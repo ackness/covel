@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- **"Edit llm.toml" works on a fresh desktop install.** The button failed with `"llm.toml" is not available` until the file had been created by hand, and the error appeared where it was easy to miss. The first click now creates `llm.toml` from the built-in default and opens it; failures show as a toast.
+- **Settings no longer attributes the built-in default model to a file that does not exist.** Providers & models tagged the built-in DeepSeek default "From llm.toml" even with no `llm.toml` on disk. It is now tagged "Built-in default", and providers that come from the file or the built-in default explain why they have no delete button and how to remove them.
+
 - **Local builds ship a production web client.** With `NODE_ENV=development` in the repo-root `.env` (the value in `.env.example`), `pnpm build` and `pnpm build:electron` bundled a development-mode web client: the router devtools were visible and React ran its development build. The web build now defaults to production; a `NODE_ENV` exported in the shell still takes precedence. CI and released installers were not affected.
 
 ## [0.0.45] - 2026-10-03

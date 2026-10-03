@@ -16,7 +16,8 @@ import {
   invalidateAllPingResults,
   PingButton,
 } from "@/components/shared/ping-button.js";
-import { isDesktopApp, openLlmToml } from "@/lib/desktop-bridge.js";
+import { isDesktopApp } from "@/lib/desktop-bridge.js";
+import { useOpenLlmToml } from "../use-open-llm-toml.js";
 import {
   SettingsDraftConflict,
   useSettingDraft,
@@ -61,6 +62,7 @@ export function LlmKeysPane({
   const { t } = useTranslation();
   const store = useSettingsStore();
   const { state } = useSession();
+  const openLlmTomlFile = useOpenLlmToml();
 
   const isConfigured = state.llmConfig?.configured ?? false;
   const [priceMultipliers, setPriceMultipliersLocal] = useState<
@@ -148,11 +150,7 @@ export function LlmKeysPane({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => {
-              void openLlmToml().catch((err: unknown) => {
-                console.error("[LlmKeysPane] openLlmToml failed", err);
-              });
-            }}
+            onClick={() => void openLlmTomlFile()}
             className="text-[11px]"
           >
             <FolderOpen className="w-3 h-3 mr-1.5" />

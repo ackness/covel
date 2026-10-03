@@ -4,7 +4,9 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
+import { loadLlmConfig, parseLlmConfig } from "@covel/ai-provider";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
+import { LLM_TOML_STARTER } from "../../src/ai-setup.js";
 import { loadKeysEnv } from "../../../desktop/src/env-files.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
@@ -114,6 +116,49 @@ describe("config API env and file contracts", () => {
       detached: true,
       stdio: "ignore",
     });
+  });
+
+  it("creates a missing desktop llm.toml from the built-in default before opening it", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
+    const llmToml = path.join(tmpHome, "llm.toml");
+    vi.mocked(spawn).mockReturnValue({
+      on: vi.fn(),
+      unref: vi.fn(),
+    } as unknown as ReturnType<typeof spawn>);
+    const app = buildApp(apiKeys);
+    const open = () =>
+      app.request("/api/config/open-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "llm.toml" }),
+      });
+
+    const first = await open();
+    expect(first.status).toBe(200);
+    await expect(first.json()).resolves.toEqual({ ok: true, created: true });
+    expect(loadLlmConfig(llmToml)?.llmConfig.covel).toEqual(
+      parseLlmConfig(LLM_TOML_STARTER).llmConfig.covel,
+    );
+
+    fs.writeFileSync(llmToml, "# Edited by the user\n", "utf8");
+    const second = await open();
+    await expect(second.json()).resolves.toEqual({ ok: true, created: false });
+    expect(fs.readFileSync(llmToml, "utf8")).toBe("# Edited by the user\n");
+  });
+
+  it("does not create llm.toml outside desktop mode", async () => {
+    const llmToml = path.join(tmpHome, "llm.toml");
+    process.env.COVEL_LLM_TOML = llmToml;
+
+    const res = await buildApp(apiKeys).request("/api/config/open-folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "llm.toml" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(fs.existsSync(llmToml)).toBe(false);
   });
 
   it("reports desktop paths from runtime env", async () => {

@@ -125,7 +125,7 @@ rather than separate hardcoded page, preload or health versions.
 
 **Settings → Desktop** surfaces every path, proxy selection, one-click folder actions, and the `data_root` picker.
 
-Opening `llm.toml` follows the effective `COVEL_LLM_TOML` override and only falls back to the config root when no override is set. `keys.env` remains under the config root. The target must exist; otherwise the endpoint returns `open_target_unavailable`. Source development and Docker use different model-config and resource-path defaults; see the [environment loading rules](./env-registry.md#加载路径与环境差异).
+Opening `llm.toml` follows the effective `COVEL_LLM_TOML` override and only falls back to the config root when no override is set. `keys.env` remains under the config root. While `llm.toml` does not exist the app runs on the built-in default (a DeepSeek `story` slot); the first "Edit `llm.toml`" click creates the file from that default and then opens it, leaving the active models unchanged. Any other missing target returns `open_target_unavailable`. Under **Settings → Models → Providers & models**, models from the file are tagged "From llm.toml" and, when no file exists, "Built-in default"; both are removed only by editing the file, while providers added in the UI live in `settings.json` and can be deleted there. Source development and Docker use different model-config and resource-path defaults; see the [environment loading rules](./env-registry.md#加载路径与环境差异).
 
 ## Desktop REST authentication
 

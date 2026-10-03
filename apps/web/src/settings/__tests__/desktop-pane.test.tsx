@@ -32,7 +32,7 @@ vi.mock("@/lib/desktop-bridge.js", () => ({
   openLogsDir: vi.fn(),
   openConfigDir: vi.fn(),
   openDataDir: vi.fn(),
-  openLlmToml: vi.fn().mockResolvedValue(undefined),
+  openLlmToml: vi.fn().mockResolvedValue({ created: false }),
   openKeysEnv: vi.fn().mockResolvedValue(undefined),
   pickDataDir: vi.fn().mockResolvedValue(null),
   reloadServerAndWait: vi.fn(),
