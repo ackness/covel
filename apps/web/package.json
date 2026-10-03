@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm generate:routes && tsc -b && vite build",
+    "build": "pnpm generate:routes && tsc -b && node ./scripts/build.mjs",
     "preview": "vite preview",
     "generate:routes": "tsr generate",
     "lint": "tsc --noEmit && node ./scripts/check-tailwind-canonical.mjs",
