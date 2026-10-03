@@ -469,6 +469,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | 方法   | 路径                          | 描述                                                                                                                                                                                                                                                    |
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/api/framework/capabilities` | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                                                                                                                           |
+| GET    | `/api/framework/authoring`    | 世界创作面：世界包文件、内置数据目标、各数据契约的创作说明与示例、插件目录                                                                                                                                                                              |
 | GET    | `/api/plugins`                | 列出 registry 中的插件及其注册/错误状态                                                                                                                                                                                                                 |
 | GET    | `/api/plugins/:id`            | 获取插件详情及完整 manifest 开发契约                                                                                                                                                                                                                    |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
@@ -2017,6 +2018,82 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 
 ### 插件管理
 
+#### `GET /api/framework/authoring`
+
+返回当前服务端已加载插件对应的世界创作面，供世界创建界面和开发 Agent 使用。内容全部来自插件清单的 `contributes.data.*.authoring` 声明，不含任何写死的插件清单；`pnpm describe:authoring` 输出的是同一份数据。
+
+查询参数 `locale` 决定 `title` 等展示文本的语言，缺省为服务端默认语言。
+
+**响应节选:**
+
+```json
+{
+  "files": [
+    {
+      "path": "world.yaml",
+      "purpose": "World manifest: identity, locales, plugin selection, character schema.",
+      "reference": "docs/reference/schema/world-manifest.md"
+    }
+  ],
+  "destinations": [
+    {
+      "title": "Characters",
+      "description": "Character records of the session's world model.",
+      "source": {
+        "id": "characters",
+        "entry": {
+          "kind": "json",
+          "path": "characters/characters.json",
+          "to": "characters",
+          "key": "id"
+        }
+      }
+    }
+  ],
+  "contracts": [
+    {
+      "contract": "memory.blocks@1",
+      "pluginId": "memory",
+      "namespace": "definitions",
+      "title": "题材记忆块",
+      "hint": "Write one object with `id: world` and a `blocks` list. …",
+      "schema": "./schemas/block-definitions.schema.json",
+      "source": {
+        "id": "definitions",
+        "entry": {
+          "kind": "json",
+          "path": "data/memory-blocks.json",
+          "schema": "contract:memory.blocks@1",
+          "to": "contract:memory.blocks@1",
+          "key": "id"
+        }
+      },
+      "example": { "id": "world", "blocks": [] },
+      "generate": "default"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "memory",
+      "displayName": "记忆",
+      "description": "…",
+      "tags": [],
+      "provides": [],
+      "requires": [],
+      "settings": []
+    }
+  ]
+}
+```
+
+| 字段           | 说明                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| `files`        | 世界包的文件及其字段表位置                                                                   |
+| `destinations` | 内核拥有的数据目标（维度、角色），不依赖任何插件                                             |
+| `contracts`    | 每个被接收的数据契约：接收插件、标题、写作提示、可直接写入 `world.data.yaml` 的条目、示例    |
+| `generate`     | 仅当应用内生成器可以生成这份内容时出现：`offer` 表示列为可选项，`default` 表示列出并默认选中 |
+| `plugins`      | 插件目录：ID、名称、简介、提供与依赖的契约、可用 `pluginSettings` 预置的设置项               |
+
 #### `GET /api/framework/capabilities`
 
 返回框架级 discovery 索引，供第三方开发者、外部工具和 AI Agent 程序化判断“Covel 当前支持哪些字段、URI、工具和事件”。它描述框架能力，不依赖某个具体插件。
@@ -2935,7 +3012,8 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
   "saveTarget": "server-file",
   "brief": {
     "experienceMode": "traditional-story",
-    "content": ["characters", "lorebook", "rules", "memory", "opening-kit"],
+    "content": ["characters", "lorebook", "rules", "opening-kit"],
+    "contracts": ["memory.blocks@1"],
     "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
   }
 }
@@ -2951,11 +3029,12 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 
 `brief`：
 
-| 字段                     | 类型     | 说明                                                                          |
-| ------------------------ | -------- | ----------------------------------------------------------------------------- |
-| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage` |
-| `content`                | string[] | 可选 `characters`、`lorebook`、`rules`、`memory`、`opening-kit`               |
-| `additionalInstructions` | string   | 世界包补充要求（最多 2000 字符），如角色关系、禁忌、节奏或需要避开的内容      |
+| 字段                     | 类型     | 说明                                                                                                          |
+| ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage`                                 |
+| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`                                               |
+| `contracts`              | string[] | 插件内容，写数据契约 ID。可选值来自 `GET /api/framework/authoring` 中带 `generate` 的契约；传入其他值返回 400 |
+| `additionalInstructions` | string   | 世界包补充要求（最多 2000 字符），如角色关系、禁忌、节奏或需要避开的内容                                      |
 
 | `saveTarget`   | 保存位置                              | 持久性来源                     | 适用场景                                                       |
 | -------------- | ------------------------------------- | ------------------------------ | -------------------------------------------------------------- |

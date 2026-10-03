@@ -112,7 +112,10 @@ function recordForStoreOnly(record: WorldRecord, saveTarget: SaveTarget) {
   } satisfies WorldRecord;
 }
 
-function parseCreationBrief(value: unknown): {
+function parseCreationBrief(
+  value: unknown,
+  availableContracts: readonly string[],
+): {
   value?: WorldCreationBrief;
   error?: string;
 } {
@@ -149,6 +152,21 @@ function parseCreationBrief(value: unknown): {
       error: `brief.content entries must be one of ${WORLD_PACKAGE_CONTENT_KINDS.join(", ")}`,
     };
   }
+  const contracts = raw.contracts;
+  if (
+    contracts !== undefined &&
+    (!Array.isArray(contracts) ||
+      contracts.some(
+        (item) =>
+          typeof item !== "string" || !availableContracts.includes(item),
+      ))
+  ) {
+    return {
+      error: availableContracts.length
+        ? `brief.contracts entries must be one of ${availableContracts.join(", ")}`
+        : "brief.contracts is not supported: no active plugin offers generated content",
+    };
+  }
   const additionalInstructions = raw.additionalInstructions;
   if (
     additionalInstructions !== undefined &&
@@ -169,6 +187,9 @@ function parseCreationBrief(value: unknown): {
       ...(typeof experienceMode === "string" ? { experienceMode } : {}),
       ...(Array.isArray(content)
         ? { content: [...new Set(content as string[])] }
+        : {}),
+      ...(Array.isArray(contracts)
+        ? { contracts: [...new Set(contracts as string[])] }
         : {}),
       ...(typeof additionalInstructions === "string"
         ? { additionalInstructions: additionalInstructions.trim() }
@@ -243,7 +264,13 @@ aiRoutes.post(
       const denied = checkWorldWriteAccess(c);
       if (denied) return denied;
     }
-    const brief = parseCreationBrief(body.brief);
+    const dataContracts = await worldGenerationDataContracts(
+      c.get("pluginRegistry"),
+    );
+    const brief = parseCreationBrief(
+      body.brief,
+      dataContracts.map((item) => item.contract),
+    );
     if (brief.error) {
       return c.json(errorBody(brief.error), 400);
     }
@@ -269,9 +296,7 @@ aiRoutes.post(
           model: typeof body.model === "string" ? body.model : undefined,
           locale: normalizeLocale(body.locale, DEFAULT_LOCALE),
           brief: brief.value,
-          dataContracts: await worldGenerationDataContracts(
-            c.get("pluginRegistry"),
-          ),
+          dataContracts,
           signal: shutdownSignal
             ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
             : c.req.raw.signal,

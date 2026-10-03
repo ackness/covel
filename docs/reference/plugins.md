@@ -252,7 +252,7 @@ contributes:
       accepts: [example.facts@1]
 ```
 
-接收世界数据的 namespace 还可以声明 `authoring`（`title`、`hint`、`example`、`source`），说明世界作者该如何提供这份内容；只有列出 `accepts` 的 namespace 才能声明它。`pnpm describe:authoring` 汇总所有已扫描插件的声明，`--check` 按 namespace 的 schema 校验每份 `example`。字段见 [Plugin manifest 字段表](schema/plugin-manifest.md)。
+接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`generate`），说明世界作者该如何提供这份内容，以及应用内生成器能否生成它；只有列出 `accepts` 的 namespace 才能声明它。`pnpm describe:authoring` 汇总所有已扫描插件的声明，`--check` 按 namespace 的 schema 校验每份 `example`。字段见 [Plugin manifest 字段表](schema/plugin-manifest.md)。
 
 World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:example.facts@1`。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
 

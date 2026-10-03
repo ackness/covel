@@ -319,7 +319,17 @@ describe("ai world generation route", () => {
       app = createTestApp(
         store,
         new FixedLlm(
-          `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${JSON.stringify({ memoryDefinitions: blocks })}\n===END===`,
+          `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${JSON.stringify(
+            {
+              contractData: [
+                {
+                  contract: "memory.blocks@1",
+                  key: "world",
+                  value: { id: "world", blocks },
+                },
+              ],
+            },
+          )}\n===END===`,
         ),
         registry,
       );
@@ -329,7 +339,7 @@ describe("ai world generation route", () => {
         body: JSON.stringify({
           concept: "Tidal city",
           saveTarget,
-          brief: { content: ["memory"] },
+          brief: { contracts: ["memory.blocks@1"] },
         }),
       });
       const events = await readSseJson(response);
@@ -436,7 +446,11 @@ describe("ai world generation route", () => {
       const response = await app.request("/api/ai/generate-world", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concept: "A tidal city", saveTarget }),
+        body: JSON.stringify({
+          concept: "A tidal city",
+          saveTarget,
+          brief: { contracts: ["world.time-definition@1"] },
+        }),
       });
       const events = await readSseJson(response);
       const done = events.find((event) => event.type === "done") as
@@ -816,6 +830,22 @@ describe("ai world generation route", () => {
     });
     expect(done?.world.metadata.worldDataPath).toBeUndefined();
     expect(done?.world.metadata.characterBlueprintSources).toBeUndefined();
+  });
+
+  it("rejects a plugin contract that no loaded plugin offers for generation", async () => {
+    const res = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "生成世界",
+        brief: { contracts: ["not-offered@1"] },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("brief.contracts"),
+    });
   });
 
   it("rejects unsupported world-package content options before streaming", async () => {

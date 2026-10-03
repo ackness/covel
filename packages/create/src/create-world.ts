@@ -191,7 +191,11 @@ export async function createWorld(
       log(options, "info", "applied YAML repair:", repairs.join("; "));
     }
 
-    const briefErrors = applyCreationBriefToManifest(yamlData, options.brief);
+    const briefErrors = applyCreationBriefToManifest(
+      yamlData,
+      options.brief,
+      options.dataContracts,
+    );
     if (
       yamlData.worldData !== undefined ||
       yamlData.dimensionSources !== undefined

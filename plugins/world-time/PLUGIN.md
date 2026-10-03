@@ -34,6 +34,9 @@ contributes:
         title:
           zh: 世界时间定义
           en: World time definition
+        summary:
+          zh: 定义这个世界怎样计时，以及各种行动耗时多久。
+          en: Defines how this world counts time and how long actions take.
         hint: >-
           Write one object with `id: world` and a `definition`. `kind: phases`
           counts named phases in a cycle; `kind: calendar` uses months and
@@ -41,6 +44,7 @@ contributes:
           time tracker how much time each kind of action takes; state it in
           concrete steps.
         example: ./examples/time-definition.json
+        generate: offer
         source:
           kind: yaml
           path: data/time.yaml

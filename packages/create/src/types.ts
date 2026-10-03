@@ -81,14 +81,6 @@ export interface GeneratedWorldLorebookEntry {
   readonly extra?: Readonly<Record<string, unknown>>;
 }
 
-export interface GeneratedMemoryDefinition {
-  readonly label: string;
-  readonly displayName: string;
-  readonly extractionHint: string;
-  readonly icon?: string;
-  readonly maxChars?: number;
-}
-
 export interface GeneratedWorldPackageContent {
   readonly contractData?: readonly GeneratedContractData[];
   readonly characters: readonly GeneratedWorldCharacter[];
@@ -101,6 +93,8 @@ export interface GeneratedContractData {
   readonly contract: string;
   readonly key: string;
   readonly value: Readonly<Record<string, unknown>>;
+  /** Also project the record into the lorebook, as its receiver declares. */
+  readonly lorebook?: true;
 }
 
 export interface WorldGenerationDataContract {
@@ -108,4 +102,12 @@ export interface WorldGenerationDataContract {
   readonly schema: Readonly<Record<string, unknown>>;
   /** The caller compiles the loaded contract schema; create owns no gameplay schema. */
   readonly validate: (value: unknown) => boolean;
+  /** Authoring notes the receiving plugin declares for this content. */
+  readonly title?: string;
+  readonly hint?: string;
+  readonly example?: unknown;
+  /** Plugin that receives the data; the generated world requests it. */
+  readonly pluginId?: string;
+  /** The receiver also wants each record projected into the lorebook. */
+  readonly lorebook?: boolean;
 }

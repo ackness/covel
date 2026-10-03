@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { WorldGenerationDataContract } from "@covel/create";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { describeAuthoringSurface } from "../authoring/describe.js";
 import { resolveWorldDataSchema } from "./schema-registry.js";
 import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
@@ -9,6 +10,7 @@ function source(
   contract: string,
   index: number,
   value?: unknown,
+  lorebook = false,
 ): OrderedWorldDataSource {
   return {
     id: `contract${index}`,
@@ -16,7 +18,7 @@ function source(
       kind: "json",
       path: `data/contract-${index}.json`,
       schema: `contract:${contract}`,
-      to: `contract:${contract}`,
+      to: `contract:${contract}${lorebook ? "+lorebook" : ""}`,
       key: "id",
     },
     order: index,
@@ -49,7 +51,8 @@ export function portableContractSources(
       !record.value ||
       typeof record.value !== "object" ||
       Array.isArray(record.value) ||
-      record.value.id !== record.key
+      record.value.id !== record.key ||
+      (record.lorebook !== undefined && record.lorebook !== true)
     ) {
       throw new Error(`Invalid world contractData record at index ${index}`);
     }
@@ -57,37 +60,56 @@ export function portableContractSources(
     if (identities.has(identity))
       throw new Error(`Duplicate world contractData record: ${identity}`);
     identities.add(identity);
-    return source(record.contract, index, record.value);
+    return source(
+      record.contract,
+      index,
+      record.value,
+      record.lorebook === true,
+    );
   });
 }
 
-/** Discover authorable contracts from data receivers, without naming gameplay plugins. */
+/**
+ * The contracts the world generator may be asked to produce: those whose
+ * receiving plugin declares `authoring.generate`. Everything the generator
+ * learns about a contract comes from that declaration, so no gameplay plugin
+ * is named here.
+ */
 export async function worldGenerationDataContracts(
   registry: Pick<PluginRegistry, "get" | "getAll"> | undefined,
 ): Promise<readonly WorldGenerationDataContract[]> {
-  const contracts = new Set<string>();
-  for (const [, entry] of registry?.getAll() ?? []) {
-    if (entry.status === "error") continue;
-    for (const declaration of Object.values(
-      entry.packageManifest?.plugin?.contributes?.data ?? {},
-    ))
-      for (const contract of declaration.accepts ?? []) contracts.add(contract);
-  }
+  if (!registry) return [];
+  const surface = await describeAuthoringSurface(registry);
   const result: WorldGenerationDataContract[] = [];
-  for (const contract of [...contracts].sort()) {
+  const seen = new Set<string>();
+  for (const item of surface.contracts) {
+    if (
+      !item.generate ||
+      seen.has(item.contract) ||
+      registry.get(item.pluginId)?.status === "error"
+    )
+      continue;
+    seen.add(item.contract);
     const schema = await resolveWorldDataSchema({
-      source: source(contract, result.length),
+      source: source(item.contract, result.length),
       deps: { registry },
     });
     if (!schema || "level" in schema || schema.kind !== "local")
-      throw new Error(`Cannot load world generation schema for ${contract}`);
+      throw new Error(
+        `Cannot load world generation schema for ${item.contract}`,
+      );
     result.push({
-      contract,
+      contract: item.contract,
       schema: JSON.parse(await readFile(schema.path, "utf8")) as Record<
         string,
         unknown
       >,
       validate: (value) => Boolean(schema.validate(value)),
+      title: item.title,
+      ...(item.hint ? { hint: item.hint } : {}),
+      ...(item.example !== undefined ? { example: item.example } : {}),
+      pluginId: item.pluginId,
+      lorebook: item.source?.entry.to.endsWith("+lorebook") === true,
     });
   }
   return result;

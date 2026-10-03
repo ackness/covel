@@ -142,12 +142,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*.authoring`
 
-| Field     | Type                        | Required | Description                                                                                                                  |
-| --------- | --------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `title`   | text (string or locale map) | yes      | Author-facing name of this content. Plain string or a locale map. Example: `"Starting quests"`.                              |
-| `hint`    | string                      | no       | How to write good records: what to include, limits, and links to other content. Read by authors and by generators.           |
-| `example` | string                      | no       | Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema. |
-| `source`  | object                      | no       | The world data source an author declares to supply this content.                                                             |
+| Field      | Type                        | Required | Description                                                                                                                                                                                                           |
+| ---------- | --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`    | text (string or locale map) | yes      | Author-facing name of this content. Plain string or a locale map. Example: `"Starting quests"`.                                                                                                                       |
+| `summary`  | text (string or locale map) | no       | One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string or a locale map.                                                                            |
+| `hint`     | string                      | no       | How to write good records: what to include, limits, and links to other content. Read by authors and by generators.                                                                                                    |
+| `example`  | string                      | no       | Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema.                                                                                          |
+| `source`   | object                      | no       | The world data source an author declares to supply this content.                                                                                                                                                      |
+| `generate` | `"offer"` or `"default"`    | no       | Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`. |
 
 ## `contributes.data.*.authoring.source`
 

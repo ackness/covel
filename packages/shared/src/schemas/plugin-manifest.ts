@@ -30,6 +30,12 @@ const dataAuthoringSchema = z
         "Author-facing name of this content. Plain string or a locale map.",
       examples: ["Starting quests"],
     }),
+    summary: z
+      .union([z.string().min(1), z.record(z.string(), z.string())])
+      .describe(
+        "One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string or a locale map.",
+      )
+      .optional(),
     hint: z
       .string()
       .min(1)
@@ -86,7 +92,27 @@ const dataAuthoringSchema = z
         "The world data source an author declares to supply this content.",
       )
       .optional(),
+    generate: z
+      .enum(["offer", "default"])
+      .describe(
+        "Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`.",
+      )
+      .optional(),
   })
+  .refine(
+    (authoring) =>
+      !authoring.generate ||
+      (authoring.example !== undefined &&
+        authoring.source !== undefined &&
+        authoring.source.kind !== "media" &&
+        (authoring.source.key ?? "id") === "id" &&
+        authoring.source.visibility !== "hidden"),
+    {
+      path: ["generate"],
+      message:
+        "generate needs an example and a public, non-media source keyed by `id`",
+    },
+  )
   .describe(
     "What a world author needs to supply this content. Authoring tools and the world generator read it.",
   );

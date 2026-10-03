@@ -157,6 +157,51 @@ export interface GenerateWorldError {
   message: string;
 }
 
+/** Plugin-owned content the world generator can produce for the loaded plugins. */
+export interface GeneratableWorldContent {
+  readonly contract: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly selectedByDefault: boolean;
+}
+
+/**
+ * List the plugin content a generated world may include. The list comes from
+ * the plugins' own authoring declarations, so it changes with the plugins
+ * that are installed.
+ */
+export async function listGeneratableWorldContent(
+  locale: string,
+): Promise<GeneratableWorldContent[]> {
+  const surface = await request<{ contracts?: unknown }>(
+    `/api/framework/authoring?locale=${encodeURIComponent(locale)}`,
+    { silentErrors: true },
+  );
+  if (!Array.isArray(surface.contracts)) return [];
+  const result: GeneratableWorldContent[] = [];
+  for (const item of surface.contracts as Record<string, unknown>[]) {
+    if (
+      !item ||
+      typeof item.contract !== "string" ||
+      typeof item.title !== "string" ||
+      (item.generate !== "offer" && item.generate !== "default") ||
+      result.some((known) => known.contract === item.contract)
+    )
+      continue;
+    result.push({
+      contract: item.contract,
+      title: item.title,
+      // `summary` is written for players and localized; the namespace's
+      // technical description is not shown here.
+      ...(typeof item.summary === "string"
+        ? { description: item.summary }
+        : {}),
+      selectedByDefault: item.generate === "default",
+    });
+  }
+  return result;
+}
+
 export type GenerateWorldEvent =
   GenerateWorldProgress | GenerateWorldDone | GenerateWorldError;
 

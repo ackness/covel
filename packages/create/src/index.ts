@@ -7,7 +7,6 @@ export type {
   CreateResult,
   GeneratedWorld,
   GeneratedWorldCharacter,
-  GeneratedMemoryDefinition,
   GeneratedWorldLorebookEntry,
   GeneratedWorldPackageContent,
 } from "./types.js";

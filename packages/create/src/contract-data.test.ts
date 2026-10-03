@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
-import { normalizeGeneratedPackage } from "./package-processor.js";
+import {
+  applyCreationBriefToManifest,
+  normalizeGeneratedPackage,
+} from "./package-processor.js";
 import { writeWorldDataFiles } from "./world-writer.js";
 
 const contract = {
@@ -18,11 +21,11 @@ const record = {
   value: { id: "world", description: "A custom definition" },
 };
 
-it("validates generic contract records without a gameplay schema dependency", () => {
+const brief = { contracts: [contract.contract] };
+
+it("validates requested contract records without a gameplay schema dependency", () => {
   expect(
-    normalizeGeneratedPackage({ contractData: [record] }, undefined, [
-      contract,
-    ]),
+    normalizeGeneratedPackage({ contractData: [record] }, brief, [contract]),
   ).toMatchObject({ errors: [], content: { contractData: [record] } });
   for (const records of [
     [{ ...record, contract: "unknown@1" }],
@@ -31,11 +34,39 @@ it("validates generic contract records without a gameplay schema dependency", ()
     [record, record],
   ]) {
     expect(
-      normalizeGeneratedPackage({ contractData: records }, undefined, [
-        contract,
-      ]).errors.length,
+      normalizeGeneratedPackage({ contractData: records }, brief, [contract])
+        .errors.length,
     ).toBeGreaterThan(0);
   }
+});
+
+it("accepts records only for contracts the brief requests, and requires each requested one", () => {
+  // Available but not requested: the model must not volunteer it.
+  expect(
+    normalizeGeneratedPackage({ contractData: [record] }, {}, [contract])
+      .errors,
+  ).toEqual([
+    `contractData[0] uses contract "${contract.contract}", which the creation brief did not request`,
+  ]);
+  // Requested but missing: the attempt fails so the generator retries.
+  expect(normalizeGeneratedPackage({}, brief, [contract]).errors).toEqual([
+    `contractData must include at least one record for contract "${contract.contract}"`,
+  ]);
+});
+
+it("requests the receiving plugin of every selected contract", () => {
+  const manifest: Record<string, unknown> = {
+    pluginPolicy: { requested: ["narrator"] },
+  };
+  expect(
+    applyCreationBriefToManifest(manifest, brief, [
+      { ...contract, pluginId: "custom-plugin" },
+    ]),
+  ).toEqual([]);
+  expect(manifest.pluginPolicy).toMatchObject({
+    presetId: "traditional-story",
+    requested: ["narrator", "custom-plugin"],
+  });
 });
 
 it("writes portable contract records as validated contract-targeted world sources", async () => {
@@ -44,7 +75,7 @@ it("writes portable contract records as validated contract-targeted world source
     const manifest: Record<string, unknown> = {};
     const content = normalizeGeneratedPackage(
       { contractData: [record] },
-      undefined,
+      brief,
       [contract],
     ).content;
     await writeWorldDataFiles(root, manifest, content);
@@ -71,44 +102,23 @@ it("writes portable contract records as validated contract-targeted world source
   }
 });
 
-it("normalizes memory definitions into portable contract data and rejects duplicate targets", () => {
-  const blocks = [
-    {
-      label: "tides",
-      displayName: "Tides",
-      extractionHint: "Track changing tides",
-    },
-    {
-      label: "debts",
-      displayName: "Debts",
-      extractionHint: "Track favors owed",
-    },
-  ];
-  const normalized = normalizeGeneratedPackage(
-    { memoryDefinitions: blocks },
-    { content: ["memory"] },
-  );
-  expect(normalized).toMatchObject({
-    errors: [],
-    content: {
-      contractData: [
-        {
-          contract: "memory.blocks@1",
-          key: "world",
-          value: { id: "world", blocks },
-        },
-      ],
-    },
-  });
-  const duplicate = normalizeGeneratedPackage(
-    {
-      memoryDefinitions: blocks,
-      contractData: normalized.content.contractData,
-    },
-    { content: ["memory"] },
-    [{ contract: "memory.blocks@1", schema: {}, validate: () => true }],
-  );
-  expect(duplicate.errors).toContain(
-    "duplicate contractData record: memory.blocks@1/world",
-  );
+it("targets the lorebook projection when the receiver declares it", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "covel-contract-data-"));
+  try {
+    const manifest: Record<string, unknown> = {};
+    const content = normalizeGeneratedPackage(
+      { contractData: [record] },
+      brief,
+      [{ ...contract, lorebook: true }],
+    ).content;
+    await writeWorldDataFiles(root, manifest, content);
+    const descriptor = parse(
+      await readFile(path.join(root, String(manifest.worldData)), "utf8"),
+    );
+    expect(descriptor.sources.contract0.to).toBe(
+      `contract:${contract.contract}+lorebook`,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

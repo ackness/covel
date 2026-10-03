@@ -103,8 +103,10 @@ contributes:
 ```
 
 - `title` 是给作者看的内容名称；`hint` 说明怎么写好这类记录，用简短明确的英文句子。
+- `summary` 是给玩家看的一句话简介，支持多语言；应用内创作界面用它作为选项说明。
 - `example` 指向一份合法示例（JSON）。它按 namespace 的 schema 校验，`pnpm describe:authoring --check` 和仓库测试都会检查。
 - `source` 是这份内容在世界包里的约定来源：`kind`、`path`、`key`，以及可选的 `visibility: hidden` 和 `lorebook: true`。媒体目录用 `kind: media`。
+- `generate` 声明应用内的世界生成器可以只凭 `hint` 和 `example` 生成这份内容：`offer` 把它列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、非媒体的、以 `id` 为 key 的来源。玩家选中后，生成器会把这个契约的 schema、提示和示例写进提示词，并把接收插件加入世界的 `pluginPolicy.requested`。只有在真实模型上验证过生成质量的内容才应声明它。
 
 `pnpm describe:authoring` 会把这些声明汇总成可直接粘贴进 `world.data.yaml` 的条目，世界创作 skill 和应用内生成器读的是同一份数据。新插件声明了 `authoring`，就不需要再去修改中心文档或 skill。字段表见 [Plugin manifest 字段表](../reference/schema/plugin-manifest.md)。
 

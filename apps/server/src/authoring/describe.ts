@@ -35,6 +35,9 @@ export interface AuthoringContract {
   readonly pluginId: string;
   readonly namespace: string;
   readonly title: string;
+  /** Player-facing sentence, in the requested locale. */
+  readonly summary?: string;
+  /** The namespace's technical description, for authors and tools. */
   readonly description?: string;
   readonly hint?: string;
   /** Path of the record schema, relative to the plugin package. */
@@ -46,6 +49,8 @@ export interface AuthoringContract {
   };
   /** A valid example of the source value. */
   readonly example?: unknown;
+  /** Set when the in-app world generator may produce this content. */
+  readonly generate?: "offer" | "default";
 }
 
 export interface AuthoringPlugin {
@@ -226,6 +231,9 @@ export async function describeAuthoringSurface(
           pluginId,
           namespace,
           title: text(authoring?.title, locale) || contract,
+          ...(authoring?.summary
+            ? { summary: text(authoring.summary, locale) }
+            : {}),
           ...(declaration.description
             ? { description: declaration.description }
             : {}),
@@ -240,6 +248,7 @@ export async function describeAuthoringSurface(
               }
             : {}),
           example: await readExample(entry.rootPath, authoring?.example),
+          ...(authoring?.generate ? { generate: authoring.generate } : {}),
         });
       }
     }

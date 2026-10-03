@@ -175,6 +175,8 @@ dimensionSources:
 
 AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/lorebook.yaml`，并和 dimensions 一起写入 `data/world.data.yaml`。文件型世界在创建 session 时始终按 descriptor 导入。
 
+插件内容由创作简报的 `contracts` 指定：生成器只为被选中的数据契约生成记录，每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`），接收插件会被加入 `pluginPolicy.requested`。未选中的契约不会进入提示词；模型为未选中的契约输出记录，或漏掉被选中的契约，都会让本次尝试失败并重试。每条记录写成 `data/contract-<n>.json`，接收方声明了 lorebook 投影时目标为 `contract:<id>+lorebook`。
+
 `server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口直接使用经过校验的生成结果，把通用领域角色放入 `WorldRecord.metadata.embeddedCharacters`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
 
 ### 三个完整内置示例

@@ -33,6 +33,9 @@ contributes:
         title:
           zh: 题材记忆块
           en: Memory blocks
+        summary:
+          zh: 让记忆系统按这个题材追踪线索、承诺、倒计时等状态。
+          en: Tracks genre state such as clues, promises and countdowns.
         hint: >-
           Write one object with `id: world` and a `blocks` list. Each block has
           a `label` (a snake_case key), a `displayName` and an
@@ -40,6 +43,7 @@ contributes:
           are optional. Choose blocks that fit the genre. Do not make a block
           for data that a dimension or another plugin already tracks.
         example: ./examples/blocks.json
+        generate: default
         source:
           kind: json
           path: data/memory-blocks.json

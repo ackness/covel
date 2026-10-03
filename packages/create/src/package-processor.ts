@@ -6,7 +6,6 @@ import type {
   GeneratedWorldCharacter,
   GeneratedContractData,
   WorldGenerationDataContract,
-  GeneratedMemoryDefinition,
   GeneratedWorldLorebookEntry,
   GeneratedWorldPackageContent,
 } from "./types.js";
@@ -27,6 +26,15 @@ function strings(value: unknown): string[] | undefined {
 
 function requestedKinds(brief: WorldCreationBrief | undefined) {
   return new Set<WorldPackageContentKind>(brief?.content ?? []);
+}
+
+/** The data contracts the brief asks for, in the order the caller supplied them. */
+export function selectedDataContracts(
+  brief: WorldCreationBrief | undefined,
+  dataContracts: readonly WorldGenerationDataContract[],
+): readonly WorldGenerationDataContract[] {
+  const wanted = new Set(brief?.contracts ?? []);
+  return dataContracts.filter((item) => wanted.has(item.contract));
 }
 
 function normalizeCharacter(
@@ -162,6 +170,7 @@ export function normalizeGeneratedPackage(
   dataContracts: readonly WorldGenerationDataContract[] = [],
 ): { content: GeneratedWorldPackageContent; errors: string[] } {
   const requested = requestedKinds(brief);
+  const selected = selectedDataContracts(brief, dataContracts);
   const errors: string[] = [];
   const root = isRecord(value) ? value : {};
 
@@ -186,12 +195,18 @@ export function normalizeGeneratedPackage(
       );
       continue;
     }
-    const declaration = dataContracts.find(
+    const declaration = selected.find(
       (item) => item.contract === record.contract,
     );
-    if (!declaration || !declaration.validate(record.value)) {
+    if (!declaration) {
       errors.push(
-        `contractData[${index}] has an unknown contract or invalid value`,
+        `contractData[${index}] uses contract "${record.contract}", which the creation brief did not request`,
+      );
+      continue;
+    }
+    if (!declaration.validate(record.value)) {
+      errors.push(
+        `contractData[${index}] value does not match the schema of contract "${record.contract}"`,
       );
       continue;
     }
@@ -205,7 +220,14 @@ export function normalizeGeneratedPackage(
       contract: record.contract,
       key: record.key,
       value: record.value,
+      ...(declaration.lorebook ? { lorebook: true as const } : {}),
     });
+  }
+  for (const declaration of selected) {
+    if (!contractData.some((item) => item.contract === declaration.contract))
+      errors.push(
+        `contractData must include at least one record for contract "${declaration.contract}"`,
+      );
   }
 
   const characters = requested.has("characters")
@@ -238,59 +260,6 @@ export function normalizeGeneratedPackage(
     errors.push("WORLD_PACKAGE_YAML must include at least 3 rules");
   }
 
-  const memoryDefinitions: GeneratedMemoryDefinition[] = [];
-  if (requested.has("memory")) {
-    for (const [index, block] of (Array.isArray(root.memoryDefinitions)
-      ? root.memoryDefinitions
-      : []
-    ).entries()) {
-      if (
-        !isRecord(block) ||
-        typeof block.label !== "string" ||
-        !/^[a-z][a-z0-9_]*$/.test(block.label) ||
-        typeof block.displayName !== "string" ||
-        !block.displayName.trim() ||
-        typeof block.extractionHint !== "string" ||
-        !block.extractionHint.trim() ||
-        (block.maxChars !== undefined &&
-          (!Number.isInteger(block.maxChars) || Number(block.maxChars) <= 0))
-      ) {
-        errors.push(
-          `memoryDefinitions[${index}] must contain a label, displayName and extractionHint, with optional positive maxChars`,
-        );
-        continue;
-      }
-      memoryDefinitions.push({
-        label: block.label,
-        displayName: block.displayName,
-        extractionHint: block.extractionHint,
-        ...(typeof block.icon === "string" ? { icon: block.icon } : {}),
-        ...(typeof block.maxChars === "number"
-          ? { maxChars: block.maxChars }
-          : {}),
-      });
-    }
-    if (memoryDefinitions.length < 2 || memoryDefinitions.length > 4)
-      errors.push(
-        "WORLD_PACKAGE_YAML must include 2-4 genre memoryDefinitions",
-      );
-    if (
-      new Set(memoryDefinitions.map((block) => block.label)).size !==
-      memoryDefinitions.length
-    )
-      errors.push("memoryDefinitions labels must be unique");
-    const identity = "memory.blocks@1/world";
-    if (identities.has(identity)) {
-      errors.push(`duplicate contractData record: ${identity}`);
-    } else if (memoryDefinitions.length > 0) {
-      contractData.push({
-        contract: "memory.blocks@1",
-        key: "world",
-        value: { id: "world", blocks: memoryDefinitions },
-      });
-    }
-  }
-
   const duplicateCharacterIds = duplicateIds(characters);
   if (duplicateCharacterIds.length > 0) {
     errors.push(`duplicate character ids: ${duplicateCharacterIds.join(", ")}`);
@@ -309,6 +278,7 @@ export function normalizeGeneratedPackage(
 export function applyCreationBriefToManifest(
   manifest: Record<string, unknown>,
   brief: WorldCreationBrief | undefined,
+  dataContracts: readonly WorldGenerationDataContract[] = [],
 ): string[] {
   if (!brief) return [];
   const errors: string[] = [];
@@ -316,6 +286,14 @@ export function applyCreationBriefToManifest(
     ? manifest.pluginPolicy
     : (manifest.pluginPolicy = {});
   policy.presetId = brief.experienceMode ?? "traditional-story";
+  // Requested content is only used when its receiving plugin is active.
+  const receivers = selectedDataContracts(brief, dataContracts)
+    .map((item) => item.pluginId)
+    .filter((id): id is string => typeof id === "string");
+  if (receivers.length > 0)
+    policy.requested = [
+      ...new Set([...(strings(policy.requested) ?? []), ...receivers]),
+    ];
   if (brief.experienceMode === "dialogue-mode") {
     manifest.defaultViewMode = "stage";
   } else {

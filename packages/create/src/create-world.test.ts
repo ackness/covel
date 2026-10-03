@@ -517,13 +517,18 @@ dimensions:
     const memoryPackage =
       WORLD_PACKAGE_YAML +
       `
-memoryDefinitions:
-  - label: time_debt
-    displayName: 时间债
-    extractionHint: 玩家改写时间付出的记忆与后果。
-  - label: erased_clues
-    displayName: 被删除的线索
-    extractionHint: 只在雨中显现、随后可能再次消失的证据。
+contractData:
+  - contract: memory.blocks@1
+    key: world
+    value:
+      id: world
+      blocks:
+        - label: time_debt
+          displayName: 时间债
+          extractionHint: 玩家改写时间付出的记忆与后果。
+        - label: erased_clues
+          displayName: 被删除的线索
+          extractionHint: 只在雨中显现、随后可能再次消失的证据。
 `;
     const result = await createWorld({
       llm: new FixedLlm(
@@ -533,9 +538,19 @@ memoryDefinitions:
       attemptTimeoutMs: 5_000,
       brief: {
         experienceMode: "dialogue-mode",
-        content: ["characters", "lorebook", "rules", "memory", "opening-kit"],
+        content: ["characters", "lorebook", "rules", "opening-kit"],
+        contracts: ["memory.blocks@1"],
         additionalInstructions: "让角色彼此隐瞒一段共同历史。",
       },
+      dataContracts: [
+        {
+          contract: "memory.blocks@1",
+          schema: { type: "object" },
+          validate: (value) =>
+            Array.isArray((value as { blocks?: unknown }).blocks),
+          pluginId: "memory",
+        },
+      ],
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
@@ -573,6 +588,7 @@ memoryDefinitions:
     expect(manifest).toContain("presetId: dialogue-mode");
     expect(manifest).toContain("defaultViewMode: stage");
     expect(manifest).not.toContain("memoryBlocks:");
+    expect(manifest).toMatch(/requested:[\s\S]*- memory/);
     expect(descriptor).toContain("to: contract:memory.blocks@1");
     expect(
       JSON.parse(

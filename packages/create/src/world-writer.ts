@@ -156,7 +156,7 @@ export async function writeWorldDataFiles(
       kind: "json",
       path: recordPath,
       schema: `contract:${record.contract}`,
-      to: `contract:${record.contract}`,
+      to: `contract:${record.contract}${record.lorebook ? "+lorebook" : ""}`,
       key: "id",
     };
   }
