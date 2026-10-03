@@ -997,10 +997,22 @@ function toDetectedForm(
  * Missing required fields are filled with placeholder data derived from
  * the field type so the submission always satisfies the schema.
  */
+/**
+ * Test input is written in the session's language. A Chinese name or message
+ * in a session of another locale is itself Chinese context for the model and
+ * hides what the pipeline does on its own.
+ */
+function isChineseLocale(locale: string): boolean {
+  return /^zh(-|$)/i.test(locale);
+}
+
 function buildFormValues(
   form: DetectedForm,
   overrides: Record<string, string>,
+  locale: string,
 ): Record<string, string | number> {
+  const chinese = isChineseLocale(locale);
+  const testName = chinese ? "E2E测试角色" : "E2E Tester";
   const values: Record<string, string | number> = {};
 
   for (const field of form.fields) {
@@ -1018,7 +1030,11 @@ function buildFormValues(
     }
     if (field.type === "text" || field.type === "textarea") {
       values[field.name] =
-        field.name === "characterName" ? "E2E测试角色" : `测试${field.name}`;
+        field.name === "characterName"
+          ? testName
+          : chinese
+            ? `测试${field.name}`
+            : `test ${field.name}`;
       continue;
     }
     if (field.type === "number") {
@@ -1035,7 +1051,7 @@ function buildFormValues(
   // Safety net: at least characterName for auto-advanced flows that
   // skipped fields we didn't understand.
   if (Object.keys(values).length === 0) {
-    values.characterName = overrides.characterName ?? "E2E测试角色";
+    values.characterName = overrides.characterName ?? testName;
   }
 
   return values;
@@ -1825,7 +1841,7 @@ async function runMain(
         .join(", ") || "(none)",
     );
 
-    const values = buildFormValues(detectedForm, args.formValues);
+    const values = buildFormValues(detectedForm, args.formValues, args.locale);
     kv("Values", previewJson(values, 120));
 
     const submitResp = await httpJson<{
@@ -1889,13 +1905,21 @@ async function runMain(
   );
   refreshSession(sess);
 
-  const defaultPlayerMessages = [
-    "探索周围环境，寻找任何可以利用的线索。",
-    "与同伴交流，分享彼此的判断和下一步的打算。",
-    "小心靠近目标区域，保持警觉地观察环境。",
-    "尝试回忆此前发生过的事件，看看是否能关联起来。",
-    "根据掌握的信息做出谨慎的决定，然后继续前进。",
-  ];
+  const defaultPlayerMessages = isChineseLocale(args.locale)
+    ? [
+        "探索周围环境，寻找任何可以利用的线索。",
+        "与同伴交流，分享彼此的判断和下一步的打算。",
+        "小心靠近目标区域，保持警觉地观察环境。",
+        "尝试回忆此前发生过的事件，看看是否能关联起来。",
+        "根据掌握的信息做出谨慎的决定，然后继续前进。",
+      ]
+    : [
+        "Explore the surroundings and look for any clue that can be used.",
+        "Talk with your companions; share what each of you thinks and plans to do next.",
+        "Approach the target area carefully and watch the surroundings.",
+        "Try to recall what happened earlier and see whether the events connect.",
+        "Make a careful decision from what you know, then move on.",
+      ];
 
   for (let i = 0; i < args.turns; i++) {
     const content =
