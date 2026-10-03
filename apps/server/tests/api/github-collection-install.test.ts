@@ -184,6 +184,25 @@ describe("mixed GitHub previews and batch installs", () => {
     expect(await store.getWorld("barrow")).toMatchObject({ id: "barrow" });
   });
 
+  it("leaves out a package it cannot read and keeps the others installable", async () => {
+    archives[`example/pack@${sha}`] = await zip(
+      {
+        ...pluginFiles("barrow-dice"),
+        "examples/stale/package.json": JSON.stringify({ name: "stale" }),
+        "examples/stale/PLUGIN.md":
+          "---\nname: stale\npluginType: plugin\n---\n",
+      },
+      "pack-commit",
+    );
+
+    const result = await preview();
+
+    expect(result.items.map((item) => item.id)).toEqual(["barrow-dice"]);
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]).toMatchObject({ level: "warning" });
+    expect(result.problems[0]!.message).toContain("examples/stale is left out");
+  });
+
   it("removes what the batch installed when a later package fails", async () => {
     archives[`example/pack@${sha}`] = await zip(
       { ...pluginFiles("barrow-dice"), ...worldFiles() },

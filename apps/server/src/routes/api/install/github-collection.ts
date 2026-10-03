@@ -300,6 +300,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
     const items: GithubPackagePreview[] = [];
     const plugins: CollectionPluginFacts[] = [];
     const worlds: CollectionWorldFacts[] = [];
+    const skipped: string[] = [];
     for (const member of members) {
       if (member.kind === "world" && !worldsAllowed) {
         problems.push({
@@ -309,10 +310,22 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         continue;
       }
       const bundle = selectPackageEntries(member.archive, member.directory);
-      const summary =
-        member.kind === "world"
-          ? await inspectWorldBundle(bundle)
-          : inspectBundle(bundle, reserved);
+      let summary: Awaited<ReturnType<typeof inspectWorldBundle>>;
+      try {
+        summary =
+          member.kind === "world"
+            ? await inspectWorldBundle(bundle)
+            : inspectBundle(bundle, reserved);
+      } catch (error) {
+        // A manifest names its members, so a broken one breaks the collection.
+        // A directory scan merely found this package: say why it is left out
+        // and keep the others installable.
+        if (manifest) throw error;
+        skipped.push(
+          `${member.directory || "/"} is left out: ${errorResponse(error).body.error.slice(0, 300)}`,
+        );
+        continue;
+      }
       if (member.kind === "world") worlds.push(worldFacts(bundle));
       else plugins.push(pluginFacts(bundle));
       const preview = {
@@ -336,7 +349,10 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
       });
     }
 
+    if (items.length === 0 && skipped.length > 0)
+      throw httpError(400, `Nothing here can be installed. ${skipped[0]}`);
     problems.push(
+      ...skipped.map((message) => ({ level: "warning" as const, message })),
       ...checkCollection({
         worlds,
         plugins,
