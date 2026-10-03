@@ -1,6 +1,6 @@
 [
   {
-    "id": "char-tomas-reed",
+    "id": "npc-tomas-reed",
     "name": "Tomas Reed",
     "type": "npc",
     "description": "Emberback's fifty-eight-year-old chief technician, elected shift lead, and your mentor. Tomas can repair almost anything without making the person who broke it feel small. He trusts evidence, public process, and the idea that panic is just a problem with too many steps at once.",
@@ -17,7 +17,7 @@
     }
   },
   {
-    "id": "char-june-okafor",
+    "id": "npc-june-okafor",
     "name": "June Okafor",
     "type": "npc",
     "description": "A thirty-one-year-old Sunrunner courier and Emberback's best crawler pilot. June moves medicine, mail, and stranded travelers across routes that maps describe too confidently. She is escorting the medical convoy toward Mile Seventeen when your future warning arrives.",
@@ -34,7 +34,7 @@
     }
   },
   {
-    "id": "char-mina-park",
+    "id": "npc-mina-park",
     "name": "Dr. Mina Park",
     "type": "npc",
     "description": "A forty-two-year-old atmospheric physicist who leads the Nightglass Observatory. Mina has spent months documenting radio echoes that arrive before their source transmissions. She is climbing Emberback's main mast with a storm reader when the future call warns you to keep her off the tower.",
@@ -51,7 +51,7 @@
     }
   },
   {
-    "id": "char-priya-nair",
+    "id": "npc-priya-nair",
     "name": "Priya Nair",
     "type": "npc",
     "description": "Emberback's forty-five-year-old lead medic. Priya runs an eight-bed clinic with two heat-stroke patients and a cold room full of medicine that cannot lose power. Every watt the array takes is a watt she has to argue for.",
@@ -68,7 +68,7 @@
     }
   },
   {
-    "id": "char-eli-varga",
+    "id": "npc-eli-varga",
     "name": "Eli Varga",
     "type": "npc",
     "description": "A nineteen-year-old night-shift signal operator who logged the 06:14 call. Eli is brilliant with receivers and shaky under pressure, and he is certain he heard something in the static after your voice stopped. He has not told anyone yet.",

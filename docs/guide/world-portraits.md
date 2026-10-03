@@ -4,7 +4,7 @@
 
 - 机器清单（脚本直接读）：`worlds/emberback/media/portraits.json` · `worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json`
 - 每张新图的提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`，`negative` 作为负向提示。共享前后缀减少风格漂移；同角色变体仍需以批准图为编辑参考，锁定身份和取景。
-- 清单中的 `characterId` 必须能匹配实例化后的角色 ID：角色卡声明 `instantiate.characterId` 时使用该值（如 `npc-lin-yuanzhou`）；未声明时可使用角色卡 `id`（如 `emberback` 的 `tomas-reed`，实例化记录会带 session / `char-` 前缀，前端按后缀匹配）。文件名通常使用角色卡 `id` 的 `<id>.png`。
+- 清单中的 `characterId` 写实例化后的角色 ID，统一为 `npc-<角色卡 id>`（如 `npc-lin-yuanzhou`、`npc-tomas-reed`）。角色卡未声明 `instantiate.characterId` 时就按这个规则实例化；`characters/characters.json` 里的角色记录也用同一个 ID。文件名通常使用角色卡 `id` 的 `<id>.png`。
 
 场景背景的清单、日/夜变体与生成流程见 [场景背景生成指南](./world-scenes.md)。
 
