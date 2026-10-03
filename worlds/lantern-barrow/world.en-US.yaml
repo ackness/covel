@@ -1,0 +1,67 @@
+# en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
+name: "Lantern Barrow: First Expedition"
+summary: The lantern that guarded the barrow for a century has gone out, its
+  keeper is missing, and the bronze doors stand open. Form a party at the
+  Greyreed tavern, spend your points, and roll your way down — a classic
+  tabletop adventure, starting with your first expedition.
+pluginPolicy:
+  packs:
+    - id: classic-tabletop
+      label: Classic Tabletop
+      description:
+        Point-buy character creation, form checks and dice-pool rolls,
+        quests and inventory, companion affinity, and live panels for the delve
+        map, the barrow's alarm, and your renown.
+      reason:
+        Tabletop play is fun when the rules are visible — you spent the points,
+        the dice are really rolled, and every room and every noise that stirs
+        the barrow stays on the panels.
+characterSchema:
+  attributes:
+    - id: persona
+      name: Personality
+      description:
+        Who your adventurer is and how they talk — e.g. "a gruff veteran
+        with a soft heart who speaks in short sentences." Shapes how the
+        narrator portrays you.
+    - id: calling
+      name: Calling
+      description:
+        What your adventurer does for a living — fighter, rogue, scholar,
+        priest, hunter, or your own idea.
+    - id: background
+      name: Background
+      description: Why you came to Greyreed, and one thing from your past only you know.
+    - id: might
+      name: Might
+      description: Fighting, forcing doors, climbing, and carrying.
+    - id: agility
+      name: Agility
+      description: Dodging, sneaking, lockpicking, and disarming traps.
+    - id: endurance
+      name: Endurance
+      description: Resisting poison, cold, exhaustion, and the body's response to terror.
+    - id: wits
+      name: Wits
+      description:
+        Reading runes, recalling lore, solving puzzles, and understanding
+        how traps work.
+    - id: insight
+      name: Insight
+      description: Spotting ambushes, hearing lies, finding hidden doors, and tracking.
+    - id: presence
+      name: Presence
+      description:
+        Persuading, intimidating, calming, and bargaining — including with
+        things that should not be awake.
+    - id: hp
+      name: Hit Points
+      description:
+        Drops when hurt and recovers with rest or healing. At 0 you fall
+        unconscious rather than dying outright.
+    - id: condition
+      name: Condition
+      description: Current visible conditions such as wounded, poisoned, or shaken.
+    - id: trust
+      name: Trust
+      description: Trust toward the player

@@ -11,7 +11,11 @@ import {
   attachExecutionJournal,
   attachRuntimeTrigger,
 } from "../execution-journal.js";
-import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
+import {
+  getRuntimeSpec,
+  pluginMessagesFor,
+  stageMessageOrder,
+} from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import { getToolContent, getPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -249,6 +253,7 @@ export async function executeAgentGuard({
     // `turn-function-runtime.ts`: without it a hung guard blocks the whole
     // turn (and the session lock) forever. Promise.race keeps the guard
     // promise subscribed, so a post-timeout rejection is still observed.
+    const guardMessages = pluginMessagesFor(loaded.messages, input.locale);
     const guardPromise = loaded.guard({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -259,6 +264,7 @@ export async function executeAgentGuard({
         lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
       },
       locale: input.locale,
+      ...(guardMessages ? { messages: guardMessages } : {}),
       store: guardStore,
       world,
       recursiveCall: guardRecursiveCall,

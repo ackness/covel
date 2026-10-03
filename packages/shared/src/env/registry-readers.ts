@@ -194,6 +194,11 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     userPluginsDir: readEnvString("COVEL_USER_PLUGINS_DIR", undefined, source),
     worldsDir: readEnvString("COVEL_WORLDS_DIR", undefined, source),
     userWorldsDir: readEnvString("COVEL_USER_WORLDS_DIR", undefined, source),
+    userTranslationsDir: readEnvString(
+      "COVEL_USER_TRANSLATIONS_DIR",
+      undefined,
+      source,
+    ),
     userConfigDir: readEnvString("COVEL_USER_CONFIG_DIR", undefined, source),
     systemProxyUrl: readEnvString("COVEL_SYSTEM_PROXY_URL", undefined, source),
     logsDir: readEnvString("COVEL_LOGS_DIR", undefined, source),

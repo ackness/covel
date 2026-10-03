@@ -1,0 +1,12 @@
+# Chinese text of the pregame plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: 开局准备
+  description: 在开局时读取世界资料，准备好第一段冒险。
+messages:
+  Unknown World: 未知世界
+  🌍 Welcome to {world}: 🌍 欢迎来到{world}
+  Your adventure is about to begin…: 你的冒险即将开始...
+  "[{world}] {summary}": 【{world}】{summary}
+  Game initialized. Welcome to {world}.: 游戏初始化完成，欢迎来到{world}。

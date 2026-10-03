@@ -1,0 +1,28 @@
+# Chinese text of the tabletop-rules plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: 跑团规则
+  description: 在角色创建后追加开局配点，以程序结算属性检定，并保留可复核的骰子记录。
+  contributes:
+    data:
+      rules:
+        authoring:
+          title: 开局配点规则
+runtimes/check/RUNTIME.md:
+  description: 提交属性检定，结果不会因重试而重掷
+runtimes/creation/RUNTIME.md:
+  description: 开局配点
+messages:
+  Attribute checks: 属性检定
+  Request an attribute check: 发起属性检定
+  This world has no point-buy attributes; checks are unavailable.: 本世界没有可配点属性，无法发起检定。
+  Attribute check: 属性检定
+  Attempted action: 尝试的行动
+  Attribute: 属性
+  Difficulty: 难度
+  Resolve check: 进行检定
+  Opening point allocation applied.: 开局配点已应用。
+  "Opening point allocation: distribute {budget} points": 开局配点：分配 {budget} 点
+  Finish allocation: 完成配点
+  Opening point allocation complete.: 完成了开局配点。

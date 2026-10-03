@@ -149,7 +149,7 @@ describe("character-blueprint handler", () => {
       imported: true,
       blueprintId: "json-mentor",
       instantiated: true,
-      characterId: "char-json-mentor",
+      characterId: "npc-json-mentor",
     });
     const proposals = getPendingProposals(result);
     expect(proposals.map((proposal) => proposal.type)).toEqual([

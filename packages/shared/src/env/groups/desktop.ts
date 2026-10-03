@@ -69,6 +69,14 @@ export const DESKTOP_ENV_VARS = [
     description: "User world package directory mounted by desktop shells.",
   },
   {
+    name: "COVEL_USER_TRANSLATIONS_DIR",
+    group: "desktop",
+    type: "path",
+    status: "active",
+    description:
+      "Directory of plugin translations made outside the packages (translation packages, local machine translations).",
+  },
+  {
     name: "COVEL_USER_CONFIG_DIR",
     group: "desktop",
     type: "path",

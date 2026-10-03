@@ -39,9 +39,18 @@ const DEFAULT_CONTENT: readonly WorldPackageContentKind[] = [
   "characters",
   "lorebook",
   "rules",
-  "memory",
   "opening-kit",
 ];
+
+function defaultContracts(
+  offered: readonly api.GeneratableWorldContent[],
+): Set<string> {
+  return new Set(
+    offered
+      .filter((item) => item.selectedByDefault)
+      .map((item) => item.contract),
+  );
+}
 
 export function AiWorldGenerator({
   open,
@@ -55,6 +64,12 @@ export function AiWorldGenerator({
   const [content, setContent] = useState<ReadonlySet<WorldPackageContentKind>>(
     () => new Set(DEFAULT_CONTENT),
   );
+  const [pluginContent, setPluginContent] = useState<
+    readonly api.GeneratableWorldContent[]
+  >([]);
+  const [contracts, setContracts] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [additionalInstructions, setAdditionalInstructions] = useState("");
   const [phase, setPhase] = useState<WorldGenerationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +82,9 @@ export function AiWorldGenerator({
     setPrompt("");
     setExperienceMode("traditional-story");
     setContent(new Set(DEFAULT_CONTENT));
+    setContracts(defaultContracts(pluginContent));
     setAdditionalInstructions("");
-  }, []);
+  }, [pluginContent]);
 
   useEffect(
     () => () => {
@@ -90,6 +106,25 @@ export function AiWorldGenerator({
       )
       .catch(() => setServerStorageMode(undefined));
   }, [open]);
+
+  // The offered plugin content depends on which plugins the server loaded, so
+  // it is asked for each time the dialog opens. Without it the dialog still
+  // works with the kernel-owned content.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void api
+      .listGeneratableWorldContent(i18n.language)
+      .catch(() => [] as api.GeneratableWorldContent[])
+      .then((offered) => {
+        if (cancelled) return;
+        setPluginContent(offered);
+        setContracts(defaultContracts(offered));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, i18n.language]);
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
@@ -156,6 +191,7 @@ export function AiWorldGenerator({
         brief: {
           experienceMode,
           content: [...content],
+          ...(contracts.size > 0 ? { contracts: [...contracts] } : {}),
           ...(additionalInstructions.trim()
             ? { additionalInstructions: additionalInstructions.trim() }
             : {}),
@@ -165,6 +201,7 @@ export function AiWorldGenerator({
   }, [
     additionalInstructions,
     content,
+    contracts,
     experienceMode,
     i18n.language,
     onOpenChange,
@@ -206,6 +243,15 @@ export function AiWorldGenerator({
       const next = new Set(current);
       if (next.has(kind)) next.delete(kind);
       else next.add(kind);
+      return next;
+    });
+  }, []);
+
+  const toggleContract = useCallback((contract: string) => {
+    setContracts((current) => {
+      const next = new Set(current);
+      if (next.has(contract)) next.delete(contract);
+      else next.add(contract);
       return next;
     });
   }, []);
@@ -327,10 +373,13 @@ export function AiWorldGenerator({
               t={t}
               experienceMode={experienceMode}
               content={content}
+              pluginContent={pluginContent}
+              contracts={contracts}
               additionalInstructions={additionalInstructions}
               disabled={isWorking || phase === "done"}
               onExperienceModeChange={setExperienceMode}
               onToggleContent={toggleContent}
+              onToggleContract={toggleContract}
               onAdditionalInstructionsChange={setAdditionalInstructions}
             />
           </div>

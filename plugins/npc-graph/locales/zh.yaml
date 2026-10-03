@@ -1,0 +1,15 @@
+# Chinese text of the npc-graph plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: 关系图谱
+  description: 记录人物之间的关系，让故事提到相关人物时更连贯。
+runtimes/extractor/RUNTIME.md:
+  description: 从故事里整理人物、势力和他们之间的关系。
+runtimes/rag-retriever/RUNTIME.md:
+  description: 当你提到某个人时，帮助故事想起相关人物和关系。
+messages:
+  Relationship Graph: 关系图谱
+  No character or faction relationships yet. They will appear as the story continues.: 尚未发现角色或势力关系，继续推进故事后会自动出现……
+  Relationships among characters, groups, and factions in the current session. Green = positive, red = negative, gray = neutral.: 当前会话里的角色、群体与势力关系。绿线=正向关系，红线=负向关系，灰线=中立。点击节点查看档案。
+  "## Known NPC relationships (from graph retrieval)": "## 已知 NPC 关系（从图谱检索）"

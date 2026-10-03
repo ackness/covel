@@ -29,6 +29,7 @@ const brokenPlugin: PluginSummary = {
   runtimes: [],
   tools: [],
   userSettings: [],
+  languages: { text: ["en"], instructions: ["en"] },
 };
 
 describe("PackagesPane installed plugin management", () => {

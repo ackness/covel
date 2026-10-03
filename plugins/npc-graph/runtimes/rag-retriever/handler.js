@@ -8,21 +8,20 @@
  * when the player's message does not name a graph node.
  *
  */
-import { pickLocaleText } from "@covel/plugin-handlers-utils";
+import { translate } from "@covel/plugin-handlers-utils";
 
 /**
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
-  const { playerMessage, locale } = ctx;
+  const { playerMessage } = ctx;
   // ctx.pluginData is the one scoped plugin-data path — same shape for
   // trusted and community runtimes, so no store arity sniffing.
   const pluginData = ctx.pluginData;
   // This markdown header is injected into the narrator prompt, so resolve it to
   // the session locale instead of emitting a fixed-language heading.
-  const relHeader = pickLocaleText(
-    locale,
-    "## 已知 NPC 关系（从图谱检索）",
+  const relHeader = translate(
+    ctx,
     "## Known NPC relationships (from graph retrieval)",
   );
 

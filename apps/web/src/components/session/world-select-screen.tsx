@@ -29,6 +29,7 @@ import {
   isWorldLocaleMismatch,
   prioritizeWorldsByLocale,
   worldLanguageName,
+  worldPlayLocale,
 } from "@/lib/world-locale.js";
 import i18n from "@/i18n";
 import { DEFAULT_FALLBACK_LOCALE } from "@covel/shared";
@@ -137,7 +138,11 @@ export function WorldSelectScreen({
   function handleEnterWorld(worldId: string) {
     if (enteringWorldId) return;
     const world = worlds.find((item) => item.id === worldId);
-    if (world && isWorldLocaleMismatch(world.locale, activeLocale)) {
+    // Ask only when the world has no edition in the interface language.
+    if (
+      world &&
+      isWorldLocaleMismatch(worldPlayLocale(world, activeLocale), activeLocale)
+    ) {
       setPendingWorldId(worldId);
       return;
     }
@@ -362,6 +367,7 @@ export function WorldSelectScreen({
           world={selectedWorld}
           onClose={handleBack}
           onEdit={handleEditFromDetail}
+          onRevised={onWorldUpdated}
           onDelete={
             isWorldDeletable(selectedWorld)
               ? () => handleDeleteFromDetail(selectedWorld.id)

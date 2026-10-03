@@ -1,14 +1,11 @@
 {
   "id": "dice-check-panel",
-  "label": { "zh": "判定记录", "en": "Check Log" },
+  "label": "Check Log",
   "icon": "dices",
   "alwaysRender": true,
   "dataSource": { "namespace": "checks" },
   "emptyState": {
-    "message": {
-      "zh": "还没有判定记录。当你尝试有风险的行动时，判定结果会出现在这里。",
-      "en": "No checks resolved yet. Results will appear here when you attempt risky actions."
-    }
+    "message": "No checks resolved yet. Results will appear here when you attempt risky actions."
   },
   "view": {
     "component": "Stack",
@@ -21,10 +18,7 @@
           {
             "component": "Text",
             "props": {
-              "content": {
-                "zh": "快速掷骰与输入 /roll 使用同一条命令管线。",
-                "en": "Quick rolls use the same command pipeline as /roll."
-              },
+              "content": "Quick rolls use the same command pipeline as /roll.",
               "variant": "muted",
               "size": "xs"
             }
@@ -36,7 +30,7 @@
               {
                 "component": "Button",
                 "props": {
-                  "label": { "zh": "掷 d20", "en": "Roll d20" },
+                  "label": "Roll d20",
                   "variant": "primary",
                   "size": "compact"
                 },
@@ -53,7 +47,7 @@
               {
                 "component": "Button",
                 "props": {
-                  "label": { "zh": "掷 2d6", "en": "Roll 2d6" },
+                  "label": "Roll 2d6",
                   "variant": "default",
                   "size": "compact"
                 },

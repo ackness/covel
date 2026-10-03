@@ -6,6 +6,7 @@
  *   - `worlds/crud.ts`      — list / get / create / patch / delete.
  *   - `worlds/dimensions.ts`— dimensions export / import.
  *   - `worlds/data-sync.ts` — world-data preflight / sync-data / sync-dimensions.
+ *   - `worlds/translate.ts` — add an edition of a world in another language.
  *   - `worlds/shared.ts`    — shared Env type + metadata/entry helpers.
  *
  * Mount order: the data-sync and dimensions sub-paths are registered before the
@@ -18,10 +19,12 @@ import { worldDataSyncRoutes } from "./worlds/data-sync.js";
 import { worldDimensionRoutes } from "./worlds/dimensions.js";
 import { worldPluginPlanRoutes } from "./worlds/plugin-plan.js";
 import { worldCrudRoutes } from "./worlds/crud.js";
+import { worldTranslateRoutes } from "./worlds/translate.js";
 
 export const worldRoutes = new Hono<WorldEnv>();
 
 worldRoutes.route("/", worldDataSyncRoutes);
 worldRoutes.route("/", worldDimensionRoutes);
 worldRoutes.route("/", worldPluginPlanRoutes);
+worldRoutes.route("/", worldTranslateRoutes);
 worldRoutes.route("/", worldCrudRoutes);

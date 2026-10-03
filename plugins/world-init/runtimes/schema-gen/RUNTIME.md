@@ -1,10 +1,8 @@
 ---
 type: agent
-description:
-  zh: 开局一次性构建角色属性结构和世界资料。
-  en: >-
-    Builds the character attribute structure and world reference data once at
-    game start.
+description: >-
+  Builds the character attribute structure and world reference data once at game
+  start.
 schedule:
   stage: setup
   trigger:

@@ -9,7 +9,9 @@ observation/
 ├── package.json
 ├── README.md
 ├── PLUGIN.md
-└── PLUGIN.en.md
+├── PLUGIN.zh.md
+└── locales/
+    └── zh.yaml
 ```
 
 `PLUGIN.md`：
@@ -18,9 +20,7 @@ observation/
 ---
 id: observation
 kind: plugin
-displayName:
-  zh: 环境观察
-  en: Observation
+displayName: Observation
 description: Adds a short observation grounded in the latest narrative.
 requires: [narrative-engine@1]
 contributes:
@@ -51,6 +51,18 @@ runtime:
 Read runtime-inputs.narrative.value and describe one detail the player can observe.
 Use at most {{ userSettings.length }} sentences.
 Do not invent an event, character, item, or decision that the narrative did not establish.
+```
+
+`locales/zh.yaml` 只写标签的译文，key 与 `PLUGIN.md` 相同：
+
+```yaml
+PLUGIN.md:
+  displayName: 环境观察
+  description: 根据最新叙事补充一小段环境观察。
+  contributes:
+    settings:
+      - key: length
+        label: 最多句数
 ```
 
 根 `requires` 让启用时找到叙事提供者；输入绑定让本 runtime 等待并读取该提供者结果。`required: true` 表示上游失败或不存在时本 runtime 不能继续。`visibility: plugin` 表示结果属于插件输出；主故事提供者使用 `story`。
@@ -112,9 +124,9 @@ contributes:
 
 ## 本地化
 
-在 `PLUGIN.en.md` 中只保留需要翻译的自然语言字段和正文。若插件使用多 runtime，则正文翻译放在对应的 `RUNTIME.en.md`。翻译不能改变工具、输出契约、调度和提示词段位置。
+`PLUGIN.md` 的正文用 English 写。中文版本放在 `PLUGIN.zh.md`，只保留正文和固定段的 `content`；若插件使用多 runtime，则放在对应的 `RUNTIME.zh.md`。简体中文会话读取中文版本，其他语言的会话读取 English 正文并按会话语言输出，不需要为每种语言再写一份。变体不能改变工具、输出契约、调度和提示词段位置。
 
-清单 `displayName/description/label` 可使用 locale map。玩家设置通过 `ctx.userSettings` 或提示词变量读取，不通过旧根 `userSettings` 声明。
+清单的 `displayName/description/label` 写 English；其他语言写在 `locales/<locale>.yaml` 里（见 [i18n](../reference/i18n.md#2-本地化插件)）。玩家设置通过 `ctx.userSettings` 或提示词变量读取，不通过旧根 `userSettings` 声明。
 
 ## 验证与发布
 

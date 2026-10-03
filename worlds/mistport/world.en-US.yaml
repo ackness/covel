@@ -1,0 +1,93 @@
+# en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
+name: Mistport Chronicles
+summary: Three tide-bells, a missing Guildmaster, and a shattered Key draw you
+  into a four-way struggle beneath Mistport's eternal fog.
+pluginPolicy:
+  packs:
+    - id: mistport-investigation
+      label: Mistport Investigation
+      description:
+        A traditional investigation of Qi's disappearance with clue memory,
+        relationship tracking, world rules, preset characters, and portraits.
+      reason: A Case Board, Faction Standing, the Deep Withdrawal, and the Key
+        Fragments settle after every turn alongside tide-time, fog-rot, and
+        seven core characters, so every choice in the long investigation leaves
+        a mark.
+characterSchema:
+  attributes:
+    - id: persona
+      name: Personality
+      description: The hero's personality and how they speak (voice follows from
+        personality) — e.g. "taciturn, wary, decisive when it counts." Shapes
+        how the narrator portrays the character and their dialogue.
+    - id: origin
+      name: Origin
+      description:
+        Enter as a newly admitted Tide-Reader apprentice or an Undertow
+        local; you may also add a homeland, former trade, and reason for coming
+        to the Main Pier.
+    - id: motive
+      name: Driving Motive
+      description:
+        "Your personal reason to risk investigating Qi: a debt, curiosity,
+        redemption, profit, or a missing person of your own."
+    - id: faction
+      name: Faction
+      description: Affiliated faction or guild
+    - id: role
+      name: Role
+      description: Role or rank within the faction
+    - id: location
+      name: Location
+      description: Current whereabouts
+    - id: tideSense
+      name: Tide Sense
+      description: Sensitivity to the tide and fog
+    - id: fogRot
+      name: Fog Rot
+      description: "Irreversible fog-rot progress: 0-24 latent, 25-49 visibly
+        translucent, 50-74 stronger Tide-Force with lasting impairment, and 75+
+        close to dissolution."
+    - id: fogRotSigns
+      name: Fog-Rot Signs
+      description:
+        Currently observable locations, mutations, and symptoms of fog-rot;
+        leave blank when there are no signs.
+    - id: vitality
+      name: Vitality
+      description: Capacity to act after injury, fatigue, and exposure
+    - id: stress
+      name: Stress
+      description: Mental strain from fear, secrets, and time pressure
+    - id: condition
+      name: Condition
+      description: Injuries, illness, exposure, or other ongoing conditions
+    - id: tideReading
+      name: Tide-Reading
+      description:
+        Skill at appraising relics, reading tide-marks, and stabilizing
+        Tide-Force
+    - id: stealth
+      name: Fogcraft
+      description: Skill at controlling sound and light, navigating, and evading fog beasts
+    - id: diplomacy
+      name: Diplomacy
+      description: Skill at negotiation, reading people, and navigating the four factions
+    - id: combat
+      name: Combat
+      description: Skill at self-defense and fighting in confined ruins
+    - id: permit
+      name: Undertow Permit
+      description: Whether the character holds a Council-recognized Undertow permit
+    - id: equipment
+      name: Equipment
+      description: Fog-lamps, silenced tools, waterproof rope, and other usable gear
+    - id: relics
+      name: Carried Relics
+      description: Appraised or unappraised relics and fragments currently carried
+    - id: trust
+      name: Trust
+      description: Trust toward the player
+    - id: dispositionToPlayer
+      name: Disposition
+      description: Attitude toward the player

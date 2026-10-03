@@ -26,9 +26,6 @@ id: fact-index
 kind: plugin
 description: Extracts and retrieves narrative facts.
 provides: [facts.index@1, facts.query@1]
-contracts:
-  facts.index@1:
-    schema: ./schemas/facts.schema.json
 contributes:
   data:
     facts:
@@ -37,6 +34,8 @@ contributes:
       schema: ./schemas/facts.schema.json
 ---
 ```
+
+namespace 接收 `facts.index@1`，它的 `schema` 就是这个契约的公共 schema，不需要在根 `contracts` 里再写一遍。只有不被任何 namespace 接收的契约（例如 runtime 的输出契约）才写 `contracts.<id>.schema`。
 
 `runtimes/extract/RUNTIME.md`：
 
@@ -81,7 +80,47 @@ function:
 
 `contracts` 定义 schema，`contributes.data.<namespace>.accepts` 声明接收哪些版本化数据契约。接收 schema 路径需与契约声明一致。相同契约的多个提供者必须使用一致 schema，冲突在加载或导入前报错。
 
-世界来源使用 `schema: contract:facts.index@1`、`to: contract:facts.index@1`，框架按当前活动插件声明分发。插件的私有 namespace 不作为跨插件 API，也不再使用 `plugin:<id>/<namespace>` 作为作者导入目标。投影通过根 `contributes.worldProjections` 声明，输出必须对应可导入的数据 namespace。详见[世界数据参考](../reference/world-data.md)。
+接收世界数据的 namespace 应同时声明 `authoring`，告诉世界作者怎么提供这份内容：
+
+```yaml
+contributes:
+  data:
+    facts:
+      version: 1
+      schema: ./schemas/facts.schema.json
+      accepts: [facts.index@1]
+      authoring:
+        title: Known facts
+        hint: >-
+          Write one record for each fact the story starts with. Keep `text` to
+          one sentence.
+        example: ./examples/facts.json
+        source:
+          kind: yaml
+          path: data/facts.yaml
+          key: id
+```
+
+`title` 是标签，主清单里写 English；中文写在 `locales/zh.yaml`：
+
+```yaml
+PLUGIN.md:
+  contributes:
+    data:
+      facts:
+        authoring:
+          title: 已知事实
+```
+
+- `title` 是给作者看的内容名称；`hint` 说明怎么写好这类记录，用简短明确的英文句子。
+- `summary` 是给玩家看的一句话简介，支持多语言；应用内创作界面用它作为选项说明。
+- `example` 指向一份合法示例（JSON）。它按 namespace 的 schema 校验，`pnpm describe:authoring --check` 和仓库测试都会检查。
+- `source` 是这份内容在世界包里的约定来源：`kind`、`path`、`key`，以及可选的 `visibility: hidden` 和 `lorebook: true`。媒体目录用 `kind: media`。世界包把文件放在这个 `path` 上就会被导入，不需要 descriptor；两个契约声明了同一个 `path` 时这个路径不算约定，所以选一个别的插件不会用的路径。
+- `generate` 声明应用内的世界生成器可以只凭 `hint` 和 `example` 生成这份内容：`offer` 把它列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、非媒体的、以 `id` 为 key 的来源。玩家选中后，生成器会把这个契约的 schema、提示和示例写进提示词，并把接收插件加入世界的 `pluginPolicy.requested`。只有在真实模型上验证过生成质量的内容才应声明它。
+
+`pnpm describe:authoring` 会把这些声明汇总成每种内容的路径、写法和示例（以及等价的 descriptor 条目），世界创作 skill 和应用内生成器读的是同一份数据。新插件声明了 `authoring`，就不需要再去修改中心文档或 skill。字段表见 [Plugin manifest 字段表](../reference/schema/plugin-manifest.md)。
+
+世界来源使用 `to: contract:facts.index@1`（`schema` 省略时就是目标契约的 schema），框架按当前活动插件声明分发。插件的私有 namespace 不作为跨插件 API，也不再使用 `plugin:<id>/<namespace>` 作为作者导入目标。投影通过根 `contributes.worldProjections` 声明，输出必须对应可导入的数据 namespace。详见[世界数据参考](../reference/world-data.md)。
 
 角色蓝图等业务格式由其插件拥有。框架处理通用 source/target 和 CharacterSchema/CharacterRecord，不按具体插件 ID 包装数据或制造角色镜像。
 
@@ -113,7 +152,7 @@ Function 通过 `function.tools` 声明 `ctx.tools.call` 的白名单，不能�
 
 ## 本地化与加载快照
 
-根变体为 `PLUGIN.<locale>.md`，子变体为 `RUNTIME.<locale>.md`。变体可以省略不翻译的结构，loader 会从 canonical 继承；结构漂移被报告并保持 canonical 值。提示词段 ID、position、runtime 输入、工具和超时均属于结构。
+canonical 正文是 English；中文变体为根 `PLUGIN.zh.md` 和子 runtime 的 `RUNTIME.zh.md`，其他语言的变体文件不被读取。变体可以省略不翻译的结构，loader 会从 canonical 继承；结构漂移被报告并保持 canonical 值。提示词段 ID、position、runtime 输入、工具和超时均属于结构。
 
 静态提示词语言版本在插件加载时捕获，执行期间不读磁盘。热重载替换后，新执行看到新定义，已开始的执行继续使用其捕获版本。不要在扩展 handler 内重新解析 manifest。
 

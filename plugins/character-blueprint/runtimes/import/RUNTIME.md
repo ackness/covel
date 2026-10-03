@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 把预设人物资料导入当前故事。
-  en: Imports a preset character profile into the story.
+description: Imports a preset character profile into the story.
 schedule:
   trigger:
     type: manual

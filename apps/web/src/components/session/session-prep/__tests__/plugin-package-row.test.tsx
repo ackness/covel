@@ -35,6 +35,7 @@ const plugin: PluginSummary = {
     outputContract: undefined,
     tags: [],
   })),
+  languages: { text: ["en"], instructions: ["en"] },
   userSettings: [
     {
       key: "imageRole",
@@ -125,4 +126,26 @@ it("warns about the effective binding, then clears warnings when the missing def
   ]);
   fireEvent.change(runtime, { target: { value: "" } });
   expect(setBinding).toHaveBeenCalledWith("fixture/agent-0", "");
+});
+it("marks a plugin that has no text in the interface language", async () => {
+  // The fixture has English text only.
+  const view = render(<PluginPackageRow {...rowProps()} />);
+  expect(screen.queryByText("Not translated")).toBeNull();
+
+  await act(async () => {
+    await i18n.changeLanguage("zh-CN");
+  });
+  view.rerender(<PluginPackageRow {...rowProps()} />);
+  expect(screen.getByText("未翻译")).toBeTruthy();
+
+  view.rerender(
+    <PluginPackageRow
+      {...rowProps()}
+      pkg={{
+        ...plugin,
+        languages: { text: ["en", "zh"], instructions: ["en"] },
+      }}
+    />,
+  );
+  expect(screen.queryByText("未翻译")).toBeNull();
 });

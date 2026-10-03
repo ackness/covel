@@ -1,16 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import handler from "../runtimes/recorder/handler.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages`: this plugin's translations.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 const TOPIC = "check.resolved";
 
+// What the narrative reports: its decisions and the outcome it wrote. The
+// die, the DC and the total are the recorder's.
 const VALID_CHECK = {
   action: "撬开地窖的铜锁",
   attribute: "敏捷",
-  roll: 14,
   modifier: 3,
-  dc: 12,
   difficulty: "normal",
-  total: 17,
   outcome: "success",
 };
 
@@ -25,6 +31,7 @@ function makeCtx({
   return {
     pluginId: "dice-check",
     runtimeId: "dice-check/recorder",
+    messages,
     sessionId: "sess-1",
     turnId: "turn-7",
     triggerEvent: noTriggerEvent ? undefined : { topic: TOPIC, data },
@@ -63,11 +70,8 @@ describe("dice-check recorder handler", () => {
           {
             action: "Check the receiver wiring for a loose connection",
             attribute: "systems",
-            roll: 12,
             modifier: 4,
-            dc: 12,
             difficulty: "normal",
-            total: 16,
             outcome: "success",
           },
         ],
@@ -148,13 +152,11 @@ describe("dice-check recorder handler", () => {
 
   it("records every check of a multi-check batch with consecutive sequence keys", async () => {
     // Arrange
+    // The second check of the turn uses the second die, a 6.
     const second = {
       action: "缒链下降",
-      roll: 6,
       modifier: 1,
-      dc: 12,
       difficulty: "normal",
-      total: 7,
       outcome: "failure",
     };
     const ctx = makeCtx({ data: { checks: [VALID_CHECK, second] } });
@@ -188,9 +190,10 @@ describe("dice-check recorder handler", () => {
     expect(messageRow.key).toBe("turn-7");
     expect(messageRow.value.__turnId).toBe("turn-7");
     expect(messageRow.value.checks).toHaveLength(1);
+    // Every language the plugin ships: the block picks the UI language.
     expect(messageRow.value.checks[0].outcomeLabel).toEqual({
-      zh: "成功",
       en: "Success",
+      zh: "成功",
     });
   });
 
@@ -200,7 +203,8 @@ describe("dice-check recorder handler", () => {
     const ctx = makeCtx({
       data: {
         checks: [
-          { ...VALID_CHECK, modifier: -3, total: 11, outcome: "failure" },
+          // One check is on record, so this one uses the second die, a 14.
+          { ...VALID_CHECK, modifier: -3, outcome: "failure" },
         ],
       },
       existingCheckRows: [
@@ -230,9 +234,7 @@ describe("dice-check recorder handler", () => {
     // Arrange
     const ctx = makeCtx({
       data: {
-        checks: [
-          { ...VALID_CHECK, roll: 20, total: 23, outcome: "critical-success" },
-        ],
+        checks: [{ ...VALID_CHECK, outcome: "critical-success" }],
       },
       dice: [20, 6, 8],
     });
@@ -248,10 +250,12 @@ describe("dice-check recorder handler", () => {
     expect(checksRow.value.outcomeColor).toBe("purple");
   });
 
-  it("drops invalid batch items but records the valid ones", async () => {
-    // Arrange — first item lacks roll, second is fine
-    const { roll: _dropped, ...withoutRoll } = VALID_CHECK;
-    const ctx = makeCtx({ data: { checks: [withoutRoll, VALID_CHECK] } });
+  it("drops an invalid batch item, and the next check keeps its own die", async () => {
+    // Arrange — the first item has no modifier. It still was the first check
+    // of the turn, so the second item is judged by the second die, a 6.
+    const { modifier: _dropped, ...withoutModifier } = VALID_CHECK;
+    const second = { ...VALID_CHECK, action: "缒链下降", outcome: "failure" };
+    const ctx = makeCtx({ data: { checks: [withoutModifier, second] } });
 
     // Act
     const result = await handler(ctx);
@@ -261,13 +265,35 @@ describe("dice-check recorder handler", () => {
       (r) => r.namespace === "checks",
     );
     expect(checkRows).toHaveLength(1);
-    expect(checkRows[0].value.action).toBe("撬开地窖的铜锁");
+    expect(checkRows[0].value).toMatchObject({
+      action: "缒链下降",
+      roll: 6,
+      total: 9,
+      outcome: "failure",
+    });
+    expect(
+      result.effects.pluginData.find((r) => r.namespace === "message").value
+        .rejectedCount,
+    ).toBe(1);
+  });
+
+  it("takes the die from the pool, whatever a receipt says about it", async () => {
+    // A receipt cannot choose its die: the first check uses the first die.
+    const ctx = makeCtx({
+      data: { checks: [{ ...VALID_CHECK, roll: 20, dc: 8, total: 23 }] },
+    });
+
+    const result = await handler(ctx);
+
+    expect(
+      result.effects.pluginData.find((r) => r.namespace === "checks").value,
+    ).toMatchObject({ roll: 14, dc: 12, total: 17, outcome: "success" });
   });
 
   it("reports failure when every batch item misses a required field", async () => {
     // Arrange
-    const { roll: _dropped, ...withoutRoll } = VALID_CHECK;
-    const ctx = makeCtx({ data: { checks: [withoutRoll] } });
+    const { modifier: _dropped, ...withoutModifier } = VALID_CHECK;
+    const ctx = makeCtx({ data: { checks: [withoutModifier] } });
 
     // Act
     const result = await handler(ctx);
@@ -325,11 +351,8 @@ describe("dice-check recorder handler", () => {
         checks: [
           {
             action: "说服守卫",
-            roll: 9,
-            total: 9,
             outcome: "failure",
             modifier: "3",
-            dc: 12.5,
             difficulty: "impossible",
           },
         ],
@@ -345,10 +368,14 @@ describe("dice-check recorder handler", () => {
   });
 
   it.each([
-    ["a roll outside the pre-rolled pool", { roll: 2 }],
-    ["an inconsistent total", { total: 999 }],
-    ["a DC inconsistent with its difficulty", { dc: 16 }],
-    ["an outcome inconsistent with total vs DC", { outcome: "failure" }],
+    // The first die is a 14: with +3 against DC 12 the outcome is success.
+    ["an outcome that the die does not give", { outcome: "failure" }],
+    [
+      "a critical outcome that the die did not roll",
+      { outcome: "critical-success" },
+    ],
+    ["a modifier that is not an attribute modifier", { modifier: 11 }],
+    ["an unknown difficulty", { difficulty: "legendary" }],
   ])("rejects %s", async (_label, patch) => {
     const ctx = makeCtx({
       data: { checks: [{ ...VALID_CHECK, ...patch }] },
@@ -368,7 +395,7 @@ describe("dice-check recorder handler", () => {
   it("fails closed without shifting positions when the dice pool is malformed", async () => {
     const ctx = makeCtx({
       data: { checks: [VALID_CHECK] },
-      dice: [99, VALID_CHECK.roll],
+      dice: [99, 14],
     });
     const result = await handler(ctx);
     expect(result.outcome).toBe("failed");

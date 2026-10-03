@@ -1,5 +1,5 @@
 import {
-  pickLocaleText as pick,
+  translate,
   makeProposal,
   withPendingProposals,
   wordId,
@@ -28,7 +28,7 @@ import {
  * @type {import("@covel/plugin-handlers-utils").PluginAgentGuard}
  */
 export default async function guard(ctx) {
-  const { logger, sessionId, store, locale } = ctx;
+  const { logger, sessionId, store } = ctx;
 
   const characters = ctx.world?.characters;
   const player = Array.isArray(characters)
@@ -103,10 +103,10 @@ export default async function guard(ctx) {
               playerExists: true,
               playerId: id,
               playerName: name,
-              narrativeOutput: pick(
-                locale,
-                `[系统] 已创建角色 ${name}，冒险即将开始……`,
-                `[System] Character ${name} created — your adventure is about to begin…`,
+              narrativeOutput: translate(
+                ctx,
+                "[System] Character {name} created — your adventure is about to begin…",
+                { name },
               ),
               preGameDone: true,
             },
@@ -195,7 +195,7 @@ function pickDescription(values) {
     }
     if (parts.length >= 3) break;
   }
-  return parts.length > 0 ? parts.join("；") : undefined;
+  return parts.length > 0 ? parts.join("; ") : undefined;
 }
 
 /**

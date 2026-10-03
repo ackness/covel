@@ -95,7 +95,11 @@ export async function prepareDimensionFinalization(args: {
       continue;
     for (const proposal of result.pendingProposals ?? []) {
       if (proposal.type !== "dimension.initialize") continue;
-      const initialized = materializeDimensionRecords(records, proposal);
+      const initialized = materializeDimensionRecords(
+        records,
+        proposal,
+        session.locale,
+      );
       const entries = Object.entries(initialized)
         .filter(([id]) => !records[id])
         .map(([key, value]) => ({

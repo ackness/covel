@@ -3,6 +3,7 @@ import type { PluginInputSlot, PluginServiceClient } from "./plugin-api.js";
 import type { ExtensionWorldModel } from "./extension-points.js";
 import type { HandlerResult, JobStatusEffect } from "./handler-result.js";
 import type { PluginToolResult } from "./tool-result.js";
+import type { PluginMessages } from "./messages.js";
 
 export interface FunctionStoreView {
   /** Read a single plugin_data row scoped to the calling plugin. */
@@ -118,6 +119,8 @@ export interface PluginFunctionContext {
    */
   readonly logicalTurn?: number;
   readonly locale?: string;
+  /** This plugin's translations, read by `translate` and `labelText`. */
+  readonly messages?: PluginMessages;
   readonly store: FunctionStoreView;
   readonly world?: ExtensionWorldModel;
   readonly services?: PluginServiceClient;

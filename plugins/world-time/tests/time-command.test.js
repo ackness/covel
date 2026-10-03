@@ -4,13 +4,21 @@ import { discoverPlugins, loadPluginDefinition } from "@covel/plugin-loader";
 import { worldTimeSchema } from "../schema.js";
 import time from "../rpc/time.js";
 import register from "../server/index.js";
-import { DEFAULT_TIME, initialTick } from "../clock.js";
+import { DEFAULT_TIME, defaultTime, initialTick } from "../clock.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages` for a Chinese session.
+const chinese = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 function context(value, locale = "en") {
   return {
     sessionId: "session",
     pluginId: "world-time",
     locale,
+    ...(locale === "zh-CN" ? { messages: chinese } : {}),
     store: {
       getPluginData: vi.fn(async () => (value ? { value } : null)),
       setPluginData: vi.fn(),
@@ -53,7 +61,8 @@ describe("world-time command", () => {
   it("formats the committed calendar in the session locale and leaves its tick and turn unchanged", async () => {
     const value = {
       schemaVersion: 1,
-      definition: DEFAULT_TIME,
+      // What a Chinese session records: the default calendar in Chinese.
+      definition: defaultTime({ locale: "zh-CN", messages: chinese }),
       tick: initialTick(DEFAULT_TIME) + 60,
       display: "Stale cached display",
       lastTurnId: "turn-1",

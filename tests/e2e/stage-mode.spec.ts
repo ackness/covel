@@ -280,6 +280,7 @@ test.describe("Stage view mode", () => {
                 runtimes: [],
                 tools: [],
                 userSettings: [],
+                languages: { text: ["en"], instructions: ["en"] },
                 provides: [],
                 requires: [],
                 optional: [],

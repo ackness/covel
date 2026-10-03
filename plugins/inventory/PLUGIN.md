@@ -1,14 +1,10 @@
 ---
 id: inventory
 kind: plugin
-displayName:
-  zh: 行囊
-  en: Inventory
-description:
-  zh: 每回合从叙事中记录明确的物品得失与装备变化，右栏随时可查背包。
-  en: >-
-    Records explicit item gains, losses, and equipment changes from each turn's
-    narrative, with an always-available bag panel.
+displayName: Inventory
+description: >-
+  Records explicit item gains, losses, and equipment changes from each turn's
+  narrative, with an always-available bag panel.
 tags:
   - "data:world-data"
   - "cost:function"
@@ -19,17 +15,12 @@ provides:
 requires:
   - world-ir-provider@1
 entry: ./server/index.js
-contracts:
-  inventory.items@1:
-    schema: ./schemas/items.schema.json
 contributes:
   commands:
     - name: bag
       aliases:
         - inventory
-      description:
-        zh: 查看当前背包并打开行囊面板。
-        en: View the current bag and open the inventory panel.
+      description: View the current bag and open the inventory panel.
       action: open-bag
   data:
     items:
@@ -40,6 +31,18 @@ contributes:
       version: 1
       accepts:
         - inventory.items@1
+      authoring:
+        title: Opening inventory
+        hint: >-
+          List what the player carries when the story opens. `quantity` is a
+          number. Tag money with `currency`. Set `equipped` to true for gear the
+          player is wearing or holding. Keep the list short; items gained in
+          play are tracked automatically.
+        example: ./examples/items.json
+        source:
+          kind: yaml
+          path: data/items.yaml
+          key: id
   ui:
     right:
       - ./ui/inventory-panel.json

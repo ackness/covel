@@ -92,9 +92,24 @@ describe("guide manifest and UI loading", () => {
     // hardcoding a particular narrative runtime id.
     expect(loaded.promptTemplate).toContain("<runtime-inputs>");
     expect(loaded.promptTemplate).toContain("`narrative.value`");
-    expect(loaded.promptTemplate).toContain("`recap` 用 1-3 句、20-240 个字符");
-    expect(loaded.promptTemplate).toContain("只写叙事或对话中已经确认的事实");
+    // The limits the tool enforces are stated in the prompt, per language.
     expect(loaded.promptTemplate).toContain(
+      "`recap`: 1-3 sentences, at most 60 words.",
+    );
+    expect(loaded.promptTemplate).toContain(
+      "include only confirmed narrative/dialogue facts",
+    );
+    expect(loaded.promptTemplate).toContain(
+      "`decision`: one sentence, at most 25 words.",
+    );
+    // A Chinese session reads the PLUGIN.zh.md variant with the same limits.
+    const chinese = await loadRuntime(discovery!, "guide", "zh-CN");
+    expect(chinese.promptTemplate).toContain("<runtime-inputs>");
+    expect(chinese.promptTemplate).toContain(
+      "`recap` 用 1-3 句、20-240 个字符",
+    );
+    expect(chinese.promptTemplate).toContain("只写叙事或对话中已经确认的事实");
+    expect(chinese.promptTemplate).toContain(
       "`decision` 用 8-120 个字符写出玩家当前需要回应的一个问题或决策点",
     );
     const ui = await loadPluginUi(discovery!);

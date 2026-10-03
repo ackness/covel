@@ -94,6 +94,26 @@ Community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is
 import-gated behind two-phase approval: a `covel:plugin-server-code` grant, then
 the action grant.
 
+## Translations from outside a package
+
+`$COVEL_HOME/translations` (`COVEL_USER_TRANSLATIONS_DIR`) holds plugin
+translations that did not come with the plugin: translation packages the user
+copied there and machine translations made on that machine. The loader reads
+them as data:
+
+- Only labels and `messages` are read. A prompt body (`*.zh.md`) is read from
+  the plugin package only, so a translation cannot change an instruction.
+- A label section keeps label fields only (`displayName`, `description`,
+  `label`, `title`, `summary`); anything else in it is dropped, as for the
+  plugin's own locale files.
+- The author's translation wins wherever both translate the same text.
+- Symbolic links are not followed; only regular files are read.
+
+The text is still model-facing in one case: a `messages` entry for text that
+plugin code writes into state or context. That makes a translation package
+the same class of input as a world package's lore, and it is why the
+directory is a local, operator-controlled path with no install endpoint.
+
 ## Other server guards
 
 | Guard              | Behavior                                                                                                                                        | Code                                        |

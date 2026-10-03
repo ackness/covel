@@ -1,14 +1,10 @@
 ---
 id: living-world-rules
 kind: plugin
-displayName:
-  zh: 世界规则
-  en: World Rules
-description:
-  zh: 展示世界包里长期生效的规则（禁忌、风俗和特殊设定），并让叙事始终遵守。
-  en: >-
-    Shows the world's lasting rules, such as taboos, customs, and special
-    setting details, and keeps the story following them.
+displayName: World Rules
+description: >-
+  Shows the world's lasting rules, such as taboos, customs, and special setting
+  details, and keeps the story following them.
 tags:
   - "data:world-data"
   - "data:lorebook"
@@ -18,9 +14,6 @@ tags:
 provides:
   - living-world-rules@1
   - world-info@1
-contracts:
-  world.rules@1:
-    schema: ./schemas/rules.schema.json
 contributes:
   data:
     rules:
@@ -29,6 +22,21 @@ contributes:
       version: 1
       accepts:
         - world.rules@1
+      authoring:
+        title: World rules
+        hint: >-
+          Write one rule for each fact the narrative must never contradict. Each
+          rule needs `schemaVersion: 1`, an `id` and `content`. `kind` is
+          `constant`, `triggered` or `evolving`; `category` is `character`,
+          `scene`, `relationship`, `world` or `style`. State the rule and its
+          consequence in plain sentences. Do not restate values that a dimension
+          already tracks.
+        example: ./examples/rules.json
+        source:
+          kind: yaml
+          path: data/rules/world-rules.yaml
+          key: id
+          lorebook: true
   worldProjections:
     rules-from-world-ir:
       from: "contract:world-ir@1"

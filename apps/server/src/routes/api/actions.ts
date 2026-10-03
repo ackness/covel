@@ -125,7 +125,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     );
   }
   const body = bodyResult.value;
-  const { requestId, type, sessionId, locale, model, payload } = body;
+  const { requestId, type, sessionId, model, payload } = body;
   const isRuntimeRetry =
     type === "retry_runtime" || type === "retry_failed_runtimes";
 
@@ -200,11 +200,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         : ""; // start/retry carry no new player message
   const turnId = crypto.randomUUID();
 
-  // Locale: an explicit request.locale (sent by the client on every turn
-  // based on the live UI language) wins over the session's stored locale so
-  // users who toggle language mid-session see matching LLM output. The
-  // session.locale still acts as the fallback when the client omits it.
-  const effectiveLocale = locale ?? session.locale;
+  // The content locale is fixed when the session is created. A request cannot
+  // change it: switching the UI language mid-session changes labels, not the
+  // language the story is written in.
+  const effectiveLocale = session.locale;
 
   // Reconcile the process-local registry from the persisted session snapshot.
   // This is needed after restart and also removes plugins disabled by another
@@ -431,18 +430,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           );
 
           let effectiveSession = liveSession;
-          if (effectiveSession.locale !== effectiveLocale) {
-            const updatedAt = new Date().toISOString();
-            await store.updateSession(sessionId, {
-              locale: effectiveLocale,
-              updatedAt,
-            });
-            effectiveSession = {
-              ...effectiveSession,
-              locale: effectiveLocale,
-              updatedAt,
-            };
-          }
           if (
             type === "start_session" &&
             payload.loreOverride !== undefined &&
@@ -874,13 +861,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         wasPreGamePending,
         queuedRuntimeJobs,
         followerJobs,
-      } = await withSettledExecutionLock(
-        c,
-        sessionId,
-        executeCapturedTurn,
-        undefined,
-        effectiveLocale,
-      );
+      } = await withSettledExecutionLock(c, sessionId, executeCapturedTurn);
 
       // ——— Post-lock tail (per turn) ———
       // Job announcements and the final SSE writes deliberately run AFTER the

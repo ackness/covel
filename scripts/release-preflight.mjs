@@ -290,6 +290,8 @@ try {
       "--import",
       "tsx",
       path.join(repoRoot, "scripts/validate-release-worlds.ts"),
+      // Bundled worlds may only name bundled plugins and contracts.
+      "--strict",
       ...worldDirs.map((entry) => path.join(repoRoot, "worlds", entry.name)),
     ],
     { cwd: repoRoot, encoding: "utf-8", stdio: "pipe" },

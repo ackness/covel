@@ -279,6 +279,68 @@ describe("world-init domain tools", () => {
       settlement: "no-change",
       updates: [],
     });
+    // Shapes that real-model runs sent and that have one meaning: a slash
+    // path, a reason on a change or beside `updates`, and one dimension
+    // split over two entries.
+    const loose = await updateDimensions({ tool, z }).execute(
+      {
+        updates: [
+          {
+            id: "board",
+            expectedVersion: 3,
+            changes: [
+              { path: "letter/status", value: "corroborated", reason: "Seen." },
+            ],
+            reason: "The letter is confirmed.",
+          },
+          {
+            id: "board",
+            expectedVersion: 3,
+            changes: [{ path: "report.lead", value: "Report 74, one page" }],
+            reason: "A page is missing.",
+          },
+        ],
+        reason: "Two facts this turn.",
+      },
+      ctx,
+    );
+    expect(getPendingProposals(loose)[0]?.payload.updates).toEqual([
+      expect.objectContaining({
+        id: "board",
+        reason: "The letter is confirmed. A page is missing.",
+        value: {
+          letter: { lead: "Torn letter", status: "corroborated" },
+          report: { lead: "Report 74, one page", status: "unverified" },
+        },
+      }),
+    ]);
+    // A key that holds a slash is still one key.
+    const slashed = {
+      ...board,
+      "pier/7": { lead: "Pier 7", status: "unverified" },
+    };
+    const kept = await updateDimensions({ tool, z }).execute(
+      {
+        updates: [
+          {
+            id: "board",
+            expectedVersion: 3,
+            changes: [{ path: "pier/7.status", value: "corroborated" }],
+          },
+        ],
+      },
+      {
+        ...ctx,
+        world: {
+          dimensions: {
+            board: { ...ctx.world.dimensions.board, value: slashed },
+          },
+        },
+      },
+    );
+    expect(
+      getPendingProposals(kept)[0]?.payload.updates[0]?.value["pier/7"],
+    ).toEqual({ lead: "Pier 7", status: "corroborated" });
   });
   it("rejects change paths that reach a prototype", async () => {
     const ctx = trackerContext();

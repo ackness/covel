@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
 import handler from "../handler.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages` for a Chinese session.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 function makeStore(overrides = {}) {
   return {
@@ -21,6 +28,7 @@ describe("pregame handler", () => {
     const result = await handler({
       sessionId: "sess-1",
       locale: "zh-CN",
+      messages,
       store: makeStore(),
     });
 
@@ -50,6 +58,7 @@ describe("pregame handler", () => {
     const result = await handler({
       sessionId: "sess-1",
       locale: "zh",
+      messages,
       store: {
         async getSession() {
           throw new Error("boom");

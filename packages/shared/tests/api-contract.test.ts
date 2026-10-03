@@ -40,6 +40,7 @@ const plugin = {
   ],
   tools: [],
   userSettings: [],
+  languages: { text: ["en"], instructions: ["en"] },
 };
 
 describe("shared API contracts", () => {
@@ -66,7 +67,6 @@ describe("shared API contracts", () => {
       requestId: "req-1",
       sessionId: "session-1",
       type: "retry_runtime",
-      locale: "EN_us",
       payload: { runtimeId: "plugin/story" },
     });
 
@@ -76,7 +76,6 @@ describe("shared API contracts", () => {
         requestId: "req-1",
         sessionId: "session-1",
         type: "retry_runtime",
-        locale: "en-US",
         payload: { runtimeId: "plugin/story" },
       },
     });

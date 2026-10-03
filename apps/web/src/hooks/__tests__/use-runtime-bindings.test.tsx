@@ -34,6 +34,7 @@ const plugins: PluginSummary[] = [
     ],
     tools: [],
     userSettings: [],
+    languages: { text: ["en"], instructions: ["en"] },
   },
 ];
 

@@ -8,5 +8,10 @@ export function resolveUserResourceDirs(env = readRuntimeEnv()) {
   return {
     worlds: resolve(env.userWorldsDir ?? join(home, "worlds")),
     plugins: resolve(env.userPluginsDir ?? join(home, "plugins")),
+    // Translations made outside the packages: installed translation packages
+    // and machine translations made on this machine.
+    translations: resolve(
+      env.userTranslationsDir ?? join(home, "translations"),
+    ),
   };
 }

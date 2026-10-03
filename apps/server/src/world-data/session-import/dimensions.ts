@@ -6,6 +6,7 @@ import {
   dimensionIdSchema,
   DIMENSION_CONTRACT,
   DIMENSION_DATA_NAMESPACE,
+  resolveWorldDimensionsLocale,
   worldDimensionsSchema,
 } from "@covel/shared";
 import { canonicalJson, sha256Hex } from "../digest.js";
@@ -21,13 +22,21 @@ function parseDimensions(value: unknown) {
   return parsed.data;
 }
 
-/** All author entry points resolve to one effective declaration before session import. */
+/**
+ * All author entry points resolve to one effective declaration before session
+ * import. `locale` is the session's content locale: the records written here
+ * hold that one language, never the package's locale maps.
+ */
 export function appendDimensionPlan(
   plan: ImportPlan,
   dimensions: unknown,
-  deps?: WorldDataImportPreflightDeps,
+  deps: WorldDataImportPreflightDeps | undefined,
+  locale: string | undefined,
 ): ImportPlan {
-  const definitions = parseDimensions(dimensions);
+  const definitions = resolveWorldDimensionsLocale(
+    parseDimensions(dimensions),
+    locale,
+  );
   const providers = [...(deps?.registry?.getAll() ?? [])].filter(
     ([id, entry]) =>
       entry.status !== "error" &&
@@ -77,7 +86,11 @@ export function appendDimensionPlan(
   };
 }
 
-/** Match world loading precedence, but validate only dimension declarations here. */
+/**
+ * Match world loading precedence, but validate only dimension declarations
+ * here. The result is resolved for the session's content locale: a session
+ * stores one language, never the package's locale maps.
+ */
 export async function readEffectiveDimensions(args: {
   worldRoot: string;
   manifest: {
@@ -102,7 +115,7 @@ export async function readEffectiveDimensions(args: {
     args.worldRoot,
     paths,
     args.manifest.id ?? "world",
-    args.locale ?? args.manifest.defaultLocale,
+    args.manifest.defaultLocale,
     (message) => {
       externalDiagnostic = message;
     },
@@ -119,15 +132,19 @@ export async function readEffectiveDimensions(args: {
       target.path.join(".") !== "dimensions"
     )
       continue;
-    const read = await readWorldDataSource(
-      source,
-      args.locale ?? args.manifest.defaultLocale,
-    );
+    // Every overlay is compiled in: labels keep all languages. The values
+    // are resolved for the session's locale at the end of this function.
+    const read = await readWorldDataSource(source, undefined, {
+      overlays: { mode: "compile", baseLocale: args.manifest.defaultLocale },
+    });
     if (read.diagnostics.some((diagnostic) => diagnostic.level === "error"))
       throw new Error(
         read.diagnostics.map((diagnostic) => diagnostic.message).join("; "),
       );
     definitions = parseDimensions(read.value);
   }
-  return definitions;
+  return resolveWorldDimensionsLocale(
+    definitions,
+    args.locale ?? args.manifest.defaultLocale,
+  );
 }

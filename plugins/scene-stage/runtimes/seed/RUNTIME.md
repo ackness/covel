@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 开局时为舞台种下世界注册表里的第一个场景，避免叙事未发 scene.set 时舞台空白。
-  en: >-
-    Seeds the stage with the world registry's first scene at setup, so the stage
-    is never blank before the narrative emits scene.set.
+description: >-
+  Seeds the stage with the world registry's first scene at setup, so the stage
+  is never blank before the narrative emits scene.set.
 schedule:
   stage: setup
   trigger:
@@ -16,18 +14,18 @@ function:
   handler: ./handler.js
 ---
 
-# Scene Stage 开场种子
+# Scene Stage opening seed
 
-`scene.set` 的发射方是叙事 LLM（通过事件目录的【必做】指示）。指示是提示词约束，不是保证：弱模型可能整局不发，舞台就一直空白，而 `scene-stage/resolver` 是 `event` 触发的，没有事件就永远不跑。
+The narrative model emits `scene.set`, following a required instruction in the event directory. An instruction is a prompt constraint, not a guarantee: a weak model may never emit the event, and the stage then stays blank, because `scene-stage/resolver` is event-triggered and never runs without one.
 
-这个 runtime 是那条链路的确定性下限。它在 `stage: setup` 跑一次——**早于任何叙事输出**，所以不与 LLM 发的 `scene.set` 竞争（两者若在同一回合发射，事件扇出顺序不定，后写的会盖掉正确场景）。
+This runtime is the deterministic floor under that chain. It runs once at `stage: setup`, **before any narrative output**, so it does not race a `scene.set` from the model. (If both were emitted in the same turn, the event fan-out order would be undefined and the later write would cover the correct scene.)
 
-## 行为
+## Behavior
 
-1. `stage/current` 已存在（恢复会话、setup 重试）→ 跳过，绝不覆盖。
-2. 世界没有场景注册表，或注册表为空 → 跳过。未启用舞台模式的世界零影响。
-3. 否则把注册表第一个场景按白天变体写入 `stage/current`，`source: "world"`。
+1. `stage/current` already exists (a resumed session, a setup retry): skip, and never overwrite it.
+2. The world has no scene registry, or the registry is empty: skip. A world without stage mode is unaffected.
+3. Otherwise write the first scene of the registry to `stage/current` in its day variant, with `source: "world"`.
 
-叙事之后发的 `scene.set` 由 resolver 正常处理并覆盖此记录——种子只负责"第一帧不是空的"。
+A `scene.set` that the narrative emits later is handled by the resolver as usual and replaces this record. The seed only makes sure the first frame is not blank.
 
-注册表的第一个场景即开场场景：世界包的 `scenes` 数组顺序由作者决定（见 `docs/reference/world-data.md`），`scripts/emit-scenes.mjs` 保序输出。
+The first scene of the registry is the opening scene: the author decides the order of the `scenes` array in the world package (see `docs/reference/world-data.md`), and `scripts/emit-scenes.mjs` keeps that order.

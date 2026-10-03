@@ -1,16 +1,13 @@
 {
   "id": "affinity",
   "group": "affinity",
-  "label": { "zh": "好感度", "en": "Affinity" },
-  "shortLabel": { "zh": "好感", "en": "Affinity" },
+  "label": "Affinity",
+  "shortLabel": "Affinity",
   "icon": "heart",
   "groupOrder": 710,
   "dataSource": { "namespace": "affinity" },
   "emptyState": {
-    "message": {
-      "zh": "还没有好感记录，与角色互动后会自动出现……",
-      "en": "No affinity records yet. They will appear as you interact with characters…"
-    }
+    "message": "No affinity records yet. They will appear as you interact with characters…"
   },
   "view": {
     "component": "Stack",
@@ -19,10 +16,7 @@
       {
         "component": "Text",
         "props": {
-          "content": {
-            "zh": "分数范围 -100..100，进度条中点为中立。",
-            "en": "Scores range -100..100; the bar's midpoint is neutral."
-          },
+          "content": "Scores range -100..100; the bar's midpoint is neutral.",
           "variant": "muted",
           "size": "xs"
         }

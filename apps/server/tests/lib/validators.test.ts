@@ -11,19 +11,18 @@ describe("locale validation", () => {
     expect(normalizeLocale(" en_u_ca_gregory ")).toBe("en-u-ca-gregory");
   });
 
-  it("uses the same canonical locale contract for action requests", () => {
-    const result = validateActionRequest({
+  it("gives an action request no way to change the session's locale", () => {
+    const action = {
       requestId: "request-1",
       sessionId: "session-1",
       type: "send_message",
-      locale: " en_u_ca_gregory ",
       payload: { content: "hello" },
-    });
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.locale).toBe("en-u-ca-gregory");
-    }
+    };
+    expect(validateActionRequest(action).ok).toBe(true);
+    // The content locale is fixed when the session is created.
+    expect(validateActionRequest({ ...action, locale: "en-US" }).ok).toBe(
+      false,
+    );
   });
 
   it("rejects path-like locale values through the registry default", () => {

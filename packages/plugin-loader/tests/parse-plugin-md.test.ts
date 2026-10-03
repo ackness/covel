@@ -136,6 +136,95 @@ describe("current authoring manifests", () => {
       },
     ]);
   });
+  it("gives the runtime of a single-runtime package the tools the package contributes", () => {
+    const agent = { type: "agent", schedule: { stage: "post-turn" } };
+    const compiled = (runtime: object) =>
+      compileInlineRuntime(
+        parsePluginMd(
+          md({
+            ...root,
+            entry: "./server/index.js",
+            contributes: { tools: ["record-note", "list-notes"] },
+            runtime,
+          }),
+          "probe/PLUGIN.md",
+        ),
+      )!.manifest.tools;
+
+    // The tools have one runtime to go to: it does not list them again.
+    expect(compiled(agent)).toEqual({ plugin: ["record-note", "list-notes"] });
+    expect(
+      compiled({ ...agent, agent: { tools: { builtin: ["emit-event"] } } }),
+    ).toEqual({
+      builtin: ["emit-event"],
+      plugin: ["record-note", "list-notes"],
+    });
+    // A list that is written is the list, an empty one included.
+    expect(
+      compiled({ ...agent, agent: { tools: { plugin: ["record-note"] } } }),
+    ).toEqual({ plugin: ["record-note"] });
+    expect(compiled({ ...agent, agent: { tools: { plugin: [] } } })).toEqual({
+      plugin: [],
+    });
+  });
+
+  it("leaves the tool list of a runtime in a multi-runtime package as written", () => {
+    const plugin = parsePluginMd(
+      md({
+        ...root,
+        entry: "./server/index.js",
+        contributes: { tools: ["record-note"] },
+      }),
+      "probe/PLUGIN.md",
+    ).plugin;
+    // Each runtime of the package gets a different part: it names its tools.
+    expect(
+      parseRuntimeMd(
+        md({ type: "agent", schedule: { stage: "post-turn" } }),
+        "probe/runtimes/worker/RUNTIME.md",
+        plugin,
+      ).manifest.tools,
+    ).toBeUndefined();
+  });
+
+  it("takes a contract's schema from the data namespace that accepts it", () => {
+    const data = (schema: string, accepts: string[]) => ({
+      schema,
+      version: 1,
+      accepts,
+    });
+    const { plugin } = parsePluginMd(
+      md({
+        ...root,
+        contracts: {
+          "notes.public@1": { schema: "./schemas/public.schema.json" },
+        },
+        contributes: {
+          data: {
+            notes: data("./schemas/note.schema.json", [
+              "notes@1",
+              "notes.public@1",
+            ]),
+            drafts: data("./schemas/draft.schema.json", ["drafts@1"]),
+            // Two namespaces accept `shared@1` with different schemas.
+            left: data("./schemas/left.schema.json", ["shared@1"]),
+            right: data("./schemas/right.schema.json", ["shared@1"]),
+          },
+        },
+      }),
+      "probe/PLUGIN.md",
+    );
+
+    expect(plugin.contracts).toEqual({
+      // Not written in `contracts`: the schema of the namespace.
+      "notes@1": { schema: "./schemas/note.schema.json" },
+      "drafts@1": { schema: "./schemas/draft.schema.json" },
+      // Written: kept as it is.
+      "notes.public@1": { schema: "./schemas/public.schema.json" },
+      // `shared@1` has no entry: the manifest must say which schema is public.
+    });
+  });
+
   it("derives child identity from the directory and accepts function configuration", () => {
     const plugin = parsePluginMd(md(root), "probe/PLUGIN.md").plugin!;
     const parsed = parseRuntimeMd(

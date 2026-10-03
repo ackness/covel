@@ -2,7 +2,7 @@
  * Unified server entry (PLUGIN.md `entry`) — puts the quest the player is on
  * into the session summary: its next open objective and how far along it is.
  */
-import { appendSummaryEntries } from "@covel/plugin-handlers-utils";
+import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 
 export default function (covel) {
   covel.provideExtension("ui.slot@1", "summary", {
@@ -28,7 +28,7 @@ export default function (covel) {
         {
           id: "quest.current",
           kind: "text",
-          label: { zh: "当前目标", en: "Objective" },
+          label: labelText(ctx, "Objective"),
           value: next ? next.text : quest.name,
         },
       ];

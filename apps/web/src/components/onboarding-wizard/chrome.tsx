@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { resolveI18nText } from "@covel/shared";
 import { useLocalePreference } from "@/hooks/useLocalePreference.js";
 import { localeDefinitions } from "@/i18n/catalog-registry.js";
+import { localeOptionLabel } from "@/i18n/locale-option-label.js";
 import { TOTAL_STEPS } from "./constants.js";
 import type { OnboardingStep } from "./types.js";
 
@@ -18,7 +18,11 @@ export function LocaleToggle() {
       >
         {localeDefinitions.map((definition) => (
           <option key={definition.code} value={definition.code}>
-            {resolveI18nText(definition.label, locale) ?? definition.code}
+            {localeOptionLabel(
+              definition,
+              locale,
+              t("onboarding.languageExperimental", "experimental"),
+            )}
           </option>
         ))}
       </select>

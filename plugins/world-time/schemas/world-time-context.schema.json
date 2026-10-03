@@ -9,6 +9,7 @@
     "definition": { "type": "object" },
     "tick": { "type": "integer" },
     "display": { "type": "string" },
+    "units": { "type": "array", "items": { "type": "string" } },
     "locale": { "type": "string" }
   },
   "additionalProperties": true

@@ -3,19 +3,16 @@ sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
-    schema: covel://world/dimensions
     to: world:metadata.dimensions
   cast:
     kind: json
     path: characters/main-cast.json
-    schema: contract:character.blueprints@1
     to: contract:character.blueprints@1
     key: id
     after: dimensions
   campusRules:
     kind: yaml
     path: data/rules/campus-life.yaml
-    schema: contract:world.rules@1
     to: contract:world.rules@1+lorebook
     key: id
     after: cast
@@ -36,21 +33,18 @@ sources:
   scenesRegistry:
     kind: json
     path: media/scenes.registry.json
-    schema: contract:stage.scenes@1
     to: contract:stage.scenes@1
     key: registryId
     after: scenes
   presence:
     kind: json
     path: media/presence.json
-    schema: contract:character.portraits@1
     to: contract:character.portraits@1
     key: characterId
     after: portraits
   affinity:
     kind: yaml
     path: data/affinity.yaml
-    schema: contract:character.affinity@1
     to: contract:character.affinity@1
     key: id
     after: cast
@@ -64,18 +58,15 @@ sources:
     kind: json
     path: data/memory-blocks.json
     to: contract:memory.blocks@1
-    schema: contract:memory.blocks@1
     key: id
   timeDefinition:
     kind: yaml
     path: data/time.yaml
-    schema: contract:world.time-definition@1
     to: contract:world.time-definition@1
     key: id
   storyEvents:
     kind: yaml
     path: data/hidden/story-events.yaml
-    schema: contract:story.events@1
     to: contract:story.events@1
     key: id
     after: dimensions

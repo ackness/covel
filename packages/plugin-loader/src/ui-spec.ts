@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { compileUiText, readMessageCatalogs } from "./locale-messages.js";
 
 async function containedFile(root: string, file: string): Promise<string> {
   const [realRoot, realFile] = await Promise.all([
@@ -19,10 +20,11 @@ export async function loadPluginUiSpec(
   ownerPluginId: string,
 ): Promise<Record<string, unknown>> {
   const specPath = await containedFile(root, file);
-  const spec = JSON.parse(await fs.readFile(specPath, "utf-8")) as Record<
-    string,
-    unknown
-  >;
+  // The spec holds English text; `locales/<locale>.yaml` translates it.
+  const spec = compileUiText(
+    JSON.parse(await fs.readFile(specPath, "utf-8")) as Record<string, unknown>,
+    await readMessageCatalogs(root),
+  );
   validateUiBindings(spec, ownerPluginId);
   const webview = spec.webview;
   if (webview && typeof webview === "object" && !Array.isArray(webview)) {

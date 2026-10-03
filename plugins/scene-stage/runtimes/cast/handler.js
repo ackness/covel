@@ -1,4 +1,5 @@
 import {
+  labelText,
   makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
@@ -47,10 +48,10 @@ export default async function handler(ctx) {
     const activeCast = {
       speakers: [],
       reason: "No named NPC has enough current scene salience yet.",
-      reasonLabel: {
-        zh: "当前暂无足够突出的 NPC。",
-        en: "No NPC currently has enough scene salience.",
-      },
+      reasonLabel: labelText(
+        ctx,
+        "No NPC currently has enough scene salience.",
+      ),
       turnId,
       updatedAt: new Date().toISOString(),
     };
@@ -74,7 +75,7 @@ export default async function handler(ctx) {
     fields: candidate.fields,
     score: candidate.score,
     signals: candidate.signals,
-    signalViews: candidate.signals.map(signalView),
+    signalViews: candidate.signals.map((signal) => signalView(ctx, signal)),
   }));
   const activeCast = {
     speakers,
@@ -97,17 +98,18 @@ export default async function handler(ctx) {
   );
 }
 
-function signalView(signal) {
+function signalView(ctx, signal) {
+  // Each text is a literal: the validator reads them from the source.
   const labels = {
-    "mentioned by player": { zh: "玩家提到", en: "Mentioned" },
-    "present in recent messages": { zh: "在场景中", en: "In scene" },
-    "has character profile": { zh: "有角色档案", en: "Profile" },
-    "has tracked state": { zh: "有状态记录", en: "State" },
-    "recently active": { zh: "刚刚活跃", en: "Recent" },
+    "mentioned by player": labelText(ctx, "Mentioned"),
+    "present in recent messages": labelText(ctx, "In scene"),
+    "has character profile": labelText(ctx, "Profile"),
+    "has tracked state": labelText(ctx, "State"),
+    "recently active": labelText(ctx, "Recent"),
   };
   return {
     id: signal,
-    label: labels[signal] ?? { zh: signal, en: signal },
+    label: labels[signal] ?? signal,
   };
 }
 

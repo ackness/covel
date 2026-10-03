@@ -14,6 +14,7 @@ import {
   localesShareLanguageAndScript,
   resolveI18nDeep,
   resolveI18nText,
+  localizedWorldText,
 } from "../src/index.js";
 
 describe("i18n utilities", () => {
@@ -204,5 +205,72 @@ describe("locale registry", () => {
         { defaultLocale: "en-US", fallbackLocale: "en-US" },
       ),
     ).toThrow("Invalid fallback locale");
+  });
+});
+
+describe("resolveI18nDeep", () => {
+  it("does not mistake field names that are also language codes for a locale map", () => {
+    // `id` is Indonesian, `to` Tongan, `no` Norwegian, `is` Icelandic.
+    const data = {
+      ref: { id: "torn-letter" },
+      route: { to: "harbor", no: "7" },
+      title: { "zh-CN": "状态", "en-US": "Status" },
+      label: { zh: "行囊", en: "Inventory" },
+    };
+    expect(resolveI18nDeep(data, "en-US")).toEqual({
+      ref: { id: "torn-letter" },
+      route: { to: "harbor", no: "7" },
+      title: "Status",
+      label: "Inventory",
+    });
+  });
+
+  it("still reads a map of other languages when one key has a region", () => {
+    expect(
+      resolveI18nDeep(
+        { name: { "ja-JP": "霧の港", ko: "안개 항구" } },
+        "ja-JP",
+      ),
+    ).toEqual({ name: "霧の港" });
+  });
+});
+
+describe("localizedWorldText", () => {
+  const world = {
+    name: "雾港",
+    description: "潮钟三鸣。",
+    metadata: {
+      localizedText: {
+        name: { "zh-CN": "雾港", "en-US": "Mistport" },
+        description: { "zh-CN": "潮钟三鸣。", "en-US": "Three tide-bells." },
+      },
+    },
+  };
+
+  it("gives a session the world's name and description in its own language", () => {
+    expect(localizedWorldText(world, "en-US")).toEqual({
+      name: "Mistport",
+      description: "Three tide-bells.",
+    });
+    expect(localizedWorldText(world, "zh-CN")).toEqual({
+      name: "雾港",
+      description: "潮钟三鸣。",
+    });
+  });
+
+  it("keeps the record's own text when the world ships no translation", () => {
+    expect(
+      localizedWorldText({ name: "雾港", description: "潮钟三鸣。" }, "en-US"),
+    ).toEqual({ name: "雾港", description: "潮钟三鸣。" });
+    expect(
+      localizedWorldText(
+        { name: "雾港", metadata: { localizedText: { name: 7 } } },
+        "en-US",
+      ),
+    ).toEqual({ name: "雾港", description: undefined });
+    expect(localizedWorldText(null, "en-US")).toEqual({
+      name: undefined,
+      description: undefined,
+    });
   });
 });

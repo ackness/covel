@@ -341,6 +341,14 @@ describe("executeTurn recursiveCall", () => {
     const leafFinished = new Promise<void>((resolve) => {
       finishLeaf = resolve;
     });
+    // The child ignores its abort signal and keeps running until the test
+    // lets it go, which is after the parent has returned. A sleep of 120 ms
+    // against a bound of 100 ms said the same thing only on an idle machine.
+    let releaseLeaf!: () => void;
+    const leafReleased = new Promise<void>((resolve) => {
+      releaseLeaf = resolve;
+    });
+    let leafDone = false;
     const loaded = new Map<string, LoadedRuntime>([
       [
         caller.name,
@@ -359,7 +367,7 @@ describe("executeTurn recursiveCall", () => {
           manifest: leaf,
           promptTemplate: "",
           handler: async (ctx) => {
-            await new Promise((resolve) => setTimeout(resolve, 120));
+            await leafReleased;
             leafSignalAborted = ctx.signal?.aborted === true;
             try {
               await ctx.store?.setPluginData({
@@ -376,6 +384,7 @@ describe("executeTurn recursiveCall", () => {
               lateWriteError =
                 error instanceof Error ? error.message : String(error);
             }
+            leafDone = true;
             finishLeaf();
             return { ok: true };
           },
@@ -389,15 +398,15 @@ describe("executeTurn recursiveCall", () => {
       getPluginSource: () => "builtin",
     };
 
-    const startedAt = Date.now();
     const result = await executeTurn(input, [caller, leaf], deps);
-    const elapsedMs = Date.now() - startedAt;
 
-    expect(elapsedMs).toBeLessThan(100);
+    // The parent returned at its own deadline; it did not wait for the child.
+    expect(leafDone).toBe(false);
     expect(result.runtimeResults[0]).toMatchObject({ status: "failed" });
     expect(result.runtimeResults[0]?.error).toContain("timed out after 25ms");
     expect(result.nestedRuntimeResults ?? []).toEqual([]);
 
+    releaseLeaf();
     await leafFinished;
     expect(leafSignalAborted).toBe(true);
     expect(lateWriteError).toContain("revoked");

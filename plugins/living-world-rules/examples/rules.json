@@ -1,0 +1,11 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "tide-closes-the-quay",
+    "title": "The tide closes the lower quay",
+    "content": "The lower quay floods at high tide. Nobody can cross it then; a scene on the lower quay must end or move before the tide turns.",
+    "kind": "constant",
+    "category": "world",
+    "enabled": true
+  }
+]

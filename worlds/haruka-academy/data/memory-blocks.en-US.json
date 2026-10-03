@@ -1,0 +1,12 @@
+{
+  "blocks": [
+    {
+      "displayName": "Relationships",
+      "extractionHint": "What actually happened between each character and the player: which line or moment changed the distance, and what they said or held back. Affection lives in the affinity panel and stage/trust/pressure in the Heart Routes dimension; record memorable details here, not numbers."
+    },
+    {
+      "displayName": "Campus Schedule",
+      "extractionHint": "Current location, weather, next bell or campus closing appointment, likely characters and scheduled destinations. The world-time plugin owns the current date and phase; do not maintain a second clock in memory."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import {
   makeProposal,
   withPendingProposals,
-  pickLocaleText as pick,
+  translate,
 } from "@covel/plugin-handlers-utils";
 import { worldDimensionsSchema } from "@covel/shared";
 
@@ -33,11 +33,7 @@ export default async function guard(ctx) {
       schemaCount: attributes.length,
       dimensionCount: Object.keys(definitions).length,
       worldSchema: schema,
-      narrativeOutput: pick(
-        ctx.locale,
-        "[系统] 世界资料已加载",
-        "[System] World data loaded",
-      ),
+      narrativeOutput: translate(ctx, "[System] World data loaded"),
     },
     proposals,
   );

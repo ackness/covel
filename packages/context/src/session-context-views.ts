@@ -5,7 +5,12 @@
  * I/O and guard semantics.
  */
 
-import { resolveI18nDeep, resolveI18nText } from "@covel/shared";
+import {
+  WORLD_LOCALIZED_TEXT_KEY,
+  localizedWorldText,
+  resolveI18nDeep,
+  resolveI18nText,
+} from "@covel/shared";
 import type { DimensionSnapshot, JsonValue } from "@covel/shared";
 import type { WorldRecord } from "./session-context-store.js";
 import type { WorldContextView } from "./types.js";
@@ -52,7 +57,7 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
   if (metadata) {
     // Surface remaining metadata keys through `extra` for forward-compat.
     for (const [k, v] of Object.entries(metadata)) {
-      if (k === "dimensions") continue;
+      if (k === "dimensions" || k === WORLD_LOCALIZED_TEXT_KEY) continue;
       extra = extra ?? {};
       extra[k] = v;
     }
@@ -60,8 +65,8 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
 
   return {
     id,
-    name: worldRecord?.name,
-    description: worldRecord?.description,
+    // The session's language, when the world ships that translation.
+    ...localizedWorldText(worldRecord, input.locale),
     tags: worldRecord?.tags,
     lore: worldRecord?.lore,
     tone,

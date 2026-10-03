@@ -15,9 +15,16 @@ export default function ({ tool }) {
     parameters: z
       .object({
         amount: z.number().int().min(0).max(1_000_000).optional(),
-        unit: z.enum(["minute", "hour", "day", "phase", "cycle"]).optional(),
+        unit: z
+          .enum(["minute", "hour", "day", "phase", "cycle"])
+          .optional()
+          .describe("One of the units in currentTime.value.units."),
         direction: z.enum(["forward", "backward"]).optional(),
-        reason: z.string().min(1).max(500),
+        reason: z
+          .string()
+          .min(1)
+          .max(1000)
+          .describe("One short sentence: what took this time."),
       })
       .strict(),
     execute: async (request, context) => {

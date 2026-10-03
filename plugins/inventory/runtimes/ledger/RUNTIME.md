@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 每回合从共享的事实抽取中记录主角的物品得失与装备变化。
-  en: >-
-    Records the protagonist's item gains, losses, and equipment changes from
-    each turn's shared fact extraction.
+description: >-
+  Records the protagonist's item gains, losses, and equipment changes from each
+  turn's shared fact extraction.
 schedule:
   stage: post-turn
   trigger:

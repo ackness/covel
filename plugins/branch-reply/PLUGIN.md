@@ -1,12 +1,8 @@
 ---
 id: branch-reply
 kind: plugin
-displayName:
-  zh: 回复变体
-  en: Reply Variants
-description:
-  zh: 提供多条可切换的回复，让你挑选更合适的说法。
-  en: Offers several reply options so you can choose the one that fits best.
+displayName: Reply Variants
+description: Offers several reply options so you can choose the one that fits best.
 tags:
   - "cost:function"
   - "ui:message-block"

@@ -11,6 +11,8 @@ export interface WorldDataDiagnostic {
   readonly schema?: string;
   readonly pointer?: string;
   readonly message: string;
+  /** Set when a locale file's entry was ignored; `path` is that file. */
+  readonly localeOverlay?: true;
 }
 
 export interface SourceFieldOrigin {
@@ -26,6 +28,12 @@ export interface MergedWorldDataSource {
   readonly overridden: boolean;
   readonly pathOrigin: SourceFieldOrigin;
   readonly schemaOrigin?: SourceFieldOrigin;
+  /**
+   * The source named no schema; `descriptor.schema` is the one of its
+   * destination. A contract that declares no schema is then not an error:
+   * the source is imported without a check, as before.
+   */
+  readonly schemaImplicit?: true;
 }
 
 export interface OrderedWorldDataSource extends MergedWorldDataSource {

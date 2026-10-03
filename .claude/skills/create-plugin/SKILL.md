@@ -42,8 +42,24 @@ Read [manifest fields](references/plugin-schema.md) first. Root `PLUGIN.md` is
 required and holds `id`, `kind`, package contracts, and `contributes`. A single
 inline `runtime` or child `runtimes/<id>/RUNTIME.md` files supply executable
 behavior; child `PLUGIN.md` files and old flat authoring fields are rejected.
-Declare scheduling with `stage` plus `needs` / `after` edges, `outputKind`, and
-`capabilities`.
+Declare scheduling with `stage` plus `needs` / `after` edges, and `io.visibility`.
+
+Write `PLUGIN.md`, `RUNTIME.md` and `ui/*.json` in English: labels, tool
+descriptions, UI text, and the prompt body. Put label translations
+(`displayName`, `description`, `label`, `title`, `summary`) in
+`locales/<locale>.yaml`, one section per manifest file, and UI text translations
+in the same file under `messages` (English text, then its translation). Code
+writes English too and reads the same `messages` through `translate(ctx, "…")`
+(session language) and `labelText(ctx, "…")` (every language, for the client).
+An
+inline `{ zh, en }` map in a manifest or a UI spec fails `pnpm validate:plugin`,
+and a bundled plugin needs a Chinese translation for every UI text. The
+Simplified Chinese prompt is `PLUGIN.zh.md` / `RUNTIME.zh.md` with an empty
+frontmatter; a bundled plugin must ship it for every prompt a model reads, then
+run `pnpm prompts:lock`. No other language has a prompt file. See
+`docs/reference/i18n.md`. Write the body as `docs/guide/prompt-style.md` says:
+short imperative sentences, one term for one thing, each rule once, `must` /
+`must not` / `can`, and tone or examples under a `## Voice` heading.
 
 For same-execution inputs, bind public contracts under `io.inputs`. Reusable
 operations use declared services; kernel customization uses declared extensions.
@@ -88,6 +104,7 @@ not ship workspace dependencies or sibling-plugin imports.
 pnpm validate:plugin plugins/<id>       # manifest + cross-runtime checks
 pnpm --filter <package-name> test       # focused handler/registration tests
 pnpm check:plugins                      # plugin i18n + README gates
+pnpm check:prompts                      # English prompts and their Chinese variants
 ```
 
 Follow [testing](references/plugin-testing.md) for which layers to cover. Verify

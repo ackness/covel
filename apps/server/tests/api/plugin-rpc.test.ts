@@ -1777,7 +1777,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         requestId: "req-branch-next",
         type: "send_message",
         sessionId: session.id,
-        locale: "zh-CN",
         payload: { content: "Continue from there." },
       }),
     });

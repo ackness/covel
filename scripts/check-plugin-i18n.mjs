@@ -5,8 +5,13 @@
  * JSON UI specs:
  *   - Scans plugins/**\/ui/*.json and templates/**\/ui/*.json, including
  *     nested runtime ui directories.
- *   - Bare CJK strings are rejected. Wrap them as I18nText objects.
- *   - I18nText objects may use any locale and must include an English fallback.
+ *   - A spec holds English text. Bare CJK strings are rejected; translations
+ *     go in locales/<locale>.yaml under `messages`.
+ *   - Every label and every text of a bundled plugin (manifest, UI, code) has
+ *     a Chinese translation. The old inline `{ zh, en }` form made a missing
+ *     one visible where the text was written; with the translation in another
+ *     file this check does. A label translation must also be recorded in
+ *     locales/lock.json against the English text it was made from.
  *
  * PLUGIN.md frontmatter:
  *   - Scans user-visible fields such as description, displayName, label,
@@ -14,13 +19,29 @@
  *   - Bare CJK strings in those fields are rejected.
  *   - I18nText objects may use any locale and must include an English fallback.
  *
+ * Text that reaches a model:
+ *   - Tool and parameter descriptions in plugin and template handlers are
+ *     English. A Chinese tool definition goes to the model in every session.
+ *   - Framework source holds Chinese only in the files recorded below.
+ *
  * Exit code: 0 = OK, 1 = violations found.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
-import { canonicalizeLocale, localeLanguage } from "@covel/shared";
+import {
+  checkFrameworkChinese,
+  findChineseToolText,
+} from "./lib/model-facing-text.mjs";
+import {
+  applyLocaleOverlay,
+  canonicalizeLocale,
+  isKnownLocale,
+  localeLanguage,
+} from "@covel/shared";
+// By path: a package-name import can resolve to a stale copy in a worktree.
+import { pluginTranslationStatus } from "../packages/plugin-loader/src/locale-tooling.ts";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -133,6 +154,49 @@ function isPluginHandlerJsFile(rel) {
   return true;
 }
 
+/**
+ * Lines of Chinese text, outside comments, in each framework source file that
+ * has any. A file that is not listed, or whose count changes, fails the check.
+ * Before adding a line here, ask who reads the text: a model reads English
+ * (or the Chinese variant of an instruction, chosen by `instructionLocaleFor`);
+ * a player reads a locale pair.
+ */
+const FRAMEWORK_CHINESE_LINES = {
+  // Player-facing label and notice pairs.
+  "apps/desktop/src/main-i18n.ts": 59,
+  "apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts": 2,
+  "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
+  "apps/server/src/routes/api/session/commands.ts": 4,
+  "apps/server/src/routes/misc-api/plugin-flow.ts": 6,
+  "packages/runtime/src/rpc-defaults/submit-form.ts": 6,
+  "packages/shared/src/utils/locale-registry.ts": 4,
+  // Chinese variants of framework instructions, each beside its English text.
+  "packages/context/src/prompt-internals.ts": 5,
+  "packages/plugin-handlers-utils/src/narrative-review.ts": 9,
+  "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
+  "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
+  // Patterns that match Chinese text.
+  "packages/context/src/budget.ts": 1,
+  "packages/create/src/validation-helpers.ts": 7,
+  "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
+  "packages/tools/src/builtin/tool-search.ts": 2,
+  // Example input for tests and the CLI.
+  "packages/plugin-test-utils/src/factories.ts": 1,
+  "packages/test-runtime/src/cli.ts": 1,
+};
+
+function frameworkRoots() {
+  const packages = resolve(REPO_ROOT, "packages");
+  return [
+    "apps/server/src",
+    "apps/desktop/src",
+    ...readdirSync(packages)
+      .filter((name) => existsSync(join(packages, name, "src")))
+      .sort()
+      .map((name) => `packages/${name}/src`),
+  ];
+}
+
 // A UI-label-ish object key assigned a bare quoted string literal. Catches
 // `label: "观察"` written into plugin_data by a tool/handler (which bypasses
 // the JSON/frontmatter scans above and renders untranslated for en players),
@@ -161,14 +225,20 @@ function checkHandlerJsFiles() {
       if (!CJK_REGEX.test(literal)) continue;
       totalViolations += 1;
       console.error(
-        `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - store it as an I18nText object with the target locale and an English fallback so the frontend resolves the locale.`,
+        `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - write the English text and translate it in locales/<locale>.yaml: labelText(ctx, "English") for text the client draws, translate(ctx, "English") for text in the session's language.`,
+      );
+    }
+    for (const hit of findChineseToolText(text)) {
+      totalViolations += 1;
+      console.error(
+        `${rel}:${hit.line}: tool or parameter description "${hit.text}" is Chinese - a tool definition is an instruction and goes to the model in every session language; write it in English.`,
       );
     }
     UNSAFE_HANDLER_LOCALE_BRANCH_RE.lastIndex = 0;
     while ((match = UNSAFE_HANDLER_LOCALE_BRANCH_RE.exec(text)) !== null) {
       totalViolations += 1;
       console.error(
-        `${rel}: unsafe locale prefix/split branch "${match[0].slice(0, 120)}" - use @covel/shared locale helpers, resolveI18nText(), or @covel/plugin-handlers-utils pickLocaleText().`,
+        `${rel}: unsafe locale prefix/split branch "${match[0].slice(0, 120)}" - use translate() / labelText() from @covel/plugin-handlers-utils with locales/<locale>.yaml, or pickLocaleText() for an instruction that exists in English and Chinese only.`,
       );
     }
   }
@@ -297,6 +367,12 @@ function normalizeTemplatePlaceholders(frontmatter) {
 function printViolation(rel, violation) {
   const pathStr = pathToString(violation.path);
   const sample = violation.value.slice(0, 120);
+  if (violation.kind === "bare-cjk" && violation.context === "world.yaml") {
+    console.error(
+      `${rel}: "${pathStr}" has no English text ("${sample}") - add it under the same path in world.en.yaml beside world.yaml`,
+    );
+    return;
+  }
   if (violation.kind === "bare-cjk") {
     console.error(
       `${rel}: "${pathStr}" contains bare CJK string "${sample}" in ${violation.context} - wrap it in an I18nText object with the target locale and an English fallback`,
@@ -364,9 +440,12 @@ function checkPluginMarkdownFiles() {
 }
 
 // World manifests: world.yaml display fields (name/summary + memoryBlocks /
-// characterAttributes labels) must be I18nText, same contract as plugins. The
-// `data/` content (character cards, rule prose) is authored narrative and is
-// intentionally out of scope here.
+// characterAttributes labels) must have an English text, same contract as
+// plugins. world.yaml itself holds one language; the English text comes from
+// the `world.<locale>.yaml` overlay, so the check runs on the manifest with its
+// overlays compiled in, as the loader reads it. The `data/` content (character
+// cards, rule prose) is authored narrative and is intentionally out of scope
+// here.
 const WORLD_VISIBLE_KEYS = new Set([
   ...USER_VISIBLE_KEYS,
   "name", // world title + characterAttributes[].name
@@ -395,8 +474,30 @@ function checkWorldFiles() {
       totalViolations += 1;
       continue;
     }
+    const worldDir = resolve(REPO_ROOT, rel, "..");
+    const baseLocale =
+      typeof parsed?.defaultLocale === "string"
+        ? parsed.defaultLocale
+        : "zh-CN";
+    let compiled = parsed;
+    try {
+      for (const name of readdirSync(worldDir).sort()) {
+        const tag = /^world\.([A-Za-z0-9-]+)\.yaml$/.exec(name)?.[1];
+        const locale = tag ? canonicalizeLocale(tag) : undefined;
+        if (!locale || !isKnownLocale(locale)) continue;
+        compiled = applyLocaleOverlay(
+          compiled,
+          YAML.parse(readFileSync(join(worldDir, name), "utf8")),
+          { mode: "compile", locale, baseLocale },
+        ).value;
+      }
+    } catch (err) {
+      console.error(`${rel}: failed to read a locale file - ${err.message}`);
+      totalViolations += 1;
+      continue;
+    }
     const violations = [];
-    walkPluginField(parsed, [], violations, "world.yaml", WORLD_VISIBLE_KEYS);
+    walkPluginField(compiled, [], violations, "world.yaml", WORLD_VISIBLE_KEYS);
     for (const violation of violations) {
       totalViolations += 1;
       printViolation(rel, violation);
@@ -405,15 +506,62 @@ function checkWorldFiles() {
   return { files, totalViolations };
 }
 
+/**
+ * Bundled plugins ship Chinese: every label, and every text of the UI and
+ * the code, needs a `zh` translation. A label translation also has to belong
+ * to the English text the manifest has now: `locales/lock.json` records the
+ * text each one was made from.
+ */
+async function checkBundledTranslations() {
+  const pluginsDir = resolve(REPO_ROOT, "plugins");
+  let problems = 0;
+  const report = (message) => {
+    problems += 1;
+    console.error(message);
+  };
+  for (const name of readdirSync(pluginsDir).sort()) {
+    const root = join(pluginsDir, name);
+    if (name.startsWith("_") || !existsSync(join(root, "PLUGIN.md"))) continue;
+    const zh = `plugins/${name}/locales/zh.yaml`;
+    const { labels, messages } = await pluginTranslationStatus(root, "zh");
+    for (const unit of labels.missing)
+      report(
+        `plugins/${name}/${unit.file}: ${unit.pointer} "${unit.text.slice(0, 60)}" has no Chinese translation - add it to ${zh} under "${unit.file}".`,
+      );
+    for (const unit of labels.stale)
+      report(
+        `plugins/${name}/${unit.file}: ${unit.pointer} changed after its Chinese translation was made - update the translation in ${zh}, then run \`pnpm i18n lock plugins/${name}\`.`,
+      );
+    if (labels.unlocked.length > 0)
+      report(
+        `plugins/${name}: ${labels.unlocked.length} label translation(s) are not recorded in locales/lock.json - check them against the English text, then run \`pnpm i18n lock plugins/${name}\`.`,
+      );
+    for (const { file, where, text } of messages.missing)
+      report(
+        `plugins/${name}/${file}: ${where} "${text.slice(0, 60)}" has no Chinese translation - add it to ${zh} under messages (repeat the English text when it is the same in Chinese).`,
+      );
+  }
+  return problems;
+}
+
 const jsonResult = checkJsonFiles();
+const uiCoverageMissing = await checkBundledTranslations();
 const pluginMdResult = checkPluginMarkdownFiles();
 const handlerJsResult = checkHandlerJsFiles();
 const worldResult = checkWorldFiles();
+const frameworkProblems = checkFrameworkChinese({
+  repoRoot: REPO_ROOT,
+  roots: frameworkRoots(),
+  allowed: FRAMEWORK_CHINESE_LINES,
+});
+for (const problem of frameworkProblems) console.error(problem);
 const totalViolations =
   jsonResult.totalViolations +
+  uiCoverageMissing +
   pluginMdResult.totalViolations +
   handlerJsResult.totalViolations +
-  worldResult.totalViolations;
+  worldResult.totalViolations +
+  frameworkProblems.length;
 
 if (totalViolations > 0) {
   console.error(
@@ -423,5 +571,5 @@ if (totalViolations > 0) {
 }
 
 console.log(
-  `check-plugin-i18n: OK (${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s), ${handlerJsResult.files.length} handler .js file(s), ${worldResult.files.length} world.yaml file(s) scanned)`,
+  `check-plugin-i18n: OK (${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s), ${handlerJsResult.files.length} handler .js file(s), ${worldResult.files.length} world.yaml file(s), ${Object.keys(FRAMEWORK_CHINESE_LINES).length} framework file(s) with recorded Chinese text scanned)`,
 );

@@ -13,25 +13,60 @@ const slashCommandNameSchema = z
 
 const slashCommandArgumentSpecSchema = z
   .object({
-    name: slashCommandNameSchema,
-    type: z.enum(["string", "integer", "number", "boolean"]).optional(),
-    description: i18nTextLoose.optional(),
-    required: z.boolean().optional(),
-    variadic: z.boolean().optional(),
-    choices: z.array(z.string().min(1)).min(1).max(64).optional(),
+    name: slashCommandNameSchema.describe(
+      "Argument name in lowercase kebab-case.",
+    ),
+    type: z
+      .enum(["string", "integer", "number", "boolean"])
+      .describe("Value type of the argument. Defaults to string.")
+      .optional(),
+    description: i18nTextLoose
+      .describe("What the argument means. Shown to the player.")
+      .optional(),
+    required: z
+      .boolean()
+      .describe("`true` when the player must supply the argument.")
+      .optional(),
+    variadic: z
+      .boolean()
+      .describe(
+        "`true` collects all remaining words. Only the last argument can be variadic.",
+      )
+      .optional(),
+    choices: z
+      .array(z.string().min(1))
+      .min(1)
+      .max(64)
+      .describe("Allowed values of the argument.")
+      .optional(),
   })
   .strict();
 
 export const slashCommandSpecSchema = z
   .object({
-    name: slashCommandNameSchema,
-    aliases: z.array(slashCommandNameSchema).max(16).optional(),
-    description: i18nTextLoose,
-    arguments: z.array(slashCommandArgumentSpecSchema).max(16).optional(),
-    action: slashCommandNameSchema,
+    name: slashCommandNameSchema.describe(
+      "Command name in lowercase kebab-case, without the leading slash.",
+    ),
+    aliases: z
+      .array(slashCommandNameSchema)
+      .max(16)
+      .describe("Other names that invoke the same command.")
+      .optional(),
+    description: i18nTextLoose.describe(
+      "What the command does. Shown to the player.",
+    ),
+    arguments: z
+      .array(slashCommandArgumentSpecSchema)
+      .max(16)
+      .describe("Positional arguments, in order. Names must be unique.")
+      .optional(),
+    action: slashCommandNameSchema.describe(
+      "RPC action the command invokes. It must be listed in `contributes.actions`.",
+    ),
     context: z
       .array(z.enum(["session", "active-runtimes", "models"]))
       .max(3)
+      .describe("Host context scopes passed to the action.")
       .optional(),
   })
   .strict()

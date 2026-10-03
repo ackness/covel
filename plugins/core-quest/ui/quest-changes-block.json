@@ -16,7 +16,7 @@
           {
             "component": "Text",
             "props": {
-              "content": { "zh": "任务日志", "en": "Quest log" },
+              "content": "Quest log",
               "weight": "bold",
               "size": "sm"
             }
@@ -61,9 +61,6 @@
     ]
   },
   "emptyState": {
-    "message": {
-      "zh": "本回合没有任务变更。",
-      "en": "No quest changes this turn."
-    }
+    "message": "No quest changes this turn."
   }
 }

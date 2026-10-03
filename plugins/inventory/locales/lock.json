@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.commands[name=bag].description": "394180cac415b33b",
+      "PLUGIN.md#contributes.data.items.authoring.title": "7e52bbf8fe8d2879",
+      "PLUGIN.md#description": "dada70c736a45e68",
+      "PLUGIN.md#displayName": "758f487fe8e9fcc5",
+      "runtimes/ledger/RUNTIME.md#description": "d70481ff3983b8be",
+      "runtimes/vocabulary/RUNTIME.md#description": "45f26f4694da8bfb"
+    }
+  }
+}

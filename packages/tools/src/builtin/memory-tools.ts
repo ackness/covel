@@ -31,20 +31,23 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
   tools.push(
     tool({
       name: "memory-search",
-      description: "搜索对话记忆和长期知识库。",
+      description:
+        "Search conversation memory and the long-term knowledge base.",
       parameters: z.object({
-        query: z.string().min(1).describe("查询文本"),
+        query: z.string().min(1).describe("Query text"),
         scope: z
           .enum(["recall", "archival", "all"])
           .optional()
-          .describe("recall=对话，archival=知识库，all=全部（默认）"),
+          .describe(
+            "recall = conversation, archival = knowledge base, all = both (default)",
+          ),
         limit: z
           .number()
           .int()
           .min(1)
           .max(20)
           .optional()
-          .describe("结果上限；默认 5"),
+          .describe("Maximum results; default 5"),
       }),
       execute: async (params, context) => {
         const scope = params.scope ?? "all";

@@ -10,6 +10,10 @@ import type {
   WorldDataDescriptor,
   WorldDataSourceDescriptor,
 } from "@covel/shared";
+import {
+  conventionalDescriptor,
+  type ConventionalSource,
+} from "./conventions.js";
 import { resolveContainedPath } from "./safe-path.js";
 import { orderSources } from "./source-order.js";
 import { fileExists } from "./session-import/utils.js";
@@ -83,17 +87,56 @@ async function readDescriptorFile(
   }
 }
 
+/**
+ * The schema a source is checked against when it names none: the one of its
+ * destination. A source that goes to `contract:quests@1` holds records of
+ * that contract, so the contract ID does not have to be written twice.
+ */
+export function defaultSourceSchema(to: string): string | undefined {
+  if (to === "world:metadata.dimensions") return "covel://world/dimensions";
+  const contract = /^contract:([^+]+)/.exec(to)?.[1];
+  return contract ? `contract:${contract}` : undefined;
+}
+
+function withDefaultSchema(
+  source: MergedWorldDataSource,
+): MergedWorldDataSource {
+  if (source.descriptor.schema) return source;
+  const schema = defaultSourceSchema(source.descriptor.to);
+  return schema
+    ? {
+        ...source,
+        descriptor: { ...source.descriptor, schema },
+        schemaImplicit: true,
+      }
+    : source;
+}
+
+/**
+ * The sources of a world package, in import order.
+ *
+ * `worldDataPath` is the descriptor that `world.yaml` names. Without one the
+ * package is read by convention: each file at a well-known path is a source
+ * (see `conventions.ts`).
+ */
 export async function loadWorldDataDescriptor(options: {
   worldRoot: string;
-  worldDataPath: string;
+  worldDataPath?: string;
   worldId: string;
   covelHome?: string;
+  /** The conventions to read by; the process's list when absent. */
+  conventions?: readonly ConventionalSource[];
 }): Promise<LoadedWorldDataDescriptor> {
   const diagnostics: WorldDataDiagnostic[] = [];
-  const base = await readDescriptorFile(
-    options.worldRoot,
-    options.worldDataPath,
-  );
+  const base = options.worldDataPath
+    ? await readDescriptorFile(options.worldRoot, options.worldDataPath)
+    : {
+        descriptor: await conventionalDescriptor(
+          options.worldRoot,
+          options.conventions,
+        ),
+        diagnostics: [],
+      };
   diagnostics.push(...base.diagnostics);
   if (!base.descriptor) return { sources: [], diagnostics };
 
@@ -176,9 +219,9 @@ export async function loadWorldDataDescriptor(options: {
     }
   }
 
-  const enabled = [...merged.values()].filter(
-    (source) => source.descriptor.enabled !== false,
-  );
+  const enabled = [...merged.values()]
+    .filter((source) => source.descriptor.enabled !== false)
+    .map(withDefaultSchema);
   const ordered = orderSources(enabled);
   return {
     sources: ordered.sources,

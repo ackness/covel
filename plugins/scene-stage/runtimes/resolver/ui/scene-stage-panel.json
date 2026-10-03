@@ -1,26 +1,14 @@
 {
   "id": "scene-stage",
   "group": "scene-stage",
-  "groupLabel": {
-    "zh": "当前场景",
-    "en": "Scene"
-  },
-  "label": {
-    "zh": "场景",
-    "en": "Scene"
-  },
-  "shortLabel": {
-    "zh": "场景",
-    "en": "Scene"
-  },
+  "groupLabel": "Scene",
+  "label": "Scene",
+  "shortLabel": "Scene",
   "icon": "image",
   "groupOrder": 450,
   "dataSource": { "namespace": "stage" },
   "emptyState": {
-    "message": {
-      "zh": "还没有确立场景，等待叙事推进……",
-      "en": "No scene established yet, waiting for the narrative to progress…"
-    }
+    "message": "No scene established yet, waiting for the narrative to progress…"
   },
   "view": {
     "component": "Stack",

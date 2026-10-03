@@ -23,20 +23,35 @@
  */
 
 import {
+  labelText,
   makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
 const MAX_QUESTS_PER_CALL = 5;
 
-// Badge metadata for the message block, keyed by change kind. Stored as
-// I18nText so the block resolves it to the session locale at render time.
-const CHANGE_META = {
-  new: { badge: { zh: "新任务", en: "New" }, color: "blue" },
-  progress: { badge: { zh: "推进", en: "Progress" }, color: "cyan" },
-  completed: { badge: { zh: "完成", en: "Completed" }, color: "green" },
-  failed: { badge: { zh: "失败", en: "Failed" }, color: "red" },
+// Badge color for the message block, keyed by change kind.
+const CHANGE_COLOR = {
+  new: "blue",
+  progress: "cyan",
+  completed: "green",
+  failed: "red",
 };
+
+/**
+ * The badge text in every language the plugin ships. Only the message block
+ * draws it; it picks the player's UI language.
+ */
+function changeBadge(context, change) {
+  // Each text is a literal: the validator reads them from the source.
+  const badges = {
+    new: labelText(context, "New"),
+    progress: labelText(context, "Progress"),
+    completed: labelText(context, "Completed"),
+    failed: labelText(context, "Failed"),
+  };
+  return badges[change];
+}
 
 export default function ({ tool, z, shortIdBatch }) {
   const objectiveSchema = z.object({
@@ -220,13 +235,12 @@ export default function ({ tool, z, shortIdBatch }) {
           rowByName.set(lookupKey, { key: id, value: stored });
         }
 
-        const meta = CHANGE_META[change];
         changes.push({
           id: stored.id,
           name: stored.name,
           change,
-          badge: meta.badge,
-          color: meta.color,
+          badge: changeBadge(context, change),
+          color: CHANGE_COLOR[change],
           detail: objectiveProgress(stored.objectives),
         });
         results.push({

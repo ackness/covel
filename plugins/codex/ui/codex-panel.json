@@ -1,63 +1,57 @@
 {
   "id": "codex",
   "group": "codex",
-  "label": { "zh": "知识图鉴", "en": "Codex" },
-  "shortLabel": { "zh": "图鉴", "en": "Codex" },
+  "label": "Codex",
+  "shortLabel": "Codex",
   "icon": "book-open",
   "groupOrder": 700,
   "dataSource": { "namespace": "entries" },
   "emptyState": {
-    "message": {
-      "zh": "图鉴暂无词条，继续推进故事后会自动出现……",
-      "en": "No codex entries yet. They will appear as the story continues…"
-    }
+    "message": "No codex entries yet. They will appear as the story continues…"
   },
   "view": {
     "component": "FilterContainer",
     "props": {
       "items": { "$state": "/entries" },
-      "searchPlaceholder": {
-        "zh": "搜索词条…",
-        "en": "Search entries…"
-      },
+      "searchPlaceholder": "Search entries…",
       "searchFields": ["value/title", "value/content", "value/tags"],
       "filterField": "value/category",
       "showCounts": true,
       "filterTabs": [
-        { "value": "all", "label": { "zh": "全部", "en": "All" } },
+        { "value": "all", "label": "All" },
         {
           "value": "monster",
-          "label": { "zh": "怪物", "en": "Monsters" },
+          "label": "Monsters",
           "icon": "skull",
           "color": "red"
         },
         {
           "value": "item",
-          "label": { "zh": "物品", "en": "Items" },
+          "label": "Items",
           "icon": "gem",
           "color": "amber"
         },
         {
           "value": "location",
-          "label": { "zh": "地点", "en": "Locations" },
+          "label": "Locations",
           "icon": "map-pin",
           "color": "blue"
         },
         {
           "value": "lore",
-          "label": { "zh": "传说", "en": "Lore" },
+          "label": "Lore",
           "icon": "scroll-text",
           "color": "purple"
         },
         {
           "value": "character",
-          "label": { "zh": "人物", "en": "Characters" },
+          "label": "Characters",
           "icon": "users",
           "color": "green"
         },
         {
           "value": "skill",
-          "label": { "zh": "技能", "en": "Skills" },
+          "label": "Skills",
           "icon": "sparkles",
           "color": "cyan"
         }
@@ -78,14 +72,8 @@
         "collapsible": true,
         "defaultExpanded": false
       },
-      "footer": {
-        "zh": "共 {{count}} 条记录",
-        "en": "{{count}} entries collected"
-      },
-      "emptyMessage": {
-        "zh": "没有匹配的条目",
-        "en": "No matching entries"
-      }
+      "footer": "{{count}} entries collected",
+      "emptyMessage": "No matching entries"
     }
   }
 }

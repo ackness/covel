@@ -1,0 +1,16 @@
+# en-US text for time.yaml. Only translated text; structure and ids come from time.yaml.
+definition:
+  name: Greyreed hours
+  cycleLabel: Day
+  phases:
+    - Dawn
+    - Day
+    - Dusk
+    - Night
+    - Deep night
+  evolution:
+    prompt:
+      Count in watches of the day. A short conversation in the tavern stays in
+      the current watch; visiting around the village, searching the cottage, or
+      a stretch of delving advances one; camping in the barrow advances one or
+      two. There is no daylight in the barrow, but the hours still pass.

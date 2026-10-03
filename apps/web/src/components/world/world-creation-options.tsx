@@ -8,21 +8,26 @@ import {
   BookOpenText,
   Check,
   MessagesSquare,
+  Puzzle,
   Route,
   ShieldCheck,
-  Sparkles,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { GeneratableWorldContent } from "@/services/api.js";
 
 interface WorldCreationOptionsProps {
   t: TFunction;
   experienceMode: WorldExperienceMode;
   content: ReadonlySet<WorldPackageContentKind>;
+  /** Content the loaded plugins offer; titles arrive already localized. */
+  pluginContent: readonly GeneratableWorldContent[];
+  contracts: ReadonlySet<string>;
   additionalInstructions: string;
   disabled: boolean;
   onExperienceModeChange: (mode: WorldExperienceMode) => void;
   onToggleContent: (kind: WorldPackageContentKind) => void;
+  onToggleContract: (contract: string) => void;
   onAdditionalInstructionsChange: (value: string) => void;
 }
 
@@ -71,12 +76,6 @@ const CONTENT_OPTIONS: ReadonlyArray<{
     descriptionKey: "world.aiContentRulesDesc",
   },
   {
-    kind: "memory",
-    icon: Sparkles,
-    labelKey: "world.aiContentMemory",
-    descriptionKey: "world.aiContentMemoryDesc",
-  },
-  {
     kind: "opening-kit",
     icon: Backpack,
     labelKey: "world.aiContentOpeningKit",
@@ -88,10 +87,13 @@ export function WorldCreationOptions({
   t,
   experienceMode,
   content,
+  pluginContent,
+  contracts,
   additionalInstructions,
   disabled,
   onExperienceModeChange,
   onToggleContent,
+  onToggleContract,
   onAdditionalInstructionsChange,
 }: WorldCreationOptionsProps) {
   return (
@@ -109,7 +111,7 @@ export function WorldCreationOptions({
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-primary/25 bg-primary/8 px-2 py-1 font-mono text-[10px] text-primary">
-          {t("world.aiPackageCount", { count: content.size })}
+          {t("world.aiPackageCount", { count: content.size + contracts.size })}
         </span>
       </div>
 
@@ -156,48 +158,40 @@ export function WorldCreationOptions({
           {t("world.aiContentLabel", "Package supplements")}
         </p>
         <div className="mt-2 space-y-1.5">
-          {CONTENT_OPTIONS.map((option) => {
-            const selected = content.has(option.kind);
-            const Icon = option.icon;
-            return (
-              <button
-                key={option.kind}
-                type="button"
-                aria-pressed={selected}
-                disabled={disabled}
-                onClick={() => onToggleContent(option.kind)}
-                className={`flex w-full items-center gap-3 rounded-(--radius-control) border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  selected
-                    ? "border-primary/35 bg-primary/6"
-                    : "border-transparent bg-background/40 hover:border-border"
-                }`}
-              >
-                <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                    selected
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {selected ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : (
-                    <Icon className="h-3.5 w-3.5" />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium">
-                    {t(option.labelKey)}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
-                    {t(option.descriptionKey)}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
+          {CONTENT_OPTIONS.map((option) => (
+            <ContentToggle
+              key={option.kind}
+              icon={option.icon}
+              label={t(option.labelKey)}
+              description={t(option.descriptionKey)}
+              selected={content.has(option.kind)}
+              disabled={disabled}
+              onToggle={() => onToggleContent(option.kind)}
+            />
+          ))}
         </div>
       </div>
+
+      {pluginContent.length > 0 && (
+        <div className="mt-4">
+          <p className="ui-eyebrow text-muted-foreground">
+            {t("world.aiPluginContentLabel", "Plugin content")}
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {pluginContent.map((item) => (
+              <ContentToggle
+                key={item.contract}
+                icon={Puzzle}
+                label={item.title}
+                description={item.description}
+                selected={contracts.has(item.contract)}
+                disabled={disabled}
+                onToggle={() => onToggleContract(item.contract)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4">
         <div className="flex items-center justify-between gap-3">
@@ -227,5 +221,57 @@ export function WorldCreationOptions({
         />
       </div>
     </section>
+  );
+}
+
+function ContentToggle({
+  icon: Icon,
+  label,
+  description,
+  selected,
+  disabled,
+  onToggle,
+}: {
+  icon: LucideIcon;
+  label: string;
+  description?: string;
+  selected: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`flex w-full items-center gap-3 rounded-(--radius-control) border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+        selected
+          ? "border-primary/35 bg-primary/6"
+          : "border-transparent bg-background/40 hover:border-border"
+      }`}
+    >
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+          selected
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground"
+        }`}
+      >
+        {selected ? (
+          <Check className="h-3.5 w-3.5" />
+        ) : (
+          <Icon className="h-3.5 w-3.5" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-medium">{label}</span>
+        {description && (
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+            {description}
+          </span>
+        )}
+      </span>
+    </button>
   );
 }

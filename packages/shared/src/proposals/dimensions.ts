@@ -7,6 +7,7 @@ import {
   dimensionSourceSchema,
   validateDimensionValue,
   worldDimensionsSchema,
+  resolveWorldDimensionsLocale,
 } from "../schemas/dimensions.js";
 import type {
   DimensionRecord,
@@ -110,15 +111,23 @@ export function dimensionsJsonEqual(left: unknown, right: unknown): boolean {
   );
 }
 
-/** Shared domain materialization for tool previews and the commit boundary. */
+/**
+ * Shared domain materialization for tool previews and the commit boundary.
+ *
+ * `locale` is the session's content locale. Declarations may arrive with the
+ * world package's locale maps; a session stores one language, so they are
+ * resolved here, whichever plugin path proposed them.
+ */
 export function materializeDimensionRecords(
   base: Readonly<Record<string, DimensionRecord>>,
   proposal: ProposalFor<"dimension.initialize" | "dimension.update">,
+  locale?: string,
 ): Readonly<Record<string, DimensionRecord>> {
   const records: Record<string, DimensionRecord> = structuredClone(base);
   if (proposal.type === "dimension.initialize") {
-    const { definitions } = dimensionInitializePayloadSchema.parse(
-      proposal.payload,
+    const definitions = resolveWorldDimensionsLocale(
+      dimensionInitializePayloadSchema.parse(proposal.payload).definitions,
+      locale,
     );
     for (const [id, definition] of Object.entries(definitions)) {
       const existing = records[id];
@@ -154,9 +163,11 @@ export function materializeDimensionRecords(
       payload.source.turnNumber < existing.lastTrackedSource.turnNumber
     )
       throw new DimensionConflictError(`Stale dimension source: ${update.id}`);
+    // A write in play is in the session's language: no locale maps.
     const issues = validateDimensionValue(
       existing.definition.schema,
       update.value,
+      { localized: "resolved" },
     );
     if (issues.length)
       throw new DimensionValidationError(

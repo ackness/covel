@@ -31,16 +31,12 @@
     position: before_plugin
   budgetClass: flexible
   keys:
-    - 古冢
-    - 墓
-    - 合唱
-    - 歌声
-    - 噪音
-    - 火光
     - barrow
+    - tomb
     - choir
     - singing
     - noise
+    - firelight
   insertionOrder: 430
 - schemaVersion: 1
   id: lantern-truth
@@ -53,10 +49,6 @@
     position: before_plugin
   budgetClass: sticky
   keys:
-    - 灯心
-    - 古冢之王
-    - 守灯人
-    - 科尔文
     - Lantern Heart
     - Barrow King
     - Ysolde
@@ -73,11 +65,6 @@
     position: before_plugin
   budgetClass: flexible
   keys:
-    - 火把
-    - 干粮
-    - 休息
-    - 受伤
-    - 生命
     - torch
     - rations
     - rest

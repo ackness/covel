@@ -158,7 +158,6 @@ export async function batchRetryFixture() {
       retryFromTurnId: "source",
     },
     type = "retry_failed_runtimes",
-    locale?: string,
   ) =>
     app.request("/api/actions", {
       method: "POST",
@@ -168,7 +167,6 @@ export async function batchRetryFixture() {
         sessionId,
         type,
         payload,
-        ...(locale ? { locale } : {}),
       }),
     });
   const post = async (...args: Parameters<typeof open>) => {

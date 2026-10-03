@@ -47,6 +47,44 @@ const world = {
 } as WorldRecord;
 
 describe("WorldCard", () => {
+  it("shows the name and summary of the edition the player would play", () => {
+    const bilingual = {
+      ...world,
+      metadata: {
+        supportedLocales: ["en-US", "zh-CN"],
+        localizedText: {
+          name: { "en-US": "Test World", "zh-CN": "测试世界" },
+          description: {
+            "en-US": "A world used by the editor accessibility tests.",
+            "zh-CN": "给编辑器无障碍测试用的世界。",
+          },
+        },
+      },
+    } as WorldRecord;
+    const card = (interfaceLocale: string) => (
+      <WorldCard
+        world={bilingual}
+        index={0}
+        isEntering={false}
+        dimmed={false}
+        storageLabel="Built-in"
+        interfaceLocale={interfaceLocale}
+        t={i18n.t}
+        onEnter={vi.fn()}
+        onViewDetails={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    const view = render(card("zh-CN"));
+    expect(screen.getByRole("heading", { name: "测试世界" })).toBeTruthy();
+    expect(screen.getByText("给编辑器无障碍测试用的世界。")).toBeTruthy();
+
+    // No Russian edition: the session would be in the world's own language.
+    view.rerender(card("ru-RU"));
+    expect(screen.getByRole("heading", { name: "Test World" })).toBeTruthy();
+  });
+
   it("uses an independent button for entering the world", () => {
     const onEnter = vi.fn();
     const onViewDetails = vi.fn();

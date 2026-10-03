@@ -107,16 +107,16 @@ function makeCharacterUpsertProposal(
 // ── create-character ─────────────────────────────────────────────
 
 const CREATE_DESCRIPTION =
-  "创建角色；同 session 的同名同类型会去重。fields 按世界 schema 合并默认值并返回校验 warning。";
+  "Create a character. A character with the same name and type in this session is not duplicated. `fields` are merged with the world schema defaults; validation warnings are returned.";
 
 function createCharacterParametersSchema(schema?: CharacterSchema) {
   return z.object({
-    name: z.string().min(1).describe("角色名"),
+    name: z.string().min(1).describe("Character name"),
     type: characterTypeSchema(schema),
-    description: z.string().optional().describe("简短描述"),
+    description: z.string().optional().describe("Short description"),
     fields: buildFieldsZod(null)
       .optional()
-      .describe("可选属性；使用 world schema attribute id"),
+      .describe("Optional attributes, keyed by world schema attribute id"),
   });
 }
 
@@ -216,15 +216,18 @@ function createCreateCharacterTool(
 // ── update-character ─────────────────────────────────────────────
 
 const UPDATE_DESCRIPTION =
-  "按 id 更新角色；description 替换，fields shallow merge，version 自动 +1。只传明确变化。";
+  "Update a character by id. `description` is replaced, `fields` are shallow-merged, and `version` increases by 1. Send only what changed.";
 
 function createUpdateCharacterParametersSchema() {
   return z.object({
-    id: z.string().min(1).describe("角色 id"),
-    description: z.string().optional().describe("新描述；省略则保留"),
+    id: z.string().min(1).describe("Character id"),
+    description: z
+      .string()
+      .optional()
+      .describe("New description; omit to keep the current one"),
     fields: buildFieldsZod(null)
       .optional()
-      .describe("属性 patch；使用 world schema attribute id"),
+      .describe("Attribute patch, keyed by world schema attribute id"),
   });
 }
 
@@ -446,7 +449,7 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
   return tool({
     name: "list-characters",
     description:
-      "列出本 session 中的所有角色（session 作用域，跨插件可见）。输出按频率降序排序（version 越高表示被交互得越频繁），频率相同时按最近更新时间降序排序。可按世界 schema 声明的 type 过滤。返回紧凑的文本列表——每个角色一行，包含 id / 名字 / 类型 / 版本 / 简短描述。需要完整属性时调用 get-character。",
+      "List every character in this session (session scope, visible to all plugins). Sorted by version, highest first (a higher version means more interaction), then by latest update. Can filter by a type the world schema declares. Returns a compact text list, one line per character: id / name / type / version / short description. Call get-character for full attributes.",
     parameters: z.object({
       type: z
         .preprocess((value) => {
@@ -463,7 +466,7 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
           }
           return normalized;
         }, z.string().min(1).optional().nullable())
-        .describe("按类型过滤（可选）"),
+        .describe("Filter by type (optional)"),
     }),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
@@ -528,14 +531,16 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
   return tool({
     name: "get-character",
     description:
-      "按 id 或 name 查询单个角色的完整属性（包括所有 fields、description、version、时间戳）。必须传入 id 或 name 其中之一；name 不必完全一致，唯一包含或被包含的名字也算命中。找不到时返回候选名字，无需再调用 list-characters。",
+      "Get one character's full attributes by id or name (all fields, description, version, timestamps). Pass id or name. The name need not match exactly: a single name that contains it, or that it contains, also matches. When nothing matches, candidate names are returned, so list-characters is not needed.",
     parameters: z
       .object({
-        id: z.string().optional().describe("角色 id"),
+        id: z.string().optional().describe("Character id"),
         name: z
           .string()
           .optional()
-          .describe("角色名称；也可写名字的一部分，如省略头衔"),
+          .describe(
+            "Character name; a part of it also works, for example without the title",
+          ),
       })
       .refine((v) => Boolean(v.id || v.name), {
         message: "either id or name is required",

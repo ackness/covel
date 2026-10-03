@@ -199,12 +199,16 @@ export async function resolveWorldDataSchema(options: {
         };
       selected = { path: schemaPath, canonical };
     }
-    if (!selected)
+    if (!selected) {
+      // The source did not ask for this schema; it is the default of its
+      // destination. A contract without a schema has nothing to check by.
+      if (options.source.schemaImplicit) return null;
       return {
         level: "error",
         schema: uri,
         message: `No schema declared for contract "${contract}"`,
       };
+    }
     return {
       kind: "local",
       uri,

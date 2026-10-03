@@ -111,19 +111,20 @@ worlds/my-world/
 
 ## 贯穿界面、插件与世界包的 i18n
 
-Covel 内置 `zh-CN`、`en-US` 与 `ru-RU` 三套界面词典。玩家选择的 locale 会统一用于界面标签、插件 metadata 与提示词、世界 metadata、角色字段和 WorldData source。短自然语言字段使用 `{ zh, en }` 这样的 `I18nText`；较长内容则使用独立的语言变体文件：
+Covel 内置 `zh-CN`、`en-US` 与 `ru-RU` 三套界面词典。界面语言只决定标签。一局会话只有一种内容语言，在创建会话时确定，而且一定是这个世界已有的语言版本。每个内容文件只写一种语言；译文是它旁边的一个文件，只写翻译后的文字：
 
 ```text
 apps/web/src/i18n/locales/ja-JP.json       # 应用界面词典
-plugins/my-plugin/PLUGIN.ja.md             # 本地化的 agent 指令
-worlds/my-world/WORLD.ja.md                 # 本地化的世界设定
+plugins/my-plugin/locales/ja.yaml          # 插件的标签、界面文字和消息
+worlds/my-world/world.ja.yaml              # 世界名称、简介、属性名
+worlds/my-world/WORLD.ja.md                # 本地化的世界设定
 worlds/my-world/characters/main-cast.ja.json
 worlds/my-world/data/rules/core.ja.yaml
 ```
 
-世界包通过 `defaultLocale` 与 `supportedLocales` 声明语言。加载器会优先读取当前语言的变体，缺失时回退到权威 source，因此只完成部分翻译也不会影响游玩。雾港展示了包含世界观、角色、规则和媒体 metadata 变体的中英双语世界包。**Emberback Relay** 则是内置的英文默认世界包（`defaultLocale: en-US`），manifest、设定、角色、规则、任务和其他开局内容均以英文提供。
+世界包通过 `defaultLocale` 与 `supportedLocales` 声明语言。某个语言版本没翻译的文字回退到世界自己的语言，因此只完成部分翻译也不会影响游玩，`pnpm validate:world` 会列出还缺什么。四个内置世界都带中英两个版本：**Emberback Relay** 用英文写成（`defaultLocale: en-US`），其余三个用中文写成。世界没有玩家的语言时，可以在应用里翻译，也可以用 `pnpm i18n translate`。
 
-玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`PLUGIN.<lang>.md`、`WORLD.<lang>.md` 与 WorldData source 变体。只翻译自然语言内容，稳定 ID、契约、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
+玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，按需补充语言文件：插件里的 `locales/<lang>.yaml`，世界里的 `world.<lang>.yaml`、`WORLD.<lang>.md` 以及 `data/rules/core.<lang>.yaml` 这样的数据文件。插件提示词保持英文，可附带一份中文变体；模型按会话语言输出。只翻译自然语言内容，稳定 ID、契约、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
 
 ## 端到端调试每个回合
 

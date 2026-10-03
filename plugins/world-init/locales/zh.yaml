@@ -1,0 +1,21 @@
+# Chinese text of the world-init plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: 世界维度
+  description: 初始化角色属性和作者声明的世界维度，持续维护可变状态。
+runtimes/dimension-context/RUNTIME.md:
+  description: 发布本回合冻结的世界维度快照，不调用模型。
+runtimes/dimension-tracker/RUNTIME.md:
+  description: 按作者规则维护本轮叙事发生的维度变化；无变化也明确结算。
+runtimes/edit-dimensions/RUNTIME.md:
+  description: 玩家修正维度当前值，或明确人工处理/跳过待结算回合。
+runtimes/schema-gen/RUNTIME.md:
+  description: 开局一次性构建角色属性结构和世界资料。
+messages:
+  World Details: 世界资料
+  Details: 资料
+  Overview: 总览
+  Character Traits: 角色属性
+  Character traits are not ready yet. Waiting for the world to finish preparing…: 角色属性定义尚未生成，等待世界初始化……
+  "[System] World data loaded": "[系统] 世界资料已加载"

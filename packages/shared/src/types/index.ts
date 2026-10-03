@@ -75,6 +75,7 @@ export type {
   PluginRuntimeTrigger,
   PluginSource,
   PluginStatus,
+  PluginLanguages,
   PluginSummary,
   PluginToolSummary,
   RuntimePluginContract,

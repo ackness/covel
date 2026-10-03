@@ -6,6 +6,7 @@ import {
   RpcDispatchError,
   RpcValidationError,
 } from "@covel/runtime";
+import { pluginMessagesFor } from "@covel/shared";
 import type {
   PluginRpcRequest,
   RpcCommandInvocation,
@@ -360,6 +361,12 @@ export async function dispatchPluginAction(
           sessionId,
           pluginId,
         });
+        // The plugin's own translations, in the session's language. A
+        // framework action has no plugin entry and reads none.
+        const messages = pluginMessagesFor(
+          c.get("pluginRegistry")?.get(pluginId)?.messages,
+          liveSession.locale,
+        );
         return executor.dispatch(
           {
             pluginId,
@@ -372,6 +379,7 @@ export async function dispatchPluginAction(
             sessionId,
             store: rpcStore,
             locale: liveSession.locale,
+            ...(messages ? { messages } : {}),
             ...(liveInvocation ? { command: liveInvocation } : {}),
             ...(environment ? { environment } : {}),
           },

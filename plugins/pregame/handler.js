@@ -1,4 +1,4 @@
-import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
+import { translate } from "@covel/plugin-handlers-utils";
 
 /**
  * Pre-Game handler — pure function runtime, no LLM.
@@ -10,9 +10,9 @@ import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function pregameHandler(ctx) {
-  const { sessionId, store, locale } = ctx;
+  const { sessionId, store } = ctx;
 
-  let worldName = pick(locale, "未知世界", "Unknown World");
+  let worldName = translate(ctx, "Unknown World");
   let worldSummary = "";
 
   if (store && typeof store === "object") {
@@ -31,32 +31,26 @@ export default async function pregameHandler(ctx) {
     }
   }
 
-  const welcomeTitle = pick(
-    locale,
-    `🌍 欢迎来到${worldName}`,
-    `🌍 Welcome to ${worldName}`,
-  );
+  const welcomeTitle = translate(ctx, "🌍 Welcome to {world}", {
+    world: worldName,
+  });
   const notifications = [
     {
       level: "info",
       title: welcomeTitle,
       message:
-        worldSummary ||
-        pick(
-          locale,
-          "你的冒险即将开始...",
-          "Your adventure is about to begin…",
-        ),
+        worldSummary || translate(ctx, "Your adventure is about to begin…"),
     },
   ];
 
   const narrativeOutput = worldSummary
-    ? `【${worldName}】${worldSummary}`
-    : pick(
-        locale,
-        `游戏初始化完成，欢迎来到${worldName}。`,
-        `Game initialized. Welcome to ${worldName}.`,
-      );
+    ? translate(ctx, "[{world}] {summary}", {
+        world: worldName,
+        summary: worldSummary,
+      })
+    : translate(ctx, "Game initialized. Welcome to {world}.", {
+        world: worldName,
+      });
 
   // completion:"done" is the setup completion signal. narrativeOutput stays a business value
   // (drives the turn message); notifications are a domain effect.

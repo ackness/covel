@@ -46,7 +46,7 @@ export default async function handler(ctx) {
   );
   if (!opening) return done("no scene registry");
 
-  const stage = buildStageRecord({
+  const stage = buildStageRecord(ctx, {
     sceneId: String(opening.sceneId),
     name:
       typeof opening.name === "string" ? opening.name : String(opening.sceneId),

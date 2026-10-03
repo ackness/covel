@@ -376,7 +376,6 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
           requestId: `req-haruka-chat-${index + 1}`,
           type: "send_message",
           sessionId,
-          locale: "zh-CN",
           payload: { content },
         }),
       });

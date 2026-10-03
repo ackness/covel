@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.commands[name=time].description": "3d05bbeb675e4f01",
+      "PLUGIN.md#contributes.data.definitions.authoring.summary": "010f361637d59f69",
+      "PLUGIN.md#contributes.data.definitions.authoring.title": "7ff581255a040a66",
+      "PLUGIN.md#description": "e4d271752fb147fb",
+      "PLUGIN.md#displayName": "8b88f5c23894f89a",
+      "runtimes/advance/RUNTIME.md#description": "1fedcbc5996fe62a",
+      "runtimes/context/RUNTIME.md#description": "b08e2fca08e89fde"
+    }
+  }
+}

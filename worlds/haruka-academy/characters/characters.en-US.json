@@ -1,0 +1,106 @@
+[
+  {
+    "id": "npc-kamishiro-mio",
+    "name": "Mio Kamishiro",
+    "description": "Class President of Class 2-B and Literature Club President; excellent grades, diligent work ethic, habitually hides anxiety beneath politeness and orderliness.",
+    "fields": {
+      "club": "Literature Club",
+      "class": "Class 2-B",
+      "relationshipStage": "Acquaintance",
+      "favoriteTopic": "Books, School Festival publications, quiet places",
+      "availability": "In Class 2-B before morning reading and during breaks; in the Literature Club Activity Room after school; occasionally in the Library during lunch breaks for proofreading",
+      "currentConcern": "Completing the table of contents for 'Spring Mint' and justifying the club's continued existence before the budget preliminary review at 14 days countdown"
+    }
+  },
+  {
+    "id": "npc-asakura-rin",
+    "name": "Rin Asakura",
+    "description": "News Club Reporter, quick to act, casually flippant in speech, skilled at using jokes to probe people's true reactions.",
+    "fields": {
+      "club": "News Club",
+      "class": "Class 2-B",
+      "relationshipStage": "Acquaintance",
+      "favoriteTopic": "Rumors, interviews, hidden truths",
+      "availability": "Between classes and during lunch at Class 2-B or the Courtyard Notice Board; after school in the News Club editing room",
+      "currentConcern": "Deciding how to report on the Transfer Student and drawing boundaries between interviewing and friendship for the 'Rumor Truth Wall'"
+    }
+  },
+  {
+    "id": "npc-shiina-kaho",
+    "name": "Kaho Shiina",
+    "description": "Guitarist in the Light Music Club, an intuitive doer who seems carefree but is actually very serious about the stage and the people she likes.",
+    "fields": {
+      "club": "Light Music Club",
+      "class": "Class 2-A",
+      "relationshipStage": "Acquaintance",
+      "favoriteTopic": "Music, the way home from school, the stage",
+      "availability": "May pass through the Courtyard with her guitar during lunch; in the Light Music Club Practice Room after school; occasionally goes to the Sakurazaka Seawall at dusk",
+      "currentConcern": "Finish the last part of her new song before the main stage rehearsal seven days away, and overcome the shadow of last year's mistake"
+    }
+  },
+  {
+    "id": "npc-shiraishi-yuma",
+    "name": "Yuma Shiraishi",
+    "description": "Vice President of the Student Council, calm and rule-abiding, responsible for club registration and School Festival procedures, often misunderstood as lacking Social Obligation.",
+    "fields": {
+      "club": "Student Council",
+      "class": "Class 2-C",
+      "relationshipStage": "Acquaintance",
+      "favoriteTopic": "Rules, responsibility, quiet rooftops",
+      "availability": "In the Student Council Room during breaks; reviews club materials after school; patrols the Club Building and rooftop at 17:40",
+      "currentConcern": "Complete the preliminary budget review according to procedure while preserving space for genuinely hardworking clubs to appeal or submit additional documents"
+    }
+  },
+  {
+    "id": "npc-mikoeda-haruka",
+    "name": "Haruka Mikoeda",
+    "description": "President of the Student Council, third year. Gentle and precise, she has a habit of using one sentence to bring disputes back to procedure; she makes the final call on resource allocation for the School Festival.",
+    "fields": {
+      "club": "Student Council",
+      "class": "Third Year",
+      "relationshipStage": "Acquaintance",
+      "favoriteTopic": "Procedures, overall balance, post-graduation plans",
+      "availability": "In the Student Council Room after lunch or after school; inspects the Courtyard, Club Building, and main stage during key Milestones",
+      "currentConcern": "Completing her last School Festival and handing off the Student Council without letting so-called fairness erase the efforts of small Clubs"
+    }
+  },
+  {
+    "id": "npc-onodera-chihiro",
+    "name": "Chihiro Onodera",
+    "description": "Homeroom Teacher of Class 2-B, Japanese Language teacher, and former Advisor of the Literature Club. He respects student autonomy and gives gentle reminders, but rarely solves problems for students directly.",
+    "fields": {
+      "club": "Staff · Former Advisor of the Literature Club",
+      "class": "Homeroom Teacher of Class 2-B",
+      "relationshipStage": "Teacher-Student",
+      "favoriteTopic": "Old books, students' own choices, not rushing to give answers",
+      "availability": "Class hours and morning reading in Class 2-B. Stays briefly in the classroom after duty shifts. Passes by the Old Journal Shelf in the Library when needed.",
+      "currentConcern": "Helping the Transfer Student adapt to the Class without solving their problems for them, and ensuring the Literature Club gets a chance to fight for itself."
+    }
+  },
+  {
+    "id": "npc-morikawa-souta",
+    "name": "Souta Morikawa",
+    "description": "Light Music Club drummer, Kaho's teammate, Class 2-A. Outgoing and quick-tongued, he often mistakes others' silence for agreement; capable of creating comedic misunderstandings, but also reminds the player of Kaho's pressure in the stage storyline.",
+    "fields": {
+      "club": "Light Music Club",
+      "class": "Class 2-A",
+      "relationshipStage": "Acquaintance",
+      "favoriteTopic": "Bands, live performances, turning serious matters into jokes",
+      "availability": "Lunch break may be spent in Class 2-A or the Courtyard; fixed at the Light Music Club Practice Room after school; visits Hoshisuna Instrument Shop before rehearsals",
+      "currentConcern": "Checking main stage equipment and looking for an opportunity to confess his oversight responsibility for last year's malfunction"
+    }
+  },
+  {
+    "id": "npc-toujou-akane",
+    "name": "Akane Toujou",
+    "description": "A third-year Head Librarian, a quiet senior girl, and a regular at Umineko Bookstore. Having witnessed clubs disappear and people desperately trying to preserve something, she deeply understands the value of quiet companionship.",
+    "fields": {
+      "club": "Library Committee",
+      "class": "Third Year",
+      "relationshipStage": "Acquaintance",
+      "favoriteTopic": "Books, old School Festival special issues, dusk at the seawall",
+      "availability": "In the Library during lunch breaks and after school until 5:30 PM; occasionally goes to Umineko Bookstore or Sakurazaka Seawall after closing",
+      "currentConcern": "Organizing signed pages from old publications before graduation, and determining if her sister's past preservation campaign can still help the Literature Club today"
+    }
+  }
+]

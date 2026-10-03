@@ -25,6 +25,7 @@ function sessionPlugin(
     runtimes: [],
     tools: [],
     userSettings: [],
+    languages: { text: ["en"], instructions: ["en"] },
     active,
     serverCodeApproved: true,
     sessionState: active ? "active" : "inactive",

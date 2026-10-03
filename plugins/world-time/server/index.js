@@ -1,4 +1,4 @@
-import { appendSummaryEntries } from "@covel/plugin-handlers-utils";
+import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 import createAdvanceWorldTime from "../tools/advance-world-time.js";
 import time from "../rpc/time.js";
 import { worldTimeSchema } from "../schema.js";
@@ -22,7 +22,7 @@ export default function register(covel) {
         {
           id: "time.now",
           kind: "text",
-          label: { zh: "时间", en: "Time" },
+          label: labelText(ctx, "Time"),
           value: describeTime(definition.data, state.tick, ctx.locale).display,
         },
       ]);

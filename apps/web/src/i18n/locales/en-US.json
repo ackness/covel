@@ -585,8 +585,7 @@
     "aiContentLorebookDesc": "Create keyword-aware entries for places, groups, and facts.",
     "aiContentRules": "World Rules",
     "aiContentRulesDesc": "Create durable consequences, boundaries, and narrative constraints.",
-    "aiContentMemory": "Genre Memory",
-    "aiContentMemoryDesc": "Track clues, promises, countdowns, and other genre state.",
+    "aiPluginContentLabel": "Plugin Content",
     "aiContentOpeningKit": "Opening Kit",
     "aiContentOpeningKitDesc": "Create starting resources, player constraints, and immediate choices.",
     "aiAdditionalLabel": "Author Notes",
@@ -619,7 +618,21 @@
       "skipped": "Skip this settlement"
     },
     "dimensionDefinitions": "Dimension definitions (JSON)",
-    "applyDimensions": "Apply definitions"
+    "applyDimensions": "Apply definitions",
+    "reviseTitle": "Revise this world",
+    "reviseHint": "Say what to change in your own words. Only that part is rewritten; sessions you already started keep the world they began with.",
+    "revisePlaceholder": "For example: make it three factions, or add a rival who wants the same thing.",
+    "reviseRequest": "What to change",
+    "revising": "Revising…",
+    "reviseAction": "Apply the change",
+    "translateTitle": "Translate this world",
+    "translateHint": "This world is written in {{worldLanguage}}, and a session plays in a language the world has. You can add a {{language}} edition.",
+    "translateConfirm": "Your model translates every text of the world: names, lore, rules and characters. This uses model calls, and a machine translation of names and tone needs a look afterwards.",
+    "translating": "Translating…",
+    "translateStart": "Start the translation",
+    "translateAction": "Translate to {{language}}",
+    "reviseDone": "The change is applied.",
+    "reviseDropsEditions": "This world has editions in other languages. A revision removes them, because their text would no longer match. Translate the world again afterwards."
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",
@@ -748,7 +761,8 @@
         "description": "Import, remove, and reuse custom theme packages."
       },
       "uiLocale": {
-        "label": "Interface Language"
+        "label": "Interface Language",
+        "description": "A language marked experimental has a translated interface. The instructions the models read stay in English, so the quality of the story depends on the model."
       },
       "chatMessageWindow": {
         "label": "Chat window message limit"
@@ -1549,7 +1563,9 @@
       "badView": "`view` must be an object",
       "conversionFailed": "could not render `view`"
     },
-    "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles."
+    "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles.",
+    "untranslated": "Not translated",
+    "untranslatedHint": "This plugin has no text in your language. Its panels show English."
   },
   "pluginJob": {
     "completed": "{{target}} completed in {{duration}}",
@@ -1638,7 +1654,8 @@
     "duringTurnDesc": "Game state may still be updating after the story appears. Wait for Turn complete to confirm the result. If you stop and the turn is not committed, retry with the original input. For partial update failures, retry the failed tasks. Expand earlier interactions, suggestions, or execution details when needed.",
     "reopenHint": "Reopen this guide from the world selection page. Models and appearance can be adjusted in Settings at any time.",
     "chooseWorld": "Choose a world",
-    "testBindings": "Review and test existing models ({{count}} roles)"
+    "testBindings": "Review and test existing models ({{count}} roles)",
+    "languageExperimental": "experimental"
   },
   "character": {
     "noCharacters": "Characters will appear here once created.",

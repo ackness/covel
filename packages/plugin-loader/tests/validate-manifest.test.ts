@@ -57,17 +57,38 @@ describe("manifest authoring CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(field);
   });
-  it("accepts localized metadata and entry-only contribution packages", async () => {
+  it("accepts label translations and entry-only contribution packages", async () => {
     const root = await fixture({
-      description: { en: "Probe", zh: "探针" },
       entry: "./server/index.js",
       contributes: {
         ui: { right: ["./ui/panel.json"] },
         prompt: [{ id: "guide", content: "Guidance", position: { depth: 2 } }],
       },
     });
+    await mkdir(path.join(root, "locales"));
+    await writeFile(
+      path.join(root, "locales/zh.yaml"),
+      "PLUGIN.md:\n  description: 探针\n",
+    );
     const result = validate(root);
     expect(result.status, result.stderr).toBe(0);
+  });
+  it("rejects a label written as a locale map and a translation it cannot place", async () => {
+    const inline = validate(
+      await fixture({ description: { en: "Probe", zh: "探针" } }),
+    );
+    expect(inline.status).toBe(1);
+    expect(inline.stderr).toContain("written as a locale map (description)");
+
+    const root = await fixture();
+    await mkdir(path.join(root, "locales"));
+    await writeFile(
+      path.join(root, "locales/zh.yaml"),
+      "PLUGIN.md:\n  kind: 插件\n",
+    );
+    const stray = validate(root);
+    expect(stray.status).toBe(1);
+    expect(stray.stderr).toContain("kind is not a label");
   });
   it.each(["directory", "root", "child"])(
     "validates all runtime declarations through a %s path",

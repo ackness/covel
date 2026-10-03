@@ -8,8 +8,8 @@
  * between a create and an update call, so a guessed id cannot fail the turn.
  *
  * A new entry's key is its title as words (`codex-west-herb-garden`,
- * `codex-西侧旧药园`). Persisted values carry `categoryMeta` (icon / color /
- * displayName) from `category-metadata.js`, so the panel renders category
+ * `codex-西侧旧药园`). Persisted values carry `categoryMeta` (icon / color)
+ * from `category-metadata.js`, so the panel renders category
  * badges without a framework lookup table, and every change emits a
  * `ui-spec` EntryCard block.
  */
@@ -140,8 +140,7 @@ export default function ({ tool, z }) {
           const prior = existing.value;
           value = {
             ...prior,
-            categoryMeta:
-              prior.categoryMeta ?? getCategoryMetadata(prior.category),
+            categoryMeta: getCategoryMetadata(prior.category),
             content: `${prior.content}\n\n${entry.content}`,
             tags: mergeTags(prior.tags, entry.tags),
             rarity: higherRarity(prior.rarity ?? "common", entry.rarity),

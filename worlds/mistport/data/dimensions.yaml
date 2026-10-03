@@ -1,10 +1,6 @@
 caseBoard:
-  name:
-    zh-CN: 案情板
-    en-US: Case Board
-  description:
-    zh-CN: 齐老失踪案的线索与可信度。线索会被佐证，也会被潮水、伪造或走漏污染。
-    en-US: Leads in Qi's disappearance and how far each can be trusted. Leads can be corroborated — or contaminated by floodwater, forgery, or a leak.
+  name: 案情板
+  description: 齐老失踪案的线索与可信度。线索会被佐证，也会被潮水、伪造或走漏污染。
   schema:
     type: object
     additionalProperties:
@@ -12,74 +8,55 @@ caseBoard:
       properties:
         lead:
           type: string
-          title: { zh-CN: 线索, en-US: Lead }
+          title: 线索
           x-i18n: true
         status:
           type: string
-          title: { zh-CN: 状态, en-US: Status }
+          title: 状态
           enum: [unverified, corroborated, contaminated, resolved]
           x-enumLabels:
-            unverified: { zh-CN: 未核实, en-US: Unverified }
-            corroborated: { zh-CN: 已佐证, en-US: Corroborated }
-            contaminated: { zh-CN: 已污染, en-US: Contaminated }
-            resolved: { zh-CN: 已解决, en-US: Resolved }
+            unverified: 未核实
+            corroborated: 已佐证
+            contaminated: 已污染
+            resolved: 已解决
         note:
           type: string
-          title: { zh-CN: 当前判断, en-US: Current read }
+          title: 当前判断
           maxLength: 240
           x-i18n: true
       required: [lead, status]
       additionalProperties: false
   initialValue:
     torn-letter:
-      lead:
-        zh-CN: 半封信
-        en-US: The torn letter
+      lead: 半封信
       status: unverified
-      note:
-        zh-CN: 苏窈手中，写着“钥匙不能落到他手里”。纸边有只在退潮遗迹结晶的黑潮盐，可齐老是在满潮时离开的。
-        en-US: Held by Su — “The Key must not fall into his hands.” Its edge bears black tide-salt that only forms in exposed ruins, yet Qi left at high tide.
+      note: 苏窈手中，写着“钥匙不能落到他手里”。纸边有只在退潮遗迹结晶的黑潮盐，可齐老是在满潮时离开的。
     report-74:
-      lead:
-        zh-CN: 第七十四号鉴定报告
-        en-US: Appraisal Report 74
+      lead: 第七十四号鉴定报告
       status: unverified
-      note:
-        zh-CN: 公会封档库缺了一页，目录仍写着“铰齿状灰色碎片”；同日访客簿也被无损取页。
-        en-US: One page is missing from the Sealed Archive; the catalog still lists a “hinged-tooth grey fragment.” That day's visitor ledger lost a page too.
+      note: 公会封档库缺了一页，目录仍写着“铰齿状灰色碎片”；同日访客簿也被无损取页。
     echo-gallery:
-      lead:
-        zh-CN: 回声廊的三种痕迹
-        en-US: Three traces in the Echo Gallery
+      lead: 回声廊的三种痕迹
       status: unverified
-      note:
-        zh-CN: 齐老的潮纹、灰隼私队的新绳索、刻着童谣的铜片——出现时间互相矛盾。
-        en-US: Qi's tide-mark, fresh rope from Falcon's unit, and a copper plate engraved with a nursery rhyme — their times contradict one another.
+      note: 齐老的潮纹、灰隼私队的新绳索、刻着童谣的铜片——出现时间互相矛盾。
     stilltide-survivor:
-      lead:
-        zh-CN: 静潮病院的幸存者
-        en-US: The Stilltide survivor
+      lead: 静潮病院的幸存者
       status: unverified
-      note:
-        zh-CN: 三年前深潜队唯一归来者，被议会隔离。“它在下面醒了”并不是他最初说的原句。
-        en-US: Sole survivor of the expedition three years ago, isolated by the Council. “It woke up down there” was not what he said first.
+      note: 三年前深潜队唯一归来者，被议会隔离。“它在下面醒了”并不是他最初说的原句。
   updateRule:
-    zh-CN: 只记录本轮叙事明确发生的变化。发现新的具名物证、证词或矛盾时新增一条（ID 用简短英文 kebab-case），状态为 unverified。有独立证词或潮纹记录印证时改为 corroborated；被涨潮冲刷、被伪造或公开走漏时改为 contaminated；真相被确认且不再有争议时改为 resolved。潮水带走证据不等于证实任何一方的解释。不删除条目；note 只写一句当前判断。
-    en-US: Record only changes this turn's narrative makes explicit. Add a new entry (short English kebab-case ID, status unverified) when a named piece of evidence, testimony, or contradiction is found. Set corroborated when independent testimony or tide-mark records back it; contaminated when floodwater, forgery, or a public leak taints it; resolved when the truth is confirmed and no longer disputed. The tide removing evidence never proves anyone's interpretation. Never delete entries; keep note to one sentence.
+    只记录本轮叙事明确发生的变化。发现新的具名物证、证词或矛盾时新增一条（ID 用简短英文 kebab-case），状态为
+    unverified。有独立证词或潮纹记录印证时改为 corroborated；被涨潮冲刷、被伪造或公开走漏时改为
+    contaminated；真相被确认且不再有争议时改为 resolved。潮水带走证据不等于证实任何一方的解释。不删除条目；note 只写一句当前判断。
 
 deepWithdrawal:
-  name:
-    zh-CN: 深退潮
-    en-US: Deep Withdrawal
-  description:
-    zh-CN: 罕见的深退潮会让下潮区完全暴露——也只给人很短的撤离时间。
-    en-US: A rare deep withdrawal lays the Undertow bare — and leaves very little time to get out.
+  name: 深退潮
+  description: 罕见的深退潮会让下潮区完全暴露——也只给人很短的撤离时间。
   schema:
     type: object
     properties:
       stage:
         type: string
-        title: { zh-CN: 阶段, en-US: Stage }
+        title: 阶段
         enum:
           [
             triple-warning,
@@ -90,128 +67,124 @@ deepWithdrawal:
             receded,
           ]
         x-enumLabels:
-          triple-warning: { zh-CN: 三连预警, en-US: Triple warning }
-          step-ninety: { zh-CN: 退过第九十级, en-US: Past step ninety }
-          full-exposure: { zh-CN: 遗迹完全暴露, en-US: Full exposure }
-          return-bell: { zh-CN: 返潮警铃, en-US: Return bell }
-          flood: { zh-CN: 急涨, en-US: Sudden flood }
-          receded: { zh-CN: 潮水复归, en-US: Receded }
+          triple-warning: 三连预警
+          step-ninety: 退过第九十级
+          full-exposure: 遗迹完全暴露
+          return-bell: 返潮警铃
+          flood: 急涨
+          receded: 潮水复归
       note:
         type: string
-        title: { zh-CN: 潮讯, en-US: Tide report }
+        title: 潮讯
         maxLength: 240
         x-i18n: true
     required: [stage]
     additionalProperties: false
   initialValue:
     stage: triple-warning
-    note:
-      zh-CN: 潮钟三鸣。深退潮比往常提前，没人说得清为什么。
-      en-US: The tide-bells have rung three times. The deep withdrawal is early, and no one can say why.
+    note: 潮钟三鸣。深退潮比往常提前，没人说得清为什么。
   updateRule:
-    zh-CN: 只按叙事中明确出现的潮讯推进，顺序为 triple-warning → step-ninety（海水退过褪水阶第九十级）→ full-exposure（遗迹完全暴露）→ return-bell（返潮警铃，通常只剩约半小时）→ flood（急涨）→ receded（本次深退潮结束）。不跳级、不倒退；receded 之后只有叙事明确出现新的三连预警才回到 triple-warning。普通涨落潮由世界时间负责，不在此记录。
-    en-US: Advance only on tide signs the narrative states, in order — triple-warning → step-ninety (water passes the ninetieth Drawdown Step) → full-exposure (ruins fully exposed) → return-bell (usually about half an hour left) → flood (sudden flood) → receded (this withdrawal is over). Never skip or reverse; after receded, return to triple-warning only if the narrative sounds a new triple warning. Ordinary tides belong to world time and are not tracked here.
+    只按叙事中明确出现的潮讯推进，顺序为 triple-warning → step-ninety（海水退过褪水阶第九十级）→
+    full-exposure（遗迹完全暴露）→ return-bell（返潮警铃，通常只剩约半小时）→ flood（急涨）→
+    receded（本次深退潮结束）。不跳级、不倒退；receded 之后只有叙事明确出现新的三连预警才回到
+    triple-warning。普通涨落潮由世界时间负责，不在此记录。
 
 factionStanding:
-  name:
-    zh-CN: 四方立场
-    en-US: Faction Standing
-  description:
-    zh-CN: 议会、验潮师公会、盐牙会与雾中教会怎么看你。没有不留痕迹的中立。
-    en-US: How the Council, the Tide-Reader Guild, the Salt Fangs, and the Congregation see you. No neutrality leaves no trace.
+  name: 四方立场
+  description: 议会、验潮师公会、盐牙会与雾中教会怎么看你。没有不留痕迹的中立。
   schema:
     type: object
     properties:
       council:
         type: object
-        title: { zh-CN: 雾港议会, en-US: Council }
+        title: 雾港议会
         properties:
           attitude:
             type: integer
-            title: { zh-CN: 态度, en-US: Attitude }
+            title: 态度
             minimum: -3
             maximum: 3
           marks:
             type: array
-            title: { zh-CN: 记录, en-US: Marks }
+            title: 记录
             maxItems: 4
             items:
               type: string
               enum: [permit, owes-you, you-owe, warrant]
               x-enumLabels:
-                permit: { zh-CN: 持有许可, en-US: Permit }
-                owes-you: { zh-CN: 欠你人情, en-US: Owes you }
-                you-owe: { zh-CN: 你欠人情, en-US: You owe }
-                warrant: { zh-CN: 通缉, en-US: Warrant }
+                permit: 持有许可
+                owes-you: 欠你人情
+                you-owe: 你欠人情
+                warrant: 通缉
         required: [attitude, marks]
         additionalProperties: false
       guild:
         type: object
-        title: { zh-CN: 验潮师公会, en-US: Tide-Reader Guild }
+        title: 验潮师公会
         properties:
           attitude:
             type: integer
-            title: { zh-CN: 态度, en-US: Attitude }
+            title: 态度
             minimum: -3
             maximum: 3
           marks:
             type: array
-            title: { zh-CN: 记录, en-US: Marks }
+            title: 记录
             maxItems: 4
             items:
               type: string
               enum: [permit, owes-you, you-owe, warrant]
               x-enumLabels:
-                permit: { zh-CN: 持有许可, en-US: Permit }
-                owes-you: { zh-CN: 欠你人情, en-US: Owes you }
-                you-owe: { zh-CN: 你欠人情, en-US: You owe }
-                warrant: { zh-CN: 通缉, en-US: Warrant }
+                permit: 持有许可
+                owes-you: 欠你人情
+                you-owe: 你欠人情
+                warrant: 通缉
         required: [attitude, marks]
         additionalProperties: false
       saltFangs:
         type: object
-        title: { zh-CN: 盐牙会, en-US: Salt Fangs }
+        title: 盐牙会
         properties:
           attitude:
             type: integer
-            title: { zh-CN: 态度, en-US: Attitude }
+            title: 态度
             minimum: -3
             maximum: 3
           marks:
             type: array
-            title: { zh-CN: 记录, en-US: Marks }
+            title: 记录
             maxItems: 4
             items:
               type: string
               enum: [permit, owes-you, you-owe, warrant]
               x-enumLabels:
-                permit: { zh-CN: 持有许可, en-US: Permit }
-                owes-you: { zh-CN: 欠你人情, en-US: Owes you }
-                you-owe: { zh-CN: 你欠人情, en-US: You owe }
-                warrant: { zh-CN: 通缉, en-US: Warrant }
+                permit: 持有许可
+                owes-you: 欠你人情
+                you-owe: 你欠人情
+                warrant: 通缉
         required: [attitude, marks]
         additionalProperties: false
       congregation:
         type: object
-        title: { zh-CN: 雾中教会, en-US: Congregation of the Mist }
+        title: 雾中教会
         properties:
           attitude:
             type: integer
-            title: { zh-CN: 态度, en-US: Attitude }
+            title: 态度
             minimum: -3
             maximum: 3
           marks:
             type: array
-            title: { zh-CN: 记录, en-US: Marks }
+            title: 记录
             maxItems: 4
             items:
               type: string
               enum: [permit, owes-you, you-owe, warrant]
               x-enumLabels:
-                permit: { zh-CN: 持有许可, en-US: Permit }
-                owes-you: { zh-CN: 欠你人情, en-US: Owes you }
-                you-owe: { zh-CN: 你欠人情, en-US: You owe }
-                warrant: { zh-CN: 通缉, en-US: Warrant }
+                permit: 持有许可
+                owes-you: 欠你人情
+                you-owe: 你欠人情
+                warrant: 通缉
         required: [attitude, marks]
         additionalProperties: false
     required: [council, guild, saltFangs, congregation]
@@ -222,16 +195,13 @@ factionStanding:
     saltFangs: { attitude: 0, marks: [] }
     congregation: { attitude: 0, marks: [] }
   updateRule:
-    zh-CN: attitude 从 -3（敌视）到 3（倚重），开局中立。玩家明确帮助、出卖、与之交易或公开违抗某方时调整 1，重大事件最多 2。议会与盐牙会处于冷战：讨好一方且被另一方得知时，另一方 -1。获得许可证、被欠或欠下人情、遭到通缉时加入对应 marks（不重复），偿还、撤销或解除后移除。只按本轮叙事明确发生的事件结算。
-    en-US: attitude runs from -3 (hostile) to 3 (relied upon) and starts neutral. Shift by 1 when the player clearly helps, betrays, trades with, or openly defies a faction; 2 at most for a major event. The Council and the Salt Fangs are in a cold war — when the player favors one and the other learns of it, the other drops by 1. Add the matching mark (no duplicates) when a permit is granted, a favor is owed either way, or a warrant is issued; remove it once repaid, revoked, or lifted. Settle only events this turn's narrative makes explicit.
+    attitude 从 -3（敌视）到 3（倚重），开局中立。玩家明确帮助、出卖、与之交易或公开违抗某方时调整 1，重大事件最多
+    2。议会与盐牙会处于冷战：讨好一方且被另一方得知时，另一方 -1。获得许可证、被欠或欠下人情、遭到通缉时加入对应
+    marks（不重复），偿还、撤销或解除后移除。只按本轮叙事明确发生的事件结算。
 
 keyFragments:
-  name:
-    zh-CN: 钥匙碎片
-    en-US: Key Fragments
-  description:
-    zh-CN: 铁姑、陈远山和灰隼都在找的“钥匙”零件。它能打开什么，没人肯说。
-    en-US: Pieces of the “Key” that Iron Meg, Councilor Chen, and Grey Falcon are all hunting. No one will say what it opens.
+  name: 钥匙碎片
+  description: 铁姑、陈远山和灰隼都在找的“钥匙”零件。它能打开什么，没人肯说。
   schema:
     type: object
     additionalProperties:
@@ -239,56 +209,46 @@ keyFragments:
       properties:
         fragment:
           type: string
-          title: { zh-CN: 碎片, en-US: Fragment }
+          title: 碎片
           x-i18n: true
         holder:
           type: string
-          title: { zh-CN: 持有者, en-US: Held by }
+          title: 持有者
           x-i18n: true
         status:
           type: string
-          title: { zh-CN: 状态, en-US: Status }
+          title: 状态
           enum: [rumored, located, held-by-you, taken, lost]
           x-enumLabels:
-            rumored: { zh-CN: 传闻, en-US: Rumored }
-            located: { zh-CN: 已定位, en-US: Located }
-            held-by-you: { zh-CN: 在你手中, en-US: Yours }
-            taken: { zh-CN: 被夺走, en-US: Taken }
-            lost: { zh-CN: 遗失, en-US: Lost }
+            rumored: 传闻
+            located: 已定位
+            held-by-you: 在你手中
+            taken: 被夺走
+            lost: 遗失
       required: [fragment, holder, status]
       additionalProperties: false
   initialValue:
     meg-collection:
-      fragment:
-        zh-CN: 铁姑暗中收集的遗物碎片
-        en-US: Iron Meg's quiet collection
-      holder:
-        zh-CN: 铁姑（盐牙会）
-        en-US: Iron Meg (Salt Fangs)
+      fragment: 铁姑暗中收集的遗物碎片
+      holder: 铁姑（盐牙会）
       status: rumored
     archive-fragment:
-      fragment:
-        zh-CN: 铰齿状灰色碎片
-        en-US: Hinged-tooth grey fragment
-      holder:
-        zh-CN: 不明——报告那一页被取走了
-        en-US: Unknown — the report page is gone
+      fragment: 铰齿状灰色碎片
+      holder: 不明——报告那一页被取走了
       status: rumored
   updateRule:
-    zh-CN: 只记录叙事中明确出现的钥匙碎片，新碎片用简短英文 kebab-case ID。找到下落时改为 located，落入玩家手中为 held-by-you，被他人夺走为 taken 并更新 holder，下落彻底断绝为 lost。不凭空增加碎片，也不揭示钥匙能打开什么。
-    en-US: Track only Key fragments the narrative explicitly shows; give new ones a short English kebab-case ID. Set located when a whereabouts is confirmed, held-by-you when the player gets it, taken (and update holder) when someone else seizes it, lost when every trail is gone. Never invent fragments or reveal what the Key opens.
+    只记录叙事中明确出现的钥匙碎片，新碎片用简短英文 kebab-case ID。找到下落时改为 located，落入玩家手中为
+    held-by-you，被他人夺走为 taken 并更新 holder，下落彻底断绝为 lost。不凭空增加碎片，也不揭示钥匙能打开什么。
 
 geography:
-  name:
-    zh-CN: 地理
-    en-US: Geography
+  name: 地理
   schema:
     type: object
     properties:
       overview:
         type: string
         x-i18n: true
-        title: { zh-CN: 概况, en-US: Overview }
+        title: 概况
       regions:
         type: array
         items:
@@ -297,15 +257,15 @@ geography:
             name:
               type: string
               x-i18n: true
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             description:
               type: string
               x-i18n: true
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
             climate:
               type: string
               x-i18n: true
-              title: { zh-CN: 气候, en-US: Climate }
+              title: 气候
             landmarks:
               type: array
               items:
@@ -314,139 +274,61 @@ geography:
                   name:
                     type: string
                     x-i18n: true
-                    title: { zh-CN: 名称, en-US: Name }
+                    title: 名称
                   description:
                     type: string
                     x-i18n: true
-                    title: { zh-CN: 描述, en-US: Description }
+                    title: 描述
                 additionalProperties: false
-              title: { zh-CN: 地标, en-US: Landmarks }
+              title: 地标
           additionalProperties: false
-        title: { zh-CN: 地区, en-US: Regions }
+        title: 地区
     additionalProperties: false
   initialValue:
-    overview:
-      zh-CN: 悬崖与海面之间的港口城市，永恒灰白浓雾笼罩，能见度不超过五十步。城市垂直分上城、中港、下潮区三层。
-      en-US: A port city wedged between sea cliffs and the ocean, shrouded in perpetual grey fog that limits visibility to fifty paces. It rises in three vertical tiers — Upper City, Mid-Harbor, and the Undertow.
+    overview: 悬崖与海面之间的港口城市，永恒灰白浓雾笼罩，能见度不超过五十步。城市垂直分上城、中港、下潮区三层。
     regions:
-      - name:
-          zh-CN: 上城
-          en-US: Upper City
-        description:
-          zh-CN: 议会与商会所在地，位于悬崖顶部，建筑以石砌为主，是合法遗物贸易的中枢。
-          en-US: Seat of the Council and trade guilds atop the cliffs, stone-built, hub of the legal relic trade.
-        climate:
-          zh-CN: 雾气稀薄，偶见天光
-          en-US: Thinner fog, occasional glimpses of sky
+      - name: 上城
+        description: 议会与商会所在地，位于悬崖顶部，建筑以石砌为主，是合法遗物贸易的中枢。
+        climate: 雾气稀薄，偶见天光
         landmarks:
-          - name:
-              zh-CN: 议事厅
-              en-US: Council Hall
-            description:
-              zh-CN: 议会权力中枢，穹顶嵌有远古潮石灯——全城唯一不靠火焰的光源。
-              en-US: The political nerve center, its dome set with an ancient tide-stone lamp — the only flameless light in the city.
-          - name:
-              zh-CN: 验潮师公会塔
-              en-US: Tide-Reader Guild Tower
-            description:
-              zh-CN: 鉴定远古遗物的学术要地，也是雾港唯一的图书馆与档案库。
-              en-US: Academy and appraisal center for ancient relics; also Mistport's only library and archive.
-          - name:
-              zh-CN: 封档库
-              en-US: Sealed Archive
-            description:
-              zh-CN: 公会塔地下的禁阅档案室。齐老失踪当日，第七十四号鉴定报告与访客簿各少了一页，门锁却没有被撬动。
-              en-US: A restricted archive beneath the Guild Tower. On the day Qi vanished, one page disappeared from Appraisal Report 74 and another from the visitor ledger, though the lock was untouched.
-          - name:
-              zh-CN: 静潮病院
-              en-US: Stilltide Infirmary
-            description:
-              zh-CN: 名义上收治重度雾蚀患者，实际由议会严密看守；三年前深潜队唯一的幸存者被关在最下层病房。
-              en-US: Officially a ward for advanced fog-rot, but kept under Council guard; the sole survivor of the expedition three years ago is confined on its lowest floor.
-      - name:
-          zh-CN: 中港
-          en-US: Mid-Harbor
-        description:
-          zh-CN: 码头、工坊和旅店聚集地，城市的经济心脏，也是各方势力公开与暗中交锋的舞台。
-          en-US: Docks, workshops, and inns — the economic heart of Mistport, and the stage where every faction clashes openly and in shadow.
-        climate:
-          zh-CN: 浓雾常驻，潮湿闷热
-          en-US: Perpetual fog, humid and warm
+          - name: 议事厅
+            description: 议会权力中枢，穹顶嵌有远古潮石灯——全城唯一不靠火焰的光源。
+          - name: 验潮师公会塔
+            description: 鉴定远古遗物的学术要地，也是雾港唯一的图书馆与档案库。
+          - name: 封档库
+            description: 公会塔地下的禁阅档案室。齐老失踪当日，第七十四号鉴定报告与访客簿各少了一页，门锁却没有被撬动。
+          - name: 静潮病院
+            description: 名义上收治重度雾蚀患者，实际由议会严密看守；三年前深潜队唯一的幸存者被关在最下层病房。
+      - name: 中港
+        description: 码头、工坊和旅店聚集地，城市的经济心脏，也是各方势力公开与暗中交锋的舞台。
+        climate: 浓雾常驻，潮湿闷热
         landmarks:
-          - name:
-              zh-CN: 主栈桥
-              en-US: Main Pier
-            description:
-              zh-CN: 雾港唯一的大型泊位，渡船与货船在此停靠，新来者从这里踏入雾港。
-              en-US: The only large berth; ferries and cargo ships dock here, and newcomers first set foot in Mistport.
-          - name:
-              zh-CN: 钟塔
-              en-US: Tide-Bell Tower
-            description:
-              zh-CN: 以潮汐驱动的机械钟，每六小时鸣响一次；三连击代表深退潮预警。
-              en-US: A tide-driven clocktower tolling every six hours; a triple strike signals a deep-withdrawal alert.
-          - name:
-              zh-CN: 盐市
-              en-US: The Salt Market
-            description:
-              zh-CN: 中港背巷里半公开的市集，盐牙会在此放货与招募；持盐牙筹者才听得到真正的价。
-              en-US: A half-open bazaar in Mid-Harbor's back alleys where the Salt Fangs move goods and recruit; only Salt Chips hear the real prices.
-          - name:
-              zh-CN: 无声栈
-              en-US: Quiet-Fog Inn
-            description:
-              zh-CN: 探险者常住的低顶旅店，墙壁填了吸音雾菌。老板不问来路，却会把未归者的雾灯挂在门梁上。
-              en-US: A low-ceilinged explorers' inn insulated with sound-eating fog fungus. Its keeper asks no origins, but hangs every missing guest's fog-lamp above the door.
-          - name:
-              zh-CN: 封潮关
-              en-US: Tide-Seal Gate
-            description:
-              zh-CN: 中港通往下潮区褪水阶的检查站，灰隼在此核验许可证、没收明火与未登记遗物；栈桥暗门可绕行，但欠盐牙会一份人情。
-              en-US: The checkpoint between Mid-Harbor and the Undertow steps, where Grey Falcon inspects permits and seizes open flames or undeclared relics. A pier hatch bypasses it at the price of a favor owed to the Salt Fangs.
-      - name:
-          zh-CN: 下潮区
-          en-US: The Undertow
-        description:
-          zh-CN: 潮退后暴露的远古遗迹区域，地形每次退潮都会改变，无图可循；最深处从未有人到达。
-          en-US: Ancient ruins exposed at low tide; the layout changes with every withdrawal, no map ever valid, and its deepest reaches never reached.
-        climate:
-          zh-CN: 阴冷，弥漫盐雾与腐蚀气息
-          en-US: Cold and briny, corrosive salt mist
+          - name: 主栈桥
+            description: 雾港唯一的大型泊位，渡船与货船在此停靠，新来者从这里踏入雾港。
+          - name: 钟塔
+            description: 以潮汐驱动的机械钟，每六小时鸣响一次；三连击代表深退潮预警。
+          - name: 盐市
+            description: 中港背巷里半公开的市集，盐牙会在此放货与招募；持盐牙筹者才听得到真正的价。
+          - name: 无声栈
+            description: 探险者常住的低顶旅店，墙壁填了吸音雾菌。老板不问来路，却会把未归者的雾灯挂在门梁上。
+          - name: 封潮关
+            description: 中港通往下潮区褪水阶的检查站，灰隼在此核验许可证、没收明火与未登记遗物；栈桥暗门可绕行，但欠盐牙会一份人情。
+      - name: 下潮区
+        description: 潮退后暴露的远古遗迹区域，地形每次退潮都会改变，无图可循；最深处从未有人到达。
+        climate: 阴冷，弥漫盐雾与腐蚀气息
         landmarks:
-          - name:
-              zh-CN: 骨拱门
-              en-US: Bone Arch
-            description:
-              zh-CN: 半淹没的巨大拱形结构，来源不明；六年前的深退潮中暴露，带走了十七条人命。
-              en-US: A half-submerged colossal archway of unknown origin, exposed in the deep withdrawal six years ago that took seventeen lives.
-          - name:
-              zh-CN: 沉钟堂
-              en-US: The Sunken Bell Hall
-            description:
-              zh-CN: 退潮时才露出的半沉建筑，雾中教会在此聚会礼拜，相信这里离"雾之主"最近。
-              en-US: A half-sunken structure bared only at ebb, where the Congregation of the Mist gathers, believing it lies closest to the Mist Lord.
-          - name:
-              zh-CN: 隐潮窟
-              en-US: The Hidden Grotto
-            description:
-              zh-CN: 涨潮也淹不到的洞窟群，盐牙会的根据地，铁姑在此存放她搜集的遗物碎片。
-              en-US: A cave network the flood never reaches, the Salt Fangs' stronghold, where Iron Meg keeps the relic fragments she gathers.
-          - name:
-              zh-CN: 褪水阶
-              en-US: Drawdown Steps
-            description:
-              zh-CN: 封潮关下方通往遗迹的长阶，每一级刻着撤离刻度。海水退过第九十级才算深退潮；返潮警铃后，安全窗口只剩约半小时。
-              en-US: The long stair descending from the Tide-Seal Gate, each step marked for evacuation. A deep withdrawal begins below step ninety; once the return bell sounds, roughly half an hour remains.
-          - name:
-              zh-CN: 回声廊
-              en-US: Echo Gallery
-            description:
-              zh-CN: 本次深退潮最先露出的环形廊道，石壁会延迟复述脚步与耳语。齐老的潮纹印记、灰隼私队的新绳痕与一枚陌生童谣铜片同时出现在这里。
-              en-US: A ring corridor first exposed by the present deep withdrawal, its stone repeating footsteps and whispers seconds late. Qi's tide-mark, fresh rope scars from Falcon's unit, and an unknown copper nursery-rhyme plate all appear here.
+          - name: 骨拱门
+            description: 半淹没的巨大拱形结构，来源不明；六年前的深退潮中暴露，带走了十七条人命。
+          - name: 沉钟堂
+            description: 退潮时才露出的半沉建筑，雾中教会在此聚会礼拜，相信这里离"雾之主"最近。
+          - name: 隐潮窟
+            description: 涨潮也淹不到的洞窟群，盐牙会的根据地，铁姑在此存放她搜集的遗物碎片。
+          - name: 褪水阶
+            description: 封潮关下方通往遗迹的长阶，每一级刻着撤离刻度。海水退过第九十级才算深退潮；返潮警铃后，安全窗口只剩约半小时。
+          - name: 回声廊
+            description: 本次深退潮最先露出的环形廊道，石壁会延迟复述脚步与耳语。齐老的潮纹印记、灰隼私队的新绳痕与一枚陌生童谣铜片同时出现在这里。
 factions:
-  name:
-    zh-CN: 势力
-    en-US: Factions
+  name: 势力
   schema:
     type: array
     items:
@@ -454,29 +336,29 @@ factions:
       properties:
         id:
           type: string
-          title: { zh-CN: ID, en-US: ID }
+          title: ID
         name:
           type: string
           x-i18n: true
-          title: { zh-CN: 名称, en-US: Name }
+          title: 名称
         description:
           type: string
           x-i18n: true
-          title: { zh-CN: 描述, en-US: Description }
+          title: 描述
         type:
           type: string
-          title: { zh-CN: 类型, en-US: Type }
+          title: 类型
         influence:
           type: string
-          title: { zh-CN: 影响力, en-US: Influence }
+          title: 影响力
         leader:
           type: string
           x-i18n: true
-          title: { zh-CN: 领袖, en-US: Leader }
+          title: 领袖
         headquarters:
           type: string
           x-i18n: true
-          title: { zh-CN: 据点, en-US: Headquarters }
+          title: 据点
         relations:
           type: array
           items:
@@ -484,151 +366,99 @@ factions:
             properties:
               targetId:
                 type: string
-                title: { zh-CN: 对象, en-US: Target }
+                title: 对象
               type:
                 type: string
-                title: { zh-CN: 类型, en-US: Type }
+                title: 类型
               description:
                 type: string
                 x-i18n: true
-                title: { zh-CN: 描述, en-US: Description }
+                title: 描述
             additionalProperties: false
-          title: { zh-CN: 关系, en-US: Relations }
+          title: 关系
       additionalProperties: false
   initialValue:
     - id: council
-      name:
-        zh-CN: 雾港议会
-        en-US: Mistport Council
-      description:
-        zh-CN: 统治上城的政治实体，试图以"封潮令"限制平民进入下潮区，垄断合法遗物贸易；内部鸽鹰两派分裂。
-        en-US: The ruling political body of the Upper City, pushing the 'Seal Tide Decree' to restrict Undertow access and monopolize the legal relic trade; split between doves and hawks within.
+      name: 雾港议会
+      description: 统治上城的政治实体，试图以"封潮令"限制平民进入下潮区，垄断合法遗物贸易；内部鸽鹰两派分裂。
       type: political
       influence: major
-      leader:
-        zh-CN: 议长・陈远山
-        en-US: Councilor Chen
-      headquarters:
-        zh-CN: 上城・议事厅
-        en-US: Upper City — Council Hall
+      leader: 议长・陈远山
+      headquarters: 上城・议事厅
       relations:
         - targetId: salt-fangs
           type: hostile
-          description:
-            zh-CN: 视盐牙会为非法组织，长期冷战
-            en-US: Views the Salt Fangs as an outlaw syndicate; locked in a cold war
+          description: 视盐牙会为非法组织，长期冷战
         - targetId: tide-readers
           type: patron
-          description:
-            zh-CN: 拨款资助公会，也借此施加影响
-            en-US: Funds the Guild, and leverages that funding for influence
+          description: 拨款资助公会，也借此施加影响
         - targetId: fog-church
           type: hostile
-          description:
-            zh-CN: 斥雾中教会为邪教，警惕其在底层迅速扩张
-            en-US: Brands the Congregation a cult and fears its swift growth in the lower city
+          description: 斥雾中教会为邪教，警惕其在底层迅速扩张
     - id: tide-readers
-      name:
-        zh-CN: 验潮师公会
-        en-US: Tide-Reader Guild
-      description:
-        zh-CN: 唯一有资质鉴定远古遗物、研究裂潮规律的学术组织；高层刻意压制某些鉴定报告，年轻验潮师日渐不安。
-        en-US: The only body qualified to appraise ancient relics and study the Riftide; its leadership buries certain reports, and its younger members grow uneasy.
+      name: 验潮师公会
+      description: 唯一有资质鉴定远古遗物、研究裂潮规律的学术组织；高层刻意压制某些鉴定报告，年轻验潮师日渐不安。
       type: guild
       influence: major
-      leader:
-        zh-CN: 公会长・齐老
-        en-US: Guildmaster Qi
-      headquarters:
-        zh-CN: 上城・验潮师公会塔
-        en-US: Upper City — Guild Tower
+      leader: 公会长・齐老
+      headquarters: 上城・验潮师公会塔
       relations:
         - targetId: council
           type: allied
-          description:
-            zh-CN: 依赖议会资金，提供遗物鉴定，保持名义独立
-            en-US: Funded by the Council, provides appraisal, keeps nominal independence
+          description: 依赖议会资金，提供遗物鉴定，保持名义独立
         - targetId: salt-fangs
           type: complicated
-          description:
-            zh-CN: 公开敌对走私，私下铁姑曾是公会学徒，旧情难断
-            en-US: Publicly opposes the smugglers, yet Iron Meg was once a Guild apprentice — old ties linger
+          description: 公开敌对走私，私下铁姑曾是公会学徒，旧情难断
     - id: salt-fangs
-      name:
-        zh-CN: 盐牙会
-        en-US: Salt Fangs
-      description:
-        zh-CN: 控制下潮区遗物黑市的走私帮派，势力深植底层；二当家铁姑守信，暗中搜集遗物碎片。
-        en-US: A smuggler syndicate controlling the relic black market in the Undertow; its second, Iron Meg, keeps her word and quietly gathers relic fragments.
+      name: 盐牙会
+      description: 控制下潮区遗物黑市的走私帮派，势力深植底层；二当家铁姑守信，暗中搜集遗物碎片。
       type: criminal
       influence: major
-      leader:
-        zh-CN: 二当家・铁姑
-        en-US: Iron Meg
-      headquarters:
-        zh-CN: 下潮区・隐潮窟
-        en-US: The Undertow — Hidden Grotto
+      leader: 二当家・铁姑
+      headquarters: 下潮区・隐潮窟
       relations:
         - targetId: council
           type: hostile
-          description:
-            zh-CN: 长期对抗议会封锁政策
-            en-US: Openly defies Council blockade policies
+          description: 长期对抗议会封锁政策
         - targetId: fog-church
           type: neutral
-          description:
-            zh-CN: 不信其教义，但容许信徒在下潮区借道，偶尔交易情报
-            en-US: Disbelieves the doctrine but lets the faithful pass through the Undertow, trading intel now and then
+          description: 不信其教义，但容许信徒在下潮区借道，偶尔交易情报
     - id: fog-church
-      name:
-        zh-CN: 雾中教会
-        en-US: Congregation of the Mist
-      description:
-        zh-CN: 崇拜"雾之主"的新兴教团，相信雾是有意识的存在、遗迹是其身体，宣讲"雾蚀是升华"；信众在底层激增。
-        en-US: A rising order worshipping the 'Mist Lord', holding that the fog is conscious and the ruins are its body, and preaching that 'fog-rot is ascension'; its numbers swell in the lower city.
+      name: 雾中教会
+      description: 崇拜"雾之主"的新兴教团，相信雾是有意识的存在、遗迹是其身体，宣讲"雾蚀是升华"；信众在底层激增。
       type: religious
       influence: minor
-      leader:
-        zh-CN: 雾使・小霜
-        en-US: Mist-Speaker Frost
-      headquarters:
-        zh-CN: 下潮区・沉钟堂
-        en-US: The Undertow — Sunken Bell Hall
+      leader: 雾使・小霜
+      headquarters: 下潮区・沉钟堂
       relations:
         - targetId: council
           type: defiant
-          description:
-            zh-CN: 被议会列为邪教，却以底层信众为盾顽强生长
-            en-US: Outlawed by the Council, yet shielded by its lower-city flock
+          description: 被议会列为邪教，却以底层信众为盾顽强生长
         - targetId: tide-readers
           type: rival
-          description:
-            zh-CN: 以"信仰"解释潮力与雾蚀，与公会的"科学"立场针锋相对
-            en-US: Explains Tide-Force and fog-rot through faith, clashing with the Guild's 'scientific' stance
+          description: 以"信仰"解释潮力与雾蚀，与公会的"科学"立场针锋相对
 powerSystem:
-  name:
-    zh-CN: 力量体系
-    en-US: Power System
+  name: 力量体系
   schema:
     type: object
     properties:
       name:
         type: string
         x-i18n: true
-        title: { zh-CN: 名称, en-US: Name }
+        title: 名称
       type:
         type: string
-        title: { zh-CN: 类型, en-US: Type }
+        title: 类型
       description:
         type: string
         x-i18n: true
-        title: { zh-CN: 描述, en-US: Description }
+        title: 描述
       rules:
         type: array
         items:
           type: string
           x-i18n: true
-        title: { zh-CN: 规则, en-US: Rules }
+        title: 规则
       tiers:
         type: array
         items:
@@ -637,66 +467,41 @@ powerSystem:
             name:
               type: string
               x-i18n: true
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             rank:
               type: integer
-              title: { zh-CN: 等级, en-US: Rank }
+              title: 等级
             description:
               type: string
               x-i18n: true
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
           additionalProperties: false
-        title: { zh-CN: 层级, en-US: Tiers }
+        title: 层级
     additionalProperties: false
   initialValue:
-    name:
-      zh-CN: 潮力
-      en-US: Tide-Force
+    name: 潮力
     type: magic
-    description:
-      zh-CN: 远古遗物蕴含的不可预测能量，与潮汐周期共振，退潮时最强。验潮师以"潮纹"引导稳定，过度使用招致雾蚀。
-      en-US: Unpredictable energy stored in ancient relics, resonating with the tidal cycle and strongest at ebb. Tide-Readers channel and stabilize it through 'tide-marks'; overuse brings fog-rot.
+    description: 远古遗物蕴含的不可预测能量，与潮汐周期共振，退潮时最强。验潮师以"潮纹"引导稳定，过度使用招致雾蚀。
     rules:
-      - zh-CN: 遗物效果因潮汐相位而异——满潮时最强、退潮时最稳
-        en-US: Relic effects vary with tidal phase — strongest at high tide, most stable at low tide
-      - zh-CN: 未经鉴定的遗物直接使用可能产生反噬，轻则失能、重则致命
-        en-US: Using an unappraised relic may trigger backlash — disabling at best, fatal at worst
-      - zh-CN: 雾兽被潮力波动吸引，大规模使用遗物会引来雾兽群
-        en-US: Fog beasts are drawn to Tide-Force fluctuations; large-scale relic use attracts swarms
-      - zh-CN: 验潮师通过"潮纹"手法引导能量，需要长期训练，官方却否认潮力存在
-        en-US: Tide-Readers channel energy through 'tide-marks', a skill of years — yet the Guild denies Tide-Force exists
-      - zh-CN: 过度使用潮力引发"雾蚀"：身体逐渐半透明，最终溶入雾中，不可逆
-        en-US: Overusing Tide-Force causes 'fog-rot' — the body turning translucent and dissolving into the mist, irreversibly
-      - zh-CN: 极少数人无需遗物也能感知潮力，这种天赋被公会视为危险，被教会奉为神迹
-        en-US: A rare few sense Tide-Force without any relic — a gift the Guild deems dangerous and the Congregation calls a miracle
-      - zh-CN: 雾蚀以 0-100 记录且不可逆：25 起出现可见异变，50 起伴随持续失能，75 以上随时可能溶入雾中
-        en-US: "Fog-rot is tracked from 0-100 and never reverses: visible changes begin at 25, lasting impairment at 50, and dissolution may occur above 75"
+      - 遗物效果因潮汐相位而异——满潮时最强、退潮时最稳
+      - 未经鉴定的遗物直接使用可能产生反噬，轻则失能、重则致命
+      - 雾兽被潮力波动吸引，大规模使用遗物会引来雾兽群
+      - 验潮师通过"潮纹"手法引导能量，需要长期训练，官方却否认潮力存在
+      - 过度使用潮力引发"雾蚀"：身体逐渐半透明，最终溶入雾中，不可逆
+      - 极少数人无需遗物也能感知潮力，这种天赋被公会视为危险，被教会奉为神迹
+      - 雾蚀以 0-100 记录且不可逆：25 起出现可见异变，50 起伴随持续失能，75 以上随时可能溶入雾中
     tiers:
-      - name:
-          zh-CN: 学徒
-          en-US: Apprentice
+      - name: 学徒
         rank: 1
-        description:
-          zh-CN: 能感知遗物是否活性
-          en-US: Can sense whether a relic is active
-      - name:
-          zh-CN: 验潮师
-          en-US: Tide-Reader
+        description: 能感知遗物是否活性
+      - name: 验潮师
         rank: 2
-        description:
-          zh-CN: 可鉴定并稳定常规遗物
-          en-US: Can appraise and stabilize standard relics
-      - name:
-          zh-CN: 御潮者
-          en-US: Tide-Warden
+        description: 可鉴定并稳定常规遗物
+      - name: 御潮者
         rank: 3
-        description:
-          zh-CN: 能主动引导潮力，极为罕见，多已显雾蚀
-          en-US: Can actively direct Tide-Force — exceedingly rare, and most already show fog-rot
+        description: 能主动引导潮力，极为罕见，多已显雾蚀
 history:
-  name:
-    zh-CN: 历史
-    en-US: History
+  name: 历史
   schema:
     type: array
     items:
@@ -705,110 +510,58 @@ history:
         era:
           type: string
           x-i18n: true
-          title: { zh-CN: 时代, en-US: Era }
+          title: 时代
         name:
           type: string
           x-i18n: true
-          title: { zh-CN: 名称, en-US: Name }
+          title: 名称
         description:
           type: string
           x-i18n: true
-          title: { zh-CN: 描述, en-US: Description }
+          title: 描述
         significance:
           type: string
-          title: { zh-CN: 重要性, en-US: Significance }
+          title: 重要性
         year:
           type: string
           x-i18n: true
-          title: { zh-CN: 年份, en-US: Year }
+          title: 年份
       additionalProperties: false
   initialValue:
-    - era:
-        zh-CN: 远古
-        en-US: Ancient
-      name:
-        zh-CN: 造者时代
-        en-US: The Builders' Era
-      description:
-        zh-CN: 下潮区遗迹的建造者文明，已无文字记录，仅余建筑残骸；其碑文比雾港古老一万年。
-        en-US: The civilization that built the Undertow ruins; no records survive, only remnants — its inscriptions ten thousand years older than Mistport.
+    - era: 远古
+      name: 造者时代
+      description: 下潮区遗迹的建造者文明，已无文字记录，仅余建筑残骸；其碑文比雾港古老一万年。
       significance: major
-    - era:
-        zh-CN: 建城纪
-        en-US: Founding
-      year:
-        zh-CN: 约三百年前
-        en-US: ~300 years ago
-      name:
-        zh-CN: 雾港建城
-        en-US: Founding of Mistport
-      description:
-        zh-CN: 流民在悬崖间搭建栈道定居，发现退潮暴露的遗物可以交易。
-        en-US: Refugees built walkways between the cliffs and discovered tradeable relics exposed at low tide.
+    - era: 建城纪
+      year: 约三百年前
+      name: 雾港建城
+      description: 流民在悬崖间搭建栈道定居，发现退潮暴露的遗物可以交易。
       significance: major
-    - era:
-        zh-CN: 当代
-        en-US: Modern
-      year:
-        zh-CN: 六年前
-        en-US: Six years ago
-      name:
-        zh-CN: 骨拱门深退潮
-        en-US: The Bone Arch Withdrawal
-      description:
-        zh-CN: 上一次深退潮暴露出"骨拱门"，多支探险队涌入，十七人葬身涨潮，至今为忌讳。
-        en-US: The last deep withdrawal bared the Bone Arch; expeditions rushed in and seventeen drowned in the returning tide — a tragedy still spoken of in whispers.
+    - era: 当代
+      year: 六年前
+      name: 骨拱门深退潮
+      description: 上一次深退潮暴露出"骨拱门"，多支探险队涌入，十七人葬身涨潮，至今为忌讳。
       significance: major
-    - era:
-        zh-CN: 当代
-        en-US: Modern
-      year:
-        zh-CN: 三年前
-        en-US: Three years ago
-      name:
-        zh-CN: 失踪的探险队
-        en-US: The Vanished Expedition
-      description:
-        zh-CN: 一支议会探险队深入下潮区后全队失踪，唯一幸存者发疯，反复念叨"它在下面醒了"。
-        en-US: A Council expedition vanished in the deep Undertow; its lone survivor went mad, repeating "It woke up down there."
+    - era: 当代
+      year: 三年前
+      name: 失踪的探险队
+      description: 一支议会探险队深入下潮区后全队失踪，唯一幸存者发疯，反复念叨"它在下面醒了"。
       significance: major
-    - era:
-        zh-CN: 近年
-        en-US: Recent years
-      name:
-        zh-CN: 雾中教会兴起
-        en-US: Rise of the Congregation
-      description:
-        zh-CN: 雾蚀患者激增，雾中教会以"升华"教义吸纳底层贫民，雾使小霜的预言屡屡应验。
-        en-US: As fog-rot cases surged, the Congregation drew in the poor with its doctrine of 'ascension', and Mist-Speaker Frost's prophecies kept coming true.
+    - era: 近年
+      name: 雾中教会兴起
+      description: 雾蚀患者激增，雾中教会以"升华"教义吸纳底层贫民，雾使小霜的预言屡屡应验。
       significance: minor
-    - era:
-        zh-CN: 当代
-        en-US: Modern
-      year:
-        zh-CN: 去年
-        en-US: Last year
-      name:
-        zh-CN: 封潮令草案
-        en-US: Seal Tide Decree Draft
-      description:
-        zh-CN: 陈议长提出封潮令，禁止无证者进入下潮区，引发底层激烈反对。
-        en-US: Councilor Chen proposed banning unlicensed civilians from the Undertow, sparking unrest in the lower tiers.
+    - era: 当代
+      year: 去年
+      name: 封潮令草案
+      description: 陈议长提出封潮令，禁止无证者进入下潮区，引发底层激烈反对。
       significance: minor
-    - era:
-        zh-CN: 当下
-        en-US: Now
-      name:
-        zh-CN: 雾在变浓
-        en-US: The Thickening Fog
-      description:
-        zh-CN: 最敏感的验潮师察觉雾正逐月变浓、退潮间隔拉长；齐老的笔记称之为"周期的临界点"。
-        en-US: The keenest Tide-Readers feel the fog thickening month by month and the ebbs stretching apart; Qi's notes call it "the critical point of the cycle."
+    - era: 当下
+      name: 雾在变浓
+      description: 最敏感的验潮师察觉雾正逐月变浓、退潮间隔拉长；齐老的笔记称之为"周期的临界点"。
       significance: major
 economy:
-  name:
-    zh-CN: 经济
-    en-US: Economy
+  name: 经济
   schema:
     type: object
     properties:
@@ -820,60 +573,43 @@ economy:
             name:
               type: string
               x-i18n: true
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             symbol:
               type: string
-              title: { zh-CN: 符号, en-US: Symbol }
+              title: 符号
             description:
               type: string
               x-i18n: true
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
           additionalProperties: false
-        title: { zh-CN: 货币, en-US: Currencies }
+        title: 货币
       resources:
         type: array
         items:
           type: string
           x-i18n: true
-        title: { zh-CN: 资源, en-US: Resources }
+        title: 资源
       tradeNotes:
         type: string
         x-i18n: true
-        title: { zh-CN: 贸易, en-US: Trade }
+        title: 贸易
     additionalProperties: false
   initialValue:
     currencies:
-      - name:
-          zh-CN: 潮币
-          en-US: Tide Coin
+      - name: 潮币
         symbol: ₮
-        description:
-          zh-CN: 议会发行的标准货币
-          en-US: Standard currency issued by the Council
-      - name:
-          zh-CN: 盐牙筹
-          en-US: Salt Chip
-        description:
-          zh-CN: 盐牙会在黑市流通的不可追踪代币
-          en-US: Untraceable token used in the Salt Fangs black market
+        description: 议会发行的标准货币
+      - name: 盐牙筹
+        description: 盐牙会在黑市流通的不可追踪代币
     resources:
-      - zh-CN: 远古遗物
-        en-US: Ancient relics
-      - zh-CN: 遗物碎片
-        en-US: Relic fragments
-      - zh-CN: 潮盐
-        en-US: Tide salt
-      - zh-CN: 雾菌（可食用真菌）
-        en-US: Fog fungus (edible)
-      - zh-CN: 崖铁
-        en-US: Cliff iron
-    tradeNotes:
-      zh-CN: 遗物交易是雾港经济的核心。合法渠道走验潮师公会鉴定后拍卖，黑市走盐牙会；遗物碎片在黑市价格离奇，因为有人在高价收购。
-      en-US: The relic trade is Mistport's backbone. Legal relics go through Guild appraisal and auction; the black market runs through the Salt Fangs — and relic fragments fetch strange prices, because someone is buying them up.
+      - 远古遗物
+      - 遗物碎片
+      - 潮盐
+      - 雾菌（可食用真菌）
+      - 崖铁
+    tradeNotes: 遗物交易是雾港经济的核心。合法渠道走验潮师公会鉴定后拍卖，黑市走盐牙会；遗物碎片在黑市价格离奇，因为有人在高价收购。
 socialStructure:
-  name:
-    zh-CN: 社会结构
-    en-US: Society
+  name: 社会结构
   schema:
     type: object
     properties:
@@ -885,51 +621,35 @@ socialStructure:
             name:
               type: string
               x-i18n: true
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             rank:
               type: integer
-              title: { zh-CN: 等级, en-US: Rank }
+              title: 等级
             description:
               type: string
               x-i18n: true
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
           additionalProperties: false
-        title: { zh-CN: 阶层, en-US: Classes }
+        title: 阶层
       notes:
         type: string
         x-i18n: true
-        title: { zh-CN: 备注, en-US: Notes }
+        title: 备注
     additionalProperties: false
   initialValue:
     classes:
-      - name:
-          zh-CN: 议员与商会
-          en-US: Councilors & Merchants
+      - name: 议员与商会
         rank: 1
-        description:
-          zh-CN: 上城精英，掌握政治与合法贸易权
-          en-US: Upper City elite controlling politics and legal trade
-      - name:
-          zh-CN: 中港市民
-          en-US: Mid-Harbor Citizens
+        description: 上城精英，掌握政治与合法贸易权
+      - name: 中港市民
         rank: 2
-        description:
-          zh-CN: 码头工人、工匠、旅店主，城市运转的中坚
-          en-US: Dockworkers, artisans, innkeepers — the city's backbone
-      - name:
-          zh-CN: 潮民
-          en-US: Undertow Dwellers
+        description: 码头工人、工匠、旅店主，城市运转的中坚
+      - name: 潮民
         rank: 3
-        description:
-          zh-CN: 下潮区边缘居民，靠拾荒和走私为生，也是雾中教会的主要信众
-          en-US: Scavengers and smugglers at the city's edge — and the Congregation's main flock
-    notes:
-      zh-CN: 验潮师公会成员不受阶层限制，凭技术获得跨阶层通行权；雾蚀患者则被各阶层排斥，逐渐流向教会。
-      en-US: Tide-Reader Guild members hold cross-tier passage regardless of class; the fog-rotted are shunned by all tiers and drift toward the Congregation.
+        description: 下潮区边缘居民，靠拾荒和走私为生，也是雾中教会的主要信众
+    notes: 验潮师公会成员不受阶层限制，凭技术获得跨阶层通行权；雾蚀患者则被各阶层排斥，逐渐流向教会。
 tone:
-  name:
-    zh-CN: 基调
-    en-US: Tone
+  name: 基调
   schema:
     type: object
     properties:
@@ -937,20 +657,20 @@ tone:
         type: array
         items:
           type: string
-        title: { zh-CN: 类型, en-US: Genres }
+        title: 类型
       contentRating:
         type: string
-        title: { zh-CN: 分级, en-US: Rating }
+        title: 分级
       narrativeStyle:
         type: string
         x-i18n: true
-        title: { zh-CN: 叙事风格, en-US: Narrative style }
+        title: 叙事风格
       themes:
         type: array
         items:
           type: string
           x-i18n: true
-        title: { zh-CN: 主题, en-US: Themes }
+        title: 主题
     additionalProperties: false
   initialValue:
     genres:
@@ -958,98 +678,77 @@ tone:
       - mystery
       - exploration
     contentRating: teen
-    narrativeStyle:
-      zh-CN: 雾气氤氲的哥特悬疑风格，节奏舒缓但暗流涌动，真相一层层剥开、代价一点点累积。
-      en-US: Gothic suspense shrouded in fog — slow on the surface, with dangerous undercurrents, truth peeled back layer by layer and the cost mounting bit by bit.
+    narrativeStyle: 雾气氤氲的哥特悬疑风格，节奏舒缓但暗流涌动，真相一层层剥开、代价一点点累积。
     themes:
-      - zh-CN: 阶层对立
-        en-US: class divide
-      - zh-CN: 未知探索
-        en-US: the unknown
-      - zh-CN: 秩序与自由
-        en-US: order vs. freedom
-      - zh-CN: 信仰与异化
-        en-US: faith and alienation
-      - zh-CN: 真相的代价
-        en-US: the price of truth
-      - zh-CN: 身体的边界
-        en-US: the boundary of the body
+      - 阶层对立
+      - 未知探索
+      - 秩序与自由
+      - 信仰与异化
+      - 真相的代价
+      - 身体的边界
 mechanics:
-  name:
-    zh-CN: 玩法
-    en-US: Mechanics
+  name: 玩法
   schema:
     type: object
     properties:
       combatStyle:
         type: string
-        title: { zh-CN: 战斗, en-US: Combat }
+        title: 战斗
       skillSystem:
         type: string
         x-i18n: true
-        title: { zh-CN: 检定规则, en-US: Checks }
+        title: 检定规则
       difficulty:
         type: string
-        title: { zh-CN: 难度, en-US: Difficulty }
+        title: 难度
       customRules:
         type: array
         items:
           type: string
           x-i18n: true
-        title: { zh-CN: 附加规则, en-US: House rules }
+        title: 附加规则
     additionalProperties: false
   initialValue:
     combatStyle: narrative
-    skillSystem:
-      zh-CN: 以职业技能树为核心：验潮（鉴定/引导遗物）、潜行（雾中行动）、交涉（社交）、格斗。
-      en-US: "Skill trees by vocation: Tide-Reading (appraise/channel relics), Stealth (fog navigation), Diplomacy (social), Combat."
+    skillSystem: 以职业技能树为核心：验潮（鉴定/引导遗物）、潜行（雾中行动）、交涉（社交）、格斗。
     difficulty: normal
     customRules:
-      - zh-CN: 雾中行动需声音/光源检定，失败则引来雾兽
-        en-US: Fog actions require sound/light checks — failure attracts fog beasts
-      - zh-CN: 遗物使用前必须鉴定，否则触发随机效果表
-        en-US: Relics must be appraised before use, or trigger a random-effect table
-      - zh-CN: 潮汐周期影响下潮区可探索范围，涨潮预警必须撤退
-        en-US: The tidal cycle determines the explorable range; a flood warning forces retreat
-      - zh-CN: 引导潮力或使用活性遗物会累积雾蚀值，过线则身体不可逆地变化
-        en-US: Channeling Tide-Force or using active relics accrues fog-rot; past a threshold the body changes irreversibly
-      - zh-CN: 四方势力（议会/公会/盐牙会/教会）对玩家的遗物与下潮区行动各有反应，立场此消彼长
-        en-US: The four powers (Council/Guild/Salt Fangs/Congregation) each react to the player's relic and Undertow actions, standings shifting against one another
-      - zh-CN: 线索按「未核实 / 已佐证 / 已污染 / 已解决」演化；潮水可能带走物证，却不会自动证明任何人的解释
-        en-US: Clues evolve through unverified, corroborated, contaminated, and resolved states; the tide may remove evidence, but never proves anyone's interpretation by itself
-      - zh-CN: 有代价的行动应更新至少一项可见状态：潮时、地点、伤势/雾蚀、角色态度、阵营压力或线索可信度
-        en-US: "Any costly action should visibly update at least one state: tide-time, location, condition/fog-rot, character attitude, faction pressure, or clue confidence"
+      - 雾中行动需声音/光源检定，失败则引来雾兽
+      - 遗物使用前必须鉴定，否则触发随机效果表
+      - 潮汐周期影响下潮区可探索范围，涨潮预警必须撤退
+      - 引导潮力或使用活性遗物会累积雾蚀值，过线则身体不可逆地变化
+      - 四方势力（议会/公会/盐牙会/教会）对玩家的遗物与下潮区行动各有反应，立场此消彼长
+      - 线索按「未核实 / 已佐证 / 已污染 / 已解决」演化；潮水可能带走物证，却不会自动证明任何人的解释
+      - 有代价的行动应更新至少一项可见状态：潮时、地点、伤势/雾蚀、角色态度、阵营压力或线索可信度
 startingConditions:
-  name:
-    zh-CN: 开局
-    en-US: Opening
+  name: 开局
   schema:
     type: object
     properties:
       openingScenario:
         type: string
         x-i18n: true
-        title: { zh-CN: 开场, en-US: Opening scene }
+        title: 开场
       openingHook:
         type: string
         x-i18n: true
-        title: { zh-CN: 引子, en-US: Hook }
+        title: 引子
       openingChips:
         type: array
         items:
           type: string
           x-i18n: true
-        title: { zh-CN: 开局行动, en-US: Opening moves }
+        title: 开局行动
       playerConstraints:
         type: array
         items:
           type: string
           x-i18n: true
-        title: { zh-CN: 开局限制, en-US: Constraints }
+        title: 开局限制
       startingLocation:
         type: string
         x-i18n: true
-        title: { zh-CN: 起点, en-US: Starting point }
+        title: 起点
       startingResources:
         type: object
         properties:
@@ -1058,34 +757,21 @@ startingConditions:
           雾灯:
             type: integer
         additionalProperties: false
-        title: { zh-CN: 初始资源, en-US: Starting resources }
+        title: 初始资源
     additionalProperties: false
   initialValue:
-    openingScenario:
-      zh-CN: 黄昏，你刚抵达中港主栈桥。潮汐钟敲响罕见的三连击——深退潮预警。码头上盐牙会在招募探险者，议会在张贴封潮令；验潮师苏窈挤过人群。若你是新学徒，她认得你的考核潮纹；若你是潮民，她带着齐老点名寻找熟路人的便笺。她告诉你：齐老今早走进了下潮区，而那时正是涨潮期。
-      en-US: "Dusk on Mid-Harbor's main pier. The tide-bell rings a rare triple strike — a deep-withdrawal alert. Salt Fangs recruit explorers while Council officers post the Seal Tide Decree. Tide-Reader Su Yao pushes through the crowd: if you are a new apprentice, she recognizes your examination tide-mark; if you are an Undertow local, she carries Qi's note asking for someone who knows the hidden ways. Qi walked into the Undertow that morning — at high tide, when no one can."
-    openingHook:
-      zh-CN: 潮钟三鸣，齐老失踪，下潜还是封港？
-      en-US: The bell tolls thrice, Qi is gone — dive, or seal?
+    openingScenario: 黄昏，你刚抵达中港主栈桥。潮汐钟敲响罕见的三连击——深退潮预警。码头上盐牙会在招募探险者，议会在张贴封潮令；验潮师苏窈挤过人群。若你是新学徒，她认得你的考核潮纹；若你是潮民，她带着齐老点名寻找熟路人的便笺。她告诉你：齐老今早走进了下潮区，而那时正是涨潮期。
+    openingHook: 潮钟三鸣，齐老失踪，下潜还是封港？
     openingChips:
-      - zh-CN: 深退潮
-        en-US: Deep withdrawal
-      - zh-CN: 封潮令
-        en-US: Seal Tide Decree
-      - zh-CN: 齐老失踪
-        en-US: Qi's disappearance
-      - zh-CN: 半封失踪信
-        en-US: A torn letter
+      - 深退潮
+      - 封潮令
+      - 齐老失踪
+      - 半封失踪信
     playerConstraints:
-      - zh-CN: 初始为验潮师学徒或普通潮民
-        en-US: Start as a Tide-Reader apprentice or common Undertow dweller
-      - zh-CN: 不可携带明火进入雾区
-        en-US: No open flames permitted in the fog
-      - zh-CN: 无证进入下潮区违反封潮令，会被议会追责
-        en-US: Entering the Undertow unlicensed violates the Seal Tide Decree and draws Council reprisal
-    startingLocation:
-      zh-CN: 中港・主栈桥
-      en-US: Mid-Harbor — Main Pier
+      - 初始为验潮师学徒或普通潮民
+      - 不可携带明火进入雾区
+      - 无证进入下潮区违反封潮令，会被议会追责
+    startingLocation: 中港・主栈桥
     startingResources:
       潮币: 50
       雾灯: 1

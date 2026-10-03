@@ -51,6 +51,7 @@ Guides (`docs/guide/`) — task walkthroughs:
 - Shipping worlds with their plugins: `collections.md`
 - World art: `world-art-direction.md`, `world-portraits.md`, `world-scenes.md`
 - Testing: `e2e-testing.md` (Playwright and the pre-release playthrough), `e2e-plugin-verify.md` (real-LLM harness)
+- How to write a prompt body (contract zone, voice zone, vocabulary): `prompt-style.md`
 - Environment variables: `env-registry.md`
 - Desktop config and packaging: `desktop-config.md`, `desktop-packaging.md`
 - Themes: `themes.md`; agent skills: `skills.md`
@@ -79,14 +80,14 @@ Toolchain versions come from `mise.toml` (Node 26, pnpm 12.6.0, actionlint).
 ```bash
 pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)
 pnpm dev              # web (5173) + server (3001), SqliteStore (./data/covel.db)
-                      # server watches plugins/**/*.{md,js,json} and restarts on change
+                      # server watches plugins/**/*.{md,js,json,yaml}; editing a PLUGIN.md, handler or locale file restarts it
 pnpm dev:web          # web only
 pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
 pnpm dev:electron     # desktop shell in development
 pnpm stop             # kill stray dev/turbo processes
 pnpm check            # the CI static gate: peers, lint, package boundaries, deps:check,
-                      # plugin manifests, i18n, script regressions, actionlint
+                      # plugin manifests, schema reference, prompt variants, i18n, script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
@@ -96,15 +97,30 @@ pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); use
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
 pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]
                       # default target is the user plugin dir; --with-tools scaffolds into plugins/
-pnpm validate:plugin  # validate PLUGIN.md / RUNTIME.md; a plugin DIR also gets cross-runtime checks
-pnpm validate:world   # validate world packages: pnpm validate:world worlds/<id>
+pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
+                      # from the Zod schemas; run after changing an author-facing schema field
+pnpm describe:authoring  # what a world may contain for the scanned plugins: files, data contracts
+                      # with the path each file goes to and an example, plugin IDs and settings
+                      # (--json, --check validates plugin examples, --plugins <dir>)
+pnpm validate:plugin  # validate PLUGIN.md / RUNTIME.md and locale files; a plugin DIR also gets
+                      # cross-runtime checks and a line with the languages it has text in
+pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, every seed record):
+                      # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>
 pnpm validate:collection  # static check of a covel-collection.yaml directory (docs/guide/collections.md)
 pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [dir]
 pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]
 pnpm test:plugin-lifecycle  # install, authorize, run, and remove a community ZIP through the real API
 pnpm test:tabletop-plugin   # the same for tabletop-rules packed under a different plugin ID
 pnpm pack:test-plugin       # write the ZIPs those tests use to test-results/ (also pack:tabletop-plugin)
-pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs
+pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool definitions are English;
+                      # Chinese text in framework source only in recorded files; every label and
+                      # text of a bundled plugin has a current Chinese translation
+pnpm i18n             # translation tooling for a plugin or world directory: status, extract,
+                      # translate (configured model; --to <dir> keeps a plugin's translation
+                      # outside its package), lock (docs/reference/i18n.md)
+pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt
+                      # (pnpm prompts:lock records a pair after both languages changed); it also prints
+                      # style and structure warnings, which do not fail it (docs/guide/prompt-style.md)
 pnpm check:boundaries # workspace public entry points, declared deps, package direction
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity; exits non-zero
@@ -200,9 +216,12 @@ bundled `worlds/` and `plugins/`.
   under `node --test` through `pnpm check`.
 
 Each `plugins/<id>/` needs a root `PLUGIN.md` (plain YAML frontmatter; `id` equals
-the directory name), `package.json`, and `README.md`. Optional: `PLUGIN.<locale>.md`,
-`server/` (the `entry` module), `runtimes/<id>/RUNTIME.md` with its handler and
-guard, `schemas/`, `tools/`, `ui/`, `lib/`, `tests/`.
+the directory name), `package.json`, and `README.md`. Optional: `server/` (the
+`entry` module), `runtimes/<id>/RUNTIME.md` with its handler and guard, `schemas/`,
+`tools/`, `hooks/`, `ui/`, `lib/`, `tests/`, `PLUGIN.zh.md` / `RUNTIME.zh.md` (the
+Simplified Chinese prompt body), and `locales/<locale>.yaml` (translations of
+labels, UI text and text in code; the main files are English; `locales/lock.json`
+records the English text each label translation is for).
 
 ESM-only, TypeScript strict, ES2022, NodeNext — **use `.js` extensions in TS
 relative imports**. Workspace packages export TS source directly
@@ -409,17 +428,28 @@ handling, and supported backend differences — those are not version compatibil
 
 ### Locale
 
-The effective locale of a turn is the request `locale`, falling back to
-`Session.locale`; it reaches runtimes as `TurnInput.locale` → `ctx.locale`. The app
-default is `zh-CN`. Display fields use `I18nText = string | Record<string, string>`
+A session's content locale is fixed when the session is created
+(`SessionRecord.locale`, default `zh-CN`), and it is always an edition the world
+has (`sessionContentLocale` in `@covel/shared`). Every turn, manual runtime, and
+background job passes it as `KernelInput.locale` → `RuntimeContextView.locale`; an
+action request carries no locale and cannot change it. The UI language only
+selects labels. Display fields use `I18nText = string | Record<string, string>`
 and must be resolved with `resolveI18nText(value, locale)` from `@covel/shared` —
-never with ad-hoc `startsWith("en")` checks.
+never with ad-hoc `startsWith("en")` checks. Authored files hold one language:
+a main file is written in its language, and `<name>.<locale>.<ext>` (worlds) or
+`locales/<locale>.yaml` (plugins) holds only the translated text.
 
 All framework LLM prompts are externalized as locale-aware markdown files under
 `prompts/`, resolved as exact locale → language → registry fallback (English) →
-locale-less default, otherwise an error. `PLUGIN.<locale>.md` / `RUNTIME.<locale>.md`
-hold translations only: they supply prose and natural-language fields and can never
-change contracts, tools, stages, or limits, which the canonical file owns.
+locale-less default, otherwise an error.
+
+Prompt bodies are instructions, not content. The canonical `PLUGIN.md` /
+`RUNTIME.md` body is English; `*.zh.md` is the only variant and is read when the
+session locale is Simplified Chinese. Every other locale reads the English body.
+The framework's own instruction lines follow the same rule
+(`instructionLocaleFor` in `@covel/shared`).
+`COVEL_INSTRUCTION_LOCALE` (`en` / `zh`) fixes the instruction language for all
+sessions. Rules: `docs/reference/i18n.md`.
 
 ### Documentation sync
 

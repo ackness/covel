@@ -89,19 +89,22 @@ Anchor the lore around one core anomaly or pressure mechanism that makes this wo
 
 ## WORLD_PACKAGE_YAML
 
-Include optional `contractData: [{ contract, key, value }]` for world-specific plugin definitions using only public data schemas supplied in the creation brief. Each record value must have an `id` equal to `key`. Do not put plugin-owned definitions in `dimensions`. Omit contractData when no suitable contract is supplied.
-
 This section carries optional text content that ships with the world package.
-Always include the four content arrays below. Use `[]` when the Creation Brief says
-OMIT. The optional `contractData` array above is the only additional top-level field.
+Always include the three content arrays below. Use `[]` when the Creation Brief says
+OMIT.
+
+When the Creation Brief lists plugin data contracts, also include
+`contractData: [{ contract, key, value }]`. Write one item for each record.
+Each `value` must satisfy the record schema of its contract, and `value.id`
+must equal `key`. Follow the guidance and the example given for the contract.
+Create records only for the listed contracts. Do not put plugin-owned data in
+`dimensions`. Omit `contractData` when the brief lists no contract.
 
 ```yaml
-memoryDefinitions:
-  - label: <unique snake_case label>
-    displayName: <short display name>
-    extractionHint: <what the memory plugin must keep current>
-    icon: <optional Lucide icon name>
-    maxChars: 2400
+contractData:
+  - contract: <contract ID from the Creation Brief>
+    key: <stable ASCII id, equal to value.id>
+    value: <one record that satisfies the contract's schema>
 characters:
   - schemaVersion: 1
     id: <stable ASCII id>

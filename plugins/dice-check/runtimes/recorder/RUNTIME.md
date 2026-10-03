@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 记录叙事发回的骰子判定回执，沉淀审计轨并驱动消息区的判定结果块。
-  en: >-
-    Records dice-check receipts emitted by the narrative, keeping an audit log
-    and powering the in-message result block.
+description: >-
+  Records dice-check receipts emitted by the narrative, keeping an audit log and
+  powering the in-message result block.
 schedule:
   trigger:
     type: event
@@ -27,16 +25,16 @@ function:
   handler: ./handler.js
 ---
 
-骰子判定回执记录器（function runtime）。
+Dice check receipt recorder (function runtime).
 
-订阅 `check.resolved` 事件（由叙事引擎按 `dice-check/roller` 注入的规则经 emit-event 发射）：
+It subscribes to the `check.resolved` event, which the narrative engine emits through `emit-event` under the rules that `dice-check/roller` injects.
 
-若同一执行的 `tabletop-check@1` 输出已有本回合结算回执，表单检定由 tabletop-rules 独占；本 runtime 跳过整批事件，不读取或写入骰池回执。没有本回合回执时继续按下面的规则记录普通行动。
+If the `tabletop-check@1` output of the same execution already holds a settlement receipt for this turn, the form check belongs to tabletop-rules alone: this runtime skips the whole event batch and neither reads nor writes dice pool receipts. Without such a receipt it records ordinary actions as follows.
 
-1. 防御性读取事件 payload——`checks` 数组逐项按预掷骰顺序校验，缺必填字段（action / roll / modifier / dc / difficulty / total / outcome）、类型不对或计算关系不一致的项跳过，全部无效才整体 skip
-2. 每条判定记录写入 `plugin_data[checks]`（key = `<turnId>-<序号>`），含展示字段（结果标签/配色/骰式文本），倒序面板直接消费
-3. 本回合判定数组写入 `plugin_data[message]`（key = turnId，值带 `__turnId` 绑定到本回合消息），消息区判定结果块直接消费
+1. Read the event payload defensively. An item of the `checks` array holds what the narrative decided (action / attribute / modifier / difficulty) and the outcome it wrote. The die is not in the receipt: the first item uses the first die of the turn, the second the second. The runtime calculates the DC, the total and the outcome by `lib/check-rules.js`. An item is skipped when a required field is missing, a type is wrong, or its outcome is not the one the die gives; the die of a skipped item is still used. The runtime fails only when every item is invalid.
+2. Write each check to `plugin_data[checks]` (key = `<turnId>-<index>`) with its display fields (outcome label, color, dice notation). The newest-first panel reads these directly.
+3. Write this turn's check array to `plugin_data[message]` (key = turnId; the value carries `__turnId` to bind it to this turn's message). The in-message result block reads it directly.
 
-> payload 为何是批量：`emit-event` 对同一 topic 每回合去重，逐次发射时第二次会被丢弃；因此契约要求叙事引擎把整回合的判定合并进一个 `checks` 数组一次发完。
+> Why the payload is a batch: `emit-event` de-duplicates one topic per turn, so a second emission would be dropped. The contract therefore requires the narrative engine to merge the whole turn's checks into one `checks` array and send it once.
 
 Note: `events[].schema` paths resolve relative to the **plugin root** (`plugins/dice-check/`), not this runtime's directory; only `handler` and `ui.*` paths resolve relative to this runtime's own directory.

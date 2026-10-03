@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#description": "4f0626f8dfc892e6",
+      "PLUGIN.md#displayName": "890dcb2590edee83",
+      "runtimes/character-tracker/RUNTIME.md#description": "feaf4752483f1224",
+      "runtimes/player-init/RUNTIME.md#description": "3878543a65a4a885"
+    }
+  }
+}

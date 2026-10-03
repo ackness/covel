@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
 import register from "../server/index.js";
 
 let project;
@@ -7,7 +8,13 @@ register({
     project = handler;
   },
 });
+// What the host gives the provider as `ctx.messages`: this plugin's translations.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 const withQuests = (quests) => ({
+  messages,
   pluginData: { list: async () => quests.map((value) => ({ value })) },
 });
 
@@ -39,7 +46,8 @@ describe("quest session summary", () => {
         {
           id: "quest.current",
           kind: "text",
-          label: { zh: "当前目标", en: "Objective" },
+          // Every language the plugin has: the client picks the UI language.
+          label: { en: "Objective", zh: "当前目标" },
           value: "Ask Tiegu about page 74",
         },
         {

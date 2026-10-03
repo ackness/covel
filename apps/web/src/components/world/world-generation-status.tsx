@@ -8,6 +8,8 @@ interface WorldGenerationStatusProps {
   phase: WorldGenerationPhase;
   error: string | null;
   t: TFunction;
+  /** What to say when the work is done; a new world by default. */
+  doneLabel?: string;
 }
 
 const PHASE_ORDER = ["generating", "validating", "saving"] as const;
@@ -16,6 +18,7 @@ export function WorldGenerationStatus({
   phase,
   error,
   t,
+  doneLabel,
 }: WorldGenerationStatusProps) {
   const isWorking = PHASE_ORDER.includes(phase as (typeof PHASE_ORDER)[number]);
   if (phase === "idle") return null;
@@ -42,7 +45,7 @@ export function WorldGenerationStatus({
       <div className="flex items-center gap-3 rounded-(--radius-control) border border-emerald-500/30 bg-emerald-500/10 p-4">
         <Check className="h-4 w-4 shrink-0 text-emerald-500" />
         <p className="text-sm font-medium text-emerald-500">
-          {t("world.aiDone", "World is ready!")}
+          {doneLabel ?? t("world.aiDone", "World is ready!")}
         </p>
       </div>
     );

@@ -3,18 +3,15 @@ sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
-    schema: covel://world/dimensions
     to: world:metadata.dimensions
   tabletopRules:
     kind: json
     path: data/tabletop-rules.json
-    schema: contract:tabletop-rules.rules.initial@1
     to: contract:tabletop-rules.rules.initial@1
     key: id
   cast:
     kind: json
     path: characters/main-cast.json
-    schema: contract:character.blueprints@1
     to: contract:character.blueprints@1
     key: id
     after: dimensions
@@ -27,28 +24,24 @@ sources:
   rules:
     kind: yaml
     path: data/rules/barrow-rules.yaml
-    schema: contract:world.rules@1
     to: contract:world.rules@1+lorebook
     key: id
     after: dimensions
   quests:
     kind: yaml
     path: data/quests.yaml
-    schema: contract:quests@1
     to: contract:quests@1
     key: id
     after: dimensions
   items:
     kind: yaml
     path: data/items.yaml
-    schema: contract:inventory.items@1
     to: contract:inventory.items@1
     key: id
     after: dimensions
   affinity:
     kind: yaml
     path: data/affinity.yaml
-    schema: contract:character.affinity@1
     to: contract:character.affinity@1
     key: id
     after: cast
@@ -56,18 +49,15 @@ sources:
     kind: json
     path: data/memory-blocks.json
     to: contract:memory.blocks@1
-    schema: contract:memory.blocks@1
     key: id
   timeDefinition:
     kind: yaml
     path: data/time.yaml
-    schema: contract:world.time-definition@1
     to: contract:world.time-definition@1
     key: id
   storyEvents:
     kind: yaml
     path: data/hidden/story-events.yaml
-    schema: contract:story.events@1
     to: contract:story.events@1
     key: id
     after: dimensions

@@ -1,6 +1,6 @@
 /**
- * Reconcile a localized `PLUGIN.<locale>.md` manifest against the canonical
- * `PLUGIN.md`.
+ * Reconcile a `PLUGIN.zh.md` / `RUNTIME.zh.md` variant against the canonical
+ * English manifest.
  *
  * A locale variant is a TRANSLATION, not a fork. Only natural-language fields
  * (description, display names, author's-note / post-history prose, …) may

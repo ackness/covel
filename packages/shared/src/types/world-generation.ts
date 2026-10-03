@@ -9,7 +9,6 @@ export const WORLD_PACKAGE_CONTENT_KINDS = [
   "characters",
   "lorebook",
   "rules",
-  "memory",
   "opening-kit",
 ] as const;
 
@@ -24,6 +23,12 @@ export type WorldPackageContentKind =
  */
 export interface WorldCreationBrief {
   readonly experienceMode?: WorldExperienceMode;
+  /** Kernel-owned content: characters, lorebook, rules, opening resources. */
   readonly content?: readonly WorldPackageContentKind[];
+  /**
+   * Plugin-owned content, as data contract IDs. The choices come from the
+   * installed plugins' authoring declarations, never from a fixed list.
+   */
+  readonly contracts?: readonly string[];
   readonly additionalInstructions?: string;
 }

@@ -756,6 +756,37 @@ describe("Turn executor hook wire-in", () => {
       expect(sys?.content).toBe("REWRITTEN_SYSTEM_PROMPT");
     });
 
+    it("keeps the framework's language directive when a hook replaces the system prompt", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PostContextAssembly:body-only",
+        event: "PostContextAssembly",
+        // A context-trimming handler returns its own prompt body, as the
+        // fact-extraction plugin does. It knows nothing about the preamble.
+        handler: vi.fn().mockResolvedValue({
+          action: "continue",
+          replace: { systemPrompt: "BODY_ONLY_PROMPT" },
+        }),
+      });
+
+      const deps = await makeDeps(llm, pipeline);
+      await executeTurn(
+        makeTurnInput({ locale: "en-US" }),
+        [makeManifest()],
+        deps,
+      );
+
+      const sys = (
+        llm.calls[0] as { messages: Array<{ role: string; content: string }> }
+      ).messages.find((m) => m.role === "system");
+      // Without the directive the model is never told the session language.
+      expect(sys?.content).toMatch(
+        /^\[RUNTIME\][\s\S]*\[LANGUAGE\] You MUST write all natural-language content in [^\n]*English/,
+      );
+      expect(sys?.content.endsWith("BODY_ONLY_PROMPT")).toBe(true);
+    });
+
     it("threads the runtime's outputKind into the payload (read-only)", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();

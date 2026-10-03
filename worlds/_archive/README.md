@@ -28,4 +28,4 @@ Covel 现在只精心维护**两个**互补的旗舰样例世界：
 git mv worlds/_archive/cloudmere worlds/cloudmere
 ```
 
-复活前建议先修复其设定一致性（参考 `mistport` 的 `WORLD.zh.md` ↔ `dimensions.yaml` ↔ `characters/` 三者对齐的方式），并补齐角色卡与 `memoryBlocks`。
+复活前建议先修复其设定一致性（参考 `mistport` 的 `WORLD.md` ↔ `dimensions.yaml` ↔ `characters/` 三者对齐的方式），并补齐角色卡与 `memoryBlocks`。

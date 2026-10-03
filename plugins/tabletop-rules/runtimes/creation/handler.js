@@ -1,7 +1,7 @@
 import {
   creationRules,
   validateAllocation,
-  pickLocaleText,
+  translate,
 } from "../../lib/rules.js";
 
 export default async function (ctx) {
@@ -55,11 +55,7 @@ export default async function (ctx) {
       value: {
         playerId,
         rules,
-        narrativeOutput: pickLocaleText(
-          ctx.locale,
-          "开局配点已应用。",
-          "Opening point allocation applied.",
-        ),
+        narrativeOutput: translate(ctx, "Opening point allocation applied."),
       },
     };
   }
@@ -113,12 +109,13 @@ export default async function (ctx) {
   // Opening flow: the identity/personality form already created the player;
   // offer the allocation form on top of those fields. Rules freeze at first
   // display so later configuration changes cannot alter a shown form.
-  const zh = pickLocaleText(ctx.locale, true, false);
   const result = await ctx.tools.call("create-form", {
     formId,
-    title: zh
-      ? `开局配点：分配 ${rules.budget} 点`
-      : `Opening point allocation: distribute ${rules.budget} points`,
+    title: translate(
+      ctx,
+      "Opening point allocation: distribute {budget} points",
+      { budget: rules.budget },
+    ),
     fields: rules.attributes.map((attribute) => ({
       type: "number",
       name: attribute.id,
@@ -130,10 +127,8 @@ export default async function (ctx) {
       required: true,
     })),
     validation: { name: "point-buy", data: rules },
-    submitLabel: zh ? "完成配点" : "Finish allocation",
-    narrativeTemplate: zh
-      ? "完成了开局配点。"
-      : "Opening point allocation complete.",
+    submitLabel: translate(ctx, "Finish allocation"),
+    narrativeTemplate: translate(ctx, "Opening point allocation complete."),
   });
   await ctx.pluginData.set("setup", "offered", { formId });
   return {

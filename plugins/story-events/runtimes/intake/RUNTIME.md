@@ -1,8 +1,7 @@
 ---
 type: function
-description:
-  zh: 接收其他 runtime 在剧情推进中提出的后续隐藏事件，校验后加入隐藏事件表。
-  en: Accepts follow-up hidden events planned by other runtimes during play, validating them before they join the hidden event table.
+description: Accepts follow-up hidden events planned by other runtimes during
+  play, validating them before they join the hidden event table.
 schedule:
   stage: post-turn
   trigger:

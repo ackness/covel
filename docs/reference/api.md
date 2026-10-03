@@ -289,6 +289,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                                        |
 | POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                              |
 | POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
+| POST   | `/api/worlds/:id/translate`            | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）                                                                                                                             |
 
 服务端删除世界先在短世界锁内记录删除状态，释放世界锁后逐个执行完整的会话删除流程，包括等待执行写入、生命周期钩子、媒体引用与进程内状态清理，最后删除世界记录和对应文件包。底层 `DataStore.deleteWorld` 仍只删除世界记录；需要级联清理的调用必须经过 API 生命周期流程。
 
@@ -469,6 +470,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | 方法   | 路径                          | 描述                                                                                                                                                                                                                                                    |
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/api/framework/capabilities` | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                                                                                                                           |
+| GET    | `/api/framework/authoring`    | 世界创作面：世界包文件、内置数据目标、各数据契约的创作说明与示例、插件目录                                                                                                                                                                              |
 | GET    | `/api/plugins`                | 列出 registry 中的插件及其注册/错误状态                                                                                                                                                                                                                 |
 | GET    | `/api/plugins/:id`            | 获取插件详情及完整 manifest 开发契约                                                                                                                                                                                                                    |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
@@ -655,10 +657,11 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### AI 生成
 
-| 方法 | 路径                     | 描述                                    |
-| ---- | ------------------------ | --------------------------------------- |
-| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                   |
-| POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token |
+| 方法 | 路径                     | 描述                                                   |
+| ---- | ------------------------ | ------------------------------------------------------ |
+| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                                  |
+| POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token                |
+| POST | `/api/ai/revise-world`   | 按一句话修改应用内创建的世界；hosted 需 operator token |
 
 ### 模型数据库（Model DB）
 
@@ -1147,6 +1150,32 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 ---
 
+#### `POST /api/worlds/:id/translate`
+
+为一个世界包增加一种语言版本。服务端找出该语言还缺的文字，请配置的模型翻译（先列出世界的名字和术语，再译名字字段，最后译正文，同一个名字只有一种译法），把译文写成世界包里主文件旁的语言文件（`world.<locale>.yaml`、`WORLD.<locale>.md`、`data/*.<locale>.yaml`），并把该语言加入 `world.yaml` 的 `supportedLocales`。之后用这种语言创建的会话就使用这个版本。
+
+```json
+{ "locale": "ja-JP" }
+```
+
+只写**用户世界目录**（`COVEL_USER_WORLDS_DIR`）里的世界包：应用内生成的和安装的世界。内置世界自带语言版本，存储在数据库或浏览器里的世界没有文件可写，这两种返回 409。译文是模型草稿，人名地名和语气需要人看一遍。hosted 部署需要 operator token。
+
+SSE 事件：
+
+| `type`     | 字段                                     | 含义                                                               |
+| ---------- | ---------------------------------------- | ------------------------------------------------------------------ |
+| `progress` | `step`, `done`, `total`                  | `step` 为 `glossary`、`names`、`texts` 或 `long texts`             |
+| `done`     | `world`, `total`, `translated`, `failed` | 重新加载后的 `WorldRecord`；原本缺多少条、译出多少条、多少条没译成 |
+| `error`    | `message`                                | 失败原因；模型一条也没译出时也走这里，世界包不变                   |
+
+| 状态码 | `code`                     | 含义                     |
+| ------ | -------------------------- | ------------------------ |
+| 400    | —                          | `locale` 不是语言标签    |
+| 404    | `world_not_found`          | 没有这个世界             |
+| 409    | `world_not_translatable`   | 世界包不在用户世界目录里 |
+| 409    | `world_already_translated` | 这种语言已经没有缺的文字 |
+| 409    | `world_deleting`           | 世界正在删除             |
+
 ### 会话管理
 
 #### `GET /api/sessions`
@@ -1190,13 +1219,17 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 }
 ```
 
-| 字段           | 类型     | 必填 | 说明                                                                                                  |
-| -------------- | -------- | ---- | ----------------------------------------------------------------------------------------------------- |
-| `worldId`      | string   | 否   | 已存在且未进入删除流程的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                      |
-| `locale`       | string   | 否   | 语言区域，默认 `zh-CN`                                                                                |
-| `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                                  |
-| `id`           | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`）                                         |
-| `loreOverride` | string   | 否   | 本次会话的世界背景快照，沿用世界文档的字符串契约；空字符串表示显式清空，与会话同次创建保存到 metadata |
+| 字段           | 类型     | 必填 | 说明                                                                                                                                                                                                                                                                |
+| -------------- | -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worldId`      | string   | 否   | 已存在且未进入删除流程的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                                                                                                                                                                                    |
+| `locale`       | string   | 否   | 玩家想用的内容语言，默认 `zh-CN`。会话的内容语言必须是世界实际有的语言版本：世界有该语言（或同语言同文字的其他地区）的版本就用那个版本，否则用世界自己的语言，并在响应里返回 `requestedLocale`。创建后锁定：之后的回合、手动 runtime 与后台任务都用它，请求无法修改 |
+| `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                                                                                                                                                                                                |
+| `id`           | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`）                                                                                                                                                                                                       |
+| `loreOverride` | string   | 否   | 本次会话的世界背景快照，沿用世界文档的字符串契约；空字符串表示显式清空，与会话同次创建保存到 metadata                                                                                                                                                               |
+
+响应是会话记录加一次性的 `ownerToken`。`locale` 是会话实际的内容语言；当它不是请求的语言时，响应另带 `requestedLocale`（请求的语言），客户端据此提示玩家“这个世界没有该语言的版本，故事将用世界的语言进行”。世界的语言版本取自 `world.yaml` 的 `supportedLocales`（未声明时只有 `defaultLocale`）；应用内生成的世界只有生成时的那一种语言。
+
+响应还可能带 `pluginsWithoutLocale: string[]`：启用了、但没有会话语言文字的插件 ID（只有 English 标签，面板显示英文）。它只是提示，不影响会话创建。
 
 会话不保存独立的 `presetId` 模型选择；模型路由使用槽位配置、请求级覆盖与 `runtimeModelOverrides`。
 
@@ -2019,6 +2052,82 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 
 ### 插件管理
 
+#### `GET /api/framework/authoring`
+
+返回当前服务端已加载插件对应的世界创作面，供世界创建界面和开发 Agent 使用。内容全部来自插件清单的 `contributes.data.*.authoring` 声明，不含任何写死的插件清单；`pnpm describe:authoring` 输出的是同一份数据。
+
+查询参数 `locale` 决定 `title` 等展示文本的语言，缺省为服务端默认语言。
+
+**响应节选:**
+
+```json
+{
+  "files": [
+    {
+      "path": "world.yaml",
+      "purpose": "World manifest: identity, locales, plugin selection, character schema.",
+      "reference": "docs/reference/schema/world-manifest.md"
+    }
+  ],
+  "destinations": [
+    {
+      "title": "Characters",
+      "description": "Character records of the session's world model.",
+      "source": {
+        "id": "characters",
+        "entry": {
+          "kind": "json",
+          "path": "characters/characters.json",
+          "to": "characters",
+          "key": "id"
+        }
+      }
+    }
+  ],
+  "contracts": [
+    {
+      "contract": "memory.blocks@1",
+      "pluginId": "memory",
+      "namespace": "definitions",
+      "title": "题材记忆块",
+      "hint": "Write one object with `id: world` and a `blocks` list. …",
+      "schema": "./schemas/block-definitions.schema.json",
+      "source": {
+        "id": "definitions",
+        "entry": {
+          "kind": "json",
+          "path": "data/memory-blocks.json",
+          "schema": "contract:memory.blocks@1",
+          "to": "contract:memory.blocks@1",
+          "key": "id"
+        }
+      },
+      "example": { "id": "world", "blocks": [] },
+      "generate": "default"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "memory",
+      "displayName": "记忆",
+      "description": "…",
+      "tags": [],
+      "provides": [],
+      "requires": [],
+      "settings": []
+    }
+  ]
+}
+```
+
+| 字段           | 说明                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| `files`        | 世界包的文件及其字段表位置                                                                   |
+| `destinations` | 内核拥有的数据目标（维度、角色），不依赖任何插件                                             |
+| `contracts`    | 每个被接收的数据契约：接收插件、标题、写作提示、可直接写入 `world.data.yaml` 的条目、示例    |
+| `generate`     | 仅当应用内生成器可以生成这份内容时出现：`offer` 表示列为可选项，`default` 表示列出并默认选中 |
+| `plugins`      | 插件目录：ID、名称、简介、提供与依赖的契约、可用 `pluginSettings` 预置的设置项               |
+
 #### `GET /api/framework/capabilities`
 
 返回框架级 discovery 索引，供第三方开发者、外部工具和 AI Agent 程序化判断“Covel 当前支持哪些字段、URI、工具和事件”。它描述框架能力，不依赖某个具体插件。
@@ -2078,14 +2187,15 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 
 返回 `{items: PluginSummary[]}`。`PluginSummary` 来自 registry 的统一投影：
 
-| 字段                                                        | 含义                                                             |
-| ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| `id`, `displayName`, `description`                          | 包身份与可本地化描述                                             |
-| `kind`, `source`                                            | `core \| plugin` 与 `builtin \| community`                       |
-| `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error` 与加载错误 |
-| `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                               |
-| `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                 |
-| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                     |
+| 字段                                                        | 含义                                                                                                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `displayName`, `description`                          | 包身份与可本地化描述                                                                                                                        |
+| `kind`, `source`                                            | `core \| plugin` 与 `builtin \| community`                                                                                                  |
+| `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error` 与加载错误                                                                            |
+| `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                                                                                                          |
+| `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                                                                                            |
+| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                                                                                                |
+| `languages`                                                 | `{ text: string[], instructions: string[] }`：插件有文字的语言（标签、界面和代码文字，含翻译目录里的译文）和有指令的语言。两者都至少含 `en` |
 
 宿主是否加载与会话是否激活是两种状态；列表不会把全局宿主状态写成某个会话的 active。`loaded` 来自当前 entry 代次的实际发布状态，与 runtime 缓存无关；首次发布失败为 `error`，重载失败而旧代仍可用时仍为 `loaded` 并可携带 `error`。纯声明或 entry-only 包可以没有 runtime。
 
@@ -2809,7 +2919,7 @@ id: evt-002
 
 前端主要使用此端点进行游戏交互。将动作请求（发送消息、执行命令等）翻译为 Turn 执行，并通过 SSE 流式返回结果。
 
-请求体按 `type` 作判别联合校验：顶层只接受 `requestId`、`type`、`sessionId`、`locale`、`model`、`payload`；每种 action 的 payload 也拒绝未声明字段。`requestId` / `sessionId` / runtime/turn ID 必须是有界安全标识符，locale 必须符合 BCP-47 风格格式；非法请求在创建 turn 或写入消息前返回 400。
+请求体按 `type` 作判别联合校验：顶层只接受 `requestId`、`type`、`sessionId`、`model`、`payload`；每种 action 的 payload 也拒绝未声明字段。请求不带 `locale`：回合一律使用会话创建时锁定的内容语言（`session.locale`），带 `locale` 的请求会被拒绝。`requestId` / `sessionId` / runtime/turn ID 必须是有界安全标识符；非法请求在创建 turn 或写入消息前返回 400。
 
 **请求体:**
 
@@ -2818,7 +2928,6 @@ id: evt-002
   "requestId": "req-001",
   "type": "send_message",
   "sessionId": "mistport-a1b2c3d4",
-  "locale": "zh-CN",
   "payload": {
     "content": "我拔出剑，准备迎战"
   }
@@ -2937,7 +3046,8 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
   "saveTarget": "server-file",
   "brief": {
     "experienceMode": "traditional-story",
-    "content": ["characters", "lorebook", "rules", "memory", "opening-kit"],
+    "content": ["characters", "lorebook", "rules", "opening-kit"],
+    "contracts": ["memory.blocks@1"],
     "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
   }
 }
@@ -2953,11 +3063,12 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 
 `brief`：
 
-| 字段                     | 类型     | 说明                                                                          |
-| ------------------------ | -------- | ----------------------------------------------------------------------------- |
-| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage` |
-| `content`                | string[] | 可选 `characters`、`lorebook`、`rules`、`memory`、`opening-kit`               |
-| `additionalInstructions` | string   | 世界包补充要求（最多 2000 字符），如角色关系、禁忌、节奏或需要避开的内容      |
+| 字段                     | 类型     | 说明                                                                                                          |
+| ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage`                                 |
+| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`                                               |
+| `contracts`              | string[] | 插件内容，写数据契约 ID。可选值来自 `GET /api/framework/authoring` 中带 `generate` 的契约；传入其他值返回 400 |
+| `additionalInstructions` | string   | 世界包补充要求（最多 2000 字符），如角色关系、禁忌、节奏或需要避开的内容                                      |
 
 | `saveTarget`   | 保存位置                              | 持久性来源                     | 适用场景                                                       |
 | -------------- | ------------------------------------- | ------------------------------ | -------------------------------------------------------------- |
@@ -2997,11 +3108,58 @@ data: {"type":"progress","phase":"saving"}
 data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","metadata":{"storage":{"scope":"server","backend":"file","durable":true}}}}
 ```
 
+`done` 帧可以带 `warnings`（字符串数组），说明结果与创作简报的差距，世界本身合法且可玩：
+
+```text
+data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; the brief asks for 4","dropped dimension \"discoveries\": schema.properties.visited: Unrecognized key: \"boolean\""]}
+```
+
+- 某类内容数量低于目标（角色 3、资料库 4、规则 3、开局资源 2）时接受结果并给出 warning；被请求的内容一条都没有时才判为失败并重试。
+- 无法通过校验的维度被单独丢弃并给出 warning，其余维度保留。
+- 没有 warning 时不带这个字段。
+
 生成开始后的模型、校验或写入失败通过 HTTP 200 SSE 帧返回：`data: {"type":"error","message":"..."}`。请求体不合法则在开始流式响应前返回 HTTP 400 标准错误 envelope。
 
 **响应 400:** `{ "error": "concept (string) is required" }` 或 `{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }`
 
 ---
+
+#### `POST /api/ai/revise-world`
+
+按玩家的一句话修改一个**由生成器创建**的世界（“改成三个派系”“加一个对手”）。模型拿到世界当前的完整内容和这条要求，按 `generate-world` 的三段格式返回，但只写它改动的部分；服务端把它写的内容合并到当前世界上：
+
+- 没改的段写 `UNCHANGED`，整段沿用；
+- `WORLD_YAML` 里只写改动的字段，`dimensions` 按维度 ID 合并（写 `null` 表示删除这个维度）；
+- `WORLD_PACKAGE_YAML` 里只写新增或改动的条目，按 `id` 合并进所在列表（`contractData` 按 `contract` + `key`）；删除一条写 `{ id, remove: true }`。
+
+因此“加一个角色”不会改动其他角色，也不会丢掉模型没有重复写出的设定条目。合并后的结果与新生成的世界走同一套校验，世界的 `id` 不变。
+
+```json
+{
+  "worldId": "frozen-continent",
+  "instruction": "加一个与主角争夺同一目标的对手"
+}
+```
+
+| 字段          | 类型   | 必填 | 说明                                                                             |
+| ------------- | ------ | ---- | -------------------------------------------------------------------------------- |
+| `worldId`     | string | 是   | 要修改的世界                                                                     |
+| `instruction` | string | 是   | 修改要求（最多 2000 字符）                                                       |
+| `world`       | object | 否   | 只存在于浏览器的世界（`return-only` 生成的）由客户端随请求带上它的 `WorldRecord` |
+| `model`       | string | 否   | 覆盖 LLM 模型                                                                    |
+
+只有带生成标记的世界可以修改：`metadata.generated === true`。生成器写出的世界包里有一个 `.covel-generated.json` 文件，世界记录据此带上这个标记；手写的或安装的世界包没有它，因为这类包里可能有立绘、额外的数据源和语言文件，整包重写会丢掉它们。
+
+世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，失败时旧包不变）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
+
+SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。
+
+| 状态码 | `code`                | 含义                                                             |
+| ------ | --------------------- | ---------------------------------------------------------------- |
+| 400    | —                     | 缺少 `worldId` 或 `instruction`，或 `instruction` 过长           |
+| 404    | `world_not_found`     | 服务端没有这个世界，请求里也没有带 `world`                       |
+| 409    | `world_not_revisable` | 世界没有生成标记（内置、手写或安装的世界包改文件，不走这个接口） |
+| 409    | `world_deleting`      | 世界正在删除                                                     |
 
 ### Trace 调试
 

@@ -27,7 +27,7 @@ test("validates root events once regardless of runtime and locale manifests", as
   );
   await fs.copyFile(
     path.join(root, "PLUGIN.md"),
-    path.join(root, "PLUGIN.en.md"),
+    path.join(root, "PLUGIN.zh.md"),
   );
   assert.deepEqual(checkPluginEventSchemas(root), { checked: 1, errors: [] });
 });

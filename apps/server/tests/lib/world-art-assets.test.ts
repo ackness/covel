@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { applyLocaleOverlay } from "@covel/shared";
 import { describe, expect, it } from "vitest";
 import { inspectPng } from "../../../../scripts/lib/png-image-validation.mjs";
 
@@ -66,8 +67,26 @@ describe.each(worlds)("shipped art: %s", (world) => {
         /^presence(?:\.[\w-]+)?\.json$/.test(name),
       );
       expect(locales).toContain("presence.json");
+      const main = await readJson<Presence[]>(
+        path.join(mediaDir, "presence.json"),
+      );
       for (const locale of locales) {
-        const records = await readJson<Presence[]>(path.join(mediaDir, locale));
+        // A locale file holds translated text; the media references come from
+        // the main file. Check what a session in that language is given: the
+        // main records with the locale file merged in.
+        const merged = applyLocaleOverlay(
+          main,
+          await readJson<unknown>(path.join(mediaDir, locale)),
+          {
+            mode: "resolve",
+            locale: locale.split(".")[1] ?? "main",
+            baseLocale: "main",
+            arrayKey: "characterId",
+          },
+        );
+        // An entry the main file has no place for would be dropped at import.
+        expect(merged.issues, `${world}/${locale}`).toEqual([]);
+        const records = merged.value as Presence[];
         expect(records.map((record) => record.characterId).sort()).toEqual(
           manifest.characters.map((character) => character.characterId).sort(),
         );

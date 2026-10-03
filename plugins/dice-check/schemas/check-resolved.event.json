@@ -8,19 +8,11 @@
       "type": "array",
       "minItems": 1,
       "maxItems": 3,
-      "description": "All checks resolved this turn, batched into a single emission (emit-event dedupes by topic per turn, so one event must carry every check).",
+      "description": "All checks resolved this turn, in the order the turn's checks were used, batched into a single emission (emit-event dedupes by topic per turn, so one event must carry every check). The d20, the DC and the total are not reported: the system takes the dice in order and calculates them.",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "action",
-          "roll",
-          "modifier",
-          "dc",
-          "difficulty",
-          "total",
-          "outcome"
-        ],
+        "required": ["action", "modifier", "difficulty", "outcome"],
         "properties": {
           "action": {
             "type": "string",
@@ -31,27 +23,15 @@
             "type": "string",
             "description": "Character attribute the modifier was derived from, if any."
           },
-          "roll": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 20,
-            "description": "The consumed pre-rolled d20 value, unmodified."
-          },
           "modifier": {
             "type": "integer",
-            "description": "Attribute modifier added to the roll."
-          },
-          "dc": {
-            "type": "integer",
-            "description": "Difficulty class the total was compared against."
+            "minimum": -10,
+            "maximum": 10,
+            "description": "Attribute modifier of the action, derived from the numeric attribute on the player character's sheet."
           },
           "difficulty": {
             "enum": ["easy", "normal", "hard", "extreme"],
-            "description": "Named difficulty band (easy 8 / normal 12 / hard 16 / extreme 20)."
-          },
-          "total": {
-            "type": "integer",
-            "description": "roll + modifier."
+            "description": "Difficulty chosen from the fiction: easy (DC 8), normal (DC 12), hard (DC 16), extreme (DC 20)."
           },
           "outcome": {
             "enum": [
@@ -60,7 +40,7 @@
               "critical-success",
               "critical-failure"
             ],
-            "description": "Resolved outcome. Natural 20 = critical-success, natural 1 = critical-failure."
+            "description": "The outcome that this turn's check table gives for the chosen difficulty and modifier. It is checked against the dice."
           }
         }
       }

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "harbor-marks",
+    "name": "Harbor marks",
+    "quantity": 40,
+    "description": "Port scrip accepted by every stall on the quay.",
+    "tags": ["currency"]
+  },
+  {
+    "id": "oil-lantern",
+    "name": "Oil lantern",
+    "quantity": 1,
+    "description": "A hooded lantern with enough oil for one night.",
+    "tags": ["tool"],
+    "equipped": true
+  }
+]

@@ -1,0 +1,20 @@
+# Chinese text of the codex plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: 设定图鉴
+  description: 自动整理新发现的地点、人物、物品和传闻，方便随时回看。
+messages:
+  Codex: 知识图鉴
+  shortLabel|Codex: 图鉴
+  No codex entries yet. They will appear as the story continues…: 图鉴暂无词条，继续推进故事后会自动出现……
+  Search entries…: 搜索词条…
+  All: 全部
+  Monsters: 怪物
+  Items: 物品
+  Locations: 地点
+  Lore: 传说
+  Characters: 人物
+  Skills: 技能
+  "{{count}} entries collected": 共 {{count}} 条记录
+  No matching entries: 没有匹配的条目

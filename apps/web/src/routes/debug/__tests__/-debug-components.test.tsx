@@ -169,6 +169,7 @@ describe("debug route components", () => {
           tags: [],
           tools: [{ id: "append-story", kind: "builtin" }],
           userSettings: [],
+          languages: { text: ["en"], instructions: ["en"] },
           dataSchemas: {},
           worldProjections: {},
           declaredPluginDataNamespaces: [],

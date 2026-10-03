@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#description": "8cd4fec378b9c084",
+      "PLUGIN.md#displayName": "112c2409036ce285",
+      "runtimes/dimension-context/RUNTIME.md#description": "c419edf2fc448d8a",
+      "runtimes/dimension-tracker/RUNTIME.md#description": "68874256834adf11",
+      "runtimes/edit-dimensions/RUNTIME.md#description": "9545222e1173e459",
+      "runtimes/schema-gen/RUNTIME.md#description": "4819c11b2fccf2e4"
+    }
+  }
+}

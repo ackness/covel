@@ -18,9 +18,9 @@ const dimensions: DimensionSnapshot = {
         },
       },
     },
-    value: [
-      { id: "salt-fangs", name: { "zh-CN": "盐牙会", "en-US": "Salt-Fangs" } },
-    ],
+    // Session state holds one language: the world's locale maps were
+    // resolved when the world was imported.
+    value: [{ id: "salt-fangs", name: "盐牙会" }],
     version: 3,
   },
   codes: {
@@ -45,7 +45,7 @@ function view(locale: string) {
     locale,
   });
 }
-describe("buildWorldContextView frozen dimensions and explicit localization", () => {
+describe("buildWorldContextView frozen dimensions", () => {
   it("keeps the same versioned raw public values, with a detached snapshot", () => {
     const current = view("zh-CN");
     expect(current.dimensions).toEqual(dimensions);
@@ -53,20 +53,17 @@ describe("buildWorldContextView frozen dimensions and explicit localization", ()
     expect(current.name).toBe("W");
     expect(current.tags).toEqual(["fog"]);
   });
-  it("localizes only marked fields in bounded model projections", () => {
-    const projection = projectDimensionSnapshot(
-      view("zh-CN").dimensions!,
-      "zh-CN",
-    );
-    expect(projection).toContain("盐牙会");
-    expect(projection).not.toContain("Salt-Fangs");
-    expect(projection).toContain("salt-fangs");
-    expect(projection).toContain("business-a");
-    expect(projection).toContain("business-b");
-  });
-  it("uses the shared locale resolver only on explicitly localized fields", () => {
-    expect(
-      projectDimensionSnapshot(view("ja-JP").dimensions!, "ja-JP"),
-    ).toContain("Salt-Fangs");
+  it("projects stored values as they are, whatever the request language", () => {
+    for (const locale of ["zh-CN", "ja-JP"]) {
+      const projection = projectDimensionSnapshot(
+        view(locale).dimensions!,
+        locale,
+      );
+      expect(projection).toContain("盐牙会");
+      expect(projection).toContain("salt-fangs");
+      // Ordinary data keyed by language codes is not translatable text.
+      expect(projection).toContain("business-a");
+      expect(projection).toContain("business-b");
+    }
   });
 });

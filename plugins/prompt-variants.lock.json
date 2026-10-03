@@ -1,0 +1,62 @@
+{
+  "plugins/affinity/PLUGIN.md": {
+    "en": "2c4f33d13b91f1bf",
+    "zh": "308d821c503fb58c"
+  },
+  "plugins/char-creator/runtimes/character-tracker/RUNTIME.md": {
+    "en": "0cf251d69acd9e02",
+    "zh": "59cff9643d44152d"
+  },
+  "plugins/char-creator/runtimes/player-init/RUNTIME.md": {
+    "en": "265a6af6278e1bd9",
+    "zh": "35395f72463c7d4c"
+  },
+  "plugins/chat-mode-narrator/PLUGIN.md": {
+    "en": "9312de5da40041b5",
+    "zh": "be5517d74c547124"
+  },
+  "plugins/codex/PLUGIN.md": {
+    "en": "a16ecd900c56d4c1",
+    "zh": "24c4a5cc018677c2"
+  },
+  "plugins/guide/PLUGIN.md": {
+    "en": "c267860a2ca890ca",
+    "zh": "e1551b10e8ed3df8"
+  },
+  "plugins/narrator/PLUGIN.md": {
+    "en": "0d412e200e71dae7",
+    "zh": "83821b75f4a9fc49"
+  },
+  "plugins/npc-graph/runtimes/extractor/RUNTIME.md": {
+    "en": "1ecaf9b5920774a1",
+    "zh": "8c98df08a6befcaf"
+  },
+  "plugins/npc-graph/runtimes/rag-retriever/RUNTIME.md": {
+    "en": "07522f00d8c97ac8",
+    "zh": "f1c3333cbd6cc31c"
+  },
+  "plugins/pregame/PLUGIN.md": {
+    "en": "7b6e61fb7e518a10",
+    "zh": "f31df13abfb8a792"
+  },
+  "plugins/story-events/runtimes/plot/RUNTIME.md": {
+    "en": "456893c99f007958",
+    "zh": "6f8eef9bbdc39742"
+  },
+  "plugins/world-init/runtimes/dimension-tracker/RUNTIME.md": {
+    "en": "595a57862c8f63b1",
+    "zh": "0e56999c8d29561b"
+  },
+  "plugins/world-init/runtimes/schema-gen/RUNTIME.md": {
+    "en": "1ba30e3d2d97d4bd",
+    "zh": "de44eea82a25849b"
+  },
+  "plugins/world-ir/PLUGIN.md": {
+    "en": "aad4db70f7107f97",
+    "zh": "693a6332e477f545"
+  },
+  "plugins/world-time/runtimes/advance/RUNTIME.md": {
+    "en": "d7e3440be88d6cdb",
+    "zh": "51339819c8382989"
+  }
+}

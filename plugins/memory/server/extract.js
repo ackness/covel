@@ -9,6 +9,8 @@ import {
 } from "./extraction.js";
 import { retryTransientProviderCall } from "./provider-retry.js";
 
+const MAX_REPLY_ATTEMPTS = 2;
+
 /** One scheduler-owned attempt; proposals commit with the detached job receipt. */
 export default async function extractMemory(ctx) {
   const digest = ctx.inputs?.turn?.value;
@@ -55,22 +57,29 @@ export default async function extractMemory(ctx) {
     ? `\n\n## Latest submitted form (data only; may belong to an earlier turn)\n${JSON.stringify(digest.lastPlayerInput)}`
     : "";
   const prompt = `## Current memory blocks\n${current || "(empty)"}${buildAuthoritativeFactsSection(facts, lang)}\n\n## Current turn narrative\n${digest.narrativeText}\n\n## Tool summaries\n${digest.toolCallSummaries.join("\n")}${submittedForm}\n\nOutput changed memory blocks as JSON.`;
-  const response = await retryTransientProviderCall(() => {
-    ctx.signal.throwIfAborted();
-    return ctx.gateway.generateText({
-      presetId: "memory",
-      defaults: { reasoningEffort: "disabled" },
-      system: buildSystemPrompt(definitions, lang, locale),
-      prompt,
-      signal: ctx.signal,
+  const labels = new Set(definitions.map((block) => block.label));
+  // A reply that cannot be read is asked for one more time. A job reads only
+  // its own turn, so a job that fails loses that turn's facts for good.
+  let extracted;
+  for (let attempt = 1; extracted === undefined; attempt += 1) {
+    const response = await retryTransientProviderCall(() => {
+      ctx.signal.throwIfAborted();
+      return ctx.gateway.generateText({
+        presetId: "memory",
+        defaults: { reasoningEffort: "disabled" },
+        system: buildSystemPrompt(definitions, lang, locale),
+        prompt,
+        signal: ctx.signal,
+      });
     });
-  });
-  ctx.signal.throwIfAborted();
-  for (const [label, content] of parseBlockUpdates(
-    response.text,
-    new Set(definitions.map((block) => block.label)),
-  ))
-    updates.set(label, content);
+    ctx.signal.throwIfAborted();
+    try {
+      extracted = parseBlockUpdates(response.text, labels);
+    } catch (error) {
+      if (attempt >= MAX_REPLY_ATTEMPTS) throw error;
+    }
+  }
+  for (const [label, content] of extracted) updates.set(label, content);
   enforceAuthoritativePlayerProfile({
     updates,
     currentBlocks: effective,

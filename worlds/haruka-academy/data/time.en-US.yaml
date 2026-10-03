@@ -1,0 +1,35 @@
+# en-US text for time.yaml. Only translated text; structure and ids come from time.yaml.
+definition:
+  name: Campus time
+  calendar:
+    era: Campus year
+    months:
+      - name: January
+      - name: February
+      - name: March
+      - name: April
+      - name: May
+      - name: June
+      - name: July
+      - name: August
+      - name: September
+      - name: October
+      - name: November
+      - name: December
+    weekdays:
+      - Monday
+      - Tuesday
+      - Wednesday
+      - Thursday
+      - Friday
+      - Saturday
+      - Sunday
+    periods:
+      - name: Night
+      - name: Morning
+      - name: Afternoon
+      - name: Evening
+  evolution:
+    prompt: Conversation usually takes minutes; classes and club activities take
+      their narrated duration. Sleep or an explicit next-day transition crosses
+      a day. Flashbacks do not move the present clock.

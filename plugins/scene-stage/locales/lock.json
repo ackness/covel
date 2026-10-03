@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.data.assets.authoring.title": "a19c8b7f0a69fb02",
+      "PLUGIN.md#contributes.data.scenes.authoring.title": "a24ed590530ed94d",
+      "PLUGIN.md#contributes.settings[key=activeSpeakerCount].label": "a613674299f56491",
+      "PLUGIN.md#description": "f465b6cee014e03c",
+      "PLUGIN.md#displayName": "f4be2acdd1a92dd3",
+      "runtimes/cast/RUNTIME.md#description": "78d0552b12ebb6d5",
+      "runtimes/direction/RUNTIME.md#description": "b68888215bf50d8e",
+      "runtimes/resolver/RUNTIME.md#description": "9c67b26969306887",
+      "runtimes/seed/RUNTIME.md#description": "25cfc3f8bebed131"
+    }
+  }
+}
