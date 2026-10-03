@@ -1502,7 +1502,11 @@
       "submitFailed": "Approval submission failed: {{error}}",
       "unexpectedRequired": "Still got approval-required after grant — please check the approval backend",
       "required": "Your selected community plugins need authorization for this server session. They remain paused until approved.",
-      "review": "Authorize {{pluginId}}"
+      "review": "Authorize {{pluginId}}",
+      "batchTitle": "Authorize community plugins",
+      "batchMessage": "These community plugins are selected for this session and stay paused until you authorize them. Their code runs in the Covel backend without a process sandbox. Untick any you do not want to run. Authorization lasts for this session until the backend restarts.",
+      "allowSelected": "Authorize selected",
+      "notNow": "Not now"
     },
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",

@@ -1502,7 +1502,11 @@
       "submitFailed": "审批提交失败：{{error}}",
       "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端",
       "required": "已选择的社区插件需要在本次服务启动后授权，批准前暂停运行。",
-      "review": "授权 {{pluginId}}"
+      "review": "授权 {{pluginId}}",
+      "batchTitle": "授权社区插件",
+      "batchMessage": "以下社区插件已在本会话中选用，授权前保持暂停。它们的代码在 Covel 后端运行，没有进程沙箱。不想运行的请取消勾选。授权在本会话内有效，后端重启后需要重新授权。",
+      "allowSelected": "授权所选",
+      "notNow": "暂不授权"
     },
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",

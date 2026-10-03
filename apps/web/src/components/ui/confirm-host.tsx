@@ -40,9 +40,24 @@ export function ConfirmHost() {
 
   const current = queue[0];
 
+  // A multi-item prompt starts with every entry ticked: the player opted into
+  // each of them already, and unticks the ones to leave out.
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+  const currentId = current?.id;
+  useEffect(() => {
+    setChecked(new Set(queueRef.current[0]?.choices?.map((c) => c.id) ?? []));
+  }, [currentId]);
+
   const settle = (approved: boolean) => {
     if (!current) return;
-    current.resolve(approved);
+    current.resolve(
+      approved,
+      approved
+        ? current.choices
+            ?.filter((choice) => checked.has(choice.id))
+            .map((choice) => choice.id)
+        : undefined,
+    );
     // Remove by id rather than dropping the head: two clicks landing in the
     // same render both see this `current`, and a second `slice(1)` would evict
     // the NEXT request unanswered, hanging its caller. Filtering by id makes
@@ -64,11 +79,44 @@ export function ConfirmHost() {
             {current?.message}
           </DialogDescription>
         </DialogHeader>
+        {current?.choices && (
+          <ul className="max-h-64 space-y-2 overflow-y-auto">
+            {current.choices.map((choice) => (
+              <li key={choice.id}>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={checked.has(choice.id)}
+                    onChange={(event) => {
+                      const next = new Set(checked);
+                      if (event.target.checked) next.add(choice.id);
+                      else next.delete(choice.id);
+                      setChecked(next);
+                    }}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium">{choice.label}</span>
+                    {choice.detail && (
+                      <span className="block text-xs text-muted-foreground wrap-break-word">
+                        {choice.detail}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" size="sm" onClick={() => settle(false)}>
             {current?.cancelLabel}
           </Button>
-          <Button size="sm" onClick={() => settle(true)}>
+          <Button
+            size="sm"
+            disabled={current?.choices !== undefined && checked.size === 0}
+            onClick={() => settle(true)}
+          >
             {current?.confirmLabel}
           </Button>
         </div>
