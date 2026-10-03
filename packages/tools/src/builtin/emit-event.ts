@@ -45,7 +45,7 @@ export function createEmitEventTool(deps: {
       const known = await deps.directory.listTopics(context.sessionId);
       if (!known.includes(topic)) {
         return {
-          _text: `unknown topic "${topic}". Available topics: ${known.join(", ") || "(none — no consumer plugin active)"}`,
+          _text: `unknown topic "${topic}"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: ${known.join(", ") || "(none — no consumer plugin active)"}`,
         };
       }
       const verdict = await deps.directory.validate(

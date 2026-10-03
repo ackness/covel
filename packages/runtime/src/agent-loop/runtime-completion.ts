@@ -96,6 +96,17 @@ function completionCorrection(
     : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.";
 }
 
+/**
+ * The correction for a `requireToolUse` runtime that called only
+ * `runtime-done`: the terminator does not record anything, including "no
+ * change".
+ */
+export function runtimeDoneCorrection(locale?: string): string {
+  return isDefaultLocale(locale)
+    ? "runtime-done 只结束运行，不会记录任何结果。请调用声明的业务工具提交本轮结果；确实无变化时也要按工具说明提交空结果，然后再结束。"
+    : "runtime-done only ends the run; it records nothing. Call the declared business tool to submit this turn's result; if nothing changed, submit the empty result its description allows, then finish.";
+}
+
 /** One bounded corrective step, shared by fresh and resumed tool loops. */
 export function checkTextCompletion(args: {
   manifest: RuntimeManifest;

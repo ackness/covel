@@ -501,6 +501,34 @@ describe("runAgentToolLoop core", () => {
     expect(toolEvents).toEqual(["tool.calling", "tool.completed"]);
   });
 
+  it("lets a story stuck repeating a tool call write its prose without tools", async () => {
+    // Seen with the narrator emitting an event no active plugin consumed:
+    // throwing here failed the story and with it the whole player turn.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      let i = 0;
+      const requests: Parameters<LLMAdapter["generate"]>[0][] = [];
+      const llm: LLMAdapter = {
+        generate: async (params) => {
+          requests.push(params);
+          return params.tools
+            ? toolCall("mark", { note: "same" }, `tc-${i++}`)
+            : prose("The fog closes over the pier.");
+        },
+      };
+      const result = await run({
+        llm,
+        manifest: manifest({ outputKind: "story" }),
+        maxSteps: 20,
+      });
+
+      expect(result.finalContent).toBe("The fog closes over the pier.");
+      expect(requests.at(-1)?.tools).toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("injects one perturbation on a repeated identical tool call, then throws", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

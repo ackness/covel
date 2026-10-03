@@ -52,6 +52,7 @@ import {
   checkTextCompletion,
   hasExplicitCompletion,
   captureCompletionCalls,
+  runtimeDoneCorrection,
   type CompletionCalls,
 } from "./runtime-completion.js";
 import { type BudgetOptions, type TokenEstimator } from "@covel/context";
@@ -681,20 +682,26 @@ async function runAgentToolLoopWithinBudget(
           // bounded steps to write the narrative before accepting completion.
           finalContent = null;
           activeToolDefs = undefined;
-          messages.push({
-            role: "system",
-            content: isDefaultLocale(input.locale)
-              ? "你只完成了工具调用，还没有输出故事正文。现在根据已读取的信息直接写出本回合正文；不要再调用工具或解释处理过程。"
-              : "You completed tool calls but have not written the story. Write this turn's narrative now using the information already retrieved. Do not call more tools or describe the processing steps.",
-          });
+          messages.push(writeStoryWithoutTools(input.locale));
           continue;
         }
         // A `requireToolUse` runtime can reach here having called nothing but
         // the terminator — a nudged model will do exactly that to satisfy
         // "call the declared tools". This exit runs before the gate below, so
         // record the unmet contract here or the runtime finishes as an empty
-        // success.
+        // success. A first bare `runtime-done` gets the same single
+        // correction as a bare text finish: bookkeeping runtimes often mean
+        // "nothing changed", which their own tool must record.
         if (requireToolUse && businessCalls.length === 0) {
+          if (noToolCallCorrections === 0) {
+            noToolCallCorrections++;
+            finalContent = null;
+            messages.push({
+              role: "system",
+              content: runtimeDoneCorrection(input.locale),
+            });
+            continue;
+          }
           requiredToolUseUnmet = true;
         }
         // Preserve streamed / captured prose from earlier steps or this
@@ -757,13 +764,27 @@ async function runAgentToolLoopWithinBudget(
       // almost certainly stuck in a KV-cache echo. Inject a perturbation
       // system message to nudge it onto a different path; on the second
       // detection give up so the loop cannot wedge the runtime forever.
-      guardAgainstToolLoop({
-        collectedToolCalls,
-        threshold: retryPolicy.loopDetectionThreshold,
-        runtimeName: manifest.name,
-        messages,
-        state: loopGuardState,
-      });
+      try {
+        guardAgainstToolLoop({
+          collectedToolCalls,
+          threshold: retryPolicy.loopDetectionThreshold,
+          runtimeName: manifest.name,
+          messages,
+          state: loopGuardState,
+        });
+      } catch (err) {
+        // A failed story fails the whole player turn. A story stuck repeating
+        // a tool call (e.g. an event no active plugin consumes) still has
+        // what it needs to narrate: take the tools away and ask for prose.
+        if (manifest.outputKind !== "story" || activeToolDefs === undefined)
+          throw err;
+        console.warn(
+          `[runtime-loop] ${manifest.name} kept repeating a tool call; continuing without tools`,
+        );
+        finalContent = null;
+        activeToolDefs = undefined;
+        messages.push(writeStoryWithoutTools(input.locale));
+      }
 
       // Continue loop — LLM sees tool results and decides next action
       continue;
@@ -838,5 +859,15 @@ async function runAgentToolLoopWithinBudget(
         executedToolCalls,
         initialState?.completionCalls,
       ),
+  };
+}
+
+/** Ask a story runtime that has only called tools to write the narrative. */
+function writeStoryWithoutTools(locale: string | undefined): LLMMessage {
+  return {
+    role: "system",
+    content: isDefaultLocale(locale)
+      ? "你只完成了工具调用，还没有输出故事正文。现在根据已读取的信息直接写出本回合正文；不要再调用工具或解释处理过程。"
+      : "You completed tool calls but have not written the story. Write this turn's narrative now using the information already retrieved. Do not call more tools or describe the processing steps.",
   };
 }
