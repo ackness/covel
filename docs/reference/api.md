@@ -3410,8 +3410,11 @@ Response 创建作为完成条件。普通请求覆盖完整 middleware/handler�
 `POST /api/config/open-folder` accepts `{ "target": "llm.toml" }` and opens
 `COVEL_LLM_TOML` when configured (relative paths resolve from the server working
 directory), otherwise `<covelHome>/llm.toml`. The `keys.env` target always resolves
-under `covelHome`. Missing files return `400` with `open_target_unavailable`;
-opening a file does not reload the running gateway. Use
+under `covelHome`. In desktop mode a missing `llm.toml` is created first from the
+built-in default (same slots as the active fallback, so nothing changes until it is
+edited) and the response reports it: `{ "ok": true, "created": true }`. Every other
+missing target, and a missing `llm.toml` outside desktop mode, returns `400` with
+`open_target_unavailable`. Opening a file does not reload the running gateway. Use
 `POST /api/llm-config/reload` after editing to apply model configuration.
 
 ### Installed resource storage and vector configuration

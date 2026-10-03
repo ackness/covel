@@ -95,6 +95,18 @@ describe("desktop bridge REST helpers", () => {
     );
   });
 
+  it("reports whether opening llm.toml created the file", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ ok: true, created: true }), {
+        status: 200,
+      }),
+    );
+    await expect(openLlmToml()).resolves.toEqual({ created: true });
+
+    mockFetch(new Response("{}", { status: 200 }));
+    await expect(openLlmToml()).resolves.toEqual({ created: false });
+  });
+
   it("updates data root through the desktop config REST endpoint", async () => {
     const fetchMock = mockFetch(new Response("{}", { status: 200 }));
 
