@@ -18,6 +18,12 @@ A string tag on a runtime manifest that advertises what the runtime _does_ (e.g.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), AGENTS.md "Framework ↔ Plugin Isolation Rule".
 
+## Collection
+
+A manifest (`covel-collection.yaml`) that lists worlds and plugins to install together, including packages pinned by commit in other repositories. It is a pointer list used at install time: what it installs are ordinary plugins and ordinary worlds, each updated and removed on its own. Distinct from **Pack**, which selects among plugins that are already installed.
+
+See: [docs/guide/collections.md](./guide/collections.md), [docs/reference/plugin-installation.md](./reference/plugin-installation.md).
+
 ## Kernel
 
 The framework runtime that schedules turns, assembles context, drives LLM tool-calls, validates proposals, and commits writes. Everything outside the `plugins/` directory (`packages/`, `apps/server/src/`, `apps/web/src/`) is kernel code.

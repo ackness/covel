@@ -12,6 +12,7 @@
 | 写复杂 TypeScript 插件和审批 | [`plugin-authoring-advanced.md`](./plugin-authoring-advanced.md)       | [`../reference/plugins.md`](../reference/plugins.md)                                                                       |
 | 写插件 UI                    | [`plugin-ui-runtime-guidelines.md`](./plugin-ui-runtime-guidelines.md) | [`../reference/ui-panels.md`](../reference/ui-panels.md), [`../reference/ui-components.md`](../reference/ui-components.md) |
 | 测试插件                     | [`plugin-testing.md`](./plugin-testing.md)                             | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                                                                           |
+| 把世界和配套插件一起发布     | [`collections.md`](./collections.md)                                   | [`../reference/plugin-installation.md`](../reference/plugin-installation.md)                                               |
 
 ## World Authoring
 

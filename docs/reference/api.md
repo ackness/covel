@@ -484,6 +484,9 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | POST | `/api/install/world`                 | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `201 { ok, kind:"world", id, restartRequired:false }`                     |
 | POST | `/api/install/plugin/github/preview` | `{ url }`：解析公开 GitHub 仓库或子目录，返回固定提交、摘要与签名预览；不安装或执行插件                                                                               |
 | POST | `/api/install/plugin/github`         | `{ token, acceptRisk: true }`：校验已确认的预览并安装，返回 `201 { ok, kind: "plugin", id, restartRequired: true }`                                                   |
+| POST | `/api/install/github/preview`        | `{ url }`：一次预览链接下的插件、世界或合集成员，返回 `{ collection, items, problems }`；见[插件安装](plugin-installation.md#http-契约)                               |
+| POST | `/api/install/github/batch`          | `{ tokens, acceptRisk: true }`：把已预览的包作为一个整体安装，失败时回滚本次写入，返回 `201 { ok, installed, restartRequired }`                                       |
+| POST | `/api/install/collection`            | multipart 字段 `file`：导入打包好的合集 ZIP，响应同 batch                                                                                                             |
 | GET  | `/api/install/plugins`               | 列出用户插件目录中的包及可用的来源记录，包含尚未重启加载的插件                                                                                                        |
 
 > **canonical 插件身份**：插件的唯一身份是 manifest 根 `id`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `id: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID；`@covel/plugin-narrator` + `id: narrator` 会命中 reserved 并返回 409。启动 discovery 同样硬性校验目录名 == manifest 根 id，不一致的插件注册为 `hostState: "error"`、不加载任何 runtime/tool/hook/wire。

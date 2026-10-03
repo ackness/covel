@@ -80,6 +80,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | ----------------------------------------------- | ------------------------------------------------------ |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                   |
 | `version`, `displayName`, `description`, `tags` | 元数据；不再使用 `role:*` 标签驱动业务                 |
+| `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；安装器强制执行    |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`       |
 | `requires`                                      | 必需契约，解析器补入提供者                             |
 | `optional`                                      | 可选契约，不强制激活提供者                             |
