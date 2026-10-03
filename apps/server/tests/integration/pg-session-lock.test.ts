@@ -184,20 +184,29 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
 
     const sessionId = `sess-timeout-${Date.now()}`;
 
-    // Holder keeps the lock for ~300ms, exceeding the contender's 150ms
-    // acquire timeout so we can observe the timeout path deterministically.
+    // The holder says when it has the lock and keeps it until the contender
+    // has timed out. Sleeping "long enough" for either step is a race: on a
+    // loaded machine the holder had not acquired after 30 ms, the contender
+    // got the lock and the test failed.
+    let acquired!: () => void;
+    const holding = new Promise<void>((resolve) => (acquired = resolve));
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
     const holder = lock.withLock(sessionId, async () => {
-      await new Promise((r) => setTimeout(r, 300));
+      acquired();
+      await released;
     });
+    await holding;
 
-    // Brief delay so the holder reliably acquires before we race.
-    await new Promise((r) => setTimeout(r, 30));
-
-    await expect(
-      lock.withLock(sessionId, async () => {
-        throw new Error("should-not-reach-fn");
-      }),
-    ).rejects.toThrow(/failed to acquire lock for session .* within 150ms/);
+    try {
+      await expect(
+        lock.withLock(sessionId, async () => {
+          throw new Error("should-not-reach-fn");
+        }),
+      ).rejects.toThrow(/failed to acquire lock for session .* within 150ms/);
+    } finally {
+      release();
+    }
 
     // Let the holder finish cleanly before tearing down the pool.
     await holder;
@@ -214,22 +223,31 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
       pollIntervalMs: 20,
     });
 
+    // The holder keeps the only connection until the contender has failed.
+    // That the contender fails at all while the holder still holds proves the
+    // deadline covers the queue wait; no wall-clock bound is needed, and a
+    // sleep to "let the holder reserve first" would be a race.
+    let reserved!: () => void;
+    const holding = new Promise<void>((resolve) => (reserved = resolve));
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
     const holder = lock.withLock(`sess-pool-hold-${Date.now()}`, async () => {
-      await new Promise((r) => setTimeout(r, 600));
+      reserved();
+      await released;
     });
-    // Brief delay so the holder reliably reserves the only connection.
-    await new Promise((r) => setTimeout(r, 50));
+    await holding;
 
-    const t0 = Date.now();
-    await expect(
-      lock.withLock(`sess-pool-wait-${Date.now()}`, async () => {
-        throw new Error("should-not-reach-fn");
-      }),
-    ).rejects.toThrow(
-      /failed to reserve a lock connection for session .* within 200ms/,
-    );
-    // The timeout must fire near the deadline, not after the holder releases.
-    expect(Date.now() - t0).toBeLessThan(500);
+    try {
+      await expect(
+        lock.withLock(`sess-pool-wait-${Date.now()}`, async () => {
+          throw new Error("should-not-reach-fn");
+        }),
+      ).rejects.toThrow(
+        /failed to reserve a lock connection for session .* within 200ms/,
+      );
+    } finally {
+      release();
+    }
 
     await holder;
     await sql.end();

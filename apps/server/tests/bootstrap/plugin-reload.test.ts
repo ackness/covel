@@ -686,18 +686,23 @@ describe("plugin generation reload", () => {
     const f = await fixture();
     f.manager.watch();
     await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2));
-    await vi.waitFor(async () => {
-      expect(
-        await f.client().call({
-          pluginId: f.id,
-          name: "value",
-          contract: "fixture.value@1",
-          input: null,
-        }),
-      ).toBe(2);
-    });
+    // A real file event, then a debounced reload. The default wait of one
+    // second is a speed limit: a loaded machine delivers the event later.
+    await vi.waitFor(
+      async () => {
+        expect(
+          await f.client().call({
+            pluginId: f.id,
+            name: "value",
+            contract: "fixture.value@1",
+            input: null,
+          }),
+        ).toBe(2);
+      },
+      { timeout: 15_000 },
+    );
     expect(f.disposed).toEqual([1]);
-  });
+  }, 20_000);
 
   it("retains a timed-out provider until its losing promise finishes", async () => {
     const f = await fixture();
@@ -734,6 +739,8 @@ describe("plugin generation reload", () => {
     await f.manager.reload(f.id, "session");
     expect(f.disposed).toEqual([1]);
     gate.resolve();
-    await vi.waitFor(() => expect(f.disposed).toEqual([1, 2]));
-  });
+    await vi.waitFor(() => expect(f.disposed).toEqual([1, 2]), {
+      timeout: 15_000,
+    });
+  }, 20_000);
 });

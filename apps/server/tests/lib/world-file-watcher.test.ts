@@ -115,7 +115,8 @@ dimensionSources:
             }),
           );
         },
-        { timeout: 5000 },
+        // A real file event and a debounced reload: allow for a loaded machine.
+        { timeout: 15_000 },
       );
       if (decoy)
         expect(await store.getWorld(directoryName)).toEqual(decoyBefore);
@@ -152,5 +153,5 @@ dimensionSources:
       await rm(root, { recursive: true, force: true });
     }
   },
-  10_000,
+  30_000,
 );
