@@ -37,15 +37,17 @@ describe("dice-check roll command", () => {
     ]);
   });
 
-  it("registers the roll RPC from the package entry", () => {
+  it("registers the roll RPC and the receipt guard from the package entry", () => {
     const registerRpc = vi.fn();
-    registerDiceCheck({ registerRpc });
+    const on = vi.fn();
+    registerDiceCheck({ registerRpc, on });
 
     expect(registerRpc).toHaveBeenCalledWith(
       "roll",
       roll,
       expect.objectContaining({ description: expect.any(String) }),
     );
+    expect(on).toHaveBeenCalledWith("PreToolUse", expect.any(Function));
   });
 
   it("parses the default and bounded NdM notation", () => {

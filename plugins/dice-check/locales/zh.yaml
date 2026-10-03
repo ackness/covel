@@ -6,7 +6,7 @@ PLUGIN.md:
   description: 为有失败风险的行动提供骰子判定：预掷骰池、规则化成败、可视化回执。
   contributes:
     events:
-      - description: 发射条件：本回合完成过至少一次骰子判定时必须发射，且整回合只发一次——把所有判定装进 checks 数组（先判定完、再一次性发射）。每项：action 填行动简述；roll 填消耗的预掷骰原值；modifier 填属性修正；total = roll + modifier；dc/difficulty 填难度；outcome 按 total vs DC 判定，天然 20 为 critical-success、天然 1 为 critical-failure。无风险行动不判定也不发射。
+      - description: 发射条件：本回合完成过至少一次骰子判定时必须发射，且整回合只发一次——把所有判定按使用顺序装进 checks 数组（先判定完、再一次性发射）。每项：action 填行动简述；attribute 填所用属性；modifier 填属性修正；difficulty 填 easy、normal、hard 或 extreme；outcome 填本回合判定表给出的结果。不要填 d20、DC 和合计，它们由系统补上。无风险行动不判定也不发射。
     commands:
       - name: roll
         description: 掷指定骰式，默认为 1d20。

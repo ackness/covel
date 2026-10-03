@@ -448,12 +448,19 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 **校验流程与错误形态**（错误均以可读文本回给 LLM，供其看错误后重试，不抛异常中断工具循环）：
 
-1. topic 本回合已经发射过（`context.emittedEventTopics` 由工具循环累积传入，见 `packages/tools/src/types.ts` 的 `ToolExecutionContext.emittedEventTopics`）→ no-op：`event "<topic>" already emitted this turn — skipped`，不产生第二条 `emittedEvents`
+1. topic 本回合已经发射过（`context.emittedEventTopics` 由工具循环累积传入，见 `packages/tools/src/types.ts` 的 `ToolExecutionContext.emittedEventTopics`）→ no-op：`event "<topic>" was already emitted this turn and is recorded. Do not emit it again; continue with the task.`，不产生第二条 `emittedEvents`
 2. topic 不在当前 session 的**已 advertise 目录**里 → `unknown topic "<topic>"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: <逗号分隔列表，或 "(none — no consumer plugin active)">`。`advertise: false` 的内部 topic 不进 emit-event 白名单（`listTopics` 与 `validate` 均只认 advertised），只能由声明它的插件自己的**函数 runtime**经 `output.events` 结果通道发射——agent 无法经 `emit-event` 直发绕过生成门；回显的可用列表也不泄漏内部 topic 名
 3. topic 已知但 payload 未通过 JSON Schema 校验 → `event payload rejected: <ajv 错误文本>`
-4. 全部通过 → `event "<topic>" emitted`，结果携带 `emittedEvents`
+4. 全部通过 → `event "<topic>" emitted and recorded for this turn. Do not emit it again.`，结果携带 `emittedEvents`。结果文本明确说“不要再发”：只回一个 `emitted` 时，部分模型会为了保险把同一事件再发一次，白费一轮调用
 
 **一次一个 topic**：单次调用只发射一条事件；需要发多个领域事件时多次调用 `emit-event`。
+
+**让回执可以当场核对。** JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子对不对得上”。消费事件的 runtime 又是在整回合写完之后才运行，那时发现回执不对已经来不及改正文。两条做法可以避免这种事后才失败的回执：
+
+- 回执只放模型自己决定的内容，代码算得出的字段不要让模型填。让模型同时填“难度名”和“DC 数字”、“骰值”和“合计”，就多出几处会对不上的地方。
+- 需要对照本回合数据的检查，用声明事件的插件自己的 `PreToolUse` hook 在发出当场做：不符就 `abort`，把正确的值写进 `reason`。`reason` 会作为这次工具调用的结果回给模型，它可以在写正文之前重发。
+
+`dice-check` 是例子：回执里没有骰值、DC 和合计，recorder 按顺序取骰并计算；`hooks/verify-check-receipt.js` 在叙事发出回执时对照骰子，结果不符就把每次判定的正确结果退回去。
 
 **去重的作用域是单个 tool loop**：`emittedEventTopics` 由 agent tool loop 逐次累积，因此同一 runtime 在同一回合内重复发同一 topic 会被 no-op。它**不跨 runtime**——同一 DAG 层级（并行组）里的两个 runtime 可以各自发同一 topic。这不是缺陷：事件 fan-out 收集阶段按 topic 汇聚（同一深度内 first-emission-wins，见 `collectEventsFrom`），所以下游订阅者仍只被触发一次。代价是同一深度里第二个 runtime 发出的同 topic payload 不会被投递：调度器为它发出 `scheduling.hazard`（`code: "event-payload-dropped"`，含 topic 与 runtimeId），不会静默丢失。需要传递多条信息时，在一个事件的 `data` 里批量携带（如 `check.resolved` 的批量契约），或为不同来源使用不同 topic。
 

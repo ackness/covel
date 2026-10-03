@@ -24,12 +24,15 @@ contributes:
       description: >-
         Emission condition: MUST emit when at least one dice check was resolved
         this turn, and only ONCE per turn — put every resolved check into the
-        checks array (resolve all first, then emit once). Per item: action =
-        short description of the attempt; roll = the consumed pre-rolled d20
-        value; modifier = the attribute modifier; total = roll + modifier;
-        dc/difficulty = the difficulty; outcome follows total vs DC, with
-        natural 20 = critical-success and natural 1 = critical-failure.
-        Risk-free actions never roll or emit.
+        checks array, in the order the checks were used (resolve all first,
+        then emit once). Per item: action = short description of the attempt;
+        attribute = the attribute used; modifier = its modifier; difficulty =
+        easy, normal, hard or extreme; outcome = the outcome that the turn's
+        check table gives. Do not report the d20, the DC or the total: the
+        system adds them. Risk-free actions never roll or emit.
+  hooks:
+    - event: PreToolUse
+      enforce: normal
   ui:
     message:
       - ./runtimes/recorder/ui/check-message.json
@@ -50,4 +53,4 @@ contributes:
     - roll
 ---
 
-Dice Check turns "does my lockpicking succeed?" from narrative-LLM freestyle into an auditable roll: a pre-turn runtime rolls the turn's d20 pool and injects it (with the check rules) into the narrative engine, which resolves risky actions against it and emits `check.resolved` receipts. The `action-check@1` contract carries only that injected `checkContext` text, so narrative engines hold no dice rules of their own and a plugin with a different resolution system can provide the same contract. A same-turn `tabletop-check@1` receipt owns its submitted action, so the recorder skips dice-pool events for that turn. The root entry exposes player-facing dice actions; see `runtimes/roller/RUNTIME.md` (the pre-roll injector) and `runtimes/recorder/RUNTIME.md` (the receipt recorder + UI) for the executable runtimes.
+Dice Check turns "does my lockpicking succeed?" from narrative-LLM freestyle into an auditable roll: a pre-turn runtime rolls the turn's d20 pool and injects one row for each check (with the check rules) into the narrative engine. The narrative decides the attribute, the modifier and the difficulty of a risky action, reads the outcome from the row, and emits a `check.resolved` receipt. A `PreToolUse` guard compares the receipt with the dice when it is sent and sends a wrong outcome back with the correct one, so the prose is written to the outcome the dice gave. The `action-check@1` contract carries only that injected `checkContext` text, so narrative engines hold no dice rules of their own and a plugin with a different resolution system can provide the same contract. A same-turn `tabletop-check@1` receipt owns its submitted action, so the recorder skips dice-pool events for that turn. The root entry exposes player-facing dice actions; see `runtimes/roller/RUNTIME.md` (the pre-roll injector) and `runtimes/recorder/RUNTIME.md` (the receipt recorder + UI) for the executable runtimes.

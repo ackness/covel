@@ -39,7 +39,9 @@ export function createEmitEventTool(deps: {
     execute: async ({ topic, data }, context) => {
       if (context.emittedEventTopics?.includes(topic)) {
         return {
-          _text: `event "${topic}" already emitted this turn — skipped`,
+          // Say what to do next: a model that reads only "skipped" tries a
+          // third time.
+          _text: `event "${topic}" was already emitted this turn and is recorded. Do not emit it again; continue with the task.`,
         };
       }
       const known = await deps.directory.listTopics(context.sessionId);
@@ -56,9 +58,14 @@ export function createEmitEventTool(deps: {
       if (!verdict.ok) {
         return { _text: `event payload rejected: ${verdict.reason}` };
       }
-      return withEmittedEvents({ _text: `event "${topic}" emitted` }, [
-        { topic, data },
-      ]);
+      // One topic is emitted one time in a turn. The result says so: with a
+      // bare "emitted" some models send the same event again to be sure.
+      return withEmittedEvents(
+        {
+          _text: `event "${topic}" emitted and recorded for this turn. Do not emit it again.`,
+        },
+        [{ topic, data }],
+      );
     },
   });
 }

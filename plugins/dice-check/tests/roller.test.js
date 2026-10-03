@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import handler from "../runtimes/roller/handler.js";
+import { poolOf } from "../lib/turn-pool.js";
 
 function makeCtx(overrides = {}) {
   return {
@@ -50,18 +51,66 @@ describe("dice-check roller handler", () => {
     expect(result.value.checkContext).toContain("大失败");
   });
 
-  it("lists every rolled die in the checkContext pool", async () => {
+  it("gives each check one row with its die and the outcome at every difficulty", async () => {
     // Arrange
-    const ctx = makeCtx();
+    const ctx = makeCtx({ locale: "en-US" });
 
     // Act
     const result = await handler(ctx);
 
     // Assert
     const { dice } = result.effects.pluginData[0].value;
+    const rows = result.value.checkContext
+      .split("\n")
+      .filter((line) => /^\| \d \|/.test(line));
+    expect(rows).toHaveLength(3);
     dice.forEach((value, index) => {
-      expect(result.value.checkContext).toContain(`#${index + 1}: ${value}`);
+      const cells = rows[index].split("|").map((cell) => cell.trim());
+      expect(cells.slice(1, 3)).toEqual([`${index + 1}`, `${value}`]);
+      // easy, normal, hard, extreme: the narrative reads, it does not add.
+      const expected = [8, 12, 16, 20].map((dc) => {
+        if (value === 20) return "critical success";
+        if (value === 1) return "critical failure";
+        const needed = dc - value;
+        if (needed <= -10) return "success";
+        if (needed > 10) return "failure";
+        return `success if modifier is ${needed > 0 ? `+${needed}` : needed} or more, else failure`;
+      });
+      expect(cells.slice(3, 7)).toEqual(expected);
     });
+  });
+
+  it("keeps the turn's dice for the guard that checks the receipt", async () => {
+    const result = await handler(makeCtx({ turnId: "turn-guard" }));
+    expect(poolOf("sess-1", "turn-guard")).toEqual(
+      result.effects.pluginData[0].value.dice,
+    );
+  });
+
+  it("gives no dice table in a turn that a tabletop form settled", async () => {
+    const result = await handler(
+      makeCtx({
+        turnId: "turn-owned",
+        locale: "en-US",
+        inputs: { tabletopCheck: { value: { resolvedTurnId: "turn-owned" } } },
+      }),
+    );
+
+    expect(result.value.checkContext).toContain("Do not make a dice check");
+    expect(result.value.checkContext).not.toContain("| check |");
+    // The dice are still rolled and recorded; the guard does not get them.
+    expect(result.value.dice).toHaveLength(3);
+    expect(poolOf("sess-1", "turn-owned")).toBeUndefined();
+
+    // A receipt of an earlier turn does not own this one.
+    const next = await handler(
+      makeCtx({
+        turnId: "turn-next",
+        locale: "en-US",
+        inputs: { tabletopCheck: { value: { resolvedTurnId: "turn-owned" } } },
+      }),
+    );
+    expect(next.value.checkContext).toContain("| check |");
   });
 
   it("writes the raw dice pool to the rolls namespace keyed by turnId", async () => {

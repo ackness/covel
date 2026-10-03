@@ -31,7 +31,7 @@ It subscribes to the `check.resolved` event, which the narrative engine emits th
 
 If the `tabletop-check@1` output of the same execution already holds a settlement receipt for this turn, the form check belongs to tabletop-rules alone: this runtime skips the whole event batch and neither reads nor writes dice pool receipts. Without such a receipt it records ordinary actions as follows.
 
-1. Read the event payload defensively. Each item of the `checks` array is validated in pre-roll order. An item is skipped when a required field is missing (action / roll / modifier / dc / difficulty / total / outcome), a type is wrong, or the arithmetic does not hold. The runtime skips entirely only when every item is invalid.
+1. Read the event payload defensively. An item of the `checks` array holds what the narrative decided (action / attribute / modifier / difficulty) and the outcome it wrote. The die is not in the receipt: the first item uses the first die of the turn, the second the second. The runtime calculates the DC, the total and the outcome by `lib/check-rules.js`. An item is skipped when a required field is missing, a type is wrong, or its outcome is not the one the die gives; the die of a skipped item is still used. The runtime fails only when every item is invalid.
 2. Write each check to `plugin_data[checks]` (key = `<turnId>-<index>`) with its display fields (outcome label, color, dice notation). The newest-first panel reads these directly.
 3. Write this turn's check array to `plugin_data[message]` (key = turnId; the value carries `__turnId` to bind it to this turn's message). The in-message result block reads it directly.
 

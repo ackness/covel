@@ -1,4 +1,10 @@
 import { labelText } from "@covel/plugin-handlers-utils";
+import {
+  isDifficulty,
+  isModifier,
+  resolveCheck,
+  rollText,
+} from "../../lib/check-rules.js";
 
 /**
  * @typedef {import("@covel/plugin-handlers-utils").PluginFunctionContext & { execution?: { sourceTurnId?: string } }} RecorderContext
@@ -6,19 +12,6 @@ import { labelText } from "@covel/plugin-handlers-utils";
 
 const CHECKS_NAMESPACE = "checks";
 const MESSAGE_NAMESPACE = "message";
-
-const OUTCOMES = new Set([
-  "success",
-  "failure",
-  "critical-success",
-  "critical-failure",
-]);
-const DIFFICULTY_DCS = Object.freeze({
-  easy: 8,
-  normal: 12,
-  hard: 16,
-  extreme: 20,
-});
 
 // Presentation is computed here so the json-render specs stay dumb: they just
 // bind label/color/critical fields off the stored record.
@@ -60,9 +53,11 @@ function outcomeLabel(ctx, outcome) {
  * Record the `check.resolved` receipt batch emitted by the narrative engine.
  * The payload carries ALL checks of the turn in one `checks` array because
  * emit-event dedupes by topic per turn — a second emission would be dropped.
- * Defensive at the trust boundary: emit-event validates payloads against the
- * event schema, and this handler additionally proves each receipt against the
- * immutable pre-rolled pool and the deterministic check rules.
+ * A receipt holds what the narrative decided: the action, the attribute, the
+ * modifier, the difficulty, and the outcome it wrote. The die is not in it:
+ * this handler takes the turn's dice in order, calculates the DC, the total
+ * and the outcome by the rules, and records a check only when the outcome
+ * the narrative wrote is the one the dice give.
  *
  * @param {RecorderContext} ctx
  */
@@ -89,17 +84,21 @@ export default async function handler(ctx) {
   const previousChecks = await readTurnChecks(ctx);
   const dice = await readDicePool(ctx);
   const records = [];
+  let skipped = 0;
   for (const raw of rawChecks) {
-    const expectedRoll = dice[previousChecks.length + records.length];
+    const expectedRoll = dice[previousChecks.length + records.length + skipped];
     if (expectedRoll === undefined) break;
     const record = parseCheck(raw, expectedRoll);
-    if (record !== null) records.push(record);
+    // A die is used by its check even when the receipt is wrong, so that
+    // the checks after it keep their own dice.
+    if (record === null) skipped += 1;
+    else records.push(record);
   }
   if (records.length === 0) {
     return {
       outcome: "failed",
       error:
-        "The reported check could not be verified against this turn's dice and rules. No check was recorded. The roll, modifier, total, difficulty, DC, and outcome must agree.",
+        "The reported check could not be verified against this turn's dice and rules. No check was recorded. The outcome must be the one that the turn's dice give for the reported modifier and difficulty.",
     };
   }
 
@@ -113,7 +112,7 @@ export default async function handler(ctx) {
       outcomeLabel: outcomeLabel(ctx, record.outcome),
       outcomeColor: presentation.color,
       critical: presentation.critical,
-      rollText: buildRollText(record),
+      rollText: rollText(record),
     };
   });
   return {
@@ -143,75 +142,32 @@ export default async function handler(ctx) {
 }
 
 /**
- * Validate and normalize the event payload. Returns null when a required
- * field is missing, malformed, or inconsistent with the pre-rolled die and
- * deterministic check rules.
+ * The record of one reported check, or null when the receipt is malformed or
+ * its outcome is not the one that this check's die gives.
  *
  * @param {unknown} data
- * @param {number} expectedRoll
+ * @param {number} roll The die of this check, from the pre-rolled pool.
  */
-function parseCheck(data, expectedRoll) {
+function parseCheck(data, roll) {
   if (!data || typeof data !== "object") return null;
   const payload = /** @type {Record<string, unknown>} */ (data);
 
   const action =
     typeof payload.action === "string" ? payload.action.trim() : "";
-  const roll = asInteger(payload.roll);
-  const modifier = asInteger(payload.modifier);
-  const dc = asInteger(payload.dc);
-  const difficulty =
-    typeof payload.difficulty === "string" &&
-    Object.hasOwn(DIFFICULTY_DCS, payload.difficulty)
-      ? payload.difficulty
-      : null;
-  const total = asInteger(payload.total);
-  const outcome = OUTCOMES.has(payload.outcome) ? payload.outcome : null;
   if (
     !action ||
-    roll !== expectedRoll ||
-    modifier === null ||
-    dc === null ||
-    difficulty === null ||
-    dc !== DIFFICULTY_DCS[difficulty] ||
-    total !== roll + modifier
-  ) {
+    !isModifier(payload.modifier) ||
+    !isDifficulty(payload.difficulty)
+  )
     return null;
-  }
-  if (!outcome || outcome !== expectedOutcome(roll, total, dc)) return null;
+  const result = resolveCheck(roll, payload.modifier, payload.difficulty);
+  if (payload.outcome !== result.outcome) return null;
 
-  const record = { action, roll, modifier, dc, difficulty, total, outcome };
+  const record = { action, ...result };
   if (typeof payload.attribute === "string" && payload.attribute.trim()) {
     record.attribute = payload.attribute.trim();
   }
   return record;
-}
-
-/** @param {number} roll @param {number} total @param {number} dc */
-function expectedOutcome(roll, total, dc) {
-  if (roll === 20) return "critical-success";
-  if (roll === 1) return "critical-failure";
-  return total >= dc ? "success" : "failure";
-}
-
-/** @param {unknown} value */
-function asInteger(value) {
-  return Number.isInteger(value) ? /** @type {number} */ (value) : null;
-}
-
-/**
- * Human-readable roll expression, e.g. "14 + 3 = 17 vs DC 12". Modifier and
- * DC render only when the receipt carried them.
- *
- * @param {{ roll: number, modifier?: number, total: number, dc?: number }} record
- */
-function buildRollText(record) {
-  const modifier = record.modifier;
-  const base =
-    modifier === undefined
-      ? `${record.roll}`
-      : `${record.roll} ${modifier >= 0 ? "+" : "-"} ${Math.abs(modifier)}`;
-  const vs = record.dc === undefined ? "" : ` vs DC ${record.dc}`;
-  return `${base} = ${record.total}${vs}`;
 }
 
 /**
