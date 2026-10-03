@@ -208,6 +208,33 @@ describe("locale registry", () => {
   });
 });
 
+describe("resolveI18nDeep", () => {
+  it("does not mistake field names that are also language codes for a locale map", () => {
+    // `id` is Indonesian, `to` Tongan, `no` Norwegian, `is` Icelandic.
+    const data = {
+      ref: { id: "torn-letter" },
+      route: { to: "harbor", no: "7" },
+      title: { "zh-CN": "状态", "en-US": "Status" },
+      label: { zh: "行囊", en: "Inventory" },
+    };
+    expect(resolveI18nDeep(data, "en-US")).toEqual({
+      ref: { id: "torn-letter" },
+      route: { to: "harbor", no: "7" },
+      title: "Status",
+      label: "Inventory",
+    });
+  });
+
+  it("still reads a map of other languages when one key has a region", () => {
+    expect(
+      resolveI18nDeep(
+        { name: { "ja-JP": "霧の港", ko: "안개 항구" } },
+        "ja-JP",
+      ),
+    ).toEqual({ name: "霧の港" });
+  });
+});
+
 describe("localizedWorldText", () => {
   const world = {
     name: "雾港",
