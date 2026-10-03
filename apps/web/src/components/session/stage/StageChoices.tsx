@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useChoiceHotkeys } from "@/hooks/use-choice-hotkeys.js";
 import {
   mergeChoices,
   type StageChoiceItem,
@@ -43,8 +44,8 @@ const STAGGER_STEP_MS = 60;
 const TWO_COLUMN_GROUP_SIZE = 4;
 
 // Category labels arrive as localized display text with no semantic key.
-// Cycling the four hues keeps adjacent suggestions visually distinguishable.
-const CATEGORY_HUES = 4;
+// Cycling four tones keeps adjacent suggestions visually distinguishable.
+const CATEGORY_TONES = ["info", "success", "warning", "primary"] as const;
 
 export function StageChoices({
   extensions,
@@ -59,6 +60,8 @@ export function StageChoices({
 }: StageChoicesProps): ReactElement | null {
   const { t } = useTranslation();
   const [draft, setDraft] = useState("");
+  const [optionsEl, setOptionsEl] = useState<HTMLElement | null>(null);
+  useChoiceHotkeys(optionsEl, visible && !executing);
   const { items, groups, context } = mergeChoices(
     interactionChoices,
     suggestions,
@@ -166,7 +169,13 @@ export function StageChoices({
           </div>
 
           {groups.length > 0 && (
-            <div className="px-3 py-3">
+            // One numbering for the whole panel, matching the number keys.
+            <div
+              ref={setOptionsEl}
+              className="px-3 py-3"
+              data-choice-scope=""
+              data-turn-current="true"
+            >
               <div className="space-y-3">
                 {groups.map((group) => (
                   <div key={group.id}>
@@ -176,11 +185,11 @@ export function StageChoices({
                       </p>
                     )}
                     <div
+                      role="group"
                       className={clsx(
-                        "grid gap-1.5",
-                        group.items.length >= TWO_COLUMN_GROUP_SIZE
-                          ? "sm:grid-cols-2"
-                          : "grid-cols-1",
+                        "ui-choice-list",
+                        group.items.length >= TWO_COLUMN_GROUP_SIZE &&
+                          "sm:grid sm:grid-cols-2",
                       )}
                     >
                       {group.items.map((item) => {
@@ -195,26 +204,30 @@ export function StageChoices({
                                 !onSubmitInteraction)
                             }
                             onClick={() => handleSelect(item)}
-                            className="ui-stage-choice-item min-h-11 rounded-(--radius-control) border border-border/60 bg-background/35 px-3.5 py-2 text-left text-sm transition-colors hover:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50"
+                            // The same option hooks as the text view, so the
+                            // active style scheme draws both alike.
+                            className="ui-choice ui-stage-choice-item"
+                            data-tone={
+                              CATEGORY_TONES[index % CATEGORY_TONES.length]
+                            }
                             style={{
                               animationDelay: `${index * STAGGER_STEP_MS}ms`,
                             }}
                           >
-                            <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                              <span className="min-w-0 flex-1">
+                            <span
+                              aria-hidden="true"
+                              className="ui-choice-index"
+                            />
+                            <span className="ui-choice-content">
+                              <span className="ui-choice-title">
                                 {item.label}
                               </span>
-                              {item.description && (
-                                <span
-                                  className={clsx(
-                                    "ui-stage-cat ml-auto shrink-0",
-                                    `ui-stage-cat-${index % CATEGORY_HUES}`,
-                                  )}
-                                >
-                                  {item.description}
-                                </span>
-                              )}
                             </span>
+                            {item.description && (
+                              <span className="ui-choice-eyebrow">
+                                {item.description}
+                              </span>
+                            )}
                           </button>
                         );
                       })}

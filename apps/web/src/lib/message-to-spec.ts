@@ -297,7 +297,9 @@ function formToSpecDisabled(
 }
 
 /**
- * Convert a choice block to a json-render nested spec.
+ * Convert a choice block to a json-render nested spec: the prompt, then the
+ * options as a `ChoiceList`, so they look and behave like every other set of
+ * options in the active style scheme.
  */
 function choiceToSpec(data: Record<string, unknown>): NestedSpec {
   const prompt = (data.prompt as string) ?? "";
@@ -315,18 +317,22 @@ function choiceToSpec(data: Record<string, unknown>): NestedSpec {
     });
   }
 
-  for (const choice of choices) {
-    children.push({
-      type: "Button",
-      props: { label: choice.label, variant: "default" },
+  children.push({
+    type: "ChoiceList",
+    children: choices.map((choice) => ({
+      type: "Choice",
+      props: {
+        title: choice.label,
+        ...(choice.description ? { description: choice.description } : {}),
+      },
       on: {
         click: {
           action: "selectChoice",
           params: { choiceId: choice.id, label: choice.label },
         },
       },
-    });
-  }
+    })),
+  });
 
   return {
     type: "Stack",

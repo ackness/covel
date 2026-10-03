@@ -128,7 +128,14 @@ describe("CandidateList", () => {
   it("accepts a candidate through the branch-reply runtime contract", async () => {
     renderBranchReply(candidateSet);
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Accept" })[1]);
+    // Each variant is one option button; choosing it accepts that version.
+    const options = screen.getAllByRole("button", { name: /Accept$/ });
+    expect(options.map((option) => option.className)).toEqual([
+      "ui-choice",
+      "ui-choice",
+    ]);
+    expect(options[1]!.textContent).toContain("Wait and watch the guard.");
+    fireEvent.click(options[1]!);
 
     await waitFor(() => {
       expect(postPluginRpc).toHaveBeenCalledWith("sess-branch", {
@@ -180,7 +187,7 @@ describe("CandidateList", () => {
     // candidate card here. Regenerate stays available; the hint is shown.
     expect(screen.queryByText("The seeded narrator reply text.")).toBeNull();
     expect(screen.getByRole("button", { name: "Regenerate" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Accept$/ })).toBeNull();
   });
 
   it("disables runtime actions when the message state has no turn id", () => {
@@ -189,7 +196,7 @@ describe("CandidateList", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: "Accept" }).hasAttribute("disabled"),
+      screen.getByRole("button", { name: /Accept$/ }).hasAttribute("disabled"),
     ).toBe(true);
   });
 

@@ -125,76 +125,68 @@ export const CandidateList: ComponentRenderer = ({ element }) => {
           )}
         </p>
       )}
-      <div className="space-y-1.5">
-        {variants.map((candidate, index) => {
+      {/* Each variant is an option: choosing it accepts that version of the
+          reply. Drafting or sending its text stays a secondary action. */}
+      <div role="group" className="ui-choice-list">
+        {variants.map((candidate) => {
           const accepted = candidate.id === acceptedCandidateId;
+          const details = (data?.detailFields ?? [])
+            .map((field) => resolvePath(candidate.row, field))
+            .filter(Boolean)
+            .join(" · ");
           return (
-            <div
-              key={candidate.id}
-              className={clsx(
-                "border border-border bg-background/70 px-3 py-2.5 space-y-2",
-                accepted && "border-primary/50 bg-primary/5",
-              )}
-            >
-              <div className="flex items-start gap-2">
-                <span className="font-mono text-[10px] text-muted-foreground/70 pt-0.5">
-                  {index + 1}
+            <div key={candidate.id} className="ui-choice-row">
+              <button
+                type="button"
+                className="ui-choice"
+                onClick={() =>
+                  void invokeAction("accept", data?.acceptAction, candidate)
+                }
+                disabled={
+                  !sessionId || !data?.acceptAction || pendingAction !== null
+                }
+                aria-pressed={accepted}
+                aria-busy={pendingAction === "accept" || undefined}
+                data-selected={accepted ? "true" : undefined}
+              >
+                <span aria-hidden="true" className="ui-choice-index" />
+                <span className="ui-choice-content">
+                  <span className="ui-choice-title whitespace-pre-wrap">
+                    {candidate.content}
+                  </span>
                 </span>
-                <p className="flex-1 whitespace-pre-wrap text-[13px] leading-[1.55] text-foreground">
-                  {candidate.content}
-                </p>
-                {accepted && (
-                  <Check className="w-3.5 h-3.5 shrink-0 text-primary mt-0.5" />
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 pl-5">
+                <span className="ui-choice-eyebrow inline-flex items-center gap-1">
+                  {pendingAction === "accept" ? (
+                    <Loader2
+                      aria-hidden="true"
+                      className="h-3 w-3 animate-spin"
+                    />
+                  ) : (
+                    accepted && <Check aria-hidden="true" className="h-3 w-3" />
+                  )}
+                  {acceptLabel}
+                </span>
+              </button>
+              <div className="ui-choice-actions flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => draftCandidate(candidate)}
-                  className="font-medium rounded-(--radius-control) transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-transparent text-muted-foreground border border-dashed border-border hover:border-foreground/40 hover:text-foreground"
+                  className="ui-btn ui-btn-quiet h-7 px-2 text-[11px] text-muted-foreground"
                 >
                   {draftLabel}
                 </button>
                 <button
                   type="button"
                   onClick={() => sendCandidate(candidate)}
-                  className="font-medium rounded-(--radius-control) transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-transparent text-foreground border border-border hover:border-foreground/40 hover:bg-foreground/5"
+                  className="ui-btn ui-btn-quiet h-7 px-2 text-[11px] text-muted-foreground"
                 >
                   {sendLabel}
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void invokeAction("accept", data?.acceptAction, candidate)
-                  }
-                  disabled={
-                    !sessionId || !data?.acceptAction || pendingAction !== null
-                  }
-                  aria-busy={pendingAction === "accept" || undefined}
-                  className={clsx(
-                    "font-medium rounded-(--radius-control) transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] border",
-                    accepted
-                      ? "bg-foreground text-(--surface-page) border-foreground hover:bg-foreground/90"
-                      : "bg-transparent text-muted-foreground border-dashed border-border hover:border-foreground/40 hover:text-foreground",
-                    pendingAction !== null && "opacity-70 cursor-progress",
-                  )}
-                >
-                  {pendingAction === "accept" && (
-                    <Loader2
-                      aria-hidden="true"
-                      className="w-3 h-3 animate-spin"
-                    />
-                  )}
-                  {acceptLabel}
-                </button>
-                {data?.detailFields?.length ? (
+                {details && (
                   <span className="font-mono text-[9px] text-muted-foreground/60">
-                    {data.detailFields
-                      .map((field) => resolvePath(candidate.row, field))
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {details}
                   </span>
-                ) : null}
+                )}
               </div>
             </div>
           );

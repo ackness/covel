@@ -11,24 +11,12 @@
  */
 
 import type { ComponentRenderer } from "@json-render/react";
-import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
 import { Loader2 } from "lucide-react";
-import {
-  resolveActionParams,
-  matchesPendingDraft,
-} from "../interaction-selection.js";
-import { useSession } from "@/stores/session-store.js";
 import { useI18nResolver } from "./helpers.js";
+import { useActionFeedback } from "./use-action-feedback.js";
 
 // ── Button ────────────────────────────────────────────────────────
-// Kept here: complex standalone, references session store + selection state.
-
-const invocationParams = new Map<string, readonly [string, string]>([
-  ["invokeRuntime", ["runtime", "runtimeId"]],
-  ["invokePluginAction", ["action", "action"]],
-  ["invokeCommand", ["command", "command"]],
-]);
 
 export const Button: ComponentRenderer = ({ element, emit }) => {
   const resolve = useI18nResolver();
@@ -36,44 +24,7 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
   const variant = (element.props?.variant as string) ?? "default";
   const size = (element.props?.size as string) ?? "md";
 
-  // ── Selection feedback for plugin-declared interactions ────────────
-  //
-  // When the user clicks a plugin-supplied button whose action stashes a
-  // pending draft (draftMessage / selectChoice / etc.), we echo the choice
-  // back visually so the player can see what they picked. The match is
-  // framework-neutral: we only inspect the click binding's params and the
-  // active drafts; no plugin IDs anywhere.
-  const { state } = useSession();
-  const pendingDrafts = state.pendingInteractionDrafts;
-  const { get: getState } = useStateStore();
-
-  // ── In-flight feedback for plugin-rpc dispatch ─────────────────────
-  //
-  // PluginPanel writes `/_invoking/<key>` whenever an `invokeRuntime`,
-  // `invokePluginAction`, or `invokeCommand` click is mid-flight. The binding
-  // tells us which key it would set, so we can show a spinner exactly on
-  // the button that fired the action — no risk of dimming the whole panel.
-  const invokingMap =
-    (getState("/_invoking") as Record<string, boolean> | undefined) ?? {};
-  const click = element.on?.click;
-  const bindings = click ? (Array.isArray(click) ? click : [click]) : [];
-  let isSelected = false;
-  let isPending = false;
-  // `getState` is stable even when the store changes. Resolve dynamic action
-  // params on each render so both feedback states track the current snapshot.
-  for (const binding of bindings) {
-    const resolved = resolveActionParams(
-      binding.params as Record<string, unknown> | undefined,
-      getState,
-    );
-    isSelected ||= matchesPendingDraft(resolved, pendingDrafts);
-    const invocation = invocationParams.get(binding.action);
-    if (invocation) {
-      const [kind, param] = invocation;
-      const id = resolved[param];
-      isPending ||= typeof id === "string" && !!invokingMap[`${kind}:${id}`];
-    }
-  }
+  const { isSelected, isPending } = useActionFeedback(element.on?.click);
 
   const Loader = Loader2;
 
