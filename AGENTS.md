@@ -57,12 +57,14 @@ pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
 pnpm stop             # kill stray dev/turbo processes
 pnpm check            # the CI static gate: peers, lint, package boundaries, deps:check,
-                      # plugin manifests, i18n, script regressions, actionlint
+                      # plugin manifests, schema reference, i18n, script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
+pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
+                      # from the Zod schemas; run after changing an author-facing schema field
 pnpm validate:plugin  # validate PLUGIN.md manifests; a plugin DIR also gets cross-runtime checks
 pnpm validate:world   # validate world packages: pnpm validate:world worlds/<id>
 pnpm validate:collection  # static check of a covel-collection.yaml directory (docs/guide/collections.md)

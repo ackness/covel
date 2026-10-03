@@ -7,9 +7,10 @@ import {
   runtimeManifestAuthoringSchema,
 } from "../src/schemas/plugin.js";
 import {
+  AUTHOR_SCHEMA_NAMES,
   buildManifestJsonSchemas,
   schemaOutputPath,
-} from "../scripts/generate-plugin-json-schemas.js";
+} from "../scripts/generate-json-schemas.js";
 
 // ── Ajv compiled from the committed JSON Schema artifacts ────────────
 // Fixtures are asserted against BOTH the Zod schema and the generated JSON
@@ -588,16 +589,67 @@ describe("runtimeManifestAuthoringSchema (strict authoring)", () => {
   }
 });
 
+type JsonNode = Record<string, unknown>;
+
+function isNode(value: unknown): value is JsonNode {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Paths of every property in a JSON Schema that has no description. */
+function undescribedProperties(root: JsonNode): string[] {
+  const missing: string[] = [];
+  const visited = new Set<JsonNode>();
+  const definitions = isNode(root.definitions) ? root.definitions : {};
+  function visit(node: unknown, path: string): void {
+    if (!isNode(node)) return;
+    if (typeof node.$ref === "string") {
+      const target = definitions[node.$ref.split("/").pop() ?? ""];
+      if (isNode(target) && !visited.has(target)) {
+        visited.add(target);
+        visit(target, path);
+      }
+      return;
+    }
+    for (const keyword of ["anyOf", "allOf", "oneOf"]) {
+      const branches = node[keyword];
+      if (Array.isArray(branches))
+        for (const branch of branches) visit(branch, path);
+    }
+    if (isNode(node.properties)) {
+      for (const [key, property] of Object.entries(node.properties)) {
+        const propertyPath = path ? `${path}.${key}` : key;
+        if (!isNode(property) || typeof property.description !== "string")
+          missing.push(propertyPath);
+        visit(property, propertyPath);
+      }
+    }
+    visit(node.items, `${path}[]`);
+    visit(node.additionalProperties, `${path}.*`);
+  }
+  visit(root, "");
+  return missing;
+}
+
 describe("generated JSON Schema artifacts", () => {
   it("committed files are in sync with the generator (no drift)", () => {
     const generated = buildManifestJsonSchemas();
-    expect(JSON.parse(readFileSync(schemaOutputPath("input"), "utf8"))).toEqual(
-      generated.input,
-    );
-    expect(
-      JSON.parse(readFileSync(schemaOutputPath("authoring"), "utf8")),
-    ).toEqual(generated.authoring);
+    for (const name of Object.keys(generated) as (keyof typeof generated)[]) {
+      expect(
+        JSON.parse(readFileSync(schemaOutputPath(name), "utf8")),
+        `${name}: run \`pnpm --filter @covel/shared generate:schemas\``,
+      ).toEqual(generated[name]);
+    }
   });
+
+  // The author-facing schemas feed editor hints and the generated reference
+  // pages, so a field without a description is a field nobody can look up.
+  for (const name of AUTHOR_SCHEMA_NAMES) {
+    it(`every ${name} field carries a description`, () => {
+      expect(undescribedProperties(buildManifestJsonSchemas()[name])).toEqual(
+        [],
+      );
+    });
+  }
 
   it("both artifacts compile under Ajv v8 (draft-7)", () => {
     // compileCommitted throws on an invalid schema; reaching here is the assert.

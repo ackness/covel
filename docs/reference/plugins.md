@@ -26,10 +26,12 @@ example/
 
 所有 `PLUGIN.md`、`RUNTIME.md` 及其语言变体必须使用以独立 `---` 行包围的普通 YAML frontmatter。加载器在解析前拒绝 `---javascript`、`---js` 等 engine 指令；安装、手动放入目录和重载均不能通过元数据执行代码。
 
-作者 JSON Schema：
+作者 JSON Schema 与逐字段说明（由 Zod schema 生成，不手工维护）：
 
-- [plugin-manifest.schema.json](../../packages/shared/schemas/plugin-manifest.schema.json)
-- [runtime-manifest.schema.json](../../packages/shared/schemas/runtime-manifest.schema.json)
+- [plugin-manifest.schema.json](../../packages/shared/schemas/plugin-manifest.schema.json) · [字段表](schema/plugin-manifest.md)
+- [runtime-manifest.schema.json](../../packages/shared/schemas/runtime-manifest.schema.json) · [字段表](schema/runtime-manifest.md)
+
+本页下方的表格只概括各组字段的用途；合法字段、类型、是否必填和取值以生成的字段表为准。
 
 TypeScript 校验入口从 `@covel/shared` 导入：`pluginManifestSchema` 校验包清单，`runtimeAuthoringManifestSchema` 校验作者 runtime。用于组合完整校验器的输入/输出配置、命令参数、投影项和绑定引用等细粒度 schema 属于内部实现，不再单独从包入口导出。
 

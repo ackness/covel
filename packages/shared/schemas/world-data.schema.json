@@ -1,0 +1,109 @@
+{
+  "$id": "https://covel.local/schemas/world-data.schema.json",
+  "title": "Covel world data descriptor",
+  "description": "The descriptor a world names in `worldData`, usually `data/world.data.yaml`.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1,
+      "description": "Descriptor format version."
+    },
+    "sources": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-zA-Z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["yaml", "json", "markdown", "text", "media"],
+            "description": "Reader type. `media` reads a directory of media files."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "File or directory, relative to the world root. A variant `<name>.<locale>.<ext>` is used when it exists for the session locale.",
+            "examples": ["characters/main-cast.json"]
+          },
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Schema that validates the content: `covel://world/dimensions`, `contract:<contractId>`, or a local JSON Schema path.",
+            "examples": ["contract:character.blueprints@1"]
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Destination: `world:metadata.<path>`, `contract:<contractId>`, `contract:<contractId>+lorebook`, `lorebook`, `characters` or `media`.",
+            "examples": ["contract:character.blueprints@1", "characters"]
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Field that gives each record a stable key. Media sources use `filename`.",
+            "examples": ["id"]
+          },
+          "indexTo": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Media sources only: the `contract:<contractId>` that receives the media index. Without an active receiver the media bytes are not imported."
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["characters", "projections"]
+            },
+            "description": "Extra projections. `characters` instantiates characters; `projections` runs the pure projections that active plugins declare."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "`false` skips this source."
+          },
+          "locale": {
+            "type": "string",
+            "minLength": 2,
+            "description": "Language of the content in this source. Metadata only; it does not select a locale variant."
+          },
+          "merge": {
+            "type": "string",
+            "enum": ["replace", "skipExisting"],
+            "description": "Policy when a record already exists."
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-zA-Z0-9_-]{0,63}$"
+              },
+              {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-zA-Z0-9_-]{0,63}$"
+                }
+              }
+            ],
+            "description": "Source ID or IDs that must import first."
+          },
+          "visibility": {
+            "type": "string",
+            "enum": ["public", "hidden"],
+            "description": "`hidden` imports into the receiving plugin's hidden namespace. The data stays out of prompts and player-visible surfaces until the plugin reveals it. Requires a `contract:` destination. Defaults to `public`."
+          }
+        },
+        "required": ["kind", "path", "to"],
+        "additionalProperties": false
+      },
+      "description": "Data sources keyed by source ID. A source ID starts with a letter and uses letters, digits, `_` or `-`."
+    }
+  },
+  "required": ["schemaVersion", "sources"],
+  "additionalProperties": false
+}

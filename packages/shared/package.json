@@ -32,7 +32,7 @@
   "scripts": {
     "lint": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "generate:schemas": "tsx scripts/generate-plugin-json-schemas.ts",
+    "generate:schemas": "tsx scripts/generate-json-schemas.ts",
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "devDependencies": {

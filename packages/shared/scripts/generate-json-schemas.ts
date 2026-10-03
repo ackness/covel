@@ -1,10 +1,20 @@
 /**
- * Generate JSON Schema (draft-7) for the two runtime-manifest Zod schemas using
+ * Generate JSON Schema (draft-7) for the author-facing Zod schemas using
  * Zod 4's built-in `z.toJSONSchema` — no `zod-to-json-schema` dependency.
  *
- * Two artifacts are emitted into `packages/shared/schemas/` and committed:
- *   - `runtime-manifest.input.schema.json`     (compat superset)
- *   - `runtime-manifest.authoring.schema.json` (strict authoring target)
+ * Artifacts are emitted into `packages/shared/schemas/` and committed:
+ *   - `plugin-manifest.schema.json`            (root PLUGIN.md frontmatter)
+ *   - `runtime-manifest.schema.json`           (RUNTIME.md / inline runtime)
+ *   - `world-manifest.schema.json`             (world.yaml)
+ *   - `world-data.schema.json`                 (world data descriptor)
+ *   - `world-dimensions.schema.json`           (external dimension files)
+ *   - `runtime-manifest.input.schema.json`     (compiled loader input)
+ *   - `runtime-manifest.authoring.schema.json` (compiled strict target)
+ *
+ * The first five are what authors write. Their field descriptions come from
+ * `.describe()` / `.meta()` on the Zod schemas, which makes those schemas the
+ * single source for editor hints and for the generated reference pages under
+ * `docs/reference/schema/`.
  *
  * The generator is exported (`buildManifestJsonSchemas`) so the drift test can
  * regenerate in-memory and compare against the committed files. Running this
@@ -27,8 +37,11 @@ import {
   runtimeManifestAuthoringSchema,
 } from "../src/schemas/plugin.js";
 
+import { worldDimensionsSchema } from "../src/schemas/dimensions.js";
 import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
 import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
+import { worldDataDescriptorSchema } from "../src/schemas/world-data.js";
+import { worldManifestSchema } from "../src/schemas/world.js";
 
 const TO_JSON_SCHEMA_OPTIONS = {
   target: "draft-7",
@@ -120,21 +133,86 @@ function restoreRepresentableConstraints(
   if (outputs) outputs.minProperties = 1;
 }
 
-export function buildManifestJsonSchemas(): {
-  readonly plugin: Record<string, unknown>;
-  readonly runtime: Record<string, unknown>;
-  readonly input: Record<string, unknown>;
-  readonly authoring: Record<string, unknown>;
-} {
+/**
+ * The files an author writes. Every property in these schemas must carry a
+ * description; the drift test enforces it.
+ */
+const AUTHOR_SCHEMAS = {
+  plugin: {
+    schema: pluginManifestSchema,
+    file: "plugin-manifest.schema.json",
+    title: "Plugin manifest",
+    summary: "Frontmatter of a package's root `PLUGIN.md`.",
+  },
+  runtime: {
+    schema: runtimeAuthoringManifestSchema,
+    file: "runtime-manifest.schema.json",
+    title: "Runtime manifest",
+    summary:
+      "Frontmatter of `runtimes/<id>/RUNTIME.md`, and the inline `runtime` of a root `PLUGIN.md`.",
+  },
+  world: {
+    schema: worldManifestSchema,
+    file: "world-manifest.schema.json",
+    title: "World manifest",
+    summary: "The `world.yaml` at the root of a world package.",
+  },
+  worldData: {
+    schema: worldDataDescriptorSchema,
+    file: "world-data.schema.json",
+    title: "World data descriptor",
+    summary:
+      "The descriptor a world names in `worldData`, usually `data/world.data.yaml`.",
+  },
+  worldDimensions: {
+    schema: worldDimensionsSchema,
+    file: "world-dimensions.schema.json",
+    title: "World dimensions",
+    summary:
+      "A file of dimension definitions keyed by dimension ID, usually `data/dimensions.yaml`.",
+  },
+} as const satisfies Record<
+  string,
+  {
+    readonly schema: z.ZodType;
+    readonly file: string;
+    readonly title: string;
+    readonly summary: string;
+  }
+>;
+
+export type AuthorSchemaName = keyof typeof AUTHOR_SCHEMAS;
+export type SchemaArtifactName = AuthorSchemaName | "input" | "authoring";
+
+export const AUTHOR_SCHEMA_NAMES = Object.keys(
+  AUTHOR_SCHEMAS,
+) as readonly AuthorSchemaName[];
+
+function toAuthorJsonSchema(name: AuthorSchemaName): Record<string, unknown> {
+  const { schema, file, title, summary } = AUTHOR_SCHEMAS[name];
+  const generated = z.toJSONSchema(schema, TO_JSON_SCHEMA_OPTIONS) as Record<
+    string,
+    unknown
+  >;
+  restoreRepresentableConstraints(generated);
   return {
-    plugin: z.toJSONSchema(
-      pluginManifestSchema,
-      TO_JSON_SCHEMA_OPTIONS,
-    ) as Record<string, unknown>,
-    runtime: z.toJSONSchema(
-      runtimeAuthoringManifestSchema,
-      TO_JSON_SCHEMA_OPTIONS,
-    ) as Record<string, unknown>,
+    $id: `https://covel.local/schemas/${file}`,
+    title: `Covel ${title.toLowerCase()}`,
+    description: summary,
+    ...generated,
+  };
+}
+
+export function buildManifestJsonSchemas(): Record<
+  SchemaArtifactName,
+  Record<string, unknown>
+> {
+  return {
+    plugin: toAuthorJsonSchema("plugin"),
+    runtime: toAuthorJsonSchema("runtime"),
+    world: toAuthorJsonSchema("world"),
+    worldData: toAuthorJsonSchema("worldData"),
+    worldDimensions: toAuthorJsonSchema("worldDimensions"),
     input: toDocumentedJsonSchema(runtimeManifestInputSchema, INPUT_DOC),
     authoring: toDocumentedJsonSchema(
       runtimeManifestAuthoringSchema,
@@ -144,40 +222,25 @@ export function buildManifestJsonSchemas(): {
 }
 
 /** Path of a committed schema artifact, relative to this script. */
-export function schemaOutputPath(
-  name: "input" | "authoring" | "plugin" | "runtime",
-): string {
-  return fileURLToPath(
-    new URL(
-      name === "plugin" || name === "runtime"
-        ? `../schemas/${name}-manifest.schema.json`
-        : `../schemas/runtime-manifest.${name}.schema.json`,
-      import.meta.url,
-    ),
-  );
+export function schemaOutputPath(name: SchemaArtifactName): string {
+  const file =
+    name === "input" || name === "authoring"
+      ? `runtime-manifest.${name}.schema.json`
+      : AUTHOR_SCHEMAS[name].file;
+  return fileURLToPath(new URL(`../schemas/${file}`, import.meta.url));
 }
 
 function main(): void {
-  const { input, authoring, plugin, runtime } = buildManifestJsonSchemas();
-  writeFileSync(
-    schemaOutputPath("plugin"),
-    `${JSON.stringify(plugin, null, 2)}\n`,
-  );
-  writeFileSync(
-    schemaOutputPath("runtime"),
-    `${JSON.stringify(runtime, null, 2)}\n`,
-  );
-  writeFileSync(
-    schemaOutputPath("input"),
-    `${JSON.stringify(input, null, 2)}\n`,
-  );
-  writeFileSync(
-    schemaOutputPath("authoring"),
-    `${JSON.stringify(authoring, null, 2)}\n`,
-  );
+  const schemas = buildManifestJsonSchemas();
+  for (const name of Object.keys(schemas) as SchemaArtifactName[]) {
+    writeFileSync(
+      schemaOutputPath(name),
+      `${JSON.stringify(schemas[name], null, 2)}\n`,
+    );
+  }
   // eslint-disable-next-line no-console
   console.log(
-    "[generate:schemas] wrote runtime-manifest.{input,authoring}.schema.json",
+    `[generate:schemas] wrote ${Object.keys(schemas).length} schema files`,
   );
 }
 

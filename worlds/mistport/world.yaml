@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 schemaVersion: "1.0"
 id: mistport
 name:

@@ -7,15 +7,41 @@
 import { z } from "zod";
 
 export const extensionDeclarationSchema = z.strictObject({
-  point: z.string().regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/),
-  id: z.string().regex(/^[a-zA-Z0-9][\w.-]*$/),
-  order: z.number().int().optional(),
+  point: z
+    .string()
+    .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/)
+    .meta({
+      description: "Extension point this entry provides.",
+      examples: ["prompt.segment@1"],
+    }),
+  id: z
+    .string()
+    .regex(/^[a-zA-Z0-9][\w.-]*$/)
+    .describe("ID of this extension within the package."),
+  order: z
+    .number()
+    .int()
+    .describe(
+      "Sort order among providers of the same point. Lower values come first. Defaults to 0.",
+    )
+    .optional(),
   slot: z
     .string()
     .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/)
+    .describe("UI slot providers only: the kernel UI slot this entry fills.")
     .optional(),
-  watch: z.array(z.string().min(1)).optional(),
-  preview: z.array(z.string().min(1)).optional(),
+  watch: z
+    .array(z.string().min(1))
+    .describe(
+      "UI slot providers only: own data namespaces whose changes refresh the slot.",
+    )
+    .optional(),
+  preview: z
+    .array(z.string().min(1))
+    .describe(
+      "UI slot providers only: event topics whose in-turn preview refreshes the slot.",
+    )
+    .optional(),
 });
 import { HOOK_EVENTS } from "../types/hooks.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
@@ -102,15 +128,45 @@ export const triggerTypeSchema = z.enum([
 
 /** Trigger fields shared by the compat and authoring trigger schemas. */
 const triggerConfigShape = {
-  interval: z.number().int().positive().optional(),
-  topic: z.string().optional(),
-  maxTriggerCount: z.number().int().positive().optional(),
-  cooldownTurns: z.number().int().nonnegative().optional(),
-  startTurn: z.number().int().positive().optional(),
+  interval: z
+    .number()
+    .int()
+    .positive()
+    .describe("Interval in turns. For `scheduled` only.")
+    .optional(),
+  topic: z
+    .string()
+    .describe("Event topic to subscribe to. Required for `event`.")
+    .optional(),
+  maxTriggerCount: z
+    .number()
+    .int()
+    .positive()
+    .describe("Maximum number of triggers in one session.")
+    .optional(),
+  cooldownTurns: z
+    .number()
+    .int()
+    .nonnegative()
+    .describe("Minimum number of turns between two triggers.")
+    .optional(),
+  startTurn: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "First logical turn at which the runtime may trigger. When unset, it triggers as soon as its stage opens.",
+    )
+    .optional(),
 };
 
 export const triggerConfigSchema = z
-  .object({ type: triggerTypeSchema, ...triggerConfigShape })
+  .object({
+    type: triggerTypeSchema.describe(
+      "`auto` runs every turn in its stage. `scheduled` runs every `interval` turns. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted.",
+    ),
+    ...triggerConfigShape,
+  })
   .strict();
 
 /** Authoring trigger config shares the current production trigger shape. */
@@ -159,13 +215,34 @@ export const pluginDataInjectDeclSchema = z
       .regex(/^[a-z][a-z0-9_-]*$/i, {
         message:
           "namespace must be a short identifier (letters, digits, underscore, hyphen)",
+      })
+      .describe(
+        "Own data namespace to inline. Data of other plugins cannot be read.",
+      ),
+    as: z
+      .string()
+      .min(1)
+      .meta({
+        description: "Tag that wraps the injected block in the prompt.",
+        examples: ["<existing-affinity>"],
       }),
-    as: z.string().min(1),
     format: z
       .enum(["summary", "full", "ids-only"])
       .optional()
-      .default("summary"),
-    maxEntries: z.number().int().min(1).max(500).optional().default(50),
+      .default("summary")
+      .describe(
+        "`summary` lists key, update time and truncated JSON. `ids-only` lists keys. `full` lists complete JSON. Defaults to `summary`.",
+      ),
+    maxEntries: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .optional()
+      .default(50)
+      .describe(
+        "Maximum number of entries injected. Above it, half are the oldest and half the most recently updated. Defaults to 50.",
+      ),
   })
   .strict();
 
@@ -240,8 +317,13 @@ export const pluginDataSchemaDeclSchema = z
     namespace: pluginDataNamespaceSchema.optional(),
     schemaVersion: z.number().int().positive(),
     acceptsWorldData: z.boolean(),
-    schema: pluginRelativeJsonSchemaPath,
-    description: z.string().optional(),
+    schema: pluginRelativeJsonSchemaPath.describe(
+      "Package-relative path of the JSON Schema that validates each record.",
+    ),
+    description: z
+      .string()
+      .describe("What the namespace stores. Read by world authors and tools.")
+      .optional(),
   })
   .strict();
 
@@ -271,15 +353,28 @@ export const pluginDataSchemaMapSchema = z
 
 export const toolsConfigSchema = z
   .object({
-    builtin: z.array(z.string()).optional(),
+    builtin: z
+      .array(z.string())
+      .describe("Names of builtin tools the runtime may call.")
+      .optional(),
     /** Names of entry-registered plugin tools this runtime exposes to its LLM. */
-    plugin: z.array(z.string()).optional(),
+    plugin: z
+      .array(z.string())
+      .describe(
+        "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`.",
+      )
+      .optional(),
     /**
      * Deferred tool loading (tool-search). `true` defers the runtime's entire
      * whitelist; a string array defers just those names. Mirrors
      * `ToolsConfig.defer` in types/plugin.ts.
      */
-    defer: z.union([z.literal(true), z.array(z.string())]).optional(),
+    defer: z
+      .union([z.literal(true), z.array(z.string())])
+      .describe(
+        "Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.",
+      )
+      .optional(),
   })
   .strict();
 
@@ -289,11 +384,14 @@ export const toolsConfigSchema = z
 // never re-listed by hand — adding an event there extends this schema for free.
 export const hookDeclarationSchema = z
   .object({
-    event: z.enum(HOOK_EVENTS),
+    event: z.enum(HOOK_EVENTS).describe("Lifecycle event the hook handles."),
     handler: z.string().min(1),
     match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
     timeoutMs: z.number().int().positive().optional(),
-    enforce: z.enum(["pre", "normal", "post"]).optional(),
+    enforce: z
+      .enum(["pre", "normal", "post"])
+      .describe("Phase the hook runs in. Defaults to `normal`.")
+      .optional(),
   })
   .strict();
 
@@ -329,8 +427,12 @@ const worldProjectionKeyFieldSchema = z
 
 const worldProjectionOutputDeclSchema = z
   .object({
-    namespace: pluginDataNamespaceSchema,
-    key: worldProjectionKeyFieldSchema,
+    namespace: pluginDataNamespaceSchema.describe(
+      "Own data namespace that receives the projected records.",
+    ),
+    key: worldProjectionKeyFieldSchema.describe(
+      "Field of each projected record used as its stable key.",
+    ),
   })
   .strict();
 
@@ -342,9 +444,20 @@ const worldProjectionOutputsSchema = z
 
 const worldProjectionDeclSchema = z
   .object({
-    from: z.string().trim().min(1).regex(/\S/),
-    handler: pluginRelativeJsPath,
-    outputs: worldProjectionOutputsSchema,
+    from: z
+      .string()
+      .trim()
+      .min(1)
+      .regex(/\S/)
+      .describe(
+        "Schema URI of the world data source to project. Only sources with exactly this schema are projected.",
+      ),
+    handler: pluginRelativeJsPath.describe(
+      "Package-relative path of the pure projection handler module.",
+    ),
+    outputs: worldProjectionOutputsSchema.describe(
+      "Destinations keyed by output ID. At least one is required.",
+    ),
   })
   .strict();
 
@@ -373,11 +486,24 @@ const pluginEventDeclSchema = z
       .regex(
         EVENT_TOPIC_RE,
         "event topic must be dot-separated kebab-case (domain.verb)",
-      ),
-    schema: pluginRelativeJsonSchemaPath,
-    description: i18nTextLoose,
+      )
+      .meta({
+        description: "Event topic in dot-separated kebab-case.",
+        examples: ["scene.set"],
+      }),
+    schema: pluginRelativeJsonSchemaPath.describe(
+      "Package-relative path of the JSON Schema that validates the event payload.",
+    ),
+    description: i18nTextLoose.describe(
+      "What the event means. Given to runtimes that may emit it.",
+    ),
     /** When true (default) the contract is advertised to emitting runtimes. */
-    advertise: z.boolean().default(true),
+    advertise: z
+      .boolean()
+      .default(true)
+      .describe(
+        "`true` advertises the event to runtimes that emit events. Defaults to `true`.",
+      ),
   })
   .strict();
 
@@ -402,9 +528,18 @@ const pluginTagSchema = z
 
 const uiSpecSchema = z
   .object({
-    right: z.array(z.string().min(1)).optional(),
-    message: z.array(z.string().min(1)).optional(),
-    left: z.array(z.string().min(1)).optional(),
+    right: z
+      .array(z.string().min(1))
+      .describe("Paths of UI specs for right-panel tabs.")
+      .optional(),
+    message: z
+      .array(z.string().min(1))
+      .describe("Paths of UI specs rendered inside the message stream.")
+      .optional(),
+    left: z
+      .array(z.string().min(1))
+      .describe("Paths of UI specs for the left panel.")
+      .optional(),
   })
   .strict();
 
@@ -418,33 +553,44 @@ export const pluginUserSettingSpecSchema = z
       .regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
         message:
           "key must start with a letter and contain only letters/digits/underscore/hyphen",
-      }),
-    type: z.enum([
-      "text",
-      "textarea",
-      "number",
-      "integer",
-      "toggle",
-      "select",
-      "slider",
-      "slot",
-    ]),
+      })
+      .describe("Setting key. Runtimes read it from `ctx.userSettings`."),
+    type: z
+      .enum([
+        "text",
+        "textarea",
+        "number",
+        "integer",
+        "toggle",
+        "select",
+        "slider",
+        "slot",
+      ])
+      .describe(
+        "Control type. `select` needs `options`; `slot` lets the player pick a model slot.",
+      ),
     // zod 4.4: a bare `z.unknown()` field in ANY object (strict or not) is now
     // treated as a required key (4.3 treated it as optional); `.optional()`
     // keeps the field omittable so plugins can declare a setting with no default.
-    default: z.unknown().optional(),
-    label: i18nTextLoose,
-    description: i18nTextLoose.optional(),
-    min: z.number().optional(),
-    max: z.number().optional(),
-    step: z.number().optional(),
+    default: z
+      .unknown()
+      .describe("Value used when neither the player nor the world sets one.")
+      .optional(),
+    label: i18nTextLoose.describe("Label shown in the settings panel."),
+    description: i18nTextLoose
+      .describe("Help text shown with the control.")
+      .optional(),
+    min: z.number().describe("Minimum for numeric controls.").optional(),
+    max: z.number().describe("Maximum for numeric controls.").optional(),
+    step: z.number().describe("Step for numeric controls.").optional(),
     options: z
       .array(
         z.object({
-          value: z.string(),
-          label: i18nTextLoose,
+          value: z.string().describe("Stored value of the option."),
+          label: i18nTextLoose.describe("Label shown for the option."),
         }),
       )
+      .describe("Choices of a `select` control.")
       .optional(),
   })
   .strict();
@@ -463,7 +609,14 @@ export const MAX_SETTLE_WAIT_MS = 120_000;
 
 /** Agent prompt history window, counted in turns of visible history. */
 export const runtimeHistoryPolicySchema = z.strictObject({
-  maxTurns: z.number().int().min(0).max(1000),
+  maxTurns: z
+    .number()
+    .int()
+    .min(0)
+    .max(1000)
+    .describe(
+      "Number of most recent turns kept in the agent's prompt history. `0` sends no history.",
+    ),
 });
 
 /**
@@ -472,18 +625,51 @@ export const runtimeHistoryPolicySchema = z.strictObject({
  */
 export const turnCompletionConfigSchema = z
   .object({
-    mode: z.enum(["await", "detached"]).optional(),
-    settle: z.literal("before-next-execution").optional(),
+    mode: z
+      .enum(["await", "detached"])
+      .describe(
+        "`await` makes the turn wait for this runtime. `detached` lets the turn finish first; it is valid only on `post-turn` and `audit` stages. Defaults to `await`.",
+      )
+      .optional(),
+    settle: z
+      .literal("before-next-execution")
+      .describe(
+        "Makes the next player action wait until this detached runtime settles.",
+      )
+      .optional(),
     maxSettleWaitMs: z
       .number()
       .int()
       .positive()
       .max(MAX_SETTLE_WAIT_MS)
+      .describe(
+        "Longest time in ms the next action waits for settlement. Requires `settle`.",
+      )
       .optional(),
-    maxQueueMs: z.number().int().positive().optional(),
-    maxExecutionMs: z.number().int().positive().optional(),
-    overlap: z.literal("serial").optional(),
-    stalePolicy: z.literal("reject").optional(),
+    maxQueueMs: z
+      .number()
+      .int()
+      .positive()
+      .describe("Longest time in ms a detached job may wait in the queue.")
+      .optional(),
+    maxExecutionMs: z
+      .number()
+      .int()
+      .positive()
+      .describe("Longest time in ms a detached job may run.")
+      .optional(),
+    overlap: z
+      .literal("serial")
+      .describe(
+        "Overlap policy for detached jobs of this runtime. Only `serial` is supported.",
+      )
+      .optional(),
+    stalePolicy: z
+      .literal("reject")
+      .describe(
+        "Policy for a detached job that has become stale. Only `reject` is supported.",
+      )
+      .optional(),
   })
   .strict();
 
@@ -573,12 +759,23 @@ export const effectsDeclSchema = z
     reads: z
       .array(effectResourceSchema)
       .refine(hasUniqueItems, "reads entries must be unique")
+      .describe(
+        "Resources the runtime reads, such as `narrative:*` or `plugin-data:self:<namespace>`. Entries must be unique.",
+      )
       .optional(),
     writes: z
       .array(effectResourceSchema)
       .refine(hasUniqueItems, "writes entries must be unique")
+      .describe(
+        "Resources the runtime writes, such as `state:*` or `event:<topic>`. Entries must be unique.",
+      )
       .optional(),
-    parallelSafe: z.boolean().optional(),
+    parallelSafe: z
+      .boolean()
+      .describe(
+        "`true` states that the runtime is safe to run in parallel with its stage siblings.",
+      )
+      .optional(),
   })
   .strict();
 
@@ -595,20 +792,35 @@ const httpMethodSchema = z.enum([
 
 const httpPermissionDeclSchema = z
   .object({
-    origin: z.string().regex(/^https:\/\/[^/?#@]+$/, {
-      message:
-        "origin must be a canonical https origin (no path, query, or credentials)",
-    }),
+    origin: z
+      .string()
+      .regex(/^https:\/\/[^/?#@]+$/, {
+        message:
+          "origin must be a canonical https origin (no path, query, or credentials)",
+      })
+      .meta({
+        description:
+          "HTTPS origin the runtime may call, without path, query or credentials.",
+        examples: ["https://api.example.com"],
+      }),
     methods: z
       .array(httpMethodSchema)
       .min(1)
       .refine(hasUniqueItems, "methods must be unique")
+      .describe("HTTP methods allowed for the origin. Entries must be unique.")
       .optional(),
   })
   .strict();
 
 export const permissionsDeclSchema = z
-  .object({ http: z.array(httpPermissionDeclSchema).optional() })
+  .object({
+    http: z
+      .array(httpPermissionDeclSchema)
+      .describe(
+        "Upper bound of the HTTP origins and methods the runtime may use.",
+      )
+      .optional(),
+  })
   .strict();
 
 // ── Cross-field constraints ──────────────────────────────────────
@@ -840,17 +1052,23 @@ const runtimeManifestCommonShape = {
    * union here keeps editor tooling (generated JSON Schema) from flagging
    * every I18nText manifest.
    */
-  description: z.union([
-    z.string().min(1),
-    z
-      .record(z.string(), z.string().min(1))
-      .refine((m) => Object.keys(m).length > 0, {
-        message: "i18n description map must have at least one locale entry",
-      }),
-  ]),
+  description: z
+    .union([
+      z.string().min(1),
+      z
+        .record(z.string(), z.string().min(1))
+        .refine((m) => Object.keys(m).length > 0, {
+          message: "i18n description map must have at least one locale entry",
+        }),
+    ])
+    .describe(
+      "What the package does. Plain string or a locale map with at least one entry.",
+    ),
   // Friendly, player-facing name (I18nText). Distinct from `name`, which is
   // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
-  displayName: i18nTextLoose.optional(),
+  displayName: i18nTextLoose
+    .describe("Player-facing name. Plain string or a locale map.")
+    .optional(),
   version: z.string().optional(),
   runtimeType: z.enum(["agent", "function"]).optional(),
   handler: z.string().optional(),
@@ -860,22 +1078,39 @@ const runtimeManifestCommonShape = {
    * (`export default function (covel) { ... }`). Declare on ONE runtime
    * per plugin. Same traversal constraint as `wires` / rpc handlers.
    */
-  entry: pluginRelativeJsPath.optional(),
+  entry: pluginRelativeJsPath
+    .describe(
+      "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.",
+    )
+    .optional(),
   extensions: z.array(extensionDeclarationSchema).optional(),
   model: z.string().optional(),
   llm: z
     .strictObject({
-      reasoningEffort: z.literal("disabled").optional(),
+      reasoningEffort: z
+        .literal("disabled")
+        .describe("`disabled` turns model reasoning off for this runtime.")
+        .optional(),
       toolChoice: z
         .union([
           z.literal("required"),
-          z.strictObject({ name: z.string().min(1) }),
+          z.strictObject({
+            name: z.string().min(1).describe("Name of the tool to force."),
+          }),
         ])
+        .describe(
+          "`required` forces a tool call on every step. `{ name }` forces one named tool.",
+        )
         .optional(),
     })
+    .describe("Model call options for this runtime.")
     .optional(),
   /** Bounded agent prompt history; omitted keeps the shared session view. */
-  history: runtimeHistoryPolicySchema.optional(),
+  history: runtimeHistoryPolicySchema
+    .describe(
+      "Bounds the agent's prompt history. When omitted, the runtime sees the shared session history.",
+    )
+    .optional(),
   timeoutMs: z.number().int().positive().optional(),
   /**
    * Per-runtime cap on the agent tool-call loop. Overrides the framework
@@ -939,11 +1174,29 @@ const runtimeManifestCommonShape = {
   dataSchemas: pluginDataSchemaMapSchema.optional(),
   worldProjections: worldProjectionMapSchema.optional(),
   /** Domain events this plugin's runtime may emit via `emit-event`. */
-  events: z.array(pluginEventDeclSchema).optional(),
+  events: z
+    .array(pluginEventDeclSchema)
+    .describe(
+      "Domain events the package's runtimes may emit with the builtin `emit-event` tool.",
+    )
+    .optional(),
   i18n: z.record(z.string(), z.string()).optional(),
-  ui: uiSpecSchema.optional(),
-  userSettings: z.array(pluginUserSettingSpecSchema).optional(),
-  commands: z.array(slashCommandSpecSchema).max(32).optional(),
+  ui: uiSpecSchema
+    .describe("Package-relative paths of declarative UI specs, by placement.")
+    .optional(),
+  userSettings: z
+    .array(pluginUserSettingSpecSchema)
+    .describe(
+      "Player-configurable settings. A world can preset them with `pluginSettings`.",
+    )
+    .optional(),
+  commands: z
+    .array(slashCommandSpecSchema)
+    .max(32)
+    .describe(
+      "Player slash commands. Each `action` must be listed in `actions`.",
+    )
+    .optional(),
 } as const;
 
 /**

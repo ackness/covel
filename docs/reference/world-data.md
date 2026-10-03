@@ -51,7 +51,7 @@ worldData: data/world.data.yaml
 defaultViewMode: stage
 ```
 
-`worldData` path 相对 world root。
+`worldData` path 相对 world root。`world.yaml` 的全部字段见生成的 [World manifest 字段表](schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](schema/world-dimensions.md)。
 
 ### 动态世界维度（dimensions）
 
@@ -337,22 +337,7 @@ sources:
     after: cast
 ```
 
-字段：
-
-| 字段         | 必填 | 可选值 / 格式                                                                | 说明                                                                                                    |
-| ------------ | ---- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `kind`       | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                  | source 读取器类型。                                                                                     |
-| `path`       | yes  | 非空字符串                                                                   | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。               |
-| `schema`     | no   | `covel://world/dimensions`、`contract:<contractId>`、或本地 JSON Schema path | 校验用 schema。contract 的 JSON Schema 由已注册包声明。                                                 |
-| `to`         | yes  | 见 [Target URI](#target-uri)                                                 | 写入目标 URI。contract target 解析为活跃接收方。                                                        |
-| `key`        | no   | 简单字段名，例如 `id`、`characterId`、`filename`                             | 批量 source 的稳定 key。media 常用 `filename`。                                                         |
-| `indexTo`    | no\* | `contract:<contractId>`                                                      | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。                      |
-| `effects`    | no   | `characters`、`projections`                                                  | 额外投影；`characters` 实例化角色，`projections` 调用已启用插件声明的纯投影。                           |
-| `after`      | no   | source id 或 source id 数组                                                  | source 顺序依赖。source id 必须先声明且满足命名规则。                                                   |
-| `enabled`    | no   | boolean                                                                      | `false` 会跳过该 source。                                                                               |
-| `locale`     | no   | 长度至少 2 的字符串                                                          | source 对应的内容语言。                                                                                 |
-| `merge`      | no   | `replace`、`skipExisting`                                                    | 写入冲突策略。                                                                                          |
-| `visibility` | no   | `public`（默认）、`hidden`                                                   | `hidden` 时数据在被插件揭示前不进入提示词和任何玩家可见界面，见[隐藏数据](#隐藏数据visibility-hidden)。 |
+逐字段说明见生成的 [World data descriptor 字段表](schema/world-data-descriptor.md)；目标 URI 的阶段与语义见下方 [Target URI](#target-uri)，隐藏数据见[隐藏数据](#隐藏数据visibility-hidden)。
 
 media source 应同时声明 `key: filename` 和 `indexTo: contract:<contractId>`。缺 key 会产生 error；缺 indexTo 无法生成媒体索引写入。当前媒体字节持久化随有效 media-index write 执行，因此没有活跃索引接收方时不会导入该 source 的字节。此时产生 warning，不阻断其他数据与投影；启用接收插件后可通过 sync 补导入。
 

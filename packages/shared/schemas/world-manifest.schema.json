@@ -1,0 +1,641 @@
+{
+  "$id": "https://covel.local/schemas/world-manifest.schema.json",
+  "title": "Covel world manifest",
+  "description": "The `world.yaml` at the root of a world package.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Version of the `world.yaml` format.",
+      "examples": ["1.0"]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Stable world ID: lowercase letters, digits and hyphens, starting with a letter.",
+      "examples": ["my-world"]
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      ],
+      "description": "Display name of the world."
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the world package.",
+      "examples": ["0.1.0"]
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      ],
+      "description": "One or two sentences shown on the world card."
+    },
+    "defaultLocale": {
+      "description": "Default content locale as a BCP 47 tag. A session uses it when the request sets no locale.",
+      "type": "string"
+    },
+    "supportedLocales": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Locales this world provides content for."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Free-form catalogue tags, such as genre."
+    },
+    "pluginPolicy": {
+      "type": "object",
+      "properties": {
+        "presetId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID of the pack that seeds the initial plugin selection: a built-in pack or one declared in `packs`."
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "description": "Stable pack ID: lowercase letters, digits and hyphens. `presetId` refers to it."
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "description": "Display name of the pack."
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "description": "What the pack offers. Shown to the player."
+              },
+              "requested": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Plugin IDs the pack enables."
+              },
+              "recommended": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Plugin IDs the pack suggests. They are not enabled automatically."
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Catalogue tags that describe the pack, such as `mode:traditional-story`."
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "description": "Why this pack suits the world. Shown to the player."
+              }
+            },
+            "required": ["id", "label"],
+            "additionalProperties": false
+          },
+          "description": "Packs defined by this world. A pack is a named plugin selection the player can choose before play."
+        },
+        "preferredTags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Plugin tags this world prefers, such as `mode:traditional-story`."
+        },
+        "avoidedTags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Plugin tags this world avoids, such as `mode:dialogue`."
+        },
+        "requested": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Plugin IDs to enable by default. The player can still exclude them."
+        },
+        "recommended": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Plugin IDs to suggest. They are not enabled automatically."
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
+          },
+          "description": "Contract IDs the world needs, such as `action-check@1`. Any installed provider satisfies one. A missing or ambiguous provider blocks session creation."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Which plugins a session of this world starts with. It states intent and locks nothing; the player can change the selection."
+    },
+    "worldData": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the world data descriptor, relative to the world root.",
+      "examples": ["data/world.data.yaml"]
+    },
+    "characterSchema": {
+      "description": "Character types and attributes of this world. When present, sessions use it as written and no schema is generated.",
+      "type": "object",
+      "properties": {
+        "types": {
+          "default": ["npc", "companion"],
+          "description": "Character types besides the reserved `player`. Defaults to `npc` and `companion`.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "attributes": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/__schema0"
+              }
+            ]
+          },
+          "description": "Attribute definitions. Display order follows array order."
+        }
+      },
+      "required": ["attributes"],
+      "additionalProperties": false
+    },
+    "dimensions": {
+      "description": "Dynamic world dimensions keyed by dimension ID. Each entry is one full definition.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-zA-Z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Display name of the dimension."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "What the dimension tracks."
+          },
+          "schema": {
+            "description": "Value schema in the supported JSON Schema subset. Unsupported keywords are rejected.",
+            "allOf": [
+              {
+                "$ref": "#/definitions/__schema1"
+              }
+            ]
+          },
+          "initialValue": {
+            "description": "Starting value. It must satisfy `schema`."
+          },
+          "updateRule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Natural-language rule for how the value changes in play. When non-empty, the dimension tracker settles it after each turn. Omit it for static setting."
+          }
+        },
+        "required": ["name", "schema", "initialValue"],
+        "additionalProperties": false
+      }
+    },
+    "dimensionSources": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-zA-Z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Dimension ID → path of an external file that holds that one definition, relative to the world root."
+    },
+    "pluginSettings": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "description": "World defaults for plugin settings, keyed `pluginId → settingKey → value`. Resolution order: player override, then this value, then the plugin's own default."
+    },
+    "defaultViewMode": {
+      "type": "string",
+      "enum": ["stage", "parsed"],
+      "description": "Initial view for new sessions. `stage` is the fullscreen visual-novel stage. The player's own choice wins once made."
+    }
+  },
+  "required": ["schemaVersion", "id", "name", "summary", "defaultLocale"],
+  "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable machine key of the attribute, such as `hp`."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ],
+          "description": "Display label of the attribute."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "enum",
+            "array",
+            "object",
+            "map"
+          ],
+          "description": "Value type. `object` needs `subSchema`; `map` is an open-key record typed by `valueType`."
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum value. For `number` only."
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum value. For `number` only."
+        },
+        "defaultValue": {
+          "description": "Value given to a new character."
+        },
+        "itemType": {
+          "type": "string",
+          "enum": ["string", "number"],
+          "description": "Element type. For `array` only."
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Allowed values. For `enum` only."
+        },
+        "subSchema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "description": "Child attribute definitions. For `object` only."
+        },
+        "valueType": {
+          "type": "string",
+          "enum": ["string", "number", "boolean"],
+          "description": "Value type of each entry. For `map` only; defaults to string."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["stats", "bio", "abilities", "equipment", "social"],
+          "description": "Group used by the character panel and by prompt context."
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ],
+          "description": "What the attribute means. Shown to the player and given to the model."
+        }
+      },
+      "required": ["id", "name", "type", "category"],
+      "additionalProperties": false
+    },
+    "__schema1": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "string",
+                "number",
+                "integer",
+                "boolean",
+                "null",
+                "object",
+                "array"
+              ]
+            },
+            {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "integer",
+                  "boolean",
+                  "null",
+                  "object",
+                  "array"
+                ]
+              }
+            }
+          ],
+          "description": "JSON type of the value, or a list of types for a nullable value."
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ],
+          "description": "Display label of this node."
+        },
+        "description": {
+          "type": "string",
+          "description": "What this node holds. Given to the model."
+        },
+        "enum": {
+          "minItems": 1,
+          "type": "array",
+          "items": {},
+          "description": "Allowed values."
+        },
+        "const": {
+          "description": "The only allowed value."
+        },
+        "minimum": {
+          "type": "number",
+          "description": "Inclusive lower bound."
+        },
+        "maximum": {
+          "type": "number",
+          "description": "Inclusive upper bound."
+        },
+        "exclusiveMinimum": {
+          "type": "number",
+          "description": "Exclusive lower bound."
+        },
+        "exclusiveMaximum": {
+          "type": "number",
+          "description": "Exclusive upper bound."
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Minimum string length in characters."
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Maximum string length in characters."
+        },
+        "items": {
+          "description": "Schema of every array element.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema1"
+            }
+          ]
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Minimum array length."
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Maximum array length."
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "description": "Schemas of the named properties of an object."
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Property names that must be present. Each must be declared in `properties`."
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/__schema1"
+            }
+          ],
+          "description": "`false` rejects undeclared keys. A schema describes dynamically named records."
+        },
+        "x-i18n": {
+          "type": "boolean",
+          "description": "Marks this node as translatable text: its value is a string or a locale map. Nodes without it are never localized."
+        },
+        "x-enumLabels": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "description": "Display labels keyed by enum member. A label never replaces the stored value."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
