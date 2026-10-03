@@ -49,7 +49,6 @@ pluginPolicy:
         - living-world-rules
         - character-blueprint
         - story-events
-        - cost-gate
       recommended: []
   presetId: mistport-investigation
   preferredTags:
@@ -72,11 +71,7 @@ pluginPolicy:
     - living-world-rules
     - character-blueprint
     - story-events
-    - cost-gate
 pluginSettings:
-  cost-gate:
-    softTokens: 400000
-    hardTokens: 600000
   story-events:
     planner: true
 characterSchema:

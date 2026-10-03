@@ -329,7 +329,7 @@ export interface PluginUserSettingSpec {
     | "select"
     | "slider"
     | "slot";
-  // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
+  // Optional: a setting may declare no default. Mirrors the
   // schema's `z.unknown().optional()` so the parsed manifest type-checks.
   readonly default?: unknown;
   readonly label: import("./world.js").I18nText;

@@ -8,7 +8,8 @@
  *  1. Loads existing quests from `plugin_data[namespace="quests"]` —
  *     including world-pack preseeded records imported via `dataSchemas`.
  *  2. De-duplicates by normalized name and assigns stable short IDs to
- *     new quests via `shortIdBatch` (e.g. `quest-寻回断魂钩`).
+ *     new quests via `shortIdBatch` (e.g. `quest-3fa9c1d2` for a Chinese name,
+ *     `quest-lost-hook-3fa9c1d2` for an English one).
  *  3. Merges updates into existing quests: provided fields override;
  *     objectives match by stable ID, normalized text, then a conservative
  *     semantic fallback. Omitted `status`/`done` keep their current state so

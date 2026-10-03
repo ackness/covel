@@ -134,6 +134,10 @@ Use the [desktop release checklist](./guide/desktop-packaging.md#release-checkli
 
 Record the platforms and flows actually exercised; a successful build is not an interactive playthrough. Release notes must disclose unsigned artifacts and the absence of macOS notarization.
 
+### Model data snapshot
+
+The bundled LiteLLM model table (`packages/ai-provider/data/model-db.json`, pinned to a commit by `model-db-source.json`) supplies context windows, output limits, and prices for models whose limits are not set in `llm.toml` or Settings. Every Monday, [`update-model-db.yml`](../.github/workflows/update-model-db.yml) pins it to the newest LiteLLM commit that changed the model table, regenerates the snapshot, runs the `@covel/ai-provider` tests, and opens or refreshes a pull request from `chore/update-model-db`; it never pushes to `main`, and it can also be run from the Actions tab. Pull requests opened with the default `GITHUB_TOKEN` do not trigger other workflows: add a `MODEL_DB_PR_TOKEN` secret that may open pull requests to get CI automatically, or close and reopen the PR. The default token also needs "Allow GitHub Actions to create and approve pull requests" in the repository settings. To update by hand, run `pnpm --filter @covel/ai-provider update-model-db`.
+
 ### Code signing
 
 Official releases intentionally use unsigned artifacts and require no platform signing credentials. Release notes must disclose this and explain that macOS Gatekeeper or Windows SmartScreen may warn on first launch. Enabling signing later requires changing the electron-builder configuration and release workflow together; local signing setup is documented in [`guide/desktop-packaging.md`](./guide/desktop-packaging.md).

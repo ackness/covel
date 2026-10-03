@@ -37,12 +37,6 @@ rg -n "ponytail:" apps packages plugins
 | `apps/web/src/components/session/chat-messages/message-primitives.tsx` | Markdown soft breaks use a string rewrite                                 | Fenced-code edge cases or other transforms justify a parser plugin |
 | `apps/web/src/theme-system/token-schema.ts`                            | Ambience accepts URLs and gradients without local-image upload            | Upload requirements justify storage outside the settings blob      |
 
-## Plugins
-
-| Location                            | Accepted limit                                                     | Revisit when                                             |
-| ----------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
-| `plugins/cost-gate/hooks/budget.js` | A cumulative token cap eventually blocks a long legitimate session | Playthroughs justify a per-turn or sliding-window budget |
-
 ## Oversized modules
 
 Non-test files past the 800-line review guideline (AGENTS.md). Split only when

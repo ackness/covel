@@ -5,10 +5,10 @@ displayName:
   zh: 世界规则
   en: World Rules
 description:
-  zh: 让你添加会长期生效的世界规则，比如禁忌、风俗和特殊设定。
+  zh: 展示世界包里长期生效的规则（禁忌、风俗和特殊设定），并让叙事始终遵守。
   en: >-
-    Lets you add lasting world rules, such as taboos, customs, and special
-    setting details.
+    Shows the world's lasting rules, such as taboos, customs, and special
+    setting details, and keeps the story following them.
 tags:
   - "data:world-data"
   - "data:lorebook"

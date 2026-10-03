@@ -117,7 +117,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 1. **Runtime Timeline** — 按 `(stage, name)` 排序的 runtime 列表，含 `stage`、`runtime`、`status`、`dur`、`output` 摘要
 2. **Tool Calls** — 所有工具调用（runtime、tool、status、dur、approval、output 前 40 字符）
 3. **Trigger Verification** — 对每个已声明的 runtime 按 stage 调度语义比对「期望 vs 实际」，结果列见下表
-4. **Detected interaction form**（仅首次）— 从 runtime 结果的 `effects.interactions`（或 `create-form` / `create-character-form` 工具调用）识别角色创建表单，填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交
+4. **Detected interaction form**（setup 阶段，最多 3 个）— 从 runtime 结果的 `effects.interactions`（或 `create-form` / `create-character-form` 工具调用）识别 setup 表单（如角色创建，以及之后 `tabletop-rules` 的开局配点），填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交并发送一条消息推进；只要会话仍在 setup 且又出现新表单就继续处理。数字字段取 `defaultValue`（否则取 `min`），声明 `validation: { name: "point-buy" }` 的表单按 `data.budget` 把点数逐一分配到未覆盖的数字字段
 
 Trigger Verification 的裁决列：
 
@@ -142,7 +142,7 @@ Trigger Verification 的裁决列：
 **期望推导规则（复刻 stage 调度器）——三道闸门依次判定：**
 
 1. **激活集**：`pluginId` 不在会话 `activePlugins` 里 → 永不调度（`SKIP`）。互斥 provider（如 `narrator` vs `chat-mode-narrator`、多家 image 引擎）在这一步天然收敛——只期望激活的那一个。
-2. **stage**：无 `stage` 的 runtime（event / manual / 仅贡献型，如 `memory` / `cost-gate`——它们 `trigger.type` 可能是 `auto` 但没有 stage）**永不进入 stage 调度**，与 trigger.type 无关（`SKIP`；若因自身 event/manual 触发而运行则记 `FIRE`）。
+2. **stage**：无 `stage` 的 runtime（event / manual / 仅贡献型，如 `memory` / `history-compaction`——它们 `trigger.type` 可能是 `auto` 但没有 stage）**永不进入 stage 调度**，与 trigger.type 无关（`SKIP`；若因自身 event/manual 触发而运行则记 `FIRE`）。
 3. **band**：`setup` stage 只在开场阶段跑；其余 stage（`pre-turn` / `narrative` / `post-turn` / `audit`）只在 playing 回合跑。越 band → `SKIP`。
 
 命中三道闸门后，按执行所在的逻辑回合（`completedPlayerTurns + 1`，开场接力与第一条玩家消息同为 1）判定：

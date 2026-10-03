@@ -409,7 +409,9 @@ server transaction API in the browser.
 >   事务外幂等结算为 `failed`。嵌套 recursiveCall 复用顶层 `turnId`，因此顶层的
 >   `[turnId]` 一次结算即覆盖所有嵌套行。`committed` 结算同时把被丢弃 runtime 在
 >   `runtimeResults` 中的记录改为 `failed` 并写入原因，历史、重试与刷新看到的都是
->   实际保存的结果；它们上报的 job 也收尾为 `failed`。
+>   实际保存的结果；它们上报的 job 也收尾为 `failed`。和其他失败的 runtime 一样，被丢弃的
+>   runtime 不写入对话日志（文本、交互与 UI 卡片），也不计入触发台账
+>   （`maxTriggerCount` / `cooldownTurns`）。
 > - **完成屏障仍被扣留**：任一失败时 `turn.completed`、回合后记忆摄入、auto-snapshot
 >   都不触发，每个失败 proposal 发出 `proposal.failed` 事件，回合对客户端呈现为可见
 >   的未完成态而非"成功但状态缺失"。

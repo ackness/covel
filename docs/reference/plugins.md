@@ -154,7 +154,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 
 `agent.history: {maxTurns}` 把 agent 的提示词历史限定为最近 N 个回合（按 `turnId` 计数，`0` 为不带历史），同时去掉压缩摘要、不参与本轮压缩屏障；省略时沿用会话共享视图。只消费本轮输入的提取类 runtime 应声明它，避免提示词随会话增长。
 
-Agent 的超时、重试和步数在 `agent.loop` 中。`completion.afterTools` 可在指定工具成功后结束；`completion.require: tool-use` 要求有效工具调用。Function 工具白名单在 `function.tools`，控制 `ctx.tools.call`；Function 超时在 `function.timeoutMs`，不要把外部服务执行时限放到 agent 配置中。
+Agent 的超时、重试和步数在 `agent.loop` 中。`completion.afterTools` 可在指定工具成功后结束；`completion.require: tool-use` 要求有效工具调用：纯文本回答或只调用 `runtime-done` 时先注入一次纠正提示，仍未调用业务工具才判为失败，因此"无变化"也要通过业务工具提交空结果。Function 工具白名单在 `function.tools`，控制 `ctx.tools.call`；Function 超时在 `function.timeoutMs`，不要把外部服务执行时限放到 agent 配置中。
 
 ### 输入和输出
 

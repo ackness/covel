@@ -108,7 +108,7 @@ export interface ExecutionCompletedPayload {
   readonly error?: string;
   /**
    * Set when the turn was aborted before producing results (e.g. a
-   * TurnStart-aborting hook such as cost-gate's hard budget cap). The client
+   * TurnStart hook that aborts the turn). The client
    * surfaces this so an empty turn carries a visible reason instead of being
    * silently dropped. Absent on normal completions.
    */

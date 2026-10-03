@@ -54,11 +54,11 @@ describe("mergePluginUserSettings", () => {
 
   it("player override wins over world default per key", () => {
     const merged = mergePluginUserSettings(
-      { "cost-gate": { softTokens: 100, hardTokens: 200 } },
-      { "cost-gate": { softTokens: 50 } },
+      { "example-plugin": { softTokens: 100, hardTokens: 200 } },
+      { "example-plugin": { softTokens: 50 } },
     );
     expect(merged).toEqual({
-      "cost-gate": { softTokens: 50, hardTokens: 200 },
+      "example-plugin": { softTokens: 50, hardTokens: 200 },
     });
   });
 

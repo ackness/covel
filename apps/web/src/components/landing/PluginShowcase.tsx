@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useInView } from "@/hooks/use-in-view";
 import { useI18nResolver } from "@/lib/catalog/helpers";
+import { stageLabel } from "@/lib/stage-label.js";
 import { listPlugins } from "@/services/api.js";
-import type { I18nText, PluginSummary } from "@covel/shared";
+import type { I18nText, PluginSummary, Stage } from "@covel/shared";
 
 /**
  * Marketing tile descriptor. Only the visual layout (`span`) and the
@@ -11,15 +12,16 @@ import type { I18nText, PluginSummary } from "@covel/shared";
  * are read from the plugin's manifest at fetch time so the framework never
  * hardcodes plugin-specific copy or i18n keys (framework/plugin isolation rule).
  *
- * `bandKey` describes the *capability tier* shown above the card (e.g.
- * "Narrator · 500", "After-Turn"), not the plugin itself — keeping it as a
- * framework i18n key is intentional.
+ * `capability` must be one a plugin lists under `provides`. `stage` and the
+ * blurb describe the capability, not a plugin: they show until the plugin list
+ * loads, and stay when the page is served without a backend.
  */
 interface Tile {
   key: string;
   capability: string;
-  bandKey: string;
-  bandFallback: string;
+  stage: Stage;
+  blurbKey: string;
+  blurbFallback: string;
   span: string;
   icon: string;
 }
@@ -28,57 +30,71 @@ const TILES: readonly Tile[] = [
   {
     key: "narrator",
     capability: "narrative-engine@1",
-    bandKey: "home.plugins.narratorBand",
-    bandFallback: "Narrator · 500",
+    stage: "narrative",
+    blurbKey: "home.plugins.narratorBlurb",
+    blurbFallback:
+      "Produces the main narrative output and shapes the text the player reads this turn.",
     span: "md:col-span-3 md:row-span-2",
     icon: "/visuals/ui/world-gate.svg",
   },
   {
     key: "world-init",
-    capability: "session.world-context@1",
-    bandKey: "home.plugins.worldInitBand",
-    bandFallback: "Pre-Game · 0–99",
-    span: "md:col-span-2 md:row-span-1",
+    capability: "world-data-provider@1",
+    stage: "setup",
+    blurbKey: "home.plugins.worldInitBlurb",
+    blurbFallback:
+      "Prepares world structure and seed data before the main loop begins.",
+    span: "md:col-span-3 md:row-span-1",
     icon: "/visuals/ui/world-gate.svg",
   },
   {
-    key: "image",
-    capability: "media.image-flow@1",
-    bandKey: "home.plugins.imageBand",
-    bandFallback: "After-Turn · 700",
-    span: "md:col-span-2 md:row-span-1",
+    key: "events",
+    capability: "story-event-cue@1",
+    stage: "pre-turn",
+    blurbKey: "home.plugins.eventsBlurb",
+    blurbFallback:
+      "Reveals the world's hidden events once their conditions hold and hands the story a cue for this turn.",
+    span: "md:col-span-3 md:row-span-1",
     icon: "/visuals/ui/image-spark.svg",
   },
   {
-    key: "memory",
-    capability: "memory.block-definitions@1",
-    bandKey: "home.plugins.memoryBand",
-    bandFallback: "Audit · 1000",
+    key: "facts",
+    capability: "world-ir-provider@1",
+    stage: "post-turn",
+    blurbKey: "home.plugins.factsBlurb",
+    blurbFallback:
+      "Extracts each turn's people, relations, events, and clues once, for every bookkeeping plugin to reuse.",
     span: "md:col-span-2 md:row-span-1",
     icon: "/visuals/ui/plugin-node.svg",
   },
   {
     key: "rules",
-    capability: "world.rules@1",
-    bandKey: "home.plugins.rulesBand",
-    bandFallback: "Pre-Turn · 200",
+    capability: "dice-check@1",
+    stage: "pre-turn",
+    blurbKey: "home.plugins.rulesBlurb",
+    blurbFallback:
+      "Handles rules, dice, and modifiers where deterministic logic belongs.",
     span: "md:col-span-2 md:row-span-1",
     icon: "/visuals/ui/plugin-node.svg",
   },
   {
     key: "characters",
-    capability: "character.blueprints@1",
-    bandKey: "home.plugins.charactersBand",
-    bandFallback: "After-Turn · 600",
-    span: "md:col-span-3 md:row-span-1",
+    capability: "character-creation@1",
+    stage: "setup",
+    blurbKey: "home.plugins.charactersBlurb",
+    blurbFallback:
+      "Tracks NPCs, relationships, and character fields as structured records.",
+    span: "md:col-span-2 md:row-span-1",
     icon: "/visuals/ui/covel-mark.svg",
   },
 ];
 
-interface PluginMatch {
+export interface PluginMatch {
   id: string;
   displayName: I18nText;
   description: I18nText;
+  /** Stage of the runtime that outputs the capability, when it has one. */
+  stage?: Stage;
 }
 
 const SOURCE_RANK: Record<PluginSummary["source"], number> = {
@@ -87,32 +103,37 @@ const SOURCE_RANK: Record<PluginSummary["source"], number> = {
 };
 
 /**
- * Resolve `capability → first matching plugin`, preferring builtin over
- * community when multiple plugins claim the same capability.
+ * Resolve `capability → plugin`. When several plugins provide a capability,
+ * the one that declares itself its default wins, then builtin over community.
  */
-function indexByCapability(
+export function indexByCapability(
   plugins: readonly PluginSummary[],
 ): Map<string, PluginMatch> {
-  const sorted = [...plugins].sort(
-    (a, b) =>
-      (SOURCE_RANK[a.source ?? "community"] ?? 3) -
-      (SOURCE_RANK[b.source ?? "community"] ?? 3),
-  );
-  const index = new Map<string, PluginMatch>();
-  for (const p of sorted) {
-    for (const cap of p.provides.map((entry) =>
-      typeof entry === "string" ? entry : entry.contract,
-    )) {
-      if (!index.has(cap)) {
-        index.set(cap, {
-          id: p.id,
-          displayName: p.displayName,
-          description: p.description,
-        });
-      }
+  const best = new Map<string, { rank: number; match: PluginMatch }>();
+  for (const plugin of plugins) {
+    for (const entry of plugin.provides) {
+      const capability = typeof entry === "string" ? entry : entry.contract;
+      const isDefault = typeof entry !== "string" && entry.default === true;
+      const rank =
+        (isDefault ? 0 : 10) + (SOURCE_RANK[plugin.source ?? "community"] ?? 3);
+      if ((best.get(capability)?.rank ?? Infinity) <= rank) continue;
+      const stage = plugin.runtimes.find(
+        (runtime) => runtime.outputContract === capability,
+      )?.stage;
+      best.set(capability, {
+        rank,
+        match: {
+          id: plugin.id,
+          displayName: plugin.displayName,
+          description: plugin.description,
+          ...(stage ? { stage } : {}),
+        },
+      });
     }
   }
-  return index;
+  return new Map(
+    [...best].map(([capability, { match }]) => [capability, match]),
+  );
 }
 
 export function PluginShowcase() {
@@ -121,9 +142,11 @@ export function PluginShowcase() {
   const [headerRef, headerInView] = useInView<HTMLDivElement>({
     threshold: 0.3,
   });
-  const [capabilityToPlugin, setCapabilityToPlugin] = useState<
-    Map<string, PluginMatch>
-  >(() => new Map());
+  // `null` until the plugin list has loaded; it stays `null` without a backend.
+  const [capabilityToPlugin, setCapabilityToPlugin] = useState<Map<
+    string,
+    PluginMatch
+  > | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,9 +167,10 @@ export function PluginShowcase() {
   const cards = useMemo(
     () =>
       TILES.map((tile) => {
-        const match = capabilityToPlugin.get(tile.capability);
+        const match = capabilityToPlugin?.get(tile.capability);
         return {
           tile,
+          stage: match?.stage ?? tile.stage,
           pluginId: match?.id,
           displayName: match?.displayName
             ? resolveI18n(match.displayName)
@@ -154,6 +178,9 @@ export function PluginShowcase() {
           description: match?.description
             ? resolveI18n(match.description)
             : undefined,
+          // A loaded list with no provider is a real gap; an unloaded list
+          // only means there is nothing to read the plugin from.
+          unclaimed: capabilityToPlugin !== null && !match,
         };
       }),
     [capabilityToPlugin, resolveI18n],
@@ -175,7 +202,7 @@ export function PluginShowcase() {
         >
           <div className="md:col-span-7">
             <span className="ui-eyebrow text-muted-foreground">
-              {t("home.plugins.eyebrow", "Plugins are first-class")}
+              {t("home.plugins.eyebrow", "Plugin system")}
             </span>
             <h2
               id="plugins-heading"
@@ -183,14 +210,14 @@ export function PluginShowcase() {
             >
               {t(
                 "home.plugins.title",
-                "Eight runtimes. One pipeline. Zero hardcoded gameplay.",
+                "Split gameplay, rules, and surfaces into modules.",
               )}
             </h2>
           </div>
           <p className="md:col-span-5 text-base md:text-lg text-muted-foreground font-light leading-relaxed">
             {t(
               "home.plugins.subtitle",
-              "Every plugin declares an execution stage, a trigger mode, and a tool whitelist. The kernel discovers them by capability — never by ID.",
+              "Each plugin declares its trigger, stage, and tool scope. The kernel handles scheduling, and the product layer stays replaceable.",
             )}
           </p>
         </div>
@@ -200,6 +227,8 @@ export function PluginShowcase() {
             <PluginCard
               key={card.tile.key}
               tile={card.tile}
+              stage={card.stage}
+              unclaimed={card.unclaimed}
               pluginId={card.pluginId}
               displayName={card.displayName}
               description={card.description}
@@ -212,7 +241,7 @@ export function PluginShowcase() {
         <p className="mt-10 text-sm text-muted-foreground text-center font-light">
           {t(
             "home.plugins.footnote",
-            "Three more bundled plugins: dice, debug, slot-router. Drop in your own — same contract.",
+            "Bundled plugins are ready to use, and custom plugins follow the same contract.",
           )}
         </p>
       </div>
@@ -222,6 +251,8 @@ export function PluginShowcase() {
 
 interface CardProps {
   tile: Tile;
+  stage: Stage;
+  unclaimed: boolean;
   pluginId: string | undefined;
   displayName: string | undefined;
   description: string | undefined;
@@ -231,6 +262,8 @@ interface CardProps {
 
 function PluginCard({
   tile,
+  stage,
+  unclaimed,
   pluginId,
   displayName,
   description,
@@ -241,10 +274,12 @@ function PluginCard({
   const headline = displayName ?? pluginId ?? tile.capability;
   const blurb =
     description ??
-    t(
-      "home.plugins.unfilledSlot",
-      "Awaiting a plugin to claim this capability.",
-    );
+    (unclaimed
+      ? t(
+          "home.plugins.unfilledSlot",
+          "Awaiting a plugin to claim this capability.",
+        )
+      : t(tile.blurbKey, tile.blurbFallback));
   return (
     <article
       ref={ref}
@@ -264,7 +299,7 @@ function PluginCard({
       />
       <header className="flex items-start justify-between mb-4">
         <span className="ui-eyebrow text-muted-foreground">
-          {t(tile.bandKey, tile.bandFallback)}
+          {stageLabel(stage, t)}
         </span>
         <span className="font-mono text-[10px] text-muted-foreground/70 uppercase tracking-wider">
           {tile.capability}
@@ -280,7 +315,7 @@ function PluginCard({
               {headline}
             </span>
           ) : null}
-          {blurb}
+          <span className="line-clamp-3">{blurb}</span>
         </p>
       </div>
     </article>

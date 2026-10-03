@@ -58,13 +58,11 @@
     en-US: Low Cost
     ru-RU: Бюджетный
   description:
-    zh-CN: 保留核心流程和函数型插件，减少下游 LLM 调用；cost-gate 为每局设置 token 花费上限。
-    en-US:
-      Keeps the core loop and function plugins while reducing downstream LLM
-      calls; cost-gate caps per-session token spend.
+    zh-CN: 保留核心流程和函数型插件，减少下游 LLM 调用。
+    en-US: Keeps the core loop and function plugins while reducing downstream LLM calls.
     ru-RU:
       Сохраняет основной цикл и функциональные плагины, сокращая последующие
-      вызовы LLM; модуль контроля затрат ограничивает расход токенов на сессию.
+      вызовы LLM.
   tags:
     - cost:function
   source: builtin
@@ -74,6 +72,5 @@
     - char-creator
     - narrator
     - living-world-rules
-    - cost-gate
   recommended:
     - memory

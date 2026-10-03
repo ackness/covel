@@ -813,7 +813,7 @@ interface StepExpectation {
  * bands and NOT a re-simulation of interval/cooldown. Three gates in order:
  *   1. active set — mutually-exclusive providers (narrator vs
  *      chat-mode-narrator) resolve here: only the active one is expected.
- *   2. stage — a stage-less runtime (memory / director / cost-gate: `auto`
+ *   2. stage — a stage-less runtime (memory / history-compaction: `auto`
  *      but no stage) is never stage-scheduled.
  *   3. band — setup-stage runs only in the setup phase; all other stages run
  *      only in playing turns.
@@ -883,6 +883,9 @@ function classifyStep(
 // Form auto-fill from runtime result
 // ──────────────────────────────────────────────────────────────────
 
+/** Forms the harness submits during setup before it stops auto-filling. */
+const MAX_SETUP_FORMS = 3;
+
 interface DetectedForm {
   turnId: string;
   runtimeId: string;
@@ -892,7 +895,12 @@ interface DetectedForm {
     type: string;
     required?: boolean;
     options?: Array<string | { value?: string; label?: string }>;
+    min?: number;
+    max?: number;
+    defaultValue?: unknown;
   }>;
+  /** The form's declared validator, e.g. `{ name: "point-buy", data }`. */
+  validation?: { name?: unknown; data?: unknown };
 }
 
 /**
@@ -955,8 +963,15 @@ function toDetectedForm(
       options: Array.isArray(f.options)
         ? (f.options as Array<string | { value?: string; label?: string }>)
         : undefined,
+      min: typeof f.min === "number" ? f.min : undefined,
+      max: typeof f.max === "number" ? f.max : undefined,
+      defaultValue: f.defaultValue,
     }))
     .filter((f) => f.name.length > 0);
+  const validation =
+    source.validation && typeof source.validation === "object"
+      ? (source.validation as { name?: unknown; data?: unknown })
+      : undefined;
 
   return {
     turnId,
@@ -965,6 +980,7 @@ function toDetectedForm(
       source.interactionId ?? source.formId ?? source.id ?? "form",
     ),
     fields,
+    validation,
   };
 }
 
@@ -976,8 +992,8 @@ function toDetectedForm(
 function buildFormValues(
   form: DetectedForm,
   overrides: Record<string, string>,
-): Record<string, string> {
-  const values: Record<string, string> = {};
+): Record<string, string | number> {
+  const values: Record<string, string | number> = {};
 
   for (const field of form.fields) {
     if (overrides[field.name] !== undefined) {
@@ -997,8 +1013,16 @@ function buildFormValues(
         field.name === "characterName" ? "E2E测试角色" : `测试${field.name}`;
       continue;
     }
+    if (field.type === "number") {
+      values[field.name] =
+        typeof field.defaultValue === "number"
+          ? field.defaultValue
+          : (field.min ?? 0);
+      continue;
+    }
     values[field.name] = "";
   }
+  spendPointBuyBudget(form, overrides, values);
 
   // Safety net: at least characterName for auto-advanced flows that
   // skipped fields we didn't understand.
@@ -1007,6 +1031,44 @@ function buildFormValues(
   }
 
   return values;
+}
+
+/**
+ * A `point-buy` form accepts only an allocation that spends its whole budget
+ * (`validation.data.budget`) above each field's minimum. Spread the budget
+ * one point at a time over the number fields the caller did not override.
+ */
+function spendPointBuyBudget(
+  form: DetectedForm,
+  overrides: Record<string, string>,
+  values: Record<string, string | number>,
+): void {
+  if (form.validation?.name !== "point-buy") return;
+  const data = form.validation.data as { budget?: unknown } | undefined;
+  const budget = typeof data?.budget === "number" ? data.budget : 0;
+  const open = form.fields.filter(
+    (field) => field.type === "number" && overrides[field.name] === undefined,
+  );
+  let left =
+    budget -
+    form.fields.reduce(
+      (spent, field) =>
+        field.type === "number"
+          ? spent + (Number(values[field.name]) - (field.min ?? 0))
+          : spent,
+      0,
+    );
+  while (left > 0) {
+    const field = open.find(
+      (candidate) =>
+        candidate.max === undefined ||
+        Number(values[candidate.name]) < candidate.max,
+    );
+    if (!field) break;
+    values[field.name] = Number(values[field.name]) + 1;
+    open.push(open.splice(open.indexOf(field), 1)[0]!);
+    left -= 1;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -1730,13 +1792,20 @@ async function runMain(
   // Advance report sequence.
   ctx.turnNumber += 1;
 
-  // Auto form handling: detect a form in turn 1 results, submit it,
-  // and post send_message to advance past character creation.
-  const detectedForm = detectFormInTurn(
-    exec.turnRecord.turnId,
-    exec.turnRecord.runtimeResults,
-  );
-  if (detectedForm) {
+  // Auto form handling: setup can chain forms (character creation, then a
+  // rules plugin's point allocation). Submit each form the last request
+  // surfaced and post send_message to advance, until setup asks for no more.
+  const submittedForms = new Set<string>();
+  const nextSetupForm = (): DetectedForm | null => {
+    for (const record of exec.turnRecords) {
+      const form = detectFormInTurn(record.turnId, record.runtimeResults);
+      if (form && !submittedForms.has(form.interactionId)) return form;
+    }
+    return null;
+  };
+  let detectedForm = nextSetupForm();
+  while (detectedForm && submittedForms.size < MAX_SETUP_FORMS) {
+    submittedForms.add(detectedForm.interactionId);
     console.log("");
     console.log("  Detected interaction form:");
     kv("Runtime", detectedForm.runtimeId);
@@ -1802,6 +1871,7 @@ async function runMain(
     );
     reportTurn(ctx, exec);
     ctx.turnNumber += 1;
+    detectedForm = ctx.phase === "setup" ? nextSetupForm() : null;
   }
 
   // Remaining playing-band turns

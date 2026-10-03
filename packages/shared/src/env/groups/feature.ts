@@ -25,7 +25,7 @@ export const FEATURE_ENV_VARS = [
     group: "feature",
     type: "integer",
     status: "active",
-    defaultValue: "(narrative slot model capability, else 32768)",
+    defaultValue: "(narrative slot model capability, else 262144)",
     description:
       "Explicit override for the context window used by the compactor and prompt budget. When unset, the active narrative slot's model capability contextWindow is used.",
   },

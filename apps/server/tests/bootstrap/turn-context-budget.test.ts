@@ -22,9 +22,9 @@ describe("createTurnContextBudget", () => {
     expect(budget.contextWindowLimit).toBe(8000);
   });
 
-  it("falls back to 32768 / 16384 without imposing a model ceiling", () => {
+  it("falls back to 262144 / 16384 without imposing a model ceiling", () => {
     const budget = createTurnContextBudget({});
-    expect(budget.maxInputTokens).toBe(32_768);
+    expect(budget.maxInputTokens).toBe(262_144);
     expect(budget.reservedForResponse).toBe(16_384);
     expect(budget.contextWindowLimit).toBeUndefined();
   });

@@ -306,6 +306,75 @@ describe("requireToolUse gate", () => {
     }
   });
 
+  it("corrects a first bare runtime-done once, then accepts the tool call", async () => {
+    // Seen with world-init/dimension-tracker on qwen3.8-flash: on a quiet
+    // turn the model's first answer was runtime-done ("nothing changed").
+    // Failing it outright left settlement pending and blocked every later
+    // turn; one correction gets the no-change result recorded instead.
+    const store = await mainLoopStore("sess-done-first");
+    let step = 0;
+    const seen: { role: string; content: unknown }[][] = [];
+    const llm: LLMAdapter = {
+      async generate(params) {
+        step++;
+        seen.push([...params.messages]);
+        const call =
+          step === 1
+            ? { name: "runtime-done", arguments: { reason: "no change" } }
+            : step === 2
+              ? {
+                  name: "emit-event",
+                  arguments: { topic: "test.ping", data: { x: 1 } },
+                }
+              : undefined;
+        return call
+          ? {
+              content: null,
+              toolCalls: [
+                {
+                  id: `tc-${step}`,
+                  name: call.name,
+                  arguments: JSON.stringify(call.arguments),
+                },
+              ],
+              finishReason: "tool_calls",
+              usage: { inputTokens: 10, outputTokens: 5 },
+            }
+          : {
+              content: "done",
+              toolCalls: [],
+              finishReason: "stop",
+              usage: { inputTokens: 10, outputTokens: 5 },
+            };
+      },
+    };
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
+      llm,
+      store,
+      toolExecutor: toolExecutor(store),
+    };
+
+    const result = await executeTurn(
+      makeTurnInput({ sessionId: "sess-done-first" }),
+      [manifest({ requireToolUse: true })],
+      deps,
+      { maxSteps: 5 },
+    );
+
+    expect(
+      seen[1]!.some(
+        (m) =>
+          m.role === "system" && String(m.content).includes("runtime-done"),
+      ),
+    ).toBe(true);
+    const res = result.runtimeResults.find((r) => r.runtimeId === "plug/gated");
+    expect(res?.status).toBe("success");
+    expect(res?.effects?.events).toEqual([
+      { topic: "test.ping", data: { x: 1 } },
+    ]);
+  });
+
   it("default (no requireToolUse) finishes on the first bare response", async () => {
     const store = await mainLoopStore("sess-3");
     const llm = new ScriptedLLM(null);

@@ -42,8 +42,8 @@ describe("schedulable-missing-stage", () => {
     ).toEqual([]);
   });
 
-  it("does not warn for an entry-only server module (cost-gate shape)", () => {
-    expect(codes({ name: "cost-gate", entry: "./server/index.js" })).toEqual(
+  it("does not warn for an entry-only server module (hook-only plugin shape)", () => {
+    expect(codes({ name: "hooks-only", entry: "./server/index.js" })).toEqual(
       [],
     );
   });

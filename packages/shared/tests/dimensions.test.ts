@@ -251,6 +251,20 @@ describe("public dimension snapshots and explicit localization", () => {
     });
     expect(value.text).toEqual({ "zh-CN": "城墙", "en-US": "Wall" });
   });
+
+  it("names the translation and its length when a localized text is too long", () => {
+    const schema: DimensionValueSchema = {
+      type: "object",
+      properties: { note: { type: "string", maxLength: 5, "x-i18n": true } },
+    };
+    expect(
+      validateDimensionValue(schema, {
+        note: { "zh-CN": "城墙", "en-US": "City wall" },
+      }),
+    ).toEqual([
+      { path: ["note", "en-US"], message: "Maximum length is 5 (got 9)" },
+    ]);
+  });
 });
 
 describe("projectDimensionSnapshot", () => {

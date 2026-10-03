@@ -212,7 +212,6 @@ async function keepFocusedGuidePluginSet(page: Page) {
     "memory",
     "living-world-rules",
     "character-blueprint",
-    "cost-gate",
   ];
   for (const pluginId of unrelatedOptionalPlugins) {
     const toggle = page

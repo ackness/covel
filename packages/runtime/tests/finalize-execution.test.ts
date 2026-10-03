@@ -569,6 +569,65 @@ describe("finalizeExecution", () => {
     expect(await commitStatusOf(store)).toBe("committed");
   });
 
+  it("keeps a dropped sibling's journal rows and trigger count out", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    // The trigger ledger records against the session row.
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: null,
+      phase: "playing",
+      status: "active",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: ["rt-a", "rt-b"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    await savePendingTurn(store);
+    const journalRow = (runtimeId: string, order: number) => ({
+      id: `msg-${runtimeId}`,
+      sessionId: SESSION_ID,
+      turnId: TURN_ID,
+      sourceType: "runtime" as const,
+      sourcePluginId: runtimeId,
+      sourceRuntimeId: runtimeId,
+      role: "assistant" as const,
+      content: `${runtimeId} card`,
+      order,
+      createdAt: "2026-08-09T00:00:01.000Z",
+    });
+
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
+      results: [
+        makeResult("rt-a", { narrativeOutput: "committed line" }),
+        makeResult("rt-b", {}, badStatePatch()),
+      ],
+      turnIds: [TURN_ID],
+      journalMessages: [journalRow("rt-a", 100), journalRow("rt-b", 500)],
+      runtimeTriggers: ["rt-a", "rt-b"],
+    });
+
+    expect(outcome.status).toBe("committed");
+    expect(
+      (await store.listTurnMessages(SESSION_ID)).map((message) => message.id),
+    ).toEqual(["msg-rt-a"]);
+    const ledger = await store.listPluginData(
+      SESSION_ID,
+      "__kernel:triggers",
+      "runtimes",
+    );
+    expect(ledger.map((row) => row.key)).toEqual(["rt-a"]);
+  });
+
   it("runs PreStateCommit hooks before opening the transaction", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);
