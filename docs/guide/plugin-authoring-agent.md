@@ -30,13 +30,14 @@ runtime:
   agent:
     model: plugin
     history: { maxTurns: 2 }
-    tools: { plugin: [save-note] }
     loop:
       maxRetries: 0
       completion: { require: tool-use, afterTools: [save-note] }
 ---
 Read runtime-inputs.narrative.value and call save-note with one supported fact.
 ```
+
+这个包只有一个 runtime，所以它不用再列一遍工具：没有写 `agent.tools.plugin` 时，runtime 得到 `contributes.tools` 里的全部工具。多 runtime 的包里，每个 runtime 用 `agent.tools.plugin` 列出自己用的工具。
 
 `server/index.js`：
 

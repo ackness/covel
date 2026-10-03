@@ -58,11 +58,11 @@ pluginPolicy:
     - mode:traditional-story
   avoidedTags:
     - mode:dialogue
-worldData: data/world.data.yaml
+worldData: data/world.data.yaml # 可选：不写时按约定路径读取，见下文“按约定导入”
 defaultViewMode: stage
 ```
 
-`worldData` path 相对 world root。`world.yaml` 的全部字段见生成的 [World manifest 字段表](schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](schema/world-dimensions.md)。
+`worldData` path 相对 world root；只有世界包带 descriptor 时才写它。`world.yaml` 的全部字段见生成的 [World manifest 字段表](schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](schema/world-dimensions.md)。
 
 ### 动态世界维度（dimensions）
 

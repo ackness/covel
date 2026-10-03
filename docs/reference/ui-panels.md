@@ -642,7 +642,7 @@ contributes:
 ```
 
 ```js
-import { appendSummaryEntries } from "@covel/plugin-handlers-utils";
+import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 
 export default function (covel) {
   covel.provideExtension("ui.slot@1", "summary", {
@@ -652,7 +652,8 @@ export default function (covel) {
         {
           id: "quest.current",
           kind: "text",
-          label: { zh: "当前目标", en: "Objective" },
+          // English here; `locales/<locale>.yaml` translates it under `messages`.
+          label: labelText(ctx, "Objective"),
           value: quests[0]?.value?.name ?? "",
         },
       ]);
