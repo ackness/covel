@@ -269,6 +269,52 @@ describe("submit-world-facts", () => {
     ]);
   });
 
+  it("lists the item of an inventory change that the model did not list", async () => {
+    // The model named the torches in the event and forgot the entity.
+    const parsed = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      events: [
+        ...VALID_FACTS.events,
+        {
+          id: "took-torches",
+          type: "inventory_change",
+          attributes: {
+            item: "torch",
+            holder: "player-ren",
+            operation: "gain",
+            quantity: 2,
+          },
+        },
+      ],
+    });
+
+    expect(parsed.entities).toEqual([
+      ...VALID_FACTS.entities,
+      { id: "torch", type: "item", name: "torch" },
+    ]);
+    expect(parsed.events[1].attributes.item).toBe("torch");
+  });
+
+  it("takes an item's name in an inventory change for that item", async () => {
+    const parsed = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      events: [
+        {
+          id: "found-key",
+          type: "inventory_change",
+          attributes: {
+            item: "Brass Key",
+            holder: "player-ren",
+            operation: "gain",
+          },
+        },
+      ],
+    });
+
+    expect(parsed.entities).toEqual(VALID_FACTS.entities);
+    expect(parsed.events[0].attributes.item).toBe("brass-key");
+  });
+
   it("leaves other event types free-form", async () => {
     const result = submitWorldFacts.parameters.safeParse({
       ...VALID_FACTS,

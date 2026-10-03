@@ -88,6 +88,38 @@ describe("tool()", () => {
     });
   });
 
+  it("drops closing brackets that follow a complete value in JSON text", async () => {
+    const mod = tool({
+      name: "record",
+      description: "Record changes",
+      parameters: z.object({
+        changes: z.array(z.object({ name: z.string() })),
+      }),
+      execute: async (params) => params,
+    });
+    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    // The model closed the arguments object inside the text of the array.
+    for (const text of [
+      '[{"name":"Mira"}]}',
+      '[{"name":"Mira"}]}\n',
+      '[{"name":"Mira"}]}]',
+    ])
+      expect(await mod.execute({ changes: text }, ctx), text).toEqual({
+        changes: [{ name: "Mira" }],
+      });
+    // Brackets are all it drops: other text after the value is an error, and
+    // so is a bracket that is missing or misplaced inside the value.
+    for (const text of [
+      '[{"name":"Mira"}] and more',
+      '[{"name":"Mira"}}]',
+      '[{"name":"Mira"',
+    ])
+      await expect(
+        mod.execute({ changes: text }, ctx),
+        text,
+      ).rejects.toMatchObject({ details: [{ path: "changes" }] });
+  });
+
   it("says why text sent for an array or object could not be used", async () => {
     const mod = tool({
       name: "record",
