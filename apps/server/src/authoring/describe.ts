@@ -10,6 +10,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { resolveI18nText } from "@covel/shared";
+import {
+  KERNEL_SOURCES,
+  pluginSourceEntry,
+} from "../world-data/conventions.js";
 import { resolveContainedPath } from "../world-data/safe-path.js";
 import {
   pluginSchemaUriForTarget,
@@ -109,7 +113,8 @@ const WORLD_FILES: AuthoringSurface["files"] = [
   },
   {
     path: "data/world.data.yaml",
-    purpose: "World data descriptor: one entry per data source below.",
+    purpose:
+      "Optional world data descriptor. Without it, every file at a path listed below is a data source. Write one for a file at another path, several files of one kind, or an order between sources; `worldData` in `world.yaml` names it, and then only the sources it lists are imported.",
     reference: "docs/reference/schema/world-data-descriptor.md",
   },
   {
@@ -119,69 +124,38 @@ const WORLD_FILES: AuthoringSurface["files"] = [
   },
 ];
 
-const KERNEL_DESTINATIONS: readonly AuthoringDestination[] = [
-  {
+const KERNEL_TEXT: Readonly<
+  Record<string, Pick<AuthoringDestination, "title" | "description">>
+> = {
+  dimensions: {
     title: "World dimensions",
     description:
       "Static setting and values that change in play. Each definition has a name, a value schema, an initial value and an optional update rule.",
-    source: {
-      id: "dimensions",
-      entry: {
-        kind: "yaml",
-        path: "data/dimensions.yaml",
-        schema: "covel://world/dimensions",
-        to: "world:metadata.dimensions",
-      },
-    },
   },
-  {
+  lorebook: {
+    title: "Lorebook",
+    description:
+      "Lore entries the narrative reads when their keys come up in play. Each entry has an id, trigger keys and content.",
+  },
+  characters: {
     title: "Characters",
     description:
       "Character records of the session's world model. Types and fields follow `characterSchema` in `world.yaml`.",
-    source: {
-      id: "characters",
-      entry: {
-        kind: "json",
-        path: "characters/characters.json",
-        to: "characters",
-        key: "id",
-      },
-    },
   },
-];
+};
+
+// The same list the importer reads a package without a descriptor by.
+const KERNEL_DESTINATIONS: readonly AuthoringDestination[] = KERNEL_SOURCES.map(
+  (source) => ({
+    ...KERNEL_TEXT[source.id]!,
+    source: { id: source.id, entry: source.entry as AuthoringSourceEntry },
+  }),
+);
 
 function text(value: unknown, locale: string): string {
   return (
     resolveI18nText(value as string | Record<string, string>, locale) ?? ""
   );
-}
-
-function sourceEntry(
-  contract: string,
-  source: {
-    readonly kind: "yaml" | "json" | "media";
-    readonly path: string;
-    readonly key?: string;
-    readonly visibility?: "public" | "hidden";
-    readonly lorebook?: boolean;
-  },
-): AuthoringSourceEntry {
-  if (source.kind === "media")
-    return {
-      kind: "media",
-      path: source.path,
-      to: "media",
-      indexTo: `contract:${contract}`,
-      key: source.key ?? "filename",
-    };
-  return {
-    kind: source.kind,
-    path: source.path,
-    schema: `contract:${contract}`,
-    to: `contract:${contract}${source.lorebook ? "+lorebook" : ""}`,
-    ...(source.key ? { key: source.key } : {}),
-    ...(source.visibility === "hidden" ? { visibility: "hidden" } : {}),
-  };
 }
 
 async function readExample(
@@ -249,7 +223,10 @@ export async function describeAuthoringSurface(
             ? {
                 source: {
                   id: namespace,
-                  entry: sourceEntry(contract, authoring.source),
+                  entry: pluginSourceEntry(
+                    contract,
+                    authoring.source,
+                  ) as AuthoringSourceEntry,
                 },
               }
             : {}),

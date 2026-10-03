@@ -56,9 +56,6 @@ runtime:
     # call the model sometimes continues the story first.
     llm:
       toolChoice: required
-    tools:
-      plugin:
-        - sync-codex-entries
     loop:
       timeoutMs: 120000
       callTimeoutMs: 60000

@@ -301,7 +301,7 @@ describe("Plugin Routes", () => {
         body.destinations.map(
           (item: { source: { entry: { to: string } } }) => item.source.entry.to,
         ),
-      ).toEqual(["world:metadata.dimensions", "characters"]);
+      ).toEqual(["world:metadata.dimensions", "lorebook", "characters"]);
       expect(Array.isArray(body.contracts)).toBe(true);
       expect(Array.isArray(body.plugins)).toBe(true);
     });

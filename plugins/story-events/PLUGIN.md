@@ -24,8 +24,6 @@ contracts:
     schema: ./schemas/story-event-cue.schema.json
   story-event.plan@1:
     schema: ./schemas/story-event-plan.schema.json
-  story.events@1:
-    schema: ./schemas/story-events.schema.json
 entry: ./server/index.js
 contributes:
   tools:

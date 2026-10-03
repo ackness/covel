@@ -1,4 +1,8 @@
 import {
+  conventionsOfPlugins,
+  setWorldDataConventions,
+} from "../../world-data/conventions.js";
+import {
   getRequestLlmOptions,
   withRequestLlmOptions,
 } from "../../request-llm-context.js";
@@ -348,6 +352,9 @@ async function assembleApi(
       pluginsDirs: config.pluginsDirs,
       eventBus,
     });
+  // Worlds are read after this point. A world package without a descriptor
+  // is read by the paths that the installed plugins name for their data.
+  setWorldDataConventions(conventionsOfPlugins(registry));
 
   // Reserved plugin IDs for install-time shadow protection — derived from the
   // bundled plugins just discovered (those tagged `source: 'builtin'`), so the

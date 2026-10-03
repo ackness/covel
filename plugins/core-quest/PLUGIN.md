@@ -14,9 +14,6 @@ provides:
   - world-ir.vocabulary@1
 requires:
   - world-ir-provider@1
-contracts:
-  quests@1:
-    schema: ./schemas/quests.schema.json
 contributes:
   data:
     quests:

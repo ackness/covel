@@ -476,7 +476,7 @@ export const worldManifestSchema = z
       .min(1)
       .meta({
         description:
-          "Path of the world data descriptor, relative to the world root.",
+          "Path of the world data descriptor, relative to the world root. Without it the package is read by convention: each file at a well-known path (`data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, and the path each installed plugin names for its data) is a source.",
         examples: ["data/world.data.yaml"],
       })
       .optional(),

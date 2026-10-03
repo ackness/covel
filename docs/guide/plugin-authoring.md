@@ -54,7 +54,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 所有包级贡献写在根 `contributes`。entry 模块注册工具、RPC action、服务、扩展、hook、wire 或 form 时，名称必须与清单一致。`contributes.commands` 是玩家命令元数据，实际 RPC 名还必须列在 `contributes.actions`。
 
-只在运行时需要的工具放进 `agent.tools`。这份白名单控制 agent 能调用什么；`contributes.tools` 声明包实际注册什么。两者用途不同。
+只在运行时需要的工具放进 `agent.tools`。这份白名单控制 agent 能调用什么；`contributes.tools` 声明包实际注册什么。两者用途不同。只有一个 runtime 的包（根 `runtime:`）不写 `agent.tools.plugin` 时，这个 runtime 得到 `contributes.tools` 的全部工具，不用重复列一遍；写了就以写的为准，`plugin: []` 表示一个都不给。多 runtime 的包里每个 runtime 仍然各自列出自己的工具。
 
 跨插件调用使用版本化契约，例如 `narrative-engine@1`。根 `requires` 驱动会话依赖解析，`io.inputs` 绑定执行结果，`schedule.needs` 控制运行条件。普通契约可以有多个提供者；用 `cardinality: one/all` 指定输入要求，用显式 `conflicts` 或单提供者扩展点表达互斥。
 

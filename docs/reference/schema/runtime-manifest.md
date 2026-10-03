@@ -180,11 +180,11 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `agent.tools`
 
-| Field     | Type                     | Required | Description                                                                                         |
-| --------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------- |
-| `builtin` | list of string           | no       | Names of builtin tools the runtime may call.                                                        |
-| `plugin`  | list of string           | no       | Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. |
-| `defer`   | `true` or list of string | no       | Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.           |
+| Field     | Type                     | Required | Description                                                                                                                                                                                   |
+| --------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `builtin` | list of string           | no       | Names of builtin tools the runtime may call.                                                                                                                                                  |
+| `plugin`  | list of string           | no       | Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted. |
+| `defer`   | `true` or list of string | no       | Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.                                                                                                     |
 
 ## `agent.loop`
 
@@ -216,11 +216,11 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `function.tools`
 
-| Field     | Type                     | Required | Description                                                                                         |
-| --------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------- |
-| `builtin` | list of string           | no       | Names of builtin tools the runtime may call.                                                        |
-| `plugin`  | list of string           | no       | Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. |
-| `defer`   | `true` or list of string | no       | Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.           |
+| Field     | Type                     | Required | Description                                                                                                                                                                                   |
+| --------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `builtin` | list of string           | no       | Names of builtin tools the runtime may call.                                                                                                                                                  |
+| `plugin`  | list of string           | no       | Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted. |
+| `defer`   | `true` or list of string | no       | Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.                                                                                                     |
 
 ## `effects`
 

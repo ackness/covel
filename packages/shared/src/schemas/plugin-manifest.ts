@@ -218,7 +218,7 @@ export const pluginManifestSchema = z.strictObject({
       }),
     )
     .describe(
-      "Public schema of each contract this package publishes or accepts, keyed by contract ID.",
+      "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace.",
     )
     .optional(),
   entry: shape.entry,

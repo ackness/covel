@@ -14,9 +14,6 @@ tags:
 provides:
   - living-world-rules@1
   - world-info@1
-contracts:
-  world.rules@1:
-    schema: ./schemas/rules.schema.json
 contributes:
   data:
     rules:

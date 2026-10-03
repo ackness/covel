@@ -15,9 +15,6 @@ provides:
 requires:
   - world-ir-provider@1
 entry: ./server/index.js
-contracts:
-  inventory.items@1:
-    schema: ./schemas/items.schema.json
 contributes:
   commands:
     - name: bag

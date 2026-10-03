@@ -7,7 +7,7 @@
  * Nothing is written and no plugin code is executed.
  */
 
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, readdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -21,6 +21,12 @@ import {
 } from "@covel/shared";
 import { discoverAndRegisterPlugins } from "../routes/api/bootstrap/plugin-discovery.js";
 import { resolveLocaleFilePath } from "../world-seed-loader.js";
+import {
+  conventionsOfPlugins,
+  setWorldDataConventions,
+  worldDataConventions,
+  worldHasData,
+} from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   findLocaleOverlays,
@@ -50,6 +56,7 @@ export interface WorldPackageDiagnostic {
     | "locale-overlay"
     | "locale-script"
     | "edition-incomplete"
+    | "data-file-unused"
     | "inline-locale-map";
   /** Path relative to the world directory. */
   readonly file?: string;
@@ -485,14 +492,58 @@ async function checkLocaleFiles(
   return diagnostics;
 }
 
+/**
+ * In a package read by convention, a data file that no convention names is
+ * not imported, and nothing else says so. With a descriptor every source is
+ * written down, so this check is for the conventional case only.
+ */
+async function unclaimedDataFiles(
+  worldDir: string,
+): Promise<WorldPackageDiagnostic[]> {
+  const claimed = new Set(
+    worldDataConventions().map((source) => source.entry.path),
+  );
+  let names: string[];
+  try {
+    names = await readdir(path.join(worldDir, "data"));
+  } catch {
+    return [];
+  }
+  const diagnostics: WorldPackageDiagnostic[] = [];
+  for (const name of names.sort()) {
+    const file = `data/${name}`;
+    if (!/\.(ya?ml|json)$/.test(name) || claimed.has(file)) continue;
+    // `quests.zh-CN.yaml` translates `quests.yaml`; it is not a source.
+    const base = name.replace(
+      /\.[A-Za-z]{2,3}(-[A-Za-z0-9]+)*(\.[^.]+)$/,
+      "$2",
+    );
+    if (base !== name && claimed.has(`data/${base}`)) continue;
+    diagnostics.push({
+      level: "warning",
+      code: "data-file-unused",
+      file,
+      message:
+        "this file is not imported: the package has no descriptor, and no scanned plugin names this path for its data",
+      hint: `Paths that are read without a descriptor: ${[...claimed].sort().join(", ")}. For another path, list the file in a descriptor (\`worldData\` in world.yaml).`,
+    });
+  }
+  return diagnostics;
+}
+
 async function checkWorldData(
   worldDir: string,
   manifest: WorldManifestView,
   catalogue: PluginCatalogue,
   strict: boolean,
 ): Promise<WorldPackageDiagnostic[]> {
-  if (!manifest.worldData) return [];
   const diagnostics: WorldPackageDiagnostic[] = [];
+  if (!manifest.worldData) {
+    diagnostics.push(...(await unclaimedDataFiles(worldDir)));
+    if (!(await worldHasData(worldDir, undefined))) return diagnostics;
+  }
+  // Where a problem of the descriptor itself is reported.
+  const descriptorFile = manifest.worldData ?? "world.yaml";
 
   // The world-load pass covers the descriptor itself, source order, file
   // reads and non-contract schemas.
@@ -518,8 +569,8 @@ async function checkWorldData(
       level: "error",
       code: "world-data",
       file: diagnostic.sourceId
-        ? (fileOf.get(diagnostic.sourceId) ?? manifest.worldData)
-        : manifest.worldData,
+        ? (fileOf.get(diagnostic.sourceId) ?? descriptorFile)
+        : descriptorFile,
       sourceId: diagnostic.sourceId,
       message: diagnostic.message,
     });
@@ -537,7 +588,7 @@ async function checkWorldData(
       diagnostics.push({
         level: suggestion || strict ? "error" : "warning",
         code: "unresolved-contract",
-        file: manifest.worldData,
+        file: descriptorFile,
         sourceId: source.id,
         message: `no scanned plugin accepts data contract "${contract}"; this source cannot be validated or imported`,
         hint: suggestion
@@ -586,8 +637,8 @@ async function checkWorldData(
         level: diagnostic.level,
         code: "world-data",
         file: diagnostic.sourceId
-          ? (fileOf.get(diagnostic.sourceId) ?? manifest.worldData)
-          : manifest.worldData,
+          ? (fileOf.get(diagnostic.sourceId) ?? descriptorFile)
+          : descriptorFile,
         sourceId: diagnostic.sourceId,
         locales: [locale],
         message: diagnostic.message,
@@ -647,6 +698,9 @@ export async function validateWorldPackage(
 
   const manifest = validation.data as WorldManifestView;
   const catalogue = await loadPluginCatalogue(options.pluginsDirs);
+  // A package without a descriptor is read by the conventions of the
+  // scanned plugins, as the server reads it by those of the installed ones.
+  setWorldDataConventions(conventionsOfPlugins(catalogue));
   const strict = options.strict === true;
   return {
     worldId: manifest.id,

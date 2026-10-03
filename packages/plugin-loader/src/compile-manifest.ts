@@ -35,6 +35,18 @@ export function compileRuntimeManifest(
   runtimeId: string,
 ): RuntimeManifest {
   const a = runtime.agent;
+  // A package with one runtime has one place for its tools to go. When that
+  // runtime names no plugin tools it gets the ones the package contributes;
+  // `plugin: []` still means none. A runtime of a multi-runtime package
+  // names its tools: each of them gets a different part.
+  const contributed = plugin.contributes?.tools;
+  const agentTools =
+    runtime.type === "agent" &&
+    runtimeId === plugin.id &&
+    !a?.tools?.plugin &&
+    contributed?.length
+      ? { ...a?.tools, plugin: [...contributed] }
+      : a?.tools;
   const loop = a?.loop;
   const schedule = runtime.schedule;
   const inject: InputInjectDecl[] = (runtime.io?.selfData ?? []).map(
@@ -73,7 +85,7 @@ export function compileRuntimeManifest(
     model: a?.model,
     llm: a?.llm,
     history: a?.history,
-    tools: runtime.function?.tools ?? a?.tools,
+    tools: runtime.function?.tools ?? agentTools,
     advertiseEvents: a?.advertiseEvents,
     stage: schedule?.stage,
     trigger: schedule?.trigger,

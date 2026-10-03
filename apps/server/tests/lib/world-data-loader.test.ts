@@ -5,7 +5,13 @@ import {
 import { mkdtemp, mkdir, writeFile, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
+import {
+  KERNEL_SOURCES,
+  conventionsOfPlugins,
+  setWorldDataConventions,
+} from "../../src/world-data/conventions.js";
+import { loadPluginCatalogue } from "../../src/world-data/validate-world-package.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { loadWorldDataSummary } from "../../src/world-data/world-load.js";
 import { parseWorldDataTarget } from "../../src/world-data/target-uri.js";
@@ -660,8 +666,16 @@ sources:
     });
   });
 
-  it("loads bundled worlds through worldData descriptors", async () => {
+  it("loads bundled worlds through worldData descriptors and conventions", async () => {
     const worldsRoot = path.resolve(import.meta.dirname, "../../../../worlds");
+    // The server sets the conventions of its plugins before it loads worlds.
+    // emberback has no descriptor and is read by them.
+    setWorldDataConventions(
+      conventionsOfPlugins(
+        await loadPluginCatalogue([path.resolve(worldsRoot, "../plugins")]),
+      ),
+    );
+    onTestFinished(() => setWorldDataConventions(KERNEL_SOURCES));
     // Load each world once: the checks below revisit the same worlds, and
     // repeated loads pushed this test past its timeout on a busy machine.
     const loaded = new Map<string, ReturnType<typeof loadSingleWorld>>();

@@ -50,7 +50,7 @@ export const worldDataSourceDescriptorSchema = z
       .min(1)
       .meta({
         description:
-          "Schema that validates the content: `covel://world/dimensions`, `contract:<contractId>`, or a local JSON Schema path.",
+          "Schema that validates the content: `covel://world/dimensions`, `contract:<contractId>`, or a local JSON Schema path. Omit it for a `contract:` or dimensions destination: the schema is the one of the destination.",
         examples: ["contract:character.blueprints@1"],
       })
       .optional(),

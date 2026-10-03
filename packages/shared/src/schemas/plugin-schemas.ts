@@ -361,7 +361,7 @@ export const toolsConfigSchema = z
     plugin: z
       .array(z.string())
       .describe(
-        "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`.",
+        "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted.",
       )
       .optional(),
     /**

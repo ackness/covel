@@ -11,6 +11,11 @@ import {
 } from "@covel/shared";
 import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
+import {
+  conventionsOfPlugins,
+  worldHasData,
+  type ConventionalSource,
+} from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   finalizeWorldDataMediaRefs,
@@ -54,6 +59,17 @@ function deferredProjectionLedgerKey(
   return `${ledger.sourceId}\u0000${projection.slice("projection:".length)}\u0000${output.slice("output:".length)}`;
 }
 
+/**
+ * The conventions of the plugins this import runs with. A caller that gives
+ * a registry gets the paths of that registry; without one the list of the
+ * process applies.
+ */
+function conventionsFor(
+  deps: WorldDataImportPreflightDeps | undefined,
+): readonly ConventionalSource[] | undefined {
+  return deps?.registry ? conventionsOfPlugins(deps.registry) : undefined;
+}
+
 export { finalizeWorldDataMediaRefs, releaseWorldDataMediaRefs };
 
 export type {
@@ -80,7 +96,15 @@ export async function prepareWorldDataImportForSession(
         locale: options.locale,
       })
     : options.dimensions;
-  if (!worldRoot || !manifest?.worldData) {
+  if (
+    !worldRoot ||
+    !manifest ||
+    !(await worldHasData(
+      worldRoot,
+      manifest.worldData,
+      conventionsFor(options.preflight),
+    ))
+  ) {
     const sources = portableContractSources(options.contractData);
     if (options.contractData === undefined && effectiveDimensions === undefined)
       return { imported: false, diagnostics: [] };
@@ -112,6 +136,7 @@ export async function prepareWorldDataImportForSession(
     worldId: options.worldId,
     worldDataPath: manifest.worldData,
     covelHome: options.covelHome,
+    conventions: conventionsFor(options.preflight),
   });
   const descriptorErrors = descriptor.diagnostics.filter(
     (diagnostic) => diagnostic.level === "error",
@@ -295,7 +320,13 @@ export async function preflightWorldDataForSession(
         };
   }
   const manifest = await readWorldManifest(worldRoot);
-  if (!manifest.worldData) {
+  if (
+    !(await worldHasData(
+      worldRoot,
+      manifest.worldData,
+      conventionsFor(options.preflight),
+    ))
+  ) {
     const prepared = await prepareWorldDataImportForSession({
       ...options,
       worldsDirs: [],
@@ -316,6 +347,7 @@ export async function preflightWorldDataForSession(
     worldId: options.worldId,
     worldDataPath: manifest.worldData,
     covelHome: options.covelHome,
+    conventions: conventionsFor(options.preflight),
   });
   if (
     descriptor.diagnostics.some((diagnostic) => diagnostic.level === "error")
@@ -423,7 +455,13 @@ export async function prepareWorldDataSyncForSession(
     return preparePortableWorldDataSync(options);
   }
   const manifest = await readWorldManifest(worldRoot);
-  if (!manifest.worldData) {
+  if (
+    !(await worldHasData(
+      worldRoot,
+      manifest.worldData,
+      conventionsFor(options.preflight),
+    ))
+  ) {
     const session = await options.store.getSession(options.sessionId);
     const definitions = await readEffectiveDimensions({
       worldRoot,
@@ -455,6 +493,7 @@ export async function prepareWorldDataSyncForSession(
     worldId: options.worldId,
     worldDataPath: manifest.worldData,
     covelHome: options.covelHome,
+    conventions: conventionsFor(options.preflight),
   });
   if (
     descriptor.diagnostics.some((diagnostic) => diagnostic.level === "error")

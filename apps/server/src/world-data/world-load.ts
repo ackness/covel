@@ -5,6 +5,7 @@ import {
   type WorldDataMetadataSummary,
 } from "@covel/shared";
 import { digestFile, sha256Hex } from "./digest.js";
+import { worldHasData } from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { findLocaleOverlays } from "./locale-overlays.js";
 import { readWorldDataSource } from "./source-reader.js";
@@ -195,7 +196,7 @@ export async function loadWorldDataSummary(options: {
   diagnostics: readonly WorldDataDiagnostic[];
 }> {
   const metadata = { ...options.metadata };
-  if (!options.worldDataPath) {
+  if (!(await worldHasData(options.worldRoot, options.worldDataPath))) {
     return { metadata, diagnostics: [] };
   }
 

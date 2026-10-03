@@ -59,9 +59,6 @@ runtime:
       reasoningEffort: disabled
       toolChoice:
         name: submit-world-facts
-    tools:
-      plugin:
-        - submit-world-facts
     loop:
       timeoutMs: 120000
       callTimeoutMs: 60000

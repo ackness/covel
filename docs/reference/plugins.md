@@ -72,27 +72,25 @@ runtime:
     visibility: plugin
   agent:
     model: plugin
-    tools:
-      plugin: [save-facts]
     loop:
       completion: { require: tool-use, afterTools: [save-facts] }
 ---
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
 
-| 根字段                                          | 含义                                                   |
-| ----------------------------------------------- | ------------------------------------------------------ |
-| `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                   |
-| `version`, `displayName`, `description`, `tags` | 元数据；不再使用 `role:*` 标签驱动业务                 |
-| `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；安装器强制执行    |
-| `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`       |
-| `requires`                                      | 必需契约，解析器补入提供者                             |
-| `optional`                                      | 可选契约，不强制激活提供者                             |
-| `conflicts`                                     | 与提供这些契约的其他插件互斥                           |
-| `contracts`                                     | `{contractId: {schema: ./path.json}}` 契约 schema 声明 |
-| `entry`                                         | 包根相对的注册模块路径                                 |
-| `contributes`                                   | 下表列出的包级贡献                                     |
-| `runtime`                                       | 可选的单 runtime 声明                                  |
+| 根字段                                          | 含义                                                                                                        |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
+| `version`, `displayName`, `description`, `tags` | 元数据；不再使用 `role:*` 标签驱动业务                                                                      |
+| `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；安装器强制执行                                                         |
+| `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
+| `requires`                                      | 必需契约，解析器补入提供者                                                                                  |
+| `optional`                                      | 可选契约，不强制激活提供者                                                                                  |
+| `conflicts`                                     | 与提供这些契约的其他插件互斥                                                                                |
+| `contracts`                                     | `{contractId: {schema: ./path.json}}` 契约 schema 声明；被 `contributes.data` 的 namespace 接收的契约不用写 |
+| `entry`                                         | 包根相对的注册模块路径                                                                                      |
+| `contributes`                                   | 下表列出的包级贡献                                                                                          |
+| `runtime`                                       | 可选的单 runtime 声明                                                                                       |
 
 契约 ID 形如 `narrative-engine@1`。`runtime.io.output.contract` 必须由本包 `provides` 声明，同包不允许两个 runtime 产出同一契约。跨包可以有多个普通提供者，消费者使用 `cardinality: one` 或 `all` 表达选择要求。单提供者扩展点及显式 `conflicts` 另外执行互斥检查。`conflicts` 只允许插件契约；引用内核扩展点或 UI 槽位会得到 `invalid-conflict` 和 `conflicts` 字段位置，内核点的组合由 mode 决定。
 
@@ -243,9 +241,6 @@ Lorebook 使用 owner 与 id 的复合身份，owner 为 world、plugin 或 play
 ### 世界数据导入
 
 ```yaml
-contracts:
-  example.facts@1:
-    schema: ./schemas/facts.schema.json
 contributes:
   data:
     facts:
@@ -254,9 +249,11 @@ contributes:
       accepts: [example.facts@1]
 ```
 
+namespace 接收某个契约，就说明了这个契约的记录长什么样，所以它的 `schema` 也就是该契约的公共 schema，不需要在根 `contracts` 里再写一遍。只有两种情况要写 `contracts.<id>`：契约不是数据契约（例如 runtime 输出契约），或者两个 namespace 以不同的 schema 接收同一个契约（这时必须说明哪一份是公共的）。
+
 接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`generate`），说明世界作者该如何提供这份内容，以及应用内生成器能否生成它；只有列出 `accepts` 的 namespace 才能声明它。`pnpm describe:authoring` 汇总所有已扫描插件的声明，`--check` 按 namespace 的 schema 校验每份 `example`。字段见 [Plugin manifest 字段表](schema/plugin-manifest.md)。
 
-World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:example.facts@1`。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
+World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时就是目标契约的 schema）。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
 
 世界包把 source 声明为 `visibility: hidden` 时，同一份数据会导入到接收插件的 `_hidden.<namespace>`（例如 `_hidden.facts`）。插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取；扩展点、模型工具、`input.inject` 和公共 API 都读不到它。揭示应通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](world-data.md#隐藏数据visibility-hidden)。
 

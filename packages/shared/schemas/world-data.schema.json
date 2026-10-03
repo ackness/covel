@@ -33,7 +33,7 @@
           "schema": {
             "type": "string",
             "minLength": 1,
-            "description": "Schema that validates the content: `covel://world/dimensions`, `contract:<contractId>`, or a local JSON Schema path.",
+            "description": "Schema that validates the content: `covel://world/dimensions`, `contract:<contractId>`, or a local JSON Schema path. Omit it for a `contract:` or dimensions destination: the schema is the one of the destination.",
             "examples": ["contract:character.blueprints@1"]
           },
           "to": {

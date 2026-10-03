@@ -28,7 +28,7 @@ pnpm describe:authoring
 
 - 世界包有哪些文件，各自的字段表在哪。
 - 内置数据目标：维度、角色。
-- 每一种可以预置的内容：标题、接收它的插件、写作提示、可直接粘贴进 `data/world.data.yaml` 的条目、一份合法示例。
+- 每一种可以预置的内容：标题、接收它的插件、写作提示、文件该放的路径（`path`）、一份合法示例。
 - 插件目录：ID、简介、提供和依赖的契约、可以用 `pluginSettings` 预置的设置项。
 
 只使用这里列出的插件 ID、契约和设置项。需要机器可读的结果时加 `--json`；社区插件用 `--plugins <dir>` 一并扫描。
@@ -57,11 +57,13 @@ worlds/<id>/
 ├── world.yaml            # 字段表：docs/reference/schema/world-manifest.md
 ├── WORLD.md              # 默认 lore（800-1500 字），所有语言的兜底
 ├── WORLD.<lang>.md       # 可选，只在真的提供第二语种时写
-└── data/
-    ├── world.data.yaml   # sources 里放第 2 步给出的条目
-    ├── dimensions.yaml   # 见 references/dimensions.md
-    └── …                 # 每种内容一个文件，路径用第 2 步给出的 path
+├── data/
+│   ├── dimensions.yaml   # 见 references/dimensions.md
+│   └── …                 # 每种内容一个文件，路径用第 2 步给出的 path
+└── characters/, media/   # 同上，按第 2 步的 path
 ```
+
+文件放在第 2 步给出的路径上就会被导入，不需要 `data/world.data.yaml`，`world.yaml` 里也不写 `worldData`。只有文件不在约定路径上、一种内容有多个文件、或要指定导入顺序时才写 descriptor（见 `docs/reference/world-data.md` 的“按约定导入”）；写了之后只认 descriptor，要把所有 source 列全。
 
 要求：
 

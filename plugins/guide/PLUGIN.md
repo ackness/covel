@@ -63,9 +63,6 @@ runtime:
       reasoningEffort: disabled
       toolChoice:
         name: generate-guide
-    tools:
-      plugin:
-        - generate-guide
     loop:
       timeoutMs: 120000
       callTimeoutMs: 60000

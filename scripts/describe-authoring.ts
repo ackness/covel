@@ -82,7 +82,7 @@ function render(surface: AuthoringSurface): string {
       "",
       destination.description,
       "",
-      "Declare in `data/world.data.yaml`:",
+      `Put the file at \`${destination.source.entry.path}\`: it is imported without a descriptor. The same source in a descriptor:`,
       "",
       yamlBlock({ [destination.source.id]: destination.source.entry }),
       "",
@@ -98,7 +98,7 @@ function render(surface: AuthoringSurface): string {
     if (contract.hint) lines.push(`How to write it: ${contract.hint}`, "");
     if (contract.source)
       lines.push(
-        "Declare in `data/world.data.yaml`:",
+        `Put the ${contract.source.entry.kind === "media" ? "files in" : "file at"} \`${contract.source.entry.path}\`: ${contract.source.entry.kind === "media" ? "they are" : "it is"} imported without a descriptor. The same source in a descriptor:`,
         "",
         yamlBlock({ [contract.source.id]: contract.source.entry }),
         "",

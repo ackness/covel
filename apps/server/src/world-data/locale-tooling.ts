@@ -19,6 +19,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { DEFAULT_LOCALE, validateWorldManifest } from "@covel/shared";
+import { worldHasData } from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { findLocaleOverlays } from "./locale-overlays.js";
 import { fileExists } from "./session-import/utils.js";
@@ -451,7 +452,7 @@ async function worldFiles(worldDir: string): Promise<WorldFiles> {
 
   const worldData =
     typeof manifest.worldData === "string" ? manifest.worldData : undefined;
-  if (validation.valid && worldData) {
+  if (validation.valid && (await worldHasData(worldDir, worldData))) {
     const descriptor = await loadWorldDataDescriptor({
       worldRoot: worldDir,
       worldDataPath: worldData,

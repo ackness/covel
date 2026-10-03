@@ -18,10 +18,6 @@ entry: ./server/index.js
 contracts:
   scene-cast@1:
     schema: ./schemas/scene-cast.schema.json
-  stage.scene-assets@1:
-    schema: ./schemas/assets.schema.json
-  stage.scenes@1:
-    schema: ./schemas/scenes.schema.json
 contributes:
   extensions:
     - point: ui.slot@1

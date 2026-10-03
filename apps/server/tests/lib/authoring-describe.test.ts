@@ -39,6 +39,7 @@ describe("authoring surface", () => {
 
     expect(surface.destinations.map((item) => item.source.entry.to)).toEqual([
       "world:metadata.dimensions",
+      "lorebook",
       "characters",
     ]);
     expect(

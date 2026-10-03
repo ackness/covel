@@ -121,4 +121,3 @@ characterSchema:
       description:
         The ability to earn trust, calm conflict, read a room, and persuade
         people without treating them as obstacles.
-worldData: data/world.data.yaml

@@ -20,6 +20,7 @@ import {
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { conventionsOfPlugins } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
 
@@ -786,7 +787,9 @@ sources:
           }),
         },
       }),
-    ).rejects.toThrow(/escapes plugin root/);
+      // The source names no schema, so it is checked by the schema of its
+      // contract, and that path is where the link is refused.
+    ).rejects.toThrow(/Invalid schema path for contract "world-notes.facts@1"/);
     expect(
       await store.listPluginData("sess-1", "world-notes", "facts"),
     ).toEqual([]);
@@ -1948,10 +1951,11 @@ sources: {}
       ];
       const sessionId = `sess-portraits-${worldId}-${locale}`;
       const worldRoot = path.join(worldsDir, worldId);
+      // emberback has no descriptor: its files are read by convention.
       const descriptor = await loadWorldDataDescriptor({
         worldRoot,
-        worldDataPath: "data/world.data.yaml",
         worldId,
+        conventions: conventionsOfPlugins(pluginRegistry),
       });
       expect(
         descriptor.diagnostics.filter(

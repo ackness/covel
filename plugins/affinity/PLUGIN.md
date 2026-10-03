@@ -13,9 +13,6 @@ tags:
 requires:
   - world-ir-provider@1
 entry: ./server/index.js
-contracts:
-  character.affinity@1:
-    schema: ./schemas/affinity.schema.json
 contributes:
   data:
     affinity:
@@ -84,9 +81,6 @@ runtime:
     # call the model sometimes continues the story first.
     llm:
       toolChoice: required
-    tools:
-      plugin:
-        - update-affinity
     loop:
       timeoutMs: 120000
       callTimeoutMs: 60000

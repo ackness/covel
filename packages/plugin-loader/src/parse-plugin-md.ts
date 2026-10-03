@@ -67,7 +67,7 @@ export function parsePluginMd(
       canonicalFrontmatter,
       labels,
     );
-    const plugin = pluginManifestSchema.parse(data);
+    const plugin = withContractDefaults(pluginManifestSchema.parse(data));
     return {
       sourcePath: filePath,
       plugin,
@@ -112,6 +112,34 @@ export function parseRuntimeMd(
   } catch (error) {
     return invalid(filePath, error);
   }
+}
+
+/**
+ * A data namespace that accepts a contract states the schema of its records.
+ * That is the schema of the contract, so `contracts` does not have to repeat
+ * the path. An entry written in `contracts` is kept as it is. A contract that
+ * two namespaces accept with different schemas gets no default: the manifest
+ * must say which one is public.
+ */
+export function withContractDefaults(plugin: PluginManifest): PluginManifest {
+  const accepted = new Map<string, Set<string>>();
+  for (const declaration of Object.values(plugin.contributes?.data ?? {}))
+    for (const contract of declaration.accepts ?? []) {
+      const schemas = accepted.get(contract) ?? new Set<string>();
+      schemas.add(declaration.schema);
+      accepted.set(contract, schemas);
+    }
+  const derived = Object.fromEntries(
+    [...accepted]
+      .filter(
+        ([contract, schemas]) =>
+          schemas.size === 1 && !plugin.contracts?.[contract],
+      )
+      .map(([contract, schemas]) => [contract, { schema: [...schemas][0]! }]),
+  );
+  return Object.keys(derived).length === 0
+    ? plugin
+    : { ...plugin, contracts: { ...derived, ...plugin.contracts } };
 }
 
 /** Normalize package declarations independently of runtime compilation. */

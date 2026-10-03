@@ -25,9 +25,6 @@ runtime:
     visibility: system
   agent:
     model: plugin
-    tools:
-      plugin:
-        - record-note
 ---
 
 You are the agent runtime of the {{pluginName}} plugin. Your job is to extract durable records relevant to this plugin from the narrative of this turn.

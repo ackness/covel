@@ -16,13 +16,6 @@ provides:
   - character-blueprint@1
   - character-presence@1
 entry: ./server/index.js
-contracts:
-  character.blueprints@1:
-    schema: ./schemas/blueprints.schema.json
-  character.portraits@1:
-    schema: ./schemas/presence.schema.json
-  character.portrait-assets@1:
-    schema: ./schemas/assets.schema.json
 contributes:
   extensions:
     - point: ui.slot@1

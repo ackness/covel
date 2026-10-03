@@ -43,6 +43,11 @@ import {
   worldTranslationStatus,
   writeWorldTranslations,
 } from "../apps/server/src/world-data/locale-tooling.js";
+import {
+  conventionsOfPlugins,
+  setWorldDataConventions,
+} from "../apps/server/src/world-data/conventions.js";
+import { loadPluginCatalogue } from "../apps/server/src/world-data/validate-world-package.js";
 
 const USAGE = `Usage:
   pnpm i18n status <dir>... [--locale <tag>] [--missing]
@@ -79,6 +84,16 @@ for (let index = 0; index < rest.length; index += 1) {
 }
 if (!command || dirs.length === 0) fail(USAGE);
 if (translationsDir) setTranslationsDirectory(translationsDir);
+// A world without a descriptor is read by the paths that the bundled plugins
+// name for their data.
+if (dirs.some((dir) => existsSync(path.join(dir, "world.yaml"))))
+  setWorldDataConventions(
+    conventionsOfPlugins(
+      await loadPluginCatalogue([
+        path.resolve(import.meta.dirname, "../plugins"),
+      ]),
+    ),
+  );
 
 /** Fields of world data that hold a name: translated first, then reused. */
 const NAME_FIELDS: ReadonlySet<string> = new Set([

@@ -4,6 +4,17 @@
 
 ## World Package
 
+**最小的世界包**是两个文件：`world.yaml`（`schemaVersion`、`id`、`name`、`summary`、`defaultLocale` 五个必填字段）和 `WORLD.md`。之后每增加一种内容，就在约定的位置加一个文件，不需要再登记：
+
+| 文件                         | 内容                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `data/dimensions.yaml`       | 世界维度                                                                                                               |
+| `data/lorebook.yaml`         | 按关键词触发的设定条目                                                                                                 |
+| `characters/characters.json` | 领域角色记录                                                                                                           |
+| 插件声明的路径               | 该插件接收的数据，例如 `data/quests.yaml`（任务）、`characters/main-cast.json`（角色蓝图）、`media/portraits/`（立绘） |
+
+最后一行的路径由插件自己声明（`contributes.data.<ns>.authoring.source`），装了什么插件就有什么约定路径；`pnpm describe:authoring` 列出当前版本的全部路径和每种数据的示例。这套约定的规则见 [按约定导入](#按约定导入没有-descriptor)。
+
 推荐结构：
 
 ```text
@@ -11,7 +22,7 @@ worlds/my-world/
 ├── world.yaml
 ├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en.md 等语言版本
 ├── data/
-│   ├── world.data.yaml
+│   ├── world.data.yaml               # 可选：文件不在约定位置、或要指定顺序时才需要
 │   ├── dimensions.yaml
 │   ├── memory-blocks.json            # 可选：题材记忆定义
 │   └── rules/                       # 可选：题材规则，导入 living-world-rules
@@ -204,7 +215,7 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 | `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
 | `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
 
-四个世界都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：作者预设的隐藏事件之外，它会根据游玩中留下的线索追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
+雾港、春华学园与提灯古冢用 `data/world.data.yaml` 列出 source，Emberback 没有 descriptor、按约定路径读取；两种写法走同一导入协议，但不会为了展示能力而加入与题材无关的插件。四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：作者预设的隐藏事件之外，它会根据游玩中留下的线索追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。接受 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）或 `parsed`。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
@@ -324,6 +335,21 @@ sources:
 
 标签必须符合 `^[a-z][a-z0-9_]*$`，`displayName/extractionHint` 支持 I18nText，`maxChars` 为正整数。插件先加载固定的基础定义，再加载活跃插件的 `memory.block-definitions@1` 服务，最后加载世界定义；已占用标签保留先前定义。三个内置世界均采用此文件与 contract 结构。
 
+## 按约定导入（没有 descriptor）
+
+`world.yaml` 没有 `worldData` 字段时，世界包按约定读取：约定路径上存在的每个文件（media 则是目录）就是一个 source，效果与在 descriptor 里写出同一条完全相同。约定来自两处：
+
+- 内核：`data/dimensions.yaml` → `world:metadata.dimensions`，`data/lorebook.yaml` → `lorebook`，`characters/characters.json` → `characters`；
+- 插件：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。两个契约声明了同一个路径时，这个路径不算约定，世界包要用 descriptor 说明给谁。
+
+导入顺序是：维度，然后 media，然后其余契约数据，最后是 `characters`。
+
+内置世界 `worlds/emberback` 就是这样读的：它没有 descriptor，12 个 source 全部来自约定路径。
+
+**什么时候仍然写 descriptor**：文件不在约定路径上（比如规则文件叫 `data/rules/tide-mystery.yaml`）、一个契约有多个文件、需要 `after` 指定顺序、或要关掉某个 source。写了 `worldData` 之后只认 descriptor，约定不再生效，因此 descriptor 要列全。
+
+没有 descriptor 时，`data/` 下不属于任何约定的 YAML / JSON 文件不会被导入；`pnpm validate:world` 对这种文件给出 `data-file-unused` 提醒，并列出当前可用的约定路径。服务端按已安装插件的约定读取；某个插件没装，它的文件就不在约定里，同样会得到这条提醒。
+
 ## Descriptor
 
 `data/world.data.yaml` 使用 `sources` map：
@@ -334,13 +360,11 @@ sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
-    schema: covel://world/dimensions
     to: world:metadata.dimensions
 
   cast:
     kind: json
     path: characters/main-cast.json
-    schema: contract:character.blueprints@1
     to: contract:character.blueprints@1
     key: id
     after: dimensions
@@ -352,6 +376,8 @@ sources:
     key: id
     after: cast
 ```
+
+`schema` 可以省略：目标是 `contract:<id>`（含 `+lorebook`）时按该契约的 schema 校验，目标是 `world:metadata.dimensions` 时按维度 schema 校验。只有用本地 JSON Schema 文件校验时才需要写 `schema`。省略时，如果该契约没有任何插件声明 schema，这个 source 不做校验；显式写了 `schema: contract:<id>` 而找不到 schema 则是错误。
 
 逐字段说明见生成的 [World data descriptor 字段表](schema/world-data-descriptor.md)；目标 URI 的阶段与语义见下方 [Target URI](#target-uri)，隐藏数据见[隐藏数据](#隐藏数据visibility-hidden)。
 
@@ -994,6 +1020,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `locale-script`         | warning          | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词                                |
 | `edition-incomplete`    | warning          | `supportedLocales` 声明了某种语言，但该语言的版本缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
 | `inline-locale-map`     | error            | 主文件里把文本写成了 locale map；主文件只写一种语言，译文放进语言文件                                       |
+| `data-file-unused`      | warning          | 世界包没有 descriptor，而 `data/` 下这个文件不在任何约定路径上，不会被导入                                  |
 
 标为“error 或 warning”的三项：拼写接近某个已知 ID 时判为 error 并提示 “Did you mean”；否则默认是 warning（提供者可能是未扫描的社区插件），加 `--strict` 后一律为 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
 

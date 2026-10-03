@@ -187,7 +187,7 @@ describe("world translation tooling: what counts as text", () => {
       "ja-JP",
     );
     const rules = status.files.find(
-      (file) => file.file === "data/rules/emberback-rules.yaml",
+      (file) => file.file === "data/rules/world-rules.yaml",
     )!;
     const keys = rules.missing
       .filter((unit) => unit.pointer.includes(".keys["))

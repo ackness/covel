@@ -139,7 +139,7 @@
         "required": ["schema"],
         "additionalProperties": false
       },
-      "description": "Public schema of each contract this package publishes or accepts, keyed by contract ID."
+      "description": "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace."
     },
     "entry": {
       "type": "string",
@@ -1295,7 +1295,7 @@
                   "items": {
                     "type": "string"
                   },
-                  "description": "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`."
+                  "description": "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted."
                 },
                 "defer": {
                   "anyOf": [
@@ -1421,7 +1421,7 @@
                   "items": {
                     "type": "string"
                   },
-                  "description": "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`."
+                  "description": "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted."
                 },
                 "defer": {
                   "anyOf": [

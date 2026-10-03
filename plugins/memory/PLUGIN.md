@@ -43,9 +43,6 @@ contributes:
     blocks:
       version: 1
       schema: ./schemas/blocks.schema.json
-contracts:
-  memory.blocks@1:
-    schema: ./schemas/block-definitions.schema.json
 ---
 
 Memory extraction runs as a detached post-turn function with a before-next-execution barrier. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.
