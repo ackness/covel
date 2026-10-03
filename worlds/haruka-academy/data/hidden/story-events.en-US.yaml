@@ -1,0 +1,12 @@
+- id: mio-the-club-room
+  title: What Mio Didn't Say
+  payload: "In the Literature Club Activity Room, with only the two of you left after school, Mio finally reveals what she has been hiding from the members: someone in the Student Council proposed converting the old activity room on the third floor of the Club Building into a storage warehouse for the School Festival, and the Merger Review isn't just about member counts. She places a renovation draft under the table of contents of Spring Mint and asks you if it were you, would you tell everyone? Portray her exhaustion and hesitation, letting the player decide how to respond; do not make the decision for her, nor resolve the issue immediately."
+- id: kaho-last-verse
+  title: The Nameless Song
+  payload: 'Kaho waits for you by the Vending Machine at Sakurazaka Seawall, guitar slung behind her back. She says she can''t write the last verse of her new song, then seriously plays the written parts for you for the first time, stopping when she reaches the blank section. She admits why she can''t write it: if the School Festival performance fails, the Light Music Club might lose its main stage qualification, and she doesn''t dare write an "after." Portray this melody and her anxiety, letting the player respond; do not write the lyrics for her.'
+- id: akane-sisters-note
+  title: Words on the Old Journal's Title Page
+  payload: 'Before the Library closes, Akane Toujou takes down the oldest School Festival special issue and shows you a faded line on the title page: "Hope we can still be here next year." She quietly says this was written by her sister, who led the Old Club Building Preservation Movement seven years ago, and she has always wanted to keep this going. She asks if you are willing to hand the story of this old issue over to the Literature Club. Portray her rare initiative, leaving space for silence; do not voice all her inner thoughts for her.'
+- id: kaho-names-the-song
+  title: Naming the Song
+  payload: 'After the main stage rehearsal, Kaho stops you at the door of the Light Music Club Practice Room, stuffing a sheet of heavily edited lyrics into your hands—the last verse is finally finished, containing spring, the sea breeze, and "you" in the sentences. She says she wants you to hear the complete version first, then looks away and asks: What should this song be called? Portray her rare nervousness and anticipation, letting the player respond or name it; do not decide the song title for the player, nor treat this as a confession scene that gets fully resolved.'

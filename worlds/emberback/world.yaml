@@ -8,6 +8,7 @@ summary: A lonely relay on a tidally locked world receives a distress call in
 defaultLocale: en-US
 supportedLocales:
   - en-US
+  - zh-CN
 tags:
   - science-fiction
   - frontier

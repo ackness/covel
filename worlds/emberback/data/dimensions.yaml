@@ -94,12 +94,15 @@ signalLog:
         source:
           type: string
           title: Source
+          x-i18n: true
         channel:
           type: string
           title: Channel
+          x-i18n: true
         timestamp:
           type: string
           title: Timestamp
+          x-i18n: true
         status:
           type: string
           title: Status
@@ -113,6 +116,7 @@ signalLog:
           type: string
           title: Note
           maxLength: 240
+          x-i18n: true
       required: [source, channel, timestamp, status]
       additionalProperties: false
   initialValue:
@@ -182,6 +186,7 @@ geography:
       overview:
         type: string
         title: Overview
+        x-i18n: true
       regions:
         type: array
         items:
@@ -190,12 +195,15 @@ geography:
             name:
               type: string
               title: Name
+              x-i18n: true
             description:
               type: string
               title: Description
+              x-i18n: true
             climate:
               type: string
               title: Climate
+              x-i18n: true
             landmarks:
               type: array
               items:
@@ -204,9 +212,11 @@ geography:
                   name:
                     type: string
                     title: Name
+                    x-i18n: true
                   description:
                     type: string
                     title: Description
+                    x-i18n: true
                 additionalProperties: false
               title: Landmarks
           additionalProperties: false
@@ -253,9 +263,11 @@ factions:
         name:
           type: string
           title: Name
+          x-i18n: true
         description:
           type: string
           title: Description
+          x-i18n: true
         type:
           type: string
           title: Type
@@ -265,9 +277,11 @@ factions:
         leader:
           type: string
           title: Leader
+          x-i18n: true
         headquarters:
           type: string
           title: Headquarters
+          x-i18n: true
         relations:
           type: array
           items:
@@ -282,6 +296,7 @@ factions:
               description:
                 type: string
                 title: Description
+                x-i18n: true
             additionalProperties: false
           title: Relations
       additionalProperties: false
@@ -333,16 +348,19 @@ powerSystem:
       name:
         type: string
         title: Name
+        x-i18n: true
       type:
         type: string
         title: Type
       description:
         type: string
         title: Description
+        x-i18n: true
       rules:
         type: array
         items:
           type: string
+          x-i18n: true
         title: Rules
       tiers:
         type: array
@@ -352,12 +370,14 @@ powerSystem:
             name:
               type: string
               title: Name
+              x-i18n: true
             rank:
               type: integer
               title: Rank
             description:
               type: string
               title: Description
+              x-i18n: true
           additionalProperties: false
         title: Tiers
     additionalProperties: false
@@ -393,15 +413,19 @@ history:
         era:
           type: string
           title: Era
+          x-i18n: true
         year:
           type: string
           title: Year
+          x-i18n: true
         name:
           type: string
           title: Name
+          x-i18n: true
         description:
           type: string
           title: Description
+          x-i18n: true
         significance:
           type: string
           title: Significance
@@ -440,22 +464,26 @@ economy:
             name:
               type: string
               title: Name
+              x-i18n: true
             symbol:
               type: string
               title: Symbol
             description:
               type: string
               title: Description
+              x-i18n: true
           additionalProperties: false
         title: Currencies
       resources:
         type: array
         items:
           type: string
+          x-i18n: true
         title: Resources
       tradeNotes:
         type: string
         title: Trade
+        x-i18n: true
     additionalProperties: false
   initialValue:
     currencies:
@@ -482,17 +510,20 @@ socialStructure:
             name:
               type: string
               title: Name
+              x-i18n: true
             rank:
               type: integer
               title: Rank
             description:
               type: string
               title: Description
+              x-i18n: true
           additionalProperties: false
         title: Classes
       notes:
         type: string
         title: Notes
+        x-i18n: true
     additionalProperties: false
   initialValue:
     classes:
@@ -515,6 +546,7 @@ tone:
         type: array
         items:
           type: string
+          x-i18n: true
         title: Genres
       contentRating:
         type: string
@@ -522,10 +554,12 @@ tone:
       narrativeStyle:
         type: string
         title: Narrative style
+        x-i18n: true
       themes:
         type: array
         items:
           type: string
+          x-i18n: true
         title: Themes
     additionalProperties: false
   initialValue:
@@ -554,10 +588,12 @@ mechanics:
       skillSystem:
         type: string
         title: Checks
+        x-i18n: true
       customRules:
         type: array
         items:
           type: string
+          x-i18n: true
         title: House rules
     additionalProperties: false
   initialValue:
@@ -578,22 +614,27 @@ startingConditions:
       openingScenario:
         type: string
         title: Opening scene
+        x-i18n: true
       openingHook:
         type: string
         title: Hook
+        x-i18n: true
       openingChips:
         type: array
         items:
           type: string
+          x-i18n: true
         title: Opening moves
       playerConstraints:
         type: array
         items:
           type: string
+          x-i18n: true
         title: Constraints
       startingLocation:
         type: string
         title: Starting point
+        x-i18n: true
     additionalProperties: false
   initialValue:
     openingScenario: At 06:14 every receiver at Emberback plays the same impossible distress call—your own voice, speaking from seventy-two hours ahead. The message warns you to stop a medical convoy at Mile Seventeen, keep Mina off the tower, and prevent Tomas from shutting down the signal. The network then fails as a Crownfire storm approaches.

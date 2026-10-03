@@ -489,6 +489,7 @@ geography:
       overview:
         type: string
         title: 概况
+        x-i18n: true
       regions:
         type: array
         items:
@@ -497,12 +498,15 @@ geography:
             name:
               type: string
               title: 名称
+              x-i18n: true
             description:
               type: string
               title: 描述
+              x-i18n: true
             climate:
               type: string
               title: 气候
+              x-i18n: true
             landmarks:
               type: array
               items:
@@ -511,9 +515,11 @@ geography:
                   name:
                     type: string
                     title: 名称
+                    x-i18n: true
                   description:
                     type: string
                     title: 描述
+                    x-i18n: true
                 additionalProperties: false
               title: 地标
           additionalProperties: false
@@ -593,9 +599,11 @@ factions:
         name:
           type: string
           title: 名称
+          x-i18n: true
         description:
           type: string
           title: 描述
+          x-i18n: true
         type:
           type: string
           title: 类型
@@ -605,9 +613,11 @@ factions:
         leader:
           type: string
           title: 领袖
+          x-i18n: true
         headquarters:
           type: string
           title: 据点
+          x-i18n: true
         relations:
           type: array
           items:
@@ -622,6 +632,7 @@ factions:
               description:
                 type: string
                 title: 描述
+                x-i18n: true
             additionalProperties: false
           title: 关系
       additionalProperties: false
@@ -705,16 +716,19 @@ powerSystem:
       name:
         type: string
         title: 名称
+        x-i18n: true
       type:
         type: string
         title: 类型
       description:
         type: string
         title: 描述
+        x-i18n: true
       rules:
         type: array
         items:
           type: string
+          x-i18n: true
         title: 规则
       tiers:
         type: array
@@ -724,12 +738,14 @@ powerSystem:
             name:
               type: string
               title: 名称
+              x-i18n: true
             rank:
               type: integer
               title: 等级
             description:
               type: string
               title: 描述
+              x-i18n: true
           additionalProperties: false
         title: 层级
     additionalProperties: false
@@ -771,12 +787,15 @@ history:
         era:
           type: string
           title: 时代
+          x-i18n: true
         name:
           type: string
           title: 名称
+          x-i18n: true
         description:
           type: string
           title: 描述
+          x-i18n: true
         significance:
           type: string
           title: 重要性
@@ -823,22 +842,27 @@ economy:
             name:
               type: string
               title: 名称
+              x-i18n: true
             symbol:
               type: string
               title: 符号
+              x-i18n: true
             description:
               type: string
               title: 描述
+              x-i18n: true
           additionalProperties: false
         title: 货币
       resources:
         type: array
         items:
           type: string
+          x-i18n: true
         title: 资源
       tradeNotes:
         type: string
         title: 贸易
+        x-i18n: true
     additionalProperties: false
   initialValue:
     currencies:
@@ -874,12 +898,14 @@ socialStructure:
             name:
               type: string
               title: 名称
+              x-i18n: true
             rank:
               type: integer
               title: 等级
             description:
               type: string
               title: 描述
+              x-i18n: true
           additionalProperties: false
         title: 阶层
       races:
@@ -890,19 +916,23 @@ socialStructure:
             name:
               type: string
               title: 名称
+              x-i18n: true
             description:
               type: string
               title: 描述
+              x-i18n: true
             traits:
               type: array
               items:
                 type: string
+                x-i18n: true
               title: 特征
           additionalProperties: false
         title: 族群
       notes:
         type: string
         title: 备注
+        x-i18n: true
     additionalProperties: false
   initialValue:
     classes:
@@ -938,6 +968,7 @@ tone:
         type: array
         items:
           type: string
+          x-i18n: true
         title: 类型
       contentRating:
         type: string
@@ -945,10 +976,12 @@ tone:
       narrativeStyle:
         type: string
         title: 叙事风格
+        x-i18n: true
       themes:
         type: array
         items:
           type: string
+          x-i18n: true
         title: 主题
     additionalProperties: false
   initialValue:
@@ -986,10 +1019,12 @@ mechanics:
       skillSystem:
         type: string
         title: 检定规则
+        x-i18n: true
       customRules:
         type: array
         items:
           type: string
+          x-i18n: true
         title: 附加规则
     additionalProperties: false
   initialValue:
@@ -1022,13 +1057,16 @@ startingConditions:
       openingScenario:
         type: string
         title: 开场
+        x-i18n: true
       startingLocation:
         type: string
         title: 起点
+        x-i18n: true
       playerConstraints:
         type: array
         items:
           type: string
+          x-i18n: true
         title: 开局限制
       startingResources:
         type: object
@@ -1041,10 +1079,12 @@ startingConditions:
       openingHook:
         type: string
         title: 引子
+        x-i18n: true
       openingChips:
         type: array
         items:
           type: string
+          x-i18n: true
         title: 开局行动
     additionalProperties: false
   initialValue:

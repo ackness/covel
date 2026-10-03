@@ -1,0 +1,25 @@
+name: 余烬背中继站
+summary: 一座位于潮汐锁定世界上的孤立中继站，收到了一封来自七十二小时后的求救信号——声音竟是你自己的。
+pluginPolicy:
+  packs:
+    - id: emberback-rescue
+      label: 余烬背救援
+      description: 一个传统故事模组，包含骰子检定、任务、野外物品栏、船员关系，以及关于风暴、电网、信号日志和车队的实时面板。
+      reason: 在王冠火降临前的三小时内，每一个选择都会消耗某种资源——时间、电量、货物或信任——而面板会精确显示剩余内容。
+characterSchema:
+  attributes:
+    - id: grit
+      name: 坚毅
+      description: 用于艰苦旅行、负重、攀爬以及在高温或低温压力下保持机能的体力与耐力。
+    - id: systems
+      name: 系统
+      description: 操作无线电、电网、车辆、传感器及进行临时维修的技术能力。
+    - id: fieldcraft
+      name: 野外生存术
+      description: 用于导航、气象判断、驾驶、路线规划以及站点外生存的实际判断力。
+    - id: insight
+      name: 洞察
+      description: 模式识别、细致观察的能力，以及从噪音中分离出有意义信号的本领。
+    - id: rapport
+      name: 默契
+      description: 赢得信任、平息冲突、察言观色，以及在不将他人视为障碍的前提下说服他人的能力。

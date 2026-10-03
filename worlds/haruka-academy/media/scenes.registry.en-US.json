@@ -1,0 +1,24 @@
+{
+  "scenes": [
+    {
+      "name": "Class 2-B",
+      "locationRef": "Class 2-B/Window Seat/Bulletin Board by the Blackboard/Back Row Lockers"
+    },
+    {
+      "name": "Club Building",
+      "locationRef": "Club Building/Literature Club Activity Room/Light Music Club Practice Room/News Club Editorial Office/Club Building Rooftop"
+    },
+    {
+      "name": "Library",
+      "locationRef": "Library/Second Floor Window Long Table/Old Journal Shelf/Lending Desk Note Box"
+    },
+    {
+      "name": "Sakurazaka Seawall",
+      "locationRef": "Sakurazaka Seawall/Vending Machine/Seawall Bench"
+    },
+    {
+      "name": "Seireki Town Shopping Street",
+      "locationRef": "Seireki Town Shopping Street/Umineko Bookstore/Orange House Family Restaurant/Hoshisuna Instrument Shop"
+    }
+  ]
+}
