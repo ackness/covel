@@ -38,6 +38,21 @@ export function installPackage(
   });
 }
 
+/** Install a packed collection ZIP: every member, or none. */
+export function installCollectionZip(
+  file: File,
+): Promise<GithubBatchInstallResult> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return request("/api/install/collection", {
+    method: "POST",
+    headers: getDesktopRestAuthHeaders(),
+    body: form,
+    operatorAuth: true,
+    schema: githubBatchInstallResultSchema,
+  });
+}
+
 /** Preview every plugin, world or collection member under one GitHub URL. */
 export async function previewGithubCollection(
   url: string,

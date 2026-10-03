@@ -1,3 +1,4 @@
+import { providedContracts } from "./plugin-selection.js";
 import type { CollectionProblem } from "./schemas/collection.js";
 import { satisfiesHostVersionRange } from "./utils/host-version-range.js";
 
@@ -15,6 +16,56 @@ export interface CollectionWorldFacts {
   readonly requires: readonly string[];
   /** Plugin IDs requested by the policy and by every pack. */
   readonly requested: readonly string[];
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const strings = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+
+type ContractSource = Parameters<typeof providedContracts>[0];
+
+/** Facts from a root PLUGIN.md frontmatter that is already parsed as data. */
+export function collectionPluginFacts(
+  manifest: Readonly<Record<string, unknown>>,
+): CollectionPluginFacts {
+  const contributes = isRecord(manifest.contributes)
+    ? manifest.contributes
+    : {};
+  return {
+    id: String(manifest.id),
+    contracts: providedContracts({
+      provides: Array.isArray(manifest.provides)
+        ? (manifest.provides as NonNullable<ContractSource["provides"]>)
+        : [],
+      extensions: Array.isArray(contributes.extensions)
+        ? (contributes.extensions as NonNullable<ContractSource["extensions"]>)
+        : [],
+    }),
+    ...(typeof manifest.covel === "string"
+      ? { hostRange: manifest.covel }
+      : {}),
+  };
+}
+
+/** Facts from a world.yaml that is already parsed as data. */
+export function collectionWorldFacts(
+  manifest: Readonly<Record<string, unknown>>,
+): CollectionWorldFacts {
+  const policy = isRecord(manifest.pluginPolicy) ? manifest.pluginPolicy : {};
+  const packs = Array.isArray(policy.packs)
+    ? policy.packs.filter(isRecord)
+    : [];
+  return {
+    id: String(manifest.id),
+    requires: strings(policy.requires),
+    requested: [
+      ...strings(policy.requested),
+      ...packs.flatMap((pack) => strings(pack.requested)),
+    ],
+  };
 }
 
 /**

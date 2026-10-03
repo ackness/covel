@@ -66,6 +66,21 @@ async function zip(contents: Record<string, string>, prefix: string) {
   return result;
 }
 
+/** A ZIP with its files at the top level, as an uploaded package has them. */
+async function zipRoot(contents: Record<string, string>) {
+  const file = new yazl.ZipFile();
+  for (const [name, content] of Object.entries(contents))
+    file.addBuffer(Buffer.from(content), name);
+  const chunks: Buffer[] = [];
+  const result = new Promise<Buffer>((resolve, reject) => {
+    file.outputStream.on("data", (chunk) => chunks.push(chunk));
+    file.outputStream.on("error", reject);
+    file.outputStream.on("end", () => resolve(Buffer.concat(chunks)));
+  });
+  file.end();
+  return result;
+}
+
 let pluginRoot: string;
 let worldRoot: string;
 let app: Hono;
@@ -306,5 +321,56 @@ describe("collection manifests", () => {
 
     expect(response.status).toBe(400);
     expect(await response.text()).toContain("40-character commit SHA");
+  });
+});
+
+describe("collection ZIP import", () => {
+  const upload = async (contents: Record<string, string>) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array(await zipRoot(contents))]),
+      "pack.zip",
+    );
+    return app.request("/api/install/collection", {
+      method: "POST",
+      body: form,
+    });
+  };
+
+  it("installs a packed collection as a unit", async () => {
+    const response = await upload({
+      ...collection({
+        worlds: [{ path: "worlds/barrow" }],
+        plugins: [{ path: "plugins/barrow-dice" }],
+      }),
+      ...pluginFiles("barrow-dice"),
+      ...worldFiles(),
+    });
+
+    expect(response.status, await response.clone().text()).toBe(201);
+    expect(await response.json()).toMatchObject({
+      installed: [
+        { kind: "plugin", id: "barrow-dice" },
+        { kind: "world", id: "barrow" },
+      ],
+      restartRequired: true,
+    });
+    expect(
+      await exists(path.join(pluginRoot, "barrow-dice", "PLUGIN.md")),
+    ).toBe(true);
+    expect(await store.getWorld("barrow")).toMatchObject({ id: "barrow" });
+  });
+
+  it("writes nothing when the packed set is incomplete", async () => {
+    const response = await upload({
+      ...collection({ worlds: [{ path: "worlds/barrow" }] }),
+      ...worldFiles(),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("requires action-check@1");
+    expect(await exists(path.join(worldRoot, "barrow"))).toBe(false);
+    expect(await store.getWorld("barrow")).toBeFalsy();
   });
 });

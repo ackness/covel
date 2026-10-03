@@ -813,6 +813,8 @@
       "pluginHint": ".zip с PLUGIN.md (или runtimes/<sub>/PLUGIN.md) и package.json",
       "worldLabel": "Пакет мира",
       "worldHint": ".zip, содержащий world.yaml и WORLD.md.",
+      "collectionLabel": "Пакет коллекции",
+      "collectionHint": ".zip с covel-collection.yaml и всеми перечисленными в нём плагинами и мирами",
       "chooseFile": "Выбрать файл",
       "uploading": "Загрузка…",
       "uploadFailed": "Установка не удалась",

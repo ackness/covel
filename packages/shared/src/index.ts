@@ -362,6 +362,8 @@ export {
 } from "./plugin-selection.js";
 export {
   checkCollection,
+  collectionPluginFacts,
+  collectionWorldFacts,
   type CollectionPluginFacts,
   type CollectionWorldFacts,
 } from "./collection-check.js";

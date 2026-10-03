@@ -811,6 +811,8 @@
       "pluginHint": ".zip containing PLUGIN.md (or runtimes/<sub>/PLUGIN.md) + package.json",
       "worldLabel": "World package",
       "worldHint": ".zip containing world.yaml and WORLD.md",
+      "collectionLabel": "Collection package",
+      "collectionHint": ".zip containing covel-collection.yaml and every plugin and world it lists",
       "chooseFile": "Choose file",
       "uploading": "Uploading…",
       "uploadFailed": "Install failed",

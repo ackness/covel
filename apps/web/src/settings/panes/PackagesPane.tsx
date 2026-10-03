@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
+import { Boxes, Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
+import type { GithubBatchInstallResult } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import {
+  installCollectionZip,
   installPackage,
   listPackageInstallations,
   listInstalledPlugins,
@@ -29,7 +31,7 @@ interface ToastState {
  */
 export function PackagesPane() {
   const { t } = useTranslation();
-  const [busy, setBusy] = useState<InstallKind | null>(null);
+  const [busy, setBusy] = useState<UploadKind | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
   const [installed, setInstalled] = useState<PluginSummary[]>([]);
@@ -72,7 +74,22 @@ export function PackagesPane() {
     [],
   );
 
-  async function uploadZip(kind: InstallKind, file: File) {
+  /** The status line shows one package; prefer one that needs the restart. */
+  function showBatch(result: GithubBatchInstallResult): InstallResult | null {
+    const shown =
+      result.installed.find((item) => item.kind === "plugin") ??
+      result.installed.at(-1);
+    if (!shown) return null;
+    const single = {
+      ok: true as const,
+      ...shown,
+      restartRequired: shown.kind === "plugin",
+    };
+    setLastResult(single);
+    return single;
+  }
+
+  async function uploadZip(kind: UploadKind, file: File) {
     if (!file.name.toLowerCase().endsWith(".zip")) {
       flash({ message: t("settings.packages.invalidFileType"), tone: "error" });
       return;
@@ -80,8 +97,21 @@ export function PackagesPane() {
     setBusy(kind);
     setLastResult(null);
     try {
-      const result = await installPackage(kind, file);
-      setLastResult(result);
+      let result: InstallResult;
+      if (kind === "collection") {
+        const batch = await installCollectionZip(file);
+        const shown = showBatch(batch);
+        if (!shown) return;
+        // One message for the whole set.
+        result = {
+          ...shown,
+          id: batch.installed.map((item) => item.id).join(", "),
+          restartRequired: batch.restartRequired,
+        };
+      } else {
+        result = await installPackage(kind, file);
+        setLastResult(result);
+      }
       await refreshInstalled();
       flash({
         message: result.restartRequired
@@ -205,16 +235,7 @@ export function PackagesPane() {
         disabled={!!busy || !!removing || updateBusy || githubBusy}
         onBusyChange={setGithubBusy}
         onInstalled={(result) => {
-          // The status line shows one package; prefer one that needs the restart.
-          const shown =
-            result.installed.find((item) => item.kind === "plugin") ??
-            result.installed.at(-1);
-          if (shown)
-            setLastResult({
-              ok: true,
-              ...shown,
-              restartRequired: shown.kind === "plugin",
-            });
+          showBatch(result);
           void refreshInstalled();
         }}
       />
@@ -238,6 +259,17 @@ export function PackagesPane() {
           !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
         }
         onFile={(f) => uploadZip("plugin", f)}
+      />
+      <DropZone
+        kind="collection"
+        icon={<Boxes className="w-5 h-5" />}
+        label={t("settings.packages.collectionLabel")}
+        hint={t("settings.packages.collectionHint")}
+        busy={busy === "collection"}
+        disabled={
+          !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
+        }
+        onFile={(f) => uploadZip("collection", f)}
       />
 
       <DropZone
@@ -348,8 +380,11 @@ export function PackagesPane() {
   );
 }
 
+/** A collection ZIP installs plugins and worlds together. */
+type UploadKind = InstallKind | "collection";
+
 interface DropZoneProps {
-  kind: InstallKind;
+  kind: UploadKind;
   icon: React.ReactNode;
   label: string;
   hint: string;

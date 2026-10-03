@@ -811,6 +811,8 @@
       "pluginHint": ".zip，需包含 PLUGIN.md（或 runtimes/<sub>/PLUGIN.md）+ package.json",
       "worldLabel": "世界包",
       "worldHint": ".zip，需包含 world.yaml 与 WORLD.md",
+      "collectionLabel": "合集包",
+      "collectionHint": ".zip，需包含 covel-collection.yaml 及其列出的全部插件与世界",
       "chooseFile": "选择文件",
       "uploading": "上传中…",
       "uploadFailed": "安装失败",
