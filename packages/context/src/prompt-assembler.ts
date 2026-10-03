@@ -44,6 +44,7 @@ import {
   insertDepthContributions,
   type RenderedDepthContribution,
 } from "./message-insertion.js";
+import { PROMPT_CACHE_BREAKPOINT_MARKER } from "@covel/shared";
 import type { InputSlot, InputSource } from "@covel/shared";
 import type {
   AssembledContext,
@@ -364,6 +365,10 @@ function finalizeSegmentedContext(
   segments: PromptSegments,
 ): AssembledContext {
   const systemPrompt = serializeSystemPrompt(segments, true);
+  // Serialization emits segment 1 first, followed by its cache marker.
+  const frameworkHead = segments.frameworkPreamble
+    ? segments.frameworkPreamble + PROMPT_CACHE_BREAKPOINT_MARKER
+    : "";
 
   // Segment 7: history with optional compaction substitution
   const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
@@ -401,11 +406,12 @@ function finalizeSegmentedContext(
     });
     return {
       systemPrompt,
+      frameworkHead,
       messages: result.messages,
       budgetExceeded: result.budgetExceeded,
       prunedMessageCount: result.prunedMessageCount,
     };
   }
 
-  return { systemPrompt, messages };
+  return { systemPrompt, frameworkHead, messages };
 }

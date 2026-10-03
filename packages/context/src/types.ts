@@ -37,6 +37,13 @@ export interface LLMMessage {
 export interface AssembledContext {
   /** Full system prompt (PLUGIN.md body + injected data). */
   readonly systemPrompt: string;
+  /**
+   * The framework's own opening of `systemPrompt`: the runtime frame, the
+   * output-language directive and the completion contract, with its cache
+   * marker. Empty when the prompt has none. A context hook may rewrite the
+   * rest of the prompt; this part stays.
+   */
+  readonly frameworkHead: string;
   /** Conversation messages (history + current user message). */
   readonly messages: readonly LLMMessage[];
   /**

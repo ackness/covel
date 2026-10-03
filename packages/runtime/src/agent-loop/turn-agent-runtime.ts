@@ -232,6 +232,7 @@ export async function executeAgentRuntime({
     },
     {
       systemPrompt: assembled.systemPrompt,
+      frameworkHead: assembled.frameworkHead,
       messages: assembled.messages,
       outputKind: manifest.outputKind,
       locale: input.locale,
