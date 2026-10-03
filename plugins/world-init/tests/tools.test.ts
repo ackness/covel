@@ -280,6 +280,28 @@ describe("world-init domain tools", () => {
       updates: [],
     });
   });
+  it("rejects change paths that reach a prototype", async () => {
+    const ctx = trackerContext();
+    for (const path of ["__proto__.polluted", "a.constructor.prototype.x"]) {
+      await expect(
+        updateDimensions({ tool, z }).execute(
+          {
+            updates: [
+              {
+                id: "reputation",
+                expectedVersion: 1,
+                changes: [{ path, value: "yes" }],
+              },
+            ],
+          },
+          ctx,
+        ),
+      ).rejects.toThrow(/Unsafe change path/);
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(({} as Record<string, unknown>).x).toBeUndefined();
+  });
+
   it("rejects missing narrative provenance and skips model maintenance when no rules exist", async () => {
     await expect(
       updateDimensions({ tool, z }).execute(

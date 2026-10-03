@@ -11,10 +11,16 @@ import {
   materializeDimensionRecords,
 } from "@covel/shared";
 
+// Path segments that would reach an object's prototype instead of its data.
+const UNSAFE_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
 /** Set `value` at a dot path inside a copy of `base`, creating containers. */
 function setAtPath(base, path, value) {
   const segments = path.split(".").filter(Boolean);
   if (!segments.length) return structuredClone(value);
+  // The path comes from model output: never let it walk into a prototype.
+  if (segments.some((segment) => UNSAFE_SEGMENTS.has(segment)))
+    throw new Error(`Unsafe change path: ${path}`);
   const root = base && typeof base === "object" ? structuredClone(base) : {};
   let node = root;
   for (const [index, segment] of segments.entries()) {
@@ -23,7 +29,11 @@ function setAtPath(base, path, value) {
       node[key] = structuredClone(value);
       break;
     }
-    if (!node[key] || typeof node[key] !== "object")
+    if (
+      !Object.hasOwn(node, key) ||
+      !node[key] ||
+      typeof node[key] !== "object"
+    )
       node[key] = /^\d+$/.test(segments[index + 1]) ? [] : {};
     node = node[key];
   }
