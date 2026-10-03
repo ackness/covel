@@ -56,6 +56,7 @@ export async function preparePluginReload(
 
     packageManifest: definition.packageManifest,
     manifests: definition.manifests,
+    messages: definition.messages,
     loadedRuntimes: new Map(),
     status: "registered",
     ...(discovery.source ? { source: discovery.source } : {}),

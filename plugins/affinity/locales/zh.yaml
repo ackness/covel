@@ -18,3 +18,9 @@ messages:
   No affinity changes this turn.: 本回合没有好感变化。
   # A section mark, the same in every language.
   § AFFINITY: § AFFINITY
+  Hostile: 敌视
+  Cold: 冷淡
+  Neutral: 中立
+  Friendly: 友好
+  Close: 亲密
+  Devoted: 挚爱

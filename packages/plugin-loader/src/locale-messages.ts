@@ -229,19 +229,119 @@ async function uiSpecFiles(pluginRoot: string): Promise<string[]> {
   return files;
 }
 
+const SOURCE_FILE = /\.(js|mjs|cjs|ts)$/;
+const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set([
+  "node_modules",
+  "tests",
+  "__tests__",
+  "dist",
+  "ui",
+  "locales",
+]);
+
+async function sourceFiles(pluginRoot: string): Promise<string[]> {
+  const files: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name.startsWith(".")) continue;
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRECTORIES.has(entry.name)) await visit(full);
+      } else if (
+        entry.isFile() &&
+        SOURCE_FILE.test(entry.name) &&
+        !/\.test\.[a-z]+$/.test(entry.name)
+      )
+        files.push(full);
+    }
+  };
+  await visit(pluginRoot);
+  return files;
+}
+
 /**
- * UI texts of a plugin that have no translation in `locale`. A text with no
- * letters (a symbol, a number) needs none. An entry that repeats the English
- * text states that the text is the same in that language.
+ * A `translate(ctx, …)` or `labelText(ctx, …)` call up to its second argument.
+ * A standalone plugin defines its own `translate`; the definition is no call.
  */
-export async function missingUiTranslations(
+const TEXT_CALL =
+  /(?<!function\s+)\b(translate|labelText)\(\s*[A-Za-z_$][\w$.?]*\s*,\s*(?:(["'])((?:\\.|(?!\2)[^\\\n])*)\2|(`)((?:\\.|[^\\`])*)`|([^\s"'`]))/g;
+
+function unescapeLiteral(text: string): string {
+  return text.replace(
+    /\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|[\s\S])/g,
+    (_, c) =>
+      c === "n"
+        ? "\n"
+        : c === "t"
+          ? "\t"
+          : c[0] === "u"
+            ? String.fromCodePoint(parseInt(c.replace(/[u{}]/g, ""), 16))
+            : c === "\n"
+              ? ""
+              : c,
+  );
+}
+
+/**
+ * The English texts that plugin code passes to `translate` and `labelText`,
+ * and the calls whose text is not a constant. A catalog is keyed by the text,
+ * so the text must be readable from the source.
+ */
+export function findCodeTexts(source: string): {
+  texts: { line: number; text: string }[];
+  dynamic: { line: number; call: string }[];
+} {
+  const texts: { line: number; text: string }[] = [];
+  const dynamic: { line: number; call: string }[] = [];
+  TEXT_CALL.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = TEXT_CALL.exec(source)) !== null) {
+    const line = source.slice(0, match.index).split("\n").length;
+    const [, call, , quoted, backtick, template] = match;
+    if (quoted !== undefined)
+      texts.push({ line, text: unescapeLiteral(quoted) });
+    else if (backtick && !template!.includes("${"))
+      texts.push({ line, text: unescapeLiteral(template!) });
+    else dynamic.push({ line, call: call! });
+  }
+  return { texts, dynamic };
+}
+
+async function codeTexts(pluginRoot: string): Promise<{
+  texts: { file: string; line: number; text: string }[];
+  dynamic: { file: string; line: number; call: string }[];
+}> {
+  const texts: { file: string; line: number; text: string }[] = [];
+  const dynamic: { file: string; line: number; call: string }[] = [];
+  for (const full of await sourceFiles(pluginRoot)) {
+    const file = path.relative(pluginRoot, full).split(path.sep).join("/");
+    const found = findCodeTexts(await fs.readFile(full, "utf-8"));
+    texts.push(...found.texts.map((item) => ({ file, ...item })));
+    dynamic.push(...found.dynamic.map((item) => ({ file, ...item })));
+  }
+  return { texts, dynamic };
+}
+
+/**
+ * Texts of a plugin, in its UI specs and its code, that have no translation
+ * in `locale`. A text with no letters (a symbol, a number) needs none. An
+ * entry that repeats the English text states that the text is the same in
+ * that language.
+ */
+export async function missingTranslations(
   pluginRoot: string,
   locale: string,
-): Promise<{ file: string; property: string; text: string }[]> {
+): Promise<{ file: string; where: string; text: string }[]> {
   const catalogs = (await readMessageCatalogs(pluginRoot)).filter(
     (catalog) => catalog.locale === locale,
   );
-  const missing: { file: string; property: string; text: string }[] = [];
+  const missing: { file: string; where: string; text: string }[] = [];
   for (const full of await uiSpecFiles(pluginRoot)) {
     let spec: unknown;
     try {
@@ -257,8 +357,14 @@ export async function missingUiTranslations(
           (catalog) => matchingKey(catalog, property, text) !== undefined,
         )
       )
-        missing.push({ file, property, text });
+        missing.push({ file, where: property, text });
   }
+  for (const { file, line, text } of (await codeTexts(pluginRoot)).texts)
+    if (
+      /\p{L}/u.test(text) &&
+      !catalogs.some((catalog) => Object.hasOwn(catalog.messages, text))
+    )
+      missing.push({ file, where: `line ${line}`, text });
   return missing;
 }
 
@@ -294,11 +400,21 @@ export async function validatePluginMessages(
     compileUiText(spec, catalogs, used);
   }
 
+  const code = await codeTexts(pluginRoot);
+  for (const { file, line, call } of code.dynamic)
+    problems.push(
+      `${file}:${line}: ${call}() needs the English text as a constant; put values in {name} placeholders and pass them as parameters`,
+    );
+  for (const { text } of code.texts)
+    for (const catalog of catalogs)
+      if (Object.hasOwn(catalog.messages, text))
+        used.add(`${catalog.file}\u0000${text}`);
+
   for (const catalog of catalogs)
     for (const [key, translation] of Object.entries(catalog.messages)) {
       if (!used.has(`${catalog.file}\u0000${key}`)) {
         problems.push(
-          `${catalog.file}: ${MESSAGES_SECTION}: "${key}" is not a text of this plugin's UI; the English text changed or was removed, so this translation is ignored`,
+          `${catalog.file}: ${MESSAGES_SECTION}: "${key}" is not a text of this plugin's UI or code; the English text changed or was removed, so this translation is ignored`,
         );
         continue;
       }

@@ -55,7 +55,7 @@ export default async function handler(ctx) {
         night: null,
       };
 
-  const stage = buildStageRecord({
+  const stage = buildStageRecord(ctx, {
     sceneId: candidate.sceneId,
     name: candidate.name,
     variant,

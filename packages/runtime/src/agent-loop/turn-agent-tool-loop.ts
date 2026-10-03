@@ -10,7 +10,11 @@ import type {
   InputSlot,
   LLMTargetIdentity,
 } from "@covel/shared";
-import { instructionLocaleFor, toJsonValueOrDiagnostic } from "@covel/shared";
+import {
+  instructionLocaleFor,
+  pluginMessagesFor,
+  toJsonValueOrDiagnostic,
+} from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   isSuspendSentinel,
@@ -480,6 +484,7 @@ async function runAgentToolLoopWithinBudget(
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               locale: input.locale,
+              messages: pluginMessagesFor(loaded.messages, input.locale),
               pendingProposals: pendingProposals,
               upstreamProposals,
               world,

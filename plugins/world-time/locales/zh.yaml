@@ -22,3 +22,5 @@ messages:
   Time appears when the story starts.: 时间将在故事开始后显示。
   Time rules: 时间规则
   "Uses the default world calendar: 12 months of 30 days, 24-hour days; starts at year 1, month 1, day 1, 08:00.": 使用通用世界历：每年12个月，每月30天，24小时制；起点为第1年1月1日08:00。
+  World time has not been recorded yet. Complete the first narrative turn to view it.: 世界时间尚未记录；完成首个叙事回合后可查看。
+  "World time: {display}": 世界时间：{display}

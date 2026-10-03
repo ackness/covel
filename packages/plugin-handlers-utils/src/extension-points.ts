@@ -10,6 +10,7 @@
 
 import type { JsonValue, MediaReference } from "./types.js";
 import type { PluginServiceContext } from "./plugin-api.js";
+import type { PluginMessages } from "./messages.js";
 import type {
   ExtensionDimensionSnapshot,
   ExtensionWorldDimensions,
@@ -359,6 +360,8 @@ export interface ExtensionHandlerContext extends PluginServiceContext {
   readonly world: ExtensionWorldModel;
   readonly sessionId: string;
   readonly locale: string;
+  /** This plugin's translations, read by `translate` and `labelText`. */
+  readonly messages?: PluginMessages;
   readonly turnId?: string;
   /** Read-only, own-plugin data snapshot for this execution. */
   readonly pluginData: {

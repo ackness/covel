@@ -12,3 +12,4 @@ messages:
   Characters: 角色
   No characters created yet, complete the character creation flow to see them here…: 尚未创建角色，完成角色创建流程后将在此显示……
   All Characters: 所有角色
+  "[System] Character {name} created — your adventure is about to begin…": "[系统] 已创建角色 {name}，冒险即将开始……"

@@ -73,12 +73,13 @@ agent/function/background runtime、entry、工具、RPC、Hook、设置、UI、
 
 主要导出：
 
-| 导出                                                         | 用途                                                                            |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `MockLLM`                                                    | 记录 LLM 调用；支持 `defaultResponse` 和按顺序消费的 `responses[]`              |
-| `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult` | 减少 fixture 样板代码；`makeTurnInput` 默认带 `locale: "zh-CN"`，与真实会话一致 |
-| `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                               |
-| `expectAssetGenerated`                                       | 断言 RuntimeResult 的 `effects.assetGenerations[]` 中有合法 MediaRef            |
+| 导出                                                         | 用途                                                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `MockLLM`                                                    | 记录 LLM 调用；支持 `defaultResponse` 和按顺序消费的 `responses[]`                                             |
+| `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult` | 减少 fixture 样板代码；`makeTurnInput` 默认带 `locale: "zh-CN"`，与真实会话一致                                |
+| `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                                                              |
+| `loadPluginMessages(pluginRoot, locale)`                     | 读取插件 `locales/` 里的译文，得到宿主会传入的 `ctx.messages`；断言中文输出的 handler / 工具测试把它放进上下文 |
+| `expectAssetGenerated`                                       | 断言 RuntimeResult 的 `effects.assetGenerations[]` 中有合法 MediaRef                                           |
 
 function handler 单元测试（真实范例：[`plugins/character-blueprint/tests/presence.test.js`](../../plugins/character-blueprint/tests/presence.test.js)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
 

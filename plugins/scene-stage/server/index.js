@@ -46,6 +46,7 @@ export default function (covel) {
       for (const event of events) {
         if (event.topic === "scene.set" && current?.turnId !== event.turnId)
           current = applySceneSetPreview(
+            ctx,
             current,
             registry,
             event.data,

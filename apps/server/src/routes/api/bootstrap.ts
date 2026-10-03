@@ -485,7 +485,11 @@ async function assembleApi(
     onCallCompleted: (event) => serviceCalls.record(event),
     ...serviceAdmission.admission,
   });
-  const extensions = new PluginExtensionHost(services);
+  const extensions = new PluginExtensionHost(
+    services,
+    undefined,
+    (pluginId) => registry.get(pluginId)?.messages,
+  );
   const hookPipeline = createHookPipeline();
 
   // Unified plugin server entries (`entry` frontmatter field) — needs the

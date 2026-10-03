@@ -92,7 +92,7 @@ runtime:
 ## 参数设计原则
 
 - 每个参数加 `.describe()` — LLM 依靠描述理解如何调用
-- 存进 plugin data 的文字用会话语言写一份：`pickLocaleText(context.locale, zh, en)`，不要存 `{ zh, en }` 两份（注入提示词的数据会把两种语言都带给模型）
+- 工具写出的文字只写 English，译文放 `locales/<locale>.yaml` 的 `messages`：会被注入提示词的数据和给玩家的提示用 `translate(context, "English text", params)`，只由界面绘制的徽标用 `labelText(context, "English text")`；不要手写 `{ zh, en }` 两份
 - 工具和参数的描述用 English 写：工具定义是给模型的指令，所有语言的会话都会读到它（`pnpm check:i18n` 会拒绝中文描述）
 - 返回值中引用实体时用 `shortId()` 而非 UUID — LLM 需要能精确复制 ID
 - 返回 `ui` 数组可以渲染自定义前端卡片

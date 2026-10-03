@@ -9,6 +9,7 @@ import type {
 import type { FunctionStoreView } from "./function-runtime.js";
 import type { JsonValue, MediaReference } from "./types.js";
 import type { withPendingProposals } from "./tool-result.js";
+import type { PluginMessages } from "./messages.js";
 export type { PluginToolResult } from "./tool-result.js";
 
 export type HookEventName =
@@ -163,9 +164,11 @@ export interface PluginToolContext {
   readonly runtimeId: string;
   /**
    * The session's content language. Text a tool stores or returns is written
-   * in this language; use `pickLocaleText(context.locale, …)`.
+   * in this language; use `translate(context, "English text")`.
    */
   readonly locale?: string;
+  /** This plugin's translations, read by `translate` and `labelText`. */
+  readonly messages?: PluginMessages;
   /** Scoped, owned reads including earlier writes; absent in stateless hosts. */
   readonly store?: PluginToolStore;
   readonly world?: ExtensionWorldModel;
@@ -500,6 +503,8 @@ export interface PluginRpcContext {
   readonly runtimeId?: string;
   readonly store: PluginRpcStore;
   readonly locale?: string;
+  /** This plugin's translations, read by `translate` and `labelText`. */
+  readonly messages?: PluginMessages;
   readonly command?: {
     readonly command: string;
     readonly canonical: string;

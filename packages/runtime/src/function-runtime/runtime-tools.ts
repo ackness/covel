@@ -23,6 +23,8 @@ export function createRuntimeTools(options: {
   context: HandlerHelperContext;
   /** The session's content language, forwarded to each tool call. */
   locale?: string;
+  /** The plugin's translations for that language, forwarded as well. */
+  messages?: import("@covel/shared").PluginMessages;
   deps: TurnExecutorDeps;
   buffer: ExecutionWriteBuffer;
   inputs?: Readonly<Record<string, InputSlot>>;
@@ -77,6 +79,7 @@ export function createRuntimeTools(options: {
           {
             ...context,
             locale: options.locale,
+            messages: options.messages,
             signal,
             authorizedToolNames,
             pendingProposals: buffer,

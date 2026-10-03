@@ -2,11 +2,13 @@
  * Affinity tier metadata (plugin-local).
  *
  * Single source of truth for the score range, the six tier bands, and the
- * per-tier display metadata (label in each language + Badge color). The tool
- * derives `tier` / `tierLabel` / `tierColor` from the cumulative score on every
- * write, with the label in the session's language, so the UI (json-render spec) renders tier badges without any
+ * per-tier display metadata (name + Badge color). The tool derives `tier` /
+ * `tierLabel` / `tierColor` from the cumulative score on every write, with
+ * the name in the session's language (`locales/` translates it), so the UI (json-render spec) renders tier badges without any
  * framework-side lookup table — same pattern as codex's category-metadata.js.
  */
+
+import { translate } from "@covel/plugin-handlers-utils";
 
 export const AFFINITY_MIN = -100;
 export const AFFINITY_MAX = 100;
@@ -20,42 +22,36 @@ export const AFFINITY_TIERS = [
     id: "hostile",
     min: -100,
     max: -60,
-    label: { zh: "敌视", en: "Hostile" },
     color: "red",
   },
   {
     id: "cold",
     min: -59,
     max: -20,
-    label: { zh: "冷淡", en: "Cold" },
     color: "blue",
   },
   {
     id: "neutral",
     min: -19,
     max: 19,
-    label: { zh: "中立", en: "Neutral" },
     color: "amber",
   },
   {
     id: "friendly",
     min: 20,
     max: 59,
-    label: { zh: "友好", en: "Friendly" },
     color: "green",
   },
   {
     id: "close",
     min: 60,
     max: 84,
-    label: { zh: "亲密", en: "Close" },
     color: "cyan",
   },
   {
     id: "devoted",
     min: 85,
     max: 100,
-    label: { zh: "挚爱", en: "Devoted" },
     color: "purple",
   },
 ];
@@ -70,7 +66,7 @@ export function clampScore(score) {
 
 /**
  * @param {number} score
- * @returns {{ id: string, min: number, max: number, label: { zh: string, en: string }, color: string }}
+ * @returns {{ id: string, min: number, max: number, color: string }}
  */
 export function getTier(score) {
   const clamped = clampScore(score);
@@ -79,4 +75,25 @@ export function getTier(score) {
     // Unreachable after clamping — kept as a safe fallback for NaN input.
     AFFINITY_TIERS[2]
   );
+}
+
+/**
+ * The tier's name in the session's language. The record that holds it is
+ * injected into this plugin's prompt, so it is one language, not a pair.
+ *
+ * @param {import("@covel/plugin-handlers-utils").PluginMessageContext | undefined} ctx
+ * @param {string} tierId
+ * @returns {string}
+ */
+export function tierLabel(ctx, tierId) {
+  // Each text is a literal: the validator reads them from the source.
+  const labels = {
+    hostile: translate(ctx, "Hostile"),
+    cold: translate(ctx, "Cold"),
+    neutral: translate(ctx, "Neutral"),
+    friendly: translate(ctx, "Friendly"),
+    close: translate(ctx, "Close"),
+    devoted: translate(ctx, "Devoted"),
+  };
+  return labels[tierId] ?? tierId;
 }

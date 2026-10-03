@@ -99,6 +99,8 @@ export interface RpcHandlerContext {
    * Flows in via `...context` spread in the rpc-executor — no executor change.
    */
   readonly locale?: string;
+  /** The plugin's translations for the session's language. */
+  readonly messages?: import("@covel/shared").PluginMessages;
   /** Present only for first-class slash-command dispatches. */
   readonly command?: RpcCommandInvocation;
   /**

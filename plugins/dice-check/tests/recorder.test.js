@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import handler from "../runtimes/recorder/handler.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages`: this plugin's translations.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 const TOPIC = "check.resolved";
 
@@ -25,6 +32,7 @@ function makeCtx({
   return {
     pluginId: "dice-check",
     runtimeId: "dice-check/recorder",
+    messages,
     sessionId: "sess-1",
     turnId: "turn-7",
     triggerEvent: noTriggerEvent ? undefined : { topic: TOPIC, data },
@@ -188,9 +196,10 @@ describe("dice-check recorder handler", () => {
     expect(messageRow.key).toBe("turn-7");
     expect(messageRow.value.__turnId).toBe("turn-7");
     expect(messageRow.value.checks).toHaveLength(1);
+    // Every language the plugin ships: the block picks the UI language.
     expect(messageRow.value.checks[0].outcomeLabel).toEqual({
-      zh: "成功",
       en: "Success",
+      zh: "成功",
     });
   });
 

@@ -5,12 +5,20 @@ import { worldTimeSchema } from "../schema.js";
 import time from "../rpc/time.js";
 import register from "../server/index.js";
 import { DEFAULT_TIME, initialTick } from "../clock.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages` for a Chinese session.
+const chinese = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 function context(value, locale = "en") {
   return {
     sessionId: "session",
     pluginId: "world-time",
     locale,
+    ...(locale === "zh-CN" ? { messages: chinese } : {}),
     store: {
       getPluginData: vi.fn(async () => (value ? { value } : null)),
       setPluginData: vi.fn(),

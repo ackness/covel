@@ -138,6 +138,7 @@ export function createRuntimeLoader(
           {
             packageManifest: entry.packageManifest,
             manifests: manifests ?? [],
+            messages: entry.messages ?? [],
           },
           Object.fromEntries(
             [...params.pluginRegistry!.getAll().values()].flatMap((e) =>

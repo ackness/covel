@@ -22,7 +22,11 @@ messages:
   Search quests…: 搜索任务…
   All: 全部
   Active: 进行中
-  Completed: 已完成
-  Failed: 已失败
+  label|Completed: 已完成
+  label|Failed: 已失败
   "{{count}} quests tracked": 共 {{count}} 个任务
   No matching quests: 没有匹配的任务
+  New: 新任务
+  Progress: 推进
+  Completed: 完成
+  Failed: 失败

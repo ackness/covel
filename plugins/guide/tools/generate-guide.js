@@ -1,22 +1,30 @@
 import {
+  labelText,
   makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
-// Labels are stored as I18nText into plugin_data so the Badge renderer resolves
-// them to the session locale (a bare zh string would render Chinese for en
-// players). The CI i18n gate doesn't scan tool-written values, so keep these
-// bilingual by hand.
 const KIND_CONFIG = {
-  observe: { label: { zh: "观察", en: "Observe" }, icon: "eye", color: "blue" },
-  ask: { label: { zh: "追问", en: "Ask" }, icon: "lightbulb", color: "purple" },
-  act: { label: { zh: "行动", en: "Act" }, icon: "zap", color: "green" },
-  social: {
-    label: { zh: "交涉", en: "Negotiate" },
-    icon: "user",
-    color: "amber",
-  },
+  observe: { icon: "eye", color: "blue" },
+  ask: { icon: "lightbulb", color: "purple" },
+  act: { icon: "zap", color: "green" },
+  social: { icon: "user", color: "amber" },
 };
+
+/**
+ * The kind's name in every language the plugin ships. Only the Badge of the
+ * guide block draws it; it picks the player's UI language.
+ */
+function kindLabel(context, kind) {
+  // Each text is a literal: the validator reads them from the source.
+  const labels = {
+    observe: labelText(context, "Observe"),
+    ask: labelText(context, "Ask"),
+    act: labelText(context, "Act"),
+    social: labelText(context, "Negotiate"),
+  };
+  return labels[kind];
+}
 
 // These are hard bounds against runaway text, in characters, for every
 // language. The same sentence takes two to three times as many characters in
@@ -80,7 +88,7 @@ export default function ({ tool, z }) {
         const config = KIND_CONFIG[prompt.kind];
         return {
           kind: prompt.kind,
-          label: config.label,
+          label: kindLabel(context, prompt.kind),
           icon: config.icon,
           color: config.color,
           text: prompt.text,

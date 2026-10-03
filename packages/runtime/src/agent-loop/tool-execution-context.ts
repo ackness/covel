@@ -65,6 +65,8 @@ export function createToolExecutionContext(
   const context: ToolExecutionContext = Object.freeze({
     ...identity,
     ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
+    // Frozen by the host and shared across calls; nothing to copy.
+    ...(caller.messages !== undefined ? { messages: caller.messages } : {}),
     inputSlots: structuredClone(caller.inputSlots),
     pendingProposals: structuredClone(pending),
     upstreamProposals: structuredClone(caller.upstreamProposals),

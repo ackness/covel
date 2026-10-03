@@ -58,6 +58,8 @@ export interface PluginExtensionContext extends PluginServiceContext {
   readonly world: import("../proposals/world-model.js").WorldModelView;
   readonly sessionId: string;
   readonly locale: string;
+  /** The provider plugin's translations for the session's language. */
+  readonly messages?: import("../utils/plugin-messages.js").PluginMessages;
   readonly turnId?: string;
   readonly pluginData: {
     get(

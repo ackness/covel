@@ -12,3 +12,4 @@ messages:
   Relationship Graph: 关系图谱
   No character or faction relationships yet. They will appear as the story continues.: 尚未发现角色或势力关系，继续推进故事后会自动出现……
   Relationships among characters, groups, and factions in the current session. Green = positive, red = negative, gray = neutral.: 当前会话里的角色、群体与势力关系。绿线=正向关系，红线=负向关系，灰线=中立。点击节点查看档案。
+  "## Known NPC relationships (from graph retrieval)": "## 已知 NPC 关系（从图谱检索）"

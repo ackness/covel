@@ -1,3 +1,5 @@
+import { labelText } from "@covel/plugin-handlers-utils";
+
 /**
  * @typedef {import("@covel/plugin-handlers-utils").PluginFunctionContext & { execution?: { sourceTurnId?: string } }} RecorderContext
  */
@@ -22,26 +24,37 @@ const DIFFICULTY_DCS = Object.freeze({
 // bind label/color/critical fields off the stored record.
 const OUTCOME_PRESENTATION = {
   success: {
-    label: { zh: "成功", en: "Success" },
     color: "green",
     critical: false,
   },
   failure: {
-    label: { zh: "失败", en: "Failure" },
     color: "red",
     critical: false,
   },
   "critical-success": {
-    label: { zh: "大成功", en: "Critical success" },
     color: "purple",
     critical: true,
   },
   "critical-failure": {
-    label: { zh: "大失败", en: "Critical failure" },
     color: "amber",
     critical: true,
   },
 };
+
+/**
+ * The outcome's name in every language the plugin ships. Only the panel and
+ * the message block draw it; they pick the player's UI language.
+ */
+function outcomeLabel(ctx, outcome) {
+  // Each text is a literal: the validator reads them from the source.
+  const labels = {
+    success: labelText(ctx, "Success"),
+    failure: labelText(ctx, "Failure"),
+    "critical-success": labelText(ctx, "Critical success"),
+    "critical-failure": labelText(ctx, "Critical failure"),
+  };
+  return labels[outcome];
+}
 
 /**
  * Record the `check.resolved` receipt batch emitted by the narrative engine.
@@ -97,7 +110,7 @@ export default async function handler(ctx) {
       ...record,
       turnId: ctx.turnId,
       seq: firstSeq + index,
-      outcomeLabel: presentation.label,
+      outcomeLabel: outcomeLabel(ctx, record.outcome),
       outcomeColor: presentation.color,
       critical: presentation.critical,
       rollText: buildRollText(record),

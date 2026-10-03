@@ -8,6 +8,7 @@ import {
   bindToolStore,
   createPluginTestStore,
   executeToolAndCommit as executeAndCommit,
+  loadPluginMessages,
 } from "@covel/plugin-test-utils";
 /**
  * core-quest plugin tests.
@@ -42,6 +43,10 @@ import questLog from "../runtimes/log/handler.js";
 import vocabulary from "../runtimes/vocabulary/handler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 // ── Tool unit tests ──────────────────────────────────────────────
 
@@ -52,6 +57,8 @@ describe("upsert-quests", () => {
     pluginId: "core-quest",
     runtimeId: "core-quest/log",
     logicalTurn: 3,
+    // What the host gives a tool as `context.messages`.
+    messages,
   };
   let mockStore;
   let upsertQuestsTool;
@@ -679,7 +686,8 @@ describe("upsert-quests", () => {
     expect(changes.value[0]).toMatchObject({
       name: "寻回断魂钩",
       change: "new",
-      badge: { zh: "新任务", en: "New" },
+      // Every language the plugin ships: the block picks the UI language.
+      badge: { en: "New", zh: "新任务" },
       color: "blue",
       detail: "1/2",
     });

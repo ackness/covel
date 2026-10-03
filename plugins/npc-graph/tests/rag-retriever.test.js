@@ -15,6 +15,13 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import handler from "../runtimes/rag-retriever/handler.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages` for a Chinese session.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 function createMockStore() {
   /** @type {Map<string, any>} */
@@ -251,6 +258,7 @@ function makeCtx(store, playerMessage) {
     pluginId: "npc-graph",
     playerMessage,
     locale: "zh-CN",
+    messages,
     store,
     pluginData: makePluginDataView(store, SESSION, "npc-graph"),
     completedResults: new Map(),

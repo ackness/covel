@@ -4,7 +4,7 @@ Function handlers default-export `async function (ctx)`. Use public `@covel/shar
 
 ## Identity, inputs, and state
 
-`ctx.pluginId`, `runtimeId`, `sessionId`, `turnId`, `locale`, and `signal` describe the current invocation. `ctx.userSettings` contains this plugin's settings. `manualPayload` and `triggerEvent` supply invocation data. `ctx.inputs` contains typed same-execution bindings and `ctx.exports` contains declared committed bindings.
+`ctx.pluginId`, `runtimeId`, `sessionId`, `turnId`, `locale`, and `signal` describe the current invocation. `ctx.userSettings` contains this plugin's settings. `ctx.messages` holds this plugin's `locales/` translations; read it with `translate(ctx, "English text", params)` and `labelText(ctx, "English text")`. `manualPayload` and `triggerEvent` supply invocation data. `ctx.inputs` contains typed same-execution bindings and `ctx.exports` contains declared committed bindings.
 
 ```yaml
 schedule:

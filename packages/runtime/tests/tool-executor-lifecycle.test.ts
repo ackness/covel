@@ -41,6 +41,30 @@ describe("tool execution context", () => {
     await executor.execute(call, identity);
     expect(seen).not.toHaveProperty("locale");
   });
+
+  it("gives the tool its plugin's translations", async () => {
+    let seen: ToolExecutionContext | undefined;
+    const module = tool({
+      name: call.name,
+      description: "Synthetic builtin",
+      parameters: z.object({}),
+      async execute(_args, context) {
+        seen = context;
+        return { ok: true };
+      },
+    });
+    const executor = createToolExecutor({
+      store: createMemoryStore(),
+      findTool: () => module,
+    });
+    const messages = {
+      translations: { Success: "成功" },
+      labels: { Success: { zh: "成功" } },
+    };
+
+    await executor.execute(call, { ...identity, locale: "zh-CN", messages });
+    expect(seen?.messages).toBe(messages);
+  });
 });
 
 describe("tool executor ownership", () => {

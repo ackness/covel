@@ -21,8 +21,15 @@ messages:
   Inventory: 行囊
   Bag: 行囊
   Your bag is empty. Items you explicitly obtain in the story will appear here…: 行囊空空如也，故事里明确拿到的东西会自动记进来……
-  Equipped: 已装备
+  title|Equipped: 已装备
   Unequip: 卸下
   Drop: 丢弃
   Backpack: 背包
   Equip: 装备
+  Your bag contains {count} item entry.: 行囊中有 {count} 项物品。
+  Your bag contains {count} item entries.: 行囊中有 {count} 项物品。
+  Gained: 获得
+  Lost: 失去
+  Updated: 更新
+  Equipped: 装备
+  Unequipped: 卸下

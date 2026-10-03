@@ -3,13 +3,18 @@ import { shortIdBatch } from "@covel/plugin-handlers-utils";
 import { tool, z } from "@covel/tools";
 import openBag from "../rpc/open-bag.js";
 import registerInventory from "../server/index.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
 
-function makeCtx(rows, locale = "zh-CN") {
+// What the host gives a handler as `ctx.messages` for each session language.
+const pluginRoot = new URL("..", import.meta.url);
+
+async function makeCtx(rows, locale = "zh-CN") {
   return {
     sessionId: "sess-1",
     pluginId: "inventory",
     action: "open-bag",
     locale,
+    messages: await loadPluginMessages(pluginRoot, locale),
     store: {
       listPluginData: vi.fn(async () => rows),
     },
@@ -39,7 +44,7 @@ describe("inventory open-bag command", () => {
   });
 
   it("counts non-removed item entries and opens the inventory panel", async () => {
-    const ctx = makeCtx([
+    const ctx = await makeCtx([
       { value: { name: "火把", quantity: 2 } },
       { value: { name: "旧地图", quantity: 0, removed: true } },
       { value: { name: "短剑", quantity: 1, equipped: true } },
@@ -64,7 +69,7 @@ describe("inventory open-bag command", () => {
   });
 
   it("localizes the empty bag message", async () => {
-    const result = await openBag({}, makeCtx([], "en-US"));
+    const result = await openBag({}, await makeCtx([], "en-US"));
 
     expect(result.message).toBe("Your bag contains 0 item entries.");
     expect(result.data.itemCount).toBe(0);
@@ -72,11 +77,11 @@ describe("inventory open-bag command", () => {
 
   it("uses English fallback outside the explicit Simplified Chinese aliases", async () => {
     for (const locale of ["ru-RU", "ja-JP", "zh-Hant-TW", "zh-TW"]) {
-      const result = await openBag({}, makeCtx([], locale));
+      const result = await openBag({}, await makeCtx([], locale));
       expect(result.message).toBe("Your bag contains 0 item entries.");
     }
 
-    const simplified = await openBag({}, makeCtx([], "zh-Hans"));
+    const simplified = await openBag({}, await makeCtx([], "zh-Hans"));
     expect(simplified.message).toBe("行囊中有 0 项物品。");
   });
 });

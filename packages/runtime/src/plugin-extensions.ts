@@ -11,7 +11,9 @@ import {
   type ExtensionPoint,
   type ExtensionResult,
   type PluginExtensionDefinition,
+  type PluginMessageCatalog,
   isHiddenPluginDataNamespace,
+  pluginMessagesFor,
 } from "@covel/shared";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "./plugin-services.js";
@@ -149,6 +151,10 @@ export class PluginExtensionHost {
   constructor(
     private readonly services: PluginServiceRegistry,
     points: readonly ExtensionPoint<unknown, unknown>[] = kernelExtensionPoints,
+    /** A plugin's `messages` translations, for the provider's `ctx.messages`. */
+    private readonly messagesOf?: (
+      pluginId: string,
+    ) => readonly PluginMessageCatalog[] | undefined,
   ) {
     this.points = new Map(points.map((point) => [point.id, point]));
     if (this.points.size !== points.length)
@@ -224,6 +230,7 @@ export class PluginExtensionHost {
         world: structuredClone(world),
         sessionId: scope.sessionId,
         locale: scope.locale,
+        messages: pluginMessagesFor(this.messagesOf?.(pluginId), scope.locale),
         turnId: scope.turnId,
         pluginData: {
           get: async (namespace, key) => {

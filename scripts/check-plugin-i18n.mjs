@@ -39,7 +39,7 @@ import {
   localeLanguage,
 } from "@covel/shared";
 // By path: a package-name import can resolve to a stale copy in a worktree.
-import { missingUiTranslations } from "../packages/plugin-loader/src/locale-messages.ts";
+import { missingTranslations } from "../packages/plugin-loader/src/locale-messages.ts";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -223,7 +223,7 @@ function checkHandlerJsFiles() {
       if (!CJK_REGEX.test(literal)) continue;
       totalViolations += 1;
       console.error(
-        `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - store it as an I18nText object with the target locale and an English fallback so the frontend resolves the locale.`,
+        `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - write the English text and translate it in locales/<locale>.yaml: labelText(ctx, "English") for text the client draws, translate(ctx, "English") for text in the session's language.`,
       );
     }
     for (const hit of findChineseToolText(text)) {
@@ -236,7 +236,7 @@ function checkHandlerJsFiles() {
     while ((match = UNSAFE_HANDLER_LOCALE_BRANCH_RE.exec(text)) !== null) {
       totalViolations += 1;
       console.error(
-        `${rel}: unsafe locale prefix/split branch "${match[0].slice(0, 120)}" - use @covel/shared locale helpers, resolveI18nText(), or @covel/plugin-handlers-utils pickLocaleText().`,
+        `${rel}: unsafe locale prefix/split branch "${match[0].slice(0, 120)}" - use translate() / labelText() from @covel/plugin-handlers-utils with locales/<locale>.yaml, or pickLocaleText() for an instruction that exists in English and Chinese only.`,
       );
     }
   }
@@ -504,20 +504,17 @@ function checkWorldFiles() {
   return { files, totalViolations };
 }
 
-/** Bundled plugins ship Chinese: every UI text needs a `zh` translation. */
+/** Bundled plugins ship Chinese: every text of the UI and the code needs a `zh` translation. */
 async function checkBundledUiCoverage() {
   const pluginsDir = resolve(REPO_ROOT, "plugins");
   let missing = 0;
   for (const name of readdirSync(pluginsDir).sort()) {
     const root = join(pluginsDir, name);
     if (name.startsWith("_") || !existsSync(join(root, "PLUGIN.md"))) continue;
-    for (const { file, property, text } of await missingUiTranslations(
-      root,
-      "zh",
-    )) {
+    for (const { file, where, text } of await missingTranslations(root, "zh")) {
       missing += 1;
       console.error(
-        `plugins/${name}/${file}: ${property} "${text.slice(0, 60)}" has no Chinese translation - add it to plugins/${name}/locales/zh.yaml under messages (repeat the English text when it is the same in Chinese).`,
+        `plugins/${name}/${file}: ${where} "${text.slice(0, 60)}" has no Chinese translation - add it to plugins/${name}/locales/zh.yaml under messages (repeat the English text when it is the same in Chinese).`,
       );
     }
   }

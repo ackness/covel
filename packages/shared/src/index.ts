@@ -79,6 +79,11 @@ export {
   isInstructionVariantLocale,
 } from "./utils/instruction-locale.js";
 export type { InstructionLocale } from "./utils/instruction-locale.js";
+export { pluginMessagesFor } from "./utils/plugin-messages.js";
+export type {
+  PluginMessageCatalog,
+  PluginMessages,
+} from "./utils/plugin-messages.js";
 export type {
   LocaleDefinition,
   SupportedLocale,

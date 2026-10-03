@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { validatePluginLabels } from "../src/locale-labels.js";
 import {
   compileUiText,
-  missingUiTranslations,
+  findCodeTexts,
+  missingTranslations,
 } from "../src/locale-messages.js";
 import { loadPluginUiSpec } from "../src/ui-spec.js";
 
@@ -124,18 +125,18 @@ messages:
       JSON.stringify({ props: { content: "🎲", title: "§ MARK" } }),
     );
 
-    expect(await missingUiTranslations(dir, "zh")).toEqual([
-      { file: "ui/panel.json", property: "message", text: "No entries yet." },
+    expect(await missingTranslations(dir, "zh")).toEqual([
+      { file: "ui/panel.json", where: "message", text: "No entries yet." },
       {
         file: "ui/panel.json",
-        property: "content",
+        where: "content",
         text: "{{count}} entries collected",
       },
-      { file: "ui/panel.json", property: "label", text: "Add note" },
+      { file: "ui/panel.json", where: "label", text: "Add note" },
       // A text with no letters needs no translation; a mark with letters does.
-      { file: "ui/toast.json", property: "title", text: "§ MARK" },
+      { file: "ui/toast.json", where: "title", text: "§ MARK" },
     ]);
-    expect(await missingUiTranslations(dir, "ja")).toHaveLength(6);
+    expect(await missingTranslations(dir, "ja")).toHaveLength(6);
   });
 
   describe("validatePluginLabels", () => {
@@ -176,5 +177,102 @@ messages:
         ),
       ]);
     });
+  });
+});
+
+describe("text in plugin code", () => {
+  it("reads the English text of each translate and labelText call", () => {
+    const source = [
+      'import { labelText, translate } from "@covel/plugin-handlers-utils";',
+      "// A standalone plugin defines the helper itself.",
+      "export function translate(ctx, text, params) { return text; }",
+      'const a = translate(ctx, "World time: {display}", { display });',
+      "const b = labelText(context, 'Critical success');",
+      "const c = translate(",
+      "  ctx,",
+      '  "Say \\"here\\" now",',
+      ");",
+      "const d = translate(ctx, `Welcome to ${world}`);",
+      "const e = labelText(ctx, config.label);",
+      "const f = translate(options.ctx, `plain template`);",
+    ].join("\n");
+    const { texts, dynamic } = findCodeTexts(source);
+
+    expect(texts.map((item) => item.text)).toEqual([
+      "World time: {display}",
+      "Critical success",
+      'Say "here" now',
+      "plain template",
+    ]);
+    // A text built at run time cannot be a catalog key.
+    expect(dynamic.map((item) => [item.line, item.call])).toEqual([
+      [10, "translate"],
+      [11, "labelText"],
+    ]);
+  });
+});
+
+describe("catalog entries for text in plugin code", () => {
+  let dir: string;
+  const write = async (file: string, content: string) => {
+    await fs.mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+    await fs.writeFile(path.join(dir, file), content);
+  };
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "covel-code-messages-"));
+    await write("PLUGIN.md", "---\nid: demo\nkind: plugin\n---\n");
+    await write(
+      "rpc/time.js",
+      'export default (payload, ctx) => translate(ctx, "World time: {display}", payload);\n',
+    );
+  });
+  afterEach(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("accepts a translation of text the code has, and lists a text without one", async () => {
+    expect(await missingTranslations(dir, "zh")).toEqual([
+      { file: "rpc/time.js", where: "line 1", text: "World time: {display}" },
+    ]);
+
+    await write(
+      "locales/zh.yaml",
+      'messages:\n  "World time: {display}": 世界时间：{display}\n',
+    );
+    expect(await validatePluginLabels(dir)).toEqual([]);
+    expect(await missingTranslations(dir, "zh")).toEqual([]);
+  });
+
+  it("reports a translation of text the code no longer has", async () => {
+    await write("locales/zh.yaml", "messages:\n  Time is {display}: 时间\n");
+    expect(await validatePluginLabels(dir)).toEqual([
+      expect.stringContaining(
+        '"Time is {display}" is not a text of this plugin\'s UI or code',
+      ),
+    ]);
+  });
+
+  it("reports a text that is built at run time", async () => {
+    await write(
+      "rpc/roll.js",
+      "export default (payload, ctx) => translate(ctx, `Rolled ${payload.n}`);\n",
+    );
+    expect(await validatePluginLabels(dir)).toEqual([
+      expect.stringContaining(
+        "rpc/roll.js:1: translate() needs the English text as a constant",
+      ),
+    ]);
+  });
+
+  it("does not read tests or installed packages", async () => {
+    await write("tests/time.test.js", 'translate(ctx, "Only in a test");\n');
+    await write(
+      "node_modules/dep/index.js",
+      'translate(ctx, "Only in a dependency");\n',
+    );
+    expect(
+      (await missingTranslations(dir, "zh")).map((item) => item.text),
+    ).toEqual(["World time: {display}"]);
   });
 });

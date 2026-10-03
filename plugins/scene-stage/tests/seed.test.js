@@ -5,6 +5,13 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import handler from "../runtimes/seed/handler.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages`: this plugin's translations.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 function ref(id) {
   return { id: id.repeat(64).slice(0, 64), mime: "image/png", size: 1024 };
@@ -37,6 +44,7 @@ function makeCtx({ registry = REGISTRY, previous = null, noPluginData } = {}) {
   return {
     pluginId: "scene-stage",
     runtimeId: "scene-stage/seed",
+    messages,
     sessionId: "sess-1",
     turnId: "turn-1",
     pluginData: noPluginData

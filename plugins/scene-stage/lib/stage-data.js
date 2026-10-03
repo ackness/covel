@@ -6,39 +6,33 @@
  * (`ui/scene-stage-panel.json`) and the stage view depend on.
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
+import { labelText, makeProposal } from "@covel/plugin-handlers-utils";
 
 export const SCENES_NS = "scenes";
 export const REGISTRY_KEY = "scene-registry";
 export const STAGE_NS = "stage";
 export const STAGE_KEY = "current";
 
-/** @type {Record<string, {zh: string, en: string}>} */
-const SOURCE_LABELS = {
-  world: { zh: "世界背景", en: "World art" },
-  none: { zh: "无背景", en: "No backdrop" },
-};
-
 /**
+ * The backdrop source's name in every language the plugin ships. Only the
+ * panel and the stage draw it; they pick the player's UI language.
+ *
+ * @param {import('@covel/plugin-handlers-utils').PluginMessageContext | undefined} ctx
  * @param {string} source
- * @returns {{zh: string, en: string}}
  */
-export function sourceLabelFor(source) {
-  return SOURCE_LABELS[source] ?? SOURCE_LABELS.none;
+export function sourceLabelFor(ctx, source) {
+  // Each text is a literal: the validator reads them from the source.
+  return source === "world"
+    ? labelText(ctx, "World art")
+    : labelText(ctx, "No backdrop");
 }
 
-/** @type {Record<"day"|"night", {zh: string, en: string}>} */
-const VARIANT_LABELS = {
-  day: { zh: "白天", en: "Day" },
-  night: { zh: "夜晚", en: "Night" },
-};
-
 /**
+ * @param {import('@covel/plugin-handlers-utils').PluginMessageContext | undefined} ctx
  * @param {"day"|"night"} variant
- * @returns {{zh: string, en: string}}
  */
-export function variantLabelFor(variant) {
-  return VARIANT_LABELS[variant] ?? VARIANT_LABELS.day;
+export function variantLabelFor(ctx, variant) {
+  return variant === "night" ? labelText(ctx, "Night") : labelText(ctx, "Day");
 }
 
 /**
@@ -60,6 +54,7 @@ export function resolveMedia(variant, day, night) {
  * shape — every runtime that publishes a stage goes through here so a new
  * field can't reach the panel from one handler and not the other.
  *
+ * @param {import('@covel/plugin-handlers-utils').PluginMessageContext | undefined} ctx
  * @param {{
  *   sceneId: string,
  *   name: string,
@@ -70,19 +65,19 @@ export function resolveMedia(variant, day, night) {
  *   turnId?: string,
  * }} params
  */
-export function buildStageRecord(params) {
+export function buildStageRecord(ctx, params) {
   const day = params.day ?? null;
   const night = params.night ?? null;
   return {
     sceneId: params.sceneId,
     name: params.name,
     variant: params.variant,
-    variantLabel: variantLabelFor(params.variant),
+    variantLabel: variantLabelFor(ctx, params.variant),
     source: params.source,
     day,
     night,
     resolved: resolveMedia(params.variant, day, night),
-    sourceLabel: sourceLabelFor(params.source),
+    sourceLabel: sourceLabelFor(ctx, params.source),
     turnId: params.turnId,
     updatedAt: new Date().toISOString(),
   };

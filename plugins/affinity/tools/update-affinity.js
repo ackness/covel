@@ -24,11 +24,15 @@
 
 import {
   makeProposal,
-  pickLocaleText,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
-import { AFFINITY_MIN, clampScore, getTier } from "../tier-metadata.js";
+import {
+  AFFINITY_MIN,
+  clampScore,
+  getTier,
+  tierLabel as labelOfTier,
+} from "../tier-metadata.js";
 
 const HISTORY_LIMIT = 10;
 const MAX_CHANGES_PER_TURN = 5;
@@ -130,11 +134,7 @@ export default function ({ tool, z, shortIdBatch }) {
         const tier = getTier(score);
         // The record is injected into this plugin's prompt, so the label is
         // stored in the session's language, not as a pair of both.
-        const tierLabel = pickLocaleText(
-          context.locale,
-          tier.label.zh,
-          tier.label.en,
-        );
+        const tierLabel = labelOfTier(context, tier.id);
         // World-preseeded records carry no history — treat missing as empty.
         const history = Array.isArray(prior.history) ? prior.history : [];
         const deltaText = formatDelta(change.delta);

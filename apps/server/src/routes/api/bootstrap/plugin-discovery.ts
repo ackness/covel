@@ -107,6 +107,7 @@ export async function discoverAndRegisterPlugins(
 
         packageManifest,
         manifests,
+        messages: definition.messages,
         loadedRuntimes: new Map(),
         status: "registered",
         ...(discovery.source ? { source: discovery.source } : {}),

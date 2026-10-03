@@ -20,6 +20,7 @@ export {
 } from "./load.js";
 export type { PluginDefinition } from "./load.js";
 export { validatePluginLabels } from "./locale-labels.js";
+export { readMessageCatalogs } from "./locale-messages.js";
 export {
   pluginDeclarations,
   pluginRuntimeManifests,

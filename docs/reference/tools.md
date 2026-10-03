@@ -920,7 +920,7 @@ Bootstrap 时自动分类：
 
 - 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
 - 审批激活后，entry 模块会 JIT 执行并完成注册；未授权 session 无法触发 community runtime/hook。
-- 所有 entry factory 的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前 session/plugin 状态；RPC/function runtime 使用各自的 scoped store。`context.locale` 是会话的内容语言：工具存入 plugin data 或返回的文字用这一种语言写（`pickLocaleText(context.locale, zh, en)`），不要存 `{ zh, en }` 两份——注入提示词的数据会把两种语言都带给模型。
+- 所有 entry factory 的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前 session/plugin 状态；RPC/function runtime 使用各自的 scoped store。`context.locale` 是会话的内容语言，`context.messages` 是本插件 `locales/` 里的译文：工具存入会被注入提示词的数据、或返回给玩家的文字用 `translate(context, "English text")` 写成会话语言的一份；只由界面绘制的徽标用 `labelText(context, "English text")`。不要手写 `{ zh, en }` 两份——注入提示词的数据会把两种语言都带给模型。详见 [i18n](./i18n.md#2-本地化插件)。
 - community agent guard 仅获得只读 store 与纯输入；`pluginData`、logger、gateway、utils、media、assetProgress 等副作用能力不注入，`recursiveCall` 会拒绝。写入放在 runtime handler 返回的 proposal/`pluginData[]` 中。
 - 进程内 ESM 本身不是沙箱。self 层级以本机用户为信任边界；hosted 层级把 community server-code 定义为 operator 级全局信任。真正的多租户第三方代码需要独立 worker/process 隔离。
 

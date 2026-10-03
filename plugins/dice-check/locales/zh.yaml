@@ -24,3 +24,11 @@ messages:
   Quick rolls use the same command pipeline as /roll.: 快速掷骰与输入 /roll 使用同一条命令管线。
   Roll d20: 掷 d20
   Roll 2d6: 掷 2d6
+  Dice count must be between 1 and 100.: 骰子数量必须在 1 到 100 之间。
+  Die sides must be between 2 and 1000.: 骰子面数必须在 2 到 1000 之间。
+  Use NdM dice notation, for example 2d6.: 请使用 NdM 骰式，例如 2d6。
+  "{notation}: {rolls} (total {total})": "{notation}：{rolls}（合计 {total}）"
+  Success: 成功
+  Failure: 失败
+  Critical success: 大成功
+  Critical failure: 大失败

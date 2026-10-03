@@ -40,7 +40,19 @@ import {
 
 import { tool, z } from "@covel/tools";
 import createUpdateAffinity from "../tools/update-affinity.js";
-import { AFFINITY_TIERS, clampScore, getTier } from "../tier-metadata.js";
+import {
+  AFFINITY_TIERS,
+  clampScore,
+  getTier,
+  tierLabel,
+} from "../tier-metadata.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a tool as `context.messages` for a Chinese session.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 /** Seed a committed affinity record directly into the test store. */
 async function seedRecord(store, key, value) {
@@ -85,10 +97,10 @@ describe("tier metadata", () => {
     expect(clampScore(42)).toBe(42);
   });
 
-  it("carries a bilingual label and a badge color on every tier", () => {
+  it("names every tier in English and in Chinese, with a badge color", () => {
     for (const tier of AFFINITY_TIERS) {
-      expect(tier.label.zh).toBeTruthy();
-      expect(tier.label.en).toBeTruthy();
+      expect(tierLabel(undefined, tier.id)).toMatch(/^[A-Z][a-z]+$/);
+      expect(tierLabel({ messages }, tier.id)).toMatch(/^[\u4e00-\u9fff]+$/);
       expect(tier.color).toBeTruthy();
     }
   });
@@ -103,6 +115,7 @@ describe("update-affinity", () => {
     pluginId: "affinity",
     runtimeId: "affinity",
     locale: "zh-CN",
+    messages,
     turnNumber: 3,
   };
   let mockStore;
@@ -124,7 +137,7 @@ describe("update-affinity", () => {
     const result = await executeAndCommit(
       updateAffinityTool,
       { changes: [{ name: "Lian", delta: 5, reason: "You paid her debt" }] },
-      { ...ctx, locale: "en-US" },
+      { ...ctx, locale: "en-US", messages: undefined },
       mockStore,
     );
     const stored = await mockStore.getPluginData(

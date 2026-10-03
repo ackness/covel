@@ -1,5 +1,5 @@
 import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
-import { toJsonValueOrDiagnostic } from "@covel/shared";
+import { pluginMessagesFor, toJsonValueOrDiagnostic } from "@covel/shared";
 import { createWorldModelView } from "./world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import type {
@@ -333,10 +333,13 @@ export async function executeFunctionRuntime({
   // that covers both the player abort and the deadline.
   let capabilitiesRevoked = false;
   const isRevoked = () => capabilitiesRevoked;
+  // The plugin's translations for this session's language.
+  const messages = pluginMessagesFor(loaded.messages, input.locale);
   const runtimeTools = createRuntimeTools({
     manifest,
     context: helperCtx,
     locale: input.locale,
+    messages,
     deps: { ...deps, hookPipeline },
     buffer: writeBuffer,
     world,
@@ -448,6 +451,7 @@ export async function executeFunctionRuntime({
         lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
       },
       locale: input.locale,
+      ...(messages ? { messages } : {}),
       store: revocable.store,
       world,
       tools: runtimeTools.tools,
