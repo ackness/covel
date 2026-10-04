@@ -1,6 +1,7 @@
 ---
 id: affinity
 kind: plugin
+version: 0.0.35
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -10,6 +11,10 @@ tags:
   - "cost:llm"
   - "ui:right-panel"
   - "ui:message-block"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 requires:
   - world-ir-provider@1
 entry: ./server/index.js

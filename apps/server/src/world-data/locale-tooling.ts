@@ -76,7 +76,19 @@ interface StructuredFile {
   readonly value: unknown;
   /** A world dimensions file: its schema says what is text. */
   readonly dimensions?: true;
+  /** Places whose string is never text, whatever it looks like. */
+  readonly notText?: ReadonlySet<string>;
 }
+
+/**
+ * Manifest fields that stay as written in every language. An author's name and
+ * a license name look like text, but the manifest takes one string for each,
+ * so a translation there would make the file invalid.
+ */
+const MANIFEST_NOT_TEXT: ReadonlySet<string> = new Set([
+  "author.name",
+  "license",
+]);
 
 const CJK = /[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/;
 const IDENTIFIER_KEYS: ReadonlySet<string> = new Set([
@@ -173,6 +185,7 @@ function textUnits(
     key: string,
   ): void => {
     if (typeof value === "string") {
+      if (source.notText?.has(pointerOf(steps))) return;
       if (isText(key, value, baseLocale)) add(steps, value);
       return;
     }
@@ -445,7 +458,13 @@ async function worldFiles(worldDir: string): Promise<WorldFiles> {
       ? manifest.defaultLocale
       : DEFAULT_LOCALE;
   const structured: StructuredFile[] = [
-    { file: "world.yaml", format: "yaml", arrayKeys: ["id"], value: manifest },
+    {
+      file: "world.yaml",
+      format: "yaml",
+      arrayKeys: ["id"],
+      value: manifest,
+      notText: MANIFEST_NOT_TEXT,
+    },
   ];
   const prose: string[] = [];
   if (await fileExists(path.join(worldDir, "WORLD.md"))) prose.push("WORLD.md");

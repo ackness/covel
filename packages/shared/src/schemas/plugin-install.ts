@@ -58,6 +58,8 @@ export const githubPluginPreviewSchema = z
     id: z.string(),
     version: z.string().nullable(),
     description: z.string(),
+    /** Author name from the package manifest; null when it declares none. */
+    author: z.string().nullable(),
     hasServerCode: z.boolean(),
     source: githubPluginSourceSchema,
     token: z.string(),

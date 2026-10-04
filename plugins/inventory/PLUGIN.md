@@ -1,6 +1,7 @@
 ---
 id: inventory
 kind: plugin
+version: 0.0.35
 displayName: Inventory
 description: >-
   Records explicit item gains, losses, and equipment changes from each turn's
@@ -10,6 +11,10 @@ tags:
   - "cost:function"
   - "ui:right-panel"
   - "ui:message-block"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - world-ir.vocabulary@1
 requires:

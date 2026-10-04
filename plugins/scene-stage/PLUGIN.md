@@ -1,6 +1,7 @@
 ---
 id: scene-stage
 kind: plugin
+version: 0.0.35
 displayName: Scene Stage
 description: >-
   Tracks the current scene, time of day, and who is on stage for the visual
@@ -10,6 +11,10 @@ tags:
   - "data:characters"
   - "cost:function"
   - "ui:right-panel"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - stage-direction@1
   - scene-stage@1

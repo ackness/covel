@@ -4,6 +4,8 @@ Root `PLUGIN.md` and child `RUNTIME.md` use strict YAML frontmatter. The main ch
 
 ## Package manifest
 
+Optional credits (`author`, `license`, `homepage`) are display data shown before play; links are `https` only. Fields and limits: `docs/reference/plugins.md` ("作者信息"). When the package has a `package.json`, its `version` equals the manifest `version`.
+
 ```yaml
 ---
 id: sample-notes

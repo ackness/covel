@@ -1,6 +1,7 @@
 ---
 id: character-blueprint
 kind: plugin
+version: 0.0.35
 displayName: Character Profiles
 description: >-
   Saves the world's preset character profiles along with their portraits,
@@ -12,6 +13,10 @@ tags:
   - "cost:function"
   - "ui:right-panel"
   - "ui:manual-action"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - character-blueprint@1
   - character-presence@1

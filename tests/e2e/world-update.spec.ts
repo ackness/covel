@@ -47,6 +47,7 @@ for (const width of [1280, 390]) {
             id: "example-note",
             version: "1.1.0",
             description: "Updated plugin",
+            author: null,
             hasServerCode: false,
             source: nextSource,
             previous: { version: "1.0.0", source },

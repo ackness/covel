@@ -1,6 +1,7 @@
 ---
 id: narrator
 kind: core
+version: 0.0.35
 displayName: Narrator
 description: >-
   Continues the story from your actions, describing scenes, reactions, and
@@ -9,6 +10,10 @@ tags:
   - "mode:traditional-story"
   - "data:relationship-graph"
   - "cost:llm"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - contract: narrative-engine@1
     default: true

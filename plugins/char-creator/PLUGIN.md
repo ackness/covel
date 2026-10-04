@@ -1,6 +1,7 @@
 ---
 id: char-creator
 kind: core
+version: 0.0.35
 displayName: Character Creator
 description: >-
   Helps create your hero and keeps important character details up to date during
@@ -10,6 +11,10 @@ tags:
   - "cost:llm"
   - "data:world-data"
   - "ui:right-panel"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - contract: character-creation@1
     default: true

@@ -1,8 +1,13 @@
 ---
 id: history-compaction
 kind: core
+version: 0.0.41
 displayName: History Compaction
 description: Maintains bounded rolling summaries of older conversation history.
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - contract: history.compact@1
     default: true

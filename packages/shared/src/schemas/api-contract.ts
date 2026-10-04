@@ -18,6 +18,7 @@ import {
   triggerConfigSchema,
 } from "./plugin-schemas.js";
 import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
+import { packageCreditFields } from "./package-info.js";
 
 const ACTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
 const SAFE_WORLD_ID_PATTERN = /^[a-z0-9_-]{1,64}$/i;
@@ -272,6 +273,7 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
       .optional(),
     runtimeCount: z.number().int().nonnegative(),
     version: z.string().optional(),
+    ...packageCreditFields,
     provides: z.array(
       z.union([
         z.string(),

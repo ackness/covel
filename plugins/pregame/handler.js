@@ -19,6 +19,15 @@ export default async function pregameHandler(ctx) {
     const s = /** @type {any} */ (store);
     try {
       const session = await s.getSession();
+      // A new plugin version makes the host run setup again in a session that
+      // is already playing. The welcome belongs to the opening only.
+      if (session?.phase === "playing") {
+        return {
+          outcome: "success",
+          value: { narrativeOutput: "", initialized: true },
+          completion: "done",
+        };
+      }
       if (session?.worldId) {
         const world = await s.getWorld();
         if (world) {

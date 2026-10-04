@@ -12,7 +12,7 @@
 
 ## API
 
-使用安装 API 门控，世界写操作还遵循全局世界写入权限。预览形状复用包预览（id、version、description、source、token、expiresAt）；`hasServerCode` 固定 false 表示此安装路径不会加载代码，不表示目录不包含脚本文件。
+使用安装 API 门控，世界写操作还遵循全局世界写入权限。预览形状复用包预览（id、version、description、author、source、token、expiresAt；`author` 是清单里的作者名，没有声明时为 `null`）；`hasServerCode` 固定 false 表示此安装路径不会加载代码，不表示目录不包含脚本文件。
 
 | 方法   | 路径                                       | 行为                                                                               |
 | ------ | ------------------------------------------ | ---------------------------------------------------------------------------------- |

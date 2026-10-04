@@ -15,6 +15,8 @@ import {
   type InstallResult,
 } from "@/services/api.js";
 import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
+import { pluginPackageInfo } from "@/lib/package-info.js";
+import { PackageCredits } from "@/components/shared/package-credits.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 
@@ -318,6 +320,18 @@ export function PackagesPane() {
                         {t("settings.github.pending")}
                       </p>
                     )}
+                    <PackageCredits
+                      info={creditsOf(
+                        installed.find((plugin) => plugin.id === p.id),
+                      )}
+                      packageName={
+                        text(
+                          installed.find((plugin) => plugin.id === p.id)
+                            ?.displayName,
+                        ) || p.id
+                      }
+                      className="mt-1.5"
+                    />
                   </div>
                   <Button
                     size="sm"
@@ -382,6 +396,13 @@ export function PackagesPane() {
 
 /** A collection ZIP installs plugins and worlds together. */
 type UploadKind = InstallKind | "collection";
+
+/** A plugin's credits without the version: the row shows the installed one. */
+function creditsOf(plugin: PluginSummary | undefined) {
+  if (!plugin) return undefined;
+  const { version: _version, ...credits } = pluginPackageInfo(plugin);
+  return credits;
+}
 
 interface DropZoneProps {
   kind: UploadKind;

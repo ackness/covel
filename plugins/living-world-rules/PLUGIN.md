@@ -1,6 +1,7 @@
 ---
 id: living-world-rules
 kind: plugin
+version: 0.0.35
 displayName: World Rules
 description: >-
   Shows the world's lasting rules, such as taboos, customs, and special setting
@@ -11,6 +12,10 @@ tags:
   - "cost:function"
   - "ui:right-panel"
   - "ui:manual-action"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - living-world-rules@1
   - world-info@1

@@ -5,6 +5,7 @@ import { Eye, Trash2, ArrowRight } from "lucide-react";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import {
   worldLanguageBadge,
   worldLanguageName,
@@ -63,6 +64,7 @@ export function WorldCard({
     },
     playLocale,
   );
+  const byline = packageByline(worldPackageInfo(world), t);
   return (
     <article
       aria-busy={isEntering}
@@ -148,6 +150,11 @@ export function WorldCard({
             <p className="text-[14px] leading-relaxed text-white/76 line-clamp-3 wrap-break-word">
               {shown.description}
             </p>
+            {byline && (
+              <p className="ui-meta truncate text-[11px] text-white/70">
+                {byline}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-1.5">

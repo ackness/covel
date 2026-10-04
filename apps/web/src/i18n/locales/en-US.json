@@ -2095,5 +2095,17 @@
     "empty": "No character blueprints yet",
     "instantiated": "Instantiated",
     "blueprintOnly": "Blueprint only"
+  },
+  "package": {
+    "author": "Author",
+    "version": "v{{version}}",
+    "license": "License",
+    "homepage": "Homepage",
+    "link": {
+      "title": "Open a third-party link?",
+      "message": "This link was provided by the author of “{{package}}”, not by Covel. Covel has not checked this site and is not responsible for what it contains. Do not enter passwords or payment details there unless you trust it.",
+      "site": "Site: {{host}}",
+      "confirm": "Open link"
+    }
   }
 }

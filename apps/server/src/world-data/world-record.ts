@@ -1,6 +1,8 @@
 import {
   WORLD_EDITIONS_KEY,
   WORLD_LOCALIZED_TEXT_KEY,
+  WORLD_PACKAGE_INFO_KEY,
+  packageInfoOf,
   resolveI18nText,
 } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
@@ -22,6 +24,7 @@ export function worldRecordFromManifest(
     ...(isLocaleMap(manifest.name) ? { name: manifest.name } : {}),
     ...(isLocaleMap(manifest.summary) ? { description: manifest.summary } : {}),
   };
+  const packageInfo = packageInfoOf(manifest);
   return {
     id: manifest.id as string,
     name:
@@ -55,6 +58,8 @@ export function worldRecordFromManifest(
       ...(Object.keys(localizedText).length
         ? { [WORLD_LOCALIZED_TEXT_KEY]: localizedText }
         : {}),
+      // Version and credits, for the world's cards.
+      ...(packageInfo ? { [WORLD_PACKAGE_INFO_KEY]: packageInfo } : {}),
       ...metadata,
     },
     createdAt: now,

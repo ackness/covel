@@ -1,6 +1,7 @@
 ---
 id: world-ir
 kind: plugin
+version: 0.0.35
 displayName: World Fact Extraction
 description: >-
   Extracts people, relationships, events, and clues from each story turn for
@@ -8,6 +9,10 @@ description: >-
 tags:
   - "data:world-ir"
   - "cost:llm"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - world-ir-provider@1
 contracts:

@@ -104,8 +104,8 @@ them as data:
 - Only labels and `messages` are read. A prompt body (`*.zh.md`) is read from
   the plugin package only, so a translation cannot change an instruction.
 - A label section keeps label fields only (`displayName`, `description`,
-  `label`, `title`, `summary`); anything else in it is dropped, as for the
-  plugin's own locale files.
+  `label`, `title`, `summary`, `about`); anything else in it is dropped, as for
+  the plugin's own locale files.
 - The author's translation wins wherever both translate the same text.
 - Symbolic links are not followed; only regular files are read.
 
@@ -113,6 +113,33 @@ The text is still model-facing in one case: a `messages` entry for text that
 plugin code writes into state or context. That makes a translation package
 the same class of input as a world package's lore, and it is why the
 directory is a local, operator-controlled path with no install endpoint.
+
+## Package credits and author links
+
+A plugin, world or collection may state its author, license and home page, and
+the author may add a short message and up to six labelled links
+(`author`, `license`, `homepage`; fields in
+[`docs/reference/plugins.md`](../reference/plugins.md#作者信息)). This is text
+from whoever made the package, shown to a player who has not started playing.
+The limits on it:
+
+- **Display only.** The host makes no decision from these fields. They are
+  left out of the world view that prompt templates read, so the author's
+  message never reaches a model.
+- **Plain text.** The message and labels render as text: no Markdown, no HTML
+  and no images, so a package cannot make the client fetch a remote resource
+  when its card is shown.
+- **`https` links only.** The manifest schema rejects any other scheme
+  (`http:`, `javascript:`, `file:`) and an address with a user name or
+  password, which can hide the real host.
+- **The player opens a link, after a warning.** A click shows the full address
+  and its host, and says that the link comes from the package author and that
+  Covel has not checked the site. The link opens in the system browser only
+  after the player confirms. The host name is shown in ASCII, so a look-alike
+  name in another script appears as `xn--…`.
+- **Before play only.** Credits appear on world cards, the world page, the
+  session preparation screen and the installed-package list. The play view
+  does not show them. An install preview shows the author's name and no links.
 
 ## Other server guards
 

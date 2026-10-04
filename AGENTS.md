@@ -103,7 +103,8 @@ pnpm describe:authoring  # what a world may contain for the scanned plugins: fil
                       # with the path each file goes to and an example, plugin IDs and settings
                       # (--json, --check validates plugin examples, --plugins <dir>)
 pnpm validate:plugin  # validate PLUGIN.md / RUNTIME.md and locale files; a plugin DIR also gets
-                      # cross-runtime checks and a line with the languages it has text in
+                      # cross-runtime checks, a check that PLUGIN.md and package.json state one
+                      # version, and a line with the languages it has text in
 pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, every seed record):
                       # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>
 pnpm validate:collection  # static check of a covel-collection.yaml directory (docs/guide/collections.md)
