@@ -167,6 +167,7 @@ export function buildAgentLoopPolicy({
       maxRetries: manifest.maxRetries,
       callTimeoutMs: manifest.callTimeoutMs,
       firstTokenTimeoutMs: manifest.firstTokenTimeoutMs,
+      idleTimeoutMs: manifest.idleTimeoutMs,
       loopDetectionThreshold: manifest.loopDetectionThreshold,
       runtimeTimeoutMs: timeoutMs,
     }),

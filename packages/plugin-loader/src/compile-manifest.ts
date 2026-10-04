@@ -99,6 +99,7 @@ export function compileRuntimeManifest(
     timeoutMs: runtime.function?.timeoutMs ?? loop?.timeoutMs,
     callTimeoutMs: loop?.callTimeoutMs,
     firstTokenTimeoutMs: loop?.firstTokenTimeoutMs,
+    idleTimeoutMs: loop?.idleTimeoutMs,
     maxRetries: loop?.maxRetries,
     loopDetectionThreshold: loop?.loopDetection,
     maxRecursionDepth: loop?.maxRecursionDepth,

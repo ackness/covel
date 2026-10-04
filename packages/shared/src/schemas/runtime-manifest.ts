@@ -236,20 +236,32 @@ export const runtimeAuthoringManifestSchema = z
               .number()
               .int()
               .positive()
-              .describe("Total time limit of the runtime in ms.")
+              .describe(
+                "Time limit of the runtime in ms. The time a streamed model call spends writing does not count.",
+              )
               .optional(),
             callTimeoutMs: z
               .number()
               .int()
               .positive()
-              .describe("Time limit of one model call in ms.")
+              .describe(
+                "Time limit of one model call that is not streamed, in ms.",
+              )
               .optional(),
             firstTokenTimeoutMs: z
               .number()
               .int()
               .positive()
               .describe(
-                "Time limit for the first streamed token in ms. Defaults to 30000.",
+                "Time limit for the first streamed token in ms. Defaults to 120000.",
+              )
+              .optional(),
+            idleTimeoutMs: z
+              .number()
+              .int()
+              .positive()
+              .describe(
+                "Longest silence of a streamed model call that has started to write, in ms. A model that keeps writing is not cut off. Defaults to 120000.",
               )
               .optional(),
             maxRetries: z

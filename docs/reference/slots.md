@@ -274,6 +274,8 @@ Provider and plugin HTTP helpers cancel rejected response bodies before retrying
 
 媒体和 embedding 不自动套用文本预算，保留独立 wire 的时限及轮询策略；例如 DashScope WAN 仍可每 2 秒轮询、最多 300 秒。它们可以显式传入预算，此时所有 HTTP 请求（含轮询）都计数。底层 HTTP helper 只消耗传入的预算。观测数据在原 `transportAttempt` 之外提供可选 `logicalAttempt` 和 `transportRetryReason`（`http-429` / `http-5xx`）。
 
+默认预算按无输出时间限时。流每产出一段正文、推理或一次工具调用，时限就顺延到此刻之后 120 秒，最晚不超过预算创建后 30 分钟。所以上文的 120 秒约束的是首次输出之前的等待（含重试、退避和排队）以及两次输出之间的静默，不是持续输出的流的总时长；非流式调用没有进度信号，仍受 120 秒总时限约束。显式传入 `timeoutMs` 或 `deadline` 的预算保持固定，`deadline` 是任何输出都不会推后的绝对时限；要让显式预算也按无输出时间计算，另传 `idleTimeoutMs`，并可用 `ceilingMs` 设定顺延的上限。Agent runtime 的一次模型调用以 `max(120 秒, runtime 剩余时间)` 为预算并传入 `agent.loop.idleTimeoutMs`，因此 runtime 声明的重试次数都有时间执行：流式调用在首次输出前受 `firstTokenTimeoutMs` 和 runtime 时限约束，之后只受 `idleTimeoutMs` 约束，输出所用的时间不计入 runtime 的 `timeoutMs`；`callTimeoutMs` 只约束非流式调用。
+
 生命周期 hook 的每个通知阶段合计最多等待 1 秒。普通 hook 异常或超时记录 warning 后继续；请求取消或逻辑 deadline 会立即停止等待，不触发额外重试。预算到期时，gateway 也会停止等待不响应 signal 的自定义 adapter；自定义实现仍应使用 signal 取消其底层 I/O。
 
 请求次数由框架 HTTP helper 在真正发送前计数。自定义 adapter 如果直接使用自己的网络客户端，应在发送前调用 `assertLlmRequestBudget(config.requestBudget, { signal: config.signal, consumeAttempt: true })`（存在预算时）；框架无法自动统计其内部 HTTP 请求。

@@ -734,6 +734,145 @@ describe("streamLLMWithRetry", () => {
   });
 });
 
+describe("streamLLMWithRetry silence limits", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** `chunks` text deltas, `gapMs` apart, then a normal finish. */
+  function steadyStream(chunks: number, gapMs: number): StreamScript {
+    return {
+      events: [
+        ...Array.from({ length: chunks }, () => [
+          { delay: gapMs },
+          { type: "text-delta" as const, textDelta: "x" },
+        ]).flat(),
+        { type: "done", finishReason: "stop" },
+      ],
+    };
+  }
+
+  it("does not cut off a stream that writes past callTimeoutMs, the runtime deadline and the default request deadline", async () => {
+    // 10 minutes of output, never more than 30 s of silence.
+    const llm = createScriptedStreamLLM([steadyStream(20, 30_000)]);
+    const policy = buildRetryPolicy({
+      runtimeTimeoutMs: 240_000,
+      callTimeoutMs: 120_000,
+      maxRetries: 1,
+    });
+    const streamTimes: number[] = [];
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy,
+      deadline: Date.now() + 240_000,
+      onStreamTime: (ms) => streamTimes.push(ms),
+    });
+    await vi.advanceTimersByTimeAsync(600_000);
+    const result = await pending;
+
+    expect(result.response.content).toBe("x".repeat(20));
+    expect(llm.attempts).toBe(1);
+    // From the first output (30 s) to the end (600 s).
+    expect(streamTimes).toEqual([570_000]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("ends a stream that goes silent after it started to write, without a retry", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "text-delta", textDelta: "partial" },
+          { delay: 600_000 },
+          { type: "text-delta", textDelta: "never" },
+        ],
+      },
+      steadyStream(1, 0),
+    ]);
+    const policy = buildRetryPolicy({
+      runtimeTimeoutMs: 240_000,
+      idleTimeoutMs: 45_000,
+      maxRetries: 1,
+    });
+    const onStreamTime = vi.fn();
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy,
+      deadline: Date.now() + 240_000,
+      onStreamTime,
+    });
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: "LLMRetryError",
+      reason: "idle-timeout",
+      hasPartialOutput: true,
+    });
+    await vi.advanceTimersByTimeAsync(44_999);
+    expect(llm.attempts).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await rejected;
+
+    expect(llm.attempts).toBe(1);
+    expect(onStreamTime).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("restarts the idle wait with reasoning and tool-call output", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "reasoning-delta", reasoningDelta: "think" },
+          { delay: 40_000 },
+          { type: "reasoning-delta", reasoningDelta: "more" },
+          { delay: 40_000 },
+          { type: "tool-call", id: "c1", name: "lookup", arguments: "{}" },
+          { delay: 40_000 },
+          { type: "done", finishReason: "tool_calls" },
+        ],
+      },
+    ]);
+    const policy = buildRetryPolicy({
+      runtimeTimeoutMs: 60_000,
+      idleTimeoutMs: 45_000,
+      maxRetries: 0,
+    });
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy,
+      deadline: Date.now() + 60_000,
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+    const result = await pending;
+
+    expect(result.response.toolCalls).toHaveLength(1);
+    expect(result.response.reasoningContent).toBe("thinkmore");
+  });
+
+  it("still bounds the wait for the first output by the runtime deadline", async () => {
+    const llm = createScriptedStreamLLM([
+      { events: [{ delay: 600_000 }, { type: "done", finishReason: "stop" }] },
+    ]);
+    const policy = buildRetryPolicy({
+      runtimeTimeoutMs: 20_000,
+      maxRetries: 0,
+    });
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy,
+      deadline: Date.now() + 20_000,
+    });
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: "LLMRetryError",
+      reason: "first-token-timeout",
+      hasPartialOutput: false,
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 // ── Trace emission tests ────────────────────────────────────────────
 
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
@@ -761,6 +900,7 @@ describe("callLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 10_000,
         firstTokenTimeoutMs: 5_000,
+        idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
       deadline: Date.now() + 30_000,
@@ -804,6 +944,7 @@ describe("callLLMWithRetry trace emissions", () => {
           maxRetries: 0,
           callTimeoutMs: 1_000,
           firstTokenTimeoutMs: 1_000,
+          idleTimeoutMs: 30_000,
           loopDetectionThreshold: 3,
         },
         deadline: Date.now() + 5_000,
@@ -843,6 +984,7 @@ describe("callLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 1_000,
         firstTokenTimeoutMs: 1_000,
+        idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
       deadline: Date.now() + 5_000,
@@ -887,6 +1029,7 @@ describe("streamLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 10_000,
         firstTokenTimeoutMs: 5_000,
+        idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
       deadline: Date.now() + 30_000,
@@ -938,6 +1081,7 @@ describe("streamLLMWithRetry trace emissions", () => {
           maxRetries: 0,
           callTimeoutMs: 1_000,
           firstTokenTimeoutMs: 1_000,
+          idleTimeoutMs: 30_000,
           loopDetectionThreshold: 3,
         },
         deadline: Date.now() + 5_000,
@@ -981,6 +1125,7 @@ describe("streamLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 1_000,
         firstTokenTimeoutMs: 1_000,
+        idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
       deadline: Date.now() + 5_000,
@@ -1002,6 +1147,7 @@ describe("computeAttemptBudget", () => {
     maxRetries: 1,
     callTimeoutMs: 10_000,
     firstTokenTimeoutMs: 30_000,
+    idleTimeoutMs: 30_000,
     loopDetectionThreshold: 3,
   };
 
@@ -1063,6 +1209,7 @@ describe("thinking stream activity", () => {
         policy: {
           maxRetries: 0,
           firstTokenTimeoutMs: 50,
+          idleTimeoutMs: 30_000,
           callTimeoutMs: 500,
           loopDetectionThreshold: 3,
         },

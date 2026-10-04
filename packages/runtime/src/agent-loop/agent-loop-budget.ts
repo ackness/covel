@@ -51,7 +51,8 @@ export function createAgentLoopBudget(
     },
     assertLive,
     // The model retry layer owns its per-attempt timers and queue exclusion.
-    // Re-arm our timer with its reported queue compensation after it returns.
+    // Re-arm our timer with its reported queue and stream-output compensation
+    // after it returns.
     pauseForModel() {
       assertLive();
       clear();

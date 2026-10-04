@@ -126,6 +126,86 @@ describe("agent request recovery budgets", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("leaves a retry its time after a stream that never wrote", async () => {
+    // A story runtime with a 240 s limit and one retry: the first stream is
+    // silent for the whole first-token wait, the second one answers.
+    let attempts = 0;
+    const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>(
+      async function* (params) {
+        if (attempts++ === 0)
+          await new Promise<never>((_resolve, reject) => {
+            params.signal?.addEventListener("abort", () =>
+              reject(params.signal!.reason),
+            );
+          });
+        yield { type: "text-delta", textDelta: "recovered" };
+        yield { type: "done", finishReason: "stop" };
+      },
+    );
+    const pending = requestLLMResponse({
+      manifest: {
+        name: "fixture/story",
+        pluginId: "fixture",
+        description: "Fixture",
+      },
+      deps: { llm: { generate: vi.fn(), stream } },
+      messages,
+      effectiveModel: undefined,
+      toolDefs: undefined,
+      responseFormat: undefined,
+      retryPolicy: buildRetryPolicy({
+        runtimeTimeoutMs: 240_000,
+        maxRetries: 1,
+      }),
+      deadline: Date.now() + 240_000,
+      useStreaming: true,
+      reportRetry: vi.fn(),
+      onStreamDelta: async () => {},
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect((await pending).content).toBe("recovered");
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not cut off a streamed answer that takes longer than the runtime limit to write", async () => {
+    const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>(async function* () {
+      for (let i = 0; i < 20; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 30_000));
+        yield { type: "text-delta", textDelta: "x" };
+      }
+      yield { type: "done", finishReason: "stop" };
+    });
+    const onStreamTime = vi.fn();
+    const pending = requestLLMResponse({
+      manifest: {
+        name: "fixture/story",
+        pluginId: "fixture",
+        description: "Fixture",
+      },
+      deps: { llm: { generate: vi.fn(), stream } },
+      messages,
+      effectiveModel: undefined,
+      toolDefs: undefined,
+      responseFormat: undefined,
+      retryPolicy: buildRetryPolicy({
+        runtimeTimeoutMs: 240_000,
+        callTimeoutMs: 120_000,
+        maxRetries: 1,
+      }),
+      deadline: Date.now() + 240_000,
+      useStreaming: true,
+      reportRetry: vi.fn(),
+      onStreamDelta: async () => {},
+      onStreamTime,
+    });
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect((await pending).content).toBe("x".repeat(20));
+    expect(stream).toHaveBeenCalledOnce();
+    expect(onStreamTime).toHaveBeenCalledWith(570_000);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("never recovers a refusal through non-stream generation", async () => {
     const error = new AiProviderError({
       code: "REFUSAL",

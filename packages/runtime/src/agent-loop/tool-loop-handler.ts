@@ -3,6 +3,7 @@ import {
   awaitLlmRequest,
   createLlmRequestBudget,
   createLlmRequestScope,
+  DEFAULT_LLM_REQUEST_TIMEOUT_MS,
   type LLMProviderRequest,
   type LLMRequestBudget,
   type LLMTargetIdentity,
@@ -62,6 +63,8 @@ export interface RequestLLMResponseOptions {
   readonly reportRetry: (info: RetryInfo) => void;
   /** Forwards LLM-slot queue waits so the tool loop can extend its deadline. */
   readonly onQueueWait?: (waitedMs: number) => void;
+  /** Forwards the time a stream spent writing, for the same extension. */
+  readonly onStreamTime?: (streamedMs: number) => void;
   /** Called once per forwarded text delta; the DeltaForwarder owns the count. */
   readonly onStreamDelta: (textDelta: string) => Promise<void>;
 }
@@ -97,8 +100,18 @@ export async function requestLLMResponse(
     resolvedTarget = undefined;
   }
 
+  // One logical call may use the runtime's remaining time, so each retry the
+  // policy allows can run. It is never less than the default: time queued for
+  // a model slot counts here, while the runtime deadline is credited for it.
+  // Output of a stream moves the limit.
   const requestScope = createLlmRequestScope({
-    budget: createLlmRequestBudget(),
+    budget: createLlmRequestBudget({
+      timeoutMs: Math.max(
+        DEFAULT_LLM_REQUEST_TIMEOUT_MS,
+        deadline - Date.now(),
+      ),
+      idleTimeoutMs: retryPolicy.idleTimeoutMs,
+    }),
   });
   const callParams = {
     llm: deps.llm,
@@ -153,14 +166,15 @@ async function requestStreaming(
   let response: LLMResponse;
   let usedNonStreamFallback = false;
 
-  // Streaming path: helper enforces per-attempt call-timeout + first-token
-  // (TTFB) guard, retries on transient failures, and forwards text deltas to
+  // Streaming path: helper enforces the first-token (TTFB) and idle guards,
+  // retries on transient failures, and forwards text deltas to
   // the caller on the first attempt. If streaming exhausts its retries with a
   // failure before producing output, fall back to a non-stream call.
   try {
     const streamed = await streamLLMWithRetry({
       ...callParams,
       onDelta: onStreamDelta,
+      onStreamTime: opts.onStreamTime,
     });
     response = streamed.response;
   } catch (streamError) {

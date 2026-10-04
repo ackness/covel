@@ -23,13 +23,16 @@ export interface RetryPolicy {
   readonly callTimeoutMs: number;
   /** Streaming first-token timeout in ms. */
   readonly firstTokenTimeoutMs: number;
+  /** Longest silence of a stream that has started to write, in ms. */
+  readonly idleTimeoutMs: number;
   /** Tool-loop threshold (0 disables detection). */
   readonly loopDetectionThreshold: number;
 }
 
 /** Default threshold constants, also exported so tests can align. */
 export const DEFAULT_MAX_RETRIES = 1;
-export const DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 30_000;
+export const DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 120_000;
+export const DEFAULT_IDLE_TIMEOUT_MS = 120_000;
 export const DEFAULT_LOOP_THRESHOLD = 3;
 const DEFAULT_CALL_TIMEOUT_CAP_MS = 60_000;
 const MIN_CALL_TIMEOUT_MS = 5_000;
@@ -51,6 +54,7 @@ export function buildRetryPolicy(input: {
   maxRetries?: number;
   callTimeoutMs?: number;
   firstTokenTimeoutMs?: number;
+  idleTimeoutMs?: number;
   loopDetectionThreshold?: number;
   runtimeTimeoutMs: number;
 }): RetryPolicy {
@@ -72,6 +76,10 @@ export function buildRetryPolicy(input: {
     1_000,
     input.firstTokenTimeoutMs ?? DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
   );
+  const idleTimeoutMs = Math.max(
+    1_000,
+    input.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+  );
   const loopDetectionThreshold = Math.max(
     0,
     input.loopDetectionThreshold ?? DEFAULT_LOOP_THRESHOLD,
@@ -80,6 +88,7 @@ export function buildRetryPolicy(input: {
     maxRetries,
     callTimeoutMs,
     firstTokenTimeoutMs,
+    idleTimeoutMs,
     loopDetectionThreshold,
   };
 }
@@ -88,6 +97,7 @@ export function buildRetryPolicy(input: {
 
 export type RetryReason =
   | "first-token-timeout"
+  | "idle-timeout"
   | "call-timeout"
   | "transient-error"
   | "tool-loop-detected"
@@ -249,23 +259,27 @@ export function assertDeadlineNotReached(
 }
 
 /**
- * Compute the per-attempt time budget: the smaller of the policy's
- * `callTimeoutMs` and the time remaining until the runtime deadline, floored
- * at {@link MIN_ATTEMPT_BUDGET_MS}.
+ * Time remaining until the runtime deadline, floored at
+ * {@link MIN_ATTEMPT_BUDGET_MS}.
  */
-export function computeAttemptBudget(
-  policy: RetryPolicy,
-  deadline: number,
-): number {
+export function computeDeadlineBudget(deadline: number): number {
   const remainingMs = deadline - Date.now();
   // Past the deadline: no budget. Granting the 1s floor here would let an
   // attempt run ~1s beyond the runtime deadline. assertDeadlineNotReached
   // usually throws first; this guards races and direct callers.
   if (remainingMs <= 0) return 0;
-  return Math.min(
-    policy.callTimeoutMs,
-    Math.max(MIN_ATTEMPT_BUDGET_MS, remainingMs),
-  );
+  return Math.max(MIN_ATTEMPT_BUDGET_MS, remainingMs);
+}
+
+/**
+ * Compute the time budget of one non-streaming attempt: the smaller of the
+ * policy's `callTimeoutMs` and the time remaining until the runtime deadline.
+ */
+export function computeAttemptBudget(
+  policy: RetryPolicy,
+  deadline: number,
+): number {
+  return Math.min(policy.callTimeoutMs, computeDeadlineBudget(deadline));
 }
 
 /**

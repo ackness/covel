@@ -2,6 +2,7 @@ import {
   assertLlmRequestBudget,
   createLlmRequestScope,
   iterateLlmRequest,
+  noteLlmRequestProgress,
   type LLMResponseFormat,
   type LLMRequestDefaults,
   type LLMProviderWarning,
@@ -366,11 +367,20 @@ export function createGateway(deps: GatewayDependencies) {
     let cleanup = () => {};
     try {
       cleanup = applySlotOverlay(deps, options?.slotOverrides);
-      yield* streamTextInner(input, {
+      for await (const event of streamTextInner(input, {
         ...options,
         requestBudget: scope.budget,
         signal: scope.signal,
-      });
+      })) {
+        // Output keeps the request alive; only silence reaches the deadline.
+        if (
+          event.type === "tool-call" ||
+          (event.type === "text-delta" && event.textDelta.length > 0) ||
+          (event.type === "reasoning-delta" && event.reasoningDelta.length > 0)
+        )
+          noteLlmRequestProgress(scope.budget);
+        yield event;
+      }
     } finally {
       cleanup();
       scope.dispose();

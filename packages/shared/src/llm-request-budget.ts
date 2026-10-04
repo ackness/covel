@@ -2,11 +2,24 @@
 export interface LLMRequestBudget {
   readonly maxAttempts: number;
   attempts: number;
-  readonly deadline: number;
+  /** Moves later while a stream delivers output; never past `ceiling`. */
+  deadline: number;
+  /**
+   * Longest silence of a stream that has started to write. Absent means the
+   * deadline is fixed.
+   */
+  readonly idleTimeoutMs?: number;
+  /** Latest time `deadline` may reach. */
+  readonly ceiling: number;
 }
 
 export const DEFAULT_LLM_REQUEST_ATTEMPTS = 8;
+/** Longest wait for the first output, with every retry and backoff. */
 export const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 120_000;
+/** Longest silence of a stream that has started to write. */
+export const DEFAULT_LLM_REQUEST_IDLE_TIMEOUT_MS = 120_000;
+/** Ends a model that never stops writing. */
+export const DEFAULT_LLM_REQUEST_CEILING_MS = 30 * 60_000;
 
 export class LLMRequestBudgetError extends Error {
   readonly code = "REQUEST_BUDGET_EXCEEDED";
@@ -25,15 +38,29 @@ export class LLMRequestBudgetError extends Error {
   }
 }
 
+/**
+ * A budget with no explicit `timeoutMs` or `deadline` is limited by silence:
+ * output of a stream moves its deadline (see {@link noteLlmRequestProgress}).
+ * An explicit limit stays fixed unless the caller also gives `idleTimeoutMs`.
+ * `deadline` is an absolute limit that output never moves.
+ */
 export function createLlmRequestBudget(
   options: {
     maxAttempts?: number;
     timeoutMs?: number;
     deadline?: number;
+    idleTimeoutMs?: number;
+    ceilingMs?: number;
   } = {},
 ): LLMRequestBudget {
   const maxAttempts = options.maxAttempts ?? DEFAULT_LLM_REQUEST_ATTEMPTS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_LLM_REQUEST_TIMEOUT_MS;
+  const fixed =
+    options.timeoutMs !== undefined || options.deadline !== undefined;
+  const idleTimeoutMs =
+    options.idleTimeoutMs ??
+    (fixed ? undefined : DEFAULT_LLM_REQUEST_IDLE_TIMEOUT_MS);
+  const ceilingMs = options.ceilingMs ?? DEFAULT_LLM_REQUEST_CEILING_MS;
   if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) {
     throw new RangeError("LLM request maxAttempts must be a positive integer");
   }
@@ -43,11 +70,41 @@ export function createLlmRequestBudget(
   if (options.deadline !== undefined && !Number.isFinite(options.deadline)) {
     throw new RangeError("LLM request deadline must be finite");
   }
+  if (
+    idleTimeoutMs !== undefined &&
+    (!Number.isFinite(idleTimeoutMs) || idleTimeoutMs <= 0)
+  ) {
+    throw new RangeError(
+      "LLM request idleTimeoutMs must be finite and positive",
+    );
+  }
+  if (!Number.isFinite(ceilingMs) || ceilingMs <= 0) {
+    throw new RangeError("LLM request ceilingMs must be finite and positive");
+  }
+  const now = Date.now();
+  const limit = options.deadline ?? Infinity;
+  const deadline = Math.min(now + timeoutMs, limit);
   return {
     maxAttempts,
     attempts: 0,
-    deadline: Math.min(Date.now() + timeoutMs, options.deadline ?? Infinity),
+    deadline,
+    ...(idleTimeoutMs !== undefined ? { idleTimeoutMs } : {}),
+    ceiling:
+      idleTimeoutMs === undefined
+        ? deadline
+        : Math.max(deadline, Math.min(now + ceilingMs, limit)),
   };
+}
+
+/**
+ * Record that a stream delivered output. A model that keeps writing is not
+ * cut off: the deadline moves to one idle timeout from now. Silence and the
+ * ceiling still end the request.
+ */
+export function noteLlmRequestProgress(budget: LLMRequestBudget): void {
+  if (budget.idleTimeoutMs === undefined) return;
+  const next = Math.min(Date.now() + budget.idleTimeoutMs, budget.ceiling);
+  if (next > budget.deadline) budget.deadline = next;
 }
 
 /** Guards do not spend attempts; only a transport about to send consumes one. */

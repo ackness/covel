@@ -1121,10 +1121,12 @@ const runtimeManifestCommonShape = {
   maxSteps: z.number().int().positive().optional(),
   /** Smart retry count on transient LLM failures. Default 1. Set 0 to disable. */
   maxRetries: z.number().int().min(0).max(5).optional(),
-  /** Per-LLM-call total timeout (ms). Caps a single provider call. */
+  /** Total timeout of one non-streaming LLM call (ms). */
   callTimeoutMs: z.number().int().positive().optional(),
-  /** Streaming first-token (TTFB) timeout (ms). Default 30000. */
+  /** Streaming first-token (TTFB) timeout (ms). Default 120000. */
   firstTokenTimeoutMs: z.number().int().positive().optional(),
+  /** Longest silence of a stream that has started to write (ms). Default 120000. */
+  idleTimeoutMs: z.number().int().positive().optional(),
   /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
   loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
   /** Retry a bare (no-tool-call) finish once before releasing. Default false. */

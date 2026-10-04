@@ -557,19 +557,27 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    */
   readonly maxRetries?: number;
   /**
-   * Per-LLM-call total timeout in ms. Caps a single provider call so a hung
-   * request cannot consume the whole `timeoutMs` budget. Defaults to
-   * `min(60000, floor(timeoutMs / (maxRetries + 1)))` so every retry attempt
-   * fits inside the runtime deadline.
+   * Total timeout of one non-streaming LLM call in ms. Caps a single provider
+   * call so a hung request cannot consume the whole `timeoutMs` budget.
+   * Defaults to `min(60000, floor(timeoutMs / (maxRetries + 1)))` so every
+   * retry attempt fits inside the runtime deadline. A streaming call is
+   * limited by `firstTokenTimeoutMs` and `idleTimeoutMs` instead.
    */
   readonly callTimeoutMs?: number;
   /**
    * Streaming first-token (TTFB) timeout in ms. Fires when a streaming LLM
-   * call is established but emits no text/tool-call event before the
-   * threshold — typical symptom of a hung provider with a live TCP socket.
-   * Default 30000. Ignored for non-streaming calls.
+   * call is established but emits no text, reasoning or tool-call event
+   * before the threshold — typical symptom of a hung provider with a live TCP
+   * socket. Default 120000. Ignored for non-streaming calls.
    */
   readonly firstTokenTimeoutMs?: number;
+  /**
+   * Longest silence, in ms, of a streaming LLM call that has started to
+   * write. Each output starts the wait again, so a model that keeps writing
+   * is not cut off and the time it writes does not count against `timeoutMs`.
+   * Default 120000. Ignored for non-streaming calls.
+   */
+  readonly idleTimeoutMs?: number;
   /**
    * Tool-call loop detection threshold. When the LLM emits `N` consecutive
    * tool calls with identical `{name, arguments}`, the executor aborts the
