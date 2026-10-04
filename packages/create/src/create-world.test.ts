@@ -842,6 +842,23 @@ describe("buildWorldPrompt", () => {
     );
   });
 
+  it("shows dimension definitions without an ID that a model can copy", async () => {
+    const prompt = await buildWorldPrompt("Synthetic world", "zh-CN");
+    const start = prompt.indexOf("\ndimensions:\n");
+    const block = prompt.slice(start, prompt.indexOf("```", start));
+    const ids = [...block.matchAll(/^ {2}(\S.*):$/gm)].map(
+      (match) => match[1]!,
+    );
+
+    // A model writes a concrete example ID into every world it generates,
+    // whatever the world is about. A placeholder has to be replaced.
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.filter((id) => !/^<\w+>$/.test(id))).toEqual([]);
+    // The brief can ask for two numeric resources. A model writes as many as
+    // the example shows.
+    expect(block.match(/schema: \{ type: integer/g)).toHaveLength(2);
+  });
+
   it("turns the structured brief into binding package instructions", async () => {
     const prompt = await buildWorldPrompt("雨中的倒转钟城", "zh-CN", {
       experienceMode: "dialogue-mode",

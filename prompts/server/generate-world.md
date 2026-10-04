@@ -53,24 +53,30 @@ pluginPolicy:
 # Set to stage only for dialogue-mode; omit for traditional-story.
 defaultViewMode: stage
 
-# Example IDs only: the author chooses every dimension ID and data structure.
+# Each key under `dimensions` is an ID that you choose for this world: English
+# words that say what the dimension holds. A key in angle brackets is a
+# placeholder for your ID. The entries show the kinds of definition.
 dimensions:
-  setting:
+  <idOfTheWorldReference>:
     name: <world reference>
     description: <what this reference describes>
     schema: { type: string }
     initialValue: <compact geography, factions, history and narrative constraints>
-  opening:
+  <idOfTheOpeningChoices>:
     name: <opening choices>
     schema: { type: string }
     initialValue: <2 sentences with immediate tension and concrete choices>
-  repairBudget:
-    name: <a world-specific resource>
+  <idOfAResource>:
+    name: <a resource that this world spends or loses>
     schema: { type: integer, minimum: 0 }
     initialValue: 10
     updateRule: <optional natural-language rule; only count explicitly completed actions>
-  discoveries:
-    name: <discovered places>
+  <idOfAnotherResource>:
+    name: <a different resource or pressure of this world>
+    schema: { type: integer, minimum: 0, maximum: 100 }
+    initialValue: 60
+  <idOfARecord>:
+    name: <a record that grows during play, such as the places found>
     schema:
       type: object
       additionalProperties:
@@ -171,10 +177,10 @@ rules:
 - initialValue must satisfy schema without coercion. Supported schema keywords: type (string/number/integer/boolean/null/object/array or a type array), title, description, enum, const, minimum/maximum/exclusiveMinimum/exclusiveMaximum, minLength/maxLength, items/minItems/maxItems, properties/required/additionalProperties, x-i18n. Do not use $ref, format, pattern or unsupported keywords.
 - Rules describe how already completed narrative changes values; do not declare hidden event triggers, deterministic periodic scheduling, or duplicate data owned by inventory/characters/time plugins.
 - Omit updateRule for static references. Use x-i18n: true only on explicitly multilingual text nodes; ordinary JSON maps are not translation maps.
-- If opening-kit is requested, supply at least two resource dimensions with numeric initialValue and a dimension describing opening choices.
+- When the Creation Brief asks for resource dimensions, write at least two dimensions with a numeric initialValue. Each one is a resource of this world, with its own ID and name.
 - Be creative and specific. Avoid generic fantasy tropes.
 - Never expose the generation process or describe world content as a test fixture, prompt/model output, evaluation artifact, or framework implementation example. Technical vocabulary is allowed when it belongs to the fictional setting.
 - Avoid literal generic names built only from genre nouns. Coin proper nouns with a local cultural or historical reason.
 - The opening choices and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.
-- The opening dimension must present an immediate choice or tension tied to that crisis.
+- The dimension that holds the opening choices must present an immediate choice or tension tied to that crisis.
 - Do NOT output anything except the delimited sections that the request names.
