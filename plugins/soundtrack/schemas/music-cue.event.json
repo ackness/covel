@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mood"],
+  "properties": {
+    "mood": {
+      "enum": [
+        "calm",
+        "warm",
+        "joy",
+        "romance",
+        "sorrow",
+        "mystery",
+        "tense",
+        "dread",
+        "battle",
+        "triumph",
+        "silence"
+      ],
+      "description": "The mood of the story now. `silence` stops the music."
+    }
+  }
+}

@@ -333,6 +333,8 @@ describe("world data session importer", () => {
       "memory/definitions",
       "scene-stage/assets",
       "scene-stage/scenes",
+      "soundtrack/assets",
+      "soundtrack/tracks",
       "story-events/events",
       "tabletop-rules/rules",
       "world-time/definitions",

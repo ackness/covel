@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **World gallery.** The art a world package ships shows before a session exists. In the `showcase` world list the selected world's scenes rotate behind its title — with a pause control, and without starting for a player who asked for reduced motion — and its portraits sit under the summary; a picture opens at full size. The world details list every picture. A world without a built-in cover opens on its own scenes. New routes: `GET /api/worlds/:id/gallery` and `GET /api/worlds/:id/gallery/:source/:file`, which serve only raster images of the package's public `kind: media` sources.
+- **World art on the cards.** In the `cards` world list a cover shows a few faces of the world and the number of its pictures; they open the gallery. The world's scenes pass over the cover while the pointer rests on it. The "continue" banner rotates the scenes of the world and lists its pictures.
+- **Background music.** A world can ship music: files under `media/music/` and a track list `media/music.yaml` that says when each track plays — in which scenes, for which moods, or as the theme of the world. The new bundled `soundtrack` plugin records the mood (the new `music.cue` event, emitted by the narrative) and the scene (`scene.set`), and chooses the track. The kernel UI slot `stage.music@1` carries the choice to the app, which plays it: tracks change with a crossfade, the music lowers itself under a narrated line, pauses while the page is hidden, and has a switch in the session header and a volume in Settings → General. Other plugins can provide the same slot. See `docs/reference/world-data.md` (Background Music) and `docs/reference/ui-panels.md` (Stage music).
+- **A world list of any length.** The strip of covers in the `showcase` world list stays one row: what does not fit scrolls with a faded edge, steps to either side, and the arrow keys; the selected world stays in view; "All worlds" opens a searchable grid.
+
+### Changed
+
+- **Panel tabs that do not fit.** With labelled tabs (`panelTabs: "bar"`) the context panel no longer shows a scrollbar under a cut-off row. The cut-off side fades, the mouse wheel moves the row, the selected tab stays in the middle, and a button at the end lists every panel with its full name.
+
 ## [0.0.46] - 2026-10-04
 
 This release adds style schemes that change the layout as well as the colours, puts each language of a world or plugin in its own file with tooling to translate it, writes an AI-generated world one part at a time under a limit on silence instead of total time, and keeps Settings usable when an upgrade meets older settings (#117–#121, #123–#127).

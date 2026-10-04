@@ -277,19 +277,21 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                   | 描述                                                                                                                                                                                    |
-| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                          | 列出所有世界                                                                                                                                                                            |
-| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                                                                                                            |
-| POST   | `/api/worlds`                          | 创建世界；已有 ID 返回 `409 world_already_exists`                                                                                                                                       |
-| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                                         |
-| DELETE | `/api/worlds/:id`                      | 删除世界及其全部会话（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
-| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                                                                                                               |
-| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                                                                                                            |
-| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                                        |
-| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                              |
-| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
-| POST   | `/api/worlds/:id/translate`            | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）                                                                                                                             |
+| 方法   | 路径                                    | 描述                                                                                                                                                                                    |
+| ------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                           | 列出所有世界                                                                                                                                                                            |
+| GET    | `/api/worlds/:id`                       | 获取世界详情                                                                                                                                                                            |
+| POST   | `/api/worlds`                           | 创建世界；已有 ID 返回 `409 world_already_exists`                                                                                                                                       |
+| PATCH  | `/api/worlds/:id`                       | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                                         |
+| DELETE | `/api/worlds/:id`                       | 删除世界及其全部会话（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`     | 导出世界维度（YAML/JSON）                                                                                                                                                               |
+| POST   | `/api/worlds/:id/dimensions/import`     | 导入世界维度                                                                                                                                                                            |
+| POST   | `/api/worlds/:id/sync-dimensions`       | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                                        |
+| POST   | `/api/worlds/:id/world-data/preflight`  | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                              |
+| POST   | `/api/worlds/:id/sync-data`             | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
+| POST   | `/api/worlds/:id/translate`             | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）                                                                                                                             |
+| GET    | `/api/worlds/:id/gallery`               | 列出世界包自带的图片（场景、立绘），供世界列表和世界详情在没有会话时展示                                                                                                                |
+| GET    | `/api/worlds/:id/gallery/:source/:file` | 读取上一条列表里的一张图片                                                                                                                                                              |
 
 服务端删除世界先在短世界锁内记录删除状态，释放世界锁后逐个执行完整的会话删除流程，包括等待执行写入、生命周期钩子、媒体引用与进程内状态清理，最后删除世界记录和对应文件包。底层 `DataStore.deleteWorld` 仍只删除世界记录；需要级联清理的调用必须经过 API 生命周期流程。
 
@@ -1182,6 +1184,36 @@ SSE 事件：
 | 409    | `world_not_translatable`   | 世界包不在用户世界目录里                           |
 | 409    | `world_already_translated` | 这种语言已经没有缺的文字                           |
 | 409    | `world_deleting`           | 世界正在删除                                       |
+
+#### `GET /api/worlds/:id/gallery`
+
+列出世界包自带的图片。会话创建时才把世界包的 `kind: media` 来源导入媒体库，世界列表和世界详情还没有会话，所以从世界包直接读同一批文件。
+
+只包含世界数据描述符里公开的 `kind: media` 来源（`enabled: false` 和 `visibility: hidden` 的来源不列出）中的 PNG / JPEG / WebP 文件，按来源顺序、文件名排序，最多 60 张；读不出像素尺寸的文件不列出。没有世界包的世界（只存在数据库或浏览器里）返回空列表。
+
+```json
+{
+  "items": [
+    {
+      "id": "scenes/library-day.png",
+      "source": "scenes",
+      "url": "/api/worlds/haruka-academy/gallery/scenes/library-day.png?v=mutjeu1c-1b6i7",
+      "width": 1536,
+      "height": 1024
+    }
+  ]
+}
+```
+
+`source` 是描述符里的来源 ID。`url` 带文件版本（修改时间和大小），文件变了地址就变。框架不解读图片的用途：前端只按宽高比区分——宽图（宽 ≥ 高的 1.2 倍）可以铺满屏幕作背景，其余作为人物图展示。
+
+世界不存在返回 404。读权限与 `GET /api/worlds` 相同：这些图片是世界包的分发内容，不属于任何会话。
+
+#### `GET /api/worlds/:id/gallery/:source/:file`
+
+返回一张图片的字节。只响应 `GET /api/worlds/:id/gallery` 会列出的文件：`:source` 是来源 ID，`:file` 是该来源目录下的文件名，其他路径（包括 `..`、符号链接、未列出的来源）一律 404。
+
+响应带 `ETag`；地址里的 `v` 与当前文件版本一致时 `Cache-Control: public, max-age=31536000, immutable`，否则 `no-cache`。`If-None-Match` 命中返回 304。
 
 ### 会话管理
 

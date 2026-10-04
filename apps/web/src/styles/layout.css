@@ -260,4 +260,42 @@
   .ui-world-thumb[aria-pressed="true"] {
     border: 2px solid var(--accent-primary);
   }
+
+  /* A strip of covers longer than its row snaps to a cover when it scrolls. */
+  .ui-world-rail {
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 2.25rem;
+  }
+
+  .ui-world-rail > .ui-world-thumb {
+    scroll-snap-align: start;
+  }
+
+  /* ── Horizontal strips ──────────────────────────────────────── */
+  /* A strip that hides content fades its cut-off edge instead of showing a
+     scrollbar; the controls beside the strip do the scrolling. */
+  .ui-scroll-fade {
+    --fade-start: #000;
+    --fade-end: #000;
+    scrollbar-width: none;
+    mask-image: linear-gradient(
+      90deg,
+      var(--fade-start) 0,
+      #000 2.25rem,
+      #000 calc(100% - 2.25rem),
+      var(--fade-end) 100%
+    );
+  }
+
+  .ui-scroll-fade::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ui-scroll-fade[data-fade-start="true"] {
+    --fade-start: transparent;
+  }
+
+  .ui-scroll-fade[data-fade-end="true"] {
+    --fade-end: transparent;
+  }
 }

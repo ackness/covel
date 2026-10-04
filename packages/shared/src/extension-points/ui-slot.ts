@@ -127,6 +127,23 @@ export const sessionSummaryEntrySchema = z.discriminatedUnion("kind", [
 export const sessionSummarySchema = z.strictObject({
   entries: z.array(sessionSummaryEntrySchema).max(16),
 });
+/**
+ * What should be playing behind the session now. It is state, not a command:
+ * the player changes track when `trackId` changes and is silent without a
+ * `ref`, so a reload or a resumed session lands on the same music.
+ */
+export const stageMusicSchema = z.strictObject({
+  trackId: z.string().min(1).max(128).optional(),
+  title: i18nTextSchema.optional(),
+  /** An audio asset. Absent: silence. */
+  ref: mediaRefSchema.optional(),
+  /** Defaults to true: background music repeats until the track changes. */
+  loop: z.boolean().optional(),
+  /** The author's level for this track, under the player's own volume. */
+  volume: z.number().min(0).max(1).optional(),
+  /** Length of the fade from the track before. The player has a default. */
+  fadeMs: z.number().int().min(0).max(10_000).optional(),
+});
 export const uiSlotValueSchemas = {
   [kernelUiSlots.backdrop]: stageBackdropSchema,
   [kernelUiSlots.cast]: stageCastSchema,
@@ -134,6 +151,7 @@ export const uiSlotValueSchemas = {
   [kernelUiSlots.choices]: stageChoicesSchema,
   [kernelUiSlots.characterVisual]: characterVisualSchema,
   [kernelUiSlots.summary]: sessionSummarySchema,
+  [kernelUiSlots.music]: stageMusicSchema,
 } as const;
 export const uiSlotNameSchema = z.enum(Object.values(kernelUiSlots));
 export type UiSlotName = z.infer<typeof uiSlotNameSchema>;
@@ -144,6 +162,7 @@ export type StageChoicesModel = z.infer<typeof stageChoicesSchema>;
 export type CharacterVisualModel = z.infer<typeof characterVisualSchema>;
 export type SessionSummaryEntry = z.infer<typeof sessionSummaryEntrySchema>;
 export type SessionSummaryModel = z.infer<typeof sessionSummarySchema>;
+export type StageMusicModel = z.infer<typeof stageMusicSchema>;
 const valueSchema = z.union([
   stageBackdropSchema,
   stageCastSchema,
@@ -152,6 +171,7 @@ const valueSchema = z.union([
   characterVisualSchema,
   characterVisualCollectionSchema,
   sessionSummarySchema,
+  stageMusicSchema,
   z.null(),
 ]);
 export type UiSlotValue = z.infer<typeof valueSchema>;

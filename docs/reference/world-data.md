@@ -385,6 +385,10 @@ sources:
 
 media source 应同时声明 `key: filename` 和 `indexTo: contract:<contractId>`。缺 key 会产生 error；缺 indexTo 无法生成媒体索引写入。当前媒体字节持久化随有效 media-index write 执行，因此没有活跃索引接收方时不会导入该 source 的字节。此时产生 warning，不阻断其他数据与投影；启用接收插件后可通过 sync 补导入。
 
+### 会话之外可见的图片
+
+`kind: media` 的来源在创建会话时才导入媒体库，但其中的图片（PNG / JPEG / WebP）在这之前就能被玩家看到：世界列表和世界详情通过 `GET /api/worlds/:id/gallery` 直接从世界包读取。`enabled: false` 和 `visibility: hidden` 的来源不在其中。接口和展示规则见 [api.md](./api.md) 与 [world-art-direction.md](../guide/world-art-direction.md)。
+
 ### 隐藏数据（`visibility: hidden`）
 
 source 默认是公开的。声明 `visibility: hidden` 的 source 承载「条件满足前不能被知道」的内容，例如隐藏剧情。它只能写入数据合约（`to: contract:<contractId>`），导入后落在接收插件的保留命名空间 `_hidden.<namespace>`（例如 `story-events` 的 `events` 命名空间对应 `_hidden.events`）。
@@ -795,6 +799,45 @@ sources:
 **未出图时的空 registry 兜底**：`media/scenes.registry.json` 不存在会导致 world-data 校验失败（source 引用了不存在的文件）。作者还没准备场景图时，对空的 `media/scenes/` 目录跑一次 `emit-scenes.mjs` 即可产出合法的空 registry（`{schemaVersion: 1, registryId: "scene-registry", scenes: []}`），先提交进世界包占位；scene-stage 侧空 `scenes[]` 时一律走"未命中注册表"分支（`source: "none"`，舞台回退世界头图），不是错误状态。出图后重跑 `emit-scenes.mjs` 覆盖即可，无需改 world.data.yaml。
 
 清单润色规范、参数表、日/夜缺图回退语义、作者四步工作流见 [场景背景生成指南](../guide/world-scenes.md)。
+
+## Background Music
+
+世界包的背景音乐通过 `stage.music-assets@1` / `stage.music-tracks@1` 导入，由 `soundtrack` 插件接收。播放不需要任何模型：插件按当前场景和情绪从曲目表里选曲，投影到内核槽位 `stage.music@1`，应用负责播放（见 [ui-panels.md](./ui-panels.md#stage-music)）。
+
+世界包提供两样东西：`media/music/` 下的音乐文件（`.mp3` / `.wav`，单文件上限 20 MB、整个目录上限 100 MB），和一份手写的曲目表 `media/music.yaml`。
+
+| 字段     | 说明                                                                                                                     |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `id`     | 曲目机器键，在表内唯一。                                                                                                 |
+| `title`  | 可选，播放时显示给玩家的曲名。                                                                                           |
+| `file`   | `media/music/` 下的文件名。不写哈希：导入时每个文件生成一条以文件名为 key 的索引记录。                                   |
+| `theme`  | 可选，`true` 表示世界主题曲：没有别的曲目合适时播放。                                                                    |
+| `scenes` | 可选，叙事里使用的场景名列表。声明后这首曲子只在这些场景播放；场景名相同或一方包含另一方即算命中。                       |
+| `moods`  | 可选，这首曲子适合的情绪：`calm`、`warm`、`joy`、`romance`、`sorrow`、`mystery`、`tense`、`dread`、`battle`、`triumph`。 |
+| `loop`   | 可选，`false` 表示只播放一遍。默认循环。                                                                                 |
+| `volume` | 可选，这首曲子的音量（0–1）。默认 1。玩家自己的音量再乘在上面。                                                          |
+
+`tracks` 的顺序就是优先顺序。选曲规则依次为：符合当前情绪且属于当前场景的曲目 → 符合当前情绪、不限场景的曲目 → 当前场景自己的曲目 → 主题曲 → 静音。
+
+没有 `worldData` 描述符的世界，把文件放在上面两个约定路径即可。有描述符的世界声明两个来源，`registryId: music-registry` 是曲目表的自描述常量，同时充当 `key`：
+
+```yaml
+sources:
+  music:
+    kind: media
+    path: media/music
+    to: media
+    indexTo: contract:stage.music-assets@1
+    key: filename
+  musicTracks:
+    kind: yaml
+    path: media/music.yaml
+    to: contract:stage.music-tracks@1
+    key: registryId
+    after: music
+```
+
+情绪来自叙事发射的 `music.cue` 事件，场景来自 `scene.set` 事件（由跟踪场景的插件声明）。只想要一首贯穿全局的主题曲时，曲目表里放一首 `theme: true` 的曲目即可，不依赖任何事件。把 `soundtrack` 放进世界的 `pluginPolicy`，玩家启用后才会导入这些数据并播放。
 
 ## Third-Party Extension
 

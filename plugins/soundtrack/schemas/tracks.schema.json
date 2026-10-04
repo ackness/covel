@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://soundtrack/tracks",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "registryId", "tracks"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "registryId": { "const": "music-registry" },
+    "tracks": {
+      "type": "array",
+      "maxItems": 64,
+      "description": "Tracks in order of preference: of two tracks that fit, the earlier one plays.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "file"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Stable track ID, unique in the list."
+          },
+          "title": {
+            "type": "string",
+            "description": "Name shown to the player while the track plays."
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "description": "File name of the track in the music directory."
+          },
+          "theme": {
+            "type": "boolean",
+            "description": "The theme of the world: it plays when no other track fits."
+          },
+          "scenes": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "Scene names, as the narrative uses them. The track plays only there. Absent: anywhere."
+          },
+          "moods": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "calm",
+                "warm",
+                "joy",
+                "romance",
+                "sorrow",
+                "mystery",
+                "tense",
+                "dread",
+                "battle",
+                "triumph"
+              ]
+            },
+            "description": "Moods the track fits. Absent: the track does not answer a mood."
+          },
+          "loop": {
+            "type": "boolean",
+            "description": "`false` plays the track once. Defaults to true."
+          },
+          "volume": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Level of this track, from 0 to 1. Defaults to 1."
+          }
+        }
+      }
+    }
+  }
+}

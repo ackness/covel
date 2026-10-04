@@ -119,15 +119,15 @@ interface ThemeLayoutSpec {
 | `nav`       | `top`      | 顶部导航条                                                                          |
 |             | `rail`     | 桌面宽度下改为左侧图标导航栏；窄屏仍用顶部导航条和菜单弹层                          |
 | `panelTabs` | `rail`     | 右侧面板用纵向图标条切换                                                            |
-|             | `bar`      | 右侧面板顶部用带文字的横向页签，可横向滚动                                          |
+|             | `bar`      | 右侧面板顶部用带文字的横向页签；放不下时可横向滚动，末尾多一个列出全部页签的按钮    |
 | `backdrop`  | `ambient`  | 会话顶部一层很淡的世界图                                                            |
 |             | `scene`    | 当前场景图铺满会话区（`stage.backdrop@1` 槽位，缺失时回退世界头图），正文收进右侧栏 |
 |             | `banner`   | 世界图作为章节横幅放在第一条消息上方，随历史一起滚动                                |
 |             | `none`     | 不显示世界图                                                                        |
 | `worldList` | `covers`   | 整卡封面的世界卡片（两列）                                                          |
-|             | `cards`    | 上图下文的卡片（三列），顶部有「继续上次的冒险」和搜索框                            |
+|             | `cards`    | 上图下文的卡片（三列），顶部有「继续上次的冒险」和搜索框；封面悬停轮播场景图        |
 |             | `list`     | 一行一个世界的阅读列表                                                              |
-|             | `showcase` | 选中世界的封面铺满全屏，其他世界排成缩略图条；默认选中最近玩过的世界                |
+|             | `showcase` | 选中世界的封面和场景图轮播铺满全屏，立绘排在简介下方，其他世界排成缩略图条          |
 | `turnNotes` | `fold`     | 每回合的只读结果（检定、状态变化、新发现）折叠在正文下方                            |
 |             | `inline`   | 最新一回合的结果默认展开，更早的仍然折叠                                            |
 |             | `margin`   | 结果放在正文旁的页边栏；会话区不够宽时退回正文下方                                  |
@@ -342,7 +342,8 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 - `.ui-session-header`：会话顶部工具条；其中 `.ui-session-title` 是标题（`backdrop: "scene"` 且有场景名时是场景名，否则是世界名），`.ui-view-switch` 是「文本 / 舞台」切换（选中项带 `data-state="on"`），`.ui-session-action` 是返回、设置、更多、面板开关这些按钮，`.ui-menu-item` 是「更多」菜单里的条目
 - `.ui-session-thumb`：工具条里世界名前的世界缩略图。默认隐藏，主题用 `display: block` 打开并给出尺寸
 - `.ui-panel-status`：`panelTabs: "bar"` 时右侧面板页签下方的玩家状态条；`.ui-panel-status-name` 是玩家名，`.ui-panel-status-title` 是状态条的标题（「手记」），默认隐藏，主题用 `display: block` 打开
-- `.ui-panel-tabbar` / `.ui-panel-tab` / `.ui-panel-tab-icon`：`panelTabs: "bar"` 时右侧面板的页签条、页签和页签图标（当前页签带 `data-state="active"`）
+- `.ui-panel-tabbar` / `.ui-panel-tab` / `.ui-panel-tab-icon`：`panelTabs: "bar"` 时右侧面板的页签条、页签和页签图标（当前页签带 `data-state="active"`）。页签放不下时页签条末尾出现 `.ui-panel-tab-menu` 按钮，点开是全部页签的网格
+- `.ui-scroll-fade`：放不下而横向滚动的条（页签条、世界缩略图条）。被截断的一侧渐隐，由 `data-fade-start` / `data-fade-end` 标出是哪一侧
 - `.ui-panel-header`
 - `.ui-panel-section`
 - `.ui-panel-footer`

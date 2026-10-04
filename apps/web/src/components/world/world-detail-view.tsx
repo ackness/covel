@@ -14,6 +14,7 @@ import {
 } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { DimensionValueView } from "@/components/session/dimension-value-view.js";
+import { WorldGallerySection } from "./world-gallery.js";
 import { WorldRevisePanel, isWorldRevisable } from "./world-revise-panel.js";
 import {
   WorldTranslatePanel,
@@ -151,6 +152,12 @@ export function WorldDetailView({
             {shown.description}
           </p>
         )}
+
+        <WorldGallerySection
+          world={world}
+          title={shown.name ?? text(world.name)}
+          t={t}
+        />
 
         {onRevised && isWorldTranslatable(world, interfaceLocale) && (
           <WorldTranslatePanel

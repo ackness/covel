@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "registryId": "music-registry",
+  "tracks": [
+    {
+      "id": "theme",
+      "title": "The Lantern Barrow",
+      "file": "theme.mp3",
+      "theme": true
+    },
+    {
+      "id": "tavern",
+      "title": "The Crooked Stag",
+      "file": "tavern.mp3",
+      "scenes": ["The Crooked Stag"]
+    },
+    {
+      "id": "battle",
+      "file": "battle.mp3",
+      "moods": ["battle"]
+    }
+  ]
+}

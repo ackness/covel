@@ -30,6 +30,7 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { useUiSlot } from "@/stores/ui-slot-store.js";
 import { ConnectionStatus } from "./connection-status.js";
+import { MusicToggle } from "../session-music.js";
 import {
   executionTone,
   type ExecutionPresentation,
@@ -214,6 +215,8 @@ export function GameViewHeader({
             <span className="text-[11px] tabular-nums">{suspensionsCount}</span>
           </Button>
         )}
+
+        <MusicToggle sessionId={sessionId} t={t} />
 
         <Button
           variant="ghost"

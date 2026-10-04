@@ -107,6 +107,7 @@ export type {
   CharacterVisualCollectionModel,
   SessionSummaryEntry,
   SessionSummaryModel,
+  StageMusicModel,
 } from "./extension-points.js";
 export { appendSummaryEntries } from "./session-summary.js";
 

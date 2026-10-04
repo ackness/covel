@@ -61,6 +61,8 @@ pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 
 当前封面位于 `apps/web/public/visuals/worlds/`，由 `apps/web/src/lib/world-visuals.ts` 选择，不会因为世界包内人物图更新而自动更换。封面与玩法相符且质量合格时可以保留；世界包的导入协议见 [world-data](../reference/world-data.md)，媒体引用见 [media-store](../reference/media-store.md)。
 
+世界包里公开的 `kind: media` 图片在玩家进入会话之前就会展示：世界详情页列出全部图片；`showcase` 排法的世界列表把宽图（宽 ≥ 高的 1.2 倍，即场景图）轮播成全屏背景，把其余图片（立绘）排在简介下方，点开可看原图；`cards` 排法在封面左下角显示几张头像和图片总数，指针停在封面上时轮播场景图。没有内置封面的世界直接用自己的场景图作背景。所以这些图片要能单独成立：不放半成品，暂不公开的图片放进 `enabled: false` 或 `visibility: hidden` 的来源。接口见 [api.md](../reference/api.md) 的 `GET /api/worlds/:id/gallery`。
+
 ## 后续美术投入顺序
 
 这些是待验证的建议，不是本轮已制作或已接入的资源：

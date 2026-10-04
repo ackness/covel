@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { parseJsonSseData, readSseStream } from "../sse.js";
 import {
   worldCreateRequestSchema,
@@ -50,6 +51,38 @@ export async function getWorld(
     options,
   );
   return mapWorldRecord(raw);
+}
+
+const worldGallerySchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string(),
+      source: z.string(),
+      // A path on this server; never a URL that names another host.
+      url: z
+        .string()
+        .refine((value) => value.startsWith("/") && !value.startsWith("//")),
+      width: z.number().positive(),
+      height: z.number().positive(),
+    }),
+  ),
+});
+
+/** One image a world package ships, readable before a session exists. */
+export type WorldGalleryItem = z.infer<
+  typeof worldGallerySchema
+>["items"][number];
+
+/** A world kept only in this browser has no package: it answers with no images. */
+export async function listWorldGallery(
+  worldId: string,
+  signal?: AbortSignal,
+): Promise<WorldGalleryItem[]> {
+  const res = await request(
+    `/api/worlds/${encodeURIComponent(worldId)}/gallery`,
+    { signal, silentErrors: true, schema: worldGallerySchema },
+  );
+  return res.items;
 }
 
 export async function getWorldPluginPlan(
