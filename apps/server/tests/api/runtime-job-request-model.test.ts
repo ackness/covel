@@ -255,4 +255,169 @@ runtime:
       ).toBe(true);
     },
   );
+
+  it("judges readiness by the function runtime's declared model slot", async () => {
+    // Regression: a detached function runtime without a declared slot was
+    // judged against the default preset, which ignores the request's slot
+    // bindings — the job sat queued until its queue deadline.
+    root = await mkdtemp(join(tmpdir(), "covel-request-model-"));
+    const pluginDir = join(root, "plugins", pluginId);
+    await mkdir(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: pluginId, version: "1.0.0", type: "module" }),
+    );
+    await writeFile(
+      join(pluginDir, "PLUGIN.md"),
+      `---
+id: ${pluginId}
+kind: plugin
+description: Detached job calling a named slot from its handler
+version: 1.0.0
+runtime:
+  type: function
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+    completion:
+      mode: detached
+  function:
+    model: memory
+    handler: ./handler.js
+  effects:
+    writes:
+      - plugin-data:self:results
+---
+`,
+    );
+    await writeFile(
+      join(pluginDir, "handler.js"),
+      `export default async (ctx) => {
+          await ctx.gateway.generateText({ presetId: "memory", messages: [{ role: "user", content: "extract" }] });
+          return { outcome: "success", value: {}, effects: { pluginData: [{ namespace: "results", key: "done", value: true }] } };
+        };`,
+    );
+
+    const slotConfig = {
+      slotBindings: { memory: { modelRef: "user-preset" } },
+      customPresets: [
+        { id: "user-preset", provider: "user-provider", model: "user-model" },
+      ],
+    };
+    const generateText = vi.fn(
+      async (_input: unknown, _options?: GatewayCallOptions) => ({
+        text: "ok",
+        finishReason: "stop",
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      }),
+    );
+    const gateway = {
+      resolveSlot: vi.fn(resolveBound),
+      generateText,
+      generateObject: vi.fn(),
+    };
+    const modelTargets = new Map<string, PluginLlmModelTarget>();
+    const serverReady = vi.fn(({ model }: { model: string | undefined }) =>
+      hasServerRuntimeJobCredentials(gateway, model, {}, modelTargets),
+    );
+    const defaultLlmAdapter = { generate: vi.fn() };
+    const defaultPluginGateway = createPluginRuntimeGateway(gateway);
+    const store = createMemoryStore();
+    boot = await bootstrapApi({
+      pluginsDir: join(root, "plugins"),
+      covelHome: join(root, "home"),
+      worldsDirs: [],
+      store,
+      storeBackend: "memory",
+      llmAdapter: defaultLlmAdapter,
+      pluginGateway: defaultPluginGateway,
+      pluginModelTargets: modelTargets,
+      canRunRuntimeJobWithServerServices: serverReady,
+      perRequestMiddleware: [
+        createPerRequestLlmMiddleware({
+          ai: { gateway } as unknown as AiStack,
+          modelTargets,
+          envApiKeys: {},
+          defaultLlmAdapter,
+          defaultPluginGateway,
+        }),
+      ],
+    });
+    await boot.startupMaintenance;
+    expect(boot.registry.get(pluginId)?.status).toBe("registered");
+
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: sessionId,
+      status: "active",
+      phase: "playing",
+      locale: "en-US",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
+      activePlugins: [pluginId],
+      metadata: {
+        approvalScopeNonce: "approval",
+        sessionIncarnationNonce: "incarnation",
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const session = (await store.getSession(sessionId))!;
+    const jobKey = { sessionId, pluginId, jobId: "slot-job" };
+    await createRuntimeJob(store, {
+      ...jobKey,
+      runtimeId: pluginId,
+      maxQueueMs: 60_000,
+      origin: { activation: "stage", sourceTurnId: "source-turn" },
+      payload: {
+        schemaVersion: 1,
+        expectedSessionIncarnation: sessionIncarnationIdentity(session),
+        expectedApprovalScope: sessionApprovalScope(session, pluginId),
+        locale: "en-US",
+        descriptor: {
+          jobId: jobKey.jobId,
+          pluginId,
+          runtimeId: pluginId,
+          pluginVersion: "1.0.0",
+          sourceTurnId: "source-turn",
+          sourceExecutionId: "source-execution",
+          sourceExecutionStartedAt: now,
+          turnDigest: {
+            turnId: "source-turn",
+            playerMessage: "",
+            lastPlayerInput: null,
+            narrativeText: "",
+            toolCallSummaries: [],
+            runtimeResults: [],
+          },
+          upstreamResults: [],
+        },
+      },
+    });
+
+    // The readiness check resolves the declared "memory" slot, not the
+    // default preset; the request binds only that slot.
+    const response = await boot.app.request(
+      `/api/sessions/${sessionId}/plugins`,
+      {
+        headers: {
+          "X-Provider-Keys": b64({ "user-provider": "synthetic-key" }),
+          "X-Slot-Config": b64(slotConfig),
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+    boot.runtimeJobWorker.wake();
+
+    await vi.waitFor(async () =>
+      expect(await getRuntimeJob(store, jobKey)).toMatchObject({
+        status: "succeeded",
+      }),
+    );
+    expect(generateText).toHaveBeenCalledOnce();
+    expect(generateText.mock.calls[0]?.[1]?.apiKeys?.["user-provider"]).toBe(
+      "synthetic-key",
+    );
+  });
 });

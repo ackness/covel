@@ -118,6 +118,12 @@ The browser is authoritative in local mode. The server may read API keys from
 request headers and execute a turn, but it must not durably persist the player's
 checkpoint or credentials.
 
+World generation waits for a successful storage capability check before choosing
+its save target. Browser-private generation uses `return-only` and persists the
+result in `BrowserVault`; an unfinished or failed health request never falls
+back to server-file storage. A generated replacement updates the world list by
+ID instead of appending a second card.
+
 One action follows this sequence under a Web Lock keyed by the vault database and
 session ID. Other documents in the same origin wait for the complete exchange;
 the IndexedDB transaction itself is never held open over network I/O.

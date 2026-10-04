@@ -206,7 +206,14 @@ export function reducer(
     case "SET_WORLD":
       return { ...state, world: action.world };
     case "ADD_WORLD":
-      return { ...state, worlds: [...state.worlds, action.world] };
+      return {
+        ...state,
+        worlds: state.worlds.some((world) => world.id === action.world.id)
+          ? state.worlds.map((world) =>
+              world.id === action.world.id ? action.world : world,
+            )
+          : [...state.worlds, action.world],
+      };
     case "REMOVE_WORLD":
       return {
         ...state,

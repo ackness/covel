@@ -3177,7 +3177,7 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 }
 ```
 
-Web 前端根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 Dexie `BrowserVault.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。缺少 `frontendMode` 时使用 `server-file`。
+Web 前端在每次生成前等待 `/api/health` 成功响应，再根据 `storage.data.frontendMode` 选择保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 Dexie `BrowserVault.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。成功响应缺少 `frontendMode` 时使用 `server-file`；请求失败或尚未完成时不启动模型调用，失败后保留创作简报供重试，等待期间取消则不再发起生成。同 ID 的生成结果替换已有世界列表项。
 
 **响应 200:** SSE 帧。
 

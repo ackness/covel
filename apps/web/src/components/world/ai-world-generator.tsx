@@ -26,7 +26,6 @@ import {
   getDataService,
   getStorageMode,
   storageModeForServerStorage,
-  type StorageMode,
 } from "@/services/data-service.js";
 import { WorldCreationOptions } from "./world-creation-options.js";
 import {
@@ -81,7 +80,6 @@ export function AiWorldGenerator({
   const [errorCode, setErrorCode] = useState<GenerateWorldError["code"]>();
   const [parts, setParts] = useState<readonly WorldGenerationPart[]>([]);
   const [warnings, setWarnings] = useState<readonly string[]>([]);
-  const [serverStorageMode, setServerStorageMode] = useState<StorageMode>();
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const generationRef = useRef(0);
@@ -103,18 +101,6 @@ export function AiWorldGenerator({
     [],
   );
 
-  useEffect(() => {
-    if (!open) return;
-    void api
-      .fetchServerHealth()
-      .then((health) =>
-        setServerStorageMode(
-          storageModeForServerStorage(health.storage) ?? undefined,
-        ),
-      )
-      .catch(() => setServerStorageMode(undefined));
-  }, [open]);
-
   // The offered plugin content depends on which plugins the server loaded, so
   // it is asked for each time the dialog opens. Without it the dialog still
   // works with the kernel-owned content.
@@ -134,7 +120,7 @@ export function AiWorldGenerator({
     };
   }, [open, i18n.language]);
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) return;
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -204,29 +190,40 @@ export function AiWorldGenerator({
       }
     };
 
-    abortRef.current = api.generateWorld(
-      prompt.trim(),
-      i18n.language,
-      handleEvent,
-      (err) => {
-        if (generation !== generationRef.current) return;
-        abortRef.current = null;
-        setPhase("error");
-        setError(err.message);
-      },
-      undefined,
-      {
-        saveTarget: generatedWorldSaveTargetForStorageMode(serverStorageMode),
-        brief: {
-          experienceMode,
-          content: [...content],
-          ...(contracts.size > 0 ? { contracts: [...contracts] } : {}),
-          ...(additionalInstructions.trim()
-            ? { additionalInstructions: additionalInstructions.trim() }
-            : {}),
+    try {
+      // An unresolved or failed probe must not select server-file storage.
+      const health = await api.fetchServerHealth();
+      if (generation !== generationRef.current) return;
+      abortRef.current = api.generateWorld(
+        prompt.trim(),
+        i18n.language,
+        handleEvent,
+        (err) => {
+          if (generation !== generationRef.current) return;
+          abortRef.current = null;
+          setPhase("error");
+          setError(err.message);
         },
-      },
-    );
+        undefined,
+        {
+          saveTarget: generatedWorldSaveTargetForStorageMode(
+            storageModeForServerStorage(health.storage),
+          ),
+          brief: {
+            experienceMode,
+            content: [...content],
+            ...(contracts.size > 0 ? { contracts: [...contracts] } : {}),
+            ...(additionalInstructions.trim()
+              ? { additionalInstructions: additionalInstructions.trim() }
+              : {}),
+          },
+        },
+      );
+    } catch (err) {
+      if (generation !== generationRef.current) return;
+      setPhase("error");
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }, [
     additionalInstructions,
     content,
@@ -238,7 +235,6 @@ export function AiWorldGenerator({
     pluginContent,
     prompt,
     resetForm,
-    serverStorageMode,
   ]);
 
   const handleCancel = useCallback(() => {
