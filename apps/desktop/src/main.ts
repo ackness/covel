@@ -98,6 +98,10 @@ async function requestSidecarConfig<T>(
   pathName: string,
   init?: RequestInit,
 ): Promise<T> {
+  // Dev mode starts no sidecar. The external dev server runs without
+  // COVEL_DESKTOP_REST: it answers an empty settings bundle and refuses
+  // writes, so the files of this home are read and written directly.
+  if (isDev) throw new SidecarUnavailableError("no sidecar in dev mode");
   if (serverPort <= 0) throw new SidecarUnavailableError("sidecar not ready");
   let res: Response;
   try {
@@ -505,6 +509,14 @@ async function productionStartup(
   await attemptStart();
 }
 
+// The dev server is reached by name: Vite may listen on the IPv6 loopback
+// only, where `127.0.0.1` is refused.
+function openDevWindow(): BrowserWindow {
+  const win = createMainWindow("(Dev)");
+  win.loadURL("http://localhost:5173/session");
+  return win;
+}
+
 async function devStartup(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<void> {
@@ -525,8 +537,7 @@ async function devStartup(
     );
   }
 
-  const win = createMainWindow("(Dev)");
-  win.loadURL("http://localhost:5173/session");
+  const win = openDevWindow();
   win.webContents.openDevTools({ mode: "detach" });
   // Silence unused-paths warning — dev currently relies on external dev server,
   // userData is still prepared so dev/prod stay aligned.
@@ -625,6 +636,10 @@ app.whenReady().then(async () => {
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0 && serverPort > 0) {
+      if (isDev) {
+        openDevWindow();
+        return;
+      }
       const win = createMainWindow();
       navigateToApp(win, serverPort);
     }
