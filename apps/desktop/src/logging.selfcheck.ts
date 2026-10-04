@@ -6,6 +6,16 @@ assert.match(
   /unsupported settings schemaVersion: 1/,
 );
 assert.equal(formatLogPart({ port: 3001 }), '{"port":3001}');
+assert.match(
+  formatLogPart(
+    new Error("sidecar request failed", {
+      cause: new TypeError("fetch failed", {
+        cause: new Error("connect ECONNREFUSED 127.0.0.1:5173"),
+      }),
+    }),
+  ),
+  /sidecar request failed[\s\S]*caused by TypeError: fetch failed[\s\S]*caused by Error: connect ECONNREFUSED 127\.0\.0\.1:5173/,
+);
 
 assert.deepEqual(
   classifyServerStreamLine(

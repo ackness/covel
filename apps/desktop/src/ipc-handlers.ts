@@ -245,7 +245,8 @@ export function registerDesktopIpcHandlers({
         await saveKeysViaSidecar(keys);
       } catch (err) {
         if (!isSidecarUnavailable(err)) throw err;
-        writeLog("warn", "keys:save sidecar fallback:", err);
+        // Dev mode has no sidecar: the direct write is its normal path.
+        if (!isDev) writeLog("warn", "keys:save sidecar fallback:", err);
         patchKeysEnv(paths.userKeysEnvPath, keys);
       }
       return { ok: true };
@@ -333,7 +334,7 @@ export function registerDesktopIpcHandlers({
         const conflict = revisionConflictResult(err);
         if (conflict) return conflict;
         if (!isSidecarUnavailable(err)) throw err;
-        writeLog("warn", "settings:save sidecar fallback:", err);
+        if (!isDev) writeLog("warn", "settings:save sidecar fallback:", err);
         const bundle = writeSettingsEntriesAtomic(
           paths.userSettingsJsonPath,
           entries,

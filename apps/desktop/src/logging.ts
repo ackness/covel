@@ -122,7 +122,11 @@ export function initPersistentLog(
 export function formatLogPart(part: unknown): string {
   if (typeof part === "string") return part;
   if (part instanceof Error) {
-    return part.stack ?? `${part.name}: ${part.message}`;
+    const text = part.stack ?? `${part.name}: ${part.message}`;
+    // A failed request wraps its reason (`fetch failed` ← ECONNREFUSED).
+    return part.cause instanceof Error
+      ? `${text}\ncaused by ${formatLogPart(part.cause)}`
+      : text;
   }
   return JSON.stringify(part);
 }
