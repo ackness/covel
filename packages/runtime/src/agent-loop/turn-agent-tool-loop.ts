@@ -340,6 +340,9 @@ async function runAgentToolLoopWithinBudget(
         // Queue time at the LLM concurrency gate is the framework's cost:
         // shift the loop deadline by it so later steps keep their budget.
         onQueueWait: budget.extend,
+        // A model that keeps writing is not cut off: the time its stream
+        // spent delivering output does not count against the loop either.
+        onStreamTime: budget.extend,
         useStreaming: useStreaming && llmRequest.stream !== false,
         reportRetry,
         onStreamDelta: delta.forward,

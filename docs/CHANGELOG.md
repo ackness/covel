@@ -43,6 +43,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Imported characters are `npc-<name>`.** A blueprint without `instantiate.characterId` instantiates `npc-<blueprint id>`; `char-…` stays the player's prefix. Recreate development sessions of Emberback and Lantern Barrow.
 - **Text limits fit every language.** The guide's recap, decision and prompt limits and the relationship graph's node summary were sized for Chinese and rejected most English calls.
 - **A rejected tool call says what the tool accepts.** The story-event planner lists the event IDs, dimensions and time fields a condition can use; the character form lists every refused field and the attributes the world lets it collect; the clock names its units (`worldTime.value.units`); a select default names the option values; a text over a dimension's length limit is told how many characters to remove.
+- **A streamed model call is limited by silence, not by total time.** A stream is ended when the model sends no text, no reasoning and no tool call for the idle timeout (`agent.loop.idleTimeoutMs`, 120 seconds by default); a model that keeps writing is not cut off, and the time it writes does not count against the runtime's `timeoutMs`. The wait for the first output (`firstTokenTimeoutMs`) is 120 seconds by default, up from 30. `callTimeoutMs` now limits only a model call that is not streamed. The gateway's default request budget follows the same rule: output of a stream moves its 120-second deadline, up to 30 minutes; a budget with an explicit `timeoutMs` or `deadline` stays fixed unless it also sets `idleTimeoutMs`.
 
 ### Removed
 
@@ -63,6 +64,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Fewer rejected tool calls with small models.** Array arguments sent as JSON text are explained when they do not parse, and closing brackets after a complete value are dropped; an inventory change lists its item when the model named it only there; the dimension tracker accepts a slash path, a `reason` on a change, and one dimension split over two entries; a zero duration is accepted in any time unit; `emit-event` says that the event is recorded and must not be sent again.
 - **A turn's memory is not lost to one unreadable reply.** Memory extraction asks the model once more when the reply is not the JSON it asked for. A job reads only its own turn, so a failed job dropped that turn's facts.
 - **`pnpm create-plugin` scaffolds follow the current prompt and label contracts** (English manifests and prompts, Chinese labels in `locales/zh.yaml`).
+- **A slow model is no longer cut off in the middle of a turn.** Every model call of an agent runtime had a fixed 120-second budget, whatever the runtime declared, so a narrator with `callTimeoutMs: 120000` and `timeoutMs: 240000` was ended at 120 seconds with half its text shown, and a retry after a silent first attempt had no time left to run. One model call may now use the runtime's remaining time, and a stream that keeps writing is not ended.
 
 ## [0.0.45] - 2026-10-03
 

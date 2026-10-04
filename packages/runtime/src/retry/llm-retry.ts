@@ -50,6 +50,7 @@ import {
   createLlmRequestScope,
   iterateLlmRequest,
   LLMRequestBudgetError,
+  noteLlmRequestProgress,
   type LLMRequestBudget,
 } from "@covel/shared";
 import { TurnAbortedError } from "../turn-executor/turn-control.js";
@@ -59,6 +60,7 @@ import {
   assertDeadlineNotReached,
   buildRetryPolicy,
   computeAttemptBudget,
+  computeDeadlineBudget,
   exhaustedError,
   extractMessage,
   isTransientError,
@@ -77,6 +79,7 @@ export {
   perturbMessages,
   DEFAULT_MAX_RETRIES,
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
+  DEFAULT_IDLE_TIMEOUT_MS,
   DEFAULT_LOOP_THRESHOLD,
 } from "./retry-common.js";
 export type { RetryPolicy, RetryReason } from "./retry-common.js";
@@ -374,6 +377,13 @@ function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
 export interface StreamLLMWithRetryParams extends CallLLMWithRetryParams {
   /** Optional sink for text deltas so streaming can keep its UX. */
   readonly onDelta?: (delta: string) => void | Promise<void>;
+  /**
+   * Called with the time (ms) a completed stream spent delivering output. The
+   * loop extends its OWN deadline by it, and a caller holding an enclosing
+   * deadline (the agent tool loop) extends its deadline too: a model that
+   * keeps writing does not spend the runtime's time. Silence still does.
+   */
+  readonly onStreamTime?: (streamedMs: number) => void;
 }
 
 export interface StreamLLMResult {
@@ -382,9 +392,11 @@ export interface StreamLLMResult {
 }
 
 /**
- * Drive a streaming LLM call with TTFB and total-call guards. Returns the
- * fully reassembled response once the stream completes (or after we fall
- * back to a single non-stream call when the stream died with no content).
+ * Drive a streaming LLM call limited by silence: a first-token (TTFB) guard
+ * until the model writes, then an idle guard between its outputs. There is no
+ * limit on the total time of a stream that keeps writing; the request budget's
+ * ceiling ends a model that never stops. Returns the fully reassembled
+ * response once the stream completes.
  *
  * The caller is responsible for replaying deltas via `onDelta` — we forward
  * every text-delta as it arrives on the first attempt. On retry we
@@ -438,14 +450,17 @@ export async function streamLLMWithRetry(
         effectiveDeadline += slot.waitedMs;
         if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
 
-        const budget = computeAttemptBudget(
-          policy,
+        // `callTimeoutMs` is the total limit of a non-streaming call. A stream
+        // reports its progress, so only the runtime deadline bounds the wait
+        // for its first output.
+        const budget = computeDeadlineBudget(
           Math.min(effectiveDeadline, requestScope.budget.deadline),
         );
-        // Compose three abort sources into one per-attempt signal:
-        //   1. overall call budget (per-attempt)
-        //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first event
-        //   3. player turn abort — forwarded from params.abortSignal below
+        // Compose four abort sources into one per-attempt signal:
+        //   1. runtime deadline — armed on attempt start, disarmed on first output
+        //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first output
+        //   3. idle guard — armed on first output, restarted by every output
+        //   4. player turn abort — forwarded from params.abortSignal below
         const callAborter = new AbortController();
         const onExternalAbort = (): void => {
           callAborter.abort(requestScope.signal.reason);
@@ -483,6 +498,26 @@ export async function streamLLMWithRetry(
         };
 
         let firstTokenSeen = false;
+        let firstOutputAt: number | undefined;
+        let idleHandle: ReturnType<typeof setTimeout> | undefined;
+        const noteOutput = (): void => {
+          if (!firstTokenSeen) {
+            firstTokenSeen = true;
+            firstOutputAt = Date.now();
+            clearTimeout(callTimeoutHandle);
+            clearTimeout(ttfbHandle);
+          }
+          noteLlmRequestProgress(requestScope.budget);
+          clearTimeout(idleHandle);
+          idleHandle = setTimeout(() => {
+            callAborter.abort(
+              new DOMException(
+                `idle timeout: no model output for ${Math.round(policy.idleTimeoutMs / 1000)}s`,
+                "TimeoutError",
+              ),
+            );
+          }, policy.idleTimeoutMs);
+        };
         const streamedToolCalls: LLMToolCall[] = [];
         let streamedContent = "";
         let streamedReasoningContent = "";
@@ -524,17 +559,17 @@ export async function streamLLMWithRetry(
             callAborter.signal,
           )) {
             if (event.type === "text-delta") {
-              if (event.textDelta.length > 0) firstTokenSeen = true;
+              if (event.textDelta.length > 0) noteOutput();
               streamedContent += event.textDelta;
               if (event.textDelta.length > 0) {
                 await trace.ensureCalling();
                 if (forwardDeltas) await onDelta?.(event.textDelta);
               }
             } else if (event.type === "reasoning-delta") {
-              if (event.reasoningDelta.length > 0) firstTokenSeen = true;
+              if (event.reasoningDelta.length > 0) noteOutput();
               streamedReasoningContent += event.reasoningDelta;
             } else if (event.type === "tool-call") {
-              firstTokenSeen = true;
+              noteOutput();
               await trace.ensureCalling();
               streamedToolCalls.push({
                 id: event.id,
@@ -567,7 +602,13 @@ export async function streamLLMWithRetry(
           }
           clearTimeout(callTimeoutHandle);
           clearTimeout(ttfbHandle);
+          clearTimeout(idleHandle);
           requestScope.signal.removeEventListener("abort", onExternalAbort);
+          if (firstOutputAt !== undefined) {
+            const streamedMs = Date.now() - firstOutputAt;
+            effectiveDeadline += streamedMs;
+            if (streamedMs > 0) params.onStreamTime?.(streamedMs);
+          }
           await trace.ensureCalling();
 
           const finalResponse: LLMResponse = {
@@ -596,6 +637,7 @@ export async function streamLLMWithRetry(
         } catch (err) {
           clearTimeout(callTimeoutHandle);
           clearTimeout(ttfbHandle);
+          clearTimeout(idleHandle);
           requestScope.signal.removeEventListener("abort", onExternalAbort);
           lastError = err;
           lastReason = classifyStreamError(
@@ -677,6 +719,7 @@ function classifyStreamError(
     const msg = reason instanceof Error ? reason.message : String(reason ?? "");
     const lower = msg.toLowerCase();
     if (lower.includes("first-token")) return "first-token-timeout";
+    if (lower.includes("idle timeout")) return "idle-timeout";
     if (lower.includes("timeout"))
       return !firstTokenSeen ? "first-token-timeout" : "call-timeout";
   }

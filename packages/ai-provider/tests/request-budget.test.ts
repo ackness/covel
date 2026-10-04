@@ -245,6 +245,86 @@ describe("logical provider request budgets", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  function slowStream(chunks: number, gapMs: number, silent = false) {
+    const encoder = new TextEncoder();
+    let sent = 0;
+    return new Response(
+      new ReadableStream({
+        async pull(controller) {
+          await new Promise((resolve) => setTimeout(resolve, gapMs));
+          if (silent && sent > 0) return new Promise<never>(() => {});
+          if (sent++ < chunks) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ choices: [{ delta: { content: "x" } }] })}\n\n`,
+              ),
+            );
+            return;
+          }
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+            ),
+          );
+          controller.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+  }
+
+  it("does not cut off a stream that keeps writing past the default deadline", async () => {
+    // 10 chunks 30 s apart: 5 minutes in total, never 120 s of silence.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => slowStream(10, 30_000)),
+    );
+    const call = Array.fromAsync(fixture().gateway.streamText({ messages }));
+    await vi.advanceTimersByTimeAsync(330_000);
+    const events = await call;
+    expect(
+      events
+        .filter((event) => event.type === "text-delta")
+        .map((event) => (event.type === "text-delta" ? event.textDelta : ""))
+        .join(""),
+    ).toBe("x".repeat(10));
+    expect(events.at(-1)).toMatchObject({ type: "done", finishReason: "stop" });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("ends a stream that goes silent after it started to write", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => slowStream(10, 30_000, true)),
+    );
+    const call = Array.fromAsync(fixture().gateway.streamText({ messages }));
+    const rejected = expect(call).rejects.toMatchObject({
+      code: "REQUEST_BUDGET_EXCEEDED",
+    });
+    // First chunk at 30 s, then silence: the deadline is 30 s + 120 s.
+    await vi.advanceTimersByTimeAsync(149_999);
+    await vi.advanceTimersByTimeAsync(1);
+    await rejected;
+  });
+
+  it("keeps an explicit budget fixed while a stream writes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => slowStream(10, 30_000)),
+    );
+    const call = Array.fromAsync(
+      fixture().gateway.streamText(
+        { messages },
+        { requestBudget: createLlmRequestBudget({ timeoutMs: 100_000 }) },
+      ),
+    );
+    const rejected = expect(call).rejects.toMatchObject({
+      code: "REQUEST_BUDGET_EXCEEDED",
+    });
+    await vi.advanceTimersByTimeAsync(100_000);
+    await rejected;
+  });
+
   it("preserves the media backend's longer polling policy without an explicit budget", async () => {
     const start = Date.now();
     const fetch = vi.fn(

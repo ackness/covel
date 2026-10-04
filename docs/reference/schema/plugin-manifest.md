@@ -379,16 +379,17 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.agent.loop`
 
-| Field                 | Type    | Required | Description                                                                                 |
-| --------------------- | ------- | -------- | ------------------------------------------------------------------------------------------- |
-| `maxSteps`            | integer | no       | Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops.  |
-| `timeoutMs`           | integer | no       | Total time limit of the runtime in ms.                                                      |
-| `callTimeoutMs`       | integer | no       | Time limit of one model call in ms.                                                         |
-| `firstTokenTimeoutMs` | integer | no       | Time limit for the first streamed token in ms. Defaults to 30000.                           |
-| `maxRetries`          | integer | no       | Retries on a transient model failure. Defaults to 1; `0` disables retry.                    |
-| `loopDetection`       | integer | no       | Number of repeated tool calls that counts as a loop. Defaults to 3; `0` disables detection. |
-| `maxRecursionDepth`   | integer | no       | Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10.                              |
-| `completion`          | object  | no       | How the agent loop ends.                                                                    |
+| Field                 | Type    | Required | Description                                                                                                                               |
+| --------------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxSteps`            | integer | no       | Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops.                                                |
+| `timeoutMs`           | integer | no       | Time limit of the runtime in ms. The time a streamed model call spends writing does not count.                                            |
+| `callTimeoutMs`       | integer | no       | Time limit of one model call that is not streamed, in ms.                                                                                 |
+| `firstTokenTimeoutMs` | integer | no       | Time limit for the first streamed token in ms. Defaults to 120000.                                                                        |
+| `idleTimeoutMs`       | integer | no       | Longest silence of a streamed model call that has started to write, in ms. A model that keeps writing is not cut off. Defaults to 120000. |
+| `maxRetries`          | integer | no       | Retries on a transient model failure. Defaults to 1; `0` disables retry.                                                                  |
+| `loopDetection`       | integer | no       | Number of repeated tool calls that counts as a loop. Defaults to 3; `0` disables detection.                                               |
+| `maxRecursionDepth`   | integer | no       | Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10.                                                                            |
+| `completion`          | object  | no       | How the agent loop ends.                                                                                                                  |
 
 ## `runtime.agent.loop.completion`
 

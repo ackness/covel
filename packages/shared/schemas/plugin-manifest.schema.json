@@ -1333,19 +1333,25 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,
-                  "description": "Total time limit of the runtime in ms."
+                  "description": "Time limit of the runtime in ms. The time a streamed model call spends writing does not count."
                 },
                 "callTimeoutMs": {
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,
-                  "description": "Time limit of one model call in ms."
+                  "description": "Time limit of one model call that is not streamed, in ms."
                 },
                 "firstTokenTimeoutMs": {
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,
-                  "description": "Time limit for the first streamed token in ms. Defaults to 30000."
+                  "description": "Time limit for the first streamed token in ms. Defaults to 120000."
+                },
+                "idleTimeoutMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Longest silence of a streamed model call that has started to write, in ms. A model that keeps writing is not cut off. Defaults to 120000."
                 },
                 "maxRetries": {
                   "type": "integer",
