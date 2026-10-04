@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Covel audit map</title>
+    <!--
+      Block diagrams for the covel-static-turn-audit skill, drawn with ECharts.
+      Copy this file into the report folder and replace the JSON in #diagram-data.
+      Leave the style and the script as they are: the script places the blocks
+      from their layers and routes the arrows between them.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f5f4f0;
+        --band: #ffffff;
+        --lane: #f1efe9;
+        --card: #ffffff;
+        --ink: #1d1c1a;
+        --muted: #66635b;
+        --line: #d6d2c8;
+        --warn: #b3261e;
+        --k-entry: #7a5cc0;
+        --k-plugin: #2f8f6b;
+        --k-kernel: #2f5fd0;
+        --k-store: #b0741a;
+        --k-background: #77746c;
+        --e-call: #2f5fd0;
+        --e-data: #2f8f6b;
+        --e-order: #77746c;
+        --e-event: #b0741a;
+        --e-store: #a04a8a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171715;
+          --band: #1f1f1c;
+          --lane: #262622;
+          --card: #1f1f1c;
+          --ink: #ecebe6;
+          --muted: #a4a197;
+          --line: #3b3a35;
+          --warn: #ff8a80;
+          --k-entry: #b39cf0;
+          --k-plugin: #6fcfa8;
+          --k-kernel: #8aa9ff;
+          --k-store: #e3ad5c;
+          --k-background: #a4a197;
+          --e-call: #8aa9ff;
+          --e-data: #6fcfa8;
+          --e-order: #a4a197;
+          --e-event: #e3ad5c;
+          --e-store: #dc8fc8;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      header, main { max-width: 1160px; margin: 0 auto; padding: 18px 20px 0; }
+      main { padding-bottom: 28px; }
+      h1 { margin: 0; font-size: 20px; }
+      .meta { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+      #legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; color: var(--muted); font-size: 12.5px; }
+      #legend span { display: inline-flex; align-items: center; gap: 6px; }
+      #legend svg { width: 28px; height: 8px; }
+      .notice { margin: 10px 0 0; padding: 8px 12px; border: 1px solid var(--warn); border-radius: 8px; color: var(--warn); white-space: pre-wrap; }
+      section { margin: 0 0 18px; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--band); }
+      h2 { margin: 0; font-size: 16px; }
+      section > p { margin: 2px 0 10px; color: var(--muted); }
+      .scroll { overflow-x: auto; }
+      .chart { margin: 0 auto; }
+      .findings { margin: 10px 0 0; padding: 0; list-style: none; color: var(--warn); }
+      .detail { margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--lane); }
+      .detail b { display: block; }
+      details { margin-top: 10px; }
+      summary { color: var(--muted); font-size: 12.5px; cursor: pointer; }
+      table { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 12.5px; }
+      th, td { padding: 4px 8px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { border-top: 0; color: var(--muted); font-weight: 600; }
+      code { display: block; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 id="title"></h1>
+      <p class="meta" id="baseline"></p>
+      <div id="legend"></div>
+      <p class="notice" id="problems" hidden></p>
+      <p class="notice" id="offline" hidden>The diagrams are drawn by a script from cdn.jsdelivr.net, which did not load. The blocks and relations are listed as text instead.</p>
+    </header>
+    <main id="main"></main>
+
+    <!--
+      diagrams  several small diagrams read better than one large one. Start with an overview that has
+                one block per module, then add one diagram per part of the walk (setup, the main-loop
+                stages, commit, background work). Keep each to about twelve blocks and fifteen arrows.
+      layers    rows of one diagram, top to bottom, at most five blocks in a row. Order the rows so most
+                arrows point to the next row down.
+      blocks    `title` and `role` (one sentence: what it does) are written inside the block. `detail`
+                (optional, longer) and `files` (path:line) show when the block is pointed at or selected.
+                `kind` is entry | plugin | kernel | store | background.
+      edges     drawn from → to. `kind` is call | data | order | event | store. Number the labels in
+                execution order ("1 admit"). An end may name a whole row as "@<layer id>": draw one arrow
+                to the row, not one to each block in it.
+      findings  optional; the blocks they name get a red border.
+    -->
+    <script type="application/json" id="diagram-data">
+      {
+        "title": "Example audit map — replace this data",
+        "baseline": "path/to/checkout @ 0000000 · YYYY-MM-DD · example-world with its resolved plugin set",
+        "diagrams": [
+          {
+            "title": "1 · Overview",
+            "note": "One execution, from the player's action to the commit.",
+            "layers": [
+              { "id": "entry", "title": "Entry" },
+              { "id": "kernel", "title": "Kernel scheduling" },
+              { "id": "plugins", "title": "Plugin runtimes" },
+              { "id": "commit", "title": "Commit and state" }
+            ],
+            "blocks": [
+              { "id": "action", "layer": "entry", "kind": "entry", "title": "Action route", "role": "Turns a player action into one execution.", "detail": "A longer description: what it checks, what it waits for, and what it hands on.", "files": ["path/to/route.ts:120"] },
+              { "id": "select", "layer": "kernel", "kind": "kernel", "title": "Trigger selection", "role": "Picks the runtimes of this execution.", "files": ["path/to/scheduling.ts:142"] },
+              { "id": "schedule", "layer": "kernel", "kind": "kernel", "title": "Stage scheduler", "role": "Orders them into stages and DAG levels.", "files": ["path/to/scheduling.ts:280"] },
+              { "id": "runtimes", "layer": "plugins", "kind": "plugin", "title": "Plugin runtimes", "role": "Each one ends in an outcome of the outcome set.", "files": ["plugins/<id>/PLUGIN.md:30"] },
+              { "id": "finalize", "layer": "commit", "kind": "store", "title": "Finalize transaction", "role": "Commits proposals and the session clock together.", "files": ["path/to/finalize.ts:550"] }
+            ],
+            "edges": [
+              { "from": "action", "to": "select", "kind": "call", "label": "1 start execution" },
+              { "from": "select", "to": "schedule", "kind": "data", "label": "2 triggered set" },
+              { "from": "schedule", "to": "runtimes", "kind": "call", "label": "3 stage by stage" },
+              { "from": "runtimes", "to": "finalize", "kind": "store", "label": "4 proposals" }
+            ]
+          },
+          {
+            "title": "2 · Main loop",
+            "note": "Which runtime runs in which stage, and what it waits for.",
+            "layers": [
+              { "id": "pre", "title": "pre-turn" },
+              { "id": "narrative", "title": "narrative" },
+              { "id": "post", "title": "post-turn" }
+            ],
+            "blocks": [
+              { "id": "context", "layer": "pre", "kind": "plugin", "title": "context runtime", "role": "Function. Supplies context to the story runtime.", "files": ["plugins/<id>/runtimes/<rt>/RUNTIME.md:7"] },
+              { "id": "story", "layer": "narrative", "kind": "plugin", "title": "story runtime", "role": "Agent. Writes the turn's narrative.", "files": ["plugins/<id>/PLUGIN.md:30"] },
+              { "id": "tracker", "layer": "post", "kind": "plugin", "title": "tracker runtime", "role": "Agent. Records what the narrative changed.", "files": ["plugins/<id>/runtimes/<rt>/RUNTIME.md:7"] },
+              { "id": "suggest", "layer": "post", "kind": "plugin", "title": "suggestion runtime", "role": "Agent. Offers the player next actions.", "files": ["plugins/<id>/PLUGIN.md:44"] }
+            ],
+            "edges": [
+              { "from": "context", "to": "story", "kind": "data", "label": "1 io.inputs" },
+              { "from": "story", "to": "@post", "kind": "order", "label": "2 needs the story contract" }
+            ],
+            "findings": [
+              { "id": "F1", "severity": "P2", "title": "Example: the tracker's writes survive when the story's writes are dropped.", "blocks": ["tracker"] }
+            ]
+          }
+        ]
+      }
+    </script>
+    <!-- ECharts' current major version. Raise the number here when a new major is released. -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@6/dist/echarts.min.js"></script>
+    <script>
+      const data = JSON.parse(document.getElementById("diagram-data").textContent);
+      const $ = (id) => document.getElementById(id);
+      const el = (tag, props = {}, ...kids) => {
+        const node = Object.assign(document.createElement(tag), props);
+        node.append(...kids);
+        return node;
+      };
+      const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      const KINDS = {
+        call: { label: "calls", width: 1.5 },
+        data: { label: "passes data", width: 1.5 },
+        order: { label: "declared order (needs / after)", width: 1.5, dash: [6, 4] },
+        event: { label: "emits event", width: 1.5, dash: [2, 4] },
+        store: { label: "durable write", width: 2.5 },
+      };
+      const SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+      const FONT = { title: `600 13px ${SANS}`, role: `11.5px ${SANS}`, label: `11px ${SANS}` };
+      const WIDE = 196; // block width, which narrows down to NARROW so the widest row fits the page
+      const NARROW = 150;
+      const GAP = 30; // between blocks in a row
+      const PAD = 16; // inside a row's band
+      const HEAD = 24; // band title
+      const LANE = 20; // between two arrows that share a channel
+
+      const pen = document.createElement("canvas").getContext("2d");
+      const measure = (text, font) => {
+        pen.font = font;
+        return pen.measureText(text).width;
+      };
+      // Break at spaces, and between CJK characters, which have none.
+      const CJK = "\\u2e80-\\u9fff\\uf900-\\ufaff\\uff00-\\uffef";
+      const TOKEN = new RegExp(`[${CJK}]|[^\\s${CJK}]+|\\s+`, "g");
+      const wrap = (text, font, max) => {
+        const lines = [];
+        let line = "";
+        for (const token of String(text ?? "").match(TOKEN) ?? []) {
+          if (line && measure((line + token).trimEnd(), font) > max) {
+            lines.push(line.trimEnd());
+            line = token.trimStart();
+          } else line += token;
+        }
+        if (line.trim()) lines.push(line.trimEnd());
+        return lines;
+      };
+      const plain = (text) => String(text ?? "").replace(/[{}]/g, " ");
+      const esc = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+      // A diagram that misstates the model is worse than none: say what is inconsistent.
+      const problems = new Set();
+      function check(d, name) {
+        const ids = new Set(d.blocks.map((b) => b.id));
+        const layerIds = new Set(d.layers.map((l) => l.id));
+        const known = (ref) => (ref.startsWith("@") ? layerIds.has(ref.slice(1)) : ids.has(ref));
+        if (ids.size !== d.blocks.length) problems.add(`${name}: two blocks share an id`);
+        d.blocks.forEach((b) => layerIds.has(b.layer) || problems.add(`${name}: block "${b.id}" names unknown layer "${b.layer}"`));
+        d.edges.forEach((e, i) => {
+          [e.from, e.to].forEach((ref) => known(ref) || problems.add(`${name}: edge ${i + 1} names unknown block or layer "${ref}"`));
+          if (!KINDS[e.kind]) problems.add(`${name}: edge ${i + 1} has unknown kind "${e.kind}"`);
+        });
+        (d.findings ?? []).forEach((f) => f.blocks.forEach((id) => ids.has(id) || problems.add(`${name}: finding ${f.id} names unknown block "${id}"`)));
+        d.blocks.forEach((b) => {
+          const related = d.edges.some((e) => [e.from, e.to].some((ref) => ref === b.id || ref === `@${b.layer}`));
+          if (!related) problems.add(`${name}: block "${b.id}" has no relation to anything`);
+        });
+        return d.edges.filter((e) => known(e.from) && known(e.to) && e.from !== e.to && KINDS[e.kind]);
+      }
+
+      // Rows come from the layers; arrows run in the channels between rows and never cross a block.
+      function layout(d, edges, room) {
+        const rowIndex = new Map(d.layers.map((l, i) => [l.id, i]));
+        const placed = d.blocks.filter((b) => rowIndex.has(b.layer));
+        const cols = Math.max(1, ...d.layers.map((l) => placed.filter((b) => b.layer === l.id).length));
+        const rowOf = (ref) => rowIndex.get(ref.startsWith("@") ? ref.slice(1) : d.blocks.find((b) => b.id === ref).layer);
+
+        // An arrow that skips a row goes round the rows, through a gutter at the side.
+        const plans = edges.map((e) => ({ e, a: rowOf(e.from), b: rowOf(e.to) }));
+        const far = { right: plans.filter((p) => p.b - p.a > 1), left: plans.filter((p) => p.a - p.b > 1) };
+        const gutter = { left: far.left.length ? 18 + 12 * far.left.length : 4, right: far.right.length ? 18 + 12 * far.right.length : 4 };
+
+        const W = Math.max(NARROW, Math.min(WIDE, Math.floor((room - gutter.left - gutter.right - PAD * 2 - (cols - 1) * GAP) / cols)));
+        const rows = d.layers.map((layer) => ({
+          layer,
+          items: placed.filter((b) => b.layer === layer.id).map((b) => {
+            const title = wrap(b.title, FONT.title, W - 20);
+            const role = wrap(b.role, FONT.role, W - 20);
+            return { b, title, role, h: 16 + title.length * 18 + role.length * 15 };
+          }),
+        }));
+        const inner = cols * W + (cols - 1) * GAP + PAD * 2;
+        const width = gutter.left + inner + gutter.right;
+        far.right.forEach((p, i) => (p.gx = gutter.left + inner + 14 + 12 * i));
+        far.left.forEach((p, i) => (p.gx = gutter.left - 14 - 12 * i));
+
+        // Horizontal positions.
+        const rect = new Map();
+        rows.forEach((row, r) => {
+          rect.set(`@${row.layer.id}`, { row: r, band: true, left: gutter.left, right: gutter.left + inner, cx: gutter.left + inner / 2 });
+          const start = gutter.left + PAD + ((cols - row.items.length) * (W + GAP)) / 2;
+          row.items.forEach((item, i) => rect.set(item.b.id, { row: r, col: i, item, left: start + i * (W + GAP), right: start + i * (W + GAP) + W, cx: start + i * (W + GAP) + W / 2 }));
+        });
+
+        // Which side each arrow leaves and enters, and where along that side.
+        const ports = new Map();
+        for (const p of plans) {
+          const [s, t] = [rect.get(p.e.from), rect.get(p.e.to)];
+          p.s = s;
+          p.t = t;
+          if (p.a === p.b) p.type = !s.band && !t.band && Math.abs(s.col - t.col) === 1 && !p.e.label ? "side" : "bridge";
+          else p.type = Math.abs(p.a - p.b) === 1 ? "near" : "far";
+          if (p.type === "side") continue;
+          p.sides = p.type === "bridge" ? ["top", "top"] : p.a < p.b ? ["bottom", "top"] : ["top", "bottom"];
+          [[p.e.from, s, t, 0], [p.e.to, t, s, 1]].forEach(([ref, self, other, end]) => {
+            if (self.band) return;
+            const key = `${ref}:${p.sides[end]}`;
+            if (!ports.has(key)) ports.set(key, []);
+            ports.get(key).push({ p, end, self, sort: other.cx });
+          });
+        }
+        for (const list of ports.values()) {
+          list.sort((x, y) => x.sort - y.sort);
+          const step = Math.min(18, (W - 48) / Math.max(1, list.length - 1));
+          list.forEach((slot, i) => ((slot.p.x ??= [])[slot.end] = slot.self.cx + (i - (list.length - 1) / 2) * step));
+        }
+        for (const p of plans.filter((x) => x.type !== "side")) {
+          p.x ??= [];
+          // An arrow to a whole row meets the row straight above or below its other end.
+          const clamp = (x, band) => Math.min(band.right - 24, Math.max(band.left + 24, x));
+          if (p.s.band && p.t.band) p.x = [p.s.cx, p.t.cx];
+          else if (p.s.band) p.x[0] = clamp(p.x[1], p.s);
+          else if (p.t.band) p.x[1] = clamp(p.x[0], p.t);
+        }
+
+        // Channel c runs above row c. Arrows whose spans do not overlap share a lane.
+        const channels = Array.from({ length: rows.length + 1 }, () => []);
+        const labelWidth = (p) => (p.e.label ? measure(p.e.label, FONT.label) + 12 : 0);
+        const span = (p, c, from, to, labelled) => {
+          const mid = (from + to) / 2;
+          const half = Math.max(Math.abs(to - from) / 2, labelled ? labelWidth(p) / 2 : 0);
+          const seg = { p, x0: mid - half, x1: mid + half };
+          channels[c].push(seg);
+          return seg;
+        };
+        for (const p of plans) {
+          if (p.type === "near" && Math.abs(p.x[0] - p.x[1]) > 0.5) p.segs = [span(p, Math.max(p.a, p.b), p.x[0], p.x[1], true)];
+          else if (p.type === "bridge") p.segs = [span(p, p.a, p.x[0], p.x[1], true)];
+          else if (p.type === "far") p.segs = p.a < p.b ? [span(p, p.a + 1, p.x[0], p.gx, false), span(p, p.b, p.gx, p.x[1], true)] : [span(p, p.a, p.x[0], p.gx, false), span(p, p.b + 1, p.gx, p.x[1], true)];
+        }
+        const lanes = channels.map((list) => {
+          const ends = [];
+          list.sort((x, y) => x.x0 - y.x0);
+          for (const seg of list) {
+            let lane = ends.findIndex((end) => end + 10 <= seg.x0);
+            if (lane < 0) lane = ends.push(0) - 1;
+            ends[lane] = seg.x1;
+            seg.lane = lane;
+          }
+          return ends.length;
+        });
+
+        // Vertical positions.
+        let y = 4;
+        const channelTop = [];
+        rows.forEach((row, r) => {
+          channelTop[r] = y;
+          const outer = r === 0 && !lanes[r];
+          y += outer ? 4 : Math.max(44, 34 + LANE * Math.max(0, lanes[r] - 1));
+          const h = Math.max(40, ...row.items.map((item) => item.h));
+          Object.assign(rect.get(`@${row.layer.id}`), { top: y, bottom: y + HEAD + h + PAD, cy: y + (HEAD + h + PAD) / 2 });
+          row.items.forEach((item) => Object.assign(rect.get(item.b.id), { top: y + HEAD + (h - item.h) / 2, bottom: y + HEAD + (h + item.h) / 2, cy: y + HEAD + h / 2 }));
+          y += HEAD + h + PAD;
+        });
+        channelTop[rows.length] = y;
+        const height = y + (lanes[rows.length] ? 34 + LANE * (lanes[rows.length] - 1) : 4);
+        const laneY = (c, seg) => channelTop[c] + 20 + LANE * seg.lane;
+
+        // Routes.
+        for (const p of plans) {
+          const { s, t } = p;
+          if (p.type === "side") {
+            const right = t.cx > s.cx;
+            p.points = [[right ? s.right : s.left, s.cy], [right ? t.left : t.right, t.cy]];
+            continue;
+          }
+          const [y0, y1] = [s[p.sides[0]], t[p.sides[1]]];
+          const [x0, x1] = p.x;
+          if (!p.segs) {
+            p.points = [[x0, y0], [x1, y1]];
+            p.label = { x: x0 + 7, y: (y0 + y1) / 2, align: "left", verticalAlign: "middle" };
+          } else if (p.segs.length === 1) {
+            const ly = laneY(p.type === "bridge" ? p.a : Math.max(p.a, p.b), p.segs[0]);
+            p.points = [[x0, y0], [x0, ly], [x1, ly], [x1, y1]];
+            p.label = { x: (x0 + x1) / 2, y: ly - 3, align: "center", verticalAlign: "bottom" };
+          } else {
+            const down = p.a < p.b;
+            const [l0, l1] = [laneY(down ? p.a + 1 : p.a, p.segs[0]), laneY(down ? p.b : p.b + 1, p.segs[1])];
+            p.points = [[x0, y0], [x0, l0], [p.gx, l0], [p.gx, l1], [x1, l1], [x1, y1]];
+            p.label = { x: (p.gx + x1) / 2, y: l1 - 3, align: "center", verticalAlign: "bottom" };
+          }
+        }
+        return { width, height, rows, rect, plans, W };
+      }
+
+      function arrow([x0, y0], [x1, y1]) {
+        const length = Math.hypot(x1 - x0, y1 - y0) || 1;
+        const [ux, uy] = [(x1 - x0) / length, (y1 - y0) / length];
+        const [bx, by] = [x1 - ux * 9, y1 - uy * 9];
+        return [[x1, y1], [bx - uy * 4.5, by + ux * 4.5], [bx + uy * 4.5, by - ux * 4.5]];
+      }
+
+      function blockHtml(d, b) {
+        const title = (ref) => (ref.startsWith("@") ? `the ${d.layers.find((l) => l.id === ref.slice(1)).title} row` : d.blocks.find((x) => x.id === ref).title);
+        const mine = (ref) => ref === b.id || ref === `@${b.layer}`;
+        const relation = (e, other, arrowText) => `<div>${arrowText} ${esc(title(other))} · ${esc(KINDS[e.kind].label)}${e.label ? `: ${esc(e.label)}` : ""}</div>`;
+        const out = d.edges.filter((e) => mine(e.from) && !mine(e.to)).map((e) => relation(e, e.to, "→"));
+        const into = d.edges.filter((e) => mine(e.to) && !mine(e.from)).map((e) => relation(e, e.from, "←"));
+        const found = (d.findings ?? []).filter((f) => f.blocks.includes(b.id)).map((f) => `<div style="color: var(--warn)">${esc(f.id)} · ${esc(f.severity)} · ${esc(f.title)}</div>`);
+        return [`<b>${esc(b.title)}</b>`, `<div>${esc(b.role)}</div>`, b.detail ? `<div style="margin-top: 4px">${esc(b.detail)}</div>` : "", ...(b.files ?? []).map((f) => `<code>${esc(f)}</code>`), ...out, ...into, ...found].join("");
+      }
+
+      function draw(d, edges, section) {
+        const { width, height, rows, rect, plans, W } = layout(d, edges, section.querySelector(".scroll").clientWidth);
+        const blocks = rows.flatMap((row) => row.items);
+        const flagged = new Set((d.findings ?? []).flatMap((f) => f.blocks));
+        const holder = section.querySelector(".chart");
+        echarts.getInstanceByDom(holder)?.dispose();
+        holder.style.width = `${width}px`;
+        holder.style.height = `${height}px`;
+        const detail = section.querySelector(".detail");
+        detail.hidden = true;
+        const chart = echarts.init(holder, null, { renderer: "svg" });
+
+        // Pointing at a block keeps it, its arrows and their other ends; selecting pins that.
+        let focus = null;
+        let pinned = null;
+        const neighbours = (b) => {
+          const mine = (ref) => ref === b.id || ref === `@${b.layer}`;
+          const set = new Set([b.id]);
+          const add = (ref) => (ref.startsWith("@") ? d.blocks.filter((x) => `@${x.layer}` === ref).forEach((x) => set.add(x.id)) : set.add(ref));
+          plans.forEach((p) => (p.on = mine(p.e.from) || mine(p.e.to)) && [p.e.from, p.e.to].filter((ref) => !mine(ref)).forEach(add));
+          return set;
+        };
+        const dim = (on) => (focus && !on ? 0.16 : 1);
+        const tick = () => chart.setOption({ series: ["edges", "labels", "blocks"].map((id) => ({ id })) });
+        const show = (item) => {
+          focus = item ? neighbours(item.b) : null;
+          if (!item) plans.forEach((p) => (p.on = false));
+          tick();
+        };
+
+        const custom = (id, z, count, renderItem, silent = false) => ({ id, type: "custom", coordinateSystem: "none", z, silent, data: Array.from({ length: count }, (_, i) => i), renderItem });
+        chart.setOption({
+          animation: false,
+          tooltip: {
+            confine: true,
+            backgroundColor: css("--band"),
+            borderColor: css("--line"),
+            textStyle: { color: css("--ink"), fontSize: 12.5 },
+            extraCssText: "max-width: 360px; white-space: normal; line-height: 1.45;",
+            formatter: (p) => (p.seriesId === "blocks" ? blockHtml(d, blocks[p.dataIndex].b) : ""),
+          },
+          series: [
+            custom("bands", 1, rows.length, (params) => {
+              const band = rect.get(`@${rows[params.dataIndex].layer.id}`);
+              return { type: "rect", shape: { x: band.left, y: band.top, width: band.right - band.left, height: band.bottom - band.top, r: 10 }, style: { fill: css("--lane"), stroke: css("--line"), lineWidth: 1 } };
+            }, true),
+            // Row titles sit above the arrows, so an arrow that passes one goes behind it.
+            custom("titles", 3, rows.length, (params) => {
+              const band = rect.get(`@${rows[params.dataIndex].layer.id}`);
+              return { type: "text", style: { text: plain(rows[params.dataIndex].layer.title).toUpperCase(), x: band.left + 10, y: band.top + 6, fill: css("--muted"), font: `600 11px ${SANS}`, backgroundColor: css("--lane"), padding: [1, 3] } };
+            }, true),
+            custom("edges", 2, plans.length, (params) => {
+              const p = plans[params.dataIndex];
+              const kind = KINDS[p.e.kind];
+              const color = css(`--e-${p.e.kind}`);
+              const opacity = dim(p.on);
+              return {
+                type: "group",
+                children: [
+                  { type: "polyline", shape: { points: p.points }, style: { fill: "none", stroke: color, lineWidth: kind.width + (focus && p.on ? 1 : 0), lineDash: kind.dash ?? null, lineJoin: "round", opacity } },
+                  { type: "polygon", shape: { points: arrow(p.points.at(-2), p.points.at(-1)) }, style: { fill: color, opacity } },
+                ],
+              };
+            }, true),
+            custom("labels", 3, plans.length, (params) => {
+              const p = plans[params.dataIndex];
+              if (!p.e.label || !p.label) return { type: "group", children: [] };
+              return { type: "text", style: { text: plain(p.e.label), ...p.label, fill: css("--ink"), font: FONT.label, backgroundColor: css("--band"), padding: [1, 4], borderRadius: 3, opacity: dim(p.on) } };
+            }, true),
+            custom("blocks", 4, blocks.length, (params) => {
+              const item = blocks[params.dataIndex];
+              const box = rect.get(item.b.id);
+              const hit = flagged.has(item.b.id);
+              const opacity = dim(focus?.has(item.b.id));
+              const text = [...item.title.map((line) => `{t|${plain(line)}}`), ...item.role.map((line) => `{r|${plain(line)}}`)].join("\n");
+              return {
+                type: "group",
+                children: [
+                  { type: "rect", shape: { x: box.left, y: box.top, width: W, height: item.h, r: 8 }, style: { fill: css("--card"), stroke: hit ? css("--warn") : css(`--k-${item.b.kind}`) || css("--line"), lineWidth: hit ? 3 : 1.5, opacity } },
+                  { type: "text", style: { text, x: box.cx, y: box.cy, align: "center", verticalAlign: "middle", opacity, rich: { t: { font: FONT.title, fill: css("--ink"), lineHeight: 18 }, r: { font: FONT.role, fill: css("--muted"), lineHeight: 15 } } } },
+                ],
+              };
+            }),
+          ],
+        });
+
+        chart.on("mouseover", { seriesId: "blocks" }, (p) => pinned ?? show(blocks[p.dataIndex]));
+        chart.on("mouseout", { seriesId: "blocks" }, () => pinned ?? show(null));
+        chart.on("click", { seriesId: "blocks" }, (p) => {
+          pinned = pinned === blocks[p.dataIndex] ? null : blocks[p.dataIndex];
+          show(pinned);
+          detail.hidden = !pinned;
+          if (pinned) detail.innerHTML = blockHtml(d, pinned.b);
+        });
+      }
+
+      document.title = data.title ?? document.title;
+      $("title").textContent = data.title ?? "";
+      $("baseline").textContent = data.baseline ?? "";
+      const online = typeof echarts !== "undefined";
+      $("offline").hidden = online;
+      const used = new Set(data.diagrams.flatMap((d) => d.edges.map((e) => e.kind)));
+      for (const [kind, style] of Object.entries(KINDS).filter(([k]) => used.has(k))) {
+        const sample = el("span");
+        sample.innerHTML = `<svg viewBox="0 0 28 8"><path d="M1 4H27" stroke="var(--e-${kind})" stroke-width="${style.width + 0.5}" stroke-dasharray="${(style.dash ?? []).join(" ")}"/></svg>`;
+        sample.append(style.label);
+        $("legend").append(sample);
+      }
+      $("legend").append(el("span", { textContent: "red border: a finding" }));
+
+      const redraw = [];
+      data.diagrams.forEach((d, index) => {
+        const edges = check(d, d.title ?? `diagram ${index + 1}`);
+        const rowsHtml = d.blocks.map((b) => `<tr><td>${esc(b.title)}</td><td>${esc(b.role)}${b.detail ? `<br>${esc(b.detail)}` : ""}</td><td>${(b.files ?? []).map((f) => `<code>${esc(f)}</code>`).join("")}</td></tr>`).join("");
+        const name = (ref) => (ref.startsWith("@") ? `${d.layers.find((l) => l.id === ref.slice(1))?.title} row` : (d.blocks.find((b) => b.id === ref)?.title ?? ref));
+        const relations = edges.map((e) => `<tr><td>${esc(name(e.from))}</td><td>→ ${esc(name(e.to))}</td><td>${esc(KINDS[e.kind].label)}${e.label ? `: ${esc(e.label)}` : ""}</td></tr>`).join("");
+        const section = el("section");
+        section.innerHTML = `<h2></h2><p></p><div class="scroll"><div class="chart"></div></div><div class="detail" hidden></div><ul class="findings"></ul>
+          <details><summary>Blocks and relations as text</summary><table><tr><th>Block</th><th>What it does</th><th>Where it lives</th></tr>${rowsHtml}</table><table><tr><th>From</th><th>To</th><th>Relation</th></tr>${relations}</table></details>`;
+        section.querySelector("h2").textContent = d.title ?? "";
+        section.querySelector("p").textContent = d.note ?? "";
+        (d.findings ?? []).forEach((f) => section.querySelector(".findings").append(el("li", { textContent: `${f.id} · ${f.severity} · ${f.title}` })));
+        $("main").append(section);
+        if (online) redraw.push(() => draw(d, edges, section));
+        else section.querySelector("details").open = true;
+      });
+      redraw.forEach((run) => run());
+      let timer;
+      addEventListener("resize", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => redraw.forEach((run) => run()), 150);
+      });
+      if (problems.size) Object.assign($("problems"), { hidden: false, textContent: `Check the diagram data:\n${[...problems].join("\n")}` });
+    </script>
+  </body>
+</html>

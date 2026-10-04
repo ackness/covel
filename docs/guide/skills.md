@@ -12,7 +12,8 @@ Covel 仓库 `.claude/skills/` 目录下的每个子目录都是一个**独立�
 .claude/skills/
 ├── covel-static-turn-audit/
 │   ├── SKILL.md
-│   └── agents/openai.yaml # 外部代理的展示元信息
+│   ├── agents/openai.yaml # 外部代理的展示元信息
+│   └── assets/audit-map.html # 框图页面模板，代理只替换其中的 JSON 数据
 ├── create-world/
 │   ├── SKILL.md           # 入口，YAML frontmatter 必须有 name + description
 │   ├── agents/openai.yaml
@@ -76,7 +77,7 @@ description: 一句话描述这个 skill 做什么、何时触发（代理通过
 
 - `.claude/skills/create-plugin/SKILL.md`：生成插件骨架、运行时声明与作者参考；细节在其 `references/`。
 - `.claude/skills/create-world/SKILL.md`：生成世界包。它不携带字段表和插件清单，而是先运行 `pnpm describe:authoring` 向当前版本查询可写内容，写完用 `pnpm validate:world worlds/<id>` 校验；`references/` 只留维度写法和发布前检查。
-- `.claude/skills/covel-static-turn-audit/SKILL.md`：静态审计 start-game、插件启用、turn 调度和多轮流程。
+- `.claude/skills/covel-static-turn-audit/SKILL.md`：不启动应用、不调用模型，以读代码为主对 runtime 调度做逻辑推断式审计；读代码难以判定的复杂逻辑，用小脚本做输入输出验证，脚本和日志留在 `debugs/audits/` 作为辅助资料。它把每次 LLM 调用当作未知量，枚举一次 runtime 执行可能的全部结局，从外围插件、插件之间、内核调度到提交与后台作业逐层推演，每条发现都是一条有代码行支撑的反例轨迹。它不携带回合管线的副本和插件清单：框架的承诺读 `docs/architecture/flow.md`，runtime 从当前基线的 `PLUGIN.md` / `RUNTIME.md` 推导；报告写入 gitignored 的 `devs/audits/`。用户要求时另外输出一页 HTML 框图（`assets/audit-map.html`，ECharts 绘制，从 CDN 加载；加载不到时以文字列出同样内容），用方块说明每部分代码做什么、彼此什么关系。
 
 它们不是 npm/pnpm 命令，也不会被 Covel server 自动发现。使用支持 Agent Skills 的代理时，
 将对应的 `SKILL.md` 作为 skill 输入，或直接在仓库根目录读取它：
