@@ -63,6 +63,7 @@ export const MANIFEST_LABEL_KEYS: ReadonlySet<string> = new Set([
   "label",
   "title",
   "summary",
+  "about",
 ]);
 
 /** Keep label text and the fields list items are matched by; report the rest. */

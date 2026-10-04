@@ -1,6 +1,7 @@
 ---
 id: story-events
 kind: plugin
+version: 0.1.0
 displayName: Hidden Story Events
 description: >-
   Keeps world-authored hidden story events out of prompts and player views until
@@ -9,6 +10,10 @@ description: >-
 tags:
   - "data:world-data"
   - "cost:function"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - story-event-cue@1
   - story-event.plan@1

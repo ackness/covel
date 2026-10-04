@@ -14,6 +14,10 @@ tags:
   - frontier
   - mystery
   - exploration
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 pluginPolicy:
   packs:
     - id: emberback-rescue

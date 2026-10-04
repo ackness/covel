@@ -1,6 +1,7 @@
 ---
 id: dice-check
 kind: plugin
+version: 0.0.35
 displayName: Dice Check
 description: >-
   Dice checks for risky actions — pre-rolled dice pools, rule-based outcomes,
@@ -9,6 +10,10 @@ tags:
   - "cost:function"
   - "ui:message-block"
   - "ui:right-panel"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - action-check@1
 optional:

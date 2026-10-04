@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge.js";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { worldPackageInfo } from "@/lib/package-info.js";
+import { PackageCredits } from "@/components/shared/package-credits.js";
 import type * as api from "@/services/api.js";
 import { CollapsibleCardHeader } from "./collapsible-card-header.js";
 import { useTranslation } from "react-i18next";
@@ -65,6 +67,10 @@ export function WorldInfoCard({
                   ))}
                 </div>
               )}
+              <PackageCredits
+                info={worldPackageInfo(world)}
+                packageName={text(world.name) || world.id}
+              />
             </div>
           </div>
         </CardContent>

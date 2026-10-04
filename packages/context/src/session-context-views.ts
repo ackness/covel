@@ -7,6 +7,7 @@
 
 import {
   WORLD_LOCALIZED_TEXT_KEY,
+  WORLD_PACKAGE_INFO_KEY,
   localizedWorldText,
   resolveI18nDeep,
   resolveI18nText,
@@ -58,6 +59,9 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
     // Surface remaining metadata keys through `extra` for forward-compat.
     for (const [k, v] of Object.entries(metadata)) {
       if (k === "dimensions" || k === WORLD_LOCALIZED_TEXT_KEY) continue;
+      // Credits are the package author's own text, for cards only. Keeping
+      // them out of prompt templates means that text never reaches a model.
+      if (k === WORLD_PACKAGE_INFO_KEY) continue;
       extra = extra ?? {};
       extra[k] = v;
     }

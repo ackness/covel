@@ -1,6 +1,7 @@
 ---
 id: codex
 kind: plugin
+version: 0.0.35
 displayName: Codex
 description: >-
   Automatically collects newly discovered places, people, items, and rumors for
@@ -9,6 +10,10 @@ tags:
   - "data:lorebook"
   - "cost:llm"
   - "ui:right-panel"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 requires:
   - world-ir-provider@1
 entry: ./server/index.js

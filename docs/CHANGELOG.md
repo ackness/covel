@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Credits for plugins, worlds and collections.** `PLUGIN.md`, `world.yaml` and `covel-collection.yaml` take the same optional fields: `author` (`name`, `url`, a short `about` message, and up to six labelled `links`), `license` and `homepage`. World cards show the author and version; the world page, the session preparation screen and the installed-plugin list show the full credits, and an install preview shows the author's name. The play view does not show them. `about` and link labels are translated like other labels (`locales/<locale>.yaml`, `world.<locale>.yaml`); the author's name and the license are shown as written. Fields and limits: `docs/reference/plugins.md`.
+- **A warning before a third-party link opens.** Links in credits are `https` only. A click shows the full address and its host and says the link comes from the package author, not from Covel; it opens after the player confirms.
+- **Versions on world cards and bundled plugins.** A world's `version` now reaches its cards (`metadata.packageInfo`), and every bundled plugin states its `version`, `author` and `license`. `pnpm validate:plugin` fails when a plugin's `PLUGIN.md` and `package.json` state different versions.
+
+### Changed
+
+- **Existing sessions run plugin setup once more.** The bundled plugins had no `version` and counted as `0.0.0`; setup completion is recorded per version, so each setup runtime runs again on the next turn of an existing session and skips work that is done. `pregame` no longer repeats its welcome in a session that is already playing. A session whose world changed its dimension definitions after the session began can fail this rerun; use the setup recovery control in the plugin panel, or start a new session.
+- `GithubPluginPreview` and the collection preview carry `author` (a name or `null`).
+
 ## [0.0.46] - 2026-10-04
 
 This release adds style schemes that change the layout as well as the colours, puts each language of a world or plugin in its own file with tooling to translate it, writes an AI-generated world one part at a time under a limit on silence instead of total time, and keeps Settings usable when an upgrade meets older settings (#117–#121, #123–#127).

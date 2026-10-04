@@ -1,12 +1,17 @@
 ---
 id: branch-reply
 kind: plugin
+version: 0.0.35
 displayName: Reply Variants
 description: Offers several reply options so you can choose the one that fits best.
 tags:
   - "cost:function"
   - "ui:message-block"
   - "ui:manual-action"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - branch-reply@1
 optional:

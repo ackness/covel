@@ -1,12 +1,17 @@
 ---
 id: pregame
 kind: core
+version: 0.0.35
 displayName: Pre-Game Setup
 description: >-
   Reads the world details at the start and prepares the first step of the
   adventure.
 tags:
   - "cost:function"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides: [session.opening@1]
 contracts:
   session.opening@1:

@@ -83,6 +83,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
 | `version`, `displayName`, `description`, `tags` | 元数据；不再使用 `role:*` 标签驱动业务                                                                      |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；安装器强制执行                                                         |
+| `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
 | `requires`                                      | 必需契约，解析器补入提供者                                                                                  |
 | `optional`                                      | 可选契约，不强制激活提供者                                                                                  |
@@ -93,6 +94,39 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `runtime`                                       | 可选的单 runtime 声明                                                                                       |
 
 契约 ID 形如 `narrative-engine@1`。`runtime.io.output.contract` 必须由本包 `provides` 声明，同包不允许两个 runtime 产出同一契约。跨包可以有多个普通提供者，消费者使用 `cardinality: one` 或 `all` 表达选择要求。单提供者扩展点及显式 `conflicts` 另外执行互斥检查。`conflicts` 只允许插件契约；引用内核扩展点或 UI 槽位会得到 `invalid-conflict` 和 `conflicts` 字段位置，内核点的组合由 mode 决定。
+
+### 作者信息
+
+插件、世界（`world.yaml`）和合集（`covel-collection.yaml`）用同一组可选字段说明“谁做的、去哪找”。它们只用于展示：宿主不据此做任何判断，其中的文字不进入提示词。
+
+```yaml
+version: 1.2.0
+author:
+  name: Jane Doe
+  url: https://example.com
+  about: I write small mystery worlds. A new one comes out every month.
+  links:
+    - label: Community
+      url: https://example.com/community
+    - label: Support my work
+      url: https://example.com/support
+license: CC-BY-4.0
+homepage: https://example.com/tidefall
+```
+
+| 字段           | 说明                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| `author.name`  | 作者或团队名，最多 80 字符。在任何语言下都按原样显示，不翻译              |
+| `author.url`   | 作者自己的页面                                                            |
+| `author.about` | 作者写给玩家的一段话：自我介绍、其他作品、支持方式。纯文本，最多 500 字符 |
+| `author.links` | 带标签的链接，最多 6 条；`label` 最多 40 字符                             |
+| `license`      | 许可证：SPDX 标识或简短名称，最多 64 字符                                 |
+| `homepage`     | 包自己的页面，例如仓库或文档                                              |
+
+- **链接只接受 `https`**，不能带用户名和密码；`http:`、`javascript:`、`file:` 等地址在清单校验时被拒绝。这些链接是作者提供的第三方地址，宿主没有审核。玩家点开任何一个之前，界面先显示完整地址和域名并说明这一点，确认后才在浏览器中打开。域名以 ASCII 形式显示，其他文字写成的仿冒域名会显示为 `xn--…`。
+- **展示位置**：世界列表（作者 · 版本）、世界详情、开局准备页的世界卡片和插件行、设置里的已安装插件。安装预览只显示作者名，不显示链接。进入游玩后的界面不显示这些内容。
+- **翻译**：插件在 `locales/<locale>.yaml` 的 `PLUGIN.md` 一节翻译 `author.about` 和 `author.links` 的 `label`（链接按顺序对应）；世界在 `world.<locale>.yaml` 里翻译同样两处。作者名和许可证不翻译，`pnpm i18n` 不把它们算作待翻译文本。
+- **版本号**：列表显示清单里的 `version`。插件同时带 `package.json` 时两处的版本必须相同，`pnpm validate:plugin` 会检查：安装预览读的是 `package.json`，宿主读的是 `PLUGIN.md`。`version` 变化会让已有会话重跑该插件的 setup runtime，setup 的 guard 或 handler 必须对已完成的工作返回跳过。
 
 ### 契约版本策略
 
@@ -284,7 +318,7 @@ World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时
 
 ## 本地化与验证
 
-canonical `PLUGIN.md` / `RUNTIME.md` 的正文和 `contributes.prompt` 固定段必须是 English。只有简体中文有变体：根文件用 `PLUGIN.zh.md`，子 runtime 用 `RUNTIME.zh.md`，其中只写正文和固定段的 `content`，frontmatter 可以为空。结构字段由 canonical 文件决定，变体不能改变契约、工具、stage、超时、提示词段 ID 或位置。简体中文会话读取中文变体，其余语言（包括繁体中文）读取 canonical；其他语言的变体文件不被读取。`COVEL_INSTRUCTION_LOCALE=en|zh` 可以为所有会话固定指令语言。玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`）在主清单里写 English，译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节、只写译文，可以是任意语言；加载器把它们编译成 locale map。标签文件只能翻译这些字段，写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误；主清单里的内联 locale map 同样报错。同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）：界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。格式见 [i18n](./i18n.md#2-本地化插件)。
+canonical `PLUGIN.md` / `RUNTIME.md` 的正文和 `contributes.prompt` 固定段必须是 English。只有简体中文有变体：根文件用 `PLUGIN.zh.md`，子 runtime 用 `RUNTIME.zh.md`，其中只写正文和固定段的 `content`，frontmatter 可以为空。结构字段由 canonical 文件决定，变体不能改变契约、工具、stage、超时、提示词段 ID 或位置。简体中文会话读取中文变体，其余语言（包括繁体中文）读取 canonical；其他语言的变体文件不被读取。`COVEL_INSTRUCTION_LOCALE=en|zh` 可以为所有会话固定指令语言。玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`）在主清单里写 English，译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节、只写译文，可以是任意语言；加载器把它们编译成 locale map。标签文件只能翻译这些字段，写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误；主清单里的内联 locale map 同样报错。同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）：界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。格式见 [i18n](./i18n.md#2-本地化插件)。
 
 内置插件里模型会读取的提示词（agent 正文和固定段）必须有中文变体；function runtime 的正文是说明文档，只写 English；社区插件只需要 English。两种语言必须提到同一组工具、注入块和 `runtime-inputs.<name>`；`pnpm check:prompts` 检查这一点，并用 `plugins/prompt-variants.lock.json` 发现“英文改了、中文没跟”的情况。两边都更新后运行 `pnpm prompts:lock`。完整规则见 [i18n](./i18n.md#内置语言与扩展边界)。
 

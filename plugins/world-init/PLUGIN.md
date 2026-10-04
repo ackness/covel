@@ -1,6 +1,7 @@
 ---
 id: world-init
 kind: core
+version: 0.0.35
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.
@@ -9,6 +10,10 @@ tags:
   - "data:characters"
   - "cost:llm"
   - "ui:right-panel"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - world-data-provider@1
   - world.dimensions@1

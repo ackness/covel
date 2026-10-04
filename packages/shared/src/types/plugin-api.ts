@@ -8,6 +8,7 @@ import type {
 } from "./runtime-scheduling.js";
 import type { PluginUserSettingSpec, SessionSlashCommand } from "./plugin.js";
 import type { I18nText } from "./world.js";
+import type { PackageAuthor } from "../schemas/package-info.js";
 
 export type PluginSource = "builtin" | "community";
 
@@ -58,6 +59,10 @@ export interface PluginSummary {
   };
   readonly runtimeCount: number;
   readonly version?: string;
+  /** Credits from the package manifest; display data only. */
+  readonly author?: PackageAuthor;
+  readonly license?: string;
+  readonly homepage?: string;
   readonly provides: NonNullable<
     import("./plugin-manifest.js").PluginManifest["provides"]
   >;

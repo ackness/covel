@@ -5,6 +5,7 @@ import {
 } from "../extension-points/contracts.js";
 import { z } from "zod";
 import { hostVersionRangeSchema } from "../utils/host-version-range.js";
+import { packageCreditFields } from "./package-info.js";
 import {
   contractIdSchema,
   runtimeAuthoringManifestSchema,
@@ -159,6 +160,7 @@ export const pluginManifestSchema = z.strictObject({
       "Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts.",
     )
     .optional(),
+  ...packageCreditFields,
   provides: z
     .array(
       z.union([

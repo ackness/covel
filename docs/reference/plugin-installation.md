@@ -59,7 +59,7 @@ GitHub 源码归档带的一层外目录会被移除，再提取指定插件目�
 
 插件根清单可声明 `covel` 版本范围（如 `">=0.0.45 <0.1.0"`）。宿主版本不在范围内时，预览、安装、更新和 ZIP 导入都会拒绝该包并给出两个版本号。语法见[合集指南](../guide/collections.md#版本范围)。
 
-预览包含 ID、包版本、描述、代码存在提示、来源、签名 token 和 `expiresAt`。来源为 `{ repository, commit, path, digest, tracking }`。`tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支，tree 链接先解析明确的分支；其余 tag/commit 保持锁定。`hasServerCode` 是保守的文件和清单扫描提示，不是完整代码审计；测试或构建源码也可能触发代码提示。适配版本仍由作者在目录与 README 声明，当前仅验证清单格式，不自动判断所有运行时兼容性。
+预览包含 ID、包版本、描述、作者名（`author`，清单没有声明时为 `null`）、代码存在提示、来源、签名 token 和 `expiresAt`。来源为 `{ repository, commit, path, digest, tracking }`。`tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支，tree 链接先解析明确的分支；其余 tag/commit 保持锁定。`hasServerCode` 是保守的文件和清单扫描提示，不是完整代码审计；测试或构建源码也可能触发代码提示。适配版本仍由作者在目录与 README 声明，当前仅验证清单格式，不自动判断所有运行时兼容性。
 
 预览不写入插件目录。签名覆盖源仓库、commit、子目录、文件摘要与预览信息，15 分钟有效，进程重启后失效。安装只使用签名内容，重新下载固定 commit，并对按路径排序、包含文件名及长度的文件内容摘要进行比对；不依赖 GitHub ZIP 字节级稳定性。摘要变化或过期返回 409，需重新预览确认。下载只访问固定 GitHub API 和 codeload 地址，拒绝重定向，不转发运营者或浏览器凭证，并限制流式读取字节数及单请求 30 秒超时。
 

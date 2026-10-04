@@ -105,6 +105,9 @@ export function buildPluginSummary(
     ...((entry.packageManifest?.manifest ?? manifests[0])?.version
       ? { version: (entry.packageManifest?.manifest ?? manifests[0])!.version }
       : {}),
+    ...(plugin?.author ? { author: plugin.author } : {}),
+    ...(plugin?.license ? { license: plugin.license } : {}),
+    ...(plugin?.homepage ? { homepage: plugin.homepage } : {}),
     provides: plugin?.provides ?? [],
     requires: plugin?.requires ?? [],
     optional: plugin?.optional ?? [],

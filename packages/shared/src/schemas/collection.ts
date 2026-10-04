@@ -2,6 +2,7 @@ import { z } from "zod";
 import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { githubPluginPreviewSchema } from "./plugin-install.js";
 import { i18nTextSchema } from "./world.js";
+import { packageCreditFields } from "./package-info.js";
 
 /** File name of a collection manifest, at the root of the collection. */
 export const COLLECTION_MANIFEST_FILE = "covel-collection.yaml";
@@ -57,6 +58,7 @@ export const collectionManifestSchema = z
     name: i18nTextSchema,
     description: i18nTextSchema.optional(),
     version: z.string().max(100).optional(),
+    ...packageCreditFields,
     covel: hostVersionRangeSchema.optional(),
     worlds: z.array(memberSchema).default([]),
     plugins: z.array(memberSchema).default([]),
@@ -102,6 +104,7 @@ export const githubCollectionPreviewSchema = z
         id: z.string(),
         name: i18nTextSchema,
         version: z.string().nullable(),
+        author: z.string().nullable(),
       })
       .strict()
       .nullable(),

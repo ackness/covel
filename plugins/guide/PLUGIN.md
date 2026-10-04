@@ -1,6 +1,7 @@
 ---
 id: guide
 kind: plugin
+version: 0.0.35
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
@@ -8,6 +9,10 @@ description: >-
 tags:
   - "cost:llm"
   - "ui:message-block"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - scene-prompts@1
 requires:

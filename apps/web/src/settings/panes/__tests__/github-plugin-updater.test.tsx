@@ -29,6 +29,7 @@ const preview: GithubPluginUpdatePreview = {
   id: installation.id,
   version: "1.1.0",
   description: "Updated note",
+  author: null,
   hasServerCode: true,
   source: { ...source, commit: "c".repeat(40), digest: "d".repeat(64) },
   previous: { version: installation.version, source },

@@ -22,6 +22,7 @@ const plugin = {
   id: "barrow-dice",
   version: "1.0.0",
   description: "Dice for the barrow",
+  author: "Barrow Works",
   hasServerCode: true,
   source,
   token: "plugin-token",
@@ -37,7 +38,12 @@ const world = {
   token: "world-token",
 };
 const pack: GithubCollectionPreview = {
-  collection: { id: "barrow-pack", name: "Barrow Pack", version: "1.2.0" },
+  collection: {
+    id: "barrow-pack",
+    name: "Barrow Pack",
+    version: "1.2.0",
+    author: null,
+  },
   items: [plugin, world],
   problems: [],
 };

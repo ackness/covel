@@ -90,6 +90,7 @@ export async function inspectWorldBundle(entries: readonly ExtractedEntry[]) {
     id: worldId,
     version: manifest.version ?? null,
     description: resolveI18nText(manifest.summary, "en-US") ?? "",
+    author: manifest.author?.name ?? null,
     hasServerCode: false,
   };
 }

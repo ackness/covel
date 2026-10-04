@@ -1,6 +1,7 @@
 ---
 id: npc-graph
 kind: plugin
+version: 0.0.35
 displayName: Relationship Graph
 description: >-
   Tracks relationships between characters so the story stays consistent when
@@ -10,6 +11,10 @@ tags:
   - "cost:llm"
   - "ui:right-panel"
   - "cost:function"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - npc-graph@1
   - graph-rag@1
