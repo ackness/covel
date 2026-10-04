@@ -1,18 +1,11 @@
 import {
   awaitLlmRequest,
   createLlmRequestBudget,
+  DEFAULT_LLM_REQUEST_CEILING_MS,
   iterateLlmRequest,
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
 } from "@covel/shared";
 import type { LLMAdapter, LLMMessage, LLMResponse } from "@covel/shared";
-
-/**
- * The gateway ends a request after 120 seconds unless the caller gives it a
- * budget. Authoring answers are long and some models write slowly, so the
- * limit that applies here is the idle timeout. This ceiling only ends a model
- * that never stops writing.
- */
-const REQUEST_CEILING_MS = 30 * 60_000;
 
 /** The model sent nothing for the whole idle timeout. */
 export class LlmIdleTimeoutError extends Error {
@@ -57,7 +50,13 @@ export async function requestLlmResponse(
     model: options.model,
     messages: options.messages,
     signal,
-    requestBudget: createLlmRequestBudget({ timeoutMs: REQUEST_CEILING_MS }),
+    // The default budget waits 120 seconds for the first output, and the
+    // player may set a longer wait. The idle timer below is the limit that
+    // applies here; this fixed budget only ends a model that never stops
+    // writing.
+    requestBudget: createLlmRequestBudget({
+      timeoutMs: DEFAULT_LLM_REQUEST_CEILING_MS,
+    }),
   };
 
   wait();
@@ -80,10 +79,14 @@ export async function requestLlmResponse(
       signal,
     )) {
       signal.throwIfAborted();
-      wait();
+      // Only output restarts the wait: an empty event is not an answer.
       if (event.type === "text-delta") {
+        if (event.textDelta.length === 0) continue;
+        wait();
         content += event.textDelta;
         options.onText?.(content.length);
+      } else if (event.type === "reasoning-delta") {
+        if (event.reasoningDelta.length > 0) wait();
       } else if (event.type === "done") {
         finishReason =
           event.finishReason === "tool_calls" ||

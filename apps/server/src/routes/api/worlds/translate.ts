@@ -13,6 +13,7 @@ import type { LLMAdapter } from "@covel/runtime";
 import type { WorldRecord } from "@covel/store";
 import { errorBody, readJsonBody } from "../../../api-error.js";
 import { streamOwnedSSE } from "../../../application-work.js";
+import { orderedSend } from "../../../lib/ordered-send.js";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { rateLimiter, singleFlight } from "../../../middleware/rate-limit.js";
 import { parseIdleTimeoutMs } from "../../../world-data/authoring-timeout.js";
@@ -133,7 +134,7 @@ worldTranslateRoutes.post(
           ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
           : c.req.raw.signal;
         // Progress is sent in order; a write that fails ends the stream.
-        let pending = Promise.resolve();
+        const progress = orderedSend(send);
         const result = await translateWorldPackage({
           worldDir,
           locale,
@@ -143,13 +144,10 @@ worldTranslateRoutes.post(
             : {}),
           signal,
           idleTimeoutMs: idleTimeout.value,
-          onProgress: (step, done, total) => {
-            pending = pending.then(() =>
-              send({ type: "progress", step, done, total }),
-            );
-          },
+          onProgress: (step, done, total) =>
+            progress.push({ type: "progress", step, done, total }),
         });
-        await pending;
+        await progress.settled();
         signal.throwIfAborted();
         if (result.translated === 0) {
           await send({

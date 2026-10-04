@@ -41,6 +41,7 @@ import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
 import { isWorldDeleting } from "../../world-lifecycle.js";
 import { worldSectionsOf } from "../../world-data/world-sections.js";
 import { parseIdleTimeoutMs } from "../../world-data/authoring-timeout.js";
+import { orderedSend } from "../../lib/ordered-send.js";
 
 type Env = {
   Variables: {
@@ -71,22 +72,19 @@ interface ErrorEvent {
 }
 type GenerateEvent = ProgressEvent | DoneEvent | ErrorEvent;
 
-/**
- * Sends the progress of the parts in the order it was reported. `createWorld`
- * reports synchronously and does not wait for the stream; `settled` resolves
- * when every report is written, and rejects when the client is gone.
- */
+/** Sends the progress of the parts in the order `createWorld` reported it. */
 function partProgress(send: (event: GenerateEvent) => Promise<void>) {
-  let pending = Promise.resolve();
+  const events = orderedSend(send);
   return {
     report(parts: readonly WorldGenerationPart[]) {
-      pending = pending.then(() =>
-        send({ type: "progress", phase: "generating", parts }),
-      );
-      // The failure is seen by `settled`; this keeps it from being unhandled.
-      pending.catch(() => undefined);
+      events.push({ type: "progress", phase: "generating", parts });
     },
-    settled: () => pending,
+    settled: events.settled,
+    /**
+     * Waits for the reports before an error is sent: a report that arrives
+     * after the error would show the request as running again.
+     */
+    drained: () => events.settled().catch(() => undefined),
   };
 }
 type SaveTarget = "server-file" | "server-store" | "return-only";
@@ -323,11 +321,11 @@ aiRoutes.post(
 
       let generatedWorldDir: string | undefined;
       let activated = false;
+      const progress = partProgress(send);
       try {
         shutdownSignal?.throwIfAborted();
         await send({ type: "progress", phase: "generating" });
 
-        const progress = partProgress(send);
         const createOpts = {
           llm,
           concept: (concept as string).trim(),
@@ -437,6 +435,7 @@ aiRoutes.post(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[ai/generate-world] unexpected error:", msg);
+        await progress.drained();
         await send({
           type: "error",
           message: msg,
@@ -570,13 +569,13 @@ aiRoutes.post(
       const send = async (event: GenerateEvent) => {
         await stream.writeSSE({ data: JSON.stringify(event) });
       };
+      const progress = partProgress(send);
       try {
         shutdownSignal?.throwIfAborted();
         await send({ type: "progress", phase: "generating" });
         const signal = shutdownSignal
           ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
           : c.req.raw.signal;
-        const progress = partProgress(send);
         const result = await createWorld({
           llm,
           concept: existing.description || existing.name,
@@ -673,6 +672,7 @@ aiRoutes.post(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[ai/revise-world] unexpected error:", msg);
+        await progress.drained();
         await send({ type: "error", message: msg });
       }
     });

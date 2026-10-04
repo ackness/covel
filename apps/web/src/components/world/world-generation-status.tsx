@@ -140,8 +140,16 @@ export function WorldGenerationStatus({
               )}
             </p>
           )}
-          {/* Shows how far the world got and which part stopped it. */}
-          {parts.length > 0 && <PartList parts={parts} t={t} />}
+          {/* Shows how far the world got and which part stopped it. A request
+              that broke off leaves its part active; nothing writes it now. */}
+          {parts.length > 0 && (
+            <PartList
+              parts={parts.map((part) =>
+                part.state === "active" ? { ...part, state: "failed" } : part,
+              )}
+              t={t}
+            />
+          )}
         </div>
       </div>
     );

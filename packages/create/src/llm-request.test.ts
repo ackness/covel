@@ -155,6 +155,33 @@ describe("requestLlmResponse idle timeout", () => {
     await expect(response).resolves.toMatchObject({ content: "answer" });
   });
 
+  it("does not count an empty piece as output of the model", async () => {
+    vi.useFakeTimers();
+    const response = requestLlmResponse({
+      llm: {
+        async generate() {
+          throw new Error("generate() should not be used when stream() exists");
+        },
+        // The provider keeps the stream open with pieces that hold no text.
+        async *stream() {
+          for (;;) {
+            await pause(80);
+            yield { type: "text-delta", textDelta: "" } as const;
+            yield { type: "reasoning-delta", reasoningDelta: "" } as const;
+          }
+        },
+      },
+      messages: [],
+      signal: new AbortController().signal,
+      idleTimeoutMs: 100,
+    });
+    const rejection =
+      expect(response).rejects.toBeInstanceOf(LlmIdleTimeoutError);
+
+    await vi.advanceTimersByTimeAsync(100);
+    await rejection;
+  });
+
   it("ends a request when the model stays silent for the timeout", async () => {
     vi.useFakeTimers();
     let aborted: unknown;
