@@ -24,6 +24,8 @@ After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each ne
 
 The root `.pre-commit-config.yaml` defines commit checks. Install pre-commit and run `pre-commit install` to enable them, or run `pre-commit run --all-files` manually. Oxlint is pinned in the root `devDependencies` and `pnpm-lock.yaml`. Like Prettier and type checks, it uses the project toolchain through `mise exec` without creating a separate Node environment. `scripts/run-with-project-node.mjs` prepends the selected Node directory to the child PATH so CLI shims and subsequent commands use the same version. Existing hooks read the updated configuration automatically; no global cache cleanup is needed.
 
+New files are limited to 3 MiB by default. World gallery originals at `worlds/*/media/gallery/*.png` have a separate 4 MiB limit to preserve lossless 1536×1024 images. Prefer their WebP versions for display.
+
 ### PostgreSQL 18 development environment
 
 Create the root `.env` as above and keep `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, and `DATABASE_URL` consistent. Starting only the database does not require the Docker app's operator token:

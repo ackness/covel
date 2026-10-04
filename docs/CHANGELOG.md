@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- Lantern Barrow now ships six full-body character portraits and a dedicated world-selection cover. Emberback adds portraits for Priya Nair and Eli Varga. The four active worlds include a first gallery asset collection with localized introductions, setting background, source references and clearly identified illustrative scenes; gallery navigation is not implemented yet.
+- Gallery descriptions now also cover 35 reviewed existing portraits, expression and outfit variants, day/night scenes and world covers. Each includes Chinese and English descriptions grounded in the original setting, with visual observations separated from story facts; the existing image files are preserved.
+
 ## [0.0.46] - 2026-10-04
 
 This release adds style schemes that change the layout as well as the colours, puts each language of a world or plugin in its own file with tooling to translate it, writes an AI-generated world one part at a time under a limit on silence instead of total time, and keeps Settings usable when an upgrade meets older settings (#117–#121, #123–#127).

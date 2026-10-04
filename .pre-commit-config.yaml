@@ -27,6 +27,11 @@ repos:
         # 3 MB: covers tracked world character portraits (~1.7–2.4 MB PNGs)
         # while still catching accidental large blobs (videos, dumps, bundles).
         args: [--maxkb=3072]
+        exclude: ^worlds/[^/]+/media/gallery/[^/]+\.png$
+      - id: check-added-large-files
+        name: check gallery PNG size
+        files: ^worlds/[^/]+/media/gallery/[^/]+\.png$
+        args: [--maxkb=4096]
 
   - repo: local
     hooks:
