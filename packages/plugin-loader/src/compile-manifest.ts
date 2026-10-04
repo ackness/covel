@@ -82,7 +82,7 @@ export function compileRuntimeManifest(
     runtimeType: runtime.type,
     handler: runtime.function?.handler,
     guard: runtime.guard,
-    model: a?.model,
+    model: a?.model ?? runtime.function?.model,
     llm: a?.llm,
     history: a?.history,
     tools: runtime.function?.tools ?? agentTools,

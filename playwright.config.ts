@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 // Keep the default E2E stack isolated from `pnpm dev`: reusing a long-running
@@ -7,6 +10,17 @@ import { defineConfig, devices } from "@playwright/test";
 const e2eWebOrigin = "http://127.0.0.1:5181";
 const e2eServerOrigin = "http://127.0.0.1:3101";
 const baseURL = process.env.E2E_BASE_URL ?? e2eWebOrigin;
+const testHome = process.env.E2E_BASE_URL
+  ? undefined
+  : mkdtempSync(join(tmpdir(), "covel-e2e-"));
+if (testHome) {
+  mkdirSync(join(testHome, "worlds"));
+  mkdirSync(join(testHome, "plugins"));
+  // Only remove the temporary profile created by this test process.
+  process.once("exit", () =>
+    rmSync(testHome, { recursive: true, force: true }),
+  );
+}
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -39,6 +53,10 @@ export default defineConfig({
             STORE_BACKEND: "memory",
             SERVER_PORT: "3101",
             CORS_ORIGIN: e2eWebOrigin,
+            COVEL_HOME: testHome!,
+            COVEL_USER_WORLDS_DIR: join(testHome!, "worlds"),
+            COVEL_USER_PLUGINS_DIR: join(testHome!, "plugins"),
+            COVEL_SERVER_LOG_FILE: "",
           },
           url: `${e2eServerOrigin}/api/health`,
           reuseExistingServer: false,
