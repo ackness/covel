@@ -99,6 +99,7 @@ const plugin = (id: string): SessionPlugin => ({
   runtimes: [],
   tools: [],
   userSettings: [],
+  languages: { text: ["en"], instructions: ["en"] },
   provides: [],
   tags: [],
 });

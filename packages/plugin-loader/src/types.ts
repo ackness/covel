@@ -35,6 +35,8 @@ import type {
   RuntimeManifest,
   PluginUserSettingSpec,
   PluginEventDecl,
+  PluginLanguages,
+  PluginMessageCatalog,
   SlashCommandSpec,
 } from "@covel/shared";
 
@@ -164,6 +166,10 @@ export interface PluginRegistryEntry {
   readonly runtimeManifestPaths?: Readonly<Record<string, string>>;
   /** Explicit executable runtime definitions; absent entries have no execution. */
   readonly manifests?: readonly ParsedRuntimeMd[];
+  /** The `messages` section of each `locales/<locale>.yaml` of the plugin. */
+  readonly messages?: readonly PluginMessageCatalog[];
+  /** The languages the package has text in; absent means English only. */
+  readonly languages?: PluginLanguages;
   /** Normalized package data schema declarations. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
   /** Normalized package world projections. */

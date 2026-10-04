@@ -23,22 +23,38 @@
  */
 
 import {
+  labelText,
   makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
 /**
- * Badge metadata per op — persisted into the `message` namespace value so
- * the chat toast block renders locale-aware labels without any framework
- * lookup table.
+ * Badge color per op — persisted into the `message` namespace value so the
+ * chat toast block renders it without any framework lookup table.
  */
-const OP_BADGES = {
-  add: { label: { zh: "获得", en: "Gained" }, color: "green" },
-  remove: { label: { zh: "失去", en: "Lost" }, color: "red" },
-  set: { label: { zh: "更新", en: "Updated" }, color: "blue" },
-  equip: { label: { zh: "装备", en: "Equipped" }, color: "purple" },
-  unequip: { label: { zh: "卸下", en: "Unequipped" }, color: "amber" },
+const OP_COLORS = {
+  add: "green",
+  remove: "red",
+  set: "blue",
+  equip: "purple",
+  unequip: "amber",
 };
+
+/**
+ * The badge text in every language the plugin ships. Only the toast block
+ * draws it; it picks the player's UI language.
+ */
+function opBadge(context, op) {
+  // Each text is a literal: the validator reads them from the source.
+  const badges = {
+    add: labelText(context, "Gained"),
+    remove: labelText(context, "Lost"),
+    set: labelText(context, "Updated"),
+    equip: labelText(context, "Equipped"),
+    unequip: labelText(context, "Unequipped"),
+  };
+  return badges[op];
+}
 
 export default function ({ tool, z, shortIdBatch }) {
   const changeSchema = z.object({
@@ -151,14 +167,13 @@ export default function ({ tool, z, shortIdBatch }) {
         }
       };
       const pushMessage = (op, name, amount) => {
-        const badge = OP_BADGES[op];
         const sign = op === "add" ? "+ " : op === "remove" ? "− " : "";
         const suffix = amount !== undefined ? ` ×${amount}` : "";
         messageChanges.push({
           op,
           text: `${sign}${name}${suffix}`,
-          badge: badge.label,
-          color: badge.color,
+          badge: opBadge(context, op),
+          color: OP_COLORS[op],
         });
       };
 

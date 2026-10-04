@@ -79,7 +79,7 @@ describe.each(["narrator", "chat-mode-narrator"])(
           expect(finalInstruction?.role).toBe("system");
           expect(finalInstruction?.content).toContain(
             locale === "zh-CN"
-              ? "本轮旁白人称固定为 上文指定的人称"
+              ? "本回合旁白人称固定为 上文指定的人称"
               : "This turn's narration uses the perspective configured above",
           );
           expect(context.messages).toContainEqual({

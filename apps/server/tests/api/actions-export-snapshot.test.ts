@@ -44,9 +44,9 @@ runtime:
       'export default async function() { return { outcome: "success", value: { narrativeOutput: "The journey continues." } }; }',
     );
     await fs.writeFile(
-      path.join(root, "PLUGIN.en.md"),
+      path.join(root, "PLUGIN.zh.md"),
       (await fs.readFile(path.join(root, "PLUGIN.md"), "utf-8")) +
-        "English captured body.\n",
+        "中文捕获正文。\n",
     );
     await fs.writeFile(
       path.join(root, "output.json"),
@@ -107,25 +107,21 @@ runtime:
       c.set("eventBus", createEventBus(store));
       c.set("loadRuntimeFn", async (...args) => {
         const loaded = await loader.loadRuntimeFn(...args);
-        expect(loaded?.promptTemplate).toContain("English captured body.");
+        expect(loaded?.promptTemplate).toContain("中文捕获正文。");
         return loaded;
       });
-      c.set(
-        "withPluginSnapshot",
-        async (sessionId, fn, _beforeCapture, locale) => {
-          expect((await store.getSession(sessionId))?.locale).toBe("zh-CN");
-          expect(locale).toBe("en-US");
-          return (await loader.capture(sessionId, locale)).run(async () => {
-            const loaded = await loader.loadRuntimeFn(
-              definition.manifests[0]!.manifest,
-              undefined,
-              sessionId,
-            );
-            expect(loaded?.promptTemplate).toContain("English captured body.");
-            return fn();
-          });
-        },
-      );
+      c.set("withPluginSnapshot", async (sessionId, fn) => {
+        // The snapshot reads prompts in the session's own locale.
+        return (await loader.capture(sessionId)).run(async () => {
+          const loaded = await loader.loadRuntimeFn(
+            definition.manifests[0]!.manifest,
+            undefined,
+            sessionId,
+          );
+          expect(loaded?.promptTemplate).toContain("中文捕获正文。");
+          return fn();
+        });
+      });
       c.set("resolveModel", () => undefined);
       c.set("llmAdapter", {
         generate: async () => {
@@ -142,13 +138,12 @@ runtime:
         requestId: "export-action",
         type: "send_message",
         sessionId: "session",
-        locale: "en-US",
         payload: { content: "Continue" },
       }),
     });
     const stream = await response.text();
     expect(response.status, stream).toBe(200);
-    expect((await store.getSession("session"))?.locale).toBe("en-US");
+    expect((await store.getSession("session"))?.locale).toBe("zh-CN");
     const exports = await store.listRuntimeExports("session");
     expect(exports, stream).toHaveLength(1);
     expect(exports[0]).toMatchObject({

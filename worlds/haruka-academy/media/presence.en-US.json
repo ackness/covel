@@ -1,0 +1,34 @@
+[
+  {
+    "characterId": "npc-kamishiro-mio",
+    "displayName": "Mio Kamishiro"
+  },
+  {
+    "characterId": "npc-asakura-rin",
+    "displayName": "Rin Asakura"
+  },
+  {
+    "characterId": "npc-shiina-kaho",
+    "displayName": "Kaho Shiina"
+  },
+  {
+    "characterId": "npc-shiraishi-yuma",
+    "displayName": "Yuma Shiraishi"
+  },
+  {
+    "characterId": "npc-mikoeda-haruka",
+    "displayName": "Haruka Mikoeda"
+  },
+  {
+    "characterId": "npc-onodera-chihiro",
+    "displayName": "Chihiro Onodera"
+  },
+  {
+    "characterId": "npc-morikawa-souta",
+    "displayName": "Souta Morikawa"
+  },
+  {
+    "characterId": "npc-toujou-akane",
+    "displayName": "Akane Toujou"
+  }
+]

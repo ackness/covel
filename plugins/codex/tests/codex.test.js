@@ -25,6 +25,7 @@ import {
   loadPluginDefinition,
   loadPluginUi,
   loadRuntime,
+  resolveRuntimePrompt,
 } from "@covel/plugin-loader";
 import {
   getPendingProposals,
@@ -85,7 +86,7 @@ describe("sync-codex-entries", () => {
       category: "location",
       rarity: "common",
       isNew: true,
-      categoryMeta: { displayName: { zh: "地点", en: "Locations" } },
+      categoryMeta: { icon: "MapPin", color: "blue" },
     });
   });
 
@@ -231,11 +232,8 @@ describe("getCategoryMetadata", () => {
     const meta = getCategoryMetadata("mystery-future-category");
     expect(meta.icon).toBe("BookOpen");
     expect(meta.color).toBe("gray");
-    // displayName echoes the raw category so the UI still has *something*.
-    expect(meta.displayName).toEqual({
-      zh: "mystery-future-category",
-      en: "mystery-future-category",
-    });
+    // The name is not stored: entries go into the prompt in one language.
+    expect(meta).not.toHaveProperty("displayName");
   });
 });
 
@@ -318,9 +316,19 @@ describe("codex plugin manifest", () => {
     );
   });
 
-  it("should load PLUGIN.md body as the LLM prompt template", () => {
-    expect(loaded.promptTemplate).toContain("知识图鉴");
+  it("should load PLUGIN.md body as the LLM prompt template", async () => {
+    expect(loaded.promptTemplate).toContain("Knowledge Codex Tracker");
     expect(loaded.promptTemplate).toContain("<existing-entries>");
+    // A Chinese session reads the PLUGIN.zh.md variant of the same prompt.
+    const discovery = (await discoverPlugins(PLUGINS_DIR)).find(
+      (d) => d.id === "codex",
+    );
+    const chinese = resolveRuntimePrompt(
+      (await loadPluginDefinition(discovery, "zh-CN")).manifests[0],
+      "zh-CN",
+    );
+    expect(chinese).toContain("知识图鉴");
+    expect(chinese).toContain("<existing-entries>");
   });
 
   it("should have auto trigger and rely on its typed WorldIR DAG edge", () => {

@@ -1,0 +1,24 @@
+# Chinese text of the chat-mode-narrator plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: 对话叙事
+  description: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
+  contributes:
+    settings:
+      - key: narrativePerson
+        label: 叙事人称
+        description: 旁白如何称呼玩家角色；人物对白保持各自的人称。
+        options:
+          - label: 第一人称（我）
+          - label: 第二人称（你）
+          - label: 第三人称（角色名）
+      - key: dialogueRatio
+        label: 对话占比
+        description: 回复中人物对白和内心反应的大致占比。
+      - key: proseLength
+        label: 回复长度
+        options:
+          - label: 短
+          - label: 中
+          - label: 长

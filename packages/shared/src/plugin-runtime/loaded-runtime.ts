@@ -1,5 +1,6 @@
 import type { RuntimeManifest, RuntimeActivation } from "../index.js";
 import type { FunctionHandler, AgentGuard } from "./handler.js";
+import type { PluginMessageCatalog } from "../utils/plugin-messages.js";
 
 /** Level 2: fully loaded runtime ready for execution. */
 export interface LoadedRuntime {
@@ -44,6 +45,11 @@ export interface LoadedRuntime {
   readonly handler?: FunctionHandler;
   /** Guard function — runs before agent execution, returns `{ skip: true }` to bypass LLM. */
   readonly guard?: AgentGuard;
+  /**
+   * The plugin's `messages` translations, one per `locales/<locale>.yaml`.
+   * The host turns them into `ctx.messages` for the session's language.
+   */
+  readonly messages?: readonly PluginMessageCatalog[];
   /** Loaded UI specs from ui/ directory, grouped by slot. */
   readonly uiSpecs?: {
     readonly right?: readonly Readonly<Record<string, unknown>>[];

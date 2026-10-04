@@ -71,11 +71,53 @@ export {
   localesShareLanguageAndScript,
   normalizeLocale,
 } from "./utils/locale-registry.js";
+export {
+  INSTRUCTION_LOCALES,
+  instructionLocaleFor,
+  instructionLocaleOverride,
+  instructionVariantCandidates,
+  isInstructionVariantLocale,
+  localeTier,
+} from "./utils/instruction-locale.js";
+export type {
+  InstructionLocale,
+  LocaleTier,
+} from "./utils/instruction-locale.js";
+export { pluginMessagesFor } from "./utils/plugin-messages.js";
+export {
+  WORLD_EDITIONS_KEY,
+  pluginHasTextIn,
+  sessionContentLocale,
+  worldEditionLocales,
+} from "./utils/content-locale.js";
+export type { WorldEditions } from "./utils/content-locale.js";
+export type {
+  PluginMessageCatalog,
+  PluginMessages,
+} from "./utils/plugin-messages.js";
 export type {
   LocaleDefinition,
   SupportedLocale,
 } from "./utils/locale-registry.js";
-export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
+export {
+  resolveI18nText,
+  resolveI18nDeep,
+  isKnownLocale,
+  isLocaleMap,
+  localizedWorldText,
+  WORLD_LOCALIZED_TEXT_KEY,
+} from "./utils/i18n.js";
+export {
+  applyLocaleOverlay,
+  findInlineLocaleMaps,
+  isLocaleMapFor,
+  splitLocaleMaps,
+} from "./utils/locale-overlay.js";
+export type {
+  ApplyLocaleOverlayOptions,
+  LocaleOverlayIssue,
+  LocaleOverlayMode,
+} from "./utils/locale-overlay.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export {
   assertJsonValue,
@@ -261,7 +303,8 @@ export {
   dimensionSettlementSummarySchema,
   validateDimensionValue,
   dimensionSnapshotFromRecords,
-  localizeDimensionValue,
+  resolveDimensionDefinitionLocale,
+  resolveWorldDimensionsLocale,
 } from "./schemas/dimensions.js";
 
 // ── API Transport Contracts ────────────────────────────────────

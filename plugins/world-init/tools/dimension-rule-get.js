@@ -1,6 +1,7 @@
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
+  resolveI18nDeep,
   resolveI18nText,
   dimensionIdSchema,
   dimensionRecordSchema,
@@ -40,7 +41,7 @@ export default function ({ tool, z }) {
       const text =
         part === "rule"
           ? (resolveI18nText(definition.updateRule, session.locale) ?? "")
-          : JSON.stringify(definition.schema);
+          : JSON.stringify(resolveI18nDeep(definition.schema, session.locale));
       const characters = Array.from(text);
       const content = characters.slice(offset, offset + limit).join("");
       const complete = offset + limit >= characters.length;

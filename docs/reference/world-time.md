@@ -81,7 +81,7 @@ evolution:
 内置 `world-time` 是 core-plugin，包含两个 runtime：
 
 1. `world-time/context`（pre-turn function）读取会话时钟或世界初值，发布 `world-time-context@1` 契约输出。初值和本地化显示更新通过 proposal 暂存。导入定义面板在首次叙事前即显示规则；未导入定义时显示默认历法说明。
-2. `world-time/advance`（post-turn agent）通过 required inputs 读取本轮成功叙事和时间起点，调用 `advance-world-time`。模型只提议跨度/方向，插件完成历法运算和策略校验。工具成功即结束；默认 20 步工具预算、超时和循环检测仍有效。
+2. `world-time/advance`（post-turn agent）通过 required inputs 读取本轮成功叙事和时间起点，调用 `advance-world-time`。模型只提议跨度/方向，插件完成历法运算和策略校验。单位取自 `currentTime.value.units`；amount 为 0 时任何单位都接受（零时长与单位无关），非零时长用了该时钟没有的单位会被拒绝，错误信息列出可用单位。工具成功即结束；默认 20 步工具预算、超时和循环检测仍有效。
 
 叙事插件的 `RUNTIME.md` 接入：
 
@@ -93,7 +93,7 @@ io:
       required: false
 ```
 
-`worldTime.value` 包含 `definition`、整数 `tick`、`display`，以及 calendar 的年月日时分或 phases 的 cycle/phase。它是本轮起点。叙事遵循世界的 prompt，明确耗时/转场；post-turn 阶段再结算结束时间。旧记忆和历史叙事不能覆盖该起点。`scene` 记忆仅描述氛围，当前日期和时刻由结构化时钟维护。
+`worldTime.value` 包含 `definition`、整数 `tick`、`display`、该时钟可用的时长单位 `units`（calendar 为 `minute`/`hour`/`day`，phases 为 `phase`/`cycle`，第一个是基础单位），以及 calendar 的年月日时分或 phases 的 cycle/phase。它是本轮起点。叙事遵循世界的 prompt，明确耗时/转场；post-turn 阶段再结算结束时间。旧记忆和历史叙事不能覆盖该起点。`scene` 记忆仅描述氛围，当前日期和时刻由结构化时钟维护。
 
 状态存放在插件的 `clock/current` 行，随普通会话数据进入快照、检查点和分支。定义在首次提交时复制到会话，后续世界编辑或定义重新导入不会重置已有时钟；读档不因全局世界文件变化而重解释旧刻度。`lastTurnId` 防止同轮重复工具调用，`lastDelta` 和 `reason` 记录本次变化。所有写入都经过已有 proposal 事务；叙事失败、提案提交失败均回滚时间。递归子叙事不独立结算。
 

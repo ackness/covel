@@ -33,6 +33,28 @@ export interface CreateWorldOptions {
   readonly logger?: CreateWorldLogger;
   /** Template source shared by generation and repair for this invocation. */
   readonly loadPrompt?: PromptLoader;
+  /**
+   * Revise an existing world instead of creating one. The model gets the
+   * current package and the request, and returns the same three sections;
+   * a section it does not change comes back as the word `UNCHANGED` and is
+   * taken from `current` as it is. The result goes through the same checks
+   * as a new world and keeps the world's `id`.
+   */
+  readonly revision?: WorldRevision;
+}
+
+/** The current package of a world, in the sections the model writes. */
+export interface WorldSections {
+  /** `world.yaml` with inline data: no `worldData`, no `dimensionSources`. */
+  readonly yaml: string;
+  readonly lore: string;
+  readonly packageYaml?: string;
+}
+
+export interface WorldRevision {
+  readonly current: WorldSections;
+  /** What the player asked for, in the player's words. */
+  readonly instruction: string;
 }
 
 /** Validated, portable generation result. File export never mutates it. */
@@ -42,6 +64,12 @@ export interface GeneratedWorld {
   readonly lore: string;
   readonly locale: string;
   readonly packageContent: GeneratedWorldPackageContent;
+  /**
+   * What the result falls short of: content below the requested amount, or
+   * parts that were dropped because they were invalid. The world is valid and
+   * playable; these explain how it differs from the brief.
+   */
+  readonly warnings: readonly string[];
 }
 
 export type CreateResult =
@@ -81,14 +109,6 @@ export interface GeneratedWorldLorebookEntry {
   readonly extra?: Readonly<Record<string, unknown>>;
 }
 
-export interface GeneratedMemoryDefinition {
-  readonly label: string;
-  readonly displayName: string;
-  readonly extractionHint: string;
-  readonly icon?: string;
-  readonly maxChars?: number;
-}
-
 export interface GeneratedWorldPackageContent {
   readonly contractData?: readonly GeneratedContractData[];
   readonly characters: readonly GeneratedWorldCharacter[];
@@ -101,6 +121,8 @@ export interface GeneratedContractData {
   readonly contract: string;
   readonly key: string;
   readonly value: Readonly<Record<string, unknown>>;
+  /** Also project the record into the lorebook, as its receiver declares. */
+  readonly lorebook?: true;
 }
 
 export interface WorldGenerationDataContract {
@@ -108,4 +130,12 @@ export interface WorldGenerationDataContract {
   readonly schema: Readonly<Record<string, unknown>>;
   /** The caller compiles the loaded contract schema; create owns no gameplay schema. */
   readonly validate: (value: unknown) => boolean;
+  /** Authoring notes the receiving plugin declares for this content. */
+  readonly title?: string;
+  readonly hint?: string;
+  readonly example?: unknown;
+  /** Plugin that receives the data; the generated world requests it. */
+  readonly pluginId?: string;
+  /** The receiver also wants each record projected into the lorebook. */
+  readonly lorebook?: boolean;
 }

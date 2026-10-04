@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
 import register from "../server/index.js";
 
 let project;
@@ -8,7 +9,13 @@ register({
     project = handler;
   },
 });
+// What the host gives the provider as `ctx.messages`: this plugin's translations.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 const withItems = (items) => ({
+  messages,
   pluginData: { list: async () => items.map((value) => ({ value })) },
 });
 
@@ -38,7 +45,8 @@ describe("inventory session summary", () => {
         {
           id: "inventory.items",
           kind: "list",
-          label: { zh: "行囊", en: "Pack" },
+          // Every language the plugin has: the client picks the UI language.
+          label: { en: "Pack", zh: "行囊" },
           items: ["Fog lamp", "Coin ×12", "Rope"],
           total: 3,
         },

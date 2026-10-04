@@ -31,6 +31,7 @@ function plugin(
     runtimes: [],
     tools: [],
     userSettings: [],
+    languages: { text: ["en"], instructions: ["en"] },
   };
 }
 

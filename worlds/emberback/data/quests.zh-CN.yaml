@@ -1,0 +1,32 @@
+- id: call-from-tomorrow
+  name: 来自明天的呼唤
+  description: 你自己的声音从七十二小时后的未来发来警告。保存录音，查明它如何抵达余烬背，并决定在王冠火到来之前分享多少内容。
+  giver: 未知的未来呼叫者
+  reward: 余烬背首个远程回声背后的真相
+  objectives:
+    - id: preserve-recording
+      text: 制作一份未来传输的隔离副本
+    - id: verify-voice
+      text: 将信号与你的站点声纹进行比对
+    - id: trace-origin
+      text: 追踪回声的时间和位置特征
+- id: stop-mile-seventeen
+  name: 阻止车队
+  description: 琼恩正护送三十个医疗低温包前往未来警告中确切提到的地点。在远程通信完全失效前追上她。
+  giver: 未来的你
+  reward: 车队的安全与琼恩的信任
+  objectives:
+    - id: contact-june
+      text: 与琼恩的爬行器建立联络
+    - id: change-route
+      text: 在到达十七英里之前说服车队改变路线或追上他们
+- id: keep-the-relay-alive
+  name: 三小时电力
+  description: 王冠火将在三小时后袭击余烬背。中继站无法同时为阵列主系统、风暴护盾、爬行器充电器、诊所储备以及米娜的全谱扫描供电。
+  giver: 余烬背中继合作社
+  reward: 一个仍能应答呼叫的站点
+  objectives:
+    - id: audit-charge
+      text: 审查站点的电力预算
+    - id: choose-priorities
+      text: 将电力分配给最重要的系统

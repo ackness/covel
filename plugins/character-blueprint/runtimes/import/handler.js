@@ -153,8 +153,9 @@ function normalizeBlueprint(value) {
 
 /**
  * The instantiated character's id: `instantiate.characterId` when given,
- * otherwise `char-<blueprint id>`. Character keys are per session already,
- * so no session prefix.
+ * otherwise `npc-<blueprint id>`, the form world packages use for their own
+ * character records and portrait mappings. Character keys are per session
+ * already, so no session prefix.
  *
  * @param {Record<string, unknown>} blueprint
  */
@@ -170,5 +171,5 @@ function characterIdForBlueprint(blueprint) {
     if (typeof characterId === "string" && characterId.length > 0)
       return characterId;
   }
-  return `char-${blueprint.id}`;
+  return `npc-${blueprint.id}`;
 }

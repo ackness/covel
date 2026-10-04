@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.data.events.authoring.title": "84be676596dfe47c",
+      "PLUGIN.md#contributes.settings[key=planner].description": "a99a0740012a0f5d",
+      "PLUGIN.md#contributes.settings[key=planner].label": "78e469343a71a6a0",
+      "PLUGIN.md#description": "d8bb553ff69405cc",
+      "PLUGIN.md#displayName": "eb0158f375d9be07",
+      "runtimes/evaluate/RUNTIME.md#description": "94cc16e33c3acd45",
+      "runtimes/intake/RUNTIME.md#description": "70edccb76fb9bdf1",
+      "runtimes/plot/RUNTIME.md#description": "a9a15fdb0cc435e2"
+    }
+  }
+}

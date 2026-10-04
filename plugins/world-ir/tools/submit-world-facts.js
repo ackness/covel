@@ -70,7 +70,53 @@ function normalizeArguments(value) {
         withDetailsInAttributes(fact, fields),
       );
   }
-  return facts;
+  return withInventoryItems(facts);
+}
+
+/**
+ * An inventory change names its item. The model often names the item there
+ * and does not list it under `entities` again, or writes the item's name
+ * where its id goes. In real-model runs this was the most frequent reason
+ * for a rejected output, and each rejection costs the whole extraction a
+ * second time. Both forms say which item is meant, so they are settled here:
+ * a name becomes the id of the item that has it, and an item that is not
+ * listed is listed. An id that belongs to an entity of another type is left
+ * alone: that is a contradiction, and validation reports it.
+ */
+function withInventoryItems(facts) {
+  if (!Array.isArray(facts.events)) return facts;
+  const entities = Array.isArray(facts.entities) ? [...facts.entities] : [];
+  const ids = new Set(entities.filter(isRecord).map((entity) => entity.id));
+  const itemIdByName = new Map(
+    entities
+      .filter(
+        (entity) =>
+          isRecord(entity) &&
+          entity.type === "item" &&
+          typeof entity.name === "string",
+      )
+      .map((entity) => [entity.name, entity.id]),
+  );
+  let changed = false;
+  const events = facts.events.map((event) => {
+    const item =
+      isRecord(event) &&
+      event.type === "inventory_change" &&
+      isRecord(event.attributes)
+        ? event.attributes.item
+        : undefined;
+    if (typeof item !== "string" || !item || ids.has(item)) return event;
+    changed = true;
+    const named = itemIdByName.get(item);
+    if (named !== undefined)
+      return { ...event, attributes: { ...event.attributes, item: named } };
+    if (entities.length >= MAX_ENTITIES) return event;
+    entities.push({ id: item, type: "item", name: item });
+    ids.add(item);
+    itemIdByName.set(item, item);
+    return event;
+  });
+  return changed ? { ...facts, entities, events } : facts;
 }
 
 /**

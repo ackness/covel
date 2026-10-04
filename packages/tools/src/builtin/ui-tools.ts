@@ -22,10 +22,16 @@ const uiPartStatusSchema = z.enum([
 ]);
 
 const uiRenderPartSchema = z.object({
-  id: z.string().min(1).describe("稳定 part id"),
-  type: z.string().min(1).describe("part 类型，如 text/image/audio/video/card"),
-  status: uiPartStatusSchema.default("success").describe("part 独立状态"),
-  content: z.unknown().optional().describe("part 内容，由 type 决定结构"),
+  id: z.string().min(1).describe("Stable part id"),
+  type: z
+    .string()
+    .min(1)
+    .describe("Part type, for example text/image/audio/video/card"),
+  status: uiPartStatusSchema.default("success").describe("Status of this part"),
+  content: z
+    .unknown()
+    .optional()
+    .describe("Part content; its structure depends on type"),
   retry: z
     .object({
       count: z.number().int().min(0),
@@ -37,13 +43,13 @@ const uiRenderPartSchema = z.object({
 export const renderUITool = tool({
   name: "render-ui",
   description:
-    "渲染一个由多个独立 part 组成的 UI 块。每个 part 有自己的状态，适用于文本、图片、卡片、音频等多模态混排。",
+    "Render one UI block made of independent parts. Each part has its own status. Use it to mix text, images, cards, audio and other media.",
   parameters: z.object({
-    parts: z.array(uiRenderPartSchema).min(1).describe("UI parts 列表"),
+    parts: z.array(uiRenderPartSchema).min(1).describe("List of UI parts"),
     layout: z
       .enum(["stream", "split", "overlay"])
       .optional()
-      .describe("布局方式"),
+      .describe("Layout"),
   }),
   execute: async (params) => ({
     rendered: true,
@@ -71,8 +77,16 @@ export const renderUITool = tool({
 const formFieldOptionSchema = z.union([
   z.string(),
   z.object({
-    value: z.string().min(1).describe("提交值，也是叙事模板里插入的文本"),
-    label: z.string().min(1).describe("下拉里展示给玩家的完整描述"),
+    value: z
+      .string()
+      .min(1)
+      .describe(
+        "Submitted value; also the text inserted into the narrative template",
+      ),
+    label: z
+      .string()
+      .min(1)
+      .describe("Full description shown to the player in the dropdown"),
   }),
 ]);
 
@@ -86,7 +100,7 @@ const formFieldSchema = z
       .array(formFieldOptionSchema)
       .optional()
       .describe(
-        "select 选项。字符串形式下展示文本即提交值；需要「展示详细、叙事简洁」时用 { value, label }",
+        "Options of a select. For a string option the shown text is the submitted value. Use { value, label } when the player needs a detailed label and the narrative needs a short value.",
       ),
     required: z.boolean().optional(),
     defaultValue: z
@@ -138,7 +152,7 @@ const formFieldSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["defaultValue"],
-        message: "select defaultValue must match a declared option value",
+        message: `select defaultValue ${JSON.stringify(field.defaultValue)} must match a declared option value exactly. The option values are: ${values.map((value) => JSON.stringify(value)).join(", ")}`,
       });
     }
   });
@@ -151,26 +165,28 @@ const submitBehaviorSchema = z.object({
 export const createFormTool = tool({
   name: "create-form",
   description:
-    "创建一个需要玩家填写的表单。框架会将表单渲染在前端，玩家填写提交后结果注入下一轮上下文（通过 `{{ player.lastFormValues }}`）。适用于角色创建、NPC 对话选择、任务确认等任何需要玩家输入的场景。表单提交后，发起表单的插件应在下一轮读取 lastFormValues 并调用相应的业务工具（如 create-character）处理。",
+    "Create a form for the player to fill in. The framework renders it in the client; the submitted values enter the next turn's context (through `{{ player.lastFormValues }}`). Use it for character creation, NPC dialogue choices, quest confirmation, or any input from the player. After submission, the plugin that created the form reads lastFormValues on the next turn and calls its own tool (for example create-character).",
   parameters: z.object({
-    formId: z.string().min(1).describe("表单唯一标识"),
-    title: z.string().min(1).describe("表单标题"),
-    fields: z.array(formFieldSchema).min(1).describe("表单字段列表"),
-    submitLabel: z.string().min(1).describe("提交按钮文本"),
+    formId: z.string().min(1).describe("Unique form id"),
+    title: z.string().min(1).describe("Form title"),
+    fields: z.array(formFieldSchema).min(1).describe("Form fields"),
+    submitLabel: z.string().min(1).describe("Text of the submit button"),
     narrativeTemplate: z
       .string()
       .describe(
-        "叙事模板，包含 {{fieldName}} 占位符，玩家提交后由框架填入该字段的提交值。" +
-          "select 字段填入的是选项的 value（字符串选项即其本身），因此选项若写成" +
-          "「短标签 —— 长解释」，整串都会进正文；这种情况改用 { value, label }，" +
-          "把短标签放 value、解释放 label",
+        "Narrative template with {{fieldName}} placeholders. After submission the framework fills each one with that field's submitted value. " +
+          "A select field supplies the option's value (a string option supplies itself), so an option written as " +
+          "a short label followed by a long explanation puts the whole string into the narrative. In that case use { value, label }: " +
+          "the short label in value, the explanation in label.",
       ),
     validation: z
       .object({ name: z.string().min(1), data: z.unknown().optional() })
       .optional(),
     submitBehavior: submitBehaviorSchema
       .optional()
-      .describe("可选的提交行为：是否回显提交内容、是否立即提交"),
+      .describe(
+        "Optional submit behavior: echo the filled narrative, submit immediately",
+      ),
   }),
   execute: async (params) => {
     for (const field of params.fields) {
@@ -205,23 +221,29 @@ export const createFormTool = tool({
 // ── create-choices ───────────────────────────────────────────────
 
 const choiceSchema = z.object({
-  id: z.string().min(1).describe("选项唯一标识"),
-  label: z.string().min(1).describe("选项文本"),
-  description: z.string().optional().describe("选项的补充说明"),
+  id: z.string().min(1).describe("Unique choice id"),
+  label: z.string().min(1).describe("Choice text"),
+  description: z
+    .string()
+    .optional()
+    .describe("Extra explanation of the choice"),
   category: z
     .string()
     .optional()
-    .describe("选项分类：safe/aggressive/creative/wild 等"),
+    .describe("Choice category: safe/aggressive/creative/wild and similar"),
 });
 
 export const createChoicesTool = tool({
   name: "create-choices",
   description:
-    "创建一个选项列表供玩家选择。适用于决策点、分支剧情、NPC 对话选项。玩家点击选项后结果注入下一轮上下文。",
+    "Create a list of choices for the player. Use it for decision points, branching plot and NPC dialogue options. The chosen option enters the next turn's context.",
   parameters: z.object({
-    choiceId: z.string().min(1).describe("选项组唯一标识"),
-    prompt: z.string().min(1).describe('引导文本（如"你要怎么做？"）'),
-    choices: z.array(choiceSchema).min(2).describe("选项列表（至少2个）"),
+    choiceId: z.string().min(1).describe("Unique id of the choice group"),
+    prompt: z
+      .string()
+      .min(1)
+      .describe('Lead-in text, for example "What do you do?"'),
+    choices: z.array(choiceSchema).min(2).describe("Choices (at least 2)"),
   }),
   execute: async (params) => ({
     created: true,
@@ -249,11 +271,13 @@ export const createChoicesTool = tool({
 export const createNotificationTool = tool({
   name: "create-notification",
   description:
-    "在前端显示一条通知消息。适用于状态变化提醒、获得物品、触发事件等。",
+    "Show a notification in the client. Use it for state changes, items gained, triggered events and similar.",
   parameters: z.object({
-    level: z.enum(["info", "success", "warning", "error"]).describe("通知级别"),
-    title: z.string().min(1).describe("通知标题"),
-    message: z.string().min(1).describe("通知内容"),
+    level: z
+      .enum(["info", "success", "warning", "error"])
+      .describe("Notification level"),
+    title: z.string().min(1).describe("Notification title"),
+    message: z.string().min(1).describe("Notification body"),
   }),
   execute: async (params) => ({
     notified: true,

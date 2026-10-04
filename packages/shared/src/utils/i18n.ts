@@ -82,7 +82,11 @@ const LANGUAGE_NAMES = new Intl.DisplayNames(["en"], {
   fallback: "none",
 });
 
-function isLocaleKey(key: string): boolean {
+/**
+ * Whether a tag names a real language. `backup` and `draft` are well-formed
+ * language subtags, so syntax alone does not tell a locale from a word.
+ */
+export function isKnownLocale(key: string): boolean {
   const canonical = canonicalizeLocale(key);
   return (
     canonical !== undefined &&
@@ -90,17 +94,43 @@ function isLocaleKey(key: string): boolean {
   );
 }
 
+const REGISTERED_LANGUAGES = new Set(
+  localeRegistry.codes.map((code) => localeLanguage(code) ?? code),
+);
+
+/**
+ * A key that can only be a locale: it has a script or region (`zh-CN`,
+ * `sr-Latn`), or its language is one the app registers (`zh`, `en`, `ru`).
+ * `id`, `to`, `no` and `is` are language codes too, and field names far more
+ * often.
+ */
+function isUnambiguousLocaleKey(key: string): boolean {
+  const canonical = canonicalizeLocale(key);
+  if (!canonical) return false;
+  return (
+    canonical.includes("-") ||
+    REGISTERED_LANGUAGES.has(localeLanguage(canonical) ?? canonical)
+  );
+}
+
 /**
  * True for a plain object whose every key is a locale code and every value is
  * a string — i.e. an inline {@link I18nText} record like `{ "zh-CN": "…", en: "…" }`.
  * A structured object (e.g. `{ name, description, type }`) is not a locale map.
+ *
+ * At least one key must be unambiguous. Otherwise `{ id: "torn-letter" }` is
+ * "a map with an Indonesian text", and code that resolves maps wherever it
+ * finds them turns the object into the string `"torn-letter"`.
  */
-function isLocaleMap(value: unknown): value is Record<string, string> {
+export function isLocaleMap(value: unknown): value is Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const entries = Object.entries(value);
   return (
     entries.length > 0 &&
-    entries.every(([key, item]) => isLocaleKey(key) && typeof item === "string")
+    entries.every(
+      ([key, item]) => isKnownLocale(key) && typeof item === "string",
+    ) &&
+    entries.some(([key]) => isUnambiguousLocaleKey(key))
   );
 }
 
@@ -128,4 +158,41 @@ export function resolveI18nDeep(value: unknown, locale?: string): unknown {
     return out;
   }
   return value;
+}
+
+/** Key under a world record's `metadata` that keeps its translated texts. */
+export const WORLD_LOCALIZED_TEXT_KEY = "localizedText";
+
+/**
+ * A world record's name and description in one locale.
+ *
+ * The record's own `name` / `description` are plain strings in the world's
+ * default locale, for stores and lists. A world that ships translations also
+ * keeps them under `metadata.localizedText`, so a session in another language
+ * is told the world's name in that language.
+ */
+export function localizedWorldText(
+  world:
+    | {
+        readonly name?: string;
+        readonly description?: string;
+        readonly metadata?: Readonly<Record<string, unknown>> | null;
+      }
+    | null
+    | undefined,
+  locale?: string,
+): { name?: string; description?: string } {
+  const localized = world?.metadata?.[WORLD_LOCALIZED_TEXT_KEY];
+  const pick = (key: "name" | "description"): string | undefined => {
+    const text =
+      localized && typeof localized === "object"
+        ? (localized as Record<string, unknown>)[key]
+        : undefined;
+    const resolved =
+      typeof text === "string" || isLocaleMap(text)
+        ? resolveI18nText(text, locale)
+        : undefined;
+    return resolved?.trim() ? resolved : world?.[key];
+  };
+  return { name: pick("name"), description: pick("description") };
 }

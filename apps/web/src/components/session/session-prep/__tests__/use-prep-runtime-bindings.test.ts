@@ -42,6 +42,7 @@ const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
   ],
   tools: [],
   userSettings: [],
+  languages: { text: ["en"], instructions: ["en"] },
 }));
 
 const plan: WorldPluginPlan = {

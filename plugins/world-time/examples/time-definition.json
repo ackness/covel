@@ -1,0 +1,19 @@
+{
+  "id": "world",
+  "definition": {
+    "kind": "phases",
+    "name": "Harbor hours",
+    "cycleLabel": "Day",
+    "phases": ["Dawn", "Day", "Dusk", "Night"],
+    "initial": {
+      "cycle": 1,
+      "phase": 0
+    },
+    "evolution": {
+      "mode": "forward",
+      "defaultStep": 1,
+      "maxStep": 3,
+      "prompt": "Count in watches of the day. A short talk stays in the current watch. Crossing the port or searching a building advances one watch. A night's rest advances to the next dawn."
+    }
+  }
+}

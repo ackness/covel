@@ -5,7 +5,9 @@ import {
   type WorldDataMetadataSummary,
 } from "@covel/shared";
 import { digestFile, sha256Hex } from "./digest.js";
+import { worldHasData } from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
+import { findLocaleOverlays } from "./locale-overlays.js";
 import { readWorldDataSource } from "./source-reader.js";
 import {
   resolveWorldDataSchema,
@@ -79,6 +81,7 @@ async function validateSourceSchema(
 async function summarizeSource(
   source: OrderedWorldDataSource,
   metadata: Record<string, unknown>,
+  defaultLocale: string | undefined,
 ): Promise<{
   digest: string;
   diagnostics: readonly WorldDataDiagnostic[];
@@ -103,7 +106,19 @@ async function summarizeSource(
     });
   }
 
-  const read = await readWorldDataSource(source);
+  const isDimensions =
+    parsedTarget?.kind === "world-metadata" &&
+    parsedTarget.path.join(".") === "dimensions";
+  // The catalog shows dimension labels in the viewer's language, so their
+  // overlays are compiled into locale maps. Other sources are content and are
+  // read in their main language here.
+  const read = await readWorldDataSource(
+    source,
+    undefined,
+    isDimensions
+      ? { overlays: { mode: "compile", baseLocale: defaultLocale } }
+      : {},
+  );
   diagnostics.push(...read.diagnostics);
   if (!read.path) {
     return { digest: sha256Hex(`${source.id}:missing`), diagnostics };
@@ -116,7 +131,24 @@ async function summarizeSource(
   }
 
   diagnostics.push(...(await validateSourceSchema(source, read.value)));
-  const digest = await digestFile(read.path);
+  // A translation is part of the source: changing an overlay changes the
+  // digest, so a world sync sees it.
+  const overlayDigests = await Promise.all(
+    (
+      await findLocaleOverlays(
+        source.pathOrigin.descriptorRoot,
+        source.descriptor.path,
+      )
+    ).map(
+      async (overlay) =>
+        `${overlay.file}:${(await digestFile(overlay.path)).digest}`,
+    ),
+  );
+  const mainDigest = (await digestFile(read.path)).digest;
+  const digest =
+    overlayDigests.length > 0
+      ? sha256Hex([mainDigest, ...overlayDigests].join("\n"))
+      : mainDigest;
   if (parsedTarget?.kind === "characters" && Array.isArray(read.value)) {
     metadata.embeddedCharacters = [
       ...(Array.isArray(metadata.embeddedCharacters)
@@ -146,13 +178,15 @@ async function summarizeSource(
       message: `world-load MVP only projects world:metadata.dimensions; ${source.descriptor.to} is recorded in summary only`,
     });
   }
-  return { digest: digest.digest, diagnostics };
+  return { digest, diagnostics };
 }
 
 export async function loadWorldDataSummary(options: {
   worldRoot: string;
   worldId: string;
   worldDataPath?: string;
+  /** Locale of the package's main files. */
+  defaultLocale?: string;
   covelHome?: string;
   metadata?: Record<string, unknown>;
   now?: string;
@@ -162,7 +196,7 @@ export async function loadWorldDataSummary(options: {
   diagnostics: readonly WorldDataDiagnostic[];
 }> {
   const metadata = { ...options.metadata };
-  if (!options.worldDataPath) {
+  if (!(await worldHasData(options.worldRoot, options.worldDataPath))) {
     return { metadata, diagnostics: [] };
   }
 
@@ -180,7 +214,11 @@ export async function loadWorldDataSummary(options: {
   const importedAt = options.now ?? new Date().toISOString();
 
   for (const source of descriptor.sources) {
-    const result = await summarizeSource(source, metadata);
+    const result = await summarizeSource(
+      source,
+      metadata,
+      options.defaultLocale,
+    );
     const sourceDiagnostics = [
       ...descriptor.diagnostics.filter(
         (diagnostic) => diagnostic.sourceId === source.id,

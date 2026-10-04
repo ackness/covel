@@ -7,7 +7,7 @@
  * and enforces lore quality rules.
  */
 
-import { resolveI18nText } from "@covel/shared";
+import { resolveI18nText, validateDimensionData } from "@covel/shared";
 
 const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "schemaVersion",
@@ -71,6 +71,29 @@ export function normalizeGeneratedManifest(
   // coerced or rewritten according to a fixed list of world-building topics.
 
   return repairs;
+}
+
+/**
+ * Remove every dimension whose definition does not validate, and report each
+ * one. A single bad schema keyword then costs one dimension, not the whole
+ * generated world and another full model call.
+ */
+export function dropInvalidDimensions(
+  manifest: Record<string, unknown>,
+): string[] {
+  const dimensions = manifest.dimensions;
+  if (!isRecord(dimensions)) return [];
+  const dropped: string[] = [];
+  for (const [id, definition] of Object.entries(dimensions)) {
+    const validation = validateDimensionData(id, definition);
+    if (validation.valid) continue;
+    delete dimensions[id];
+    const first = validation.errors?.[0];
+    dropped.push(
+      `dropped dimension "${id}": ${first ? `${first.path}: ${first.message}` : "invalid definition"}`,
+    );
+  }
+  return dropped;
 }
 
 function manifestText(value: unknown, locale: string): string | undefined {

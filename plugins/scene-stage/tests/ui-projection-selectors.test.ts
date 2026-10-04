@@ -30,6 +30,7 @@ describe("applySceneSetPreview", () => {
     expect(
       applySceneSetPreview(
         undefined,
+        undefined,
         registry,
         { location: "二年 B 组", timeOfDay: "night" },
         "turn-2",
@@ -46,7 +47,7 @@ describe("applySceneSetPreview", () => {
 
   it("uses normalized locationRef matching", () => {
     expect(
-      applySceneSetPreview(undefined, registry, {
+      applySceneSetPreview(undefined, undefined, registry, {
         location: " 教 室 ",
         timeOfDay: "day",
       }),
@@ -61,7 +62,7 @@ describe("applySceneSetPreview", () => {
       resolved: ref("classroom-day"),
     };
     expect(
-      applySceneSetPreview(previous, registry, {
+      applySceneSetPreview(undefined, previous, registry, {
         location: "学生会室",
         timeOfDay: "day",
       }),

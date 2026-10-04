@@ -290,7 +290,6 @@ export async function runSingleSessionAction({
         const base = {
           requestId: owner.requestId,
           sessionId: session.id,
-          locale: session.locale ?? i18n.language,
         };
         const action: api.ActionRequest = content.startsWith("/")
           ? {

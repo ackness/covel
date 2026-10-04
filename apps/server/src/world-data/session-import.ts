@@ -11,6 +11,11 @@ import {
 } from "@covel/shared";
 import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
+import {
+  conventionsOfPlugins,
+  worldHasData,
+  type ConventionalSource,
+} from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   finalizeWorldDataMediaRefs,
@@ -54,6 +59,17 @@ function deferredProjectionLedgerKey(
   return `${ledger.sourceId}\u0000${projection.slice("projection:".length)}\u0000${output.slice("output:".length)}`;
 }
 
+/**
+ * The conventions of the plugins this import runs with. A caller that gives
+ * a registry gets the paths of that registry; without one the list of the
+ * process applies.
+ */
+function conventionsFor(
+  deps: WorldDataImportPreflightDeps | undefined,
+): readonly ConventionalSource[] | undefined {
+  return deps?.registry ? conventionsOfPlugins(deps.registry) : undefined;
+}
+
 export { finalizeWorldDataMediaRefs, releaseWorldDataMediaRefs };
 
 export type {
@@ -80,7 +96,15 @@ export async function prepareWorldDataImportForSession(
         locale: options.locale,
       })
     : options.dimensions;
-  if (!worldRoot || !manifest?.worldData) {
+  if (
+    !worldRoot ||
+    !manifest ||
+    !(await worldHasData(
+      worldRoot,
+      manifest.worldData,
+      conventionsFor(options.preflight),
+    ))
+  ) {
     const sources = portableContractSources(options.contractData);
     if (options.contractData === undefined && effectiveDimensions === undefined)
       return { imported: false, diagnostics: [] };
@@ -96,6 +120,7 @@ export async function prepareWorldDataImportForSession(
       basePlan,
       effectiveDimensions,
       options.preflight,
+      options.locale,
     );
     return {
       imported: true,
@@ -111,6 +136,7 @@ export async function prepareWorldDataImportForSession(
     worldId: options.worldId,
     worldDataPath: manifest.worldData,
     covelHome: options.covelHome,
+    conventions: conventionsFor(options.preflight),
   });
   const descriptorErrors = descriptor.diagnostics.filter(
     (diagnostic) => diagnostic.level === "error",
@@ -141,6 +167,7 @@ export async function prepareWorldDataImportForSession(
     basePlan,
     resolvedDimensions,
     options.preflight,
+    options.locale,
   );
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   let materializedWrites = plan.writes;
@@ -221,7 +248,8 @@ export async function importWorldDataForSession(
   options: ImportWorldDataForSessionOptions,
 ): Promise<ImportWorldDataForSessionResult> {
   const session =
-    !options.preflight?.activePlugins && options.store.getSession
+    (!options.preflight?.activePlugins || options.locale === undefined) &&
+    options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
   const prepared = await prepareWorldDataImportForSession({
@@ -292,7 +320,13 @@ export async function preflightWorldDataForSession(
         };
   }
   const manifest = await readWorldManifest(worldRoot);
-  if (!manifest.worldData) {
+  if (
+    !(await worldHasData(
+      worldRoot,
+      manifest.worldData,
+      conventionsFor(options.preflight),
+    ))
+  ) {
     const prepared = await prepareWorldDataImportForSession({
       ...options,
       worldsDirs: [],
@@ -313,6 +347,7 @@ export async function preflightWorldDataForSession(
     worldId: options.worldId,
     worldDataPath: manifest.worldData,
     covelHome: options.covelHome,
+    conventions: conventionsFor(options.preflight),
   });
   if (
     descriptor.diagnostics.some((diagnostic) => diagnostic.level === "error")
@@ -350,6 +385,7 @@ export async function preflightWorldDataForSession(
           locale: options.locale,
         }),
         options.preflight,
+        options.locale,
       );
   return preflightPlanResult(plan, [
     ...descriptor.diagnostics,
@@ -419,17 +455,29 @@ export async function prepareWorldDataSyncForSession(
     return preparePortableWorldDataSync(options);
   }
   const manifest = await readWorldManifest(worldRoot);
-  if (!manifest.worldData) {
+  if (
+    !(await worldHasData(
+      worldRoot,
+      manifest.worldData,
+      conventionsFor(options.preflight),
+    ))
+  ) {
     const session = await options.store.getSession(options.sessionId);
     const definitions = await readEffectiveDimensions({
       worldRoot,
       manifest,
       locale: options.locale ?? session?.locale,
     });
-    const plan = appendDimensionPlan(emptyImportPlan(), definitions, {
-      ...options.preflight,
-      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
-    });
+    const plan = appendDimensionPlan(
+      emptyImportPlan(),
+      definitions,
+      {
+        ...options.preflight,
+        activePlugins:
+          options.preflight?.activePlugins ?? session?.activePlugins,
+      },
+      options.locale ?? session?.locale,
+    );
     // There is no descriptor for other domains: do not treat their old ledger
     // rows as removed merely because inline dimensions are now synchronizable.
     return {
@@ -445,6 +493,7 @@ export async function prepareWorldDataSyncForSession(
     worldId: options.worldId,
     worldDataPath: manifest.worldData,
     covelHome: options.covelHome,
+    conventions: conventionsFor(options.preflight),
   });
   if (
     descriptor.diagnostics.some((diagnostic) => diagnostic.level === "error")
@@ -464,10 +513,16 @@ export async function prepareWorldDataSyncForSession(
       sources: descriptor.sources,
       locale: options.locale ?? session?.locale,
     });
-    const plan = appendDimensionPlan(emptyImportPlan(), definitions, {
-      ...options.preflight,
-      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
-    });
+    const plan = appendDimensionPlan(
+      emptyImportPlan(),
+      definitions,
+      {
+        ...options.preflight,
+        activePlugins:
+          options.preflight?.activePlugins ?? session?.activePlugins,
+      },
+      options.locale ?? session?.locale,
+    );
     return {
       imported: true,
       dimensionOnly: true,
@@ -481,7 +536,8 @@ export async function prepareWorldDataSyncForSession(
   }
 
   const session =
-    !options.preflight?.activePlugins && options.store.getSession
+    (!options.preflight?.activePlugins || options.locale === undefined) &&
+    options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
   const basePlan = await buildImportPlan({
@@ -499,12 +555,17 @@ export async function prepareWorldDataSyncForSession(
     worldRoot,
     manifest,
     sources: descriptor.sources,
-    locale: options.locale,
+    locale: options.locale ?? session?.locale,
   });
-  const plan = appendDimensionPlan(basePlan, effectiveDimensions, {
-    ...options.preflight,
-    activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
-  });
+  const plan = appendDimensionPlan(
+    basePlan,
+    effectiveDimensions,
+    {
+      ...options.preflight,
+      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
+    },
+    options.locale ?? session?.locale,
+  );
   return {
     imported: true,
     diagnostics: [
@@ -519,9 +580,10 @@ export async function prepareWorldDataSyncForSession(
 async function preparePortableWorldDataSync(
   options: SyncWorldDataForSessionOptions,
 ): Promise<PreparedWorldDataSync> {
-  const session = !options.preflight?.activePlugins
-    ? await options.store.getSession(options.sessionId)
-    : null;
+  const session =
+    !options.preflight?.activePlugins || options.locale === undefined
+      ? await options.store.getSession(options.sessionId)
+      : null;
   const prepared = await prepareWorldDataImportForSession({
     sessionId: options.sessionId,
     worldId: options.worldId,

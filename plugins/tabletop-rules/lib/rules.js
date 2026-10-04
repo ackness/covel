@@ -8,6 +8,24 @@ export function pickLocaleText(locale, zh, en) {
   }
 }
 
+/**
+ * The text in the session's language, from this plugin's `locales/` files.
+ * The same contract as `translate` of `@covel/plugin-handlers-utils`, which a
+ * standalone package does not import: the host passes the translations as
+ * `ctx.messages`.
+ */
+export function translate(ctx, text, params) {
+  const translations = ctx?.messages?.translations;
+  const template =
+    translations && Object.hasOwn(translations, text)
+      ? translations[text]
+      : text;
+  if (!params) return template;
+  return template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) =>
+    Object.hasOwn(params, name) ? String(params[name]) : match,
+  );
+}
+
 export function label(value, locale) {
   if (typeof value === "string") return value;
   const fallback = value?.["en-US"] ?? value?.en ?? "Attribute";

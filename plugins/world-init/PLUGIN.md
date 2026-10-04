@@ -1,12 +1,9 @@
 ---
 id: world-init
 kind: core
-displayName:
-  zh: 世界维度
-  en: World Dimensions
-description:
-  zh: 初始化角色属性和作者声明的世界维度，持续维护可变状态。
-  en: Initializes character attributes and authored dimensions, maintaining evolving state.
+displayName: World Dimensions
+description: Initializes character attributes and authored dimensions,
+  maintaining evolving state.
 tags:
   - "data:world-data"
   - "data:characters"

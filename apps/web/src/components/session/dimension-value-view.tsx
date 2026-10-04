@@ -1,9 +1,5 @@
 import { useTranslation } from "react-i18next";
-import {
-  localizeDimensionValue,
-  type DimensionValueSchema,
-  type JsonValue,
-} from "@covel/shared";
+import type { DimensionValueSchema, JsonValue } from "@covel/shared";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 
 export function DimensionValueView({
@@ -15,13 +11,7 @@ export function DimensionValueView({
 }) {
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language;
-  return (
-    <Value
-      schema={schema}
-      value={localizeDimensionValue(schema, value, locale)}
-      locale={locale}
-    />
-  );
+  return <Value schema={schema} value={value} locale={locale} />;
 }
 
 function Value({

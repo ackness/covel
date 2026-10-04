@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
 import { validateDimensions } from "@covel/shared";
 import { worldTimeSchema } from "../schema.js";
 import {
@@ -7,6 +8,7 @@ import {
   describeTime,
   initialTick,
   loadTime,
+  timeUnits,
 } from "../clock.js";
 
 const calendar = {
@@ -76,6 +78,33 @@ describe("world-owned time", () => {
       definition: DEFAULT_TIME,
       tick: initialTick(DEFAULT_TIME),
     });
+  });
+  it("names the default calendar in the session's language only", async () => {
+    const store = { getPluginData: async () => null };
+    const messages = await loadPluginMessages(
+      new URL("..", import.meta.url),
+      "zh-CN",
+    );
+    const chinese = await loadTime(store, "zh-CN", {
+      locale: "zh-CN",
+      messages,
+    });
+
+    // Plain text: the definition is stored and given to the narrative, and a
+    // table of every language would put all of them into each prompt.
+    expect(chinese.definition.name).toBe("世界时间");
+    expect(chinese.definition.calendar.months[2].name).toBe("3月");
+    expect(chinese.definition.calendar.periods.map((p) => p.name)).toEqual([
+      "深夜",
+      "早晨",
+      "下午",
+      "夜晚",
+    ]);
+    expect(chinese.display).toBe("世界历 1 · 1月 1 · 08:00 · 早晨");
+    expect(JSON.stringify(DEFAULT_TIME)).not.toMatch(/[\u4e00-\u9fff]/);
+    expect((await loadTime(store, "en")).display).toBe(
+      "World era 1 · Month 1 1 · 08:00 · Morning",
+    );
   });
   it.each([
     { ...phases, initial: { cycle: 0, phase: 99 } },
@@ -189,6 +218,20 @@ describe("world-owned time", () => {
     expect(() => advanceTime(definition, 0, { amount: 1 }, "t")).toThrow(
       /omit/,
     );
+  });
+  it("names the units of the clock and takes zero in any unit", () => {
+    expect(timeUnits(phases)).toEqual(["phase", "cycle"]);
+    expect(timeUnits(calendar)).toEqual(["minute", "hour", "day"]);
+    // A short scene on a phase clock: the model reports minutes.
+    expect(() =>
+      advanceTime(phases, 0, { amount: 15, unit: "minute" }, "t"),
+    ).toThrow(/Use unit "phase" or "cycle"\. Use amount 0/);
+    expect(() =>
+      advanceTime(calendar, 0, { amount: 1, unit: "phase" }, "t"),
+    ).toThrow(/Use unit "minute", "hour" or "day"/);
+    expect(
+      advanceTime(phases, 5, { amount: 0, unit: "minute" }, "t"),
+    ).toMatchObject({ tick: 5 });
   });
   it("rejects unsupported units, direction violations, excessive spans and overflow", () => {
     expect(() =>

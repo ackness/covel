@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.data.rules.authoring.title": "67ab83beb8b1f85c",
+      "PLUGIN.md#description": "055ca44c1566c1b7",
+      "PLUGIN.md#displayName": "aa4bf9af8ebee0de",
+      "runtimes/check/RUNTIME.md#description": "5c0c4e4b0c1c1852",
+      "runtimes/creation/RUNTIME.md#description": "765748e8bde1458d"
+    }
+  }
+}

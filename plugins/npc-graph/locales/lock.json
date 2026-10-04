@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#description": "86896268814df875",
+      "PLUGIN.md#displayName": "b4493492ed7a1c7f",
+      "runtimes/extractor/RUNTIME.md#description": "e4ee67c1b8ec9f9a",
+      "runtimes/rag-retriever/RUNTIME.md#description": "c4699a044fc9c3da"
+    }
+  }
+}

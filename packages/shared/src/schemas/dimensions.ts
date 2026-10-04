@@ -106,30 +106,74 @@ const recursiveValueSchema: z.ZodType<DimensionValueSchema> = z.lazy(() =>
             .min(1)
             .refine((types) => new Set(types).size === types.length),
         ])
+        .describe(
+          "JSON type of the value, or a list of types for a nullable value.",
+        )
         .optional(),
-      title: textSchema.optional(),
-      description: z.string().optional(),
-      enum: z.array(dimensionJsonSchema).min(1).optional(),
-      const: dimensionJsonSchema.optional(),
-      minimum: z.number().optional(),
-      maximum: z.number().optional(),
-      exclusiveMinimum: z.number().optional(),
-      exclusiveMaximum: z.number().optional(),
-      minLength: countSchema.optional(),
-      maxLength: countSchema.optional(),
-      items: recursiveValueSchema.optional(),
-      minItems: countSchema.optional(),
-      maxItems: countSchema.optional(),
-      properties: z.record(z.string(), recursiveValueSchema).optional(),
+      title: textSchema.describe("Display label of this node.").optional(),
+      description: z
+        .string()
+        .describe("What this node holds. Given to the model.")
+        .optional(),
+      enum: z
+        .array(dimensionJsonSchema)
+        .min(1)
+        .describe("Allowed values.")
+        .optional(),
+      const: dimensionJsonSchema.describe("The only allowed value.").optional(),
+      minimum: z.number().describe("Inclusive lower bound.").optional(),
+      maximum: z.number().describe("Inclusive upper bound.").optional(),
+      exclusiveMinimum: z
+        .number()
+        .describe("Exclusive lower bound.")
+        .optional(),
+      exclusiveMaximum: z
+        .number()
+        .describe("Exclusive upper bound.")
+        .optional(),
+      minLength: countSchema
+        .describe("Minimum string length in characters.")
+        .optional(),
+      maxLength: countSchema
+        .describe("Maximum string length in characters.")
+        .optional(),
+      // Describe the optional wrapper, never the recursive reference itself:
+      // `.describe()` clones its receiver, and a fresh lazy on every
+      // evaluation would make schema traversal recurse without end.
+      items: recursiveValueSchema
+        .optional()
+        .describe("Schema of every array element."),
+      minItems: countSchema.describe("Minimum array length.").optional(),
+      maxItems: countSchema.describe("Maximum array length.").optional(),
+      properties: z
+        .record(z.string(), recursiveValueSchema)
+        .describe("Schemas of the named properties of an object.")
+        .optional(),
       required: z
         .array(z.string())
         .refine((keys) => new Set(keys).size === keys.length)
+        .describe(
+          "Property names that must be present. Each must be declared in `properties`.",
+        )
         .optional(),
       additionalProperties: z
         .union([z.boolean(), recursiveValueSchema])
+        .describe(
+          "`false` rejects undeclared keys. A schema describes dynamically named records.",
+        )
         .optional(),
-      "x-i18n": z.boolean().optional(),
-      "x-enumLabels": z.record(z.string(), textSchema).optional(),
+      "x-i18n": z
+        .boolean()
+        .describe(
+          "Marks this node as translatable text: its value is a string or a locale map. Nodes without it are never localized.",
+        )
+        .optional(),
+      "x-enumLabels": z
+        .record(z.string(), textSchema)
+        .describe(
+          "Display labels keyed by enum member. A label never replaces the stored value.",
+        )
+        .optional(),
     })
     .superRefine((node, ctx) => {
       const labels = node["x-enumLabels"];
@@ -224,10 +268,21 @@ export interface DimensionValueIssue {
   readonly message: string;
 }
 
+export interface DimensionValueValidationOptions {
+  /**
+   * What an `x-i18n` node may hold. `authored` (the default) is a world
+   * package before import: a plain string or a locale map. `resolved` is
+   * session state, where the content locale is already fixed: a plain string
+   * only.
+   */
+  readonly localized?: "authored" | "resolved";
+}
+
 /** No coercion, defaults, code execution or ignored schema keywords. */
 export function validateDimensionValue(
   schema: DimensionValueSchema,
   value: unknown,
+  options: DimensionValueValidationOptions = {},
 ): readonly DimensionValueIssue[] {
   const jsonError = dimensionJsonError(value);
   if (jsonError) return [{ path: [], message: jsonError }];
@@ -244,6 +299,12 @@ export function validateDimensionValue(
       issues.push({ path, message });
     };
     if (node["x-i18n"]) {
+      if (options.localized === "resolved" && typeof input !== "string") {
+        add(
+          "Expected a string. Write this text once, in the session language; do not supply a locale map",
+        );
+        return;
+      }
       const text = textSchema.safeParse(input);
       if (!text.success) {
         add("Expected I18nText at an x-i18n node");
@@ -286,8 +347,12 @@ export function validateDimensionValue(
       const length = Array.from(input).length;
       if (node.minLength !== undefined && length < node.minLength)
         add(`Minimum length is ${node.minLength} (got ${length})`);
+      // A model does not count characters: with the limit and the length
+      // alone it cut 16 of 104. The amount to remove is a target it can use.
       if (node.maxLength !== undefined && length > node.maxLength)
-        add(`Maximum length is ${node.maxLength} (got ${length})`);
+        add(
+          `Maximum length is ${node.maxLength} (got ${length}): remove at least ${length - node.maxLength} characters`,
+        );
     }
     if (Array.isArray(input)) {
       if (node.minItems !== undefined && input.length < node.minItems)
@@ -323,17 +388,27 @@ export function validateDimensionValue(
 export const worldDimensionDefinitionSchema: z.ZodType<WorldDimensionDefinition> =
   z
     .strictObject({
-      name: textSchema.refine(
-        (name) =>
-          (typeof name === "string" ? [name] : Object.values(name)).some(
-            (text) => text.trim().length > 0,
-          ),
-        { message: "Dimension name must be non-empty" },
+      name: textSchema
+        .refine(
+          (name) =>
+            (typeof name === "string" ? [name] : Object.values(name)).some(
+              (text) => text.trim().length > 0,
+            ),
+          { message: "Dimension name must be non-empty" },
+        )
+        .describe("Display name of the dimension."),
+      description: textSchema.describe("What the dimension tracks.").optional(),
+      schema: dimensionValueSchema.describe(
+        "Value schema in the supported JSON Schema subset. Unsupported keywords are rejected.",
       ),
-      description: textSchema.optional(),
-      schema: dimensionValueSchema,
-      initialValue: dimensionJsonSchema,
-      updateRule: textSchema.optional(),
+      initialValue: dimensionJsonSchema.describe(
+        "Starting value. It must satisfy `schema`.",
+      ),
+      updateRule: textSchema
+        .describe(
+          "Natural-language rule for how the value changes in play. When non-empty, the dimension tracker settles it after each turn. Omit it for static setting.",
+        )
+        .optional(),
     })
     .superRefine((definition, ctx) => {
       for (const issue of validateDimensionValue(
@@ -387,16 +462,32 @@ export const dimensionRecordSchema: z.ZodType<DimensionRecord> = z
     lastTrackedSource: dimensionSourceSchema.optional(),
   })
   .superRefine((record, ctx) => {
-    for (const issue of validateDimensionValue(
-      record.definition.schema,
-      record.value,
-    )) {
+    // A session holds one language. Locale maps are resolved when the world
+    // is imported, so neither the value nor the stored definition has any.
+    for (const [field, value] of [
+      ["value", record.value],
+      ["definition.initialValue", record.definition.initialValue],
+    ] as const)
+      for (const issue of validateDimensionValue(
+        record.definition.schema,
+        value,
+        { localized: "resolved" },
+      )) {
+        ctx.addIssue({
+          code: "custom",
+          path: [...field.split("."), ...issue.path],
+          message: issue.message,
+        });
+      }
+    if (
+      record.definition.updateRule !== undefined &&
+      typeof record.definition.updateRule !== "string"
+    )
       ctx.addIssue({
         code: "custom",
-        path: ["value", ...issue.path],
-        message: issue.message,
+        path: ["definition", "updateRule"],
+        message: "Expected a string in the session language",
       });
-    }
   });
 
 const snapshotEntrySchema = z
@@ -408,7 +499,9 @@ const snapshotEntrySchema = z
     version: z.number().int().positive(),
   })
   .superRefine((entry, ctx) => {
-    for (const issue of validateDimensionValue(entry.schema, entry.value)) {
+    for (const issue of validateDimensionValue(entry.schema, entry.value, {
+      localized: "resolved",
+    })) {
       ctx.addIssue({
         code: "custom",
         path: ["value", ...issue.path],
@@ -457,7 +550,7 @@ export function dimensionSnapshotFromRecords(
   );
 }
 
-export function localizeDimensionValue(
+function localizeDimensionValue(
   schema: DimensionValueSchema,
   value: JsonValue,
   locale?: string,
@@ -487,6 +580,44 @@ export function localizeDimensionValue(
     );
   }
   return value;
+}
+
+/**
+ * Resolve an authored definition for one content locale: the initial value
+ * and the update rule become plain strings. `name` and `description` are
+ * labels, shown in the UI language, so they keep their locale maps.
+ */
+export function resolveDimensionDefinitionLocale(
+  definition: WorldDimensionDefinition,
+  locale?: string,
+): WorldDimensionDefinition {
+  const { updateRule, ...rest } = definition;
+  const rule =
+    updateRule === undefined
+      ? undefined
+      : (resolveI18nText(updateRule, locale) ?? "");
+  return {
+    ...rest,
+    initialValue: localizeDimensionValue(
+      definition.schema,
+      definition.initialValue,
+      locale,
+    ),
+    ...(rule === undefined ? {} : { updateRule: rule }),
+  };
+}
+
+/** World dimensions as a session of this content locale stores them. */
+export function resolveWorldDimensionsLocale(
+  definitions: WorldDimensions,
+  locale?: string,
+): WorldDimensions {
+  return Object.fromEntries(
+    Object.entries(definitions).map(([id, definition]) => [
+      id,
+      resolveDimensionDefinitionLocale(definition, locale),
+    ]),
+  );
 }
 
 /** Public recovery notice: no rules, initial values, baseline or narrative body. */

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "mara-voss",
+    "name": "Mara Voss",
+    "score": 15,
+    "notes": "Your mentor at the harbor office. She trusts your work, but not yet your judgment under pressure."
+  },
+  {
+    "id": "captain-hale",
+    "name": "Captain Hale",
+    "score": -10,
+    "notes": "He blames you for last winter's lost cargo."
+  }
+]

@@ -1,5 +1,6 @@
 import type { WorldGenerationDataContract } from "./types.js";
 import { interpolate, loadPrompt, type PromptLoader } from "@covel/context";
+import { selectedDataContracts } from "./package-processor.js";
 import type {
   WorldCreationBrief,
   WorldPackageContentKind,
@@ -38,10 +39,7 @@ export async function buildWorldPrompt(
     language: promptLocale.language,
     creationBrief: [
       formatCreationBrief(brief),
-      "WORLD_PACKAGE_YAML may include contractData: [{contract, key, value}]. Use only the loaded public schemas below; value.id must equal key. Author useful world-specific definitions when appropriate. Omit unsupported contracts. Never place plugin data in dimensions.",
-      JSON.stringify(
-        dataContracts.map(({ contract, schema }) => ({ contract, schema })),
-      ),
+      formatContractBrief(selectedDataContracts(brief, dataContracts)),
     ].join("\n"),
   });
 }
@@ -79,12 +77,32 @@ function requestedLine(
   return `- ${requested.has(kind) ? "CREATE" : "OMIT"}: ${description}`;
 }
 
+/** One CREATE block per requested contract; schemas of the rest stay out. */
+function formatContractBrief(
+  contracts: readonly WorldGenerationDataContract[],
+): string {
+  if (contracts.length === 0)
+    return "Plugin data contracts: none requested. Omit contractData.";
+  return [
+    "Plugin data contracts: create contractData records for each contract below, and for no other contract.",
+    ...contracts.map((item) =>
+      [
+        `- CREATE contract "${item.contract}"${item.title ? ` (${item.title})` : ""}.${item.hint ? ` ${item.hint}` : ""}`,
+        `  Record schema: ${JSON.stringify(item.schema)}`,
+        ...(item.example !== undefined
+          ? [`  Example value: ${JSON.stringify(item.example)}`]
+          : []),
+      ].join("\n"),
+    ),
+  ].join("\n");
+}
+
 function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
   if (!brief) {
     return [
       "Experience preset: traditional-story.",
       "No optional package supplements were explicitly requested.",
-      "Return empty characters/lorebook/rules/memoryDefinitions arrays.",
+      "Return empty characters/lorebook/rules arrays.",
     ].join("\n");
   }
   const requested = new Set(brief.content ?? []);
@@ -104,11 +122,6 @@ function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
       requested,
       "rules",
       "3-5 durable world or narrative rules that make consequences consistent.",
-    ),
-    requestedLine(
-      requested,
-      "memory",
-      "2-4 genre-specific memoryDefinitions in WORLD_PACKAGE_YAML (do not repeat generic story/scene/player blocks).",
     ),
     requestedLine(
       requested,

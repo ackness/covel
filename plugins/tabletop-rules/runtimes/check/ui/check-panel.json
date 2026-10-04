@@ -1,13 +1,13 @@
 {
   "id": "tabletop-rules",
-  "label": { "zh": "属性检定", "en": "Attribute checks" },
+  "label": "Attribute checks",
   "icon": "dices",
   "alwaysRender": true,
   "dataSource": { "namespace": "checks" },
   "view": {
     "component": "Button",
     "props": {
-      "label": { "zh": "发起属性检定", "en": "Request an attribute check" }
+      "label": "Request an attribute check"
     },
     "on": {
       "click": {

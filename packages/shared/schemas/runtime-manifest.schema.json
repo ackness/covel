@@ -1,10 +1,14 @@
 {
+  "$id": "https://covel.local/schemas/runtime-manifest.schema.json",
+  "title": "Covel runtime manifest",
+  "description": "Frontmatter of `runtimes/<id>/RUNTIME.md`, and the inline `runtime` of a root `PLUGIN.md`.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["agent", "function"]
+      "enum": ["agent", "function"],
+      "description": "`agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler."
     },
     "description": {
       "anyOf": [
@@ -21,48 +25,57 @@
             "type": "string"
           }
         }
-      ]
+      ],
+      "description": "What the runtime does. Plain string or a locale map."
     },
     "schedule": {
       "type": "object",
       "properties": {
         "stage": {
           "type": "string",
-          "enum": ["setup", "pre-turn", "narrative", "post-turn", "audit"]
+          "enum": ["setup", "pre-turn", "narrative", "post-turn", "audit"],
+          "description": "Stage the runtime runs in. Required for `auto` and `scheduled` triggers. Order: `setup`, `pre-turn`, `narrative`, `post-turn`, `audit`."
         },
         "trigger": {
           "type": "object",
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["auto", "manual", "scheduled", "event"]
+              "enum": ["auto", "manual", "scheduled", "event"],
+              "description": "`auto` runs every turn in its stage. `scheduled` runs every `interval` turns. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted."
             },
             "interval": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Interval in turns. For `scheduled` only."
             },
             "topic": {
-              "type": "string"
+              "type": "string",
+              "description": "Event topic to subscribe to. Required for `event`."
             },
             "maxTriggerCount": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Maximum number of triggers in one session."
             },
             "cooldownTurns": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Minimum number of turns between two triggers."
             },
             "startTurn": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "First logical turn at which the runtime may trigger. When unset, it triggers as soon as its stage opens."
             }
           },
           "required": ["type"],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "When the runtime is activated."
         },
         "needs": {
           "type": "array",
@@ -77,11 +90,13 @@
                 "properties": {
                   "runtime": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "description": "Runtime ID in this package: `<pluginId>/<runtimeId>`, or the package ID for a single runtime."
                   },
                   "scope": {
                     "type": "string",
-                    "enum": ["turn", "session"]
+                    "enum": ["turn", "session"],
+                    "description": "`turn` gates on the same execution. `session` gates on the persistent setup snapshot and is valid only on stage `setup`."
                   }
                 },
                 "required": ["runtime"],
@@ -92,22 +107,26 @@
                 "properties": {
                   "contract": {
                     "type": "string",
-                    "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
+                    "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+                    "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
                   },
                   "cardinality": {
                     "type": "string",
-                    "enum": ["one", "all"]
+                    "enum": ["one", "all"],
+                    "description": "`one` takes a single provider; `all` takes every provider."
                   },
                   "scope": {
                     "type": "string",
-                    "enum": ["turn", "session"]
+                    "enum": ["turn", "session"],
+                    "description": "`turn` gates on the same execution. `session` gates on the persistent setup snapshot and is valid only on stage `setup`."
                   }
                 },
                 "required": ["contract"],
                 "additionalProperties": false
               }
             ]
-          }
+          },
+          "description": "Upstream runtimes or contracts that must succeed first. Sets order and gates this runtime."
         },
         "after": {
           "type": "array",
@@ -124,7 +143,8 @@
                     "properties": {
                       "runtime": {
                         "type": "string",
-                        "minLength": 1
+                        "minLength": 1,
+                        "description": "Runtime ID in this package: `<pluginId>/<runtimeId>`, or the package ID for a single runtime."
                       }
                     },
                     "required": ["runtime"],
@@ -135,11 +155,13 @@
                     "properties": {
                       "contract": {
                         "type": "string",
-                        "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
+                        "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+                        "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
                       },
                       "cardinality": {
                         "type": "string",
-                        "enum": ["one", "all"]
+                        "enum": ["one", "all"],
+                        "description": "`one` takes a single provider; `all` takes every provider."
                       }
                     },
                     "required": ["contract"],
@@ -148,58 +170,70 @@
                 ]
               }
             ]
-          }
+          },
+          "description": "Upstream runtimes or contracts that run first. Sets order only; it does not gate and does not activate a provider."
         },
         "completion": {
           "type": "object",
           "properties": {
             "mode": {
               "type": "string",
-              "enum": ["await", "detached"]
+              "enum": ["await", "detached"],
+              "description": "`await` makes the turn wait for this runtime. `detached` lets the turn finish first; it is valid only on `post-turn` and `audit` stages. Defaults to `await`."
             },
             "settle": {
               "type": "string",
-              "const": "before-next-execution"
+              "const": "before-next-execution",
+              "description": "Makes the next player action wait until this detached runtime settles."
             },
             "maxSettleWaitMs": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 120000
+              "maximum": 120000,
+              "description": "Longest time in ms the next action waits for settlement. Requires `settle`."
             },
             "maxQueueMs": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Longest time in ms a detached job may wait in the queue."
             },
             "maxExecutionMs": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Longest time in ms a detached job may run."
             },
             "overlap": {
               "type": "string",
-              "const": "serial"
+              "const": "serial",
+              "description": "Overlap policy for detached jobs of this runtime. Only `serial` is supported."
             },
             "stalePolicy": {
               "type": "string",
-              "const": "reject"
+              "const": "reject",
+              "description": "Policy for a detached job that has become stale. Only `reject` is supported."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Whether the turn waits for this runtime."
         },
         "manual": {
           "type": "object",
           "properties": {
             "execution": {
               "type": "string",
-              "enum": ["sync", "background"]
+              "enum": ["sync", "background"],
+              "description": "`sync` awaits the result. `background` queues a durable job and returns its ID."
             }
           },
           "required": ["execution"],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Execution mode for `manual` and `event` activation."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "When and in what order the runtime runs."
     },
     "io": {
       "type": "object",
@@ -222,7 +256,8 @@
                         "properties": {
                           "runtime": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Runtime ID in this package: `<pluginId>/<runtimeId>`, or the package ID for a single runtime."
                           }
                         },
                         "required": ["runtime"],
@@ -233,11 +268,13 @@
                         "properties": {
                           "contract": {
                             "type": "string",
-                            "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
+                            "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+                            "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
                           },
                           "cardinality": {
                             "type": "string",
-                            "enum": ["one", "all"]
+                            "enum": ["one", "all"],
+                            "description": "`one` takes a single provider; `all` takes every provider."
                           }
                         },
                         "required": ["contract"],
@@ -250,34 +287,43 @@
                     "properties": {
                       "kernel": {
                         "type": "string",
-                        "const": "turn-digest@1"
+                        "const": "turn-digest@1",
+                        "description": "Kernel input: the frozen last player input and the runtime results observed so far."
                       }
                     },
                     "required": ["kernel"],
                     "additionalProperties": false
                   }
-                ]
+                ],
+                "description": "Producer of the value: a runtime in this package, a contract, or a kernel input."
               },
               "scope": {
                 "type": "string",
-                "enum": ["turn", "committed"]
+                "enum": ["turn", "committed"],
+                "description": "`turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`."
               },
               "select": {
-                "type": "string"
+                "type": "string",
+                "description": "JSON Pointer applied to the upstream value. Not supported with `scope: committed`.",
+                "examples": ["/narrativeOutput"]
               },
               "required": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "`true` stops this runtime when the upstream value is missing or failed."
               },
               "accepts": {
-                "type": "string"
+                "type": "string",
+                "description": "Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check."
               },
               "recordAs": {
-                "type": "string"
+                "type": "string",
+                "description": "Export key to read from the producer. Required with `scope: committed`."
               }
             },
             "required": ["from"],
             "additionalProperties": false
-          }
+          },
+          "description": "Typed input bindings keyed by local name. An agent reads them at `runtime-inputs.<name>.value`."
         },
         "selfData": {
           "type": "array",
@@ -288,19 +334,24 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 64,
-                "pattern": "^[a-z][a-z0-9_-]*$"
+                "pattern": "^[a-z][a-z0-9_-]*$",
+                "description": "Own data namespace to inline. Data of other plugins cannot be read."
               },
               "as": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Tag that wraps the injected block in the prompt.",
+                "examples": ["<existing-affinity>"]
               },
               "format": {
                 "default": "summary",
+                "description": "`summary` lists key, update time and truncated JSON. `ids-only` lists keys. `full` lists complete JSON. Defaults to `summary`.",
                 "type": "string",
                 "enum": ["summary", "full", "ids-only"]
               },
               "maxEntries": {
                 "default": 50,
+                "description": "Maximum number of entries injected. Above it, half are the oldest and half the most recently updated. Defaults to 50.",
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 500
@@ -308,49 +359,61 @@
             },
             "required": ["namespace", "as"],
             "additionalProperties": false
-          }
+          },
+          "description": "Own plugin data inlined into the agent prompt."
         },
         "payloadSchema": {
-          "type": "string"
+          "type": "string",
+          "description": "Schema that validates the activation payload."
         },
         "output": {
           "type": "object",
           "properties": {
             "contract": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
+              "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+              "description": "Contract this runtime's output publishes. It must be listed in the package's `provides`."
             },
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Private schema that validates the runtime's output."
             },
             "recordAs": {
-              "type": "string"
+              "type": "string",
+              "description": "Export key under which the output is persisted for later executions. Requires `schema`."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "What the runtime produces."
         },
         "visibility": {
           "type": "string",
-          "enum": ["story", "plugin", "system"]
+          "enum": ["story", "plugin", "system"],
+          "description": "Output kind the kernel dispatches on: `story` for the main narrative provider, `plugin` for plugin output, `system` for system output."
         },
         "concealed": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "`true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "What the runtime reads and produces."
     },
     "agent": {
       "type": "object",
       "properties": {
         "model": {
-          "type": "string"
+          "type": "string",
+          "description": "Model slot the agent uses.",
+          "examples": ["plugin"]
         },
         "llm": {
           "type": "object",
           "properties": {
             "reasoningEffort": {
               "type": "string",
-              "const": "disabled"
+              "const": "disabled",
+              "description": "`disabled` turns model reasoning off for this runtime."
             },
             "toolChoice": {
               "anyOf": [
@@ -363,16 +426,19 @@
                   "properties": {
                     "name": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "description": "Name of the tool to force."
                     }
                   },
                   "required": ["name"],
                   "additionalProperties": false
                 }
-              ]
+              ],
+              "description": "`required` forces a tool call on every step. `{ name }` forces one named tool."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Model call options for this runtime."
         },
         "history": {
           "type": "object",
@@ -380,11 +446,13 @@
             "maxTurns": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 1000
+              "maximum": 1000,
+              "description": "Number of most recent turns kept in the agent's prompt history. `0` sends no history."
             }
           },
           "required": ["maxTurns"],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Bounds the agent's prompt history. When omitted, the runtime sees the shared session history."
         },
         "tools": {
           "type": "object",
@@ -393,13 +461,15 @@
               "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "description": "Names of builtin tools the runtime may call."
             },
             "plugin": {
               "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "description": "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted."
             },
             "defer": {
               "anyOf": [
@@ -413,13 +483,16 @@
                     "type": "string"
                   }
                 }
-              ]
+              ],
+              "description": "Deferred tool loading. `true` defers the whole whitelist; a list defers only those names."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Tools the agent's model may call."
         },
         "advertiseEvents": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "`true` lists the session's event directory in the prompt so the model knows which topics it may emit."
         },
         "loop": {
           "type": "object",
@@ -427,71 +500,85 @@
             "maxSteps": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops."
             },
             "timeoutMs": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Total time limit of the runtime in ms."
             },
             "callTimeoutMs": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Time limit of one model call in ms."
             },
             "firstTokenTimeoutMs": {
               "type": "integer",
               "exclusiveMinimum": 0,
-              "maximum": 9007199254740991
+              "maximum": 9007199254740991,
+              "description": "Time limit for the first streamed token in ms. Defaults to 30000."
             },
             "maxRetries": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 5
+              "maximum": 5,
+              "description": "Retries on a transient model failure. Defaults to 1; `0` disables retry."
             },
             "loopDetection": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 20
+              "maximum": 20,
+              "description": "Number of repeated tool calls that counts as a loop. Defaults to 3; `0` disables detection."
             },
             "maxRecursionDepth": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 50
+              "maximum": 50,
+              "description": "Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10."
             },
             "completion": {
               "type": "object",
               "properties": {
                 "require": {
                   "type": "string",
-                  "enum": ["explicit", "tool-use"]
+                  "enum": ["explicit", "tool-use"],
+                  "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a valid business tool call, so \"no change\" is also submitted through the tool."
                 },
                 "afterTools": {
                   "type": "array",
                   "items": {
                     "type": "string"
-                  }
+                  },
+                  "description": "The runtime completes after a successful call to one of these tools."
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": false,
+              "description": "How the agent loop ends."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Limits and completion rules of the agent loop."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Settings of an `agent` runtime. Not allowed on a `function` runtime."
     },
     "function": {
       "type": "object",
       "properties": {
         "handler": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Path of the handler module. The module default-exports the handler function."
         },
         "timeoutMs": {
           "type": "integer",
           "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
+          "maximum": 9007199254740991,
+          "description": "Time limit of the handler in ms."
         },
         "tools": {
           "type": "object",
@@ -500,13 +587,15 @@
               "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "description": "Names of builtin tools the runtime may call."
             },
             "plugin": {
               "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "description": "Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted."
             },
             "defer": {
               "anyOf": [
@@ -520,17 +609,21 @@
                     "type": "string"
                   }
                 }
-              ]
+              ],
+              "description": "Deferred tool loading. `true` defers the whole whitelist; a list defers only those names."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "Tools the handler may call through `ctx.tools.call`."
         }
       },
       "required": ["handler"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Settings of a `function` runtime. Required when `type` is `function`."
     },
     "guard": {
-      "type": "string"
+      "type": "string",
+      "description": "Path of the guard module. It runs before the runtime and can skip it."
     },
     "effects": {
       "type": "object",
@@ -566,7 +659,8 @@
                 "pattern": "^http:https:\\/\\/[^/?#@]+$"
               }
             ]
-          }
+          },
+          "description": "Resources the runtime reads, such as `narrative:*` or `plugin-data:self:<namespace>`. Entries must be unique."
         },
         "writes": {
           "type": "array",
@@ -599,13 +693,16 @@
                 "pattern": "^http:https:\\/\\/[^/?#@]+$"
               }
             ]
-          }
+          },
+          "description": "Resources the runtime writes, such as `state:*` or `event:<topic>`. Entries must be unique."
         },
         "parallelSafe": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "`true` states that the runtime is safe to run in parallel with its stage siblings."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Declared read and write sets, used to detect parallel hazards."
     },
     "permissions": {
       "type": "object",
@@ -617,7 +714,9 @@
             "properties": {
               "origin": {
                 "type": "string",
-                "pattern": "^https:\\/\\/[^/?#@]+$"
+                "pattern": "^https:\\/\\/[^/?#@]+$",
+                "description": "HTTPS origin the runtime may call, without path, query or credentials.",
+                "examples": ["https://api.example.com"]
               },
               "methods": {
                 "minItems": 1,
@@ -625,15 +724,18 @@
                 "items": {
                   "type": "string",
                   "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]
-                }
+                },
+                "description": "HTTP methods allowed for the origin. Entries must be unique."
               }
             },
             "required": ["origin"],
             "additionalProperties": false
-          }
+          },
+          "description": "Upper bound of the HTTP origins and methods the runtime may use."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "description": "Declared permission upper bounds."
     }
   },
   "required": ["type"],

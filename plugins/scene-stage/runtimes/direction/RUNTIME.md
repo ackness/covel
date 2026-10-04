@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 接收结构化舞台演出指令，跟踪角色登退场、站位、焦点及服装/表情/姿势。
-  en: >-
-    Applies structured stage directions for actor presence, position, focus,
-    outfit, expression, and pose.
+description: >-
+  Applies structured stage directions for actor presence, position, focus,
+  outfit, expression, and pose.
 schedule:
   trigger:
     type: event

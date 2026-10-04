@@ -1,0 +1,22 @@
+[
+  {
+    "id": "ledger-resurfaces",
+    "title": "The Ledger Resurfaces",
+    "when": {
+      "dimension": "caseBoard",
+      "path": "missing-ledger.status",
+      "in": ["corroborated", "resolved"]
+    },
+    "payload": "A dock boy brings the missing ledger to the hero, wrapped in sailcloth. One page is cut out. Show who sent him only through what he lets slip; do not name the sender.",
+    "priority": 10
+  },
+  {
+    "id": "watcher-on-the-quay",
+    "title": "A Watcher on the Quay",
+    "when": {
+      "revealed": "ledger-resurfaces",
+      "turnsSinceGte": 2
+    },
+    "payload": "Two turns after the ledger returns, the hero notices the same hooded figure for the second time. The figure leaves when seen. Do not reveal who it is."
+  }
+]

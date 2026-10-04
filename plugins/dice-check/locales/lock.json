@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.commands[name=roll].arguments[name=notation].description": "1bd42e4f78ac36d9",
+      "PLUGIN.md#contributes.commands[name=roll].description": "62009627685d410e",
+      "PLUGIN.md#description": "ed6787d79ed9544d",
+      "PLUGIN.md#displayName": "27260491575f53f8",
+      "runtimes/recorder/RUNTIME.md#description": "699ca141d1723b5a",
+      "runtimes/roller/RUNTIME.md#description": "0440d5148f4d8eab"
+    }
+  }
+}

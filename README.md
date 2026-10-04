@@ -113,19 +113,20 @@ worlds/my-world/
 
 ## Internationalization across UI, plugins, and worlds
 
-Covel ships with `zh-CN`, `en-US`, and `ru-RU` UI catalogs. The selected locale is used consistently for interface labels, plugin metadata and prompts, world metadata, character fields, and WorldData sources. Short natural-language fields use `I18nText` maps such as `{ zh, en }`; longer content lives in locale-specific files:
+Covel ships with `zh-CN`, `en-US`, and `ru-RU` UI catalogs. The interface language selects labels. A session has one content language, fixed when the session is created, and it is always a language the world has an edition in. Each authored file is written in one language; a translation is a file beside it that holds only the translated text:
 
 ```text
 apps/web/src/i18n/locales/ja-JP.json       # application UI catalog
-plugins/my-plugin/PLUGIN.ja.md             # localized agent instructions
-worlds/my-world/WORLD.ja.md                 # localized setting document
+plugins/my-plugin/locales/ja.yaml          # a plugin's labels, UI text and messages
+worlds/my-world/world.ja.yaml              # world name, summary, attribute names
+worlds/my-world/WORLD.ja.md                # localized setting document
 worlds/my-world/characters/main-cast.ja.json
 worlds/my-world/data/rules/core.ja.yaml
 ```
 
-World packs declare `defaultLocale` and `supportedLocales`. The loader first tries the current language variant and then falls back to the canonical source, so a partial translation remains playable. Mistport demonstrates a bilingual pack with localized lore, characters, rules, and media metadata. **Emberback Relay** is the built-in English-default world pack (`defaultLocale: en-US`), with its manifest, setting, cast, rules, quests, and other starting content authored in English.
+World packs declare `defaultLocale` and `supportedLocales`. A text that an edition does not translate falls back to the world's own language, so a partial translation remains playable, and `pnpm validate:world` lists what is missing. The four built-in worlds ship Chinese and English editions; **Emberback Relay** is written in English (`defaultLocale: en-US`) and the other three in Chinese. A world without the player's language can be translated in the app or with `pnpm i18n translate`.
 
-Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds translated `I18nText` values plus `PLUGIN.<lang>.md`, `WORLD.<lang>.md`, and WorldData source variants as needed. Only natural-language content is translated—stable IDs, contracts, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
+Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds locale files as needed: `locales/<lang>.yaml` in a plugin, and `world.<lang>.yaml`, `WORLD.<lang>.md` and source files such as `data/rules/core.<lang>.yaml` in a world. Plugin prompts stay English, with an optional Chinese variant; the model writes in the session language. Only natural-language content is translated—stable IDs, contracts, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
 
 ## Debug every turn end to end
 

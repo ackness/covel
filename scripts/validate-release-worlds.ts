@@ -1,61 +1,77 @@
 #!/usr/bin/env tsx
 
-import { readFile } from "node:fs/promises";
 import path from "node:path";
-import YAML from "yaml";
-import { formatValidationErrors, validateWorldManifest } from "@covel/shared";
-import { loadWorldDataSummary } from "../apps/server/src/world-data/world-load.js";
+import { fileURLToPath } from "node:url";
+import {
+  validateWorldPackage,
+  type WorldPackageDiagnostic,
+} from "../apps/server/src/world-data/validate-world-package.js";
 
-const worldDirs = process.argv.slice(2);
+const USAGE = `Usage: pnpm validate:world [--strict] [--plugins <dir>]... <world-dir>...
+
+  --plugins <dir>  Also scan this directory for plugin packages. The bundled
+                   plugins/ directory is always scanned.
+  --strict         Treat a plugin ID or contract that no scanned plugin supplies
+                   as an error instead of a warning.`;
+
+const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const worldDirs: string[] = [];
+const pluginsDirs = [path.join(repoRoot, "plugins")];
+let strict = false;
+
+const args = process.argv.slice(2);
+for (let index = 0; index < args.length; index += 1) {
+  const arg = args[index]!;
+  if (arg === "--strict") strict = true;
+  else if (arg === "--plugins") {
+    const dir = args[(index += 1)];
+    if (!dir) {
+      console.error(USAGE);
+      process.exit(2);
+    }
+    pluginsDirs.push(path.resolve(dir));
+  } else if (arg.startsWith("--")) {
+    console.error(`Unknown option: ${arg}\n\n${USAGE}`);
+    process.exit(2);
+  } else worldDirs.push(arg);
+}
 if (worldDirs.length === 0) {
-  console.error("Usage: validate-release-worlds.ts <world-dir>...");
+  console.error(USAGE);
   process.exit(2);
+}
+
+function formatDiagnostic(diagnostic: WorldPackageDiagnostic): string {
+  const where = [
+    diagnostic.file,
+    diagnostic.pointer,
+    diagnostic.sourceId ? `source "${diagnostic.sourceId}"` : undefined,
+    diagnostic.locales?.length
+      ? `locale ${diagnostic.locales.join(", ")}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const label = diagnostic.level === "error" ? "error  " : "warning";
+  return [
+    `  ${label} ${where}`,
+    `          ${diagnostic.message}`,
+    ...(diagnostic.hint ? [`          ${diagnostic.hint}`] : []),
+  ].join("\n");
 }
 
 let failed = false;
 for (const worldDir of worldDirs) {
-  const manifestPath = path.join(worldDir, "world.yaml");
-  let raw: unknown;
-  try {
-    raw = YAML.parse(await readFile(manifestPath, "utf-8"));
-  } catch (error) {
-    failed = true;
-    console.error(
-      `✗ ${manifestPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    continue;
-  }
-
-  const validation = validateWorldManifest(raw);
-  if (!validation.valid) {
-    failed = true;
-    console.error(`✗ ${manifestPath} (world manifest schema)`);
-    console.error(formatValidationErrors(validation.errors ?? []));
-    continue;
-  }
-
-  const manifest = validation.data as Record<string, unknown>;
-  const result = await loadWorldDataSummary({
-    worldRoot: worldDir,
-    worldId: String(manifest.id),
-    ...(typeof manifest.worldData === "string"
-      ? { worldDataPath: manifest.worldData }
-      : {}),
+  const { diagnostics } = await validateWorldPackage({
+    worldDir,
+    pluginsDirs,
+    strict,
   });
-  const errors = result.diagnostics.filter(
-    (diagnostic) => diagnostic.level === "error",
-  );
-  if (errors.length > 0) {
-    failed = true;
-    console.error(`✗ ${manifestPath} (worldData diagnostics)`);
-    for (const diagnostic of errors) {
-      console.error(
-        `  - ${diagnostic.sourceId ? `${diagnostic.sourceId}: ` : ""}${diagnostic.message}`,
-      );
-    }
-    continue;
-  }
-  console.log(`✓ ${manifestPath}`);
+  const errors = diagnostics.filter((item) => item.level === "error");
+  const manifestPath = path.join(worldDir, "world.yaml");
+  if (errors.length > 0) failed = true;
+  const report = diagnostics.map(formatDiagnostic).join("\n");
+  if (errors.length > 0) console.error(`✗ ${manifestPath}\n${report}`);
+  else console.log(`✓ ${manifestPath}${report ? `\n${report}` : ""}`);
 }
 
 if (failed) process.exit(1);

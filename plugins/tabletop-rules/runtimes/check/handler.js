@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { pickLocaleText } from "../../lib/rules.js";
+import { translate } from "../../lib/rules.js";
 
 export default async function (ctx) {
   const rules =
@@ -9,9 +9,8 @@ export default async function (ctx) {
     // instead of failing every turn.
     if (ctx.manualPayload?.openForm === true) {
       throw new Error(
-        pickLocaleText(
-          ctx.locale,
-          "本世界没有可配点属性，无法发起检定。",
+        translate(
+          ctx,
           "This world has no point-buy attributes; checks are unavailable.",
         ),
       );
@@ -90,21 +89,20 @@ function settled(receipt) {
 }
 
 async function openForm(ctx, rules) {
-  const zh = pickLocaleText(ctx.locale, true, false);
   const form = await ctx.tools.call("create-form", {
     formId: `${ctx.pluginId}-check-${ctx.turnId}`,
-    title: zh ? "属性检定" : "Attribute check",
+    title: translate(ctx, "Attribute check"),
     fields: [
       {
         type: "text",
         name: "action",
-        label: zh ? "尝试的行动" : "Attempted action",
+        label: translate(ctx, "Attempted action"),
         required: true,
       },
       {
         type: "select",
         name: "attribute",
-        label: zh ? "属性" : "Attribute",
+        label: translate(ctx, "Attribute"),
         required: true,
         options: rules.attributes.map((attribute) => ({
           value: attribute.id,
@@ -114,13 +112,13 @@ async function openForm(ctx, rules) {
       {
         type: "select",
         name: "difficulty",
-        label: zh ? "难度" : "Difficulty",
+        label: translate(ctx, "Difficulty"),
         required: true,
         defaultValue: "12",
         options: ["8", "12", "16", "20"],
       },
     ],
-    submitLabel: zh ? "进行检定" : "Resolve check",
+    submitLabel: translate(ctx, "Resolve check"),
     narrativeTemplate: "{{action}} ({{attribute}}, DC {{difficulty}}).",
   });
   return {

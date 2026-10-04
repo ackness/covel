@@ -51,9 +51,11 @@ export default function ({ tool, z, shortIdBatch }) {
     summary: z
       .string()
       .min(4)
-      .max(200)
+      // A hard bound in characters for every language: one English sentence
+      // needs about twice the characters of the same sentence in Chinese.
+      .max(400)
       .describe(
-        "A profile summary of no more than 200 characters, used as the node's dossier",
+        "A profile summary of one or two sentences, used as the node's dossier",
       ),
     attributes: z
       .record(z.string(), z.unknown())

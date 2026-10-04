@@ -61,7 +61,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 所有包级贡献写在根 `contributes`。entry 模块注册工具、RPC action、服务、扩展、hook、wire 或 form 时，名称必须与清单一致。`contributes.commands` 是玩家命令元数据，实际 RPC 名还必须列在 `contributes.actions`。
 
-只在运行时需要的工具放进 `agent.tools`。这份白名单控制 agent 能调用什么；`contributes.tools` 声明包实际注册什么。两者用途不同。
+只在运行时需要的工具放进 `agent.tools`。这份白名单控制 agent 能调用什么；`contributes.tools` 声明包实际注册什么。两者用途不同。只有一个 runtime 的包（根 `runtime:`）不写 `agent.tools.plugin` 时，这个 runtime 得到 `contributes.tools` 的全部工具，不用重复列一遍；写了就以写的为准，`plugin: []` 表示一个都不给。多 runtime 的包里每个 runtime 仍然各自列出自己的工具。
 
 跨插件调用使用版本化契约，例如 `narrative-engine@1`。根 `requires` 驱动会话依赖解析，`io.inputs` 绑定执行结果，`schedule.needs` 控制运行条件。普通契约可以有多个提供者；用 `cardinality: one/all` 指定输入要求，用显式 `conflicts` 或单提供者扩展点表达互斥。
 
@@ -73,7 +73,7 @@ runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声
 
 角色和角色 schema 读取 `ctx.world`，角色写入通过 proposals。不要把角色复制到本插件的 `characters` namespace，也不要扫描其他插件私有 schema。
 
-插件私有数据使用绑定 store：`getPluginData(namespace, key)`、`listPluginData(namespace?)`。不同插件共享数据必须声明公开契约。可导入世界数据的 namespace 在 `contributes.data` 声明 `version/schema/accepts`，其契约 schema 放在根 `contracts`。见 [World Data](../reference/world-data.md)。
+插件私有数据使用绑定 store：`getPluginData(namespace, key)`、`listPluginData(namespace?)`。不同插件共享数据必须声明公开契约。可导入世界数据的 namespace 在 `contributes.data` 声明 `version/schema/accepts`，其契约 schema 放在根 `contracts`；再用 `authoring` 声明标题、写作提示、示例和约定路径，世界作者和创作工具通过 `pnpm describe:authoring` 读到它（见[进阶指南](./plugin-authoring-advanced.md#数据契约与世界导入)）。见 [World Data](../reference/world-data.md)。
 
 记忆语义由 memory 插件和其 `memory.block-definitions@1` 服务拥有。世界自定义记忆块通过 `memory.blocks@1` 导入。不要新增 `memoryBlocks` 或 `summaryFocus` 根字段。
 
@@ -81,7 +81,7 @@ runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声
 
 Agent 正文放在相应 `PLUGIN.md` 或 `RUNTIME.md`。静态附加段用根 `contributes.prompt`，动态内容用 `prompt.segment@1`。同包静态段不按 runtime 筛选，多 runtime 的局部规则应写在各自正文中。
 
-翻译文件分别为 `PLUGIN.en.md`、`RUNTIME.en.md` 等。只翻译正文与自然语言字段，未出现的字段继承 canonical。工具、依赖、契约、提示词段 ID 和位置不能由翻译覆盖。运行时生成的消息使用 `ctx.locale` 选择文案；不要只翻译清单而遗漏工具返回值。
+标签（名称、说明）和正文都用 English 写在主文件里；标签的译文放在 `locales/<locale>.yaml`，任何语言都可以加。正文和固定段用 English 写在 canonical 文件里。需要中文指令时加 `PLUGIN.zh.md` / `RUNTIME.zh.md`（内置插件的 agent 提示词必须加，社区插件可选），只写正文和固定段的 `content`，未出现的字段继承 canonical；其他语言不需要也不会读取变体文件，那些会话使用 English 正文并按会话语言输出。工具、依赖、契约、提示词段 ID 和位置不能由变体覆盖。正文不需要再写“用什么语言输出”：框架在每个 agent 的系统提示词开头给出输出语言指令，改写上下文的 hook 也去不掉它（见 [Prompt Structure](../reference/prompt-structure.md)）。修改任一语言后运行 `pnpm check:prompts`，两边都更新完再运行 `pnpm prompts:lock`。运行时生成的消息使用 `ctx.locale` 选择文案；不要只翻译清单而遗漏工具返回值。 正文怎么写（契约区与文风区、句长、用词）见 [提示词写法](./prompt-style.md)。
 
 ## 验证与发现
 

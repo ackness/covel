@@ -11,14 +11,16 @@ example/
 ├── package.json
 ├── README.md
 ├── PLUGIN.md
-├── PLUGIN.en.md
+├── PLUGIN.zh.md
+├── locales/
+│   └── zh.yaml
 ├── server/index.js
 ├── schemas/
 ├── ui/
 └── runtimes/
     └── extract/
         ├── RUNTIME.md
-        ├── RUNTIME.en.md
+        ├── RUNTIME.zh.md
         └── handler.js
 ```
 
@@ -26,10 +28,12 @@ example/
 
 所有 `PLUGIN.md`、`RUNTIME.md` 及其语言变体必须使用以独立 `---` 行包围的普通 YAML frontmatter。加载器在解析前拒绝 `---javascript`、`---js` 等 engine 指令；安装、手动放入目录和重载均不能通过元数据执行代码。
 
-作者 JSON Schema：
+作者 JSON Schema 与逐字段说明（由 Zod schema 生成，不手工维护）：
 
-- [plugin-manifest.schema.json](../../packages/shared/schemas/plugin-manifest.schema.json)
-- [runtime-manifest.schema.json](../../packages/shared/schemas/runtime-manifest.schema.json)
+- [plugin-manifest.schema.json](../../packages/shared/schemas/plugin-manifest.schema.json) · [字段表](schema/plugin-manifest.md)
+- [runtime-manifest.schema.json](../../packages/shared/schemas/runtime-manifest.schema.json) · [字段表](schema/runtime-manifest.md)
+
+本页下方的表格只概括各组字段的用途；合法字段、类型、是否必填和取值以生成的字段表为准。
 
 TypeScript 校验入口从 `@covel/shared` 导入：`pluginManifestSchema` 校验包清单，`runtimeAuthoringManifestSchema` 校验作者 runtime。用于组合完整校验器的输入/输出配置、命令参数、投影项和绑定引用等细粒度 schema 属于内部实现，不再单独从包入口导出。
 
@@ -68,27 +72,25 @@ runtime:
     visibility: plugin
   agent:
     model: plugin
-    tools:
-      plugin: [save-facts]
     loop:
       completion: { require: tool-use, afterTools: [save-facts] }
 ---
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
 
-| 根字段                                          | 含义                                                   |
-| ----------------------------------------------- | ------------------------------------------------------ |
-| `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                   |
-| `version`, `displayName`, `description`, `tags` | 元数据；不再使用 `role:*` 标签驱动业务                 |
-| `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；安装器强制执行    |
-| `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`       |
-| `requires`                                      | 必需契约，解析器补入提供者                             |
-| `optional`                                      | 可选契约，不强制激活提供者                             |
-| `conflicts`                                     | 与提供这些契约的其他插件互斥                           |
-| `contracts`                                     | `{contractId: {schema: ./path.json}}` 契约 schema 声明 |
-| `entry`                                         | 包根相对的注册模块路径                                 |
-| `contributes`                                   | 下表列出的包级贡献                                     |
-| `runtime`                                       | 可选的单 runtime 声明                                  |
+| 根字段                                          | 含义                                                                                                        |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
+| `version`, `displayName`, `description`, `tags` | 元数据；不再使用 `role:*` 标签驱动业务                                                                      |
+| `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；安装器强制执行                                                         |
+| `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
+| `requires`                                      | 必需契约，解析器补入提供者                                                                                  |
+| `optional`                                      | 可选契约，不强制激活提供者                                                                                  |
+| `conflicts`                                     | 与提供这些契约的其他插件互斥                                                                                |
+| `contracts`                                     | `{contractId: {schema: ./path.json}}` 契约 schema 声明；被 `contributes.data` 的 namespace 接收的契约不用写 |
+| `entry`                                         | 包根相对的注册模块路径                                                                                      |
+| `contributes`                                   | 下表列出的包级贡献                                                                                          |
+| `runtime`                                       | 可选的单 runtime 声明                                                                                       |
 
 契约 ID 形如 `narrative-engine@1`。`runtime.io.output.contract` 必须由本包 `provides` 声明，同包不允许两个 runtime 产出同一契约。跨包可以有多个普通提供者，消费者使用 `cardinality: one` 或 `all` 表达选择要求。单提供者扩展点及显式 `conflicts` 另外执行互斥检查。`conflicts` 只允许插件契约；引用内核扩展点或 UI 槽位会得到 `invalid-conflict` 和 `conflicts` 字段位置，内核点的组合由 mode 决定。
 
@@ -239,9 +241,6 @@ Lorebook 使用 owner 与 id 的复合身份，owner 为 world、plugin 或 play
 ### 世界数据导入
 
 ```yaml
-contracts:
-  example.facts@1:
-    schema: ./schemas/facts.schema.json
 contributes:
   data:
     facts:
@@ -250,7 +249,11 @@ contributes:
       accepts: [example.facts@1]
 ```
 
-World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:example.facts@1`。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
+namespace 接收某个契约，就说明了这个契约的记录长什么样，所以它的 `schema` 也就是该契约的公共 schema，不需要在根 `contracts` 里再写一遍。只有两种情况要写 `contracts.<id>`：契约不是数据契约（例如 runtime 输出契约），或者两个 namespace 以不同的 schema 接收同一个契约（这时必须说明哪一份是公共的）。
+
+接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`generate`），说明世界作者该如何提供这份内容，以及应用内生成器能否生成它；只有列出 `accepts` 的 namespace 才能声明它。`pnpm describe:authoring` 汇总所有已扫描插件的声明，`--check` 按 namespace 的 schema 校验每份 `example`。字段见 [Plugin manifest 字段表](schema/plugin-manifest.md)。
+
+World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时就是目标契约的 schema）。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
 
 世界包把 source 声明为 `visibility: hidden` 时，同一份数据会导入到接收插件的 `_hidden.<namespace>`（例如 `_hidden.facts`）。插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取；扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。揭示应通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](world-data.md#隐藏数据visibility-hidden)。
 
@@ -281,11 +284,16 @@ World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:
 
 ## 本地化与验证
 
-根翻译使用 `PLUGIN.<locale>.md`，子 runtime 使用 `RUNTIME.<locale>.md`。只提供需要翻译的正文和自然语言字段即可。结构字段由 canonical 文件决定，翻译不能改变契约、工具、stage、超时、提示词段 ID 或位置。缺少目标语言时使用兼容语言候选、English、canonical；默认中文及其别名保留 canonical。静态提示词与 runtime 正文的语言版本都在 definition/generation 加载时捕获。执行按有效 locale 从该快照选择正文，不重新读取正在热更新的文件；语言选择不能改变 canonical manifest 的权限或执行合同。
+canonical `PLUGIN.md` / `RUNTIME.md` 的正文和 `contributes.prompt` 固定段必须是 English。只有简体中文有变体：根文件用 `PLUGIN.zh.md`，子 runtime 用 `RUNTIME.zh.md`，其中只写正文和固定段的 `content`，frontmatter 可以为空。结构字段由 canonical 文件决定，变体不能改变契约、工具、stage、超时、提示词段 ID 或位置。简体中文会话读取中文变体，其余语言（包括繁体中文）读取 canonical；其他语言的变体文件不被读取。`COVEL_INSTRUCTION_LOCALE=en|zh` 可以为所有会话固定指令语言。玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`）在主清单里写 English，译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节、只写译文，可以是任意语言；加载器把它们编译成 locale map。标签文件只能翻译这些字段，写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误；主清单里的内联 locale map 同样报错。同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）：界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。格式见 [i18n](./i18n.md#2-本地化插件)。
+
+内置插件里模型会读取的提示词（agent 正文和固定段）必须有中文变体；function runtime 的正文是说明文档，只写 English；社区插件只需要 English。两种语言必须提到同一组工具、注入块和 `runtime-inputs.<name>`；`pnpm check:prompts` 检查这一点，并用 `plugins/prompt-variants.lock.json` 发现“英文改了、中文没跟”的情况。两边都更新后运行 `pnpm prompts:lock`。完整规则见 [i18n](./i18n.md#内置语言与扩展边界)。
+
+静态提示词与 runtime 正文的语言版本都在 definition/generation 加载时捕获。执行按有效 locale 从该快照选择正文，不重新读取正在热更新的文件；语言选择不能改变 canonical manifest 的权限或执行合同。
 
 ```sh
 pnpm validate:plugin plugins/example
 pnpm validate:plugin plugins/example/runtimes/extract/RUNTIME.md
+pnpm check:prompts
 pnpm --filter @covel/plugin-example test
 pnpm lint
 ```

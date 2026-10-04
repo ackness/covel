@@ -339,7 +339,7 @@ describe("core plugin manifest contract", () => {
     // A copy in an engine body would bind that engine to one resolution system
     // and contradict a replacement provider.
     for (const engine of ["narrator", "chat-mode-narrator"]) {
-      for (const file of ["PLUGIN.md", "PLUGIN.en.md"]) {
+      for (const file of ["PLUGIN.md", "PLUGIN.zh.md"]) {
         const source = await readFile(
           path.join(PLUGINS_DIR, engine, file),
           "utf-8",

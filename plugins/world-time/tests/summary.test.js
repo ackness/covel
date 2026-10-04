@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
 import { sessionSummarySchema } from "@covel/shared";
 import register from "../server/index.js";
 import { DEFAULT_TIME, describeTime, initialTick } from "../clock.js";
@@ -12,8 +13,14 @@ register({
     project = handler;
   },
 });
+// What the host gives the provider as `ctx.messages`: this plugin's translations.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 const withClock = (value, locale = "en") => ({
   locale,
+  messages,
   pluginData: { get: async () => (value ? { value } : undefined) },
 });
 
@@ -33,7 +40,8 @@ describe("world-time session summary", () => {
         {
           id: "time.now",
           kind: "text",
-          label: { zh: "时间", en: "Time" },
+          // Every language the plugin has: the client picks the UI language.
+          label: { en: "Time", zh: "时间" },
           value: describeTime(DEFAULT_TIME, tick, "zh").display,
         },
       ],

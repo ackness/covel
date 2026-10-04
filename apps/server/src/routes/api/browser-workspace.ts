@@ -441,6 +441,7 @@ export function createBrowserWorkspaceRoutes(
                           registry: c.get("pluginRegistry"),
                           activePlugins: checkpoint.session.activePlugins,
                         },
+                        checkpoint.session.locale,
                       );
                       await applyPreparedWorldDataImportForSession({
                         store: tx,

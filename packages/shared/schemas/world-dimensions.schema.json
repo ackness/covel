@@ -1,0 +1,254 @@
+{
+  "$id": "https://covel.local/schemas/world-dimensions.schema.json",
+  "title": "Covel world dimensions",
+  "description": "A file of dimension definitions keyed by dimension ID, usually `data/dimensions.yaml`.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "propertyNames": {
+    "type": "string",
+    "pattern": "^[a-z][a-zA-Z0-9_-]{0,63}$"
+  },
+  "additionalProperties": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Display name of the dimension."
+      },
+      "description": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "What the dimension tracks."
+      },
+      "schema": {
+        "description": "Value schema in the supported JSON Schema subset. Unsupported keywords are rejected.",
+        "allOf": [
+          {
+            "$ref": "#/definitions/__schema0"
+          }
+        ]
+      },
+      "initialValue": {
+        "description": "Starting value. It must satisfy `schema`."
+      },
+      "updateRule": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Natural-language rule for how the value changes in play. When non-empty, the dimension tracker settles it after each turn. Omit it for static setting."
+      }
+    },
+    "required": ["name", "schema", "initialValue"],
+    "additionalProperties": false
+  },
+  "definitions": {
+    "__schema0": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "string",
+                "number",
+                "integer",
+                "boolean",
+                "null",
+                "object",
+                "array"
+              ]
+            },
+            {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "integer",
+                  "boolean",
+                  "null",
+                  "object",
+                  "array"
+                ]
+              }
+            }
+          ],
+          "description": "JSON type of the value, or a list of types for a nullable value."
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ],
+          "description": "Display label of this node."
+        },
+        "description": {
+          "type": "string",
+          "description": "What this node holds. Given to the model."
+        },
+        "enum": {
+          "minItems": 1,
+          "type": "array",
+          "items": {},
+          "description": "Allowed values."
+        },
+        "const": {
+          "description": "The only allowed value."
+        },
+        "minimum": {
+          "type": "number",
+          "description": "Inclusive lower bound."
+        },
+        "maximum": {
+          "type": "number",
+          "description": "Inclusive upper bound."
+        },
+        "exclusiveMinimum": {
+          "type": "number",
+          "description": "Exclusive lower bound."
+        },
+        "exclusiveMaximum": {
+          "type": "number",
+          "description": "Exclusive upper bound."
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Minimum string length in characters."
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Maximum string length in characters."
+        },
+        "items": {
+          "description": "Schema of every array element.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema0"
+            }
+          ]
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Minimum array length."
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Maximum array length."
+        },
+        "properties": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "description": "Schemas of the named properties of an object."
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Property names that must be present. Each must be declared in `properties`."
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/__schema0"
+            }
+          ],
+          "description": "`false` rejects undeclared keys. A schema describes dynamically named records."
+        },
+        "x-i18n": {
+          "type": "boolean",
+          "description": "Marks this node as translatable text: its value is a string or a locale map. Nodes without it are never localized."
+        },
+        "x-enumLabels": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "description": "Display labels keyed by enum member. A label never replaces the stored value."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

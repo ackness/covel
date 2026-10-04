@@ -50,7 +50,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   await rm(home, { recursive: true, force: true });
-}, 15_000);
+}, 60_000);
 
 describe("production composition root startup failure", () => {
   it.each([
@@ -139,6 +139,8 @@ describe("production composition root startup failure", () => {
     },
     // The first case transforms the full production composition root under
     // workspace-wide test load; this suite checks ownership, not startup speed.
-    15_000,
+    // 15 s was still a speed limit: on a loaded machine the import alone
+    // exceeded it. The limit only has to catch a hang.
+    60_000,
   );
 });

@@ -1,8 +1,7 @@
 ---
 type: function
-description:
-  zh: 玩家修正维度当前值，或明确人工处理/跳过待结算回合。
-  en: Edits current values or explicitly resolves a pending settlement manually or by skipping.
+description: Edits current values or explicitly resolves a pending settlement
+  manually or by skipping.
 schedule:
   trigger:
     type: manual

@@ -15,6 +15,7 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
+import { GENERATED_WORLD_MARKER } from "@covel/create";
 import { worldRecordFromManifest } from "./world-data/world-record.js";
 import { readReceipt } from "./routes/api/install/package-files.js";
 import type { SessionLock } from "./lib/session-lock.js";
@@ -31,6 +32,10 @@ import {
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
+import {
+  compileLocaleOverlays,
+  readWorldManifestSource,
+} from "./world-data/locale-overlays.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
 import {
   fileExists,
@@ -41,7 +46,7 @@ import {
  * Resolve a locale-aware file inside the world directory.
  * Priority: exact canonical locale → compatible primary language → base file.
  */
-async function resolveLocaleFilePath(
+export async function resolveLocaleFilePath(
   worldDir: string,
   relativePath: string,
   defaultLocale?: string,
@@ -87,27 +92,13 @@ async function resolveSafePath(
 }
 
 /**
- * Resolve a locale-aware dimension file path.
- * Priority: exact locale → compatible primary language → declared file.
- *
- * Example: geography.yaml with defaultLocale="zh-CN"
- *   → tries geography.zh.yaml first, then geography.yaml
- */
-async function resolveLocaleDimensionPath(
-  worldDir: string,
-  relativePath: string,
-  defaultLocale?: string,
-): Promise<string | null> {
-  return resolveLocaleFilePath(worldDir, relativePath, defaultLocale);
-}
-
-/**
  * Load external dimension files referenced by `dimensionSources` in world.yaml.
  * Each file contains one dimension definition (name, schema, initialValue, rule).
  * External files take precedence over inline dimensions for the same key.
  *
- * Locale resolution: for each source path, tries `<name>.<lang>.<ext>` first
- * (e.g., `geography.zh.yaml`), then falls back to the declared path.
+ * Translations: `<name>.<locale>.<ext>` beside a file is a sparse overlay of
+ * it. Every overlay is compiled into locale maps; `defaultLocale` names the
+ * language of the main file.
  */
 export async function loadExternalDimensions(
   worldDir: string,
@@ -142,13 +133,8 @@ export async function loadExternalDimensions(
       );
     }
 
-    // Resolve with locale awareness
-    const resolvedPath = await resolveLocaleDimensionPath(
-      worldDir,
-      relativePath,
-      defaultLocale,
-    );
-    if (!resolvedPath) {
+    const resolvedPath = await resolveSafePath(worldDir, relativePath);
+    if (!resolvedPath || !(await fileExists(resolvedPath))) {
       return fail(
         `[world-seed] ${worldId}: dimension file not found for "${key}": ${relativePath}`,
       );
@@ -156,7 +142,18 @@ export async function loadExternalDimensions(
 
     try {
       const content = await readFile(resolvedPath, "utf-8");
-      const data = parseYaml(content);
+      // `<name>.<locale>.<ext>` beside the file holds its translations.
+      const compiled = await compileLocaleOverlays({
+        root: worldDir,
+        relativePath,
+        base: parseYaml(content),
+        baseLocale: defaultLocale,
+      });
+      for (const issue of compiled.issues)
+        console.warn(
+          `[world-seed] ${worldId}: ${issue.file}: ${issue.path} ${issue.message}`,
+        );
+      const data = compiled.value;
 
       // All authored dimensions use the same definition contract.
       const validation = validateDimensionData(key, data);
@@ -194,8 +191,14 @@ export async function loadSingleWorld(
   const yamlPath = await resolveSafePath(worldDir, "world.yaml");
   if (!yamlPath) return null;
 
-  const yamlContent = await readFile(yamlPath, "utf-8");
-  const raw = parseYaml(yamlContent) as Record<string, unknown>;
+  // The main file is one language; `world.<locale>.yaml` overlays add the
+  // translations, compiled here into locale maps for the catalog.
+  const source = await readWorldManifestSource(worldDir);
+  for (const issue of source.issues)
+    console.warn(
+      `[world-seed] ${path.basename(worldDir)}: ${issue.file}: ${issue.path} ${issue.message}`,
+    );
+  const raw = source.raw as Record<string, unknown>;
 
   const validation = validateWorldManifest(raw);
   if (!validation.valid) {
@@ -249,6 +252,10 @@ export async function loadSingleWorld(
         : {}),
       source: options?.source ?? (packageReceipt ? "generated-file" : "file"),
       ...(options?.storage ? { storage: options.storage } : {}),
+      // Written by the world generator: the app may rewrite this package.
+      ...((await fileExists(path.join(worldDir, GENERATED_WORLD_MARKER)))
+        ? { generated: true }
+        : {}),
       dimensions:
         Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
     },
@@ -259,6 +266,7 @@ export async function loadSingleWorld(
     covelHome: options?.covelHome,
     worldId,
     worldDataPath,
+    defaultLocale,
     metadata: baseRecord.metadata,
     now,
   });

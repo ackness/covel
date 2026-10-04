@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 记录当前场景里谁在场、谁正在说话。
-  en: Tracks who is present in the scene and who is currently speaking.
+description: Tracks who is present in the scene and who is currently speaking.
 schedule:
   stage: pre-turn
   trigger:

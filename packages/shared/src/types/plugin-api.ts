@@ -69,6 +69,15 @@ export interface PluginSummary {
   readonly runtimes: readonly PluginRuntimeSummary[];
   readonly tools: readonly PluginToolSummary[];
   readonly userSettings: readonly PluginUserSettingSpec[];
+  readonly languages: PluginLanguages;
+}
+
+/** The languages a plugin package has text in. English is always one. */
+export interface PluginLanguages {
+  /** Labels, UI text and text written by code: English plus `locales/<locale>.yaml`. */
+  readonly text: readonly string[];
+  /** Prompt bodies: English, and `zh` when the plugin has a `*.zh.md` variant. */
+  readonly instructions: readonly string[];
 }
 
 export interface RuntimePluginContract extends PluginRuntimeSummary {

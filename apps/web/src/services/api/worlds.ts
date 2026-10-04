@@ -150,11 +150,58 @@ export interface GenerateWorldProgress {
 export interface GenerateWorldDone {
   type: "done";
   world: WorldRecord;
+  /** How the world falls short of the brief; absent when it does not. */
+  warnings?: readonly string[];
 }
 
 export interface GenerateWorldError {
   type: "error";
   message: string;
+}
+
+/** Plugin-owned content the world generator can produce for the loaded plugins. */
+export interface GeneratableWorldContent {
+  readonly contract: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly selectedByDefault: boolean;
+}
+
+/**
+ * List the plugin content a generated world may include. The list comes from
+ * the plugins' own authoring declarations, so it changes with the plugins
+ * that are installed.
+ */
+export async function listGeneratableWorldContent(
+  locale: string,
+): Promise<GeneratableWorldContent[]> {
+  const surface = await request<{ contracts?: unknown }>(
+    `/api/framework/authoring?locale=${encodeURIComponent(locale)}`,
+    { silentErrors: true },
+  );
+  if (!Array.isArray(surface.contracts)) return [];
+  const result: GeneratableWorldContent[] = [];
+  for (const item of surface.contracts as Record<string, unknown>[]) {
+    if (
+      !item ||
+      typeof item.contract !== "string" ||
+      typeof item.title !== "string" ||
+      (item.generate !== "offer" && item.generate !== "default") ||
+      result.some((known) => known.contract === item.contract)
+    )
+      continue;
+    result.push({
+      contract: item.contract,
+      title: item.title,
+      // `summary` is written for players and localized; the namespace's
+      // technical description is not shown here.
+      ...(typeof item.summary === "string"
+        ? { description: item.summary }
+        : {}),
+      selectedByDefault: item.generate === "default",
+    });
+  }
+  return result;
 }
 
 export type GenerateWorldEvent =
@@ -199,6 +246,105 @@ export function generateWorld(
       });
 
       onDone?.();
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+  })();
+
+  return controller;
+}
+
+/**
+ * Change a world that was created in the app, by a request in the player's
+ * words. The server streams the same events as `generateWorld`.
+ *
+ * `world` is the record of a world that only this browser holds: the server
+ * revises it and stores nothing.
+ */
+export function reviseWorld(
+  worldId: string,
+  instruction: string,
+  onEvent: (event: GenerateWorldEvent) => void,
+  onError?: (err: Error) => void,
+  options?: { world?: WorldRecord },
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await requestResponse("/api/ai/revise-world", {
+        method: "POST",
+        body: JSON.stringify({
+          worldId,
+          instruction,
+          ...(options?.world ? { world: options.world } : {}),
+        }),
+        signal: controller.signal,
+        operatorAuth: true,
+      });
+      await readSseStream({
+        response: res,
+        signal: controller.signal,
+        parse: parseJsonSseData<GenerateWorldEvent>,
+        onMessage: onEvent,
+      });
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+  })();
+
+  return controller;
+}
+
+export type TranslateWorldEvent =
+  | {
+      type: "progress";
+      step: "glossary" | "names" | "texts" | "long texts";
+      done: number;
+      total: number;
+    }
+  | {
+      type: "done";
+      world: WorldRecord;
+      total: number;
+      translated: number;
+      failed: number;
+    }
+  | { type: "error"; message: string };
+
+/**
+ * Add an edition of a world in `locale`, written by the configured model.
+ * The server writes locale files beside the world's own and streams progress.
+ */
+export function translateWorld(
+  worldId: string,
+  locale: string,
+  onEvent: (event: TranslateWorldEvent) => void,
+  onError?: (err: Error) => void,
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await requestResponse(
+        `/api/worlds/${encodeURIComponent(worldId)}/translate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ locale }),
+          signal: controller.signal,
+          operatorAuth: true,
+        },
+      );
+      await readSseStream({
+        response: res,
+        signal: controller.signal,
+        parse: parseJsonSseData<TranslateWorldEvent>,
+        onMessage: onEvent,
+      });
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         onError?.(err instanceof Error ? err : new Error(String(err)));

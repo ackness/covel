@@ -1,14 +1,10 @@
 ---
 id: core-quest
 kind: plugin
-displayName:
-  zh: 任务日志
-  en: Quest Log
-description:
-  zh: 自动从叙事中登记和推进任务，随时回看目标、进度和报酬。
-  en: >-
-    Automatically registers and advances quests from the narrative so goals,
-    progress, and rewards stay visible.
+displayName: Quest Log
+description: >-
+  Automatically registers and advances quests from the narrative so goals,
+  progress, and rewards stay visible.
 tags:
   - "data:world-data"
   - "cost:function"
@@ -19,9 +15,6 @@ provides:
 requires:
   - world-ir-provider@1
 entry: ./server/index.js
-contracts:
-  quests@1:
-    schema: ./schemas/quests.schema.json
 contributes:
   data:
     quests:
@@ -32,6 +25,19 @@ contributes:
       version: 1
       accepts:
         - quests@1
+      authoring:
+        title: Starting quests
+        hint: >-
+          Seed the main quest and, at most, a few side quests. `status` is
+          `active`, `completed` or `failed`. Each objective has `text` and
+          `done`; give it an `id` so later updates can address it. The quest log
+          advances quests by name, so use the quest and giver names that the
+          lore uses.
+        example: ./examples/quests.json
+        source:
+          kind: yaml
+          path: data/quests.yaml
+          key: id
   ui:
     right:
       - ./ui/quest-log-panel.json

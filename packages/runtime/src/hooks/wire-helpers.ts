@@ -332,6 +332,13 @@ export async function runPostRuntimeHook(
  */
 export interface AssembledContextView {
   readonly systemPrompt: string;
+  /**
+   * The framework's own opening of `systemPrompt` (runtime frame,
+   * output-language directive, completion contract). A handler that replaces
+   * the system prompt does not have to carry it over: it is kept. Without it
+   * the model is never told which language the session is in.
+   */
+  readonly frameworkHead?: string;
   readonly messages: readonly LLMMessage[];
   /**
    * Read-only `outputKind` of the runtime whose context was assembled
@@ -368,6 +375,20 @@ interface PostContextAssemblyPayload extends AssembledContextView {
   readonly runtimeId: string;
 }
 
+/**
+ * Keep the framework's opening on a system prompt that a hook rewrote. A
+ * handler usually trims context by returning its own prompt body; the
+ * language directive and completion contract are not its to drop.
+ */
+function withFrameworkHead(
+  systemPrompt: string,
+  frameworkHead: string | undefined,
+): string {
+  if (!frameworkHead || systemPrompt.startsWith(frameworkHead))
+    return systemPrompt;
+  return systemPrompt ? `${frameworkHead}\n\n${systemPrompt}` : frameworkHead;
+}
+
 export async function runPostContextAssemblyHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   assembled: AssembledContextView,
@@ -390,7 +411,11 @@ export async function runPostContextAssemblyHook(
   const replace = hookReplace(hookResult);
   if (replace) {
     return {
-      systemPrompt: replace.systemPrompt ?? assembled.systemPrompt,
+      systemPrompt: withFrameworkHead(
+        replace.systemPrompt ?? assembled.systemPrompt,
+        assembled.frameworkHead,
+      ),
+      frameworkHead: assembled.frameworkHead,
       messages: replace.messages ?? assembled.messages,
       outputKind: assembled.outputKind,
       locale: assembled.locale,

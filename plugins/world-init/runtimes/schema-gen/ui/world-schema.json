@@ -1,16 +1,13 @@
 {
   "id": "world-schema",
   "group": "world-data",
-  "groupLabel": { "zh": "世界资料", "en": "World Details" },
-  "shortLabel": { "zh": "资料", "en": "Details" },
-  "label": { "zh": "角色属性", "en": "Character Traits" },
+  "groupLabel": "World Details",
+  "shortLabel": "Details",
+  "label": "Character Traits",
   "icon": "sliders-horizontal",
   "dataSource": { "namespace": "schema" },
   "emptyState": {
-    "message": {
-      "zh": "角色属性定义尚未生成，等待世界初始化……",
-      "en": "Character traits are not ready yet. Waiting for the world to finish preparing…"
-    }
+    "message": "Character traits are not ready yet. Waiting for the world to finish preparing…"
   },
   "view": {
     "component": "CardList",

@@ -585,8 +585,7 @@
     "aiContentLorebookDesc": "生成可按关键词调用的地点、组织与设定条目。",
     "aiContentRules": "世界规则",
     "aiContentRulesDesc": "生成长期生效的因果、边界与叙事约束。",
-    "aiContentMemory": "题材记忆",
-    "aiContentMemoryDesc": "持续追踪线索、承诺、倒计时等题材状态。",
+    "aiPluginContentLabel": "插件内容",
     "aiContentOpeningKit": "开局配置",
     "aiContentOpeningKitDesc": "生成起始资源、玩家约束与立即可选的行动。",
     "aiAdditionalLabel": "补充要求",
@@ -619,7 +618,21 @@
       "skipped": "明确跳过本次结算"
     },
     "dimensionDefinitions": "维度定义（JSON）",
-    "applyDimensions": "应用定义"
+    "applyDimensions": "应用定义",
+    "reviseTitle": "修改这个世界",
+    "reviseHint": "用你自己的话说要改什么。只重写相关的部分；已经开始的会话仍然使用它们开始时的世界。",
+    "revisePlaceholder": "例如：改成三个派系；或者加一个和主角争夺同一目标的对手。",
+    "reviseRequest": "要改什么",
+    "revising": "正在修改…",
+    "reviseAction": "应用修改",
+    "translateTitle": "翻译这个世界",
+    "translateHint": "这个世界是用{{worldLanguage}}写的，而会话只能使用世界已有的语言。你可以给它加一个{{language}}版本。",
+    "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；机器翻译的人名地名和语气，事后需要看一遍。",
+    "translating": "正在翻译…",
+    "translateStart": "开始翻译",
+    "translateAction": "翻译成{{language}}",
+    "reviseDone": "修改已应用。",
+    "reviseDropsEditions": "这个世界有其他语言的版本。修改会移除它们，因为译文将不再与内容对应。修改之后请重新翻译。"
   },
   "settings": {
     "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",
@@ -748,7 +761,8 @@
         "description": "导入、移除并复用自定义主题包。"
       },
       "uiLocale": {
-        "label": "界面语言"
+        "label": "界面语言",
+        "description": "标为“实验性”的语言只翻译了界面。模型读到的指令仍是英文，故事质量取决于模型。"
       },
       "chatMessageWindow": {
         "label": "聊天窗口消息上限"
@@ -1549,7 +1563,9 @@
       "badView": "view 必须是对象",
       "conversionFailed": "无法渲染 view"
     },
-    "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。"
+    "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。",
+    "untranslated": "未翻译",
+    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。"
   },
   "pluginJob": {
     "completed": "{{target}} 已完成（耗时 {{duration}}）",
@@ -1638,7 +1654,8 @@
     "duringTurnDesc": "剧情生成后，可能仍在更新游戏状态。等待“本轮已完成”后再确认结果；若主动停止且显示“本轮未提交”，可用原输入重试。部分更新失败时，只重试失败任务即可。历史交互、建议和执行细节可展开查看。",
     "reopenHint": "以后可在世界选择页点击“新手引导”重看；模型和外观随时可在设置中调整。",
     "chooseWorld": "去选择世界",
-    "testBindings": "查看并测试已有模型（{{count}} 个用途）"
+    "testBindings": "查看并测试已有模型（{{count}} 个用途）",
+    "languageExperimental": "实验性"
   },
   "character": {
     "noCharacters": "角色信息将在创建角色后显示。",

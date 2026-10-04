@@ -226,7 +226,6 @@ describe("E2E: Narrator game flow", () => {
         requestId: "req-narrator-1",
         type: "send_message",
         sessionId,
-        locale: "zh-CN",
         payload: { content: "走进了黑暗的森林" },
       }),
     });
@@ -286,7 +285,6 @@ describe("E2E: Narrator game flow", () => {
         requestId: "req-multi-1",
         type: "send_message",
         sessionId: session.id,
-        locale: "zh-CN",
         payload: { content: "拔出长剑" },
       }),
     });
@@ -303,7 +301,6 @@ describe("E2E: Narrator game flow", () => {
         requestId: "req-multi-2",
         type: "send_message",
         sessionId: session.id,
-        locale: "zh-CN",
         payload: { content: "向巨龙发起攻击" },
       }),
     });
@@ -328,7 +325,6 @@ describe("E2E: Narrator game flow", () => {
         requestId: "req-missing",
         type: "send_message",
         sessionId: "nonexistent",
-        locale: "zh-CN",
         payload: { content: "test" },
       }),
     });

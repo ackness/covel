@@ -13,23 +13,39 @@ import type {
   PackageManifest,
 } from "./types.js";
 import { reconcileLocalizedManifest } from "./localized-manifest.js";
+import { compileManifestLabels, type ManifestLabels } from "./locale-labels.js";
 import { compileRuntimeManifest } from "./compile-manifest.js";
 
 function frontmatter(
   content: string,
   filePath: string,
   canonical?: Readonly<Record<string, unknown>>,
+  labels?: readonly ManifestLabels[],
 ) {
   // Reject engine directives before gray-matter can select an executable parser.
-  if (!/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.test(content)) {
+  // The block may be empty: a language variant that translates only the body
+  // has nothing to declare.
+  if (!/^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---(?:\r?\n|$)/.test(content)) {
     throw new Error("Manifest requires plain YAML frontmatter");
   }
   const parsed = matter(content, { language: "yaml" });
+  let data = parsed.data;
+  if (labels?.length) {
+    // Label translations from `locales/<locale>.yaml` become locale maps
+    // before validation, so the manifest is the same as one that wrote them
+    // inline.
+    const compiled = compileManifestLabels(data, labels);
+    data = compiled.data;
+    for (const issue of compiled.issues)
+      console.warn(
+        `[plugin-loader] ${filePath}: ${issue.file}: ${issue.path} ${issue.message}; this translation is ignored`,
+      );
+  }
   return {
     body: parsed.content,
     data: canonical
-      ? reconcileLocalizedManifest(canonical, parsed.data, filePath)
-      : parsed.data,
+      ? reconcileLocalizedManifest(canonical, data, filePath)
+      : data,
   };
 }
 function invalid(filePath: string, error: unknown): never {
@@ -41,10 +57,17 @@ export function parsePluginMd(
   content: string,
   filePath: string,
   canonicalFrontmatter?: Readonly<Record<string, unknown>>,
+  /** Label translations of this file; see `readManifestLabels`. */
+  labels?: readonly ManifestLabels[],
 ): ParsedPluginMd {
   try {
-    const { body, data } = frontmatter(content, filePath, canonicalFrontmatter);
-    const plugin = pluginManifestSchema.parse(data);
+    const { body, data } = frontmatter(
+      content,
+      filePath,
+      canonicalFrontmatter,
+      labels,
+    );
+    const plugin = withContractDefaults(pluginManifestSchema.parse(data));
     return {
       sourcePath: filePath,
       plugin,
@@ -61,9 +84,16 @@ export function parseRuntimeMd(
   filePath: string,
   plugin: PluginManifest,
   canonicalFrontmatter?: Readonly<Record<string, unknown>>,
+  /** Label translations of this file; see `readManifestLabels`. */
+  labels?: readonly ManifestLabels[],
 ): ParsedRuntimeMd {
   try {
-    const { body, data } = frontmatter(content, filePath, canonicalFrontmatter);
+    const { body, data } = frontmatter(
+      content,
+      filePath,
+      canonicalFrontmatter,
+      labels,
+    );
     const runtime = runtimeAuthoringManifestSchema.parse(data);
     const localId = path.basename(path.dirname(filePath));
     if (!/^[a-z][a-z0-9-]*$/.test(localId))
@@ -82,6 +112,34 @@ export function parseRuntimeMd(
   } catch (error) {
     return invalid(filePath, error);
   }
+}
+
+/**
+ * A data namespace that accepts a contract states the schema of its records.
+ * That is the schema of the contract, so `contracts` does not have to repeat
+ * the path. An entry written in `contracts` is kept as it is. A contract that
+ * two namespaces accept with different schemas gets no default: the manifest
+ * must say which one is public.
+ */
+export function withContractDefaults(plugin: PluginManifest): PluginManifest {
+  const accepted = new Map<string, Set<string>>();
+  for (const declaration of Object.values(plugin.contributes?.data ?? {}))
+    for (const contract of declaration.accepts ?? []) {
+      const schemas = accepted.get(contract) ?? new Set<string>();
+      schemas.add(declaration.schema);
+      accepted.set(contract, schemas);
+    }
+  const derived = Object.fromEntries(
+    [...accepted]
+      .filter(
+        ([contract, schemas]) =>
+          schemas.size === 1 && !plugin.contracts?.[contract],
+      )
+      .map(([contract, schemas]) => [contract, { schema: [...schemas][0]! }]),
+  );
+  return Object.keys(derived).length === 0
+    ? plugin
+    : { ...plugin, contracts: { ...derived, ...plugin.contracts } };
 }
 
 /** Normalize package declarations independently of runtime compilation. */
@@ -108,7 +166,12 @@ export function normalizePackageManifest(
       c?.data &&
       Object.fromEntries(
         Object.entries(c.data).map(
-          ([namespace, { version, accepts, ...decl }]) => [
+          // `authoring` is for world authors and tools; the runtime data
+          // schema declaration does not carry it.
+          ([
+            namespace,
+            { version, accepts, authoring: _authoring, ...decl },
+          ]) => [
             namespace,
             {
               ...decl,

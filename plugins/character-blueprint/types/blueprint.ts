@@ -84,7 +84,7 @@ export function characterBlueprintToCharacterUpsert(
 ): CharacterUpsertPayload {
   const instantiate = blueprint.instantiate;
   const id =
-    opts.characterId ?? instantiate?.characterId ?? `char-${blueprint.id}`;
+    opts.characterId ?? instantiate?.characterId ?? `npc-${blueprint.id}`;
   const type = instantiate?.type ?? blueprint.role ?? "npc";
   const description = instantiate?.description ?? blueprint.description;
   const fields = instantiate?.fields ?? blueprint.attributes;

@@ -1,3 +1,25 @@
+const COLLECTABLE_TYPES = ["string", "enum"];
+
+/**
+ * What the form may hold in this world, written for the model: a rejection
+ * that only says "not allowed" makes it guess the next field.
+ */
+function collectableFields(attributes) {
+  const usable = [...attributes.values()].filter((attribute) =>
+    COLLECTABLE_TYPES.includes(attribute.type),
+  );
+  if (!usable.length)
+    return "This world declares no string or enum attribute, so the form has one field: characterName. Write the other details as fixed text in narrativeTemplate.";
+  const list = usable
+    .map((attribute) =>
+      attribute.type === "enum"
+        ? `${attribute.id} (enum: ${(attribute.options ?? []).join(" | ")})`
+        : `${attribute.id} (string)`,
+    )
+    .join(", ");
+  return `The form may hold characterName and these attributes of the world: ${list}. Remove every other field, and its placeholder in narrativeTemplate.`;
+}
+
 /** Validate against the authoritative same-turn schema before showing a form. */
 export default function ({ tool }, createFormTool) {
   return tool({
@@ -15,19 +37,30 @@ export default function ({ tool }, createFormTool) {
           attribute,
         ]),
       );
-      for (const field of params.fields) {
-        if (
-          field.name === "characterName" &&
-          field.type === "text" &&
-          field.required === true
+      const isName = (field) =>
+        field.name === "characterName" &&
+        field.type === "text" &&
+        field.required === true;
+      // Name every field that cannot stay, so one correction is enough.
+      const refused = params.fields
+        .filter((field) => !isName(field))
+        .map((field) => ({ field, attribute: attributes.get(field.name) }))
+        .filter(
+          ({ attribute }) =>
+            !attribute || !COLLECTABLE_TYPES.includes(attribute.type),
         )
-          continue;
+        .map(({ field, attribute }) =>
+          attribute
+            ? `${field.name} (a ${attribute.type} attribute: it keeps its default)`
+            : `${field.name} (not an attribute of this world)`,
+        );
+      if (refused.length)
+        throw new Error(
+          `The form cannot collect: ${refused.join(", ")}. ${collectableFields(attributes)}`,
+        );
+      for (const field of params.fields) {
+        if (isName(field)) continue;
         const attribute = attributes.get(field.name);
-        if (!attribute || !["string", "enum"].includes(attribute.type)) {
-          throw new Error(
-            `Field ${field.name} cannot be collected as narrative text. Use only declared string/enum attributes, or collect characterName alone; keep numeric and compound defaults.`,
-          );
-        }
         if (
           attribute.type === "string" &&
           !["text", "textarea", "select"].includes(field.type)
@@ -52,14 +85,7 @@ export default function ({ tool }, createFormTool) {
           }
         }
       }
-      if (
-        !params.fields.some(
-          (field) =>
-            field.name === "characterName" &&
-            field.type === "text" &&
-            field.required === true,
-        )
-      ) {
+      if (!params.fields.some(isName)) {
         throw new Error("Include a required characterName text field.");
       }
       return createFormTool.execute(params, context);

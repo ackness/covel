@@ -69,6 +69,10 @@ export interface ToolCallContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /** The session's content language, forwarded to the tool context. */
+  readonly locale?: string;
+  /** The calling plugin's translations, forwarded to the tool context. */
+  readonly messages?: import("@covel/shared").PluginMessages;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly pendingProposals?: readonly Proposal[];
   /** Player messages recorded in the session, forwarded to the tool context. */

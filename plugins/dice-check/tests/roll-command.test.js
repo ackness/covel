@@ -3,6 +3,15 @@ import { readFile } from "node:fs/promises";
 import { parseDiceNotation, rollDice } from "../rpc/dice.js";
 import roll from "../rpc/roll.js";
 import registerDiceCheck from "../server/index.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a handler as `ctx.messages`: this plugin's
+// `locales/*.yaml` translations for the session's language.
+const pluginRoot = new URL("..", import.meta.url);
+const session = async (locale) => ({
+  locale,
+  messages: await loadPluginMessages(pluginRoot, locale),
+});
 
 describe("dice-check roll command", () => {
   it("binds JSON-render quick-roll buttons to the canonical roll command", async () => {
@@ -28,15 +37,17 @@ describe("dice-check roll command", () => {
     ]);
   });
 
-  it("registers the roll RPC from the package entry", () => {
+  it("registers the roll RPC and the receipt guard from the package entry", () => {
     const registerRpc = vi.fn();
-    registerDiceCheck({ registerRpc });
+    const on = vi.fn();
+    registerDiceCheck({ registerRpc, on });
 
     expect(registerRpc).toHaveBeenCalledWith(
       "roll",
       roll,
       expect.objectContaining({ description: expect.any(String) }),
     );
+    expect(on).toHaveBeenCalledWith("PreToolUse", expect.any(Function));
   });
 
   it("parses the default and bounded NdM notation", () => {
@@ -106,10 +117,13 @@ describe("dice-check roll command", () => {
   });
 
   it("localizes validation errors from the session locale", async () => {
-    const zh = await roll({ args: { notation: "0d6" } }, { locale: "zh-CN" });
+    const zh = await roll(
+      { args: { notation: "0d6" } },
+      await session("zh-CN"),
+    );
     const en = await roll(
       { args: { notation: "2d1001" } },
-      { locale: "en-US" },
+      await session("en-US"),
     );
 
     expect(zh).toMatchObject({ ok: false, data: { code: "invalid-count" } });
@@ -120,14 +134,17 @@ describe("dice-check roll command", () => {
 
   it("uses English fallback for non-default and Traditional Chinese locales", async () => {
     for (const locale of ["ru-RU", "ja-JP", "zh-Hant-TW", "zh-TW"]) {
-      const result = await roll({ args: { notation: "bad" } }, { locale });
+      const result = await roll(
+        { args: { notation: "bad" } },
+        await session(locale),
+      );
       expect(result.message).toContain("Use NdM dice notation");
       expect(result.message).not.toContain("请使用");
     }
 
     const simplified = await roll(
       { args: { notation: "bad" } },
-      { locale: "zh-Hans" },
+      await session("zh-Hans"),
     );
     expect(simplified.message).toContain("请使用");
   });

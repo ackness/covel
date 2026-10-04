@@ -38,5 +38,18 @@ describe("default tool registry", () => {
         "world-dimension-list",
       ].sort(),
     );
+
+    // Tool definitions are instructions and go to the model in every session
+    // language. A Chinese description is Chinese context in an English
+    // session, and the model starts answering in Chinese.
+    for (const [name, module] of registry.builtinTools) {
+      const definition = JSON.stringify([
+        module.description,
+        module.jsonSchema,
+      ]);
+      expect(definition, `tool ${name}`).not.toMatch(
+        /[\u3040-\u30ff\u4e00-\u9fff]/,
+      );
+    }
   });
 });

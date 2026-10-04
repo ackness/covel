@@ -21,7 +21,7 @@
           {
             "component": "Text",
             "props": {
-              "content": { "zh": "好感变化", "en": "Affinity changes" },
+              "content": "Affinity changes",
               "weight": "bold",
               "size": "sm"
             }
@@ -74,9 +74,6 @@
     ]
   },
   "emptyState": {
-    "message": {
-      "zh": "本回合没有好感变化。",
-      "en": "No affinity changes this turn."
-    }
+    "message": "No affinity changes this turn."
   }
 }

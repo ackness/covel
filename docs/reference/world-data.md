@@ -4,14 +4,25 @@
 
 ## World Package
 
+**最小的世界包**是两个文件：`world.yaml`（`schemaVersion`、`id`、`name`、`summary`、`defaultLocale` 五个必填字段）和 `WORLD.md`。之后每增加一种内容，就在约定的位置加一个文件，不需要再登记：
+
+| 文件                         | 内容                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `data/dimensions.yaml`       | 世界维度                                                                                                               |
+| `data/lorebook.yaml`         | 按关键词触发的设定条目                                                                                                 |
+| `characters/characters.json` | 领域角色记录                                                                                                           |
+| 插件声明的路径               | 该插件接收的数据，例如 `data/quests.yaml`（任务）、`characters/main-cast.json`（角色蓝图）、`media/portraits/`（立绘） |
+
+最后一行的路径由插件自己声明（`contributes.data.<ns>.authoring.source`），装了什么插件就有什么约定路径；`pnpm describe:authoring` 列出当前版本的全部路径和每种数据的示例。这套约定的规则见 [按约定导入](#按约定导入没有-descriptor)。
+
 推荐结构：
 
 ```text
 worlds/my-world/
 ├── world.yaml
-├── WORLD.md                         # 默认世界观；也可用 WORLD.zh.md / WORLD.en.md
+├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en.md 等语言版本
 ├── data/
-│   ├── world.data.yaml
+│   ├── world.data.yaml               # 可选：文件不在约定位置、或要指定顺序时才需要
 │   ├── dimensions.yaml
 │   ├── memory-blocks.json            # 可选：题材记忆定义
 │   └── rules/                       # 可选：题材规则，导入 living-world-rules
@@ -47,11 +58,11 @@ pluginPolicy:
     - mode:traditional-story
   avoidedTags:
     - mode:dialogue
-worldData: data/world.data.yaml
+worldData: data/world.data.yaml # 可选：不写时按约定路径读取，见下文“按约定导入”
 defaultViewMode: stage
 ```
 
-`worldData` path 相对 world root。
+`worldData` path 相对 world root；只有世界包带 descriptor 时才写它。`world.yaml` 的全部字段见生成的 [World manifest 字段表](schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](schema/world-dimensions.md)。
 
 ### 动态世界维度（dimensions）
 
@@ -63,7 +74,7 @@ defaultViewMode: stage
 # world.yaml
 dimensions:
   reputation:
-    name: { zh-CN: 声望, en-US: Reputation }
+    name: 声望 # 译文写在 world.en-US.yaml 的同一路径下
     description: 主角在当地的公开声望。
     schema:
       type: integer
@@ -112,25 +123,39 @@ ID 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`，且不能是 `__proto__`、`proto
 
 不支持的关键字（包括 `$ref`、远程 schema、表达式与代码）直接拒绝，不会忽略。初值、玩家修改和自动提交共用校验，不做类型强转或默认值填充。共享 JSON 边界限制深度 32、节点数 10,000、UTF-8 序列化体积 256 KiB；维度 map 与 schema 同样接受边界校验，不仅检查单个字段。
 
-名称、说明和更新规则按声明的 `I18nText` 解析；普通值不经过猜测式深度翻译。只有 schema 明确标记 `x-i18n: true` 的节点按 `I18nText` 校验和显示本地化，例如：
+名称和说明是面板标签，按界面语言从 `I18nText` 解析；普通值不经过猜测式深度翻译。只有 schema 明确标记 `x-i18n: true` 的节点可以翻译。主文件写默认语言的文本，译文写在[语言文件](#语言文件namelocaleext)里；这些节点和 `updateRule` 在导入会话时按会话的内容语言解析成普通字符串，会话里不保存 locale map（见 [Dynamic Dimensions](./dynamic-dimensions.md)）。例如：
 
 ```yaml
-name: 港口传闻
-schema: { type: string, x-i18n: true }
-initialValue:
-  { zh-CN: 灯塔有人守夜。, en-US: Someone keeps watch at the lighthouse. }
+# data/dimensions.yaml
+harborRumor:
+  name: 港口传闻
+  schema: { type: string, x-i18n: true }
+  initialValue: 灯塔有人守夜。
+
+# data/dimensions.en-US.yaml
+harborRumor:
+  name: Harbor Rumor
+  initialValue: Someone keeps watch at the lighthouse.
 ```
 
 `title` 与 `x-enumLabels` 只影响面板显示：值仍是稳定的枚举 ID（模型、规则和校验都使用 ID），`x-enumLabels` 的键必须是该节点 `enum` 中的标量成员：
 
 ```yaml
+# 主文件
 schema:
   type: string
-  title: { zh-CN: 状态, en-US: Status }
+  title: 状态
   enum: [unverified, corroborated]
   x-enumLabels:
-    unverified: { zh-CN: 未核实, en-US: Unverified }
-    corroborated: { zh-CN: 已佐证, en-US: Corroborated }
+    unverified: 未核实
+    corroborated: 已佐证
+
+# 语言文件：同样的路径，只有文本
+schema:
+  title: Status
+  x-enumLabels:
+    unverified: Unverified
+    corroborated: Corroborated
 ```
 
 公共快照保留原始值；展示投影或查询可按注解本地化。正常 JSON `{zh: 1, en: 2}` 不会被当成翻译，ID、属性名和枚举成员不翻译。
@@ -169,13 +194,17 @@ dimensionSources:
 
 ### AI 生成结果与文件导出
 
-`@covel/create` 的 `createWorld({ llm, concept, ... })` 生成并验证内容，成功时返回 `id`、`manifest`、`lore`、`locale` 与 `packageContent`；失败时返回 `success: false` 和 `errors`。返回的 manifest 是 schema 校验后的规范值，包含 locale 的规范形式和 `characterSchema.types` 等默认值；三种保存目标消费同一份规范值。生成过程不写世界包，也不接收 `outputDir`。生成 manifest 必须包含内联数据，不能引用尚未生成的 `worldData` 或 `dimensionSources` 文件。 简报生成的 `memoryDefinitions` 在规范化时转换成 `packageContent.contractData` 中的 `memory.blocks@1/world` 记录；文件与非文件模式消费同一份合同数据，同一目标重复声明会被拒绝。
+`@covel/create` 的 `createWorld({ llm, concept, ... })` 生成并验证内容，成功时返回 `id`、`manifest`、`lore`、`locale`、`packageContent` 与 `warnings`（数量低于简报目标的内容、被丢弃的无效维度）；失败时返回 `success: false` 和 `errors`。返回的 manifest 是 schema 校验后的规范值，包含 locale 的规范形式和 `characterSchema.types` 等默认值；三种保存目标消费同一份规范值。生成过程不写世界包，也不接收 `outputDir`。生成 manifest 必须包含内联数据，不能引用尚未生成的 `worldData` 或 `dimensionSources` 文件。 简报生成的 `memoryDefinitions` 在规范化时转换成 `packageContent.contractData` 中的 `memory.blocks@1/world` 记录；文件与非文件模式消费同一份合同数据，同一目标重复声明会被拒绝。
 
 需要文件包时显式调用 `await writeWorldPackage(outputDir, result)`。导出返回相对文件路径，在独立副本中把内联数据转换为文件引用，保留原生成结果；已有同名包会被拒绝，并发发布只允许一个完整包成功。
 
 AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/lorebook.yaml`，并和 dimensions 一起写入 `data/world.data.yaml`。文件型世界在创建 session 时始终按 descriptor 导入。
 
+插件内容由创作简报的 `contracts` 指定：生成器只为被选中的数据契约生成记录，每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`），接收插件会被加入 `pluginPolicy.requested`。未选中的契约不会进入提示词；模型为未选中的契约输出记录，或漏掉被选中的契约，都会让本次尝试失败并重试。每条记录写成 `data/contract-<n>.json`，接收方声明了 lorebook 投影时目标为 `contract:<id>+lorebook`。
+
 `server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口直接使用经过校验的生成结果，把通用领域角色放入 `WorldRecord.metadata.embeddedCharacters`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
+
+生成器写出的世界包根目录里有一个 `.covel-generated.json`。它说明这个包只含生成器写的内容，所以应用可以按玩家的要求把它整包重写（`POST /api/ai/revise-world`）。世界记录据此带上 `metadata.generated: true`。把生成的世界当作起点手工加入立绘或其他文件之后，请删掉这个文件：否则下一次“修改这个世界”会重写整个包，手工加入的文件会丢失。
 
 ### 内置示例世界
 
@@ -188,7 +217,7 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 | `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
 | `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
 
-四个世界都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：作者预设的隐藏事件之外，它会根据游玩中留下的线索追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
+雾港、春华学园与提灯古冢用 `data/world.data.yaml` 列出 source，Emberback 没有 descriptor、按约定路径读取；两种写法走同一导入协议，但不会为了展示能力而加入与题材无关的插件。四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：作者预设的隐藏事件之外，它会根据游玩中留下的线索追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。接受 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）或 `parsed`。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
@@ -308,6 +337,21 @@ sources:
 
 标签必须符合 `^[a-z][a-z0-9_]*$`，`displayName/extractionHint` 支持 I18nText，`maxChars` 为正整数。插件先加载固定的基础定义，再加载活跃插件的 `memory.block-definitions@1` 服务，最后加载世界定义；已占用标签保留先前定义。三个内置世界均采用此文件与 contract 结构。
 
+## 按约定导入（没有 descriptor）
+
+`world.yaml` 没有 `worldData` 字段时，世界包按约定读取：约定路径上存在的每个文件（media 则是目录）就是一个 source，效果与在 descriptor 里写出同一条完全相同。约定来自两处：
+
+- 内核：`data/dimensions.yaml` → `world:metadata.dimensions`，`data/lorebook.yaml` → `lorebook`，`characters/characters.json` → `characters`；
+- 插件：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。两个契约声明了同一个路径时，这个路径不算约定，世界包要用 descriptor 说明给谁。
+
+导入顺序是：维度，然后 media，然后其余契约数据，最后是 `characters`。
+
+内置世界 `worlds/emberback` 就是这样读的：它没有 descriptor，12 个 source 全部来自约定路径。
+
+**什么时候仍然写 descriptor**：文件不在约定路径上（比如规则文件叫 `data/rules/tide-mystery.yaml`）、一个契约有多个文件、需要 `after` 指定顺序、或要关掉某个 source。写了 `worldData` 之后只认 descriptor，约定不再生效，因此 descriptor 要列全。
+
+没有 descriptor 时，`data/` 下不属于任何约定的 YAML / JSON 文件不会被导入；`pnpm validate:world` 对这种文件给出 `data-file-unused` 提醒，并列出当前可用的约定路径。服务端按已安装插件的约定读取；某个插件没装，它的文件就不在约定里，同样会得到这条提醒。
+
 ## Descriptor
 
 `data/world.data.yaml` 使用 `sources` map：
@@ -318,13 +362,11 @@ sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
-    schema: covel://world/dimensions
     to: world:metadata.dimensions
 
   cast:
     kind: json
     path: characters/main-cast.json
-    schema: contract:character.blueprints@1
     to: contract:character.blueprints@1
     key: id
     after: dimensions
@@ -337,22 +379,9 @@ sources:
     after: cast
 ```
 
-字段：
+`schema` 可以省略：目标是 `contract:<id>`（含 `+lorebook`）时按该契约的 schema 校验，目标是 `world:metadata.dimensions` 时按维度 schema 校验。只有用本地 JSON Schema 文件校验时才需要写 `schema`。省略时，如果该契约没有任何插件声明 schema，这个 source 不做校验；显式写了 `schema: contract:<id>` 而找不到 schema 则是错误。
 
-| 字段         | 必填 | 可选值 / 格式                                                                | 说明                                                                                                    |
-| ------------ | ---- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `kind`       | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                  | source 读取器类型。                                                                                     |
-| `path`       | yes  | 非空字符串                                                                   | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。               |
-| `schema`     | no   | `covel://world/dimensions`、`contract:<contractId>`、或本地 JSON Schema path | 校验用 schema。contract 的 JSON Schema 由已注册包声明。                                                 |
-| `to`         | yes  | 见 [Target URI](#target-uri)                                                 | 写入目标 URI。contract target 解析为活跃接收方。                                                        |
-| `key`        | no   | 简单字段名，例如 `id`、`characterId`、`filename`                             | 批量 source 的稳定 key。media 常用 `filename`。                                                         |
-| `indexTo`    | no\* | `contract:<contractId>`                                                      | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。                      |
-| `effects`    | no   | `characters`、`projections`                                                  | 额外投影；`characters` 实例化角色，`projections` 调用已启用插件声明的纯投影。                           |
-| `after`      | no   | source id 或 source id 数组                                                  | source 顺序依赖。source id 必须先声明且满足命名规则。                                                   |
-| `enabled`    | no   | boolean                                                                      | `false` 会跳过该 source。                                                                               |
-| `locale`     | no   | 长度至少 2 的字符串                                                          | source 对应的内容语言。                                                                                 |
-| `merge`      | no   | `replace`、`skipExisting`                                                    | 写入冲突策略。                                                                                          |
-| `visibility` | no   | `public`（默认）、`hidden`                                                   | `hidden` 时数据在被插件揭示前不进入提示词和任何玩家可见界面，见[隐藏数据](#隐藏数据visibility-hidden)。 |
+逐字段说明见生成的 [World data descriptor 字段表](schema/world-data-descriptor.md)；目标 URI 的阶段与语义见下方 [Target URI](#target-uri)，隐藏数据见[隐藏数据](#隐藏数据visibility-hidden)。
 
 media source 应同时声明 `key: filename` 和 `indexTo: contract:<contractId>`。缺 key 会产生 error；缺 indexTo 无法生成媒体索引写入。当前媒体字节持久化随有效 media-index write 执行，因此没有活跃索引接收方时不会导入该 source 的字节。此时产生 warning，不阻断其他数据与投影；启用接收插件后可通过 sync 补导入。
 
@@ -396,21 +425,58 @@ sources:
 
 隐藏的意义是「不剧透」，不是加密：世界包文件就在玩家本地，浏览器本地模式的工作区 checkpoint 也包含这些数据以便执行。不要把真正需要保密的信息写进世界包。
 
-### Locale 变体解析（`<name>.<locale>.<ext>`）
+### 语言文件（`<name>.<locale>.<ext>`）
 
-导入器按**会话 locale** 解析 source 文件，沿用 `WORLD.md` / 外部 dimension 约定：对每个 source 的 `path`，依次尝试 `<name>.<exact-locale>.<ext>`、script 兼容的 `<name>.<primary-language>.<ext>`，命中则用之，否则回退到声明的 `path`。例如 `ru-RU` 依次尝试 `main-cast.ru-RU.json`、`main-cast.ru.json`、`main-cast.json`；`zh-Hant-TW` 不会尝试默认推断为 Hans 的 `main-cast.zh.json`。
+**主文件只写一种语言**，即 `world.yaml` 的 `defaultLocale`。其他语言放在主文件旁边的 `<name>.<locale>.<ext>` 里，只写译文，不重复结构：
 
+```text
+world.yaml                     # 主文件，defaultLocale 的文本
+world.en-US.yaml               # 只有英文译文
+data/dimensions.yaml
+data/dimensions.en-US.yaml
+characters/main-cast.json
+characters/main-cast.en.json
+WORLD.md
+WORLD.en.md                    # 正文类文件没有可对齐的 id，整份替换
 ```
-characters/main-cast.json      # 默认（作者语言）
-characters/main-cast.en.json   # en 会话自动选用
-data/rules/tide-mystery.yaml
-data/rules/tide-mystery.en.yaml
+
+```yaml
+# world.yaml
+name: 雾港・裂潮纪
+characterSchema:
+  attributes:
+    - id: fogRot
+      name: 雾蚀
+      type: number
+
+# world.en-US.yaml —— 只有文本
+name: Mistport Chronicles
+characterSchema:
+  attributes:
+    - id: fogRot
+      name: Fog Rot
 ```
 
-- locale 来自 session（创建时确定）；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时回退到 `session.locale`。
-- 对**任意** source kind 生效（`json` / `yaml` / `text` / `markdown` / `media` 目录）——变体不存在即回退，是纯 opt-in、非破坏。
-- import ledger / `sync-data` 记录并比对被选中的变体文件摘要，故不同 locale 的会话各自独立、互不污染。
-- 与 source 的 `locale` 字段无关：那是 source 内容语言的元数据；本机制是「按会话 locale 选文件」。
+合并规则（`@covel/shared` 的 `applyLocaleOverlay`）：
+
+- 对象按 key 合并；对象列表按 `id` 合并（worldData source 用它声明的 `key`），元素没有 `id` 时按位置合并。
+- 语言文件只能翻译主文件里已有的文本。出现主文件没有的 key 或 id、在结构位置写文本、改动数字或布尔值，这一条都会被忽略并报告，主文件的值保留。
+- 没翻译的文本回退到主文件，所以可以逐步翻译。把主文件整份复制再改文字也是合法的语言文件。
+- 纯文本列表（例如别名）作为一个整体翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。
+- 文件名里的 `<locale>` 必须是真实语言的标签（`en`、`en-US`、`zh-Hant`）；`items.backup.yaml` 不会被当成语言文件。
+
+两种读取方式：
+
+| 文件                                                                                           | 读取方式                                                          | 结果                                                  |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
+| `world.yaml`、维度定义（`dimensionSources` 的文件、`to: world:metadata.dimensions` 的 source） | 所有语言文件一起编译                                              | 文本成为 locale map，世界目录和面板标签按界面语言显示 |
+| 其他结构化 worldData source（JSON / YAML）                                                     | 只合并会话语言的那一份：先精确 locale，再 script 兼容的主语言短键 | 单一语言的数据；会话里不保存 locale map               |
+| `markdown` / `text` / `media`                                                                  | 语言文件整份替换主文件                                            | 同上                                                  |
+
+- 会话语言在创建时确定；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时取 `session.locale`。`zh-Hant-TW` 不会读取 `zh` 的文件。
+- 语言文件是 source 的一部分：改动任何一份都会改变该 source 的摘要，`sync-data` 能看到。
+- **主文件不再写内联 locale map**（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。此前用内联写法的世界包需要拆成主文件加语言文件；内置的三个双语世界已经这样迁移。
+- 维度值里只有 schema 标了 `x-i18n: true` 的文本节点可以翻译；翻译其他节点会让该维度校验失败。
 
 `source id` 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。descriptor 顶层目前只接受 `schemaVersion: 1` 和 `sources`。
 
@@ -565,7 +631,7 @@ characterSchema:
   types: [npc, companion]
   attributes:
     - id: affection
-      name: { zh-CN: 好感度, en-US: Affection }
+      name: 好感度 # world.en-US.yaml 里按 id 写 `name: Affection`
       type: number
       min: 0
       max: 100
@@ -772,6 +838,14 @@ override path 相对 `~/.covel/world-overrides/<world-id>/`，并会做 realpath
 
 ### 配套插件数据
 
+当前版本能预置哪些内容、各自怎么声明和怎么写，用下面的命令查询。输出来自各插件的 `contributes.data.*.authoring` 声明，包含可直接粘贴的 source 条目和一份合法示例：
+
+```bash
+pnpm describe:authoring              # 文本
+pnpm describe:authoring --json       # 机器可读
+pnpm describe:authoring --plugins ~/.covel/plugins   # 一并扫描社区插件
+```
+
 插件可以为自己的 namespace 约定一个 schema URI：
 
 ```yaml
@@ -924,6 +998,35 @@ sources:
     key: id
     merge: skipExisting
 ```
+
+### 静态校验（`pnpm validate:world`）
+
+```bash
+pnpm validate:world worlds/my-world
+pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
+```
+
+校验器不创建会话、不执行插件代码，但复用建会话时的 worldData 预检，因此这里通过的数据在建会话时不会再因记录内容失败。插件目录取仓库 `plugins/` 加上每个 `--plugins <dir>`。
+
+| 诊断 code               | 级别             | 含义                                                                                                        |
+| ----------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `manifest-invalid`      | error            | `world.yaml` 无法解析或不符合 schema                                                                        |
+| `lore-missing`          | error            | 某个声明的语言（`defaultLocale` / `supportedLocales`）解析不到 lore 文件                                    |
+| `lore-fallback-missing` | warning          | 没有 `WORLD.md`，未声明语言的会话会拿到空 lore                                                              |
+| `unknown-plugin`        | error 或 warning | `pluginPolicy` / `pluginSettings` 引用的插件 ID 不在已扫描目录中                                            |
+| `unknown-setting`       | warning          | `pluginSettings` 的 key 不是该插件声明的设置项，值会被忽略                                                  |
+| `unprovided-contract`   | error 或 warning | `pluginPolicy.requires` 的契约没有提供者                                                                    |
+| `unresolved-contract`   | error 或 warning | source 使用的数据契约没有任何已扫描插件接收                                                                 |
+| `world-data`            | 与预检一致       | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录                   |
+| `locale-overlay`        | warning          | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略                    |
+| `locale-script`         | warning          | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词                                |
+| `edition-incomplete`    | warning          | `supportedLocales` 声明了某种语言，但该语言的版本缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
+| `inline-locale-map`     | error            | 主文件里把文本写成了 locale map；主文件只写一种语言，译文放进语言文件                                       |
+| `data-file-unused`      | warning          | 世界包没有 descriptor，而 `data/` 下这个文件不在任何约定路径上，不会被导入                                  |
+
+标为“error 或 warning”的三项：拼写接近某个已知 ID 时判为 error 并提示 “Did you mean”；否则默认是 warning（提供者可能是未扫描的社区插件），加 `--strict` 后一律为 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
+
+每个声明的语言各跑一遍预检，因为[语言文件](#语言文件namelocaleext)会让不同语言读到不同文本；主文件旁的每个语言文件都会检查，不限于声明的语言。校验逻辑在 `apps/server/src/world-data/validate-world-package.ts`，返回结构化诊断，可被其他工具复用。
 
 ### 开发检查清单
 

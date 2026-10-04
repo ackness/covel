@@ -46,6 +46,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - Vite 从仓库根读取 `.env`、`.env.local` 和对应 mode 文件；只有 `VITE_*` 会暴露到浏览器。开发代理使用 `RUNTIME_HOST`（默认 `127.0.0.1`）以及 `RUNTIME_PORT` > `SERVER_PORT` > `3001`。Shell 值优先。构建缓存包含这些根环境文件和 `VITE_*`，修改公开配置后不会复用旧产物。根 `.env` 里的 `NODE_ENV` 只作用于 server：`pnpm --filter @covel/web build`（以及经它构建的 `pnpm build`、`pnpm build:electron`）始终产出生产包，只有在 shell 中显式导出 `NODE_ENV=development` 才会得到开发模式的前端产物。
 - `pnpm dev:pg` 预检读取根 `.env`，默认跟随 `DATABASE_URL`。没有 URL 时检查 `127.0.0.1:POSTGRES_PORT`（默认 `5432`）；`COVEL_PG_PREFLIGHT_HOST/PORT` 可显式覆盖。设置了不带端口的 URL 时使用 PostgreSQL 默认端口 `5432`。
 - Docker 的进程环境由 Compose 注入，模型配置从宿主机只读挂载；路径与持久化规则见下节。
+- 包外的插件译文（翻译包、本机机器翻译）从 `COVEL_USER_TRANSLATIONS_DIR` 读取，未设置时使用 `$COVEL_HOME/translations`，目录不存在就什么都不读。格式见 [i18n](../reference/i18n.md)。
 - 用户包安装和启动发现统一使用 `COVEL_USER_WORLDS_DIR` / `COVEL_USER_PLUGINS_DIR`，未设置时使用 `$COVEL_HOME/worlds` / `plugins`（默认 `~/.covel`）。桌面继续使用 shell 注入的目录。世界安装成功即可查询和使用；插件安装后仍需重启服务。插件目录下指向目录的软链接（例如在另一个仓库开发的插件）按普通插件发现，读取范围限定在链接解析后的插件目录内；失效的软链接会被跳过并记录警告。
 - 离线图片脚本复用应用 TOML loader，支持 metadata 内联表、子表以及 `${VAR}` 插值。配置路径为 `COVEL_LLM_TOML`，否则 `$COVEL_HOME/llm.toml`；密钥优先级为 `COVEL_IMG_KEY` > provider 环境变量 > `$COVEL_HOME/keys.env` 中 provider key > `OPENAI_API_KEY` 环境变量 / 文件回退。源码使用根配置时可运行 `COVEL_LLM_TOML=llm.toml pnpm exec tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/generate-scenes.mjs haruka-academy --dry-run` 预览生成任务；实际生成时去掉 `--dry-run` 并选定配置中的 `--slot`。
 
@@ -176,4 +177,5 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 - `COVEL_SUSPENSION_TTL_MS` 默认 `604800000`（7 天），控制未解决（unresolved）挂起项的过期清理。清理无独立调度器：服务启动时执行一次性 force sweep，之后由 suspension 列表与具体 suspension 的 resume 请求机会式触发、最多每小时一次。设为 `0`（或负数）关闭清理。**claimed（恢复进行中）/ 已成功解决的记录永不清理**。属于框架基础设施开关（非插件 per-session 设置）。详见 [`docs/reference/api.md`](../reference/api.md) Suspend / Resume 章节。
 - `COVEL_PLUGIN_LOG_LEVEL` 取 `debug` / `info` / `warn` / `error`，插件 `ctx.logger` 写入 `_logs` 环的最低级别。未设置时开发环境为 `debug`，`NODE_ENV=production` 时为 `info`；低于阈值的日志不写入存储。
 - `COVEL_EFFECTS_POLICY` 默认 `warn`，控制同层 effects 读写 hazard 的处置策略。`warn`（缺省）：对同一并行层内存在读写冲突且无依赖边的 runtime 对产出稳定诊断，但保持并行执行。`strict`：在产出诊断的同时，按稳定 runtime id 顺序把冲突对拆分到串行子层（不添加语义依赖边、不制造环），未冲突的 runtime 仍并行。任何非 `strict` 值都归一为 `warn`。属于框架运行期开关（feature 组），非插件 per-session 设置。
+- `COVEL_INSTRUCTION_LOCALE` 取 `en` / `zh`，默认不设置。不设置时，简体中文会话读取插件的 `*.zh.md` 提示词变体和框架的中文指令，其他语言的会话读取 English。设为 `en` 时所有会话都读 English；设为 `zh` 时所有会话优先读中文变体，没有变体的插件仍读 English。它只决定指令语言，不改变会话的内容语言。用于对比两种指令语言的效果，或为某个模型固定其中一种。
 - 插件自带的运行期开关由插件自身经 `process.env` 读取，并在各自 `PLUGIN.md` / `README.md` 文档化。它们不经框架 env helper，也不在本 registry 的分组表内：这是「插件作者可读自己 env」的既定边界，与框架运行期开关分离管理。插件阈值类配置优先用 per-session `userSettings`（hook 经 `HookContext.getOwnSettings()` 读取），env 只作兜底。

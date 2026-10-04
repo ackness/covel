@@ -136,7 +136,11 @@ Agent 调用 `echo-value` 时，成功内容是 `{ "ok": true, "value": "..." }`
 `value`、空字符串或超过 80 个字符会得到 `VALIDATION_ERROR`，而不是进入
 handler。模型有时把数组或对象参数写成一段 JSON 文本；schema 在该位置要求
 数组或对象时，`tool()` 先解析这段文本再校验一次，省掉一轮模型重交，解析后
-的内容仍须通过同一 schema。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
+的内容仍须通过同一 schema。有一种情况会被接受：一个完整的 JSON 值后面多出
+几个收尾括号（`[{"id":1}]}`，模型把外层参数对象也在文本里收了尾）。括号前
+的值是完整的，去掉多余括号不改变其中任何内容。除此之外，文本本身不是合法
+JSON 时不做猜测式修补：`VALIDATION_ERROR` 会写明解析失败的原因和位置，并要求
+模型直接传数组或对象本身。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
 `tools.builtin`）；它返回成功内容 `{ success, namespace, key }`，并把写入
 作为 `plugin.data` proposal 交给回合末 commit chain。
 
@@ -398,10 +402,9 @@ interface UIRenderPart {
 
 框架 builtin，定义于 `packages/tools/src/builtin/world-dimension-tools.ts`。所有插件使用同一公开 `ctx.world.dimensions` 冻结快照，不读取提供者私有 namespace、不叠加自身未提交写入，也不回退世界初值。`dimension` 接受任意[合法作者 ID](world-data.md#声明格式)，不以旧九类名称作为白名单。
 
-| 参数          | 类型                                       | 必需 | 描述                                            |
-| ------------- | ------------------------------------------ | ---- | ----------------------------------------------- |
-| `queries`     | Array<{dimension, path?, offset?, limit?}> | ✓    | 至少 1 项，最多 20 项                           |
-| `resolveI18n` | boolean                                    |      | 默认 `true`，只解析 schema 中显式 `x-i18n` 节点 |
+| 参数      | 类型                                       | 必需 | 描述                  |
+| --------- | ------------------------------------------ | ---- | --------------------- |
+| `queries` | Array<{dimension, path?, offset?, limit?}> | ✓    | 至少 1 项，最多 20 项 |
 
 `path` 相对于该项的 **`value`**，不是 definition 或公共 entry。支持点路径（`durability`）、数组下标（`regions[0].name`）、根数组（`[0].name`）及 JSON Pointer（`/regions/0/name`，支持 `~0` / `~1`）。只读自有属性，不读取原型链；路径不存在返回 `found:false`，语法错误另带 `error`。
 
@@ -447,12 +450,19 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 **校验流程与错误形态**（错误均以可读文本回给 LLM，供其看错误后重试，不抛异常中断工具循环）：
 
-1. topic 本回合已经发射过（`context.emittedEventTopics` 由工具循环累积传入，见 `packages/tools/src/types.ts` 的 `ToolExecutionContext.emittedEventTopics`）→ no-op：`event "<topic>" already emitted this turn — skipped`，不产生第二条 `emittedEvents`
+1. topic 本回合已经发射过（`context.emittedEventTopics` 由工具循环累积传入，见 `packages/tools/src/types.ts` 的 `ToolExecutionContext.emittedEventTopics`）→ no-op：`event "<topic>" was already emitted this turn and is recorded. Do not emit it again; continue with the task.`，不产生第二条 `emittedEvents`
 2. topic 不在当前 session 的**已 advertise 目录**里 → `unknown topic "<topic>"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: <逗号分隔列表，或 "(none — no consumer plugin active)">`。`advertise: false` 的内部 topic 不进 emit-event 白名单（`listTopics` 与 `validate` 均只认 advertised），只能由声明它的插件自己的**函数 runtime**经 `output.events` 结果通道发射——agent 无法经 `emit-event` 直发绕过生成门；回显的可用列表也不泄漏内部 topic 名
 3. topic 已知但 payload 未通过 JSON Schema 校验 → `event payload rejected: <ajv 错误文本>`
-4. 全部通过 → `event "<topic>" emitted`，结果携带 `emittedEvents`
+4. 全部通过 → `event "<topic>" emitted and recorded for this turn. Do not emit it again.`，结果携带 `emittedEvents`。结果文本明确说“不要再发”：只回一个 `emitted` 时，部分模型会为了保险把同一事件再发一次，白费一轮调用
 
 **一次一个 topic**：单次调用只发射一条事件；需要发多个领域事件时多次调用 `emit-event`。
+
+**让回执可以当场核对。** JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子对不对得上”。消费事件的 runtime 又是在整回合写完之后才运行，那时发现回执不对已经来不及改正文。两条做法可以避免这种事后才失败的回执：
+
+- 回执只放模型自己决定的内容，代码算得出的字段不要让模型填。让模型同时填“难度名”和“DC 数字”、“骰值”和“合计”，就多出几处会对不上的地方。
+- 需要对照本回合数据的检查，用声明事件的插件自己的 `PreToolUse` hook 在发出当场做：不符就 `abort`，把正确的值写进 `reason`。`reason` 会作为这次工具调用的结果回给模型，它可以在写正文之前重发。
+
+`dice-check` 是例子：回执里没有骰值、DC 和合计，recorder 按顺序取骰并计算；`hooks/verify-check-receipt.js` 在叙事发出回执时对照骰子，结果不符就把每次判定的正确结果退回去。
 
 **去重的作用域是单个 tool loop**：`emittedEventTopics` 由 agent tool loop 逐次累积，因此同一 runtime 在同一回合内重复发同一 topic 会被 no-op。它**不跨 runtime**——同一 DAG 层级（并行组）里的两个 runtime 可以各自发同一 topic。这不是缺陷：事件 fan-out 收集阶段按 topic 汇聚（同一深度内 first-emission-wins，见 `collectEventsFrom`），所以下游订阅者仍只被触发一次。代价是同一深度里第二个 runtime 发出的同 topic payload 不会被投递：调度器为它发出 `scheduling.hazard`（`code: "event-payload-dropped"`，含 topic 与 runtimeId），不会静默丢失。需要传递多条信息时，在一个事件的 `data` 里批量携带（如 `check.resolved` 的批量契约），或为不同来源使用不同 topic。
 
@@ -534,7 +544,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 **辅助 API 迁移**：`overlayCharacters(proposals, stored, sessionId)` 现在必须接收已存储角色和会话 ID，返回该会话完整角色视图的 `Map<string, CharacterRecord>`，不再返回最后一条原始 payload。结果与输入引用隔离。`CharacterRecord` 由 `@covel/shared` 定义，`@covel/store` 保留同名类型导出。
 
-`char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
+`char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。表单含有不可收集的字段时，工具一次列出全部被拒字段及原因（不是世界属性，或是数值/复合属性），并给出该世界可收集的属性清单；世界没有 string/enum 属性时明确说明表单只有 `characterName` 一个字段。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
 
 创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
 
@@ -768,6 +778,8 @@ Attributes:
 
 叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 
+校验前先整理几种含义明确的写法，不为此退回模型重交：路径里的 `/` 也当作分隔符（`call-0614/status`），除非当前值里已有包含该斜杠的键；写在单条 change 上或与 `updates` 并列的 `reason` 被去掉；同一维度、同一 `expectedVersion` 的多条 `changes` 条目合并为一条（`reason` 依次拼接）。同一维度若有一条给出完整 `value`，仍按重复 ID 拒绝。
+
 本轮无变化也必须调用 `update-dimensions({updates:[]})`。既没有 `value`、`changes` 也为空或缺失的条目表示该维度未变化，工具直接略去它，不为此退回模型重交。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 
 ---
@@ -919,7 +931,7 @@ Bootstrap 时自动分类：
 
 - 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
 - 审批激活后，entry 模块会 JIT 执行并完成注册；未授权 session 无法触发 community runtime/hook。
-- 所有 entry factory 的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前 session/plugin 状态；RPC/function runtime 使用各自的 scoped store。
+- 所有 entry factory 的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前 session/plugin 状态；RPC/function runtime 使用各自的 scoped store。`context.locale` 是会话的内容语言，`context.messages` 是本插件 `locales/` 里的译文：工具存入会被注入提示词的数据、或返回给玩家的文字用 `translate(context, "English text")` 写成会话语言的一份；只由界面绘制的徽标用 `labelText(context, "English text")`。不要手写 `{ zh, en }` 两份——注入提示词的数据会把两种语言都带给模型。详见 [i18n](./i18n.md#2-本地化插件)。
 - community agent guard 仅获得只读 store 与纯输入；`pluginData`、logger、gateway、utils、media、assetProgress 等副作用能力不注入，`recursiveCall` 会拒绝。写入放在 runtime handler 返回的 proposal/`pluginData[]` 中。
 - 进程内 ESM 本身不是沙箱。self 层级以本机用户为信任边界；hosted 层级把 community server-code 定义为 operator 级全局信任。真正的多租户第三方代码需要独立 worker/process 隔离。
 

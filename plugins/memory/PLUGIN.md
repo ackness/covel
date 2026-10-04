@@ -1,14 +1,10 @@
 ---
 id: memory
 kind: core
-displayName:
-  zh: 故事记忆
-  en: Story Memory
-description:
-  zh: 展示故事记住的重点，包括剧情、场景、人物关系和主角状态。
-  en: >-
-    Shows what the story remembers, including plot, scene, relationships, and
-    hero status.
+displayName: Story Memory
+description: >-
+  Shows what the story remembers, including plot, scene, relationships, and hero
+  status.
 tags:
   - "cost:llm"
   - "ui:right-panel"
@@ -28,12 +24,25 @@ contributes:
       accepts:
         - memory.blocks@1
       schema: ./schemas/block-definitions.schema.json
+      description: World-defined memory blocks that replace the default set.
+      authoring:
+        title: Memory blocks
+        summary: Tracks genre state such as clues, promises and countdowns.
+        hint: >-
+          Write one object with `id: world` and a `blocks` list. Each block has
+          a `label` (a snake_case key), a `displayName` and an `extractionHint`
+          that says what to remember; `icon` and `maxChars` are optional. Choose
+          blocks that fit the genre. Do not make a block for data that a
+          dimension or another plugin already tracks.
+        example: ./examples/blocks.json
+        generate: default
+        source:
+          kind: json
+          path: data/memory-blocks.json
+          key: id
     blocks:
       version: 1
       schema: ./schemas/blocks.schema.json
-contracts:
-  memory.blocks@1:
-    schema: ./schemas/block-definitions.schema.json
 ---
 
 Memory extraction runs as a detached post-turn function with a before-next-execution barrier. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.

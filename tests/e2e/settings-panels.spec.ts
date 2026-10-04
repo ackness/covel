@@ -114,6 +114,7 @@ for (const width of [1512, 390]) {
       tags: [],
       tools: [],
       userSettings: [],
+      languages: { text: ["en"], instructions: ["en"] },
       runtimes: [
         {
           id: "panel-fixture/function",

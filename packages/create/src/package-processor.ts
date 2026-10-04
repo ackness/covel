@@ -6,7 +6,6 @@ import type {
   GeneratedWorldCharacter,
   GeneratedContractData,
   WorldGenerationDataContract,
-  GeneratedMemoryDefinition,
   GeneratedWorldLorebookEntry,
   GeneratedWorldPackageContent,
 } from "./types.js";
@@ -27,6 +26,15 @@ function strings(value: unknown): string[] | undefined {
 
 function requestedKinds(brief: WorldCreationBrief | undefined) {
   return new Set<WorldPackageContentKind>(brief?.content ?? []);
+}
+
+/** The data contracts the brief asks for, in the order the caller supplied them. */
+export function selectedDataContracts(
+  brief: WorldCreationBrief | undefined,
+  dataContracts: readonly WorldGenerationDataContract[],
+): readonly WorldGenerationDataContract[] {
+  const wanted = new Set(brief?.contracts ?? []);
+  return dataContracts.filter((item) => wanted.has(item.contract));
 }
 
 function normalizeCharacter(
@@ -160,9 +168,33 @@ export function normalizeGeneratedPackage(
   value: unknown,
   brief: WorldCreationBrief | undefined,
   dataContracts: readonly WorldGenerationDataContract[] = [],
-): { content: GeneratedWorldPackageContent; errors: string[] } {
+  /** `amounts: false` skips the brief's target amounts; a revision has none. */
+  options: { readonly amounts?: boolean } = {},
+): {
+  content: GeneratedWorldPackageContent;
+  errors: string[];
+  warnings: string[];
+} {
   const requested = requestedKinds(brief);
+  const selected = selectedDataContracts(brief, dataContracts);
   const errors: string[] = [];
+  const warnings: string[] = [];
+  // A requested kind that is absent is a failed answer. One that is present
+  // but below the target is a usable world: retrying it costs a full model
+  // call and often trades this shortfall for a different one.
+  const checkAmount = (
+    kind: WorldPackageContentKind,
+    label: string,
+    amount: number,
+    target: number,
+  ) => {
+    if (!requested.has(kind) || options.amounts === false) return;
+    if (amount === 0) errors.push(`WORLD_PACKAGE_YAML must include ${label}`);
+    else if (amount < target)
+      warnings.push(
+        `generated ${amount} ${label}; the brief asks for ${target}`,
+      );
+  };
   const root = isRecord(value) ? value : {};
 
   const contractData: GeneratedContractData[] = [];
@@ -186,12 +218,18 @@ export function normalizeGeneratedPackage(
       );
       continue;
     }
-    const declaration = dataContracts.find(
+    const declaration = selected.find(
       (item) => item.contract === record.contract,
     );
-    if (!declaration || !declaration.validate(record.value)) {
+    if (!declaration) {
       errors.push(
-        `contractData[${index}] has an unknown contract or invalid value`,
+        `contractData[${index}] uses contract "${record.contract}", which the creation brief did not request`,
+      );
+      continue;
+    }
+    if (!declaration.validate(record.value)) {
+      errors.push(
+        `contractData[${index}] value does not match the schema of contract "${record.contract}"`,
       );
       continue;
     }
@@ -205,91 +243,43 @@ export function normalizeGeneratedPackage(
       contract: record.contract,
       key: record.key,
       value: record.value,
+      ...(declaration.lorebook ? { lorebook: true as const } : {}),
     });
   }
+  for (const declaration of selected) {
+    if (!contractData.some((item) => item.contract === declaration.contract))
+      errors.push(
+        `contractData must include at least one record for contract "${declaration.contract}"`,
+      );
+  }
 
+  // The caps bound what one generation call writes. A revision returns a
+  // world that exists: cutting it down would lose the player's content.
+  const most = (count: number) =>
+    options.amounts === false ? Infinity : count;
   const characters = requested.has("characters")
-    ? (Array.isArray(root.characters) ? root.characters.slice(0, 5) : [])
+    ? (Array.isArray(root.characters) ? root.characters.slice(0, most(5)) : [])
         .map((item, index) => normalizeCharacter(item, index, errors))
         .filter((item): item is GeneratedWorldCharacter => item !== null)
     : [];
   const lorebook = requested.has("lorebook")
-    ? (Array.isArray(root.lorebook) ? root.lorebook.slice(0, 8) : [])
+    ? (Array.isArray(root.lorebook) ? root.lorebook.slice(0, most(8)) : [])
         .map((item, index) =>
           normalizeLorebookEntry(item, index, "lorebook", errors),
         )
         .filter((item): item is GeneratedWorldLorebookEntry => item !== null)
     : [];
   const rules = requested.has("rules")
-    ? (Array.isArray(root.rules) ? root.rules.slice(0, 5) : [])
+    ? (Array.isArray(root.rules) ? root.rules.slice(0, most(5)) : [])
         .map((item, index) =>
           normalizeLorebookEntry(item, index, "rule", errors),
         )
         .filter((item): item is GeneratedWorldLorebookEntry => item !== null)
     : [];
 
-  if (requested.has("characters") && characters.length < 3) {
-    errors.push("WORLD_PACKAGE_YAML must include at least 3 characters");
-  }
-  if (requested.has("lorebook") && lorebook.length < 4) {
-    errors.push("WORLD_PACKAGE_YAML must include at least 4 lorebook entries");
-  }
-  if (requested.has("rules") && rules.length < 3) {
-    errors.push("WORLD_PACKAGE_YAML must include at least 3 rules");
-  }
-
-  const memoryDefinitions: GeneratedMemoryDefinition[] = [];
-  if (requested.has("memory")) {
-    for (const [index, block] of (Array.isArray(root.memoryDefinitions)
-      ? root.memoryDefinitions
-      : []
-    ).entries()) {
-      if (
-        !isRecord(block) ||
-        typeof block.label !== "string" ||
-        !/^[a-z][a-z0-9_]*$/.test(block.label) ||
-        typeof block.displayName !== "string" ||
-        !block.displayName.trim() ||
-        typeof block.extractionHint !== "string" ||
-        !block.extractionHint.trim() ||
-        (block.maxChars !== undefined &&
-          (!Number.isInteger(block.maxChars) || Number(block.maxChars) <= 0))
-      ) {
-        errors.push(
-          `memoryDefinitions[${index}] must contain a label, displayName and extractionHint, with optional positive maxChars`,
-        );
-        continue;
-      }
-      memoryDefinitions.push({
-        label: block.label,
-        displayName: block.displayName,
-        extractionHint: block.extractionHint,
-        ...(typeof block.icon === "string" ? { icon: block.icon } : {}),
-        ...(typeof block.maxChars === "number"
-          ? { maxChars: block.maxChars }
-          : {}),
-      });
-    }
-    if (memoryDefinitions.length < 2 || memoryDefinitions.length > 4)
-      errors.push(
-        "WORLD_PACKAGE_YAML must include 2-4 genre memoryDefinitions",
-      );
-    if (
-      new Set(memoryDefinitions.map((block) => block.label)).size !==
-      memoryDefinitions.length
-    )
-      errors.push("memoryDefinitions labels must be unique");
-    const identity = "memory.blocks@1/world";
-    if (identities.has(identity)) {
-      errors.push(`duplicate contractData record: ${identity}`);
-    } else if (memoryDefinitions.length > 0) {
-      contractData.push({
-        contract: "memory.blocks@1",
-        key: "world",
-        value: { id: "world", blocks: memoryDefinitions },
-      });
-    }
-  }
+  checkAmount("characters", "characters", characters.length, 3);
+  checkAmount("lorebook", "lorebook entries", lorebook.length, 4);
+  checkAmount("rules", "rules", rules.length, 3);
 
   const duplicateCharacterIds = duplicateIds(characters);
   if (duplicateCharacterIds.length > 0) {
@@ -303,19 +293,53 @@ export function normalizeGeneratedPackage(
   return {
     content: { characters, lorebook, rules, contractData },
     errors,
+    warnings,
   };
+}
+
+/**
+ * The brief of a revision: what the revised package holds. A new world keeps
+ * the kinds of content its brief asked for; a revised one keeps what it has
+ * and what the request added.
+ */
+export function briefOfPackage(value: unknown): WorldCreationBrief {
+  const root = isRecord(value) ? value : {};
+  const content = (["characters", "lorebook", "rules"] as const).filter(
+    (kind) => Array.isArray(root[kind]) && root[kind].length > 0,
+  );
+  const contracts = [
+    ...new Set(
+      (Array.isArray(root.contractData) ? root.contractData : []).flatMap(
+        (record) =>
+          isRecord(record) && typeof record.contract === "string"
+            ? [record.contract]
+            : [],
+      ),
+    ),
+  ];
+  return { content, contracts };
 }
 
 export function applyCreationBriefToManifest(
   manifest: Record<string, unknown>,
   brief: WorldCreationBrief | undefined,
-): string[] {
-  if (!brief) return [];
+  dataContracts: readonly WorldGenerationDataContract[] = [],
+): { errors: string[]; warnings: string[] } {
+  if (!brief) return { errors: [], warnings: [] };
   const errors: string[] = [];
+  const warnings: string[] = [];
   const policy = isRecord(manifest.pluginPolicy)
     ? manifest.pluginPolicy
     : (manifest.pluginPolicy = {});
   policy.presetId = brief.experienceMode ?? "traditional-story";
+  // Requested content is only used when its receiving plugin is active.
+  const receivers = selectedDataContracts(brief, dataContracts)
+    .map((item) => item.pluginId)
+    .filter((id): id is string => typeof id === "string");
+  if (receivers.length > 0)
+    policy.requested = [
+      ...new Set([...(strings(policy.requested) ?? []), ...receivers]),
+    ];
   if (brief.experienceMode === "dialogue-mode") {
     manifest.defaultViewMode = "stage";
   } else {
@@ -334,11 +358,11 @@ export function applyCreationBriefToManifest(
         Number.isFinite(definition.initialValue),
     );
     if (numericResources.length < 2) {
-      errors.push(
-        "opening-kit must include at least 2 numeric dimension initial values",
+      warnings.push(
+        `opening kit has ${numericResources.length} numeric resource dimensions; the brief asks for 2`,
       );
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }

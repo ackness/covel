@@ -1,4 +1,4 @@
-import { pickLocaleText } from "@covel/plugin-handlers-utils";
+import { translate } from "@covel/plugin-handlers-utils";
 
 const NAMESPACE = "items";
 
@@ -14,11 +14,14 @@ export default async function openBag(_payload, ctx) {
     const value = row?.value;
     return value && typeof value === "object" && value.removed !== true;
   }).length;
-  const message = pickLocaleText(
-    ctx.locale,
-    `行囊中有 ${itemCount} 项物品。`,
-    `Your bag contains ${itemCount} item ${itemCount === 1 ? "entry" : "entries"}.`,
-  );
+  const message =
+    itemCount === 1
+      ? translate(ctx, "Your bag contains {count} item entry.", {
+          count: itemCount,
+        })
+      : translate(ctx, "Your bag contains {count} item entries.", {
+          count: itemCount,
+        });
 
   return {
     ok: true,

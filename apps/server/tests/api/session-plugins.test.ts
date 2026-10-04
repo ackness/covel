@@ -747,6 +747,84 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(await store.getSession("sess-unmet-world")).toBeNull();
     });
 
+    it("creates the session in a language the world has an edition for", async () => {
+      await store.upsertWorld({
+        id: "bilingual-world",
+        name: "双语世界",
+        description: "Test world",
+        locale: "zh-CN",
+        metadata: { supportedLocales: ["zh-CN", "en-US"] },
+        createdAt: new Date().toISOString(),
+      });
+      await store.upsertWorld({
+        id: "chinese-world",
+        name: "中文世界",
+        description: "Test world",
+        locale: "zh-CN",
+        metadata: {},
+        createdAt: new Date().toISOString(),
+      });
+      const create = async (id: string, worldId: string, locale: string) => {
+        const res = await app.request("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, worldId, locale, plugins: ["narrator"] }),
+        });
+        expect(res.status).toBe(201);
+        return (await res.json()) as {
+          locale: string;
+          requestedLocale?: string;
+        };
+      };
+
+      // The world has an English edition: the session is English.
+      const english = await create("sess-en", "bilingual-world", "en-US");
+      expect(english.locale).toBe("en-US");
+      expect(english.requestedLocale).toBeUndefined();
+
+      // The world is Chinese only. An English session would put Chinese lore
+      // beside a request for English output, so the session is Chinese and
+      // the response names the language that was asked for.
+      const fallback = await create("sess-zh", "chinese-world", "en-US");
+      expect(fallback.locale).toBe("zh-CN");
+      expect(fallback.requestedLocale).toBe("en-US");
+      expect((await store.getSession("sess-zh"))?.locale).toBe("zh-CN");
+    });
+
+    it("names the active plugins that have no text in the session's language", async () => {
+      registry.register(
+        makeEntry({
+          id: "translated-plugin",
+          summary: makeSummary({ id: "translated-plugin", name: "Translated" }),
+          source: "builtin",
+          languages: { text: ["en", "zh"], instructions: ["en"] },
+        }),
+      );
+      const create = async (id: string, locale: string) => {
+        const res = await app.request("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id,
+            locale,
+            plugins: ["narrator", "translated-plugin"],
+          }),
+        });
+        expect(res.status).toBe(201);
+        return (await res.json()) as { pluginsWithoutLocale?: string[] };
+      };
+
+      // `narrator` and the default `pregame` are registered with English
+      // only. The session is created all the same: their panels show English.
+      expect(
+        (await create("sess-zh-labels", "zh-CN")).pluginsWithoutLocale,
+      ).toEqual(["narrator", "pregame"]);
+      // Every plugin has English.
+      expect(
+        (await create("sess-en-labels", "en-US")).pluginsWithoutLocale,
+      ).toBeUndefined();
+    });
+
     it("imports portable lorebook entries from a store-only generated world", async () => {
       await store.upsertWorld({
         id: "portable-generated-world",

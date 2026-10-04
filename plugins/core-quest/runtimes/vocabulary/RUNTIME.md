@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 在事实抽取前公布进行中的任务与未完成目标，便于沿用同一名称。
-  en: >-
-    Publishes active quests and their open objectives before fact extraction so
-    the same names are reused.
+description: >-
+  Publishes active quests and their open objectives before fact extraction so
+  the same names are reused.
 schedule:
   stage: pre-turn
   trigger:

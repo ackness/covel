@@ -1,0 +1,16 @@
+{
+  "id": "world",
+  "blocks": [
+    {
+      "label": "case_theories",
+      "displayName": "Case Theories",
+      "extractionHint": "Who the player suspects, why, and what would change their mind. Do not repeat clue facts that a dimension already tracks.",
+      "icon": "Search"
+    },
+    {
+      "label": "promises",
+      "displayName": "Promises & Debts",
+      "extractionHint": "What the player promised, owes, or was promised, and whether it was kept."
+    }
+  ]
+}

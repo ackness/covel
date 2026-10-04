@@ -9,7 +9,10 @@ import {
   dimensionInitializePayloadSchema,
   materializeDimensionRecords,
 } from "./dimensions.js";
-import { dimensionSnapshotFromRecords } from "../schemas/dimensions.js";
+import {
+  dimensionSnapshotFromRecords,
+  resolveWorldDimensionsLocale,
+} from "../schemas/dimensions.js";
 
 export interface WorldModelView {
   readonly worldRecord?: {
@@ -71,6 +74,8 @@ export function materializeWorldModel(
   },
   proposals: readonly Proposal[],
   sessionId: string,
+  /** The session's content locale; resolves declared dimensions to it. */
+  locale?: string,
 ): WorldModelView {
   let state: WorldModelView = {
     ...structuredClone(base),
@@ -121,8 +126,9 @@ export function materializeWorldModel(
       proposal.type === "dimension.initialize" &&
       proposal.source.pluginId === state.dimensionProviderPluginId
     ) {
-      const { definitions } = dimensionInitializePayloadSchema.parse(
-        proposal.payload,
+      const definitions = resolveWorldDimensionsLocale(
+        dimensionInitializePayloadSchema.parse(proposal.payload).definitions,
+        locale,
       );
       const dimensions = { ...state.dimensions };
       for (const [id, definition] of Object.entries(definitions)) {
@@ -154,7 +160,7 @@ export function materializeWorldModel(
       state = {
         ...state,
         dimensions: dimensionSnapshotFromRecords(
-          materializeDimensionRecords(records, proposal),
+          materializeDimensionRecords(records, proposal, locale),
         ),
       };
     } else continue;

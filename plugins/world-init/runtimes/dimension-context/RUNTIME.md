@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 发布本回合冻结的世界维度快照，不调用模型。
-  en: Publishes this turn's frozen dimension snapshot without a model call.
+description: Publishes this turn's frozen dimension snapshot without a model call.
 schedule:
   stage: pre-turn
   trigger:

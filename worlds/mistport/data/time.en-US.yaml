@@ -1,0 +1,14 @@
+# en-US text for time.yaml. Only translated text; structure and ids come from time.yaml.
+definition:
+  name: Mistport tide time
+  cycleLabel: Tide cycle
+  phases:
+    - Rising tide
+    - High tide
+    - Falling tide
+    - Low tide
+  evolution:
+    prompt:
+      Count tide phases, not real-world hours. Brief continuous conversation
+      may remain in the phase; waiting for tides or exploring across districts
+      advances it. Deep ebb is a story event, not a routine phase.

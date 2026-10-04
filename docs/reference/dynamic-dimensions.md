@@ -19,7 +19,9 @@ dimensions:
 
 支持的 JSON Schema 字段以 `packages/shared/src/schemas/dimensions.ts` 为准：`type`、`enum`、`const`、`minimum`、`maximum`、`minLength`、`maxLength`、`minItems`、`maxItems`、`items`、`properties`、`required`、`additionalProperties`、`title`（可为 `I18nText`）、`description`、`x-i18n`、`x-enumLabels`（标量枚举成员的显示名，值仍存 ID）。未知关键字明确报错，不忽略约束。声明、规则、JSON 值、批次及查询都有体积/深度/数量预算。
 
-只有显式 `x-i18n: true` 的文本节点会按 locale 选择译文。普通 JSON 的语言形似键、枚举和业务 ID 不会自动翻译。
+只有显式 `x-i18n: true` 的文本节点可以在世界包里写成 locale map。普通 JSON 的语言形似键、枚举和业务 ID 不会被当作翻译。
+
+**翻译在导入时解析，会话里只存一种语言。** 创建会话（或同步世界数据）时，`initialValue` 里的 `x-i18n` 节点和 `updateRule` 按会话的内容语言解析成普通字符串再写入；缺少该语言时按[统一解析规则](./i18n.md#统一解析规则)回退。插件在游玩中通过 `dimension.initialize` 声明定义时（例如开局时把世界包的声明再提交一次），框架在物化记录前做同样的解析，所以无论走哪条路径，会话里的记录都只有一种语言，重复声明也不会和已导入的记录冲突。会话状态里的维度值、存下的 `initialValue` 和 `updateRule` 都是普通字符串，提交 locale map 会被校验拒绝；模型和玩家修改时也只写一份文本。`name`、`description`、schema 的 `title` 与 `x-enumLabels` 是面板标签，继续保留 locale map，按玩家当前的界面语言显示。此前创建的开发会话若存有 locale map 形式的维度值，需要重新创建。
 
 `world.yaml` inline、`dimensionSources` 单项文件、`covel://world/dimensions → world:metadata.dimensions` 使用同一 definition map。外部同名定义优先于 inline；descriptor 替换最终 map。单项文件内容是完整 definition，不是旧 raw value。
 

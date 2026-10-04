@@ -8,45 +8,42 @@
  *
  * Shape:
  *   {
- *     displayName: { zh: string; en: string },
  *     icon: string,   // Lucide icon component name (PascalCase)
  *     color: string,  // Semantic color token; UI maps to Tailwind classes
  *   }
  *
+ * The category's name is not stored. Entries are injected into this plugin's
+ * prompt, and a name stored in two languages put both in front of the model.
+ * The panel takes the names from its filter tabs.
+ *
  * Categories MUST stay in sync with the enum in `tools/sync-codex-entries.js`.
  */
 
-/** @typedef {{ displayName: { zh: string, en: string }, icon: string, color: string }} CodexCategoryMeta */
+/** @typedef {{ icon: string, color: string }} CodexCategoryMeta */
 
 /** @type {Record<string, CodexCategoryMeta>} */
 export const CODEX_CATEGORY_METADATA = {
   monster: {
-    displayName: { zh: "怪物", en: "Monsters" },
     icon: "Skull",
     color: "red",
   },
   item: {
-    displayName: { zh: "物品", en: "Items" },
     icon: "Gem",
     color: "amber",
   },
   location: {
-    displayName: { zh: "地点", en: "Locations" },
     icon: "MapPin",
     color: "blue",
   },
   lore: {
-    displayName: { zh: "传说", en: "Lore" },
     icon: "ScrollText",
     color: "purple",
   },
   character: {
-    displayName: { zh: "人物", en: "Characters" },
     icon: "Users",
     color: "green",
   },
   skill: {
-    displayName: { zh: "技能", en: "Skills" },
     icon: "Sparkles",
     color: "cyan",
   },
@@ -60,8 +57,7 @@ export const DEFAULT_CODEX_CATEGORY_META = Object.freeze({
 
 /**
  * Look up display metadata for a category. Falls back to a generic shape
- * (icon `BookOpen`, color `gray`, displayName echoing the raw category) when
- * the category isn't in the known set.
+ * (icon `BookOpen`, color `gray`) when the category isn't in the known set.
  *
  * @param {string} category
  * @returns {CodexCategoryMeta}
@@ -70,7 +66,6 @@ export function getCategoryMetadata(category) {
   const known = CODEX_CATEGORY_METADATA[category];
   if (known) return known;
   return {
-    displayName: { zh: category, en: category },
     icon: DEFAULT_CODEX_CATEGORY_META.icon,
     color: DEFAULT_CODEX_CATEGORY_META.color,
   };

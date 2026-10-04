@@ -289,6 +289,24 @@ describe("Plugin Routes", () => {
     });
   });
 
+  describe("GET /api/framework/authoring", () => {
+    it("returns the authoring surface in the requested locale", async () => {
+      const res = await app.request("/api/framework/authoring?locale=en-US");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.files.map((file: { path: string }) => file.path)).toContain(
+        "world.yaml",
+      );
+      expect(
+        body.destinations.map(
+          (item: { source: { entry: { to: string } } }) => item.source.entry.to,
+        ),
+      ).toEqual(["world:metadata.dimensions", "lorebook", "characters"]);
+      expect(Array.isArray(body.contracts)).toBe(true);
+      expect(Array.isArray(body.plugins)).toBe(true);
+    });
+  });
+
   describe("GET /api/framework/capabilities", () => {
     it("returns framework-level capability enums and discovery anchors", async () => {
       const res = await app.request("/api/framework/capabilities");

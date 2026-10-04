@@ -1,0 +1,410 @@
+crownfire:
+  name: 王冠火倒计时
+  description: 王冠火风暴抵达山脊所需的分钟数，以及其逼近的程度。
+  schema:
+    properties:
+      minutesRemaining:
+        title: 剩余分钟数
+      stage:
+        title: 风暴
+        x-enumLabels:
+          distant: 地平线上
+          approaching: 逼近
+          imminent: 迫在眉睫
+          overhead: 头顶上方
+          passing: 掠过
+  updateRule: 扣除本轮叙事实际花费的故事时间：简短对话5–10分钟，修理、搜索或争论15–40分钟，前往十七英里或夜玻璃的履带车行程30–60分钟。如果叙事说明了剩余窗口期，则使用该数值。时间永不回溯。当剩余时间在120分钟或更少时设为“逼近”，30分钟或更少时设为“迫在眉睫”，0分钟时设为“头顶上方”，仅当叙事表明风暴锋面已移过才设为“掠过”。
+relayGrid:
+  name: 中继网格
+  description: 共享电力储备及其当前供给对象。重要系统无法同时全功率运行。
+  schema:
+    properties:
+      reserve:
+        title: 储备百分比
+      systems:
+        title: 系统
+        properties:
+          longRange:
+            title: 远程阵列
+            x-enumLabels:
+              off: 关闭
+              low: 低功率
+              full: 全功率
+          stormShields:
+            title: 风暴护盾
+            x-enumLabels:
+              off: 关闭
+              low: 低功率
+              full: 全功率
+          clinic:
+            title: 诊所储备
+            x-enumLabels:
+              off: 关闭
+              low: 低功率
+              full: 全功率
+          crawlerChargers:
+            title: 爬行器充电器
+            x-enumLabels:
+              off: 关闭
+              low: 低功率
+              full: 全功率
+          nightglassLink:
+            title: 夜玻璃链接
+            x-enumLabels:
+              off: 关闭
+              low: 低功率
+              full: 全功率
+  updateRule: 仅当叙事开启或关闭某系统时才改变其状态。在大约一小时的故事时间内，每个全功率运行的系统消耗6–10点储备，每个低功率运行的系统消耗2–4点；将太阳能田拉入光照区或成功修复可恢复5–20点。根据本轮实际花费的时间结算消耗。当储备为0时，除诊所外的所有系统均降至关闭状态；只有当叙事明确说明时，诊所才会关闭。
+signalLog:
+  name: 信号日志
+  description: 值得保留的所有传输和回声记录，以及已确立的技术事实。
+  schema:
+    additionalProperties:
+      properties:
+        source:
+          title: 来源
+        channel:
+          title: 频道
+        timestamp:
+          title: 时间戳
+        status:
+          title: 状态
+          x-enumLabels:
+            unexplained: 未解释
+            traced: 已追踪
+            verified: 已验证
+            disproven: 已证伪
+        note:
+          title: 备注
+  initialValue:
+    call-0614:
+      source: 未知——声音是你自己的
+      channel: 所有接收器同时响起，随后远程网络中断
+      timestamp: 06:14 站点时间（声称来自+72小时后）
+      note: 在十七英里处阻止车队。让米娜远离塔楼。不要让托马斯切断信号。
+  updateRule: 当叙事接收、记录或发现新的传输或回声时，添加一条条目（使用短横线分隔的小写ID）。随着信息明朗，填入来源、频道和时间戳；当定位到其起源时标记为“已追踪”，当独立仪器或目击者确认时标记为“已验证”，当证明其为伪造或误读时标记为“已证伪”。一旦技术事实确立，除非叙事明确推翻，否则不得更改。切勿删除条目。
+convoy:
+  name: 医疗车队
+  description: 琼恩的履带车队及其三十个低温包——正前往十七英里。
+  schema:
+    properties:
+      position:
+        title: 位置
+        x-enumLabels:
+          en-route: 前往十七英里途中
+          holding: 原地待命
+          rerouted: 改道
+          at-mile-seventeen: 位于十七英里
+          arrived: 安全送达
+          stranded: 滞留
+          lost: 失联
+      contact:
+        title: 联络
+        x-enumLabels:
+          none: 无联络
+          intermittent: 间歇性联络
+          open: 频道畅通
+      cryoPacks:
+        title: 低温包完好
+  updateRule: 仅当叙事显示车队停下、转向、抵达某地或陷入困境时，才更改位置。根据无线电本回合的实际通信结果设定联络状态。仅当叙事明确显示低温包受损、变质或丢失时，才减少低温包数量。
+geography:
+  name: 地理
+  schema:
+    properties:
+      overview:
+        title: 概览
+      regions:
+        items:
+          properties:
+            name:
+              title: 名称
+            description:
+              title: 描述
+            climate:
+              title: 气候
+            landmarks:
+              items:
+                properties:
+                  name:
+                    title: 名称
+                  description:
+                    title: 描述
+              title: 地标
+        title: 区域
+  initialValue:
+    overview: 维斯珀是一个潮汐锁定世界。其炽热的昼半球与冰封的夜半球在暮界线交汇，这是一条由红色山脊、寒风和通过无线电相连的定居点组成的宜居带。
+    regions:
+      - name: 余烬背山脊
+        description: 一道承载中继站及其住宅、工坊和可移动太阳能田的锈红色长陡崖。该山脊虽孤立，却从未寂静。
+        climate: 干燥多风，向阳侧酷热与背阴侧严寒界限分明。
+        landmarks:
+          - name: 三桅塔
+            description: 余烬背的远程阵列。天气晴朗时，中央桅杆可覆盖西部中继链上的所有定居点。
+          - name: 转辙场
+            description: 围绕车站最古老的变压器建造的公共工坊、充电区、厨房和会议厅。
+      - name: 向阳路
+        description: 一条穿过玻璃平原和玄武岩阴影、朝向太阳延伸的硬化履带车道。十七英里是其中最暴露的路段。
+        climate: 刺眼强光、磨蚀性尘埃，以及能在几分钟内吞噬车辆的热浪前锋。
+        landmarks:
+          - name: 十七英里
+            description: 一座天然石拱旁的野战信号中继器。未来的警告提及此地，但其维护日志未显示任何异常。
+          - name: 镜农场
+            description: 为余烬背供电的移动太阳能收集器。它们的每日对准情况决定了社区可用的电量。
+      - name: 向夜架
+        description: 一片向下倾斜的高原，遍布深蓝岩石、霜草和通往永恒黑夜的埋藏冰管。
+        climate: 晴朗、极寒，易发生快速移动的冰暴。
+        landmarks:
+          - name: 夜玻璃天文台
+            description: 一座紧凑型研究站，用于研究磁暴、大气回声以及维斯珀冰层的移动边缘。
+      - name: 王冠火前线
+        description: 一场沿暮界线移动的大陆级磁暴。其带电尘埃扭曲无线电信号，并在天空中绘出金色丝带。
+        climate: 电活动频繁、不可预测，对暴露在外的人员、车辆和天线阵列构成危险。
+factions:
+  name: 势力
+  schema:
+    items:
+      properties:
+        id:
+          title: ID
+        name:
+          title: 名称
+        description:
+          title: 描述
+        type:
+          title: 类型
+        influence:
+          title: 影响力
+        leader:
+          title: 领袖
+        headquarters:
+          title: 总部
+        relations:
+          items:
+            properties:
+              targetId:
+                title: 目标
+              type:
+                title: 类型
+              description:
+                title: 描述
+          title: 关系
+  initialValue:
+    - id: relay-cooperative
+      name: 余烬背中继合作社
+      description: 车站的技术员、操作员、医护人员、种植者和厨师共同维护中继站，并决定如何分配其有限的电力。
+      leader: 托马斯·里德，当选轮班主管
+      headquarters: 余烬背山脊，转辙场
+      relations:
+        - description: 中继站使信使避开风暴；信使则为孤立的车站提供补给。
+        - description: 合作社需要天文台的预报，但反感那些消耗中继时间和电力的实验。
+    - id: sunrunners
+      name: 逐日者
+      description: 独立履带车组，负责在暮界线各定居点之间运送药品、邮件、备件和乘客。
+      leader: 在每次路线会议上选出的轮值道路队长
+      headquarters: 道路本身
+      relations:
+        - description: 他们将自己的生命托付给余烬背的操作员，尽管对每一次路线封闭都抱怨不已。
+        - description: 对于大多数司机来说，预测模型的重要性不如地标、直觉以及无线电中清晰的声音。
+    - id: nightglass-observatory
+      name: 夜玻璃天文台
+      description: 一个小型平民研究团队，追踪维斯珀的大气层以及那些有时早于其来源传输到达的无线电回声。
+      leader: 米娜·帕克博士
+      headquarters: 向夜架
+      relations:
+        - description: 夜玻璃需要余烬背的阵列来验证其理论；余烬背则需要夜玻璃来预测王冠火。
+powerSystem:
+  name: 回声读取
+  schema:
+    properties:
+      name:
+        title: 名称
+      type:
+        title: 类型
+      description:
+        title: 描述
+      rules:
+        title: 规则
+      tiers:
+        items:
+          properties:
+            name:
+              title: 名称
+            rank:
+              title: 等级
+            description:
+              title: 描述
+        title: 层级
+  initialValue:
+    name: 回声读取
+    description: 一种从由维斯珀磁天气引起的时移无线电回声中提取有用信息的技术。这是一种技术实践，而非预言。
+    rules:
+      - 回声必须被记录、添加时间戳，并与独立信号进行比对，才能被视为证据。
+      - 更清晰的未来信息在人们据此行动时会引发更强的干扰；确定性绝非免费。
+      - 回声展示的是可能的传输，而非固定的未来。选择可以阻止、改变或导致所听到的内容。
+      - 王冠火能增强回声范围，但同时会使普通通信可靠性降低，并让暴露的电子元件更加危险。
+    tiers:
+      - name: 监听者
+        description: 能在强烈的静电噪声中识别模式、虚假重复和刻意言语。
+      - name: 追踪者
+        description: 能通过比较接收器间的相位漂移来估算回声产生的地点和时间。
+      - name: 拼接者
+        description: 能从几个相互冲突的回声中重建缺失片段，而不假装不确定性已消失。
+      - name: 呼叫者
+        description: 理论上具备将回复传输至更早窗口的能力。目前已知没有经过验证的呼叫者。
+history:
+  name: 历史
+  schema:
+    items:
+      properties:
+        era:
+          title: 时代
+        year:
+          title: 年份
+        name:
+          title: 名称
+        description:
+          title: 描述
+        significance:
+          title: 意义
+  initialValue:
+    - era: 定居时代
+      year: 214年前
+      name: 暮线着陆
+      description: 第一批永久栖息地被安置在可以用常规工程平衡维斯珀的光与冷的地方。
+    - era: 中继时代
+      year: 86年前
+      name: 余烬背上线
+      description: 三座山脊桅杆消除了西部链条中最长的盲区，并将一个维修营地变成了一个社区。
+    - era: 现代时代
+      year: 19年前
+      name: 大断电
+      description: 一场王冠风暴使六个定居点与外界隔绝了十一天。合作社“任何呼叫都不会无人应答”的承诺便始于那次恢复期。
+    - era: 现在
+      year: 4个月前
+      name: 首次验证回声
+      description: 米娜·帕克在夜玻璃传输天气预报前九分钟记录下了该预报。重复事件变得越来越长且具体。
+economy:
+  name: 经济
+  schema:
+    properties:
+      currencies:
+        items:
+          properties:
+            name:
+              title: 名称
+            symbol:
+              title: 符号
+            description:
+              title: 描述
+        title: 货币
+      resources:
+        title: 资源
+      tradeNotes:
+        title: 贸易
+  initialValue:
+    currencies:
+      - name: 交易筹码
+        description: 合作社信用点，可用于购买食物、修理、路线通行和个人物资。绝不会因缺乏筹码而拒绝提供必要的紧急服务。
+    resources:
+      - 电池电量
+      - 浓缩水
+      - 陶瓷电子元件
+      - 履带车零件
+      - 医疗低温包
+    tradeNotes: 电力是余烬背真正的预算。每一项重大维修、传输、车辆充电或研究扫描都会从其他公共需求中夺走能量。
+socialStructure:
+  name: 社会
+  schema:
+    properties:
+      classes:
+        items:
+          properties:
+            name:
+              title: 名称
+            rank:
+              title: 等级
+            description:
+              title: 描述
+        title: 阶层
+      notes:
+        title: 备注
+  initialValue:
+    classes:
+      - name: 居民
+        description: 居住在余烬背并共同承担维护班次、投票权和紧急义务的合作社成员。
+      - name: 路线队
+        description: 在定居点之间穿梭并依赖临时站点泊位的信使、运输工和机械师。
+      - name: 访客
+        description: 研究人员、乘客和商人，享有与其他人相同的紧急保护，但没有合作社投票权。
+    notes: 等级描述的是公民责任，而非个人价值。在紧急情况下，拥有相关专业知识的人领导响应行动。
+tone:
+  name: 基调
+  schema:
+    properties:
+      genres:
+        title: 类型
+      contentRating:
+        title: 分级
+      narrativeStyle:
+        title: 叙事风格
+      themes:
+        title: 主题
+  initialValue:
+    genres:
+      - 边疆科幻
+      - 社区冒险
+      - 时间谜团
+    narrativeStyle: 清晰、以角色驱动的冒险散文，包含触觉性的技术细节、干幽默的时刻以及可见的后果。惊奇感应源于人们共同解决不可能的问题。
+    themes:
+      - 警告他人是改变还是制造了危险
+      - 公共基础设施作为陌生人之间的承诺
+      - 专业知识、信任与共同责任
+      - 希望作为一种实践纪律
+mechanics:
+  name: 机制
+  schema:
+    properties:
+      combatStyle:
+        title: 战斗
+      difficulty:
+        title: 难度
+      skillSystem:
+        title: 检定
+      customRules:
+        title: 房规
+  initialValue:
+    skillSystem: 高风险动作使用坚毅、系统、野外生存术、洞察或默契。失败会改变时间、电量、信任、安全或可用信息的质量，而不仅仅是停止故事。
+    customRules:
+      - 跟踪王冠火倒计时，并在动作消耗有意义的时间时说明代价。
+      - 载具、无线电和站点系统需要电量；在某处投入的电力在其他地方不可用。
+      - 未来的回声提供线索，绝非强制结果。玩家的选择可能阻止、改变或导致所听到的传输。
+      - 承诺和发现属于任务日志和信号日志。
+      - 重要角色会记住诚实、关怀、能力以及玩家优先考虑谁的安全。
+startingConditions:
+  name: 开场
+  schema:
+    properties:
+      openingScenario:
+        title: 开场场景
+      openingHook:
+        title: 引子
+      openingChips:
+        title: 开局行动
+      playerConstraints:
+        title: 限制
+      startingLocation:
+        title: 起始地点
+  initialValue:
+    openingScenario: 06:14，余烬背中继站的每个接收器都播放着同一条不可能的求救信号——你自己的声音，从七十二小时后传来。消息警告你要在十七英里处阻止医疗车队，让米娜远离塔楼，并防止托马斯关闭信号。随后网络失效，因为一场王冠风暴正在逼近。
+    openingHook: 未来使用了你的声音。你首先警告谁？
+    openingChips:
+      - 给托马斯播放录音
+      - 呼叫琼恩并阻止车队
+      - 跟随米娜爬上去
+      - 在信号消失前追踪它
+      - 检查站点的剩余电量
+    playerConstraints:
+      - 你是余烬背最新的线路员，受过训练但尚未被信任独自应对危机。
+      - 王冠火将在三小时内到达山脊。
+      - 医疗车队已经在移动，远程通信正在失效。
+    startingLocation: 余烬背中继站，信号室

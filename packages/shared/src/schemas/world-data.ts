@@ -34,25 +34,86 @@ const afterSchema = z.union([
 
 export const worldDataSourceDescriptorSchema = z
   .object({
-    kind: worldDataSourceKindSchema,
-    path: z.string().min(1),
-    schema: z.string().min(1).optional(),
-    to: z.string().min(1),
-    key: z.string().min(1).optional(),
-    indexTo: z.string().min(1).optional(),
-    effects: z.array(worldDataEffectSchema).optional(),
-    enabled: z.boolean().optional(),
-    locale: z.string().min(2).optional(),
-    merge: worldDataMergeModeSchema.optional(),
-    after: afterSchema.optional(),
-    visibility: worldDataVisibilitySchema.optional(),
+    kind: worldDataSourceKindSchema.describe(
+      "Reader type. `media` reads a directory of media files.",
+    ),
+    path: z
+      .string()
+      .min(1)
+      .meta({
+        description:
+          "File or directory, relative to the world root. A variant `<name>.<locale>.<ext>` is used when it exists for the session locale.",
+        examples: ["characters/main-cast.json"],
+      }),
+    schema: z
+      .string()
+      .min(1)
+      .meta({
+        description:
+          "Schema that validates the content: `covel://world/dimensions`, `contract:<contractId>`, or a local JSON Schema path. Omit it for a `contract:` or dimensions destination: the schema is the one of the destination.",
+        examples: ["contract:character.blueprints@1"],
+      })
+      .optional(),
+    to: z
+      .string()
+      .min(1)
+      .meta({
+        description:
+          "Destination: `world:metadata.<path>`, `contract:<contractId>`, `contract:<contractId>+lorebook`, `lorebook`, `characters` or `media`.",
+        examples: ["contract:character.blueprints@1", "characters"],
+      }),
+    key: z
+      .string()
+      .min(1)
+      .meta({
+        description:
+          "Field that gives each record a stable key. Media sources use `filename`.",
+        examples: ["id"],
+      })
+      .optional(),
+    indexTo: z
+      .string()
+      .min(1)
+      .describe(
+        "Media sources only: the `contract:<contractId>` that receives the media index. Without an active receiver the media bytes are not imported.",
+      )
+      .optional(),
+    effects: z
+      .array(worldDataEffectSchema)
+      .describe(
+        "Extra projections. `characters` instantiates characters; `projections` runs the pure projections that active plugins declare.",
+      )
+      .optional(),
+    enabled: z.boolean().describe("`false` skips this source.").optional(),
+    locale: z
+      .string()
+      .min(2)
+      .describe(
+        "Language of the content in this source. Metadata only; it does not select a locale variant.",
+      )
+      .optional(),
+    merge: worldDataMergeModeSchema
+      .describe("Policy when a record already exists.")
+      .optional(),
+    after: afterSchema
+      .describe("Source ID or IDs that must import first.")
+      .optional(),
+    visibility: worldDataVisibilitySchema
+      .describe(
+        "`hidden` imports into the receiving plugin's hidden namespace. The data stays out of prompts and player-visible surfaces until the plugin reveals it. Requires a `contract:` destination. Defaults to `public`.",
+      )
+      .optional(),
   })
   .strict();
 
 export const worldDataDescriptorSchema = z
   .object({
-    schemaVersion: z.literal(1),
-    sources: z.record(worldDataSourceIdSchema, worldDataSourceDescriptorSchema),
+    schemaVersion: z.literal(1).describe("Descriptor format version."),
+    sources: z
+      .record(worldDataSourceIdSchema, worldDataSourceDescriptorSchema)
+      .describe(
+        "Data sources keyed by source ID. A source ID starts with a letter and uses letters, digits, `_` or `-`.",
+      ),
   })
   .strict();
 

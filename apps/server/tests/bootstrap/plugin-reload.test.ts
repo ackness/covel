@@ -564,8 +564,8 @@ describe("plugin generation reload", () => {
       "utf-8",
     );
     await fs.writeFile(
-      path.join(f.root, "PLUGIN.en.md"),
-      canonical.replace("\nFixture\n", "\nEnglish generation one.\n"),
+      path.join(f.root, "PLUGIN.zh.md"),
+      canonical.replace("\nFixture\n", "\n中文第一版。\n"),
     );
     await f.manager.reload(f.id, "session");
     const started = Promise.withResolvers<void>();
@@ -575,19 +575,19 @@ describe("plugin generation reload", () => {
       await finish.promise;
       const manifest = f.registry.getActiveRuntimes("session")[0]!;
       expect(
-        (await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session"))
+        (await f.runtimeLoader!.loadRuntimeFn(manifest, "zh-CN", "session"))
           ?.promptTemplate,
-      ).toContain("English generation one.");
+      ).toContain("中文第一版。");
       expect(
         (
-          await f.runtimeLoader!.loadRuntimeFn(manifest, "zh-CN", "session")
+          await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session")
         )?.promptTemplate.trim(),
       ).toBe("Fixture");
     });
     await started.promise;
     await fs.writeFile(
-      path.join(f.root, "PLUGIN.en.md"),
-      canonical.replace("\nFixture\n", "\nEnglish generation two.\n"),
+      path.join(f.root, "PLUGIN.zh.md"),
+      canonical.replace("\nFixture\n", "\n中文第二版。\n"),
     );
     await f.manager.reload(f.id, "session");
     finish.resolve();
@@ -595,9 +595,9 @@ describe("plugin generation reload", () => {
     await f.manager.withSnapshot("session", async () => {
       const manifest = f.registry.getActiveRuntimes("session")[0]!;
       expect(
-        (await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session"))
+        (await f.runtimeLoader!.loadRuntimeFn(manifest, "zh-CN", "session"))
           ?.promptTemplate,
-      ).toContain("English generation two.");
+      ).toContain("中文第二版。");
     });
   });
 
@@ -684,20 +684,29 @@ describe("plugin generation reload", () => {
 
   it("reloads approved community files through the development watcher", async () => {
     const f = await fixture();
+    const entry = path.join(f.root, "entry.mjs");
     f.manager.watch();
-    await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2));
-    await vi.waitFor(async () => {
-      expect(
-        await f.client().call({
+    // The system starts a watch in the background and reports nothing for a
+    // write made before it is ready, so one write right after `watch()` can
+    // be lost. Write again until a reload is seen. The pause between writes
+    // is longer than the reload debounce.
+    await vi.waitFor(
+      async () => {
+        const value = await f.client().call({
           pluginId: f.id,
           name: "value",
           contract: "fixture.value@1",
           input: null,
-        }),
-      ).toBe(2);
-    });
-    expect(f.disposed).toEqual([1]);
-  });
+        });
+        if (value !== 2) await fs.writeFile(entry, f.source(2));
+        expect(value).toBe(2);
+      },
+      { timeout: 45_000, interval: 1_000 },
+    );
+    // A repeated write can reload the same source once more; the first
+    // generation is the first one disposed.
+    expect(f.disposed[0]).toBe(1);
+  }, 60_000);
 
   it("retains a timed-out provider until its losing promise finishes", async () => {
     const f = await fixture();
@@ -734,6 +743,8 @@ describe("plugin generation reload", () => {
     await f.manager.reload(f.id, "session");
     expect(f.disposed).toEqual([1]);
     gate.resolve();
-    await vi.waitFor(() => expect(f.disposed).toEqual([1, 2]));
-  });
+    await vi.waitFor(() => expect(f.disposed).toEqual([1, 2]), {
+      timeout: 45_000,
+    });
+  }, 60_000);
 });

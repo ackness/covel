@@ -101,14 +101,38 @@ describe("plan-story-events", () => {
         retire: ["meg-offer"],
       }),
     ).rejects.toThrow(
+      // Each message says what can be used instead, so that the next call
+      // does not guess again.
       [
         "meg-offer: only pending planned events can be retired",
         "meg-offer: this event already fired",
-        "meg-offer: unknown dimension: weather",
-        "meg-offer: unknown time field: period",
-        "meg-offer: unknown event: kings-secret",
+        "meg-offer: unknown dimension: weather. The dimensions are: factionStanding",
+        "meg-offer: unknown time field: period. The numeric fields of worldTime.value are: phase",
+        "meg-offer: unknown event: kings-secret. `revealed` takes the ID of an event in storyEvents.value (meg-offer, dock-fire) or of an event in this call. Use one of them or remove the condition",
       ].join("\n"),
     );
+  });
+
+  it("says how to write a condition that mixes kinds or operators", async () => {
+    const event = (all) => ({
+      events: [{ id: "watch", title: "Watch", all, payload: "Brief." }],
+    });
+    await expect(
+      run(event([{ dimension: "factionStanding", revealed: "meg-offer" }])),
+    ).rejects.toThrow(
+      "watch: a condition references exactly one of dimension, time, revealed; this one has dimension and revealed. Write one condition for each",
+    );
+    await expect(
+      run(event([{ time: "phase", gte: 2, lte: 4 }])),
+    ).rejects.toThrow(
+      "watch: a dimension or time condition has exactly one operator; this one has gte and lte. For a range, write two conditions",
+    );
+  });
+
+  it("takes a reason of a few sentences", async () => {
+    const reason = "The keeper lied about the ledger. ".repeat(12).trim();
+    expect(reason.length).toBeGreaterThan(300);
+    expect((await run({ events: [], reason })).reason).toBe(reason);
   });
 
   it("accepts an empty plan", async () => {

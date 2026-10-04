@@ -3,7 +3,7 @@
  * item-op RPC action (panel buttons) and the `/bag` command action, and puts
  * what the player carries into the session summary.
  */
-import { appendSummaryEntries } from "@covel/plugin-handlers-utils";
+import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 import itemOp from "../rpc/item-op.js";
 import openBag from "../rpc/open-bag.js";
 
@@ -39,7 +39,7 @@ export default function (covel) {
         {
           id: "inventory.items",
           kind: "list",
-          label: { zh: "行囊", en: "Pack" },
+          label: labelText(ctx, "Pack"),
           items: carried
             .slice(0, SUMMARY_ITEMS)
             .map((item) =>

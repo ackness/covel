@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 schemaVersion: "1.0"
 id: emberback
 name: Emberback Relay
@@ -7,6 +8,7 @@ summary: A lonely relay on a tidally locked world receives a distress call in
 defaultLocale: en-US
 supportedLocales:
   - en-US
+  - zh-CN
 tags:
   - science-fiction
   - frontier
@@ -119,4 +121,3 @@ characterSchema:
       description:
         The ability to earn trust, calm conflict, read a room, and persuade
         people without treating them as obstacles.
-worldData: data/world.data.yaml

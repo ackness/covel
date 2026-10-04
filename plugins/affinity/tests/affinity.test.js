@@ -35,11 +35,24 @@ import {
   loadPluginDefinition,
   loadPluginUi,
   loadRuntime,
+  resolveRuntimePrompt,
 } from "@covel/plugin-loader";
 
 import { tool, z } from "@covel/tools";
 import createUpdateAffinity from "../tools/update-affinity.js";
-import { AFFINITY_TIERS, clampScore, getTier } from "../tier-metadata.js";
+import {
+  AFFINITY_TIERS,
+  clampScore,
+  getTier,
+  tierLabel,
+} from "../tier-metadata.js";
+import { loadPluginMessages } from "@covel/plugin-test-utils";
+
+// What the host gives a tool as `context.messages` for a Chinese session.
+const messages = await loadPluginMessages(
+  new URL("..", import.meta.url),
+  "zh-CN",
+);
 
 /** Seed a committed affinity record directly into the test store. */
 async function seedRecord(store, key, value) {
@@ -84,10 +97,10 @@ describe("tier metadata", () => {
     expect(clampScore(42)).toBe(42);
   });
 
-  it("carries a bilingual label and a badge color on every tier", () => {
+  it("names every tier in English and in Chinese, with a badge color", () => {
     for (const tier of AFFINITY_TIERS) {
-      expect(tier.label.zh).toBeTruthy();
-      expect(tier.label.en).toBeTruthy();
+      expect(tierLabel(undefined, tier.id)).toMatch(/^[A-Z][a-z]+$/);
+      expect(tierLabel({ messages }, tier.id)).toMatch(/^[\u4e00-\u9fff]+$/);
       expect(tier.color).toBeTruthy();
     }
   });
@@ -101,6 +114,8 @@ describe("update-affinity", () => {
     turnId: "turn-1",
     pluginId: "affinity",
     runtimeId: "affinity",
+    locale: "zh-CN",
+    messages,
     turnNumber: 3,
   };
   let mockStore;
@@ -116,6 +131,23 @@ describe("update-affinity", () => {
       }),
       mockStore,
     );
+  });
+
+  it("stores the tier label in the session's language", async () => {
+    const result = await executeAndCommit(
+      updateAffinityTool,
+      { changes: [{ name: "Lian", delta: 5, reason: "You paid her debt" }] },
+      { ...ctx, locale: "en-US", messages: undefined },
+      mockStore,
+    );
+    const stored = await mockStore.getPluginData(
+      "sess-1",
+      "affinity",
+      "affinity",
+      getToolContent(result).results[0].id,
+    );
+    // The record goes into the prompt: one language, not a pair of both.
+    expect(stored.value.tierLabel).toBe("Neutral");
   });
 
   it("creates an unknown NPC at score 0 and applies the delta with derived fields", async () => {
@@ -141,7 +173,7 @@ describe("update-affinity", () => {
     expect(stored.value.score).toBe(5);
     expect(stored.value.scoreBar).toBe(105);
     expect(stored.value.tier).toBe("neutral");
-    expect(stored.value.tierLabel).toEqual({ zh: "中立", en: "Neutral" });
+    expect(stored.value.tierLabel).toBe("中立");
     expect(stored.value.history).toEqual([
       { turn: 3, delta: 5, reason: "你替她挡了债主" },
     ]);
@@ -171,7 +203,7 @@ describe("update-affinity", () => {
     );
     expect(stored.value.score).toBe(100);
     expect(stored.value.tier).toBe("devoted");
-    expect(stored.value.tierLabel).toEqual({ zh: "挚爱", en: "Devoted" });
+    expect(stored.value.tierLabel).toBe("挚爱");
   });
 
   it("clamps at the -100 lower bound and lands in the hostile tier", async () => {
@@ -197,7 +229,7 @@ describe("update-affinity", () => {
     );
     expect(stored.value.score).toBe(-100);
     expect(stored.value.tier).toBe("hostile");
-    expect(stored.value.tierLabel).toEqual({ zh: "敌视", en: "Hostile" });
+    expect(stored.value.tierLabel).toBe("敌视");
     expect(stored.value.lastDelta).toBe("-20");
     expect(stored.value.lastDeltaColor).toBe("red");
   });
@@ -293,7 +325,7 @@ describe("update-affinity", () => {
     );
     expect(stored.value.score).toBe(35);
     expect(stored.value.tier).toBe("friendly");
-    expect(stored.value.tierLabel).toEqual({ zh: "友好", en: "Friendly" });
+    expect(stored.value.tierLabel).toBe("友好");
     expect(stored.value.scoreBar).toBe(135);
     expect(stored.value.history).toEqual([
       { turn: 3, delta: 5, reason: "你记得她的生日" },
@@ -495,8 +527,18 @@ describe("affinity plugin manifest", () => {
     expect(loadedUi.uiSpecs?.message?.[0].id).toBe("affinity-toast");
   });
 
-  it("loads PLUGIN.md body as the LLM prompt template", () => {
-    expect(loaded.promptTemplate).toContain("好感度系统");
+  it("loads PLUGIN.md body as the LLM prompt template", async () => {
+    expect(loaded.promptTemplate).toContain("Affinity Tracker");
     expect(loaded.promptTemplate).toContain("<existing-affinity>");
+    // A Chinese session reads the PLUGIN.zh.md variant of the same prompt.
+    const discovery = (await discoverPlugins(PLUGINS_DIR)).find(
+      (d) => d.id === "affinity",
+    );
+    const chinese = resolveRuntimePrompt(
+      (await loadPluginDefinition(discovery, "zh-CN")).manifests[0],
+      "zh-CN",
+    );
+    expect(chinese).toContain("好感度系统");
+    expect(chinese).toContain("<existing-affinity>");
   });
 });

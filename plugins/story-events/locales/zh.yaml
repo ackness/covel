@@ -1,0 +1,21 @@
+# Chinese text of the story-events plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
+PLUGIN.md:
+  displayName: 隐藏事件
+  description: 世界包声明的隐藏剧情在条件满足前对模型与玩家都不可见；满足时由叙事在本回合自然演出。可开启剧情策划，在幕后追加后续事件。
+  contributes:
+    settings:
+      - key: planner
+        label: 剧情策划
+        description: 每 3 回合调用一次模型，根据剧情在幕后埋下之后才会发生的隐藏事件。
+    data:
+      events:
+        authoring:
+          title: 隐藏剧情事件
+runtimes/evaluate/RUNTIME.md:
+  description: 每回合用当前维度与世界时间判断隐藏事件是否满足条件，满足时向叙事交出本回合的剧情提示。
+runtimes/intake/RUNTIME.md:
+  description: 接收其他 runtime 在剧情推进中提出的后续隐藏事件，校验后加入隐藏事件表。
+runtimes/plot/RUNTIME.md:
+  description: 每隔几回合读取本轮叙事和世界状态，埋下之后才会发生的隐藏后续事件。

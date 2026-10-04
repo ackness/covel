@@ -1,5 +1,8 @@
 import { resolvePluginDeclarations } from "./declarations.js";
 import { loadPluginUiSpec } from "./ui-spec.js";
+import { readMessageCatalogs } from "./locale-messages.js";
+import { pluginLanguages } from "./plugin-languages.js";
+import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
 /**
  * Progressive plugin loading — three levels of detail.
  */
@@ -8,15 +11,17 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-  DEFAULT_FALLBACK_LOCALE,
-  DEFAULT_LOCALE,
   canonicalizeLocale,
-  localeLookupCandidates,
-  localeRegistry,
   hasIllegalDetachedContract,
-  normalizeLocale,
+  instructionVariantCandidates,
+  isInstructionVariantLocale,
 } from "@covel/shared";
-import type { PluginManifest, RuntimeManifest } from "@covel/shared";
+import type {
+  PluginManifest,
+  PluginLanguages,
+  PluginMessageCatalog,
+  RuntimeManifest,
+} from "@covel/shared";
 import type {
   PluginDiscoveryResult,
   PluginSummary,
@@ -39,32 +44,26 @@ import {
 } from "./declarations.js";
 
 /**
- * Resolve a locale-aware PLUGIN.md path.
+ * Prompt files for a session locale, most specific first.
  *
- * Resolution order (e.g., locale = "ru-RU"):
- *   1. PLUGIN.ru-RU.md  (exact locale)
- *   2. PLUGIN.ru.md     (language only)
- *   3. PLUGIN.en-US.md / PLUGIN.en.md (English fallback)
- *   4. PLUGIN.md        (canonical fallback)
- *
- * The registered default locale and its explicit aliases use PLUGIN.md before
- * English so the historical canonical prompt remains unchanged for zh-CN.
+ * The canonical `PLUGIN.md` / `RUNTIME.md` is English and is the base every
+ * plugin supplies. A Chinese session reads a `*.zh-CN.md` or `*.zh.md` variant
+ * when the plugin ships one; every other locale reads the canonical file.
+ * `COVEL_INSTRUCTION_LOCALE` can force either language for all sessions.
  */
-function localeVariantNames(locale: string, stem = "PLUGIN"): string[] {
-  return localeLookupCandidates(locale).map(
-    (candidate) => `${stem}.${candidate}.md`,
-  );
+function localizedMarkdownNames(locale?: string, stem = "PLUGIN"): string[] {
+  return [
+    ...instructionVariantCandidates(locale).map(
+      (candidate) => `${stem}.${candidate}.md`,
+    ),
+    `${stem}.md`,
+  ];
 }
 
-function isDefaultLocaleOrAlias(locale: string): boolean {
-  const defaultDefinition = localeRegistry.get(DEFAULT_LOCALE);
-  if (normalizeLocale(locale) === normalizeLocale(DEFAULT_LOCALE)) return true;
-  return (
-    defaultDefinition?.aliases?.some(
-      (alias) =>
-        canonicalizeLocale(alias) !== undefined &&
-        normalizeLocale(canonicalizeLocale(alias)!) === normalizeLocale(locale),
-    ) ?? false
+/** A variant file in a language that has no instruction set is never read. */
+function warnUnreadVariant(sourcePath: string): void {
+  console.warn(
+    `[plugin-loader] ${sourcePath} is not read: prompt files exist only as the canonical English file and a Chinese (*.zh.md) variant. Translate labels with locale maps instead.`,
   );
 }
 
@@ -78,22 +77,6 @@ async function resolveLocalizedPluginMd(
     if (await fileExists(candidate)) return candidate;
   }
   return path.join(dir, `${stem}.md`);
-}
-
-function localizedMarkdownNames(locale?: string, stem = "PLUGIN"): string[] {
-  const base = `${stem}.md`;
-  const canonicalLocale = canonicalizeLocale(locale);
-  if (!canonicalLocale) return [base];
-  const requestedNames = localeVariantNames(canonicalLocale, stem);
-  if (isDefaultLocaleOrAlias(canonicalLocale)) return [...requestedNames, base];
-  const fallbackLocale = canonicalizeLocale(DEFAULT_FALLBACK_LOCALE)!;
-  return [
-    ...new Set([
-      ...requestedNames,
-      ...localeVariantNames(fallbackLocale, stem),
-      base,
-    ]),
-  ];
 }
 
 /** Capture prose before publication; later locale selection never reads live files. */
@@ -121,8 +104,13 @@ async function captureRuntimePrompts(
       name === `${stem}.md`
     )
       continue;
-    if (!canonicalizeLocale(name.slice(stem.length + 1, -3))) continue;
+    const variantLocale = canonicalizeLocale(name.slice(stem.length + 1, -3));
+    if (!variantLocale) continue;
     const sourcePath = path.join(dir, name);
+    if (!isInstructionVariantLocale(variantLocale)) {
+      warnUnreadVariant(sourcePath);
+      continue;
+    }
     await assertInsideRoot(discovery.rootPath, sourcePath, "Localized prompt");
     const content = await fs.readFile(sourcePath, "utf-8");
     const localized = discovery.isMultiRuntime
@@ -176,11 +164,23 @@ async function parsePluginMdForLocale(
     content: string,
     file: string,
     canonical?: Readonly<Record<string, unknown>>,
+    labels?: readonly ManifestLabels[],
   ) =>
     plugin
-      ? parseRuntimeMd(content, file, plugin, canonical)
-      : parsePluginMd(content, file, canonical);
-  const canonical = parse(await fs.readFile(basePath, "utf-8"), basePath);
+      ? parseRuntimeMd(content, file, plugin, canonical, labels)
+      : parsePluginMd(content, file, canonical, labels);
+  // The plugin root is the directory itself, or two levels above a runtime's.
+  const pluginRoot = plugin ? path.resolve(dir, "..", "..") : dir;
+  const labels = await readManifestLabels(
+    pluginRoot,
+    path.relative(pluginRoot, basePath),
+  );
+  const canonical = parse(
+    await fs.readFile(basePath, "utf-8"),
+    basePath,
+    undefined,
+    labels,
+  );
   return localizedPath === basePath
     ? canonical
     : parse(
@@ -275,6 +275,10 @@ export async function loadPluginSummary(
 export interface PluginDefinition {
   readonly packageManifest: ParsedPluginMd;
   readonly manifests: readonly ParsedRuntimeMd[];
+  /** The `messages` section of each `locales/<locale>.yaml`. */
+  readonly messages: readonly PluginMessageCatalog[];
+  /** The languages the package has text in. */
+  readonly languages: PluginLanguages;
 }
 
 export async function loadPluginDefinition(
@@ -421,6 +425,8 @@ export async function loadPluginDefinition(
         captureRuntimePrompts(discovery, parsed, plugin),
       ),
     ),
+    messages: await readMessageCatalogs(discovery.rootPath),
+    languages: await pluginLanguages(discovery.rootPath),
   };
   validatePluginDeclarations([packageManifest]);
   return definition;
@@ -445,7 +451,8 @@ export async function loadPluginEntryDefinition(
   for (const filename of await fs.readdir(discovery.rootPath)) {
     const match = /^PLUGIN\.(.+)\.md$/.exec(filename);
     const locale = match && canonicalizeLocale(match[1]);
-    if (!locale) continue;
+    // Unread variants were already reported while capturing runtime prompts.
+    if (!locale || !isInstructionVariantLocale(locale)) continue;
     const file = path.join(discovery.rootPath, filename);
     await assertInsideRoot(
       discovery.rootPath,
@@ -693,7 +700,7 @@ export async function loadPluginUi(
  * Level 2: Fully load a runtime for execution.
  * Reads prompt template, output schema.
  *
- * @param locale - Optional locale for loading localized PLUGIN.md (e.g., "en-US" → PLUGIN.en.md)
+ * @param locale - Optional session locale; a Chinese locale reads the PLUGIN.zh.md variant
  */
 export async function loadRuntime(
   discovery: PluginDiscoveryResult,
@@ -821,6 +828,7 @@ export async function loadRuntime(
     ...(Object.keys(exportContractSchemas).length
       ? { exportContractSchemas }
       : {}),
+    ...(snapshot.messages.length > 0 ? { messages: snapshot.messages } : {}),
     handler,
     guard,
   };

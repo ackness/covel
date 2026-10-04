@@ -84,6 +84,20 @@ function lorebookRecordValue(write: PlannedWrite & { kind: "lorebook" }) {
   return isRecord(write.value) ? write.value : { content: write.content };
 }
 
+/**
+ * The entry's `extra`, with the record's own title. The prompt names a world
+ * rule by `extra.title`; without it the model reads the rule's id or its
+ * first trigger keyword in place of the title.
+ */
+function lorebookExtra(value: Record<string, unknown>): unknown {
+  const title = value.title;
+  if (typeof title !== "string" || title.length === 0) return value.extra;
+  if (value.extra === undefined) return { title };
+  if (!isRecord(value.extra) || typeof value.extra.title === "string")
+    return value.extra;
+  return { ...value.extra, title };
+}
+
 function toLorebookRecord(
   sessionId: string,
   write: PlannedWrite & { kind: "lorebook" },
@@ -91,6 +105,7 @@ function toLorebookRecord(
   now: string,
 ): LorebookEntryRecord {
   const value = lorebookRecordValue(write);
+  const extra = lorebookExtra(value);
   return {
     id: write.id,
     sessionId,
@@ -106,7 +121,7 @@ function toLorebookRecord(
         ? value.insertionOrder
         : insertionOrder,
     enabled: typeof value.enabled === "boolean" ? value.enabled : true,
-    ...(value.extra !== undefined ? { extra: value.extra } : {}),
+    ...(extra !== undefined ? { extra } : {}),
     createdAt: now,
     updatedAt: now,
   };

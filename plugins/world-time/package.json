@@ -14,9 +14,10 @@
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
+    "@covel/plugin-test-utils": "workspace:*",
     "@covel/runtime": "workspace:*",
     "@covel/store": "workspace:*",
-    "vitest": "^5.0.1",
-    "@covel/tools": "workspace:*"
+    "@covel/tools": "workspace:*",
+    "vitest": "^5.0.1"
   }
 }

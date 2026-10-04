@@ -4,13 +4,13 @@
 
 | 层 | 检查什么 | 怎么跑 | 必做? |
 |---|---|---|---|
-| **L1 Schema + worldData** | `world.yaml`(Zod strict)+ worldData descriptor 与各 source 的生产加载诊断 | `pnpm validate:world worlds/<id>` | ✓ 必须 |
+| **L1 静态校验** | `world.yaml`(Zod strict)、lore 文件、插件 ID 与契约、worldData descriptor、**每条种子记录**(按接收插件的契约 schema)、各语言变体 | `pnpm validate:world worlds/<id>` | ✓ 必须 |
 | **L2 引用一致性** | faction.relations.targetId 指向的 id 真实存在 | 一行 node 脚本 | 当 factions 含 relations 时必须 |
 | **L3 内容完整度** | WORLD.md 是否引用了 yaml 里的关键 region/faction/事件 | 人工肉眼或 grep | 准备发布时建议 |
 
 ---
 
-## L1 — Schema + worldData 校验(必做)
+## L1 — 静态校验(必做)
 
 在仓库根目录执行:
 
@@ -18,23 +18,38 @@
 pnpm validate:world worlds/<id>
 ```
 
-它和 `pnpm release:preflight` 用的是同一个脚本(`scripts/validate-release-worlds.ts`):先用生产 schema 校验 `world.yaml`,声明了 `worldData` 时再按服务端的加载路径解析 descriptor 和每个 source,报告 error 级诊断。可以一次传多个目录;仓库外的世界(`~/.covel/worlds/<id>/`)直接传绝对路径。
+它和 `pnpm release:preflight` 用的是同一个校验器,并且复用建会话时的 worldData 预检,所以这里通过的种子,建会话时不会再因为记录内容报错。可以一次传多个目录;仓库外的世界(`~/.covel/worlds/<id>/`)直接传绝对路径。
+
+检查内容:
+
+- `world.yaml` 按生产 schema 校验。
+- 每个声明的语言(`defaultLocale` 与 `supportedLocales`)都能解析到 lore 文件;缺 `WORLD.md` 兜底时给 warning。
+- `pluginPolicy` 与 `pluginSettings` 里的插件 ID 在已扫描的插件目录中存在;拼写接近已知 ID 时直接判为 error 并给出 "Did you mean"。
+- `pluginSettings` 的 key 是该插件声明过的设置项。
+- `pluginPolicy.requires` 的契约有提供者。
+- descriptor、source 顺序(`after` 指向不存在的 source 会报错)、文件读取。
+- 每个 `contract:` source 的每条记录,按接收插件公开的 schema 校验;每个声明的语言各校验一遍,因为不同语言会选到不同的变体文件。
+- 语言变体文件与默认文件的 `key` 集合一致,缺记录或多记录给 warning。
+
+选项:
+
+- `--plugins <dir>`:额外扫描一个插件目录(社区插件)。仓库的 `plugins/` 总会扫描。
+- `--strict`:没有任何已扫描插件提供的插件 ID / 契约按 error 处理。不加时是 warning,因为提供者可能是没被扫描到的社区插件。
 
 失败输出形如:
 
 ```
-✗ worlds/<id>/world.yaml (world manifest schema)
-  - id: id must be lowercase with hyphens (e.g. "my-world")
-  - (root): Unrecognized key: "bogusField"
+✗ worlds/<id>/world.yaml
+  error   world.yaml · pluginPolicy.requested[1]
+          plugin "dice-chek" is not in the scanned plugin directories
+          Did you mean "dice-check"?
+  error   data/memory-blocks.json · source "memory"
+          worldData source "memory" value failed schema validation: data/blocks must be array
 ```
 
-worldData 的常见失败:
+每条诊断给出文件、位置或 source、问题和可行的修法。按提示改完重跑,直到没有 error。
 
-- `schemaVersion` 写成 `"1"`(字符串)—— 必须是数字字面量 `1`
-- source id 不符合 `^[a-z][a-zA-Z0-9_-]{0,63}$`(如 `Cast`、`1cast`)
-- `to: media` 的 source 忘了写 `indexTo` —— **校验会放行,但导入是 no-op**:字节进不了插件索引,舞台拿不到立绘/背景。凡是 `kind: media`,检查它有没有配套的 `indexTo`
-
-`after` 引用的 source id 必须在同一份 descriptor 里真实存在,这条校验不查,靠肉眼。`contract:` 种子记录也不在这一层逐条校验,见文末。
+仍需留意的一点:`to: media` 的 source 要同时写 `key: filename` 和 `indexTo`,否则字节进不了插件索引,舞台拿不到立绘/背景。
 
 ---
 
@@ -126,12 +141,11 @@ if (missing.length){
 
 ```
 写完 world.yaml + WORLD.md
-└─ L1 pnpm validate:world(必做,含 worldData)
-   ├─ 有 contract: 种子? → 按文末用接收插件的 schema 逐条校验
+└─ L1 pnpm validate:world(必做,含 worldData 与种子记录)
    ├─ factions 有 relations? → L2 引用检查
    └─ 准备发布?
       ├─ 是 → L3 lore 覆盖度 grep + L4 真实游戏跑一回合
       └─ 否(本地测试用) → 跳过 L3/L4
 ```
 
-对于 `contract:` source，使用解析后的接收插件公开 schema 校验记录，并检查接收 namespace 的 `accepts`。角色导入还需校验角色类型、字段和 player 单例；不要以插件私有 namespace 代替角色领域。
+角色导入还需确认角色类型、字段和 player 单例符合 `characterSchema`；不要以插件私有 namespace 代替角色领域。

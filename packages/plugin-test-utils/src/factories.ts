@@ -22,6 +22,9 @@ export function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
     turnId: "turn-1",
     playerMessage: "开始游戏",
     origin: "player",
+    // A session always has a locale. Without one the framework writes no
+    // preamble, so a test would see a prompt that production never sends.
+    locale: "zh-CN",
     ...overrides,
   };
 }

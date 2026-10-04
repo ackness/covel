@@ -21,6 +21,16 @@ export const FEATURE_ENV_VARS = [
       "Policy for same-layer effects read/write hazards: warn preserves parallelism; strict serializes conflicting pairs.",
   },
   {
+    name: "COVEL_INSTRUCTION_LOCALE",
+    group: "feature",
+    type: "enum",
+    status: "active",
+    values: ["en", "zh"],
+    defaultValue: "(derived from the session locale)",
+    description:
+      "Force one instruction language for every session: en reads the canonical English prompt bodies, zh prefers the *.zh.md variants. When unset, Simplified Chinese sessions read Chinese instructions where they exist and all other sessions read English.",
+  },
+  {
     name: "COVEL_COMPACTOR_CONTEXT_WINDOW",
     group: "feature",
     type: "integer",

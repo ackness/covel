@@ -12,6 +12,16 @@ import type { GenerateWorldEvent, WorldRecord } from "@/services/api.js";
 const api = vi.hoisted(() => ({
   fetchServerHealth: vi.fn(async () => ({ storage: undefined })),
   generateWorld: vi.fn(),
+  listGeneratableWorldContent: vi.fn(
+    async (): Promise<
+      {
+        contract: string;
+        title: string;
+        description?: string;
+        selectedByDefault: boolean;
+      }[]
+    > => [],
+  ),
 }));
 const dataService = vi.hoisted(() => ({
   saveGeneratedWorld: vi.fn(),
@@ -86,5 +96,46 @@ describe("AiWorldGenerator", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
+  });
+
+  it("offers the plugin content the server lists and sends the selection", async () => {
+    api.listGeneratableWorldContent.mockResolvedValue([
+      {
+        contract: "memory.blocks@1",
+        title: "Memory blocks",
+        description: "World-defined memory blocks.",
+        selectedByDefault: true,
+      },
+      {
+        contract: "world.time-definition@1",
+        title: "World time definition",
+        selectedByDefault: false,
+      },
+    ]);
+    api.generateWorld.mockReturnValue(new AbortController());
+
+    render(
+      <AiWorldGenerator open onOpenChange={vi.fn()} onWorldCreated={vi.fn()} />,
+    );
+    const memory = await screen.findByRole("button", {
+      name: /Memory blocks/,
+    });
+    const time = screen.getByRole("button", { name: /World time definition/ });
+    expect(memory.getAttribute("aria-pressed")).toBe("true");
+    expect(time.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(memory);
+    fireEvent.click(time);
+    fireEvent.change(screen.getByLabelText("核心创意"), {
+      target: { value: "A harbor that keeps time by the tide" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+
+    await waitFor(() => expect(api.generateWorld).toHaveBeenCalledOnce());
+    const options = api.generateWorld.mock.calls[0]![5] as {
+      brief: { content: string[]; contracts?: string[] };
+    };
+    expect(options.brief.contracts).toEqual(["world.time-definition@1"]);
+    expect(options.brief.content).not.toContain("memory");
   });
 });

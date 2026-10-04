@@ -3,14 +3,12 @@ import {
   actionRequestSchema,
   type SessionExecutionStatus,
 } from "@covel/shared";
-import i18n from "i18next";
 import type * as api from "@/services/api.js";
 import type { SessionDispatch, SessionState } from "./types.js";
 
 export function createRecoveryActionRequest(
   status: SessionExecutionStatus,
   sessionId: string,
-  locale: string,
 ): api.ActionRequest | undefined {
   if (
     !status.retry ||
@@ -21,7 +19,6 @@ export function createRecoveryActionRequest(
   return actionRequestSchema.parse({
     requestId: crypto.randomUUID(),
     sessionId,
-    locale,
     type: status.retry.type,
     payload: { ...status.retry.payload, recoverFromTurnId: status.turnId },
   });
@@ -44,7 +41,6 @@ export function useExecutionRecoveryActions({
     const request = createRecoveryActionRequest(
       recovery.status,
       state.session.id,
-      state.session.locale ?? i18n.language,
     );
     if (request) runKernelAction(request);
   }, [state, runKernelAction]);

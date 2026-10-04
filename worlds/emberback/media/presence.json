@@ -1,7 +1,7 @@
 [
   {
     "schemaVersion": 1,
-    "characterId": "tomas-reed",
+    "characterId": "npc-tomas-reed",
     "displayName": "Tomas Reed",
     "avatar": {
       "id": "ac2702497d98de0798fdc9086231d5e1b0ffb3dc68bd0135ff6cb5c03f766ded",
@@ -32,7 +32,7 @@
   },
   {
     "schemaVersion": 1,
-    "characterId": "june-okafor",
+    "characterId": "npc-june-okafor",
     "displayName": "June Okafor",
     "avatar": {
       "id": "110319c6958fbcbe2fe27f4ec3b49415d638335b1b3e64cb43c5c8c49c7597af",
@@ -63,7 +63,7 @@
   },
   {
     "schemaVersion": 1,
-    "characterId": "mina-park",
+    "characterId": "npc-mina-park",
     "displayName": "Dr. Mina Park",
     "avatar": {
       "id": "877d34e96ac7a73dbac20df0a1eb9fb80e81a17757ee37079ed5b4ba949b81a1",

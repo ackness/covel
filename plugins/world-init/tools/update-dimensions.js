@@ -14,9 +14,33 @@ import {
 // Path segments that would reach an object's prototype instead of its data.
 const UNSAFE_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
-/** Set `value` at a dot path inside a copy of `base`, creating containers. */
+/**
+ * The segments of a change path. It is a dot path; a model also writes it
+ * with slashes ("call-0614/status"), so a slash separates too, unless the
+ * value has a key that contains that slash.
+ */
+function pathSegments(base, path) {
+  const segments = [];
+  let node = base;
+  for (const part of path.split(".").filter(Boolean)) {
+    const isKey =
+      node !== null && typeof node === "object" && Object.hasOwn(node, part);
+    for (const segment of isKey ? [part] : part.split("/").filter(Boolean)) {
+      segments.push(segment);
+      node =
+        node !== null &&
+        typeof node === "object" &&
+        Object.hasOwn(node, segment)
+          ? node[segment]
+          : undefined;
+    }
+  }
+  return segments;
+}
+
+/** Set `value` at a path inside a copy of `base`, creating containers. */
 function setAtPath(base, path, value) {
-  const segments = path.split(".").filter(Boolean);
+  const segments = pathSegments(base, path);
   if (!segments.length) return structuredClone(value);
   // The path comes from model output: never let it walk into a prototype.
   if (segments.some((segment) => UNSAFE_SEGMENTS.has(segment)))
@@ -38,6 +62,59 @@ function setAtPath(base, path, value) {
     node = node[key];
   }
   return root;
+}
+
+const isRecord = (value) =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * Put a call into the declared shape where its meaning is not in doubt.
+ * In real-model runs a `reason` was written on a change or beside `updates`,
+ * and one dimension was split over two entries. Each cost a rejected call
+ * and one more model call, and none of them changes what is written.
+ */
+function normalizeArguments(input) {
+  if (!isRecord(input) || !Array.isArray(input.updates)) return input;
+  const { reason: _reason, ...call } = input;
+  const updates = [];
+  for (const entry of call.updates) {
+    if (!isRecord(entry)) {
+      updates.push(entry);
+      continue;
+    }
+    const update = Array.isArray(entry.changes)
+      ? {
+          ...entry,
+          changes: entry.changes.map((change) => {
+            if (!isRecord(change)) return change;
+            const { reason: _changeReason, ...rest } = change;
+            return rest;
+          }),
+        }
+      : { ...entry };
+    const earlier = updates.find(
+      (other) =>
+        isRecord(other) &&
+        other.id === update.id &&
+        other.expectedVersion === update.expectedVersion,
+    );
+    // Two entries that patch one dimension are one update. An entry that
+    // replaces the whole value stays apart and is refused as a duplicate.
+    if (
+      !earlier ||
+      Object.hasOwn(earlier, "value") ||
+      Object.hasOwn(update, "value")
+    ) {
+      updates.push(update);
+      continue;
+    }
+    earlier.changes = [...(earlier.changes ?? []), ...(update.changes ?? [])];
+    const reasons = [earlier.reason, update.reason].filter(
+      (reason) => typeof reason === "string" && reason,
+    );
+    if (reasons.length) earlier.reason = reasons.join(" ");
+  }
+  return { ...call, updates };
 }
 
 /**
@@ -74,27 +151,30 @@ export default function ({ tool, z }) {
     name: "update-dimensions",
     description:
       'Settle this narrative\'s dimension rules once. Submit a batch of {id, expectedVersion, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
-    parameters: z.strictObject({
-      updates: z
-        .array(
-          z.strictObject({
-            id: z.string().min(1),
-            expectedVersion: z.number().int().positive(),
-            value: z.unknown().optional(),
-            changes: z
-              .array(
-                z.strictObject({
-                  path: z.string().min(1),
-                  value: z.unknown(),
-                }),
-              )
-              .max(32)
-              .optional(),
-            reason: z.string().max(2000).optional(),
-          }),
-        )
-        .max(64),
-    }),
+    parameters: z.preprocess(
+      normalizeArguments,
+      z.strictObject({
+        updates: z
+          .array(
+            z.strictObject({
+              id: z.string().min(1),
+              expectedVersion: z.number().int().positive(),
+              value: z.unknown().optional(),
+              changes: z
+                .array(
+                  z.strictObject({
+                    path: z.string().min(1),
+                    value: z.unknown(),
+                  }),
+                )
+                .max(32)
+                .optional(),
+              reason: z.string().max(2000).optional(),
+            }),
+          )
+          .max(64),
+      }),
+    ),
     execute: async (params, ctx) => {
       const updates = resolveUpdates(params.updates, ctx.world.dimensions);
       const narrative = ctx.inputSlots?.narrative;

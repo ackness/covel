@@ -41,6 +41,7 @@
  *   --server <url>         API base (default: http://localhost:3001/api)
  *   --slot <name>          Override the story runtimes' model slot (default: configured routing)
  *   --world <id>           World to use (default: first world returned by /api/worlds)
+ *   --locale <tag>         Session content locale (default: zh-CN)
  *   --turns <n>            Number of playing-phase turns to run after char-creation (default: 3)
  *   --runtime <id>         Filter output + assertions to this runtime only
  *   --plugin <id>          Filter output + assertions to this plugin only
@@ -58,6 +59,7 @@
  *   --require-summary-use  Fail unless a later LLM prompt contains <compacted_history>
  *   --require-tools <ids>  Require comma-separated tool.completed names
  *   --strict-traces        Fail on any *.failed/error LLM trace
+ *   --no-language-check    Do not check that model output is in the session's language
  *   --max-input-tokens <n> Fail when provider-reported input usage exceeds n
  *   --help                 Show this help
  *
@@ -71,6 +73,12 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, createWriteStream, type WriteStream } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { writeFileSync } from "node:fs";
+import {
+  languageVerdict,
+  outputLanguageReport,
+  promptLanguageReport,
+  rejectedToolCalls,
+} from "./lib/e2e-output-checks.mjs";
 
 // ──────────────────────────────────────────────────────────────────
 // CLI argument parsing
@@ -81,6 +89,8 @@ interface CliArgs {
   /** Story-runtime slot override; absent means the configured routing. */
   slot?: string;
   world?: string;
+  /** Content locale of the session; also selects the prompt language. */
+  locale: string;
   turns: number;
   runtimeFilter?: string;
   pluginFilter?: string;
@@ -97,6 +107,7 @@ interface CliArgs {
   requireSummaryUse: boolean;
   requireTools: string[];
   strictTraces: boolean;
+  languageCheck: boolean;
   maxInputTokens?: number;
 }
 
@@ -104,6 +115,7 @@ function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     server: "http://localhost:3001/api",
     slot: process.env.E2E_MODEL_SLOT?.trim() || undefined,
+    locale: "zh-CN",
     turns: 3,
     enablePlugins: [],
     coreOnly: false,
@@ -117,6 +129,7 @@ function parseArgs(argv: string[]): CliArgs {
     requireSummaryUse: false,
     requireTools: [],
     strictTraces: false,
+    languageCheck: true,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -136,6 +149,9 @@ function parseArgs(argv: string[]): CliArgs {
         break;
       case "--world":
         args.world = next();
+        break;
+      case "--locale":
+        args.locale = next();
         break;
       case "--turns":
         args.turns = Number.parseInt(next(), 10);
@@ -195,6 +211,9 @@ function parseArgs(argv: string[]): CliArgs {
       case "--strict-traces":
         args.strictTraces = true;
         break;
+      case "--no-language-check":
+        args.languageCheck = false;
+        break;
       case "--max-input-tokens":
         args.maxInputTokens = Number.parseInt(next(), 10);
         break;
@@ -231,6 +250,7 @@ Options:
                           Slot names come from [covel.xxx] in llm.toml,
                           pass only the xxx part (e.g. e2e, e2e_local)
   --world <id>            World to use (default: first available)
+  --locale <tag>          Session content locale (default: zh-CN)
   --turns <n>             Playing-phase turns after char creation (default: 3)
   --runtime <id>          Filter output + assertions to this runtime only
   --plugin <id>           Filter output + assertions to this plugin only
@@ -247,6 +267,7 @@ Options:
   --require-summary-use   Require <compacted_history> in a later LLM prompt
   --require-tools <ids>   Require comma-separated tool.completed names
   --strict-traces         Fail on any *.failed trace or error LLM response
+  --no-language-check     Skip the check that model output is in the session's language
   --max-input-tokens <n>  Enforce provider-reported input usage ceiling
   --help                  Show this help
 `;
@@ -989,10 +1010,22 @@ function toDetectedForm(
  * Missing required fields are filled with placeholder data derived from
  * the field type so the submission always satisfies the schema.
  */
+/**
+ * Test input is written in the session's language. A Chinese name or message
+ * in a session of another locale is itself Chinese context for the model and
+ * hides what the pipeline does on its own.
+ */
+function isChineseLocale(locale: string): boolean {
+  return /^zh(-|$)/i.test(locale);
+}
+
 function buildFormValues(
   form: DetectedForm,
   overrides: Record<string, string>,
+  locale: string,
 ): Record<string, string | number> {
+  const chinese = isChineseLocale(locale);
+  const testName = chinese ? "E2E测试角色" : "E2E Tester";
   const values: Record<string, string | number> = {};
 
   for (const field of form.fields) {
@@ -1010,7 +1043,11 @@ function buildFormValues(
     }
     if (field.type === "text" || field.type === "textarea") {
       values[field.name] =
-        field.name === "characterName" ? "E2E测试角色" : `测试${field.name}`;
+        field.name === "characterName"
+          ? testName
+          : chinese
+            ? `测试${field.name}`
+            : `test ${field.name}`;
       continue;
     }
     if (field.type === "number") {
@@ -1027,7 +1064,7 @@ function buildFormValues(
   // Safety net: at least characterName for auto-advanced flows that
   // skipped fields we didn't understand.
   if (Object.keys(values).length === 0) {
-    values.characterName = overrides.characterName ?? "E2E测试角色";
+    values.characterName = overrides.characterName ?? testName;
   }
 
   return values;
@@ -1116,7 +1153,6 @@ async function runTurn(
     type: action.type,
     payload: action.payload,
     requestId: randomUUID(),
-    locale: "zh-CN",
   };
   if (args.slot) body.model = args.slot;
 
@@ -1691,6 +1727,7 @@ async function runMain(
     process.exit(2);
   }
   kv("World", chosen.id);
+  kv("Locale", args.locale);
 
   // ── Phase 4: Session creation ──────────────────────────────────
   // Start the way the prep screen does: the world's preset pack plus the
@@ -1714,7 +1751,7 @@ async function runMain(
   }
   const session = await httpJson<SessionRecord>(args.server, "/sessions", {
     worldId: chosen.id,
-    locale: "zh-CN",
+    locale: args.locale,
     ...(plugins ? { plugins } : {}),
   });
   state.sessionId = session.id;
@@ -1817,7 +1854,7 @@ async function runMain(
         .join(", ") || "(none)",
     );
 
-    const values = buildFormValues(detectedForm, args.formValues);
+    const values = buildFormValues(detectedForm, args.formValues, args.locale);
     kv("Values", previewJson(values, 120));
 
     const submitResp = await httpJson<{
@@ -1881,13 +1918,21 @@ async function runMain(
   );
   refreshSession(sess);
 
-  const defaultPlayerMessages = [
-    "探索周围环境，寻找任何可以利用的线索。",
-    "与同伴交流，分享彼此的判断和下一步的打算。",
-    "小心靠近目标区域，保持警觉地观察环境。",
-    "尝试回忆此前发生过的事件，看看是否能关联起来。",
-    "根据掌握的信息做出谨慎的决定，然后继续前进。",
-  ];
+  const defaultPlayerMessages = isChineseLocale(args.locale)
+    ? [
+        "探索周围环境，寻找任何可以利用的线索。",
+        "与同伴交流，分享彼此的判断和下一步的打算。",
+        "小心靠近目标区域，保持警觉地观察环境。",
+        "尝试回忆此前发生过的事件，看看是否能关联起来。",
+        "根据掌握的信息做出谨慎的决定，然后继续前进。",
+      ]
+    : [
+        "Explore the surroundings and look for any clue that can be used.",
+        "Talk with your companions; share what each of you thinks and plans to do next.",
+        "Approach the target area carefully and watch the surroundings.",
+        "Try to recall what happened earlier and see whether the events connect.",
+        "Make a careful decision from what you know, then move on.",
+      ];
 
   for (let i = 0; i < args.turns; i++) {
     const content =
@@ -2136,6 +2181,88 @@ async function runMain(
     else assertions.fail(`required tool did not complete: ${toolName}`);
   }
 
+  // A rejected tool call is sent again and leaves no stored record, so the
+  // turn results show nothing. Each one costs a model round trip.
+  const rejected = rejectedToolCalls(tracesBody.events);
+  const rejectedTotal = rejected.reduce((sum, row) => sum + row.count, 0);
+  console.log("");
+  console.log(`  Rejected tool calls (from traces): ${rejectedTotal}`);
+  if (rejected.length > 0) {
+    printTable(
+      ["count", "runtime", "tool", "error"],
+      rejected.map((row) => [
+        String(row.count),
+        row.runtimeId,
+        row.toolName,
+        row.error,
+      ]),
+    );
+    // A real model has a few rejected calls in every run, so this is a
+    // warning. It fails only when rejections outnumber accepted calls: that
+    // is no longer a model slip but a tool or prompt that cannot be satisfied.
+    const acceptedTotal = tracesBody.events.filter(
+      (event) => event.type === "tool.completed",
+    ).length;
+    if (rejectedTotal > acceptedTotal)
+      assertions.fail(
+        `${rejectedTotal} tool calls were rejected and only ${acceptedTotal} accepted`,
+      );
+    else
+      assertions.warn(
+        `${rejectedTotal} tool call(s) were rejected and sent again`,
+      );
+  }
+
+  // What the models wrote must be in the session's language.
+  if (args.languageCheck) {
+    const language = outputLanguageReport(tracesBody.events, args.locale);
+    console.log("");
+    console.log(`  Output language (session locale ${args.locale}):`);
+    printTable(
+      ["result", "runtime", "prose values", "wrong language", "example"],
+      language.map((row) => [
+        languageVerdict(row).toUpperCase(),
+        row.runtimeId,
+        String(row.prose),
+        String(row.wrong),
+        row.examples[0] ?? "",
+      ]),
+    );
+    for (const row of language) {
+      const verdict = languageVerdict(row);
+      const message = `${row.runtimeId} wrote ${row.wrong} of ${row.prose} prose values in the wrong language`;
+      if (verdict === "fail") assertions.fail(message);
+      else if (verdict === "warn") assertions.warn(message);
+      else assertions.pass(`${row.runtimeId} output language`);
+    }
+  }
+
+  // What the models were told should be in the session's language too. A
+  // warning: a world with no edition in this language sends its own text.
+  if (args.languageCheck) {
+    const prompts = promptLanguageReport(tracesBody.events, args.locale);
+    if (prompts.length > 0) {
+      const total = prompts.reduce((sum, row) => sum + row.characters, 0);
+      console.log("");
+      console.log(
+        `  Prompt language: ${total} Chinese, Japanese or Korean characters were sent to the model in a ${args.locale} session:`,
+      );
+      printTable(
+        ["characters", "lines", "runtime", "example"],
+        prompts.map((row) => [
+          String(row.characters),
+          String(row.lines),
+          row.runtimeId,
+          row.example,
+        ]),
+      );
+      assertions.warn(
+        `${total} characters in another script were sent to the model in a ${args.locale} session`,
+      );
+    } else if (!/^(zh|ja|ko)([-_]|$)/i.test(args.locale ?? ""))
+      assertions.pass("prompt language");
+  }
+
   if (args.strictTraces) {
     const failures = tracesBody.events.filter(
       (event) =>
@@ -2240,7 +2367,8 @@ async function runMain(
   );
   kv(
     "Tool calls",
-    `${totalToolCalls} (ok=${successToolCalls} fail=${failToolCalls})`,
+    // `fail` counts stored failures; a rejected call was retried and is not stored.
+    `${totalToolCalls} (ok=${successToolCalls} fail=${failToolCalls} rejected-and-retried=${rejectedTotal})`,
   );
   kv(
     "Assertions",

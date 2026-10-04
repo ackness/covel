@@ -785,9 +785,8 @@ sources:
           })
         : null;
       expect(Boolean(receipt)).toBe(expectTabletopReceipt);
-      const pool = slots["check-results"]?.value?.match(
-        /Pre-rolled d20s: #1: (\d+)/,
-      );
+      // The first row of the turn's check table: `| 1 | <d20> | ...`.
+      const pool = slots["check-results"]?.value?.match(/\| 1 \| (\d+) \|/);
       const roll = receipt?.die ?? Number(pool?.[1]);
       expect(Number.isInteger(roll)).toBe(true);
       const modifier = receipt?.modifier ?? 0;
@@ -815,11 +814,8 @@ sources:
                   {
                     action: receipt?.action ?? "Inspect the receiver",
                     attribute: receipt?.attribute ?? "tideReading",
-                    roll,
                     modifier,
-                    dc,
                     difficulty: "normal",
-                    total: roll + modifier,
                     outcome,
                   },
                 ],

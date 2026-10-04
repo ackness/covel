@@ -1,25 +1,16 @@
 {
   "id": "character",
   "group": "character",
-  "groupLabel": {
-    "zh": "角色",
-    "en": "Characters"
-  },
+  "groupLabel": "Characters",
   "groupOrder": 100,
-  "label": {
-    "zh": "角色",
-    "en": "Characters"
-  },
+  "label": "Characters",
   "icon": "users",
   "dataSource": {
     "source": "session.characters",
     "namespace": "characters"
   },
   "emptyState": {
-    "message": {
-      "zh": "尚未创建角色，完成角色创建流程后将在此显示……",
-      "en": "No characters created yet, complete the character creation flow to see them here…"
-    }
+    "message": "No characters created yet, complete the character creation flow to see them here…"
   },
   "view": {
     "component": "Stack",
@@ -30,10 +21,7 @@
       {
         "component": "Text",
         "props": {
-          "content": {
-            "zh": "所有角色",
-            "en": "All Characters"
-          },
+          "content": "All Characters",
           "weight": "bold",
           "size": "sm"
         }

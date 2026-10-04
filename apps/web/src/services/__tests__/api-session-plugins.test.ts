@@ -74,6 +74,7 @@ function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
     ],
     tools: [],
     userSettings: [],
+    languages: { text: ["en"], instructions: ["en"] },
     ...overrides,
   };
 }

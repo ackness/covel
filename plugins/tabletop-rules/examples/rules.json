@@ -1,0 +1,24 @@
+{
+  "id": "creation",
+  "budget": 6,
+  "attributes": [
+    {
+      "id": "might",
+      "label": "Might",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "wits",
+      "label": "Wits",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "presence",
+      "label": "Presence",
+      "base": 1,
+      "max": 4
+    }
+  ]
+}

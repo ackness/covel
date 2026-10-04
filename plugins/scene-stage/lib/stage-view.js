@@ -2,6 +2,8 @@
  * `direction/current`. The record itself is authoritative once present:
  * `actors: []` means the director intentionally cleared the stage. */
 
+import { sourceLabelFor } from "./stage-data.js";
+
 export const MAX_SPRITE_SLOTS = 4;
 
 function normalizeSceneLocation(value) {
@@ -14,7 +16,7 @@ function normalizeSceneLocation(value) {
 /** Resolve a validated scene.set event against already-imported world art for
  * immediate display, the same way the durable resolver will: an unknown
  * location has no backdrop. */
-export function applySceneSetPreview(current, registry, data, turnId) {
+export function applySceneSetPreview(ctx, current, registry, data, turnId) {
   const location =
     typeof data.location === "string" ? data.location.trim() : "";
   if (!location) return current;
@@ -45,7 +47,7 @@ export function applySceneSetPreview(current, registry, data, turnId) {
       name: location,
       variant,
       source: "none",
-      sourceLabel: { zh: "无背景", en: "No backdrop" }, // i18n-allow -- serialized I18nText data
+      sourceLabel: sourceLabelFor(ctx, "none"),
       resolved: undefined,
       ...(turnId ? { turnId } : {}),
     };
@@ -59,7 +61,7 @@ export function applySceneSetPreview(current, registry, data, turnId) {
     name: typeof matched.name === "string" ? matched.name : location,
     variant,
     source: "world",
-    sourceLabel: { zh: "世界背景", en: "World art" }, // i18n-allow -- serialized I18nText data
+    sourceLabel: sourceLabelFor(ctx, "world"),
     day,
     night,
     resolved: variant === "night" ? (night ?? day) : day,

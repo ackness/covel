@@ -3,6 +3,7 @@ import {
   dimensionRecordSchema,
   dimensionSnapshotFromRecords,
   projectDimensionSnapshot,
+  resolveI18nDeep,
   resolveI18nText,
 } from "@covel/shared";
 import makeDimensionRuleGet from "../tools/dimension-rule-get.js";
@@ -121,7 +122,9 @@ export default function (covel) {
         const block = [
           `<dimension id="${id}" version="${frozen?.version ?? record.version}">`,
           `rule: ${rule}`,
-          `schema: ${JSON.stringify(record.definition.schema)}`,
+          // Titles and enum labels are locale maps for the panels. The model
+          // reads one language: the session's.
+          `schema: ${JSON.stringify(resolveI18nDeep(record.definition.schema, ctx.locale))}`,
           `value: ${JSON.stringify(frozen ? frozen.value : record.value)}`,
           "</dimension>",
         ].join("\n");

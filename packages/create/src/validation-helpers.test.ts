@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { findLoreQualityErrors } from "./validation-helpers.js";
+import {
+  dropInvalidDimensions,
+  findLoreQualityErrors,
+} from "./validation-helpers.js";
 
 function loreWith(content: string): string {
   return `# The Glass City
@@ -44,5 +47,47 @@ describe("findLoreQualityErrors", () => {
     expect(findLoreQualityErrors(loreWith(content))).toContain(
       "WORLD.md contains explicit generation meta wording",
     );
+  });
+});
+
+describe("dropInvalidDimensions", () => {
+  it("removes only the dimensions that do not validate and reports each", () => {
+    const manifest: Record<string, unknown> = {
+      dimensions: {
+        coins: {
+          name: "Coins",
+          schema: { type: "integer", minimum: 0 },
+          initialValue: 8,
+        },
+        // `boolean` is not a schema keyword; the model meant `type: boolean`.
+        discoveries: {
+          name: "Discoveries",
+          schema: {
+            type: "object",
+            properties: { visited: { boolean: true } },
+          },
+          initialValue: {},
+        },
+        // The initial value does not satisfy its own schema.
+        morale: {
+          name: "Morale",
+          schema: { type: "integer", maximum: 5 },
+          initialValue: 9,
+        },
+      },
+    };
+
+    const warnings = dropInvalidDimensions(manifest);
+
+    expect(Object.keys(manifest.dimensions as object)).toEqual(["coins"]);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toContain('dropped dimension "discoveries"');
+    expect(warnings[1]).toContain('dropped dimension "morale"');
+  });
+
+  it("leaves a manifest without dimensions untouched", () => {
+    const manifest: Record<string, unknown> = { id: "plain" };
+    expect(dropInvalidDimensions(manifest)).toEqual([]);
+    expect(manifest).toEqual({ id: "plain" });
   });
 });
