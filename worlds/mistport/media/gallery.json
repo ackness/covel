@@ -29,8 +29,8 @@
         "tool": "built-in-imagegen",
         "prompt": "Create EXACTLY 1536x1024 landscape game-gallery environment for Mistport, a dark-fantasy fog-noir tidal city. Painterly photorealism, desaturated cold grey, teal, rust and old bronze, wet tactile stone and salted timber, dense grey-white sea fog, no visible sky. Eye-level view from a wet wooden main pier toward ancient stone steps newly exposed by ebbing tide, half-submerged near ruins only, broken masonry, mooring rope, shells and receding water lines. The next landing fades into fog within tens of meters; NO clear distant city or landscape. One abandoned unlit shielded tide-stone lamp hangs from a pier post, no flame. Investigative mood: foreground clues clear and sharp, pale mist creates depth, readable midtones rather than pitch darkness. Human-scale entry to risky exploration, open walkway for a character overlay, center-right focal stair, lower-left quieter space for description. No people, monsters, gore, text, watermarks, magical beams, electric neon, fire, or high-fantasy spectacle."
       },
-      "sha256": "01d2890e7e576dd7ac1d5bfcc25379e5b7184444e78c50781937aa65c67da43d",
-      "bytes": 3116420
+      "sha256": "03ae2e76723fa31b9eeb6711f20f6280a344aa8c03afeb17d12c2402167fece7",
+      "bytes": 2858960
     },
     {
       "id": "su-yao-appraisal",
@@ -58,8 +58,8 @@
         "prompt": "Transform reference portrait into a cinematic investigative story still EXACTLY 1536x1024 landscape. Preserve SU YAO's exact reference identity: adult woman in twenties, black hair pinned in the same loose bun, pale face, serious thoughtful eyes, navy-black high-collared guild coat with aged-bronze embroidery and her round tide-stone appraisal mirror. Same realistic painterly fog-noir style, cold grey teal and restrained rust. New scene: a guild appraisal workroom, waist-up seated at a worn worktable beside a misted window, examining a small dull stone-and-metal relic fragment on a folded cloth through the mirror held carefully in one hand; other hand rests next to handwritten notes with no readable text. A small shielded cold tide-stone lamp softly lights mirror and knuckles, no flame and no bright beams. Her face shows careful professional concentration with subtle worry; normal opaque healthy skin. Near shelves hold plain boxes and practical measuring tools, background softly lost in grey light. One character only; recognizable portrait face, natural hands, atmospheric dimensional depth. No revealed relic power, no plot resolution, no monster, no modern machinery, no readable text, no watermark.",
         "referenceImages": ["worlds/mistport/media/portraits/su-yao.png"]
       },
-      "sha256": "d5453673342b682ed1a40141875ec346e224a6cff7054992ad60116903a49b40",
-      "bytes": 2185467
+      "sha256": "3d89ddd46dc49f7b17e6c7c00616ba994866561a5d9534a827e1487e5e58f014",
+      "bytes": 1996409
     },
     {
       "id": "lin-yuanzhou",
@@ -80,8 +80,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "2d5975625090ac74cb1edca4f97ceb68ff197494279c26760c7e9df142d35deb",
-      "bytes": 2169966
+      "sha256": "7bed93ea92e4027a406451d33c29eb0b994947777ae1a41e91e8a4da3e92f8a7",
+      "bytes": 1936301
     },
     {
       "id": "su-yao",
@@ -102,8 +102,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "06f384406974970568f0b533c67a85b40d7a72ac6c34a90be81cd72ad1e1ce23",
-      "bytes": 2115262
+      "sha256": "eae573d02102206f93e1d95d146125e32df4087a5a61886b8a1f6ea0590aaea2",
+      "bytes": 1917619
     },
     {
       "id": "iron-meg",
@@ -126,8 +126,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "3acc7807c64eba0c4f0cd9d1d132d93644e713c0669e9458e605ea9e7d944409",
-      "bytes": 2103315
+      "sha256": "dad541591e17f1c74cb0c80f3e8481fbd994755d2c53ad9b2b7764d606d86649",
+      "bytes": 1882755
     },
     {
       "id": "chen-yuanshan",
@@ -150,8 +150,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "a459d41dce1c9e86489b129b1b6c2c1f3f97269a5d1ae23e1a3b715799897147",
-      "bytes": 2449589
+      "sha256": "5046ddc9d403d6eefcc925b6ea52ee55a94dcfcbcba149df8510a93ed6cfa8e7",
+      "bytes": 2162377
     },
     {
       "id": "guildmaster-qi",
@@ -174,8 +174,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "b4263dbbb034ebb17cccbd8efe22a7b26726b1dd5fd0628d08ece06924411746",
-      "bytes": 2385974
+      "sha256": "8bade496fccca17df7309d0612941be7acb2eee48f58dc1bd8ea47798f40795b",
+      "bytes": 2156193
     },
     {
       "id": "xiao-shuang",
@@ -198,8 +198,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "84d0037edf561a1dd105e40476676704d498dd06612f92cbd9a7a50682e2bea5",
-      "bytes": 2011943
+      "sha256": "337e128f41ce0706341e77a4c7697215e30530cbfcb6fffbe69484f62d0ba82b",
+      "bytes": 1758592
     },
     {
       "id": "grey-falcon",
@@ -220,8 +220,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "369ddd5e11bd8e37bb4e946c407819270f23d4484bf2905169689b3c5d088d2d",
-      "bytes": 2159696
+      "sha256": "9065bb88378a2983145f748d0c939c3f6000123f038abe106767f0e97ad2290c",
+      "bytes": 1912042
     },
     {
       "id": "world-cover",

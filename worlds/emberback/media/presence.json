@@ -4,14 +4,14 @@
     "characterId": "npc-tomas-reed",
     "displayName": "Tomas Reed",
     "avatar": {
-      "id": "ac2702497d98de0798fdc9086231d5e1b0ffb3dc68bd0135ff6cb5c03f766ded",
+      "id": "0c0eaa929b49b7b9f085b6f369f85f59b6ef36ca4039feee449351f6118ddac8",
       "mime": "image/png",
-      "size": 3147314
+      "size": 2959594
     },
     "sprite": {
-      "id": "ac2702497d98de0798fdc9086231d5e1b0ffb3dc68bd0135ff6cb5c03f766ded",
+      "id": "0c0eaa929b49b7b9f085b6f369f85f59b6ef36ca4039feee449351f6118ddac8",
       "mime": "image/png",
-      "size": 3147314
+      "size": 2959594
     },
     "visuals": {
       "defaultVariant": "default",
@@ -22,9 +22,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "ac2702497d98de0798fdc9086231d5e1b0ffb3dc68bd0135ff6cb5c03f766ded",
+            "id": "0c0eaa929b49b7b9f085b6f369f85f59b6ef36ca4039feee449351f6118ddac8",
             "mime": "image/png",
-            "size": 3147314
+            "size": 2959594
           }
         }
       ]
@@ -35,14 +35,14 @@
     "characterId": "npc-june-okafor",
     "displayName": "June Okafor",
     "avatar": {
-      "id": "110319c6958fbcbe2fe27f4ec3b49415d638335b1b3e64cb43c5c8c49c7597af",
+      "id": "0837e26e2b34c5d0d08c39eefacc42ac5779b191f313e19ee9cfd3a06f213ea8",
       "mime": "image/png",
-      "size": 2978501
+      "size": 2759540
     },
     "sprite": {
-      "id": "110319c6958fbcbe2fe27f4ec3b49415d638335b1b3e64cb43c5c8c49c7597af",
+      "id": "0837e26e2b34c5d0d08c39eefacc42ac5779b191f313e19ee9cfd3a06f213ea8",
       "mime": "image/png",
-      "size": 2978501
+      "size": 2759540
     },
     "visuals": {
       "defaultVariant": "default",
@@ -53,9 +53,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "110319c6958fbcbe2fe27f4ec3b49415d638335b1b3e64cb43c5c8c49c7597af",
+            "id": "0837e26e2b34c5d0d08c39eefacc42ac5779b191f313e19ee9cfd3a06f213ea8",
             "mime": "image/png",
-            "size": 2978501
+            "size": 2759540
           }
         }
       ]
@@ -66,14 +66,14 @@
     "characterId": "npc-mina-park",
     "displayName": "Dr. Mina Park",
     "avatar": {
-      "id": "877d34e96ac7a73dbac20df0a1eb9fb80e81a17757ee37079ed5b4ba949b81a1",
+      "id": "489b80c46590ad308e9025061d9357e542a1b68705e4068457cf293c023f7255",
       "mime": "image/png",
-      "size": 2780671
+      "size": 2596885
     },
     "sprite": {
-      "id": "877d34e96ac7a73dbac20df0a1eb9fb80e81a17757ee37079ed5b4ba949b81a1",
+      "id": "489b80c46590ad308e9025061d9357e542a1b68705e4068457cf293c023f7255",
       "mime": "image/png",
-      "size": 2780671
+      "size": 2596885
     },
     "visuals": {
       "defaultVariant": "default",
@@ -84,9 +84,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "877d34e96ac7a73dbac20df0a1eb9fb80e81a17757ee37079ed5b4ba949b81a1",
+            "id": "489b80c46590ad308e9025061d9357e542a1b68705e4068457cf293c023f7255",
             "mime": "image/png",
-            "size": 2780671
+            "size": 2596885
           }
         }
       ]
@@ -97,14 +97,14 @@
     "characterId": "npc-priya-nair",
     "displayName": "Priya Nair",
     "avatar": {
-      "id": "edb909cad217c8da13461e6e2c3d4ccc9c65309f00ab15d1255035fa449f36a4",
+      "id": "e33abee420852a5fdf36731d302fe53a001d12e234eb97b9653d5360deb4737e",
       "mime": "image/png",
-      "size": 2437701
+      "size": 2310147
     },
     "sprite": {
-      "id": "edb909cad217c8da13461e6e2c3d4ccc9c65309f00ab15d1255035fa449f36a4",
+      "id": "e33abee420852a5fdf36731d302fe53a001d12e234eb97b9653d5360deb4737e",
       "mime": "image/png",
-      "size": 2437701
+      "size": 2310147
     },
     "visuals": {
       "defaultVariant": "default",
@@ -115,9 +115,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "edb909cad217c8da13461e6e2c3d4ccc9c65309f00ab15d1255035fa449f36a4",
+            "id": "e33abee420852a5fdf36731d302fe53a001d12e234eb97b9653d5360deb4737e",
             "mime": "image/png",
-            "size": 2437701
+            "size": 2310147
           }
         }
       ]
@@ -128,14 +128,14 @@
     "characterId": "npc-eli-varga",
     "displayName": "Eli Varga",
     "avatar": {
-      "id": "f90d9351e362f17819be0bce344a8f809f341858f6a5661f8370a5b8b3d33a41",
+      "id": "84a4e37365b7dc54705cf5315bfbb38a32bac0b041db99e72a7e2d47c12a1c95",
       "mime": "image/png",
-      "size": 2987316
+      "size": 2804400
     },
     "sprite": {
-      "id": "f90d9351e362f17819be0bce344a8f809f341858f6a5661f8370a5b8b3d33a41",
+      "id": "84a4e37365b7dc54705cf5315bfbb38a32bac0b041db99e72a7e2d47c12a1c95",
       "mime": "image/png",
-      "size": 2987316
+      "size": 2804400
     },
     "visuals": {
       "defaultVariant": "default",
@@ -146,9 +146,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "f90d9351e362f17819be0bce344a8f809f341858f6a5661f8370a5b8b3d33a41",
+            "id": "84a4e37365b7dc54705cf5315bfbb38a32bac0b041db99e72a7e2d47c12a1c95",
             "mime": "image/png",
-            "size": 2987316
+            "size": 2804400
           }
         }
       ]

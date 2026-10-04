@@ -4,14 +4,14 @@
     "characterId": "npc-brannoc-hale",
     "displayName": "布兰诺克・黑尔",
     "avatar": {
-      "id": "11fae9afa7a6d159c2c7b0fa43bf5679b8f6bedcec4ab5b0f6f0495bb8f2cb16",
+      "id": "d13791cab2ef9e1dffa0d81c6ff3994345854f23b84d87178a349f3b383c7b92",
       "mime": "image/png",
-      "size": 2158550
+      "size": 2038210
     },
     "sprite": {
-      "id": "11fae9afa7a6d159c2c7b0fa43bf5679b8f6bedcec4ab5b0f6f0495bb8f2cb16",
+      "id": "d13791cab2ef9e1dffa0d81c6ff3994345854f23b84d87178a349f3b383c7b92",
       "mime": "image/png",
-      "size": 2158550
+      "size": 2038210
     },
     "visuals": {
       "defaultVariant": "default",
@@ -22,9 +22,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "11fae9afa7a6d159c2c7b0fa43bf5679b8f6bedcec4ab5b0f6f0495bb8f2cb16",
+            "id": "d13791cab2ef9e1dffa0d81c6ff3994345854f23b84d87178a349f3b383c7b92",
             "mime": "image/png",
-            "size": 2158550
+            "size": 2038210
           }
         }
       ]
@@ -35,14 +35,14 @@
     "characterId": "npc-sister-wren",
     "displayName": "雷恩修女",
     "avatar": {
-      "id": "7469972f4fd417f74c78d0513d0bb406bf74153487899c18ba7eb1a8a7084643",
+      "id": "ca360a377a2f5c83c42488a99546c903738c680d832e62cd2f165d640df7d104",
       "mime": "image/png",
-      "size": 1965590
+      "size": 1875962
     },
     "sprite": {
-      "id": "7469972f4fd417f74c78d0513d0bb406bf74153487899c18ba7eb1a8a7084643",
+      "id": "ca360a377a2f5c83c42488a99546c903738c680d832e62cd2f165d640df7d104",
       "mime": "image/png",
-      "size": 1965590
+      "size": 1875962
     },
     "visuals": {
       "defaultVariant": "default",
@@ -53,9 +53,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "7469972f4fd417f74c78d0513d0bb406bf74153487899c18ba7eb1a8a7084643",
+            "id": "ca360a377a2f5c83c42488a99546c903738c680d832e62cd2f165d640df7d104",
             "mime": "image/png",
-            "size": 1965590
+            "size": 1875962
           }
         }
       ]
@@ -66,14 +66,14 @@
     "characterId": "npc-mirelle-voss",
     "displayName": "梅瑞尔・沃斯",
     "avatar": {
-      "id": "a33b02ef4ab1e1082f23c7a0d70bab9c0624ff47c5d9d477688c3a19de0e9d12",
+      "id": "cdf652f8e202cd352ccd8594ac0a0bb5388236de7e0beedd5594529442e86acb",
       "mime": "image/png",
-      "size": 2044900
+      "size": 1949546
     },
     "sprite": {
-      "id": "a33b02ef4ab1e1082f23c7a0d70bab9c0624ff47c5d9d477688c3a19de0e9d12",
+      "id": "cdf652f8e202cd352ccd8594ac0a0bb5388236de7e0beedd5594529442e86acb",
       "mime": "image/png",
-      "size": 2044900
+      "size": 1949546
     },
     "visuals": {
       "defaultVariant": "default",
@@ -84,9 +84,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "a33b02ef4ab1e1082f23c7a0d70bab9c0624ff47c5d9d477688c3a19de0e9d12",
+            "id": "cdf652f8e202cd352ccd8594ac0a0bb5388236de7e0beedd5594529442e86acb",
             "mime": "image/png",
-            "size": 2044900
+            "size": 1949546
           }
         }
       ]
@@ -97,14 +97,14 @@
     "characterId": "npc-aldous-penn",
     "displayName": "阿尔多斯・潘恩",
     "avatar": {
-      "id": "c76a41d281c33a5a6b577871eeec5c5df0cb3bf1cffbaff6b72d4374bc17a6bf",
+      "id": "f6ebdd6729e7c499789009257175f7e248e270987d467ebf3be9e4f0393f3f52",
       "mime": "image/png",
-      "size": 1736980
+      "size": 1629335
     },
     "sprite": {
-      "id": "c76a41d281c33a5a6b577871eeec5c5df0cb3bf1cffbaff6b72d4374bc17a6bf",
+      "id": "f6ebdd6729e7c499789009257175f7e248e270987d467ebf3be9e4f0393f3f52",
       "mime": "image/png",
-      "size": 1736980
+      "size": 1629335
     },
     "visuals": {
       "defaultVariant": "default",
@@ -115,9 +115,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "c76a41d281c33a5a6b577871eeec5c5df0cb3bf1cffbaff6b72d4374bc17a6bf",
+            "id": "f6ebdd6729e7c499789009257175f7e248e270987d467ebf3be9e4f0393f3f52",
             "mime": "image/png",
-            "size": 1736980
+            "size": 1629335
           }
         }
       ]
@@ -128,14 +128,14 @@
     "characterId": "npc-keeper-ysolde",
     "displayName": "守灯人伊索德",
     "avatar": {
-      "id": "426f7e6a5145d0a6b0490bf796a64a8201f84d9d84dacb24ee00e0ffebed14da",
+      "id": "b54db644683fb9bc65c19de9140f22955262d220f8e8d5e50d51c00b1f55e15e",
       "mime": "image/png",
-      "size": 2180053
+      "size": 2092131
     },
     "sprite": {
-      "id": "426f7e6a5145d0a6b0490bf796a64a8201f84d9d84dacb24ee00e0ffebed14da",
+      "id": "b54db644683fb9bc65c19de9140f22955262d220f8e8d5e50d51c00b1f55e15e",
       "mime": "image/png",
-      "size": 2180053
+      "size": 2092131
     },
     "visuals": {
       "defaultVariant": "default",
@@ -146,9 +146,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "426f7e6a5145d0a6b0490bf796a64a8201f84d9d84dacb24ee00e0ffebed14da",
+            "id": "b54db644683fb9bc65c19de9140f22955262d220f8e8d5e50d51c00b1f55e15e",
             "mime": "image/png",
-            "size": 2180053
+            "size": 2092131
           }
         }
       ]
@@ -159,14 +159,14 @@
     "characterId": "npc-corvin-ashe",
     "displayName": "科尔文・艾什",
     "avatar": {
-      "id": "186ec535e40c11a3694c8648b032aa13f5e54cfdec7c71def8f5473a12cec4a4",
+      "id": "f434b54ef91fe565f072b17f6379341618f5cb39a8eb366d85100bb2fc9133bd",
       "mime": "image/png",
-      "size": 1720154
+      "size": 1627530
     },
     "sprite": {
-      "id": "186ec535e40c11a3694c8648b032aa13f5e54cfdec7c71def8f5473a12cec4a4",
+      "id": "f434b54ef91fe565f072b17f6379341618f5cb39a8eb366d85100bb2fc9133bd",
       "mime": "image/png",
-      "size": 1720154
+      "size": 1627530
     },
     "visuals": {
       "defaultVariant": "default",
@@ -177,9 +177,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "186ec535e40c11a3694c8648b032aa13f5e54cfdec7c71def8f5473a12cec4a4",
+            "id": "f434b54ef91fe565f072b17f6379341618f5cb39a8eb366d85100bb2fc9133bd",
             "mime": "image/png",
-            "size": 1720154
+            "size": 1627530
           }
         }
       ]

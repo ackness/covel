@@ -29,8 +29,8 @@
         "tool": "built-in-imagegen",
         "prompt": "Create EXACTLY 1536x1024 landscape visual-novel background for Haruka Academy, wholesome spring seaside Japanese high school. Clean anime scenery, delicate linework, soft painterly cel shading, sea blue mint green cream and pale pink, warm afternoon light. Interior of the LITERATURE CLUB on third floor of an old THREE-STORY wooden clubhouse: modest sunlit room, worn wood floor and beams, one large worktable with neatly grouped blank manuscript sheets, a blue-bound anthology mockup with no title, pencils, binder clips; low shelves of old club journals, empty mismatched school chairs. Windows show nearby school rooftops and a distant strip of blue sea from modest third-floor height. Light curtains in sea breeze, a few spring cherry petals outside, calm intimacy and sense of shared effort. Clear central foreground for character sprites and quiet lower dialogue area; lovely warm/cool depth, no people or silhouettes, no readable text, no watermark, no fantasy or photorealism. Not a lavish library: a small club fighting to keep its room."
       },
-      "sha256": "144dcdc4b15d5acbd2d7eb213b06a0390b086bd15d51fa51ac49c038d4f356a3",
-      "bytes": 2571817
+      "sha256": "f086f581c32940c12ff89fef02b0fe4e52c49f19b2e23e13074bf4d9ef22866f",
+      "bytes": 2449706
     },
     {
       "id": "mio-manuscript-afternoon",
@@ -60,8 +60,8 @@
           "worlds/haruka-academy/media/portraits/kamishiro-mio.png"
         ]
       },
-      "sha256": "4c7b3dd5ba41dbbecf4d8314360b0618a43210d4f153f0d8bca992dc35d60e61",
-      "bytes": 2106330
+      "sha256": "10fdb465ab39d83ec6fd1d035ce4d2c40117534468840f5bde0e81b282cbf534",
+      "bytes": 1960795
     },
     {
       "id": "kamishiro-mio",
@@ -84,8 +84,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "f0e5e9fa37c6f4a8e730881e0e9118c59f5efe987628cda89a5a1ea23d16756e",
-      "bytes": 1817975
+      "sha256": "7e4a79f587fad0ab5a270753eaaa9adbca717bef87fdcc5e0b0b015a902d17ad",
+      "bytes": 1762716
     },
     {
       "id": "asakura-rin",
@@ -106,8 +106,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "b5c93566c001a14dbcdac5d921e7d08219373894081e9d5536d140ef19b258a5",
-      "bytes": 1715034
+      "sha256": "fa1c262efac737ef9396a7f53575ba8f1ac436cce4299bf873985e039e4e6428",
+      "bytes": 1614490
     },
     {
       "id": "shiina-kaho",
@@ -128,8 +128,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "b711c8a5ee140d9571caf694446cef49eff9ba00d564f4f13a2a25d8690aa659",
-      "bytes": 2109660
+      "sha256": "cea32612bf3a6f4bdb9606a9a355be6ead2be376bc9e130c2f4a1125137ebdd0",
+      "bytes": 2016291
     },
     {
       "id": "shiraishi-yuma",
@@ -150,8 +150,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "71a88467a52f0e7c5db4ffd1794b6107803ec9aa8af5f07af425d524a053643b",
-      "bytes": 1628878
+      "sha256": "f29fafe08ba49bf11def357717b7a2ab068cde0b0d54bdef9dff2160120c753e",
+      "bytes": 1563869
     },
     {
       "id": "mikoeda-haruka",
@@ -172,8 +172,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "80ba29c18fc69335689bd2c6352ca75a154af1c65266e397061e021b021119ce",
-      "bytes": 1914443
+      "sha256": "bf3d46bd363b60ec0fee2e65dcc7f43d8011d95072bc898543be84eca5960323",
+      "bytes": 1855873
     },
     {
       "id": "onodera-chihiro",
@@ -196,8 +196,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "4e9fa095de7732c33f8880a99f60b78de4b4f5b220f44ee1fdb692228bef4e46",
-      "bytes": 1318815
+      "sha256": "9206fc58d24a1248ae5ecac7f9c81a93de19d8d4bf1c5b0dece2cf99ae595300",
+      "bytes": 1278629
     },
     {
       "id": "morikawa-souta",
@@ -218,8 +218,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "2b1c852f0b4f7390b3af65ad74daa20b24cf3c27643fc5605b5b5f68e90e3216",
-      "bytes": 1126325
+      "sha256": "73a655634481f3fc35181ebcbbc3b00532094975151d0468555509d712a3ff0c",
+      "bytes": 1082914
     },
     {
       "id": "toujou-akane",
@@ -242,8 +242,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "9f8ad968fd0e05374a5ca4fbaf12d004a98d4dccc405c2b9685028444be67961",
-      "bytes": 2010039
+      "sha256": "d85cdeb1032eb4545bbc43e5b576caf5b097589fad3a13af67f7616699104cd3",
+      "bytes": 1956927
     },
     {
       "id": "asakura-rin-uniform-serious",
@@ -264,8 +264,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "86c219d0457f052456bef18ff1ae6f6512441f9c4cfbc2f4f78995f41f1ccf08",
-      "bytes": 1156296
+      "sha256": "47d91cfa5e2fdaaad7f174940fc71ea19e34e29544554c6c67f60edd879c9f9f",
+      "bytes": 1110625
     },
     {
       "id": "shiina-kaho-uniform-concerned",
@@ -286,8 +286,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "a780287f09f64bd296d56b2186db3e09d6e5870f869b2d9f6b11333222d772db",
-      "bytes": 1558022
+      "sha256": "7caa650f7f73b5b5dc2c94e74b1f83bfa7eaedc96c6019a3196b12b885dc5e9b",
+      "bytes": 1515926
     },
     {
       "id": "onodera-chihiro-casual-gentle",
@@ -310,8 +310,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "8e09210e6f95ce54d00f2ed5521736db6e8f5c0319a1135be1094853dc1723d4",
-      "bytes": 1183430
+      "sha256": "df243ad65d8244c9bfb280867e44f62717201cd7d6f0193c14543a24869f8a31",
+      "bytes": 1135796
     },
     {
       "id": "morikawa-souta-rehearsal-focused",
@@ -334,8 +334,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "b4281a9f870b575a7d53804d17df70b194b086b23d0d789f220e0dfb268ca252",
-      "bytes": 1151506
+      "sha256": "87d50ab6da7007ce9c38db9d1cfa290336e399732297e59e3e3dbeb89a4415c6",
+      "bytes": 1112509
     },
     {
       "id": "classroom-2b-day",
@@ -353,8 +353,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "8a02503330e9163669a7bd82a71195154863ad367958ec71471f7c20e12d7ab8",
-      "bytes": 2201263
+      "sha256": "8ca6cdab672c6c710f2d324f8f0e0b72c9d00aee2a3c81efbc6e51cfcd071e14",
+      "bytes": 2058733
     },
     {
       "id": "classroom-2b-night",
@@ -372,8 +372,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "1418a6477fc2c0e0893c88099bf8ed1b062f3f1c325d49744aad5e7288620f46",
-      "bytes": 2205680
+      "sha256": "5529cfe99fbc8719d21a196496c546a393ad42a75453bfa9192368a2e2851266",
+      "bytes": 2069719
     },
     {
       "id": "club-building-day",
@@ -391,8 +391,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "6a0c93618a2284d570ce0eafe43a5bcf2a987eb566b612367585fd51976c654e",
-      "bytes": 3215293
+      "sha256": "3d8112afa2799893e32d6f26eddc8dfbea03f7eed7efe83c9d75ee002049d7d4",
+      "bytes": 3000566
     },
     {
       "id": "club-building-night",
@@ -410,8 +410,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "df095698286be040ab3a462b1e17037f363c9a3f4d665083a0f3eaa20756216e",
-      "bytes": 2881704
+      "sha256": "d63df0d1fbe4e35d95ac83443046ada7b2f1ec69ab2e995893a1296be55cb9e5",
+      "bytes": 2725502
     },
     {
       "id": "library-day",
@@ -429,8 +429,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "a5793b4c64645aabb7bddf5ddc62d775ee51fddee90f08457f541ccd3f1160f3",
-      "bytes": 2279676
+      "sha256": "9ef922475fb1b9468f11101667c55e89fbf1a74ddad2a38b1c741e0814968306",
+      "bytes": 2166805
     },
     {
       "id": "library-night",
@@ -448,8 +448,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "fa07ba38b99a6e850e87ffc812b5067c1629b958462af36ce93894ccfebf2bef",
-      "bytes": 2171697
+      "sha256": "1a914047379e58bc6f794ef378665248f0f96f18a5b9ae8c382c5a148b8ac1fc",
+      "bytes": 2051413
     },
     {
       "id": "sakurazaka-seawall-day",
@@ -467,8 +467,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "0a8a6bc497e49a267cb8c37c52989e0eb9050ed39bb7f7b4a46c3d4ab8b05931",
-      "bytes": 3083978
+      "sha256": "bae8cfef39cc1828e5760eb8415249eb1271141f486987aa2fc6470a5ba2da9a",
+      "bytes": 2890422
     },
     {
       "id": "sakurazaka-seawall-night",
@@ -486,8 +486,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "22cf0766933b583edde0cafb0e17c9b62903e7d3c787f29d70509b47953e35e9",
-      "bytes": 2929749
+      "sha256": "a74d1c28220702709d928677806f77fa14324178fe581157ba1d8fb78bd6c7a1",
+      "bytes": 2767836
     },
     {
       "id": "shopping-street-day",
@@ -507,8 +507,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "aec9ef6b0f6dff09d651cb524d9f7e4321c6e63b495bd6b625567852d13b74dc",
-      "bytes": 2674457
+      "sha256": "cefeb995d808110fb6b808631f3f9a2de31aa347e4825cab1281b83c137e89f2",
+      "bytes": 2533967
     },
     {
       "id": "shopping-street-night",
@@ -528,8 +528,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "257e1964b021f69a6329b94d9120c8cf0a5b9c392d70e65fb75a9d8c795c27d3",
-      "bytes": 2631828
+      "sha256": "6bccfeafc5459ee329369cf0d357d97192e7506288355bfc7bbb520e5af7d605",
+      "bytes": 2502114
     },
     {
       "id": "world-cover",

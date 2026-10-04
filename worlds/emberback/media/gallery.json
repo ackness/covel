@@ -29,8 +29,8 @@
         "tool": "built-in-imagegen",
         "prompt": "Create an environmental gallery illustration for Emberback Relay, EXACTLY 1536x1024 landscape PNG. Match bright graphic painterly retro-frontier science fiction, elegant adventure-poster shapes, cream, terracotta and cobalt, tactile repaired technology and layered depth. Vesper is TIDALLY LOCKED: low white brightward sun fixed on the LEFT horizon, cold nightward sky on the RIGHT, NOT sunset on Earth. Mile Seventeen: an exposed rust-red basalt road crossing under a large NATURAL ROCK ARCH. A small practical field radio repeater with cream ceramic heat shielding, cobalt casing and short aerial is bolted beneath the arch. Wheel tracks and a modest guard rail show courier use; road leads toward remote warm Crownfire storm clouds, no disaster happening, no vehicle wreck. Distant ridge geometry and solar glare give scale. No people, no words, no logos, no floating holograms, no ornamental gears, no magic. Open foreground supports UI and character overlays, focal arch in central 60 percent, readable warm sunlight, scientific frontier optimism mixed with weather danger."
       },
-      "sha256": "d10f0937e6cd3a3f23653bbdb1ab578d47ba6e159687da7b60169c11c3eafb2c",
-      "bytes": 3205990
+      "sha256": "6e4aac6538799dd6c81526e59f20859187723c3a1b8b0b109b065f2e7c4bdde8",
+      "bytes": 2960729
     },
     {
       "id": "signal-before-the-storm",
@@ -58,8 +58,8 @@
         "prompt": "Transform the reference character portrait into a cinematic story still, EXACTLY 1536x1024 landscape. The reference is the identity and costume authority for TOMAS REED: preserve his late-fifties Latino face, greying hair and short beard, cream-and-cobalt coveralls, mustard harness, enamel mug and analog field radio. Keep the reference's warm graphic painterly retro-frontier science-fiction illustration style, creamy sunlight, terracotta basalt and cobalt details. NEW scene: Tomas at a relay operations workbench, three-quarter waist-up, quietly leaning forward to adjust an analog receiver with one hand, the other beside his battered enamel coffee mug. A reel-to-reel recorder, practical ceramic electrical fittings and a few unlettered paper notes. Through a narrow open hatch, a rust ridge and distant relay mast under fixed low brightward light and gathering golden Crownfire weather. His expression is attentive, humane, weighing evidence. No panic, explosion or resolved crisis. Single character, background lower contrast, dramatic but welcoming dimensional lighting, clear hands and believable device. No text, no watermark, no future prediction made visible, no holographic magic. A possible quiet work moment, not a canonical new event.",
         "referenceImages": ["worlds/emberback/media/portraits/tomas-reed.png"]
       },
-      "sha256": "db5f4829931b8c8dba9867cf597a26ffc842a0edc3b241c9044d3d6bc55a2e97",
-      "bytes": 2616140
+      "sha256": "036080507300f95c612d0038dfd3bde4d653042212beb7a09e228dc4fa1654ca",
+      "bytes": 2532380
     },
     {
       "id": "priya-nair",
@@ -79,8 +79,8 @@
         "tool": "built-in-imagegen",
         "prompt": "Create a NEW full-body character portrait for Emberback Relay, 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single forty-five-year-old South Asian female lead medic Priya Nair, medium-brown skin, practical mature face, graying dark hair tied back with reading glasses pushed into it. Rolled cream sleeves, grey clinic vest, cobalt work trousers, practical shoes; a compact battery tester on a lanyard at chest, holding a slim medical chart with no readable text. Quiet, level, dryly compassionate gaze, solid grounded working stance. Background is an eight-bed clinic's modest service alcove: repaired cream ceramic panels, cool medicine cabinet, reserve battery with analog meter, soft warm light. No visible patients or other people. Complete head-to-boots body, head y=70, soles y=1480, centered, same full-length scale as matching Emberback cast. Restrained foreground-midground-background depth, lower-contrast environment, face and signature tester readable. Optimistic community life under resource pressure, no neon cyberpunk, no spaceship, no fantasy, no bulky armor, no text or watermark. OPAQUE environmental portrait."
       },
-      "sha256": "edb909cad217c8da13461e6e2c3d4ccc9c65309f00ab15d1255035fa449f36a4",
-      "bytes": 2437701
+      "sha256": "e33abee420852a5fdf36731d302fe53a001d12e234eb97b9653d5360deb4737e",
+      "bytes": 2310147
     },
     {
       "id": "eli-varga",
@@ -100,8 +100,8 @@
         "tool": "built-in-imagegen",
         "prompt": "Create a NEW full-body character portrait for Emberback Relay, EXACTLY 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single nineteen-year-old ADULT male signal operator Eli Varga, slight natural adult build, unruly dark blond hair, alert anxious grey eyes, pale face with a few freckles, earnest intelligent expression. Oversized cream-and-cobalt cooperative work jacket, ochre utility trousers and practical boots, old over-ear communications headphones around neck, ink-stained fingers holding a small frequency notebook at waist with no readable text. Slightly hesitant posture as though about to report something important. Background: warm rust-red basalt-walled operations alcove, repaired cobalt analog radio receivers, reel-to-reel recorder, cream ceramic electrical panels, coils of functional cable, softer and lower contrast than character. Complete head-to-boots body, head y=70 soles y=1480, centered, same full-length scale as matching Emberback cast. Clear face silhouette, believable contact shadow and dimensional depth. No people other than Eli, no screens full of text, no cyberpunk, no military costume, no space suit, no watermark. OPAQUE environmental portrait."
       },
-      "sha256": "f90d9351e362f17819be0bce344a8f809f341858f6a5661f8370a5b8b3d33a41",
-      "bytes": 2987316
+      "sha256": "84a4e37365b7dc54705cf5315bfbb38a32bac0b041db99e72a7e2d47c12a1c95",
+      "bytes": 2804400
     },
     {
       "id": "tomas-reed",
@@ -124,8 +124,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "ac2702497d98de0798fdc9086231d5e1b0ffb3dc68bd0135ff6cb5c03f766ded",
-      "bytes": 3147314
+      "sha256": "0c0eaa929b49b7b9f085b6f369f85f59b6ef36ca4039feee449351f6118ddac8",
+      "bytes": 2959594
     },
     {
       "id": "june-okafor",
@@ -148,8 +148,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "110319c6958fbcbe2fe27f4ec3b49415d638335b1b3e64cb43c5c8c49c7597af",
-      "bytes": 2978501
+      "sha256": "0837e26e2b34c5d0d08c39eefacc42ac5779b191f313e19ee9cfd3a06f213ea8",
+      "bytes": 2759540
     },
     {
       "id": "mina-park",
@@ -172,8 +172,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "877d34e96ac7a73dbac20df0a1eb9fb80e81a17757ee37079ed5b4ba949b81a1",
-      "bytes": 2780671
+      "sha256": "489b80c46590ad308e9025061d9357e542a1b68705e4068457cf293c023f7255",
+      "bytes": 2596885
     },
     {
       "id": "world-cover",

@@ -57,6 +57,8 @@
 6. 检查原尺寸、缩略图、浅深背景合成、移动端裁切及昼夜对照。图片不应带说明文字、水印或未校对的招牌；必须出现的文字优先交给 UI。
 7. 替换已批准资产前保留原件或 Git 版本。选定图复制到世界包，在发布前刷新 `presence*.json` 与 `scenes.registry.json` 的 SHA-256 和字节数。中英文 presence 必须引用相同的图片内容，显示名称仍按语言保留。
 
+压缩既有素材时优先无损处理：保持尺寸、逐像素 RGBA（包含全透明像素下的颜色）与色彩元数据，只有校验一致且文件变小才替换。已经有损编码的 WebP 不重复有损压缩；无损重编码更大时保留原件。压缩会改变文件哈希，即使画面不变也必须刷新 presence、场景注册表及画廊清单的哈希和字节数，保留人物资料与语言字段。
+
 ```bash
 node scripts/emit-presence.mjs mistport
 node scripts/emit-scenes.mjs haruka-academy

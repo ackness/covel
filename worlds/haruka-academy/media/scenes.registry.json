@@ -7,14 +7,14 @@
       "name": "二年 B 组",
       "locationRef": "二年 B 组/靠窗座位/黑板旁公告栏/后排储物柜",
       "day": {
-        "id": "8a02503330e9163669a7bd82a71195154863ad367958ec71471f7c20e12d7ab8",
+        "id": "8ca6cdab672c6c710f2d324f8f0e0b72c9d00aee2a3c81efbc6e51cfcd071e14",
         "mime": "image/png",
-        "size": 2201263
+        "size": 2058733
       },
       "night": {
-        "id": "1418a6477fc2c0e0893c88099bf8ed1b062f3f1c325d49744aad5e7288620f46",
+        "id": "5529cfe99fbc8719d21a196496c546a393ad42a75453bfa9192368a2e2851266",
         "mime": "image/png",
-        "size": 2205680
+        "size": 2069719
       }
     },
     {
@@ -22,14 +22,14 @@
       "name": "社团楼",
       "locationRef": "社团楼/文艺部活动室/轻音部练习室/新闻部编辑室/社团楼屋顶",
       "day": {
-        "id": "6a0c93618a2284d570ce0eafe43a5bcf2a987eb566b612367585fd51976c654e",
+        "id": "3d8112afa2799893e32d6f26eddc8dfbea03f7eed7efe83c9d75ee002049d7d4",
         "mime": "image/png",
-        "size": 3215293
+        "size": 3000566
       },
       "night": {
-        "id": "df095698286be040ab3a462b1e17037f363c9a3f4d665083a0f3eaa20756216e",
+        "id": "d63df0d1fbe4e35d95ac83443046ada7b2f1ec69ab2e995893a1296be55cb9e5",
         "mime": "image/png",
-        "size": 2881704
+        "size": 2725502
       }
     },
     {
@@ -37,14 +37,14 @@
       "name": "图书馆",
       "locationRef": "图书馆/二楼窗边长桌/旧刊架/借阅台便签盒",
       "day": {
-        "id": "a5793b4c64645aabb7bddf5ddc62d775ee51fddee90f08457f541ccd3f1160f3",
+        "id": "9ef922475fb1b9468f11101667c55e89fbf1a74ddad2a38b1c741e0814968306",
         "mime": "image/png",
-        "size": 2279676
+        "size": 2166805
       },
       "night": {
-        "id": "fa07ba38b99a6e850e87ffc812b5067c1629b958462af36ce93894ccfebf2bef",
+        "id": "1a914047379e58bc6f794ef378665248f0f96f18a5b9ae8c382c5a148b8ac1fc",
         "mime": "image/png",
-        "size": 2171697
+        "size": 2051413
       }
     },
     {
@@ -52,14 +52,14 @@
       "name": "樱坂海堤",
       "locationRef": "樱坂海堤/自动贩卖机/海堤长椅",
       "day": {
-        "id": "0a8a6bc497e49a267cb8c37c52989e0eb9050ed39bb7f7b4a46c3d4ab8b05931",
+        "id": "bae8cfef39cc1828e5760eb8415249eb1271141f486987aa2fc6470a5ba2da9a",
         "mime": "image/png",
-        "size": 3083978
+        "size": 2890422
       },
       "night": {
-        "id": "22cf0766933b583edde0cafb0e17c9b62903e7d3c787f29d70509b47953e35e9",
+        "id": "a74d1c28220702709d928677806f77fa14324178fe581157ba1d8fb78bd6c7a1",
         "mime": "image/png",
-        "size": 2929749
+        "size": 2767836
       }
     },
     {
@@ -67,14 +67,14 @@
       "name": "青砾町商店街",
       "locationRef": "青砾町商店街/海猫书房/橙屋家庭餐厅/星砂乐器行",
       "day": {
-        "id": "aec9ef6b0f6dff09d651cb524d9f7e4321c6e63b495bd6b625567852d13b74dc",
+        "id": "cefeb995d808110fb6b808631f3f9a2de31aa347e4825cab1281b83c137e89f2",
         "mime": "image/png",
-        "size": 2674457
+        "size": 2533967
       },
       "night": {
-        "id": "257e1964b021f69a6329b94d9120c8cf0a5b9c392d70e65fb75a9d8c795c27d3",
+        "id": "6bccfeafc5459ee329369cf0d357d97192e7506288355bfc7bbb520e5af7d605",
         "mime": "image/png",
-        "size": 2631828
+        "size": 2502114
       }
     }
   ]
