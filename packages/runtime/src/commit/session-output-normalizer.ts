@@ -17,6 +17,54 @@ import {
   makeProposal,
 } from "../session/session-kernel-helpers.js";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** A domain effect {@link normalizeOutput} cannot turn into a proposal. */
+export interface MalformedDomainEffect {
+  /** Proposal type the malformed entry would have become. */
+  readonly type: "interaction.request" | "narrative.append" | "ui.render";
+  readonly error: string;
+}
+
+/**
+ * Find the first effect entry {@link normalizeOutput} reads fields from that is
+ * not an object. Such an entry is a rejected write of its runtime, reported
+ * here so no caller has to survive a thrown TypeError.
+ */
+export function malformedDomainEffect(
+  effects: RuntimeEffects | undefined,
+): MalformedDomainEffect | undefined {
+  if (!effects) return undefined;
+  for (const [channel, type] of [
+    ["interactions", "interaction.request"],
+    ["notifications", "narrative.append"],
+  ] as const) {
+    const entries: unknown = effects[channel];
+    if (!Array.isArray(entries)) continue;
+    const index = entries.findIndex((entry) => !isRecord(entry));
+    if (index >= 0)
+      return { type, error: `effects.${channel}[${index}] is not an object` };
+  }
+  const blocks: unknown = effects.ui;
+  if (!Array.isArray(blocks)) return undefined;
+  for (const [index, block] of blocks.entries()) {
+    if (!isRecord(block) || !Array.isArray(block.parts)) continue;
+    const part = block.parts.findIndex((entry) => !isRecord(entry));
+    if (part >= 0)
+      return {
+        type: "ui.render",
+        error: `effects.ui[${index}].parts[${part}] is not an object`,
+      };
+  }
+  return undefined;
+}
+
+/**
+ * Turn a success result into proposals. Callers reject the result first when
+ * {@link malformedDomainEffect} reports an entry.
+ */
 export function normalizeOutput(
   output: Record<string, unknown>,
   source: ProposalSource,
@@ -71,8 +119,7 @@ export function normalizeOutput(
   }
 
   const uiBlocks = (Array.isArray(effects.ui) ? effects.ui : []).filter(
-    (block): block is Record<string, unknown> =>
-      block !== null && typeof block === "object" && !Array.isArray(block),
+    isRecord,
   );
   for (const [index, block] of uiBlocks.entries()) {
     const fallbackId =

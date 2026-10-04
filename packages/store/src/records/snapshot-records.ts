@@ -217,6 +217,14 @@ export interface SuspensionRecord {
      * execution id, so suspension itself never completes a player turn.
      */
     readonly executionContext: ExecutionContext;
+    /**
+     * Content locale and numeric clock of the suspended execution. Resume
+     * hands them back unchanged: a continuation belongs to its source turn,
+     * whatever the session has counted since.
+     */
+    readonly locale?: string;
+    readonly logicalTurn?: number;
+    readonly turnNumber?: number;
     /** Events buffered before suspension; resume must not silently drop them. */
     readonly emittedEvents?: readonly unknown[];
     /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */

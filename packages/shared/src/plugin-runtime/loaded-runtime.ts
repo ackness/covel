@@ -1,4 +1,4 @@
-import type { RuntimeManifest, RuntimeActivation } from "../index.js";
+import type { RuntimeManifest } from "../index.js";
 import type { FunctionHandler, AgentGuard } from "./handler.js";
 import type { PluginMessageCatalog } from "../utils/plugin-messages.js";
 
@@ -37,6 +37,12 @@ export interface LoadedRuntime {
   readonly exportAcceptsSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  /**
+   * Optional `inputs` / `input.inject` bindings whose `accepts` names a
+   * contract that no installed package publishes. Their values cannot be
+   * checked, so they are never delivered.
+   */
+  readonly unresolvedAccepts?: readonly string[];
   /** Published contracts for complete committed export values, keyed by binding. */
   readonly exportContractSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>

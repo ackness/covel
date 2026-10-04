@@ -13,6 +13,7 @@ export { supportsVector } from "./vector-store.js";
 export { rebindSnapshotPayloadSession } from "./records/snapshot-session-scope.js";
 export {
   SessionAlreadyExistsError,
+  SessionNotFoundError,
   SessionRecordScopeConflictError,
 } from "./errors.js";
 export {

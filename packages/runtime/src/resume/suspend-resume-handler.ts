@@ -39,6 +39,9 @@ export interface HandleSuspensionOptions {
   readonly pendingProposals: readonly Proposal[];
   readonly emittedEvents: readonly EmittedEvent[];
   readonly executionContext: ExecutionContext;
+  /** Numeric clock of this execution, restored into the tool context on resume. */
+  readonly logicalTurn?: number;
+  readonly turnNumber?: number;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly suspendToolCallId: string;
   readonly startTime: number;
@@ -84,6 +87,11 @@ export async function handleSuspension(
     ...(opts.inputSlots ? { inputSlots: opts.inputSlots } : {}),
     ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),
     executionContext,
+    ...(input.locale !== undefined ? { locale: input.locale } : {}),
+    ...(opts.logicalTurn !== undefined
+      ? { logicalTurn: opts.logicalTurn }
+      : {}),
+    ...(opts.turnNumber !== undefined ? { turnNumber: opts.turnNumber } : {}),
     // Store the suspend tool's call ID so resume can append a proper tool result
     suspendToolCallId,
   };

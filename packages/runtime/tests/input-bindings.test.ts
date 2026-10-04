@@ -631,6 +631,20 @@ describe("resolveInputBindings — published contract schema", () => {
     });
   });
 
+  it("withholds an optional value whose accepts contract is not installed", async () => {
+    const res = await resolveInputBindings({
+      ...args({ npcContext: "A knows B" }, false),
+      unresolvedAccepts: ["graph"],
+    });
+    expect(res).toMatchObject({ ok: true, slots: {} });
+    expect(res.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "accepts-contract-unresolved",
+        severity: "warn",
+      }),
+    );
+  });
+
   it.each([true, false])(
     "reports a contract violation as a provider error (required=%s)",
     async (required) => {

@@ -285,6 +285,7 @@ export async function loadPluginDefinition(
   discovery: PluginDiscoveryResult,
   locale?: string,
 ): Promise<PluginDefinition> {
+  if (discovery.layoutError) throw new Error(discovery.layoutError);
   const rootPath = path.join(discovery.rootPath, "PLUGIN.md");
   const parsedPackage = await parsePluginMdForLocale(
     discovery.rootPath,
@@ -617,6 +618,23 @@ async function loadDeclaredSchema(
 }
 
 /**
+ * An optional binding may accept a contract whose publisher is not installed:
+ * the plugin that publishes it is optional as well. The runtime still loads,
+ * and the binding is reported in `unresolved` so the runtime withholds a value
+ * it cannot check. A required binding keeps failing the load.
+ */
+function isUnresolvedOptionalContract(
+  binding: { readonly accepts?: string; readonly required?: boolean },
+  contracts: ContractSchemas,
+): boolean {
+  return (
+    binding.required === false &&
+    binding.accepts?.startsWith("contract:") === true &&
+    !contracts[binding.accepts.slice("contract:".length)]
+  );
+}
+
+/**
  * Load every `inputs.<name>.accepts` schema declared on the manifest, keyed by
  * binding name. Absent / missing files are simply omitted (the runtime Ajv
  * check only runs where a schema resolved).
@@ -626,11 +644,16 @@ async function loadBindingAcceptsSchemas(
   pluginRoot: string,
   inputs: RuntimeManifest["inputs"],
   contracts: ContractSchemas,
+  unresolved: string[],
 ): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
   if (!inputs) return undefined;
   const out: Record<string, Readonly<Record<string, unknown>>> = {};
   for (const [name, binding] of Object.entries(inputs)) {
     if (!binding.accepts) continue;
+    if (isUnresolvedOptionalContract(binding, contracts)) {
+      unresolved.push(name);
+      continue;
+    }
     const schema = await loadDeclaredSchema(
       runtimeDir,
       pluginRoot,
@@ -653,11 +676,16 @@ async function loadExportAcceptsSchemas(
   pluginRoot: string,
   inject: NonNullable<RuntimeManifest["input"]>["inject"],
   contracts: ContractSchemas,
+  unresolved: string[],
 ): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
   if (!inject) return undefined;
   const out: Record<string, Readonly<Record<string, unknown>>> = {};
   for (const decl of inject) {
     if (decl.kind !== "runtime-export" || !decl.accepts) continue;
+    if (isUnresolvedOptionalContract(decl, contracts)) {
+      unresolved.push(decl.name);
+      continue;
+    }
     const schema = await loadDeclaredSchema(
       runtimeDir,
       pluginRoot,
@@ -750,11 +778,13 @@ export async function loadRuntime(
       )
     : undefined;
 
+  const unresolvedAccepts: string[] = [];
   const bindingAcceptsSchemas = await loadBindingAcceptsSchemas(
     runtimeDir,
     discovery.rootPath,
     parsed.manifest.inputs,
     contracts,
+    unresolvedAccepts,
   );
 
   const bindingContractSchemas = Object.fromEntries(
@@ -772,6 +802,7 @@ export async function loadRuntime(
     discovery.rootPath,
     parsed.manifest.input?.inject,
     contracts,
+    unresolvedAccepts,
   );
   const exportContractSchemas = Object.fromEntries(
     (parsed.manifest.input?.inject ?? []).flatMap((binding) => {
@@ -825,6 +856,7 @@ export async function loadRuntime(
       ? { bindingContractSchemas }
       : {}),
     ...(exportAcceptsSchemas ? { exportAcceptsSchemas } : {}),
+    ...(unresolvedAccepts.length > 0 ? { unresolvedAccepts } : {}),
     ...(Object.keys(exportContractSchemas).length
       ? { exportContractSchemas }
       : {}),

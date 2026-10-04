@@ -3,14 +3,12 @@ import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
   dimensionRecordSchema,
-  materializeDimensionRecords,
   dimensionSnapshotSchema,
   dimensionSettlementReceiptSchema,
   resolveI18nText,
   type DimensionRecord,
   type DimensionSettlementReceipt,
   type WorldDimensionDefinition,
-  type ExecutionContext,
   type JsonValue,
   type Proposal,
   type RuntimeManifest,
@@ -19,14 +17,12 @@ import {
 import type { StoreTransaction } from "@covel/store";
 
 interface DimensionFinalizationResult {
-  readonly pluginId: string;
   readonly runtimeId: string;
   readonly turnId: string;
   readonly runId?: string;
   readonly status: string;
   readonly output: Record<string, unknown> | null;
   readonly canonicalValue?: { readonly value?: JsonValue };
-  readonly pendingProposals?: readonly Proposal[];
 }
 
 /**
@@ -46,28 +42,60 @@ export function settlementDefinitions(
   );
 }
 
-/** Register narrative obligations inside the same transaction as narrative commit. */
-export async function prepareDimensionFinalization(args: {
+/** The dimension provider one execution commits against. */
+export interface DimensionSettlementScope {
+  readonly provider: string;
+  /** Runtime that publishes the provider's dimension snapshot. */
+  readonly publisher: string;
+  readonly locale: string | undefined;
+  /** Player turn the narratives of this execution belong to. */
+  readonly turnNumber: number;
+}
+
+type DimensionRuntime = Pick<
+  RuntimeManifest,
+  "name" | "pluginId" | "outputKind" | "outputContract"
+>;
+
+/** The narrative a settlement update refers to, when it names one. */
+function settlementSourceOf(
+  proposal: Proposal,
+): { readonly resultId: string } | undefined {
+  if (proposal.type !== "dimension.update") return undefined;
+  const payload: unknown = proposal.payload;
+  if (!payload || typeof payload !== "object") return undefined;
+  const source = (payload as { readonly source?: unknown }).source;
+  return source && typeof source === "object"
+    ? (source as { readonly resultId: string })
+    : undefined;
+}
+
+/**
+ * A settlement update needs its narrative's receipt to exist before it
+ * commits; without one the commit handler records the update as unsettled debt.
+ */
+export function needsSettlementReceipt(proposal: Proposal): boolean {
+  return settlementSourceOf(proposal) !== undefined;
+}
+
+/**
+ * Bind the session to the dimension provider of this execution. The dimension
+ * commit handlers reject a writer that is not the bound provider, so this runs
+ * before any runtime commits. It writes no dimension data.
+ */
+export async function bindDimensionProvider(args: {
   readonly tx: StoreTransaction;
   readonly sessionId: string;
-  readonly executionContext: ExecutionContext;
-  readonly runtimes: readonly Pick<
-    RuntimeManifest,
-    "name" | "pluginId" | "outputKind" | "outputContract"
-  >[];
-  readonly results: readonly DimensionFinalizationResult[];
-}): Promise<readonly SessionEvent[]> {
-  const { tx, sessionId, runtimes, results } = args;
-  const providers = [
-    ...new Set(
-      runtimes
-        .filter((runtime) => runtime.outputContract === DIMENSION_CONTRACT)
-        .map((runtime) => runtime.pluginId),
-    ),
-  ];
+  readonly runtimes: readonly DimensionRuntime[];
+}): Promise<DimensionSettlementScope | undefined> {
+  const { tx, sessionId, runtimes } = args;
+  const publishers = runtimes.filter(
+    (runtime) => runtime.outputContract === DIMENSION_CONTRACT,
+  );
+  const providers = [...new Set(publishers.map((runtime) => runtime.pluginId))];
   if (providers.length > 1) throw new Error("Conflicting dimension providers");
   const provider = providers[0];
-  if (!provider) return [];
+  if (!provider) return undefined;
   const session = await tx.getSession(sessionId);
   if (!session) throw new Error(`Session not found: ${sessionId}`);
   const previous = session.metadata?._dimensionProviderPluginId;
@@ -79,58 +107,71 @@ export async function prepareDimensionFinalization(args: {
     await tx.updateSession(sessionId, {
       metadata: { _dimensionProviderPluginId: provider },
     });
-  const rows = await tx.listPluginData(
+  return {
+    provider,
+    publisher: publishers[0]!.name,
+    locale: session.locale,
+    turnNumber: session.completedPlayerTurns + 1,
+  };
+}
+
+/** A producer that RAN and failed marks the receipt; an absent one does not. */
+function sharedExtractionFailed(
+  runtimes: readonly DimensionRuntime[],
+  results: readonly DimensionFinalizationResult[],
+): boolean {
+  // IR is optional corroboration, never the settlement owner. A producer that
+  // was skipped, not scheduled, or simply absent from this execution does not
+  // poison the obligation — the tracker can still settle from the
+  // authoritative narrative alone, and a later retry with a successful IR run
+  // must be able to clear the flag.
+  return runtimes
+    .filter((runtime) => runtime.outputContract === "world-ir-provider@1")
+    .some((producer) =>
+      results.some(
+        (result) =>
+          result.runtimeId === producer.name && result.status === "failed",
+      ),
+    );
+}
+
+/**
+ * Register the settlement obligation of every narrative in this execution.
+ *
+ * Receipts freeze the records `sink` can read, which are the committed ones:
+ * initialization reaches the store only through its own proposal, inside the
+ * savepoint of the runtime that proposed it. Call this where a receipt is
+ * first needed and once more after the last runtime; a receipt that already
+ * exists is left alone, and one registered inside a savepoint that rolls back
+ * is registered again from what did commit.
+ */
+export async function registerDimensionSettlements(args: {
+  readonly sink: StoreTransaction;
+  readonly sessionId: string;
+  readonly scope: DimensionSettlementScope;
+  readonly runtimes: readonly DimensionRuntime[];
+  readonly results: readonly DimensionFinalizationResult[];
+}): Promise<readonly SessionEvent[]> {
+  const { sink, sessionId, scope, runtimes, results } = args;
+  const { provider } = scope;
+  const rows = await sink.listPluginData(
     sessionId,
     provider,
     DIMENSION_DATA_NAMESPACE,
   );
-  let records = Object.fromEntries(
+  const records = Object.fromEntries(
     rows.map((row) => [row.key, dimensionRecordSchema.parse(row.value)]),
   );
-  for (const result of results) {
-    if (
-      result.pluginId !== provider ||
-      !["success", "skipped"].includes(result.status)
-    )
-      continue;
-    for (const proposal of result.pendingProposals ?? []) {
-      if (proposal.type !== "dimension.initialize") continue;
-      const initialized = materializeDimensionRecords(
-        records,
-        proposal,
-        session.locale,
-      );
-      const entries = Object.entries(initialized)
-        .filter(([id]) => !records[id])
-        .map(([key, value]) => ({
-          namespace: DIMENSION_DATA_NAMESPACE,
-          key,
-          value,
-          expectedVersion: null,
-          timestamp: new Date().toISOString(),
-        }));
-      if (
-        !(await tx.compareAndSetPluginDataBatch(sessionId, provider, entries))
-      )
-        throw new Error("Dimension initialization version conflict");
-      records = { ...initialized };
-    }
-  }
   if (
     !Object.values(records).some((record) =>
-      resolveI18nText(record.definition.updateRule, session.locale)?.trim(),
+      resolveI18nText(record.definition.updateRule, scope.locale)?.trim(),
     )
   )
     return [];
   const events: SessionEvent[] = [];
-  const publisher = runtimes.find(
-    (runtime) =>
-      runtime.pluginId === provider &&
-      runtime.outputContract === DIMENSION_CONTRACT,
-  );
   const published = results.find(
     (result) =>
-      result.runtimeId === publisher?.name && result.status === "success",
+      result.runtimeId === scope.publisher && result.status === "success",
   );
   const snapshot = published
     ? dimensionSnapshotSchema.parse(
@@ -152,21 +193,7 @@ export async function prepareDimensionFinalization(args: {
   const kinds = new Map(
     runtimes.map((runtime) => [runtime.name, runtime.outputKind]),
   );
-  const irProducers = runtimes.filter(
-    (runtime) => runtime.outputContract === "world-ir-provider@1",
-  );
-  // IR is optional corroboration, never the settlement owner. Only a producer
-  // that RAN and failed (status "failed") marks the receipt's extraction
-  // error. A producer that was skipped, not scheduled, or simply absent from
-  // this execution does not poison the obligation — the tracker can still
-  // settle from the authoritative narrative alone, and a later retry with a
-  // successful IR run must be able to clear the flag.
-  const irFailed = irProducers.some((producer) =>
-    results.some(
-      (result) =>
-        result.runtimeId === producer.name && result.status === "failed",
-    ),
-  );
+  const irFailed = sharedExtractionFailed(runtimes, results);
   const now = new Date().toISOString();
   for (const result of results) {
     if (kinds.get(result.runtimeId) !== "story" || result.status !== "success")
@@ -178,31 +205,37 @@ export async function prepareDimensionFinalization(args: {
     const receipt: DimensionSettlementReceipt = {
       source: {
         resultId: result.runId,
-        turnNumber: session.completedPlayerTurns + 1,
+        turnNumber: scope.turnNumber,
       },
       status: "pending-settlement",
       readVersions,
-      definitions: settlementDefinitions(records, session.locale),
+      definitions: settlementDefinitions(records, scope.locale),
       sourceTurnId: result.turnId,
       version: 1,
       ...(irFailed ? { error: "Shared WorldIR extraction failed" } : {}),
     };
-    const created = await tx.compareAndSetPluginDataBatch(sessionId, provider, [
-      {
-        namespace: DIMENSION_SETTLEMENT_NAMESPACE,
-        key: result.runId,
-        expectedVersion: null,
-        value: receipt,
-        timestamp: now,
-      },
-    ]);
+    const created = await sink.compareAndSetPluginDataBatch(
+      sessionId,
+      provider,
+      [
+        {
+          namespace: DIMENSION_SETTLEMENT_NAMESPACE,
+          key: result.runId,
+          expectedVersion: null,
+          value: receipt,
+          timestamp: now,
+        },
+      ],
+    );
     if (created) {
-      const event: SessionEvent = {
+      // The event bus records the event when finalize publishes it after
+      // commit; saving it here too collided on the same event id.
+      events.push({
         id: crypto.randomUUID(),
         type: "dimensions.settlement.changed",
         sessionId,
         turnId: result.turnId,
-        source: { pluginId: provider, runtimeId: publisher!.name },
+        source: { pluginId: provider, runtimeId: scope.publisher },
         timestamp: now,
         payload: {
           providerPluginId: provider,
@@ -212,55 +245,61 @@ export async function prepareDimensionFinalization(args: {
           status: "pending-settlement",
           ...(receipt.error ? { error: receipt.error } : {}),
         },
-      };
-      // The event bus records the event when finalize publishes it after
-      // commit; saving it here too collided on the same event id.
-      events.push(event);
-    }
-  }
-  // An explicit scoped retry re-evaluates the same source against a new,
-  // version-checked read set; it never reuses an old absolute update plan.
-  if (
-    args.executionContext.origin === "manual" &&
-    args.executionContext.sourceTurnId
-  ) {
-    for (const result of results) {
-      if (result.pluginId !== provider || result.status !== "success") continue;
-      for (const proposal of result.pendingProposals ?? []) {
-        if (
-          proposal.type !== "dimension.update" ||
-          !proposal.payload.source ||
-          proposal.payload.settlement === "manual" ||
-          proposal.payload.settlement === "skipped"
-        )
-          continue;
-        const row = await tx.getPluginData(
-          sessionId,
-          provider,
-          DIMENSION_SETTLEMENT_NAMESPACE,
-          proposal.payload.source.resultId,
-        );
-        if (!row) continue;
-        const receipt = dimensionSettlementReceiptSchema.parse(row.value);
-        if (receipt.status !== "pending-settlement") continue;
-        if (receipt.error === "Shared WorldIR extraction failed" && irFailed)
-          continue;
-        const { error: _error, ...clean } = receipt;
-        await tx.compareAndSetPluginDataBatch(sessionId, provider, [
-          {
-            namespace: DIMENSION_SETTLEMENT_NAMESPACE,
-            key: receipt.source.resultId,
-            expectedVersion: receipt.version,
-            value: {
-              ...clean,
-              readVersions: proposal.payload.readVersions,
-              version: receipt.version + 1,
-            },
-            timestamp: now,
-          },
-        ]);
-      }
+      });
     }
   }
   return events;
+}
+
+/**
+ * An explicit scoped retry re-evaluates the same source against a new,
+ * version-checked read set; it never reuses an old absolute update plan. The
+ * pending receipt adopts the read set of each accepted retry update, in the
+ * same savepoint that then commits the update.
+ */
+export async function adoptRetryReadSets(args: {
+  readonly sink: StoreTransaction;
+  readonly sessionId: string;
+  readonly scope: DimensionSettlementScope;
+  readonly runtimes: readonly DimensionRuntime[];
+  readonly results: readonly DimensionFinalizationResult[];
+  readonly proposals: readonly Proposal[];
+}): Promise<void> {
+  const { sink, sessionId, scope } = args;
+  const irFailed = sharedExtractionFailed(args.runtimes, args.results);
+  const now = new Date().toISOString();
+  for (const proposal of args.proposals) {
+    const source = settlementSourceOf(proposal);
+    if (!source || proposal.type !== "dimension.update") continue;
+    if (
+      proposal.payload.settlement === "manual" ||
+      proposal.payload.settlement === "skipped"
+    )
+      continue;
+    const row = await sink.getPluginData(
+      sessionId,
+      scope.provider,
+      DIMENSION_SETTLEMENT_NAMESPACE,
+      source.resultId,
+    );
+    if (!row) continue;
+    const receipt = dimensionSettlementReceiptSchema.parse(row.value);
+    if (receipt.status !== "pending-settlement") continue;
+    if (receipt.error === "Shared WorldIR extraction failed" && irFailed)
+      continue;
+    const { error: _error, ...clean } = receipt;
+    await sink.compareAndSetPluginDataBatch(sessionId, scope.provider, [
+      {
+        namespace: DIMENSION_SETTLEMENT_NAMESPACE,
+        key: receipt.source.resultId,
+        expectedVersion: receipt.version,
+        value: {
+          ...clean,
+          readVersions: proposal.payload.readVersions,
+          version: receipt.version + 1,
+        },
+        timestamp: now,
+      },
+    ]);
+  }
 }

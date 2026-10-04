@@ -14,6 +14,7 @@ import {
   type RuntimeManifest,
 } from "@covel/shared";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
 import { dimensionExecutionBarrier } from "../src/turn-executor/dimension-barrier.js";
 import { createWorldModelView } from "../src/function-runtime/world-model-view.js";
@@ -416,6 +417,154 @@ for (const [backend, create] of [
       ]);
       expect(result.every((entry) => entry.committed)).toBe(true);
       expect(await record(store)).toMatchObject({ value: 5, version: 2 });
+    });
+    describe("initialization from an optional runtime", () => {
+      // A story committed beside an optional initializer: the initializer's
+      // write must obey the commit policy and its own savepoint.
+      async function initialize(
+        store: DataStore,
+        options: {
+          policy?: "veto" | "rewrite";
+          extra?: readonly Proposal[];
+        } = {},
+      ) {
+        await store.deletePluginData(
+          "s",
+          "owner",
+          DIMENSION_DATA_NAMESPACE,
+          "reputation",
+        );
+        const hookPipeline = createHookPipeline();
+        hookPipeline.register({
+          id: "dimension-policy",
+          event: "PreStateCommit",
+          handler: async (_ctx, payload) => {
+            const { proposal: seen } = payload as { proposal: Proposal };
+            if (seen.type !== "dimension.initialize" || !options.policy)
+              return { action: "continue" };
+            if (options.policy === "veto")
+              return { action: "abort", reason: "Policy forbids it" };
+            return {
+              action: "continue",
+              replace: {
+                proposal: {
+                  ...seen,
+                  payload: {
+                    definitions: {
+                      reputation: { ...definition, initialValue: 7 },
+                    },
+                  },
+                },
+              },
+            };
+          },
+        });
+        const result = (
+          runtimeId: string,
+          pluginId: string,
+          output: Record<string, unknown>,
+        ) => ({
+          runtimeId,
+          pluginId,
+          runId: runtimeId === "story" ? "narrative-result" : runtimeId,
+          turnId: "t",
+          status: "success",
+          output,
+        });
+        return finalizeExecution({
+          store,
+          hookPipeline,
+          sessionId: "s",
+          turnIds: [],
+          executionContext: {
+            executionId: "execution",
+            origin: "player",
+            countPolicy: "complete-player-turn",
+            logicalTurnId: "logical",
+          },
+          runtimes: [
+            ...runtimes.slice(0, 2),
+            {
+              name: "owner/initializer",
+              pluginId: "owner",
+              outputKind: "system",
+            },
+          ] as RuntimeManifest[],
+          results: [
+            result("owner/context", "owner", {}),
+            result("story", "story", {
+              narrativeOutput: "The commission was completed.",
+            }),
+            {
+              ...result("owner/initializer", "owner", {}),
+              pendingProposals: [
+                proposal(
+                  { definitions: { reputation: definition } },
+                  "dimension.initialize",
+                ),
+                ...(options.extra ?? []),
+              ],
+            },
+          ],
+        });
+      }
+      const dropped = {
+        status: "committed",
+        isolatedRuntimes: [
+          { runtimeId: "owner/initializer", error: expect.any(String) },
+        ],
+      };
+
+      it("writes the initial value and freezes it in the receipt", async () => {
+        const store = await setup(create);
+        const outcome = await initialize(store);
+        expect(outcome.status).toBe("committed");
+        expect(outcome.isolatedRuntimes).toBeUndefined();
+        expect(await record(store)).toMatchObject({ value: 0, version: 1 });
+        expect(await receipt(store)).toMatchObject({
+          status: "pending-settlement",
+          definitions: { reputation: definition },
+          readVersions: { reputation: 1 },
+        });
+      });
+      it("writes nothing when the policy vetoes initialization", async () => {
+        const store = await setup(create);
+        expect(await initialize(store, { policy: "veto" })).toMatchObject(
+          dropped,
+        );
+        expect(await record(store)).toBeUndefined();
+        // No committed dimension has a rule, so the story owes no settlement.
+        expect(await receipt(store)).toBeUndefined();
+        expect((await store.listMessages("s")).length).toBe(1);
+      });
+      it("writes the rewritten definition, never the one first proposed", async () => {
+        const store = await setup(create);
+        const outcome = await initialize(store, { policy: "rewrite" });
+        expect(outcome.status).toBe("committed");
+        expect(outcome.isolatedRuntimes).toBeUndefined();
+        expect(await record(store)).toMatchObject({ value: 7, version: 1 });
+        expect(await receipt(store)).toMatchObject({
+          status: "pending-settlement",
+          definitions: { reputation: { initialValue: 7 } },
+          readVersions: { reputation: 1 },
+        });
+      });
+      it("rolls initialization back with a later rejected write of the same runtime", async () => {
+        const store = await setup(create);
+        const rejected = proposal(
+          {
+            namespace: DIMENSION_DATA_NAMESPACE,
+            key: "reputation",
+            value: { ...initial, value: 99 },
+          },
+          "plugin.data",
+        );
+        expect(await initialize(store, { extra: [rejected] })).toMatchObject(
+          dropped,
+        );
+        expect(await record(store)).toBeUndefined();
+        expect(await receipt(store)).toBeUndefined();
+      });
     });
     // P0-2 regression: a retry replays the original narrative result, whose
     // runId is the frozen source.resultId. The tracker resolves the receipt

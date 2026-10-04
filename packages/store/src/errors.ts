@@ -8,6 +8,19 @@ export class SessionAlreadyExistsError extends Error {
   }
 }
 
+/**
+ * Raised when a write needs the session row and it is gone. A caller that
+ * raced with session deletion can tell this from a database failure.
+ */
+export class SessionNotFoundError extends Error {
+  readonly code = "session_not_found";
+
+  constructor(readonly sessionId: string) {
+    super(`Session not found: ${sessionId}`);
+    this.name = "SessionNotFoundError";
+  }
+}
+
 /** Raised when a global record id is already bound to another session. */
 export class SessionRecordScopeConflictError extends Error {
   readonly code = "session_record_scope_conflict";
