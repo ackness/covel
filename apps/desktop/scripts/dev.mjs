@@ -15,7 +15,6 @@ import { ensureElectronBinary } from "./ensure-electron.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
-const projectRoot = path.resolve(desktopRoot, "../..");
 
 // Build main process + preload
 console.log("[dev] Building main process and preload...");

@@ -4,13 +4,6 @@ import type {
   ModelSlotMap,
 } from "./types.js";
 
-export interface SlotRegistryDeps {
-  presetRegistry: {
-    resolvePreset(presetId?: string): { id: string } | null;
-    listPresets(): Array<{ id: string; enabled: boolean }>;
-  };
-}
-
 export interface SlotRegistry {
   configure(slotMap: ModelSlotMap): void;
   /** Direct lookup only — returns undefined if slot not found (no fallback). */
@@ -29,7 +22,7 @@ export interface SlotRegistry {
  * Tag-aware: slots have tags (e.g., "text", "image").
  * No cross-tag fallback. Direct lookup only.
  */
-export function createSlotRegistry(deps: SlotRegistryDeps): SlotRegistry {
+export function createSlotRegistry(): SlotRegistry {
   let slotMap: ModelSlotMap = { slots: {} };
 
   function configure(map: ModelSlotMap): void {

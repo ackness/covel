@@ -88,10 +88,21 @@ describe("current package discovery and loading", () => {
         .userSettings?.[0]?.key,
     ).toBe("limit");
   });
-  it("rejects old child names instead of discovering a partial package", async () => {
+  it("reports old child names as that package's error instead of loading a partial package", async () => {
     await root();
     await write(path.join(temp, "probe/runtimes/run/PLUGIN.md"), md(agent));
-    await expect(discoverPlugins(temp)).rejects.toThrow("RUNTIME.md");
+    // A package with a broken layout does not hide the packages beside it.
+    await write(
+      path.join(temp, "sibling/PLUGIN.md"),
+      md({ id: "sibling", kind: "plugin", description: "Sibling" }),
+    );
+    const discovered = await discoverPlugins(temp);
+    const probe = discovered.find((d) => d.id === "probe")!;
+    const sibling = discovered.find((d) => d.id === "sibling")!;
+    expect(probe.layoutError).toContain("RUNTIME.md");
+    await expect(loadPluginDefinition(probe)).rejects.toThrow("RUNTIME.md");
+    expect(sibling.layoutError).toBeUndefined();
+    expect((await loadPluginDefinition(sibling)).manifests).toEqual([]);
   });
   it("rejects inline runtime together with a runtime directory", async () => {
     await root({ runtime: agent });
@@ -101,7 +112,11 @@ describe("current package discovery and loading", () => {
   });
   it("requires a root and matching package identity", async () => {
     await write(path.join(temp, "probe/runtimes/run/RUNTIME.md"), md(agent));
-    await expect(discoverPlugins(temp)).rejects.toThrow("root PLUGIN.md");
+    const [missingRoot] = await discoverPlugins(temp);
+    expect(missingRoot!.layoutError).toContain("root PLUGIN.md");
+    await expect(loadPluginDefinition(missingRoot!)).rejects.toThrow(
+      "root PLUGIN.md",
+    );
     await root({ id: "other" });
     const [d] = await discoverPlugins(temp);
     await expect(loadPluginDefinition(d!)).rejects.toThrow("id must match");

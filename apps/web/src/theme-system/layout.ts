@@ -7,27 +7,12 @@ import { z } from "zod";
  * so a package names a preset (and may override single options) and the app
  * shell reads the resolved result.
  */
-export const THEME_NAV_PLACEMENTS = ["top", "rail"] as const;
-export const THEME_PANEL_TABS = ["rail", "bar"] as const;
-export const THEME_SESSION_BACKDROPS = [
-  "ambient",
-  "scene",
-  "banner",
-  "none",
-] as const;
-export const THEME_WORLD_LISTS = [
-  "covers",
-  "cards",
-  "list",
-  "showcase",
-] as const;
-export const THEME_TURN_NOTES = ["fold", "inline", "margin"] as const;
-export const THEME_LAYOUT_PRESET_IDS = [
-  "classic",
-  "book",
-  "stage",
-  "panel",
-] as const;
+const THEME_NAV_PLACEMENTS = ["top", "rail"] as const;
+const THEME_PANEL_TABS = ["rail", "bar"] as const;
+const THEME_SESSION_BACKDROPS = ["ambient", "scene", "banner", "none"] as const;
+const THEME_WORLD_LISTS = ["covers", "cards", "list", "showcase"] as const;
+const THEME_TURN_NOTES = ["fold", "inline", "margin"] as const;
+const THEME_LAYOUT_PRESET_IDS = ["classic", "book", "stage", "panel"] as const;
 
 export type ThemeNavPlacement = (typeof THEME_NAV_PLACEMENTS)[number];
 export type ThemePanelTabs = (typeof THEME_PANEL_TABS)[number];
@@ -69,7 +54,7 @@ export interface ResolvedThemeLayout extends ThemeLayoutOptions {
   readonly preset: ThemeLayoutPresetId;
 }
 
-export const DEFAULT_LAYOUT_PRESET: ThemeLayoutPresetId = "classic";
+const DEFAULT_LAYOUT_PRESET: ThemeLayoutPresetId = "classic";
 
 export const THEME_LAYOUT_PRESETS: Record<
   ThemeLayoutPresetId,

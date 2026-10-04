@@ -15,7 +15,6 @@
  */
 
 import type {
-  I18nText,
   InputInjectDecl,
   PluginDataInjectDecl,
   RuntimeInjectDecl,

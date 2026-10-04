@@ -10,6 +10,7 @@ import { eq } from "drizzle-orm";
 import { applyPluginDataBatchCas } from "../common/plugin-data-batch-cas.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 
+import { SessionNotFoundError } from "../errors.js";
 import type { DataStore, StoreTransaction } from "../types.js";
 import {
   INDEPENDENT_CONNECTION_NESTING_REASON,
@@ -87,8 +88,7 @@ function buildPgData(
         .from(schema.sessions)
         .where(eq(schema.sessions.id, sessionId))
         .for("update");
-      if (sessions.length === 0)
-        throw new Error(`Session not found: ${sessionId}`);
+      if (sessions.length === 0) throw new SessionNotFoundError(sessionId);
       return applyPluginDataBatchCas(data, sessionId, pluginId, records);
     },
   };

@@ -43,6 +43,34 @@ function session(id: string): SessionRecord {
   };
 }
 
+/**
+ * Make the worker's status projection fail. The projection writes its row
+ * inside a store transaction, so the failure is injected on that transaction.
+ */
+function failStatusProjection(
+  store: DataStore,
+  shouldFail: (row: Parameters<DataStore["appendJobStatus"]>[0]) => boolean,
+) {
+  const withTransaction = store.withTransaction.bind(store);
+  return vi.spyOn(store, "withTransaction").mockImplementation((fn) =>
+    withTransaction((tx) =>
+      fn(
+        new Proxy(tx, {
+          get(target, property) {
+            const value = Reflect.get(target, property, target);
+            if (property !== "appendJobStatus") return value;
+            return async (row: Parameters<DataStore["appendJobStatus"]>[0]) => {
+              if (shouldFail(row))
+                throw new Error("synthetic projection failure");
+              return target.appendJobStatus(row);
+            };
+          },
+        }),
+      ),
+    ),
+  );
+}
+
 function job(
   sessionId = "session-a",
   jobId = "job-a",
@@ -447,21 +475,13 @@ describe.each([
     async (failure) => {
       await createRuntimeJob(store, job());
       const eventBus = createEventBus();
-      const append = store.appendJobStatus.bind(store);
       let rejected = false;
-      const intercepted = vi
-        .spyOn(store, "appendJobStatus")
-        .mockImplementation(async (row) => {
-          if (
-            failure === "projection" &&
-            row.state === "succeeded" &&
-            !rejected
-          ) {
-            rejected = true;
-            throw new Error("synthetic projection failure");
-          }
-          return append(row);
-        });
+      const intercepted = failStatusProjection(store, (row) => {
+        if (failure !== "projection" || row.state !== "succeeded" || rejected)
+          return false;
+        rejected = true;
+        return true;
+      });
       const execute = vi.fn(
         async (_job, control: RuntimeJobExecutionControl) => {
           await control.beforeCommit({
@@ -678,9 +698,12 @@ describe.each([
   it("releases the concurrency slot when claimed-job progress persistence fails", async () => {
     await createRuntimeJob(store, job());
     await createRuntimeJob(store, job("session-a", "job-b"));
-    const append = vi
-      .spyOn(store, "appendJobStatus")
-      .mockRejectedValueOnce(new Error("temporary progress write failure"));
+    let failed = false;
+    const append = failStatusProjection(store, () => {
+      if (failed) return false;
+      failed = true;
+      return true;
+    });
     const execute = vi.fn(async (_job, control: RuntimeJobExecutionControl) => {
       await control.beforeCommit({
         backgroundTurnId: "turn-b",

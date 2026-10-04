@@ -427,10 +427,6 @@ async function assembleApi(
     clearSessionToolOverrides,
   } = await setupPluginTools({
     store,
-    registry,
-    discoveryMap,
-    manifestCache,
-    llmAdapter: config.llmAdapter,
     eventDirectory,
   });
   owned.closeTools = () => toolExecutor.close();

@@ -23,7 +23,7 @@ import { selectPromptSegments } from "./extension-segments.js";
  * the current user message, and any depth/post-history prompt contributions.
  */
 
-import { applyBudget, resolveBudgetOptions } from "./budget.js";
+import { applyBudget } from "./budget.js";
 import {
   assemblePromptVariables,
   buildCurrentTurnUserMessage,

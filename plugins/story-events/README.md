@@ -46,7 +46,7 @@ sources:
 ```
 
 - 条件组合：`all` / `any` / `not`；叶子引用 `dimension`（可带 `path`，点号或数组）、`time`（world-time 输出的数值字段，如时段制的 `phase` / `cycle`，历法制的 `hour` / `day` / `month` / `weekdayIndex`）或 `revealed`（另一个事件）。
-- 事件链：`{ revealed: <事件 ID> }` 在该事件发生过后成立，可加 `turnsSinceGte` / `turnsSinceLte` 限定距它最近一次发生过了多少回合；配合 `not` 可以写「某事还没发生」。`revealed` 叶子不需要比较运算符，引用不存在的事件 ID 视为不满足并写入诊断。
+- 事件链：`{ revealed: <事件 ID> }` 在该事件发生过后成立，可加 `turnsSinceGte` / `turnsSinceLte` 限定距它最近一次发生过了多少回合；配合 `not` 可以写「某事还没发生」。`revealed` 叶子不需要比较运算符，引用不存在的事件 ID 属于无法判断（见下）并写入诊断；事件存在但尚未发生则是确定的“不成立”，`not` 可以正常取反。
 
 ```yaml
 - id: fangs-collect
@@ -63,7 +63,7 @@ sources:
 - 运算符（`dimension` / `time` 叶子恰好一个）：`equals`、`notEquals`、`in`、`gte`、`gt`、`lte`、`lt`、`exists`。
 - 时间请用与语言无关的数值字段；`period` 是本地化文字，不适合写进条件。
 - `once` 默认 `true`；可重复事件用 `once: false` + `cooldownTurns`。多个事件同时满足时，`priority` 高者先触发，同级按 ID 排序。
-- 引用了不存在的维度或世界时间不可用时，条件视为不满足，原因写进输出的 `diagnostics`（只含 ID，不含剧情内容）。
+- 引用了不存在的维度、不存在的事件 ID，或世界时间不可用时，该叶子**无法判断**，原因写进输出的 `diagnostics`（只含 ID，不含剧情内容）。无法判断不会被 `not` 翻转成满足；`any` 仍可凭其他成立的分支成立，`all` 仍因任一不成立的分支不成立；整棵条件最终无法判断时视为不满足。
 
 ## 数据与可见性
 

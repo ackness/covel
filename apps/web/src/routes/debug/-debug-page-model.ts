@@ -12,7 +12,7 @@ export interface VisibleTurn {
   turnIndex: number;
 }
 
-export function isManualTurn(turn: api.TurnTrace): boolean {
+function isManualTurn(turn: api.TurnTrace): boolean {
   return turn.events.some(
     (event) =>
       event.type === "turn.started" &&

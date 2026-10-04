@@ -121,3 +121,54 @@ describe("loadRuntime output schema resolution", () => {
     }
   });
 });
+
+describe("loadRuntime binding accepts contracts", () => {
+  async function load(
+    required: boolean,
+    contracts: Record<string, Record<string, unknown>> = {},
+  ) {
+    const pluginDir = path.join(tmpDir, "test-plugin");
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDir, "PLUGIN.md"),
+      makeFrontmatter({
+        inputs: {
+          facts: {
+            from: { contract: "facts-provider@1" },
+            accepts: "contract:facts@1",
+            required,
+          },
+        },
+      }).replace(
+        "kind: plugin",
+        `kind: plugin\n${required ? "requires" : "optional"}: ["facts-provider@1"]`,
+      ),
+    );
+    const [discovery] = await discoverPlugins(tmpDir);
+    return loadRuntime(
+      discovery,
+      "test-plugin",
+      undefined,
+      undefined,
+      contracts,
+    );
+  }
+
+  it("loads a runtime whose optional binding accepts a contract that is not installed", async () => {
+    const loaded = await load(false);
+    expect(loaded.bindingAcceptsSchemas).toBeUndefined();
+    expect(loaded.unresolvedAccepts).toEqual(["facts"]);
+  });
+
+  it("checks the optional binding once the contract is installed", async () => {
+    const loaded = await load(false, { "facts@1": SCHEMA });
+    expect(loaded.bindingAcceptsSchemas).toEqual({ facts: SCHEMA });
+    expect(loaded.unresolvedAccepts).toBeUndefined();
+  });
+
+  it("still refuses a required binding whose accepts contract is not installed", async () => {
+    await expect(load(true)).rejects.toThrow(
+      "Unresolved schema contract: contract:facts@1",
+    );
+  });
+});

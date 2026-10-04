@@ -561,7 +561,7 @@ describe("gateway slot tag fallback", () => {
     });
 
     const presetRegistry = createPresetRegistry({ profiles, presets });
-    const slotRegistry = createSlotRegistry({ presetRegistry });
+    const slotRegistry = createSlotRegistry();
     slotRegistry.configure({
       slots: {
         story: { slotId: "story", presetId: "primary", tag: "text" },

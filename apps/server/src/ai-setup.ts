@@ -178,7 +178,7 @@ export function createAiStack(): AiStack {
     presets: loaded.config.presets,
   });
 
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   slotRegistry.configure({ slots: buildSlotMap(loaded.config) });
 
   const gateway = createGateway({

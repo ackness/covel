@@ -485,7 +485,9 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 - `resumeSchema` 必须可被 `JSON.stringify` —— pendingContinuation 是要落盘的
 - 同一 runtime 同一时刻只能有一个未解决的 suspension（resume 路由通过 `runtimeId + sessionId` 查找）
-- 注册位置：`bootstrap/tools.ts` 中 `tools.registerBuiltin(suspendTool)`，所有 agent runtime 自动可用
+- 注册位置：`@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具；agent 仍须在 `agent.tools.builtin` 中列出 `suspend` 才能调用
+- 恢复执行延续被挂起的那次执行：`ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化；`ctx.world` 是恢复时已提交的 World Model 叠加 continuation 中缓冲的写入
+- `completion.require: tool-use` 在恢复后只承认挂起前**成功**的业务工具调用；挂起前失败且未被同名成功调用解决的工具仍算未完成，恢复后必须重新完成
 
 ---
 

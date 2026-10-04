@@ -19,7 +19,7 @@
  * This script imports framework TS source directly (no build step for
  * dev packages), so it must run under tsx, not plain node:
  *
- *   npx tsx scripts/generate-portraits.mjs <world> [--slot gpt-image-2]
+ *   pnpm exec tsx scripts/generate-portraits.mjs <world> [--slot gpt-image-2]
  *        [--only id1,id2] [--size WxH] [--quality low|medium|high]
  *        [--limit N] [--concurrency N] [--force] [--dry-run]
  */
@@ -96,7 +96,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.world) {
     console.error(
-      "usage: npx tsx scripts/generate-portraits.mjs <world> [--slot gpt-image-2] [--only id1,id2] [--size 1024x1536] [--quality medium] [--limit N] [--concurrency 5] [--force] [--dry-run]",
+      "usage: pnpm exec tsx scripts/generate-portraits.mjs <world> [--slot gpt-image-2] [--only id1,id2] [--size 1024x1536] [--quality medium] [--limit N] [--concurrency 5] [--force] [--dry-run]",
     );
     process.exit(1);
   }

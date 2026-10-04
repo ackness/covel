@@ -171,7 +171,7 @@ async function exists(
  * `known` is the list to read by: a caller that holds the plugin registry
  * passes its conventions; without it the list of the process is used.
  */
-export async function presentConventionalSources(
+async function presentConventionalSources(
   worldRoot: string,
   known: readonly ConventionalSource[] = conventions,
 ): Promise<readonly ConventionalSource[]> {

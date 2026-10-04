@@ -70,7 +70,12 @@ import {
 } from "../media/canonicalize-media-refs.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
-import { prepareDimensionFinalization } from "./dimension-finalization.js";
+import {
+  adoptRetryReadSets,
+  bindDimensionProvider,
+  needsSettlementReceipt,
+  registerDimensionSettlements,
+} from "./dimension-finalization.js";
 import { droppedUpstream } from "./commit-dependencies.js";
 
 /**
@@ -575,53 +580,99 @@ export async function finalizeExecution(
                 : undefined;
           if (error) throw new Error(error);
         }
-        const dimensionEvents = await prepareDimensionFinalization({
+        const dimensions = await bindDimensionProvider({
           tx,
           sessionId,
-          executionContext,
           runtimes,
-          results,
         });
-        const events: SessionEvent[] = [...dimensionEvents];
-        for (const event of dimensionEvents)
-          postCommit.push(async () => {
-            if (
-              event.type === "dimensions.changed" ||
-              event.type === "dimensions.settlement.changed"
-            )
-              await emitter?.emit(event.type, event.payload);
-            eventBus?.emit({
-              id: event.id,
-              type: "event",
-              topic: "state",
-              sessionId,
-              timestamp: event.timestamp,
-              payload: {
-                ...event.payload,
-                _subType: event.type,
-                turnId: event.turnId,
-              },
-            });
+        const events: SessionEvent[] = [];
+        // Settlement receipts freeze committed records. They are registered
+        // where a runtime first needs one and again after the last runtime, so
+        // a receipt never describes initialization that was vetoed, rewritten
+        // or rolled back with its runtime.
+        const registerSettlements = async (
+          sink: StoreTransaction,
+          defer: (fn: () => Promise<void>) => void,
+        ): Promise<readonly SessionEvent[]> => {
+          if (!dimensions) return [];
+          const registered = await registerDimensionSettlements({
+            sink,
+            sessionId,
+            scope: dimensions,
+            runtimes,
+            results,
           });
+          for (const event of registered)
+            defer(async () => {
+              await emitter?.emit(
+                "dimensions.settlement.changed",
+                event.payload,
+              );
+              eventBus?.emit({
+                id: event.id,
+                type: "event",
+                topic: "state",
+                sessionId,
+                timestamp: event.timestamp,
+                payload: {
+                  ...event.payload,
+                  _subType: event.type,
+                  turnId: event.turnId,
+                },
+              });
+            });
+          return registered;
+        };
+        const scopedRetry =
+          executionContext.origin === "manual" &&
+          executionContext.sourceTurnId !== undefined;
         const commitResult = async (
           result: FinalizableResult,
           sink: StoreTransaction,
           defer: (fn: () => Promise<void>) => void,
         ): Promise<readonly SessionEvent[]> => {
           const { proposals, failedProposals } = prepared.get(result)!;
-          const out =
-            proposals.length > 0
-              ? await commitPreparedProposals(
-                  proposals,
-                  sink,
-                  sessionId,
-                  result,
-                  commitOpts(result, defer),
-                )
-              : { events: [], failedProposals: [] };
-          const failed = [...failedProposals, ...out.failedProposals];
+          const committed: SessionEvent[] = [];
+          const failed = [...failedProposals];
+          const commitBatch = async (
+            batch: readonly Proposal[],
+          ): Promise<void> => {
+            if (batch.length === 0) return;
+            const out = await commitPreparedProposals(
+              batch,
+              sink,
+              sessionId,
+              result,
+              commitOpts(result, defer),
+            );
+            committed.push(...out.events);
+            failed.push(...out.failedProposals);
+          };
+          // The provider's own initialization commits first, so the receipt
+          // its settlement update needs is built from what really landed.
+          const settles =
+            dimensions && result.pluginId === dimensions.provider
+              ? proposals.findIndex(needsSettlementReceipt)
+              : -1;
+          if (settles < 0 || !dimensions) {
+            await commitBatch(proposals);
+          } else {
+            await commitBatch(proposals.slice(0, settles));
+            committed.push(...(await registerSettlements(sink, defer)));
+            const updates = proposals.slice(settles);
+            if (scopedRetry && result.status === "success")
+              await adoptRetryReadSets({
+                sink,
+                sessionId,
+                scope: dimensions,
+                runtimes,
+                results,
+                proposals: updates,
+              });
+            await commitBatch(updates);
+          }
           if (failed.length > 0) throw new ProposalCommitFailure(failed);
-          return out.events;
+          return committed;
         };
         // Results arrive in execution order, so every upstream settles before
         // the runtimes that depend on it.
@@ -668,6 +719,11 @@ export async function finalizeExecution(
             );
           }
         }
+        // Every narrative owes a settlement, whether or not a runtime of this
+        // execution asked for its receipt.
+        events.push(
+          ...(await registerSettlements(tx, (fn) => postCommit.push(fn))),
+        );
         // A dropped runtime settles as failed: like any failed run, it adds
         // nothing to the conversation and does not count as a trigger.
         for (const message of args.journalMessages ?? []) {

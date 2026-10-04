@@ -117,3 +117,52 @@ describe("registry runtime discovery paths", () => {
     expect(response.diagnostics).toEqual([]);
   });
 });
+
+describe("a package with a retired layout", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "covel-layout-"));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("is reported as that package's error while the other packages still register", async () => {
+    await mkdir(path.join(dir, "healthy"), { recursive: true });
+    await writeFile(
+      path.join(dir, "healthy", "PLUGIN.md"),
+      `---\n${stringify({
+        id: "healthy",
+        kind: "plugin",
+        description: "Loads normally",
+      })}---\n`,
+    );
+    // The retired layout: no root manifest, a runtime manifest named PLUGIN.md.
+    await mkdir(path.join(dir, "retired", "runtimes", "main"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(dir, "retired", "runtimes", "main", "PLUGIN.md"),
+      "---\nname: retired/main\n---\n",
+    );
+
+    const eventBus = createEventBus(createMemoryStore());
+    try {
+      const { registry, discoveryMap } = await discoverAndRegisterPlugins({
+        pluginsDir: dir,
+        eventBus,
+      });
+
+      expect(registry.get("healthy")).toMatchObject({ status: "registered" });
+      expect(registry.get("retired")).toMatchObject({
+        status: "error",
+        error: expect.stringContaining("must be named RUNTIME.md"),
+      });
+      expect([...discoveryMap.keys()]).toEqual(["healthy"]);
+    } finally {
+      await eventBus.close();
+    }
+  });
+});

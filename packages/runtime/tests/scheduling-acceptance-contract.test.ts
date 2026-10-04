@@ -1092,14 +1092,9 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
   });
 });
 
-describe("media pipeline & job-status", () => {
-  // The kernel-owned progress→terminal chain and non-success envelope boundary
-  // are exercised in media-boundaries-acceptance.test.ts. The remaining
-  // unshipped surface is the Step 4/6 legacy view projector.
-  it.todo(
-    "scenario 9 compat: manifest-declared jobStatus.legacyViews projects only the emitting plugin's jobs into legacy tracks/images while new UI consumes kernel job-status",
-  );
-});
+// Media pipeline & job-status: the kernel-owned progress→terminal chain and the
+// non-success envelope boundary are exercised in
+// media-boundaries-acceptance.test.ts.
 
 describe("MediaRef canonicalization boundaries", () => {
   // activation/binding/export/job-data share a canonicalizer in

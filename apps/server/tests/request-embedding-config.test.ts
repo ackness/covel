@@ -68,7 +68,7 @@ it("uses request embedding settings and keys for probes and detached work withou
       },
     ],
   });
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   slotRegistry.configure({
     slots: {
       embed: { slotId: "embed", presetId: "base-embed", tag: "embedding" },

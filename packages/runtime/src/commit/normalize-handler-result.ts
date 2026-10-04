@@ -9,7 +9,8 @@
  *
  * The explicit `{ outcome, value, effects, ... }` union is parsed; a malformed
  * shape becomes `failed: output-schema-invalid`; a success `value` is checked
- * against the JSON wire boundary.
+ * against the JSON wire boundary, and its effects against the entry shapes
+ * the commit normalizer reads.
  *
  * Non-success isolation (docs 02 §4.1): a `skipped` / `failed` envelope may only
  * carry observability effects (`jobStatus` / `diagnostics`); any domain write is
@@ -25,6 +26,7 @@ import type {
   RuntimeDiagnostic,
   RuntimeEffects,
 } from "@covel/shared";
+import { malformedDomainEffect } from "./session-output-normalizer.js";
 
 export interface NormalizedHandlerResult {
   readonly outcome: HandlerResult;
@@ -123,6 +125,8 @@ function normalizeEnvelope(raw: unknown): NormalizedHandlerResult {
         });
         return invalid("value is not JSON-serialisable");
       }
+      const malformed = malformedDomainEffect(effects as RuntimeEffects);
+      if (malformed) return invalid(malformed.error);
       const obs = pickObservability(effects);
       const merged: Record<string, unknown> = {};
       // A success envelope keeps every declared effect (domain + observability).

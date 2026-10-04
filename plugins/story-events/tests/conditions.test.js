@@ -55,6 +55,47 @@ describe("evaluateCondition", () => {
     ).toEqual({ met: false, issues: ["world time is unavailable"] });
   });
 
+  it("never lets `not` turn an unavailable reference into a met condition", () => {
+    const noTime = { dimensions: state.dimensions, time: null };
+    expect(
+      evaluateCondition({ not: { time: "phase", equals: 3 } }, noTime),
+    ).toEqual({ met: false, issues: ["world time is unavailable"] });
+    expect(
+      evaluateCondition({ not: { dimension: "renown", gte: 1 } }, state),
+    ).toEqual({ met: false, issues: ["unknown dimension: renown"] });
+    expect(
+      evaluateCondition({ not: { not: { time: "phase", equals: 3 } } }, noTime)
+        .met,
+    ).toBe(false);
+    // A reference that exists is still negated normally.
+    expect(
+      evaluateCondition({ not: { time: "phase", equals: 9 } }, state),
+    ).toEqual({ met: true, issues: [] });
+  });
+
+  it("keeps the decidable branches of all / any around an unavailable reference", () => {
+    const noTime = { dimensions: state.dimensions, time: null };
+    const unavailable = { time: "phase", equals: 3 };
+    const holds = { dimension: "location", equals: "lighthouse" };
+    const fails = { dimension: "location", equals: "harbor" };
+    expect(evaluateCondition({ any: [unavailable, holds] }, noTime).met).toBe(
+      true,
+    );
+    expect(evaluateCondition({ any: [unavailable, fails] }, noTime).met).toBe(
+      false,
+    );
+    expect(evaluateCondition({ all: [unavailable, holds] }, noTime).met).toBe(
+      false,
+    );
+    // `all` is already false, so negating it holds whatever the time is.
+    expect(
+      evaluateCondition({ not: { all: [unavailable, fails] } }, noTime),
+    ).toEqual({ met: true, issues: ["world time is unavailable"] });
+    expect(
+      evaluateCondition({ not: { any: [unavailable, fails] } }, noTime).met,
+    ).toBe(false);
+  });
+
   it("rejects leaves without exactly one operator", () => {
     const result = evaluateCondition(
       { dimension: "location", equals: "lighthouse", in: ["lighthouse"] },
@@ -117,11 +158,42 @@ describe("revealed leaves", () => {
 });
 
 describe("localizedText", () => {
-  it("prefers the exact locale, then the same language, then any text", () => {
+  it("prefers the exact locale, then the same language and script, then English", () => {
     const text = { "zh-CN": "灯塔", "en-US": "Lighthouse" };
     expect(localizedText(text, "en-US")).toBe("Lighthouse");
     expect(localizedText(text, "en-GB")).toBe("Lighthouse");
-    expect(localizedText(text, "ru-RU")).toBe("灯塔");
+    expect(localizedText(text, "ru-RU")).toBe("Lighthouse");
+    expect(localizedText({ "zh-CN": "灯塔" }, "ru-RU")).toBe("灯塔");
     expect(localizedText("plain", "en-US")).toBe("plain");
+  });
+
+  it("reads keys whatever their case or separator, and the language-only key before a regional one", () => {
+    expect(
+      localizedText({ "en-GB": "British", "en-us": "American" }, "en-US"),
+    ).toBe("American");
+    expect(localizedText({ en_US: "American" }, "en-US")).toBe("American");
+    expect(localizedText({ "en-US": "Regional", en: "Generic" }, "en-GB")).toBe(
+      "Generic",
+    );
+  });
+
+  it("falls back to English the way an en-US session reads it", () => {
+    const text = { en: "Generic English", "en-US": "Regional English" };
+    expect(localizedText(text, "ru-RU")).toBe("Regional English");
+    expect(localizedText({ en: "Generic English" }, "ru-RU")).toBe(
+      "Generic English",
+    );
+    expect(localizedText({ "en-GB": "British English" }, "ru-RU")).toBe(
+      "British English",
+    );
+  });
+
+  it("does not read Simplified Chinese for a Traditional Chinese session", () => {
+    const text = { "zh-CN": "灯塔", "zh-TW": "燈塔", "en-US": "Lighthouse" };
+    expect(localizedText(text, "zh-Hant-HK")).toBe("燈塔");
+    expect(localizedText(text, "zh-SG")).toBe("灯塔");
+    expect(
+      localizedText({ "zh-CN": "灯塔", "en-US": "Lighthouse" }, "zh-TW"),
+    ).toBe("Lighthouse");
   });
 });

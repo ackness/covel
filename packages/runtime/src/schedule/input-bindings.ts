@@ -99,6 +99,8 @@ export interface ResolveBindingsInput {
   };
   /** Consumer's loaded `accepts` schemas, keyed by binding name. */
   readonly acceptsSchemas: Readonly<Record<string, Schema>>;
+  /** Optional bindings whose `accepts` contract is not installed. */
+  readonly unresolvedAccepts?: readonly string[];
   /**
    * Published schema of each contract-sourced binding's contract, keyed by
    * binding name. Every provider's full output must satisfy it before `select`.
@@ -399,6 +401,19 @@ export async function resolveInputBindings(
       continue; // optional → omit slot
     }
 
+    // A value that cannot be checked against its declared shape is withheld.
+    if (args.unresolvedAccepts?.includes(name)) {
+      diagnostics.push(
+        diag(
+          "accepts-contract-unresolved",
+          "warn",
+          manifest.name,
+          `binding "${name}" accepts a contract no installed plugin publishes; its value is withheld`,
+        ),
+      );
+      continue;
+    }
+
     // Build-time accepts compatibility, per provider (docs 02 §3.1). Proven
     // incompatible → skip; indeterminate → diagnostic + always-on runtime check.
     if (acceptsSchema) {
@@ -616,6 +631,8 @@ export interface ResolveExportBindingsInput {
   readonly activeRuntimes: readonly RuntimeManifest[];
   /** Consumer's loaded export `accepts` schemas, keyed by binding name. */
   readonly acceptsSchemas: Readonly<Record<string, Schema>>;
+  /** Optional bindings whose `accepts` contract is not installed. */
+  readonly unresolvedAccepts?: readonly string[];
   /** Published contracts validate the complete committed output before accepts. */
   readonly contractSchemas?: Readonly<Record<string, Schema>>;
   /**
@@ -675,6 +692,18 @@ export async function resolveExportBindings(
     if (providers.length === 0) {
       const skip = gateMissing("provider not in active set");
       if (skip) return skip;
+      continue;
+    }
+    // A value that cannot be checked against its declared shape is withheld.
+    if (args.unresolvedAccepts?.includes(name)) {
+      diagnostics.push(
+        diag(
+          "accepts-contract-unresolved",
+          "warn",
+          consumerRuntimeId,
+          `export "${name}" accepts a contract no installed plugin publishes; its value is withheld`,
+        ),
+      );
       continue;
     }
     if (cardinality === "one" && providers.length > 1) {

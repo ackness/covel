@@ -77,6 +77,9 @@ export async function discoverPlugins(
         withFileTypes: true,
       });
       const pluginMdPaths: string[] = [];
+      // One package with a broken layout must not hide every other package:
+      // it is reported with the error instead of failing the whole scan.
+      let layoutError: string | undefined;
 
       for (const rtEntry of runtimeEntries) {
         if (!rtEntry.isDirectory()) {
@@ -84,9 +87,7 @@ export async function discoverPlugins(
         }
         const oldPath = path.join(runtimesDir, rtEntry.name, "PLUGIN.md");
         if (await fileExists(oldPath))
-          throw new Error(
-            `${oldPath}: runtime manifests must be named RUNTIME.md`,
-          );
+          layoutError ??= `${oldPath}: runtime manifests must be named RUNTIME.md`;
         const rtPluginMd = path.join(runtimesDir, rtEntry.name, "RUNTIME.md");
         if (await fileExists(rtPluginMd)) {
           pluginMdPaths.push(rtPluginMd);
@@ -94,16 +95,15 @@ export async function discoverPlugins(
       }
 
       if (!(await fileExists(pluginMdPath)))
-        throw new Error(`${rootPath}: a plugin root PLUGIN.md is required`);
-      {
-        results.push({
-          id: entry.name,
-          rootPath,
-          isMultiRuntime: true,
-          pluginMdPaths,
-        });
-        continue;
-      }
+        layoutError ??= `${rootPath}: a plugin root PLUGIN.md is required`;
+      results.push({
+        id: entry.name,
+        rootPath,
+        isMultiRuntime: true,
+        pluginMdPaths,
+        ...(layoutError ? { layoutError } : {}),
+      });
+      continue;
     }
 
     // Check for single-runtime layout

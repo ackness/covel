@@ -11,7 +11,7 @@
  * (default ~/.covel/llm.toml), selected via --slot. See
  * scripts/lib/image-gen-common.mjs). Runs under tsx:
  *
- *   npx tsx scripts/generate-scenes.mjs <world> [--slot gpt-image-2]
+ *   pnpm exec tsx scripts/generate-scenes.mjs <world> [--slot gpt-image-2]
  *        [--only id1,id2] [--variant day|night] [--size WxH] [--quality q]
  *        [--limit N] [--concurrency N] [--force] [--dry-run]
  *        [--scaffold] [--landmarks]
@@ -187,7 +187,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.world) {
     console.error(
-      "usage: npx tsx scripts/generate-scenes.mjs <world> [--slot gpt-image-2] [--only id1,id2] [--variant day|night] [--size 1536x1024] [--quality medium] [--limit N] [--concurrency 5] [--force] [--dry-run] [--scaffold] [--landmarks]",
+      "usage: pnpm exec tsx scripts/generate-scenes.mjs <world> [--slot gpt-image-2] [--only id1,id2] [--variant day|night] [--size 1536x1024] [--quality medium] [--limit N] [--concurrency 5] [--force] [--dry-run] [--scaffold] [--landmarks]",
     );
     process.exit(1);
   }

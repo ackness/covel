@@ -16,7 +16,7 @@ import { useUiSlot } from "@/stores/ui-slot-store.js";
  * track to play. Which track, and why, is the plugins' business; the app only
  * plays what the slot holds.
  */
-export function useSessionMusic(sessionId: string): StageMusicModel | null {
+function useSessionMusic(sessionId: string): StageMusicModel | null {
   const music = useUiSlot(sessionId, "stage.music@1")?.value as
     StageMusicModel | null | undefined;
   return music?.ref ? music : null;

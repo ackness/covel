@@ -132,10 +132,22 @@ success receipt commit in one CAS batch/transaction. Explicit `no-change` also
 validates the read set and writes a receipt; it is not inferred from a missing
 tool call or a successful runtime.
 
+Initialization has one write path: its own `dimension.initialize` proposal. It
+passes `PreStateCommit` like any other proposal and commits inside the
+savepoint of the runtime that proposed it, so a veto writes nothing, a rewrite
+writes the rewritten definition, and a runtime that is dropped takes its
+initialization with it. Before any runtime commits, `finalizeExecution` only
+binds the session to its dimension provider. Receipts freeze the committed
+records: they are registered where a provider runtime first needs one (before
+its first settlement update) and once more after the last runtime. A receipt
+registered inside a savepoint that rolls back is registered again from what did
+commit, and no receipt is registered when no committed dimension has a rule.
+
 A rejected tracked plan can retain the story with an explicit
 `pending-settlement` domain result: it writes no values and no success receipt.
-This does **not** change `finalizeExecution`'s global rule that any
-`committed:false` proposal rolls back the whole execution. Ordinary manual
+This does **not** change how `finalizeExecution` treats a `committed:false`
+proposal: it drops the runtime that proposed it when the execution has a
+committed story, and rolls back the whole execution otherwise. Ordinary manual
 version conflicts remain write rejection; infrastructure errors still throw
 and roll back. Notifications are published only after durable commit. The next
 narrative is blocked until the pending source is retried, explicitly marked
@@ -386,7 +398,10 @@ server transaction API in the browser.
 >   `failedProposals` / `isolatedRuntimes`（`{ runtimeId, error }`）中列出被丢弃的部分
 >   （主回合以 `proposal.failed` 与该 runtime 的 `runtime.failed` SSE 告知）。没有 story
 >   的执行（manual、background、detached、setup）仍是整体原子：任一 proposal 失败即整体
->   回滚，作业不会为未落库的写入报告成功。
+>   回滚，作业不会为未落库的写入报告成功。结果里无法变成 proposal 的 effect 条目
+>   （`effects.ui[].parts`、`effects.interactions`、`effects.notifications` 中的非对象）
+>   同样算作该 runtime 被拒绝的写入，按上述边界处理，不会以异常拖垮整回合；function
+>   runtime 在 handler 返回时就以 `output-schema-invalid` 失败。
 > - **只有上游真正提交，下游才提交**——结果按执行顺序提交，被丢弃 runtime 的硬依赖方
 >   一并丢弃（`commit/commit-dependencies.ts`）：turn 作用域的 `needs` 目标、必填
 >   `inputs` 来源，以及触发事件的全部发出者都被丢弃的事件订阅者。`after` 与
@@ -425,8 +440,9 @@ server transaction API in the browser.
 >   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
 >   镜像）折叠进 proposal 提交后、`commit_status` 结算前的同一事务（
 >   `commit/session-clock.ts` 的 `applySessionClockTx`）。API 与 snapshot 直接保存
->   current-only 时钟字段。任一 proposal 失败即整体回滚——
->   计数、phase、setup 镜像都不推进，ledger 不写入。manual / background / resume
+>   current-only 时钟字段。整回合回滚时（story 或 setup 失败，或没有 story 的执行中
+>   任一 proposal 失败）计数、phase、setup 镜像都不推进，ledger 不写入；只丢弃可选
+>   runtime 的提交照常推进时钟。manual / background / resume
 >   finalize 不传 `sessionClock`，时钟不动。
 > - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入；
 >   `framework.submit-form` 再用 store transaction 原子提交批量 player input。因而同一 session
@@ -441,19 +457,38 @@ server transaction API in the browser.
 > 写入序列"的模式，但属于不同关注点。
 
 ```ts
-// finalizeExecution: all runtime results share one required transaction.
-await store.withTransaction(async (tx) => {
-  for (const result of results) {
-    const out = await processRuntimeResult(
+// finalizeExecution: normalization, guards and PreStateCommit run first.
+const prepared = new Map();
+for (const result of results) {
+  prepared.set(
+    result,
+    await prepareRuntimeProposals(
       result,
-      tx,
+      store,
       sessionId,
       kindOf(result),
       opts,
-    );
-    if (out.failedProposals.length > 0) {
-      throw new ProposalCommitFailure(out.failedProposals);
-    }
+    ),
+  );
+}
+// All runtime results then share one required transaction, which only writes.
+await store.withTransaction(async (tx) => {
+  for (const result of results) {
+    const { proposals, failedProposals } = prepared.get(result);
+    const commit = async (sink) => {
+      const out = await commitPreparedProposals(
+        proposals,
+        sink,
+        sessionId,
+        result,
+        opts,
+      );
+      const failed = [...failedProposals, ...out.failedProposals];
+      if (failed.length > 0) throw new ProposalCommitFailure(failed);
+    };
+    // An optional runtime beside a committed story commits in its own
+    // savepoint; a ProposalCommitFailure there drops that runtime alone.
+    await (isolates(result) ? tx.savepoint(commit) : commit(tx));
   }
   for (const message of journalMessages) await tx.appendTurnMessage(message);
   await extraInTx?.(tx, { droppedRuntimeIds });

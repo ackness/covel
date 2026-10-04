@@ -21,6 +21,33 @@ import {
 } from "./session-guard.js";
 import type { SessionRouteEnv } from "./route-env.js";
 
+/**
+ * A session keeps its dimension data under the provider it bound, and turns,
+ * snapshots and browser checkpoints all require that provider to be active.
+ * A selection change must not take it out of the active set.
+ */
+function droppedDimensionProvider(
+  session: {
+    readonly activePlugins: readonly string[];
+    readonly metadata?: Readonly<Record<string, unknown>>;
+  },
+  active: readonly string[],
+): string | undefined {
+  const bound = session.metadata?._dimensionProviderPluginId;
+  return typeof bound === "string" &&
+    session.activePlugins.includes(bound) &&
+    !active.includes(bound)
+    ? bound
+    : undefined;
+}
+
+function dimensionProviderRequired(pluginId: string) {
+  return errorBody(
+    `This change would disable "${pluginId}", which holds this session's dimensions and must stay enabled`,
+    { code: "dimension_provider_required" },
+  );
+}
+
 export function registerSessionPluginRoutes(
   routes: Hono<SessionRouteEnv>,
 ): void {
@@ -180,6 +207,9 @@ export function registerSessionPluginRoutes(
       if (rejected)
         return c.json(errorBody(rejected.reason, { code: rejected.code }), 409);
       const active = plan.active;
+      const droppedProvider = droppedDimensionProvider(session, active);
+      if (droppedProvider)
+        return c.json(dimensionProviderRequired(droppedProvider), 409);
       // Single mutation point: persist the authoritative activePlugins set
       // first; the registry mirror only reconciles after the store write
       // succeeds (a rejected write leaves memory untouched).
@@ -255,6 +285,9 @@ export function registerSessionPluginRoutes(
         ),
       });
       const active = plan.active;
+      const droppedProvider = droppedDimensionProvider(session, active);
+      if (droppedProvider)
+        return c.json(dimensionProviderRequired(droppedProvider), 409);
       // Single mutation point: the scope rotation and activePlugins write
       // land durably before the registry mirror drops the plugin.
       await pluginRegistry.applyPersistedActivations(id, active, async () => {

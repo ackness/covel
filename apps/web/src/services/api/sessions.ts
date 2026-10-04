@@ -353,27 +353,6 @@ export async function listMessagesPage(
   );
 }
 
-export async function syncMessages(
-  sessionId: string,
-  messages: Array<{
-    id?: string;
-    role: string;
-    content: string;
-    turnId?: string;
-    runtimeId?: string;
-    block?: Record<string, unknown>;
-    createdAt?: string;
-  }>,
-): Promise<void> {
-  await request<{ ok: boolean }>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/messages/sync`,
-    {
-      method: "POST",
-      body: JSON.stringify({ messages }),
-    },
-  );
-}
-
 /** Hydrate the server's transient MemoryStore from the browser authority. */
 export async function uploadBrowserCheckpoint(
   sessionId: string,

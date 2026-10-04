@@ -99,7 +99,7 @@ function resolvePluginIcon(name: string): LucideIcon {
   return HelpCircle;
 }
 
-export interface RightPanelProps {
+interface RightPanelProps {
   panelRequest?: RightPanelRequest | null;
   sessionId: string;
   /** Currently loaded world — its `lore` (WORLD.md) is rendered in the World tab. */

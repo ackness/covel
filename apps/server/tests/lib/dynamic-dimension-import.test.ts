@@ -237,6 +237,88 @@ describe("dynamic dimension author import and sync", () => {
     ).toMatchObject({ value: 1, version: 1 });
     await args.store.close();
   });
+  it("protects a dimension initialized in play, which has no import ledger, while its settlement is pending", async () => {
+    const args = await fixture();
+    const world = (initialValue: number) =>
+      args.store.upsertWorld({
+        id: "world",
+        name: "World",
+        description: "",
+        metadata: { dimensions: { stamina: definition(initialValue) } },
+        createdAt: at,
+      });
+    const sync = () =>
+      syncWorldDataForSession({ ...args, worldsDirs: [], dryRun: false });
+    const record = async () =>
+      (await args.store.getPluginData(
+        "session",
+        "world-init",
+        "_dimensions",
+        "stamina",
+      ))!.value;
+    const receipt = (status: string) =>
+      args.store.setPluginData({
+        id: "receipt",
+        sessionId: "session",
+        pluginId: "world-init",
+        namespace: "_dimension-settlements",
+        key: "source",
+        value: {
+          source: { resultId: "source", turnNumber: 1 },
+          sourceTurnId: "turn",
+          definitions: { stamina: definition(1) },
+          readVersions: { stamina: 1 },
+          status,
+          version: 1,
+        },
+        createdAt: at,
+        updatedAt: at,
+      });
+    // What a committed `dimension.initialize` leaves: a bound provider and a
+    // versioned record, with no world-data import ledger row.
+    await world(1);
+    await args.store.updateSession("session", {
+      metadata: { _dimensionProviderPluginId: "world-init" },
+    });
+    await args.store.setPluginData({
+      id: "stamina",
+      sessionId: "session",
+      pluginId: "world-init",
+      namespace: "_dimensions",
+      key: "stamina",
+      value: { definition: definition(1), value: 1, version: 1 },
+      createdAt: at,
+      updatedAt: at,
+    });
+    await receipt("pending-settlement");
+    expect(await args.store.listWorldDataImportLedger("session")).toEqual([]);
+
+    await world(2);
+    expect((await sync()).conflicts).toEqual([
+      expect.objectContaining({ key: "stamina", reason: "modified" }),
+    ]);
+    expect(await record()).toMatchObject({
+      definition: { initialValue: 1 },
+      value: 1,
+      version: 1,
+    });
+    expect(await args.store.listWorldDataImportLedger("session")).toEqual([]);
+
+    // The unchanged declaration is not a conflict.
+    await world(1);
+    expect((await sync()).conflicts).toEqual([]);
+    expect(await record()).toMatchObject({ value: 1, version: 1 });
+
+    // Once the narrative is settled the new declaration can be adopted.
+    await world(2);
+    await receipt("no-change");
+    expect((await sync()).conflicts).toEqual([]);
+    expect(await record()).toMatchObject({
+      definition: { initialValue: 2 },
+      value: 2,
+    });
+    await args.store.close();
+  });
   it("imports and syncs inline/external worlds with no worldData descriptor", async () => {
     const args = await fixture();
     const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-inline-"));

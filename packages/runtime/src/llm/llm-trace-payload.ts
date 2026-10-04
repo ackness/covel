@@ -18,7 +18,6 @@ import type {
 import type {
   LLMMessage,
   LLMResponse,
-  LLMToolCall,
   LLMToolDefinition,
 } from "./llm-adapter.js";
 

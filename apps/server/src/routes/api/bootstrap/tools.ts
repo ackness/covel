@@ -3,11 +3,12 @@
  *
  * Builds the framework tool registry (builtin UI tools, suspend / runtime-done
  * sentinels, plugin-data tools, character tools, world-dimension tools), wires
- * per-session character-tool overrides, registers each plugin's approved local
- * tools, and assembles the approval-gated `ToolExecutor`.
+ * per-session character-tool overrides, and assembles the approval-gated
+ * `ToolExecutor`. Plugins register their own tools into the returned registry
+ * from their entry modules (`bootstrap/plugin-entry.ts`).
  *
  * Extracted from `bootstrap.ts` to keep the composition root readable. All
- * closures capture the same `store` / `registry` the bootstrap builds.
+ * closures capture the same `store` the bootstrap builds.
  */
 
 import {
@@ -17,25 +18,12 @@ import {
   type ToolModule,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
-import {
-  createToolExecutor,
-  type ManagedToolExecutor,
-  type LLMAdapter,
-} from "@covel/runtime";
+import { createToolExecutor, type ManagedToolExecutor } from "@covel/runtime";
 import { createDefaultToolApprovalPipeline } from "@covel/approval";
-import type {
-  PluginRegistry,
-  PluginDiscoveryResult,
-  ParsedRuntimeMd,
-} from "@covel/plugin-loader";
 import type { EventDirectory } from "./event-directory.js";
 
 export interface SetupPluginToolsParams {
   readonly store: DataStore;
-  readonly registry: PluginRegistry;
-  readonly discoveryMap: Map<string, PluginDiscoveryResult>;
-  readonly manifestCache: Map<string, readonly ParsedRuntimeMd[]>;
-  readonly llmAdapter: LLMAdapter;
   readonly eventDirectory: EventDirectory;
 }
 
@@ -51,7 +39,7 @@ export interface PluginToolsResult {
 export async function setupPluginTools(
   params: SetupPluginToolsParams,
 ): Promise<PluginToolsResult> {
-  const { store, registry, eventDirectory } = params;
+  const { store, eventDirectory } = params;
   const tools = createDefaultToolRegistry({ store, eventDirectory });
 
   // ── Per-session tool overrides (Phase 2) ──────────────────────

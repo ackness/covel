@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -34,6 +37,18 @@ test("browser smoke starts each owned server once and respects external stacks",
       assert.equal(servers.length, 2);
       assert.equal(new Set(servers.map((server) => server.url)).size, 2);
       assert.ok(servers.every((server) => server.cwd === repoRoot));
+      // The owned server runs in a home of its own, never the developer's:
+      // a spec must not read installed plugins or keys, or leave a generated
+      // world behind.
+      const owned = servers.filter((server) => server.env?.COVEL_HOME);
+      assert.equal(owned.length, 1);
+      const home = owned[0].env.COVEL_HOME;
+      assert.notEqual(path.resolve(home), path.join(os.homedir(), ".covel"));
+      assert.equal(path.dirname(home), path.resolve(os.tmpdir()));
+      for (const key of ["COVEL_USER_WORLDS_DIR", "COVEL_USER_PLUGINS_DIR"]) {
+        assert.equal(path.dirname(owned[0].env[key]), home, key);
+      }
+      assert.equal(fs.existsSync(home), false, "removed on exit");
     }
   }
 });

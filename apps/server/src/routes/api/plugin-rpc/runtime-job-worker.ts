@@ -1,6 +1,7 @@
 import { turnDigestSchema } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import type { DataStore, StoreTransaction } from "@covel/store";
+import { SessionNotFoundError } from "@covel/store/session";
 import type {
   DeferredRuntimeJob,
   JobStatusRecord,
@@ -21,6 +22,10 @@ import {
   type RuntimeJobStatus,
 } from "./jobs.js";
 import { publicRuntimeJobDiagnostics } from "./runtime-job-public.js";
+import {
+  SESSION_DELETION_PENDING_KEY,
+  SESSION_INCARNATION_KEY,
+} from "../session/session-guard.js";
 
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_LEASE_MS = 120_000;
@@ -295,24 +300,70 @@ export function publishRuntimeJobStatusEvent(
   });
 }
 
+/**
+ * A job-status row projects one job of one session incarnation. It may be
+ * written only while that job and that incarnation exist, so a deleted or
+ * re-created session never receives rows of the session that used to hold its
+ * id.
+ */
+async function ownsRuntimeJobProjection(
+  store: Pick<StoreTransaction, "getSession" | "getPluginData">,
+  job: RuntimeJobRecord,
+): Promise<boolean> {
+  const session = await store.getSession(job.sessionId);
+  if (!session || session.metadata?.[SESSION_DELETION_PENDING_KEY])
+    return false;
+  const admitted = runtimeJobIncarnation(job.payload);
+  if (
+    admitted !== undefined &&
+    admitted !==
+      `incarnation:${String(session.metadata?.[SESSION_INCARNATION_KEY])}`
+  )
+    return false;
+  return (await getRuntimeJob(store, job)) !== null;
+}
+
+/**
+ * Project a job's durable state as a job-status row and announce it.
+ *
+ * The ownership check and the write are one transaction, so session deletion
+ * cannot land between them, whichever lock the caller holds: the worker
+ * projects a claim before any runtime or session lock is taken. Memory and
+ * SQLite queue the delete behind the open transaction; PostgreSQL holds the
+ * session row, which the delete cascade locks first. The event is published
+ * only for a row that committed.
+ */
 export async function appendRuntimeJobStatus(
-  store: Pick<DataStore, "appendJobStatus" | "listJobStatus">,
+  store: Pick<DataStore, "withTransaction">,
   eventBus: EventBus,
   job: RuntimeJobRecord,
 ): Promise<void> {
-  const existing = await store.listJobStatus(job.sessionId, {
-    progressScopeId: job.jobId,
-    jobId: job.jobId,
+  const record = await store.withTransaction(async (tx) => {
+    try {
+      // The dimension writers' session barrier: a row lock on PostgreSQL.
+      await tx.compareAndSetPluginDataBatch(job.sessionId, job.pluginId, []);
+    } catch (error) {
+      // The session row was gone, or replaced, when PostgreSQL granted the
+      // lock: this job's session no longer exists. Any other failure is the
+      // database's, and reaches the caller as it was raised.
+      if (error instanceof SessionNotFoundError) return undefined;
+      throw error;
+    }
+    if (!(await ownsRuntimeJobProjection(tx, job))) return undefined;
+    const existing = await tx.listJobStatus(job.sessionId, {
+      progressScopeId: job.jobId,
+      jobId: job.jobId,
+    });
+    const own = existing.filter(
+      (row) => row.pluginId === job.pluginId && row.runtimeId === job.runtimeId,
+    );
+    const next = makeRuntimeJobStatusRecord(
+      job,
+      (own.at(-1)?.sequence ?? -1) + 1,
+    );
+    return (await tx.appendJobStatus(next)) ? next : undefined;
   });
-  const own = existing.filter(
-    (record) =>
-      record.pluginId === job.pluginId && record.runtimeId === job.runtimeId,
-  );
-  const sequence = (own.at(-1)?.sequence ?? -1) + 1;
-  const record = makeRuntimeJobStatusRecord(job, sequence);
-  if (await store.appendJobStatus(record)) {
-    publishRuntimeJobStatusEvent(eventBus, record);
-  }
+  if (record) publishRuntimeJobStatusEvent(eventBus, record);
 }
 
 function runtimeKey(job: RuntimeJobRecord): string {

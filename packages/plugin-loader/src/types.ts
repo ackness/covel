@@ -105,6 +105,12 @@ export interface PluginDiscoveryResult {
    * regardless of id, so a user-supplied `core-evil` cannot auto-load.
    */
   readonly source?: PluginSource;
+  /**
+   * Why this directory is not a loadable package (for example a runtime
+   * manifest still named `PLUGIN.md`). The package is reported with this
+   * error and never loaded; the other packages are unaffected.
+   */
+  readonly layoutError?: string;
 }
 
 /**

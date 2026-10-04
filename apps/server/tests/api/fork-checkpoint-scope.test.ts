@@ -14,6 +14,7 @@ import {
   makeSnapshotPayload,
   makeSuspension,
 } from "../../../../packages/store/src/contract/test-fixtures.js";
+import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
   createInProcessSessionLock,
@@ -154,5 +155,135 @@ describe("fork checkpoint scope", () => {
         (record) => record.namespace,
       ),
     ).toEqual(["notes"]);
+  });
+});
+
+describe("fork with a bound dimension provider", () => {
+  const PROVIDER = "dimension-provider";
+
+  /**
+   * A parent whose snapshot is bound to `PROVIDER`. A community provider is
+   * approved per session, so the child cannot start with it active.
+   */
+  async function fork(source: "builtin" | "community", withData: boolean) {
+    const store = createMemoryStore();
+    const parentId = "parent-session";
+    const registry = createPluginRegistry();
+    registry.register({
+      id: PROVIDER,
+      rootPath: "",
+      source,
+      status: "registered",
+      manifests: [],
+      loadedRuntimes: new Map(),
+      summary: {
+        id: PROVIDER,
+        name: "Dimension Provider",
+        description: "",
+        pluginType: "core-plugin",
+        runtimeCount: 0,
+      },
+      packageManifest: parsePluginMd(
+        `---\nid: ${PROVIDER}\nkind: core\ndescription: Dimension provider\nprovides:\n  - world.dimensions@1\n---\n`,
+        `${PROVIDER}/PLUGIN.md`,
+      ),
+    });
+    await store.createWorld(makeWorld({ id: "world-1" }));
+    await store.createSession(
+      makeSession({
+        id: parentId,
+        activePlugins: [PROVIDER],
+        metadata: {
+          _dimensionProviderPluginId: PROVIDER,
+          sessionIncarnationNonce: crypto.randomUUID(),
+        },
+      }),
+    );
+    const now = new Date().toISOString();
+    const row = {
+      id: "dimension-row",
+      sessionId: parentId,
+      pluginId: PROVIDER,
+      namespace: "_dimensions",
+      key: "weather",
+      value: {
+        definition: {
+          name: "Weather",
+          schema: { type: "string" },
+          initialValue: "sunny",
+        },
+        value: "sunny",
+        version: 1,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+    const sourceSnapshot = makeSnapshot({
+      sessionId: parentId,
+      payload: makeSnapshotPayload({
+        pluginData: withData ? [row] : [],
+        session: {
+          status: "active",
+          phase: "playing",
+          locale: "en-US",
+          activePlugins: [PROVIDER],
+          completedPlayerTurns: 1,
+          setupRuntimes: {},
+          dimensionProviderPluginId: PROVIDER,
+        },
+      }),
+    });
+    await store.saveSnapshot(sourceSnapshot);
+    const app = new Hono();
+    app.use("*", async (context, next) => {
+      context.set("store" as never, store as never);
+      context.set(
+        "sessionLock" as never,
+        createInProcessSessionLock() as never,
+      );
+      context.set("pluginRegistry" as never, registry as never);
+      await next();
+    });
+    app.route("/api/sessions", snapshotRoutes as never);
+    const response = await app.request(`/api/sessions/${parentId}/fork`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromSnapshotId: sourceSnapshot.id }),
+    });
+    return { store, response, body: await response.json() };
+  }
+
+  const exportChild = (store: DataStore, sessionId: string) =>
+    exportSessionCheckpoint(store, sessionId, {
+      revision: 1,
+      actionId: "fork-checkpoint",
+    });
+
+  it("keeps a built-in provider bound and active in the child", async () => {
+    const { store, response, body } = await fork("builtin", true);
+    expect(response.status).toBe(201);
+    const child = (await store.getSession(body.sessionId))!;
+    expect(child.activePlugins).toEqual([PROVIDER]);
+    expect(child.metadata?._dimensionProviderPluginId).toBe(PROVIDER);
+    await expect(exportChild(store, body.sessionId)).resolves.toBeDefined();
+  });
+
+  it("refuses to fork dimension data whose provider needs the player's approval", async () => {
+    const { store, response, body } = await fork("community", true);
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({ code: "dimension_provider_required" });
+    // No child the session view, snapshots and checkpoints would reject.
+    expect((await store.listSessions()).map((session) => session.id)).toEqual([
+      "parent-session",
+    ]);
+  });
+
+  it("starts the child unbound when the provider holds no dimension data", async () => {
+    const { store, response, body } = await fork("community", false);
+    expect(response.status).toBe(201);
+    const child = (await store.getSession(body.sessionId))!;
+    expect(child.activePlugins).toEqual([]);
+    expect(child.metadata?._dimensionProviderPluginId).toBeUndefined();
+    await expect(exportChild(store, body.sessionId)).resolves.toBeDefined();
   });
 });

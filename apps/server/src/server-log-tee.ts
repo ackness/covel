@@ -7,8 +7,8 @@
  *   - Skip when `COVEL_DESKTOP_REST=true` or `1`. The packaged desktop already
  *     captures the sidecar's stdout/stderr from outside and writes its
  *     own `server.log` — we don't want a double-write.
- *   - Skip when `NODE_ENV=production` and no explicit
- *     `COVEL_SERVER_LOG_FILE` is provided.
+ *   - Skip when `NODE_ENV=production`: the bootstrap that enables the tee
+ *     does nothing in production.
  *   - Otherwise write to `<COVEL_LOGS_DIR>/server.log`, falling back to
  *     `<COVEL_HOME>/data/logs/server.log` when only `COVEL_HOME` is set.
  *

@@ -54,9 +54,12 @@ import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import { storyOutputError } from "./story-output.js";
 import {
   checkTextCompletion,
+  hasBusinessWork,
+  hasCompletedBusinessWork,
   hasExplicitCompletion,
   captureCompletionCalls,
   runtimeDoneCorrection,
+  unresolvedToolFailures,
   type CompletionCalls,
 } from "./runtime-completion.js";
 import { type BudgetOptions, type TokenEstimator } from "@covel/context";
@@ -176,17 +179,19 @@ async function runAgentToolLoopWithinBudget(
     ...(initialState?.collectedToolCalls ?? []),
   ];
   const executedToolCalls: ExecutedToolCallState[] = [];
-  // Work done before a suspension lives in the seeded `collectedToolCalls`
-  // only — `executedToolCalls` always starts empty — so the requireToolUse
-  // gate below must count it, or a resumed runtime that already called its
-  // tool would be judged as having done nothing.
-  const seededBusinessWork = (initialState?.collectedToolCalls ?? []).some(
-    (c) => c.toolName !== "runtime-done",
+  // `executedToolCalls` always starts empty, so the requireToolUse gate below
+  // reads work done before a suspension from the persisted execution evidence;
+  // otherwise a resumed runtime that already called its tool would be judged
+  // as having done nothing. The transcript is not evidence: a failed call
+  // leaves a tool name there too.
+  const seededBusinessWork = hasCompletedBusinessWork(
+    initialState?.completionCalls,
   );
-  // Set when `requireToolUse` released a runtime that never did business
-  // work — the caller turns it into a failure rather than an empty success.
-  let requiredToolUseUnmet = false;
-  const failedToolCalls: FailedToolCallState[] = [];
+  // A failure still unresolved at the suspension stays visible to the
+  // finalizer, as it would have without the suspension.
+  const failedToolCalls: FailedToolCallState[] = unresolvedToolFailures(
+    initialState?.completionCalls,
+  ).map((toolName) => ({ toolName }));
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
   ];
@@ -598,6 +603,8 @@ async function runAgentToolLoopWithinBudget(
                 pendingProposals,
                 emittedEvents,
                 executionContext,
+                ...(logicalTurn !== undefined ? { logicalTurn } : {}),
+                ...(turnNumber !== undefined ? { turnNumber } : {}),
                 suspendToolCallId: effectiveTc.id,
                 startTime,
                 runId,
@@ -700,22 +707,23 @@ async function runAgentToolLoopWithinBudget(
         }
         // A `requireToolUse` runtime can reach here having called nothing but
         // the terminator — a nudged model will do exactly that to satisfy
-        // "call the declared tools". This exit runs before the gate below, so
-        // record the unmet contract here or the runtime finishes as an empty
-        // success. A first bare `runtime-done` gets the same single
+        // "call the declared tools" — or after a business tool that failed.
+        // A first `runtime-done` without business work gets the same single
         // correction as a bare text finish: bookkeeping runtimes often mean
-        // "nothing changed", which their own tool must record.
-        if (requireToolUse && businessCalls.length === 0) {
-          if (noToolCallCorrections === 0) {
-            noToolCallCorrections++;
-            finalContent = null;
-            messages.push({
-              role: "system",
-              content: runtimeDoneCorrection(input.locale),
-            });
-            continue;
-          }
-          requiredToolUseUnmet = true;
+        // "nothing changed", which their own tool must record. A second one
+        // ends the loop, and the contract is judged where the loop returns.
+        if (
+          requireToolUse &&
+          noToolCallCorrections === 0 &&
+          !hasBusinessWork(executedToolCalls, seededBusinessWork)
+        ) {
+          noToolCallCorrections++;
+          finalContent = null;
+          messages.push({
+            role: "system",
+            content: runtimeDoneCorrection(input.locale),
+          });
+          continue;
         }
         // Preserve streamed / captured prose from earlier steps or this
         // step's response.content. Without this guard a story runtime that
@@ -817,7 +825,6 @@ async function runAgentToolLoopWithinBudget(
       messages.push({ role: "system", content: completion.correction });
       continue;
     }
-    requiredToolUseUnmet ||= completion.requiredToolUseUnmet;
 
     // Late steering: an interjection that arrived while THIS response
     // was streaming would otherwise sit queued until turn release and never
@@ -863,7 +870,11 @@ async function runAgentToolLoopWithinBudget(
     stoppedWithResponse,
     effectiveMaxSteps,
     deadline: budget.deadline,
-    requiredToolUseUnmet,
+    // Judged here, where every way out of the loop ends — a text answer,
+    // `runtime-done`, a completing tool, a hook that stops the loop, or the
+    // step limit — so none of them can pass a runtime that did no work.
+    requiredToolUseUnmet:
+      requireToolUse && !hasBusinessWork(executedToolCalls, seededBusinessWork),
     lastTarget,
     requiredCompletionUnmet:
       manifest.requireExplicitCompletion === true &&

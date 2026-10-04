@@ -48,4 +48,13 @@ export const PACKAGING_ENV_VARS = [
     status: "packaging",
     description: "Apple Developer Team ID.",
   },
+  {
+    name: "COVEL_SMOKE_HOST_NODE",
+    group: "packaging",
+    type: "boolean",
+    status: "packaging",
+    defaultValue: "false",
+    description:
+      "Lets the desktop staging smoke run on the host Node with the memory backend when the Electron binary is missing. Native modules are then not verified under Electron.",
+  },
 ] as const satisfies readonly EnvVarDefinition[];

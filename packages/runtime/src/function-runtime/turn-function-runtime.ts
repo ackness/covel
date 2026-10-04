@@ -489,6 +489,7 @@ export async function executeFunctionRuntime({
       ...(revocable.media ? { media: revocable.media } : {}),
       ...(revocable.images ? { images: revocable.images } : {}),
       ...(revocable.speech ? { speech: revocable.speech } : {}),
+      ...(revocable.music ? { music: revocable.music } : {}),
       ...(revocable.assetProgress
         ? { assetProgress: revocable.assetProgress }
         : {}),
@@ -607,6 +608,8 @@ export async function executeFunctionRuntime({
         ...(activation ? { activation: structuredClone(activation) } : {}),
         emittedEvents: [],
         executionContext,
+        ...(input.locale !== undefined ? { locale: input.locale } : {}),
+        ...(logicalTurn !== undefined ? { logicalTurn } : {}),
       },
       createdAt: new Date().toISOString(),
     };

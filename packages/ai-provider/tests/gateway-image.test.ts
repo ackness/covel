@@ -69,7 +69,7 @@ function setup(presetOverrides: Partial<PresetConfig> = {}) {
     },
   ];
   const presetRegistry = createPresetRegistry({ profiles, presets });
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   const gateway = createGateway({
     providerRegistry,
     presetRegistry,

@@ -6,7 +6,8 @@
  *   - A .zip archive (extracted into the target user dir)
  *
  * Validation is intentionally strict:
- *   - Plugin imports require a PLUGIN.md at the root or inside runtimes/*
+ *   - Plugin imports require a PLUGIN.md at the root; runtime manifests under
+ *     runtimes/* are named RUNTIME.md, and one still named PLUGIN.md is refused
  *   - World imports require a world.yaml at the root
  *   - Zip entries are filtered for zip-slip / absolute paths / symlinks
  *     and capped against zip-bombs (see `zip-extract.ts`).
@@ -50,19 +51,23 @@ function isFileSafe(p: string): boolean {
 
 // ── Validators ─────────────────────────────────────────────────
 
+/**
+ * The package layout plugin discovery loads: a root `PLUGIN.md`, and runtime
+ * manifests named `RUNTIME.md`. A runtime folder that still holds a
+ * `PLUGIN.md` is the retired layout and is refused here, before it is
+ * published into the plugin directory.
+ */
 function pluginMdExists(root: string): boolean {
-  if (isFileSafe(path.join(root, "PLUGIN.md"))) return true;
+  if (!isFileSafe(path.join(root, "PLUGIN.md"))) return false;
   const runtimesDir = path.join(root, "runtimes");
-  if (!isDirectorySafe(runtimesDir)) return false;
-  for (const entry of fs.readdirSync(runtimesDir, { withFileTypes: true })) {
-    if (
-      entry.isDirectory() &&
-      isFileSafe(path.join(runtimesDir, entry.name, "PLUGIN.md"))
-    ) {
-      return true;
-    }
-  }
-  return false;
+  if (!isDirectorySafe(runtimesDir)) return true;
+  return !fs
+    .readdirSync(runtimesDir, { withFileTypes: true })
+    .some(
+      (entry) =>
+        entry.isDirectory() &&
+        isFileSafe(path.join(runtimesDir, entry.name, "PLUGIN.md")),
+    );
 }
 
 function worldYamlExists(root: string): boolean {

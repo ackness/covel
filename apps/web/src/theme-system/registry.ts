@@ -17,7 +17,6 @@ import {
 import { applyTokenOverrides } from "./overrides.js";
 import { syncThemeStyles } from "./runtime.js";
 import {
-  CUSTOM_THEMES_KEY,
   THEME_MANAGER_WIDGET_KEY,
   loadStoredCustomThemes,
   saveStoredCustomThemes,

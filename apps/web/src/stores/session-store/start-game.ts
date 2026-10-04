@@ -103,7 +103,6 @@ export async function startGameSession({
     // authoritative and implements syncToServer as a no-op.
     await workspace.hydrate(session.id);
     if (!isCurrent()) return;
-    api.markServerAck();
     const prepBindings = await persistPrepRuntimeBindings(
       ds,
       world.id,

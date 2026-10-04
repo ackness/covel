@@ -20,6 +20,7 @@ import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
 import { completionContractError } from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
+import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
 import {
   finalizeRuntimeResult,
@@ -58,15 +59,17 @@ export async function resumeSuspendedRuntime(
   const startTime = Date.now();
   const runId = crypto.randomUUID();
 
-  // Minimal TurnInput for the resumed runtime: session/turn come from the
-  // suspension and there is no fresh player message. With no model overrides the
-  // loop resolves the model via `deps.resolveModel(manifest, undefined)`, which
-  // matches the pre-refactor resume behaviour.
+  // TurnInput for the resumed runtime: session, turn and content locale come
+  // from the suspension and there is no fresh player message. With no model
+  // overrides the loop resolves the model via
+  // `deps.resolveModel(manifest, undefined)`.
+  const { locale } = suspension.pendingContinuation;
   const input: TurnInput = {
     sessionId: suspension.sessionId,
     turnId: suspension.turnId,
     playerMessage: "",
     origin: "resume",
+    ...(locale !== undefined ? { locale } : {}),
     ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
   };
 
@@ -133,7 +136,7 @@ async function executeResumedRuntime(
 
   const loaded = await deps.loadRuntime(
     manifest,
-    undefined,
+    input.locale,
     suspension.sessionId,
   );
   throwIfTurnExecutionAborted(deps.turnControl, "resume loading");
@@ -170,6 +173,9 @@ async function executeResumedRuntime(
     );
     return executeFunctionRuntime({
       lastPlayerInput,
+      ...(pendingContinuation.logicalTurn !== undefined
+        ? { logicalTurn: pendingContinuation.logicalTurn }
+        : {}),
       manifest,
       input,
       loaded,
@@ -236,12 +242,32 @@ async function executeResumedRuntime(
     });
   }
 
+  // The World Model base is what is committed now, as it is for a resumed
+  // function runtime; the loop overlays the continuation's own buffered writes.
+  const worldBase = deps.store
+    ? await createWorldModelView(
+        deps.worldModelReads ?? deps.store,
+        input.sessionId,
+        [],
+        [],
+        () => {},
+        deps.dimensionContext,
+      )
+    : undefined;
+
   // Re-enter the shared agent tool loop with the persisted write set seeded in.
   // `allowSuspend: false` forbids re-suspending mid-resume (a nested suspend is
   // fed back to the LLM as an error tool result).
   const toolLoop = await runAgentToolLoop({
+    worldBase,
     manifest,
     input,
+    ...(pendingContinuation.turnNumber !== undefined
+      ? { turnNumber: pendingContinuation.turnNumber }
+      : {}),
+    ...(pendingContinuation.logicalTurn !== undefined
+      ? { logicalTurn: pendingContinuation.logicalTurn }
+      : {}),
     loaded,
     inputSlots: pendingContinuation.inputSlots
       ? freezeInputSlots(pendingContinuation.inputSlots)

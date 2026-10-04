@@ -49,6 +49,7 @@ import { createRawConfigApiRoutes } from "./routes/raw-config-api.js";
 import { createAppUpdateRoutes } from "./routes/app-update.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
+import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
 import {
   errorBody,
   makeErrorHandler,
@@ -166,20 +167,23 @@ const sidecarOrigins = [
   `http://localhost:${env.serverPort}`,
   `http://127.0.0.1:${env.serverPort}`,
 ];
+const isAllowedOrigin = (origin: string): boolean => {
+  const configured =
+    env.corsOrigins.length > 0 ? env.corsOrigins : defaultAllowedOrigins;
+  return configured.includes(origin) || sidecarOrigins.includes(origin);
+};
 app.use(
   "*",
   cors({
     origin: (origin) => {
       if (!origin) return origin;
-      const configured =
-        env.corsOrigins.length > 0 ? env.corsOrigins : defaultAllowedOrigins;
-      if (configured.includes(origin)) return origin;
-      if (sidecarOrigins.includes(origin)) return origin;
-      return null;
+      return isAllowedOrigin(origin) ? origin : null;
     },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   }),
 );
+// CORS withholds the response; this withholds the write.
+app.use("*", createOriginGuardMiddleware(isAllowedOrigin));
 
 // Merge ~/.covel/keys.env (plain KEY=VALUE lines) into process.env BEFORE
 // createAiStack(). ai-setup reads llm.toml which does `${ENV}`

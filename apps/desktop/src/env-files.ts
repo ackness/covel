@@ -5,9 +5,9 @@ import {
   normalizeProviderKeyMap,
   providerKeyToId,
   toApiKeyEnvMap,
-} from "./provider-keys.js";
+} from "@covel/shared";
 
-export function loadEnvFiles(baseDir: string): Record<string, string> {
+function loadEnvFiles(baseDir: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const name of [".env", ".env.llm"]) {
     const filePath = path.join(baseDir, name);
@@ -29,7 +29,7 @@ export function loadKeysEnv(keysFile: string): Record<string, string> {
   return normalizeProviderKeyMap(result);
 }
 
-export function loadKeysEnvForChild(keysFile: string): Record<string, string> {
+function loadKeysEnvForChild(keysFile: string): Record<string, string> {
   return toApiKeyEnvMap(loadKeysEnv(keysFile));
 }
 

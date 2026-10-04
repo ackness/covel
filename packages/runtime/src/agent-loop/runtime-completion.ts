@@ -26,6 +26,44 @@ export function captureCompletionCalls(
   ];
 }
 
+/**
+ * Whether the calls recorded before a suspension include business work. Only a
+ * call that succeeded counts: a failed call also leaves a name in the
+ * transcript, and `runtime-done` records nothing.
+ */
+export function hasCompletedBusinessWork(prior: CompletionCalls = []): boolean {
+  return prior.some((call) => call.success && !call.done);
+}
+
+/**
+ * Whether this loop has business work to show: a call that succeeded here, or
+ * one that succeeded before the suspension it resumed from. A call in the
+ * transcript proves nothing, since a failed call is recorded there as well.
+ * The loop judges `requireToolUse` with this where it returns, so the answer
+ * is the same however the loop ended.
+ */
+export function hasBusinessWork(
+  calls: readonly ExecutedToolCallState[],
+  seededBusinessWork: boolean,
+): boolean {
+  return (
+    seededBusinessWork ||
+    calls.some((call) => call.success && !isRuntimeDoneSentinel(call.result))
+  );
+}
+
+/** Tools whose last attempt before a suspension failed, in first-failure order. */
+export function unresolvedToolFailures(
+  prior: CompletionCalls = [],
+): readonly string[] {
+  const failures = new Set<string>();
+  for (const call of prior) {
+    if (call.success) failures.delete(call.name);
+    else failures.add(call.name);
+  }
+  return [...failures];
+}
+
 export function hasExplicitCompletion(
   manifest: RuntimeManifest,
   calls: readonly ExecutedToolCallState[],
@@ -55,7 +93,7 @@ export function completionContractError(
   state: { requiredToolUseUnmet: boolean; requiredCompletionUnmet: boolean },
 ): string | undefined {
   if (state.requiredToolUseUnmet) {
-    return `${manifest.name} declares requireToolUse but finished without calling a business tool (a bare \`runtime-done\` does not count). The model answered with prose instead of doing the work.`;
+    return `${manifest.name} declares requireToolUse but finished without a business tool call that succeeded (a failed call and a bare \`runtime-done\` do not count).`;
   }
   if (state.requiredCompletionUnmet) {
     return `${manifest.name} declares requireExplicitCompletion but did not successfully complete a declared finishing tool or call runtime-done without unresolved tool failures.`;
@@ -107,7 +145,11 @@ export function runtimeDoneCorrection(locale?: string): string {
     : "runtime-done only ends the run; it records nothing. Call the declared business tool to submit this turn's result; if nothing changed, submit the empty result its description allows, then finish.";
 }
 
-/** One bounded corrective step, shared by fresh and resumed tool loops. */
+/**
+ * One bounded corrective step for a text answer, shared by fresh and resumed
+ * tool loops. It only decides whether to ask the model again; whether the
+ * contract was met is judged where the loop returns.
+ */
 export function checkTextCompletion(args: {
   manifest: RuntimeManifest;
   calls: readonly ExecutedToolCallState[];
@@ -115,18 +157,15 @@ export function checkTextCompletion(args: {
   corrections: number;
   locale?: string;
   prior?: CompletionCalls;
-}): { correction?: string; requiredToolUseUnmet: boolean } {
+}): { correction?: string } {
   const { manifest, calls } = args;
-  const businessWork =
-    args.seededBusinessWork ||
-    calls.some((call) => call.success && !isRuntimeDoneSentinel(call.result));
   const requiredToolUseUnmet =
-    manifest.requireToolUse === true && !businessWork;
+    manifest.requireToolUse === true &&
+    !hasBusinessWork(calls, args.seededBusinessWork);
   const explicitUnmet =
     manifest.requireExplicitCompletion &&
     !hasExplicitCompletion(manifest, calls, args.prior);
-  if (!requiredToolUseUnmet && !explicitUnmet)
-    return { requiredToolUseUnmet: false };
+  if (!requiredToolUseUnmet && !explicitUnmet) return {};
   const reason = requiredToolUseUnmet
     ? "no-tool-call"
     : "no-explicit-completion";
@@ -134,13 +173,10 @@ export function checkTextCompletion(args: {
     console.warn(
       `[covel:warn] [runtime-retry] ${manifest.name} attempt=1 reason=${reason} cause=completion contract unmet`,
     );
-    return {
-      correction: completionCorrection(manifest, args.locale),
-      requiredToolUseUnmet: false,
-    };
+    return { correction: completionCorrection(manifest, args.locale) };
   }
   console.warn(
     `[covel:warn] [runtime-retry] ${manifest.name} reason=${reason} cause=completion contract still unmet after correction; releasing`,
   );
-  return { requiredToolUseUnmet };
+  return {};
 }

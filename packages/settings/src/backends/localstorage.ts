@@ -1,6 +1,5 @@
 import {
   SettingsRevisionConflictError,
-  type SettingKey,
   type SettingsBackendAdapter,
 } from "../types.js";
 import {

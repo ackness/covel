@@ -11,7 +11,6 @@ const api = vi.hoisted(() => ({
   getSessionView: vi.fn(),
   listSessionPlugins: vi.fn(),
   listSuspensions: vi.fn(),
-  markServerAck: vi.fn(),
   getSession: vi.fn(),
 }));
 const pluginData = vi.hoisted(() => ({
@@ -239,7 +238,6 @@ describe("restoreSessionState workspace ordering", () => {
       "plugins",
       "suspensions",
     ]);
-    expect(api.markServerAck).toHaveBeenCalledOnce();
     expect(pluginData.setActiveSession).toHaveBeenNthCalledWith(1, null);
     expect(pluginData.setActiveSession).toHaveBeenNthCalledWith(2, session.id);
   });
@@ -271,7 +269,6 @@ describe("restoreSessionState workspace ordering", () => {
     expect(api.getSessionView).not.toHaveBeenCalled();
     expect(api.listSessionPlugins).not.toHaveBeenCalled();
     expect(api.listSuspensions).not.toHaveBeenCalled();
-    expect(api.markServerAck).not.toHaveBeenCalled();
     expect(pluginData.setActiveSession).toHaveBeenLastCalledWith(null);
   });
 });

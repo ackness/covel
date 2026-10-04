@@ -3,7 +3,6 @@
 import {
   getPluginTrustInfo,
   pluginDeclarations,
-  resolvePluginDeclarations,
   resolvePluginRuntimeManifest,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";

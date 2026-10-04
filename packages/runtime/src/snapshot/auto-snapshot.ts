@@ -12,7 +12,7 @@ import { buildSnapshotPayload } from "./snapshot-payload-builder.js";
  * fork/restore working at a fraction of the cost (audit 2026-07-11 R-04).
  */
 export const DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS = 5;
-export const DEFAULT_AUTO_SNAPSHOT_RETENTION = 20;
+const DEFAULT_AUTO_SNAPSHOT_RETENTION = 20;
 
 export interface SaveAutoSnapshotOptions {
   readonly store: DataStore;

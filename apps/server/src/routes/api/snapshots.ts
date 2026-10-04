@@ -26,6 +26,8 @@ import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
+  DIMENSION_DATA_NAMESPACE,
+  DIMENSION_SETTLEMENT_NAMESPACE,
   collectMediaRefIds,
   isControlPlanePluginDataNamespace,
 } from "@covel/shared";
@@ -319,21 +321,49 @@ snapshotRoutes.post("/:id/fork", async (c) => {
           500,
         );
       }
+      // Community code is approved per session, so a fork starts without it.
+      const pluginRegistry = c.get("pluginRegistry");
+      const childActivePlugins = snapshotSession.activePlugins.filter(
+        (pluginId) => {
+          const entry = pluginRegistry?.get(pluginId);
+          if (!pluginRegistry) return true;
+          if (!entry) return true;
+          return getPluginTrustInfo(pluginId, entry?.source).autoLoad;
+        },
+      );
+      // A session's dimension data lives under the provider it bound, and the
+      // session view, snapshots, browser checkpoints and turns all need that
+      // provider active. A fork can neither approve the provider for the child
+      // nor drop the data, so it is refused while the snapshot holds any. With
+      // no dimension data the child simply starts unbound.
+      const boundProvider = snapshotSession.dimensionProviderPluginId;
+      const keepsProvider =
+        boundProvider !== undefined &&
+        childActivePlugins.includes(boundProvider);
+      if (
+        boundProvider !== undefined &&
+        !keepsProvider &&
+        snapshot.payload.pluginData.some(
+          (row) =>
+            row.pluginId === boundProvider &&
+            (row.namespace === DIMENSION_DATA_NAMESPACE ||
+              row.namespace === DIMENSION_SETTLEMENT_NAMESPACE),
+        )
+      ) {
+        return c.json(
+          errorBody(
+            `Cannot fork: "${boundProvider}" holds this session's dimensions, and a fork cannot enable it without the player's approval`,
+            { code: "dimension_provider_required" },
+          ),
+          409,
+        );
+      }
       // Hold the child's lifecycle lock from its first durable row through
       // post-commit media references and events. Otherwise DELETE on the newly
       // visible child could release no refs, then be followed by this fork
       // adding stale refs for a session that no longer exists.
       return sessionLock.withLock(childSessionId, async () => {
         const childOwner = mintSessionOwnerToken();
-        const pluginRegistry = c.get("pluginRegistry");
-        const childActivePlugins = snapshotSession.activePlugins.filter(
-          (pluginId) => {
-            const entry = pluginRegistry?.get(pluginId);
-            if (!pluginRegistry) return true;
-            if (!entry) return true;
-            return getPluginTrustInfo(pluginId, entry?.source).autoLoad;
-          },
-        );
 
         const now = nowIso;
 
@@ -373,11 +403,8 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 // child's settlement barrier can resolve its owner instead of
                 // deadlocking on a missing provider. The snapshot surfaces it
                 // under SnapshotSessionState.dimensionProviderPluginId.
-                ...(snapshotSession.dimensionProviderPluginId !== undefined
-                  ? {
-                      _dimensionProviderPluginId:
-                        snapshotSession.dimensionProviderPluginId,
-                    }
+                ...(keepsProvider
+                  ? { _dimensionProviderPluginId: boundProvider }
                   : {}),
                 [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
                 [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),

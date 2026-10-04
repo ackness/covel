@@ -122,7 +122,7 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 
 单运维方模型下这是可接受的：批准 community 代码等同于信任它在本进程内运行。多租户隔离需要真正的代码沙箱，尚未实现。
 
-> CORS（`CORS_ORIGIN`）只是浏览器策略，**不构成鉴权**；真正的授权边界是 owner token + 部署层级 + 回环监听。
+> CORS（`CORS_ORIGIN`）只是浏览器策略，**不构成鉴权**；真正的授权边界是 owner token + 部署层级 + 回环监听。CORS 只阻止网页读取响应，因此另有一道写入来源检查：`POST` / `PUT` / `PATCH` / `DELETE` 请求带有 `Origin`，而该来源既不在允许列表内，也不是请求所访问的主机（`Host` 或 `X-Forwarded-Host`）时，在进入任何路由前以 `403 { "code": "origin_not_allowed" }` 拒绝。不带 `Origin` 的非浏览器客户端不受影响。
 
 ---
 
@@ -511,7 +511,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | ---- | --------------------------------- | --------------------------------------------------------- |
 | GET  | `/api/sessions/:id/messages`      | 获取会话完整消息列表（`{ items }`；长会话优先用 `/page`） |
 | GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）            |
-| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                           |
+| POST | `/api/sessions/:id/messages/sync` | 按稳定 ID 幂等追加消息（外部客户端用）                    |
 
 ### 统一翻译层（Runtime Outputs / Interaction Records）
 
@@ -631,7 +631,7 @@ Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit
 | GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
 | POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
 
-Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。进程重启后同样不恢复易失 grant；`GET /api/sessions/:id/plugins` 将缺少当前 grant 的 community 项显示为未激活，但保留会话中保存的插件选择，便于后续调用重新授权。
+Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。快照绑定的维度 provider 是 community 插件时，child 无法在创建时启用它：快照里有该 provider 的维度数据或结算回执时，fork 以 `409 { "code": "dimension_provider_required" }` 拒绝，不创建子会话；没有维度数据时子会话不带该绑定，正常创建。进程重启后同样不恢复易失 grant；`GET /api/sessions/:id/plugins` 将缺少当前 grant 的 community 项显示为未激活，但保留会话中保存的插件选择，便于后续调用重新授权。
 
 ### 角色数据
 
@@ -2343,6 +2343,10 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 `activePlugins`。持久化成功后才更新进程内 registry，避免并发 lost update 和
 持久化失败造成的 registry/store 分裂。
 
+启用或禁用后重新求解的激活集若不再包含会话已绑定的维度 provider（它持有该会话的
+`_dimensions` 数据，回合、快照与 browser checkpoint 都要求它保持启用），请求以
+`409 { "code": "dimension_provider_required" }` 拒绝，会话的插件选择保持不变。
+
 **响应:**
 
 ```json
@@ -2355,7 +2359,7 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 
 响应包含 `{ok:true,activePluginIds,resolution}`；`resolution` 使用当前 resolver 的完整结果。
 
-会话非 active、已进入删除流程或等待期间被替换时返回 409。
+会话非 active、已进入删除流程或等待期间被替换时返回 409。禁用会话已绑定的维度 provider，或禁用后依赖求解会连带移除它时，返回 `409 { "code": "dimension_provider_required" }`，不改动会话。
 
 ---
 
@@ -2481,7 +2485,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `POST /api/sessions/:id/messages/sync`
 
-LocalDataService 将浏览器本地消息镜像到临时 server session。每条消息可带本地稳定的 `id` 与 `createdAt`；同一 session 内重复提交相同 `id` 会跳过，因此 restore / 网络重试不会重复追加整段历史。省略 `id` 的旧客户端仍会由服务端生成新 ID，不具备跨请求幂等性。整批写入在 session lock 与 DataStore transaction 内执行，任一新消息写入失败会回滚整批。
+向 server session 追加一批消息。内置 Web 客户端不调用它：browser-private 会话改用 `PUT /api/sessions/:id/browser-checkpoint` 上传完整 checkpoint。每条消息可带稳定的 `id` 与 `createdAt`；同一 session 内重复提交相同 `id` 会跳过，因此 restore / 网络重试不会重复追加整段历史。省略 `id` 的旧客户端仍会由服务端生成新 ID，不具备跨请求幂等性。整批写入在 session lock 与 DataStore transaction 内执行，任一新消息写入失败会回滚整批。
 
 ---
 
@@ -2789,7 +2793,7 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 }
 ```
 
-返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；内部写入失败返回 `500`。
+返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；快照的维度数据属于子会话无法启用的 community provider 时返回 `409 { code: 'dimension_provider_required' }`；内部写入失败返回 `500`。
 
 整个 fork 在父 session 执行锁内读取来源数据，并在 `withTransaction` 下写入；中途任何失败都会 rollback，不会留下半成品子 session。与手动快照一样，PG 部署下锁获取超时返回 `503 { code: 'session_busy' }`。
 

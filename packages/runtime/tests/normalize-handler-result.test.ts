@@ -38,6 +38,25 @@ describe("normalizeHandlerResult", () => {
     );
   });
 
+  it.each([
+    ["ui", [{ parts: [null] }], "effects.ui[0].parts[0]"],
+    ["interactions", [null], "effects.interactions[0]"],
+    ["notifications", [{ title: "ok" }, "text"], "effects.notifications[1]"],
+  ])(
+    "rejects a success envelope whose %s effect holds a non-object entry",
+    (channel, entries, path) => {
+      const { outcome } = normalizeHandlerResult({
+        outcome: "success",
+        value: {},
+        effects: { [channel]: entries },
+      });
+      expect(outcome).toEqual({
+        outcome: "failed",
+        error: `output-schema-invalid: ${path} is not an object`,
+      });
+    },
+  );
+
   it("parses skipped and strips domain effects to observability", () => {
     const { outcome, diagnostics } = normalizeHandlerResult({
       outcome: "skipped",

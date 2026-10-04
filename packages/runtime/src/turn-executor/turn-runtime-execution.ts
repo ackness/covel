@@ -1,6 +1,5 @@
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
 import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
-import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   ExecutionContext,
   InputSlot,
@@ -516,6 +515,9 @@ export async function executeOneRuntime(
           }
         : {}),
       acceptsSchemas: loaded.bindingAcceptsSchemas ?? {},
+      ...(loaded.unresolvedAccepts
+        ? { unresolvedAccepts: loaded.unresolvedAccepts }
+        : {}),
       contractSchemas: loaded.bindingContractSchemas ?? {},
       // Same shared canonicalizer as the activation boundary: an injected
       // same-execution value carries the producer's raw MediaRefs (they have
@@ -596,6 +598,9 @@ export async function executeOneRuntime(
         exportBindings: exportSpec,
         activeRuntimes,
         acceptsSchemas: loaded.exportAcceptsSchemas ?? {},
+        ...(loaded.unresolvedAccepts
+          ? { unresolvedAccepts: loaded.unresolvedAccepts }
+          : {}),
         contractSchemas: loaded.exportContractSchemas ?? {},
         getFrozenExport: (producerRuntimeId, recordAs) =>
           deps.store

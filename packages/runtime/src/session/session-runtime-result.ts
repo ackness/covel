@@ -13,7 +13,11 @@ import {
   runPreStateCommitHook,
   type KernelStore,
 } from "../commit/session-commit-pipeline.js";
-import { normalizeOutput } from "../commit/session-output-normalizer.js";
+import {
+  malformedDomainEffect,
+  normalizeOutput,
+} from "../commit/session-output-normalizer.js";
+import { makeProposal } from "./session-kernel-helpers.js";
 import { anchorPluginMessage } from "../commit/plugin-message-turn.js";
 import {
   enforceImageAssetOutput,
@@ -116,6 +120,28 @@ async function collectRuntimeProposals(
   if (result.status !== "success" || !result.output) {
     const commit = result.status === "skipped" && pendingProposals.length > 0;
     return { proposals: commit ? pendingProposals : [], failures: [], commit };
+  }
+
+  // A malformed effect is a rejected write of this runtime, never a thrown
+  // error: the finalizer isolates an optional runtime on a rejected write.
+  const malformed = malformedDomainEffect(result.effects);
+  if (malformed) {
+    return {
+      proposals: [],
+      failures: [
+        {
+          proposal: makeProposal(
+            malformed.type,
+            source,
+            result.turnId,
+            sessionId,
+            { error: malformed.error },
+          ),
+          error: malformed.error,
+        },
+      ],
+      commit: false,
+    };
   }
 
   const proposals = normalizeOutput(

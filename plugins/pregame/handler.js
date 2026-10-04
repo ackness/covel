@@ -10,7 +10,7 @@ import { translate } from "@covel/plugin-handlers-utils";
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function pregameHandler(ctx) {
-  const { sessionId, store } = ctx;
+  const { store } = ctx;
 
   let worldName = translate(ctx, "Unknown World");
   let worldSummary = "";

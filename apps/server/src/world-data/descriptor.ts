@@ -92,7 +92,7 @@ async function readDescriptorFile(
  * destination. A source that goes to `contract:quests@1` holds records of
  * that contract, so the contract ID does not have to be written twice.
  */
-export function defaultSourceSchema(to: string): string | undefined {
+function defaultSourceSchema(to: string): string | undefined {
   if (to === "world:metadata.dimensions") return "covel://world/dimensions";
   const contract = /^contract:([^+]+)/.exec(to)?.[1];
   return contract ? `contract:${contract}` : undefined;

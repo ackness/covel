@@ -113,6 +113,21 @@ if (pgAvailable) {
       await Promise.all([left.close(), right.close()]);
     }
   });
+  it("reports a session that is gone at the write barrier with its own error type", async () => {
+    const { SessionNotFoundError } = await import("../src/errors.js");
+    const store = await createPgStore(isolated.url, { freshSchema: true });
+    try {
+      // A caller racing with session deletion must be able to tell this from
+      // a database failure without issuing another query in the transaction.
+      await expect(
+        store.withTransaction((tx) =>
+          tx.compareAndSetPluginDataBatch("gone-session", "authority", []),
+        ),
+      ).rejects.toBeInstanceOf(SessionNotFoundError);
+    } finally {
+      await store.close();
+    }
+  });
 } else {
   describe("PgStore (skipped)", () => {
     it("skipped — PostgreSQL not available", () => {

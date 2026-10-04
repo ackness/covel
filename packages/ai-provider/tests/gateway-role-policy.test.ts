@@ -81,7 +81,7 @@ protocol = "typesafe-systemone-v1"
     },
   });
   const presetRegistry = createPresetRegistry(aiConfig);
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   slotRegistry.configure({
     slots: Object.fromEntries(
       aiConfig.presets.map((p) => [

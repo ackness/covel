@@ -1,7 +1,6 @@
 import {
   canonicalizeLocale,
   DEFAULT_LOCALE,
-  isDefaultLocale,
   localeDisplayName,
   resolveI18nText,
 } from "@covel/shared";
