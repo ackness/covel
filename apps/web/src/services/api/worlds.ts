@@ -6,11 +6,14 @@ import {
   worldWireRecordSchema,
   type WorldCreationBrief,
   type WorldCreateRequest,
+  type WorldGenerationPart,
   type WorldPatchRequest,
   type WorldPluginPlan,
   type WorldWireRecord,
 } from "@covel/shared";
 import { request, requestResponse } from "./request.js";
+import { getSettings } from "@/settings/store";
+import { WORLD_AUTHORING_IDLE_TIMEOUT_SETTING } from "@/settings/registry/core.js";
 import { pruneMissingSessionCredentials } from "./session-credential-cleanup.js";
 import { ignoreError } from "../../lib/ignore-error.js";
 import type {
@@ -145,6 +148,8 @@ export async function importDimensions(
 export interface GenerateWorldProgress {
   type: "progress";
   phase: "generating" | "validating" | "saving";
+  /** While generating: every part of the world and how far each one is. */
+  parts?: readonly WorldGenerationPart[];
 }
 
 export interface GenerateWorldDone {
@@ -157,6 +162,16 @@ export interface GenerateWorldDone {
 export interface GenerateWorldError {
   type: "error";
   message: string;
+  /** The model stayed silent for the whole wait the player has set. */
+  code?: "model_idle_timeout";
+}
+
+/**
+ * How long the server waits for the next output of the model, as the player
+ * set it. It goes with every request that has a model write a world.
+ */
+function authoringIdleTimeoutMs(): number {
+  return getSettings().get<number>(WORLD_AUTHORING_IDLE_TIMEOUT_SETTING) * 1000;
 }
 
 /** Plugin-owned content the world generator can produce for the loaded plugins. */
@@ -233,6 +248,7 @@ export function generateWorld(
           locale,
           saveTarget: options?.saveTarget,
           brief: options?.brief,
+          idleTimeoutMs: authoringIdleTimeoutMs(),
         }),
         signal: controller.signal,
         operatorAuth: true,
@@ -280,6 +296,7 @@ export function reviseWorld(
           worldId,
           instruction,
           ...(options?.world ? { world: options.world } : {}),
+          idleTimeoutMs: authoringIdleTimeoutMs(),
         }),
         signal: controller.signal,
         operatorAuth: true,
@@ -334,7 +351,10 @@ export function translateWorld(
         `/api/worlds/${encodeURIComponent(worldId)}/translate`,
         {
           method: "POST",
-          body: JSON.stringify({ locale }),
+          body: JSON.stringify({
+            locale,
+            idleTimeoutMs: authoringIdleTimeoutMs(),
+          }),
           signal: controller.signal,
           operatorAuth: true,
         },

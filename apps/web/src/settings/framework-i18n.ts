@@ -59,6 +59,16 @@ function frameworkSettingText(
         "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
       ),
     },
+    "world.authoringIdleTimeoutSeconds": {
+      label: t(
+        "settings.frameworkEntries.worldAuthoringIdleTimeout.label",
+        "World authoring: wait for the model (seconds)",
+      ),
+      description: t(
+        "settings.frameworkEntries.worldAuthoringIdleTimeout.description",
+        "How long creating, revising or translating a world waits when the model sends nothing. A model that keeps writing is never cut off, however long the whole answer takes. Raise this when a slow model needs a long time before its first words.",
+      ),
+    },
     "ui.onboardedVersion": {
       label: t(
         "settings.frameworkEntries.onboardedVersion.label",

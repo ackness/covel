@@ -16,7 +16,7 @@ content.
 
 ## Output Format
 
-Return EXACTLY three sections with these delimiters:
+The package has three sections with these delimiters:
 
 ===WORLD_YAML===
 <complete world.yaml>
@@ -25,6 +25,10 @@ Return EXACTLY three sections with these delimiters:
 ===WORLD_PACKAGE_YAML===
 <portable text package data>
 ===END===
+
+Each request names what to write: one section, one list of a section, or all
+three sections. Return only what the request names, under its delimiter, and
+finish the answer with ===END===.
 
 ## world.yaml Schema
 
@@ -90,8 +94,9 @@ Anchor the lore around one core anomaly or pressure mechanism that makes this wo
 ## WORLD_PACKAGE_YAML
 
 This section carries optional text content that ships with the world package.
-Always include the three content arrays below. Use `[]` when the Creation Brief says
-OMIT.
+When the request asks for the whole section, include the three content arrays
+below and use `[]` when the Creation Brief says OMIT. When the request asks for
+one list, write that list alone.
 
 When the Creation Brief lists plugin data contracts, also include
 `contractData: [{ contract, key, value }]`. Write one item for each record.
@@ -156,11 +161,12 @@ rules:
 
 ## Rules
 
-- The first line of the answer must be exactly ===WORLD_YAML===.
-- Do not use markdown code fences around either section.
+- The first line of the answer must be the delimiter of the first section you write.
+- Do not use markdown code fences around a section.
 - ALL content in {{ language }}. Only IDs in kebab-case English.
 - Use only schema fields shown above. Do not add extra fields.
 - Quote schemaVersion and version as strings.
+- Write a text value that contains quotation marks or a colon as a YAML block scalar (`content: |-` with the text on the next lines). Do not put it between double quotes.
 - Every dimension is a strict definition: name, optional description, schema, initialValue, optional updateRule. No fixed dimension ID whitelist exists.
 - initialValue must satisfy schema without coercion. Supported schema keywords: type (string/number/integer/boolean/null/object/array or a type array), title, description, enum, const, minimum/maximum/exclusiveMinimum/exclusiveMaximum, minLength/maxLength, items/minItems/maxItems, properties/required/additionalProperties, x-i18n. Do not use $ref, format, pattern or unsupported keywords.
 - Rules describe how already completed narrative changes values; do not declare hidden event triggers, deterministic periodic scheduling, or duplicate data owned by inventory/characters/time plugins.
@@ -171,4 +177,4 @@ rules:
 - Avoid literal generic names built only from genre nouns. Coin proper nouns with a local cultural or historical reason.
 - The opening choices and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.
 - The opening dimension must present an immediate choice or tension tied to that crisis.
-- Do NOT output anything except the three delimited sections.
+- Do NOT output anything except the delimited sections that the request names.

@@ -52,6 +52,28 @@ export function parseWorldOutput(
   };
 }
 
+/**
+ * One section of an answer that was asked for that section alone. A model
+ * that wrote the other sections as well still gives a usable answer: the
+ * section ends at the next delimiter.
+ */
+export function parseWorldSection(
+  raw: string,
+  marker: "WORLD_YAML" | "WORLD_MD" | "WORLD_PACKAGE_YAML",
+): string | null {
+  const cleaned = raw.trim();
+  const start = findSectionMarker(cleaned, marker);
+  if (start < 0) return null;
+  const from = start + markerLength(marker);
+  const next = /\n===(?:WORLD_YAML|WORLD_MD|WORLD_PACKAGE_YAML|END)===/.exec(
+    cleaned.slice(from),
+  );
+  const section = stripFence(
+    cleaned.slice(from, next ? from + next.index : cleaned.length),
+  ).trim();
+  return section || null;
+}
+
 export function parseWorldLoreRepairOutput(raw: string): string | null {
   const cleaned = raw.trim();
   const loreMarker = findSectionMarker(cleaned, "WORLD_MD");

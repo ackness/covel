@@ -2,7 +2,11 @@
  * Types for the @covel/create package.
  */
 
-import type { LLMAdapter, WorldCreationBrief } from "@covel/shared";
+import type {
+  LLMAdapter,
+  WorldCreationBrief,
+  WorldGenerationPart,
+} from "@covel/shared";
 import type { PromptLoader } from "@covel/context";
 
 export interface CreateWorldLogger {
@@ -27,8 +31,16 @@ export interface CreateWorldOptions {
   readonly dataContracts?: readonly WorldGenerationDataContract[];
   /** Optional abort signal for cancelling slow provider calls. */
   readonly signal?: AbortSignal;
-  /** Per-attempt generation timeout; a targeted lore repair shares this budget. */
-  readonly attemptTimeoutMs?: number;
+  /**
+   * Longest wait for the next output of the model, in every request of the
+   * generation. A request that keeps writing is not cut off.
+   */
+  readonly idleTimeoutMs?: number;
+  /**
+   * Receives the state of every part each time a part starts, grows, is
+   * asked for again, or ends.
+   */
+  readonly onProgress?: (parts: readonly WorldGenerationPart[]) => void;
   /** Optional logger for recording generation progress. */
   readonly logger?: CreateWorldLogger;
   /** Template source shared by generation and repair for this invocation. */
@@ -78,6 +90,8 @@ export type CreateResult =
       readonly success: false;
       readonly id: "unknown";
       readonly errors: readonly string[];
+      /** The last request ended because the model stayed silent too long. */
+      readonly idleTimeout?: true;
     };
 
 export interface GeneratedWorldCharacter {

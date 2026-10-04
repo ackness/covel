@@ -10,7 +10,11 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { LLMAdapter, LLMResponse } from "@covel/shared";
+import type {
+  LLMAdapter,
+  LLMResponse,
+  WorldGenerationPart,
+} from "@covel/shared";
 import { createWorld } from "./create-world.js";
 import { writeWorldPackage } from "./world-writer.js";
 import { buildWorldPrompt } from "./prompts.js";
@@ -254,7 +258,7 @@ describe("createWorld", () => {
     expect(await readdir(tmp)).toEqual([]);
   });
 
-  it("continues retrying attempt timeouts when the caller has not canceled", async () => {
+  it("does not ask again after the model stayed silent for the idle timeout", async () => {
     let calls = 0;
     const llm: LLMAdapter = {
       async generate({ signal }) {
@@ -270,10 +274,189 @@ describe("createWorld", () => {
     const result = await createWorld({
       llm,
       concept: "Synthetic world",
-      attemptTimeoutMs: 5,
+      idleTimeoutMs: 5,
     });
-    expect(result.success).toBe(false);
-    expect(calls).toBe(3);
+    // The wait is the player's limit: one silent request ends the generation.
+    expect(result).toMatchObject({ success: false, idleTimeout: true });
+    expect(calls).toBe(1);
+  });
+
+  it("finishes the world with the parts it has when the model stops answering", async () => {
+    const requests: string[] = [];
+    const reports: WorldGenerationPart[][] = [];
+    const answer = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`;
+    const result = await createWorld({
+      llm: {
+        async generate({ messages, signal }) {
+          const request = String(messages[1]?.content).split("\n")[0]!;
+          requests.push(request);
+          if (!request.includes("`lorebook`")) {
+            return {
+              content: answer,
+              toolCalls: [],
+              finishReason: "stop",
+              usage: { inputTokens: 0, outputTokens: 0 },
+            };
+          }
+          return new Promise<LLMResponse>((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal.reason), {
+              once: true,
+            });
+          });
+        },
+      },
+      concept: "Clockwork city",
+      idleTimeoutMs: 5,
+      brief: { content: ["characters", "lorebook", "rules"] },
+      onProgress: (parts) => reports.push([...parts]),
+    });
+
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    // The lorebook is asked for once, and the rules are not asked for.
+    expect(requests.map((request) => request.split(": ")[1])).toEqual([
+      "WORLD_YAML.",
+      "WORLD_MD.",
+      "the `characters` list of WORLD_PACKAGE_YAML.",
+      "the `lorebook` list of WORLD_PACKAGE_YAML.",
+    ]);
+    expect(result.packageContent.characters).toHaveLength(3);
+    expect(result.packageContent.lorebook).toEqual([]);
+    expect(result.packageContent.rules).toEqual([]);
+    expect(result.warnings).toEqual([
+      "lorebook could not be generated: LLM error: The model sent no output for 0.005 seconds",
+      "rules was not requested: the model stopped answering",
+    ]);
+    expect(reports.at(-1)!.map((part) => [part.id, part.state])).toEqual([
+      ["manifest", "done"],
+      ["lore", "done"],
+      ["characters", "done"],
+      ["lorebook", "failed"],
+      ["rules", "failed"],
+    ]);
+  });
+
+  it("writes a new world one part at a time and reports each part", async () => {
+    const requests: string[] = [];
+    const reports: WorldGenerationPart[][] = [];
+    const answer = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`;
+    const result = await createWorld({
+      llm: {
+        async generate({ messages }) {
+          requests.push(String(messages[1]?.content).split("\n")[0]!);
+          return {
+            content: answer,
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        },
+      },
+      concept: "Clockwork city",
+      brief: { content: ["characters", "lorebook", "rules"] },
+      onProgress: (parts) => reports.push([...parts]),
+    });
+
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    expect(requests).toEqual([
+      "Write one part of the world package now: WORLD_YAML.",
+      "Write one part of the world package now: WORLD_MD.",
+      "Write one part of the world package now: the `characters` list of WORLD_PACKAGE_YAML.",
+      "Write one part of the world package now: the `lorebook` list of WORLD_PACKAGE_YAML.",
+      "Write one part of the world package now: the `rules` list of WORLD_PACKAGE_YAML.",
+    ]);
+    // Every part is known before the first request, and ends as done.
+    expect(reports[0]!.map((part) => [part.id, part.state])).toEqual([
+      ["manifest", "pending"],
+      ["lore", "pending"],
+      ["characters", "pending"],
+      ["lorebook", "pending"],
+      ["rules", "pending"],
+    ]);
+    expect(reports.at(-1)!.map((part) => part.state)).toEqual(
+      Array.from({ length: 5 }, () => "done"),
+    );
+    // While the lore is written the manifest is done and the lists wait.
+    const duringLore = reports.find((parts) => parts[1]!.state === "active")!;
+    expect(duringLore.map((part) => part.state)).toEqual([
+      "done",
+      "active",
+      "pending",
+      "pending",
+      "pending",
+    ]);
+  });
+
+  it("keeps the world when one supplement cannot be generated", async () => {
+    const requests: string[] = [];
+    const reports: WorldGenerationPart[][] = [];
+    const answer = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`;
+    const result = await createWorld({
+      llm: {
+        async generate({ messages }) {
+          const request = String(messages[1]?.content).split("\n")[0]!;
+          requests.push(request);
+          return {
+            content: request.includes("`characters`")
+              ? "===WORLD_PACKAGE_YAML===\ncharacters: []\n===END==="
+              : answer,
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        },
+      },
+      concept: "Clockwork city",
+      brief: { content: ["characters", "lorebook"] },
+      onProgress: (parts) => reports.push([...parts]),
+    });
+
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    // The manifest and the lore are requested once; only the cast is asked
+    // for again, and the lorebook still follows.
+    expect(requests.map((request) => request.split(": ")[1])).toEqual([
+      "WORLD_YAML.",
+      "WORLD_MD.",
+      "the `characters` list of WORLD_PACKAGE_YAML.",
+      "the `characters` list of WORLD_PACKAGE_YAML.",
+      "the `characters` list of WORLD_PACKAGE_YAML.",
+      "the `lorebook` list of WORLD_PACKAGE_YAML.",
+    ]);
+    expect(result.packageContent.characters).toEqual([]);
+    expect(result.packageContent.lorebook).toHaveLength(4);
+    expect(result.warnings).toContain(
+      "characters could not be generated: WORLD_PACKAGE_YAML must include characters",
+    );
+    expect(reports.at(-1)!.map((part) => [part.id, part.state])).toEqual([
+      ["manifest", "done"],
+      ["lore", "done"],
+      ["characters", "failed"],
+      ["lorebook", "done"],
+    ]);
+  });
+
+  it("gives a rule another id when a lorebook entry has taken it", async () => {
+    const pack = `lorebook:
+  - { id: time-cost, content: 钟楼控制全城时间。, strategy: constant }
+rules:
+  - { id: time-cost, content: 每次改写时间都要失去记忆。, strategy: constant }`;
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${pack}\n===END===`,
+      ),
+      concept: "Clockwork city",
+      brief: { content: ["lorebook", "rules"] },
+    });
+
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.packageContent.lorebook.map((item) => item.id)).toEqual([
+      "time-cost",
+    ]);
+    expect(result.packageContent.rules.map((item) => item.id)).toEqual([
+      "time-cost-2",
+    ]);
   });
 
   it("preserves an existing package and admits only one concurrent creator", async () => {
@@ -282,7 +465,7 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
       ),
       concept: "Synthetic world",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     };
     await mkdir(path.join(tmp, "test-world"));
     await writeFile(
@@ -318,7 +501,7 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
       ),
       concept: "测试世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
@@ -356,7 +539,7 @@ describe("createWorld", () => {
       ),
       concept: "繁體世界",
       locale: "zh_hant_tw",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
@@ -379,7 +562,7 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}`,
       ),
       concept: "测试世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
@@ -398,7 +581,7 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n## 测试世界\n\n正文。\n\n1. 钩子一。\n2. 钩子二。\n3. 钩子三。`,
       ),
       concept: "测试世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
@@ -477,7 +660,7 @@ dimensions:
         `===WORLD_YAML===\n\`\`\`yaml\n${malformed}\n\`\`\`\n===WORLD_MD===\n${WORLD_LORE}`,
       ),
       concept: "测试世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
@@ -522,7 +705,7 @@ dimensions:
         `===WORLD_YAML===\n${flawedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${shortPackage}\n===END===`,
       ),
       concept: "雨中的倒转钟城",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
       brief: { content: ["characters", "lorebook", "rules"] },
     });
 
@@ -571,7 +754,7 @@ contractData:
         `===WORLD_YAML===\n${enrichedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${memoryPackage}\n===END===`,
       ),
       concept: "雨中的倒转钟城",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
       brief: {
         experienceMode: "dialogue-mode",
         content: ["characters", "lorebook", "rules", "opening-kit"],

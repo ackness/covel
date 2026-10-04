@@ -570,6 +570,14 @@
     "aiStepAuthoring": "Authoring",
     "aiStepReviewing": "Consistency check",
     "aiStepPackaging": "Packaging",
+    "aiPartManifest": "World settings",
+    "aiPartLore": "World lore",
+    "aiPartRevision": "Requested change",
+    "aiPartChars": "{{chars}} characters written",
+    "aiPartAttempt": "attempt {{attempt}}",
+    "aiPartFailed": "not generated",
+    "aiIdleTimeoutHint": "The model sent nothing for the whole wait. You can set a longer wait in Settings → {{group}}: \"World authoring: wait for the model\".",
+    "aiWarningsTitle": "The world is created, with these gaps:",
     "aiPackageTitle": "World Package Plan",
     "aiPackageDesc": "Choose what the agent should author and keep consistent.",
     "aiPackageCount": "{{count}} selected",
@@ -770,6 +778,10 @@
       "expandTurnUpdates": {
         "label": "Expand turn updates",
         "description": "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line."
+      },
+      "worldAuthoringIdleTimeout": {
+        "label": "World authoring: wait for the model (seconds)",
+        "description": "How long creating, revising or translating a world waits when the model sends nothing. A model that keeps writing is never cut off, however long the whole answer takes. Raise this when a slow model needs a long time before its first words."
       },
       "onboardedVersion": {
         "label": "Onboarding version"

@@ -34,6 +34,8 @@ export interface TranslateWorldOptions {
   readonly llm: LLMAdapter;
   readonly model?: string;
   readonly signal?: AbortSignal;
+  /** Longest wait for the next output of the model in each call. */
+  readonly idleTimeoutMs?: number;
   /** Texts done and texts in all, for the step that is running. */
   readonly onProgress?: (
     step: TranslateWorldStep,
@@ -108,7 +110,10 @@ export async function translateWorldPackage(
   if (units.length === 0)
     return { from, total: 0, translated: 0, written: [], failed: [] };
 
-  const model = options.model ? { model: options.model } : {};
+  const model = {
+    ...(options.model ? { model: options.model } : {}),
+    idleTimeoutMs: options.idleTimeoutMs,
+  };
   // Long texts (lore, a rule) go alone; short ones share a call.
   const long = units.filter((unit) => unit.text.length > 1500);
   const short = units.filter((unit) => unit.text.length <= 1500);

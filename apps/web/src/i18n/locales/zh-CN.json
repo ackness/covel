@@ -570,6 +570,14 @@
     "aiStepAuthoring": "创作内容",
     "aiStepReviewing": "检查一致性",
     "aiStepPackaging": "封装世界包",
+    "aiPartManifest": "世界设定",
+    "aiPartLore": "世界背景",
+    "aiPartRevision": "修改内容",
+    "aiPartChars": "已写 {{chars}} 字",
+    "aiPartAttempt": "第 {{attempt}} 次尝试",
+    "aiPartFailed": "未能生成",
+    "aiIdleTimeoutHint": "模型在等待时间内一直没有输出。可以在「设置 → {{group}}」里调大「世界创作：等待模型的时间」。",
+    "aiWarningsTitle": "世界已创建，但有以下不足：",
     "aiPackageTitle": "世界包编排",
     "aiPackageDesc": "选择 Agent 需要创作并长期保持一致的内容。",
     "aiPackageCount": "已选 {{count}} 项",
@@ -770,6 +778,10 @@
       "expandTurnUpdates": {
         "label": "展开本回合更新",
         "description": "在每回合下方直接展开图鉴发现、成就和状态卡片，而不是折叠成一行。"
+      },
+      "worldAuthoringIdleTimeout": {
+        "label": "世界创作：等待模型的时间（秒）",
+        "description": "创建、修改或翻译世界时，模型一直没有输出的话最多等多久。只要模型还在持续输出就不会被中断，整段内容写多久都可以。如果你用的模型要很久才开始输出，把这个值调大。"
       },
       "onboardedVersion": {
         "label": "Onboarding 版本"

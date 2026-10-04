@@ -1,8 +1,12 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
+import { WORLD_AUTHORING_IDLE_TIMEOUT_MS } from "@covel/shared";
 import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
 import { resolveInitialLocale } from "@/i18n/locale-detector.js";
 import { registerThemeSettings } from "@/theme-system/settings.js";
+
+export const WORLD_AUTHORING_IDLE_TIMEOUT_SETTING =
+  "world.authoringIdleTimeoutSeconds";
 
 /**
  * Core/general user preferences that apply app-wide regardless of session.
@@ -50,6 +54,24 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     group: "general",
     widget: "toggle",
     label: "Expand turn updates",
+  });
+
+  store.register({
+    key: WORLD_AUTHORING_IDLE_TIMEOUT_SETTING,
+    schema: z
+      .number()
+      .int()
+      .min(WORLD_AUTHORING_IDLE_TIMEOUT_MS.settingMin / 1000)
+      .max(WORLD_AUTHORING_IDLE_TIMEOUT_MS.max / 1000),
+    default: WORLD_AUTHORING_IDLE_TIMEOUT_MS.default / 1000,
+    group: "general",
+    widget: "number",
+    min: WORLD_AUTHORING_IDLE_TIMEOUT_MS.settingMin / 1000,
+    max: WORLD_AUTHORING_IDLE_TIMEOUT_MS.max / 1000,
+    step: 15,
+    label: "World authoring: wait for the model (seconds)",
+    description:
+      "How long creating, revising or translating a world waits when the model sends nothing. A model that keeps writing is never cut off, however long the whole answer takes. Raise this when a slow model needs a long time before its first words.",
   });
 
   store.register({

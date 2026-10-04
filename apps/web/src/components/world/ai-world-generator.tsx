@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   WorldExperienceMode,
+  WorldGenerationPart,
   WorldPackageContentKind,
 } from "@covel/shared";
 import { Bot, Sparkles, Wand2 } from "lucide-react";
@@ -14,7 +15,11 @@ import {
 } from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
-import type { GenerateWorldEvent, WorldRecord } from "@/services/api.js";
+import type {
+  GenerateWorldError,
+  GenerateWorldEvent,
+  WorldRecord,
+} from "@/services/api.js";
 import * as api from "@/services/api.js";
 import {
   generatedWorldSaveTargetForStorageMode,
@@ -73,6 +78,9 @@ export function AiWorldGenerator({
   const [additionalInstructions, setAdditionalInstructions] = useState("");
   const [phase, setPhase] = useState<WorldGenerationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<GenerateWorldError["code"]>();
+  const [parts, setParts] = useState<readonly WorldGenerationPart[]>([]);
+  const [warnings, setWarnings] = useState<readonly string[]>([]);
   const [serverStorageMode, setServerStorageMode] = useState<StorageMode>();
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -135,12 +143,26 @@ export function AiWorldGenerator({
     const generation = ++generationRef.current;
     setPhase("generating");
     setError(null);
+    setErrorCode(undefined);
+    setParts([]);
+    setWarnings([]);
 
     const handleEvent = (event: GenerateWorldEvent) => {
       if (generation !== generationRef.current) return;
       switch (event.type) {
         case "progress":
           setPhase(event.phase);
+          // The server names plugin content in the language of the prompt;
+          // the dialog has the name in the player's language.
+          if (event.parts)
+            setParts(
+              event.parts.map((part) => {
+                const offered = pluginContent.find(
+                  (item) => part.id === `contract:${item.contract}`,
+                );
+                return offered ? { ...part, title: offered.title } : part;
+              }),
+            );
           break;
         case "done":
           abortRef.current = null;
@@ -153,6 +175,12 @@ export function AiWorldGenerator({
               if (generation !== generationRef.current) return;
               setPhase("done");
               onWorldCreated(world);
+              // A world that falls short of the brief stays on screen until
+              // the player has read how.
+              if (event.warnings?.length) {
+                setWarnings(event.warnings);
+                return;
+              }
               timerRef.current = setTimeout(() => {
                 if (generation !== generationRef.current) return;
                 timerRef.current = undefined;
@@ -171,6 +199,7 @@ export function AiWorldGenerator({
           abortRef.current = null;
           setPhase("error");
           setError(event.message);
+          setErrorCode(event.code);
           break;
       }
     };
@@ -206,6 +235,7 @@ export function AiWorldGenerator({
     i18n.language,
     onOpenChange,
     onWorldCreated,
+    pluginContent,
     prompt,
     resetForm,
     serverStorageMode,
@@ -221,6 +251,9 @@ export function AiWorldGenerator({
     }
     setPhase("idle");
     setError(null);
+    setErrorCode(undefined);
+    setParts([]);
+    setWarnings([]);
   }, []);
 
   const isWorking =
@@ -366,7 +399,28 @@ export function AiWorldGenerator({
                 </div>
               )}
 
-              <WorldGenerationStatus phase={phase} error={error} t={t} />
+              <WorldGenerationStatus
+                phase={phase}
+                error={error}
+                errorCode={errorCode}
+                parts={parts}
+                t={t}
+              />
+              {warnings.length > 0 && (
+                <div className="space-y-1.5 text-xs text-muted-foreground">
+                  <p>
+                    {t(
+                      "world.aiWarningsTitle",
+                      "The world is created, with these gaps:",
+                    )}
+                  </p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <WorldCreationOptions
@@ -395,6 +449,10 @@ export function AiWorldGenerator({
               {isWorking ? (
                 <Button variant="outline" size="sm" onClick={handleCancel}>
                   {t("common.cancel", "Cancel")}
+                </Button>
+              ) : warnings.length > 0 ? (
+                <Button size="sm" onClick={() => handleClose(false)}>
+                  {t("common.close", "Close")}
                 </Button>
               ) : (
                 <>
