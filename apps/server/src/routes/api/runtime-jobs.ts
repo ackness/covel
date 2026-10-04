@@ -84,7 +84,7 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
   const changed = await c.get("sessionLock").withLock(sessionId, async () => {
     const job = await findJob(c.get("store"), sessionId, jobId);
     if (!job) return undefined;
-    return transitionRuntimeJob(c.get("store"), {
+    const cancelled = await transitionRuntimeJob(c.get("store"), {
       sessionId,
       pluginId: job.pluginId,
       jobId,
@@ -92,6 +92,9 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
       to: "cancelled",
       reason: "cancelled-by-user",
     });
+    if (cancelled)
+      await appendRuntimeJobStatus(c.get("store"), eventBus, cancelled);
+    return cancelled;
   });
   if (!changed) {
     return c.json(
@@ -108,7 +111,6 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
       sessionId,
       expectedSessionIncarnation: cancelledIncarnation,
     });
-  await appendRuntimeJobStatus(c.get("store"), eventBus, changed);
   return c.json(publicRuntimeJob(changed));
 });
 

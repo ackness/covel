@@ -658,22 +658,37 @@ export async function syncWorldDataForSession(
   const writesByKey = new Map(
     selectedWrites.map((write) => [writeKey(write), write]),
   );
-  const dimensionProvider = ledgers.find(
-    (ledger) => ledger.namespace === DIMENSION_DATA_NAMESPACE,
-  )?.pluginId;
-  const pendingDimensions = dimensionProvider
-    ? (
-        await options.store.listPluginData(
-          options.sessionId,
-          dimensionProvider,
-          DIMENSION_SETTLEMENT_NAMESPACE,
-        )
-      ).some(
-        (row) =>
-          dimensionSettlementReceiptSchema.parse(row.value).status ===
-          "pending-settlement",
-      )
-    : false;
+  // A pending settlement froze the definitions it will be judged against, so
+  // it protects every dimension of its provider. The provider is whoever holds
+  // the data: the one the session bound, the owner of an import ledger row, or
+  // the target of a planned write. Dimensions committed via
+  // `dimension.initialize` have no ledger row and still have an owner.
+  const dimensionProviders = new Set<string>();
+  const boundProvider = (await options.store.getSession(options.sessionId))
+    ?.metadata?._dimensionProviderPluginId;
+  if (typeof boundProvider === "string") dimensionProviders.add(boundProvider);
+  for (const ledger of ledgers)
+    if (ledger.namespace === DIMENSION_DATA_NAMESPACE && ledger.pluginId)
+      dimensionProviders.add(ledger.pluginId);
+  for (const write of plan.writes)
+    if (
+      write.kind === "plugin-data" &&
+      write.namespace === DIMENSION_DATA_NAMESPACE
+    )
+      dimensionProviders.add(write.pluginId);
+  let pendingDimensions = false;
+  for (const provider of dimensionProviders) {
+    const receipts = await options.store.listPluginData(
+      options.sessionId,
+      provider,
+      DIMENSION_SETTLEMENT_NAMESPACE,
+    );
+    pendingDimensions ||= receipts.some(
+      (row) =>
+        dimensionSettlementReceiptSchema.parse(row.value).status ===
+        "pending-settlement",
+    );
+  }
 
   const deferredProjectionKeys = new Set(
     plan.deferredProjectionOutputs.map(
@@ -744,7 +759,17 @@ export async function syncWorldDataForSession(
           record !== undefined &&
           (record.lastTrackedSource !== undefined ||
             !dimensionsJsonEqual(record.value, record.definition.initialValue));
-        if (evolved) {
+        // An unchanged declaration keeps the record a pending settlement
+        // froze; a changed one would replace it under that settlement.
+        const incoming = dimensionRecordSchema.safeParse(write.value);
+        const redefinedWhilePending =
+          record !== undefined &&
+          pendingDimensions &&
+          !(
+            incoming.success &&
+            dimensionsJsonEqual(record.definition, incoming.data.definition)
+          );
+        if (evolved || redefinedWhilePending) {
           conflicts.push({
             target: `plugin-data:${write.pluginId}:${write.namespace}`,
             key: write.key,
@@ -833,15 +858,28 @@ export async function syncWorldDataForSession(
       // hash inside the transaction and abort the whole thing if it moved.
       // The caller's session lock closes the turn-interleave window; this
       // closes the rest.
-      const dimensionProvider = ledgers.find(
-        (ledger) => ledger.namespace === DIMENSION_DATA_NAMESPACE,
-      )?.pluginId;
-      if (dimensionProvider)
-        await tx.compareAndSetPluginDataBatch(
-          options.sessionId,
-          dimensionProvider,
-          [],
-        );
+      for (const provider of dimensionProviders) {
+        await tx.compareAndSetPluginDataBatch(options.sessionId, provider, []);
+        // The scan found no pending settlement; one registered since then
+        // protects its dimensions from this sync as well.
+        const settlementRegistered =
+          !pendingDimensions &&
+          (
+            await tx.listPluginData(
+              options.sessionId,
+              provider,
+              DIMENSION_SETTLEMENT_NAMESPACE,
+            )
+          ).some(
+            (row) =>
+              dimensionSettlementReceiptSchema.parse(row.value).status ===
+              "pending-settlement",
+          );
+        if (settlementRegistered)
+          throw new WorldDataSyncConflictError(
+            "world-data sync aborted: a dimension settlement became pending after the conflict check",
+          );
+      }
       {
         for (const ledger of ledgersToDelete) {
           if (options.force && ledger.namespace !== DIMENSION_DATA_NAMESPACE)

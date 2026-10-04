@@ -1045,6 +1045,39 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       ).toEqual({ requested: ["optional-plugin"], excluded: ["narrator"] });
     });
 
+    it("refuses to disable the plugin that holds the session's dimensions", async () => {
+      // Turns, snapshots and browser checkpoints all require the bound
+      // provider; dropping it would leave a session none of them accept.
+      await store.updateSession(SESSION_ID, {
+        metadata: { _dimensionProviderPluginId: "narrator" },
+      });
+      const before = (await store.getSession(SESSION_ID))!;
+
+      const res = await app.request(
+        `/api/sessions/${SESSION_ID}/plugins/narrator`,
+        { method: "DELETE" },
+      );
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        code: "dimension_provider_required",
+      });
+      const after = (await store.getSession(SESSION_ID))!;
+      expect(after.activePlugins).toEqual(before.activePlugins);
+      expect(after.metadata?.pluginSelection).toEqual(
+        before.metadata?.pluginSelection,
+      );
+      // A change that keeps the provider active is still accepted.
+      const other = await app.request(
+        `/api/sessions/${SESSION_ID}/plugins/optional-plugin`,
+        { method: "DELETE" },
+      );
+      expect(other.status).toBe(200);
+      expect((await store.getSession(SESSION_ID))!.activePlugins).toContain(
+        "narrator",
+      );
+    });
+
     it("should allow disabling a non-core plugin", async () => {
       const res = await app.request(
         `/api/sessions/${SESSION_ID}/plugins/optional-plugin`,
