@@ -324,6 +324,14 @@ export const runtimeAuthoringManifestSchema = z
           .describe(
             "Path of the handler module. The module default-exports the handler function.",
           ),
+        model: z
+          .string()
+          .meta({
+            description:
+              "Model slot the handler's gateway calls route through. Declared so a detached job's credential readiness check judges the same slot the call resolves.",
+            examples: ["memory"],
+          })
+          .optional(),
         timeoutMs: z
           .number()
           .int()

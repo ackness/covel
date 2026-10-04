@@ -23,6 +23,7 @@ io:
         kernel: turn-digest@1
   visibility: system
 function:
+  model: memory
   timeoutMs: 120000
   handler: ../../server/extract.js
 effects:

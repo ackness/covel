@@ -209,11 +209,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `function`
 
-| Field       | Type    | Required | Description                                                                  |
-| ----------- | ------- | -------- | ---------------------------------------------------------------------------- |
-| `handler`   | string  | yes      | Path of the handler module. The module default-exports the handler function. |
-| `timeoutMs` | integer | no       | Time limit of the handler in ms.                                             |
-| `tools`     | object  | no       | Tools the handler may call through `ctx.tools.call`.                         |
+| Field       | Type    | Required | Description                                                                                                                                                                |
+| ----------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `handler`   | string  | yes      | Path of the handler module. The module default-exports the handler function.                                                                                               |
+| `model`     | string  | no       | Model slot the handler's gateway calls route through. Declared so a detached job's credential readiness check judges the same slot the call resolves. Example: `"memory"`. |
+| `timeoutMs` | integer | no       | Time limit of the handler in ms.                                                                                                                                           |
+| `tools`     | object  | no       | Tools the handler may call through `ctx.tools.call`.                                                                                                                       |
 
 ## `function.tools`
 

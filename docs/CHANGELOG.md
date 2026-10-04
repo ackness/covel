@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Detached jobs were judged by the default preset, not the slot they call.** A detached function runtime with no declared model slot (the story-memory `extract` runtime) had its credential readiness resolved against the system default preset, which ignores request-level UI slot bindings. On a desktop setup whose models are configured only in Settings (no `llm.toml`), the check never passed: the job sat queued for its full `maxQueueMs` (5 minutes), died as `queue-deadline-exceeded`, and every following turn stalled for the 30-second settle wait. Function runtimes can now declare `function.model` (the slot their `ctx.gateway` calls use); `memory/extract` declares `model: memory`.
+
 ### Added
 
 - **Credits for plugins, worlds and collections.** `PLUGIN.md`, `world.yaml` and `covel-collection.yaml` take the same optional fields: `author` (`name`, `url`, a short `about` message, and up to six labelled `links`), `license` and `homepage`. World cards show the author and version; the world page, the session preparation screen and the installed-plugin list show the full credits, and an install preview shows the author's name. The play view does not show them. `about` and link labels are translated like other labels (`locales/<locale>.yaml`, `world.<locale>.yaml`); the author's name and the license are shown as written. Fields and limits: `docs/reference/plugins.md`.
