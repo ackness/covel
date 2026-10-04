@@ -43,6 +43,7 @@ import { ignoreError } from "@/lib/ignore-error.js";
 import { emitNavEvent, type SessionPanel } from "@/lib/nav-events.js";
 import { latestExecutionPresentation } from "./execution-presentation.js";
 import { SessionBackdrop } from "./session-backdrop.js";
+import { SessionMusic } from "./session-music.js";
 import { SceneHud } from "./scene-hud.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 
@@ -451,6 +452,7 @@ export function GameView({
             } as React.CSSProperties
           }
         >
+          <SessionMusic sessionId={session.id} />
           {/* The stage view paints its own backdrop layer. */}
           {!stageActive && (
             <SessionBackdrop

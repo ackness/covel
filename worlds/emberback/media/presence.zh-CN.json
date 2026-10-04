@@ -10,5 +10,13 @@
   {
     "characterId": "npc-mina-park",
     "displayName": "米娜·帕克博士"
+  },
+  {
+    "characterId": "npc-priya-nair",
+    "displayName": "普里娅·奈尔"
+  },
+  {
+    "characterId": "npc-eli-varga",
+    "displayName": "伊莱·瓦尔加"
   }
 ]

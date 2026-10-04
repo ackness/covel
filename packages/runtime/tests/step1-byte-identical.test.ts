@@ -53,20 +53,29 @@ function orderingFixture(): readonly RuntimeManifest[] {
 }
 
 describe("ordering equivalence (priority → stage/name)", () => {
-  it("bundled event subscribers are one-per-topic, so name-order fan-out is outcome-identical", async () => {
+  it("bundled subscribers of one topic belong to different plugins, so name-order fan-out is outcome-identical", async () => {
     // The fan-out sort switched to name order. It is observable only when a
-    // single fan-out batch holds two subscribers of a pending topic. The
-    // bundled set never does: each event runtime owns a distinct subscribed
-    // topic, so no batch ever contains two runtimes whose order matters —
-    // making the new name sort byte-identical in outcome to the old priority
-    // sort for the bundled set.
+    // single fan-out batch holds two subscribers of a pending topic whose
+    // results depend on each other. Subscribers in one plugin could: they
+    // share that plugin's data. Subscribers in different plugins cannot —
+    // plugin data is owned per plugin, so each writes only its own (the
+    // scene tracker and the soundtrack both follow `scene.set`). The bundled
+    // set never puts two subscribers of one topic in one plugin, which keeps
+    // the name sort identical in outcome to the old priority sort.
     const manifests = await loadAllManifests();
-    const subscribedTopics = manifests
-      .filter((m) => m.trigger?.type === "event")
-      .map((m) => m.trigger?.topic)
-      .filter((t): t is string => typeof t === "string");
-    expect(subscribedTopics.length).toBeGreaterThan(0);
-    expect(new Set(subscribedTopics).size).toBe(subscribedTopics.length);
+    const subscribers = new Map<string, string[]>();
+    for (const manifest of manifests) {
+      const topic =
+        manifest.trigger?.type === "event" ? manifest.trigger.topic : undefined;
+      if (typeof topic !== "string") continue;
+      subscribers.set(topic, [
+        ...(subscribers.get(topic) ?? []),
+        manifest.pluginId,
+      ]);
+    }
+    expect(subscribers.size).toBeGreaterThan(0);
+    for (const [topic, plugins] of subscribers)
+      expect(new Set(plugins).size, topic).toBe(plugins.length);
   });
 
   it("new (stage, name) contribution sort is deterministic and stage-monotonic", () => {

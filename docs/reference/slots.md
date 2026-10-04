@@ -47,7 +47,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                                                  |
 | `baseUrl`                           | ✅   | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）                                                                                                              |
 | `protocol`                          | ✅   | `openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1` / `google-generative-ai-v1` / `typesafe-systemone-v1` / `openrouter-decisions-v1` / `vercel-evaluation-v4` |
-| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `evaluation`。缺省从 output 模态推断                                                                  |
+| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`。缺省从 output 模态推断（`audio` 推断为 `speech`，音乐用途须显式写 `music`）   |
 | `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                                                          |
 | `input` / `output`                  | —    | 模态覆盖（缺省自动检测，见下）。`output` 支持 `text` / `image` / `audio` / `video` / `embedding` / `evaluation`                                                               |
 | `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                                                                                                        |
@@ -183,6 +183,7 @@ reasoningEffort = "disabled"
 | `imageWire`         | `image`         | **`openai-images`**、`dashscope-wan`（DashScope 原生图像面：wan2.x 走异步任务轮询；`qwen-image*` 系列——含 qwen-image-3.0-pro——自动切同步 multimodal 端点） |
 | `speechWire`        | `speech`        | **`openai-speech`**（`POST /audio/speech`）                                                                                                                |
 | `transcriptionWire` | `transcription` | **`openai-transcription`**（`/audio/transcriptions`）                                                                                                      |
+| `musicWire`         | `music`         | 没有内置 wire，也没有缺省值：音乐服务商没有通用的请求格式，由插件注册                                                                                      |
 
 ```toml
 [covel.image]
@@ -205,9 +206,22 @@ output = ["audio"]
 providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 ```
 
+音乐生成（`ctx.music.generate()` / `gateway.composeMusic`）解析名为 `music` 的用途，找不到时只回退到 `tag = "music"` 的其他用途——语音合成的用途同样输出音频，但不会被拿来生成音乐。用途没有写 `musicWire`、或写了未注册的 wire 时，在发出请求前返回 `CONFIG_ERROR`。目前内核和内置插件都没有提供音乐 wire，这个用途要等插件注册后才能使用：
+
+```toml
+[covel.music]
+provider = "example"
+model = "example-music-1"
+baseUrl = "https://api.example.com"
+protocol = "openai-chat-v1"
+tag = "music"
+output = ["audio"]
+providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
+```
+
 - 路由键在进入 wire 前被剥离，不会泄漏到厂商请求体。
 - 未注册的 wire id 在生成时抛 `CONFIG_ERROR`（报错信息含修复指引），不会静默回落。
-- 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription? })` 注册自定义 wire（frontmatter 的 `wires` 字段仍被接受但已弃用）—— 见 [plugin-extensions.md § 模型与新协议](plugin-extensions.md#模型与新协议)；wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription)。
+- 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription?, music? })` 注册自定义 wire（frontmatter 的 `wires` 字段仍被接受但已弃用）—— 见 [plugin-extensions.md § 模型与新协议](plugin-extensions.md#模型与新协议)；wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription)。
 
 ## 供应商参数
 

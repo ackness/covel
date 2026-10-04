@@ -216,7 +216,7 @@ UI 声明来自启动时 registry 快照，静态资源惰性加载并按快照�
 
 ### activity-bar 短标签
 
-`panelTabs: "bar"` 的布局在页签上显示 `shortLabel`，没有声明时显示完整的 `groupLabel` / `label`，不做截断。下面的截断规则只用于 `panelTabs: "rail"`。
+`panelTabs: "bar"` 的布局在页签上显示 `shortLabel`，没有声明时显示完整的 `groupLabel` / `label`，不做截断。页签条放不下全部页签时可以横向滚动（鼠标滚轮也滚动它），被截断的一侧渐隐，选中的页签保持在条的中间；条的末尾多一个「全部面板」按钮，点开是全部页签的网格，显示完整名称。下面的截断规则只用于 `panelTabs: "rail"`。
 
 activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。框架默认对 `groupLabel`（或 `label`）做机械截断：
 
@@ -587,8 +587,8 @@ JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height:
 
 Plugins declare `contributes.extensions` providers for `ui.slot@1` and register
 handlers from their server entry. `slot` selects `stage.backdrop@1`,
-`stage.cast@1`, `stage.dialogue@1`, `stage.choices@1`, `character.visual@1`, or
-`session.summary@1`.
+`stage.cast@1`, `stage.dialogue@1`, `stage.choices@1`, `character.visual@1`,
+`session.summary@1`, or `stage.music@1`.
 Providers compose in declared order, then plugin/provider ID order. Handlers
 receive `{ slot, previous, events }`, own scoped `ctx.pluginData`, and the kernel
 `ctx.world` view. The host validates each provider output against its slot model.
@@ -605,6 +605,31 @@ including imported art before characters are created. Providers normalize IDs;
 the host emits one keyed `character.visual@1` snapshot per `characterId`.
 Front-end consumers join exact keys and do not infer plugin namespaces or ID
 suffixes. The stage, avatar, portrait gallery, and cast list read these slots.
+
+### Stage music
+
+`stage.music@1` holds what should be playing behind the session now:
+`{ trackId?, title?, ref?, loop?, volume?, fadeMs? }`. It is state, not a
+command. The client plays `ref` (an `audio/*` media reference), changes track
+with a crossfade when `trackId` changes, and is silent when the value has no
+`ref`. A reload, a resumed session or a fork therefore lands on the same music,
+and a provider that projects the same track again does not restart it.
+
+- `loop` defaults to true. `volume` (0–1) is the author's level for the track;
+  the player's own volume and the mute switch apply on top of it.
+- A provider that has nothing to say returns `previous`, so several plugins can
+  share the slot in declared order: one that plays the world's tracks, another
+  that fills in a generated track where the world has none.
+- The client owns playback. It lowers the music while other audio of the page
+  plays (a narrated line), pauses while the page is hidden, and waits for the
+  first click or key press when the browser refuses to start sound by itself.
+  The player's switch is in the session header and in Settings → General
+  (`audio.musicEnabled`, `audio.musicVolume`).
+
+The bundled `soundtrack` plugin provides this slot from the tracks a world
+ships: it records the mood (`music.cue`) and the scene (`scene.set`) and
+chooses the track when the slot is projected. See
+[world-data.md](./world-data.md#background-music).
 
 ### Session summary
 

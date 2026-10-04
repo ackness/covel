@@ -432,7 +432,13 @@
     "previousSuggestions": "Earlier suggestions · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
     "configureModelBeforeRetry": "Change model / parameters",
-    "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings."
+    "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
+    "allWorlds": "All worlds ({{total}})",
+    "worldsScrollBack": "Earlier worlds",
+    "worldsScrollForward": "More worlds",
+    "allPanels": "All panels",
+    "musicMute": "Mute the music",
+    "musicUnmute": "Play the music"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -639,7 +645,15 @@
     "translateStart": "Start the translation",
     "translateAction": "Translate to {{language}}",
     "reviseDone": "The change is applied.",
-    "reviseDropsEditions": "This world has editions in other languages. A revision removes them, because their text would no longer match. Translate the world again afterwards."
+    "reviseDropsEditions": "This world has editions in other languages. A revision removes them, because their text would no longer match. Translate the world again afterwards.",
+    "gallery": "Gallery",
+    "galleryOpen": "Open picture {{index}} of {{total}}",
+    "galleryAll": "All {{total}} pictures",
+    "galleryPrevious": "Previous picture",
+    "galleryNext": "Next picture",
+    "slidesPause": "Pause the backdrop slideshow",
+    "slidesPlay": "Play the backdrop slideshow",
+    "slideShow": "Show backdrop {{index}}"
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",
@@ -814,6 +828,14 @@
       },
       "llmPrepRuntimeBindings": {
         "label": "Prep-phase runtime bindings"
+      },
+      "musicEnabled": {
+        "label": "Background music",
+        "description": "Play the music of a world during a session. A world plays music only when it ships tracks and a plugin that chooses them is on."
+      },
+      "musicVolume": {
+        "label": "Music volume",
+        "description": "From 0 to 100. The music lowers itself while a narrated line plays."
       }
     },
     "operatorAccessTitle": "Hosted operator access",

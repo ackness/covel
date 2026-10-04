@@ -24,6 +24,8 @@ pnpm dev                       # 同时启动前端与后端
 
 提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier、类型检查一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。
 
+新增文件默认上限为 3 MiB；世界画廊原图 `worlds/*/media/gallery/*.png` 单独允许 4 MiB，以保留 1536×1024 图片的无损质量。展示时优先使用配套 WebP。
+
 ### PostgreSQL 18 开发环境
 
 先按上面的步骤创建根 `.env`，核对 `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT` 与 `DATABASE_URL`。仅启动数据库，不需要 Docker 应用服务的 operator token：

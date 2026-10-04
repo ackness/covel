@@ -51,6 +51,7 @@ export type OperationMode =
   | "image"
   | "speech"
   | "transcription"
+  | "music"
   | "evaluate";
 
 // ── Model Capability ──────────────────────────────────────────────
@@ -437,6 +438,29 @@ export interface SpeechSynthesisResult {
   warnings: string[];
 }
 
+// ── Music ──────────────────────────────────────────────────────────
+
+export interface MusicCompositionParams {
+  model: string;
+  /** What the music should be: style, instruments, mood, tempo. */
+  prompt: string;
+  /** Words to sing. Absent: the provider decides, or the piece has none. */
+  lyrics?: string;
+  /** True asks for a piece without vocals. */
+  instrumental?: boolean;
+  /** Wanted length. A provider may round it or ignore it. */
+  durationSeconds?: number;
+  format?: string;
+  providerRequestMetadata?: Record<string, unknown>;
+}
+
+export interface MusicCompositionResult {
+  audio: { mimeType: string; data: Uint8Array };
+  usage: UsageSummary | null;
+  /** e.g. "requested duration unsupported by this wire, got 30 s". */
+  warnings: string[];
+}
+
 // ── Transcription ──────────────────────────────────────────────────
 
 export interface TranscriptionParams {
@@ -501,7 +525,7 @@ export interface ProviderLifecycleHook {
 // ── Model Slot ────────────────────────────────────────────────────
 
 // SlotTag was in @covel/shared v1 — inlined here after v2 type refactor
-type SlotTag = "text" | "image" | "embed" | "speech" | string;
+type SlotTag = "text" | "image" | "embed" | "speech" | "music" | string;
 
 /**
  * Public, immutable view of a resolved slot/preset suitable for

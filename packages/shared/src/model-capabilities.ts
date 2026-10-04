@@ -43,7 +43,9 @@ export function supportsModelRole(
   output: readonly string[],
   tag: string | undefined,
 ): boolean {
-  const modality = tag === "speech" ? "audio" : tag;
+  // Speech and music are two uses of one output; an audio model infers
+  // `speech`, and a music role is one a slot is tagged for.
+  const modality = tag === "speech" || tag === "music" ? "audio" : tag;
   return !modality ||
     !["text", "image", "audio", "embedding", "evaluation"].includes(modality)
     ? true

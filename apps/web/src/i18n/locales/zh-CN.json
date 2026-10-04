@@ -432,7 +432,13 @@
     "previousSuggestions": "历史建议 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
-    "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。"
+    "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
+    "allWorlds": "全部世界（{{total}}）",
+    "worldsScrollBack": "向前翻",
+    "worldsScrollForward": "向后翻",
+    "allPanels": "全部面板",
+    "musicMute": "关闭背景音乐",
+    "musicUnmute": "播放背景音乐"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -639,7 +645,15 @@
     "translateStart": "开始翻译",
     "translateAction": "翻译成{{language}}",
     "reviseDone": "修改已应用。",
-    "reviseDropsEditions": "这个世界有其他语言的版本。修改会移除它们，因为译文将不再与内容对应。修改之后请重新翻译。"
+    "reviseDropsEditions": "这个世界有其他语言的版本。修改会移除它们，因为译文将不再与内容对应。修改之后请重新翻译。",
+    "gallery": "画廊",
+    "galleryOpen": "查看第 {{index}} 张，共 {{total}} 张",
+    "galleryAll": "查看全部 {{total}} 张",
+    "galleryPrevious": "上一张",
+    "galleryNext": "下一张",
+    "slidesPause": "暂停背景轮播",
+    "slidesPlay": "播放背景轮播",
+    "slideShow": "显示第 {{index}} 张背景"
   },
   "settings": {
     "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",
@@ -814,6 +828,14 @@
       },
       "llmPrepRuntimeBindings": {
         "label": "准备阶段 Runtime 绑定"
+      },
+      "musicEnabled": {
+        "label": "背景音乐",
+        "description": "游玩时播放世界的背景音乐。只有世界自带曲目、并且启用了负责选曲的插件时才会有音乐。"
+      },
+      "musicVolume": {
+        "label": "音乐音量",
+        "description": "0 到 100。播放旁白语音时音乐会自动压低。"
       }
     },
     "operatorAccessTitle": "托管服务运维访问",

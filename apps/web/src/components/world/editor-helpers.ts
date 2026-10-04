@@ -29,6 +29,25 @@ export function text(v: I18nText | undefined, locale?: string): string {
   return resolveDisplayText(v, locale ?? i18n.language);
 }
 
+/** Whether a world's name, summary or tags contain the search text. */
+export function matchesWorldQuery(
+  world: {
+    readonly name: I18nText;
+    readonly description: I18nText;
+    readonly tags?: readonly string[];
+  },
+  query: string,
+): boolean {
+  const needle = query.trim().toLowerCase();
+  return (
+    !needle ||
+    [text(world.name), text(world.description), ...(world.tags ?? [])]
+      .join("\n")
+      .toLowerCase()
+      .includes(needle)
+  );
+}
+
 /** Shared input class names */
 export const inputCls =
   "w-full border border-border bg-background px-3 py-2 text-sm";

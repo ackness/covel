@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getSpeechWire } from "@covel/ai-provider";
+import { getMusicWire, getSpeechWire } from "@covel/ai-provider";
 import {
   createPluginRegistry,
   loadPluginDefinition,
@@ -149,6 +149,12 @@ export default function (covel) {
     speech: [{
       id: "entry-tts",
       async synthesize() {
+        return { audio: { mimeType: "audio/mpeg", data: new Uint8Array() }, usage: null, warnings: [] };
+      },
+    }],
+    music: [{
+      id: "entry-music",
+      async compose() {
         return { audio: { mimeType: "audio/mpeg", data: new Uint8Array() }, usage: null, warnings: [] };
       },
     }],
@@ -611,6 +617,8 @@ describe("createBootstrapPluginEntries", () => {
     // Wires: namespaced by pluginId.
     expect(getSpeechWire("entry-full-a/entry-tts")).not.toBeNull();
     expect(getSpeechWire("entry-tts")).toBeNull();
+    expect(getMusicWire("entry-full-a/entry-music")).not.toBeNull();
+    expect(getMusicWire("entry-music")).toBeNull();
   });
 
   it("runs a MULTI-runtime plugin's entry declared on the metadata-only root PLUGIN.md", async () => {

@@ -51,6 +51,7 @@ export function worldRecordFromManifest(
       ...(manifest.defaultViewMode
         ? { defaultViewMode: manifest.defaultViewMode }
         : {}),
+      ...(manifest.themeMusic ? { themeMusic: manifest.themeMusic } : {}),
       // The locales the world has content for; a session is in one of them.
       ...(Array.isArray(manifest.supportedLocales)
         ? { [WORLD_EDITIONS_KEY]: manifest.supportedLocales }

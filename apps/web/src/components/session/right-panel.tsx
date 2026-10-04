@@ -50,7 +50,9 @@ import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
+import { useOverflowEdges } from "@/hooks/use-overflow-edges.js";
 import { PanelStatus } from "./panel-status.js";
+import { PanelTabMenu } from "./panel-tab-menu.js";
 
 export interface StorageStatusData {
   readonly backend?: ServerStoreBackend;
@@ -229,11 +231,22 @@ function SessionRightPanel({
 
   // The asynchronous storage footer can shrink the rail after a tab was
   // selected. Keep that selection visible without moving the content pane.
+  // In the bar it is centred, clear of the faded edges of the strip.
   useLayoutEffect(() => {
     tabRailRef.current
       ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
-      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [activeTab, tabItems, storageData]);
+      ?.scrollIntoView?.({
+        block: "nearest",
+        inline: barTabs ? "center" : "nearest",
+      });
+  }, [activeTab, tabItems, storageData, barTabs]);
+  const tabEdges = useOverflowEdges(
+    tabRailRef,
+    `${barTabs}:${tabItems.length}`,
+  );
+  const shownTab = tabItems.some((item) => item.value === activeTab)
+    ? activeTab
+    : "world";
 
   useEffect(() => {
     if (panelRequest) setPendingPanelRequest(panelRequest);
@@ -325,92 +338,103 @@ function SessionRightPanel({
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <Tabs
-        value={
-          tabItems.some((item) => item.value === activeTab)
-            ? activeTab
-            : "world"
-        }
+        value={shownTab}
         onValueChange={setActiveTab}
         className={`flex-1 flex min-h-0 min-w-0 ${barTabs ? "flex-col" : ""}`}
         orientation={barTabs ? "horizontal" : "vertical"}
       >
-        <div
-          ref={tabRailRef}
-          className={
-            barTabs
-              ? "ui-panel-tabbar shrink-0 overflow-x-auto overscroll-contain border-b border-(--rule-color) px-3"
-              : "border-r border-(--rule-color) shrink-0 w-12 min-h-0 overflow-y-auto overscroll-contain"
-          }
-          style={
-            barTabs
-              ? undefined
-              : {
-                  background:
-                    "color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page))",
-                }
-          }
-        >
-          <TabsList
-            className={
-              barTabs
-                ? "flex h-auto w-max items-center justify-start gap-1 rounded-none bg-transparent p-0 py-2 text-muted-foreground"
-                : "flex h-auto min-h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground"
-            }
+        {barTabs ? (
+          <div className="ui-panel-tabbar relative flex shrink-0 items-center gap-1 border-b border-(--rule-color) px-3">
+            <div
+              ref={tabRailRef}
+              data-fade-start={tabEdges.start}
+              data-fade-end={tabEdges.end}
+              className="ui-scroll-fade min-w-0 flex-1 overflow-x-auto overscroll-contain"
+              onWheel={(event) => {
+                // A mouse wheel has one axis; over the strip it moves the strip.
+                if (Math.abs(event.deltaY) > Math.abs(event.deltaX))
+                  event.currentTarget.scrollLeft += event.deltaY;
+              }}
+            >
+              <TabsList className="flex h-auto w-max items-center justify-start gap-1 rounded-none bg-transparent p-0 py-2 text-muted-foreground">
+                {tabItems.map((item) => {
+                  const ItemIcon = item.icon;
+                  return (
+                    <TabsTrigger
+                      key={item.id}
+                      value={item.value}
+                      className="ui-panel-tab h-8 shrink-0 gap-1.5 rounded-(--radius-control) border-0 px-2.5 text-[13px] font-normal text-muted-foreground shadow-none touch-manipulation data-[state=active]:bg-accent data-[state=active]:font-medium data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
+                      title={item.title ?? item.label}
+                      // The tab may show a short label; its name stays the full one.
+                      aria-label={item.label}
+                    >
+                      <ItemIcon
+                        className="ui-panel-tab-icon h-3.5 w-3.5 shrink-0"
+                        aria-hidden
+                      />
+                      <span>{item.shortLabel ?? item.label}</span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </div>
+            {/* What the strip hides is one click away. */}
+            {(tabEdges.start || tabEdges.end) && (
+              <PanelTabMenu
+                items={tabItems}
+                active={shownTab}
+                label={t("session.allPanels")}
+                onSelect={setActiveTab}
+              />
+            )}
+          </div>
+        ) : (
+          <div
+            ref={tabRailRef}
+            className="border-r border-(--rule-color) shrink-0 w-12 min-h-0 overflow-y-auto overscroll-contain"
+            style={{
+              background:
+                "color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page))",
+            }}
           >
-            {tabItems.map((item, idx) => {
-              const ItemIcon = item.icon;
-              const afterFrameworkTabs = idx === 2;
-              if (barTabs) {
+            <TabsList className="flex h-auto min-h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground">
+              {tabItems.map((item, idx) => {
+                const ItemIcon = item.icon;
+                const afterFrameworkTabs = idx === 2;
                 return (
-                  <TabsTrigger
+                  <div
                     key={item.id}
-                    value={item.value}
-                    className="ui-panel-tab h-8 shrink-0 gap-1.5 rounded-(--radius-control) border-0 px-2.5 text-[13px] font-normal text-muted-foreground shadow-none touch-manipulation data-[state=active]:bg-accent data-[state=active]:font-medium data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
-                    title={item.title ?? item.label}
-                    // The tab may show a short label; its name stays the full one.
-                    aria-label={item.label}
+                    className="w-full flex flex-col items-center"
                   >
-                    <ItemIcon
-                      className="ui-panel-tab-icon h-3.5 w-3.5 shrink-0"
-                      aria-hidden
-                    />
-                    <span>{item.shortLabel ?? item.label}</span>
-                  </TabsTrigger>
-                );
-              }
-              return (
-                <div
-                  key={item.id}
-                  className="w-full flex flex-col items-center"
-                >
-                  {afterFrameworkTabs && (
-                    <div
-                      aria-hidden
-                      className="w-6 h-px bg-border my-1.5 shrink-0"
-                    />
-                  )}
-                  <TabsTrigger
-                    value={item.value}
-                    className="group relative min-h-12 w-full rounded-none border-0 px-0 py-1 text-muted-foreground shadow-none touch-manipulation data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                    title={item.title ?? item.label}
-                    aria-label={item.label}
-                  >
-                    <span
-                      aria-hidden
-                      className="absolute left-0 top-1 bottom-1 w-0.5 bg-transparent transition-colors group-data-[state=active]:bg-(--accent-primary)"
-                    />
-                    <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden px-1">
-                      <ItemIcon className="w-4 h-4 shrink-0" />
-                      <span className="block w-full max-w-full truncate text-center text-[9px] leading-none whitespace-nowrap">
-                        {item.shortLabel ?? compactTabLabel(item.label)}
+                    {afterFrameworkTabs && (
+                      <div
+                        aria-hidden
+                        className="w-6 h-px bg-border my-1.5 shrink-0"
+                      />
+                    )}
+                    <TabsTrigger
+                      value={item.value}
+                      className="group relative min-h-12 w-full rounded-none border-0 px-0 py-1 text-muted-foreground shadow-none touch-manipulation data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                      title={item.title ?? item.label}
+                      aria-label={item.label}
+                    >
+                      <span
+                        aria-hidden
+                        className="absolute left-0 top-1 bottom-1 w-0.5 bg-transparent transition-colors group-data-[state=active]:bg-(--accent-primary)"
+                      />
+                      <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden px-1">
+                        <ItemIcon className="w-4 h-4 shrink-0" />
+                        <span className="block w-full max-w-full truncate text-center text-[9px] leading-none whitespace-nowrap">
+                          {item.shortLabel ?? compactTabLabel(item.label)}
+                        </span>
                       </span>
-                    </span>
-                  </TabsTrigger>
-                </div>
-              );
-            })}
-          </TabsList>
-        </div>
+                    </TabsTrigger>
+                  </div>
+                );
+              })}
+            </TabsList>
+          </div>
+        )}
         {/* The labelled-tab layouts keep the player's status in view above
             whichever tab is open. */}
         {barTabs && <PanelStatus sessionId={sessionId} />}

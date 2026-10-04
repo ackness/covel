@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "world": "emberback",
+  "defaultLocale": "en-US",
+  "note": "Editorial gallery assets, not a runtime import contract. Descriptions follow the world and reviewed images; possible-moment depictions do not establish session events. Paths are relative to this media directory.",
+  "images": [
+    {
+      "id": "mile-seventeen",
+      "kind": "scene",
+      "filename": "gallery/mile-seventeen.png",
+      "webFilename": "gallery/mile-seventeen.webp",
+      "width": 1536,
+      "height": 1024,
+      "name": "Mile Seventeen",
+      "description": "The brightward courier road beneath a basalt arch, ahead of Crownfire.",
+      "background": "Mile Seventeen lies on the road to the brightward settlements, with a field repeater bolted beneath a natural basalt arch. June's medical convoy is approaching with cryo-packs needed by the clinics.",
+      "storyContext": "The opening future call warns against letting the convoy reach this crossing, but an echo is not a guaranteed future. This possible pre-storm view does not establish whether the convoy passes or suffers an accident.",
+      "location": "Brightward Road · Mile Seventeen",
+      "visualNotes": [
+        "The arch, road and mounted repeater establish the crossing's practical role.",
+        "Low sunlight and a cool sky suggest geographical light on a tidally locked world.",
+        "The distant storm creates pressure; the road is intact and empty."
+      ],
+      "relatedCharacters": ["npc-june-okafor"],
+      "depiction": "possible-moment",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "generation": {
+        "tool": "built-in-imagegen",
+        "prompt": "Create an environmental gallery illustration for Emberback Relay, EXACTLY 1536x1024 landscape PNG. Match bright graphic painterly retro-frontier science fiction, elegant adventure-poster shapes, cream, terracotta and cobalt, tactile repaired technology and layered depth. Vesper is TIDALLY LOCKED: low white brightward sun fixed on the LEFT horizon, cold nightward sky on the RIGHT, NOT sunset on Earth. Mile Seventeen: an exposed rust-red basalt road crossing under a large NATURAL ROCK ARCH. A small practical field radio repeater with cream ceramic heat shielding, cobalt casing and short aerial is bolted beneath the arch. Wheel tracks and a modest guard rail show courier use; road leads toward remote warm Crownfire storm clouds, no disaster happening, no vehicle wreck. Distant ridge geometry and solar glare give scale. No people, no words, no logos, no floating holograms, no ornamental gears, no magic. Open foreground supports UI and character overlays, focal arch in central 60 percent, readable warm sunlight, scientific frontier optimism mixed with weather danger."
+      },
+      "sha256": "6e4aac6538799dd6c81526e59f20859187723c3a1b8b0b109b065f2e7c4bdde8",
+      "bytes": 2960729
+    },
+    {
+      "id": "signal-before-the-storm",
+      "kind": "still",
+      "filename": "gallery/signal-before-the-storm.png",
+      "webFilename": "gallery/signal-before-the-storm.webp",
+      "width": 1536,
+      "height": 1024,
+      "name": "Listening Before the Storm",
+      "description": "Atmospheric vignette: Tomas studies a receiver; this does not establish a player choice or outcome.",
+      "background": "Tomas is the fifty-eight-year-old chief technician and elected shift lead. He trusts evidence and public decisions. Communications, the clinic, storm protection and crawler charging all draw from the same limited reserve.",
+      "storyContext": "This vignette imagines him checking a receiver under the pressure of an anomalous call and an approaching storm. It does not establish that he cuts off the network or reveal what any recording contains.",
+      "location": "Emberback Relay · Communications workbench",
+      "visualNotes": [
+        "His face, coveralls, field radio and enamel mug follow the existing portrait.",
+        "Manual controls, tape equipment and repairs make infrastructure tangible.",
+        "Warm basalt and cobalt equipment retain the approachable frontier mood."
+      ],
+      "relatedCharacters": ["npc-tomas-reed"],
+      "depiction": "possible-moment",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "generation": {
+        "tool": "built-in-imagegen",
+        "prompt": "Transform the reference character portrait into a cinematic story still, EXACTLY 1536x1024 landscape. The reference is the identity and costume authority for TOMAS REED: preserve his late-fifties Latino face, greying hair and short beard, cream-and-cobalt coveralls, mustard harness, enamel mug and analog field radio. Keep the reference's warm graphic painterly retro-frontier science-fiction illustration style, creamy sunlight, terracotta basalt and cobalt details. NEW scene: Tomas at a relay operations workbench, three-quarter waist-up, quietly leaning forward to adjust an analog receiver with one hand, the other beside his battered enamel coffee mug. A reel-to-reel recorder, practical ceramic electrical fittings and a few unlettered paper notes. Through a narrow open hatch, a rust ridge and distant relay mast under fixed low brightward light and gathering golden Crownfire weather. His expression is attentive, humane, weighing evidence. No panic, explosion or resolved crisis. Single character, background lower contrast, dramatic but welcoming dimensional lighting, clear hands and believable device. No text, no watermark, no future prediction made visible, no holographic magic. A possible quiet work moment, not a canonical new event.",
+        "referenceImages": ["worlds/emberback/media/portraits/tomas-reed.png"]
+      },
+      "sha256": "036080507300f95c612d0038dfd3bde4d653042212beb7a09e228dc4fa1654ca",
+      "bytes": 2532380
+    },
+    {
+      "id": "priya-nair",
+      "kind": "portrait",
+      "filename": "portraits/priya-nair.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "Priya Nair",
+      "description": "Emberback's forty-five-year-old lead medic. Priya runs an eight-bed clinic with two heat-stroke patients and a cold room full of medicine that cannot lose power. Every watt the array takes is a watt she has to argue for.",
+      "background": "A dry, practical medic who refuses to be rushed and refuses to let a machine matter more than a patient.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome.",
+      "relatedCharacters": ["npc-priya-nair"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["characters/main-cast.json"],
+      "generation": {
+        "tool": "built-in-imagegen",
+        "prompt": "Create a NEW full-body character portrait for Emberback Relay, 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single forty-five-year-old South Asian female lead medic Priya Nair, medium-brown skin, practical mature face, graying dark hair tied back with reading glasses pushed into it. Rolled cream sleeves, grey clinic vest, cobalt work trousers, practical shoes; a compact battery tester on a lanyard at chest, holding a slim medical chart with no readable text. Quiet, level, dryly compassionate gaze, solid grounded working stance. Background is an eight-bed clinic's modest service alcove: repaired cream ceramic panels, cool medicine cabinet, reserve battery with analog meter, soft warm light. No visible patients or other people. Complete head-to-boots body, head y=70, soles y=1480, centered, same full-length scale as matching Emberback cast. Restrained foreground-midground-background depth, lower-contrast environment, face and signature tester readable. Optimistic community life under resource pressure, no neon cyberpunk, no spaceship, no fantasy, no bulky armor, no text or watermark. OPAQUE environmental portrait."
+      },
+      "sha256": "e33abee420852a5fdf36731d302fe53a001d12e234eb97b9653d5360deb4737e",
+      "bytes": 2310147
+    },
+    {
+      "id": "eli-varga",
+      "kind": "portrait",
+      "filename": "portraits/eli-varga.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "Eli Varga",
+      "description": "A nineteen-year-old night-shift signal operator who logged the 06:14 call. Eli is brilliant with receivers and shaky under pressure, and he is certain he heard something in the static after your voice stopped. He has not told anyone yet.",
+      "background": "A gifted, anxious young operator who notices everything and trusts himself too little to say it.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome.",
+      "relatedCharacters": ["npc-eli-varga"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["characters/main-cast.json"],
+      "generation": {
+        "tool": "built-in-imagegen",
+        "prompt": "Create a NEW full-body character portrait for Emberback Relay, EXACTLY 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single nineteen-year-old ADULT male signal operator Eli Varga, slight natural adult build, unruly dark blond hair, alert anxious grey eyes, pale face with a few freckles, earnest intelligent expression. Oversized cream-and-cobalt cooperative work jacket, ochre utility trousers and practical boots, old over-ear communications headphones around neck, ink-stained fingers holding a small frequency notebook at waist with no readable text. Slightly hesitant posture as though about to report something important. Background: warm rust-red basalt-walled operations alcove, repaired cobalt analog radio receivers, reel-to-reel recorder, cream ceramic electrical panels, coils of functional cable, softer and lower contrast than character. Complete head-to-boots body, head y=70 soles y=1480, centered, same full-length scale as matching Emberback cast. Clear face silhouette, believable contact shadow and dimensional depth. No people other than Eli, no screens full of text, no cyberpunk, no military costume, no space suit, no watermark. OPAQUE environmental portrait."
+      },
+      "sha256": "84a4e37365b7dc54705cf5315bfbb38a32bac0b041db99e72a7e2d47c12a1c95",
+      "bytes": 2804400
+    },
+    {
+      "id": "tomas-reed",
+      "kind": "portrait",
+      "filename": "portraits/tomas-reed.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "Tomas Reed",
+      "description": "The grey-haired, short-bearded technician holds an enamel mug, with a radio on his workwear and workshop consoles behind him.",
+      "background": "Tomas is the fifty-eight-year-old chief technician, elected shift lead and the player’s mentor. Verified evidence and public decisions guide his maintenance and emergency responsibilities.",
+      "storyContext": "Introduces the cooperative and its technical work. At the opening, he must weigh equipment protection against keeping communications available; the calm portrait does not settle that decision.",
+      "visualNotes": [
+        "Cream-and-cobalt coveralls, yellow harness, radio and mug provide recognizable details."
+      ],
+      "relatedCharacters": ["npc-tomas-reed"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "0c0eaa929b49b7b9f085b6f369f85f59b6ef36ca4039feee449351f6118ddac8",
+      "bytes": 2959594
+    },
+    {
+      "id": "june-okafor",
+      "kind": "portrait",
+      "filename": "portraits/june-okafor.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "June Okafor",
+      "description": "June raises a set of keys while carrying a tablet under her other arm; a coral scarf flares beside practical driving clothes and transport equipment.",
+      "background": "Thirty-one-year-old June is the Duskline’s fastest Sunrunner courier, carrying medicine, mail and travelers. Her humor gives way to precision when danger becomes real.",
+      "storyContext": "Her medical convoy is approaching Mile Seventeen at the opening. The portrait introduces the courier and transport life without establishing that the convoy has passed the crossing.",
+      "visualNotes": [
+        "Goggles, keys and knee guards emphasize her work; the background vehicle establishes no delivery outcome."
+      ],
+      "relatedCharacters": ["npc-june-okafor"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "0837e26e2b34c5d0d08c39eefacc42ac5779b191f313e19ee9cfd3a06f213ea8",
+      "bytes": 2759540
+    },
+    {
+      "id": "mina-park",
+      "kind": "portrait",
+      "filename": "portraits/mina-park.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "Dr. Mina Park",
+      "description": "Mina wears a cream-and-ochre work coat and holds a measuring instrument, framed by observation equipment and a cool sky.",
+      "background": "Mina is a forty-two-year-old atmospheric physicist and head of Nightglass, studying Vesper’s magnetic weather and signals that arrive before transmission. She grounds judgments in data and acknowledges uncertainty.",
+      "storyContext": "Introduces weather research and anomalous echoes. At the opening she is heading up the main tower to observe; the portrait establishes neither a completed climb nor the storm’s arrival.",
+      "visualNotes": [
+        "Warm and cool light reflect direction on a tidally locked world, not an Earthlike sunset."
+      ],
+      "relatedCharacters": ["npc-mina-park"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "489b80c46590ad308e9025061d9357e542a1b68705e4068457cf293c023f7255",
+      "bytes": 2596885
+    },
+    {
+      "id": "world-cover",
+      "kind": "hero",
+      "filename": "gallery/world-cover.webp",
+      "width": 1536,
+      "height": 1024,
+      "name": "The Duskline Relay",
+      "description": "Three communications masts rise above a red ridge, with a settlement, solar panels and crawler around the main tower, between bright sunlight and a cool starry sky.",
+      "background": "Vesper is tidally locked, and people live in the Duskline between its bright and dark hemispheres. Emberback’s three masts link settlements of six thousand people through shared communications, power, care and transport.",
+      "storyContext": "A homepage overview of the relay’s terrain, technology and community. The glowing waveform is a visual motif for communication and anomalous echoes, not an established naked-eye phenomenon.",
+      "visualNotes": [
+        "Warm and cold sides represent geographical zones, not an ordinary sunrise or sunset."
+      ],
+      "relatedCharacters": [],
+      "depiction": "setting-illustration",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["WORLD.md"],
+      "sha256": "0af07b72b58eae0d7d6db9779832d0583a10d087a281dc8dab73d49e58ab5891",
+      "bytes": 215890
+    }
+  ]
+}

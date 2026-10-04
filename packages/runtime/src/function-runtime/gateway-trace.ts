@@ -231,6 +231,40 @@ export function withGatewayTrace(
     };
   }
 
+  if (gateway.composeMusic) {
+    const composeMusic = gateway.composeMusic.bind(gateway);
+    facade.composeMusic = async (input) => {
+      const start = Date.now();
+      const summary = summarizeInput({
+        presetId: input.presetId,
+        prompt: input.prompt,
+      });
+      await emitter.emit("gateway.calling", {
+        ...ctx,
+        method: "composeMusic",
+        ...summary,
+      });
+      try {
+        const result = await composeMusic(input);
+        await emitter.emit("gateway.responded", {
+          ...ctx,
+          method: "composeMusic",
+          audioBytes: result.audio.data.byteLength,
+          durationMs: Date.now() - start,
+        });
+        return result;
+      } catch (err) {
+        await emitter.emit("gateway.failed", {
+          ...ctx,
+          method: "composeMusic",
+          error: summarizeTraceError(err),
+          durationMs: Date.now() - start,
+        });
+        throw err;
+      }
+    };
+  }
+
   if (gateway.transcribeAudio) {
     const transcribeAudio = gateway.transcribeAudio.bind(gateway);
     facade.transcribeAudio = async (input) => {

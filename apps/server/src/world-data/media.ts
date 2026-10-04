@@ -3,7 +3,7 @@ import path from "node:path";
 import { digestFile, sha256Hex } from "./digest.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
-const MAX_MEDIA_FILE_BYTES = 20 * 1024 * 1024;
+export const MAX_MEDIA_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_MEDIA_SOURCE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = new Set([
   ".png",

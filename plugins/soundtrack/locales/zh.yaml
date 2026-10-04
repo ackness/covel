@@ -1,0 +1,19 @@
+# Chinese text of the soundtrack plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+PLUGIN.md:
+  displayName: 配乐
+  description: 播放世界自带的背景音乐，并跟随当前场景和故事的情绪切换曲目。
+  contributes:
+    events:
+      - description: 仅当提示词里列出了这个世界的音乐情绪时发射。故事的情绪明显变成其中某一种时发射，mood 按列出的写法原样填写。每回合最多一次；情绪没有变化时不要发射。mood 为 silence 表示停止音乐。
+    data:
+      assets:
+        authoring:
+          title: 音乐文件
+      tracks:
+        authoring:
+          title: 曲目表
+runtimes/cue/RUNTIME.md:
+  description: 记录故事当前的情绪，供背景音乐选曲。
+runtimes/scene/RUNTIME.md:
+  description: 记录当前场景，供背景音乐选曲。
