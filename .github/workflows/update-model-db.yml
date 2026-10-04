@@ -34,17 +34,20 @@ jobs:
       pull-requests: write
     env:
       BRANCH: chore/update-model-db
-      GH_TOKEN: ${{ secrets.MODEL_DB_PR_TOKEN || github.token }}
 
     steps:
+      # Only the last step gets the token that can push: the setup actions,
+      # dependency install scripts, and tests in between must not read it.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.MODEL_DB_PR_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Find the newest LiteLLM model table
         id: source
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           latest="$(gh api "repos/BerriAI/litellm/commits?path=model_prices_and_context_window.json&per_page=1" --jq '.[0] | "\(.sha) \(.commit.committer.date)"')"
@@ -72,7 +75,7 @@ jobs:
 
       - name: Setup pnpm
         if: steps.source.outputs.changed == 'true'
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Setup Node.js
         if: steps.source.outputs.changed == 'true'
@@ -97,6 +100,7 @@ jobs:
         if: steps.source.outputs.changed == 'true'
         shell: bash
         env:
+          GH_TOKEN: ${{ secrets.MODEL_DB_PR_TOKEN || github.token }}
           REVISION: ${{ steps.source.outputs.revision }}
           UPDATED_AT: ${{ steps.source.outputs.updated_at }}
         run: |
@@ -105,6 +109,7 @@ jobs:
           count="$(jq '.count' packages/ai-provider/data/model-db.json)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          gh auth setup-git
           git switch -C "$BRANCH"
           git add packages/ai-provider/model-db-source.json packages/ai-provider/data/model-db.json
           git commit -m "chore(ai-provider): update LiteLLM model data to ${short}"
