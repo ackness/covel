@@ -37,6 +37,7 @@ import { worldTranslationStatus } from "./locale-tooling.js";
 import { preflightWorldDataForSession } from "./session-import.js";
 import { fileExists } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
+import { resolveWorldThemeMusic } from "./gallery.js";
 import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
 import { loadWorldDataSummary } from "./world-load.js";
@@ -57,7 +58,8 @@ export interface WorldPackageDiagnostic {
     | "locale-script"
     | "edition-incomplete"
     | "data-file-unused"
-    | "inline-locale-map";
+    | "inline-locale-map"
+    | "theme-music";
   /** Path relative to the world directory. */
   readonly file?: string;
   /** Location inside `file`, such as `pluginPolicy.requested[1]`. */
@@ -94,6 +96,7 @@ interface WorldManifestView {
   readonly defaultLocale: string;
   readonly supportedLocales?: readonly string[];
   readonly worldData?: string;
+  readonly themeMusic?: string;
   readonly pluginPolicy?: {
     readonly requested?: readonly string[];
     readonly recommended?: readonly string[];
@@ -199,6 +202,24 @@ async function checkEditions(
     });
   }
   return diagnostics;
+}
+
+/** The world list plays `themeMusic` only when it can serve the file. */
+async function checkThemeMusic(
+  worldDir: string,
+  manifest: WorldManifestView,
+): Promise<WorldPackageDiagnostic[]> {
+  if (!manifest.themeMusic) return [];
+  if (await resolveWorldThemeMusic({ worldRoot: worldDir })) return [];
+  return [
+    {
+      level: "error",
+      code: "theme-music",
+      file: manifest.themeMusic,
+      message: `\`themeMusic\` names "${manifest.themeMusic}", which the world list cannot play`,
+      hint: "Name an existing `.mp3` or `.wav` file one directory under `media/`, such as `media/music/theme.mp3`, of at most 20 MB.",
+    },
+  ];
 }
 
 async function checkLore(
@@ -712,6 +733,7 @@ export async function validateWorldPackage(
       ),
       ...overlayDiagnostics(source.issues),
       ...(await checkLore(worldDir, manifest)),
+      ...(await checkThemeMusic(worldDir, manifest)),
       ...(await checkEditions(worldDir, manifest)),
       ...checkPluginReferences(manifest, catalogue, strict),
       ...(await checkWorldData(worldDir, manifest, catalogue, strict)),

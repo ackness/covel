@@ -13,6 +13,11 @@ const DEFAULT_VISUAL: WorldVisual = {
 };
 
 const VISUALS_BY_ID: Record<string, WorldVisual> = {
+  "lantern-barrow": {
+    image: "/visuals/worlds/lantern-barrow.webp",
+    accent: "oklch(72% 0.12 75)",
+    label: "Lantern Barrow",
+  },
   cloudmere: {
     image: "/visuals/worlds/cloudmere.webp",
     accent: "oklch(72% 0.16 75)",

@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "world": "mistport",
+  "defaultLocale": "zh-CN",
+  "note": "Editorial gallery assets, not a runtime import contract. Descriptions follow the world and reviewed images; possible-moment depictions do not establish session events. Paths are relative to this media directory.",
+  "images": [
+    {
+      "id": "ebb-tide-landing",
+      "kind": "scene",
+      "filename": "gallery/ebb-tide-landing.png",
+      "webFilename": "gallery/ebb-tide-landing.webp",
+      "width": 1536,
+      "height": 1024,
+      "name": "雾中的退潮入口",
+      "description": "湿滑栈桥连接近水石阶，盐蚀的遗迹轮廓在灰白浓雾里逐渐消失。",
+      "background": "雾港的下潮区涨潮时被淹没，退潮后才允许探险者短暂进入。每次暴露的遗迹结构都可能不同，因此熟悉潮水与撤离时间，比相信旧地图更可靠。",
+      "storyContext": "这是一处退潮通路的氛围示意，不固定下一次潮退的地形。它帮助玩家理解雾中能见度、潮线变化与退路的重要性。",
+      "location": "中港与下潮区之间的临水通路",
+      "visualNotes": [
+        "近处绳索、贝壳和湿木板清晰，远方完全被雾遮住。",
+        "石阶向近处残墙延伸，画面没有展示整座城市。",
+        "悬挂灯具没有明火，符合低声、低光的探索气氛。"
+      ],
+      "relatedCharacters": [],
+      "depiction": "setting-illustration",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "generation": {
+        "tool": "built-in-imagegen",
+        "prompt": "Create EXACTLY 1536x1024 landscape game-gallery environment for Mistport, a dark-fantasy fog-noir tidal city. Painterly photorealism, desaturated cold grey, teal, rust and old bronze, wet tactile stone and salted timber, dense grey-white sea fog, no visible sky. Eye-level view from a wet wooden main pier toward ancient stone steps newly exposed by ebbing tide, half-submerged near ruins only, broken masonry, mooring rope, shells and receding water lines. The next landing fades into fog within tens of meters; NO clear distant city or landscape. One abandoned unlit shielded tide-stone lamp hangs from a pier post, no flame. Investigative mood: foreground clues clear and sharp, pale mist creates depth, readable midtones rather than pitch darkness. Human-scale entry to risky exploration, open walkway for a character overlay, center-right focal stair, lower-left quieter space for description. No people, monsters, gore, text, watermarks, magical beams, electric neon, fire, or high-fantasy spectacle."
+      },
+      "sha256": "03ae2e76723fa31b9eeb6711f20f6280a344aa8c03afeb17d12c2402167fece7",
+      "bytes": 2858960
+    },
+    {
+      "id": "su-yao-appraisal",
+      "kind": "still",
+      "filename": "gallery/su-yao-appraisal.png",
+      "webFilename": "gallery/su-yao-appraisal.webp",
+      "width": 1536,
+      "height": 1024,
+      "name": "灯下验潮",
+      "description": "氛围演绎：苏窈检查一块普通待鉴定遗物，不揭示其效用或主线真相。",
+      "background": "苏窈是已经出师的验潮师，也是公会长齐老的助手。遗物可能有不可预测的作用，公会的鉴定程序使发现物、记录与证据成为雾港调查的重要部分。",
+      "storyContext": "剧照演绎一次普通的鉴定工作。布面上的碎片没有指定剧情身份，不能据此认定它属于某把钥匙或已经被证明安全。",
+      "location": "验潮师公会・鉴定工作台",
+      "visualNotes": [
+        "苏窈的面孔、盘发、高领外衣和圆形鉴定镜与原立绘一致。",
+        "冷色潮石灯照亮工作台，没有明火或法术光束。",
+        "记录、测量工具与未命名碎片承接调查主题。"
+      ],
+      "relatedCharacters": ["npc-su-yao"],
+      "depiction": "possible-moment",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "generation": {
+        "tool": "built-in-imagegen",
+        "prompt": "Transform reference portrait into a cinematic investigative story still EXACTLY 1536x1024 landscape. Preserve SU YAO's exact reference identity: adult woman in twenties, black hair pinned in the same loose bun, pale face, serious thoughtful eyes, navy-black high-collared guild coat with aged-bronze embroidery and her round tide-stone appraisal mirror. Same realistic painterly fog-noir style, cold grey teal and restrained rust. New scene: a guild appraisal workroom, waist-up seated at a worn worktable beside a misted window, examining a small dull stone-and-metal relic fragment on a folded cloth through the mirror held carefully in one hand; other hand rests next to handwritten notes with no readable text. A small shielded cold tide-stone lamp softly lights mirror and knuckles, no flame and no bright beams. Her face shows careful professional concentration with subtle worry; normal opaque healthy skin. Near shelves hold plain boxes and practical measuring tools, background softly lost in grey light. One character only; recognizable portrait face, natural hands, atmospheric dimensional depth. No revealed relic power, no plot resolution, no monster, no modern machinery, no readable text, no watermark.",
+        "referenceImages": ["worlds/mistport/media/portraits/su-yao.png"]
+      },
+      "sha256": "3d89ddd46dc49f7b17e6c7c00616ba994866561a5d9534a827e1487e5e58f014",
+      "bytes": 1996409
+    },
+    {
+      "id": "lin-yuanzhou",
+      "kind": "portrait",
+      "filename": "portraits/lin-yuanzhou.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "林远舟",
+      "description": "年轻学徒提着冷光雾灯，深色衣领与潮湿港口融在一起，腕边露出浅淡纹路。",
+      "background": "林远舟刚通过验潮师公会初试，谨慎又充满好奇。对选择学徒身份的玩家而言，他是进入公会时的重要同侪。",
+      "storyContext": "可用于公会初识与探险准备的介绍。灯具说明下潮区对低光、安静的要求；画像没有揭示他尚未说出的秘密。",
+      "visualNotes": ["人物手中的灯是冷光；远处港口暖光不代表他使用火把。"],
+      "relatedCharacters": ["npc-lin-yuanzhou"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "7bed93ea92e4027a406451d33c29eb0b994947777ae1a41e91e8a4da3e92f8a7",
+      "bytes": 1936301
+    },
+    {
+      "id": "su-yao",
+      "kind": "portrait",
+      "filename": "portraits/su-yao.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "苏窈",
+      "description": "苏窈穿着带细金纹的深色公会服，手持圆形鉴定镜，神情专注而克制。",
+      "background": "苏窈是已出师的验潮师、齐老的助手。她做事严谨，是玩家与公会高层之间的桥梁；选择学徒身份时，她也是入门考核的监考官。",
+      "storyContext": "齐老失踪后，她携带半封信在主栈桥寻找玩家。画像可用于介绍她的职业与开局来意，镜中的具体鉴定结果仍须由剧情给出。",
+      "visualNotes": ["圆镜是职业道具，画面没有提供可据以认定遗物功能的读数。"],
+      "relatedCharacters": ["npc-su-yao"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "eae573d02102206f93e1d95d146125e32df4087a5a61886b8a1f6ea0590aaea2",
+      "bytes": 1917619
+    },
+    {
+      "id": "iron-meg",
+      "kind": "portrait",
+      "filename": "portraits/iron-meg.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "铁姑",
+      "description": "铁姑短发凌乱、下颌留疤，深色皮装与交叠手臂构成坚硬轮廓，左前臂泛着半透明灰雾。",
+      "background": "铁姑是盐牙会二当家，三十余岁。一次遗物事故让她左肘以下陷入雾蚀；她冷厉守信，并禁止手下把未鉴定的危险遗物卖给不知情的平民。",
+      "storyContext": "用于介绍下潮区的地下秩序与雾蚀代价。她对玩家的信任、交易条件和后续合作需要在故事中形成。",
+      "visualNotes": [
+        "雾蚀位于角色左臂，即画面右侧横过腰间的前臂；灰雾不应解读成冰或闪电。"
+      ],
+      "relatedCharacters": ["npc-iron-meg"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "dad541591e17f1c74cb0c80f3e8481fbd994755d2c53ad9b2b7764d606d86649",
+      "bytes": 1882755
+    },
+    {
+      "id": "chen-yuanshan",
+      "kind": "portrait",
+      "filename": "portraits/chen-yuanshan.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "陈远山",
+      "description": "灰发长者穿着纹饰深袍，举起一块深色棱角碎片，微笑与审视的目光并存。",
+      "background": "陈远山是年过六旬的雾港议会议长，推动限制平民进入下潮区的封潮令。议会掌握上城及合法遗物贸易，这使他的命令直接影响探险资格。",
+      "storyContext": "适合介绍议会权力、许可证与封锁带来的压力。手中碎片的来历、用途和搜寻目标没有由这张图得到证实。",
+      "visualNotes": [
+        "碎片只按画面描述为棱角物件，不据其外形指定任务编号或钥匙部件。"
+      ],
+      "relatedCharacters": ["npc-chen-yuanshan"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "5046ddc9d403d6eefcc925b6ea52ee55a94dcfcbcba149df8510a93ed6cfa8e7",
+      "bytes": 2162377
+    },
+    {
+      "id": "guildmaster-qi",
+      "kind": "portrait",
+      "filename": "portraits/guildmaster-qi.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "齐老",
+      "description": "白发白须的齐老抱着厚书，面容温和，手部周围浮现淡灰色的半透明痕迹。",
+      "background": "齐老是验潮师公会长，更关心研究而非政治。开局时，他留下信件后进入下潮区并失踪，而当时本应处于无法进入的涨潮期。",
+      "storyContext": "适合人物档案、失踪线索与公会背景介绍。画像是人物资料，不代表玩家已找到他，也不解释他如何进入涨潮中的遗迹。",
+      "visualNotes": [
+        "书与局部雾蚀痕迹沿用人物形象；画面不提供书中内容或症状成因。"
+      ],
+      "relatedCharacters": ["npc-guildmaster-qi"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "8bade496fccca17df7309d0612941be7acb2eee48f58dc1bd8ea47798f40795b",
+      "bytes": 2156193
+    },
+    {
+      "id": "xiao-shuang",
+      "kind": "portrait",
+      "filename": "portraits/xiao-shuang.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "小霜",
+      "description": "浅色长发的少女穿着覆身长袍，微微侧头，将一只手举到耳边，指尖隐入淡雾。",
+      "background": "小霜是雾中教会年轻的雾使，约十五六岁。她声称能听见雾的低语，并曾准确预言退潮时间与遗迹位置，但预言的来源仍是悬念。",
+      "storyContext": "可用于介绍教会与雾的低语这一疑问。侧耳动作表达倾听的形象，不证明雾具有意志，也不构成正在施法的事件。",
+      "visualNotes": [
+        "只记录局部淡雾与倾听姿态，不由外貌补充能力等级或血缘关系。"
+      ],
+      "relatedCharacters": ["npc-xiao-shuang"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "337e128f41ce0706341e77a4c7697215e30530cbfcb6fffbe69484f62d0ba82b",
+      "bytes": 1758592
+    },
+    {
+      "id": "grey-falcon",
+      "kind": "portrait",
+      "filename": "portraits/grey-falcon.png",
+      "width": 1024,
+      "height": 1536,
+      "name": "灰隼",
+      "description": "短发男子穿着带徽记的深色大衣，手持遮蔽严密的金属雾灯，只留出细窄冷光。",
+      "background": "灰隼是陈远山私人探险队的队长，也是封潮令的执行者。他寡言高效，负责封锁、搜查与追踪。",
+      "storyContext": "用于呈现议会命令在港口与遗迹入口的实际压力。开局追查与齐老失踪方向相交，画像没有决定他后来是否继续服从。",
+      "visualNotes": ["金属灯以遮光结构和微弱冷光辨识；不把它写成明火火把。"],
+      "relatedCharacters": ["npc-grey-falcon"],
+      "depiction": "character-portrait",
+      "spoilerLevel": "opening",
+      "sourceRefs": [
+        "WORLD.md",
+        "characters/main-cast.json",
+        "media/portraits.json"
+      ],
+      "sha256": "9065bb88378a2983145f748d0c939c3f6000123f038abe106767f0e97ad2290c",
+      "bytes": 1912042
+    },
+    {
+      "id": "world-cover",
+      "kind": "hero",
+      "filename": "gallery/world-cover.webp",
+      "width": 1536,
+      "height": 1024,
+      "name": "永雾中的港城",
+      "description": "湿石栈道与退水遗迹延伸到近处港湾，吊机、舟船与依崖而建的城楼逐层隐入灰雾，暖灯沿建筑点亮。",
+      "background": "雾港沿悬崖分为上城、中港和下潮区。遗物贸易维系城市生计，退潮暴露遗迹，涨潮则淹没下层；每次裂潮后的遗迹结构都会改变。",
+      "storyContext": "这是港城题材的宣传总览，用层叠建筑表现垂直城市。实际探索遵守浓雾中不超过五十步的能见度；封面不提供可复用的遗迹地图。",
+      "visualNotes": [
+        "城市暖灯与下潮探险的潮石冷光灯不同；画中残拱不被指定为某次深退潮的骨拱门。"
+      ],
+      "relatedCharacters": [],
+      "depiction": "setting-illustration",
+      "spoilerLevel": "opening",
+      "sourceRefs": ["WORLD.md"],
+      "sha256": "39d7d510d70abca7435d9c0d60ec55ef619109bc7bc5c1b94a6aa01ea28e7eda",
+      "bytes": 262888
+    }
+  ]
+}

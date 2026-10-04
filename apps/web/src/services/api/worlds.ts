@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { parseJsonSseData, readSseStream } from "../sse.js";
 import {
+  i18nTextSchema,
   worldCreateRequestSchema,
   worldPatchRequestSchema,
   worldPluginPlanSchema,
@@ -50,6 +52,51 @@ export async function getWorld(
     options,
   );
   return mapWorldRecord(raw);
+}
+
+/** A path on this server; never a URL that names another host. */
+const serverPathSchema = z
+  .string()
+  .refine((value) => value.startsWith("/") && !value.startsWith("//"));
+
+const worldGallerySchema = z.object({
+  // The music `world.yaml` names for the world list, when it can be played.
+  themeMusic: z.object({ url: serverPathSchema, mime: z.string() }).optional(),
+  items: z.array(
+    z.object({
+      id: z.string(),
+      source: z.string(),
+      url: serverPathSchema,
+      width: z.number().positive(),
+      height: z.number().positive(),
+      // From the package's gallery file; absent for a package without one.
+      kind: z
+        .enum(["hero", "map", "scene", "still", "portrait"])
+        .optional()
+        .catch(undefined),
+      name: i18nTextSchema.optional(),
+      description: i18nTextSchema.optional(),
+      background: i18nTextSchema.optional(),
+      location: i18nTextSchema.optional(),
+    }),
+  ),
+});
+
+/** What a world package shows before a session exists: its images, its theme. */
+export type WorldGallery = z.infer<typeof worldGallerySchema>;
+/** One image a world package ships. */
+export type WorldGalleryItem = WorldGallery["items"][number];
+
+/** A world kept only in this browser has no package: it answers with no images. */
+export async function getWorldGallery(
+  worldId: string,
+  signal?: AbortSignal,
+): Promise<WorldGallery> {
+  return request(`/api/worlds/${encodeURIComponent(worldId)}/gallery`, {
+    signal,
+    silentErrors: true,
+    schema: worldGallerySchema,
+  });
 }
 
 export async function getWorldPluginPlan(

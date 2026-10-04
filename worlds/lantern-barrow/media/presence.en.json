@@ -1,0 +1,26 @@
+[
+  {
+    "characterId": "npc-brannoc-hale",
+    "displayName": "Brannoc Hale"
+  },
+  {
+    "characterId": "npc-sister-wren",
+    "displayName": "Sister Wren"
+  },
+  {
+    "characterId": "npc-mirelle-voss",
+    "displayName": "Mirelle Voss"
+  },
+  {
+    "characterId": "npc-aldous-penn",
+    "displayName": "Reeve Aldous Penn"
+  },
+  {
+    "characterId": "npc-keeper-ysolde",
+    "displayName": "Keeper Ysolde"
+  },
+  {
+    "characterId": "npc-corvin-ashe",
+    "displayName": "Corvin Ashe"
+  }
+]

@@ -531,6 +531,14 @@ export const worldManifestSchema = z
         "Initial view for new sessions. `stage` is the fullscreen visual-novel stage. The player's own choice wins once made.",
       )
       .optional(),
+    themeMusic: z
+      .string()
+      .min(1)
+      .describe(
+        "Music of the world for the world list, as a path relative to the world root: an `.mp3` or `.wav` file one directory under `media/`. The world list plays it for the world the player looks at. The music of a session comes from the plugin that plays music, not from this field.",
+      )
+      .meta({ examples: ["media/music/theme.mp3"] })
+      .optional(),
   })
   .strict();
 

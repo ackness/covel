@@ -245,6 +245,10 @@ Covel 当前的工具层分成两类：
 
 写法见 [ui-panels.md 的 Session summary](../reference/ui-panels.md#session-summary)。细节仍然放在插件自己的 `ui.right` 面板里；摘要只是一瞥。
 
+### 2.4.1 背景音乐 `stage.music@1`
+
+想让会话有背景音乐的插件往 `stage.music@1` 槽位里放「现在该放哪一首」：一个音频的 `MediaRef`，加上可选的曲名、是否循环和音量。它是状态而不是指令——同一首曲子再投影一次不会重新开始，没有 `ref` 就是静音。播放、淡入淡出、玩家的音量和静音开关都在框架这边，插件不操作 `<audio>`，也不需要界面。内置的 `soundtrack` 是参考实现：两个事件 runtime 只记录情绪和场景，选曲在投影时完成。契约见 [ui-panels.md](../reference/ui-panels.md#stage-music)。
+
 ### 2.5 自定义组件 `webview`
 
 catalog 组件画不出来的界面（地图、解谜、棋盘、小游戏）用 `ui.right` 的 `webview`：插件带一个单文件 HTML，在沙箱 iframe 里运行，用 `window.covel` 读自己的数据、调用自己的动作。声明 `surfaces: ["panel", "stage"]` 后，同一个组件也挂在舞台视图的决策区。完整协议见 [插件扩展契约](../reference/plugin-extensions.md#自定义组件与挂载)。

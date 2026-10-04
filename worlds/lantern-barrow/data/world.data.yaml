@@ -21,6 +21,19 @@ sources:
     to: characters
     key: id
     after: cast
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+    after: cast
+  presence:
+    kind: json
+    path: media/presence.json
+    to: contract:character.portraits@1
+    key: characterId
+    after: portraits
   rules:
     kind: yaml
     path: data/rules/barrow-rules.yaml

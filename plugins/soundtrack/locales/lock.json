@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.data.assets.authoring.title": "ad6a60acfca5f8b1",
+      "PLUGIN.md#contributes.data.tracks.authoring.title": "0d9b531ac15bc616",
+      "PLUGIN.md#description": "6ffc72f11f1e6f4a",
+      "PLUGIN.md#displayName": "e9d334b55097d5f6",
+      "runtimes/cue/RUNTIME.md#description": "af4553cc0037fa85",
+      "runtimes/scene/RUNTIME.md#description": "f41837953c819065"
+    }
+  }
+}

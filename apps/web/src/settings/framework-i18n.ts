@@ -63,6 +63,23 @@ function frameworkSettingText(
         "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
       ),
     },
+    "audio.musicEnabled": {
+      label: t(
+        "settings.frameworkEntries.musicEnabled.label",
+        "Background music",
+      ),
+      description: t(
+        "settings.frameworkEntries.musicEnabled.description",
+        "Play the music of a world during a session. A world plays music only when it ships tracks and a plugin that chooses them is on.",
+      ),
+    },
+    "audio.musicVolume": {
+      label: t("settings.frameworkEntries.musicVolume.label", "Music volume"),
+      description: t(
+        "settings.frameworkEntries.musicVolume.description",
+        "From 0 to 100. The music lowers itself while a narrated line plays.",
+      ),
+    },
     "world.authoringIdleTimeoutSeconds": {
       label: t(
         "settings.frameworkEntries.worldAuthoringIdleTimeout.label",

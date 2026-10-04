@@ -66,6 +66,8 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | 模型用途（slot）如何路由             | `packages/ai-provider/src/config/llm-schema.ts`, `llm.toml.example`, `docs/reference/slots.md`                                                                                         |
 | 环境变量有哪些、默认值是什么         | `packages/shared/src/env/registry.ts`, `docs/guide/env-registry.md`                                                                                                                    |
 
+世界图片与画廊内容资料见 [世界美术方向](./guide/world-art-direction.md#画廊资料与前端使用) 和 [角色立绘指南](./guide/world-portraits.md)。
+
 ## Current Structure
 
 ```text

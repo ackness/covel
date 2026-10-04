@@ -333,6 +333,8 @@ describe("world data session importer", () => {
       "memory/definitions",
       "scene-stage/assets",
       "scene-stage/scenes",
+      "soundtrack/assets",
+      "soundtrack/tracks",
       "story-events/events",
       "tabletop-rules/rules",
       "world-time/definitions",
@@ -1933,7 +1935,8 @@ sources: {}
   });
 
   it.each([
-    ["emberback", "en-US", 3],
+    ["emberback", "en-US", 5],
+    ["lantern-barrow", "zh-CN", 6],
     ["mistport", "zh-CN", 7],
     ["mistport", "en-US", 7],
     ["haruka-academy", "zh-CN", 8],

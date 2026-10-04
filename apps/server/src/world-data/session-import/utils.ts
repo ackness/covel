@@ -26,6 +26,7 @@ export async function readWorldManifest(worldRoot: string): Promise<{
   dimensions?: unknown;
   dimensionSources?: unknown;
   defaultLocale?: string;
+  themeMusic?: string;
 }> {
   // `world.<locale>.yaml` overlays are compiled in, as the world loader does.
   const { raw } = await readWorldManifestSource(worldRoot);
@@ -38,6 +39,8 @@ export async function readWorldManifest(worldRoot: string): Promise<{
           typeof raw.defaultLocale === "string" ? raw.defaultLocale : undefined,
         worldData:
           typeof raw.worldData === "string" ? raw.worldData : undefined,
+        themeMusic:
+          typeof raw.themeMusic === "string" ? raw.themeMusic : undefined,
       }
     : {};
 }

@@ -16,6 +16,7 @@ import type {
   MediaContext,
   ImagesContext,
   SpeechContext,
+  MusicContext,
   AssetProgressInput,
 } from "./services.js";
 
@@ -43,6 +44,7 @@ export interface FunctionHandlerContext extends PluginFunctionContext {
   readonly media?: MediaContext;
   readonly images?: ImagesContext;
   readonly speech?: SpeechContext;
+  readonly music?: MusicContext;
   readonly assetProgress?: (progress: AssetProgressInput) => Promise<void>;
   /** Nested execution shares the parent's session and atomic commit boundary. */
   readonly recursiveCall: (

@@ -7,6 +7,8 @@ import { registerThemeSettings } from "@/theme-system/settings.js";
 
 export const WORLD_AUTHORING_IDLE_TIMEOUT_SETTING =
   "world.authoringIdleTimeoutSeconds";
+export const MUSIC_ENABLED_SETTING = "audio.musicEnabled";
+export const MUSIC_VOLUME_SETTING = "audio.musicVolume";
 
 /**
  * Core/general user preferences that apply app-wide regardless of session.
@@ -61,6 +63,31 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     label: "Expand turn updates",
     description:
       "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
+  });
+
+  store.register({
+    key: MUSIC_ENABLED_SETTING,
+    schema: z.boolean(),
+    default: true,
+    group: "general",
+    widget: "toggle",
+    label: "Background music",
+    description:
+      "Play the music of a world during a session. A world plays music only when it ships tracks and a plugin that chooses them is on.",
+  });
+
+  store.register({
+    key: MUSIC_VOLUME_SETTING,
+    schema: z.number().int().min(0).max(100),
+    default: 60,
+    group: "general",
+    widget: "number",
+    min: 0,
+    max: 100,
+    step: 5,
+    label: "Music volume",
+    description:
+      "From 0 to 100. The music lowers itself while a narrated line plays.",
   });
 
   store.register({

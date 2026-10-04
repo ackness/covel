@@ -1,0 +1,111 @@
+{
+  "images": [
+    {
+      "id": "lantern-barrow-hero",
+      "name": "After the Lantern Went Dark",
+      "description": "Greyreed and the northern barrow at dusk; the ancient lamp on the summit is dark.",
+      "background": "Greyreed is a village of roughly thirty households, sustained by its mill, tavern and small chapel. The beacon on the northern barrow had burned for a century until it went dark three days ago and its keeper vanished.",
+      "storyContext": "This is the situation available to an arriving player. Distances are composed for an establishing illustration rather than travel calculations.",
+      "location": "Greyreed and the northern barrow",
+      "visualNotes": [
+        "Cold wetland light contrasts with warm village windows.",
+        "The summit beacon is unlit and the hillside tomb entrance stands open.",
+        "Quiet reeds and dark paths at lower left leave room for a homepage heading."
+      ]
+    },
+    {
+      "id": "greyreed-map",
+      "name": "Greyreed and the Barrow",
+      "description": "An illustrated overview of the known starting region; distances are schematic.",
+      "background": "The northern path connects Greyreed to the keeper's cottage and Lantern Barrow. The tavern, headman's house, mill and Dawn Chapel are the starting places for investigation and recruitment, surrounded by reeds and dark marsh water.",
+      "storyContext": "Only known surface landmarks appear. Building positions, waterways and distances are schematic artistic choices. No dungeon routes, hidden rooms or secret locations are disclosed.",
+      "location": "The known surface region around Greyreed",
+      "visualNotes": [
+        "The barrow sits above the village, joined by a winding path.",
+        "The waterwheel, chapel and antler-fronted inn provide distinct landmarks.",
+        "The unlettered map supports localized labels; show it without cropping."
+      ]
+    },
+    {
+      "id": "crooked-stag-tavern",
+      "name": "The Crooked Antler",
+      "description": "Hearthlight, warm ale and a bounty notice: the first expedition starts here.",
+      "background": "The Crooked Antler is Greyreed's tavern, inn and meeting place. Mirelle remembers what she hears and chooses what she shares. The headman offers thirty silver coins to bring the missing keeper home.",
+      "storyContext": "The player arrives on a rainy late-autumn night, with a veteran and a novice priestess available to approach. The empty room leaves the bar, corner and window seats open for different conversations.",
+      "location": "Greyreed · The Crooked Antler",
+      "visualNotes": [
+        "Hearthlight contrasts with cold rain beyond the window.",
+        "Warm ale, a serving cloth and a pinned notice echo the opening scene.",
+        "The central aisle remains clear for dialogue staging."
+      ]
+    },
+    {
+      "id": "bronze-tomb-doors",
+      "name": "The Open Bronze Doors",
+      "description": "Halfway up the hill, the bronze doors stand pushed outward above rain-wet steps.",
+      "background": "The bronze doors halfway up the barrow opened on the night the beacon failed. The seal bears signs of being forced from within. Ysolde entered with her lamp and has not been seen in the village since.",
+      "storyContext": "This is an early expedition landmark. Players can inspect the seal, prepare light and choose how to enter; the illustration supplies no answer about the deeper chambers.",
+      "location": "Lantern Barrow · Bronze Doors",
+      "visualNotes": [
+        "Both doors open outward above broken fittings on the wet threshold.",
+        "Patina, moss and puddles show age and marsh weather.",
+        "Steps disappear into darkness; the door motifs are art direction, not decipherable clues."
+      ]
+    },
+    {
+      "id": "hall-of-lamps",
+      "name": "The Hall of Lamps",
+      "description": "Rows of wall lamps recede into darkness; a few rekindled flames reveal the way.",
+      "background": "The Hall of Lamps is the first corridor beyond the entrance, lined with wall lamps. According to the keeper, rekindling them deepens the barrow's sleep; noise, fighting and delay make the expedition more dangerous.",
+      "storyContext": "The image interprets a possible moment after some lamps have been rekindled. It does not set their starting state or imply that the summit beacon has been restored.",
+      "location": "Lantern Barrow · Hall of Lamps",
+      "visualNotes": [
+        "Warm oil flames alternate with unlit niches along both walls.",
+        "Damp flagstones catch small reflections while the far end stays hidden.",
+        "No party or enemy is fixed in the corridor."
+      ]
+    },
+    {
+      "id": "brannoc-hale",
+      "name": "Brannoc Hale",
+      "description": "A fifty-year-old retired soldier who has been drinking quietly in the corner of the Crooked Antler for three days. He says he is only passing through, yet he keeps watching the barrow hill. His sword is old and very well kept.",
+      "background": "A gruff veteran with a soft heart who steps in front of others first and complains later.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome."
+    },
+    {
+      "id": "sister-wren",
+      "name": "Sister Wren",
+      "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to inspect the barrow lantern — three days too late. She can treat wounds and read the old lantern script, and she is hiding a question about her faith.",
+      "background": "Earnest, diligent, braver than she looks, and prone to reciting prayers when nervous.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome."
+    },
+    {
+      "id": "mirelle-voss",
+      "name": "Mirelle Voss",
+      "description": "Owner of the Crooked Antler, early forties, with a long memory, a closed mouth, and exact accounts. Every rumor in the village crosses her bar first.",
+      "background": "Shrewd and warm; she hands you the truth only once she is sure you are worth it.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome."
+    },
+    {
+      "id": "aldous-penn",
+      "name": "Reeve Aldous Penn",
+      "description": "Greyreed's reeve, who posted the bounty at the tavern. He wants this solved fast, and goes vague about the days before the keeper disappeared.",
+      "background": "Respectable, anxious, and used to hiding his mistakes behind procedure.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome."
+    },
+    {
+      "id": "keeper-ysolde",
+      "name": "Keeper Ysolde",
+      "description": "A keeper in her seventies who tended the barrow lantern for forty years. The night it went out, three days ago, she walked alone through the open bronze doors and has not come out.",
+      "background": "A stubborn, clear-eyed old woman who knows the barrow's truth and would rather carry it alone than frighten the village.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome."
+    },
+    {
+      "id": "corvin-ashe",
+      "name": "Corvin Ashe",
+      "description": "A young scholar from the capital who took a room at the tavern a month ago and asked everyone about the barrow lantern. He checked out the day before it went dark. No one saw him leave the village.",
+      "background": "Brilliant, charming, and dangerously sure that knowledge justifies itself.",
+      "storyContext": "A character portrait for introductions and conversation. It does not establish where the character has been found or any later outcome."
+    }
+  ]
+}

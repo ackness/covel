@@ -350,6 +350,7 @@ pnpm lint
 | 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                         |
 | 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
 | 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)               |
+| 背景音乐调度         | [soundtrack](../../plugins/soundtrack/PLUGIN.md)                 |
 | 隐藏世界数据与策划   | [story-events](../../plugins/story-events/PLUGIN.md)             |
 
 ### 保留的数据命名空间

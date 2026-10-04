@@ -347,7 +347,7 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
 - **Model slots**: named `[covel.<slot>]` routes (`story`, `utility`, `plugin`,
   `fast`, `memory`, `image`, …) with same-tag fallback only — an image request
   never routes to text. Media generation goes through `ctx.images` / `ctx.speech`
-  and per-modality wire registries. Details: `docs/reference/slots.md`,
+  / `ctx.music` and per-modality wire registries (music has no built-in wire). Details: `docs/reference/slots.md`,
   `docs/reference/media-store.md`.
 
 ## Critical Conventions

@@ -158,7 +158,8 @@ export type UiSlotName =
   | "stage.dialogue@1"
   | "stage.choices@1"
   | "character.visual@1"
-  | "session.summary@1";
+  | "session.summary@1"
+  | "stage.music@1";
 
 export type StageBackdropModel = {
   readonly sceneId?: string;
@@ -267,6 +268,23 @@ export type SessionSummaryModel = {
   readonly entries: SessionSummaryEntry[];
 };
 
+/**
+ * What should be playing behind the session now. State, not a command: the
+ * player changes track when `trackId` changes and is silent without a `ref`.
+ */
+export type StageMusicModel = {
+  readonly trackId?: string;
+  readonly title?: I18nText;
+  /** An audio asset. Absent: silence. */
+  readonly ref?: MediaReference;
+  /** Defaults to true. */
+  readonly loop?: boolean;
+  /** The author's level for this track (0–1), under the player's own volume. */
+  readonly volume?: number;
+  /** Length of the fade from the track before, in milliseconds. */
+  readonly fadeMs?: number;
+};
+
 export type UiSlotValue =
   | StageBackdropModel
   | StageCastModel
@@ -275,6 +293,7 @@ export type UiSlotValue =
   | CharacterVisualModel
   | CharacterVisualCollectionModel
   | SessionSummaryModel
+  | StageMusicModel
   | null;
 
 export type UiSlotProjectionInput = {

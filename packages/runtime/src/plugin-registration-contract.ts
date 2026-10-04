@@ -69,7 +69,13 @@ export function enforcePluginRegistrationContract(
       registerWires(wires) {
         if (!wires || typeof wires !== "object")
           throw invalid("Invalid wire module");
-        for (const group of [wires.image, wires.speech, wires.transcription]) {
+        const groups = [
+          wires.image,
+          wires.speech,
+          wires.transcription,
+          wires.music,
+        ];
+        for (const group of groups) {
           if (
             group !== undefined &&
             (!Array.isArray(group) ||
@@ -78,7 +84,7 @@ export function enforcePluginRegistrationContract(
             throw invalid("Invalid wire group");
         }
         api.registerWires(wires);
-        for (const group of [wires.image, wires.speech, wires.transcription]) {
+        for (const group of groups) {
           for (const wire of group ?? []) record("wire", wire.id);
         }
       },

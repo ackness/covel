@@ -105,7 +105,7 @@ export interface PluginRuntimeGateway {
    */
   resolveSlot(input: {
     readonly presetId?: string;
-    /** Defaults to "text"; pass "image" / "embedding" / "speech" / "transcription" for non-text slots. */
+    /** Defaults to "text"; pass "image" / "embedding" / "speech" / "transcription" / "music" for non-text slots. */
     readonly fallbackTag?: string;
   }): ResolvedSlotForPlugin | null;
 
@@ -142,6 +142,24 @@ export interface PluginRuntimeGateway {
     presetId?: string;
     text: string;
     voice?: string;
+    format?: string;
+    signal?: AbortSignal;
+  }): Promise<{
+    audio: { mimeType: string; data: Uint8Array };
+    warnings: readonly string[];
+  }>;
+
+  /**
+   * Low-level music generation returning raw audio bytes without media
+   * persistence. Framework-internal building block for ctx.music —
+   * plugins should prefer ctx.music.generate.
+   */
+  composeMusic?(input: {
+    presetId?: string;
+    prompt: string;
+    lyrics?: string;
+    instrumental?: boolean;
+    durationSeconds?: number;
     format?: string;
     signal?: AbortSignal;
   }): Promise<{
@@ -349,6 +367,47 @@ export interface SpeechContext {
     readonly text: string;
     readonly warnings: readonly string[];
   }>;
+}
+
+export interface MusicGenerateInput {
+  /** Slot name; defaults to the `music` role, then any slot tagged `music`. */
+  readonly presetId?: string;
+  /** What the music should be: style, instruments, mood, tempo. */
+  readonly prompt: string;
+  /** Words to sing. Absent: the provider decides, or the piece has none. */
+  readonly lyrics?: string;
+  /** True asks for a piece without vocals. */
+  readonly instrumental?: boolean;
+  /** Wanted length in seconds. A provider may round it or ignore it. */
+  readonly durationSeconds?: number;
+  readonly format?: string;
+  /**
+   * Business metadata persisted onto the MediaRef. Same contract as
+   * ctx.speech: `pluginId` and `promptHash` are injected by the framework
+   * and cannot be overridden; metadata does not participate in dedup.
+   */
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  /** Abort signal forwarded to the provider call. Not part of promptHash. */
+  readonly signal?: AbortSignal;
+}
+
+export interface MusicGenerateOutput {
+  /** Always a single ref today; array keeps the shape symmetric with images. */
+  readonly refs: readonly MediaRef[];
+  readonly warnings: readonly string[];
+  /** True when promptHash matched an existing asset and no provider call was made. */
+  readonly cached: boolean;
+}
+
+/**
+ * First-class music pipeline for function runtimes, with the same dedup +
+ * MediaStore persistence contract as ctx.speech. A piece takes long to
+ * generate: call it from a detached or background runtime, never in a turn.
+ */
+export interface MusicContext {
+  /** Check the music role without generating or making a provider request. */
+  isAvailable(presetId?: string): boolean;
+  generate(input: MusicGenerateInput): Promise<MusicGenerateOutput>;
 }
 
 export interface AssetProgressInput {

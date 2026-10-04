@@ -183,7 +183,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
  *
  * - text output → text, object, stream
  * - image output → image
- * - audio output → speech
+ * - audio output → speech, music (the slot's tag says which it is for)
  * - embedding output → embed
  * - evaluation output → evaluate
  */
@@ -200,7 +200,7 @@ function deriveSupportedModes(
         modes.push("image");
         break;
       case "audio":
-        modes.push("speech");
+        modes.push("speech", "music");
         break;
       case "evaluation":
         modes.push("evaluate");

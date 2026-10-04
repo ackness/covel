@@ -96,6 +96,9 @@ export type {
   SpeechGenerateInput,
   SpeechGenerateOutput,
   SpeechTranscribeInput,
+  MusicContext,
+  MusicGenerateInput,
+  MusicGenerateOutput,
 } from "./types.js";
 
 export { resolveRuntimeProviders } from "./runtime-providers.js";

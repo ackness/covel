@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "registryId": "music-registry",
+  "moods": [
+    {
+      "id": "battle",
+      "when": "A fight has started and is not over."
+    },
+    {
+      "id": "dread",
+      "when": "Deep in the barrow, when the party hears something it cannot see."
+    }
+  ],
+  "tracks": [
+    {
+      "id": "theme",
+      "title": "The Lantern Barrow",
+      "file": "theme.mp3",
+      "theme": true
+    },
+    {
+      "id": "tavern",
+      "title": "The Crooked Stag",
+      "file": "tavern.mp3",
+      "scenes": ["The Crooked Stag"]
+    },
+    {
+      "id": "battle",
+      "file": "battle.mp3",
+      "moods": ["battle"]
+    },
+    {
+      "id": "deep-barrow",
+      "file": "deep-barrow.mp3",
+      "moods": ["dread"]
+    }
+  ]
+}

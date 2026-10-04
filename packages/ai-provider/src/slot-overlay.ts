@@ -212,6 +212,7 @@ function supportedModesForCapability(
       modes.add("image");
     } else if (output === "audio") {
       modes.add("speech");
+      modes.add("music");
     } else if (output === "evaluation") {
       modes.add("evaluate");
     } else if (output === "embedding") {

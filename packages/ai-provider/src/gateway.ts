@@ -55,6 +55,7 @@ import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
 import { DEFAULT_IMAGE_WIRE, getImageWire } from "./image/wire-registry.js";
 import type { ImageGenerationResult } from "./image/types.js";
+import { getMusicWire } from "./music/wire-registry.js";
 import {
   DEFAULT_SPEECH_WIRE,
   DEFAULT_TRANSCRIPTION_WIRE,
@@ -75,6 +76,7 @@ import type {
   ToolDefinition,
   TranscriptionResult,
   ModelRequestContext,
+  MusicCompositionResult,
 } from "./types.js";
 
 function assertExplicitGoogleMediaWire(
@@ -717,6 +719,77 @@ export function createGateway(deps: GatewayDependencies) {
     );
   }
 
+  async function composeMusic(
+    input: {
+      presetId?: string;
+      prompt: string;
+      lyrics?: string;
+      instrumental?: boolean;
+      durationSeconds?: number;
+      format?: string;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    options?: GatewayOptions,
+  ): Promise<MusicCompositionResult & { model: string; provider: string }> {
+    return runOperation(
+      {
+        // The conventional "music" slot, then any slot tagged `music`. A
+        // speech slot also outputs audio, and is never a fallback for this.
+        presetId: input.presetId ?? "music",
+        mode: "music",
+        fallbackTag: "music",
+        resolveTargets: (presetId) => [
+          deps.presetRegistry.resolveTextTarget({ presetId }),
+        ],
+        execute: async (target, resolved) => {
+          const slotMeta = target.preset?.providerRequestMetadata;
+          // No default wire: music providers share no request format.
+          const wireId =
+            typeof slotMeta?.musicWire === "string" ? slotMeta.musicWire : "";
+          const wire = wireId ? getMusicWire(wireId) : null;
+          if (!wire) {
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: wireId
+                ? `unknown music wire "${wireId}" — register it via registerMusicWire() or fix llm.toml providerRequestMetadata.musicWire`
+                : "no music wire configured — set llm.toml providerRequestMetadata.musicWire to a registered music wire",
+              provider: targetProvider(target),
+              retriable: false,
+            });
+          }
+          const result = await wire.compose(
+            configWithSignal(resolved.config, options),
+            {
+              model: targetModel(target),
+              prompt: input.prompt,
+              ...(input.lyrics ? { lyrics: input.lyrics } : {}),
+              ...(input.instrumental !== undefined
+                ? { instrumental: input.instrumental }
+                : {}),
+              ...(input.durationSeconds !== undefined
+                ? { durationSeconds: input.durationSeconds }
+                : {}),
+              ...(input.format ? { format: input.format } : {}),
+              // Per-call metadata overrides slot defaults, as for speech.
+              providerRequestMetadata: {
+                ...slotMeta,
+                ...input.providerRequestMetadata,
+              },
+            },
+            { profile: target.profile, preset: target.preset, mode: "music" },
+          );
+          return {
+            ...result,
+            model: targetModel(target),
+            provider: targetProvider(target),
+          };
+        },
+        resolveUsage: (r) => r.usage,
+      },
+      options,
+    );
+  }
+
   async function transcribeAudio(
     input: {
       presetId?: string;
@@ -881,6 +954,7 @@ export function createGateway(deps: GatewayDependencies) {
     embed,
     synthesizeSpeech,
     transcribeAudio,
+    composeMusic,
     generateImage,
     resolveSlot,
   };

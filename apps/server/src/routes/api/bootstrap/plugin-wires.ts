@@ -1,5 +1,6 @@
 import {
   registerImageWire,
+  registerMusicWire,
   registerSpeechWire,
   registerTranscriptionWire,
   type WireModuleShape,
@@ -37,6 +38,7 @@ export function registerNamespaced(
       method: "transcribe",
       register: registerTranscriptionWire,
     },
+    { wires: mod.music, method: "compose", register: registerMusicWire },
   ];
 
   for (const group of groups) {

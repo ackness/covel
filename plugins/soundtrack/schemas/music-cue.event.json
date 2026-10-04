@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mood"],
+  "properties": {
+    "mood": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "One of the moods this world lists for its music, written exactly as listed. `silence` stops the music."
+    }
+  }
+}

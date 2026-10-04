@@ -9,7 +9,6 @@ import {
   FolderOpen,
   ArrowRight,
   BookOpen,
-  Play,
   Search,
   type LucideIcon,
 } from "lucide-react";
@@ -17,14 +16,13 @@ import { Button } from "@/components/ui/button.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { WorldCard } from "@/components/world/world-card.js";
 import {
+  WorldContinueBanner,
   WorldRowItem,
-  WorldShowcase,
   WorldTileCard,
 } from "@/components/world/world-list-variants.js";
+import { WorldShowcase } from "@/components/world/world-showcase.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
-import { text } from "@/components/world/editor-helpers.js";
-import { worldVisual } from "@/lib/world-visuals.js";
-import { sessionContinueLabel } from "@/lib/session-display.js";
+import { matchesWorldQuery } from "@/components/world/editor-helpers.js";
 import { mostRecentSession } from "@/components/world/use-recent-sessions.js";
 
 export interface WorldListViewProps {
@@ -132,15 +130,9 @@ export function WorldListView(props: WorldListViewProps) {
   } = props;
   const { worldList } = useThemeLayout();
   const [query, setQuery] = useState("");
-  const needle = query.trim().toLowerCase();
-  const visibleWorlds = needle
-    ? worlds.filter((world) =>
-        [text(world.name), text(world.description), ...(world.tags ?? [])]
-          .join("\n")
-          .toLowerCase()
-          .includes(needle),
-      )
-    : worlds;
+  const visibleWorlds = worlds.filter((world) =>
+    matchesWorldQuery(world, query),
+  );
   const continueSession =
     worldList === "cards" && recentSessions && onResumeSession
       ? mostRecentSession(recentSessions)
@@ -240,43 +232,14 @@ export function WorldListView(props: WorldListViewProps) {
         </header>
 
         {/* World list — cover-led plates with the same action surface. */}
-        {continueSession && continueWorld && (
-          <section
-            aria-label={t("session.continueLatest")}
-            className="ui-world-continue mb-6 flex flex-wrap overflow-hidden rounded-(--radius-card) border border-border bg-card"
-          >
-            <img
-              src={worldVisual(continueWorld).image}
-              alt=""
-              aria-hidden="true"
-              width={1536}
-              height={1024}
-              className="h-44 min-w-0 flex-[1_1_22rem] object-cover"
-              draggable={false}
-            />
-            <div className="flex min-w-0 flex-[1_1_22rem] flex-col justify-center gap-2.5 px-6 py-5">
-              <span className="text-xs font-semibold text-(--accent-primary)">
-                {t("session.continueLatest")}
-              </span>
-              <h2 className="ui-title text-2xl leading-snug">
-                {text(continueWorld.name)}
-              </h2>
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => onResumeSession?.(continueSession)}
-                  disabled={enteringWorldId !== null}
-                  className="ui-btn ui-world-enter h-10 px-4"
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  {sessionContinueLabel(
-                    t,
-                    continueSession.completedPlayerTurns,
-                  )}
-                </button>
-              </div>
-            </div>
-          </section>
+        {continueSession && continueWorld && onResumeSession && (
+          <WorldContinueBanner
+            world={continueWorld}
+            recentSession={continueSession}
+            disabled={enteringWorldId !== null}
+            t={t}
+            onResume={onResumeSession}
+          />
         )}
 
         {worldList === "cards" && worlds.length > 0 && (

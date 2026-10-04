@@ -124,6 +124,7 @@ function manifestOf(record: WorldRecord): Entry {
     ...keep("pluginSettings"),
     ...keep("characterSchema"),
     ...keep("defaultViewMode"),
+    ...keep("themeMusic"),
     ...(dimensions && Object.keys(dimensions).length
       ? // A translated world holds every language; a revision works on one.
         { dimensions: resolveWorldDimensionsLocale(dimensions, locale) }
