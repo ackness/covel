@@ -1,0 +1,110 @@
+{
+  "images": [
+    {
+      "id": "ebb-tide-landing",
+      "name": "The Ebb-Tide Landing",
+      "description": "A wet pier meets waterside steps, with salt-worn ruins disappearing into grey-white fog.",
+      "background": "Mistport's lower tidal district floods at high tide and opens briefly during the ebb. Its exposed ruins can change with each tide, making timing and a way out more trustworthy than an old map.",
+      "storyContext": "This is an atmospheric example of an ebb-tide approach, not a fixed layout for the next low tide. It introduces limited visibility, changing waterlines and the importance of retreat.",
+      "location": "Waterside passage between Midharbor and the lower tidal district",
+      "visualNotes": [
+        "Ropes, shells and wet boards remain sharp while distance vanishes in fog.",
+        "Steps reach nearby ruined walls without revealing a city panorama.",
+        "The hanging lamp has no open flame."
+      ]
+    },
+    {
+      "id": "su-yao-appraisal",
+      "name": "The Appraisal",
+      "description": "Atmospheric vignette: Su Yao examines an unidentified fragment without revealing its powers or the central mystery.",
+      "background": "Su Yao is a qualified tide-reader and assistant to Guildmaster Qi. Relics may have unpredictable effects, so appraisal makes discoveries, records and corroborating evidence central to investigation.",
+      "storyContext": "The still depicts an ordinary appraisal. The fragment has no assigned plot identity and should not be treated as a known key piece or a confirmed safe object.",
+      "location": "Tide-Reader Guild · Appraisal workbench",
+      "visualNotes": [
+        "Her face, pinned hair, high collar and circular mirror match the original portrait.",
+        "Cool tide-stone light illuminates the desk without flame or spell beams.",
+        "Notes, measuring tools and an unnamed fragment support the investigative theme."
+      ]
+    },
+    {
+      "id": "lin-yuanzhou",
+      "name": "Lin Yuanzhou",
+      "description": "A young apprentice holds a cold-light fog lamp, his dark layered clothing blending into the wet harbor, with faint markings at the wrist.",
+      "background": "Lin has just passed the Tide-Appraisers’ Guild preliminary exam. Cautious but curious, he is an important peer for a player who enters as an apprentice.",
+      "storyContext": "Supports guild introductions and expedition preparation. The lamp recalls the Lower Tide’s need for dim light and silence without revealing his unspoken secrets.",
+      "visualNotes": [
+        "His lamp emits cold light; warm harbor lights in the distance do not make it a torch."
+      ]
+    },
+    {
+      "id": "su-yao",
+      "name": "Su Yao",
+      "description": "Su Yao wears dark guild clothing with fine gold details and holds a round appraisal mirror, her expression attentive and restrained.",
+      "background": "Su Yao is a qualified tide-appraiser and Old Qi’s assistant. Meticulous in her work, she connects the player with guild leadership and served as examiner if the player chose an apprentice background.",
+      "storyContext": "After Qi disappears, she seeks the player on the main pier with half a letter. The portrait introduces her role and opening purpose; any appraisal result must come from the story.",
+      "visualNotes": [
+        "The round mirror is a professional tool; the image provides no reading that establishes a relic’s function."
+      ]
+    },
+    {
+      "id": "iron-meg",
+      "name": "Iron Meg",
+      "description": "Iron Meg’s tousled short hair, jaw scar and dark leather clothing form a stern silhouette; her left forearm shows translucent grey mist.",
+      "background": "In her thirties, Iron Meg is the Saltfang Society’s second-in-command. A relic accident caused fog-rot below her left elbow. Stern but reliable, she forbids selling dangerous unappraised relics to unsuspecting civilians.",
+      "storyContext": "Introduces underground order and the cost of fog-rot. Her trust, trading terms and later cooperation with the player must develop through play.",
+      "visualNotes": [
+        "Fog-rot affects her anatomical left arm, crossing the waist on the viewer’s right; the grey mist is not ice or lightning."
+      ]
+    },
+    {
+      "id": "chen-yuanshan",
+      "name": "Chen Yuanshan",
+      "description": "A grey-haired elder in an embroidered dark robe holds up an angular fragment, combining a slight smile with an appraising gaze.",
+      "background": "Over sixty, Chen chairs Mistport’s council and promotes the Tide Closure Edict restricting civilian access to the Lower Tide. Council control of the Upper City and legal relic trade gives his orders direct power over expedition access.",
+      "storyContext": "Introduces council authority, permits and the pressure of closure. The fragment’s origin, purpose and connection to his search are not established by this image.",
+      "visualNotes": [
+        "The angular object is described visually without assigning it a quest number or a place in a key."
+      ]
+    },
+    {
+      "id": "guildmaster-qi",
+      "name": "Old Qi",
+      "description": "White-haired and bearded, Old Qi holds a heavy book with a gentle expression and faint grey translucence around his hands.",
+      "background": "Old Qi leads the Tide-Appraisers’ Guild and cares more for research than politics. At the opening he has vanished after leaving a letter and entering the Lower Tide during a supposedly impassable high tide.",
+      "storyContext": "Supports his dossier, disappearance clues and guild background. This portrait does not mean the player has found him or explain how he entered the flooded ruins.",
+      "visualNotes": [
+        "The book and localized fog-rot belong to his depiction; their contents and cause are not revealed."
+      ]
+    },
+    {
+      "id": "xiao-shuang",
+      "name": "Frost",
+      "description": "A pale-haired girl in a covering robe tilts her head and raises a hand near her ear, her fingertips fading into light mist.",
+      "background": "Known as Frost, she is a young oracle of the Church in the Mist, around fifteen or sixteen. She claims to hear the mist and has accurately predicted tides and ruin locations, but the source remains unresolved.",
+      "storyContext": "Introduces the church and the question of whispers in the mist. Her listening pose proves neither a conscious mist nor an act of spellcasting.",
+      "visualNotes": [
+        "Only local mist and the listening pose are recorded; appearance adds no power ranking or family relationship."
+      ]
+    },
+    {
+      "id": "grey-falcon",
+      "name": "Grey Falcon",
+      "description": "A short-haired man wears a dark coat with an insignia and holds a heavily shielded metal fog lamp with only a narrow slit of cold light.",
+      "background": "Grey Falcon commands Chen’s private expedition team and enforces the Tide Closure Edict. Quiet and efficient, he handles cordons, searches and tracking.",
+      "storyContext": "Shows the practical pressure of council orders around the harbor and ruin entrances. His opening pursuit intersects Qi’s disappearance, without settling whether he later remains obedient.",
+      "visualNotes": [
+        "The lamp is distinguished by shielding and dim cold light, not an open flame."
+      ]
+    },
+    {
+      "id": "world-cover",
+      "name": "The Harbor in Perpetual Mist",
+      "description": "Wet stone quays and exposed ruins lead into a nearby harbor; cranes, boats and cliffside buildings recede into grey fog, dotted with warm lights.",
+      "background": "Mistport rises along a cliff through the Upper City, Midharbor and Lower Tide. Relic trade sustains it; ebb exposes ruins, high tide floods them, and each rift tide changes their structure.",
+      "storyContext": "This promotional overview uses layered buildings to convey a vertical city. Exploration still obeys visibility of no more than fifty paces in the fog; the cover supplies no reusable ruin map.",
+      "visualNotes": [
+        "Warm city lamps differ from cold tide-stone exploration lamps; the broken arch is not assigned to the Bone Arch of a particular deep ebb."
+      ]
+    }
+  ]
+}

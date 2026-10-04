@@ -1,0 +1,270 @@
+{
+  "images": [
+    {
+      "id": "literature-clubroom",
+      "name": "Spring in the Literature Club",
+      "description": "Manuscripts, old club journals and a sea breeze await the next editing session on the old clubhouse's third floor.",
+      "background": "The Literature Club keeps old journals and handwritten drafts in a third-floor room of the aging clubhouse. With too few members, it faces a merger review; its festival anthology, Spring Mint, carries the hope of remaining together.",
+      "storyContext": "The room supports proofreading, interviews, shared work and quiet pauses. The illustration does not decide whether the anthology succeeds or the club keeps its room.",
+      "location": "Haruka Academy · Third-floor Literature Club",
+      "visualNotes": [
+        "A worn table, blank manuscript sheets and a blue volume show the room's purpose.",
+        "Rooftops, cherry blossoms and the sea preserve the coastal spring setting.",
+        "The empty room's layout is an artistic interpretation, best shown uncropped in a gallery."
+      ]
+    },
+    {
+      "id": "mio-manuscript-afternoon",
+      "name": "An Afternoon of Proofreading",
+      "description": "Atmospheric vignette: Mio sorts festival anthology drafts, leaving the player's response and relationship open.",
+      "background": "Mio is both class representative of 2-B and Literature Club president, accustomed to considering others first. Preparing the festival anthology gives her reason to share small tasks and remember work done together.",
+      "storyContext": "This is a possible shared proofreading moment. The empty chair leaves a place for the player without assigning their appearance, a romance or a prior promise.",
+      "location": "Haruka Academy · Literature Club worktable",
+      "visualNotes": [
+        "Mio retains the portrait's hairstyle, violet eyes and navy sailor uniform.",
+        "Offered pages, a pencil and an empty chair suggest an invitation to collaborate.",
+        "Window light, blossoms and sea maintain a wholesome everyday mood."
+      ]
+    },
+    {
+      "id": "kamishiro-mio",
+      "name": "Mio Kamishiro",
+      "description": "Mio holds books and papers against a dark sailor uniform, her shoulder-length black hair framing a gentle smile.",
+      "background": "Mio is Class 2-B’s representative and Literature Club president. With the club under merger review, she carries responsibility for the Spring Mint festival anthology and the clubroom’s survival.",
+      "storyContext": "For first introductions, class arrangements and club conversations. Her courtesy and smile do not establish an intimate relationship.",
+      "visualNotes": [
+        "Books and manuscript pages identify her role; illegible pages are not a completed anthology."
+      ]
+    },
+    {
+      "id": "asakura-rin",
+      "name": "Rin Asakura",
+      "description": "Rin winks and smiles, with a flower clip in her reddish bob and a camera and interview notebook in hand.",
+      "background": "Rin is a Class 2-B student and newspaper reporter. Interviews let her approach people; the festival’s rumor fact-check wall also makes the limits of publication part of her work.",
+      "storyContext": "Her playful default portrait suits interview invitations and everyday conversation. The smile does not mean she already knows the player’s secrets.",
+      "visualNotes": [
+        "Camera, notebook, armband and flower clip preserve her identity."
+      ]
+    },
+    {
+      "id": "shiina-kaho",
+      "name": "Kaho Shiina",
+      "description": "Kaho winks with an acoustic guitar, long light-brown hair falling beside a cream cardigan and small hair ornaments.",
+      "background": "Kaho is Class 2-A’s Light Music Club guitarist and is writing an unnamed song. Direct and seemingly casual, she takes the stage and those who listen to her practice seriously.",
+      "storyContext": "Introduces rehearsals, stage preparation and after-school invitations. Neither the guitar nor the smile establishes a finished song or an agreed outing.",
+      "visualNotes": [
+        "The acoustic guitar, cardigan and hair ornaments define the default design."
+      ]
+    },
+    {
+      "id": "shiraishi-yuma",
+      "name": "Yuma Shiraishi",
+      "description": "Bespectacled Yuma wears a tidy uniform and holds a clipboard with a quiet, serious expression.",
+      "background": "Yuma is a Class 2-C student and council vice president, responsible for club registration, budgets and festival procedures. He often expresses care through reminders and rules.",
+      "storyContext": "For club registration and council business. The clipboard establishes no review result, and his serious expression does not imply hostility toward the player.",
+      "visualNotes": [
+        "Glasses, striped tie and clipboard are his main identifying details."
+      ]
+    },
+    {
+      "id": "mikoeda-haruka",
+      "name": "Haruka Mikoeda",
+      "description": "Haruka holds a blue folder, her long hair partly tied back and a council badge on her uniform, with a composed expression.",
+      "background": "Haruka is the third-year student council president, coordinating festival resources and procedures. Gentle and precise, she brings disagreements back to practical arrangements.",
+      "storyContext": "For budgeting, room allocation and festival coordination. Her authored role is supportive; the portrait adds no romance route or private promise.",
+      "visualNotes": [
+        "Partly tied hair, council badge and blue folder preserve the original portrait."
+      ]
+    },
+    {
+      "id": "onodera-chihiro",
+      "name": "Chihiro Onodera",
+      "description": "Chihiro wears her hair in a low bun and a beige cardigan, holding up chalk while supporting an open book.",
+      "background": "Chihiro is Class 2-B’s homeroom and language teacher and the Literature Club’s former adviser. She respects student autonomy and understands the pressures on small clubs.",
+      "storyContext": "For the transfer student’s introduction, lessons and gentle guidance. She offers support while students make their own club choices.",
+      "visualNotes": [
+        "Her adult face, chalk and book establish her role as a teacher."
+      ]
+    },
+    {
+      "id": "morikawa-souta",
+      "name": "Souta Morikawa",
+      "description": "Souta raises a pair of drumsticks, smiling broadly in a rolled-sleeve white shirt and loosened tie.",
+      "background": "Souta is the Light Music Club drummer and Kaho’s bandmate. Outgoing and quick to speak, he livens up a room but can cause misunderstandings by misreading silence.",
+      "storyContext": "For ensemble scenes and stage preparation. His bandmate relationship follows the source; his smile adds no rivalry or romance.",
+      "visualNotes": [
+        "Paired drumsticks, short hair and rolled sleeves identify the drummer."
+      ]
+    },
+    {
+      "id": "toujou-akane",
+      "name": "Akane Toujou",
+      "description": "Akane has long straight dark hair and holds a blue hardback with a purple floral detail visible beside it, her gaze quiet.",
+      "background": "Akane is the third-year library committee chair and a regular at Umineko Bookstore. She values old publications and club memories, expressing care through seats, books and quiet company.",
+      "storyContext": "She enters the story naturally when the player visits the library. The portrait does not presume a reserved seat for the player or a disclosure of family history.",
+      "visualNotes": [
+        "The book and flower are visual details; the source does not establish the flower’s origin, giver or symbolism."
+      ]
+    },
+    {
+      "id": "asakura-rin-uniform-serious",
+      "name": "Rin Asakura · Listening Seriously",
+      "description": "Rin opens both eyes and softens her playful smile while keeping the camera and notebook.",
+      "background": "Rin is a Class 2-B student and newspaper reporter. Interviews let her approach people; the festival’s rumor fact-check wall also makes the limits of publication part of her work.",
+      "storyContext": "Suits serious listening and discussion of reporting boundaries. The expression alone does not establish that a story was withheld or published.",
+      "visualNotes": [
+        "Camera, notebook, armband and flower clip preserve her identity."
+      ]
+    },
+    {
+      "id": "shiina-kaho-uniform-concerned",
+      "name": "Kaho Shiina · A Concerned Look",
+      "description": "Kaho’s blue eyes are open and her smile subdued, with the same cardigan and guitar.",
+      "background": "Kaho is Class 2-A’s Light Music Club guitarist and is writing an unnamed song. Direct and seemingly casual, she takes the stage and those who listen to her practice seriously.",
+      "storyContext": "Suits rehearsal pressure or hesitation; the current story must supply the reason for concern.",
+      "visualNotes": [
+        "The acoustic guitar, cardigan and hair ornaments define the default design."
+      ]
+    },
+    {
+      "id": "onodera-chihiro-casual-gentle",
+      "name": "Chihiro Onodera · Casual Clothes and a Book",
+      "description": "Chihiro wears a pale green coat and long skirt with a brown shoulder bag, still carrying an open book.",
+      "background": "Chihiro is Class 2-B’s homeroom and language teacher and the Literature Club’s former adviser. She respects student autonomy and understands the pressures on small clubs.",
+      "storyContext": "For a casual appearance supported by the story. The outfit specifies no off-campus meeting, date or family event.",
+      "visualNotes": [
+        "The adult teacher’s face and low bun remain; the casual version shows a shoulder bag and open book."
+      ]
+    },
+    {
+      "id": "morikawa-souta-rehearsal-focused",
+      "name": "Souta Morikawa · Ready to Rehearse",
+      "description": "Souta wears a dark T-shirt beneath an open pale overshirt, holding the same drumsticks with a more restrained expression.",
+      "background": "Souta is the Light Music Club drummer and Kaho’s bandmate. Outgoing and quick to speak, he livens up a room but can cause misunderstandings by misreading silence.",
+      "storyContext": "For clothing and mood changes during rehearsals. It establishes no rehearsal result or completed festival performance.",
+      "visualNotes": [
+        "Drumsticks and hairstyle preserve identity; the dark T-shirt and open overshirt distinguish the rehearsal outfit."
+      ]
+    },
+    {
+      "id": "classroom-2b-day",
+      "name": "Class 2-B · Day",
+      "description": "Sea-facing windows, white curtains and rows of desks fill the room; notebooks lie in the foreground and the chalkboard is on the right. Soft daylight illuminates the space.",
+      "background": "Class 2-B is the transfer student’s daily base, with the opening seat at the back beside the window. Duties, lunch, study and the Sea Breeze Post festival stall connect classmates.",
+      "storyContext": "Daylight suits before-class, break-time and classroom-duty scenes; the notebooks are not automatically assigned to a character.",
+      "location": "Class 2-B",
+      "visualNotes": [
+        "Window-side desks, the right-hand chalkboard and foreground notebooks retain their positions in both views."
+      ]
+    },
+    {
+      "id": "classroom-2b-night",
+      "name": "Class 2-B · Night",
+      "description": "Sea-facing windows, white curtains and rows of desks fill the room; notebooks lie in the foreground and the chalkboard is on the right. Warm lamps meet blue-violet night light.",
+      "background": "Class 2-B is the transfer student’s daily base, with the opening seat at the back beside the window. Duties, lunch, study and the Sea Breeze Post festival stall connect classmates.",
+      "storyContext": "The night view keeps the same room with interior lights and a darkened bay. Any after-hours presence needs a story reason and time; lit windows establish no date.",
+      "location": "Class 2-B",
+      "visualNotes": [
+        "Window-side desks, the right-hand chalkboard and foreground notebooks retain their positions in both views."
+      ]
+    },
+    {
+      "id": "club-building-day",
+      "name": "Club Building · Day",
+      "description": "A three-story wooden club building stands by the sea, with a tiled roof, ivy on the right, gravel outside and a cherry tree. Soft daylight illuminates the space.",
+      "background": "The Literature Club keeps its publications and manuscripts on the third floor. Music rehearsals, newspaper activity and council business overlap here, while room allocation and merger review make it central to festival preparations.",
+      "storyContext": "The day view suits visits around club activities. The exterior does not assign a specific club to every window.",
+      "location": "Club Building",
+      "visualNotes": [
+        "Both views preserve three floors, right-side ivy and the sea on the left."
+      ]
+    },
+    {
+      "id": "club-building-night",
+      "name": "Club Building · Night",
+      "description": "A three-story wooden club building stands by the sea, with a tiled roof, ivy on the right, gravel outside and a cherry tree. Warm lamps meet blue-violet night light.",
+      "background": "The Literature Club keeps its publications and manuscripts on the third floor. Music rehearsals, newspaper activity and council business overlap here, while room allocation and merger review make it central to festival preparations.",
+      "storyContext": "Lit windows overlook the bay at night. They provide atmosphere without confirming supernatural claims in rumors about lights after six.",
+      "location": "Club Building",
+      "visualNotes": [
+        "Both views preserve three floors, right-side ivy and the sea on the left."
+      ]
+    },
+    {
+      "id": "library-day",
+      "name": "Library · Day",
+      "description": "The tall library has an upper mezzanine, a long desk beside sea-facing windows on the right and periodicals stacked on low shelves. Soft daylight illuminates the space.",
+      "background": "The library holds old festival publications and is where library committee chair Akane naturally enters the story. Publications, study and quiet company shape conversations here.",
+      "storyContext": "The day view suits borrowing books, consulting publications and studying. Empty seats are not already reserved for the player or another character.",
+      "location": "Library",
+      "visualNotes": [
+        "Mezzanine rails, shelves, the right-side desk and stacks keep the same layout."
+      ]
+    },
+    {
+      "id": "library-night",
+      "name": "Library · Night",
+      "description": "The tall library has an upper mezzanine, a long desk beside sea-facing windows on the right and periodicals stacked on low shelves. Warm lamps meet blue-violet night light.",
+      "background": "The library holds old festival publications and is where library committee chair Akane naturally enters the story. Publications, study and quiet company shape conversations here.",
+      "storyContext": "Desk and ceiling lamps light the night view above a dark bay. Entry and remaining after hours depend on the current schedule, not implied permission from the illustration.",
+      "location": "Library",
+      "visualNotes": [
+        "Mezzanine rails, shelves, the right-side desk and stacks keep the same layout."
+      ]
+    },
+    {
+      "id": "sakurazaka-seawall-day",
+      "name": "Sakurazaka Seawall · Day",
+      "description": "Cherry trees canopy the slope toward the seawall, with the school fence and gate on the left and a white vending machine on the right. Soft daylight illuminates the space.",
+      "background": "The seawall connects the route home with pauses by the water, shared walks, waiting and conversations about lyrics. The town’s few after-school destinations make encounters and rumors likely to intersect here.",
+      "storyContext": "The day view suits a shared walk or brief pause after school. It is clear weather, not an already-established rainy-day event.",
+      "location": "Sakurazaka Seawall",
+      "visualNotes": [
+        "Left fence, right vending machine, seawall and paving keep their positions."
+      ]
+    },
+    {
+      "id": "sakurazaka-seawall-night",
+      "name": "Sakurazaka Seawall · Night",
+      "description": "Cherry trees canopy the slope toward the seawall, with the school fence and gate on the left and a white vending machine on the right. Warm lamps meet blue-violet night light.",
+      "background": "The seawall connects the route home with pauses by the water, shared walks, waiting and conversations about lyrics. The town’s few after-school destinations make encounters and rumors likely to intersect here.",
+      "storyContext": "Streetlight and vending-machine light illuminate a dry slope at night. Rumors about drinks revealing feelings remain rumors, not a fact proven by the image.",
+      "location": "Sakurazaka Seawall",
+      "visualNotes": [
+        "Left fence, right vending machine, seawall and paving keep their positions."
+      ]
+    },
+    {
+      "id": "shopping-street-day",
+      "name": "Seireki Town Shopping Street · Day",
+      "description": "Books and flowers line the left side; tables and guitars appear in windows on the right, with colorful awnings, bicycles and the sea beyond. Soft daylight illuminates the space.",
+      "background": "Two short shopping streets near Seireki Town’s station serve after-school life with books, food, flowers and instruments. Merchants sponsor the festival’s closing Evening Wind Lighting and supply club materials.",
+      "storyContext": "The day view suits shopping for supplies, browsing books and meeting others. Storefronts convey the district without inventing names from indistinct signs.",
+      "location": "Seireki Town Shopping Street",
+      "visualNotes": [
+        "Books and flowers remain on the left, food and instruments on the right, with the crossing and sea aligned."
+      ]
+    },
+    {
+      "id": "shopping-street-night",
+      "name": "Seireki Town Shopping Street · Night",
+      "description": "Books and flowers line the left side; tables and guitars appear in windows on the right, with colorful awnings, bicycles and the sea beyond. Warm lamps meet blue-violet night light.",
+      "background": "Two short shopping streets near Seireki Town’s station serve after-school life with books, food, flowers and instruments. Merchants sponsor the festival’s closing Evening Wind Lighting and supply club materials.",
+      "storyContext": "The night view keeps the same storefronts under changed light and sky. Lit windows establish neither the closing festival ceremony nor fixed hours for every shop.",
+      "location": "Seireki Town Shopping Street",
+      "visualNotes": [
+        "Books and flowers remain on the left, food and instruments on the right, with the crossing and sea aligned."
+      ]
+    },
+    {
+      "id": "world-cover",
+      "name": "Sea Breeze on Campus",
+      "description": "Sunlight falls across a slope beside the school building, with cherry blossoms, green trees, campus roofs and the bay beyond the railing.",
+      "background": "Haruka Academy stands on a gentle slope in coastal Seireki Town, its classrooms facing the harbor. With twenty-one days until the spring festival, a transfer student begins a new daily life in Class 2-B.",
+      "storyContext": "For the homepage and world introduction, establishing the coastal campus, spring clubs and everyday relationships. The empty scene establishes no chosen club or romance.",
+      "visualNotes": [
+        "This campus overview is distinct from the five authored scene anchors; distant buildings receive no invented story-location names."
+      ]
+    }
+  ]
+}

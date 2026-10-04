@@ -1,0 +1,188 @@
+[
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-brannoc-hale",
+    "displayName": "布兰诺克・黑尔",
+    "avatar": {
+      "id": "11fae9afa7a6d159c2c7b0fa43bf5679b8f6bedcec4ab5b0f6f0495bb8f2cb16",
+      "mime": "image/png",
+      "size": 2158550
+    },
+    "sprite": {
+      "id": "11fae9afa7a6d159c2c7b0fa43bf5679b8f6bedcec4ab5b0f6f0495bb8f2cb16",
+      "mime": "image/png",
+      "size": 2158550
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "11fae9afa7a6d159c2c7b0fa43bf5679b8f6bedcec4ab5b0f6f0495bb8f2cb16",
+            "mime": "image/png",
+            "size": 2158550
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-sister-wren",
+    "displayName": "雷恩修女",
+    "avatar": {
+      "id": "7469972f4fd417f74c78d0513d0bb406bf74153487899c18ba7eb1a8a7084643",
+      "mime": "image/png",
+      "size": 1965590
+    },
+    "sprite": {
+      "id": "7469972f4fd417f74c78d0513d0bb406bf74153487899c18ba7eb1a8a7084643",
+      "mime": "image/png",
+      "size": 1965590
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "7469972f4fd417f74c78d0513d0bb406bf74153487899c18ba7eb1a8a7084643",
+            "mime": "image/png",
+            "size": 1965590
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-mirelle-voss",
+    "displayName": "梅瑞尔・沃斯",
+    "avatar": {
+      "id": "a33b02ef4ab1e1082f23c7a0d70bab9c0624ff47c5d9d477688c3a19de0e9d12",
+      "mime": "image/png",
+      "size": 2044900
+    },
+    "sprite": {
+      "id": "a33b02ef4ab1e1082f23c7a0d70bab9c0624ff47c5d9d477688c3a19de0e9d12",
+      "mime": "image/png",
+      "size": 2044900
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "a33b02ef4ab1e1082f23c7a0d70bab9c0624ff47c5d9d477688c3a19de0e9d12",
+            "mime": "image/png",
+            "size": 2044900
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-aldous-penn",
+    "displayName": "阿尔多斯・潘恩",
+    "avatar": {
+      "id": "c76a41d281c33a5a6b577871eeec5c5df0cb3bf1cffbaff6b72d4374bc17a6bf",
+      "mime": "image/png",
+      "size": 1736980
+    },
+    "sprite": {
+      "id": "c76a41d281c33a5a6b577871eeec5c5df0cb3bf1cffbaff6b72d4374bc17a6bf",
+      "mime": "image/png",
+      "size": 1736980
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "c76a41d281c33a5a6b577871eeec5c5df0cb3bf1cffbaff6b72d4374bc17a6bf",
+            "mime": "image/png",
+            "size": 1736980
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-keeper-ysolde",
+    "displayName": "守灯人伊索德",
+    "avatar": {
+      "id": "426f7e6a5145d0a6b0490bf796a64a8201f84d9d84dacb24ee00e0ffebed14da",
+      "mime": "image/png",
+      "size": 2180053
+    },
+    "sprite": {
+      "id": "426f7e6a5145d0a6b0490bf796a64a8201f84d9d84dacb24ee00e0ffebed14da",
+      "mime": "image/png",
+      "size": 2180053
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "426f7e6a5145d0a6b0490bf796a64a8201f84d9d84dacb24ee00e0ffebed14da",
+            "mime": "image/png",
+            "size": 2180053
+          }
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "npc-corvin-ashe",
+    "displayName": "科尔文・艾什",
+    "avatar": {
+      "id": "186ec535e40c11a3694c8648b032aa13f5e54cfdec7c71def8f5473a12cec4a4",
+      "mime": "image/png",
+      "size": 1720154
+    },
+    "sprite": {
+      "id": "186ec535e40c11a3694c8648b032aa13f5e54cfdec7c71def8f5473a12cec4a4",
+      "mime": "image/png",
+      "size": 1720154
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "186ec535e40c11a3694c8648b032aa13f5e54cfdec7c71def8f5473a12cec4a4",
+            "mime": "image/png",
+            "size": 1720154
+          }
+        }
+      ]
+    }
+  }
+]

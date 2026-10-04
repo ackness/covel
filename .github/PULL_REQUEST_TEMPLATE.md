@@ -52,3 +52,5 @@
 - [ ] Guides and both READMEs updated; pages with an `.en.md` sibling changed together / 已更新相关指南和中英文 README；有 `.en.md` 的页面两份同步修改
 - [ ] `docs/CHANGELOG.md` has an entry under `[Unreleased]` for user-visible changes / 用户可见的改动已写入 `docs/CHANGELOG.md` 的 `[Unreleased]`
 - [ ] `AGENTS.md` updated if packages, root scripts, or conventions changed / 包结构、根脚本或约定有变化时已更新 `AGENTS.md`
+
+<!-- New assets: 3 MiB per file; worlds/*/media/gallery/*.png originals: 4 MiB. Prefer WebP for display. -->

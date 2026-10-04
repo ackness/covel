@@ -115,6 +115,7 @@ tmp/
 # World character portraits and scene backdrops are tracked assets (generated once, reused).
 !worlds/**/media/portraits/*.png
 !worlds/**/media/scenes/*.png
+!worlds/**/media/gallery/*.png
 .playwright-mcp/
 # Local git worktrees for parallel agents
 .worktrees/
