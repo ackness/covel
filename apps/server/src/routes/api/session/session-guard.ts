@@ -36,6 +36,7 @@
  *
  * CORS remains a browser policy only — it is never relied on for authz.
  */
+import { repairSessionDimensionLocale } from "./dimension-locale-repair.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
 import type { DataStore, SessionRecord } from "@covel/store";
@@ -360,6 +361,15 @@ export async function resolveSessionById(
   const denied = checkSessionOwner(c, session);
   if (denied) {
     return { ok: false, response: denied };
+  }
+  try {
+    await repairSessionDimensionLocale(store, session);
+  } catch (error) {
+    // The route then reports the records it cannot read, as it did before.
+    console.error(
+      `[session] ${sessionId}: could not resolve locale maps in dimension records`,
+      error,
+    );
   }
   if (c.req.method === "GET" || c.req.method === "HEAD") {
     c.set("sessionReadIncarnation", {

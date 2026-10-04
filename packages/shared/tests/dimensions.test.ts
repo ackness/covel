@@ -6,6 +6,7 @@ import {
   dimensionSnapshotFromRecords,
   dimensionValueSchema,
   dimensionRecordSchema,
+  resolveDimensionRecordLocale,
   materializeDimensionRecords,
   resolveDimensionDefinitionLocale,
   projectDimensionSnapshot,
@@ -319,6 +320,69 @@ describe("public dimension snapshots and explicit localization", () => {
     expect(record("城墙", "城墙")).toBe(true);
     expect(record(map, "城墙")).toBe(false);
     expect(record("城墙", map)).toBe(false);
+  });
+
+  it("resolves a record that stored locale maps to the session's language", () => {
+    const stored = {
+      definition: {
+        name: { "zh-CN": "经济", "en-US": "Economy" },
+        schema: {
+          type: "object",
+          properties: {
+            currencies: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string", "x-i18n": true },
+                  symbol: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        initialValue: {
+          currencies: [
+            { name: { "zh-CN": "潮币", "en-US": "Tide Coin" }, symbol: "₮" },
+          ],
+        },
+        updateRule: {
+          "zh-CN": "交易后更新。",
+          "en-US": "Update after a trade.",
+        },
+      },
+      value: {
+        currencies: [
+          { name: { "zh-CN": "潮币", "en-US": "Tide Coin" }, symbol: "₮" },
+          { name: "盐牙筹" },
+        ],
+      },
+      version: 3,
+      lastTrackedSource: { resultId: "result-1", turnNumber: 2 },
+    };
+    expect(dimensionRecordSchema.safeParse(stored).success).toBe(false);
+
+    const resolved = resolveDimensionRecordLocale(stored, "zh-CN");
+    expect(resolved).toMatchObject({
+      // Labels follow the interface language and keep their maps.
+      definition: {
+        name: { "zh-CN": "经济", "en-US": "Economy" },
+        initialValue: { currencies: [{ name: "潮币", symbol: "₮" }] },
+        updateRule: "交易后更新。",
+      },
+      value: {
+        currencies: [{ name: "潮币", symbol: "₮" }, { name: "盐牙筹" }],
+      },
+      version: 3,
+      lastTrackedSource: { resultId: "result-1", turnNumber: 2 },
+    });
+    expect(resolveDimensionRecordLocale(stored, "en-US")?.value).toEqual({
+      currencies: [{ name: "Tide Coin", symbol: "₮" }, { name: "盐牙筹" }],
+    });
+    // A record that is damaged in another way is not made up.
+    expect(
+      resolveDimensionRecordLocale({ ...stored, version: 0 }, "zh-CN"),
+    ).toBeUndefined();
   });
 
   it("names the translation and its length when a localized text is too long", () => {
