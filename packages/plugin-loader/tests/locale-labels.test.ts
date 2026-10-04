@@ -92,6 +92,48 @@ PLUGIN.md:
     expect(await validatePluginLabels(dir)).toEqual([]);
   });
 
+  it("translates the author's message and link labels, not the name", async () => {
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.md"),
+      PLUGIN.replace(
+        "provides:",
+        `author:
+  name: Jane Doe
+  about: I make small tools.
+  links:
+    - label: Community
+      url: https://example.com/community
+provides:`,
+      ),
+    );
+    await labels(
+      "zh.yaml",
+      `
+PLUGIN.md:
+  author:
+    name: 简
+    about: 我做一些小工具。
+    links:
+      - label: 社区
+`,
+    );
+
+    const { plugin } = (await loadPluginDefinition(discovery()))
+      .packageManifest;
+    // A name is shown as written: the label file does not change it.
+    expect(plugin.author).toEqual({
+      name: "Jane Doe",
+      about: { en: "I make small tools.", zh: "我做一些小工具。" },
+      links: [
+        {
+          label: { en: "Community", zh: "社区" },
+          url: "https://example.com/community",
+        },
+      ],
+    });
+    expect(await validatePluginLabels(dir)).toEqual([]);
+  });
+
   it("gives the same labels to every session language and keeps prompts apart", async () => {
     await fs.writeFile(
       path.join(dir, "PLUGIN.zh.md"),

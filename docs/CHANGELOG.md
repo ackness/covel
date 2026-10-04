@@ -12,10 +12,15 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **A world list of any length.** The strip of covers in the `showcase` world list stays one row: what does not fit scrolls with a faded edge, steps to either side, and the arrow keys; the selected world stays in view; "All worlds" opens a searchable grid.
 - Lantern Barrow now ships six full-body character portraits and a dedicated world-selection cover. Emberback adds portraits for Priya Nair and Eli Varga. The four active worlds include a first gallery asset collection with localized introductions, setting background, source references and clearly identified illustrative scenes; gallery navigation is not implemented yet.
 - Gallery descriptions now also cover 35 reviewed existing portraits, expression and outfit variants, day/night scenes and world covers. Each includes Chinese and English descriptions grounded in the original setting, with visual observations separated from story facts; the existing image files are preserved.
+- **Credits for plugins, worlds and collections.** `PLUGIN.md`, `world.yaml` and `covel-collection.yaml` take the same optional fields: `author` (`name`, `url`, a short `about` message, and up to six labelled `links`), `license` and `homepage`. World cards show the author and version; the world page, the session preparation screen and the installed-plugin list show the full credits, and an install preview shows the author's name. The play view does not show them. `about` and link labels are translated like other labels (`locales/<locale>.yaml`, `world.<locale>.yaml`); the author's name and the license are shown as written. Fields and limits: `docs/reference/plugins.md`.
+- **A warning before a third-party link opens.** Links in credits are `https` only. A click shows the full address and its host and says the link comes from the package author, not from Covel; it opens after the player confirms.
+- **Versions on world cards and bundled plugins.** A world's `version` now reaches its cards (`metadata.packageInfo`), and every bundled plugin states its `version`, `author` and `license`. `pnpm validate:plugin` fails when a plugin's `PLUGIN.md` and `package.json` state different versions.
 
 ### Changed
 
 - **Panel tabs that do not fit.** With labelled tabs (`panelTabs: "bar"`) the context panel no longer shows a scrollbar under a cut-off row. The cut-off side fades, the mouse wheel moves the row, the selected tab stays in the middle, and a button at the end lists every panel with its full name.
+- **Existing sessions run plugin setup once more.** The bundled plugins had no `version` and counted as `0.0.0`; setup completion is recorded per version, so each setup runtime runs again on the next turn of an existing session and skips work that is done. `pregame` no longer repeats its welcome in a session that is already playing. A session whose world changed its dimension definitions after the session began can fail this rerun; use the setup recovery control in the plugin panel, or start a new session.
+- `GithubPluginPreview` and the collection preview carry `author` (a name or `null`).
 
 ## [0.0.46] - 2026-10-04
 

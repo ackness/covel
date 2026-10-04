@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import {
   githubPluginPreviewSchema,
+  packageAuthorSchema,
   type GithubPluginPreview,
 } from "@covel/shared";
 import { httpError, type ExtractedEntry } from "./shared.js";
@@ -116,6 +117,7 @@ export function inspectBundle(
     id: pluginId,
     version: pkg.version ?? null,
     description: description.slice(0, 1000),
+    author: packageAuthorSchema.safeParse(data.author).data?.name ?? null,
     hasServerCode:
       entries.some((e) =>
         /\.(?:[cm]?js|tsx?|node|wasm)$/i.test(e.relativePath),

@@ -461,6 +461,20 @@ export {
   type GithubPackagePreview,
 } from "./schemas/collection.js";
 export {
+  PACKAGE_LINK_LIMIT,
+  WORLD_PACKAGE_INFO_KEY,
+  isPackageLinkUrl,
+  packageAuthorSchema,
+  packageCreditFields,
+  packageInfoOf,
+  packageInfoSchema,
+  packageLinkSchema,
+  packageLinkUrlSchema,
+  type PackageAuthor,
+  type PackageInfo,
+  type PackageLink,
+} from "./schemas/package-info.js";
+export {
   hostVersionRangeSchema,
   isHostVersionRange,
   satisfiesHostVersionRange,

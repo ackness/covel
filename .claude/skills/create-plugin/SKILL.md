@@ -46,7 +46,7 @@ Declare scheduling with `stage` plus `needs` / `after` edges, and `io.visibility
 
 Write `PLUGIN.md`, `RUNTIME.md` and `ui/*.json` in English: labels, tool
 descriptions, UI text, and the prompt body. Put label translations
-(`displayName`, `description`, `label`, `title`, `summary`) in
+(`displayName`, `description`, `label`, `title`, `summary`, `about`) in
 `locales/<locale>.yaml`, one section per manifest file, and UI text translations
 in the same file under `messages` (English text, then its translation). Code
 writes English too and reads the same `messages` through `translate(ctx, "…")`

@@ -250,6 +250,7 @@ describe("collection manifests", () => {
     archives[`example/pack@${sha}`] = await zip(
       {
         ...collection({
+          author: { name: "Barrow Works", url: "https://example.com" },
           worlds: [{ path: "worlds/barrow" }],
           plugins: [
             {
@@ -272,10 +273,12 @@ describe("collection manifests", () => {
 
     const result = await preview();
 
+    // The preview names the author; it carries no link before install.
     expect(result.collection).toEqual({
       id: "barrow-pack",
       name: "Barrow Pack",
       version: "1.2.0",
+      author: "Barrow Works",
     });
     expect(result.items.map((item) => [item.kind, item.id])).toEqual([
       ["plugin", "barrow-dice"],

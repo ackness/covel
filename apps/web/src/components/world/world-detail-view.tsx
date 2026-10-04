@@ -13,6 +13,8 @@ import {
   worldPlayLocale,
 } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { worldPackageInfo } from "@/lib/package-info.js";
+import { PackageCredits } from "@/components/shared/package-credits.js";
 import { DimensionValueView } from "@/components/session/dimension-value-view.js";
 import { WorldGallerySection } from "./world-gallery.js";
 import { WorldRevisePanel, isWorldRevisable } from "./world-revise-panel.js";
@@ -152,6 +154,12 @@ export function WorldDetailView({
             {shown.description}
           </p>
         )}
+
+        <PackageCredits
+          info={worldPackageInfo(world)}
+          packageName={shown.name ?? world.id}
+          className="max-w-3xl text-sm"
+        />
 
         <WorldGallerySection
           world={world}

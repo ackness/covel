@@ -9,6 +9,7 @@ import { z } from "zod";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
 import type { AttributeDefinition } from "../types/character-schema.js";
 import { dimensionIdSchema, worldDimensionsSchema } from "./dimensions.js";
+import { packageCreditFields } from "./package-info.js";
 export { worldDimensionsSchema } from "./dimensions.js";
 
 // ── Common ──────────────────────────────────────────────────────
@@ -466,6 +467,7 @@ export const worldManifestSchema = z
       .array(z.string())
       .describe("Free-form catalogue tags, such as genre.")
       .optional(),
+    ...packageCreditFields,
     pluginPolicy: pluginPolicySchema
       .describe(
         "Which plugins a session of this world starts with. It states intent and locks nothing; the player can change the selection.",

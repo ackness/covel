@@ -1,12 +1,17 @@
 ---
 id: soundtrack
 kind: plugin
+version: 0.0.1
 displayName: Soundtrack
 description: >-
   Plays the background music a world ships, and follows the scene and the mood
   of the story.
 tags:
   - "cost:function"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 entry: ./server/index.js
 contributes:
   extensions:

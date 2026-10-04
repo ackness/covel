@@ -863,6 +863,11 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
           "preferredTags": ["mode:traditional-story"],
           "avoidedTags": ["mode:dialogue"]
         },
+        "packageInfo": {
+          "version": "0.3.0",
+          "author": { "name": "Covel Contributors" },
+          "license": "MIT"
+        },
         "worldDataPath": "data/world.data.yaml",
         "worldData": {
           "schemaVersion": 1,
@@ -1288,6 +1293,7 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 
 - `metadata.pluginPolicy`：准备页组合策略，字段为 `presetId/preferredTags/avoidedTags/requested/recommended/requires/packs`。解析器结合包级 contract 依赖与授权状态求解激活集；顶层 metadata 不再合并旧选择字段，也不强制锁定 core 插件。
 - `pluginPolicy.requires`：世界必需的契约 ID。创建时世界作为一个依赖方参与解析，唯一提供者被自动加入；需求随会话保存在 `metadata.pluginSelection.requiredContracts`，后续启停与重载沿用，不再读取世界。没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。玩家显式停用提供者，或提供者是尚待授权的社区插件时，会话照常创建。
+- `metadata.packageInfo`：世界包的 `version` 和[作者信息](./plugins.md#作者信息)（`author`、`license`、`homepage`），只用于世界卡片展示，不进入提示词。
 - `metadata.characterSchema`：创建会话时写入领域角色 schema，包含 `types/attributes`，版本由内核管理。
 - `metadata.embeddedCharacters`：没有文件型 worldData 时，将通用 `{id,name,type,description?,fields?}` 记录导入会话 `characters`。它不是插件角色卡，不产生插件数据镜像。
 - `metadata.embeddedLorebook`：没有文件型 worldData 时导入 world owner 的 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
@@ -2235,6 +2241,7 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 | `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                                                                                            |
 | `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                                                                                                |
 | `languages`                                                 | `{ text: string[], instructions: string[] }`：插件有文字的语言（标签、界面和代码文字，含翻译目录里的译文）和有指令的语言。两者都至少含 `en` |
+| `version?`, `author?`, `license?`, `homepage?`              | 清单里的版本和[作者信息](./plugins.md#作者信息)，只用于展示。`author.about` 和链接 `label` 可能是 locale map                                |
 
 宿主是否加载与会话是否激活是两种状态；列表不会把全局宿主状态写成某个会话的 active。`loaded` 来自当前 entry 代次的实际发布状态，与 runtime 缓存无关；首次发布失败为 `error`，重载失败而旧代仍可用时仍为 `loaded` 并可携带 `error`。纯声明或 entry-only 包可以没有 runtime。
 

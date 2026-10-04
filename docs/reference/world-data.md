@@ -221,6 +221,8 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。接受 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）或 `parsed`。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
+`version`、`author`、`license`、`homepage`（可选）：世界包的版本和作者信息，字段、限制和翻译规则与插件相同，见[作者信息](./plugins.md#作者信息)。它们经 `world-seed-loader` 写进 `WorldRecord.metadata.packageInfo`，只用于世界卡片展示，不进入会话数据和提示词。
+
 `pluginPolicy` 只描述选择意图，不锁死核心插件。会话解析器依据插件包公开的 `provides/requires/optional/conflicts` contract 和授权状态生成最终激活集。
 
 | 字段                            | 说明                                                                                    |

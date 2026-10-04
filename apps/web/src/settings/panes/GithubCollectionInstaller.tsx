@@ -201,6 +201,9 @@ export function GithubCollectionInstaller({
               {preview.collection.version
                 ? ` · ${preview.collection.version}`
                 : ""}
+              {preview.collection.author
+                ? ` · ${preview.collection.author}`
+                : ""}
             </p>
           )}
           <p className="text-muted-foreground">
@@ -255,6 +258,11 @@ export function GithubCollectionInstaller({
                         ? ` · ${t("settings.github.hasCode")}`
                         : ""}
                     </span>
+                    {item.author && (
+                      <span className="block text-muted-foreground">
+                        {t("package.author")}: {item.author}
+                      </span>
+                    )}
                     {item.description && (
                       <span className="block">{item.description}</span>
                     )}

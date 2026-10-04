@@ -40,6 +40,23 @@ describe("pregame handler", () => {
     expect(result.effects.notifications[0].title).toContain("欢迎来到雾港");
   });
 
+  it("does not welcome again when setup reruns in a playing session", async () => {
+    const result = await handler({
+      sessionId: "sess-1",
+      locale: "zh-CN",
+      messages,
+      store: makeStore({
+        async getSession() {
+          return { worldId: "w1", phase: "playing" };
+        },
+      }),
+    });
+
+    expect(result.completion).toBe("done");
+    expect(result.value).toEqual({ narrativeOutput: "", initialized: true });
+    expect(result.effects).toBeUndefined();
+  });
+
   it("falls back to locale defaults when no store is available", async () => {
     const result = await handler({
       sessionId: "sess-1",

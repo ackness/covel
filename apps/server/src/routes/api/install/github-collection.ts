@@ -367,6 +367,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
             id: manifest.id,
             name: manifest.name,
             version: manifest.version ?? null,
+            author: manifest.author?.name ?? null,
           }
         : null,
       items,

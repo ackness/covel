@@ -1,6 +1,7 @@
 ---
 id: core-quest
 kind: plugin
+version: 0.0.35
 displayName: Quest Log
 description: >-
   Automatically registers and advances quests from the narrative so goals,
@@ -10,6 +11,10 @@ tags:
   - "cost:function"
   - "ui:right-panel"
   - "ui:message-block"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - world-ir.vocabulary@1
 requires:

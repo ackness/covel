@@ -19,6 +19,9 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `displayName` | text (string or locale map) | no       | Player-facing name. Plain string or a locale map.                                                                                                                                                            |
 | `description` | text (string or locale map) | yes      | What the package does. Plain string or a locale map with at least one entry.                                                                                                                                 |
 | `tags`        | list of string              | no       | Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts.                                                                                                             |
+| `author`      | object                      | no       | Who made the package. Shown on the package's cards before play, never during play.                                                                                                                           |
+| `license`     | string                      | no       | License of the package: an SPDX identifier or a short name. Example: `"MIT"`, `"CC-BY-4.0"`.                                                                                                                 |
+| `homepage`    | string                      | no       | Page of the package itself, such as its repository or documentation. `https` only. Example: `"https://example.com/my-package"`.                                                                              |
 | `provides`    | list of string or object    | no       | Versioned contracts this package provides, such as `narrative-engine@1`.                                                                                                                                     |
 | `requires`    | list of string              | no       | Contracts that must have an active provider. The resolver adds one when the package is active.                                                                                                               |
 | `optional`    | list of string              | no       | Contracts this package uses when a provider is active. They do not activate a provider.                                                                                                                      |
@@ -27,6 +30,22 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `entry`       | string                      | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.                                                                                               |
 | `contributes` | object                      | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                               |
 | `runtime`     | object                      | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                       |
+
+## `author`
+
+| Field   | Type                        | Required | Description                                                                                                     |
+| ------- | --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `name`  | string                      | yes      | Name of the person or team. Shown as written in every language. Example: `"Jane Doe"`.                          |
+| `url`   | string                      | no       | The author's own page. `https` only. Example: `"https://example.com"`.                                          |
+| `about` | text (string or locale map) | no       | A short message from the author to players: who they are, what else they make, how to support them. Plain text. |
+| `links` | list of object              | no       | Links the author wants players to see, such as a community, a support page or other work. At most 6.            |
+
+## `author.links[]`
+
+| Field   | Type                        | Required | Description                                                                                                                                   |
+| ------- | --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label` | text (string or locale map) | yes      | Text of the link. Example: `"Discord"`.                                                                                                       |
+| `url`   | string                      | yes      | Address of the link. `https` only. The player sees the full address and confirms before it opens. Example: `"https://example.com/community"`. |
 
 ## `provides[]`
 

@@ -20,6 +20,7 @@ import type { WorldRecord } from "@/services/api.js";
 import { matchesWorldQuery, text } from "@/components/world/editor-helpers.js";
 import { useOverflowEdges } from "@/hooks/use-overflow-edges.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import { worldLanguageName } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
 import {
@@ -317,6 +318,7 @@ export function WorldShowcase({
   const languageName = worldLanguageName(selected.locale, interfaceLocale);
   const busy = enteringWorldId !== null;
   const tags = selected.tags ?? [];
+  const byline = packageByline(worldPackageInfo(selected), t);
   const select = (worldId: string) => {
     setOpenImage(null);
     setSelectedId(worldId);
@@ -380,6 +382,9 @@ export function WorldShowcase({
             <p className="text-base leading-[1.8] text-white/88 line-clamp-4 wrap-break-word">
               {text(selected.description)}
             </p>
+            {byline && (
+              <p className="truncate text-[13px] text-white/72">{byline}</p>
+            )}
             {(tags.length > 0 || languageName) && (
               <div className="flex flex-wrap gap-2">
                 {tags.slice(0, 5).map((tag) => (

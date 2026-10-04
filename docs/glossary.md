@@ -13,6 +13,7 @@ One English term has one Chinese term. Chinese docs, UI copy and the Chinese pro
 | Binding          | 绑定         |                                                                     |
 | Capability       | 能力标签     |                                                                     |
 | Collection       | 合集         |                                                                     |
+| Credits          | 作者信息     | The `author`, `license` and `homepage` fields of a package.         |
 | Kernel           | 内核         |                                                                     |
 | Pack             | 玩法包       |                                                                     |
 | PluginType       | 插件类型     |                                                                     |
@@ -72,6 +73,12 @@ See: [docs/guide/collections.md](./guide/collections.md), [docs/reference/plugin
 A versioned ID such as `narrative-engine@1` that names what a plugin provides or needs. The root `PLUGIN.md` lists contracts under `provides`, `requires`, `optional`, and `conflicts`; a runtime publishes one through `io.output.contract` and consumes one through `from: { contract }`. The kernel resolves providers by contract, never by a hardcoded plugin ID, so any plugin providing the same contract can replace another. Only the current version is supported: a breaking change takes a new ID (`@2`).
 
 See: [docs/reference/plugins.md](./reference/plugins.md), AGENTS.md "Framework ↔ Plugin Isolation Rule".
+
+## Credits
+
+The optional `author`, `license` and `homepage` fields of a plugin, world or collection manifest: who made the package, and where to find them. The author block may carry a short message (`about`) and labelled `https` links. Credits are display data shown before play; the host makes no decision from them, and a link opens only after the player confirms a third-party warning.
+
+See: [docs/reference/plugins.md](./reference/plugins.md#作者信息), [docs/architecture/security.md](./architecture/security.md#package-credits-and-author-links).
 
 ## Extension point
 

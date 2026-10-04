@@ -69,6 +69,104 @@
       },
       "description": "Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts."
     },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Name of the person or team. Shown as written in every language.",
+          "examples": ["Jane Doe"]
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https:\\/\\/\\S+$",
+          "description": "The author's own page. `https` only.",
+          "examples": ["https://example.com"]
+        },
+        "about": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          ],
+          "description": "A short message from the author to players: who they are, what else they make, how to support them. Plain text."
+        },
+        "links": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    }
+                  }
+                ],
+                "description": "Text of the link.",
+                "examples": ["Discord"]
+              },
+              "url": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^https:\\/\\/\\S+$",
+                "description": "Address of the link. `https` only. The player sees the full address and confirms before it opens.",
+                "examples": ["https://example.com/community"]
+              }
+            },
+            "required": ["label", "url"],
+            "additionalProperties": false
+          },
+          "description": "Links the author wants players to see, such as a community, a support page or other work. At most 6."
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false,
+      "description": "Who made the package. Shown on the package's cards before play, never during play."
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "License of the package: an SPDX identifier or a short name.",
+      "examples": ["MIT", "CC-BY-4.0"]
+    },
+    "homepage": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https:\\/\\/\\S+$",
+      "description": "Page of the package itself, such as its repository or documentation. `https` only.",
+      "examples": ["https://example.com/my-package"]
+    },
     "provides": {
       "type": "array",
       "items": {

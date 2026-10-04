@@ -2,7 +2,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   worldTranslationStatus,
   writeWorldTranslations,
@@ -45,6 +45,31 @@ describe("world translation tooling", () => {
     expect(status.files.find((file) => file.file === "WORLD.md")).toMatchObject(
       { localeFile: "WORLD.en.md", total: 1, missing: [] },
     );
+  });
+
+  it("leaves the author's name and the license as written", async () => {
+    const manifestPath = path.join(worldDir, "world.yaml");
+    await writeFile(
+      manifestPath,
+      stringifyYaml({
+        ...parseYaml(await readFile(manifestPath, "utf-8")),
+        author: {
+          name: "灰苇工作室",
+          about: "我们做跑团世界。",
+          links: [{ label: "社区", url: "https://example.com/community" }],
+        },
+        license: "保留所有权利",
+      }),
+    );
+
+    const status = await worldTranslationStatus(worldDir, "ja-JP");
+    const texts = status.files
+      .find((file) => file.file === "world.yaml")!
+      .missing.map((unit) => unit.pointer)
+      .filter((pointer) => /^(author|license)/.test(pointer));
+
+    // The message and the link label are text; a name and a license are not.
+    expect(texts).toEqual(["author.about", "author.links[0].label"]);
   });
 
   it("lists every text of a language the world does not have", async () => {

@@ -33,6 +33,8 @@ pnpm --filter @covel/plugin-my-plugin test
 
 生成器没有交互提示：默认生成一个 function runtime 加一个 agent runtime 的示例，`-r name:type,...` 自定义 runtime 列表，`-t <dir>` 指定目标目录，`--with-tools` 生成仓库内的单 runtime 插件。包至少包含 `package.json`、`PLUGIN.md`，并为维护者提供 `README.md`。根清单的 `id` 必须与目录一致，单 runtime 使用根 `runtime`，多 runtime 使用 `runtimes/<id>/RUNTIME.md`，不要同时声明两种布局。
 
+要让玩家知道插件是谁做的，在根清单写 `version`、`author`、`license`、`homepage`：作者名、一段写给玩家的话和几个 `https` 链接会显示在开局准备页和已安装列表里，玩家点开链接前会看到第三方链接提示。字段和限制见[作者信息](../reference/plugins.md#作者信息)。
+
 ```yaml
 ---
 id: my-plugin

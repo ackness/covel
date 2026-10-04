@@ -75,7 +75,7 @@ export function ConfirmHost() {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{current?.title}</DialogTitle>
-          <DialogDescription className="whitespace-pre-line pt-1">
+          <DialogDescription className="whitespace-pre-line pt-1 wrap-anywhere">
             {current?.message}
           </DialogDescription>
         </DialogHeader>

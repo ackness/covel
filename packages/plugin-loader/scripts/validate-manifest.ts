@@ -51,6 +51,19 @@ for (const arg of args) {
       ),
       pluginMdPaths,
     });
+    // The installer shows the version in package.json and the host uses the
+    // one in PLUGIN.md. A package that states both must state one version.
+    const declared = definition.packageManifest.plugin.version;
+    const packaged = await fs
+      .readFile(path.join(rootPath, "package.json"), "utf-8")
+      .then(
+        (content) => (JSON.parse(content) as { version?: unknown }).version,
+        () => undefined,
+      );
+    if (declared && typeof packaged === "string" && declared !== packaged)
+      throw new Error(
+        `${rootPath}: PLUGIN.md version ${declared} differs from package.json version ${packaged}`,
+      );
     const labelProblems = await validatePluginLabels(rootPath);
     if (labelProblems.length > 0)
       throw new Error(

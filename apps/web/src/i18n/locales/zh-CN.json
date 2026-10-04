@@ -2117,5 +2117,17 @@
     "empty": "暂无角色蓝图",
     "instantiated": "已生成角色",
     "blueprintOnly": "仅蓝图"
+  },
+  "package": {
+    "author": "作者",
+    "version": "v{{version}}",
+    "license": "许可证",
+    "homepage": "主页",
+    "link": {
+      "title": "打开第三方链接？",
+      "message": "这个链接由「{{package}}」的作者提供，不是 Covel 提供的。Covel 没有审核过这个网站，也不对其内容负责。除非你信任它，否则不要在那里输入密码或支付信息。",
+      "site": "网站：{{host}}",
+      "confirm": "打开链接"
+    }
   }
 }

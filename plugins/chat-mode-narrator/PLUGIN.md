@@ -1,6 +1,7 @@
 ---
 id: chat-mode-narrator
 kind: plugin
+version: 0.0.35
 displayName: Dialogue Narrator
 description: >-
   Makes the story feel more like character dialogue, suited for play focused on
@@ -10,6 +11,10 @@ tags:
   - "data:characters"
   - "data:relationship-graph"
   - "cost:llm"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - narrative-engine@1
 requires:

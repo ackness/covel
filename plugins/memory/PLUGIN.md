@@ -1,6 +1,7 @@
 ---
 id: memory
 kind: core
+version: 0.0.35
 displayName: Story Memory
 description: >-
   Shows what the story remembers, including plot, scene, relationships, and hero
@@ -8,6 +9,10 @@ description: >-
 tags:
   - "cost:llm"
   - "ui:right-panel"
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 entry: ./server/index.js
 contributes:
   extensions:

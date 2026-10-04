@@ -1,10 +1,15 @@
 ---
 id: tabletop-rules
 kind: plugin
+version: 0.0.35
 displayName: Tabletop Rules
 description: >-
   Layer opening point allocation onto character creation and resolve attribute
   checks with durable dice receipts.
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - tabletop-check@1
 entry: ./server/index.js

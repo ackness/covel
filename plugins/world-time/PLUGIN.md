@@ -1,10 +1,15 @@
 ---
 id: world-time
 kind: core
+version: 0.0.1
 displayName: World Time
 description: >-
   Tracks world-defined calendars, phases and time direction, settling each story
   turn's elapsed time.
+author:
+  name: Covel Contributors
+  url: https://github.com/ackness/covel
+license: MIT
 provides:
   - world-time-evolution@1
   - world-time-context@1

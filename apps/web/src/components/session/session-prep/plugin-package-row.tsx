@@ -15,6 +15,8 @@ import {
   type PluginPack,
 } from "@/lib/session-plugin-selection.js";
 import { ProviderSlotSetting } from "./provider-slot-setting.js";
+import { pluginPackageInfo } from "@/lib/package-info.js";
+import { PackageCredits } from "@/components/shared/package-credits.js";
 import type * as api from "@/services/api.js";
 import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
 
@@ -141,6 +143,12 @@ export function PluginPackageRow({
           {description}
         </p>
       )}
+      <PackageCredits
+        info={pluginPackageInfo(pkg)}
+        packageName={displayName}
+        compact
+        className="mt-1.5 ml-9"
+      />
       <div className="mt-1.5 ml-9 flex flex-wrap gap-1">
         {reason && (
           <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">

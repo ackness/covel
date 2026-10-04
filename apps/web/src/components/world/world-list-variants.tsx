@@ -4,6 +4,7 @@ import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { sessionContinueLabel } from "@/lib/session-display.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
 import type { WorldCardProps } from "./world-card.js";
@@ -117,6 +118,7 @@ export function WorldTileCard({
   const languageBadge = worldLanguageBadge(world.locale);
   const languageName = worldLanguageName(world.locale, interfaceLocale);
   const tags = world.tags ?? [];
+  const byline = packageByline(worldPackageInfo(world), t);
   return (
     <article
       aria-busy={isEntering}
@@ -150,6 +152,9 @@ export function WorldTileCard({
         <p className="flex-1 text-[13px] leading-relaxed text-muted-foreground line-clamp-3 wrap-break-word">
           {text(world.description)}
         </p>
+        {byline && (
+          <p className="truncate text-xs text-muted-foreground">{byline}</p>
+        )}
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {tags.slice(0, 4).map((tag) => (
@@ -281,9 +286,11 @@ export function WorldRowItem({
 }: WorldCardProps) {
   const visual = worldVisual(world);
   const languageName = worldLanguageName(world.locale, interfaceLocale);
-  const meta = [...(world.tags ?? []).slice(0, 5), languageName].filter(
-    (part): part is string => Boolean(part),
-  );
+  const meta = [
+    ...(world.tags ?? []).slice(0, 5),
+    languageName,
+    packageByline(worldPackageInfo(world), t),
+  ].filter((part): part is string => Boolean(part));
   return (
     <article
       aria-busy={isEntering}
