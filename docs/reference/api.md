@@ -1155,8 +1155,10 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 为一个世界包增加一种语言版本。服务端找出该语言还缺的文字，请配置的模型翻译（先列出世界的名字和术语，再译名字字段，最后译正文，同一个名字只有一种译法），把译文写成世界包里主文件旁的语言文件（`world.<locale>.yaml`、`WORLD.<locale>.md`、`data/*.<locale>.yaml`），并把该语言加入 `world.yaml` 的 `supportedLocales`。之后用这种语言创建的会话就使用这个版本。
 
 ```json
-{ "locale": "ja-JP" }
+{ "locale": "ja-JP", "idleTimeoutMs": 300000 }
 ```
+
+`idleTimeoutMs` 可省略：每次模型请求等待下一段输出的最长时间（毫秒），含义和范围与 `POST /api/ai/generate-world` 相同。
 
 只写**用户世界目录**（`COVEL_USER_WORLDS_DIR`）里的世界包：应用内生成的和安装的世界。内置世界自带语言版本，存储在数据库或浏览器里的世界没有文件可写，这两种返回 409。译文是模型草稿，人名地名和语气需要人看一遍。hosted 部署需要 operator token。
 
@@ -1168,13 +1170,13 @@ SSE 事件：
 | `done`     | `world`, `total`, `translated`, `failed` | 重新加载后的 `WorldRecord`；原本缺多少条、译出多少条、多少条没译成 |
 | `error`    | `message`                                | 失败原因；模型一条也没译出时也走这里，世界包不变                   |
 
-| 状态码 | `code`                     | 含义                     |
-| ------ | -------------------------- | ------------------------ |
-| 400    | —                          | `locale` 不是语言标签    |
-| 404    | `world_not_found`          | 没有这个世界             |
-| 409    | `world_not_translatable`   | 世界包不在用户世界目录里 |
-| 409    | `world_already_translated` | 这种语言已经没有缺的文字 |
-| 409    | `world_deleting`           | 世界正在删除             |
+| 状态码 | `code`                     | 含义                                               |
+| ------ | -------------------------- | -------------------------------------------------- |
+| 400    | —                          | `locale` 不是语言标签，或 `idleTimeoutMs` 超出范围 |
+| 404    | `world_not_found`          | 没有这个世界                                       |
+| 409    | `world_not_translatable`   | 世界包不在用户世界目录里                           |
+| 409    | `world_already_translated` | 这种语言已经没有缺的文字                           |
+| 409    | `world_deleting`           | 世界正在删除                                       |
 
 ### 会话管理
 
@@ -3032,7 +3034,17 @@ interface SseEnvelope {
 
 AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tags、dimensions、lore，并可同时创作主要角色、资料库、世界规则、题材记忆与开局配置。服务器把文本内容写成标准世界包：`data/dimensions.yaml`、`characters/main-cast.json`、`data/lorebook.yaml` 和 `data/world.data.yaml` descriptor。
 
-生成结果先执行确定性的结构校验。YAML、世界清单、补充内容或 `WORLD.md` 结构不合法时，下一轮重新生成完整世界包；只有 `WORLD.md` 命中明确的测试、提示词或模型输出等生成过程泄漏时，服务端才在同一轮内请求一次仅包含 lore 的定向修复，并复用已经通过校验的 manifest 与补充内容。定向修复仍不合法、响应格式错误或超时时，才回退到下一轮完整生成；校验完成前不会写入半成品。
+新世界按**部分**逐个生成，每个部分是一次模型请求：先是世界清单（`manifest`），再是 `WORLD.md`（`lore`），然后是简报里要求的每一类补充内容（`characters`、`lorebook`、`rules`），最后是每个插件数据契约（`contract:<契约 ID>`）。后面的部分会拿到已经写好的部分作为上下文。
+
+每个部分到达后立即执行确定性的结构校验，不合法时只重新请求这一个部分（最多 3 次），已经通过的部分不会重写。`WORLD.md` 命中明确的测试、提示词或模型输出等生成过程泄漏时，服务端先请求一次仅包含 lore 的定向修复，修复仍不合法才重新请求 lore。
+
+- `manifest` 或 `lore` 三次都失败时，整个生成失败。
+- 补充内容或契约数据三次都失败时，世界照常创建，只是没有这一部分，`done` 帧的 `warnings` 说明缺了什么；之后可以用 `revise-world` 补上。
+- 校验完成前不会写入半成品。
+
+模型请求按**无响应时间**限时，不按总时长：模型每输出一段正文或推理，计时重新开始，所以输出慢但持续的模型可以写完很长的内容。连续 `idleTimeoutMs` 没有任何输出才算超时。不支持流式的适配器一次返回整个回答，这时无响应时间等于整个请求的时长。单次请求另有 30 分钟的总上限，只用来结束永不停止输出的模型。
+
+无响应超时**不重试**：这个时间是玩家愿意等的上限，重试只会让玩家多等几倍才知道模型没有响应。`manifest` 或 `lore` 超时，生成立即失败；补充部分超时，这一部分和它之后的部分都不再请求，世界用已经写好的部分创建，`warnings` 逐条列出缺少的部分。因此模型不响应时，最多等一个 `idleTimeoutMs` 就有结论。
 
 这个接口使用 SSE 返回进度和最终世界。客户端通过 `fetch()` + `ReadableStream` 解析 `data: {...}\n\n` 帧。
 
@@ -3044,6 +3056,7 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
   "locale": "zh-CN",
   "model": "deepseek-v4-flash",
   "saveTarget": "server-file",
+  "idleTimeoutMs": 300000,
   "brief": {
     "experienceMode": "traditional-story",
     "content": ["characters", "lorebook", "rules", "opening-kit"],
@@ -3053,13 +3066,14 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 }
 ```
 
-| 字段         | 类型   | 必填 | 说明                                                  |
-| ------------ | ------ | ---- | ----------------------------------------------------- |
-| `concept`    | string | 是   | 世界概念描述（最多 4000 字符）。也接受同义键 `prompt` |
-| `locale`     | string | 否   | 语言区域，默认 `zh-CN`                                |
-| `model`      | string | 否   | 覆盖 LLM 模型                                         |
-| `saveTarget` | string | 否   | 保存目标，默认 `server-file`。可选值见下表            |
-| `brief`      | object | 否   | 结构化创作简报；旧客户端省略时保持基础生成行为        |
+| 字段            | 类型   | 必填 | 说明                                                                                                                                                   |
+| --------------- | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `concept`       | string | 是   | 世界概念描述（最多 4000 字符）。也接受同义键 `prompt`                                                                                                  |
+| `locale`        | string | 否   | 语言区域，默认 `zh-CN`                                                                                                                                 |
+| `model`         | string | 否   | 覆盖 LLM 模型                                                                                                                                          |
+| `saveTarget`    | string | 否   | 保存目标，默认 `server-file`。可选值见下表                                                                                                             |
+| `brief`         | object | 否   | 结构化创作简报；旧客户端省略时保持基础生成行为                                                                                                         |
+| `idleTimeoutMs` | number | 否   | 等待模型下一段输出的最长时间（毫秒），整数，1000–1800000，默认 120000。超出范围返回 400。应用自己的设置项从 15 秒起；接口允许到 1 秒，方便测试超时路径 |
 
 `brief`：
 
@@ -3101,12 +3115,26 @@ Web 前端根据 `/api/health.storage.data.frontendMode` 选择生成世界保�
 ```text
 data: {"type":"progress","phase":"generating"}
 
+data: {"type":"progress","phase":"generating","parts":[{"id":"manifest","state":"pending"},{"id":"lore","state":"pending"},{"id":"characters","state":"pending"}]}
+
+data: {"type":"progress","phase":"generating","parts":[{"id":"manifest","state":"done","attempt":1,"chars":1840},{"id":"lore","state":"active","attempt":1,"chars":412},{"id":"characters","state":"pending"}]}
+
 data: {"type":"progress","phase":"validating"}
 
 data: {"type":"progress","phase":"saving"}
 
 data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","metadata":{"storage":{"scope":"server","backend":"file","durable":true}}}}
 ```
+
+`phase: "generating"` 的 `progress` 帧带 `parts`：这次生成的全部部分和各自的进度，每帧都是完整列表，客户端直接用最新一帧渲染。部分开始、收到新内容（最多每 400 毫秒一帧）、重试和结束时各发一帧。
+
+| `parts[]` 字段 | 类型   | 说明                                                                                             |
+| -------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `id`           | string | `manifest`、`lore`、`characters`、`lorebook`、`rules`、`contract:<契约 ID>`；修订时是 `revision` |
+| `title`        | string | 插件数据契约的名称；其他部分没有这个字段，由客户端命名                                           |
+| `state`        | string | `pending`、`active`、`done` 或 `failed`                                                          |
+| `attempt`      | number | 这个部分的第几次请求，从 1 开始                                                                  |
+| `chars`        | number | 当前这次请求已经收到的正文字符数                                                                 |
 
 `done` 帧可以带 `warnings`（字符串数组），说明结果与创作简报的差距，世界本身合法且可玩：
 
@@ -3116,11 +3144,12 @@ data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; th
 
 - 某类内容数量低于目标（角色 3、资料库 4、规则 3、开局资源 2）时接受结果并给出 warning；被请求的内容一条都没有时才判为失败并重试。
 - 无法通过校验的维度被单独丢弃并给出 warning，其余维度保留。
+- 某个补充部分没能生成时给出 `<部分> could not be generated: <原因>`，世界里没有这一部分；模型停止响应后没有再请求的部分给出 `<部分> was not requested: the model stopped answering`。
 - 没有 warning 时不带这个字段。
 
-生成开始后的模型、校验或写入失败通过 HTTP 200 SSE 帧返回：`data: {"type":"error","message":"..."}`。请求体不合法则在开始流式响应前返回 HTTP 400 标准错误 envelope。
+生成开始后的模型、校验或写入失败通过 HTTP 200 SSE 帧返回：`data: {"type":"error","message":"..."}`。最后一次请求因为模型在 `idleTimeoutMs` 内没有任何输出而失败时，帧里带 `"code":"model_idle_timeout"`，客户端据此提示用户调大等待时间。请求体不合法则在开始流式响应前返回 HTTP 400 标准错误 envelope。
 
-**响应 400:** `{ "error": "concept (string) is required" }` 或 `{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }`
+**响应 400:** `{ "error": "concept (string) is required" }`、`{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }` 或 `{ "error": "idleTimeoutMs must be an integer from 1000 to 1800000" }`
 
 ---
 
@@ -3141,25 +3170,26 @@ data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; th
 }
 ```
 
-| 字段          | 类型   | 必填 | 说明                                                                             |
-| ------------- | ------ | ---- | -------------------------------------------------------------------------------- |
-| `worldId`     | string | 是   | 要修改的世界                                                                     |
-| `instruction` | string | 是   | 修改要求（最多 2000 字符）                                                       |
-| `world`       | object | 否   | 只存在于浏览器的世界（`return-only` 生成的）由客户端随请求带上它的 `WorldRecord` |
-| `model`       | string | 否   | 覆盖 LLM 模型                                                                    |
+| 字段            | 类型   | 必填 | 说明                                                                             |
+| --------------- | ------ | ---- | -------------------------------------------------------------------------------- |
+| `worldId`       | string | 是   | 要修改的世界                                                                     |
+| `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                                       |
+| `world`         | object | 否   | 只存在于浏览器的世界（`return-only` 生成的）由客户端随请求带上它的 `WorldRecord` |
+| `model`         | string | 否   | 覆盖 LLM 模型                                                                    |
+| `idleTimeoutMs` | number | 否   | 等待模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同         |
 
 只有带生成标记的世界可以修改：`metadata.generated === true`。生成器写出的世界包里有一个 `.covel-generated.json` 文件，世界记录据此带上这个标记；手写的或安装的世界包没有它，因为这类包里可能有立绘、额外的数据源和语言文件，整包重写会丢掉它们。
 
 世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，失败时旧包不变）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
 
-SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。
+SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修订是一次模型请求，`parts` 里只有一个 `revision`。
 
-| 状态码 | `code`                | 含义                                                             |
-| ------ | --------------------- | ---------------------------------------------------------------- |
-| 400    | —                     | 缺少 `worldId` 或 `instruction`，或 `instruction` 过长           |
-| 404    | `world_not_found`     | 服务端没有这个世界，请求里也没有带 `world`                       |
-| 409    | `world_not_revisable` | 世界没有生成标记（内置、手写或安装的世界包改文件，不走这个接口） |
-| 409    | `world_deleting`      | 世界正在删除                                                     |
+| 状态码 | `code`                | 含义                                                                             |
+| ------ | --------------------- | -------------------------------------------------------------------------------- |
+| 400    | —                     | 缺少 `worldId` 或 `instruction`，`instruction` 过长，或 `idleTimeoutMs` 超出范围 |
+| 404    | `world_not_found`     | 服务端没有这个世界，请求里也没有带 `world`                                       |
+| 409    | `world_not_revisable` | 世界没有生成标记（内置、手写或安装的世界包改文件，不走这个接口）                 |
+| 409    | `world_deleting`      | 世界正在删除                                                                     |
 
 ### Trace 调试
 

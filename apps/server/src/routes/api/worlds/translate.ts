@@ -15,6 +15,7 @@ import { errorBody, readJsonBody } from "../../../api-error.js";
 import { streamOwnedSSE } from "../../../application-work.js";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { rateLimiter, singleFlight } from "../../../middleware/rate-limit.js";
+import { parseIdleTimeoutMs } from "../../../world-data/authoring-timeout.js";
 import { resolveWorldRoot } from "../../../world-data/session-import/utils.js";
 import {
   declareWorldEdition,
@@ -78,6 +79,10 @@ worldTranslateRoutes.post(
     if (!locale || !isKnownLocale(locale)) {
       return c.json(errorBody("locale must be a language tag"), 400);
     }
+    const idleTimeout = parseIdleTimeoutMs(parsed.body.idleTimeoutMs);
+    if (idleTimeout.error) {
+      return c.json(errorBody(idleTimeout.error), 400);
+    }
 
     const world = await store.getWorld(worldId);
     if (!world) {
@@ -137,6 +142,7 @@ worldTranslateRoutes.post(
             ? { model: parsed.body.model }
             : {}),
           signal,
+          idleTimeoutMs: idleTimeout.value,
           onProgress: (step, done, total) => {
             pending = pending.then(() =>
               send({ type: "progress", step, done, total }),

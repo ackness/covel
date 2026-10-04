@@ -895,6 +895,97 @@ describe("ai world generation route", () => {
     });
   });
 
+  it("reports every part of the world while it is generated", async () => {
+    app = createTestApp(
+      store,
+      new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`,
+      ),
+    );
+    const response = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "Clockwork city",
+        saveTarget: "return-only",
+        brief: { content: ["characters", "rules"] },
+      }),
+    });
+    const events = await readSseJson(response);
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+
+    const reports = events.flatMap((event) =>
+      Array.isArray(event.parts)
+        ? [event.parts as { id: string; state: string }[]]
+        : [],
+    );
+    expect(reports[0]!.map((part) => [part.id, part.state])).toEqual([
+      ["manifest", "pending"],
+      ["lore", "pending"],
+      ["characters", "pending"],
+      ["rules", "pending"],
+    ]);
+    expect(reports.at(-1)!.map((part) => part.state)).toEqual([
+      "done",
+      "done",
+      "done",
+      "done",
+    ]);
+    // The parts are reported before the world is checked and saved.
+    const types = events.map((event) =>
+      event.type === "progress" ? event.phase : event.type,
+    );
+    expect(types.lastIndexOf("generating")).toBeLessThan(
+      types.indexOf("validating"),
+    );
+    expect(types.at(-1)).toBe("done");
+  });
+
+  it("tells the client when the model stayed silent for the idle timeout", async () => {
+    const create = vi.spyOn(worldCreation, "createWorld").mockResolvedValue({
+      success: false,
+      id: "unknown",
+      errors: ["LLM error: The model sent no output for 300 seconds"],
+      idleTimeout: true,
+    });
+    const response = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "Clockwork city",
+        saveTarget: "return-only",
+        idleTimeoutMs: 300_000,
+      }),
+    });
+
+    expect(await readSseJson(response)).toContainEqual({
+      type: "error",
+      message: "LLM error: The model sent no output for 300 seconds",
+      code: "model_idle_timeout",
+    });
+    expect(create.mock.calls[0]![0].idleTimeoutMs).toBe(300_000);
+  });
+
+  it.each([999, 1_800_001, 60_000.5, "60000"])(
+    "rejects the idle timeout %s before streaming",
+    async (idleTimeoutMs) => {
+      for (const [route, body] of [
+        ["generate-world", { concept: "Clockwork city" }],
+        ["revise-world", { worldId: "any", instruction: "加一个派系" }],
+      ] as const) {
+        const res = await app.request(`/api/ai/${route}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, idleTimeoutMs }),
+        });
+        expect(res.status).toBe(400);
+        await expect(res.json()).resolves.toMatchObject({
+          error: "idleTimeoutMs must be an integer from 1000 to 1800000",
+        });
+      }
+    },
+  );
+
   /**
    * A player changes a world made in the app with one request. The model
    * gets the world as it is and writes back only what the request touches.
@@ -903,6 +994,10 @@ describe("ai world generation route", () => {
     const FULL = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`;
     const REVISED_MD = `${WORLD_MD}\n4. 抢在对手校时官之前找到备用钟芯。`;
     const REVISED = `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\n${REVISED_MD}\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===`;
+    // A new world is one request for each part: the manifest, the lore and
+    // the three lists of the brief. Each request takes its section from the
+    // answer it gets.
+    const CREATED = [FULL, FULL, FULL, FULL, FULL];
 
     /** Answers in order, and keeps what it was asked. */
     class SequenceLlm implements LLMAdapter {
@@ -951,7 +1046,7 @@ describe("ai world generation route", () => {
     };
 
     it("rewrites the package of a world that has files, and keeps what the request did not touch", async () => {
-      const llm = new SequenceLlm([FULL, REVISED]);
+      const llm = new SequenceLlm([...CREATED, REVISED]);
       const created = await generate("server-file", llm);
 
       const revised = await worldOf(
@@ -965,9 +1060,10 @@ describe("ai world generation route", () => {
       expect(revised.lore).toBe(REVISED_MD);
       expect(revised.createdAt).toBe(created.createdAt);
       // The model was given the world as it is, read from its files.
-      expect(llm.requests[1]).toContain("加一个与对手校时官有关的冒险钩子");
-      expect(llm.requests[1]).toContain("守钟人");
-      expect(llm.requests[1]).toContain("改写时间必须失去记忆");
+      const request = llm.requests[CREATED.length];
+      expect(request).toContain("加一个与对手校时官有关的冒险钩子");
+      expect(request).toContain("守钟人");
+      expect(request).toContain("改写时间必须失去记忆");
       // On disk: the new lore, the same cast, and nothing beside the package.
       const dir = path.join(worldsDir, "generated-world");
       expect(await readFile(path.join(dir, "WORLD.md"), "utf8")).toBe(
@@ -989,7 +1085,7 @@ describe("ai world generation route", () => {
       const created = await generate(
         "server-file",
         new SequenceLlm([
-          FULL,
+          ...CREATED,
           `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\nUNCHANGED\n===WORLD_PACKAGE_YAML===\n${cast}\n===END===`,
         ]),
       );
@@ -1018,7 +1114,7 @@ describe("ai world generation route", () => {
     });
 
     it("revises a world that lives in the store without writing files", async () => {
-      await generate("server-store", new SequenceLlm([FULL, REVISED]));
+      await generate("server-store", new SequenceLlm([...CREATED, REVISED]));
 
       const revised = await worldOf(
         await post("revise-world", {
@@ -1036,7 +1132,7 @@ describe("ai world generation route", () => {
     it("revises a world that only the browser holds and stores nothing", async () => {
       const local = await generate(
         "return-only",
-        new SequenceLlm([FULL, REVISED]),
+        new SequenceLlm([...CREATED, REVISED]),
       );
       expect(await store.getWorld("generated-world")).toBeNull();
 
@@ -1080,7 +1176,7 @@ describe("ai world generation route", () => {
     });
 
     it("knows a generated package again after the world is loaded from disk", async () => {
-      await generate("server-file", new SequenceLlm([FULL]));
+      await generate("server-file", new SequenceLlm(CREATED));
       // What a restart does: the record comes from the files alone.
       const reloaded = await loadSingleWorld(
         path.join(worldsDir, "generated-world"),

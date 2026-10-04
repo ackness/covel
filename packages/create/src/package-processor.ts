@@ -47,7 +47,9 @@ function normalizeCharacter(
     return null;
   }
   if (typeof value.id !== "string" || !CONTENT_ID.test(value.id)) {
-    errors.push(`characters[${index}].id must be a stable ASCII identifier`);
+    errors.push(
+      `characters[${index}].id must be a stable ASCII identifier, got ${JSON.stringify(value.id)}`,
+    );
     return null;
   }
   if (typeof value.name !== "string" || !value.name.trim()) {
@@ -121,7 +123,9 @@ function normalizeLorebookEntry(
     return null;
   }
   if (typeof value.id !== "string" || !CONTENT_ID.test(value.id)) {
-    errors.push(`${sourceKind}[${index}].id must be a stable ASCII identifier`);
+    errors.push(
+      `${sourceKind}[${index}].id must be a stable ASCII identifier, got ${JSON.stringify(value.id)}`,
+    );
     return null;
   }
   if (typeof value.content !== "string" || !value.content.trim()) {

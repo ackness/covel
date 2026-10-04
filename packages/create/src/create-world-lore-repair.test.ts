@@ -87,7 +87,9 @@ describe("createWorld WORLD.md repair", () => {
   });
 
   it("repairs explicit meta wording without regenerating the package", async () => {
+    // The manifest, then the lore, then the repair of the lore.
     const llm = new RecordingSequenceLlm([
+      fullPackage(META_LORE),
       fullPackage(META_LORE),
       loreRepair(CLEAN_LORE),
     ]);
@@ -95,17 +97,16 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
-    expect(llm.requests).toHaveLength(2);
-    expect(messageText(llm.requests[1]!, 0)).toContain(
+    expect(llm.requests).toHaveLength(3);
+    expect(messageText(llm.requests[2]!, 0)).toContain(
       "without changing the rest of its world package",
     );
-    expect(messageText(llm.requests[1]!, 1)).toContain(META_LORE);
-    expect(messageText(llm.requests[1]!, 1)).not.toContain("WORLD_YAML");
-    expect(llm.requests[1]!.signal).toBe(llm.requests[0]!.signal);
+    expect(messageText(llm.requests[2]!, 1)).toContain(META_LORE);
+    expect(messageText(llm.requests[2]!, 1)).not.toContain("WORLD_YAML");
     if (!result.success) throw new Error(result.errors.join("; "));
     expect(result.lore).toBe(CLEAN_LORE);
     expect(result.manifest.id).toBe("repair-world");
@@ -118,7 +119,7 @@ describe("createWorld WORLD.md repair", () => {
     const llm: LLMAdapter = {
       async generate() {
         calls++;
-        if (calls === 1) {
+        if (calls <= 2) {
           return {
             content: fullPackage(META_LORE),
             toolCalls: [],
@@ -136,13 +137,44 @@ describe("createWorld WORLD.md repair", () => {
         llm,
         concept: "修复世界",
         signal: controller.signal,
-        attemptTimeoutMs: 5_000,
+        idleTimeoutMs: 5_000,
       }),
     ).rejects.toBe(reason);
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
     await expect(
       readFile(path.join(outputDir, "repair-world", "WORLD.md")),
     ).rejects.toThrow();
+  });
+
+  it("does not ask for the lore again when the repair request stays silent", async () => {
+    let calls = 0;
+    const llm: LLMAdapter = {
+      async generate({ signal }) {
+        calls++;
+        if (calls <= 2) {
+          return {
+            content: fullPackage(META_LORE),
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        }
+        return new Promise<LLMResponse>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      },
+    };
+
+    const result = await createWorld({
+      llm,
+      concept: "修复世界",
+      idleTimeoutMs: 5,
+    });
+    expect(result).toMatchObject({ success: false, idleTimeout: true });
+    // The manifest, the lore, and one repair request that got no answer.
+    expect(calls).toBe(3);
   });
 
   it("keeps concurrent template sources isolated through repair and retry", async () => {
@@ -162,6 +194,7 @@ describe("createWorld WORLD.md repair", () => {
         );
         const llm = new RecordingSequenceLlm([
           fullPackage(META_LORE),
+          fullPackage(META_LORE),
           "invalid repair output",
           fullPackage(META_LORE),
           loreRepair(CLEAN_LORE),
@@ -170,11 +203,12 @@ describe("createWorld WORLD.md repair", () => {
           llm,
           concept: owner,
           loadPrompt: createPromptLoader(root),
-          attemptTimeoutMs: 5_000,
+          idleTimeoutMs: 5_000,
         });
         expect(result.success, JSON.stringify(result.errors)).toBe(true);
-        expect(llm.requests).toHaveLength(4);
+        expect(llm.requests).toHaveLength(5);
         expect(llm.requests.map((request) => messageText(request, 0))).toEqual([
+          `${owner} generation: ${owner}`,
           `${owner} generation: ${owner}`,
           `${owner} repair: zh-CN`,
           `${owner} generation: ${owner}`,
@@ -186,8 +220,9 @@ describe("createWorld WORLD.md repair", () => {
     );
   });
 
-  it("falls back to full generation when the targeted response is invalid", async () => {
+  it("asks for the lore again when the targeted response is invalid", async () => {
     const llm = new RecordingSequenceLlm([
+      fullPackage(META_LORE),
       fullPackage(META_LORE),
       fullPackage(CLEAN_LORE),
       fullPackage(CLEAN_LORE),
@@ -196,18 +231,19 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
-    expect(llm.requests).toHaveLength(3);
-    expect(messageText(llm.requests[2]!, 1)).toContain(
-      "Regenerate the full package now",
+    expect(llm.requests).toHaveLength(4);
+    // The manifest is written; only the lore is asked for again.
+    expect(messageText(llm.requests[3]!, 1)).toContain(
+      "Write one part of the world package now: WORLD_MD.",
     );
-    expect(messageText(llm.requests[2]!, 1)).toContain(
+    expect(messageText(llm.requests[3]!, 2)).toContain("Write this part again");
+    expect(messageText(llm.requests[3]!, 2)).toContain(
       "WORLD.md contains explicit generation meta wording",
     );
-    expect(llm.requests[2]!.signal).not.toBe(llm.requests[0]!.signal);
   });
 
   it("does not make a repair request for valid lore", async () => {
@@ -216,15 +252,16 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
-    expect(llm.requests).toHaveLength(1);
+    expect(llm.requests).toHaveLength(2);
   });
 
-  it("uses full generation for structural lore errors", async () => {
+  it("asks for the lore again alone after a structural lore error", async () => {
     const llm = new RecordingSequenceLlm([
+      fullPackage(INVALID_STRUCTURE_LORE),
       fullPackage(INVALID_STRUCTURE_LORE),
       fullPackage(CLEAN_LORE),
     ]);
@@ -232,13 +269,14 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      attemptTimeoutMs: 5_000,
+      idleTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
-    expect(llm.requests).toHaveLength(2);
-    expect(messageText(llm.requests[1]!, 1)).toContain(
-      "Regenerate the full package now",
+    expect(llm.requests).toHaveLength(3);
+    expect(messageText(llm.requests[2]!, 1)).toContain(
+      "Write one part of the world package now: WORLD_MD.",
     );
+    expect(messageText(llm.requests[2]!, 2)).toContain("Write this part again");
   });
 });

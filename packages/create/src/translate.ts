@@ -13,6 +13,8 @@ export interface TranslateTextsOptions {
   readonly llm: LLMAdapter;
   readonly model?: string;
   readonly signal: AbortSignal;
+  /** Longest wait for the next output of the model in each call. */
+  readonly idleTimeoutMs?: number;
   readonly units: readonly TranslationUnit[];
   /** Locale of the texts, such as `en`. */
   readonly from: string;
@@ -186,6 +188,7 @@ async function translateDistinct(
       llm: options.llm,
       model: options.model,
       signal: options.signal,
+      idleTimeoutMs: options.idleTimeoutMs,
       messages: [{ role: "user", content: buildPrompt(options, batch) }],
     });
     const reply = parseReply(response.content ?? "");
@@ -224,6 +227,7 @@ export async function extractGlossary(options: {
   readonly llm: LLMAdapter;
   readonly model?: string;
   readonly signal: AbortSignal;
+  readonly idleTimeoutMs?: number;
   readonly text: string;
   readonly from: string;
   readonly to: string;
@@ -234,6 +238,7 @@ export async function extractGlossary(options: {
     llm: options.llm,
     model: options.model,
     signal: options.signal,
+    idleTimeoutMs: options.idleTimeoutMs,
     messages: [
       {
         role: "user",

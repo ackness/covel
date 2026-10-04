@@ -138,7 +138,8 @@ test.describe("AI World Generation", () => {
     await expect(cancelBtn).toBeVisible();
 
     // ── Wait for completion ──
-    // A full three-attempt provider retry can exceed four minutes. Poll all
+    // A world is one model request for each part, and a part may be asked
+    // for three times, so a real provider can take minutes. Poll all
     // terminal signals together so an error is reported immediately and the
     // brief done indicator cannot race the dialog auto-close.
     const doneIndicator = dialog
@@ -159,7 +160,6 @@ test.describe("AI World Generation", () => {
           else terminalState = "pending";
           return terminalState;
         },
-        // Three server attempts can each consume the 150s generation budget.
         // Leave enough room to observe the final SSE error instead of racing it.
         { timeout: 500_000, intervals: [1_000] },
       )

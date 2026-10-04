@@ -138,4 +138,101 @@ describe("AiWorldGenerator", () => {
     expect(options.brief.contracts).toEqual(["world.time-definition@1"]);
     expect(options.brief.content).not.toContain("memory");
   });
+
+  /** Start a generation and return the function that feeds server events. */
+  async function startGeneration(onOpenChange = vi.fn()) {
+    let onEvent: ((event: GenerateWorldEvent) => void) | undefined;
+    api.generateWorld.mockImplementation(
+      (
+        _prompt: string,
+        _locale: string,
+        next: (event: GenerateWorldEvent) => void,
+      ) => {
+        onEvent = next;
+        return new AbortController();
+      },
+    );
+    render(
+      <AiWorldGenerator
+        open
+        onOpenChange={onOpenChange}
+        onWorldCreated={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("核心创意"), {
+      target: { value: "A harbor that keeps time by the tide" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+    await waitFor(() => expect(api.generateWorld).toHaveBeenCalledOnce());
+    return (event: GenerateWorldEvent) => act(() => onEvent?.(event));
+  }
+
+  it("shows each part of the world as the server reports it", async () => {
+    const send = await startGeneration();
+    send({
+      type: "progress",
+      phase: "generating",
+      parts: [
+        { id: "manifest", state: "done", attempt: 1, chars: 1800 },
+        { id: "lore", state: "active", attempt: 2, chars: 412 },
+        { id: "characters", state: "pending" },
+        { id: "contract:memory.blocks@1", title: "记忆板块", state: "failed" },
+      ],
+    });
+
+    const rows = screen.getAllByRole("listitem");
+    expect(rows.map((row) => row.getAttribute("data-state"))).toEqual([
+      "done",
+      "active",
+      "pending",
+      "failed",
+    ]);
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "世界设定",
+      "世界背景已写 412 字 · 第 2 次尝试",
+      "主要角色",
+      "记忆板块未能生成",
+    ]);
+
+    // The part that stopped the world stays on screen with the error.
+    send({
+      type: "error",
+      message: "LLM error: The model sent no output for 120 seconds",
+      code: "model_idle_timeout",
+    });
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(screen.getByText(/世界创作：等待模型的时间/)).toBeTruthy();
+  });
+
+  it("keeps a world that falls short of the brief on screen until the player closes it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const onOpenChange = vi.fn();
+      const send = await startGeneration(onOpenChange);
+      const world = {
+        id: "generated-world",
+        name: "Generated World",
+        description: "",
+      } as WorldRecord;
+      dataService.saveGeneratedWorld.mockResolvedValue(world);
+      send({
+        type: "done",
+        world,
+        warnings: ["characters could not be generated: LLM error"],
+      });
+
+      expect(
+        await screen.findByText("characters could not be generated: LLM error"),
+      ).toBeTruthy();
+      // A world without gaps closes the dialog by itself after 900 ms.
+      await act(() => vi.advanceTimersByTimeAsync(2_000));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // The dialog has its own close control; the footer button is the last.
+      fireEvent.click(screen.getAllByRole("button", { name: "关闭" }).at(-1)!);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

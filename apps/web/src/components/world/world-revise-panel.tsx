@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Wand2 } from "lucide-react";
-import { worldEditionLocales } from "@covel/shared";
+import { worldEditionLocales, type WorldGenerationPart } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import * as api from "@/services/api.js";
-import type { WorldRecord } from "@/services/api.js";
+import type { GenerateWorldError, WorldRecord } from "@/services/api.js";
 import { getDataService, getStorageMode } from "@/services/data-service.js";
 import {
   WorldGenerationStatus,
@@ -36,6 +36,8 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
   const [instruction, setInstruction] = useState("");
   const [phase, setPhase] = useState<WorldGenerationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<GenerateWorldError["code"]>();
+  const [parts, setParts] = useState<readonly WorldGenerationPart[]>([]);
   const [warnings, setWarnings] = useState<readonly string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const runRef = useRef(0);
@@ -58,20 +60,25 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
     const local = getStorageMode() === "local";
     setPhase("generating");
     setError(null);
+    setErrorCode(undefined);
+    setParts([]);
     setWarnings([]);
-    const fail = (message: string) => {
+    const fail = (message: string, code?: GenerateWorldError["code"]) => {
       if (run !== runRef.current) return;
       abortRef.current = null;
       setPhase("error");
       setError(message);
+      setErrorCode(code);
     };
     abortRef.current = api.reviseWorld(
       world.id,
       request,
       (event) => {
         if (run !== runRef.current) return;
-        if (event.type === "progress") setPhase(event.phase);
-        else if (event.type === "error") fail(event.message);
+        if (event.type === "progress") {
+          setPhase(event.phase);
+          if (event.parts) setParts(event.parts);
+        } else if (event.type === "error") fail(event.message, event.code);
         else
           void (async () => {
             try {
@@ -147,6 +154,8 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
       <WorldGenerationStatus
         phase={phase}
         error={error}
+        errorCode={errorCode}
+        parts={parts}
         t={t}
         doneLabel={t("world.reviseDone", "The change is applied.")}
       />

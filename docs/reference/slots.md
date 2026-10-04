@@ -270,7 +270,7 @@ Key 永远不进 `llm.toml`：dev 放 `.env.llm`，桌面端放 `~/.covel/keys.e
 
 Provider and plugin HTTP helpers cancel rejected response bodies before retrying instead of buffering the entire error stream. Redirect responses are also cancelled when rejected. `Retry-After` waits remain abortable; long finite delays are split into timer-safe intervals, and non-finite delays fail explicitly instead of overflowing into immediate retries.
 
-`Retry-After` 同时接受整数秒和 HTTP-date；过去的日期立即重试，无效值退回退避策略。文本 / 对象 / 流式 / 评估的 gateway 调用默认共享最多 8 次实际 HTTP 请求和 120 秒总时限。runtime 的一次逻辑调用只创建一次预算，HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`；runtime 执行预算继续按原策略计算，并发排队保留原有的额度补偿；每次实际调用同时受执行预算、逻辑总时限和取消信号约束。排队和退避也计入逻辑总时间，已经输出内容的流仍禁止重试。耗尽返回不可重试的 `REQUEST_BUDGET_EXCEEDED`。调用方可通过 `createLlmRequestBudget` 显式设置更紧或更宽的策略，并在 `GatewayOptions.requestBudget` / `LLMAdapter` 参数中传递。
+`Retry-After` 同时接受整数秒和 HTTP-date；过去的日期立即重试，无效值退回退避策略。文本 / 对象 / 流式 / 评估的 gateway 调用默认共享最多 8 次实际 HTTP 请求和 120 秒总时限。runtime 的一次逻辑调用只创建一次预算，HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`；runtime 执行预算继续按原策略计算，并发排队保留原有的额度补偿；每次实际调用同时受执行预算、逻辑总时限和取消信号约束。排队和退避也计入逻辑总时间，已经输出内容的流仍禁止重试。耗尽返回不可重试的 `REQUEST_BUDGET_EXCEEDED`。调用方可通过 `createLlmRequestBudget` 显式设置更紧或更宽的策略，并在 `GatewayOptions.requestBudget` / `LLMAdapter` 参数中传递。AI 世界创作（生成、修订、翻译）就是这样做的：回答长、有的模型输出慢，所以它按“无响应时间”限时，每次请求传入 30 分钟的显式预算，不受默认 120 秒限制（见 `docs/reference/api.md` 的 `POST /api/ai/generate-world`）。
 
 媒体和 embedding 不自动套用文本预算，保留独立 wire 的时限及轮询策略；例如 DashScope WAN 仍可每 2 秒轮询、最多 300 秒。它们可以显式传入预算，此时所有 HTTP 请求（含轮询）都计数。底层 HTTP helper 只消耗传入的预算。观测数据在原 `transportAttempt` 之外提供可选 `logicalAttempt` 和 `transportRetryReason`（`http-429` / `http-5xx`）。
 

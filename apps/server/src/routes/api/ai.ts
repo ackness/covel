@@ -6,7 +6,8 @@ import { worldGenerationDataContracts } from "../../world-data/portable-contract
  * POST /ai/revise-world — Change a world that was created here, by a request
  * in the player's words.
  * Both stream Server-Sent Events so the UI can show phase progress
- * (generating → validating → saving) and receive the final WorldRecord.
+ * (generating → validating → saving), the part the model is writing, and
+ * receive the final WorldRecord.
  */
 
 import { worldOperationLockId } from "../../world-lifecycle.js";
@@ -26,6 +27,7 @@ import {
   WORLD_EXPERIENCE_MODES,
   WORLD_PACKAGE_CONTENT_KINDS,
   type WorldCreationBrief,
+  type WorldGenerationPart,
 } from "@covel/shared";
 import type { LLMAdapter } from "@covel/runtime";
 import type { DataStore, WorldRecord } from "@covel/store";
@@ -38,6 +40,7 @@ import { normalizeLocale } from "../../lib/validators.js";
 import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
 import { isWorldDeleting } from "../../world-lifecycle.js";
 import { worldSectionsOf } from "../../world-data/world-sections.js";
+import { parseIdleTimeoutMs } from "../../world-data/authoring-timeout.js";
 
 type Env = {
   Variables: {
@@ -51,6 +54,8 @@ export const aiRoutes = new Hono<Env>();
 interface ProgressEvent {
   type: "progress";
   phase: "generating" | "validating" | "saving";
+  /** While generating: every part of the world and how far each one is. */
+  parts?: readonly WorldGenerationPart[];
 }
 interface DoneEvent {
   type: "done";
@@ -61,10 +66,29 @@ interface DoneEvent {
 interface ErrorEvent {
   type: "error";
   message: string;
+  /** The model stayed silent for the whole idle timeout; a longer one may help. */
+  code?: "model_idle_timeout";
 }
 type GenerateEvent = ProgressEvent | DoneEvent | ErrorEvent;
 
-const GENERATE_WORLD_ATTEMPT_TIMEOUT_MS = 150_000;
+/**
+ * Sends the progress of the parts in the order it was reported. `createWorld`
+ * reports synchronously and does not wait for the stream; `settled` resolves
+ * when every report is written, and rejects when the client is gone.
+ */
+function partProgress(send: (event: GenerateEvent) => Promise<void>) {
+  let pending = Promise.resolve();
+  return {
+    report(parts: readonly WorldGenerationPart[]) {
+      pending = pending.then(() =>
+        send({ type: "progress", phase: "generating", parts }),
+      );
+      // The failure is seen by `settled`; this keeps it from being unhandled.
+      pending.catch(() => undefined);
+    },
+    settled: () => pending,
+  };
+}
 type SaveTarget = "server-file" | "server-store" | "return-only";
 
 function resolveSaveTarget(value: unknown): SaveTarget | null {
@@ -283,6 +307,10 @@ aiRoutes.post(
     if (brief.error) {
       return c.json(errorBody(brief.error), 400);
     }
+    const idleTimeout = parseIdleTimeoutMs(body.idleTimeoutMs);
+    if (idleTimeout.error) {
+      return c.json(errorBody(idleTimeout.error), 400);
+    }
 
     const env = readRuntimeEnv();
     const worldsDir = resolveUserResourceDirs(env).worlds;
@@ -299,6 +327,7 @@ aiRoutes.post(
         shutdownSignal?.throwIfAborted();
         await send({ type: "progress", phase: "generating" });
 
+        const progress = partProgress(send);
         const createOpts = {
           llm,
           concept: (concept as string).trim(),
@@ -309,7 +338,8 @@ aiRoutes.post(
           signal: shutdownSignal
             ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
             : c.req.raw.signal,
-          attemptTimeoutMs: GENERATE_WORLD_ATTEMPT_TIMEOUT_MS,
+          idleTimeoutMs: idleTimeout.value,
+          onProgress: progress.report,
           logger: {
             info: (...args: unknown[]) => console.log("[createWorld]", ...args),
             warn: (...args: unknown[]) =>
@@ -321,6 +351,7 @@ aiRoutes.post(
 
         const startMs = Date.now();
         const result = await createWorld(createOpts);
+        await progress.settled();
         const elapsedMs = Date.now() - startMs;
 
         console.log(
@@ -335,6 +366,9 @@ aiRoutes.post(
           await send({
             type: "error",
             message: result.errors?.join("\n") ?? "World generation failed",
+            ...(result.idleTimeout
+              ? { code: "model_idle_timeout" as const }
+              : {}),
           });
           return;
         }
@@ -479,6 +513,10 @@ aiRoutes.post(
         400,
       );
     }
+    const idleTimeout = parseIdleTimeoutMs(body.idleTimeoutMs);
+    if (idleTimeout.error) {
+      return c.json(errorBody(idleTimeout.error), 400);
+    }
 
     const stored = await store.getWorld(worldId);
     let existing: WorldRecord;
@@ -538,6 +576,7 @@ aiRoutes.post(
         const signal = shutdownSignal
           ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
           : c.req.raw.signal;
+        const progress = partProgress(send);
         const result = await createWorld({
           llm,
           concept: existing.description || existing.name,
@@ -552,7 +591,8 @@ aiRoutes.post(
             instruction: instruction.trim(),
           },
           signal,
-          attemptTimeoutMs: GENERATE_WORLD_ATTEMPT_TIMEOUT_MS,
+          idleTimeoutMs: idleTimeout.value,
+          onProgress: progress.report,
           logger: {
             info: (...args: unknown[]) => console.log("[reviseWorld]", ...args),
             warn: (...args: unknown[]) =>
@@ -561,11 +601,15 @@ aiRoutes.post(
               console.error("[reviseWorld]", ...args),
           },
         });
+        await progress.settled();
         if (!result.success) {
           console.error("[ai/revise-world] revision failed:", result.errors);
           await send({
             type: "error",
             message: result.errors?.join("\n") ?? "World revision failed",
+            ...(result.idleTimeout
+              ? { code: "model_idle_timeout" as const }
+              : {}),
           });
           return;
         }

@@ -41,8 +41,9 @@ pnpm exec playwright test tests/e2e/game-session.spec.ts --grep "restore"
 pnpm exec playwright test --project=chromium tests/e2e/i18n.spec.ts
 ```
 
-默认套件不访问真实模型。需要验证会产生 provider 请求和费用的 AI 世界生成、三回合游戏
-流程时显式启用：
+默认套件不访问真实模型。AI 世界生成的界面流程由 `world-generation-progress.spec.ts`
+用测试进程内的假 provider 覆盖（见下文“不访问真实模型的模型输出”），几秒跑完。需要用
+真实模型验证会产生 provider 请求和费用的 AI 世界生成、三回合游戏流程时显式启用：
 
 ```bash
 cp llm.toml.example llm.toml
@@ -91,6 +92,7 @@ spec。Playwright 只配置了 `chromium` project。
 | `sendPlayerMessage`          | 输入、发送玩家消息并确认回合启动                              |
 | `expectPlayerCanAct`         | 断言回合结束后玩家一定有可用的操作入口                        |
 | `useServerWorlds`            | 让需要跨页面/API 状态的 spec 显式使用服务端世界与 MemoryStore |
+| `seedAppSettings`            | 预置新手引导版本和界面语言，让 spec 直接落在世界列表          |
 
 关键点：**回合状态要读 `data-executing`，不要用 `input:disabled` 推断**。点击前置操作后先等
 `waitForTurnStarted`，再等 `waitForTurnIdle`；否则异步 preflight 尚未把状态切到执行中时，
@@ -107,6 +109,26 @@ MemoryStore 默认向 Web 暴露 browser-private 模式：世界和会话权威�
 `BrowserVault`，不会跨 Playwright test context 出现在 `/api/worlds`。需要在后续 test 或
 直接 API 断言中复用世界的串行 spec，必须在首次导航前调用 `useServerWorlds(page)`，明确
 切换到服务端世界目录与临时 MemoryStore；纯浏览器持久化语义应在同一 page/context 内验证。
+
+### 不访问真实模型的模型输出
+
+需要模型输出、但不该访问真实 provider 的 spec 使用
+`tests/e2e/helpers/fake-llm-provider.ts`。`startFakeLlmProvider()` 在测试进程里启动一个
+OpenAI 兼容的 provider，监听 `127.0.0.1` 的随机端口：
+
+- `provider.reply = (request) => ({ text, ... })` 决定每个请求的回答。
+- `streamMs` 把回答均匀分散在一段时间内；`stall` 发出第一段后不再输出；`hold` 让回答停在
+  最后一段之前，直到测试放行。用 `hold` 可以在请求进行到一半时断言页面状态，不靠计时。
+- `provider.requests` 按顺序记录收到的请求。
+
+把页面请求指向它的做法见 `world-generation-progress.spec.ts` 的 `useFakeModel`：用
+`page.route` 给请求加上 `X-Slot-Config`（一个 `baseUrl` 指向假 provider 的自定义模型配置）
+和 `X-Provider-Keys`，并把请求体里的 `model` 改成这个配置的 ID。页面、服务端路由、网关和
+HTTP 适配器都是真实的，只有 provider 是假的。
+
+**不要靠真实等待验证超时。** 等待时间是请求参数：世界创作接口的 `idleTimeoutMs` 最小
+可以是 1000，配合 `stall` 一秒多就有结论，配合 `streamMs: 2500` 可以证明“输出持续时间超过
+无响应超时仍能写完”。要验证的是这些性质，与默认的 120 秒无关。
 
 ## 插件流水线验证
 

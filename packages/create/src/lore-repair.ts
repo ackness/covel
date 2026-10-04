@@ -11,6 +11,7 @@ interface WorldLoreRepairOptions {
   readonly lore: string;
   readonly errors: readonly string[];
   readonly signal: AbortSignal;
+  readonly idleTimeoutMs?: number;
   readonly loadPrompt?: PromptLoader;
 }
 
@@ -29,6 +30,7 @@ export async function repairWorldLore(
     llm: options.llm,
     model: options.model,
     signal: options.signal,
+    idleTimeoutMs: options.idleTimeoutMs,
     messages: [
       { role: "system", content: systemPrompt },
       {
