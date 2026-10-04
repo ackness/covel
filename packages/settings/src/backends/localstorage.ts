@@ -6,6 +6,7 @@ import {
 import {
   emptySettingsPersistenceBundle,
   nextSettingsPersistenceBundle,
+  unusableSettingsBundleLabel,
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
 } from "@covel/shared/settings-persistence";
@@ -25,6 +26,33 @@ function readBundle(storage: Storage): SettingsPersistenceBundle {
       }`,
     );
   }
+}
+
+const BACKUP_KEY = /^covel:settings\..+\.bak$/;
+
+/** A backup key that holds nothing yet: an earlier copy is never written over. */
+function freeBackupKey(storage: Storage, label: string): string {
+  const key = `${LOCAL_STORAGE_SETTINGS_KEY}.${label}.bak`;
+  return storage.getItem(key) === null
+    ? key
+    : `${LOCAL_STORAGE_SETTINGS_KEY}.${label}.${Date.now()}.bak`;
+}
+
+/**
+ * Move a bundle this build cannot use to `covel:settings.<label>.bak`: an
+ * earlier format, one without a version, or damaged text. The copy is written
+ * before the original is removed, so a failed write (a full quota) leaves the
+ * bundle in place and the store read-only.
+ */
+function archiveUnusableBundle(storage: Storage): string | null {
+  const raw = storage.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+  if (!raw) return null;
+  const label = unusableSettingsBundleLabel(raw);
+  if (label === undefined) return null;
+  const backupKey = freeBackupKey(storage, label);
+  storage.setItem(backupKey, raw);
+  storage.removeItem(LOCAL_STORAGE_SETTINGS_KEY);
+  return backupKey;
 }
 
 function readSecrets(storage: Storage): Record<string, string> {
@@ -91,16 +119,41 @@ function withSettingsLock<T>(
 export function createLocalStorageBackend(
   storage: Storage = globalThis.localStorage,
 ): SettingsBackendAdapter {
+  let archived: string | null = null;
   return {
     async load() {
-      return readBundle(storage).entries;
+      return (await this.loadWithRevision!()).entries;
     },
     async save(entries) {
       const current = readBundle(storage);
       await this.saveWithRevision!(entries, current.revision);
     },
     async loadWithRevision() {
+      archived = archiveUnusableBundle(storage) ?? archived;
       return readBundle(storage);
+    },
+    async takeArchivedBundle() {
+      const key = archived;
+      archived = null;
+      return key;
+    },
+    async backupBundle(label = "conflict") {
+      const raw = storage.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+      if (!raw) throw new Error("[settings] there is no stored bundle to keep");
+      const backupKey = freeBackupKey(storage, label);
+      storage.setItem(backupKey, raw);
+      return backupKey;
+    },
+    async listBackups() {
+      const keys: string[] = [];
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        if (key && BACKUP_KEY.test(key)) keys.push(key);
+      }
+      return keys.sort();
+    },
+    async readBackup(name) {
+      return BACKUP_KEY.test(name) ? storage.getItem(name) : null;
     },
     async saveWithRevision(entries, expectedRevision) {
       return withSettingsLock(async () => {

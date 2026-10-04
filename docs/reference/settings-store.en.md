@@ -4,7 +4,12 @@
 
 `@covel/settings` provides schema registration, in-memory values, subscriptions, and persistence. Browsers use localStorage; Electron uses IPC and personal `settings.json`. API keys use a separate secrets channel.
 
-Ordinary persisted settings accept only `schemaVersion: 2` with `revision`, `savedAt`, and `entries`. LocalStorage, REST, and desktop IPC share this validation. Unversioned and v1 development data are rejected on reads and replacement writes, without migration or deletion; recreate affected development settings. The separate settings import/export `SettingsExportBundle.schemaVersion: 1` remains the current export contract.
+Ordinary persisted settings accept only `schemaVersion: 2` with `revision`, `savedAt`, and `entries`. LocalStorage, REST, and desktop IPC share this validation. Data this build cannot use is not migrated. The app keeps a copy, makes the settings usable again, and says so once:
+
+- **The whole bundle is unusable**: an earlier format (`v1`), no version (`unversioned`), or text that is not a bundle (`damaged`). It is moved aside unchanged during load and the settings start from their defaults. The browser stores it as `covel:settings.<label>.bak`; the desktop shell renames the file to `settings.<label>.bak.json` at startup. A bundle from a later build is not such a bundle: reads and replacement writes are rejected, the content is kept, and SettingsStore is read-only.
+- **Single values are unusable**: the registered schema of a key refuses the stored value (an option removed by an upgrade, a plugin setting with a new range). This used to make the whole SettingsStore read-only. The store now keeps a full copy (`covel:settings.conflict.bak` / `settings.conflict.bak.json`) and then removes those keys from storage: they read their defaults and the other settings are unchanged. A key registered after the load (a plugin setting) is handled the same way; a write issued before that is done waits behind it.
+- A copy never replaces an existing copy (a timestamp is added to the name). When the copy cannot be written, or the backend has no `backupBundle`, nothing is dropped and SettingsStore stays read-only.
+- The notice comes through `subscribeRepairs` and `SettingsBackendAdapter.takeArchivedBundle()`. The copies can be viewed and downloaded in Settings → Data (`listBackups` / `readBackup`; desktop IPC `covel:settings:backup`, `covel:settings:backups`, `covel:settings:read-backup`). The secret channel is not affected and a copy holds no API keys. The separate settings import/export `SettingsExportBundle.schemaVersion: 1` remains the current export contract.
 
 Settings storage follows the current device: Electron IPC selects personal files; every browser selects localStorage. `/api/config/info` discovers server administration capabilities only. `COVEL_HOME` and `isDesktop` never select shared server settings for a browser, and failed discovery does not block local initialization.
 
@@ -21,6 +26,23 @@ Invalid custom themes in settings backups are skipped individually while valid t
 The Data import preview validates each entry against its currently registered schema. Incompatible entries and secrets misplaced in ordinary `entries` cannot be selected; unregistered ordinary keys remain importable. Backups containing only separate `keys` can also be applied. Import and reset report completion only after persistence succeeds; failed imports retain the preview and show an error.
 
 Key, global, and persistence-error subscriptions isolate each synchronous callback failure. A throwing observer cannot suppress siblings, turn a successful save into a failure, or replace the real I/O error. Diagnostics contain no setting key, value, or raw callback error.
+
+## Generic setting controls
+
+A registered setting without a purpose-built pane renders through the generic widgets (`apps/web/src/settings/widgets/`): General and each plugin's settings.
+
+- Text, number, slider and secret controls keep a local draft and write on blur or Enter. A draft that is still open when the dialog closes is written too. A write per key press validated every half-typed value, so a number could not be retyped.
+- A number outside the declared `min` / `max` becomes the nearest allowed value, and a value the schema rejects for being fractional is rounded. An empty or non-numeric draft restores the stored value. The range is shown beside the description when both bounds are declared.
+- "Use default" appears on a key the player has set (`store.has(key)`) and calls `store.clear(key)`. For a plugin setting this is how the world's `pluginSettings` value or the manifest default comes back into force; an explicit value equal to the default still overrides the world.
+- A description comes from the Web catalogue (`settings.frameworkEntries.*`) for framework keys and from the manifest for plugin keys; it shows whether or not the registry entry repeats it.
+
+- A plugin page shows the value from the current world's `pluginSettings`: a key the player has not set takes it, and the page names the world. A value the registered schema refuses is not used, as on the server.
+
+Toasts render under `document.body`, above every dialog. A click on a toast does not close the dialog under it.
+
+The Configuration files page edits the raw configuration as text: the settings of this device (JSON, without secrets), and the files the server offers — `llm.toml`, and `config.toml` in desktop mode (see `/api/config/raw` in the [API reference](./api.md)). A save of the settings JSON checks each entry with its registered schema, writes only the keys that changed, and returns a deleted key to its default. A copy is kept first (`covel:settings.edit.bak` / `settings.edit.bak.json`), and an earlier copy can be loaded into the editor and saved.
+
+The Operator Access page appears only where it has a use: it is hidden when `/api/health` reports `operatorTokenRequired: false` and this browser holds no token. It stays while the server has not answered, so that the operator of a hosted deployment has a place to enter the token. Language lists name each language in that language.
 
 ## Multiple instances and synchronization
 

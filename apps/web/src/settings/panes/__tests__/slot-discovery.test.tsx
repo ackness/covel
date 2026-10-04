@@ -24,6 +24,7 @@ vi.mock("../use-model-capability.js", () => ({
 const mocks = vi.hoisted(() => ({
   store: null as unknown as SettingsStore,
   plugins: [] as PluginSummary[],
+  world: null as unknown,
   llm: {
     configured: true,
     providers: [],
@@ -44,11 +45,17 @@ vi.mock("@/settings/store", () => ({
 }));
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
-    state: { plugins: mocks.plugins, presets: [], llmConfig: mocks.llm },
+    state: {
+      plugins: mocks.plugins,
+      presets: [],
+      llmConfig: mocks.llm,
+      world: mocks.world,
+    },
   }),
 }));
 
 beforeEach(async () => {
+  mocks.world = null;
   await i18n.changeLanguage("en-US");
   mocks.store = new SettingsStore({
     load: async () => ({}),
@@ -201,4 +208,35 @@ it("refreshes plugin slot choices without rebooting and retains an unavailable s
     ),
   );
   expect(picker.value).toBe("removed-slot");
+});
+
+it("shows the world's default for a setting the player has not set", async () => {
+  mocks.world = {
+    id: "mistport",
+    name: { "en-US": "Mistport" },
+    metadata: { pluginSettings: { fixture: { mediaRole: "story" } } },
+  };
+  const view = () => (
+    <PluginSettingsPane
+      entries={mocks.store
+        .listEntries()
+        .filter((entry) => entry.pluginId === "fixture")}
+    />
+  );
+  const { rerender } = render(view());
+  const picker = screen.getByRole("combobox", {
+    name: "Media role",
+  }) as HTMLSelectElement;
+  // The manifest default is "image"; this world runs the plugin on "story".
+  expect(picker.value).toBe("story");
+  expect(
+    screen.getByText("Using the default of the world “Mistport”."),
+  ).toBeTruthy();
+
+  await act(async () => {
+    await mocks.store.set("plugin.fixture.mediaRole", "image");
+  });
+  rerender(view());
+  expect(picker.value).toBe("image");
+  expect(screen.queryByText(/Using the default of the world/)).toBeNull();
 });

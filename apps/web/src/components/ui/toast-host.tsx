@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useState, type ComponentType } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, Copy, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -69,7 +70,7 @@ export function ToastHost() {
       const handle = setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== toast.id));
         timers.delete(toast.id);
-      }, AUTO_DISMISS_MS[toast.kind]);
+      }, toast.durationMs ?? AUTO_DISMISS_MS[toast.kind]);
       timers.set(toast.id, handle);
     }
     // Clean up timers whose toasts were dismissed manually.
@@ -99,7 +100,7 @@ export function ToastHost() {
     const handle = setTimeout(() => {
       setToasts((prev) => prev.filter((entry) => entry.id !== id));
       timersRef.current.delete(id);
-    }, AUTO_DISMISS_MS[toast.kind]);
+    }, toast.durationMs ?? AUTO_DISMISS_MS[toast.kind]);
     timersRef.current.set(id, handle);
   };
 
@@ -140,8 +141,12 @@ export function ToastHost() {
 
   if (toasts.length === 0) return null;
 
-  return (
+  // Rendered under `document.body`: the app root is its own stacking context,
+  // so a toast inside it sits under every dialog, whatever its z-index, and a
+  // save error raised from a dialog was never seen.
+  return createPortal(
     <div
+      data-toast-host
       aria-live="polite"
       aria-atomic="false"
       className="pointer-events-none fixed bottom-4 right-4 z-100 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
@@ -194,6 +199,7 @@ export function ToastHost() {
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }

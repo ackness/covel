@@ -714,6 +714,9 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | GET  | `/api/app-update/latest`       | 仅桌面：通过当前代理查询 GitHub 最新稳定 Release；返回 `{ version, name, publishedAt }`                                                                                                                                                                                |
 | PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                                                                                                                           |
 | POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                                                                                                                           |
+| GET  | `/api/config/raw`              | 列出可在应用内以文本编辑的配置文件：`llm.toml`，桌面模式下还有 `config.toml`；返回 `{ items: [{ name, path, exists, applies }] }`                                                                                                                                      |
+| GET  | `/api/config/raw/:name`        | 读取一个配置文件的文本和 `digest`；文件不存在时 `content` 是起始内容                                                                                                                                                                                                   |
+| PUT  | `/api/config/raw/:name`        | 校验并保存文本；body `{ content, baseDigest }`。`llm.toml` 保存后立即重载                                                                                                                                                                                              |
 
 代理 PUT 先准备并验证传输，再原子持久化配置，最后发布到进程内。磁盘写入失败时保留原 dispatcher 与 GET 状态。底层 `prepareOutboundProxy()` 提供 `commit()` / `dispose()`；未提交的传输由调用者释放，`configureOutboundProxy()` 用于立即应用。
 
@@ -779,6 +782,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
   "version": "1.0.0",
   "bootId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "timestamp": "2025-01-15T10:00:00.000Z",
+  "operatorTokenRequired": false,
   "storage": {
     "data": {
       "backend": "sqlite",
@@ -818,16 +822,17 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 }
 ```
 
-| 字段                                      | 说明                                                                                                                 |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                                            |
-| `storage.data.backend`                    | 当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                                             |
-| `storage.data.frontendMode`               | 前端数据模式：`local` 使用 Dexie BrowserVault checkpoint；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。 |
-| `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                                           |
-| `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。                         |
-| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                                             |
-| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                                        |
-| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                                        |
+| 字段                                      | 说明                                                                                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                                                            |
+| `operatorTokenRequired`                   | 当前部署是否在管理请求上校验运维令牌（`DEPLOYMENT_TIER` 为 `demo` / `commercial` 时为 `true`）。Web 设置据此显示或隐藏“运维访问”页。 |
+| `storage.data.backend`                    | 当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                                                             |
+| `storage.data.frontendMode`               | 前端数据模式：`local` 使用 Dexie BrowserVault checkpoint；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。                 |
+| `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                                                           |
+| `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。                                         |
+| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                                                             |
+| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                                                        |
+| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                                                        |
 
 ---
 
@@ -3606,6 +3611,33 @@ edited) and the response reports it: `{ "ok": true, "created": true }`. Every ot
 missing target, and a missing `llm.toml` outside desktop mode, returns `400` with
 `open_target_unavailable`. Opening a file does not reload the running gateway. Use
 `POST /api/llm-config/reload` after editing to apply model configuration.
+
+### Editing a configuration file as text
+
+`GET /api/config/raw` lists the files the server lets the app edit: `llm.toml`
+(the path the server loads, `source.path` of `GET /api/llm-config`), and
+`config.toml` in desktop mode. `keys.env` is never offered.
+
+`GET /api/config/raw/:name` returns
+`{ name, path, exists, applies, content, digest }`. `applies` is `reload` for
+`llm.toml` and `restart` for `config.toml`. While the file does not exist,
+`content` is a starting text and `digest` is that of the empty file.
+
+`PUT /api/config/raw/:name` takes `{ content, baseDigest }`:
+
+- The text is checked with the parser the server loads the file with. A text
+  that fails returns `400 config_file_invalid` with the parser's message, and
+  nothing is written. A text over 256 KiB returns `413 config_file_too_large`.
+- `baseDigest` must be the digest of the file as it is on disk. A file that
+  changed after it was read returns `409 config_file_changed`.
+- The file as it was is copied to `<name>.bak`, then replaced atomically.
+- `llm.toml` is applied at once. The response is the read shape plus
+  `backup` (the path of the copy) and `reload` (`{ ok, slots, error? }`).
+
+An unknown name returns `404 config_file_unknown`. The three routes use the
+guard of the install endpoints: the operator token on a hosted tier, the
+desktop token under the desktop shell, and `COVEL_INSTALL_API_ENABLED=1` in
+production.
 
 ### Installed resource storage and vector configuration
 

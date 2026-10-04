@@ -4,7 +4,12 @@
 
 `@covel/settings` 提供 schema 注册、内存值、订阅与持久化。浏览器使用 localStorage；Electron 通过 IPC 使用个人 `settings.json`。API key 使用独立的 secrets 通道。
 
-普通设置的持久化合同只接受 `schemaVersion: 2`，必须包含 `revision`、`savedAt` 和 `entries`。localStorage、REST 和桌面 IPC 共用该校验；无版本或 v1 开发数据不迁移，读取和覆盖写入均会拒绝，原内容保留。受影响的开发设置需要重新建立。设置导入/导出的 `SettingsExportBundle.schemaVersion: 1` 是独立的当前合同，不受此限制影响。
+普通设置的持久化合同只接受 `schemaVersion: 2`，必须包含 `revision`、`savedAt` 和 `entries`。localStorage、REST 和桌面 IPC 共用该校验；这个版本用不了的数据不迁移，而是先留一份副本、再让设置恢复可用，并在应用内提示一次：
+
+- **整份数据用不了**：更早的格式（`v1`）、没有版本号（`unversioned`）、不是合法数据（`damaged`）。加载时把它原样移到一旁，设置从默认值开始。浏览器存为 `covel:settings.<标签>.bak`，桌面端在启动时把文件改名为 `settings.<标签>.bak.json`。更新版本写的数据不在此列：读取和覆盖写入均会拒绝，原内容保留，SettingsStore 只读。
+- **个别值用不了**：存储的值不被该键当前注册的 schema 接受（升级后某个选项被移除、插件的设置改了取值范围）。这以前会让整个 SettingsStore 只读。现在先留一份完整副本（`covel:settings.conflict.bak` / `settings.conflict.bak.json`），再从存储中去掉这些键，它们读回默认值，其余设置不变。加载之后才注册的键（插件设置）同样处理；处理完成前发起的写入会排在它后面。
+- 副本从不覆盖已有的副本（重名时加时间戳）。副本写不进去、或后端没有 `backupBundle` 时，什么都不丢弃，SettingsStore 保持只读。
+- 提示经 `subscribeRepairs` 和 `SettingsBackendAdapter.takeArchivedBundle()` 给出；副本可在“设置 → 数据”查看和下载（`listBackups` / `readBackup`，桌面 IPC `covel:settings:backup`、`covel:settings:backups`、`covel:settings:read-backup`）。密钥通道不受影响，副本里没有 API 密钥。设置导入/导出的 `SettingsExportBundle.schemaVersion: 1` 是独立的当前合同，不受此限制影响。
 
 设置后端由当前设备确定：存在 Electron IPC 时使用个人文件，否则始终使用浏览器 localStorage。服务端 `/api/config/info` 只用于发现管理能力，`COVEL_HOME` 和 `isDesktop` 都不会把浏览器设置切换成服务端共享文件。管理探测失败不阻止本地设置初始化。
 
@@ -21,6 +26,23 @@
 设置备份中的无效自定义主题会被逐条跳过，合法主题继续加载。模型配置导入只接受当前 `{ version: 2, providers: [...] }` 导出格式，并逐条清理当前配置。不受支持的文件或没有可用配置的非空文件会显示错误，保留当前配置。
 
 设置的数据导入预览使用当前注册的 schema 检查每个条目，不兼容条目和误放在普通 `entries` 中的密钥不能勾选导入；未注册的普通键仍可保留。仅包含独立 `keys` 的备份也可以导入。导入或重置只有在持久化成功后提示完成，保存失败时保留导入预览并显示错误。
+
+## 通用设置控件
+
+没有专用面板的注册项由通用控件渲染（`apps/web/src/settings/widgets/`）：通用页和每个插件的设置页。
+
+- 文本、数字、滑块和密钥控件保留本地草稿，失焦或按 Enter 时写入；弹窗关闭时仍未提交的草稿也会写入。逐键写入会校验每个输入到一半的值，数字因此无法重新输入。
+- 超出声明的 `min` / `max` 的数字取最近的允许值；因带小数被 schema 拒绝的值四舍五入。空草稿或非数字草稿恢复已保存的值。同时声明上下限时，范围显示在说明旁。
+- 玩家设置过的键（`store.has(key)`）显示“恢复默认”，点击调用 `store.clear(key)`。插件设置只有这样才会重新跟随世界的 `pluginSettings` 或 manifest 默认值；与默认值相同的显式值仍会覆盖世界。
+- 框架键的说明取自 Web 文案目录（`settings.frameworkEntries.*`），插件键取自 manifest；注册项是否重复填写说明不影响显示。
+
+- 插件设置页显示当前世界 `pluginSettings` 中的值：玩家没有设置过的键以它为准，并注明来自哪个世界；该值不符合注册 schema 时不采用（服务端同样不采用）。
+
+Toast 渲染在 `document.body` 下，位于所有弹窗之上；点击 toast 不会关闭它下面的弹窗。
+
+“配置文件”页把原始配置作为文本编辑：这台设备的设置（JSON，不含密钥）以及服务端提供的 `llm.toml`、桌面模式下的 `config.toml`（见 [API](./api.md) 的 `/api/config/raw`）。设置的 JSON 保存时逐项用注册的 schema 检查，只写入有变化的键，被删掉的键恢复默认；保存前留一份副本（`covel:settings.edit.bak` / `settings.edit.bak.json`），之前的副本也可以载入编辑框后再保存。
+
+“运维访问”页只在需要它的地方出现：`/api/health` 的 `operatorTokenRequired` 为 `false` 且此浏览器没有保存令牌时隐藏；服务端尚未应答时保留，托管部署的运维人员才有地方填写令牌。语言列表用各语言自己的名称。
 
 ## 多实例写入与同步
 

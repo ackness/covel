@@ -1,4 +1,5 @@
 import {
+  SettingsRevisionConflictError,
   type SettingEntry,
   type SettingGroup,
   type SettingKey,
@@ -6,6 +7,8 @@ import {
   type SettingsExportBundle,
   type SettingsListener,
   type SettingsPersistenceErrorListener,
+  type SettingsRepair,
+  type SettingsRepairListener,
   type SettingsStoreApi,
 } from "./types.js";
 import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
@@ -33,6 +36,11 @@ export class SettingsStore implements SettingsStoreApi {
   private readonly persistenceErrorListeners =
     new Set<SettingsPersistenceErrorListener>();
   private readonly invalidHydratedKeys = new Set<SettingKey>();
+  private readonly repairListeners = new Set<SettingsRepairListener>();
+  /** Keys registered after load whose stored value is waiting to be dropped. */
+  private readonly pendingRepairKeys = new Set<SettingKey>();
+  /** Settles when no stored value waits to be dropped. Writes queue behind it. */
+  private repairing: Promise<void> | null = null;
   /**
    * Full snapshots must reach each backend in mutation order. Without this
    * queue, a slow older save can finish after a newer one and silently erase
@@ -76,10 +84,11 @@ export class SettingsStore implements SettingsStoreApi {
   private async hydrate(): Promise<void> {
     try {
       const versioned = this.hasVersionedPersistence();
-      const [stored, secrets] = await Promise.all([
-        versioned ? this.adapter.loadWithRevision!() : this.adapter.load(),
+      const [loaded, secrets] = await Promise.all([
+        this.loadRepaired(versioned),
         this.adapter.loadSecrets(),
       ]);
+      const { stored, repair } = loaded;
       const versionedStored = stored as SettingsPersistenceBundle;
       const entries = versioned
         ? versionedStored.entries
@@ -112,6 +121,7 @@ export class SettingsStore implements SettingsStoreApi {
       }
       this.hydrationError = null;
       this.hydrationState = "ready";
+      if (repair) this.publishRepair(repair);
     } catch (err) {
       // Boot continues on defaults (read-only) rather than failing hard, but
       // writes are refused: every save is a full snapshot, so writing from a
@@ -124,6 +134,122 @@ export class SettingsStore implements SettingsStoreApi {
     } finally {
       this.loadResolve();
     }
+  }
+
+  /**
+   * Load the stored entries. A stored value that its registered schema
+   * refuses made the whole store read-only: one retired option, after an
+   * upgrade of the app or of a plugin, and nothing could be saved again.
+   * When the backend can keep a copy of the bundle, such values are dropped
+   * instead, so those keys read their defaults, and the copy keeps what was
+   * there. Without a copy nothing is dropped, and the load fails as before.
+   */
+  private async loadRepaired(versioned: boolean): Promise<{
+    stored: SettingsPersistenceBundle | Record<SettingKey, unknown>;
+    repair?: SettingsRepair;
+  }> {
+    for (let attempt = 0; ; attempt += 1) {
+      const stored = versioned
+        ? await this.adapter.loadWithRevision!()
+        : await this.adapter.load();
+      const entries = versioned
+        ? (stored as SettingsPersistenceBundle).entries
+        : (stored as Record<SettingKey, unknown>);
+      const keys = this.refusedKeys(entries);
+      if (keys.length === 0 || !this.adapter.backupBundle) return { stored };
+      const backup = await this.adapter.backupBundle();
+      const kept = Object.fromEntries(
+        Object.entries(entries).filter(([key]) => !keys.includes(key)),
+      );
+      try {
+        if (!versioned) {
+          await this.adapter.save(kept);
+          return { stored: kept, repair: { backup, keys } };
+        }
+        return {
+          stored: await this.adapter.saveWithRevision!(
+            kept,
+            (stored as SettingsPersistenceBundle).revision,
+          ),
+          repair: { backup, keys },
+        };
+      } catch (error) {
+        // Another window saved first, perhaps the same repair. Look again.
+        if (!(error instanceof SettingsRevisionConflictError) || attempt >= 2) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  /** Stored keys whose registered schema refuses the stored value. */
+  private refusedKeys(entries: Record<SettingKey, unknown>): SettingKey[] {
+    return Object.entries(entries)
+      .filter(([key, value]) => {
+        const entry = this.registry.get(key);
+        return (
+          !!entry &&
+          !this.isSecretKey(key) &&
+          !entry.schema.safeParse(value).success
+        );
+      })
+      .map(([key]) => key);
+  }
+
+  /**
+   * Drop the stored values of keys that were registered after the load and
+   * refuse what is stored: a plugin whose setting changed its options. The
+   * keys already read their defaults; this keeps a copy of the bundle and
+   * removes them from it. A failure leaves the store read-only, as a refused
+   * value did before there was a copy to keep.
+   */
+  private scheduleRepair(key: SettingKey): void {
+    this.pendingRepairKeys.add(key);
+    this.repairing ??= Promise.resolve().then(async () => {
+      try {
+        while (this.pendingRepairKeys.size > 0) {
+          const keys = [...this.pendingRepairKeys];
+          this.pendingRepairKeys.clear();
+          const backup = await this.adapter.backupBundle!();
+          await this.persist(
+            "values",
+            () => {
+              for (const stale of keys) this.values.delete(stale);
+            },
+            keys,
+          );
+          for (const stale of keys) {
+            this.invalidHydratedKeys.delete(stale);
+            this.notify(stale, this.get(stale));
+          }
+          this.publishRepair({ backup, keys });
+        }
+      } catch (error) {
+        this.pendingRepairKeys.clear();
+        this.hydrationError =
+          error instanceof Error ? error : new Error(String(error));
+        this.hydrationState = "failed";
+        this.emitPersistenceError(this.hydrationError);
+      } finally {
+        this.repairing = null;
+      }
+    });
+  }
+
+  private publishRepair(repair: SettingsRepair): void {
+    for (const listener of this.repairListeners) {
+      this.notifyObserver(() => listener(repair));
+    }
+  }
+
+  /**
+   * Run a write after any stored value that waits to be dropped is gone. The
+   * stored bundle still holds that value, and a write on top of it would be
+   * refused. With nothing waiting the write runs at once, so a value that was
+   * just set reads back in the same tick.
+   */
+  private afterRepair<T>(run: () => Promise<T>): Promise<T> {
+    return this.repairing ? this.repairing.then(run) : run();
   }
 
   /** Whether `init()` successfully read the persisted state. */
@@ -389,6 +515,10 @@ export class SettingsStore implements SettingsStoreApi {
       const parsed = entry.schema.safeParse(this.values.get(entry.key));
       if (this.isSecretKey(entry.key) || !parsed.success) {
         this.invalidHydratedKeys.add(entry.key);
+        if (!this.isSecretKey(entry.key) && this.adapter.backupBundle) {
+          this.scheduleRepair(entry.key);
+          return;
+        }
         this.hydrationError = new Error(
           `Settings hydration validation failed for dynamically registered ${entry.key}`,
         );
@@ -423,6 +553,7 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   set<T>(key: SettingKey, value: T): Promise<void> {
+    if (this.repairing) return this.afterRepair(() => this.set(key, value));
     try {
       let normalized: unknown = value;
       const entry = this.registry.get(key);
@@ -463,6 +594,7 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   setMany(entries: Readonly<Record<SettingKey, unknown>>): Promise<void> {
+    if (this.repairing) return this.afterRepair(() => this.setMany(entries));
     try {
       const updates = Object.entries(entries).map(([key, value]) => {
         this.assertNonSecretEntry(key);
@@ -491,6 +623,7 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   clear(key: SettingKey): Promise<void> {
+    if (this.repairing) return this.afterRepair(() => this.clear(key));
     try {
       const entry = this.registry.get(key);
       const operation = this.isSecretKey(key)
@@ -523,6 +656,7 @@ export class SettingsStore implements SettingsStoreApi {
     // defaults, which reads to the player as "my settings are gone" — and
     // their natural response is to hit Reset, which would then wipe the very
     // settings.json / keys.env we failed to read.
+    if (this.repairing) return this.afterRepair(() => this.clearAll());
     try {
       this.assertHydrated();
       return this.observePersistence(
@@ -580,7 +714,9 @@ export class SettingsStore implements SettingsStoreApi {
     bundle: SettingsExportBundle,
     opts: { keys: readonly SettingKey[]; includeSecrets?: boolean },
   ): Promise<void> {
-    return this.observePersistence(this.importInternal(bundle, opts));
+    return this.observePersistence(
+      this.afterRepair(() => this.importInternal(bundle, opts)),
+    );
   }
 
   private async importInternal(
@@ -665,6 +801,28 @@ export class SettingsStore implements SettingsStoreApi {
   ): () => void {
     this.persistenceErrorListeners.add(handler);
     return () => this.persistenceErrorListeners.delete(handler);
+  }
+
+  subscribeRepairs(handler: SettingsRepairListener): () => void {
+    this.repairListeners.add(handler);
+    return () => this.repairListeners.delete(handler);
+  }
+
+  async backup(label: string): Promise<string | null> {
+    try {
+      return (await this.adapter.backupBundle?.(label)) ?? null;
+    } catch {
+      // Nothing is stored yet, or the backend could not write the copy.
+      return null;
+    }
+  }
+
+  async listBackups(): Promise<readonly string[]> {
+    return (await this.adapter.listBackups?.()) ?? [];
+  }
+
+  async readBackup(name: string): Promise<string | null> {
+    return (await this.adapter.readBackup?.(name)) ?? null;
   }
 
   private notify(key: SettingKey, value: unknown): void {

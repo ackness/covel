@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   emptySettingsPersistenceBundle,
   nextSettingsPersistenceBundle,
+  unusableSettingsBundleLabel,
   parseSettingsPersistenceBundle,
 } from "../src/settings-persistence/schema.js";
 
@@ -34,6 +35,23 @@ describe("settings persistence schema", () => {
       ).toThrow(/unsupported/);
     },
   );
+
+  it.each([
+    [{ schemaVersion: 1, entries: {} }, "v1"],
+    [{ entries: { "ui.locale": "en-US" } }, "unversioned"],
+    [{ schemaVersion: 2, entries: [] }, "damaged"],
+    [{ schemaVersion: "1", entries: {} }, "damaged"],
+    [[], "damaged"],
+    // This build reads the first; a later build still needs the second.
+    [{ schemaVersion: 2, revision: 0, savedAt: "", entries: {} }, undefined],
+    [{ schemaVersion: 3, entries: {} }, undefined],
+  ])("labels the stored bundle %j as %s", (value, label) => {
+    expect(unusableSettingsBundleLabel(JSON.stringify(value))).toBe(label);
+  });
+
+  it("labels text that is not JSON as damaged", () => {
+    expect(unusableSettingsBundleLabel("{ not json")).toBe("damaged");
+  });
 
   it("rejects corrupt, incomplete, and future bundles", () => {
     expect(() => parseSettingsPersistenceBundle({ schemaVersion: 2 })).toThrow(

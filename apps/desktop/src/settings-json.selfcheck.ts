@@ -3,6 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  archiveUnusableSettingsFile,
+  backupSettingsFile,
+  listSettingsBackups,
+  readSettingsBackup,
   readSettingsBundle,
   writeSettingsEntriesAtomic,
 } from "./settings-json.js";
@@ -107,6 +111,80 @@ try {
     [],
     "atomic save cleans up its same-directory temporary file",
   );
+
+  // A file this build cannot use is moved aside, byte for byte, and the next
+  // read is a fresh install.
+  const olderBytes = JSON.stringify({
+    schemaVersion: 1,
+    savedAt: "2026-07-06T02:48:18.590Z",
+    entries: { "ui.locale": "zh-CN" },
+  });
+  fs.writeFileSync(settingsFile, olderBytes, "utf-8");
+  assert.equal(
+    archiveUnusableSettingsFile(settingsFile),
+    "settings.v1.bak.json",
+  );
+  assert.equal(
+    fs.readFileSync(path.join(tempRoot, "settings.v1.bak.json"), "utf-8"),
+    olderBytes,
+  );
+  assert.deepEqual(readSettingsBundle(settingsFile).entries, {});
+  assert.equal(archiveUnusableSettingsFile(settingsFile), null, "missing file");
+
+  fs.writeFileSync(settingsFile, olderBytes, "utf-8");
+  const second = archiveUnusableSettingsFile(settingsFile);
+  assert.match(second ?? "", /^settings\.v1\.\d+\.bak\.json$/);
+  assert.equal(
+    fs.readFileSync(path.join(tempRoot, "settings.v1.bak.json"), "utf-8"),
+    olderBytes,
+    "an earlier backup is not written over",
+  );
+
+  for (const [contents, backup] of [
+    [
+      JSON.stringify({ entries: { old: true } }),
+      "settings.unversioned.bak.json",
+    ],
+    ["{ not json", "settings.damaged.bak.json"],
+  ] as const) {
+    fs.writeFileSync(settingsFile, contents, "utf-8");
+    assert.equal(archiveUnusableSettingsFile(settingsFile), backup);
+    assert.equal(
+      fs.readFileSync(path.join(tempRoot, backup), "utf-8"),
+      contents,
+    );
+  }
+
+  // A file this build reads and a file from a later build stay where they are.
+  for (const kept of [
+    JSON.stringify({ schemaVersion: 2, revision: 3, savedAt: "", entries: {} }),
+    JSON.stringify({ schemaVersion: 3, entries: {} }),
+  ]) {
+    fs.writeFileSync(settingsFile, kept, "utf-8");
+    assert.equal(archiveUnusableSettingsFile(settingsFile), null);
+    assert.equal(fs.readFileSync(settingsFile, "utf-8"), kept);
+  }
+
+  // A copy for values the settings now refuse: the file itself stays, the
+  // copy is listed, and only a listed name can be read.
+  const current = JSON.stringify({
+    schemaVersion: 2,
+    revision: 3,
+    savedAt: "",
+    entries: { "ui.appearance": "retired-theme" },
+  });
+  fs.writeFileSync(settingsFile, current, "utf-8");
+  assert.equal(backupSettingsFile(settingsFile), "settings.conflict.bak.json");
+  assert.equal(fs.readFileSync(settingsFile, "utf-8"), current);
+  assert.ok(
+    listSettingsBackups(settingsFile).includes("settings.conflict.bak.json"),
+  );
+  assert.equal(
+    readSettingsBackup(settingsFile, "settings.conflict.bak.json"),
+    current,
+  );
+  assert.equal(readSettingsBackup(settingsFile, "settings.json"), null);
+  assert.equal(readSettingsBackup(settingsFile, "../settings.json"), null);
 
   console.log("settings-json selfcheck: OK");
 } finally {

@@ -29,6 +29,17 @@ describe("operator access settings navigation", () => {
     ).toBe("运维访问");
   });
 
+  it("leaves the pane out where the server checks no operator token", () => {
+    const nodes = buildNavTree(emptyStore, {
+      locale: "en-US",
+      includeOperatorAccess: false,
+    });
+
+    expect(nodes.some((node) => node.id === OPERATOR_ACCESS_NODE_ID)).toBe(
+      false,
+    );
+  });
+
   it("is discoverable through settings search", () => {
     const nodes = buildNavTree(emptyStore, { locale: "en-US" });
 

@@ -23,6 +23,10 @@ const INVOKE_CHANNELS = [
   "covel:keys:save",
   "covel:settings:load",
   "covel:settings:save",
+  "covel:settings:archived",
+  "covel:settings:backup",
+  "covel:settings:backups",
+  "covel:settings:read-backup",
   // Import is dialog-only: the renderer triggers a native file chooser in the
   // main process. No renderer-supplied path channels.
   "covel:import:pick-plugin",

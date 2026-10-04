@@ -48,6 +48,10 @@ function frameworkSettingText(
         "settings.frameworkEntries.chatMessageWindow.label",
         "Chat window message limit",
       ),
+      description: t(
+        "settings.frameworkEntries.chatMessageWindow.description",
+        "How many messages stay loaded in the chat. Older messages leave the window and load again when you scroll up.",
+      ),
     },
     "ui.expandTurnUpdates": {
       label: t(
@@ -138,12 +142,13 @@ export function resolveSettingOptionText(
   locale: string,
 ): string {
   const fallback = resolveI18nText(option.label, locale) ?? option.value;
-  if (
-    !entry.pluginId &&
-    entry.key === "ui.locale" &&
-    localeTier(option.value) === "extended"
-  )
-    return `${fallback} (${i18n.getFixedT(locale)("onboarding.languageExperimental", "experimental")})`;
+  if (!entry.pluginId && entry.key === "ui.locale") {
+    // Each language is named in itself, as in the other language switchers.
+    const name = resolveI18nText(option.label, option.value) ?? option.value;
+    return localeTier(option.value) === "extended"
+      ? `${name} (${i18n.getFixedT(locale)("onboarding.languageExperimental", "experimental")})`
+      : name;
+  }
   if (entry.pluginId || entry.key !== "ui.scheme") return fallback;
   if (option.value !== "light" && option.value !== "dark") return fallback;
   return i18n.getFixedT(locale)(

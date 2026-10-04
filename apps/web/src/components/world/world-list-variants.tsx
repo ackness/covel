@@ -1,5 +1,13 @@
 import { useState, type CSSProperties } from "react";
-import { ArrowRight, Eye, KeyRound, Play, Trash2, Wand2 } from "lucide-react";
+import {
+  ArrowRight,
+  Eye,
+  Play,
+  Plug,
+  Settings,
+  Trash2,
+  Wand2,
+} from "lucide-react";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { sessionContinueLabel } from "@/lib/session-display.js";
@@ -298,6 +306,7 @@ export function WorldShowcase({
   interfaceLocale,
   onOpenGenerator,
   onOpenSettings,
+  onOpenAllSettings,
   onEnterWorld,
   recentSessions,
   onResumeSession,
@@ -352,9 +361,19 @@ export function WorldShowcase({
             className="ui-btn ui-world-glass h-10 px-3.5"
             title={primarySlotLabel ?? undefined}
           >
-            <KeyRound className="h-3.5 w-3.5" />
+            <Plug className="h-3.5 w-3.5" />
             {t("session.configureKeys", "API keys & presets")}
           </button>
+          {onOpenAllSettings && (
+            <button
+              type="button"
+              onClick={onOpenAllSettings}
+              className="ui-btn ui-world-glass h-10 px-3.5"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              {t("nav.settings", "Settings")}
+            </button>
+          )}
         </div>
 
         <div className="min-h-10 flex-1" />

@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { classifyServerStreamLine } from "./logging.js";
+import { classifyServerStreamLine, formatLogPart } from "./logging.js";
+
+assert.match(
+  formatLogPart(new Error("unsupported settings schemaVersion: 1")),
+  /unsupported settings schemaVersion: 1/,
+);
+assert.equal(formatLogPart({ port: 3001 }), '{"port":3001}');
 
 assert.deepEqual(
   classifyServerStreamLine(

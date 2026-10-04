@@ -6,7 +6,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Blocks,
@@ -18,6 +18,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { localeDefinitions } from "@/i18n/catalog-registry.js";
+import { emitToast } from "@/lib/toast-channel.js";
+import {
+  receiveSettingsBackupNotices,
+  settingLabels,
+} from "@/settings/store.js";
 import { localeOptionLabel } from "@/i18n/locale-option-label.js";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +52,29 @@ const noDragStyle: CSSProperties = {
 function RootLayout() {
   const { t } = useTranslation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Runs after the toast host below has subscribed. Most of these notices
+  // arise during boot, before anything could show a message.
+  useEffect(
+    () =>
+      receiveSettingsBackupNotices(({ backup, keys }) => {
+        emitToast(
+          "info",
+          t(
+            keys
+              ? "settings.refusedSettingsReset"
+              : "settings.earlierSettingsArchived",
+          ),
+          keys
+            ? t("settings.refusedSettingsResetDetail", {
+                keys: settingLabels(keys),
+                backup,
+              })
+            : t("settings.earlierSettingsArchivedDetail", { backup }),
+          { durationMs: 30_000 },
+        );
+      }),
+    [t],
+  );
   const { locale, setLocale } = useLocalePreference();
   const layoutNav = useThemeLayout().nav;
   const location = useLocation();
@@ -184,7 +212,6 @@ function RootLayout() {
         <option key={definition.code} value={definition.code}>
           {localeOptionLabel(
             definition,
-            locale,
             t("onboarding.languageExperimental", "experimental"),
           )}
         </option>

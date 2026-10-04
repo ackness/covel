@@ -41,6 +41,9 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     export const isSettingsEntries = () => true;
     export const readSettingsBundle = () => {};
     export const writeSettingsEntriesAtomic = () => {};
+    export const backupSettingsFile = () => {};
+    export const listSettingsBackups = () => [];
+    export const readSettingsBackup = () => null;
   `,
     "utf8",
   );

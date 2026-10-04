@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { History, KeyRound, Plus, Trash2 } from "lucide-react";
+import { History, Plus, Settings, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -204,23 +204,29 @@ export function LeftPanel({
       </div>
 
       {/* ── Bottom Actions (sticky) ── */}
-      <div className="ui-panel-footer border-t border-border shrink-0 space-y-2">
-        <Button
-          className="w-full h-9 text-xs border-border/80"
-          variant="outline"
+      <div className="ui-panel-footer flex shrink-0 flex-col gap-0.5">
+        <button
+          type="button"
+          className="ui-btn ui-btn-quiet h-8 w-full justify-start gap-2.5 px-2 text-xs"
           onClick={onOpenSettings}
         >
-          <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-          {t("nav.settings", "Settings")}
-        </Button>
-        <Button
-          className="w-full h-9 text-xs border border-dashed border-border/80"
-          variant="ghost"
+          <Settings
+            className="size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <span className="truncate">{t("nav.settings", "Settings")}</span>
+        </button>
+        <button
+          type="button"
+          className="ui-btn ui-btn-quiet h-8 w-full justify-start gap-2.5 px-2 text-xs"
           onClick={onResetSession}
         >
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
-          {t("common.newSession")}
-        </Button>
+          <Plus
+            className="size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          <span className="truncate">{t("common.newSession")}</span>
+        </button>
       </div>
 
       {/* Delete session confirmation */}

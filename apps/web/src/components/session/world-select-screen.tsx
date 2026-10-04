@@ -420,6 +420,10 @@ export function WorldSelectScreen({
           setSettingsTarget("llm.providers");
           onSettingsOpenChange(true);
         }}
+        onOpenAllSettings={() => {
+          setSettingsTarget(undefined);
+          onSettingsOpenChange(true);
+        }}
         onEnterWorld={handleEnterWorld}
         recentSessions={recentSessions}
         onResumeSession={onResumeSession}

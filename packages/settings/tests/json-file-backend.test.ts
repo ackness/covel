@@ -71,6 +71,19 @@ describe("json-file backend load contract", () => {
     await expect(backend.load()).resolves.toEqual({ "ui.locale": "en-US" });
   });
 
+  it("asks only the desktop shell where an earlier settings file went", async () => {
+    const invoke = vi.fn().mockResolvedValue("settings.v1.bak.json");
+    const fetchImpl = vi.fn();
+    await expect(
+      createJsonFileBackend({ ipc: { invoke } }).takeArchivedBundle!(),
+    ).resolves.toBe("settings.v1.bak.json");
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("covel:settings:archived");
+    await expect(
+      createJsonFileBackend({ fetchImpl }).takeArchivedBundle!(),
+    ).resolves.toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it.each(["REST", "IPC"] as const)(
     "rejects an unversioned %s response before saving",
     async (transport) => {
