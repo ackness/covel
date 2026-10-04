@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.46] - 2026-10-04
+
+This release adds style schemes that change the layout as well as the colours, puts each language of a world or plugin in its own file with tooling to translate it, writes an AI-generated world one part at a time under a limit on silence instead of total time, and keeps Settings usable when an upgrade meets older settings (#117–#121, #123–#127).
+
 ### Added
 
 - **Configuration files can be edited in the app.** Settings → Configuration files shows the raw configuration as text: the settings of this device as JSON, `llm.toml`, and `config.toml` in the desktop app. A save is checked first — the server's own parser for the TOML files, the registered schema for each setting — and a text that fails is not written. The version before the change is kept (`llm.toml.bak`, `settings.edit.bak.json`), `llm.toml` is applied at once, and an earlier copy of the settings can be loaded into the editor. New routes: `GET /api/config/raw`, `GET` / `PUT /api/config/raw/:name`, behind the guard of the install endpoints.
@@ -60,13 +64,6 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **A rejected tool call says what the tool accepts.** The story-event planner lists the event IDs, dimensions and time fields a condition can use; the character form lists every refused field and the attributes the world lets it collect; the clock names its units (`worldTime.value.units`); a select default names the option values; a text over a dimension's length limit is told how many characters to remove.
 - **A streamed model call is limited by silence, not by total time.** A stream is ended when the model sends no text, no reasoning and no tool call for the idle timeout (`agent.loop.idleTimeoutMs`, 120 seconds by default); a model that keeps writing is not cut off, and the time it writes does not count against the runtime's `timeoutMs`. The wait for the first output (`firstTokenTimeoutMs`) is 120 seconds by default, up from 30. `callTimeoutMs` now limits only a model call that is not streamed. The gateway's default request budget follows the same rule: output of a stream moves its 120-second deadline, up to 30 minutes; a budget with an explicit `timeoutMs` or `deadline` stays fixed unless it also sets `idleTimeoutMs`.
 
-### Removed
-
-- **`docs/architecture/refactoring-plan.md`.** The current-only convergence it planned is finished; the resulting contract is described in `AGENTS.md`, `docs/architecture/flow.md` and `docs/architecture/storage.md`.
-- **`.ui-stage-cat` theme hooks.** Stage options use the shared `.ui-choice` hooks; a theme that styled `.ui-stage-cat` or the earlier card-shaped `.ui-choice` should restyle `.ui-choice-index`, `.ui-choice-content` and `.ui-choice-eyebrow`.
-- **`apiCall` UI action name.** It was never handled by any mount point.
-- **Inline locale maps in world and plugin packages**, `PLUGIN.en.md` / `RUNTIME.en.md`, the `locale` field of an action request, the `resolveI18n` option of `world-dimension-get`, and the `memory` content kind of the world generator. See Changed for what replaces each.
-
 ### Fixed
 
 - **Sessions created before dimension values held one language open again.** Such a session stored the world's locale maps in its dimension records; every read failed validation, so opening it returned HTTP 500 and the page showed the error again and again. The server now rewrites those records in the session's language the first time the session is used, and keeps the records as they were under `_legacy.dimension-locale-maps`.
@@ -78,7 +75,6 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **AI world generation no longer fails at 120 seconds on a slow model (#122).** The generator passed no request budget to the model gateway, so the gateway's default 120-second deadline ended every attempt before the route's 150-second timeout applied. A world that took longer to write failed three times and showed "Generation failed" after six minutes, and no setting changed that. World revision and translation had the same limit.
 - **"Edit llm.toml" works on a fresh desktop install.** The button failed with `"llm.toml" is not available` until the file had been created by hand, and the error appeared where it was easy to miss. The first click now creates `llm.toml` from the built-in default and opens it; failures show as a toast.
 - **Settings no longer attributes the built-in default model to a file that does not exist.** Providers & models tagged the built-in DeepSeek default "From llm.toml" even with no `llm.toml` on disk. It is now tagged "Built-in default", and providers that come from the file or the built-in default explain why they have no delete button and how to remove them.
-
 - **Local builds ship a production web client.** With `NODE_ENV=development` in the repo-root `.env` (the value in `.env.example`), `pnpm build` and `pnpm build:electron` bundled a development-mode web client: the router devtools were visible and React ran its development build. The web build now defaults to production; a `NODE_ENV` exported in the shell still takes precedence. CI and released installers were not affected.
 - **A session no longer mixes languages.** An English session of a bilingual world sent about 3,400 Chinese characters to the model each turn (tool definitions, world name and summary, dimension labels, plugin data stored in two languages, the default calendar), and the fact-extraction agent was never told the session's language because its context hook dropped the framework's opening. All of these are corrected, and a system prompt that a hook replaces keeps the language directive.
 - **Imported world rules reach the prompt with their titles** (`[World Rule: The Party Is Alive]`), where the model read the rule's ID or its first trigger word.
@@ -87,6 +83,30 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **A turn's memory is not lost to one unreadable reply.** Memory extraction asks the model once more when the reply is not the JSON it asked for. A job reads only its own turn, so a failed job dropped that turn's facts.
 - **`pnpm create-plugin` scaffolds follow the current prompt and label contracts** (English manifests and prompts, Chinese labels in `locales/zh.yaml`).
 - **A slow model is no longer cut off in the middle of a turn.** Every model call of an agent runtime had a fixed 120-second budget, whatever the runtime declared, so a narrator with `callTimeoutMs: 120000` and `timeoutMs: 240000` was ended at 120 seconds with half its text shown, and a retry after a silent first attempt had no time left to run. One model call may now use the runtime's remaining time, and a stream that keeps writing is not ended.
+
+### Removed
+
+- **`docs/architecture/refactoring-plan.md`.** The current-only convergence it planned is finished; the resulting contract is described in `AGENTS.md`, `docs/architecture/flow.md` and `docs/architecture/storage.md`.
+- **`.ui-stage-cat` theme hooks.** Stage options use the shared `.ui-choice` hooks; a theme that styled `.ui-stage-cat` or the earlier card-shaped `.ui-choice` should restyle `.ui-choice-index`, `.ui-choice-content` and `.ui-choice-eyebrow`.
+- **`apiCall` UI action name.** It was never handled by any mount point.
+- **Inline locale maps in world and plugin packages**, `PLUGIN.en.md` / `RUNTIME.en.md`, the `locale` field of an action request, the `resolveI18n` option of `world-dimension-get`, and the `memory` content kind of the world generator. See Changed for what replaces each.
+
+### Breaking contracts and upgrade notes
+
+- Plugin prompts: the body of `PLUGIN.md` / `RUNTIME.md` is read as English and `*.zh.md` is the only variant. `PLUGIN.en.md`, `RUNTIME.en.md` and variants for other languages are no longer read. A plugin whose main body is Chinese must move it to `*.zh.md` and supply an English body.
+- Plugin packages: `pnpm validate:plugin` rejects a locale map written in a manifest or a UI spec. Write English in the main files and put the translations in `locales/<locale>.yaml`.
+- World packages: `pnpm validate:world` reports a locale map written in `world.yaml`, a dimension file or another structured source as `inline-locale-map`. Keep the default language in the main file and move each other language to `<name>.<locale>.<ext>`. `world-dimension-get` no longer takes `resolveI18n`.
+- Sessions: the content language is set when the session is created and must be an edition the world has. `POST /api/actions` answers 400 to a request that carries `locale`.
+- Sessions created by an earlier version that stored locale maps in their dimension records are rewritten in the session's language the first time they are used. The records as they were stay under `_legacy.dimension-locale-maps`.
+- Recreate development sessions of Emberback (its world data source IDs changed) and of Emberback and Lantern Barrow (imported characters are now `npc-<name>`).
+- `check.resolved` items no longer carry `roll`, `dc` and `total`; the dice plugin calculates them. A third-party consumer of that event must not read them.
+- World generator: `brief.content` no longer accepts `memory`; send `brief.contracts: ["memory.blocks@1"]`. `createWorld` takes `idleTimeoutMs` and `onProgress`, and its `attemptTimeoutMs` option is removed.
+- Agent runtimes: `agent.loop.callTimeoutMs` limits only a model call that is not streamed. A streamed call ends after `idleTimeoutMs` of silence (120 seconds by default), and `firstTokenTimeoutMs` is 120 seconds by default, up from 30.
+- Themes: the `.ui-stage-cat` hooks are removed; restyle `.ui-choice-index`, `.ui-choice-content` and `.ui-choice-eyebrow`. The `apiCall` UI action name is removed.
+- Settings: a `settings.json` (desktop) or `covel:settings` entry (browser) that this version cannot read is moved aside (`settings.v1.bak.json`, `covel:settings.v1.bak`) and the settings start from their defaults. Single values that are no longer accepted go back to their defaults after the file is copied (`settings.conflict.bak.json`). Settings → Data shows the copies. API keys are not affected.
+- A browser with no saved appearance opens in the Panel scheme. A saved choice is kept.
+- `pnpm create-plugin <name>` scaffolds have no install step and no `pnpm lint`; check them with `pnpm validate:plugin <dir>` and `pnpm test:runtime`. `--with-tools` plugins are named `@covel/plugin-<name>`.
+- macOS Apple Silicon and Windows x64 artifacts remain unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
 
 ## [0.0.45] - 2026-10-03
 
