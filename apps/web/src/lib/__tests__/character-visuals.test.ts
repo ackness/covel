@@ -2,7 +2,6 @@
 import { describe, expect, it } from "vitest";
 import {
   collectCharacterVisualRefs,
-  replaceDefaultCharacterVisual,
   resolveCharacterVisual,
   type PresenceRecord,
 } from "../character-visuals.js";
@@ -145,64 +144,5 @@ describe("collectCharacterVisualRefs", () => {
         },
       }),
     ).toEqual([duplicate]);
-  });
-});
-
-describe("replaceDefaultCharacterVisual", () => {
-  it("updates the declared default and preserves named variants", () => {
-    const replacement = ref("replacement");
-    const presence: PresenceRecord = {
-      visuals: {
-        defaultVariant: "uniform-neutral",
-        variants: [
-          {
-            id: "uniform-neutral",
-            outfit: "uniform",
-            expression: "neutral",
-            sprite: ref("old-default"),
-          },
-          {
-            id: "summer-smile",
-            outfit: "summer",
-            expression: "smile",
-            sprite: ref("summer"),
-          },
-        ],
-      },
-    };
-
-    expect(replaceDefaultCharacterVisual(presence, replacement)).toEqual({
-      defaultVariant: "uniform-neutral",
-      variants: [
-        {
-          id: "uniform-neutral",
-          outfit: "uniform",
-          expression: "neutral",
-          sprite: replacement,
-        },
-        {
-          id: "summer-smile",
-          outfit: "summer",
-          expression: "smile",
-          sprite: ref("summer"),
-        },
-      ],
-    });
-  });
-
-  it("creates a default catalog for a legacy presence record", () => {
-    const replacement = ref("replacement");
-    expect(replaceDefaultCharacterVisual({}, replacement)).toEqual({
-      defaultVariant: "default",
-      variants: [
-        {
-          id: "default",
-          outfit: "default",
-          expression: "neutral",
-          pose: "default",
-          sprite: replacement,
-        },
-      ],
-    });
   });
 });

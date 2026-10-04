@@ -25,9 +25,7 @@ export function setTranslationsDirectory(directory: string | undefined): void {
 }
 
 /** The directory that holds the outside translations of one plugin, if one is set. */
-export function translationsDirectoryOf(
-  pluginRoot: string,
-): string | undefined {
+function translationsDirectoryOf(pluginRoot: string): string | undefined {
   // A plugin's id is the name of its directory.
   return translationsRoot
     ? path.join(translationsRoot, "plugins", path.basename(pluginRoot))

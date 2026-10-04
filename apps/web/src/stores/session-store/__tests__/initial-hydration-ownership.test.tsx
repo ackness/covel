@@ -31,7 +31,6 @@ const api = vi.hoisted(() => ({
   getSessionView: vi.fn(),
   getSession: vi.fn(),
   getWorld: vi.fn(),
-  markServerAck: vi.fn(),
 }));
 vi.mock("@/services/api", () => api);
 

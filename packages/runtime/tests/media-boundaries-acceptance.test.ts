@@ -90,9 +90,6 @@ async function seedPlaying(store: ReturnType<typeof createMemoryStore>) {
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
-    phase: "playing",
-    completedPlayerTurns: 1,
-    setupRuntimes: {},
     activePlugins: [],
     createdAt: now,
     updatedAt: now,
@@ -369,7 +366,4 @@ describe("scenario 9: media pipeline & job-status boundaries", () => {
       ),
     ).toBe(true);
   });
-
-  // TODO(compat projector): the legacy tracks/images view projection (Step 4/6
-  // third-party-UI compat) is asserted when that projector lands.
 });

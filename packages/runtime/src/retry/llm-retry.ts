@@ -32,7 +32,6 @@ import type {
   LLMMessage,
   LLMResponseFormat,
   LLMResponse,
-  LLMStreamEvent,
   LLMTargetIdentity,
   LLMToolCall,
   LLMToolDefinition,
@@ -58,7 +57,6 @@ import { acquireLLMSlot } from "./llm-slots.js";
 import {
   LLMRetryError,
   assertDeadlineNotReached,
-  buildRetryPolicy,
   computeAttemptBudget,
   computeDeadlineBudget,
   exhaustedError,
@@ -79,7 +77,6 @@ export {
   perturbMessages,
   DEFAULT_MAX_RETRIES,
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
-  DEFAULT_IDLE_TIMEOUT_MS,
   DEFAULT_LOOP_THRESHOLD,
 } from "./retry-common.js";
 export type { RetryPolicy, RetryReason } from "./retry-common.js";

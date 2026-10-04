@@ -209,23 +209,17 @@ export function registerDesktopIpcHandlers({
     return { path: result.filePaths[0] };
   });
 
-  // API keys — plain `KEY=VALUE` lines at ~/.covel/keys.env. No encryption;
-  // the primary store (browser localStorage) is plain text anyway, so
-  // safeStorage only bought us a macOS Keychain prompt with no real security
-  // uplift on an unsigned build.
+  // API keys — plain `KEY=VALUE` lines at ~/.covel/keys.env, mode 600. No
+  // encryption: on an unsigned build safeStorage only bought a macOS Keychain
+  // prompt with no real security uplift.
   //
-  // TODO: `covel:keys:load` returns the real decrypted key values to the
-  // renderer. This is a deliberate tradeoff — the renderer needs the raw keys
-  // to attach them via the `X-Provider-Keys` header and to mirror them into
-  // `localStorage` (`covel:keys`) for the pure-web path. Intended proper fix:
-  // encrypt `keys.env` at rest via Electron `safeStorage` (main process) AND
-  // stop exposing raw values to the renderer — the renderer would see only a
-  // per-provider "configured" status while the main process injects keys into
-  // outbound requests. Not done here: safeStorage-at-rest alone buys nothing
-  // while the localStorage mirror stays plaintext, and on unsigned builds
-  // safeStorage degrades to a fixed key (no real encryption) plus a migration
-  // path for existing plaintext files. Doing it right requires reworking the
-  // whole key-flow (server-side injection), which is out of scope here.
+  // `covel:keys:load` returns the plaintext key values to the trusted
+  // renderer. This is the current design: the renderer attaches them to each
+  // AI request in the `X-Provider-Keys` header, and on desktop it keeps them
+  // only in the SettingsStore's json-file backend, not in `localStorage`.
+  // Keeping keys out of the renderer altogether means the main process (or the
+  // sidecar) injecting them into outbound requests; encrypting `keys.env` at
+  // rest would not remove this IPC surface.
   ipcMain.handle("covel:keys:load", (event) => {
     // Returns RAW provider keys — reject any untrusted sender frame.
     if (!isTrustedSender(event, "covel:keys:load")) return {};

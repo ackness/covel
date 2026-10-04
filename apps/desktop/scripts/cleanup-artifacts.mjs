@@ -25,7 +25,6 @@
 
 import path from "node:path";
 import fs from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
 const DROP_FILE_PATTERNS = [
   /\.blockmap$/i,

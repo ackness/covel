@@ -27,7 +27,6 @@ import type {
   SessionRecord,
   SessionSummaryRecord,
   TraceEventRecord,
-  TurnMessageRecord,
   WorldRecord,
 } from "./store-records.js";
 

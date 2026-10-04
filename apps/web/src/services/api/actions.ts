@@ -4,7 +4,6 @@ import {
   actionRequestSchema,
   sseEnvelopeSchema,
   type ActionRequest,
-  type ActionType,
   type SseEnvelope,
 } from "@covel/shared";
 import { ApiError, request, requestResponse } from "./request.js";

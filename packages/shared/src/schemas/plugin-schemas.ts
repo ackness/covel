@@ -608,7 +608,7 @@ export const stageSchema = z.enum(STAGE_ORDER);
 export const MAX_SETTLE_WAIT_MS = 120_000;
 
 /** Agent prompt history window, counted in turns of visible history. */
-export const runtimeHistoryPolicySchema = z.strictObject({
+const runtimeHistoryPolicySchema = z.strictObject({
   maxTurns: z
     .number()
     .int()

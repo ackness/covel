@@ -121,7 +121,7 @@ export function parseRuntimeMd(
  * two namespaces accept with different schemas gets no default: the manifest
  * must say which one is public.
  */
-export function withContractDefaults(plugin: PluginManifest): PluginManifest {
+function withContractDefaults(plugin: PluginManifest): PluginManifest {
   const accepted = new Map<string, Set<string>>();
   for (const declaration of Object.values(plugin.contributes?.data ?? {}))
     for (const contract of declaration.accepts ?? []) {

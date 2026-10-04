@@ -147,6 +147,8 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 只由 Electron
 打包工具读取，详见 [`desktop-packaging.md`](./desktop-packaging.md)。
 
+两个变量只由仓库工具脚本读取：`COVEL_IMG_KEY` 是离线立绘/场景生成脚本的密钥覆盖（见上文密钥优先级）；`COVEL_SMOKE_HOST_NODE=1` 让桌面 staging smoke 在缺少 Electron 二进制时改用宿主 Node 加内存后端运行，此时不验证 Electron 下的原生模块，CI 不设置它。
+
 `COVEL_PG_PREFLIGHT_SKIP` 已登记为 `active`。旧变量 `COVEL_MEMORY_V1`、`COVEL_STORY_BASE_URL`、`COVEL_PLUGIN_BASE_URL`、`VITE_API_URL`、`LIVE_IMAGE_ENABLED` 没有读取方，不属于当前配置入口，可从本地配置中删除。`*_API_KEY` 由 helper 动态枚举；`*_BASE_URL` 仅在生效的 `llm.toml` 使用 `${VAR}` 引用时有效。
 
 ## 迁移规则

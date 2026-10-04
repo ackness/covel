@@ -288,7 +288,7 @@ ${extra}
     providerDefaults: aiConfig.providers,
   });
   const presetRegistry = createPresetRegistry(aiConfig);
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   slotRegistry.configure({
     slots: {
       evaluation: {

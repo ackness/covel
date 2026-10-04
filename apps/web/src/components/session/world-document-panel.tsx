@@ -5,7 +5,6 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { BookOpen } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { Markdown } from "@/components/ui/markdown.js";
 import { text as resolveText } from "@/components/world/editor-helpers.js";

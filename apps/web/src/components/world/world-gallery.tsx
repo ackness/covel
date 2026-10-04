@@ -57,7 +57,7 @@ function useWorldGalleryAnswer(
 }
 
 /** The images of one world; empty while loading and for a world without art. */
-export function useWorldGallery(
+function useWorldGallery(
   world: WorldRecord | null | undefined,
 ): readonly WorldGalleryItem[] {
   return useWorldGalleryAnswer(world).items;
@@ -76,7 +76,7 @@ export function useWorldThemeMusicUrl(
  * ever shown whole, and the hero is the world's own cover. Without that, shape
  * decides: a wide image is a scene, the rest are figures.
  */
-export function splitGallery(items: readonly WorldGalleryItem[]): {
+function splitGallery(items: readonly WorldGalleryItem[]): {
   hero: WorldGalleryItem | undefined;
   backdrops: WorldGalleryItem[];
   figures: WorldGalleryItem[];

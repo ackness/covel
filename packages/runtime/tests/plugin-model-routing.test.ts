@@ -61,7 +61,7 @@ it("dispatches full plugin targets after system reload, with request/runtime sel
     },
   ];
   const presetRegistry = createPresetRegistry({ profiles: [], presets });
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   slotRegistry.configure({
     slots: { fast: { slotId: "fast", presetId: "system", tag: "text" } },
   });

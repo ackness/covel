@@ -161,38 +161,3 @@ export function collectCharacterVisualRefs(
   for (const variant of usableVariants(presence)) add(variant.sprite);
   return refs;
 }
-
-/** Replace the catalog's effective default while preserving every named
- * outfit/expression/pose variant. Used by the portrait gallery's legacy
- * "Replace" action so one upload does not accidentally erase the catalog. */
-export function replaceDefaultCharacterVisual(
-  presence: PresenceRecord | undefined,
-  ref: MediaRef,
-): CharacterVisualCatalog {
-  const variants = Array.isArray(presence?.visuals?.variants)
-    ? [...presence.visuals.variants]
-    : [];
-  const declaredDefault = presence?.visuals?.defaultVariant;
-  const defaultId =
-    (declaredDefault &&
-    variants.some((variant) => variant.id === declaredDefault)
-      ? declaredDefault
-      : variants.find((variant) => typeof variant.id === "string")?.id) ??
-    "default";
-  const found = variants.some((variant) => variant.id === defaultId);
-  const nextVariants = found
-    ? variants.map((variant) =>
-        variant.id === defaultId ? { ...variant, sprite: ref } : variant,
-      )
-    : [
-        ...variants,
-        {
-          id: defaultId,
-          outfit: DEFAULT_OUTFIT,
-          expression: DEFAULT_EXPRESSION,
-          pose: DEFAULT_POSE,
-          sprite: ref,
-        },
-      ];
-  return { defaultVariant: defaultId, variants: nextVariants };
-}

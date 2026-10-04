@@ -5,7 +5,7 @@ import {
   supportedLocales,
   webLocaleCatalog,
 } from "./catalog-registry.js";
-import { resolveInitialLocale } from "./locale-detector";
+import { resolveInitialLocale } from "./locale-detector.js";
 
 const initialLocale = resolveInitialLocale();
 
@@ -43,12 +43,5 @@ export const i18nReady = i18n
 if (typeof document !== "undefined") {
   document.documentElement.lang = initialLocale;
 }
-
-export {
-  localeDefinitions,
-  localeRegistry,
-  supportedLocales,
-} from "./catalog-registry.js";
-export type { SupportedLocale } from "./catalog-registry.js";
 
 export default i18n;

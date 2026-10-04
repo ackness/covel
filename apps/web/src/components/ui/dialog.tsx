@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 const Dialog = DialogPrimitive.Root;
-const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
 
@@ -110,7 +109,6 @@ function DialogDescription({
 
 export {
   Dialog,
-  DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,

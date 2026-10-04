@@ -40,7 +40,7 @@ const MAX_GALLERY_FILES = 60;
 const GALLERY_MANIFEST = "media/gallery.json";
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 
-export const WORLD_GALLERY_KINDS = [
+const WORLD_GALLERY_KINDS = [
   "hero",
   "map",
   "scene",

@@ -40,7 +40,6 @@ function formatZodErrors(error: ZodError): ManifestValidationError[] {
 function validate<T>(
   schema: ZodType<T>,
   data: unknown,
-  filePath?: string,
 ): ManifestValidationResult<T> {
   const result = schema.safeParse(data);
   if (result.success) {

@@ -32,7 +32,7 @@ export interface RetryPolicy {
 /** Default threshold constants, also exported so tests can align. */
 export const DEFAULT_MAX_RETRIES = 1;
 export const DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 120_000;
-export const DEFAULT_IDLE_TIMEOUT_MS = 120_000;
+const DEFAULT_IDLE_TIMEOUT_MS = 120_000;
 export const DEFAULT_LOOP_THRESHOLD = 3;
 const DEFAULT_CALL_TIMEOUT_CAP_MS = 60_000;
 const MIN_CALL_TIMEOUT_MS = 5_000;

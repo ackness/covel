@@ -62,7 +62,7 @@ const TEXT_PROPERTY_SUFFIX =
  * apply to these properties only, so a catalog cannot replace a component
  * name, an action or a data path.
  */
-export function isTextProperty(name: string): boolean {
+function isTextProperty(name: string): boolean {
   return TEXT_PROPERTIES.has(name) || TEXT_PROPERTY_SUFFIX.test(name);
 }
 
@@ -169,7 +169,7 @@ export function compileUiText<T>(
 }
 
 /** Text properties of a spec that are written as an inline locale map. */
-export function findInlineUiText(spec: unknown): string[] {
+function findInlineUiText(spec: unknown): string[] {
   const found: string[] = [];
   const walk = (value: unknown, at: string): void => {
     if (Array.isArray(value)) {

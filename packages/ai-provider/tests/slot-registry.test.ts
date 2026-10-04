@@ -1,23 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createSlotRegistry, type SlotRegistry } from "../src/slot-registry.js";
 
-function makeDeps() {
-  return {
-    presetRegistry: {
-      resolvePreset: (id?: string) => (id ? { id } : null),
-      listPresets: () => [
-        { id: "preset-a", enabled: true },
-        { id: "preset-b", enabled: true },
-      ],
-    },
-  };
-}
-
 describe("SlotRegistry (tag-aware)", () => {
   let registry: SlotRegistry;
 
   beforeEach(() => {
-    registry = createSlotRegistry(makeDeps());
+    registry = createSlotRegistry();
     registry.configure({
       slots: {
         ds: { slotId: "ds", presetId: "slot-ds", tag: "text" },
@@ -105,7 +93,7 @@ describe("SlotRegistry (tag-aware)", () => {
 
   describe("empty registry", () => {
     it("should handle unconfigured state", () => {
-      const empty = createSlotRegistry(makeDeps());
+      const empty = createSlotRegistry();
       expect(empty.resolveSlot("ds")).toBeUndefined();
       expect(empty.listSlotsByTag("text")).toEqual([]);
       expect(empty.getSlotTag("ds")).toBeUndefined();

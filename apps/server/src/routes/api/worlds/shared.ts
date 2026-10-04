@@ -28,16 +28,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function formatWorldEntryContent(key: string, value: unknown): string {
-  let body: string;
-  try {
-    body = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-  } catch {
-    body = String(value);
-  }
-  return `[${key}]\n${body}`;
-}
-
 export function resolveWorldMetadata(
   body: Record<string, unknown>,
   existingMetadata?: Readonly<Record<string, unknown>>,

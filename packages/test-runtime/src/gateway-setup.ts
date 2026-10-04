@@ -119,11 +119,7 @@ function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
 function configureSlots(
   config: AiConfig,
 ): ReturnType<typeof createSlotRegistry> {
-  const presetRegistry = createPresetRegistry({
-    profiles: config.profiles,
-    presets: config.presets,
-  });
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   const slots: Record<string, ModelSlotConfig> = {};
   for (const preset of config.presets) {
     if (preset.defaultSlot && preset.enabled) {

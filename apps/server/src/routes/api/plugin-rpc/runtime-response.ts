@@ -127,7 +127,7 @@ const IN_COMMIT: TurnCommitOutcome = {
   snapshotFailed: false,
 };
 
-export function summarizeRuntimeResults(
+function summarizeRuntimeResults(
   results: TurnResult["runtimeResults"],
 ): PluginRpcRuntimeResultSummary[] {
   return results.map((result) => ({

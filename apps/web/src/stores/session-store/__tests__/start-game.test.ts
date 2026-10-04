@@ -13,7 +13,6 @@ const api = vi.hoisted(() => ({
   updateSession: vi.fn(),
   clearPrepRuntimeBindings: vi.fn(),
   getSessionView: vi.fn(),
-  markServerAck: vi.fn(),
   getSession: vi.fn(),
   createSession: vi.fn(),
   getWorld: vi.fn(),
@@ -160,7 +159,6 @@ describe("startGameSession bootstrap order", () => {
       "dispatch-session",
       "clear-bindings",
     ]);
-    expect(api.markServerAck).toHaveBeenCalledOnce();
   });
 
   it("rolls back without publishing and keeps prep bindings when the patch fails", async () => {

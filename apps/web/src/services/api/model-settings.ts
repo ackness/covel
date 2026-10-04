@@ -1,4 +1,4 @@
-import { normalizeProviderKeyMap, providerKeyToId } from "@covel/shared";
+import { providerKeyToId } from "@covel/shared";
 import {
   PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES,
   utf8ByteLength,
@@ -218,41 +218,6 @@ function providerKeysSnapshot(): Record<string, string> {
     snapshotSecrets(): Record<string, string>;
   };
   return store.snapshotSecrets();
-}
-
-export function getProviderKeys(): Record<string, string> {
-  return normalizeProviderKeyMap(providerKeysSnapshot());
-}
-
-export function setProviderKeys(keys: Record<string, string>): void {
-  void setProviderKeysAsync(keys);
-}
-
-/** Promise-returning variant for call sites that want to report success. */
-export async function setProviderKeysAsync(
-  keys: Record<string, string>,
-): Promise<{ ok: boolean }> {
-  const normalized = normalizeProviderKeyMap(keys);
-  const store = getSettings();
-  // Ensure every provider has a registered entry so the Settings UI
-  // surfaces it immediately after the first call.
-  registerKnownProviders(Object.keys(normalized));
-  // Clear any providers no longer present.
-  const existing = providerKeysSnapshot();
-  try {
-    await Promise.all([
-      ...Object.entries(normalized).map(([provider, value]) =>
-        store.set(`keys.${provider}`, value),
-      ),
-      ...Object.keys(existing)
-        .filter((p) => !(p in normalized))
-        .map((p) => store.clear(`keys.${p}`)),
-    ]);
-    return { ok: true };
-  } catch (err) {
-    console.warn("[api] setProviderKeysAsync failed:", err);
-    return { ok: false };
-  }
 }
 
 // -- Slot / Preset / Parameter / Runtime-priority config -------

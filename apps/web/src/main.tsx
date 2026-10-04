@@ -31,7 +31,7 @@ import i18n, { i18nReady } from "@/i18n";
 import type { SupportedLocale } from "@/i18n/locale-detector";
 import "@/i18n";
 import "@/index.css";
-import { routeTree } from "./routeTree.gen";
+import { routeTree } from "./routeTree.gen.js";
 
 const router = createRouter({ routeTree });
 

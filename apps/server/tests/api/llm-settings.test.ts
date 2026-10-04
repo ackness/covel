@@ -62,7 +62,7 @@ function setup(options: { failModel?: string } = {}) {
     },
   });
   const presetRegistry = createPresetRegistry(config);
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   slotRegistry.configure({
     slots: { story: { slotId: "story", presetId: preset.id, tag: "text" } },
   });

@@ -141,7 +141,7 @@ function setup() {
     presets: basePresets,
   });
 
-  const slotRegistry = createSlotRegistry({ presetRegistry });
+  const slotRegistry = createSlotRegistry();
   slotRegistry.configure({
     slots: {
       story: { slotId: "story", presetId: "ds-chat", tag: "text" },
@@ -432,7 +432,7 @@ describe("gateway + slotOverrides", () => {
         },
       ],
     });
-    const slotRegistry = createSlotRegistry({ presetRegistry });
+    const slotRegistry = createSlotRegistry();
     slotRegistry.configure({
       slots: { story: { slotId: "story", presetId: "ds-chat", tag: "text" } },
     });
@@ -483,7 +483,7 @@ describe("gateway + slotOverrides", () => {
         },
       ],
     });
-    const slotRegistry = createSlotRegistry({ presetRegistry });
+    const slotRegistry = createSlotRegistry();
     slotRegistry.configure({
       slots: {
         story: {
@@ -670,7 +670,7 @@ describe("gateway + slotOverrides", () => {
       profiles,
       presets: basePresets,
     });
-    const slotRegistry = createSlotRegistry({ presetRegistry });
+    const slotRegistry = createSlotRegistry();
     slotRegistry.configure({
       slots: { story: { slotId: "story", presetId: "ds-chat", tag: "text" } },
     });
@@ -805,7 +805,7 @@ describe("gateway + slotOverrides", () => {
       profiles,
       presets: basePresets,
     });
-    const slotRegistry = createSlotRegistry({ presetRegistry });
+    const slotRegistry = createSlotRegistry();
     const gateway = createGateway({
       providerRegistry,
       presetRegistry,

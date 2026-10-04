@@ -39,4 +39,13 @@ export const AI_ENV_VARS = [
     defaultValue: "debugs/llm-cache",
     description: "Documented dev LLM replay cache directory.",
   },
+  {
+    name: "COVEL_IMG_KEY",
+    group: "ai",
+    type: "secret",
+    status: "active",
+    secret: true,
+    description:
+      "API key for the offline portrait and scene generation scripts; it wins over the selected provider's own key.",
+  },
 ] as const satisfies readonly EnvVarDefinition[];

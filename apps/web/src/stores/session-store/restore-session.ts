@@ -312,7 +312,6 @@ export async function restoreSessionState({
   }
   if (!isCurrent()) return;
 
-  api.markServerAck();
   sessionIdRef.current = targetSessionId;
   setActivePluginDataSession(targetSessionId);
   const freshSession = await api.getSession(session.id).catch(() => session);

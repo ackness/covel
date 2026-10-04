@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createPluginRegistry } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { tool, z } from "@covel/tools";
 import { setupPluginTools } from "../../src/routes/api/bootstrap/tools.js";
@@ -8,10 +7,6 @@ describe("plugin-scoped tools", () => {
   it("advertises and executes the caller's implementation without cross-plugin fallback", async () => {
     const { tools, toolExecutor } = await setupPluginTools({
       store: createMemoryStore(),
-      registry: createPluginRegistry(),
-      discoveryMap: new Map(),
-      manifestCache: new Map(),
-      llmAdapter: {} as never,
       eventDirectory: { get: () => undefined, list: () => [] } as never,
     });
     try {

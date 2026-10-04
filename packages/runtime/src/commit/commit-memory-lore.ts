@@ -1,7 +1,6 @@
 /** Authoritative lorebook commit handler. */
 
 import type { CommitResult, ProposalFor } from "@covel/shared";
-import { makeEvent } from "../session/session-kernel-helpers.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
 import {

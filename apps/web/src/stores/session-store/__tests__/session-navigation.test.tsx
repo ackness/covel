@@ -18,7 +18,6 @@ const api = vi.hoisted(() => ({
   getSession: vi.fn(),
   listSessionPlugins: vi.fn(),
   listSuspensions: vi.fn(),
-  markServerAck: vi.fn(),
   getSlotConfig: vi.fn(() => ({})),
   getPrepRuntimeBindings: vi.fn(() => ({})),
   steerTurn: vi.fn(),
