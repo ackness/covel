@@ -58,6 +58,7 @@ export type {
   PluginImageWire,
   PluginSpeechWire,
   PluginTranscriptionWire,
+  PluginMusicWire,
   PluginProviderConfig,
   PluginModelCapability,
   PluginModelRequestContext,

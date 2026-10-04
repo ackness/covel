@@ -140,11 +140,12 @@ const value = await ctx.services.call(
 
 ## 模型与新协议
 
-- 已支持的模型能力：复用 `ctx.gateway`、`ctx.images`、`ctx.speech`。Evaluation 使用 `ctx.gateway.evaluate({ presetId, state, questions, signal })`，支持 Boolean、Choice、Score。
+- 已支持的模型能力：复用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`。Evaluation 使用 `ctx.gateway.evaluate({ presetId, state, questions, signal })`，支持 Boolean、Choice、Score。
 - 自行拼装长提示词时，`ctx.gateway.resolveSlot({ presetId })?.limits` 给出 gateway 对该 slot 实际采用的 `{ contextWindow, maxOutputTokens }`；模型未声明上下文窗口时省略，不把框架兜底值当作真实上限。`generateText` / `generateObject` 可传 `maxOutputTokens` 作为单次调用上限，只能低于玩家为该 slot 配置的输出预算，不能提高它。
 - 新供应商使用既有 wire：只配置 provider、base URL、模型和用途，无须改插件或框架。
 - 新 wire 或新的返回形式：服务内部用 `ctx.gateway.resolveSlot` 取得本次请求的模型配置，再用 `ctx.utils.validateBaseUrl` / `fetchWithRetry` 实现协议，定义自己的输入输出 schema。结果通过服务契约提供给其他插件。密钥只留在服务端，不写入结果、日志或 UI。
-- 图片、语音和转写需要复用统一媒体管线时，继续使用 `covel.registerWires`。媒体落库仍通过现有媒体接口。
+- 图片、语音、转写和音乐需要复用统一媒体管线时，继续使用 `covel.registerWires`。媒体落库仍通过现有媒体接口。
+- 音乐生成：`ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, presetId?, metadata?, signal? })` 返回 `{ refs, warnings, cached }`，与 `ctx.speech.generate` 同一套去重和落库约定；`ctx.music.isAvailable(presetId?)` 只检查有没有配置音乐用途，不请求服务商。内核不带音乐 wire：提供音乐模型接入的插件用 `covel.registerWires({ music: [{ id, compose }] })` 注册，`compose(config, params, context)` 返回 `{ audio: { mimeType, data }, usage, warnings }`，需要轮询的服务商在 `compose` 里轮询完再返回。一首曲子要生成几十秒到几分钟，只应在 detached 或后台 runtime 里调用，不要放进回合。
 
 服务中的 gateway 和 HTTP 工具继承调用 runtime 的请求配置、权限、追踪、取消和撤销边界，不会因为跨插件调用获得更大权限。尤其社区调用方的自管 HTTP 仍受其 `permissions.http` 限制。已提供标准 gateway 方法的能力优先走 gateway。
 

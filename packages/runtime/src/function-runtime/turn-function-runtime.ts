@@ -30,6 +30,7 @@ import { materializeHandlerSuccess } from "../commit/materialize-handler-output.
 import { collectUiBlocks } from "../session/session-kernel-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
+import { createRuntimeMusicContext } from "./runtime-music-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
 import { createProgressReporter } from "../job-status/job-status.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
@@ -296,6 +297,19 @@ export async function executeFunctionRuntime({
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
         )
       : undefined;
+  // ctx.music: the same assembly; present only when the host can generate.
+  const musicHandle =
+    tracedGateway?.composeMusic && deps.mediaStore && mediaHandle
+      ? createRuntimeMusicContext(
+          {
+            composeMusic: tracedGateway.composeMusic.bind(tracedGateway),
+            resolveSlot: tracedGateway.resolveSlot.bind(tracedGateway),
+          },
+          deps.mediaStore,
+          mediaHandle,
+          { sessionId: input.sessionId, pluginId: manifest.pluginId },
+        )
+      : undefined;
   const world = deps.store
     ? await createWorldModelView(
         deps.worldModelReads ?? deps.store,
@@ -381,6 +395,9 @@ export async function executeFunctionRuntime({
       : undefined,
     speech: speechHandle
       ? makeRevocableCapability(speechHandle, isRevoked, "speech")
+      : undefined,
+    music: musicHandle
+      ? makeRevocableCapability(musicHandle, isRevoked, "music")
       : undefined,
     gateway: tracedGateway
       ? makeRevocableCapability(tracedGateway, isRevoked, "gateway")

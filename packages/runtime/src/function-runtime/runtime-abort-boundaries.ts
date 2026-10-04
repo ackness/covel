@@ -61,6 +61,14 @@ export function withDefaultGatewaySignal(
         signal: signalFor(defaultSignal, input.signal),
       });
   }
+  if (gateway.composeMusic) {
+    const composeMusic = gateway.composeMusic.bind(gateway);
+    facade.composeMusic = (input) =>
+      composeMusic({
+        ...input,
+        signal: signalFor(defaultSignal, input.signal),
+      });
+  }
   if (gateway.transcribeAudio) {
     const transcribeAudio = gateway.transcribeAudio.bind(gateway);
     facade.transcribeAudio = (input) =>

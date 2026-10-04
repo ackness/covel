@@ -442,6 +442,18 @@ export interface PluginServiceGateway {
     audio: { mimeType: string; data: Uint8Array };
     warnings: readonly string[];
   }>;
+  composeMusic?(input: {
+    presetId?: string;
+    prompt: string;
+    lyrics?: string;
+    instrumental?: boolean;
+    durationSeconds?: number;
+    format?: string;
+    signal?: AbortSignal;
+  }): Promise<{
+    audio: { mimeType: string; data: Uint8Array };
+    warnings: readonly string[];
+  }>;
   transcribeAudio?(input: {
     presetId?: string;
     audio: { data: Uint8Array; mimeType: string; fileName?: string };
@@ -581,6 +593,7 @@ export type PluginOperationMode =
   | "image"
   | "speech"
   | "transcription"
+  | "music"
   | "evaluate";
 export type PluginProviderProtocol =
   | "openai-chat-v1"
@@ -729,10 +742,36 @@ export interface PluginTranscriptionWire {
     warnings: string[];
   }>;
 }
+/**
+ * A music provider's request and response format. A provider that answers
+ * with a job to poll does the polling inside `compose`, under the abort signal
+ * of `config`: the caller gets the finished audio or an error.
+ */
+export interface PluginMusicWire {
+  readonly id: string;
+  compose(
+    config: PluginProviderConfig,
+    params: {
+      model: string;
+      prompt: string;
+      lyrics?: string;
+      instrumental?: boolean;
+      durationSeconds?: number;
+      format?: string;
+      providerRequestMetadata?: Record<string, unknown>;
+    },
+    context?: PluginModelRequestContext,
+  ): Promise<{
+    audio: { mimeType: string; data: Uint8Array };
+    usage: PluginUsageSummary | null;
+    warnings: string[];
+  }>;
+}
 export interface PluginWireModule {
   readonly image?: readonly PluginImageWire[];
   readonly speech?: readonly PluginSpeechWire[];
   readonly transcription?: readonly PluginTranscriptionWire[];
+  readonly music?: readonly PluginMusicWire[];
 }
 
 /** Registrations are valid only while the entry factory is running. */

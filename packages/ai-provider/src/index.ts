@@ -35,6 +35,8 @@ export type {
   EmbeddingResult,
   SpeechSynthesisParams,
   SpeechSynthesisResult,
+  MusicCompositionParams,
+  MusicCompositionResult,
   TranscriptionParams,
   TranscriptionResult,
   ModelRequestContext,
@@ -146,6 +148,10 @@ export {
   DEFAULT_TRANSCRIPTION_WIRE,
 } from "./speech/wire-registry.js";
 export type { SpeechWire, TranscriptionWire } from "./speech/types.js";
+
+// Music generation (pluggable wires; no built-in wire, no default)
+export { registerMusicWire, getMusicWire } from "./music/wire-registry.js";
+export type { MusicWire } from "./music/types.js";
 
 // Slot overlay (per-request preset injection)
 export {

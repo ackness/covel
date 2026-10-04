@@ -161,6 +161,22 @@ export interface FullGatewayLike {
     warnings: readonly string[];
   }>;
 
+  /** Optional — mirrors `PluginRuntimeGateway.composeMusic`. */
+  composeMusic?(
+    input: {
+      presetId?: string;
+      prompt: string;
+      lyrics?: string;
+      instrumental?: boolean;
+      durationSeconds?: number;
+      format?: string;
+    },
+    options?: FullGatewayOptions,
+  ): Promise<{
+    audio: { mimeType: string; data: Uint8Array };
+    warnings: readonly string[];
+  }>;
+
   /** Optional — mirrors `PluginRuntimeGateway.transcribeAudio`. */
   transcribeAudio?(
     input: {
@@ -410,6 +426,27 @@ export function createPluginRuntimeGateway(
           presetId: input.presetId,
           text: input.text,
           voice: input.voice,
+          format: input.format,
+        },
+        {
+          ...commonOptions(),
+          ...(input.signal ? { signal: input.signal } : {}),
+        },
+      );
+      return { audio: result.audio, warnings: result.warnings };
+    };
+  }
+
+  if (gateway.composeMusic) {
+    const composeMusic = gateway.composeMusic.bind(gateway);
+    facade.composeMusic = async (input) => {
+      const result = await composeMusic(
+        {
+          presetId: input.presetId,
+          prompt: input.prompt,
+          lyrics: input.lyrics,
+          instrumental: input.instrumental,
+          durationSeconds: input.durationSeconds,
           format: input.format,
         },
         {

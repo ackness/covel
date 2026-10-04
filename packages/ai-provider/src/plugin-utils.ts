@@ -21,6 +21,7 @@ import {
 import { createPinnedDispatcher } from "./adapters/http/dns-safety.js";
 import { fetchWithDispatcher } from "./outbound-network.js";
 import type { ImageWire } from "./image/types.js";
+import type { MusicWire } from "./music/types.js";
 import type { SpeechWire, TranscriptionWire } from "./speech/types.js";
 
 /**
@@ -33,6 +34,7 @@ export interface WireModuleShape {
   readonly image?: readonly ImageWire[];
   readonly speech?: readonly SpeechWire[];
   readonly transcription?: readonly TranscriptionWire[];
+  readonly music?: readonly MusicWire[];
 }
 
 export interface BaseUrlValidationResult {

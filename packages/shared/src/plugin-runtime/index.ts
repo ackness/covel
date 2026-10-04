@@ -29,6 +29,9 @@ export type {
   SpeechGenerateOutput,
   SpeechTranscribeInput,
   SpeechContext,
+  MusicGenerateInput,
+  MusicGenerateOutput,
+  MusicContext,
   AssetProgressInput,
 } from "./services.js";
 export type {
