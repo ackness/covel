@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Panel tabs that do not fit.** With labelled tabs (`panelTabs: "bar"`) the context panel no longer shows a scrollbar under a cut-off row. The cut-off side fades, the mouse wheel moves the row, the selected tab stays in the middle, and a button at the end lists every panel with its full name.
 - **Existing sessions run plugin setup once more.** The bundled plugins had no `version` and counted as `0.0.0`; setup completion is recorded per version, so each setup runtime runs again on the next turn of an existing session and skips work that is done. `pregame` no longer repeats its welcome in a session that is already playing. A session whose world changed its dimension definitions after the session began can fail this rerun; use the setup recovery control in the plugin panel, or start a new session.
 - `GithubPluginPreview` and the collection preview carry `author` (a name or `null`).
+- Losslessly compress bundled world art, documentation screenshots and application icons. Image dimensions, decoded pixels and transparency are preserved, and world media hashes and byte counts are refreshed. Already compact assets remain unchanged when re-encoding offers no meaningful saving.
 
 ## [0.0.46] - 2026-10-04
 
