@@ -33,6 +33,12 @@ export interface ResumeSuspendedRuntimeOptions {
   readonly maxSteps?: number;
   readonly timeoutMs?: number;
   readonly userSettings?: TurnInput["userSettings"];
+  /**
+   * The session's active runtimes. A resumed setup runtime that completes is
+   * checked against them to decide whether setup is finished. Defaults to the
+   * resumed runtime alone.
+   */
+  readonly activeRuntimes?: readonly RuntimeManifest[];
 }
 
 /**

@@ -5,6 +5,11 @@ import { z } from "zod";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import {
+  executeTurn as executePreparedTurn,
+  type ExecutionDeps,
+} from "../src/execution.js";
+import { commitExecution } from "../src/commit/commit-execution.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -205,6 +210,111 @@ describe("story completion contract", () => {
       expect(await store.listTurnMessages("session-story")).toHaveLength(0);
     },
   );
+
+  it("does not commit or count an action whose story was held back by a failed dimension provider", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    const runtimes = [
+      {
+        name: "dimensions/context",
+        pluginId: "dimensions",
+        runtimeType: "function",
+        outputContract: "world.dimensions@1",
+        stage: "pre-turn",
+        outputKind: "system",
+        trigger: { type: "auto" },
+      },
+      {
+        name: "planner",
+        pluginId: "planner",
+        runtimeType: "function",
+        stage: "pre-turn",
+        outputKind: "plugin",
+        trigger: { type: "auto" },
+      },
+      { ...manifest, trigger: { type: "auto" } },
+    ] as RuntimeManifest[];
+    await store.createSession({
+      id: "session-story",
+      worldId: "world-story",
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: runtimes.map((runtime) => runtime.pluginId),
+      createdAt: now,
+      updatedAt: now,
+    });
+    let modelCalls = 0;
+    const frozenDimensions = {
+      dimensionProviderPluginId: "dimensions",
+      dimensions: {},
+    };
+    const execution = await executePreparedTurn(
+      {
+        sessionId: "session-story",
+        turnId: "turn-story",
+        logicalTurnId: "logical-turn-story",
+        playerMessage: "Walk upstairs.",
+        origin: "player",
+      },
+      runtimes,
+      {
+        store,
+        // The provider's extension publishes a snapshot; only its runtime fails.
+        dimensionContext: frozenDimensions,
+        extensionExecution: {
+          run: async () => frozenDimensions,
+        } as unknown as ExecutionDeps["extensionExecution"],
+        llm: {
+          generate: async () => {
+            modelCalls += 1;
+            return response("A lamp lights the stairs.");
+          },
+        },
+        loadRuntime: async (loaded) => ({
+          manifest: loaded,
+          promptTemplate: "",
+          handler: async () =>
+            loaded.pluginId === "dimensions"
+              ? { outcome: "failed", error: "Snapshot unavailable" }
+              : {
+                  outcome: "success",
+                  value: {},
+                  effects: {
+                    pluginData: [
+                      { namespace: "plan", key: "revealed", value: true },
+                    ],
+                  },
+                },
+        }),
+      },
+    );
+    expect(
+      execution.result.runtimeResults.find(
+        (result) => result.runtimeId === manifest.name,
+      ),
+    ).toMatchObject({
+      status: "skipped",
+      output: { reason: "dimension-snapshot-unavailable" },
+    });
+    expect(modelCalls).toBe(0);
+
+    const committed = await commitExecution({
+      store,
+      execution,
+      completion: { kind: "turn", turnId: "turn-story", durationMs: 0 },
+    });
+    expect(committed.status).toBe("failed");
+    expect(committed.error).toContain("dimension provider failed");
+    expect(
+      (await store.getSession("session-story"))?.completedPlayerTurns,
+    ).toBe(0);
+    expect(
+      await store.getPluginData("session-story", "planner", "plan", "revealed"),
+    ).toBeFalsy();
+    expect(await store.listTurnMessages("session-story")).toHaveLength(0);
+  });
 
   it("rejects story envelopes without prose while leaving system tool output valid", () => {
     const params = {

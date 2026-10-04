@@ -169,9 +169,12 @@ completion events are suppressed. Previously recorded execution history is
 settled as failed; already durable client input remains outside this boundary.
 
 Story completion is a commit precondition: a failed `outputKind: story` runtime,
-or a successful story result without non-empty sanitized `narrativeOutput`,
-rejects execution finalization before any buffered proposals, journal messages,
-or player-turn counters commit. Already durable client messages remain outside
+a successful story result without non-empty sanitized `narrativeOutput`, or a
+story the executor held back because the dimension provider failed in the same
+execution (`dimension-snapshot-unavailable`) rejects execution finalization
+before any buffered proposals, journal messages, or player-turn counters
+commit. A story skipped for any other reason (its guard, a declared gate) does
+not reject the execution. Already durable client messages remain outside
 this transaction. A premature `runtime-done` first requests narrative with the
 remaining bounded model steps; an empty result becomes a failed runtime. This
 does not retry or reverse external tool side effects. Optional system extractors
@@ -442,8 +445,10 @@ server transaction API in the browser.
 >   `commit/session-clock.ts` 的 `applySessionClockTx`）。API 与 snapshot 直接保存
 >   current-only 时钟字段。整回合回滚时（story 或 setup 失败，或没有 story 的执行中
 >   任一 proposal 失败）计数、phase、setup 镜像都不推进，ledger 不写入；只丢弃可选
->   runtime 的提交照常推进时钟。manual / background / resume
->   finalize 不传 `sessionClock`，时钟不动。
+>   runtime 的提交照常推进时钟。manual / background finalize 不传 `sessionClock`，
+>   时钟不动。resume 传入：同一逻辑回合最后一个 suspension 恢复时计数一次；被恢复的
+>   是 setup runtime 且报告完成时，`done` 镜像与（全部 setup 完成时的）phase 翻转
+>   随这次提交写入，attempt 账本沿用挂起时的那次尝试。
 > - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入；
 >   `framework.submit-form` 再用 store transaction 原子提交批量 player input。因而同一 session
 >   的 turn 与重复表单提交不会穿插，PG 多进程部署也由同一分布式锁键串行化。

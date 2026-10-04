@@ -213,10 +213,115 @@ describe("setup session-gate SCC", () => {
       stage: "setup",
     } as RuntimeManifest;
 
-    const cycles = detectSetupSessionCycles([x, y, z]);
+    const cycles = detectSetupSessionCycles([x, y, z], {});
     expect(cycles.has("x/setup")).toBe(true);
     expect(cycles.has("y/setup")).toBe(true);
     expect(cycles.has("z/setup")).toBe(false); // acyclic member unaffected
+  });
+
+  // consumer needs seed@1 from any provider; `loop` provides seed@1 and waits
+  // for the consumer; `other` is a second seed@1 provider with no needs.
+  const capabilityRuntimes = () => {
+    const rt = (name: string, extra: Record<string, unknown>) =>
+      ({
+        name,
+        pluginId: name.split("/")[0],
+        description: name,
+        stage: "setup",
+        runtimeType: "function",
+        handler: "./h.js",
+        trigger: { type: "auto" },
+        version: "1.0.0",
+        ...extra,
+      }) as unknown as RuntimeManifest;
+    return {
+      consumer: rt("consumer/setup", {
+        outputContract: "consumer-ready@1",
+        needs: [{ capability: "seed@1", scope: "session", cardinality: "one" }],
+      }),
+      loop: rt("loop/setup", {
+        outputContract: "seed@1",
+        needs: [{ capability: "consumer-ready@1", scope: "session" }],
+      }),
+      other: rt("other/setup", { outputContract: "seed@1" }),
+    };
+  };
+  const NOW = "2026-01-01T00:00:00.000Z";
+
+  it("a cardinality 'one' need already met by a done provider is not a cycle edge", () => {
+    const { consumer, loop, other } = capabilityRuntimes();
+    const cycles = detectSetupSessionCycles([consumer, loop, other], {
+      "other/setup": mirrorSetupDone("1.0.0", NOW, 1, 1),
+    });
+    expect(cycles.size).toBe(0);
+  });
+
+  it("a cardinality 'one' need is released by any pending provider", () => {
+    const { consumer, loop, other } = capabilityRuntimes();
+    expect(detectSetupSessionCycles([consumer, loop, other], {}).size).toBe(0);
+  });
+
+  it("a cardinality 'one' need with only the looping provider is a cycle", () => {
+    const { consumer, loop } = capabilityRuntimes();
+    const cycles = detectSetupSessionCycles([consumer, loop], {});
+    expect([...cycles.keys()].sort()).toEqual(["consumer/setup", "loop/setup"]);
+  });
+
+  it("a cardinality 'all' need still waits for the looping provider", () => {
+    const { consumer, loop, other } = capabilityRuntimes();
+    const all = {
+      ...consumer,
+      needs: [{ capability: "seed@1", scope: "session", cardinality: "all" }],
+    } as unknown as RuntimeManifest;
+    const cycles = detectSetupSessionCycles([all, loop, other], {
+      "other/setup": mirrorSetupDone("1.0.0", NOW, 1, 1),
+    });
+    expect([...cycles.keys()].sort()).toEqual(["consumer/setup", "loop/setup"]);
+  });
+
+  it("a blocked alternative provider leaves the need to the player, not to a cycle", () => {
+    const { consumer, loop, other } = capabilityRuntimes();
+    const cycles = detectSetupSessionCycles([consumer, loop, other], {
+      "other/setup": {
+        state: "blocked",
+        pluginVersion: "1.0.0",
+        generation: 1,
+        attempts: 1,
+        reason: "setup exhausted its retry budget",
+        blockedAt: NOW,
+      },
+    });
+    expect(cycles.size).toBe(0);
+  });
+
+  it("runs the consumer of a satisfied 'one' need instead of blocking it", async () => {
+    const store = createMemoryStore();
+    await setupSession(store, "s", {
+      "other/setup": mirrorSetupDone("1.0.0", NOW, 1, 1),
+    });
+    const { consumer, loop, other } = capabilityRuntimes();
+    const invoked: string[] = [];
+    await executeTurn(
+      { sessionId: "s", turnId: "t", playerMessage: "" },
+      [consumer, loop, other],
+      {
+        loadRuntime: async (m) => ({
+          manifest: m,
+          promptTemplate: "",
+          handler: async () => {
+            invoked.push(m.name);
+            return {};
+          },
+        }),
+        llm: new NoopLLM(),
+        store,
+      },
+    );
+
+    expect(invoked).toEqual(["consumer/setup"]);
+    const mirror = (await store.getSession("s"))!.setupRuntimes!;
+    expect(mirror["consumer/setup"]?.state).not.toBe("blocked");
+    expect(mirror["loop/setup"]?.state).not.toBe("blocked");
   });
 
   it("blocks session-cycle members up front (no run, persistent blocked)", async () => {

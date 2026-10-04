@@ -68,7 +68,10 @@ import {
   planTurnDetachment,
 } from "../schedule/turn-completion.js";
 import { DIMENSION_CONTRACT } from "@covel/shared";
-import { dimensionExecutionBarrier } from "./dimension-barrier.js";
+import {
+  DIMENSION_SNAPSHOT_SKIP,
+  dimensionExecutionBarrier,
+} from "./dimension-barrier.js";
 import {
   createWorldModelView,
   memoizeWorldModelReads,
@@ -344,11 +347,10 @@ async function executeTurnImpl(
   // state), so block the members up front — no run, no attempt burned. Guarded
   // so real plugins (none declare such an edge) pay nothing.
   {
-    const pendingSetup = activeSetupRuntimes.filter((rt) => {
-      const st = setupTracker.mirror[rt.name]?.state;
-      return st !== "done" && st !== "blocked";
-    });
-    const cycles = detectSetupSessionCycles(pendingSetup);
+    const cycles = detectSetupSessionCycles(
+      activeSetupRuntimes,
+      setupTracker.mirror,
+    );
     if (cycles.size > 0 && !isTargeted) {
       const now = new Date().toISOString();
       const blocked = setupTracker.blockSessionCycles(cycles, now);
@@ -661,8 +663,8 @@ async function executeTurnImpl(
         makeSkippedResult(
           manifest,
           input,
-          "dimension-snapshot-unavailable",
-          "framework:dimensionSnapshot",
+          DIMENSION_SNAPSHOT_SKIP.reason,
+          DIMENSION_SNAPSHOT_SKIP.by,
           {},
         ),
       );

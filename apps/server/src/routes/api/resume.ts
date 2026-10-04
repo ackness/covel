@@ -376,7 +376,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           data,
           effectiveManifest!,
           resumeDeps,
-          { userSettings },
+          { userSettings, activeRuntimes },
         );
 
         const { result } = execution;
