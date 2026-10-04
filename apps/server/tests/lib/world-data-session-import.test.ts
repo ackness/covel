@@ -1935,7 +1935,8 @@ sources: {}
   });
 
   it.each([
-    ["emberback", "en-US", 3],
+    ["emberback", "en-US", 5],
+    ["lantern-barrow", "zh-CN", 6],
     ["mistport", "zh-CN", 7],
     ["mistport", "en-US", 7],
     ["haruka-academy", "zh-CN", 8],

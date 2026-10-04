@@ -3,10 +3,13 @@ import type { TFunction } from "i18next";
 import { ChevronLeft, ChevronRight, Images, Pause, Play } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
 import {
-  listWorldGallery,
+  getWorldGallery,
+  type WorldGallery,
   type WorldGalleryItem,
   type WorldRecord,
 } from "@/services/api.js";
+import type { I18nText } from "@covel/shared";
+import { text } from "@/components/world/editor-helpers.js";
 import { useInView } from "@/hooks/use-in-view.js";
 import { worldVisualForId } from "@/lib/world-visuals.js";
 
@@ -15,57 +18,80 @@ import { worldVisualForId } from "@/lib/world-visuals.js";
  * the world list and the world details, before any session exists.
  */
 
-const NO_IMAGES: readonly WorldGalleryItem[] = [];
-const galleryRequests = new Map<string, Promise<WorldGalleryItem[]>>();
+const NO_GALLERY: WorldGallery = { items: [] };
+const galleryRequests = new Map<string, Promise<WorldGallery>>();
 
-/** The images of one world; empty while loading and for a world without art. */
-export function useWorldGallery(
+/** What one world's package shows; empty while loading and without a package. */
+function useWorldGalleryAnswer(
   world: WorldRecord | null | undefined,
-): readonly WorldGalleryItem[] {
+): WorldGallery {
   const worldId = world?.id;
-  // A changed package is a changed record, so its images are read again.
+  // A changed package is a changed record, so its gallery is read again.
   const key = world ? `${world.id}\u0000${world.updatedAt ?? ""}` : "";
-  const [loaded, setLoaded] = useState<{
-    key: string;
-    items: readonly WorldGalleryItem[];
-  }>({ key: "", items: NO_IMAGES });
+  const [loaded, setLoaded] = useState<{ key: string; gallery: WorldGallery }>({
+    key: "",
+    gallery: NO_GALLERY,
+  });
 
   useEffect(() => {
     if (!worldId) return;
     let cancelled = false;
     let pending = galleryRequests.get(key);
     if (!pending) {
-      pending = listWorldGallery(worldId).catch(() => {
+      pending = getWorldGallery(worldId).catch(() => {
         // Not kept: the next visit asks again.
         galleryRequests.delete(key);
-        return [];
+        return NO_GALLERY;
       });
       galleryRequests.set(key, pending);
     }
-    void pending.then((items) => {
-      if (!cancelled) setLoaded({ key, items });
+    void pending.then((gallery) => {
+      if (!cancelled) setLoaded({ key, gallery });
     });
     return () => {
       cancelled = true;
     };
   }, [worldId, key]);
 
-  return loaded.key === key ? loaded.items : NO_IMAGES;
+  return loaded.key === key ? loaded.gallery : NO_GALLERY;
+}
+
+/** The images of one world; empty while loading and for a world without art. */
+export function useWorldGallery(
+  world: WorldRecord | null | undefined,
+): readonly WorldGalleryItem[] {
+  return useWorldGalleryAnswer(world).items;
+}
+
+/** Address of the music a world names for the world list, when it has one. */
+export function useWorldThemeMusicUrl(
+  world: WorldRecord | null | undefined,
+): string | undefined {
+  return useWorldGalleryAnswer(world).themeMusic?.url;
 }
 
 /**
- * Wide images are scenes and can fill the screen; the rest are figures —
- * character portraits and sprites — and only ever show as pictures.
+ * What each picture is for. A package that describes its gallery says so:
+ * scenes and stills can fill the screen, portraits are figures, a map is only
+ * ever shown whole, and the hero is the world's own cover. Without that, shape
+ * decides: a wide image is a scene, the rest are figures.
  */
 export function splitGallery(items: readonly WorldGalleryItem[]): {
+  hero: WorldGalleryItem | undefined;
   backdrops: WorldGalleryItem[];
   figures: WorldGalleryItem[];
+  maps: WorldGalleryItem[];
 } {
-  const isBackdrop = (item: WorldGalleryItem) =>
-    item.width >= item.height * 1.2;
+  const wide = (item: WorldGalleryItem) => item.width >= item.height * 1.2;
   return {
-    backdrops: items.filter(isBackdrop),
-    figures: items.filter((item) => !isBackdrop(item)),
+    hero: items.find((item) => item.kind === "hero"),
+    backdrops: items.filter((item) =>
+      item.kind ? item.kind === "scene" || item.kind === "still" : wide(item),
+    ),
+    figures: items.filter((item) =>
+      item.kind ? item.kind === "portrait" : !wide(item),
+    ),
+    maps: items.filter((item) => item.kind === "map"),
   };
 }
 
@@ -183,15 +209,23 @@ export function ShowcaseBackdrop({
 export function SlideIndicator({
   count,
   slideshow,
+  label,
   t,
 }: {
   readonly count: number;
   readonly slideshow: Slideshow;
+  /** Name of the slide that shows, when the package gives one. */
+  readonly label?: string;
   readonly t: TFunction;
 }) {
   if (count < 2) return null;
   return (
-    <div className="ui-world-glass flex h-9 items-center gap-1 rounded-(--radius-control) border px-1.5">
+    <div className="ui-world-glass flex h-9 max-w-full items-center gap-1 rounded-(--radius-control) border px-1.5">
+      {label && (
+        <span className="max-w-56 truncate pl-1.5 pr-1 text-xs text-white/85">
+          {label}
+        </span>
+      )}
       <button
         type="button"
         onClick={slideshow.toggle}
@@ -272,14 +306,14 @@ function GalleryThumb({
   readonly onOpen: () => void;
   readonly t: TFunction;
 }) {
+  const name = text(item.name);
+  const label = t("world.galleryOpen", { index: position + 1, total });
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={t("world.galleryOpen", {
-        index: position + 1,
-        total,
-      })}
+      aria-label={name ? `${name} — ${label}` : label}
+      title={name || undefined}
       className={`shrink-0 cursor-zoom-in overflow-hidden rounded-(--radius-control) ${className}`}
       style={{
         aspectRatio: item.width >= item.height * 1.2 ? "3 / 2" : "3 / 4",
@@ -372,6 +406,10 @@ export function WorldGalleryLightbox({
   readonly t: TFunction;
 }) {
   const item = index === null ? undefined : items[index];
+  const name = text(item?.name);
+  const description = text(item?.description);
+  const background = text(item?.background);
+  const location = text(item?.location);
   const step = (delta: number) => {
     if (index === null) return;
     onIndexChange((index + delta + items.length) % items.length);
@@ -392,7 +430,7 @@ export function WorldGalleryLightbox({
         }}
       >
         <DialogTitle className="sr-only">
-          {title} — {t("world.gallery")}
+          {name ? `${name} — ${title}` : `${title} — ${t("world.gallery")}`}
         </DialogTitle>
         {item && (
           <img
@@ -401,9 +439,37 @@ export function WorldGalleryLightbox({
             alt=""
             width={item.width}
             height={item.height}
-            className="max-h-[84vh] w-auto max-w-[96vw] object-contain"
+            className={`w-auto max-w-[96vw] object-contain ${
+              name || description ? "max-h-[70vh]" : "max-h-[84vh]"
+            }`}
             draggable={false}
           />
+        )}
+        {/* What the package says about the picture: its name, a line about
+            what it shows, and the setting behind it. */}
+        {(name || description) && (
+          <div className="w-0 min-w-full space-y-1 px-5 pt-3 text-left">
+            {name && (
+              <p className="ui-title text-base leading-snug">
+                {name}
+                {location && (
+                  <span className="ml-2 text-xs font-normal text-white/60">
+                    {location}
+                  </span>
+                )}
+              </p>
+            )}
+            {description && (
+              <p className="text-sm leading-relaxed text-white/85">
+                {description}
+              </p>
+            )}
+            {background && (
+              <p className="text-[13px] leading-relaxed text-white/60">
+                {background}
+              </p>
+            )}
+          </div>
         )}
         {items.length > 1 && index !== null && (
           <div className="flex w-full items-center justify-center gap-3 py-2">
@@ -435,26 +501,43 @@ export function WorldGalleryLightbox({
 
 /**
  * A world's art split for display: the slides behind a title, and every
- * picture. A world without a cover of its own opens on its own scenes.
+ * picture. The first slide is the cover: the app's own for a bundled world,
+ * else the hero of the package, else the first scene it ships.
  */
 export function useWorldArt(
   world: WorldRecord | null | undefined,
   cover: string,
 ): {
   slides: string[];
+  /** The name of each slide, where the package gives one. */
+  slideNames: (I18nText | undefined)[];
   figures: WorldGalleryItem[];
   pictures: WorldGalleryItem[];
 } {
   const gallery = useWorldGallery(world);
   const ownCover = worldVisualForId(world?.id) !== null;
   return useMemo(() => {
-    const { backdrops, figures } = splitGallery(gallery);
-    const scenes = backdrops.map((item) => item.url);
+    const { hero, backdrops, figures, maps } = splitGallery(gallery);
+    const lead: { url: string; name?: I18nText }[] = ownCover
+      ? [{ url: cover }]
+      : hero
+        ? [hero]
+        : backdrops.length > 0
+          ? []
+          : [{ url: cover }];
+    const shown = [...lead, ...backdrops];
     return {
-      slides: scenes.length > 0 && !ownCover ? scenes : [cover, ...scenes],
+      slides: shown.map((slide) => slide.url),
+      slideNames: shown.map((slide) => slide.name),
       figures,
-      // Portraits lead: a face says more in a thumbnail than a landscape.
-      pictures: [...figures, ...backdrops],
+      // Portraits lead: a face says more in a thumbnail than a landscape. A
+      // bundled world's hero is the cover the app already shows.
+      pictures: [
+        ...figures,
+        ...backdrops,
+        ...maps,
+        ...(hero && !ownCover ? [hero] : []),
+      ],
     };
   }, [gallery, cover, ownCover]);
 }

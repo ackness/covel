@@ -4,12 +4,10 @@ import { Volume2, VolumeX } from "lucide-react";
 import type { StageMusicModel } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { BgmPlayer, DEFAULT_FADE_MS } from "@/lib/bgm-player.js";
+import { useBgmPlayer } from "@/hooks/use-bgm-player.js";
+import { DEFAULT_FADE_MS } from "@/lib/bgm-player.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
-import {
-  MUSIC_ENABLED_SETTING,
-  MUSIC_VOLUME_SETTING,
-} from "@/settings/registry/core.js";
+import { MUSIC_ENABLED_SETTING } from "@/settings/registry/core.js";
 import { useSetting } from "@/settings/use-settings.js";
 import { useUiSlot } from "@/stores/ui-slot-store.js";
 
@@ -27,29 +25,15 @@ export function useSessionMusic(sessionId: string): StageMusicModel | null {
 /** Plays the session's music; draws nothing. */
 export function SessionMusic({ sessionId }: { readonly sessionId: string }) {
   const music = useSessionMusic(sessionId);
-  const [enabled] = useSetting<boolean>(MUSIC_ENABLED_SETTING);
-  const [volume] = useSetting<number>(MUSIC_VOLUME_SETTING);
-  const playerRef = useRef<BgmPlayer | null>(null);
+  const playerRef = useBgmPlayer(sessionId);
   const urlsRef = useRef<string[]>([]);
 
-  // Declared first: the effects below need the player of this session.
   useEffect(() => {
-    const player = new BgmPlayer();
-    playerRef.current = player;
     const urls = urlsRef.current;
     return () => {
-      player.dispose();
-      playerRef.current = null;
       for (const url of urls.splice(0)) URL.revokeObjectURL(url);
     };
   }, [sessionId]);
-
-  useEffect(() => {
-    playerRef.current?.setMuted(!enabled);
-  }, [enabled, sessionId]);
-  useEffect(() => {
-    playerRef.current?.setLevel(volume / 100);
-  }, [volume, sessionId]);
 
   const ref = music?.ref;
   const key = music ? (music.trackId ?? ref?.id) : undefined;
@@ -86,6 +70,45 @@ export function SessionMusic({ sessionId }: { readonly sessionId: string }) {
   return null;
 }
 
+/** The player's music switch, where a surface has music to switch. */
+export function MusicSwitch({
+  title,
+  className,
+  ghost = false,
+  t,
+}: {
+  /** What is playing, added to the tooltip. */
+  readonly title?: string;
+  readonly className: string;
+  /** Drawn as the quiet icon buttons of a toolbar. */
+  readonly ghost?: boolean;
+  readonly t: TFunction;
+}) {
+  const [enabled, setEnabled] = useSetting<boolean>(MUSIC_ENABLED_SETTING);
+  const label = t(enabled ? "session.musicMute" : "session.musicUnmute");
+  const props = {
+    className,
+    onClick: () => void setEnabled(!enabled),
+    "aria-label": label,
+    "aria-pressed": enabled,
+    title: title ? `${label} — ${title}` : label,
+  };
+  const icon = enabled ? (
+    <Volume2 className="h-4 w-4" />
+  ) : (
+    <VolumeX className="h-4 w-4" />
+  );
+  return ghost ? (
+    <Button variant="ghost" size="icon" {...props}>
+      {icon}
+    </Button>
+  ) : (
+    <button type="button" {...props}>
+      {icon}
+    </button>
+  );
+}
+
 /** Turns the music on and off; shown only while the session has a track. */
 export function MusicToggle({
   sessionId,
@@ -95,25 +118,13 @@ export function MusicToggle({
   readonly t: TFunction;
 }) {
   const music = useSessionMusic(sessionId);
-  const [enabled, setEnabled] = useSetting<boolean>(MUSIC_ENABLED_SETTING);
   if (!music) return null;
-  const title = text(music.title);
-  const label = t(enabled ? "session.musicMute" : "session.musicUnmute");
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <MusicSwitch
+      title={text(music.title)}
       className="ui-session-action h-10 w-10 shrink-0 md:h-8 md:w-8"
-      onClick={() => void setEnabled(!enabled)}
-      aria-label={label}
-      aria-pressed={enabled}
-      title={title ? `${label} — ${title}` : label}
-    >
-      {enabled ? (
-        <Volume2 className="w-4 h-4" />
-      ) : (
-        <VolumeX className="w-4 h-4" />
-      )}
-    </Button>
+      ghost
+      t={t}
+    />
   );
 }

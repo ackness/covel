@@ -161,6 +161,141 @@ describe("GET /api/worlds/:id/gallery", () => {
       expect((await app.request(url)).status, url).toBe(404);
   });
 
+  it("follows media/gallery.json when the package has one", async () => {
+    const dir = await writeWorld("ash-harbor");
+    await mkdir(path.join(dir, "media/gallery"), { recursive: true });
+    await mkdir(path.join(dir, "media/portraits"), { recursive: true });
+    for (const [file, width, height] of [
+      ["gallery/quay.png", 1536, 1024],
+      ["gallery/quay-web.png", 1536, 1024],
+      ["gallery/late.png", 1536, 1024],
+      ["portraits/mara.png", 1024, 1536],
+      ["secret.png", 8, 8],
+    ] as const)
+      await writeFile(path.join(dir, "media", file), pngHeader(width, height));
+    await writeFile(
+      path.join(dir, "media/gallery.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        defaultLocale: "en-US",
+        images: [
+          {
+            id: "quay",
+            kind: "scene",
+            filename: "gallery/quay.png",
+            webFilename: "gallery/quay-web.png",
+            name: "The Quay",
+            description: "Where the fires start.",
+            spoilerLevel: "opening",
+            sha256: "editorial fields are not read",
+          },
+          { id: "mara", kind: "portrait", filename: "portraits/mara.png" },
+          // Past the opening, outside `media/`, not in a directory: not shown.
+          { id: "late", filename: "gallery/late.png", spoilerLevel: "ending" },
+          { id: "escape", filename: "../world.yaml" },
+          { id: "flat", filename: "secret.png" },
+          // A kind this version does not know is still a picture.
+          { id: "poster", kind: "poster", filename: "gallery/quay.png" },
+        ],
+      }),
+    );
+    await writeFile(
+      path.join(dir, "media/gallery.zh-CN.json"),
+      JSON.stringify({
+        images: [{ id: "quay", name: "码头", description: "火从这里烧起。" }],
+      }),
+    );
+    await register(dir);
+
+    const gallery = (await items("ash-harbor")) as unknown as Record<
+      string,
+      unknown
+    >[];
+
+    expect(gallery.map(({ id, kind }) => ({ id, kind }))).toEqual([
+      { id: "quay", kind: "scene" },
+      { id: "mara", kind: "portrait" },
+      { id: "poster", kind: undefined },
+    ]);
+    // Every language of the package; the display version of the file.
+    expect(gallery[0]).toMatchObject({
+      name: { "en-US": "The Quay", "zh-CN": "码头" },
+      description: {
+        "en-US": "Where the fires start.",
+        "zh-CN": "火从这里烧起。",
+      },
+      width: 1536,
+      height: 1024,
+    });
+    expect(String(gallery[0]!.url)).toContain("/gallery/gallery/quay-web.png");
+    expect((await app.request(String(gallery[0]!.url))).status).toBe(200);
+    for (const url of [
+      "/api/worlds/ash-harbor/gallery/gallery/late.png",
+      "/api/worlds/ash-harbor/gallery/media/secret.png",
+    ])
+      expect((await app.request(url)).status, url).toBe(404);
+  });
+
+  it("lists the media sources when gallery.json cannot be read", async () => {
+    const dir = await writeWorld(
+      "ash-harbor",
+      "schemaVersion: 1\nsources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n",
+    );
+    await mkdir(path.join(dir, "media/scenes"), { recursive: true });
+    await writeFile(path.join(dir, "media/scenes/quay.png"), pngHeader(4, 4));
+    await writeFile(path.join(dir, "media/gallery.json"), "{ not json");
+    await register(dir);
+
+    expect((await items("ash-harbor")).map((item) => item.id)).toEqual([
+      "scenes/quay.png",
+    ]);
+  });
+
+  it("offers the theme music world.yaml names, and nothing it cannot play", async () => {
+    const writeThemed = async (id: string, themeMusic: string) => {
+      const dir = await writeWorld(id);
+      await writeFile(
+        path.join(dir, "world.yaml"),
+        `schemaVersion: "1.0"\nid: ${id}\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\nthemeMusic: ${themeMusic}\n`,
+      );
+      await mkdir(path.join(dir, "media/music"), { recursive: true });
+      await writeFile(path.join(dir, "media/music/theme.mp3"), "ID3 theme");
+      await writeFile(path.join(dir, "media/music/notes.txt"), "not music");
+      await register(dir);
+      return (await (
+        await app.request(`/api/worlds/${id}/gallery`)
+      ).json()) as { themeMusic?: { url: string; mime: string } };
+    };
+
+    const { themeMusic } = await writeThemed(
+      "ash-harbor",
+      "media/music/theme.mp3",
+    );
+    expect(themeMusic).toMatchObject({ mime: "audio/mpeg" });
+    const audio = await app.request(themeMusic!.url);
+    expect(audio.status).toBe(200);
+    expect(audio.headers.get("content-type")).toBe("audio/mpeg");
+    expect(await audio.text()).toBe("ID3 theme");
+
+    // Not audio, outside `media/<directory>/`, or missing: no theme.
+    for (const [id, declared] of [
+      ["text-theme", "media/music/notes.txt"],
+      ["root-theme", "world.yaml"],
+      ["escape-theme", "media/music/../../world.yaml"],
+      ["missing-theme", "media/music/absent.mp3"],
+    ] as const)
+      expect((await writeThemed(id, declared)).themeMusic, id).toBeUndefined();
+    expect(
+      (await app.request("/api/worlds/text-theme/gallery/music/notes.txt"))
+        .status,
+    ).toBe(404);
+    // An audio file the world does not name as its theme is not served.
+    expect(
+      (await app.request("/api/worlds/missing-theme/gallery/music/theme.mp3"))
+        .status,
+    ).toBe(404);
+  });
+
   it("answers with no images for a world without a package", async () => {
     await register(await writeWorld("ash-harbor"));
     await store.createWorld({

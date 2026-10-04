@@ -68,7 +68,7 @@ pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 
 当前封面位于 `apps/web/public/visuals/worlds/`，由 `apps/web/src/lib/world-visuals.ts` 选择，不会因为世界包内人物图更新而自动更换。封面与玩法相符且质量合格时可以保留；世界包的导入协议见 [world-data](../reference/world-data.md)，媒体引用见 [media-store](../reference/media-store.md)。
 
-世界包里公开的 `kind: media` 图片在玩家进入会话之前就会展示：世界详情页列出全部图片；`showcase` 排法的世界列表把宽图（宽 ≥ 高的 1.2 倍，即场景图）轮播成全屏背景，把其余图片（立绘）排在简介下方，点开可看原图；`cards` 排法在封面左下角显示几张头像和图片总数，指针停在封面上时轮播场景图。没有内置封面的世界直接用自己的场景图作背景。所以这些图片要能单独成立：不放半成品，暂不公开的图片放进 `enabled: false` 或 `visibility: hidden` 的来源。接口见 [api.md](../reference/api.md) 的 `GET /api/worlds/:id/gallery`。
+世界包的图片在玩家进入会话之前就会展示：世界详情页列出全部图片；`showcase` 排法的世界列表把场景图和剧照轮播成全屏背景，把人物图排在简介下方，点开可看原图和介绍；`cards` 排法在封面左下角显示几张头像和图片总数，指针停在封面上时轮播场景图。展示哪些图、叫什么、怎么介绍，由世界包的 `media/gallery.json` 决定（见下方[画廊资料与前端使用](#画廊资料与前端使用)）；没有这份清单时列出公开的 `kind: media` 来源里的图片，按宽高比区分场景与人物。所以这些图片要能单独成立：不放半成品。接口见 [api.md](../reference/api.md) 的 `GET /api/worlds/:id/gallery`。
 
 ## 后续美术投入顺序
 
@@ -84,7 +84,9 @@ pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 
 ## 画廊资料与前端使用
 
-四个在用世界的 `media/gallery.json` 保存新增图片与既有素材的编辑资料，语言文件为 `gallery.en.json` 或 `gallery.zh-CN.json`。这是供后续画廊使用的内容清单，目前没有对应的运行时导入 contract，也没有自动轮播或画廊页面。既有素材的运行时引用仍以原来的 portraits/scenes 清单为准。
+四个在用世界的 `media/gallery.json` 保存新增图片与既有素材的编辑资料，语言文件为 `gallery.en.json` 或 `gallery.zh-CN.json`。世界列表和世界详情的画廊读这份清单：按清单顺序展示图片，用 `kind` 决定用法，用 `name`、`description`、`background`、`location` 作介绍，有 `webFilename` 时展示它。它不是会话的导入 contract：会话里的立绘和场景仍以原来的 portraits/scenes 清单为准。
+
+画廊在开始游玩之前展示，所以只列出 `spoilerLevel` 为 `opening`（或没有声明）的图片。`filename` 和 `webFilename` 必须是 `media/` 下「一层目录 / 文件名」的路径，其余写法的图片不展示。`kind` 的用法：`scene` 和 `still` 会铺满屏幕轮播，裁切时上下各少一条；`map` 只完整显示，不参与轮播；`portrait` 作为人物图；`hero` 是世界自己的封面，应用没有内置封面的世界（例如玩家安装的世界）用它开场。
 
 每条图片记录包含以下信息，方便前端按字段展示。
 
@@ -110,4 +112,4 @@ pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 
 既有立绘与场景直接引用原文件。三个既有封面以相同字节复制到各世界的 `media/gallery/world-cover.webp`，对应前端 `apps/web/public/visuals/worlds/<world-id>.webp`，便于世界包独立携带；以后替换封面时须同步这两个文件及画廊校验信息。Emberback 封面的发光波形属于视觉意象；雾港的宣传总览不改变探索时的能见度规则，也不是遗迹路线图。
 
-新增横幅 PNG 为 `1536x1024`，并附 WebP 版。地图宜 `contain` 完整显示；场景与剧照也优先完整展示，裁切时需保留人物和关键道具。提灯古冢首页使用 `apps/web/public/visuals/worlds/lantern-barrow.webp`，与世界包的 hero WebP 相同，由现有 `world-visuals.ts` 映射选择。其余画廊图片尚未接入前端运行时；它们不改变现有 scene-stage 的场景锚点或会话状态。
+新增横幅 PNG 为 `1536x1024`，并附 WebP 版。地图宜 `contain` 完整显示；场景与剧照也优先完整展示，裁切时需保留人物和关键道具。提灯古冢首页使用 `apps/web/public/visuals/worlds/lantern-barrow.webp`，与世界包的 hero WebP 相同，由现有 `world-visuals.ts` 映射选择。画廊图片只在世界列表和世界详情里展示；它们不改变现有 scene-stage 的场景锚点或会话状态。

@@ -31,7 +31,9 @@ import {
   useSlideshow,
   useWorldArt,
 } from "./world-gallery.js";
+import { MusicSwitch } from "@/components/session/session-music.js";
 import { WorldPrimaryActions, accentStyle } from "./world-list-variants.js";
+import { useWorldThemeMusic } from "./world-music.js";
 import type { WorldListViewProps } from "./world-list-view.js";
 import { mostRecentSession } from "./use-recent-sessions.js";
 
@@ -305,11 +307,12 @@ export function WorldShowcase({
     pickedId ??
     (recentSessions ? mostRecentSession(recentSessions)?.worldId : undefined);
   const selected = worlds.find((world) => world.id === selectedId) ?? worlds[0];
-  const { slides, pictures } = useWorldArt(
+  const { slides, slideNames, pictures } = useWorldArt(
     selected,
     worldVisual(selected).image,
   );
   const slideshow = useSlideshow(selected?.id ?? "", slides.length);
+  const hasThemeMusic = useWorldThemeMusic(selected);
   if (!selected) return null;
   const resumable = Boolean(
     recentSessions?.get(selected.id) && onResumeSession,
@@ -334,6 +337,9 @@ export function WorldShowcase({
 
       <div className="relative z-1 flex min-h-full flex-col">
         <div className="ui-drag-region flex flex-wrap items-center justify-end gap-2 px-5 pt-5 md:px-8">
+          {hasThemeMusic && (
+            <MusicSwitch className="ui-btn ui-world-glass size-10 p-0" t={t} />
+          )}
           <button
             type="button"
             onClick={onOpenGenerator}
@@ -445,6 +451,7 @@ export function WorldShowcase({
                 <SlideIndicator
                   count={slides.length}
                   slideshow={slideshow}
+                  label={text(slideNames[slideshow.index])}
                   t={t}
                 />
               }

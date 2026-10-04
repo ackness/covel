@@ -3,7 +3,7 @@
  * and the world details, where no session (and so no media token) exists yet.
  *
  * The files are distribution content of a catalogue entry, readable by whoever
- * can list worlds. A request names a media source and a file of that source;
+ * can list worlds. A request names the two parts of a listed file's address;
  * it is answered only when the gallery listing itself contains that file.
  */
 
@@ -14,6 +14,7 @@ import { errorBody } from "../../../api-error.js";
 import {
   listWorldGallery,
   listWorldGalleryFiles,
+  resolveWorldThemeMusic,
 } from "../../../world-data/gallery.js";
 import { resolveWorldRoot } from "../../../world-data/session-import/utils.js";
 import { type WorldEnv } from "./shared.js";
@@ -43,33 +44,57 @@ worldGalleryRoutes.get("/:id/gallery", async (c) => {
     worldId,
     covelHome: c.get("covelHome"),
   });
+  const theme = await resolveWorldThemeMusic({ worldRoot });
   return c.json({
+    ...(theme
+      ? {
+          themeMusic: {
+            url: galleryFileUrl(
+              worldId,
+              theme.source,
+              theme.file,
+              theme.version,
+            ),
+            mime: theme.mime,
+          },
+        }
+      : {}),
     items: images.map((image) => ({
-      id: `${image.source}/${image.file}`,
+      id: image.id,
       source: image.source,
       url: galleryFileUrl(worldId, image.source, image.file, image.version),
       width: image.width,
       height: image.height,
+      ...(image.kind ? { kind: image.kind } : {}),
+      ...(image.name ? { name: image.name } : {}),
+      ...(image.description ? { description: image.description } : {}),
+      ...(image.background ? { background: image.background } : {}),
+      ...(image.location ? { location: image.location } : {}),
     })),
   });
 });
 
-// GET /worlds/:id/gallery/:source/:file
+// GET /worlds/:id/gallery/:source/:file — a listed image, or the theme music
 worldGalleryRoutes.get("/:id/gallery/:source/:file", async (c) => {
   const worldId = c.req.param("id");
   const worldRoot = await resolveWorldRoot(worldId, c.get("worldsDirs") ?? []);
   const source = c.req.param("source");
   const file = c.req.param("file");
-  const match = worldRoot
-    ? (
-        await listWorldGalleryFiles({
-          worldRoot,
-          worldId,
-          covelHome: c.get("covelHome"),
-        })
-      ).find((entry) => entry.source === source && entry.file === file)
-    : undefined;
-  if (!match) return c.json(errorBody("Image not found"), 404);
+  const names = (entry: { source: string; file: string }) =>
+    entry.source === source && entry.file === file;
+  const theme = worldRoot ? await resolveWorldThemeMusic({ worldRoot }) : null;
+  const match = !worldRoot
+    ? undefined
+    : theme && names(theme)
+      ? theme
+      : (
+          await listWorldGalleryFiles({
+            worldRoot,
+            worldId,
+            covelHome: c.get("covelHome"),
+          })
+        ).find(names);
+  if (!match) return c.json(errorBody("File not found"), 404);
 
   const etag = `"${match.version}"`;
   const headers = {

@@ -1192,31 +1192,52 @@ SSE 事件：
 
 #### `GET /api/worlds/:id/gallery`
 
-列出世界包自带的图片。会话创建时才把世界包的 `kind: media` 来源导入媒体库，世界列表和世界详情还没有会话，所以从世界包直接读同一批文件。
+列出世界包自带的图片。会话创建时才把世界包的 `kind: media` 来源导入媒体库，世界列表和世界详情还没有会话，所以从世界包直接读文件。
 
-只包含世界数据描述符里公开的 `kind: media` 来源（`enabled: false` 和 `visibility: hidden` 的来源不列出）中的 PNG / JPEG / WebP 文件，按来源顺序、文件名排序，最多 60 张；读不出像素尺寸的文件不列出。没有世界包的世界（只存在数据库或浏览器里）返回空列表。
+世界包有 `media/gallery.json` 时，画廊就是这份清单：按清单顺序列出其中的图片，并带上名称、简介和分类。清单字段见 [world-art-direction.md](../guide/world-art-direction.md#画廊资料与前端使用)，接口只读其中这些：
+
+- `id`、`kind`（`hero` / `map` / `scene` / `still` / `portrait`；不认识的值按普通图片展示）
+- `filename` 与可选的 `webFilename`：相对 `media/` 的路径，必须是「一层目录 / 文件名」。有 `webFilename` 时展示它（体积小得多）
+- `name`、`description`、`background`、`location`：`gallery.<locale>.json` 里的译文会并成语言表，由查看者选语言
+- `spoilerLevel`：画廊在开始游玩之前展示，只列出没有声明或声明为 `opening` 的图片
+
+没有这份清单（或清单无法解析）时，列出世界数据描述符里公开的 `kind: media` 来源（`enabled: false` 和 `visibility: hidden` 的来源不列出）中的图片，按来源顺序、文件名排序，没有名称和分类。
+
+两种情况都只列 PNG / JPEG / WebP，最多 60 张；读不出像素尺寸的文件不列出。没有世界包的世界（只存在数据库或浏览器里）返回空列表。
+
+`world.yaml` 声明了 `themeMusic`、且文件可以播放时（`media/` 下一层目录里的 `.mp3` / `.wav`），响应多一个 `themeMusic: { url, mime }`，地址形状与图片相同，由同一个文件接口返回。
 
 ```json
 {
   "items": [
     {
-      "id": "scenes/library-day.png",
-      "source": "scenes",
-      "url": "/api/worlds/haruka-academy/gallery/scenes/library-day.png?v=mutjeu1c-1b6i7",
+      "id": "literature-clubroom",
+      "source": "gallery",
+      "url": "/api/worlds/haruka-academy/gallery/gallery/literature-clubroom.webp?v=mutk9d2a-4441o",
       "width": 1536,
-      "height": 1024
+      "height": 1024,
+      "kind": "scene",
+      "name": {
+        "zh-CN": "文艺部的春日下午",
+        "en": "Spring in the Literature Club"
+      },
+      "description": {
+        "zh-CN": "旧社团楼三层的活动室里，稿纸、旧刊与海风等待下一次校稿。"
+      }
     }
   ]
 }
 ```
 
-`source` 是描述符里的来源 ID。`url` 带文件版本（修改时间和大小），文件变了地址就变。框架不解读图片的用途：前端只按宽高比区分——宽图（宽 ≥ 高的 1.2 倍）可以铺满屏幕作背景，其余作为人物图展示。
+`source` 是地址的前半段：清单里的图片是 `media/` 下的目录名，否则是描述符里的来源 ID。`url` 带文件版本（修改时间和大小），文件变了地址就变。`width` / `height` 读自实际展示的文件。
+
+前端按 `kind` 使用图片：`scene` 和 `still` 可以铺满屏幕作背景，`portrait` 作为人物图，`map` 只完整显示，`hero` 是世界自己的封面（应用没有内置封面的世界用它开场）。没有 `kind` 时按宽高比区分：宽图（宽 ≥ 高的 1.2 倍）作背景，其余作人物图。
 
 世界不存在返回 404。读权限与 `GET /api/worlds` 相同：这些图片是世界包的分发内容，不属于任何会话。
 
 #### `GET /api/worlds/:id/gallery/:source/:file`
 
-返回一张图片的字节。只响应 `GET /api/worlds/:id/gallery` 会列出的文件：`:source` 是来源 ID，`:file` 是该来源目录下的文件名，其他路径（包括 `..`、符号链接、未列出的来源）一律 404。
+返回一张图片（或世界主题曲）的字节。只响应 `GET /api/worlds/:id/gallery` 会列出的文件，其他路径（包括 `..`、符号链接、未列出的目录或来源、清单里超出开局范围的图片）一律 404。
 
 响应带 `ETag`；地址里的 `v` 与当前文件版本一致时 `Cache-Control: public, max-age=31536000, immutable`，否则 `no-cache`。`If-None-Match` 命中返回 304。
 

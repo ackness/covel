@@ -389,7 +389,7 @@ media source 应同时声明 `key: filename` 和 `indexTo: contract:<contractId>
 
 ### 会话之外可见的图片
 
-`kind: media` 的来源在创建会话时才导入媒体库，但其中的图片（PNG / JPEG / WebP）在这之前就能被玩家看到：世界列表和世界详情通过 `GET /api/worlds/:id/gallery` 直接从世界包读取。`enabled: false` 和 `visibility: hidden` 的来源不在其中。接口和展示规则见 [api.md](./api.md) 与 [world-art-direction.md](../guide/world-art-direction.md)。
+世界包的图片在创建会话之前就能被玩家看到：世界列表和世界详情通过 `GET /api/worlds/:id/gallery` 直接从世界包读取。世界包有 `media/gallery.json` 时展示清单里的图片和介绍（只到 `spoilerLevel: opening`）；没有时展示公开的 `kind: media` 来源里的图片，`enabled: false` 和 `visibility: hidden` 的来源不在其中。接口和展示规则见 [api.md](./api.md) 与 [world-art-direction.md](../guide/world-art-direction.md#画廊资料与前端使用)。
 
 ### 隐藏数据（`visibility: hidden`）
 
@@ -808,16 +808,28 @@ sources:
 
 世界包提供两样东西：`media/music/` 下的音乐文件（`.mp3` / `.wav`，单文件上限 20 MB、整个目录上限 100 MB），和一份手写的曲目表 `media/music.yaml`。
 
-| 字段     | 说明                                                                                                                     |
-| -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `id`     | 曲目机器键，在表内唯一。                                                                                                 |
-| `title`  | 可选，播放时显示给玩家的曲名。                                                                                           |
-| `file`   | `media/music/` 下的文件名。不写哈希：导入时每个文件生成一条以文件名为 key 的索引记录。                                   |
-| `theme`  | 可选，`true` 表示世界主题曲：没有别的曲目合适时播放。                                                                    |
-| `scenes` | 可选，叙事里使用的场景名列表。声明后这首曲子只在这些场景播放；场景名相同或一方包含另一方即算命中。                       |
-| `moods`  | 可选，这首曲子适合的情绪：`calm`、`warm`、`joy`、`romance`、`sorrow`、`mystery`、`tense`、`dread`、`battle`、`triumph`。 |
-| `loop`   | 可选，`false` 表示只播放一遍。默认循环。                                                                                 |
-| `volume` | 可选，这首曲子的音量（0–1）。默认 1。玩家自己的音量再乘在上面。                                                          |
+| 字段     | 说明                                                                                               |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| `id`     | 曲目机器键，在表内唯一。                                                                           |
+| `title`  | 可选，播放时显示给玩家的曲名。                                                                     |
+| `file`   | `media/music/` 下的文件名。不写哈希：导入时每个文件生成一条以文件名为 key 的索引记录。             |
+| `theme`  | 可选，`true` 表示世界主题曲：没有别的曲目合适时播放。                                              |
+| `scenes` | 可选，叙事里使用的场景名列表。声明后这首曲子只在这些场景播放；场景名相同或一方包含另一方即算命中。 |
+| `moods`  | 可选，这首曲子适合的情绪。名字由世界作者自己定（见下），不区分大小写。                             |
+| `loop`   | 可选，`false` 表示只播放一遍。默认循环。                                                           |
+| `volume` | 可选，这首曲子的音量（0–1）。默认 1。玩家自己的音量再乘在上面。                                    |
+
+情绪没有固定的词表。曲目表顶层可以写 `moods`，列出这个世界的音乐情绪和各自的适用时机；叙事只看到这里的名字和说明，并在故事情绪变成其中一种时发 `music.cue`：
+
+```yaml
+moods:
+  - id: battle
+    when: 刀已出鞘，胜负未分。
+  - id: 灯下
+    when: 回到有灯有火的地方，暂时安全。
+```
+
+没写顶层 `moods` 时，清单就是各曲目 `moods` 里出现过的名字。所有曲目都没有 `moods` 的世界不向叙事提供情绪清单，音乐只跟随场景和主题曲；之后也可以由别的插件来决定调度。`silence` 是保留字，表示停止音乐。
 
 `tracks` 的顺序就是优先顺序。选曲规则依次为：符合当前情绪且属于当前场景的曲目 → 符合当前情绪、不限场景的曲目 → 当前场景自己的曲目 → 主题曲 → 静音。
 
@@ -838,6 +850,8 @@ sources:
     key: registryId
     after: music
 ```
+
+世界列表上的音乐是另一回事：`world.yaml` 的 `themeMusic` 写一个音频文件的路径（`media/` 下一层目录里的 `.mp3` / `.wav`，例如 `media/music/theme.mp3`），世界选择页和世界详情在展示这个世界时播放它，不需要任何插件。它通常和曲目表里 `theme: true` 的那首是同一个文件。`pnpm validate:world` 会检查这个文件能否播放。
 
 情绪来自叙事发射的 `music.cue` 事件，场景来自 `scene.set` 事件（由跟踪场景的插件声明）。只想要一首贯穿全局的主题曲时，曲目表里放一首 `theme: true` 的曲目即可，不依赖任何事件。把 `soundtrack` 放进世界的 `pluginPolicy`，玩家启用后才会导入这些数据并播放。
 

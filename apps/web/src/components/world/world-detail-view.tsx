@@ -16,7 +16,9 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { worldPackageInfo } from "@/lib/package-info.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
 import { DimensionValueView } from "@/components/session/dimension-value-view.js";
+import { MusicSwitch } from "@/components/session/session-music.js";
 import { WorldGallerySection } from "./world-gallery.js";
+import { useWorldThemeMusic } from "./world-music.js";
 import { WorldRevisePanel, isWorldRevisable } from "./world-revise-panel.js";
 import {
   WorldTranslatePanel,
@@ -55,6 +57,7 @@ export function WorldDetailView({
     playLocale,
   );
   const visual = worldVisual(world);
+  const hasThemeMusic = useWorldThemeMusic(world);
 
   const hasDimensions =
     dims &&
@@ -93,6 +96,12 @@ export function WorldDetailView({
                 <span>{t("world.backToList")}</span>
               </Button>
               <div className="flex-1" />
+              {hasThemeMusic && (
+                <MusicSwitch
+                  className="ui-btn h-10 w-10 border border-white/25 bg-black/24 p-0 text-white hover:bg-white/12"
+                  t={t}
+                />
+              )}
               {languageBadge && languageName && (
                 <Badge
                   variant="outline"
