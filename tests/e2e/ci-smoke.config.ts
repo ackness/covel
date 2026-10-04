@@ -15,8 +15,9 @@ export default defineConfig({
     "**/onboarding.spec.ts",
     "**/settings-panels.spec.ts",
     "**/frontend-lifecycle.spec.ts",
+    "**/world-generation-progress.spec.ts",
   ],
-  grep: /first visit starts|saved custom roles remain|debugger navigation opens|browser world edits and cascading deletion/,
+  grep: /first visit starts|saved custom roles remain|debugger navigation opens|browser world edits and cascading deletion|AI world generation with a fake provider/,
   reporter: [
     ["list"],
     [
