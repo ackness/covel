@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- **World generation waits for its save destination.** Starting generation before server storage discovery finished could save a browser-private world to the server's world directory. Generation now resolves storage before contacting the model, reports discovery failures for retry, and respects cancellation while waiting. Regenerating a world with the same ID replaces its list entry instead of adding a duplicate card. Browser tests use a temporary user profile and assert that browser-private generation stays in the browser.
+
 - **Detached jobs were judged by the default preset, not the slot they call.** A detached function runtime with no declared model slot (the story-memory `extract` runtime) had its credential readiness resolved against the system default preset, which ignores request-level UI slot bindings. On a desktop setup whose models are configured only in Settings (no `llm.toml`), the check never passed: the job sat queued for its full `maxQueueMs` (5 minutes), died as `queue-deadline-exceeded`, and every following turn stalled for the 30-second settle wait. Function runtimes can now declare `function.model` (the slot their `ctx.gateway` calls use); `memory/extract` declares `model: memory`.
 
 ### Added

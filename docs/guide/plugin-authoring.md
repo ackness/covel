@@ -16,6 +16,8 @@
 
 完整字段和内置示例见[插件契约参考](../reference/plugins.md)，公开扩展点见[插件扩展点](../reference/plugin-extensions.md)。
 
+Function runtime 通过 `ctx.gateway` 调用模型时，可在 `function.model` 声明所用 slot，并在 gateway 调用中使用相同的 `presetId`。例如调用 `presetId: "memory"` 的后台任务应声明 `function.model: memory`，让 detached worker 用该 slot 判断凭证是否就绪；这一声明不会自动改写 handler 的 gateway 参数。
+
 ## 最小闭环
 
 ```sh

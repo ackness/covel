@@ -118,6 +118,9 @@ async function useFakeModel(
   await page.route("**/api/ai/generate-world", async (route) => {
     const request = route.request();
     const body = request.postDataJSON() as Record<string, unknown>;
+    // Each browser context owns its generated worlds. Catch a storage-mode
+    // regression before it can leave files or rows for later tests.
+    expect(body.saveTarget).toBe("return-only");
     const brief = { ...(body.brief as Record<string, unknown>) };
     delete brief.contracts;
     const headers = { ...request.headers() };
@@ -152,13 +155,26 @@ async function useFakeModel(
 }
 
 /** Open the generator, describe a world, and start the generation. */
-async function startGeneration(page: Page) {
+async function startGeneration(page: Page, holdHealthUntilStart = false) {
   await seedAppSettings(page);
   await page.goto("/session");
-  await page.locator("button", { hasText: "AI 创建世界" }).click();
+  const createButton = page.locator("button", { hasText: "AI 创建世界" });
+  await expect(createButton).toBeVisible();
+  let releaseHealth = () => {};
+  const health = new Promise<void>((resolve) => {
+    releaseHealth = resolve;
+  });
+  if (holdHealthUntilStart) {
+    await page.route("**/api/health", async (route) => {
+      await health;
+      await route.continue();
+    });
+  }
+  await createButton.click();
   const dialog = page.locator("[role=dialog]");
   await dialog.locator("#world-prompt").fill("一座靠潮汐灯火维生的港城");
   await dialog.getByRole("button", { name: "开始构筑" }).click();
+  releaseHealth();
   return dialog;
 }
 
@@ -200,7 +216,7 @@ test.describe("AI world generation with a fake provider", () => {
         : { text: worldAnswer() };
     await useFakeModel(page);
 
-    const dialog = await startGeneration(page);
+    const dialog = await startGeneration(page, true);
     const parts = dialog.locator("li[data-state]");
     await expect
       .poll(

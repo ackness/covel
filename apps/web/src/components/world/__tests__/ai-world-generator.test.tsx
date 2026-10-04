@@ -6,11 +6,15 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GenerateWorldEvent, WorldRecord } from "@/services/api.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  GenerateWorldEvent,
+  ServerHealth,
+  WorldRecord,
+} from "@/services/api.js";
 
 const api = vi.hoisted(() => ({
-  fetchServerHealth: vi.fn(async () => ({ storage: undefined })),
+  fetchServerHealth: vi.fn<() => Promise<ServerHealth>>(),
   generateWorld: vi.fn(),
   listGeneratableWorldContent: vi.fn(
     async (): Promise<
@@ -28,14 +32,36 @@ const dataService = vi.hoisted(() => ({
 }));
 
 vi.mock("@/services/api.js", () => api);
-vi.mock("@/services/data-service.js", () => ({
-  generatedWorldSaveTargetForStorageMode: vi.fn(() => "return-only"),
+vi.mock("@/services/data-service.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/data-service.js")>()),
   getDataService: vi.fn(() => dataService),
   getStorageMode: vi.fn(() => "local"),
-  storageModeForServerStorage: vi.fn(() => "local"),
 }));
 
 const { AiWorldGenerator } = await import("../ai-world-generator.js");
+
+function healthFor(frontendMode?: "local" | "remote"): ServerHealth {
+  return {
+    status: "ok",
+    timestamp: "2026-10-04T00:00:00.000Z",
+    version: "0.0.46",
+    storage: { data: { frontendMode } },
+  };
+}
+
+function deferredHealth() {
+  let resolve!: (health: ServerHealth) => void;
+  const promise = new Promise<ServerHealth>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  api.fetchServerHealth.mockResolvedValue(healthFor("local"));
+  api.listGeneratableWorldContent.mockResolvedValue([]);
+});
 
 afterEach(() => {
   cleanup();
@@ -43,6 +69,77 @@ afterEach(() => {
 });
 
 describe("AiWorldGenerator", () => {
+  it.each([
+    ["local", "return-only"],
+    ["remote", "server-store"],
+    [undefined, "server-file"],
+  ] as const)(
+    "waits for storage discovery before generating in %s mode",
+    async (mode, saveTarget) => {
+      const health = deferredHealth();
+      api.fetchServerHealth.mockReturnValue(health.promise);
+      api.generateWorld.mockReturnValue(new AbortController());
+      render(
+        <AiWorldGenerator
+          open
+          onOpenChange={vi.fn()}
+          onWorldCreated={vi.fn()}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("核心创意"), {
+        target: { value: "A harbor that belongs to this browser" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+
+      expect(api.generateWorld).not.toHaveBeenCalled();
+      await act(async () => health.resolve(healthFor(mode)));
+
+      expect(api.generateWorld).toHaveBeenCalledOnce();
+      expect(api.generateWorld.mock.calls[0]![5]).toMatchObject({ saveTarget });
+    },
+  );
+
+  it("does not start a cancelled generation when storage discovery finishes", async () => {
+    const health = deferredHealth();
+    api.fetchServerHealth.mockReturnValue(health.promise);
+    render(
+      <AiWorldGenerator open onOpenChange={vi.fn()} onWorldCreated={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByLabelText("核心创意"), {
+      target: { value: "A cancelled harbor" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    await act(async () => health.resolve(healthFor("local")));
+
+    expect(api.generateWorld).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "开始构筑" })).toBeTruthy();
+  });
+
+  it("keeps the brief after storage discovery fails and checks again on retry", async () => {
+    api.fetchServerHealth.mockRejectedValueOnce(
+      new Error("Server unavailable"),
+    );
+    api.generateWorld.mockReturnValue(new AbortController());
+    render(
+      <AiWorldGenerator open onOpenChange={vi.fn()} onWorldCreated={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByLabelText("核心创意"), {
+      target: { value: "A harbor worth keeping" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+
+    expect(await screen.findByText("Server unavailable")).toBeTruthy();
+    expect(api.generateWorld).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+    await waitFor(() => expect(api.generateWorld).toHaveBeenCalledOnce());
+    expect(api.generateWorld.mock.calls[0]![0]).toBe("A harbor worth keeping");
+    expect(api.generateWorld.mock.calls[0]![5]).toMatchObject({
+      saveTarget: "return-only",
+    });
+  });
+
   it("ignores a local save that finishes after the player cancels", async () => {
     let onEvent: ((event: GenerateWorldEvent) => void) | undefined;
     api.generateWorld.mockImplementation(
