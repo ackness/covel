@@ -5,6 +5,7 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
+import { isSetupRuntime } from "@covel/shared";
 import type { DataStore, SuspensionRecord } from "@covel/store";
 import {
   collectExecutionJournal,
@@ -28,6 +29,8 @@ import type {
 } from "./turn-executor/turn-executor-types.js";
 import type { FinalizeExecutionArgs } from "./commit/finalize-execution.js";
 import { getTurnExecutionSignal } from "./turn-executor/turn-control.js";
+import { SetupCompletionTracker } from "./turn-executor/setup-completion-tracker.js";
+import { collectSetupRan } from "./turn-executor/setup-run.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -89,6 +92,47 @@ function captureSchemas(deps: ExecutionDeps) {
 function publicRuntimeResult(result: RuntimeResult): RuntimeResult {
   const { pendingProposals: _pendingProposals, ...visible } = result;
   return structuredClone(visible);
+}
+
+/**
+ * Setup bookkeeping for a resumed setup runtime, in the shape a turn hands the
+ * finalizer: the completion delta (done mirror and phase flip, written with the
+ * domain commit) and the attempt to settle. The resume finishes the attempt
+ * the suspended execution started, so it settles under that execution's id.
+ */
+async function resumedSetupState(args: {
+  readonly store: DataStore;
+  readonly suspension: SuspensionRecord;
+  readonly manifest: RuntimeManifest;
+  readonly activeRuntimes: readonly RuntimeManifest[];
+  readonly result: RuntimeResult;
+}): Promise<Pick<TurnResult, "setupCompletion" | "setupRan">> {
+  const { store, suspension, manifest, result } = args;
+  if (!isSetupRuntime(manifest)) return {};
+  const session = await store.getSession(suspension.sessionId);
+  if (!session) return {};
+  const activeSetupRuntimes = args.activeRuntimes.filter(isSetupRuntime);
+  const tracker = new SetupCompletionTracker({
+    activeSetupRuntimes,
+    setupRuntimes: session.setupRuntimes,
+    preGameRuntimes: activeSetupRuntimes,
+    isPreGamePending: session.phase === "setup",
+    isManualTrigger: false,
+  });
+  const completedResults = new Map([[manifest.name, result]]);
+  tracker.recordPreGameCompletion(completedResults);
+  const setupRan = collectSetupRan({
+    activeRuntimes: [manifest],
+    completedResults,
+    setupRuntimes: tracker.mirror,
+    executionId: suspension.pendingContinuation.executionContext.executionId,
+  });
+  tracker.foldSetupRan(setupRan);
+  const setupCompletion = tracker.setupCompletion;
+  return {
+    ...(setupCompletion ? { setupCompletion } : {}),
+    ...(setupRan.length > 0 ? { setupRan } : {}),
+  };
 }
 
 /** Execute a turn and retain its complete commit plan, including nested work. */
@@ -271,6 +315,13 @@ export async function resumeSuspendedRuntime(
       result.output,
     );
   }
+  const setup = await resumedSetupState({
+    store: deps.store,
+    suspension,
+    manifest,
+    activeRuntimes: options?.activeRuntimes ?? [manifest],
+    result,
+  });
   return {
     result: publicRuntimeResult(result),
     commit: {
@@ -291,7 +342,13 @@ export async function resumeSuspendedRuntime(
         suspensions: collectExecutionSuspensions(carrier),
         turnIds: [],
         activePluginIds: hookScope.activePluginIds,
-        sessionClock: { now: new Date().toISOString() },
+        sessionClock: {
+          now: new Date().toISOString(),
+          ...(setup.setupCompletion
+            ? { setupCompletion: setup.setupCompletion }
+            : {}),
+        },
+        ...(setup.setupRan ? { setupRan: setup.setupRan } : {}),
         outputSchemas: captured.outputSchemas,
         resolvedSuspensionId: suspension.id,
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),

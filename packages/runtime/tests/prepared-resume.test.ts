@@ -242,3 +242,148 @@ describe("prepared resume host API", () => {
     expect(stored[0]!.content).toBe("The resumed result.");
   });
 });
+
+describe("resumed setup runtime", () => {
+  const setup: RuntimeManifest = {
+    name: "probe/setup",
+    pluginId: "probe",
+    version: "1.0.0",
+    runtimeType: "function",
+    stage: "setup",
+    outputKind: "plugin",
+    trigger: { type: "auto" },
+  };
+  const other: RuntimeManifest = { ...setup, name: "probe/other" };
+
+  /** A setup session whose `probe/setup` suspended and committed that pause. */
+  async function suspendedSetup() {
+    const store = createMemoryStore();
+    await store.createSession({
+      id: input.sessionId,
+      locale: "en-US",
+      status: "active",
+      phase: "setup",
+      setupRuntimes: {},
+      activePlugins: ["probe"],
+      completedPlayerTurns: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const deps = {
+      store,
+      llm: { generate: vi.fn() },
+      loadRuntime: async (
+        manifest: RuntimeManifest,
+      ): Promise<LoadedRuntime> => ({
+        manifest,
+        promptTemplate: "",
+        handler: async (context) =>
+          context.resumeData === undefined
+            ? {
+                outcome: "suspended",
+                reason: "Need player confirmation",
+                resumeSchema: { type: "object" },
+              }
+            : {
+                outcome: "success",
+                value: { content: "Confirmed." },
+                completion: "done",
+                effects: {
+                  pluginData: [{ namespace: "setup", key: "seed", value: 1 }],
+                },
+              },
+      }),
+    };
+    const execution = await executeTurn(
+      { ...input, playerMessage: "" },
+      [setup],
+      deps,
+    );
+    const outcome = await commitExecution({
+      store,
+      execution,
+      completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+    });
+    expect(outcome.status).toBe("committed");
+    const session = await store.getSession(input.sessionId);
+    expect(session?.phase).toBe("setup");
+    expect(session?.setupRuntimes[setup.name]?.state).toBe("pending");
+    const [suspension] = await store.listSuspensions(input.sessionId);
+    return { store, deps, suspension: suspension! };
+  }
+
+  it("marks the runtime done and leaves the setup band with the resumed commit", async () => {
+    const { store, deps, suspension } = await suspendedSetup();
+    const resumed = await resumeSuspendedRuntime(suspension, {}, setup, deps);
+    expect(resumed.result).toMatchObject({
+      status: "success",
+      completion: "done",
+    });
+    // Nothing is written before the host commits.
+    expect((await store.getSession(input.sessionId))?.phase).toBe("setup");
+
+    const outcome = await commitExecution({
+      store,
+      execution: resumed,
+      completion: completion(suspension),
+    });
+    expect(outcome.status).toBe("committed");
+    const session = await store.getSession(input.sessionId);
+    expect(session?.phase).toBe("playing");
+    expect(session?.setupRuntimes[setup.name]).toMatchObject({
+      state: "done",
+      resolution: "completed",
+      pluginVersion: "1.0.0",
+      generation: 1,
+      attempts: 1,
+    });
+    // The pause and its resume are one attempt.
+    const attempts = await store.listSetupAttempts(input.sessionId, {
+      runtimeId: setup.name,
+    });
+    expect(attempts.map((attempt) => attempt.state)).toEqual(["success"]);
+    expect(
+      (await store.getPluginData(input.sessionId, "probe", "setup", "seed"))
+        ?.value,
+    ).toBe(1);
+  });
+
+  it("stays in the setup band while another active setup runtime is pending", async () => {
+    const { store, deps, suspension } = await suspendedSetup();
+    const resumed = await resumeSuspendedRuntime(suspension, {}, setup, deps, {
+      activeRuntimes: [setup, other],
+    });
+    const outcome = await commitExecution({
+      store,
+      execution: resumed,
+      completion: completion(suspension),
+    });
+    expect(outcome.status).toBe("committed");
+    const session = await store.getSession(input.sessionId);
+    expect(session?.setupRuntimes[setup.name]?.state).toBe("done");
+    expect(session?.phase).toBe("setup");
+  });
+
+  it("leaves the runtime pending when the resumed commit rolls back", async () => {
+    const { store, deps, suspension } = await suspendedSetup();
+    const resumed = await resumeSuspendedRuntime(suspension, {}, setup, deps);
+    const outcome = await commitExecution({
+      store,
+      execution: resumed,
+      completion: completion(suspension),
+      extraInTx: async () => {
+        throw new Error("commit rejected");
+      },
+    });
+    expect(outcome.status).toBe("failed");
+    const session = await store.getSession(input.sessionId);
+    expect(session?.phase).toBe("setup");
+    expect(session?.setupRuntimes[setup.name]?.state).toBe("pending");
+    expect(
+      (await store.getSuspension(suspension.id))?.resolvedAt,
+    ).toBeUndefined();
+    expect(
+      await store.getPluginData(input.sessionId, "probe", "setup", "seed"),
+    ).toBeFalsy();
+  });
+});

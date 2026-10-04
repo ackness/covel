@@ -130,66 +130,82 @@ export function makePluginSetupReady(
 }
 
 /**
- * Detect cycles in the `needs(scope: session)` graph among a set of pending
- * setup runtimes, returning each cyclic member mapped to the full stuck set for
+ * Detect cycles in the `needs(scope: session)` graph of the active setup
+ * runtimes, returning each cyclic member mapped to the full stuck set for
  * diagnostics. A session-scope need reads a producer's PERSISTED done state,
  * so a cycle can never resolve within the setup band — the members are blocked
  * (`setup-session-cycle`) rather than run. Only explicit `needs(scope: session)`
  * edges count; the implicit per-plugin gate does not (it only skips, it does not
- * create a reverse dependency). Kahn-style: whatever cannot be topo-ordered is
- * in (or downstream of) a cycle.
+ * create a reverse dependency).
+ *
+ * A need waits on pending runtimes only. A target that is already done
+ * satisfies it, and a blocked or absent one leaves it to the player (retry,
+ * waive, or a changed plugin set), so neither is a cycle edge. A capability
+ * need follows the selection gate's cardinality: `all` waits for every pending
+ * provider, `one` for any of them — and for none once a provider is done or
+ * blocked. Whatever can never be released this way is in (or downstream of) a
+ * cycle.
  */
 export function detectSetupSessionCycles(
-  pendingSetup: readonly RuntimeManifest[],
+  activeSetupRuntimes: readonly RuntimeManifest[],
+  setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
 ): Map<string, string[]> {
-  const inScope = new Set(pendingSetup.map((r) => r.name));
-  const capabilityProviders = new Map<string, string[]>();
-  for (const rt of pendingSetup) {
-    for (const cap of rt.outputContract ? [rt.outputContract] : []) {
-      const list = capabilityProviders.get(cap) ?? [];
-      list.push(rt.name);
-      capabilityProviders.set(cap, list);
-    }
-  }
+  const isPending = (rt: RuntimeManifest): boolean => {
+    const mirror = setupRuntimes[rt.name];
+    return (
+      mirror?.state !== "blocked" && !isSetupDoneForVersion(mirror, rt.version)
+    );
+  };
+  const pending = activeSetupRuntimes.filter(isPending);
+  const pendingNames = new Set(pending.map((rt) => rt.name));
 
-  const inDegree = new Map<string, number>();
-  const dependents = new Map<string, string[]>();
-  for (const rt of pendingSetup) inDegree.set(rt.name, 0);
-
-  for (const rt of pendingSetup) {
-    const targets = new Set<string>();
+  // Per runtime, the groups of pending runtimes it waits for: a group is
+  // released once any one of its members can complete.
+  const waits = new Map<string, string[][]>();
+  for (const rt of pending) {
+    const groups: string[][] = [];
     for (const need of getRuntimeSpec(rt).deps.needs) {
       // Bare string / turn-scope entries are same-turn gates, not session ones.
       if (typeof need === "string" || need.scope !== "session") continue;
       if ("runtime" in need) {
-        if (inScope.has(need.runtime)) targets.add(need.runtime);
-      } else {
-        for (const name of capabilityProviders.get(need.capability) ?? []) {
-          targets.add(name);
-        }
+        if (pendingNames.has(need.runtime)) groups.push([need.runtime]);
+        continue;
+      }
+      const providers = activeSetupRuntimes.filter(
+        (provider) => provider.outputContract === need.capability,
+      );
+      const pendingProviders = providers
+        .filter(isPending)
+        .map((provider) => provider.name);
+      if ((need.cardinality ?? "one") === "all") {
+        for (const name of pendingProviders) groups.push([name]);
+      } else if (
+        pendingProviders.length > 0 &&
+        pendingProviders.length === providers.length
+      ) {
+        groups.push(pendingProviders);
       }
     }
-    for (const dep of targets) {
-      inDegree.set(rt.name, (inDegree.get(rt.name) ?? 0) + 1);
-      const list = dependents.get(dep) ?? [];
-      list.push(rt.name);
-      dependents.set(dep, list);
-    }
+    waits.set(rt.name, groups);
   }
 
-  // Kahn: peel off zero-in-degree nodes until none remain.
+  // Release every runtime whose groups can all be satisfied, until none remain.
+  const released = new Set<string>();
   while (true) {
-    const ready = [...inDegree.entries()].filter(([, deg]) => deg === 0);
+    const ready = pending.filter(
+      (rt) =>
+        !released.has(rt.name) &&
+        waits
+          .get(rt.name)!
+          .every((group) => group.some((name) => released.has(name))),
+    );
     if (ready.length === 0) break;
-    for (const [name] of ready) {
-      inDegree.delete(name);
-      for (const down of dependents.get(name) ?? []) {
-        inDegree.set(down, (inDegree.get(down) ?? 0) - 1);
-      }
-    }
+    for (const rt of ready) released.add(rt.name);
   }
 
-  const stuck = [...inDegree.keys()];
+  const stuck = pending
+    .map((rt) => rt.name)
+    .filter((name) => !released.has(name));
   const cycles = new Map<string, string[]>();
   for (const name of stuck) cycles.set(name, stuck);
   return cycles;

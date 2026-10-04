@@ -2610,6 +2610,8 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 暂停本身不完成逻辑玩家回合。runtime 先把 continuation 作为 execution-local artifact 返回；`finalizeExecution` 在 proposal、journal 与会话时钟的同一事务中保存 artifact，成功 commit 后才广播 `turn.suspended`。因此回滚不会遗留可恢复的 orphan continuation 或幽灵事件。原 execution 的 `logicalTurnId` / `countPolicy` 会随 continuation 持久化，成功 resume 在提交 proposal 的同一事务内计数一次。同一 logical turn 若有多个并行 suspension，等最后一个未解决 continuation 恢复后才计数；逻辑回合 ledger 保证重试不重复计数。
 
+被恢复的是 setup runtime 时，完成信号与普通 setup 执行同样处理：`done` 镜像与（最后一个 setup 完成时的）`phase` 翻转在 resume 的提交事务内写入，提交回滚则都不写入；attempt 账本沿用挂起时的那次尝试，不另计一次。resume 不做开场接力：由它完成最后一个 setup 时，主循环从玩家的下一个动作开始。
+
 **响应:**
 
 ```json

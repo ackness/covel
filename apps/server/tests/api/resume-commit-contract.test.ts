@@ -181,4 +181,138 @@ describe("resume commit composition", () => {
       expect(events).not.toContain("turn.completed");
     },
   );
+
+  it.each([
+    { otherDone: false, phase: "setup" },
+    { otherDone: true, phase: "playing" },
+  ])(
+    "records a resumed setup runtime as done against the session's active setup set (otherDone=$otherDone)",
+    async ({ otherDone, phase }) => {
+      const applicationWork = createApplicationWork();
+      const store = createMemoryStore();
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: "session",
+        status: "active",
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: otherDone
+          ? {
+              "setup/other": {
+                state: "done",
+                resolution: "completed",
+                pluginVersion: "1.0.0",
+                generation: 1,
+                attempts: 1,
+                completedAt: now,
+              },
+            }
+          : {},
+        activePlugins: ["setup"],
+        metadata: {
+          approvalScopeNonce: "approval-test",
+          sessionIncarnationNonce: "session-test",
+        },
+        locale: "en",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const manifests = ["setup/confirm", "setup/other"].map(
+        (name) =>
+          ({
+            name,
+            pluginId: "setup",
+            pluginType: "plugin",
+            version: "1.0.0",
+            description: name,
+            stage: "setup",
+            trigger: { type: "auto" },
+            runtimeType: "function",
+            outputKind: "plugin",
+          }) as RuntimeManifest,
+      );
+      const pluginRegistry = createPluginRegistry();
+      pluginRegistry.register({
+        id: "setup",
+        source: "builtin",
+        status: "registered",
+        loadedRuntimes: new Map(),
+        summary: {
+          id: "setup",
+          name: "Setup",
+          description: "",
+          pluginType: "plugin",
+          runtimeCount: manifests.length,
+        },
+        manifests: manifests.map((manifest) => ({
+          runtime: { type: "function" as const },
+          manifest,
+          promptTemplate: "",
+          rawFrontmatter: {},
+        })),
+      });
+      await store.saveSuspension({
+        id: "suspension",
+        sessionId: "session",
+        turnId: "turn",
+        runtimeId: "setup/confirm",
+        pluginId: "setup",
+        reason: "input",
+        resumeSchema: {},
+        createdAt: now,
+        pendingContinuation: {
+          executionContext: {
+            executionId: "original-run",
+            origin: "player",
+            countPolicy: "none",
+          },
+          messages: [],
+          toolCallsSoFar: [],
+          pendingProposals: [],
+        },
+      });
+      const app = new Hono();
+      app.use("*", applicationWork.middleware);
+      app.use("*", async (c, next) => {
+        c.set("store", store);
+        c.set("pluginRegistry", pluginRegistry);
+        c.set("sessionLock", createInProcessSessionLock());
+        c.set("eventBus", createEventBus());
+        c.set("loadRuntimeFn", async (manifest: RuntimeManifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler: async () => ({
+            outcome: "success",
+            value: { content: "Confirmed." },
+            completion: "done",
+          }),
+        }));
+        c.set("getPluginSource", () => "builtin");
+        c.set("llmAdapter", {
+          generate: async () => {
+            throw new Error("function must not use LLM");
+          },
+        });
+        await next();
+      });
+      app.route("/api/sessions", resumeRoutes);
+      const response = await app.request(
+        "/api/sessions/session/suspensions/suspension/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: {} }),
+        },
+      );
+      await applicationWork.close();
+      expect(response.status, await response.text()).toBe(200);
+      const session = await store.getSession("session");
+      expect(session?.setupRuntimes["setup/confirm"]).toMatchObject({
+        state: "done",
+        resolution: "completed",
+        attempts: 1,
+      });
+      expect(session?.phase).toBe(phase);
+    },
+  );
 });

@@ -6,6 +6,23 @@ import {
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 
+/** How the executor marks a story held back because the provider did not publish. */
+export const DIMENSION_SNAPSHOT_SKIP = {
+  reason: "dimension-snapshot-unavailable",
+  by: "framework:dimensionSnapshot",
+} as const;
+
+export function isDimensionSnapshotSkip(result: {
+  readonly status: string;
+  readonly output?: unknown;
+}): boolean {
+  const output = result.output as { skippedBy?: unknown } | null | undefined;
+  return (
+    result.status === "skipped" &&
+    output?.skippedBy === DIMENSION_SNAPSHOT_SKIP.by
+  );
+}
+
 export async function dimensionExecutionBarrier(args: {
   readonly store?: DataStore;
   readonly sessionId: string;

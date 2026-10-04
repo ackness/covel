@@ -56,7 +56,7 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
   → 原子写入当前值与成功回执；回合结束后客户端读取已提交新版
 ```
 
-回合内公共读取冻结，不因玩家并发手改或 tracker 的局部预览换版；新执行重新读取已提交存储。dimension-context 在本次执行中运行但未成功时，叙事 runtime 被跳过（`dimension-snapshot-unavailable`）；它未被调度时（定向的手动叙事或重试），叙事直接使用执行开始时冻结的已提交快照。`recordAs` export 不替代权威状态库，叙事不能反向依赖 post-turn tracker 的输出。提示词使用预算投影与按需查询，不默认展开全部大行集。
+回合内公共读取冻结，不因玩家并发手改或 tracker 的局部预览换版；新执行重新读取已提交存储。dimension-context 在本次执行中运行但未成功时，叙事 runtime 被跳过（`dimension-snapshot-unavailable`），整次执行不提交：它之前的 runtime 的写入、对话记录与回合计数一并回滚，玩家可重试同一动作；它未被调度时（定向的手动叙事或重试），叙事直接使用执行开始时冻结的已提交快照。`recordAs` export 不替代权威状态库，叙事不能反向依赖 post-turn tracker 的输出。提示词使用预算投影与按需查询，不默认展开全部大行集。
 
 有自动维护规则时，host 在叙事提交事务中登记源回合义务，身份绑定服务器确定的 narrative result ID 和逻辑回合号。维度初始化只经 `dimension.initialize` proposal 写入：它同样经过 `PreStateCommit`，并在提出它的 runtime 自己的提交边界内落库；被否决不写入，被改写则写入改写后的定义。回执冻结的是已提交的记录，同一事务里被否决或随 runtime 一起丢弃的初始化不会出现在回执中。tracker 未运行、失败或发生版本冲突不等于无变化。回执保存在 `_dimension-settlements`，有五种状态：
 
