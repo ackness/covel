@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { SettingsExportBundle } from "@covel/settings";
 import { Button } from "@/components/ui/button.js";
 import { useSettingsStore } from "./use-settings.js";
+import { SettingsBackups } from "./SettingsBackups.js";
 
 const importBundleSchema = z.object({
   schemaVersion: z.literal(1),
@@ -127,7 +128,7 @@ export function DataPane() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="max-w-2xl space-y-5">
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}
@@ -140,9 +141,12 @@ export function DataPane() {
       )}
 
       <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <h3 className="text-[13px] font-medium leading-snug text-foreground">
           {t("settings.exportHeader")}
         </h3>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {t("settings.exportDescription")}
+        </p>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
@@ -163,9 +167,12 @@ export function DataPane() {
       </section>
 
       <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <h3 className="text-[13px] font-medium leading-snug text-foreground">
           {t("settings.importHeader")}
         </h3>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {t("settings.importDescription")}
+        </p>
         <Button
           size="sm"
           variant="outline"
@@ -258,13 +265,19 @@ export function DataPane() {
         )}
       </section>
 
+      <SettingsBackups />
+
       <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <h3 className="text-[13px] font-medium leading-snug text-foreground">
           {t("settings.resetHeader")}
         </h3>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {t("settings.resetDescription")}
+        </p>
         <Button
           size="sm"
           variant="outline"
+          className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
           onClick={handleResetAll}
           disabled={busy}
         >

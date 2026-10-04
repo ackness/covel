@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
 import {
@@ -12,7 +12,36 @@ import {
   resolveSettingEntryText,
   resolveSettingOptionText,
 } from "../framework-i18n.js";
-import { useSetting } from "../use-settings.js";
+import { useSetting, useSettingOverride } from "../use-settings.js";
+
+/** Controls take their shape and colours from the active theme. */
+const CONTROL_CLASS =
+  "rounded-(--radius-control) border border-(--rule-color) bg-(--surface-page) text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) focus:ring-1 focus:ring-(--accent-primary)";
+
+export interface InheritedSettingValue {
+  readonly value: unknown;
+  /** The name of what supplies the value, for the player: a world's name. */
+  readonly source: string;
+}
+
+/**
+ * The value in force for a key the player has not set, when it is not the
+ * registered default: a world's own default for one of its plugins. The pane
+ * that knows the world provides it, keyed by setting key.
+ */
+export const InheritedSettingValues = createContext<
+  ReadonlyMap<string, InheritedSettingValue>
+>(new Map());
+
+/** `useSetting`, reading the inherited value while the player has set none. */
+function useEffectiveSetting<T>(
+  entry: SettingEntry,
+): [T, (value: T) => Promise<void>] {
+  const [stored, setValue] = useSetting<T>(entry.key);
+  const [overridden] = useSettingOverride(entry.key);
+  const inherited = useContext(InheritedSettingValues).get(entry.key);
+  return [!overridden && inherited ? (inherited.value as T) : stored, setValue];
+}
 
 function inferWidget(entry: SettingEntry): WidgetKind {
   if (entry.widget) return entry.widget;
@@ -52,31 +81,142 @@ export function SettingWidget({ entry }: { entry: SettingEntry }) {
 function FieldShell({
   entry,
   controlId,
+  inline = false,
   children,
 }: {
   entry: SettingEntry;
   controlId?: string;
+  /** Put the control beside the text instead of under it. */
+  inline?: boolean;
   children: React.ReactNode;
 }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  return (
-    <div className="space-y-1.5">
-      <Label
-        id={settingLabelId(entry.key)}
-        htmlFor={controlId}
-        className="text-xs uppercase tracking-widest text-muted-foreground"
-      >
-        {resolveSettingEntryText(entry, "label", locale)}
-      </Label>
-      {entry.description && (
-        <p className="text-[11px] text-muted-foreground">
-          {resolveSettingEntryText(entry, "description", locale)}
+  const description = resolveSettingEntryText(entry, "description", locale);
+  const inherited = useContext(InheritedSettingValues).get(entry.key);
+  const [overridden] = useSettingOverride(entry.key);
+  const range =
+    typeof entry.min === "number" && typeof entry.max === "number"
+      ? t("settings.valueRange", {
+          min: entry.min.toLocaleString(locale),
+          max: entry.max.toLocaleString(locale),
+        })
+      : "";
+  const text = (
+    <div className="min-w-0 space-y-1">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <Label
+          id={settingLabelId(entry.key)}
+          htmlFor={controlId}
+          className="text-[13px] font-medium leading-snug text-foreground"
+        >
+          {resolveSettingEntryText(entry, "label", locale)}
+        </Label>
+        <UseDefaultButton entry={entry} />
+      </div>
+      {(description || range) && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {[description, range].filter(Boolean).join(" ")}
         </p>
       )}
+      {inherited && !overridden && (
+        <p className="text-xs leading-relaxed text-(--accent-primary)">
+          {t("settings.followsWorldDefault", { world: inherited.source })}
+        </p>
+      )}
+    </div>
+  );
+  if (inline) {
+    return (
+      <div className="flex items-start justify-between gap-4">
+        {text}
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {text}
       {children}
     </div>
   );
+}
+
+/**
+ * A value the player set stays in force over a world's or a plugin's default
+ * until it is cleared, so every set value needs a way back.
+ */
+function UseDefaultButton({ entry }: { entry: SettingEntry }) {
+  const { t } = useTranslation();
+  const [overridden, restoreDefault] = useSettingOverride(entry.key);
+  if (!overridden || entry.secret || entry.backend === "keys") return null;
+  return (
+    <button
+      type="button"
+      onClick={() => void restoreDefault()}
+      className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+    >
+      {t("settings.useDefault")}
+    </button>
+  );
+}
+
+/**
+ * Edit text locally and write the setting when the field is left. A write per
+ * key press validates every half-typed value, so "30" could not become "300"
+ * through "3", and each key press saved the whole settings file.
+ */
+function useDraft(stored: string, commit: (draft: string) => void) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const latest = useRef({ draft, commit });
+  useEffect(() => {
+    latest.current = { draft, commit };
+  });
+  // Escape closes the dialog and unmounts the field without a blur.
+  useEffect(
+    () => () => {
+      const pending = latest.current;
+      if (pending.draft !== null) pending.commit(pending.draft);
+    },
+    [],
+  );
+  return {
+    text: draft ?? stored,
+    setDraft,
+    flush: () => {
+      if (draft === null) return;
+      setDraft(null);
+      commit(draft);
+    },
+  };
+}
+
+/** The number a draft stands for: inside the declared range and valid for the entry. */
+function numberFromDraft(
+  entry: SettingEntry,
+  draft: string,
+): number | undefined {
+  if (draft.trim() === "") return undefined;
+  let value = Number(draft);
+  if (!Number.isFinite(value)) return undefined;
+  if (typeof entry.min === "number") value = Math.max(entry.min, value);
+  if (typeof entry.max === "number") value = Math.min(entry.max, value);
+  if (entry.schema.safeParse(value).success) return value;
+  const rounded = Math.round(value);
+  return entry.schema.safeParse(rounded).success ? rounded : undefined;
+}
+
+function useNumberDraft(entry: SettingEntry) {
+  const [value, setValue] = useEffectiveSetting<number>(entry);
+  const draft = useDraft(String(value ?? ""), (text) => {
+    const next = numberFromDraft(entry, text);
+    if (next !== undefined && next !== value) void setValue(next);
+  });
+  return { value, ...draft };
+}
+
+function blurOnEnter(event: React.KeyboardEvent<HTMLInputElement>): void {
+  if (event.key === "Enter") event.currentTarget.blur();
 }
 
 function settingControlId(key: string, suffix?: string): string {
@@ -88,23 +228,28 @@ function settingLabelId(key: string): string {
 }
 
 function TextWidget({ entry }: { entry: SettingEntry }) {
-  const [value, setValue] = useSetting<string>(entry.key);
+  const [value, setValue] = useEffectiveSetting<string>(entry);
   const controlId = settingControlId(entry.key);
+  const draft = useDraft(value ?? "", (text) => {
+    if (text !== value) void setValue(text);
+  });
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <input
         id={controlId}
         type="text"
-        value={value ?? ""}
-        onChange={(e) => void setValue(e.target.value)}
-        className="w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
+        value={draft.text}
+        onChange={(e) => draft.setDraft(e.target.value)}
+        onBlur={draft.flush}
+        onKeyDown={blurOnEnter}
+        className={`w-full px-3 py-2 ${CONTROL_CLASS}`}
       />
     </FieldShell>
   );
 }
 
 function NumberWidget({ entry }: { entry: SettingEntry }) {
-  const [value, setValue] = useSetting<number>(entry.key);
+  const draft = useNumberDraft(entry);
   const controlId = settingControlId(entry.key);
   return (
     <FieldShell entry={entry} controlId={controlId}>
@@ -114,24 +259,21 @@ function NumberWidget({ entry }: { entry: SettingEntry }) {
         min={entry.min}
         max={entry.max}
         step={entry.step}
-        value={value ?? ""}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (v === "") return;
-          const n = Number(v);
-          if (!Number.isNaN(n)) void setValue(n);
-        }}
-        className="w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+        value={draft.text}
+        onChange={(e) => draft.setDraft(e.target.value)}
+        onBlur={draft.flush}
+        onKeyDown={blurOnEnter}
+        className={`w-40 max-w-full px-3 py-2 font-mono ${CONTROL_CLASS}`}
       />
     </FieldShell>
   );
 }
 
 function ToggleWidget({ entry }: { entry: SettingEntry }) {
-  const [value, setValue] = useSetting<boolean>(entry.key);
+  const [value, setValue] = useEffectiveSetting<boolean>(entry);
   const controlId = settingControlId(entry.key);
   return (
-    <FieldShell entry={entry} controlId={controlId}>
+    <FieldShell entry={entry} controlId={controlId} inline>
       <button
         id={controlId}
         type="button"
@@ -139,14 +281,18 @@ function ToggleWidget({ entry }: { entry: SettingEntry }) {
         aria-checked={value}
         onClick={() => void setValue(!value)}
         className={
-          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors " +
-          (value ? "bg-primary" : "bg-muted")
+          "relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors " +
+          (value
+            ? "border-(--accent-primary) bg-(--accent-primary)"
+            : "border-(--rule-color) bg-(--surface-inset)")
         }
       >
         <span
           className={
-            "inline-block h-4 w-4 rounded-full bg-background transition-transform " +
-            (value ? "translate-x-4" : "translate-x-0.5")
+            "inline-block h-3.5 w-3.5 rounded-full transition-transform " +
+            (value
+              ? "translate-x-4.5 bg-(--surface-page)"
+              : "translate-x-0.5 bg-muted-foreground")
           }
         />
       </button>
@@ -155,7 +301,7 @@ function ToggleWidget({ entry }: { entry: SettingEntry }) {
 }
 
 function SelectWidget({ entry }: { entry: SettingEntry }) {
-  const [value, setValue] = useSetting<string>(entry.key);
+  const [value, setValue] = useEffectiveSetting<string>(entry);
   const { i18n } = useTranslation();
   const controlId = settingControlId(entry.key);
   return (
@@ -164,7 +310,7 @@ function SelectWidget({ entry }: { entry: SettingEntry }) {
         id={controlId}
         value={value ?? ""}
         onChange={(e) => void setValue(e.target.value)}
-        className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+        className={`w-full px-3 py-2 sm:w-72 ${CONTROL_CLASS}`}
       >
         {(entry.options ?? []).map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -177,12 +323,13 @@ function SelectWidget({ entry }: { entry: SettingEntry }) {
 }
 
 function SliderWidget({ entry }: { entry: SettingEntry }) {
-  const [value, setValue] = useSetting<number>(entry.key);
+  const draft = useNumberDraft(entry);
   const min = entry.min ?? 0;
   const max = entry.max ?? 1;
   const step = entry.step ?? 0.1;
   const rangeId = settingControlId(entry.key);
   const numberId = settingControlId(entry.key, "number");
+  const position = Number(draft.text);
   return (
     <FieldShell entry={entry} controlId={rangeId}>
       <div className="flex items-center gap-2">
@@ -192,9 +339,12 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
           min={min}
           max={max}
           step={step}
-          value={value ?? min}
-          onChange={(e) => void setValue(Number(e.target.value))}
-          className="flex-1"
+          value={Number.isFinite(position) ? position : min}
+          onChange={(e) => draft.setDraft(e.target.value)}
+          onPointerUp={draft.flush}
+          onKeyUp={draft.flush}
+          onBlur={draft.flush}
+          className="flex-1 accent-(--accent-primary)"
         />
         <input
           id={numberId}
@@ -203,12 +353,11 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
           min={min}
           max={max}
           step={step}
-          value={value ?? ""}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (!Number.isNaN(n)) void setValue(n);
-          }}
-          className="w-16 bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono text-center"
+          value={draft.text}
+          onChange={(e) => draft.setDraft(e.target.value)}
+          onBlur={draft.flush}
+          onKeyDown={blurOnEnter}
+          className={`w-20 px-2 py-1.5 text-center font-mono ${CONTROL_CLASS}`}
         />
       </div>
     </FieldShell>
@@ -221,14 +370,20 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
   const [visible, setVisible] = useState(false);
   const serverManaged = isServerManagedSecret(value);
   const controlId = settingControlId(entry.key);
+  const stored = serverManaged ? "" : (value ?? "");
+  const draft = useDraft(stored, (text) => {
+    if (text !== stored) void setValue(text);
+  });
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <div className="flex gap-1">
         <input
           id={controlId}
           type={visible ? "text" : "password"}
-          value={serverManaged ? "" : (value ?? "")}
-          onChange={(e) => void setValue(e.target.value)}
+          value={draft.text}
+          onChange={(e) => draft.setDraft(e.target.value)}
+          onBlur={draft.flush}
+          onKeyDown={blurOnEnter}
           placeholder={
             serverManaged
               ? t(
@@ -237,7 +392,7 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
                 )
               : "sk-..."
           }
-          className="flex-1 bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+          className={`min-w-0 flex-1 px-3 py-2 font-mono ${CONTROL_CLASS}`}
         />
         {serverManaged && (
           <Button
@@ -269,16 +424,20 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
 }
 
 function TextareaWidget({ entry }: { entry: SettingEntry }) {
-  const [value, setValue] = useSetting<string>(entry.key);
+  const [value, setValue] = useEffectiveSetting<string>(entry);
   const controlId = settingControlId(entry.key);
+  const draft = useDraft(value ?? "", (text) => {
+    if (text !== value) void setValue(text);
+  });
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <textarea
         id={controlId}
-        value={value ?? ""}
-        onChange={(e) => void setValue(e.target.value)}
+        value={draft.text}
+        onChange={(e) => draft.setDraft(e.target.value)}
+        onBlur={draft.flush}
         rows={4}
-        className="w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
+        className={`w-full px-3 py-2 font-mono ${CONTROL_CLASS}`}
       />
     </FieldShell>
   );
@@ -288,7 +447,7 @@ function JsonWidget({ entry }: { entry: SettingEntry }) {
   const [value] = useSetting<unknown>(entry.key);
   return (
     <FieldShell entry={entry}>
-      <pre className="text-[11px] bg-muted/30 p-2 rounded overflow-auto font-mono max-h-48">
+      <pre className="max-h-48 overflow-auto rounded-(--radius-control) border border-(--rule-color) bg-(--surface-inset) p-2 font-mono text-[11px]">
         {JSON.stringify(value, null, 2)}
       </pre>
     </FieldShell>
@@ -302,7 +461,7 @@ function CustomWidgetPlaceholder({ entry }: { entry: SettingEntry }) {
   const { t } = useTranslation();
   return (
     <FieldShell entry={entry}>
-      <div className="text-xs text-muted-foreground italic border border-dashed border-border p-3">
+      <div className="rounded-(--radius-control) border border-dashed border-(--rule-color) p-3 text-xs italic text-muted-foreground">
         {t("settings.customWidgetUnavailable")}
       </div>
     </FieldShell>

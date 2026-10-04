@@ -118,10 +118,17 @@ export function initPersistentLog(
   }
 }
 
+/** `JSON.stringify` writes an Error as `{}`, which hides the logged failure. */
+export function formatLogPart(part: unknown): string {
+  if (typeof part === "string") return part;
+  if (part instanceof Error) {
+    return part.stack ?? `${part.name}: ${part.message}`;
+  }
+  return JSON.stringify(part);
+}
+
 export function writeLog(level: LogLevel, ...parts: unknown[]): void {
-  const msg = parts
-    .map((p) => (typeof p === "string" ? p : JSON.stringify(p)))
-    .join(" ");
+  const msg = parts.map(formatLogPart).join(" ");
   // Pretty for stdout / dev terminal — keeps `pnpm dev:electron` readable.
   const pretty = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${msg}`;
   switch (level) {

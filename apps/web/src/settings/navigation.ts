@@ -42,6 +42,7 @@ const APPEARANCE_KEYS = new Set([
   "ui.themeManager",
 ]);
 const OPERATOR_ACCESS_NODE_ID = "operator-access";
+const RAW_CONFIG_NODE_ID = "raw-config";
 function navigationLabels(locale: string) {
   const t = i18n.getFixedT(locale);
   return {
@@ -64,6 +65,7 @@ function navigationLabels(locale: string) {
       },
     ],
     appearance: t("settings.appearanceNavLabel", "Appearance"),
+    rawConfig: t("settings.rawConfigNavLabel", "Configuration files"),
     operatorAccess: t("settings.operatorAccessNavLabel", "Operator Access"),
     packages: t("settings.packages.navLabel", "Install & manage"),
   };
@@ -71,6 +73,8 @@ function navigationLabels(locale: string) {
 
 interface BuildNavOptions {
   readonly includeDesktop?: boolean;
+  /** False where the server does not check an operator token. Defaults to true. */
+  readonly includeOperatorAccess?: boolean;
   readonly locale?: string;
   readonly pluginDisplayNames?: Readonly<Record<string, I18nText | undefined>>;
 }
@@ -177,6 +181,12 @@ export function buildNavTree(
         kind: "group",
         children: entries,
       });
+      nodes.push({
+        id: RAW_CONFIG_NODE_ID,
+        label: labels.rawConfig,
+        kind: "group",
+        children: [],
+      });
     } else if (group === "general") {
       const generalEntries = entries.filter(
         (e) => !APPEARANCE_KEYS.has(e.key) && e.key !== "ui.onboardedVersion",
@@ -206,18 +216,26 @@ export function buildNavTree(
   }
   // Pure-web hosted deployments need an explicit browser-local credential
   // entry point before any operator-gated management request can succeed.
-  // Append it after the normal groups so self-tier users keep their existing
-  // default Settings pane; those servers simply ignore the optional header.
-  nodes.push({
-    id: OPERATOR_ACCESS_NODE_ID,
-    label: labels.operatorAccess,
-    kind: "group",
-    children: [],
-  });
+  // It comes after the normal groups so the default pane stays the same. A
+  // self-tier server ignores the header, so the caller leaves the pane out
+  // once that server has said so.
+  if (opts.includeOperatorAccess !== false) {
+    nodes.push({
+      id: OPERATOR_ACCESS_NODE_ID,
+      label: labels.operatorAccess,
+      kind: "group",
+      children: [],
+    });
+  }
   return nodes;
 }
 
-export { APPEARANCE_NODE_ID, OPERATOR_ACCESS_NODE_ID, PACKAGES_NODE_ID };
+export {
+  APPEARANCE_NODE_ID,
+  OPERATOR_ACCESS_NODE_ID,
+  PACKAGES_NODE_ID,
+  RAW_CONFIG_NODE_ID,
+};
 
 /** Resolve current pane IDs and composite setting keys. */
 export function resolveSettingsNode(

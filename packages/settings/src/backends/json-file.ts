@@ -157,6 +157,38 @@ export function createJsonFileBackend(
       }
       return parseIpcBundle(await res.json());
     },
+    async takeArchivedBundle(): Promise<string | null> {
+      // Only the desktop shell moves the file; the REST host leaves it alone.
+      const ipc = getIpc();
+      if (!ipc) return null;
+      const file = await ipc.invoke<unknown>("covel:settings:archived");
+      return typeof file === "string" && file.length > 0 ? file : null;
+    },
+    async backupBundle(label = "conflict"): Promise<string> {
+      // The desktop shell owns the file. The REST host keeps no copies, and
+      // the store then drops nothing.
+      const file = await getIpc()?.invoke<unknown>(
+        "covel:settings:backup",
+        label,
+      );
+      if (typeof file !== "string" || file.length === 0) {
+        throw new Error("[settings] the host kept no copy of settings.json");
+      }
+      return file;
+    },
+    async listBackups(): Promise<readonly string[]> {
+      const files = await getIpc()?.invoke<unknown>("covel:settings:backups");
+      return Array.isArray(files)
+        ? files.filter((file): file is string => typeof file === "string")
+        : [];
+    },
+    async readBackup(name: string): Promise<string | null> {
+      const text = await getIpc()?.invoke<unknown>(
+        "covel:settings:read-backup",
+        name,
+      );
+      return typeof text === "string" ? text : null;
+    },
     async loadSecrets(): Promise<Record<string, string>> {
       const ipc = getIpc();
       if (ipc) {

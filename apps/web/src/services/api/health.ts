@@ -7,6 +7,8 @@ export interface ServerHealth {
   timestamp: string;
   version: string;
   bootId?: string;
+  /** Whether this deployment checks the operator token on management requests. */
+  operatorTokenRequired?: boolean;
   storage?: {
     data?: {
       backend?: "pg" | "sqlite" | "memory";
@@ -29,6 +31,8 @@ export interface ServerHealth {
     };
   };
 }
+
+let operatorTokenRequired: boolean | undefined;
 
 /** Boot must not hang on this; a captive portal or a wedged proxy never replies. */
 const HEALTH_TIMEOUT_MS = 3000;
@@ -57,7 +61,20 @@ export async function fetchServerHealth(): Promise<ServerHealth> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error("[health] response was not a JSON object");
   }
-  return body as ServerHealth;
+  const health = body as ServerHealth;
+  if (typeof health.operatorTokenRequired === "boolean") {
+    operatorTokenRequired = health.operatorTokenRequired;
+  }
+  return health;
+}
+
+/**
+ * What the last health reply said about the operator token. Undefined until
+ * a server has answered; a caller that hides the token entry on `false` must
+ * keep it on `undefined`, or a hosted operator has no place to enter it.
+ */
+export function isOperatorTokenRequired(): boolean | undefined {
+  return operatorTokenRequired;
 }
 
 // -- Server session sync guard ------------------------------------

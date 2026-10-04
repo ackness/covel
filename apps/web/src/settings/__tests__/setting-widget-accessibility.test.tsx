@@ -6,6 +6,7 @@ import { SettingWidget } from "../widgets/index.js";
 
 vi.mock("../use-settings.js", () => ({
   useSetting: (_key: string) => ["", vi.fn()],
+  useSettingOverride: (_key: string) => [false, vi.fn()],
 }));
 
 function entry(

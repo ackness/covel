@@ -2,7 +2,8 @@ import type { TFunction } from "i18next";
 import { useState } from "react";
 import {
   Sparkles,
-  KeyRound,
+  Settings,
+  Plug,
   Cpu,
   Wand2,
   FolderOpen,
@@ -10,6 +11,7 @@ import {
   BookOpen,
   Play,
   Search,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
@@ -38,7 +40,10 @@ export interface WorldListViewProps {
   storageLabel: (world: WorldRecord) => string;
   interfaceLocale: string;
   onOpenGenerator: () => void;
+  /** Opens Settings at the providers and models page. */
   onOpenSettings: () => void;
+  /** Opens Settings at its first page. */
+  onOpenAllSettings?: () => void;
   onOpenOnboarding?: () => void;
   onEnterWorld: (worldId: string) => void;
   /** Latest playable session per world id; empty when "continue" is off. */
@@ -53,6 +58,59 @@ export interface WorldListViewProps {
  * AI-generate / API-keys action rail, the cover-led world grid, the empty
  * state, and the footer info chips.
  */
+/** One row of the header's action frame: icon block, title, one line of context. */
+function HeaderAction({
+  icon: Icon,
+  title,
+  detail,
+  accent = false,
+  warn = false,
+  onClick,
+}: {
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  /** The page's main action takes the theme accent. */
+  accent?: boolean;
+  /** The detail reports something the player has to fix. */
+  warn?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_4%,transparent)]"
+    >
+      <span
+        className={
+          "flex size-9 shrink-0 items-center justify-center rounded-(--radius-control) " +
+          (accent
+            ? "bg-[color-mix(in_oklab,var(--accent-primary)_16%,transparent)] text-(--accent-primary)"
+            : "bg-[color-mix(in_oklab,var(--color-foreground)_7%,transparent)] text-muted-foreground")
+        }
+      >
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium leading-snug">{title}</span>
+        <span
+          className={
+            "mt-0.5 line-clamp-2 block text-xs leading-snug " +
+            (warn ? "text-(--accent-warning)" : "text-muted-foreground")
+          }
+        >
+          {detail}
+        </span>
+      </span>
+      <ArrowRight
+        className="size-3.5 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-(--accent-primary)"
+        aria-hidden
+      />
+    </button>
+  );
+}
+
 export function WorldListView(props: WorldListViewProps) {
   const {
     worlds,
@@ -64,6 +122,7 @@ export function WorldListView(props: WorldListViewProps) {
     interfaceLocale,
     onOpenGenerator,
     onOpenSettings,
+    onOpenAllSettings,
     onOpenOnboarding,
     onEnterWorld,
     recentSessions,
@@ -131,72 +190,52 @@ export function WorldListView(props: WorldListViewProps) {
                 "Each world is a self-contained setting with its own tone, characters, and ruleset.",
               )}
             </p>
-            {onOpenOnboarding && (
-              <Button
-                variant="link"
-                className="mt-2 h-auto px-0 py-1.5"
-                onClick={onOpenOnboarding}
-              >
-                <BookOpen className="h-4 w-4" aria-hidden />
-                {t("onboarding.guide")}
-              </Button>
-            )}
+            <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
+              {onOpenOnboarding && (
+                <Button
+                  variant="link"
+                  className="h-auto px-0 py-1.5"
+                  onClick={onOpenOnboarding}
+                >
+                  <BookOpen className="h-4 w-4" aria-hidden />
+                  {t("onboarding.guide")}
+                </Button>
+              )}
+              {onOpenAllSettings && (
+                <Button
+                  variant="link"
+                  className="h-auto px-0 py-1.5"
+                  onClick={onOpenAllSettings}
+                >
+                  <Settings className="h-4 w-4" aria-hidden />
+                  {t("nav.settings", "Settings")}
+                </Button>
+              )}
+            </div>
           </div>
 
-          {/* Compact action rail keeps creation and setup nearby without pushing worlds down. */}
-          <aside className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:col-span-5 md:grid-cols-1 lg:grid-cols-2">
-            <button
-              type="button"
+          {/* Two actions in one frame: each row has room for its full text. */}
+          <aside className="divide-y divide-(--rule-color) overflow-hidden rounded-(--radius-card) border border-(--rule-color) bg-card/60 md:col-span-5">
+            <HeaderAction
+              icon={Wand2}
+              accent
+              title={t("world.aiCreate", "AI generate")}
+              detail={t(
+                "session.aiCreateTeaser",
+                "Spin up a brand new world from a one-line idea.",
+              )}
               onClick={onOpenGenerator}
-              className="group relative min-h-23 overflow-hidden rounded-(--radius-card) border border-primary/25 bg-card/80 hover:border-primary/55 transition-all p-3 sm:p-4 text-left"
-            >
-              <div
-                aria-hidden="true"
-                className="absolute -right-12 -top-12 h-28 w-28 rounded-full opacity-40 group-hover:opacity-65 transition-opacity"
-                style={{
-                  background:
-                    "radial-gradient(circle, color-mix(in oklab, var(--color-primary) 70%, transparent) 0%, transparent 70%)",
-                }}
-              />
-              <div className="relative">
-                <div className="flex items-center gap-2 mb-2">
-                  <Wand2 className="w-4 h-4 text-primary" />
-                  <span className="ui-eyebrow text-primary">
-                    {t("world.aiCreate", "AI generate")}
-                  </span>
-                </div>
-                <p className="font-display text-[13px] sm:text-sm font-semibold leading-snug line-clamp-2">
-                  {t(
-                    "session.aiCreateTeaser",
-                    "Spin up a brand new world from a one-line idea.",
-                  )}
-                </p>
-                <p className="mt-3 text-xs text-primary inline-flex items-center gap-1.5 group-hover:gap-2.5 transition-all font-medium">
-                  {t("session.aiCreateAction", "Describe your idea")}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </p>
-              </div>
-            </button>
-
-            <button
-              type="button"
+            />
+            <HeaderAction
+              icon={Plug}
+              title={t("session.configureKeys", "API keys & presets")}
+              detail={
+                primarySlotLabel ??
+                t("session.noModelsConfigured", "No model configured")
+              }
+              warn={!primarySlotLabel}
               onClick={onOpenSettings}
-              className="group flex min-h-23 items-center justify-between rounded-(--radius-card) border border-border bg-card/70 hover:border-primary/40 hover:bg-muted/30 transition-all p-3 sm:p-4 text-left"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <KeyRound className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[13px] sm:text-sm font-medium leading-snug line-clamp-2">
-                    {t("session.configureKeys", "API keys & presets")}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {primarySlotLabel ??
-                      t("session.noModelsConfigured", "No model configured")}
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-            </button>
+            />
           </aside>
         </header>
 

@@ -68,6 +68,8 @@ describe("Health Route", () => {
       }
     ).version;
     expect(body.version).toBe(pkgVersion);
+    // The self tier checks no operator token, and says so.
+    expect(body.operatorTokenRequired).toBe(false);
   });
 
   it("returns structured storage capabilities", async () => {

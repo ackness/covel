@@ -20,7 +20,6 @@ export function LocaleToggle() {
           <option key={definition.code} value={definition.code}>
             {localeOptionLabel(
               definition,
-              locale,
               t("onboarding.languageExperimental", "experimental"),
             )}
           </option>

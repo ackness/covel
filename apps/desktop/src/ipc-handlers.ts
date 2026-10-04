@@ -17,6 +17,9 @@ import {
 import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
 import {
   isSettingsEntries,
+  backupSettingsFile,
+  listSettingsBackups,
+  readSettingsBackup,
   readSettingsBundle,
   writeSettingsEntriesAtomic,
 } from "./settings-json.js";
@@ -103,6 +106,8 @@ export interface DesktopIpcHandlersDeps {
   readonly saveKeysViaSidecar: (
     keys: Record<string, string | null>,
   ) => Promise<void>;
+  /** The file an older settings.json was moved to at startup; reported once. */
+  readonly takeArchivedSettings: () => string | null;
 }
 
 export function registerDesktopIpcHandlers({
@@ -115,6 +120,7 @@ export function registerDesktopIpcHandlers({
   getSettingsViaSidecar,
   saveSettingsViaSidecar,
   saveKeysViaSidecar,
+  takeArchivedSettings,
 }: DesktopIpcHandlersDeps): void {
   ipcMain.handle("covel:get-info", async (event) => {
     // Returns `restToken` (privileged sidecar bearer) — gate on sender origin.
@@ -253,13 +259,54 @@ export function registerDesktopIpcHandlers({
   // Read/write preserve the versioned bundle so the renderer can use CAS.
   ipcMain.handle("covel:settings:load", (event) => {
     if (!isTrustedSender(event, "covel:settings:load")) return null;
-    return getSettingsViaSidecar().catch((error: unknown) => {
-      if (!isSidecarUnavailable(error)) throw error;
-      // A missing file is a fresh install, but an existing unreadable or
-      // malformed bundle must reject hydration. Returning `{}` here would let
-      // the next auto-save overwrite the only recoverable user settings.
-      return readSettingsBundle(paths.userSettingsJsonPath);
-    });
+    return getSettingsViaSidecar()
+      .catch((error: unknown) => {
+        if (!isSidecarUnavailable(error)) throw error;
+        // A missing file is a fresh install, but an existing unreadable or
+        // malformed bundle must reject hydration. Returning `{}` here would let
+        // the next auto-save overwrite the only recoverable user settings.
+        return readSettingsBundle(paths.userSettingsJsonPath);
+      })
+      .catch((error: unknown) => {
+        // The renderer answers this rejection with read-only settings on
+        // defaults; the reason must not exist only in its devtools console.
+        writeLog("error", "settings:load failed:", error);
+        throw error;
+      });
+  });
+  ipcMain.handle("covel:settings:archived", (event) => {
+    if (!isTrustedSender(event, "covel:settings:archived")) return null;
+    return takeArchivedSettings();
+  });
+  // Copies of settings.json kept beside it: the move at startup and the copy
+  // the renderer asks for before it drops values the settings now refuse.
+  ipcMain.handle("covel:settings:backup", (event, label: unknown) => {
+    if (!isTrustedSender(event, "covel:settings:backup")) return null;
+    try {
+      const file = backupSettingsFile(
+        paths.userSettingsJsonPath,
+        typeof label === "string" ? label : undefined,
+      );
+      writeLog("warn", `settings.json was copied to ${file}`);
+      return file;
+    } catch (err) {
+      writeLog("error", "settings:backup failed:", err);
+      return null;
+    }
+  });
+  ipcMain.handle("covel:settings:backups", (event) => {
+    if (!isTrustedSender(event, "covel:settings:backups")) return [];
+    return listSettingsBackups(paths.userSettingsJsonPath);
+  });
+  ipcMain.handle("covel:settings:read-backup", (event, name: unknown) => {
+    if (!isTrustedSender(event, "covel:settings:read-backup")) return null;
+    if (typeof name !== "string") return null;
+    try {
+      return readSettingsBackup(paths.userSettingsJsonPath, name);
+    } catch (err) {
+      writeLog("error", "settings:read-backup failed:", err);
+      return null;
+    }
   });
   ipcMain.handle("covel:settings:save", async (event, payload: unknown) => {
     if (!isTrustedSender(event, "covel:settings:save")) return { ok: false };

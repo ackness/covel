@@ -7,6 +7,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { subscribeToast, type ToastEvent } from "@/lib/toast-channel.js";
 import { OnboardingWizard } from "../../onboarding-wizard.js";
 import { ONBOARDING_VERSION } from "../constants.js";
 import { isOnboarded, markOnboarded, resetOnboarding } from "../persistence.js";
@@ -15,6 +16,7 @@ const settings = vi.hoisted(() => ({
   get: vi.fn(),
   set: vi.fn(),
   clear: vi.fn(),
+  isHydrated: vi.fn(),
 }));
 vi.mock("@/settings/store.js", () => ({ getSettings: () => settings }));
 vi.mock("@/hooks/useLocalePreference.js", () => ({
@@ -25,7 +27,9 @@ vi.mock("@/components/shared/ping-button.js", () => ({
 }));
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  settings.isHydrated.mockReset().mockReturnValue(true);
   settings.set.mockReset().mockResolvedValue(undefined);
   settings.clear.mockReset().mockResolvedValue(undefined);
 });
@@ -67,20 +71,32 @@ describe("getting started guide", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("keeps a failed completion visible and allows retry", async () => {
-    settings.set.mockRejectedValueOnce(new Error("storage unavailable"));
-    render(<Harness />);
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: "先浏览世界" })),
-    );
-    expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("设置保存失败");
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: "先浏览世界" })),
-    );
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(settings.set).toHaveBeenCalledTimes(2);
-  });
+  it.each([
+    { hydrated: true, headline: "设置保存失败" },
+    // Settings that failed to load refuse every write, so no retry can succeed.
+    { hydrated: false, headline: "设置读取失败" },
+  ])(
+    "closes the guide and reports why completion was not saved (settings loaded: $hydrated)",
+    async ({ hydrated, headline }) => {
+      settings.isHydrated.mockReturnValue(hydrated);
+      settings.set.mockRejectedValueOnce(new Error("storage unavailable"));
+      const toasts: ToastEvent[] = [];
+      const unsubscribe = subscribeToast((event) => toasts.push(event));
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      render(<Harness />);
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "先浏览世界" })),
+      );
+      unsubscribe();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(toasts).toHaveLength(1);
+      expect(toasts[0]).toMatchObject({
+        kind: "error",
+        detail: "storage unavailable",
+      });
+      expect(toasts[0]?.message).toContain(headline);
+    },
+  );
 
   it("returns from real settings entry points to the same step and never claims missing models are ready", async () => {
     render(<Harness />);

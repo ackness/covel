@@ -44,7 +44,12 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     default: 2000,
     group: "general",
     widget: "number",
+    min: 200,
+    max: 20000,
+    step: 100,
     label: "Chat window message limit",
+    description:
+      "How many messages stay loaded in the chat. Older messages leave the window and load again when you scroll up.",
   });
 
   store.register({
@@ -54,6 +59,8 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     group: "general",
     widget: "toggle",
     label: "Expand turn updates",
+    description:
+      "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
   });
 
   store.register({

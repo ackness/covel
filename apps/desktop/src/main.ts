@@ -40,6 +40,7 @@ import {
 // "@covel/desktop" from package.json — override to the friendly product name.
 app.setName("Covel");
 import { registerDesktopIpcHandlers } from "./ipc-handlers.js";
+import { archiveUnusableSettingsFile } from "./settings-json.js";
 import {
   buildAppMenu,
   createMainWindow,
@@ -553,6 +554,20 @@ app.whenReady().then(async () => {
   const paths = ensureUserPaths();
   initDesktopI18n(paths.userSettingsJsonPath, app.getLocale());
   initPersistentLog(paths.logsDir, paths.logRotation, app.getVersion());
+  // Before the sidecar or the window reads settings.json. The locale above
+  // was still read from the old file, so this launch keeps its language.
+  let archivedSettings: string | null = null;
+  try {
+    archivedSettings = archiveUnusableSettingsFile(paths.userSettingsJsonPath);
+    if (archivedSettings) {
+      writeLog(
+        "warn",
+        `this version cannot use settings.json; it was moved to ${archivedSettings} and settings start from their defaults`,
+      );
+    }
+  } catch (err) {
+    writeLog("error", "Could not move the unusable settings.json aside:", err);
+  }
   registerDesktopIpcHandlers({
     paths,
     isDev,
@@ -581,6 +596,11 @@ app.whenReady().then(async () => {
     getSettingsViaSidecar,
     saveSettingsViaSidecar,
     saveKeysViaSidecar,
+    takeArchivedSettings: () => {
+      const file = archivedSettings;
+      archivedSettings = null;
+      return file;
+    },
   });
   Menu.setApplicationMenu(buildAppMenu());
 

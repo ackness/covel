@@ -9,6 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { emitToast } from "@/lib/toast-channel.js";
+import { getSettings } from "@/settings/store.js";
 import { LocaleToggle, StepIndicator } from "./onboarding-wizard/chrome.js";
 import { markOnboarded } from "./onboarding-wizard/persistence.js";
 import { ModelStep, PlayStep, WelcomeStep } from "./onboarding-wizard/steps.js";
@@ -35,24 +37,34 @@ export function OnboardingWizard({
   const { t } = useTranslation();
   const [step, setStep] = useState<OnboardingStep>(0);
   const [saving, setSaving] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
   const savingRef = useRef(false);
   const slots = configuredTextSlots(resolvedSlots);
   const dismiss = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
-    setSaveFailed(false);
     try {
       await markOnboarded();
-      onOpenChange(false);
-      setStep(0);
-    } catch {
-      setSaveFailed(true);
+    } catch (error) {
+      // The guide closes either way. Settings that failed to load are
+      // read-only, so a guide that waits for this write never closes. It
+      // opens again on the next launch instead.
+      console.error("[onboarding] completion was not saved", error);
+      emitToast(
+        "error",
+        t(
+          getSettings().isHydrated()
+            ? "settings.saveFailed"
+            : "settings.loadFailedReadOnly",
+        ),
+        error instanceof Error ? error.message : String(error),
+      );
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
+    onOpenChange(false);
+    setStep(0);
   };
   const stepNames = ["welcome", "modelsTitle", "playTitle"] as const;
 
@@ -90,11 +102,6 @@ export function OnboardingWizard({
             />
           )}
         </div>
-        {saveFailed && (
-          <p role="alert" className="text-sm text-destructive">
-            {t("settings.saveFailed")}
-          </p>
-        )}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
           {step === 0 ? (
             <Button variant="ghost" onClick={dismiss} disabled={saving}>

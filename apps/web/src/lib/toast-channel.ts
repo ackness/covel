@@ -19,6 +19,8 @@ export interface ToastEvent {
   detail?: string;
   /** Epoch ms — used for ordering / logging. */
   timestamp: number;
+  /** How long the toast stays; the default depends on the kind. */
+  durationMs?: number;
 }
 
 type Subscriber = (event: ToastEvent) => void;
@@ -30,6 +32,7 @@ export function emitToast(
   kind: ToastKind,
   message: string,
   detail?: string,
+  options: { durationMs?: number } = {},
 ): void {
   // Clamp absurdly long details so copy-to-clipboard payloads stay sane.
   const trimmedDetail =
@@ -43,6 +46,7 @@ export function emitToast(
     message,
     detail: trimmedDetail,
     timestamp: Date.now(),
+    ...(options.durationMs ? { durationMs: options.durationMs } : {}),
   };
 
   // Iterate a snapshot so a subscriber that unsubscribes mid-dispatch

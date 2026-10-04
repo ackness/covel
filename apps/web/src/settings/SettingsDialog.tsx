@@ -1,6 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Settings2 } from "lucide-react";
+import {
+  Database,
+  FileCode,
+  Gauge,
+  Monitor,
+  PackagePlus,
+  Palette,
+  Plug,
+  Puzzle,
+  Search,
+  Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
+import { isOperatorTokenRequired } from "@/services/api/health.js";
+import { getOperatorToken } from "@/services/session-credentials.js";
 import {
   buildNavTree,
   filterNav,
@@ -16,9 +33,11 @@ import {
   APPEARANCE_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
+  RAW_CONFIG_NODE_ID,
   type NavNode,
 } from "./navigation.js";
 import { SettingWidget } from "./widgets/index.js";
+import { SettingFieldList, SettingsPaneHeader } from "./pane-layout.js";
 import { useSettingsStore } from "./use-settings.js";
 import { useSettingsWritable } from "./use-settings-save.js";
 import { DataPane } from "./DataPane.js";
@@ -30,6 +49,7 @@ import { PackagesPane } from "./panes/PackagesPane.js";
 import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
 import { PluginSettingsPane } from "./panes/PluginSettingsPane.js";
+import { RawConfigPane } from "./panes/RawConfigPane.js";
 import type { PluginSummary } from "@/services/api.js";
 
 interface SettingsDialogProps {
@@ -76,6 +96,11 @@ export function SettingsDialog({
     () =>
       buildNavTree(store, {
         includeDesktop: desktop,
+        // Shown while the server has not answered, and while a token is
+        // stored here so that it can still be cleared.
+        includeOperatorAccess:
+          isOperatorTokenRequired() !== false ||
+          getOperatorToken() !== undefined,
         locale: i18n.language,
         pluginDisplayNames,
       }),
@@ -188,19 +213,19 @@ export function SettingsDialog({
             >
               {filtered.map((node) => {
                 const selectable = isSelectable(node);
-                const indent = node.parentId ? "pl-9 " : "pl-4 ";
                 const isHeader = node.kind === "group" && !selectable;
                 const isSelected = selected === node.id;
                 if (isHeader) {
                   return (
                     <h3
                       key={node.id}
-                      className="ui-meta pl-4 pr-4 pt-4 pb-1 text-[10px] text-muted-foreground"
+                      className="ui-meta px-5 pt-4 pb-1 text-[10px] text-muted-foreground"
                     >
                       {node.label}
                     </h3>
                   );
                 }
+                const Icon = navIcon(node);
                 return (
                   <button
                     key={node.id}
@@ -208,21 +233,20 @@ export function SettingsDialog({
                     onClick={() => setSelected(node.id)}
                     aria-current={isSelected ? "page" : undefined}
                     className={
-                      "w-full text-left pr-4 py-1.5 text-xs transition-colors relative " +
-                      indent +
+                      "mx-2 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-(--radius-control) px-3 py-1.5 text-left text-[13px] transition-colors " +
                       (isSelected
-                        ? "text-foreground font-medium"
-                        : "text-muted-foreground hover:text-foreground")
+                        ? "bg-[color-mix(in_oklab,var(--accent-primary)_14%,transparent)] font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)] hover:text-foreground")
                     }
                   >
-                    {isSelected && (
-                      <span
-                        aria-hidden
-                        className="absolute left-0 top-0 bottom-0 w-0.75"
-                        style={{ background: "var(--accent-primary)" }}
-                      />
-                    )}
-                    {node.label}
+                    <Icon
+                      aria-hidden
+                      className={
+                        "size-3.5 shrink-0 " +
+                        (isSelected ? "text-(--accent-primary)" : "opacity-70")
+                      }
+                    />
+                    <span className="min-w-0 truncate">{node.label}</span>
                   </button>
                 );
               })}
@@ -252,6 +276,23 @@ export function SettingsDialog({
   );
 }
 
+const NAV_ICONS: Readonly<Record<string, LucideIcon>> = {
+  general: SlidersHorizontal,
+  [APPEARANCE_NODE_ID]: Palette,
+  "llm.slots": Workflow,
+  "llm.providers": Plug,
+  "llm.advanced": Gauge,
+  [PACKAGES_NODE_ID]: PackagePlus,
+  desktop: Monitor,
+  data: Database,
+  [RAW_CONFIG_NODE_ID]: FileCode,
+  [OPERATOR_ACCESS_NODE_ID]: ShieldCheck,
+};
+
+function navIcon(node: NavNode): LucideIcon {
+  return NAV_ICONS[node.id] ?? (node.kind === "plugin" ? Puzzle : Settings2);
+}
+
 /** Group headers ("llm", "plugin") are not directly selectable. */
 function isSelectable(node: NavNode): boolean {
   if (node.id === "llm") return false;
@@ -273,13 +314,40 @@ function renderPane(
   if (node.id === "llm.slots") return <LlmSlotsPane />;
   if (node.id === "llm.providers") return <LlmPresetsPane />;
   if (node.id === "llm.advanced") return <LlmAdvancedPane />;
-  if (node.id === "data") return <DataPane />;
+  if (node.id === "data")
+    return (
+      <>
+        <SettingsPaneHeader
+          title={node.label}
+          description={t("settings.paneDataDescription")}
+        />
+        <DataPane />
+      </>
+    );
+  if (node.id === RAW_CONFIG_NODE_ID)
+    return (
+      <>
+        <SettingsPaneHeader
+          title={node.label}
+          description={t("settings.paneRawConfigDescription")}
+        />
+        <RawConfigPane />
+      </>
+    );
   if (node.id === "desktop") return <DesktopPane />;
   if (node.id === APPEARANCE_NODE_ID) return <AppearancePane />;
   if (node.id === OPERATOR_ACCESS_NODE_ID) return <OperatorAccessPane />;
   if (node.id === PACKAGES_NODE_ID) return <PackagesPane />;
   if (node.kind === "plugin")
-    return <PluginSettingsPane entries={node.children} />;
+    return (
+      <>
+        <SettingsPaneHeader
+          title={node.label}
+          description={t("settings.panePluginDescription")}
+        />
+        <PluginSettingsPane entries={node.children} />
+      </>
+    );
 
   if (node.children.length === 0) {
     return (
@@ -289,10 +357,20 @@ function renderPane(
     );
   }
   return (
-    <div className="space-y-4">
-      {node.children.map((entry) => (
-        <SettingWidget key={entry.key} entry={entry} />
-      ))}
-    </div>
+    <>
+      <SettingsPaneHeader
+        title={node.label}
+        description={
+          node.id === "general"
+            ? t("settings.paneGeneralDescription")
+            : undefined
+        }
+      />
+      <SettingFieldList>
+        {node.children.map((entry) => (
+          <SettingWidget key={entry.key} entry={entry} />
+        ))}
+      </SettingFieldList>
+    </>
   );
 }

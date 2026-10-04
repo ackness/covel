@@ -3,7 +3,7 @@ import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
-import { Pencil, RotateCw } from "lucide-react";
+import { Pencil, RotateCw, SlidersHorizontal } from "lucide-react";
 import {
   slotBindingKey,
   type LlmSlotInfo,
@@ -301,8 +301,9 @@ export function LlmSlotCard({
             )}
             {modelChoices.includesServerBase && serverSlot && (
               <option value="__base">
-                {t("settings.useDefault")} ·{" "}
-                {formatModelConfigLabel(serverSlot)}
+                {t("settings.llmTomlDefault", {
+                  model: formatModelConfigLabel(serverSlot),
+                })}
               </option>
             )}
             {!modelChoices.includesServerBase &&
@@ -320,26 +321,21 @@ export function LlmSlotCard({
         </label>
       </div>
 
-      <div className="text-xs text-muted-foreground grid grid-cols-1 sm:grid-cols-3 gap-1 wrap-anywhere">
-        <span>
-          {t("settings.providerLabel", "Provider")}: {effectiveProvider || "—"}
-        </span>
-        <span>
-          {t("settings.modelLabel", "Model")}: {effectiveModel || "—"}
-        </span>
-        <span>
-          {t("settings.protocolLabel", {
+      {/* The selects above name the provider and the model; this line adds
+          what they do not show. */}
+      <p className="break-all text-[11px] text-muted-foreground">
+        {[
+          t("settings.protocolLabel", {
             protocol: effectiveProtocol,
             defaultValue: "Protocol: {{protocol}}",
-          })}
-        </span>
-      </div>
-
-      <p className="text-[11px] text-muted-foreground break-all">
-        {selectedPreset?.isCustom
-          ? t("settings.localModel")
-          : t("settings.fromLlmToml")}
-        {target.baseUrl ? ` · ${target.baseUrl}` : ""}
+          }),
+          selectedPreset?.isCustom
+            ? t("settings.localModel")
+            : t("settings.fromLlmToml"),
+          target.baseUrl,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </p>
 
       {effectiveModel && !incompatibleBinding && (
@@ -354,26 +350,42 @@ export function LlmSlotCard({
       )}
 
       {effectiveModel && !incompatibleBinding && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-6 text-[10px] px-1.5"
+            className="h-7 px-2 text-[11px]"
+            aria-expanded={isEditing}
             onClick={onToggleEditing}
           >
-            <Pencil className="w-3 h-3 mr-0.5" />
+            <Pencil className="mr-1 h-3 w-3" />
             {isEditing
               ? t("settings.collapseCapability")
               : t("settings.editCapability")}
           </Button>
+          {roleTag === "text" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[11px]"
+              aria-expanded={editingParameters}
+              onClick={() => setEditingParameters((value) => !value)}
+            >
+              <SlidersHorizontal className="mr-1 h-3 w-3" />
+              {t(
+                "settings.editGenerationParameters",
+                "Generation parameters (tokens, temperature, reasoning)",
+              )}
+            </Button>
+          )}
           {hasCapOverride && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 text-[10px] px-1.5 text-amber-600"
+              className="h-7 px-2 text-[11px] text-amber-600"
               onClick={onResetCapability}
             >
-              <RotateCw className="w-3 h-3 mr-0.5" />
+              <RotateCw className="mr-1 h-3 w-3" />
               {t("settings.resetOverride")}
             </Button>
           )}
@@ -397,28 +409,17 @@ export function LlmSlotCard({
           }
         />
       )}
-      {effectiveModel && !incompatibleBinding && roleTag === "text" && (
-        <div className="space-y-2 border-t border-border pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs"
-            aria-expanded={editingParameters}
-            onClick={() => setEditingParameters((value) => !value)}
-          >
-            {t(
-              "settings.editGenerationParameters",
-              "Generation parameters (tokens, temperature, reasoning)",
-            )}
-          </Button>
-          {editingParameters && (
+      {effectiveModel &&
+        !incompatibleBinding &&
+        roleTag === "text" &&
+        editingParameters && (
+          <div className="border-t border-(--rule-color) pt-2">
             <LlmAdvancedPane
               slotId={slotId}
               catalogRevision={catalogRevision}
             />
-          )}
-        </div>
-      )}
+          </div>
+        )}
     </div>
   );
 }

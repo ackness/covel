@@ -52,6 +52,37 @@ export function useSetting<T>(
   return [value, setValue];
 }
 
+/**
+ * Whether the player set this key, and a way to drop that value. A cleared
+ * key reads its default again, and a plugin setting follows the world again.
+ */
+export function useSettingOverride(
+  key: SettingKey,
+): [boolean, () => Promise<void>] {
+  const store = getSettings();
+  const subscribe = useCallback(
+    (notify: () => void) => store.subscribe(key, () => notify()),
+    [store, key],
+  );
+  const getSnapshot = useCallback(() => store.has(key), [store, key]);
+  const overridden = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const restoreDefault = useCallback(async () => {
+    try {
+      await store.clear(key);
+    } catch (err) {
+      if (err instanceof SettingsRevisionConflictError) return;
+      emitToast(
+        "error",
+        i18n.t("settings.saveFailed", {
+          defaultValue: "Could not save setting",
+        }) as string,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }, [store, key]);
+  return [overridden, restoreDefault];
+}
+
 /** Access the store imperatively (e.g. for import/export, bulk ops). */
 export function useSettingsStore(): SettingsStoreApi {
   return getSettings();

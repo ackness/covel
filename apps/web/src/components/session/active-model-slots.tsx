@@ -17,8 +17,8 @@ import {
  *
  * Variants:
  *   - `card` — used on the prep screen; shows model and Ping inline.
- *   - `compact` — used in the session sidebar; uses the icon-only variant
- *     to fit the narrow column.
+ *   - `compact` — used in the session sidebar; one row per slot with its
+ *     model and the icon-only Ping.
  */
 export function ActiveModelSlots({
   slots,
@@ -39,7 +39,7 @@ export function ActiveModelSlots({
 
   if (variant === "compact") {
     return (
-      <div className="flex flex-wrap gap-1.5">
+      <ul className="divide-y divide-(--rule-color) overflow-hidden rounded-(--radius-control) border border-(--rule-color)">
         {slots.map((slot) => {
           const modelName = formatSlotModelLabel(slot) ?? "unknown";
           const provider = slot.preset?.provider ?? slot.serverProvider ?? "";
@@ -47,23 +47,29 @@ export function ActiveModelSlots({
             .filter(Boolean)
             .join(" · ");
           return (
-            <div
+            <li
               key={slot.slotId}
-              className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/20 px-1.5 py-1"
+              className="flex items-center gap-2 py-1.5 pl-2.5 pr-1.5"
               title={tooltip}
             >
-              <span className="max-w-22 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                {slot.label}
-              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium leading-tight">
+                  {slot.label}
+                </p>
+                <p className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
+                  {modelName}
+                </p>
+              </div>
               <PingButton
                 target={{ kind: "slot", slotId: slot.slotId }}
                 variant="icon"
                 size="xs"
+                className="border-transparent bg-transparent shadow-none dark:border-transparent dark:bg-transparent"
               />
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
     );
   }
 

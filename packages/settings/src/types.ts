@@ -61,6 +61,24 @@ export interface SettingsBackendAdapter {
     entries: Record<SettingKey, unknown>,
     expectedRevision: number,
   ): Promise<SettingsPersistenceBundle>;
+  /**
+   * Where the backend put a bundle this build cannot use (an earlier format,
+   * no version, damaged text), or null. The backend moved it aside during
+   * load, so the settings now hold their defaults. Each move is reported once.
+   */
+  takeArchivedBundle?(): Promise<string | null>;
+  /**
+   * Keep a copy of the stored bundle as it is now, and return where it is.
+   * The store asks for one before it drops stored values that the current
+   * schemas refuse. Without this method, or when it fails, the store drops
+   * nothing and stays read-only. `label` goes into the name of the copy and
+   * says why it was kept: `conflict` by default, `edit` before a raw edit.
+   */
+  backupBundle?(label?: string): Promise<string>;
+  /** The copies kept by the move on load and by `backupBundle`. */
+  listBackups?(): Promise<readonly string[]>;
+  /** The text of one kept copy; null when the name is not one of them. */
+  readBackup?(name: string): Promise<string | null>;
 }
 
 export class SettingsRevisionConflictError extends Error {
@@ -77,6 +95,15 @@ export class SettingsRevisionConflictError extends Error {
 
 export type SettingsListener = (value: unknown, key: SettingKey) => void;
 export type SettingsPersistenceErrorListener = (error: Error) => void;
+
+/** Stored values the store dropped because the current schemas refuse them. */
+export interface SettingsRepair {
+  /** Where the backend kept the bundle as it was before the values went. */
+  readonly backup: string;
+  /** The keys that now read their defaults. */
+  readonly keys: readonly SettingKey[];
+}
+export type SettingsRepairListener = (repair: SettingsRepair) => void;
 
 export interface SettingsStoreApi {
   get<T>(key: SettingKey): T;
@@ -98,6 +125,18 @@ export interface SettingsStoreApi {
   subscribePersistenceErrors(
     handler: SettingsPersistenceErrorListener,
   ): () => void;
+  /** Told each time stored values were dropped and a copy was kept. */
+  subscribeRepairs(handler: SettingsRepairListener): () => void;
+  /**
+   * Keep a copy of the stored settings as they are now, before a change that
+   * replaces many of them. Null when there is nothing stored to keep or the
+   * backend keeps no copies.
+   */
+  backup(label: string): Promise<string | null>;
+  /** The copies of earlier bundles the backend keeps, by name. */
+  listBackups(): Promise<readonly string[]>;
+  /** The text of one kept copy; null when there is no such copy. */
+  readBackup(name: string): Promise<string | null>;
   register<T>(entry: SettingEntry<T>): void;
   ready(): Promise<void>;
   /** Refresh non-secret settings without overwriting pending local mutations. */

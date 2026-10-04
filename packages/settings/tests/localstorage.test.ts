@@ -137,11 +137,26 @@ describe("LocalStorageBackend", () => {
     });
   });
 
-  it("rejects corrupt JSON instead of treating it as empty", async () => {
-    storage.setItem("covel:settings", "not-json");
-    const be = createLocalStorageBackend(storage);
-    await expect(be.load()).rejects.toThrow(/invalid/);
-  });
+  it.each([
+    ["not-json", "covel:settings.damaged.bak"],
+    [
+      JSON.stringify({ entries: { retained: true } }),
+      "covel:settings.unversioned.bak",
+    ],
+  ])(
+    "moves the unusable bundle %s aside whole and starts empty",
+    async (contents, backupKey) => {
+      storage.setItem("covel:settings", contents);
+      const be = createLocalStorageBackend(storage);
+      await expect(be.load()).resolves.toEqual({});
+      expect(storage.getItem(backupKey)).toBe(contents);
+      expect(storage.getItem("covel:settings")).toBeNull();
+      expect(await be.takeArchivedBundle!()).toBe(backupKey);
+      expect(await be.listBackups!()).toEqual([backupKey]);
+      expect(await be.readBackup!(backupKey)).toBe(contents);
+      expect(await be.readBackup!("covel:keys")).toBeNull();
+    },
+  );
 
   it("rejects corrupt secret values", async () => {
     storage.setItem(
@@ -182,11 +197,10 @@ describe("LocalStorageBackend", () => {
     });
   });
 
-  it.each([undefined, 1])(
-    "preserves unsupported version %s on read and write",
-    async (schemaVersion) => {
+  it("preserves a bundle from a later build on read and write", async () => {
+    {
       const contents = JSON.stringify({
-        ...(schemaVersion === undefined ? {} : { schemaVersion }),
+        schemaVersion: 3,
         entries: { retained: true },
       });
       storage.setItem("covel:settings", contents);
@@ -196,6 +210,68 @@ describe("LocalStorageBackend", () => {
         /unsupported/,
       );
       expect(storage.getItem("covel:settings")).toBe(contents);
-    },
-  );
+      expect(await backend.listBackups!()).toEqual([]);
+    }
+  });
+
+  it("does not write over an earlier copy", async () => {
+    storage.setItem("covel:settings.v1.bak", "the first copy");
+    storage.setItem(
+      "covel:settings",
+      JSON.stringify({ schemaVersion: 1, entries: {} }),
+    );
+    const backend = createLocalStorageBackend(storage);
+    await backend.loadWithRevision!();
+    expect(storage.getItem("covel:settings.v1.bak")).toBe("the first copy");
+    expect(await backend.takeArchivedBundle!()).toMatch(
+      /^covel:settings\.v1\.\d+\.bak$/,
+    );
+  });
+
+  it("moves a bundle from an earlier build aside and starts from defaults", async () => {
+    const contents = JSON.stringify({
+      schemaVersion: 1,
+      savedAt: "2026-07-06T02:48:18.590Z",
+      entries: { "ui.onboardedVersion": 3 },
+    });
+    storage.setItem("covel:settings", contents);
+    const store = new SettingsStore(createLocalStorageBackend(storage));
+    await store.init();
+
+    // The store loaded, so it accepts writes; the old bytes are kept whole.
+    expect(store.isHydrated()).toBe(true);
+    expect(store.has("ui.onboardedVersion")).toBe(false);
+    expect(storage.getItem("covel:settings.v1.bak")).toBe(contents);
+    await store.set("ui.onboardedVersion", 4);
+    expect(
+      JSON.parse(storage.getItem("covel:settings") ?? "{}").entries,
+    ).toEqual({ "ui.onboardedVersion": 4 });
+  });
+
+  it("reports the moved bundle once", async () => {
+    storage.setItem(
+      "covel:settings",
+      JSON.stringify({ schemaVersion: 1, entries: {} }),
+    );
+    const backend = createLocalStorageBackend(storage);
+    await backend.loadWithRevision!();
+    await backend.loadWithRevision!();
+    expect(await backend.takeArchivedBundle!()).toBe("covel:settings.v1.bak");
+    expect(await backend.takeArchivedBundle!()).toBeNull();
+  });
+
+  it("leaves an earlier bundle in place when its copy cannot be written", async () => {
+    const contents = JSON.stringify({ schemaVersion: 1, entries: {} });
+    storage.setItem("covel:settings", contents);
+    const setItem = storage.setItem.bind(storage);
+    storage.setItem = (key: string, value: string) => {
+      if (key.endsWith(".bak")) throw new Error("quota exceeded");
+      setItem(key, value);
+    };
+    const store = new SettingsStore(createLocalStorageBackend(storage));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await store.init();
+    expect(store.isHydrated()).toBe(false);
+    expect(storage.getItem("covel:settings")).toBe(contents);
+  });
 });

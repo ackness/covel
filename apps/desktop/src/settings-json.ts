@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   emptySettingsPersistenceBundle,
   nextSettingsPersistenceBundle,
+  unusableSettingsBundleLabel,
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
 } from "@covel/shared/settings-persistence";
@@ -38,6 +39,83 @@ export function readSettingsBundle(
   }
 
   return parseSettingsPersistenceBundle(JSON.parse(raw) as unknown);
+}
+
+/** `settings.<label>.bak.json` beside the settings file, never an existing one. */
+function freeBackupPath(settingsFile: string, label: string): string {
+  const { dir, name, ext } = path.parse(settingsFile);
+  const backup = path.join(dir, `${name}.${label}.bak${ext}`);
+  return fs.existsSync(backup)
+    ? path.join(dir, `${name}.${label}.${Date.now()}.bak${ext}`)
+    : backup;
+}
+
+/**
+ * Move a settings file this build cannot use to `settings.<label>.bak.json`
+ * beside it, and return that file name: an earlier format (`v1`), a file with
+ * no version, or damaged text. While such a file stays in place every write
+ * is refused, and the player has read-only defaults with no way out. A file
+ * this build reads, one from a later build, and a file that is missing or
+ * cannot be opened are left alone and return null.
+ */
+export function archiveUnusableSettingsFile(
+  settingsFile: string,
+): string | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(settingsFile, "utf-8");
+  } catch {
+    return null;
+  }
+  const label = unusableSettingsBundleLabel(raw);
+  if (label === undefined) return null;
+  const backup = freeBackupPath(settingsFile, label);
+  fs.renameSync(settingsFile, backup);
+  return path.basename(backup);
+}
+
+/**
+ * Copy the settings file to `settings.<label>.bak.json` beside it and return
+ * that file name. The renderer asks for the copy before it drops values that
+ * the current settings refuse (`conflict`) and before a raw edit (`edit`).
+ */
+export function backupSettingsFile(
+  settingsFile: string,
+  label = "conflict",
+): string {
+  if (!/^[a-z]{1,16}$/.test(label)) throw new Error("invalid backup label");
+  const backup = freeBackupPath(settingsFile, label);
+  fs.copyFileSync(settingsFile, backup, fs.constants.COPYFILE_EXCL);
+  fs.chmodSync(backup, 0o600);
+  return path.basename(backup);
+}
+
+function backupNamePattern(settingsFile: string): RegExp {
+  const { name, ext } = path.parse(settingsFile);
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escape(name)}\\.[A-Za-z0-9.]+\\.bak${escape(ext)}$`);
+}
+
+/** The kept copies beside the settings file, by name. */
+export function listSettingsBackups(settingsFile: string): string[] {
+  const pattern = backupNamePattern(settingsFile);
+  try {
+    return fs
+      .readdirSync(path.dirname(settingsFile))
+      .filter((file) => pattern.test(file))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** The text of one kept copy. A name that is not one of them reads nothing. */
+export function readSettingsBackup(
+  settingsFile: string,
+  name: string,
+): string | null {
+  if (!listSettingsBackups(settingsFile).includes(name)) return null;
+  return fs.readFileSync(path.join(path.dirname(settingsFile), name), "utf-8");
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useModelCapabilities } from "@/hooks/use-model-capabilities.js";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Database, Info, Loader2, RotateCw } from "lucide-react";
+import { Database, Loader2, RotateCw } from "lucide-react";
 import {
   fetchModelDbInfo,
   getCapabilityOverrides,
@@ -32,6 +32,9 @@ import { ignoreError } from "@/lib/ignore-error.js";
 import { clearChangedSlotReasoningEfforts } from "./llm-reasoning-effort.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 import { useSettingsStore } from "../use-settings.js";
+import { SettingsPaneHeader } from "../pane-layout.js";
+
+const FILTER_FROM_SLOT_COUNT = 6;
 
 /**
  * Pane that surfaces the `[covel.<slot>]` sections from llm.toml and lets the
@@ -52,6 +55,7 @@ export function LlmSlotsPane() {
     Record<string, Partial<ModelCapabilityInfo>>
   >(() => getCapabilityOverrides());
   const [editingSlot, setEditingSlot] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reloading, setReloading] = useState(false);
@@ -215,45 +219,40 @@ export function LlmSlotsPane() {
     }
   };
 
+  const needle = filter.trim().toLowerCase();
+  const visibleSlots = needle
+    ? slots.filter((slotId) => slotId.toLowerCase().includes(needle))
+    : slots;
+
   return (
     <div className="space-y-3">
-      {/* Relationship summary — explains how slots fit into the bigger picture.
-          O-4 audit finding: players were seeing "slot / preset / key" as three
-          disconnected tabs without any indication that they form a chain. */}
-      <div className="border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5">
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {t(
-            "settings.slotChainSummary",
-            "Plugin tasks → model roles → providers and models → API keys.",
-          )}
-        </p>
-        <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/80 flex-wrap">
-          <span className="px-1.5 py-0.5 rounded bg-background border border-border">
-            {t("settings.chainRuntime", "Plugin task")}
-          </span>
-          <span className="text-muted-foreground/50">▸</span>
-          <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">
-            {t("settings.chainSlot", "Model role")}
-          </span>
-          <span className="text-muted-foreground/50">▸</span>
-          <span className="px-1.5 py-0.5 rounded bg-background border border-border">
-            {t("settings.chainPreset", "Provider and model")}
-          </span>
-          <span className="text-muted-foreground/50">▸</span>
-          <span className="px-1.5 py-0.5 rounded bg-background border border-border">
-            {t("settings.chainKey", "API key")}
-          </span>
-        </div>
-      </div>
+      {/* The title line states the chain the three LLM pages form: a player
+          otherwise sees roles, providers and keys as unrelated pages. */}
+      <SettingsPaneHeader
+        title={t("settings.llmSlots", "Model Roles")}
+        description={t(
+          "settings.slotChainSummary",
+          "Plugin tasks → model roles → providers and models → API keys.",
+        )}
+      />
       {/* Manual hot-reload: re-read llm.toml on the server and apply it to the
           live gateway without restarting. */}
-      <div className="flex items-center justify-between gap-2 border border-border/60 bg-muted/20 px-3 py-2">
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {t(
-            "settings.llm.reloadHint",
-            "Edited llm.toml? Reload to apply your slots without restarting the app.",
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-(--radius-control) border border-(--rule-color) px-3 py-2">
+        <div className="min-w-0 space-y-0.5">
+          {llm?.source && (
+            <p className="break-all text-xs">
+              {llm.source.kind === "file"
+                ? t("settings.llm.activeFile", { path: llm.source.path })
+                : t("settings.llm.activeBuiltin")}
+            </p>
           )}
-        </p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {t(
+              "settings.llm.reloadHint",
+              "Edited llm.toml? Reload to apply your slots without restarting the app.",
+            )}
+          </p>
+        </div>
         <Button
           variant="outline"
           size="sm"
@@ -271,13 +270,6 @@ export function LlmSlotsPane() {
           </span>
         </Button>
       </div>
-      {llm?.source && (
-        <p className="break-all text-[11px] text-muted-foreground">
-          {llm.source.kind === "file"
-            ? t("settings.llm.activeFile", { path: llm.source.path })
-            : t("settings.llm.activeBuiltin")}
-        </p>
-      )}
       {llm?.error && (
         <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive leading-relaxed">
           {t("settings.llm.parseError", {
@@ -287,16 +279,15 @@ export function LlmSlotsPane() {
           })}
         </div>
       )}
-      {isConfigured && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Info className="w-3 h-3" />
-          <span>{t("settings.configuredByToml")}</span>
-        </div>
-      )}
-      <div className="flex items-center gap-2 text-[10px] text-muted-foreground italic">
-        <Info className="w-3 h-3 shrink-0" />
-        <span>{t("settings.slotPingMovedHint")}</span>
-      </div>
+      <details className="text-[11px] leading-relaxed text-muted-foreground">
+        <summary className="cursor-pointer select-none hover:text-foreground">
+          {t("settings.slotNotesSummary")}
+        </summary>
+        <ul className="mt-1.5 list-disc space-y-1 pl-4">
+          {isConfigured && <li>{t("settings.configuredByToml")}</li>}
+          <li>{t("settings.slotPingMovedHint")}</li>
+        </ul>
+      </details>
       {discoveredSlotIds.length > 0 && (
         <div className="border border-border/70 bg-muted/20 px-3 py-2 space-y-2">
           <div className="flex items-center justify-between gap-2">
@@ -345,12 +336,28 @@ export function LlmSlotsPane() {
           {slotSaveError}
         </p>
       )}
+      {/* A long llm.toml makes this page long; a short one needs no filter. */}
+      {slots.length > FILTER_FROM_SLOT_COUNT && (
+        <input
+          type="search"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          placeholder={t("settings.slotFilterPlaceholder")}
+          aria-label={t("settings.slotFilterPlaceholder")}
+          className="w-full rounded-(--radius-control) border border-(--rule-color) bg-(--surface-page) px-3 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus:border-(--accent-primary) focus:ring-1 focus:ring-(--accent-primary) sm:w-72"
+        />
+      )}
+      {visibleSlots.length === 0 && slots.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t("settings.slotFilterEmpty")}
+        </p>
+      )}
       <fieldset
         disabled={savingSlot || savingCapabilities || !writable}
         aria-busy={savingSlot}
         className="min-w-0 space-y-3"
       >
-        {slots.map((slotId) => (
+        {visibleSlots.map((slotId) => (
           <LlmSlotCard
             key={slotId}
             slotId={slotId}
