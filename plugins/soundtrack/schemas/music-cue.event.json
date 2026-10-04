@@ -5,20 +5,10 @@
   "required": ["mood"],
   "properties": {
     "mood": {
-      "enum": [
-        "calm",
-        "warm",
-        "joy",
-        "romance",
-        "sorrow",
-        "mystery",
-        "tense",
-        "dread",
-        "battle",
-        "triumph",
-        "silence"
-      ],
-      "description": "The mood of the story now. `silence` stops the music."
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "One of the moods this world lists for its music, written exactly as listed. `silence` stops the music."
     }
   }
 }

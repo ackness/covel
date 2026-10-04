@@ -1,6 +1,6 @@
 import { getPendingProposals } from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-import { selectTrack } from "../lib/soundtrack.js";
+import { moodVocabulary, selectTrack } from "../lib/soundtrack.js";
 import cue from "../runtimes/cue/handler.js";
 import scene from "../runtimes/scene/handler.js";
 import register from "../server/index.js";
@@ -56,6 +56,35 @@ describe("choosing a track", () => {
   it("keeps the scene's track for a mood no track answers", () => {
     expect(pick({ mood: "sorrow", scene: "歪角鹿酒馆" })).toBe("tavern");
     expect(pick({ mood: "sorrow" })).toBe("theme");
+  });
+
+  it("takes moods as the author's words, whatever the case or spacing", () => {
+    const tracks = [
+      { id: "lamps", file: "lamps.mp3", moods: ["灯下", "Low Lamps"] },
+      { id: "theme", file: "theme.mp3", theme: true },
+    ];
+    expect(selectTrack(tracks, { mood: "灯下" })?.id).toBe("lamps");
+    expect(selectTrack(tracks, { mood: " low lamps " })?.id).toBe("lamps");
+    expect(selectTrack(tracks, { mood: "Silence" })).toBe(null);
+  });
+
+  it("lists the world's moods: the declared ones, then those only tracks name", () => {
+    expect(
+      moodVocabulary({
+        moods: [
+          { id: "dread", when: "Deep in the barrow." },
+          { id: "silence" },
+        ],
+        tracks: [
+          { id: "a", file: "a.mp3", moods: ["battle", "Dread"] },
+          { id: "b", file: "b.mp3" },
+        ],
+      }),
+    ).toEqual([{ id: "dread", when: "Deep in the barrow." }, { id: "battle" }]);
+    expect(moodVocabulary({ tracks: [{ id: "b", file: "b.mp3" }] })).toEqual(
+      [],
+    );
+    expect(moodVocabulary(null)).toEqual([]);
   });
 
   it("is silent on a silence cue, and without a theme when nothing fits", () => {
@@ -214,6 +243,45 @@ describe("the stage.music@1 projection", () => {
         },
       }),
     ).toEqual({});
+  });
+
+  it("tells the narrative which moods the world has music for", async () => {
+    const segments = (data) =>
+      handlers.get("music-moods")(
+        { turnId: "t", playerMessage: "" },
+        {
+          pluginData: {
+            get: async (namespace, key) =>
+              data[`${namespace}/${key}`]
+                ? { value: data[`${namespace}/${key}`] }
+                : null,
+          },
+        },
+      );
+    const [segment] = await segments({
+      "tracks/music-registry": {
+        ...REGISTRY,
+        moods: [{ id: "battle", when: "刀已出鞘，胜负未分。" }],
+      },
+    });
+    expect(segment).toMatchObject({
+      id: "music-moods",
+      audience: "story",
+      volatility: "session",
+    });
+    expect(segment.content).toContain("- battle: 刀已出鞘，胜负未分。");
+    expect(segment.content).toContain("- tense");
+    expect(segment.content).toContain("- triumph");
+
+    // No mood named anywhere: nothing to cue, so nothing to tell.
+    expect(
+      await segments({
+        "tracks/music-registry": {
+          tracks: [{ id: "theme", file: "theme.mp3", theme: true }],
+        },
+      }),
+    ).toEqual([]);
+    expect(await segments({})).toEqual([]);
   });
 
   it("leaves the slot to other providers when the world ships no tracks", async () => {

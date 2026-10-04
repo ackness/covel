@@ -5,7 +5,7 @@
 ## 运行时结构
 
 - `PLUGIN.md`：插件级元信息、`music.cue` 事件、两个数据契约和 `stage.music@1` 槽位提供者的声明。
-- `server/index.js`：`stage.music@1` 的提供者。每次投影时用「情绪 + 场景 + 曲目表」算出曲目，再按文件名从 `assets` 里取出音频的 `MediaRef`。
+- `server/index.js`：`stage.music@1` 的提供者。每次投影时用「情绪 + 场景 + 曲目表」算出曲目，再按文件名从 `assets` 里取出音频的 `MediaRef`。同一个文件还提供 `prompt.segment@1`：把这个世界有哪些音乐情绪、各在什么时候适用告诉叙事。
 - `runtimes/cue/`：事件触发函数 runtime（消费 `music.cue`），只把情绪写入 `state/mood`。
 - `runtimes/scene/`：事件触发函数 runtime（消费 `scene.set`），只把场景名写入 `state/scene`。
 - `lib/soundtrack.js`：namespace / key 常量和唯一的选曲规则 `selectTrack`。
@@ -64,11 +64,23 @@ musicTracks:
   after: music
 ```
 
-`file` 写文件名即可，不需要手写哈希：导入时每个文件在 `assets` 里生成一条以文件名为 key 的索引记录。可用的情绪：`calm`、`warm`、`joy`、`romance`、`sorrow`、`mystery`、`tense`、`dread`、`battle`、`triumph`。
+`file` 写文件名即可，不需要手写哈希：导入时每个文件在 `assets` 里生成一条以文件名为 key 的索引记录。
+
+情绪的名字由世界作者自己定，插件不预设任何一个。曲目表顶层的 `moods` 说明每种情绪什么时候适用，叙事只会看到这里写的名字和说明：
+
+```yaml
+moods:
+  - id: battle
+    when: 刀已出鞘，胜负未分。
+  - id: 灯下
+    when: 回到有灯有火的地方，暂时安全。
+```
+
+没写顶层 `moods` 时，情绪清单就是各曲目 `moods` 里出现过的名字，没有说明。所有曲目都没有 `moods` 的世界没有情绪清单：叙事不会发 `music.cue`，音乐只跟随场景和主题曲。匹配时不区分大小写和空白。`silence` 是保留字，表示停止音乐。
 
 ## 事件
 
-- `music.cue`（本插件声明）：叙事在情绪明显变化时发射，载荷 `{ mood }`。每回合最多一次，情绪没变不发。
+- `music.cue`（本插件声明）：叙事在情绪明显变成世界列出的某一种时发射，载荷 `{ mood }`，`mood` 是曲目表里的情绪名。每回合最多一次，情绪没变不发。
 - `scene.set`（由跟踪场景的插件声明）：本插件只订阅。会话里没有这样的插件时这个事件不会出现，曲目就只按情绪和主题曲选。
 
 两个事件都参与同回合预览：槽位提供者声明了 `preview`，音乐在回合提交前就会跟着切换。

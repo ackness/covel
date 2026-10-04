@@ -18,7 +18,7 @@ export default async function handler(ctx) {
     value: { skipped: true, reason },
   });
   const evt = ctx.triggerEvent;
-  const mood = typeof evt?.data?.mood === "string" ? evt.data.mood : "";
+  const mood = typeof evt?.data?.mood === "string" ? evt.data.mood.trim() : "";
   if (!evt || evt.topic !== "music.cue" || !mood)
     return skip("no usable music.cue payload");
   if (!ctx.pluginData) return skip("no plugin data access");

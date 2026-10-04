@@ -20,6 +20,34 @@ export const SCENE_KEY = "scene";
 /** A cue with this mood stops the music. */
 export const SILENCE = "silence";
 
+/**
+ * The moods of a world's music: the names the track list declares, then any
+ * a track uses without declaring it. The names are the author's; the plugin
+ * fixes none. A world whose tracks name no mood has an empty list, and its
+ * music follows the scene and the theme only.
+ *
+ * @param {Record<string, unknown> | null | undefined} registry
+ * @returns {{ id: string, when?: string }[]}
+ */
+export function moodVocabulary(registry) {
+  const moods = new Map();
+  const add = (id, when) => {
+    const name = typeof id === "string" ? id.trim() : "";
+    if (!name || normalize(name) === SILENCE || moods.has(normalize(name)))
+      return;
+    moods.set(normalize(name), {
+      id: name,
+      ...(typeof when === "string" && when.trim() ? { when: when.trim() } : {}),
+    });
+  };
+  for (const mood of Array.isArray(registry?.moods) ? registry.moods : [])
+    add(mood?.id, mood?.when);
+  for (const track of Array.isArray(registry?.tracks) ? registry.tracks : [])
+    for (const mood of Array.isArray(track?.moods) ? track.moods : [])
+      add(mood);
+  return [...moods.values()];
+}
+
 function normalize(text) {
   return String(text ?? "")
     .trim()
@@ -59,7 +87,7 @@ export function matchesScene(scenes, scene) {
  * @returns {Record<string, unknown> | null}
  */
 export function selectTrack(tracks, { mood, scene }) {
-  if (mood === SILENCE) return null;
+  if (normalize(mood) === SILENCE) return null;
   const usable = tracks.filter(
     (track) =>
       track &&
@@ -69,7 +97,9 @@ export function selectTrack(tracks, { mood, scene }) {
   );
   const has = (list) => Array.isArray(list) && list.length > 0;
   const feels = (track) =>
-    Boolean(mood) && has(track.moods) && track.moods.includes(mood);
+    Boolean(mood) &&
+    has(track.moods) &&
+    track.moods.some((name) => normalize(name) === normalize(mood));
   const here = (track) => matchesScene(track.scenes, scene);
   return (
     usable.find((track) => feels(track) && here(track)) ??

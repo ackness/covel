@@ -15,6 +15,8 @@ license: MIT
 entry: ./server/index.js
 contributes:
   extensions:
+    - point: prompt.segment@1
+      id: music-moods
     - point: ui.slot@1
       id: music
       slot: stage.music@1
@@ -30,10 +32,11 @@ contributes:
     - topic: music.cue
       schema: ./schemas/music-cue.event.json
       description: >-
-        Emit when the mood of the story clearly changes: the opening scene, the
-        start or the end of a fight, a turn to fear, grief, or relief. Emit at
-        most once per turn. Do not emit while the mood stays the same. The mood
-        `silence` stops the music.
+        Emit only when the prompt lists music moods for this world. Emit when
+        the mood of the story clearly changes to one of the listed moods, with
+        that mood written exactly as listed. Emit at most once per turn. Do
+        not emit while the mood stays the same. The mood `silence` stops the
+        music.
   data:
     assets:
       schema: ./schemas/assets.schema.json
@@ -61,6 +64,8 @@ contributes:
         hint: >-
           One file that names each track, the music file it plays, and when it
           plays: in which scenes, for which moods, or as the theme of the world.
+          The moods are your own words; `moods` at the top says when each
+          applies.
         example: ./examples/tracks.json
         source:
           kind: yaml

@@ -5,8 +5,12 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "registryId", "tracks"],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "registryId": { "const": "music-registry" },
+    "schemaVersion": {
+      "const": 1
+    },
+    "registryId": {
+      "const": "music-registry"
+    },
     "tracks": {
       "type": "array",
       "maxItems": 64,
@@ -37,26 +41,21 @@
           },
           "scenes": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1 },
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
             "description": "Scene names, as the narrative uses them. The track plays only there. Absent: anywhere."
           },
           "moods": {
             "type": "array",
+            "maxItems": 16,
             "items": {
-              "enum": [
-                "calm",
-                "warm",
-                "joy",
-                "romance",
-                "sorrow",
-                "mystery",
-                "tense",
-                "dread",
-                "battle",
-                "triumph"
-              ]
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
             },
-            "description": "Moods the track fits. Absent: the track does not answer a mood."
+            "description": "Moods the track fits, by the names this world uses. Absent: the track does not answer a mood."
           },
           "loop": {
             "type": "boolean",
@@ -67,6 +66,29 @@
             "minimum": 0,
             "maximum": 1,
             "description": "Level of this track, from 0 to 1. Defaults to 1."
+          }
+        }
+      }
+    },
+    "moods": {
+      "type": "array",
+      "maxItems": 32,
+      "description": "The moods of this world's music, in the author's own words. The narrative is told these names and when each applies. Absent: the moods the tracks name, without a description.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The mood's name, as tracks use it."
+          },
+          "when": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "When the story is in this mood, in one line."
           }
         }
       }
