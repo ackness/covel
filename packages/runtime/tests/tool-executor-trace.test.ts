@@ -141,6 +141,52 @@ describe("ToolExecutor trace emissions", () => {
     expect(emitter.events[0].payload.code).toBe("INVALID_ARGS");
   });
 
+  it("runs a call whose arguments have one of the slips the parser settles", async () => {
+    const emitter = makeEmitterSpy();
+    const received: unknown[] = [];
+    const approved: unknown[] = [];
+    const executor = createToolExecutor({
+      findTool: () =>
+        ({
+          name: "x",
+          description: "",
+          jsonSchema: {},
+          async execute(params: unknown) {
+            received.push(params);
+            return {};
+          },
+        }) as unknown as ToolModule,
+      // The approval check sees the arguments the call runs on.
+      approval: {
+        check: (request) => {
+          approved.push(request.input);
+          return { decision: "allow" };
+        },
+      } as ApprovalPipeline,
+    });
+    const expected = [
+      { updates: [{ id: "morale", delta: -1 }] },
+      { updates: [{ id: "trust", note: 'She calls him "keeper" now.' }] },
+      { updates: [{ id: "trust", at: { place: "hut" } }, { id: "morale" }] },
+    ];
+    for (const args of [
+      '{"updates":[{"id":"morale","delta":-1}]}]}',
+      '{"updates":[{"id":"trust","note":"She calls him "keeper" now."}]}',
+      '{"updates":[{"id":"trust","at":{"place":"hut"}, {"id":"morale"}]}',
+    ]) {
+      const res = await executor.execute(
+        { toolCallId: "c4", name: "x", arguments: args },
+        { ...baseCtx, emitter },
+      );
+      expect(res.success, args).toBe(true);
+    }
+    expect(received).toEqual(expected);
+    expect(approved).toEqual(expected);
+    expect(emitter.events.map((event) => event.type)).not.toContain(
+      "tool.failed",
+    );
+  });
+
   it("emits tool.failed with DENIED when approval denies the call", async () => {
     const emitter = makeEmitterSpy();
     const mockTool = {

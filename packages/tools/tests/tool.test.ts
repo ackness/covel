@@ -120,6 +120,23 @@ describe("tool()", () => {
       ).rejects.toMatchObject({ details: [{ path: "changes" }] });
   });
 
+  it("escapes quote marks inside a string value of JSON text", async () => {
+    const mod = tool({
+      name: "record",
+      description: "Record changes",
+      parameters: z.object({
+        changes: z.array(z.object({ name: z.string() })),
+      }),
+      execute: async (params) => params,
+    });
+    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    // The model escaped the quotes of the JSON text, but not the quote marks
+    // around a word inside it.
+    expect(
+      await mod.execute({ changes: '[{"name":"the "Mira" boat"}]}' }, ctx),
+    ).toEqual({ changes: [{ name: 'the "Mira" boat' }] });
+  });
+
   it("says why text sent for an array or object could not be used", async () => {
     const mod = tool({
       name: "record",
