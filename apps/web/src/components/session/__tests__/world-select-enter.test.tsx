@@ -1,3 +1,4 @@
+import { getSettings, initSettings } from "@/settings/store.js";
 /**
  * Entering a world must not depend on a frame being painted.
  *
@@ -13,10 +14,16 @@
  */
 
 import { fireEvent, render, screen, act } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
 import { WorldSelectScreen } from "../world-select-screen.js";
 import type { WorldRecord } from "@/services/api.js";
+
+// These assertions exercise the card list, independently of the startup style.
+beforeAll(async () => {
+  await initSettings();
+  await getSettings().set("ui.appearance", "panel");
+});
 
 const WORLDS = [
   {

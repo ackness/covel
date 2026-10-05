@@ -1,3 +1,4 @@
+import { getSettings, initSettings } from "@/settings/store.js";
 import {
   act,
   fireEvent,
@@ -5,10 +6,16 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { WorldRecord } from "@/services/api.js";
 import { WorldSelectScreen } from "../world-select-screen.js";
+
+// These assertions exercise the card list, independently of the startup style.
+beforeAll(async () => {
+  await initSettings();
+  await getSettings().set("ui.appearance", "panel");
+});
 
 const ENGLISH_WORLD = {
   id: "english-world",

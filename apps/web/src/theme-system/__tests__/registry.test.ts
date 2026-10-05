@@ -123,9 +123,10 @@ describe("theme registry", () => {
     const store = await createStore();
     syncThemeRegistry(store);
     const root = document.documentElement;
-    // The default package is the panel style.
-    expect(root.getAttribute("data-layout")).toBe("panel");
-    expect(root.getAttribute("data-nav")).toBe("rail");
+    // A new profile opens in the stage style.
+    expect(root.getAttribute("data-layout")).toBe("stage");
+    expect(root.getAttribute("data-nav")).toBe("top");
+    expect(root.getAttribute("data-backdrop")).toBe("scene");
 
     await store.set("ui.appearance", "paper");
     syncThemeRegistry(store);

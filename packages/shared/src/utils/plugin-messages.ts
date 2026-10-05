@@ -1,4 +1,5 @@
 import type { PluginMessages } from "@covel/plugin-handlers-utils";
+import { resolveI18nText } from "./i18n.js";
 
 export type { PluginMessages };
 import {
@@ -21,9 +22,9 @@ const cache = new WeakMap<
 /**
  * What plugin code is given as `ctx.messages` for a session in `locale`.
  *
- * The session's catalog is the one for the same locale, or else for the same
- * language and script: `zh-CN` reads `zh`, `zh-Hant` does not. A session with
- * no catalog reads the English text in the code.
+ * Each message uses the shared exact-locale and same-language/script lookup:
+ * a partial `zh-CN` catalog can inherit `zh`, while `zh-Hant` cannot. Messages
+ * without a compatible translation keep the English text in the code.
  */
 export function pluginMessagesFor(
   catalogs: readonly PluginMessageCatalog[] | undefined,
@@ -34,21 +35,25 @@ export function pluginMessagesFor(
   const cached = cache.get(catalogs)?.get(sessionLocale);
   if (cached) return cached;
 
-  const session =
-    catalogs.find(
-      (catalog) => canonicalizeLocale(catalog.locale) === sessionLocale,
-    ) ??
-    (sessionLocale
-      ? catalogs.find((catalog) =>
-          localesShareLanguageAndScript(sessionLocale, catalog.locale),
-        )
-      : undefined);
   const labels: Record<string, Record<string, string>> = {};
   for (const catalog of catalogs)
     for (const [text, translation] of Object.entries(catalog.messages))
       (labels[text] ??= {})[catalog.locale] = translation;
+  const translations: Record<string, string> = {};
+  if (sessionLocale) {
+    for (const [text, variants] of Object.entries(labels)) {
+      const compatible = Object.fromEntries(
+        Object.entries(variants).filter(([language]) =>
+          localesShareLanguageAndScript(sessionLocale, language),
+        ),
+      );
+      if (Object.keys(compatible).length > 0)
+        translations[text] =
+          resolveI18nText({ en: text, ...compatible }, sessionLocale) ?? text;
+    }
+  }
   const messages: PluginMessages = Object.freeze({
-    translations: Object.freeze({ ...session?.messages }),
+    translations: Object.freeze(translations),
     labels: Object.freeze(labels),
   });
 

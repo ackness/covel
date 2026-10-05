@@ -51,18 +51,23 @@ export async function seedBrowserSettings(
   entries: Record<string, unknown>,
 ) {
   await useIsolatedBrowserSettings(page);
-  await page.addInitScript((seedEntries) => {
-    if (localStorage.getItem("covel:settings") !== null) return;
-    localStorage.setItem(
-      "covel:settings",
-      JSON.stringify({
-        schemaVersion: 2,
-        revision: 0,
-        savedAt: new Date().toISOString(),
-        entries: seedEntries,
-      }),
-    );
-  }, entries);
+  // Seeded profiles keep a fixed layout; first-run tests can explicitly omit
+  // it with `"ui.appearance": undefined` before Playwright serializes the seed.
+  await page.addInitScript(
+    (seedEntries) => {
+      if (localStorage.getItem("covel:settings") !== null) return;
+      localStorage.setItem(
+        "covel:settings",
+        JSON.stringify({
+          schemaVersion: 2,
+          revision: 0,
+          savedAt: new Date().toISOString(),
+          entries: seedEntries,
+        }),
+      );
+    },
+    { "ui.appearance": "panel", ...entries },
+  );
 }
 
 /** Seed onboarding + locale so specs land straight on the world list. */

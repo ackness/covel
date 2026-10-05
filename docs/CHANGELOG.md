@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.47] - 2026-10-05
+
+This release adds world galleries, scene- and mood-based background music, and author credits, and fixes world storage selection, background model readiness, runtime scheduling, and turn settlement.
+
 ### Added
 
 - **World gallery.** The art a world package ships shows before a session exists. In the `showcase` world list the selected world's scenes rotate behind its title — with a pause control, and without starting for a player who asked for reduced motion — and its portraits sit under the summary; a picture opens at full size. The world details list every picture. A world without a built-in cover opens on its own scenes. A package says what its gallery holds in `media/gallery.json`: the pictures, their order, what each is (`hero`, `map`, `scene`, `still`, `portrait`), and a name and an introduction in every language of the package; the gallery shows them with the picture, up to the opening. A package without that file shows the raster images of its public `kind: media` sources. New routes: `GET /api/worlds/:id/gallery` and `GET /api/worlds/:id/gallery/:source/:file`, which serve only listed files.
@@ -20,12 +24,18 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Changed
 
+- **Stage is the default appearance for new profiles.** First launch uses the scene-based Stage layout and world showcase. Saved appearance choices are preserved.
+
 - **Panel tabs that do not fit.** With labelled tabs (`panelTabs: "bar"`) the context panel no longer shows a scrollbar under a cut-off row. The cut-off side fades, the mouse wheel moves the row, the selected tab stays in the middle, and a button at the end lists every panel with its full name.
 - **Existing sessions run plugin setup once more.** The bundled plugins had no `version` and counted as `0.0.0`; setup completion is recorded per version, so each setup runtime runs again on the next turn of an existing session and skips work that is done. `pregame` no longer repeats its welcome in a session that is already playing. A session whose world changed its dimension definitions after the session began can fail this rerun; use the setup recovery control in the plugin panel, or start a new session.
 - `GithubPluginPreview` and the collection preview carry `author` (a name or `null`).
 - Losslessly compress bundled world art, documentation screenshots and application icons. Image dimensions, decoded pixels and transparency are preserved, and world media hashes and byte counts are refreshed. Already compact assets remain unchanged when re-encoding offers no meaningful saving.
 
 ### Fixed
+
+- **Partial regional plugin translations keep available language translations.** Plugin text written into session state and model context now resolves each message by exact locale, then the same language and script, then its English source. A partial regional catalog no longer hides the rest of its language catalog.
+
+- **Selected panel tabs stay visible after layout changes.** The active label can grow as its font weight changes, and the panel menu or a late font can resize the strip after the initial scroll. The tab strip now follows those size changes so the selected tab is not clipped.
 
 - **Switching gameplay packs replaces the previous pack's requests.** Selecting the traditional pack after the dialogue pack kept the dialogue narrator enabled, and selecting the smaller pack kept optional plugins from the previous pack. Pack requests now have their own source, retained through manual edits; switching replaces that source while preserving other defaults, manual additions and explicit exclusions. A default that the world's initial pack requests belongs to that pack even when the world's preferred tags also select it, so another pack can replace the world's default narrative engine.
 - **Synchronous event subscribers honor their dependencies.** A legal subscriber with `needs` or a required input from another subscriber in the same fan-out batch was skipped because the batch ran in parallel. Matching synchronous subscribers now run in DAG levels with results merged between levels. Cycles are skipped while independent branches continue; background jobs remain independent.
@@ -53,6 +63,13 @@ All notable changes to this project will be documented in this file. Follows [Ke
 ### Removed
 
 - Unused code with no caller: the fixed world-detail sections of the web app, the earlier server-restart probe (`ensureServerSession`), the whole-table provider-key and `messages/sync` wrappers of the web API client, the earlier portrait replace helper, and the desktop copy of the provider-key helpers (it now uses `@covel/shared`). `createSlotRegistry()` no longer takes the preset registry it never read.
+
+### Upgrade notes for v0.0.47
+
+- Bundled plugins now declare versions. Existing sessions run their setup checks again on the next turn and skip completed work. If the world changed its dimension definitions, use the setup recovery control in the plugin panel or start a new session.
+- World theme music requires a package-provided audio file; no bundled world includes one yet. Music generation exposes an API but ships no provider wire.
+- When upgrading from before v0.0.46, also read that release's [breaking contracts and upgrade notes](#breaking-contracts-and-upgrade-notes).
+- macOS Apple Silicon and Windows x64 artifacts remain unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
 
 ## [0.0.46] - 2026-10-04
 

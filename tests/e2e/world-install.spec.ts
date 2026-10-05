@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
 
 for (const width of [1280, 390]) {
-  test(`Multi-world GitHub installation requires consent for each package at ${width}px`, async ({
+  test(`Multi-world GitHub installation requires consent for each selection at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -19,6 +19,7 @@ for (const width of [1280, 390]) {
     };
     const previews = [
       {
+        kind: "world",
         id: "example-note",
         description: "Synthetic plugin",
         version: "1.0.0",
@@ -29,6 +30,7 @@ for (const width of [1280, 390]) {
         expiresAt: Date.now() + 900_000,
       },
       {
+        kind: "world",
         id: "example-demo",
         description: "Synthetic demo",
         version: "1.0.0",
@@ -53,14 +55,16 @@ for (const width of [1280, 390]) {
         },
       }),
     );
-    await page.route("**/api/install/world/github/preview", (route) => {
+    await page.route("**/api/install/github/preview", (route) => {
       previewRequests++;
-      return route.fulfill({ json: { items: previews } });
+      return route.fulfill({
+        json: { collection: null, items: previews, problems: [] },
+      });
     });
-    await page.route("**/api/install/world/github", async (route) => {
+    await page.route("**/api/install/github/batch", async (route) => {
       const expected = installed.length === 0 ? previews[1]! : previews[0]!;
       expect(route.request().postDataJSON()).toEqual({
-        token: expected.token,
+        tokens: [expected.token],
         acceptRisk: true,
       });
       installed.push(expected);
@@ -68,8 +72,7 @@ for (const width of [1280, 390]) {
         status: 201,
         json: {
           ok: true,
-          kind: "world",
-          id: expected.id,
+          installed: [{ kind: "world", id: expected.id }],
           restartRequired: false,
         },
       });
@@ -91,13 +94,11 @@ for (const width of [1280, 390]) {
       dialog.getByRole("link", { name: "Browse community worlds" }),
     ).toHaveAttribute("href", "https://github.com/covel-ai/covel-worlds");
     await dialog
-      .getByLabel("World GitHub URL", { exact: true })
+      .getByLabel("GitHub URL", { exact: true })
       .fill(source.repository);
-    await dialog
-      .getByRole("button", { name: "Preview world", exact: true })
-      .click();
+    await dialog.getByRole("button", { name: "Preview", exact: true }).click();
     const install = dialog.getByRole("button", {
-      name: "Confirm installation",
+      name: /^Install \d+ selected$/,
     });
     await expect(install).toBeDisabled();
     await expect(
@@ -106,25 +107,30 @@ for (const width of [1280, 390]) {
       ),
     ).toBeVisible();
     expect(installed).toHaveLength(0);
-    const choice = dialog.getByRole("combobox", { name: "Choose a world" });
-    await expect(choice.getByRole("option")).toHaveText([
-      "example-note (worlds/note)",
-      "example-demo (worlds/demo)",
-    ]);
-    await choice.selectOption("1");
+    const firstPackage = dialog.getByRole("checkbox", { name: /example-note/ });
+    const secondPackage = dialog.getByRole("checkbox", {
+      name: /example-demo/,
+    });
+    await expect(firstPackage).toBeChecked();
+    await expect(secondPackage).toBeChecked();
+    const consent = dialog.getByRole("checkbox", {
+      name: "I understand the risks and trust this source.",
+    });
+    await consent.check();
+    await firstPackage.uncheck();
+    await expect(consent).not.toBeChecked();
+    await expect(install).toBeDisabled();
     await dialog
       .getByRole("checkbox", {
         name: "I understand the risks and trust this source.",
       })
       .check();
     await install.click();
-    await expect(
-      dialog.getByText("example-note · 1.0.0", { exact: true }),
-    ).toBeVisible();
+    await expect(firstPackage).toBeVisible();
+    await expect(secondPackage).toHaveCount(0);
+    await firstPackage.check();
     await expect(install).toBeDisabled();
-    const consent = dialog.getByRole("checkbox", {
-      name: "I understand the risks and trust this source.",
-    });
+
     await expect(consent).not.toBeChecked();
     await consent.check();
     await install.click();

@@ -1,4 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import {
+  loadPluginUiSpec,
+  readMessageCatalogs,
+} from "../../packages/plugin-loader/src/index.js";
+import { pluginMessagesFor } from "../../packages/shared/src/index.js";
 import { expect, test } from "@playwright/test";
 import {
   createRecoveryFixture,
@@ -21,6 +26,14 @@ for (const width of [1512, 390]) {
       await page.request.get(`/api/sessions/${fixture.id}/view`)
     ).json();
     const pluginId = "tabletop-probe";
+    const pluginRoot = fileURLToPath(
+      new URL("../../plugins/tabletop-rules/", import.meta.url),
+    );
+    const locale = snapshot.session.locale;
+    const messages = pluginMessagesFor(
+      await readMessageCatalogs(pluginRoot),
+      locale,
+    );
     const store = createMemoryStore();
     const submitFormHandler = createSubmitFormHandler(undefined, store);
     const data = new Map<string, unknown>([
@@ -28,7 +41,7 @@ for (const width of [1512, 390]) {
         "setup/rules",
         {
           budget: 4,
-          attributes: [{ id: "combat", label: "Combat", base: 1, max: 5 }],
+          attributes: [{ id: "combat", label: "战斗", base: 1, max: 5 }],
         },
       ],
     ]);
@@ -36,7 +49,8 @@ for (const width of [1512, 390]) {
       pluginId,
       sessionId: fixture.id,
       turnId: "ordinary",
-      locale: "en-US",
+      locale,
+      messages,
       store: { listPlayerInputs: () => store.listPlayerInputs(fixture.id) },
       pluginData: {
         get: async (ns: string, key: string) => data.get(`${ns}/${key}`),
@@ -90,16 +104,13 @@ for (const width of [1512, 390]) {
         body: `event: interaction.requested\ndata: ${JSON.stringify(event)}\n\n`,
       });
     });
+    const loadedSpec = await loadPluginUiSpec(
+      pluginRoot,
+      `${pluginRoot}/runtimes/check/ui/check-panel.json`,
+      "tabletop-rules",
+    );
     const spec = JSON.parse(
-      (
-        await readFile(
-          new URL(
-            "../../plugins/tabletop-rules/runtimes/check/ui/check-panel.json",
-            import.meta.url,
-          ),
-          "utf8",
-        )
-      ).replaceAll("tabletop-rules", pluginId),
+      JSON.stringify(loadedSpec).replaceAll("tabletop-rules", pluginId),
     );
     await page.route("**/api/ui-specs?*", (route) =>
       route.fulfill({
@@ -212,22 +223,20 @@ for (const width of [1512, 390]) {
           .getByRole("button", { name: /关闭|Close/, exact: true })
           .click();
       await expect(
-        page.getByRole("textbox", { name: "Attempted action" }),
+        page.getByRole("textbox", { name: "尝试的行动" }),
       ).toBeVisible();
       await expect(input).toBeDisabled();
       await page.reload();
       await expect(
-        page.getByRole("textbox", { name: "Attempted action" }),
+        page.getByRole("textbox", { name: "尝试的行动" }),
       ).toBeVisible();
       await page
-        .getByRole("textbox", { name: "Attempted action" })
+        .getByRole("textbox", { name: "尝试的行动" })
         .fill("Climb the harbor wall");
       await page
-        .getByRole("combobox", { name: "Attribute", exact: true })
+        .getByRole("combobox", { name: "属性", exact: true })
         .selectOption("combat");
-      await page
-        .getByRole("button", { name: "Resolve check", exact: true })
-        .click();
+      await page.getByRole("button", { name: "进行检定", exact: true }).click();
       await expect.poll(() => fixture.actions.length).toBe(1);
       const settled = await check({ ...context, turnId: "settled" });
       expect(settled.value.receipt?.action).toBe("Climb the harbor wall");
@@ -238,6 +247,7 @@ for (const width of [1512, 390]) {
       await input.fill("Ask the guard about the harbor.");
       await expect(input).toHaveValue("Ask the guard about the harbor.");
     } finally {
+      openedForm.resolve();
       await fixture.dispose();
       await store.close();
     }

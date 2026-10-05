@@ -17,6 +17,8 @@ Covel 的主题系统已经统一为“主题包”模式。玩家可以通过�
 - **主题 ID**：决定作用域选择器，写法是 `html[data-theme="你的主题ID"]`
 - **主题样式**：覆盖 Covel 提供的语义 token 和语义 hook
 
+首次启动且尚未保存外观选择时使用「舞台」风格（`stage`），已有用户的主题选择保持不变。
+
 主题包选择会保存到 `ui.appearance`，颜色模式会保存到 `ui.scheme`。运行时会把它们应用到 `<html data-theme="..." data-scheme="...">`；暗色模式同时保留 `.dark` class，供 Tailwind 分支和旧主题继续工作。
 
 你可以把它理解成一层“换皮配置”：
