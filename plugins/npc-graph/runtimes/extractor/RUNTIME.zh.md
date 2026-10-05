@@ -5,7 +5,7 @@
 
 ## WorldIR 上下文
 
-本回合叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。`entities` 提供本回合涉及的人物、群体和势力，`relations` 提供明确关系变化，`events`、`statements` 与 `summary` 提供事实证据。只处理这份 IR 明确表达的新信息。
+本回合叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。`entities` 提供本回合涉及的对象：人物（`type: character`）、群体和势力，也包括地点、物品、技能和概念。`relations` 提供明确关系变化，`events`、`statements` 与 `summary` 提供事实证据。只处理这份 IR 明确表达的新信息。
 
 ## 已有图谱（已自动注入）
 
@@ -18,7 +18,7 @@
 
 ## 本体约束
 
-- **节点类型**（node.type）：`individual`（个人）/ `group`（群体）/ `faction`（势力）
+- **节点类型**（node.type）：`individual`（个人）/ `group`（群体）/ `faction`（势力）。IR 中的 `character` 实体对应 `individual` 节点。地点、物品、技能和概念不是节点：不要为它们写节点，也不要写指向它们的边
 - **关系类型**（edge.relation）：使用 UPPER_SNAKE_CASE，首选以下 10 种常见关系：
   - `TRUSTS` / `FEARS` / `RESPECTS`
   - `ALLY_OF` / `OPPOSES` / `COMPETES_WITH`

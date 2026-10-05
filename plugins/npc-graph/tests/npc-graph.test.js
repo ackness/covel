@@ -156,6 +156,76 @@ describe("upsert-npc-graph", () => {
     });
   });
 
+  it("keeps people, groups, and factions when a call carries World IR entity types", async () => {
+    // The shape of a recorded call: the model copied `location` and `item`
+    // entities of its input onto nodes, with their World IR types.
+    const result = await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          {
+            name: "科尔文・艾什",
+            type: "character",
+            summary: "一个月前住进酒馆的学者，自称取走灯心是为了保管。",
+          },
+          {
+            name: "青铜门",
+            type: "location",
+            summary: "古冢山上的青铜墓门，三夜前被从内部推开。",
+          },
+          {
+            name: "铜提灯",
+            type: "item",
+            summary: "浅坑里遗落的守灯人提灯，油壶空着。",
+          },
+        ],
+        edges: [
+          {
+            sourceName: "科尔文・艾什",
+            targetName: "青铜门",
+            relation: "KNOWS_ABOUT",
+            strength: 0.6,
+            fact: "科尔文・艾什三夜前登上古冢山，见青铜门开着却没有进入。",
+          },
+        ],
+      },
+      ctx,
+      store,
+    );
+
+    const content = getToolContent(result);
+    expect(content.nodes.created).toBe(1);
+    expect(content.edges).toMatchObject({
+      created: 0,
+      skipped: 1,
+      results: [{ target: "青铜门", skipped: "missing endpoint node" }],
+    });
+    const list = await listTool.execute({}, ctx);
+    expect(getToolContent(list).nodes).toMatchObject([
+      { name: "科尔文・艾什", type: "individual" },
+    ]);
+    // A type that is not a World IR entity type is still an error.
+    await expect(
+      upsertTool.execute(
+        {
+          nodes: [{ name: "雷恩", type: "nun", summary: "黎明灯修会的修女。" }],
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    // Nothing is left of a call that held only places.
+    await expect(
+      upsertTool.execute(
+        {
+          nodes: [
+            { name: "千灯廊", type: "location", summary: "墓门内侧的长廊。" },
+          ],
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
   it("creates new nodes with short IDs and persists them", async () => {
     const result = await executeAndCommit(
       upsertTool,
