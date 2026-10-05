@@ -12,7 +12,11 @@ import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { attachRuntimeJournal } from "../src/execution-journal.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
-import type { LLMMessage, LLMRequest } from "../src/llm/llm-adapter.js";
+import type {
+  LLMAdapter,
+  LLMMessage,
+  LLMRequest,
+} from "../src/llm/llm-adapter.js";
 
 const now = "2026-10-05T00:00:00.000Z";
 const PRIOR_NARRATIVE = "The king offers a second bargain. Will you take it?";
@@ -84,7 +88,12 @@ async function seedSession(): Promise<DataStore> {
 async function conversations(
   manifests: readonly RuntimeManifest[],
   input: Partial<TurnInput> = {},
-  options: { narrative?: string; maxInputTokens?: number } = {},
+  options: {
+    narrative?: string;
+    maxInputTokens?: number;
+    reservedForResponse?: number;
+    resolveBudget?: LLMAdapter["resolveBudget"];
+  } = {},
 ) {
   const store = await seedSession();
   const seen = new Map<string, readonly LLMMessage[]>();
@@ -98,7 +107,7 @@ async function conversations(
         ? {
             contextBudget: {
               maxInputTokens: options.maxInputTokens,
-              reservedForResponse: 0,
+              reservedForResponse: options.reservedForResponse ?? 0,
             },
             estimator: (text: string) => text.length,
           }
@@ -108,6 +117,9 @@ async function conversations(
         promptTemplate: `PROMPT:${manifest.name}`,
       }),
       llm: {
+        ...(options.resolveBudget
+          ? { resolveBudget: options.resolveBudget }
+          : {}),
         generate: async (request: LLMRequest) => {
           const system = String(request.messages[0]?.content ?? "");
           const name = /PROMPT:([\w-]+)/.exec(system)?.[1] ?? "";
@@ -215,5 +227,26 @@ describe("story text of the current execution in the conversation", () => {
       status: "failed",
       error: expect.stringContaining("Context budget exceeded"),
     });
+  });
+
+  it("leaves a fallback budget unchecked until the call's own limits replace it", async () => {
+    // The fallback reserve fills the window; only the model's limits make
+    // the budget usable, and they apply at each call.
+    const sent = await conversations(
+      [narrator, observer()],
+      {},
+      {
+        maxInputTokens: 16_384,
+        reservedForResponse: 16_384,
+        resolveBudget: () => ({
+          contextWindow: 16_384,
+          maxOutputTokens: 16_384,
+          requestedMaxOutputTokens: 4096,
+        }),
+      },
+    );
+
+    expect(sent.result("observer")).toMatchObject({ status: "success" });
+    expect(sent("observer").at(-1)).toBe(`user: ${CUE}`);
   });
 });

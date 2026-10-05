@@ -12,7 +12,7 @@ import type {
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { buildContext, resolveBudgetOptions } from "@covel/context";
+import { DEFAULT_PROTECT_LAST_USER_TURNS, buildContext } from "@covel/context";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -163,16 +163,6 @@ export async function executeAgentRuntime({
   const historyPolicy = manifest.history;
   // This text is history from the next turn on, so the same filter applies.
   const visibleStory = filterRuntimeHistory(executionStory, manifest.name);
-  // The story is closed by a user-role cue, so the current turn spans one more
-  // user message than the budget protects by default.
-  const contextBudget =
-    deps.contextBudget && visibleStory.length > 0
-      ? {
-          ...deps.contextBudget,
-          protectLastUserTurns:
-            resolveBudgetOptions(deps.contextBudget).protectLastUserTurns + 1,
-        }
-      : deps.contextBudget;
 
   const assembleContext = async () => {
     const promptSegments =
@@ -296,7 +286,22 @@ export async function executeAgentRuntime({
     maxSteps,
     timeoutMs,
     messages,
-    ...(budgetEligible ? { estimator: deps.estimator, contextBudget } : {}),
+    ...(budgetEligible
+      ? {
+          estimator: deps.estimator,
+          // The cue after this turn's story is one more user message of the
+          // current turn; the budget must keep the whole turn. These limits
+          // are a fallback each call replaces, so they are not checked here.
+          contextBudget: deps.contextBudget && {
+            ...deps.contextBudget,
+            protectLastUserTurns:
+              (deps.contextBudget.protectLastUserTurns ??
+                DEFAULT_PROTECT_LAST_USER_TURNS) +
+              assembled.currentTurnUserMessages -
+              1,
+          },
+        }
+      : {}),
     hookPipeline,
     startTime,
     runId,

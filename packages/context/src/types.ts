@@ -47,6 +47,12 @@ export interface AssembledContext {
   /** Conversation messages (history + current user message). */
   readonly messages: readonly LLMMessage[];
   /**
+   * User-role messages the current turn ends the base messages with: the
+   * player message, and the cue that closes this turn's story when there is
+   * one. A budget pass must keep all of them.
+   */
+  readonly currentTurnUserMessages: number;
+  /**
    * Set when the budget pass had to drop history to fit the slot's input
    * window. Callers surface it as a trace signal so a turn that silently lost
    * context is visible in /debug. Absent when no budget was configured.

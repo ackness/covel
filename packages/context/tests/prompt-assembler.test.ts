@@ -249,6 +249,8 @@ describe("prompt-assembler", () => {
       },
       { role: "system", content: "workflow" },
     ]);
+    // The player message and the cue: a budget pass keeps both.
+    expect(result.currentTurnUserMessages).toBe(2);
   });
 
   it("adds no cue when the execution has produced no story", () => {
@@ -259,6 +261,7 @@ describe("prompt-assembler", () => {
     expect(result.messages).toEqual([
       { role: "user", content: "I step forward" },
     ]);
+    expect(result.currentTurnUserMessages).toBe(1);
   });
 
   it("renders lore_entry contributions into segmented prompt world-info segments", () => {

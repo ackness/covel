@@ -98,7 +98,7 @@ export interface BudgetResult<M> {
 }
 
 const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
-const DEFAULT_PROTECT_LAST_USER_TURNS = 1;
+export const DEFAULT_PROTECT_LAST_USER_TURNS = 1;
 
 /** Normalized numeric limits shared by prompt assembly and runtime calls. */
 export interface ResolvedBudgetOptions {
