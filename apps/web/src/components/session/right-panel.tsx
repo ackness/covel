@@ -233,12 +233,25 @@ function SessionRightPanel({
   // selected. Keep that selection visible without moving the content pane.
   // In the bar it is centred, clear of the faded edges of the strip.
   useLayoutEffect(() => {
-    tabRailRef.current
-      ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
-      ?.scrollIntoView?.({
-        block: "nearest",
-        inline: barTabs ? "center" : "nearest",
-      });
+    const rail = tabRailRef.current;
+    if (!rail) return;
+    const revealSelection = () =>
+      rail
+        .querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+        ?.scrollIntoView?.({
+          block: "nearest",
+          inline: barTabs ? "center" : "nearest",
+        });
+    revealSelection();
+    // Fonts, the active label's weight and the overflow menu can resize the
+    // strip after selection without changing any React state above.
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(revealSelection);
+    observer?.observe(rail);
+    if (rail.firstElementChild) observer?.observe(rail.firstElementChild);
+    return () => observer?.disconnect();
   }, [activeTab, tabItems, storageData, barTabs]);
   const tabEdges = useOverflowEdges(
     tabRailRef,

@@ -4,7 +4,7 @@
  */
 export type Appearance = string;
 export type ColorScheme = "light" | "dark";
-export const DEFAULT_APPEARANCE = "panel";
+export const DEFAULT_APPEARANCE = "stage";
 export const DEFAULT_COLOR_SCHEME: ColorScheme = "dark";
 
 /**

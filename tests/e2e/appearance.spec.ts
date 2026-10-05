@@ -13,6 +13,32 @@ async function openAppearance(page: Page) {
   return preview;
 }
 
+test("a new profile opens in Stage and a saved appearance survives reload", async ({
+  page,
+}) => {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": ONBOARDING_VERSION,
+    "ui.locale": "en-US",
+    "ui.appearance": undefined,
+  });
+  await page.goto("/session");
+  const root = page.locator("html");
+  await expect(root).toHaveAttribute("data-theme", "stage");
+  await expect(root).toHaveAttribute("data-layout", "stage");
+  await expect(root).toHaveAttribute("data-world-list", "showcase");
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", "stage");
+  await openAppearance(page);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Panel/ })
+    .click();
+  await expect(root).toHaveAttribute("data-theme", "panel");
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", "panel");
+  await expect(root).toHaveAttribute("data-layout", "panel");
+});
+
 const themes = [
   { theme: "paper", scheme: "dark", size: "16px", lineHeight: "28.48px" },
   { theme: "paper", scheme: "light", size: "16px", lineHeight: "28.48px" },

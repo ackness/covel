@@ -9,10 +9,19 @@ async function worldLibrary(page: Page) {
   });
 }
 
-test("concurrent first visits share samples and deleting them survives both tabs reloading", async ({
+test("concurrent first visits share the catalog and deleting them survives both tabs reloading", async ({
   page,
   context,
 }) => {
+  const catalog = ["harbor", "academy", "relay"].map((id) => ({
+    id: `initialization-${id}`,
+    name: `Catalog ${id}`,
+    description: "Synthetic initialization fixture",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }));
+  await context.route("**/api/worlds", (route) =>
+    route.fulfill({ json: { items: catalog } }),
+  );
   const second = await context.newPage();
   await seedAppSettings(page);
   await seedAppSettings(second);
@@ -23,7 +32,9 @@ test("concurrent first visits share samples and deleting them survives both tabs
     worldLibrary(page),
     worldLibrary(second),
   ]);
-  expect(firstWorlds).toHaveLength(3);
+  expect(firstWorlds.map((world) => world.id).sort()).toEqual(
+    catalog.map((world) => world.id).sort(),
+  );
   expect(secondWorlds.map((world) => world.id).sort()).toEqual(
     firstWorlds.map((world) => world.id).sort(),
   );

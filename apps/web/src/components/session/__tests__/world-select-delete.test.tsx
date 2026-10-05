@@ -1,8 +1,23 @@
+import { getSettings, initSettings } from "@/settings/store.js";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  beforeAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { getDataService } from "@/services/data-service.js";
 import type { WorldRecord } from "@/services/api.js";
 import { WorldSelectScreen } from "../world-select-screen.js";
+
+// These assertions exercise the card list, independently of the startup style.
+beforeAll(async () => {
+  await initSettings();
+  await getSettings().set("ui.appearance", "panel");
+});
 
 const dataService = vi.hoisted(() => ({ deleteWorld: vi.fn() }));
 vi.mock("@/services/data-service.js", async (importOriginal) => ({

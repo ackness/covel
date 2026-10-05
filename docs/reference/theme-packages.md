@@ -35,7 +35,7 @@
 
 其中：
 
-- `ui.appearance` 持久化主题包 ID，并应用为 `data-theme`；默认值是 `panel`
+- `ui.appearance` 持久化主题包 ID，并应用为 `data-theme`；默认值是 `stage`（舞台）；已保存的主题选择保持不变
 - 主题包的 `layout` 解析后写入 `data-layout` 及各选项属性（见 §3.1）；没有单独的布局设置项，布局随主题包切换
 - `ui.scheme` 持久化颜色模式，并应用为 `data-scheme` 与 Tailwind 兼容的 `.dark`
 - 主题包的 `schemes` 决定可用颜色模式；只支持单一模式的主题会自动把 `ui.scheme` 对齐到可用值
