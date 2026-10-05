@@ -4,6 +4,7 @@
 
 import type { ZodType } from "zod";
 import { ZodError } from "zod";
+import { parseJsonText } from "./json-text.js";
 import type {
   ToolDefinitionInput,
   ToolExecutionContext,
@@ -65,36 +66,6 @@ function jsonTextProblem(
     ? ` near \`${text.slice(Math.max(0, position - 40), position + 20)}\``
     : "";
   return `Expected ${structure}, but received text that is not valid JSON: ${reason.slice(0, 160)}${near}. ${send}`;
-}
-
-/** How many closing brackets after a complete JSON value are dropped. */
-const EXTRA_CLOSERS = 4;
-
-/**
- * Parse JSON text that may end with closing brackets it does not need.
- *
- * A model that writes an array as text often closes the arguments object
- * inside the text as well: `[{"id":1}]}`. In real-model runs this was more
- * than half of the JSON text that did not parse. The value before the extra
- * brackets is complete, so they are dropped: nothing inside the value
- * changes. Text that is broken anywhere else still fails.
- */
-function parseJsonText(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    let rest = text.trimEnd();
-    for (let dropped = 0; dropped < EXTRA_CLOSERS; dropped += 1) {
-      if (!/[\]}]$/.test(rest)) break;
-      rest = rest.slice(0, -1).trimEnd();
-      try {
-        return JSON.parse(rest);
-      } catch {
-        // One bracket fewer on the next pass.
-      }
-    }
-    throw error;
-  }
 }
 
 /**

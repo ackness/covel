@@ -31,6 +31,44 @@ import {
   wordId,
 } from "@covel/plugin-handlers-utils";
 
+// World IR, the extractor's input, types its entities with these words, and
+// a model copies them onto its nodes. A `character` is this graph's
+// `individual`. The other four are not people, groups, or factions, so they
+// are no nodes of this graph, and an edge to one of them is skipped as an
+// edge to any unknown node is. Rejecting the whole call for them cost another
+// model call, and one model then sent a door again as a `group`.
+const NODE_TYPE_OF_ENTITY = { character: "individual" };
+const ENTITIES_THAT_ARE_NO_NODES = new Set([
+  "location",
+  "item",
+  "skill",
+  "concept",
+]);
+
+function withGraphNodesOnly(value) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    !Array.isArray(value.nodes)
+  )
+    return value;
+  const nodes = value.nodes
+    .filter(
+      (node) =>
+        node === null ||
+        typeof node !== "object" ||
+        !ENTITIES_THAT_ARE_NO_NODES.has(node.type),
+    )
+    .map((node) =>
+      node !== null &&
+      typeof node === "object" &&
+      Object.hasOwn(NODE_TYPE_OF_ENTITY, node.type)
+        ? { ...node, type: NODE_TYPE_OF_ENTITY[node.type] }
+        : node,
+    );
+  return { ...value, nodes };
+}
+
 export default function ({ tool, z, shortIdBatch }) {
   const nodeInputSchema = z.object({
     name: z
@@ -101,26 +139,30 @@ export default function ({ tool, z, shortIdBatch }) {
     name: "upsert-npc-graph",
     description:
       "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name. Edges are versioned by (sourceName, targetName, relation): resubmit a relation whose strength or fact changed and the tool supersedes the previous version; resubmitting an identical one is a no-op. No need to list existing data first — the tool merges and updates internally.",
-    parameters: z
-      .object({
-        nodes: z
-          .array(nodeInputSchema)
-          .max(8)
-          .optional()
-          .describe("Nodes to create or update this turn, max 8"),
-        edges: z
-          .array(edgeInputSchema)
-          .max(12)
-          .optional()
-          .describe("Relationship edges to create this turn, max 12"),
-      })
-      .refine(
-        (value) => (value.nodes?.length ?? 0) + (value.edges?.length ?? 0) > 0,
-        {
-          message:
-            "submit at least one node or edge; use runtime-done when nothing changed",
-        },
-      ),
+    parameters: z.preprocess(
+      withGraphNodesOnly,
+      z
+        .object({
+          nodes: z
+            .array(nodeInputSchema)
+            .max(8)
+            .optional()
+            .describe("Nodes to create or update this turn, max 8"),
+          edges: z
+            .array(edgeInputSchema)
+            .max(12)
+            .optional()
+            .describe("Relationship edges to create this turn, max 12"),
+        })
+        .refine(
+          (value) =>
+            (value.nodes?.length ?? 0) + (value.edges?.length ?? 0) > 0,
+          {
+            message:
+              "submit at least one node or edge; use runtime-done when nothing changed",
+          },
+        ),
+    ),
     execute: async (params, context) => {
       const now = new Date().toISOString();
       const currentTurnId = context.turnId ?? "unknown";

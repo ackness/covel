@@ -2,6 +2,7 @@ import { z } from "zod";
 import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
 import { characterHandles } from "./character-handles.js";
 import { eventProfileIssues } from "./event-profiles.js";
+import { vocabularyEntries } from "./vocabulary.js";
 
 const MAX_ENTITIES = 32;
 // Keys of the extraction input (see server/extraction-context.js); they are
@@ -182,6 +183,68 @@ function withKnownCharacters(facts, handles) {
     : facts;
 }
 
+/**
+ * A reference sometimes holds the name of an entity of this output where its
+ * id goes. When one entity has that name and no entity has it as an id, the
+ * reference means that entity.
+ */
+function withIdsForEntityNames(facts) {
+  const ids = new Set(facts.entities.map((entity) => entity.id));
+  const idByName = new Map();
+  for (const entity of facts.entities) {
+    if (!entity.name) continue;
+    // A name that two entities share says nothing about which one is meant.
+    idByName.set(entity.name, idByName.has(entity.name) ? null : entity.id);
+  }
+  const id = (reference) =>
+    ids.has(reference) ? reference : (idByName.get(reference) ?? reference);
+  const all = (references) => references && references.map(id);
+  return {
+    ...facts,
+    relations: facts.relations.map((relation) => ({
+      ...relation,
+      from: id(relation.from),
+      to: id(relation.to),
+    })),
+    events: facts.events.map((event) =>
+      event.participantIds
+        ? { ...event, participantIds: all(event.participantIds) }
+        : event,
+    ),
+    statements: facts.statements.map((statement) =>
+      statement.subjectIds
+        ? { ...statement, subjectIds: all(statement.subjectIds) }
+        : statement,
+    ),
+  };
+}
+
+/**
+ * `vocabulary` names what the session already tracks, and the prompt asks
+ * the model to use those names. It often writes one as an id and does not
+ * list the thing under `entities`: the thing is known, as a session
+ * character is. In real-model runs this was most of the undeclared
+ * references that were left. Declare such a thing from the vocabulary, with
+ * the type the vocabulary gives it; any other undeclared id still fails.
+ */
+function withTrackedThings(facts, vocabulary) {
+  const typeByName = new Map(
+    vocabulary.map((entry) => [entry.name, entry.type]),
+  );
+  const declared = new Set(facts.entities.map((entity) => entity.id));
+  const added = [];
+  for (const id of referencedIds(facts)) {
+    const type = typeByName.get(id);
+    if (declared.has(id) || typeof type !== "string" || !type) continue;
+    declared.add(id);
+    added.push({ id, type, name: id });
+  }
+  const room = Math.max(0, MAX_ENTITIES - facts.entities.length);
+  return added.length
+    ? { ...facts, entities: [...facts.entities, ...added.slice(0, room)] }
+    : facts;
+}
+
 export default function ({ tool }) {
   const facts = worldIRV1Schema
     .extend({
@@ -218,9 +281,12 @@ export default function ({ tool }) {
     parameters,
     execute: async (facts, context) => {
       const handles = characterHandles(context?.world?.characters ?? []);
-      const completed = withKnownCharacters(
-        withCharacterIds(facts, handles),
-        handles,
+      const completed = withTrackedThings(
+        withKnownCharacters(
+          withCharacterIds(withIdsForEntityNames(facts), handles),
+          handles,
+        ),
+        vocabularyEntries(context?.inputSlots?.vocabulary),
       );
       const validation = validateWorldIRV1(completed);
       if (validation.valid) return completed;

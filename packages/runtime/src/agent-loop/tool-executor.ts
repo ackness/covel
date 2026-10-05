@@ -15,6 +15,7 @@ import {
   getEmittedEvents,
   getPendingProposals,
   getToolContent,
+  parseJsonText,
   type EmittedEvent,
   type ToolModule,
 } from "@covel/tools";
@@ -382,10 +383,11 @@ export function createToolExecutor(
         }
       }
 
-      // 3. Parse arguments
+      // 3. Parse arguments. The slips `parseJsonText` settles do not fail
+      // the call; any other fault goes back to the model.
       let params: unknown;
       try {
-        params = JSON.parse(call.arguments);
+        params = parseJsonText(call.arguments);
       } catch {
         const errorResult = toolError(
           "INVALID_ARGS",
@@ -604,9 +606,10 @@ export function createToolExecutor(
   };
 }
 
+/** The arguments the approval check sees: the same parse the call then runs on. */
 function tryParseJson(json: string): Record<string, unknown> {
   try {
-    return JSON.parse(json) as Record<string, unknown>;
+    return parseJsonText(json) as Record<string, unknown>;
   } catch {
     return {};
   }

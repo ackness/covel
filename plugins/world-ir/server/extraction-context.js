@@ -1,4 +1,5 @@
 import { characterHandles } from "../tools/character-handles.js";
+import { vocabularyEntries } from "../tools/vocabulary.js";
 
 /**
  * Fact extraction consumes a typed current-turn input. Full history and memory
@@ -49,12 +50,4 @@ export default async function extractionContext(_ctx, payload) {
       ],
     },
   };
-}
-
-/** Names published by state plugins through `world-ir.vocabulary@1`. */
-function vocabularyEntries(slot) {
-  if (slot?.cardinality !== "all" || !Array.isArray(slot.items)) return [];
-  return slot.items.flatMap((item) =>
-    Array.isArray(item?.value?.entries) ? item.value.entries : [],
-  );
 }

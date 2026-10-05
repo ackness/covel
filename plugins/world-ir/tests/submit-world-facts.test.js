@@ -210,6 +210,126 @@ describe("submit-world-facts", () => {
     );
   });
 
+  it("reads the name of an entity of the output as its id", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      entities: [
+        ...VALID_FACTS.entities,
+        { id: "reed-voice", type: "concept", name: "Voice in the Reeds" },
+        { id: "east-gate", type: "location", name: "Gate" },
+        { id: "west-gate", type: "location", name: "Gate" },
+      ],
+      relations: [
+        {
+          id: "hears",
+          type: "HEARS",
+          from: "player-ren",
+          to: "Voice in the Reeds",
+        },
+      ],
+      statements: [
+        {
+          id: "voice-counts",
+          type: "discovery",
+          content: "The voice counts names.",
+          subjectIds: ["Voice in the Reeds", "player-ren"],
+        },
+      ],
+    });
+
+    const result = await submitWorldFacts.execute(facts, {
+      world: { characters: [] },
+    });
+    expect(result.relations[0].to).toBe("reed-voice");
+    expect(result.statements[0].subjectIds).toEqual([
+      "reed-voice",
+      "player-ren",
+    ]);
+
+    // Two entities share the name: it does not say which one is meant.
+    await expect(
+      submitWorldFacts.execute(
+        {
+          ...facts,
+          statements: [
+            {
+              id: "gate-open",
+              type: "discovery",
+              content: "The gate stands open.",
+              subjectIds: ["Gate"],
+            },
+          ],
+        },
+        { world: { characters: [] } },
+      ),
+    ).rejects.toThrow('entity reference "Gate" does not exist in entities');
+  });
+
+  it("declares a referenced thing that the session vocabulary tracks", async () => {
+    const vocabulary = {
+      cardinality: "all",
+      items: [
+        { value: { entries: [{ type: "item", name: "Brass Gear" }] } },
+        {
+          value: {
+            entries: [
+              { type: "quest", name: "Find the Keeper", details: ["Go up"] },
+            ],
+          },
+        },
+      ],
+    };
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      events: [
+        {
+          id: "shows-gear",
+          type: "interaction",
+          participantIds: ["player-ren", "Brass Gear"],
+        },
+      ],
+      statements: [
+        {
+          id: "keeper-clue",
+          type: "discovery",
+          content: "The gear came from the keeper's door.",
+          subjectIds: ["Brass Gear", "Find the Keeper"],
+        },
+      ],
+    });
+
+    const result = await submitWorldFacts.execute(facts, {
+      world: { characters: [] },
+      inputSlots: { vocabulary },
+    });
+    expect(result.entities.slice(VALID_FACTS.entities.length)).toEqual([
+      { id: "Brass Gear", type: "item", name: "Brass Gear" },
+      { id: "Find the Keeper", type: "quest", name: "Find the Keeper" },
+    ]);
+
+    // Without the vocabulary the same references are unknown.
+    await expect(
+      submitWorldFacts.execute(facts, { world: { characters: [] } }),
+    ).rejects.toThrow('entity reference "Brass Gear" does not exist');
+    // A name the vocabulary does not hold still fails.
+    await expect(
+      submitWorldFacts.execute(
+        {
+          ...facts,
+          relations: [
+            {
+              id: "located-in",
+              type: "LOCATED_IN",
+              from: "Brass Gear",
+              to: "Barrow Top",
+            },
+          ],
+        },
+        { world: { characters: [] }, inputSlots: { vocabulary } },
+      ),
+    ).rejects.toThrow('entity reference "Barrow Top" does not exist');
+  });
+
   it("drops extraction input the model copied into its arguments", async () => {
     const parsed = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,

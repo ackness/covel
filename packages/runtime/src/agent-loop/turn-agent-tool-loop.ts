@@ -19,6 +19,7 @@ import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   isSuspendSentinel,
   isRuntimeDoneSentinel,
+  parseJsonText,
   type EmittedEvent,
 } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
@@ -635,7 +636,7 @@ async function runAgentToolLoopWithinBudget(
           // Build ToolCallRecord for RuntimeResult.toolCalls
           let parsedInput: Record<string, unknown> = {};
           try {
-            parsedInput = JSON.parse(effectiveTc.arguments) as Record<
+            parsedInput = parseJsonText(effectiveTc.arguments) as Record<
               string,
               unknown
             >;

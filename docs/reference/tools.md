@@ -134,13 +134,7 @@ Entry 工具应使用框架注入的 `covel.toolkit.tool` 与 `covel.toolkit.z`�
 Agent 调用 `echo-value` 时，成功内容是 `{ "ok": true, "value": "..." }`。
 参数先由 `tool()` 生成 JSON Schema，再由同一 Zod schema 在执行时校验；缺少
 `value`、空字符串或超过 80 个字符会得到 `VALIDATION_ERROR`，而不是进入
-handler。模型有时把数组或对象参数写成一段 JSON 文本；schema 在该位置要求
-数组或对象时，`tool()` 先解析这段文本再校验一次，省掉一轮模型重交，解析后
-的内容仍须通过同一 schema。有一种情况会被接受：一个完整的 JSON 值后面多出
-几个收尾括号（`[{"id":1}]}`，模型把外层参数对象也在文本里收了尾）。括号前
-的值是完整的，去掉多余括号不改变其中任何内容。除此之外，文本本身不是合法
-JSON 时不做猜测式修补：`VALIDATION_ERROR` 会写明解析失败的原因和位置，并要求
-模型直接传数组或对象本身。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
+handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
 `tools.builtin`）；它返回成功内容 `{ success, namespace, key }`，并把写入
 作为 `plugin.data` proposal 交给回合末 commit chain。
 
@@ -148,6 +142,36 @@ JSON 时不做猜测式修补：`VALIDATION_ERROR` 会写明解析失败的原�
 插件动作，应在 entry 用 `covel.registerRpc(action, handler)` 注册，并调用
 `POST /api/sessions/:id/plugin-rpc`；RPC 不是 LLM tool，也不应塞进
 `tools.plugin`。
+
+#### 模型写错的参数 JSON
+
+模型写出的参数 JSON 有三种反复出现、含义唯一的笔误。框架在解析处直接改正，
+省掉一轮模型重交；改正后的内容仍须通过工具的 schema。
+
+- **末尾多出收尾括号**：一个完整的 JSON 值后面多出至多四个 `]` / `}`
+  （`{"updates":[{"id":1}]}]}`）。括号前的值是完整的，去掉多余括号不改变其中
+  任何内容。
+- **字符串值里没有转义的引号**：模型在值里引用一个词或一句话时直接写了英文
+  双引号（`"note": "铭文把它叫作"锁"而不是灯。"`）。结束 JSON 字符串的引号后面
+  只能是 `,`、`}`、`]`、`:` 或文本结尾；后面跟着其他文字的引号属于值本身，按
+  `\"` 处理。只有引号成对出现时才这样处理，键名从不改动：引号多一个或少一个
+  （`{"{"id": …`、`"name": "Mira"", …`）是结构错误，不属于这一类。
+- **数组元素没有收尾就开始了下一个**：元素的最后一个字段是对象时，模型只收了
+  这个字段的括号（`[{"id":"a","attributes":{"kind":"lamp"}, {"id":"b"}]`）。对象
+  内部逗号后面只能是键名，出现 `{` 说明它属于外层数组的下一个元素，缺的 `}`
+  补在逗号前。同一位置的另一种读法是漏写了键名（`"summary":"…", {"role":"…"}}]`）；
+  两种读法里只有一种的括号数目对得上，所以补完后必须原样通过解析才接受，
+  按另一种读法写出的文本仍然报错。
+
+这三条对整段调用参数和字段内的 JSON 文本同样适用。其他错误不做猜测式修补，
+包括数组没有收尾、输出被截断、两个字符串之间缺逗号、值里的引号后面紧跟 `,`
+或 `:`：整段参数仍不是合法 JSON 时，调用以 `INVALID_ARGS` 失败，模型需要重新
+给出参数。
+
+模型有时还会把数组或对象参数写成一段 JSON 文本。schema 在该位置要求数组或
+对象时，`tool()` 先按上面的规则解析这段文本再校验一次，解析后的内容仍须通过
+同一 schema。文本解析不了时，`VALIDATION_ERROR` 会写明解析失败的原因和位置，
+并要求模型直接传数组或对象本身。
 
 ### 失败定位与验证
 
@@ -798,7 +822,7 @@ Attributes:
 | `summary`                                          | ✓    | 本轮事实摘要                                                      |
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
-校验前先修正几类机械性失误，不再为此让模型重交：丢弃误抄进参数的抽取输入（`narrative` / `characters` / `vocabulary`），把写在事实顶层的额外细节移入该项 `attributes`。输出 token 数决定这一步的耗时，所以抽取输入中的会话角色不给真实 id（UUID 或带会话前缀的长串），而是由姓名生成的单词短名（如 `tomas-reed`；同名角色按 id 顺序加 `-2`），工具返回前把短名还原为真实 id（包括 `inventory_change` 的 `holder`）；提示词要求模型直接引用这些角色、不在 `entities` 中重复登记；关系、事件参与者和陈述主体引用的已知角色由工具按会话角色名册补登记（`type: character` 与 `name`）；引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
+校验前先修正几类机械性失误，不再为此让模型重交：丢弃误抄进参数的抽取输入（`narrative` / `characters` / `vocabulary`），把写在事实顶层的额外细节移入该项 `attributes`。输出 token 数决定这一步的耗时，所以抽取输入中的会话角色不给真实 id（UUID 或带会话前缀的长串），而是由姓名生成的单词短名（如 `tomas-reed`；同名角色按 id 顺序加 `-2`），工具返回前把短名还原为真实 id（包括 `inventory_change` 的 `holder`）；提示词要求模型直接引用这些角色、不在 `entities` 中重复登记；关系、事件参与者和陈述主体引用的已知角色由工具按会话角色名册补登记（`type: character` 与 `name`）。另有两种引用也由工具处理：引用处写的是本次输出里某个实体的名称而不是 id，且只有一个实体叫这个名称时，改为该实体的 id；引用的是 `world-ir.vocabulary@1` 词表里的名称（会话已在追踪的物品或任务）而没有登记时，按词表给出的类型补登记（`{ id: 名称, type: 词表类型, name: 名称 }`）。引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
 
 两类事件另有固定字段，由工具一并校验（其余事件的 `attributes` 保持自由）。`inventory` 与 `core-quest` 的 function runtime 只读取这些字段，不再调用模型：
 
