@@ -71,7 +71,7 @@ messages
 - 预算裁剪把紧挨在受保护回合之前的 system 消息一并保留，所以它不会被丢掉。压缩阈值的估算把它和 system prompt 一起计入。`AssembledContext.turnContext` 是它的内容，没有时为空字符串。
 - 标签名不变。正文继续写 `runtime-inputs.<binding>.value`。
 
-仍会让请求前缀提前变化的情况：正文里内插的模板变量取值变了（如 `{{ characters.npcs }}`、`{{ player.character }}`）、按关键词触发的世界书条目变了、要求 `pre-history` 的 turn 扩展段变了、历史被压缩。声明了 `agent.history.maxTurns` 的 runtime 的历史窗口每回合滑动，本来就无法跨回合命中历史。
+仍会让请求前缀提前变化的情况：正文里内插的模板变量取值变了（如 `{{ characters.npcs }}`、`{{ player.character }}`；替代做法见[第 4 节](#4-template-变量与数据边界)）、按关键词触发的世界书条目变了、要求 `pre-history` 的 turn 扩展段变了、历史被压缩。声明了 `agent.history.maxTurns` 的 runtime 的历史窗口每回合滑动，本来就无法跨回合命中历史。
 
 扩展段先按 `audience` 过滤，再依次按 `volatility`（stable、session、turn）、`order`、provider plugin ID 和段 ID 排序。`audience: self` 覆盖提供插件的全部 runtime；`story` 匹配故事输出；`{ contract: "narrative-engine@1" }` 匹配 runtime 的输出契约。
 
@@ -129,6 +129,20 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 - `characters.npcs`：全部非玩家角色的档案，每行 `姓名 [类型] | description | fields`（description 与 fields 各截至 400 字符，合计约 8000 字符；超出的角色只列姓名）。不含 id，模型按姓名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
 - `session.id`、`session.turnNumber`。
 - `inputs.<pluginId>.<runtimeId>.<field>`。
+
+`player.character`、`characters.npcs` 的取值随剧情变化。写在正文里，system prompt 就跟着变：记录伤势或状态的会话里每回合都变，前缀缓存停在那里。希望 system prompt 逐回合不变的 runtime 在正文里只写块名，由插件 entry 提供回合级提示段，内容进入[回合上下文](#回合上下文)：
+
+```js
+import { characterSheetSegments } from "@covel/plugin-handlers-utils";
+
+covel.provideExtension("prompt.segment@1", "character-sheets", {
+  handler: (_input, ctx) =>
+    characterSheetSegments(ctx.world.characters, { profiles: true }),
+});
+```
+
+`<player-character>` 是玩家角色卡（与 `player.character` 相同的 JSON），`profiles: true` 时再加 `<character-profiles>`（与 `characters.npcs` 相同的行格式）。内置的 `narrator` 和 `chat-mode-narrator` 这样做。
+
 - `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。
 - `userSettings.*`，由根 `contributes.settings` 默认值和玩家配置合成。
 

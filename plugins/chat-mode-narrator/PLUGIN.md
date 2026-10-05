@@ -38,6 +38,9 @@ contracts:
     schema: ./schemas/narrative-engine.schema.json
 entry: ./server/index.js
 contributes:
+  extensions:
+    - point: prompt.segment@1
+      id: character-sheets
   settings:
     - key: narrativePerson
       type: select
@@ -203,7 +206,7 @@ Tags: {{ world.tags }}
 
 ## Player Character
 
-{{ player.character }}
+The `<player-character>` block holds the player character's current sheet.
 
 <!-- runtime-inputs.active-cast.value and runtime-inputs.npc-relationships.value are appended automatically in segment 5
      by input.inject (frontmatter); the body does not re-interpolate them, to avoid
