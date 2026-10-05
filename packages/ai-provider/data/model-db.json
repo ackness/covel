@@ -1,7 +1,7 @@
 {
-  "updatedAt": "2026-10-03T02:47:25.000Z",
-  "source": "https://raw.githubusercontent.com/BerriAI/litellm/5dbe4f95e82a9992d9700e241b03f3159894e678/model_prices_and_context_window.json",
-  "count": 4459,
+  "updatedAt": "2026-10-05T00:34:30.000Z",
+  "source": "https://raw.githubusercontent.com/BerriAI/litellm/be4481779ee8a73579af82a3b5394f62f4e4b057/model_prices_and_context_window.json",
+  "count": 4472,
   "models": {
     "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0": {
       "input": [
@@ -8394,8 +8394,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "contextWindow": 8192,
+      "maxOutputTokens": 8192,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.13
@@ -8410,8 +8410,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "contextWindow": 8192,
+      "maxOutputTokens": 8192,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.02
@@ -8426,8 +8426,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "contextWindow": 8192,
+      "maxOutputTokens": 8192,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.1
@@ -9050,8 +9050,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
-      "maxOutputTokens": 0,
+      "contextWindow": 32000,
+      "maxOutputTokens": 32000,
       "mode": "image_generation",
       "litellmProvider": "azure_ai"
     },
@@ -9391,7 +9391,7 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
+      "contextWindow": 32000,
       "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai",
@@ -9407,7 +9407,7 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
+      "contextWindow": 32000,
       "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai",
@@ -9423,7 +9423,7 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
+      "contextWindow": 32000,
       "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai",
@@ -14015,6 +14015,70 @@
       "inputPerMToken": 5,
       "outputPerMToken": 25
     },
+    "cloudflare/clef": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 65536,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "cloudflare",
+      "inputPerMToken": 0.24
+    },
+    "cloudflare/clef-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 65536,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "cloudflare",
+      "inputPerMToken": 0.09
+    },
+    "cloudflare/@cf/cloudflare/clef": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 65536,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "cloudflare",
+      "inputPerMToken": 0.24
+    },
+    "cloudflare/@cf/cloudflare/clef-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 65536,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "cloudflare",
+      "inputPerMToken": 0.09
+    },
     "cloudflare/@cf/meta/llama-2-7b-chat-fp16": {
       "input": [
         "text"
@@ -14702,6 +14766,38 @@
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 0.12
+    },
+    "cohere/embed-v5.0-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "embedding"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 128000,
+      "mode": "embedding",
+      "litellmProvider": "cohere",
+      "inputPerMToken": 0.12
+    },
+    "cohere/embed-v5.0-fast": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "embedding"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 128000,
+      "mode": "embedding",
+      "litellmProvider": "cohere",
+      "inputPerMToken": 0.08
     },
     "cohere/parse-v5.0": {
       "input": [
@@ -41431,8 +41527,8 @@
       "maxOutputTokens": 147456,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.29,
-      "outputPerMToken": 1.14
+      "inputPerMToken": 0.25,
+      "outputPerMToken": 1
     },
     "openrouter/deepseek/deepseek-chat-v3.1": {
       "input": [
@@ -41578,8 +41674,8 @@
       "maxOutputTokens": 943718,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.3,
-      "outputPerMToken": 1.2
+      "inputPerMToken": 0.003,
+      "outputPerMToken": 2.4
     },
     "openrouter/deepseek/deepseek-v4-pro-0813": {
       "input": [
@@ -41596,11 +41692,11 @@
         "prompt_caching"
       ],
       "contextWindow": 1048576,
-      "maxOutputTokens": 393216,
+      "maxOutputTokens": 943718,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 1.32,
-      "outputPerMToken": 3.96
+      "inputPerMToken": 0.85,
+      "outputPerMToken": 5
     },
     "openrouter/fireworks/ember-1": {
       "input": [
@@ -43952,6 +44048,22 @@
       "mode": "chat",
       "litellmProvider": "perplexity",
       "outputPerMToken": 0.28
+    },
+    "perplexity/pplx-decider-v1-27b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "perplexity",
+      "inputPerMToken": 0.04
     },
     "perplexity/sonar": {
       "input": [
@@ -64948,8 +65060,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
-      "maxOutputTokens": 0,
+      "contextWindow": 98304,
+      "maxOutputTokens": 32768,
       "mode": "audio_transcription",
       "litellmProvider": "gemini",
       "inputPerMToken": 2,
@@ -64966,8 +65078,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
-      "maxOutputTokens": 0,
+      "contextWindow": 131072,
+      "maxOutputTokens": 65536,
       "mode": "audio_transcription",
       "litellmProvider": "gemini",
       "inputPerMToken": 3.5,
@@ -68868,6 +68980,23 @@
       "litellmProvider": "xai",
       "perImage": 0.01
     },
+    "xai/grok-imagine-video-1.5-lite": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "video"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "video_generation",
+      "litellmProvider": "xai",
+      "perImage": 0.01
+    },
     "xai/grok-imagine-video-1.5-2026-05-30": {
       "input": [
         "text",
@@ -69879,7 +70008,7 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
+      "contextWindow": 32000,
       "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai",
@@ -69895,7 +70024,7 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
+      "contextWindow": 32000,
       "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai",
@@ -72857,8 +72986,8 @@
       "maxOutputTokens": 131072,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.42,
-      "outputPerMToken": 3
+      "inputPerMToken": 0.425,
+      "outputPerMToken": 2.55
     },
     "openrouter/qwen/qwen3.8-2.4t-a95b": {
       "input": [
@@ -72985,7 +73114,7 @@
       "maxOutputTokens": 943718,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.0051,
+      "inputPerMToken": 0.0152,
       "outputPerMToken": 1.28
     },
     "openrouter/qwen/qwen3.7-flash": {
@@ -73068,8 +73197,8 @@
       "maxOutputTokens": 943718,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 2.7,
-      "outputPerMToken": 13.5
+      "inputPerMToken": 0.72,
+      "outputPerMToken": 14
     },
     "openrouter/poolside/laguna-xs-2.1": {
       "input": [
@@ -73192,11 +73321,11 @@
         "prompt_caching"
       ],
       "contextWindow": 1048576,
-      "maxOutputTokens": 943718,
+      "maxOutputTokens": 131072,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.41,
-      "outputPerMToken": 3.99
+      "inputPerMToken": 0.104,
+      "outputPerMToken": 8
     },
     "openrouter/z-ai/glm-5.2:free": {
       "input": [
@@ -73570,11 +73699,11 @@
         "prompt_caching"
       ],
       "contextWindow": 1048576,
-      "maxOutputTokens": 384000,
+      "maxOutputTokens": 943718,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.028,
-      "outputPerMToken": 0.056
+      "inputPerMToken": 0.0224,
+      "outputPerMToken": 1.28
     },
     "openrouter/moonshotai/kimi-k2.6": {
       "input": [
@@ -73596,8 +73725,8 @@
       "maxOutputTokens": 235929,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.4341,
-      "outputPerMToken": 1.83
+      "inputPerMToken": 0.95,
+      "outputPerMToken": 4
     },
     "openrouter/google/gemma-4-26b-a4b-it": {
       "input": [
@@ -74662,11 +74791,11 @@
         "streaming"
       ],
       "contextWindow": 262144,
-      "maxOutputTokens": 235929,
+      "maxOutputTokens": 32000,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.1,
-      "outputPerMToken": 0.3
+      "inputPerMToken": 0.0481,
+      "outputPerMToken": 0.193
     },
     "openrouter/z-ai/glm-4.5": {
       "input": [
@@ -75251,8 +75380,8 @@
       "maxOutputTokens": 16384,
       "mode": "chat",
       "litellmProvider": "openrouter",
-      "inputPerMToken": 0.1,
-      "outputPerMToken": 0.32
+      "inputPerMToken": 0.22,
+      "outputPerMToken": 0.5
     },
     "openrouter/openai/gpt-4o-2024-11-20": {
       "input": [
@@ -76578,7 +76707,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.65,
       "outputPerMToken": 6.6
@@ -76697,7 +76826,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.38,
       "outputPerMToken": 11
@@ -76748,7 +76877,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 16.5,
       "outputPerMToken": 132
@@ -76765,7 +76894,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.38,
       "outputPerMToken": 11
@@ -76799,7 +76928,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.93,
       "outputPerMToken": 15.4
@@ -76816,7 +76945,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 23.1,
       "outputPerMToken": 184.8
@@ -76833,7 +76962,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.93,
       "outputPerMToken": 15.4
@@ -76884,7 +77013,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 33,
       "outputPerMToken": 198
@@ -77133,7 +77262,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.65,
       "outputPerMToken": 6.6
@@ -77252,7 +77381,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.38,
       "outputPerMToken": 11
@@ -77303,7 +77432,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 16.5,
       "outputPerMToken": 132
@@ -77320,7 +77449,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.38,
       "outputPerMToken": 11
@@ -77354,7 +77483,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.93,
       "outputPerMToken": 15.4
@@ -77371,7 +77500,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 23.1,
       "outputPerMToken": 184.8
@@ -77388,7 +77517,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 1.93,
       "outputPerMToken": 15.4
@@ -77439,7 +77568,7 @@
       ],
       "contextWindow": 0,
       "maxOutputTokens": 0,
-      "mode": "chat",
+      "mode": "responses",
       "litellmProvider": "azure",
       "inputPerMToken": 33,
       "outputPerMToken": 198
@@ -79357,6 +79486,21 @@
       "maxOutputTokens": 0,
       "mode": "evaluation",
       "litellmProvider": "laya"
+    },
+    "strands_decider/strands-decider-2B-hobson-v19": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "evaluation",
+      "litellmProvider": "strands_decider"
     },
     "typesafe/jev-1.13.0": {
       "input": [
@@ -82304,6 +82448,57 @@
       "litellmProvider": "openrouter",
       "inputPerMToken": 8,
       "outputPerMToken": 15
+    },
+    "openrouter/openai/gpt-image-2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "litellmProvider": "openrouter",
+      "inputPerMToken": 5
+    },
+    "openrouter/openai/gpt-image-2.5-flare": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "litellmProvider": "openrouter",
+      "inputPerMToken": 5
+    },
+    "openrouter/openai/gpt-image-2.5-sunburst": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "litellmProvider": "openrouter",
+      "inputPerMToken": 5
     },
     "openrouter/openai/gpt-5.4-mini:batch": {
       "input": [
@@ -86694,6 +86889,25 @@
       "maxOutputTokens": 32768,
       "mode": "chat",
       "litellmProvider": "openrouter"
+    },
+    "azure_ai/kimi-k2-thinking": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "mode": "chat",
+      "litellmProvider": "azure_ai",
+      "inputPerMToken": 0.6,
+      "outputPerMToken": 2.5
     }
   }
 }
