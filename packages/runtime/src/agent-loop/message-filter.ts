@@ -9,9 +9,9 @@
  *   - Post-turn extraction runtimes (character-tracker / codex / extractor /
  *     guide) would otherwise carry every other plugin's JSON output
  *     forward turn after turn — an unbounded, compounding token cost, since
- *     these agents already receive the current narrative via `<narrator-output>`
- *     and their own state via plugin-data injects, and never read another
- *     plugin's output from history.
+ *     these agents already receive the current narrative as the last story
+ *     message and through their inputs, and their own state via plugin-data
+ *     injects, and never read another plugin's output from history.
  * Extracted from `turn-agent-runtime.ts` so the runtime body stays focused on
  * orchestration.
  */

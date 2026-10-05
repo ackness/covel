@@ -284,8 +284,8 @@ describe("core plugin manifest contract", () => {
       const extractor = requireRuntime(manifests, id);
       expect(extractor.requireExplicitCompletion).toBe(true);
       expect(extractor.requireToolUse).not.toBe(true);
-      // Each ends on the player's message; a required tool call keeps the
-      // model from continuing the story, and runtime-done still settles a
+      // Each reads a conversation of story text; a required tool call keeps
+      // the model from continuing the story, and runtime-done still settles a
       // quiet turn.
       expect(extractor.llm?.toolChoice).toBe("required");
     }

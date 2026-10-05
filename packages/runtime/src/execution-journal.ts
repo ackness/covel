@@ -42,7 +42,8 @@ export function attachExecutionJournal<T extends object>(
   return carrier;
 }
 
-function journalOf(carrier: object): readonly TurnMessageRecord[] {
+/** Messages a turn or runtime result adds to the conversation at commit. */
+export function journalOf(carrier: object): readonly TurnMessageRecord[] {
   return (carrier as JournalCarrier)[EXECUTION_JOURNAL] ?? [];
 }
 

@@ -212,6 +212,55 @@ describe("prompt-assembler", () => {
     ]);
   });
 
+  it("places the execution's story after the player message, closed by a cue, before post-history segments", () => {
+    const result = buildSegmentedContext(
+      baselineParams({
+        manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
+        turnInput: makeTurnInput({ locale: "zh-CN" }),
+        messageHistory: [
+          { role: "user", content: "earlier action" },
+          { role: "assistant", content: "earlier story" },
+        ],
+        executionStory: [
+          { role: "assistant", content: "this turn's story", name: "narrator" },
+        ],
+        promptSegments: [
+          {
+            id: "workflow",
+            content: "workflow",
+            position: "post-history",
+            audience: "self",
+            volatility: "stable",
+            providerPluginId: "test-rt",
+          },
+        ],
+      }),
+    );
+
+    expect(result.messages).toEqual([
+      { role: "user", content: "earlier action" },
+      { role: "assistant", content: "earlier story" },
+      { role: "user", content: "I step forward" },
+      { role: "assistant", content: "this turn's story", name: "narrator" },
+      {
+        role: "user",
+        content:
+          "上面这段正文是本回合在玩家消息之后写出的，剧情现在停在它的结尾。请按系统指令完成本 runtime 的任务。",
+      },
+      { role: "system", content: "workflow" },
+    ]);
+  });
+
+  it("adds no cue when the execution has produced no story", () => {
+    const result = buildSegmentedContext(
+      baselineParams({ executionStory: [] }),
+    );
+
+    expect(result.messages).toEqual([
+      { role: "user", content: "I step forward" },
+    ]);
+  });
+
   it("renders lore_entry contributions into segmented prompt world-info segments", () => {
     const params = baselineParams({
       promptTemplate: "Plugin body.",

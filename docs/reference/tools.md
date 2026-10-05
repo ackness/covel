@@ -1070,7 +1070,7 @@ export default function ({ tool, z, shortId }) {
 **执行期读取与取消**：生产宿主和 `test-runtime` 在每次工具调用中注入 `context.store`，接口复用 `FunctionStoreView`：
 
 - `getPluginData(namespace, key)` / `listPluginData(namespace)` 绑定当前 session/plugin，按顺序合并同次执行中已有的 set、batch 和 delete 提案。
-- `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` 只读取当前会话；有 limit 时读取最近消息。
+- `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` 只读取当前会话；有 limit 时读取最近消息。消息只含已提交的回合，正在执行的回合要到提交后才出现。
 - 读取值、输入 slots、已有提案和事件主题是独立副本。修改它们不会修改数据库或调用方缓冲。返回的内容、提案和事件也会在异步记录前复制。
 - 读取句柄在工具返回、抛错或调用取消后失效；取消期间已经开始的读取不会再向工具交付结果。工具应等待自身读取完成再返回；宿主仍会等待已发起读取结束后才完成该工具调用。
 - `context.signal` 传递调用方的取消信号；外部请求应使用该信号。取消后的迟到结果不会被作为成功提案返回。框架不能强制终止同进程 JavaScript，也不能撤销已发出的外部副作用。

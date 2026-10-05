@@ -130,6 +130,13 @@ export interface ContextBuildParams {
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   /** Previous turn messages (append-only history from DataStore). */
   readonly messageHistory?: readonly MessageHistoryRecord[];
+  /**
+   * Story text the running execution produced before this runtime. It is not
+   * in `messageHistory` until the execution commits, so it is placed after the
+   * current player message, where the next turn's history will show it, and
+   * closed by a user-role cue.
+   */
+  readonly executionStory?: readonly MessageHistoryRecord[];
   /** Session-level metadata (turnNumber, characters, lastFormValues). */
   readonly sessionMeta?: SessionMeta;
   /**

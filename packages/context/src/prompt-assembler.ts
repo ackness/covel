@@ -13,6 +13,8 @@ import { selectPromptSegments } from "./extension-segments.js";
  * [6 WorldInfo: after-plugin]   ← keyword-triggered
  * ---- messages ----
  * [7 history (after pruning)]   ← dynamic (handled as messages)
+ *   current player message, then the story text this execution already
+ *   produced and its closing cue (runtimes that run after the story)
  * [8 WorldInfo: at-depth:N]     ← placed before Nth-from-last message (depthContributions)
  * [9 Author's Note]             ← depth-4 instruction
  * [10 Post-History Instructions]← director-grade high-weight
@@ -27,6 +29,7 @@ import { applyBudget } from "./budget.js";
 import {
   assemblePromptVariables,
   buildCurrentTurnUserMessage,
+  buildExecutionStoryCue,
   buildFrameworkPreamble,
   buildInjectBlocks,
   buildInjectBlocksAsync,
@@ -40,6 +43,7 @@ import {
   renderSystemLoreContributions,
 } from "./contribution-aggregator.js";
 import {
+  buildExecutionStoryMessages,
   buildMessageHistoryWithSummaries,
   insertDepthContributions,
   type RenderedDepthContribution,
@@ -376,12 +380,17 @@ function finalizeSegmentedContext(
     params.summaries ?? [],
   );
 
-  // Pre-history segments precede history and the current user turn. Depth
-  // segments are inserted relative to this base, then post-history segments.
+  // Pre-history segments precede history and the current turn: the player
+  // message, then the story this execution already produced. Depth segments
+  // are inserted relative to this base, then post-history segments.
   const baseMessages: readonly LLMMessage[] = [
     ...(segments.preHistoryExtensions ?? []),
     ...historyMessages,
     { role: "user", content: buildCurrentTurnUserMessage(params.turnInput) },
+    ...buildExecutionStoryMessages(
+      params.executionStory ?? [],
+      buildExecutionStoryCue(params.turnInput.locale),
+    ),
   ];
 
   // Insert depth-positioned lore and extension segments.

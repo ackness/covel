@@ -193,7 +193,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 
 触发类型包括 `auto`、`scheduled`、`manual` 和 `event`。自动主循环运行时应声明 stage；manual/event 可按请求或事件独立触发。`schedule.manual.execution: background` 使用后台执行，`schedule.completion` 控制回合是否等待，具体限制由 manifest 校验和运行时准入执行。
 
-`agent.history: {maxTurns}` 把 agent 的提示词历史限定为最近 N 个回合（按 `turnId` 计数，`0` 为不带历史），同时去掉压缩摘要、不参与本轮压缩屏障；省略时沿用会话共享视图。只消费本轮输入的提取类 runtime 应声明它，避免提示词随会话增长。
+`agent.history: {maxTurns}` 把 agent 的提示词历史限定为最近 N 个回合（按 `turnId` 计数，`0` 为不带历史），同时去掉压缩摘要、不参与本轮压缩屏障；省略时沿用会话共享视图。当前回合不计入 N：当前玩家输入和本次执行已产出的故事正文始终发送（见 [Prompt 结构](prompt-structure.md#本回合正文)）。只消费本轮输入的提取类 runtime 应声明它，避免提示词随会话增长。
 
 Agent 的超时、重试和步数在 `agent.loop` 中。流式的模型调用按无输出时间限时：首次输出前最多等待 `firstTokenTimeoutMs`，之后两次输出之间最多静默 `idleTimeoutMs`（默认各 120 秒）；持续输出的模型不会被截断，输出所用的时间也不计入 `timeoutMs`。非流式调用没有进度信号，由 `callTimeoutMs` 限制单次调用的总时长。`completion.afterTools` 可在指定工具成功后结束；`completion.require: tool-use` 要求有效工具调用，即至少一次执行成功的业务工具调用；失败的调用不算。纯文本回答或调用 `runtime-done` 时若还没有这样的调用，先注入一次纠正提示，仍未完成才判为失败，因此"无变化"也要通过业务工具提交空结果。判定在循环返回处统一进行，普通执行与 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。Function 工具白名单在 `function.tools`，控制 `ctx.tools.call`；Function 超时在 `function.timeoutMs`，不要把外部服务执行时限放到 agent 配置中。
 
