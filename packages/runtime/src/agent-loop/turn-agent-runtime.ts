@@ -12,7 +12,7 @@ import type {
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { buildContext } from "@covel/context";
+import { DEFAULT_PROTECT_LAST_USER_TURNS, buildContext } from "@covel/context";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -44,6 +44,8 @@ export interface ExecuteAgentRuntimeOptions {
   readonly maxSteps: number;
   readonly timeoutMs: number;
   readonly messageHistory: readonly import("@covel/store").TurnMessageRecord[];
+  /** Story text this execution produced before this runtime (see `projectExecutionStory`). */
+  readonly executionStory?: readonly import("@covel/store").TurnMessageRecord[];
   readonly sessionMeta:
     | {
         turnNumber: number;
@@ -94,6 +96,7 @@ export async function executeAgentRuntime({
   maxSteps,
   timeoutMs,
   messageHistory,
+  executionStory = [],
   sessionMeta,
   hookPipeline,
   sessionSummaries,
@@ -128,10 +131,11 @@ export async function executeAgentRuntime({
   // runtimes need this so they don't mimic JSON formats; post-turn extraction
   // runtimes (character-tracker / codex / npc-graph / guide) need it so
   // other plugins' JSON doesn't accumulate in their prompt turn after turn —
-  // they already get the current narrative via `<narrator-output>` and their
-  // own state via plugin-data injects, and never read another plugin's output
-  // from history. Conservative: player/system messages and prose from any
-  // runtime are kept — only structured-looking output is dropped.
+  // they already get the current narrative as the last story message and
+  // through their inputs, their own state via plugin-data injects, and never
+  // read another plugin's output from history. Conservative: player/system
+  // messages and prose from any runtime are kept — only structured-looking
+  // output is dropped.
   let effectiveMessageHistory = messageHistory;
   let effectiveSessionSummaries = sessionSummaries ?? [];
 
@@ -157,6 +161,8 @@ export async function executeAgentRuntime({
   // newest turns are sent and compaction summaries are dropped, so this
   // runtime's prompt stays bounded instead of growing with the session.
   const historyPolicy = manifest.history;
+  // This text is history from the next turn on, so the same filter applies.
+  const visibleStory = filterRuntimeHistory(executionStory, manifest.name);
 
   const assembleContext = async () => {
     const promptSegments =
@@ -181,6 +187,7 @@ export async function executeAgentRuntime({
         : visibleHistory,
       sessionMeta,
       summaries: historyPolicy ? [] : effectiveSessionSummaries,
+      ...(visibleStory.length > 0 ? { executionStory: visibleStory } : {}),
       // Thread the unified snapshot into context building so templates can
       // read structured session data via `world`, `session`, and `player`.
       ...(sessionContext ? { sessionContext } : {}),
@@ -280,7 +287,20 @@ export async function executeAgentRuntime({
     timeoutMs,
     messages,
     ...(budgetEligible
-      ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
+      ? {
+          estimator: deps.estimator,
+          // The cue after this turn's story is one more user message of the
+          // current turn; the budget must keep the whole turn. These limits
+          // are a fallback each call replaces, so they are not checked here.
+          contextBudget: deps.contextBudget && {
+            ...deps.contextBudget,
+            protectLastUserTurns:
+              (deps.contextBudget.protectLastUserTurns ??
+                DEFAULT_PROTECT_LAST_USER_TURNS) +
+              assembled.currentTurnUserMessages -
+              1,
+          },
+        }
       : {}),
     hookPipeline,
     startTime,

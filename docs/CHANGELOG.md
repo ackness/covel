@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Action suggestions follow the story instead of a fixed set of types.** `guide` now asks for 3–4 options (it asked for 3–6) and writes each as a different answer to the decision at hand. It no longer has to offer one option of each type; the type is a display tag chosen after the option is written. At least one option must change the situation (a new event, a changed relationship, leaving the scene), and at most two may only gather information. The `scene-prompts@1` output is unchanged.
+- **The prompt of a runtime that runs after the story has two more messages.** The story text of the running turn follows the player message as an assistant message, then a short framework cue in the user role. A `PostContextAssembly` hook that rewrites `messages` for a `post-turn` or `audit` agent sees them. `agent.history.maxTurns` does not count the current turn. See `docs/reference/prompt-structure.md`.
+
+### Fixed
+
+- **Agents that run after the story no longer answer the previous turn** ([ackness/covel#139](https://github.com/ackness/covel/issues/139)). The conversation sent to a `post-turn` or `audit` agent stopped at the previous narrative and the new player message: the committed history ends one turn back, and the story just written was only in a JSON block of the system prompt, ahead of the whole history. As the history grew, the model took the end of the conversation for the present. Action suggestions then recapped the previous turn and offered what the player had just done. The kernel now adds the story text of the running execution to the conversation, as the next turn's history will show it, so every such agent reads the turn it is working on. A retried runtime already read it from the committed history; both paths now send the same conversation.
+- **Action suggestions do not repeat what just happened.** `guide` reads the last story reply as the present moment, writes its recap up to that point, and does not offer an action the narrative completed or a question it answered.
+
 ## [0.0.47] - 2026-10-05
 
 This release adds world galleries, scene- and mood-based background music, and author credits, and fixes world storage selection, background model readiness, runtime scheduling, and turn settlement.

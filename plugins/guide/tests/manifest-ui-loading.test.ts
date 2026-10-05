@@ -90,27 +90,37 @@ describe("guide manifest and UI loading", () => {
     const loaded = await loadRuntime(discovery!, "guide");
     // Engine-agnostic body reads the capability-bound runtime input instead of
     // hardcoding a particular narrative runtime id.
-    expect(loaded.promptTemplate).toContain("<runtime-inputs>");
-    expect(loaded.promptTemplate).toContain("`narrative.value`");
+    expect(loaded.promptTemplate).toContain("`runtime-inputs.narrative.value`");
     // The limits the tool enforces are stated in the prompt, per language.
     expect(loaded.promptTemplate).toContain(
       "`recap`: 1-3 sentences, at most 60 words.",
     );
     expect(loaded.promptTemplate).toContain(
-      "include only confirmed narrative/dialogue facts",
+      "`recap` holds confirmed story facts",
     );
     expect(loaded.promptTemplate).toContain(
-      "`decision`: one sentence, at most 25 words.",
+      "`decision`: one sentence, at most 25 words",
+    );
+    // Suggestions start where this turn's narrative ends, and no rule asks
+    // for one prompt of each type.
+    expect(loaded.promptTemplate).toContain(
+      "You must not offer an action that the narrative already completed",
+    );
+    expect(loaded.promptTemplate).toContain(
+      "You must not fill a fixed set of types",
     );
     // A Chinese session reads the PLUGIN.zh.md variant with the same limits.
     const chinese = await loadRuntime(discovery!, "guide", "zh-CN");
-    expect(chinese.promptTemplate).toContain("<runtime-inputs>");
     expect(chinese.promptTemplate).toContain(
-      "`recap` 用 1-3 句、20-240 个字符",
+      "`runtime-inputs.narrative.value`",
     );
-    expect(chinese.promptTemplate).toContain("只写叙事或对话中已经确认的事实");
+    expect(chinese.promptTemplate).toContain("`recap`：1-3 句、20-240 个字符");
+    expect(chinese.promptTemplate).toContain("只写已经确认的故事事实");
     expect(chinese.promptTemplate).toContain(
-      "`decision` 用 8-120 个字符写出玩家当前需要回应的一个问题或决策点",
+      "`decision`：一句话，8-120 个字符",
+    );
+    expect(chinese.promptTemplate).toContain(
+      "叙事里已经做完的动作、已经回答的问题，不能再作为短句给出",
     );
     const ui = await loadPluginUi(discovery!);
     expect(ui.uiSpecs?.message).toHaveLength(1);
@@ -128,7 +138,7 @@ describe("guide manifest and UI loading", () => {
     const discovery = discoveries.find((candidate) => candidate.id === "guide");
     const loaded = await loadRuntime(discovery!, "guide", "en-US");
 
-    expect(loaded.promptTemplate).toContain("<runtime-inputs>");
+    expect(loaded.promptTemplate).toContain("`runtime-inputs.narrative.value`");
     expect(loaded.promptTemplate).toContain("`recap`");
     expect(loaded.promptTemplate).toContain("`decision`");
     const localizedPostHistory = JSON.stringify(

@@ -13,7 +13,7 @@
 
 - 通过 `runtime.io.inputs.narrative.from.contract: narrative-engine@1` 读取当前叙事，不绑定具体叙事器 ID；`select: /narrativeOutput` 取叙事文本。
 - 必需输入由 JSON Schema 校验；失败的叙事引擎不会调度本 runtime。
-- 一次工具调用生成 `scene`、`recap`、`decision` 和观察、提问、行动、社交四类共 3–6 条短句建议。
+- 一次工具调用生成 `scene`、`recap`、`decision` 和 3–4 条短句建议。建议从本回合正文结尾的局面出发：已经做完的事、已经回答的问题不再给出，每条通向不同的走向，至少一条会改变局面。观察、提问、行动、社交只是显示用的标签，不要求每种各出一条。
 - 工具通过一个 `plugin.data.batch` 写入本轮完整结果，`__turnId` 用于隔离旧轮数据。
 - `requireToolUse` 防止 agent 误写续篇，`completeAfterTools` 在工具成功后直接结束，避免第二次 LLM 调用。
 

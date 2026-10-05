@@ -37,16 +37,20 @@ const MAX_DECISION = 300;
 const MAX_PROMPT = 160;
 
 export default function ({ tool, z }) {
+  // `text` comes first: the model writes the action, then labels it. With
+  // `kind` first it picked one of each type and wrote a phrase to fit.
   const promptSchema = z.object({
-    kind: z
-      .enum(["observe", "ask", "act", "social"])
-      .describe("Prompt type: observe/ask/act/social"),
     text: z
       .string()
       .min(1)
       .max(MAX_PROMPT)
       .describe(
-        "A short, scene-specific action phrase the player can send directly",
+        "One answer to the decision: a short action phrase the player can send as written",
+      ),
+    kind: z
+      .enum(["observe", "ask", "act", "social"])
+      .describe(
+        "Display tag: the type nearest to the text. Types can repeat: observe/ask/act/social",
       ),
   });
 
@@ -66,7 +70,7 @@ export default function ({ tool, z }) {
         .min(20)
         .max(MAX_RECAP)
         .describe(
-          "A 1-3 sentence recap using only confirmed facts and explicit player intentions, commitments, or agreements",
+          "A 1-3 sentence recap of confirmed facts and stated player intentions, ending at the state where this turn's narrative ends",
         ),
       decision: z
         .string()
@@ -74,13 +78,17 @@ export default function ({ tool, z }) {
         .min(8)
         .max(MAX_DECISION)
         .describe(
-          "The current question or decision the player needs to answer",
+          "The one question that the end of this turn's narrative puts to the player",
         ),
+      // The prompt body asks for 3-4. Six is the bound, like the lengths
+      // above: an entry over the target is not worth a rejected call.
       prompts: z
         .array(promptSchema)
         .min(3)
         .max(6)
-        .describe("3-6 short player action phrases that can be sent directly"),
+        .describe(
+          "3-4 different answers to the decision. Do not offer what the narrative already completed or answered",
+        ),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();

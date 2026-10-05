@@ -17,7 +17,12 @@ export {
 } from "./context-builder.js";
 
 // ── Token Budget ────────────────────────────────────────────────
-export { applyBudget, estimateTokens, resolveBudgetOptions } from "./budget.js";
+export {
+  DEFAULT_PROTECT_LAST_USER_TURNS,
+  applyBudget,
+  estimateTokens,
+  resolveBudgetOptions,
+} from "./budget.js";
 export type {
   TokenEstimator,
   BudgetOptions,

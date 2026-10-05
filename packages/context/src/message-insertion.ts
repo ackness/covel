@@ -37,6 +37,18 @@ function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
 }
 
 /**
+ * Story text of the running execution in the shape the next turn's history
+ * gives it, closed by `cue`. Empty when the execution has produced none.
+ */
+export function buildExecutionStoryMessages(
+  story: readonly MessageHistoryRecord[],
+  cue: string,
+): LLMMessage[] {
+  if (story.length === 0) return [];
+  return [...story.map(toLLMMessage), { role: "user", content: cue }];
+}
+
+/**
  * Segment 7 — history with optional compaction substitution. When a message
  * carries `compactedAtTurnId`, the first such message is replaced by its
  * summary and subsequent compacted messages are dropped.

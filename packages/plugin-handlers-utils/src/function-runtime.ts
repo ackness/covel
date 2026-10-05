@@ -26,7 +26,11 @@ export interface FunctionStoreView {
   >;
   /** Read the canonical session record. */
   getSession(): Promise<unknown>;
-  /** List recent turn messages for the session (read-only timeline access). */
+  /**
+   * List recent turn messages for the session (read-only timeline access).
+   * Committed messages only: the running turn is not among them. Read it from
+   * `playerMessage`, an input binding, or the `turn-digest@1` kernel input.
+   */
   listTurnMessages(limit?: number): Promise<unknown[]>;
   /**
    * Page the full turn-message log oldest-first, including messages already

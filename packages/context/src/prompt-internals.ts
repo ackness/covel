@@ -486,6 +486,21 @@ export function buildCurrentTurnUserMessage(
 }
 
 /**
+ * Closing user message after the story text of the running execution.
+ *
+ * A runtime that runs after the story must treat the end of that text as the
+ * present. The cue says so, and it keeps the request from ending on an
+ * assistant message, which a provider can take as text to continue.
+ */
+export function buildExecutionStoryCue(locale: string | undefined): string {
+  if (instructionLocaleFor(locale ?? "") === "zh") {
+    return "上面这段正文是本回合在玩家消息之后写出的，剧情现在停在它的结尾。请按系统指令完成本 runtime 的任务。";
+  }
+
+  return "The story text above was written in this turn, after the player's message. The story now stands at its end. Do this runtime's task as the system instructions define.";
+}
+
+/**
  * Framework preamble used by segment-based prompt assembly (segment 1).
  *
  * When a locale is provided, prepends a `[RUNTIME]` header that keeps

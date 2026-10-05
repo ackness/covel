@@ -360,7 +360,7 @@ catalog 组件画不出来的界面（地图、解谜、棋盘、小游戏）用
 #### Guide
 
 1. runtime 分析叙事引擎输出
-2. tool 生成情境回顾、当前决策与 3–6 条短句
+2. tool 生成情境回顾、当前决策与 3–4 条短句
 3. tool 把 `recap`、`decision`、`prompt1Text`、`prompt1Label` 等写入 `plugin_data[guide][message]`
 4. `plugins/guide/ui/guide-block.json` 从 `message` namespace 读取并渲染；`stage.choices@1` 槽位把同一组短句交给舞台模式
 

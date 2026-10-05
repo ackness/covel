@@ -2,15 +2,19 @@ import { snapshotPlayerInput } from "./turn-digest.js";
 import type {
   PlayerInputSubmission,
   RuntimeManifest,
+  RuntimeResult,
   SetupRuntimeState,
   TurnInput,
 } from "@covel/shared";
 import {
+  getRuntimeSpec,
   isSetupRuntime,
   promptHistoryTransformV1,
+  stageMessageOrder,
   turnDigestSchema,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
+import { journalOf } from "../execution-journal.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import {
   readRuntimeTriggerLedger,
@@ -187,6 +191,45 @@ export async function buildProjectedPromptHistory(args: {
     turnId: input.turnId,
   });
   return result.messages;
+}
+
+/**
+ * Story text this execution produced in the stages before `manifest` runs.
+ *
+ * The committed history stops at the previous turn, and only the player
+ * message of the running turn is added to it. A runtime that runs after the
+ * story would read a conversation that ends on the previous narrative and
+ * answer that state, so the story messages waiting in the execution journal
+ * are shown to it as the next turn's history will show them. Only earlier
+ * stages count: they have settled, so the result does not depend on which
+ * parallel sibling finished first. A retry seed belongs to another turn, whose
+ * story the history already holds.
+ */
+export function projectExecutionStory(args: {
+  readonly manifest: RuntimeManifest;
+  readonly input: TurnInput;
+  readonly activeRuntimes: readonly RuntimeManifest[];
+  readonly completedResults: ReadonlyMap<string, RuntimeResult>;
+}): readonly TurnMessageRecord[] {
+  const { manifest, input, activeRuntimes, completedResults } = args;
+  const stage = stageMessageOrder(getRuntimeSpec(manifest).stage);
+  const story = new Set(
+    activeRuntimes
+      .filter((runtime) => runtime.outputKind === "story")
+      .map((runtime) => runtime.name),
+  );
+  return [...completedResults.values()]
+    .filter(
+      (result) => result.status === "success" && story.has(result.runtimeId),
+    )
+    .flatMap((result) => journalOf(result))
+    .filter(
+      (message) =>
+        message.turnId === input.turnId &&
+        message.order < stage &&
+        message.content.trim().length > 0,
+    )
+    .sort((a, b) => a.order - b.order);
 }
 
 /**

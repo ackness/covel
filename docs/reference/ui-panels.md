@@ -467,7 +467,7 @@ ui:
 
 ```
 guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
-  → `ui.message` 渲染情境回顾、当前决策与 3–6 条短句（舞台模式同时经 `stage.choices@1` 显示）
+  → `ui.message` 渲染情境回顾、当前决策与 3–4 条短句（舞台模式同时经 `stage.choices@1` 显示）
   → 玩家点击建议后进入待发送区
   → InputBar 统一发送待发送草稿与手写输入
 ```

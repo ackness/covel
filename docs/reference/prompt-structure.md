@@ -13,8 +13,20 @@
 1. 读取 canonical `turn_messages` 中未压缩的后缀和全量消息统计。当前玩家输入先保留在 execution journal，提交成功后才落库。
 2. 对历史副本运行 `prompt.history-transform@1` pipeline。每个 provider 接收前一个 provider 的结果；该投影不改写 canonical 消息，也不改变调度计数。
 3. 按当前 runtime 过滤其他插件的结构化历史输出和没有文本的 runtime 行，组装实际 system prompt，并合并已持久化摘要。声明了 `agent.history.maxTurns` 的 runtime 只保留最近 N 个回合（按 `turnId` 计数）的可见消息，不合并摘要。
-4. 首个使用共享历史视图的 agent 以这个 system prompt 估算压缩需求。同一 turn 的这类 agent 共用一次压缩屏障；成功后重载历史与摘要，重新投影并组装 context。声明了历史窗口的 runtime 不触发也不等待该屏障。
-5. 执行 `PostContextAssembly`，应用预算；每次 `PreLLMCall` 后再按实际请求校验预算。
+4. 把本次执行已经产出的故事正文接在当前玩家输入之后（见下方「本回合正文」）。
+5. 首个使用共享历史视图的 agent 以这个 system prompt 估算压缩需求。同一 turn 的这类 agent 共用一次压缩屏障；成功后重载历史与摘要，重新投影并组装 context。声明了历史窗口的 runtime 不触发也不等待该屏障。
+6. 执行 `PostContextAssembly`，应用预算；每次 `PreLLMCall` 后再按实际请求校验预算。
+
+### 本回合正文
+
+已提交的历史只到上一回合为止，本回合的消息要等执行提交后才落库。因此框架把执行日志（execution journal）里尚未提交的部分也投影进对话：当前玩家输入，以及更早 stage 里 `outputKind: story` 的 runtime 已经成功产出的正文。正文以 assistant 消息出现，和下一回合历史里的样子相同，后面跟一条 user 角色的框架提示，说明这段正文写于本回合、剧情停在它的结尾。
+
+- 只取**更早 stage** 的结果。stage 之间有屏障，结果已经确定；同一 stage 内并行的 runtime 互相看不到对方的正文，需要时用 `io.inputs` 声明依赖。没有 stage 的 runtime（回合内的 event 后继）排在所有 stage 之后。
+- 只取**本次执行**产出的正文。重试时作为种子带入的来源回合结果不投影，它的正文已经在历史里。
+- `agent.history.maxTurns` 不计入本回合：`0` 仍会发送当前玩家输入和本回合正文。
+- 这段正文和结尾提示属于当前回合，预算裁剪时与当前玩家输入一起受保护。
+
+没有这一步时，叙事之后运行的 agent 读到的对话停在「上一回合的正文 + 本回合玩家输入」，模型会把上一回合结尾当成当下；`<runtime-inputs>` 里虽然有本回合正文，但它在 system prompt 中、位于整段历史之前。同一个 runtime 在提交后被重试时，历史里已经有本回合正文，两种情况现在读到的对话一致。
 
 `history.compact@1` 是 single 扩展点。框架负责阈值、返回值校验及摘要与消息标记的原子持久化；默认 `history-compaction` 插件负责选择连续历史前缀、调用摘要模型和限制摘要长度。当前默认策略保护最近两个用户回合和最后五条消息，将旧摘要与新前缀合并为单块滚动摘要，预算为 context window 的 4%，最少 128、最多 1024 estimated tokens。
 
@@ -36,6 +48,7 @@ messages
   pre-history 非 system 扩展消息
   摘要替换后的历史
   当前玩家输入
+  本次执行已产出的故事正文与结尾提示（仅叙事之后的 runtime）
   按 depth 插入的世界书和扩展消息
   post-history 扩展消息
 ```
@@ -86,7 +99,7 @@ provider 获得当前执行的 locale、只读世界视图和自身数据访问�
 
 ### Runtime LLM 请求默认值
 
-runtime 的 `agent` 分组可声明 `llm.reasoningEffort: disabled`，以及 `llm.toolChoice: { name: submit-facts }`（指定工具）或 `llm.toolChoice: required`（必须调用某个已声明工具，由模型选择）。叙事后的记账 runtime 收到的对话以本轮玩家输入结尾，不强制工具时模型容易直接续写剧情。`required` 适合"无变化"也由同一个写入工具表达的 runtime（如 `update-dimensions({updates: []})`）；若无变化要改调 `runtime-done`，强制工具会让模型先提交一次被拒的空写入，而失败的写入不会被随后的 `runtime-done` 抵消。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
+runtime 的 `agent` 分组可声明 `llm.reasoningEffort: disabled`，以及 `llm.toolChoice: { name: submit-facts }`（指定工具）或 `llm.toolChoice: required`（必须调用某个已声明工具，由模型选择）。叙事后的记账 runtime 收到的对话是故事正文，不强制工具时模型容易直接续写剧情。`required` 适合"无变化"也由同一个写入工具表达的 runtime（如 `update-dimensions({updates: []})`）；若无变化要改调 `runtime-done`，强制工具会让模型先提交一次被拒的空写入，而失败的写入不会被随后的 `runtime-done` 抵消。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
 
 provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，DeepSeek thinking 请求省略不兼容的 `tool_choice`。`deepseek-flash` 和 V4 模型未指定开关时也按默认开启思考处理；显式关闭后保留插件的工具选择偏好。此行为遵循 [DeepSeek Chat Completions 的工具选择限制](https://api-docs.deepseek.com/api/create-chat-completion/)，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
 
@@ -117,7 +130,7 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 
 ## 5. Token 预算与缓存
 
-有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。当前用户回合和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
+有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。当前用户回合（含本回合正文及其结尾提示）和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
 
 `serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；进入 system prompt 的 turn 扩展段（`position: system` 或 system 角色的 `pre-history`）放在最后一个缓存边界之后，不设置断点。user/assistant 角色的 pre-history、post-history 和 depth 段保持各自消息位置，不承诺这些消息位于某个 system 缓存边界内。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
 

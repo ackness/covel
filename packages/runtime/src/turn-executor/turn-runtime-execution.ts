@@ -1,4 +1,5 @@
 import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
+import { projectExecutionStory } from "./session-state.js";
 import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
 import type {
   ExecutionContext,
@@ -699,6 +700,12 @@ export async function executeOneRuntime(
       maxSteps,
       timeoutMs,
       messageHistory,
+      executionStory: projectExecutionStory({
+        manifest,
+        input,
+        activeRuntimes,
+        completedResults,
+      }),
       sessionMeta,
       hookPipeline,
       sessionSummaries,

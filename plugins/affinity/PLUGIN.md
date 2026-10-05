@@ -82,8 +82,8 @@ runtime:
     model: plugin
     history:
       maxTurns: 2
-    # The conversation ends on the player's message; without a required tool
-    # call the model sometimes continues the story first.
+    # The conversation is story text; without a required tool call the model
+    # sometimes continues the story first.
     llm:
       toolChoice: required
     loop:
