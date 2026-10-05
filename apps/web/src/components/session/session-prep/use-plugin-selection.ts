@@ -76,8 +76,21 @@ export function usePluginSelection(
       .then((plan) => {
         if (cancelled) return;
         // Publish defaults with the plan so consumers never observe a ready
-        // plan alongside the temporary core-only selection.
-        setSelectedPlugins(defaultSelectedPluginIds(plan));
+        // plan alongside the temporary core-only selection. A default the
+        // initial pack also requests belongs to the pack, so the next pack can
+        // replace it even when the world's preferred tags selected it too.
+        const packRequests = new Set(
+          plan.packs.find((pack) => pack.id === plan.selectedPackId)
+            ?.requested ?? [],
+        );
+        setPackRequestedPlugins(packRequests);
+        setOtherSelectedPlugins(
+          new Set(
+            [...defaultSelectedPluginIds(plan)].filter(
+              (id) => !packRequests.has(id),
+            ),
+          ),
+        );
         setExcludedPlugins(new Set());
         setActivePluginPackId(plan.selectedPackId ?? null);
         setPluginPlan(plan);
@@ -107,8 +120,16 @@ export function usePluginSelection(
     [pluginPlan],
   );
   const requiredContracts = pluginPlan?.policy.requires ?? NO_CONTRACTS;
-  const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(
+  const [otherSelectedPlugins, setOtherSelectedPlugins] = useState<Set<string>>(
     () => new Set(corePluginIds),
+  );
+  // Pack ownership survives manual edits that clear the card's highlight.
+  const [packRequestedPlugins, setPackRequestedPlugins] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const selectedPlugins = useMemo(
+    () => new Set([...otherSelectedPlugins, ...packRequestedPlugins]),
+    [otherSelectedPlugins, packRequestedPlugins],
   );
   const [excludedPlugins, setExcludedPlugins] = useState<Set<string>>(
     () => new Set(),
@@ -217,15 +238,9 @@ export function usePluginSelection(
       const pack = pluginPacks.find((item) => item.id === packId);
       if (!pack) return;
       setActivePluginPackId(pack.id);
-      setSelectedPlugins(
-        new Set(
-          [...selectedPlugins, ...pack.requested].filter(
-            (id) => !excludedPlugins.has(id),
-          ),
-        ),
-      );
+      setPackRequestedPlugins(new Set(pack.requested));
     },
-    [pluginPacks, selectedPlugins, excludedPlugins],
+    [pluginPacks],
   );
 
   const togglePlugin = useCallback(
@@ -234,14 +249,18 @@ export function usePluginSelection(
       setActivePluginPackId(null);
       const enabling = !selectedPluginIdSet.has(name);
       const next = new Set(
-        enabling ? [name, ...selectedPlugins] : selectedPlugins,
+        enabling ? [name, ...otherSelectedPlugins] : otherSelectedPlugins,
       );
       if (!enabling) next.delete(name);
       const excluded = new Set(excludedPlugins);
       if (enabling) {
         excluded.delete(name);
         const replacement = resolveSessionPlugins({
-          requested: [...next, ...worldRequiredPluginIds],
+          requested: [
+            ...next,
+            ...packRequestedPlugins,
+            ...worldRequiredPluginIds,
+          ],
           excluded: [...excluded],
           plugins: candidates,
           requiredContracts,
@@ -262,11 +281,12 @@ export function usePluginSelection(
         }
       } else excluded.add(name);
       setExcludedPlugins(excluded);
-      setSelectedPlugins(next);
+      setOtherSelectedPlugins(next);
     },
     [
       lockedPluginIds,
-      selectedPlugins,
+      otherSelectedPlugins,
+      packRequestedPlugins,
       selectedPluginIdSet,
       excludedPlugins,
       candidates,

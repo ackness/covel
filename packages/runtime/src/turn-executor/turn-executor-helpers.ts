@@ -160,7 +160,7 @@ export function makeFailedResult(
  */
 export function makeSkippedResult(
   manifest: RuntimeManifest,
-  input: TurnInput,
+  input: Pick<TurnInput, "turnId">,
   reason: string,
   by: string,
   detail?: Record<string, unknown>,

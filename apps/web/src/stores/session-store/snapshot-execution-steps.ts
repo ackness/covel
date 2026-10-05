@@ -1,10 +1,9 @@
-import {
-  appendReasoningStep,
-  mergeReasoning,
-  reasoningAction,
-} from "./reasoning.js";
+import { appendReasoningStep, reasoningAction } from "./reasoning.js";
 import type { SessionExecutionStatus, SnapshotTraceEvent } from "@covel/shared";
-import { toExecutionStepStatus } from "./execution-steps.js";
+import {
+  mergeExecutionStep,
+  toExecutionStepStatus,
+} from "./execution-steps.js";
 import {
   buildRetryAttemptSteps,
   reconcileExecutionAttempts,
@@ -132,12 +131,8 @@ export function reconcileExecutionSteps(
   for (const step of buildSnapshotExecutionSteps(events)) {
     const previous = steps.get(stepKey(step));
     steps.set(stepKey(step), {
-      ...previous,
-      ...step,
+      ...mergeExecutionStep(previous, step),
       ...(step.status === "llm" && previous ? { status: previous.status } : {}),
-      ...(previous?.reasoning || step.reasoning
-        ? { reasoning: mergeReasoning(previous?.reasoning, step.reasoning) }
-        : {}),
       ...(previous?.attemptStatus === "committed"
         ? { attemptStatus: "committed" }
         : {}),

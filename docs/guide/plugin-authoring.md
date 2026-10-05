@@ -73,6 +73,8 @@ runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声
 
 **跨包依赖边界**：`needs`、`after` 和 `io.inputs` 的跨包引用必须使用版本化契约（如 `narrative-engine@1`），不允许直接引用其他插件的 runtime 名称（如 `other-plugin/some-runtime`）。包内多个 runtime 之间可以使用 runtime 名称建立排序和输入关系，但跨包必须通过公开契约解耦。违反此规则的 manifest 加载时会被拒绝。
 
+同轮事件链的同步订阅者可以声明同次依赖：同一深度实际匹配的订阅者按 DAG 分层，先合并上游结果，再执行下游 gate 和 input binding。`needs` 要求上游成功，`after` 只等待执行结束；独立订阅者仍并行。依赖不会替作者触发未匹配的 topic，后台订阅者也不会因这份 DAG 与其他后台作业建立依赖。需要跨作业接力时，使用后续事件或已提交输出。
+
 ## 数据归属
 
 角色和角色 schema 读取 `ctx.world`，角色写入通过 proposals。不要把角色复制到本插件的 `characters` namespace，也不要扫描其他插件私有 schema。

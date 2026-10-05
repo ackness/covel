@@ -129,6 +129,8 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 `runtime.deferred` 只在原始回合和 `_runtime_jobs` queued 记录原子提交成功、session lock 释放后发出；回滚时不产生“幽灵后台任务”。服务端分别写入当前 `/api/actions` 流，并通过 EventBus 的 `runtime` topic 发给 `/api/events/stream` 持久订阅。其 `COVEL_EVENT_META.forwardToActionStream` 为 `false`，避免 EventBus 再转发一次造成 action 流重复。
 
+这是移交公告，不是作业的最新状态。它可迟于 worker 的状态事件到达；Web 对同一 `jobId` 已观察到的 durable 控制状态保留进度与终态，迟到公告不会把它改回 queued。
+
 ### 回合中控制（W4：steer / abort）
 
 回合中控制走 HTTP 端点而非 SSE 事件（见 [api.md § 回合中控制](./api.md#回合中控制w4)）：
@@ -186,6 +188,10 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 长耗时的 function runtime（媒体生成等）在 finalizer 提交之前，通过 `ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })` 实时上报进度。这是 effects 隔离的**唯一实时例外**：上报写入内核 job-status 存储（追加式、按 `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)` 幂等），成功后立即发出本事件并经 `/actions` SSE 转发；它不写游戏态、不满足 binding/gate、不随领域事务回滚。`state` 取值为 `queued | running | progress | waiting-input | succeeded | failed | cancelled`；身份字段全部由内核注入，插件只提供作业业务字段。执行结束后，框架按最终保存结果收尾本次执行上报的作业：仍未终结的作业按 runtime 结果映射为终态；插件已上报 `succeeded`、但本次领域写入未提交（整次执行回滚、该 runtime 失败，或它的写入在提交时被单独丢弃）时，框架追加 `failed`，不保留成功状态。插件自己上报的 `failed` / `cancelled` 不被改写。
 
 staged detached worker 也使用同一事件投影 durable 状态：`queued/claimed/running/committing/succeeded/cancelled` 分别映射为公开的 `queued/running/progress/succeeded/cancelled`；`failed/timed_out/stale/orphaned` 映射为公开 `failed`，具体终态保留在 `data.durableStatus`。`data.originTurnId` 让 Web 把后台任务挂回产生它的原始 turn，而不是后台执行自己的 `backgroundTurnId`。
+
+Web 在 reducer 中对同一 durable job 的控制事件比较 `sequence`，重复或更旧的状态不覆盖新状态，恢复得到的 durable 终态也不会被旧排队公告撤销。控制通道的 `progressScopeId` 和 `jobId` 都是该 durable job 的 ID；插件子进度通过 `data.runtimeJobId` 关联父任务，但拥有独立序列，不能与父任务序列比较，也不能撤销父任务终态。不同 `jobId` 的重试可重新开始。普通插件先报 succeeded、finalizer 随后因提交失败改报 failed 的路径仍按最终事件更新。
+
+恢复读取的 durable 行没有控制序号，合并时保留已观察到的序号；同一作业的 `queued → claimed → running → committing` 阶段不能回退，恢复读取可以推进阶段或补齐终态。这些规则也用于恢复期间新收到控制事件后的最终 reducer 合并。
 
 > 本通道与框架保留 namespace `_runtime_jobs` 并存：manual/event `execution: background` 与 staged `turnCompletion: detached` 都记录在其中。`job-status.updated` 是它的实时/恢复投影，不替代领域结果事务。
 

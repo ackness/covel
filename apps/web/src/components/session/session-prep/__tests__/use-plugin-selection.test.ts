@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resolveSessionPlugins,
   type PluginSummary,
+  type PluginPack,
   type WorldPluginPlan,
 } from "@covel/shared";
 import { usePluginSelection } from "../use-plugin-selection.js";
@@ -78,7 +79,190 @@ function selectionPlan(defaultPluginIds: string[]): WorldPluginPlan {
   };
 }
 
+const PACKS: PluginPack[] = [
+  {
+    id: "full",
+    label: "Full",
+    requested: ["core", "extra"],
+    recommended: [],
+    tags: [],
+    source: "builtin",
+  },
+  {
+    id: "alternative",
+    label: "Alternative",
+    requested: ["alternative"],
+    recommended: [],
+    tags: [],
+    source: "builtin",
+  },
+  {
+    id: "small",
+    label: "Small",
+    requested: ["core"],
+    recommended: ["extra"],
+    tags: [],
+    source: "builtin",
+  },
+];
+const PACK_PLUGINS = [
+  ...PLUGINS,
+  plugin("extra"),
+  plugin("manual"),
+  plugin("preferred"),
+  plugin("world"),
+];
+
 describe("usePluginSelection", () => {
+  it("replaces pack requests in both directions and removes optional extras for a smaller pack", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan([]),
+      packs: PACKS,
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+
+    act(() => result.current.applyPack("full"));
+    act(() => result.current.applyPack("alternative"));
+    expect(result.current.requestedPluginIds).toEqual(["alternative"]);
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["alternative", "dependency"]),
+    );
+    act(() => result.current.applyPack("full"));
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["core", "extra"]),
+    );
+    act(() => result.current.applyPack("small"));
+    expect(result.current.requestedPluginIds).toEqual(["core"]);
+    expect(result.current.selectedPluginIdSet.has("extra")).toBe(false);
+    expect(result.current.activePluginPack?.id).toBe("small");
+  });
+
+  it("separates the initial pack from world defaults and preserves explicitly excluded world requests", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["alternative", "world", "preferred"]),
+      policy: {
+        ...PLAN.policy,
+        requested: ["world"],
+        preferredTags: ["preferred"],
+      },
+      packs: PACKS,
+      selectedPackId: "alternative",
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.togglePlugin("world"));
+    act(() => result.current.applyPack("small"));
+    expect(new Set(result.current.requestedPluginIds)).toEqual(
+      new Set(["core", "preferred"]),
+    );
+    expect(result.current.selectedPluginIdSet.has("alternative")).toBe(false);
+    expect(result.current.excludedPluginIds).toEqual(["world"]);
+  });
+
+  it("lets the next pack replace an engine that the initial pack and the world's preferred tags both selected", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["alternative", "preferred"]),
+      policy: {
+        ...PLAN.policy,
+        requested: [],
+        preferredTags: ["mode:alternative"],
+      },
+      packs: PACKS,
+      selectedPackId: "alternative",
+    });
+    const plugins = PACK_PLUGINS.map((pkg) =>
+      pkg.id === "alternative" || pkg.id === "preferred"
+        ? { ...pkg, tags: ["mode:alternative"] }
+        : pkg,
+    );
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, plugins, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.selectedPluginIdSet.has("alternative")).toBe(true);
+
+    act(() => result.current.applyPack("small"));
+    // The preferred default outside the pack stays; the pack's engine goes.
+    expect(new Set(result.current.requestedPluginIds)).toEqual(
+      new Set(["core", "preferred"]),
+    );
+    expect(result.current.selectedPluginIdSet.has("core")).toBe(true);
+    expect(result.current.selectedPluginIdSet.has("alternative")).toBe(false);
+    expect(result.current.activePluginPack?.id).toBe("small");
+  });
+
+  it("keeps an explicit exclusion when a later pack requests the plugin", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan([]),
+      packs: PACKS,
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.applyPack("full"));
+    act(() => result.current.togglePlugin("extra"));
+    act(() => result.current.applyPack("small"));
+    act(() => result.current.applyPack("full"));
+    expect(result.current.selectedPluginIdSet.has("extra")).toBe(false);
+    expect(result.current.excludedPluginIds).toContain("extra");
+  });
+
+  it("remembers pack ownership after manual edits and keeps a manually re-enabled pack member", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan([]),
+      packs: PACKS,
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.applyPack("full"));
+    act(() => result.current.togglePlugin("manual"));
+    expect(result.current.activePluginPack).toBeNull();
+    act(() => result.current.togglePlugin("extra"));
+    act(() => result.current.togglePlugin("extra"));
+    act(() => result.current.applyPack("alternative"));
+    expect(new Set(result.current.requestedPluginIds)).toEqual(
+      new Set(["manual", "extra", "alternative"]),
+    );
+    expect(result.current.requestedPluginIds).not.toContain("core");
+    expect(result.current.selectedPluginIdSet.has("dependency")).toBe(true);
+  });
+
+  it("resets pack, manual and excluded sources with the next world's plan", async () => {
+    vi.mocked(api.getWorldPluginPlan)
+      .mockResolvedValueOnce({ ...selectionPlan([]), packs: PACKS })
+      .mockResolvedValueOnce({
+        ...selectionPlan(["alternative"]),
+        worldId: "world-2",
+        packs: PACKS,
+        selectedPackId: "alternative",
+      });
+    const { result, rerender } = renderHook(
+      ({ worldId }) =>
+        usePluginSelection(worldId, PACK_PLUGINS, prepareWorldForServer),
+      { initialProps: { worldId: PLAN.worldId } },
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.applyPack("full"));
+    act(() => result.current.togglePlugin("manual"));
+    act(() => result.current.togglePlugin("extra"));
+    rerender({ worldId: "world-2" });
+    await waitFor(() =>
+      expect(result.current.pluginPlan?.worldId).toBe("world-2"),
+    );
+    expect(result.current.requestedPluginIds).toEqual(["alternative"]);
+    expect(result.current.excludedPluginIds).toEqual([]);
+    expect(result.current.activePluginPack?.id).toBe("alternative");
+    act(() => result.current.applyPack("small"));
+    expect(result.current.requestedPluginIds).toEqual(["core"]);
+  });
   it("does not infer new-session authorization from a globally loaded community entry", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
       selectionPlan(["community"]),

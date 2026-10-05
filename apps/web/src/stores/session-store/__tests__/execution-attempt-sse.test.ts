@@ -64,6 +64,31 @@ function harness(retrying = true) {
 }
 
 describe("SSE retry commit settlement", () => {
+  it("keeps the durable terminal when a batched action stream delivers an old queue and handoff", () => {
+    const h = harness(false);
+    const job = {
+      jobId: "job",
+      progressScopeId: "job",
+      sequence: 4,
+      state: "succeeded",
+      data: { durableStatus: "succeeded", originTurnId: "attempt" },
+    };
+    h.send("job-status.updated", job);
+    h.send("job-status.updated", {
+      ...job,
+      sequence: 0,
+      state: "queued",
+      data: { durableStatus: "queued", originTurnId: "attempt" },
+    });
+    h.send("runtime.deferred", { jobId: "job", sourceTurnId: "attempt" });
+    expect(
+      h.getState().executionSteps.find((step) => step.jobId === "job"),
+    ).toMatchObject({
+      status: "completed",
+      jobState: "succeeded",
+      durableJobStatus: { sequence: 4 },
+    });
+  });
   it("atomically replaces the inflight failure summary and ignores a late replay", () => {
     const h = harness();
     const inflight = {

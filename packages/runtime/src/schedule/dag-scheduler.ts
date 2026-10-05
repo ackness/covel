@@ -157,6 +157,7 @@ function buildCapabilityProviders(
 /** Topologically sort `runtimes` into levels via a Kahn sort over declared edges. */
 export function scheduleByDag(
   runtimes: readonly RuntimeManifest[],
+  satisfiedRuntimes: readonly RuntimeManifest[] = [],
 ): DagScheduleResult {
   if (runtimes.length === 0) return { groups: [] };
 
@@ -167,8 +168,14 @@ export function scheduleByDag(
   const hardDependencies = new Map<string, ReadonlySet<string>>();
   const oneProviderGroups = new Map<string, readonly (readonly string[])[]>();
   const byName = new Map<string, RuntimeManifest>();
-  const capabilityProviders = buildCapabilityProviders(runtimes);
-  const completed = new Set<string>();
+  // Only external outcomes can satisfy an OR edge before this batch runs.
+  // They provide evidence, never additional nodes to execute.
+  const external = satisfiedRuntimes.filter((rt) => !inScope.has(rt.name));
+  const capabilityProviders = buildCapabilityProviders([
+    ...runtimes,
+    ...external,
+  ]);
+  const completed = new Set(external.map((rt) => rt.name));
 
   for (const rt of runtimes) {
     byName.set(rt.name, rt);
