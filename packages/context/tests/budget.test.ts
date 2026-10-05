@@ -158,6 +158,28 @@ describe("applyBudget", () => {
     expect(result.prunedMessageCount).toBe(6);
   });
 
+  it("keeps the system messages directly ahead of the protected turn", () => {
+    // The turn context stands between the history and the player message. A
+    // request that keeps the turn and drops its data answers it blind.
+    const messages: TestMessage[] = [
+      msg("user", contentOfChars(400)), // u1 100 tokens
+      msg("assistant", contentOfChars(400)), // a1 100
+      msg("system", contentOfChars(200)), // turn context 50  ← protect start
+      msg("user", contentOfChars(200)), // u2 50
+    ];
+
+    const result = applyBudget("", messages, {
+      maxInputTokens: 150,
+      reservedForResponse: 0,
+      estimator: mockEstimator,
+    });
+
+    expect(result.messages.slice(-2)).toEqual(messages.slice(2));
+    expect(result.messages).not.toContain(messages[0]);
+    expect(result.messages).not.toContain(messages[1]);
+    expect(result.prunedMessageCount).toBe(2);
+  });
+
   it("returns budgetExceeded when protected tail alone exceeds budget", () => {
     const systemPrompt = "";
     // Single huge user message, way over budget.

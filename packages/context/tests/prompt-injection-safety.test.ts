@@ -92,11 +92,12 @@ describe("prompt injection safety", () => {
       ]),
     });
 
-    const { systemPrompt } = buildSegmentedContext(params);
+    const { systemPrompt, turnContext } = buildSegmentedContext(params);
 
     // Token stays literal — proof the inject block was not interpolated.
-    expect(systemPrompt).toContain("echo {{ player.message }}");
+    expect(turnContext).toContain("echo {{ player.message }}");
     // The expansion (what a second pass would produce) never appears.
+    expect(turnContext).not.toContain("echo PLAYER_INJECTED_SECRET");
     expect(systemPrompt).not.toContain("echo PLAYER_INJECTED_SECRET");
   });
 });

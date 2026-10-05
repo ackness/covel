@@ -118,7 +118,7 @@ describe("prompt-assembler", () => {
     expect(publicContext.systemPrompt).toBe(result.systemPrompt);
   });
 
-  it("places upstream injects in segment 5, after plugin instructions, before messages", () => {
+  it("places this turn's data ahead of the current turn and keeps it out of the system prompt", () => {
     const params = baselineParams({
       promptTemplate: "You are a downstream runtime.",
       manifest: makeManifest({
@@ -145,19 +145,17 @@ describe("prompt-assembler", () => {
 
     const result = buildSegmentedContext(params);
 
-    const bodyIdx = result.systemPrompt.indexOf(
-      "You are a downstream runtime.",
-    );
-    const injectIdx = result.systemPrompt.indexOf(
-      "<upstream-output>the upstream story</upstream-output>",
-    );
-    expect(bodyIdx).toBeGreaterThanOrEqual(0);
-    expect(injectIdx).toBeGreaterThan(bodyIdx);
+    // A system prompt that carries this turn's data differs every turn, and
+    // a provider cache stops at the first byte that differs.
+    expect(result.systemPrompt).toContain("You are a downstream runtime.");
+    expect(result.systemPrompt).not.toContain("<upstream-output>");
 
-    // Messages array still only contains the current user turn.
+    const block = "<upstream-output>the upstream story</upstream-output>";
     expect(result.messages).toEqual([
+      { role: "system", content: block },
       { role: "user", content: "I step forward" },
     ]);
+    expect(result.turnContext).toBe(block);
   });
 
   it("omits empty segments without leaving double blank lines in the output", () => {
@@ -460,6 +458,141 @@ describe("prompt-assembler", () => {
 
 // ── Prompt cache breakpoint markers ──────────────────────
 
+describe("prompt-assembler — turn context", () => {
+  const narrative = (value: string) => ({
+    narrative: {
+      cardinality: "one" as const,
+      value,
+      source: { pluginId: "narrator", runtimeId: "narrator", resultId: "r" },
+    },
+  });
+  const memory = (content: string) => ({
+    id: "memory",
+    content,
+    position: "system" as const,
+    audience: "all" as const,
+    volatility: "turn" as const,
+    providerPluginId: "memory",
+  });
+  const history = [
+    { role: "user", content: "earlier action" },
+    { role: "assistant", content: "earlier story" },
+  ];
+
+  // The reason for the layout: a provider serves a request from its cache
+  // only as far as it matches an earlier one from the first byte.
+  it("keeps the system prompt and the history identical from turn to turn", () => {
+    const turn = (
+      inputs: string,
+      block: string,
+      extra: MessageHistoryRecord[],
+    ) =>
+      buildSegmentedContext(
+        baselineParams({
+          turnInput: makeTurnInput({ locale: "en-US" }),
+          activation: { source: "stage", detached: false, payload: null },
+          messageHistory: [...history, ...extra],
+          inputSlots: narrative(inputs),
+          promptSegments: [memory(block)],
+        }),
+      );
+    const first = turn("story one", "goal: find the artifact", []);
+    const second = turn("story two", "goal: leave the barrow", [
+      { role: "user", content: "I step forward" },
+      { role: "assistant", content: "story one" },
+    ]);
+
+    expect(second.systemPrompt).toBe(first.systemPrompt);
+    expect(second.messages.slice(0, history.length)).toEqual(
+      first.messages.slice(0, history.length),
+    );
+    expect(first.turnContext).toContain("story one");
+    expect(first.turnContext).toContain("goal: find the artifact");
+    expect(second.turnContext).toContain("story two");
+  });
+
+  it("places the turn context between the history and the current turn", () => {
+    const result = buildSegmentedContext(
+      baselineParams({
+        manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
+        turnInput: makeTurnInput({ locale: "en-US" }),
+        messageHistory: history,
+        executionStory: [{ role: "assistant", content: "this turn's story" }],
+        inputSlots: narrative("this turn's story"),
+        promptSegments: [
+          memory("goal: find the artifact"),
+          {
+            id: "note",
+            content: "note",
+            position: { depth: 0 },
+            audience: "all",
+            volatility: "stable",
+            providerPluginId: "lore",
+          },
+          {
+            id: "workflow",
+            content: "workflow",
+            position: "post-history",
+            audience: "all",
+            volatility: "stable",
+            providerPluginId: "test-rt",
+          },
+        ],
+      }),
+    );
+
+    // The request ends on the current turn and the workflow, as it did with
+    // the data in the system prompt. A data block as the last thing before
+    // the reply leaked its syntax into small models' tool calls.
+    expect(
+      result.messages.map(({ role, content }) =>
+        content === result.turnContext ? "turn context" : `${role}: ${content}`,
+      ),
+    ).toEqual([
+      "user: earlier action",
+      "assistant: earlier story",
+      "turn context",
+      "user: I step forward",
+      "assistant: this turn's story",
+      `user: ${result.messages.at(-3)?.content}`,
+      "system: note",
+      "system: workflow",
+    ]);
+    expect(result.messages[2]?.role).toBe("system");
+    // Data blocks first, then the turn-volatile segments, as one message.
+    expect(result.turnContext).toMatch(
+      /^<runtime-inputs>\n[^\n]+\n<\/runtime-inputs>\n\ngoal: find the artifact$/,
+    );
+  });
+
+  it("keeps a staged activation in the system prompt and treats an event's as data of the run", () => {
+    const staged = buildSegmentedContext(
+      baselineParams({
+        activation: { source: "stage", detached: false, payload: null },
+      }),
+    );
+    // The same block every turn: it does not unsettle the system prompt, and
+    // a runtime without inputs gets no extra message.
+    expect(staged.systemPrompt).toContain("<runtime-activation>");
+    expect(staged.turnContext).toBe("");
+    expect(staged.messages).toEqual([
+      { role: "user", content: "I step forward" },
+    ]);
+
+    const event = buildSegmentedContext(
+      baselineParams({
+        activation: {
+          source: "event",
+          detached: false,
+          payload: { topic: "check.resolved" },
+        },
+      }),
+    );
+    expect(event.systemPrompt).not.toContain("<runtime-activation>");
+    expect(event.turnContext).toContain("check.resolved");
+  });
+});
+
 describe("prompt-assembler — cache breakpoints", () => {
   it("emits markers after segment 1 and segment 3", () => {
     const params = baselineParams({
@@ -478,7 +611,7 @@ describe("prompt-assembler — cache breakpoints", () => {
     expect(segments[1]).toContain("Plugin body.");
   });
 
-  it("skips a turn-varying extension segment — it must not anchor a breakpoint", () => {
+  it("moves a turn-varying system segment out of the system prompt, ahead of the current turn", () => {
     const params = baselineParams({
       promptTemplate: "Plugin body.",
       turnInput: makeTurnInput({ locale: "en-US" }),
@@ -494,13 +627,41 @@ describe("prompt-assembler — cache breakpoints", () => {
     });
 
     const result = buildSegmentedContext(params);
+
+    // Memory changes every turn. In the system prompt it made every request
+    // differ from the last one ahead of the whole history.
+    expect(result.systemPrompt).not.toContain("goal");
+    expect(result.systemPrompt.endsWith(PROMPT_CACHE_BREAKPOINT_MARKER)).toBe(
+      true,
+    );
+    expect(result.messages).toEqual([
+      { role: "system", content: "goal: find the artifact" },
+      { role: "user", content: "I step forward" },
+    ]);
+    expect(result.turnContext).toBe("goal: find the artifact");
+  });
+
+  it("keeps a turn-varying pre-history segment in the system prompt, where it anchors no breakpoint", () => {
+    const params = baselineParams({
+      promptTemplate: "Plugin body.",
+      turnInput: makeTurnInput({ locale: "en-US" }),
+      promptSegments: [
+        {
+          id: "roster",
+          position: "pre-history",
+          audience: "all",
+          volatility: "turn",
+          content: "goal: find the artifact",
+        },
+      ],
+    });
+
+    const result = buildSegmentedContext(params);
     const segments = splitPromptCacheSegments(result.systemPrompt);
 
-    // The framework preamble opens its own cache span, and working memory
-    // anchors no breakpoint. It used to ride along inside the plugin
-    // instructions' segment, which defeated the point: memory changes every
-    // turn, so the instructions it shared a segment with were invalidated
-    // every turn too. It now trails every marker as an unmarked tail.
+    // The segment asked for a place ahead of the history and keeps it. It
+    // trails every marker as an unmarked tail, so the instructions ahead of
+    // it stay cacheable.
     const frameworkSegment = segments[0];
     expect(frameworkSegment).toContain("[LANGUAGE]");
     expect(frameworkSegment).not.toContain("goal");

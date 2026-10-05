@@ -421,7 +421,10 @@ describe("agent export segment", () => {
       completedResults: new Map(),
       exportSlots,
     });
-    const match = assembled.systemPrompt.match(
+    // An export is read anew each execution: it is data of the turn, behind
+    // the conversation.
+    expect(assembled.systemPrompt).not.toContain("<runtime-exports>");
+    const match = assembled.turnContext.match(
       /<runtime-exports>\n([\s\S]*?)\n<\/runtime-exports>/,
     );
     expect(match).toBeTruthy();

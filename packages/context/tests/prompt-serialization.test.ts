@@ -19,7 +19,7 @@ function makeSegments(
     turnExtensions: "",
     pluginInstructions: "",
     worldInfoBeforePlugin: "",
-    upstreamInjects: "",
+    sessionInjects: "",
     worldInfoAfterPlugin: "",
     ...overrides,
   };
@@ -36,7 +36,7 @@ describe("serializeSystemPrompt", () => {
         turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
-        upstreamInjects: "injects",
+        sessionInjects: "injects",
         worldInfoAfterPlugin: "after",
       }),
       false,
@@ -51,7 +51,7 @@ describe("serializeSystemPrompt", () => {
     const result = serializeSystemPrompt(
       makeSegments({
         pluginInstructions: "plugin",
-        upstreamInjects: "injects",
+        sessionInjects: "injects",
       }),
       false,
     );
@@ -67,7 +67,7 @@ describe("serializeSystemPrompt", () => {
         turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
-        upstreamInjects: "injects",
+        sessionInjects: "injects",
         worldInfoAfterPlugin: "after",
       }),
       true,
@@ -131,7 +131,7 @@ describe("serializeSystemPrompt — cache-breakpoint budget contract", () => {
         turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
-        upstreamInjects: "injects",
+        sessionInjects: "injects",
         worldInfoAfterPlugin: "after",
       }),
       true,
@@ -153,7 +153,7 @@ describe("serializeSystemPrompt — cache-breakpoint budget contract", () => {
         turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
-        upstreamInjects: "injects",
+        sessionInjects: "injects",
         worldInfoAfterPlugin: "after",
       }),
       true,

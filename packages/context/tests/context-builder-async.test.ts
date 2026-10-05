@@ -176,7 +176,7 @@ describe("buildContext — runtime inject regression", () => {
 
     expect(asyncResult.systemPrompt).toBe(sync.systemPrompt);
     expect(asyncResult.messages).toEqual(sync.messages);
-    expect(asyncResult.systemPrompt).toContain(
+    expect(asyncResult.turnContext).toBe(
       "<narrator-output>你走到了山脚下。</narrator-output>",
     );
   });
@@ -203,7 +203,7 @@ describe("buildContext — runtime inject regression", () => {
     };
     const result = buildContextSync(params);
     expect(result.systemPrompt).toBe(`body${PROMPT_CACHE_BREAKPOINT_MARKER}`);
-    expect(result.systemPrompt).not.toContain("<existing-entries>");
+    expect(result.turnContext).toBe("");
   });
 });
 
@@ -263,7 +263,7 @@ describe("buildContext — plugin-data inject", () => {
   it("injects <existing-entries>(none)</existing-entries> when namespace is empty", async () => {
     const store = makeStoreStub([]);
     const result = await buildContext(makeParams(store));
-    expect(result.systemPrompt).toContain(
+    expect(result.turnContext).toContain(
       "<existing-entries>(none)</existing-entries>",
     );
   });
@@ -285,14 +285,14 @@ describe("buildContext — plugin-data inject", () => {
     ];
     const store = makeStoreStub(entries);
     const result = await buildContext(makeParams(store));
-    expect(result.systemPrompt).toContain(
+    expect(result.turnContext).toContain(
       "- codex-fire-mountain | 2025-01-02T00:00:00.000Z",
     );
-    expect(result.systemPrompt).toContain(
+    expect(result.turnContext).toContain(
       "- codex-blue-river | 2025-01-04T00:00:00.000Z",
     );
     // Long value should be truncated with `...`
-    expect(result.systemPrompt).toMatch(/火山[^\n]*\.\.\./);
+    expect(result.turnContext).toMatch(/火山[^\n]*\.\.\./);
   });
 
   it("propagates listPluginData errors (no silent fallback)", async () => {
@@ -362,14 +362,14 @@ describe("buildContext — two-pass truncation", () => {
 
     // Anchors = 2 oldest created = codex-00, codex-01
     // Recent = 2 newest updated (excluding anchors) = codex-09, codex-08
-    expect(result.systemPrompt).toContain("- codex-00");
-    expect(result.systemPrompt).toContain("- codex-01");
-    expect(result.systemPrompt).toContain("- codex-09");
-    expect(result.systemPrompt).toContain("- codex-08");
+    expect(result.turnContext).toContain("- codex-00");
+    expect(result.turnContext).toContain("- codex-01");
+    expect(result.turnContext).toContain("- codex-09");
+    expect(result.turnContext).toContain("- codex-08");
     // middle entries excluded
-    expect(result.systemPrompt).not.toContain("- codex-05");
+    expect(result.turnContext).not.toContain("- codex-05");
     // count note shows we truncated
-    expect(result.systemPrompt).toContain("10 entries in total, 4 shown");
+    expect(result.turnContext).toContain("10 entries in total, 4 shown");
   });
 
   it("returns all entries when count <= maxEntries (no truncation)", async () => {
@@ -408,9 +408,9 @@ describe("buildContext — two-pass truncation", () => {
       completedResults: new Map(),
       store,
     });
-    expect(result.systemPrompt).toContain("- codex-a");
-    expect(result.systemPrompt).toContain("- codex-b");
-    expect(result.systemPrompt).not.toContain("entries in total");
+    expect(result.turnContext).toContain("- codex-a");
+    expect(result.turnContext).toContain("- codex-b");
+    expect(result.turnContext).not.toContain("entries in total");
   });
 });
 
@@ -450,22 +450,22 @@ describe("buildContext — format variants", () => {
 
   it("ids-only outputs just the key", async () => {
     const result = await buildWithFormat("ids-only");
-    expect(result.systemPrompt).toContain("- codex-test");
-    expect(result.systemPrompt).not.toContain("测试");
+    expect(result.turnContext).toContain("- codex-test");
+    expect(result.turnContext).not.toContain("测试");
   });
 
   it("full outputs the complete JSON value", async () => {
     const result = await buildWithFormat("full");
-    expect(result.systemPrompt).toContain(
+    expect(result.turnContext).toContain(
       '- codex-test: {"title":"测试","content":"short"}',
     );
   });
 
   it("summary includes updatedAt and compact JSON", async () => {
     const result = await buildWithFormat("summary");
-    expect(result.systemPrompt).toContain(
+    expect(result.turnContext).toContain(
       "- codex-test | 2025-01-02T00:00:00.000Z |",
     );
-    expect(result.systemPrompt).toContain("测试");
+    expect(result.turnContext).toContain("测试");
   });
 });

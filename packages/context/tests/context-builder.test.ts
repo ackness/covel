@@ -275,11 +275,15 @@ describe("buildContext", () => {
 
     const ctx = buildContext(params);
 
-    expect(ctx.systemPrompt).toContain(
-      "<narrator-output>the story</narrator-output>",
-    );
     expect(ctx.systemPrompt).toContain("I open the door");
+    // The inject is data of this turn: it leaves the system prompt and
+    // stands ahead of the current turn.
+    expect(ctx.systemPrompt).not.toContain("<narrator-output>");
     expect(ctx.messages).toEqual([
+      {
+        role: "system",
+        content: "<narrator-output>the story</narrator-output>",
+      },
       { role: "user", content: "I open the door" },
     ]);
   });

@@ -209,7 +209,13 @@ export async function executeAgentRuntime({
   // Compaction exists to fit the shared history view; a bounded runtime never
   // reads summaries, so it neither waits on nor triggers the turn's barrier.
   if (prepareCompactedContext && !historyPolicy) {
-    const refreshed = await prepareCompactedContext(assembled.systemPrompt);
+    // The turn context is fixed overhead like the system prompt, which it was
+    // part of; the threshold estimate counts both.
+    const refreshed = await prepareCompactedContext(
+      [assembled.systemPrompt, assembled.turnContext]
+        .filter(Boolean)
+        .join("\n\n"),
+    );
     if (refreshed.compacted) {
       effectiveMessageHistory = refreshed.messageHistory;
       effectiveSessionSummaries = refreshed.sessionSummaries;

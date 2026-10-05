@@ -26,7 +26,7 @@
 - `agent.history.maxTurns` 不计入本回合：`0` 仍会发送当前玩家输入和本回合正文。
 - 这段正文和结尾提示属于当前回合，预算裁剪时与当前玩家输入一起受保护。
 
-没有这一步时，叙事之后运行的 agent 读到的对话停在「上一回合的正文 + 本回合玩家输入」，模型会把上一回合结尾当成当下；`<runtime-inputs>` 里虽然有本回合正文，但它在 system prompt 中、位于整段历史之前。同一个 runtime 在提交后被重试时，历史里已经有本回合正文，两种情况现在读到的对话一致。
+没有这一步时，叙事之后运行的 agent 读到的对话停在「上一回合的正文 + 本回合玩家输入」，模型会把上一回合结尾当成当下；`<runtime-inputs>` 里虽然有本回合正文，但那是数据块里的一个字段，不是对话的一部分。同一个 runtime 在提交后被重试时，历史里已经有本回合正文，两种情况现在读到的对话一致。
 
 `history.compact@1` 是 single 扩展点。框架负责阈值、返回值校验及摘要与消息标记的原子持久化；默认 `history-compaction` 插件负责选择连续历史前缀、调用摘要模型和限制摘要长度。当前默认策略保护最近两个用户回合和最后五条消息，将旧摘要与新前缀合并为单块滚动摘要，预算为 context window 的 4%，最少 128、最多 1024 estimated tokens。
 
@@ -40,20 +40,38 @@ systemPrompt
   当前 runtime 的本地化正文
   stable / session 扩展段
   WorldInfo: before-plugin
-  声明输入、导出、事件目录与 activation 数据块
+  事件目录；阶段内运行的 activation
   WorldInfo: after-plugin
-  turn 扩展段
+  要求 pre-history 的 turn 扩展段
 
 messages
   pre-history 非 system 扩展消息
   摘要替换后的历史
+  回合上下文：本回合的数据块与 turn 扩展段（一条 system 消息）
   当前玩家输入
   本次执行已产出的故事正文与结尾提示（仅叙事之后的 runtime）
   按 depth 插入的世界书和扩展消息
   post-history 扩展消息
 ```
 
-空段跳过；system 段以空行连接。`position: system` 与默认 system 角色的 `pre-history` 段进入 system prompt。`pre-history` 的 user/assistant 段进入历史之前，`post-history` 段追加到 messages 末尾，`{ depth: n }` 按相对消息深度插入。
+空段跳过；system 段以空行连接。`position: system` 的 stable / session 段与默认 system 角色的 `pre-history` 段进入 system prompt；`position: system` 且 `volatility: turn` 的段进入回合上下文。`pre-history` 的 user/assistant 段进入历史之前，`post-history` 段追加到 messages 末尾，`{ depth: n }` 按相对消息深度插入。
+
+### 回合上下文
+
+每回合都会变的内容不放在 system prompt 里，而是合成一条 system 消息，排在历史之后、当前玩家输入之前。它包含：
+
+- 本回合的数据块：`io.selfData` 与注入块、`<runtime-inputs>`、`<runtime-exports>`，以及事件或手动触发的 `<runtime-activation>`（带载荷）。阶段内运行的 activation 每回合相同，留在 system prompt。
+- `position: system` 且 `volatility: turn` 的扩展段，如记忆块和 `<world-dimensions>`。
+
+原因是服务商的前缀缓存：一次请求只有从第一个字节起与之前的请求相同的部分才能命中。数据块在 system prompt 里时，system prompt 每回合都不同，排在它后面的整段历史就无法命中，会话越长浪费越多。现在 system prompt 逐回合保持不变，缓存可以一直覆盖到上一回合的历史。
+
+- 这段内容仍是 system 角色，其中由插件写给模型的指令（如掷骰步骤）权重不变。把 system 消息提到顶部的 adapter（Anthropic）发出的请求和以前一样。
+- 它不放在请求的最后。请求仍以本回合的消息和 post-history 段结尾：数据块紧挨着回复时，较小的模型会把数据块的写法带进工具参数（把参数包成输入块的形状、在字段后面补一个闭合标签）。
+- depth 插入按对话消息计数，回合上下文不占位置。
+- 预算裁剪把紧挨在受保护回合之前的 system 消息一并保留，所以它不会被丢掉。压缩阈值的估算把它和 system prompt 一起计入。`AssembledContext.turnContext` 是它的内容，没有时为空字符串。
+- 标签名不变。正文继续写 `runtime-inputs.<binding>.value`。
+
+仍会让请求前缀提前变化的情况：正文里内插的模板变量取值变了（如 `{{ characters.npcs }}`、`{{ player.character }}`）、按关键词触发的世界书条目变了、要求 `pre-history` 的 turn 扩展段变了、历史被压缩。声明了 `agent.history.maxTurns` 的 runtime 的历史窗口每回合滑动，本来就无法跨回合命中历史。
 
 扩展段先按 `audience` 过滤，再依次按 `volatility`（stable、session、turn）、`order`、provider plugin ID 和段 ID 排序。`audience: self` 覆盖提供插件的全部 runtime；`story` 匹配故事输出；`{ contract: "narrative-engine@1" }` 匹配 runtime 的输出契约。
 
@@ -126,15 +144,15 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 
 pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post-turn 提交后新执行再发布新版，不反向绑定 tracker 输出，不以 `recordAs` 或世界初值兜底。来源重试通过 `retryFromTurnId` 使用原 turn artifact，失败/未结算不是无变化。完整状态见 [World Model](world-model.md#回合时序与结算回执)。本期没有 #97 的隐藏事件载荷或条件触发层。
 
-声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。提示词里的 provenance 只有 `pluginId` 与 `runtimeId`：`resultId` 是只供工具和内核使用的 UUID，工具从 `ctx.inputSlots` 读取，不进入提示词（`<runtime-exports>` 同理）。
+声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过[回合上下文](#回合上下文)里的 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。提示词里的 provenance 只有 `pluginId` 与 `runtimeId`：`resultId` 是只供工具和内核使用的 UUID，工具从 `ctx.inputSlots` 读取，不进入提示词（`<runtime-exports>` 同理）。
 
 ## 5. Token 预算与缓存
 
-有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。当前用户回合（含本回合正文及其结尾提示）和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
+有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。当前用户回合（含它前面的回合上下文、本回合正文及其结尾提示）和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
 
-`serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；进入 system prompt 的 turn 扩展段（`position: system` 或 system 角色的 `pre-history`）放在最后一个缓存边界之后，不设置断点。user/assistant 角色的 pre-history、post-history 和 depth 段保持各自消息位置，不承诺这些消息位于某个 system 缓存边界内。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
+`serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；留在 system prompt 的 turn 扩展段（system 角色的 `pre-history`）放在最后一个缓存边界之后，不设置断点；`position: system` 的 turn 扩展段不在 system prompt 里，见[回合上下文](#回合上下文)。user/assistant 角色的 pre-history、post-history 和 depth 段保持各自消息位置，不承诺这些消息位于某个 system 缓存边界内。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
 
-稳定内容排在前面可以保留相同前缀。`volatility` 仅决定排序和缓存边界，不保证内容永远不变，也不取消执行内的扩展结果复用。
+稳定内容排在前面可以保留相同前缀。`volatility` 决定排序、缓存边界，以及 `position: system` 的段落在 system prompt 还是回合上下文；它不保证内容永远不变，也不取消执行内的扩展结果复用。
 
 ## 6. 外置模板与本地化
 
