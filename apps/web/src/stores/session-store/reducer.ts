@@ -1,4 +1,4 @@
-import { appendReasoningStep, mergeReasoning } from "./reasoning.js";
+import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import { deepMerge, encodePageCursor } from "@covel/shared";
 import {
@@ -7,7 +7,10 @@ import {
   upsertGameStateCharacter,
   mergeCommittedDimensions,
 } from "./game-state.js";
-import { buildDurableRuntimeJobExecutionStep } from "./execution-steps.js";
+import {
+  buildDurableRuntimeJobExecutionStep,
+  mergeExecutionStep,
+} from "./execution-steps.js";
 import {
   applyPluginMessageSurface,
   refreshPluginMessageSurfaces,
@@ -40,11 +43,7 @@ function upsertExecutionStep(
       (row) => row.turnId === step.turnId && row.attemptStatus === "committed",
     );
   const updated = {
-    ...(idx >= 0 ? next[idx] : undefined),
-    ...step,
-    ...(next[idx]?.reasoning || step.reasoning
-      ? { reasoning: mergeReasoning(next[idx]?.reasoning, step.reasoning) }
-      : {}),
+    ...mergeExecutionStep(idx >= 0 ? next[idx] : undefined, step),
     ...(committed ? { attemptStatus: "committed" as const } : {}),
     ...(idx >= 0 &&
     next[idx].attemptStatus === "committed" &&
@@ -482,11 +481,24 @@ export function reducer(
         executionSteps: upsertExecutionStep(state.executionSteps, action.step),
       };
     }
-    case "LOAD_EXECUTION_STEPS":
+    case "LOAD_EXECUTION_STEPS": {
+      // Recovery can start before live job events arrive or React updates refs.
+      const observedJobs = new Map(
+        state.executionSteps
+          .filter((step) => step.durableJobStatus)
+          .map((step) => [`${step.turnId}|${step.runtimeId}`, step]),
+      );
+      const recovered = action.steps.map((step) => {
+        const key = `${step.turnId}|${step.runtimeId}`;
+        const previous = observedJobs.get(key);
+        observedJobs.delete(key);
+        return previous ? mergeExecutionStep(previous, step) : step;
+      });
       return refreshPluginMessageSurfaces({
         ...state,
-        executionSteps: action.steps,
+        executionSteps: [...recovered, ...observedJobs.values()],
       });
+    }
     case "SET_TURN_ATTEMPT_STATUS":
       return refreshPluginMessageSurfaces({
         ...state,

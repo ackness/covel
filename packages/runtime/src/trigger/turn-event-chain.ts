@@ -7,6 +7,9 @@ import type {
 import { isSetupDoneForVersion, isSetupRuntime } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
+import { scheduleByDag } from "../schedule/dag-scheduler.js";
+import { makeSkippedResult } from "../turn-executor/turn-executor-helpers.js";
+import { isRequiredUpstreamSatisfied } from "../turn-executor/turn-output-helpers.js";
 import { shouldTrigger } from "./trigger.js";
 import type { TriggerContext } from "../types.js";
 
@@ -185,11 +188,8 @@ export async function runEventChain({
     });
     if (nextBatch.length === 0) break;
 
-    // Event subscribers have no dependency-edge mechanism between them (and no
-    // stage — event runtimes are stage-less), so name is the stable tie-break.
-    // Replaces the old numeric-priority sort. Bundled plugins have a single
-    // subscriber per topic, so no fan-out batch ever contains two runtimes whose
-    // relative order is observable.
+    // Keep background handoffs deterministic; synchronous ordering below comes
+    // from the same dependency DAG used by staged runtimes.
     const ordered = [...nextBatch].sort((a, b) => a.name.localeCompare(b.name));
 
     const currentDepthEvents = new Map(emittedEvents);
@@ -225,23 +225,46 @@ export async function runEventChain({
 
     if (syncBatch.length === 0) break;
 
-    const results = await executeParallel(
+    const dag = scheduleByDag(
       syncBatch,
-      async (manifest, identity) => {
-        const topic = manifest.trigger?.topic;
-        const matchedEvent =
-          topic !== undefined ? currentDepthEvents.get(topic) : undefined;
-        const triggerEvent =
-          topic !== undefined && matchedEvent !== undefined
-            ? { topic, data: matchedEvent }
-            : undefined;
-        return executeRuntime(manifest, triggerEvent, identity);
-      },
-      turnId,
+      activeRuntimes.filter((manifest) =>
+        isRequiredUpstreamSatisfied(completedResults.get(manifest.name)),
+      ),
     );
-    for (const [name, result] of results) {
-      completedResults.set(name, result);
-      collectEventsFrom(result, newEvents, onDroppedEvent);
+    if (dag.error) console.warn(`[event-chain] DAG scheduler: ${dag.error}`);
+    const cyclePath = dag.cyclic?.map((manifest) => manifest.name);
+    for (const manifest of dag.cyclic ?? []) {
+      completedResults.set(
+        manifest.name,
+        makeSkippedResult(
+          manifest,
+          { turnId },
+          "dependency-cycle",
+          "framework:dependencyCycle",
+          { cyclePath },
+        ),
+      );
+    }
+    for (const group of dag.groups) {
+      const results = await executeParallel(
+        group.runtimes,
+        async (manifest, identity) => {
+          const topic = manifest.trigger?.topic;
+          const matchedEvent =
+            topic !== undefined ? currentDepthEvents.get(topic) : undefined;
+          const triggerEvent =
+            topic !== undefined && matchedEvent !== undefined
+              ? { topic, data: matchedEvent }
+              : undefined;
+          return executeRuntime(manifest, triggerEvent, identity);
+        },
+        turnId,
+      );
+      // Gates and bindings in the next level must see these upstream outcomes.
+      for (const [name, result] of results) {
+        completedResults.set(name, result);
+        collectEventsFrom(result, newEvents, onDroppedEvent);
+      }
     }
 
     emittedEvents.clear();

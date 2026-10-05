@@ -172,6 +172,20 @@ async function restoreSubmittedBlocks(
 }
 
 function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
+  const control = raw.durableJobStatus;
+  const durableJobStatus =
+    control &&
+    typeof control === "object" &&
+    !Array.isArray(control) &&
+    "state" in control &&
+    typeof control.state === "string"
+      ? {
+          state: control.state,
+          ...("sequence" in control && typeof control.sequence === "number"
+            ? { sequence: control.sequence }
+            : {}),
+        }
+      : undefined;
   return {
     runtimeId: (raw.runtimeId as string) ?? "unknown",
     pluginId: (raw.pluginId as string) ?? "",
@@ -204,6 +218,7 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
     jobId: raw.jobId as string | undefined,
     detached: raw.detached === true,
     jobState: raw.jobState as string | undefined,
+    durableJobStatus,
     progress: raw.progress as number | undefined,
   };
 }

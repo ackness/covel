@@ -88,6 +88,34 @@ beforeEach(() => {
 });
 
 describe("restoreSessionState workspace ordering", () => {
+  it("retains cached durable control identity and sequence through restore", async () => {
+    const ds = makeDataService([]);
+    const step = {
+      runtimeId: "worker",
+      pluginId: "worker",
+      turnId: "source",
+      status: "completed",
+      jobId: "job",
+      detached: true,
+      jobState: "succeeded",
+      durableJobStatus: { state: "succeeded", sequence: 4 },
+    };
+    vi.mocked(ds.loadExecutionSteps).mockResolvedValue([step]);
+    const dispatch = vi.fn();
+    await restoreSessionState({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef: { current: null },
+      sessionGenerationRef,
+      worlds: [world],
+      session,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "LOAD_EXECUTION_STEPS",
+      steps: [expect.objectContaining(step)],
+    });
+  });
   it("retains persisted retry source, actual attempt, and commit evidence", async () => {
     const ds = makeDataService([]);
     const step = {

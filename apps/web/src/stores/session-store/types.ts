@@ -83,6 +83,8 @@ export interface ExecutionStep {
   detached?: boolean;
   /** Latest kernel/legacy job state used for accessible progress text. */
   jobState?: string;
+  /** Durable parent control state; plugin sub-job sequences are independent. */
+  durableJobStatus?: { state: string; sequence?: number };
   /** Latest background progress percentage. */
   progress?: number;
 }

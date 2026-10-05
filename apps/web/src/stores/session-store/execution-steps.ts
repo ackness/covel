@@ -1,5 +1,98 @@
 import type { ExecutionStep } from "./types.js";
 import { retryStepMetadata } from "./execution-projection.js";
+import { mergeReasoning } from "./reasoning.js";
+
+const DURABLE_TERMINAL_STATES = new Set([
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "stale",
+  "orphaned",
+]);
+const DURABLE_ACTIVE_PHASES: Readonly<Record<string, number>> = {
+  queued: 0,
+  claimed: 1,
+  running: 2,
+  committing: 3,
+};
+
+/** Merge live/recovered rows without letting a handoff undo durable progress. */
+export function mergeExecutionStep(
+  previous: ExecutionStep | undefined,
+  incoming: ExecutionStep,
+): ExecutionStep {
+  const sameJob =
+    previous?.jobId !== undefined &&
+    previous.jobId === incoming.jobId &&
+    previous.pluginId === incoming.pluginId;
+  const control = sameJob ? previous.durableJobStatus : undefined;
+  let step = incoming;
+  if (previous && control) {
+    const nextControl = incoming.durableJobStatus;
+    const older =
+      nextControl?.sequence !== undefined &&
+      control.sequence !== undefined &&
+      nextControl.sequence <= control.sequence;
+    const terminal = DURABLE_TERMINAL_STATES.has(control.state);
+    const phase = DURABLE_ACTIVE_PHASES[control.state];
+    const nextPhase = nextControl
+      ? DURABLE_ACTIVE_PHASES[nextControl.state]
+      : undefined;
+    const earlierPhase =
+      phase !== undefined && nextPhase !== undefined && nextPhase < phase;
+    if (
+      older ||
+      earlierPhase ||
+      (terminal &&
+        (!nextControl || !DURABLE_TERMINAL_STATES.has(nextControl.state))) ||
+      (!nextControl && incoming.jobState === "queued")
+    ) {
+      step = previous;
+    } else if (!nextControl) {
+      // Sub-job progress can update text/percentage, never its parent's state.
+      step = {
+        ...incoming,
+        status: previous.status,
+        jobState: previous.jobState,
+      };
+    } else if (nextControl.sequence === undefined) {
+      // Persisted job rows have no sequence; keep the live channel's watermark.
+      step = {
+        ...incoming,
+        durableJobStatus: {
+          ...nextControl,
+          ...(control.sequence !== undefined
+            ? { sequence: control.sequence }
+            : {}),
+        },
+      };
+    }
+  }
+  const newJob =
+    incoming.jobId !== undefined && previous?.jobId !== incoming.jobId;
+  // One job has one start time. The handoff carries it and can arrive after a
+  // control event, and control events built from a stale row omit it.
+  const startedAt = sameJob
+    ? (step.startedAt ?? previous?.startedAt ?? incoming.startedAt)
+    : undefined;
+  return {
+    ...previous,
+    ...(newJob
+      ? {
+          durableJobStatus: undefined,
+          jobState: undefined,
+          progress: undefined,
+          detail: undefined,
+        }
+      : {}),
+    ...step,
+    ...(startedAt !== undefined ? { startedAt } : {}),
+    ...(previous?.reasoning || incoming.reasoning
+      ? { reasoning: mergeReasoning(previous?.reasoning, incoming.reasoning) }
+      : {}),
+  };
+}
 
 export function toExecutionStepStatus(
   status: string | undefined,
@@ -90,8 +183,7 @@ export function buildDeferredExecutionStep(
 
 /**
  * Project a kernel job-status event onto the source runtime's timeline row.
- * Mixed-version deployments may provide the source turn on the accepted event,
- * in job data, or only in the existing row, so all three are supported.
+ * The source turn comes from job data or the matching handoff row.
  */
 export function buildJobStatusExecutionStep(
   payload: Record<string, unknown>,
@@ -112,7 +204,12 @@ export function buildJobStatusExecutionStep(
       : undefined;
   const parentJobId =
     typeof data?.runtimeJobId === "string" ? data.runtimeJobId : undefined;
-  const isRuntimeControlStatus = typeof data?.durableStatus === "string";
+  const isRuntimeControlStatus =
+    typeof data?.durableStatus === "string" &&
+    payload.progressScopeId === jobId;
+  if (existing?.jobId && existing.jobId !== (parentJobId ?? jobId)) {
+    existing = undefined;
+  }
   const turnId =
     (typeof payload.originTurnId === "string"
       ? payload.originTurnId
@@ -145,6 +242,16 @@ export function buildJobStatusExecutionStep(
     status,
     detached: true,
     jobId: parentJobId ?? jobId,
+    ...(isRuntimeControlStatus
+      ? {
+          durableJobStatus: {
+            state: data!.durableStatus as string,
+            ...(typeof payload.sequence === "number"
+              ? { sequence: payload.sequence }
+              : {}),
+          },
+        }
+      : {}),
     jobState:
       parentJobId && !isRuntimeControlStatus
         ? (existing?.jobState ?? "running")
@@ -226,6 +333,7 @@ export function buildDurableRuntimeJobExecutionStep(
     detached: true,
     jobId,
     jobState: state,
+    durableJobStatus: { state },
     turnId:
       typeof origin?.sourceTurnId === "string"
         ? origin.sourceTurnId

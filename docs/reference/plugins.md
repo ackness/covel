@@ -183,6 +183,10 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 必须�
 
 阶段按 `setup → pre-turn → narrative → post-turn → audit` 推进，阶段之间有完成屏障。相同阶段的先后由依赖边决定。`needs` 是成功门控，`after` 只表达排序。调度不能用更晚阶段的输出解锁更早阶段。
 
+同轮事件链中，每个深度实际匹配的同步 event runtime 也按 `needs`、`after` 和 `io.inputs` 建 DAG：层内独立执行，层间合并结果，再检查下游成功门控和输入。环及被环阻塞的下游记为 `skipped: dependency-cycle`，独立分支继续执行。依赖声明不会触发未匹配事件的提供者；后台 event follower 是独立作业，不参与这份同步 DAG。
+
+前一阶段或事件深度已满足的提供者也可满足 `needs` 的单提供者契约需求，避免当前批次中的另一候选提供者造成假循环；它不撤销 `after`、全提供者需求或输入绑定的排序边。
+
 包级 `requires` 保证契约提供者被激活，不要求每次执行都重新产生输出。需要在后续执行处理表单的 setup runtime 应用 `after` 排在一次性 setup 提供者之后，并读取已提交状态；不要使用默认 turn scope 的契约 `needs`，否则提供者完成 setup 后不再运行，消费者会被成功门控跳过。`after` 不证明初始化成功；消费者 guard 必须检查所需领域状态，例如新建主角前确认 `ctx.world.characterSchema` 已存在，缺失时明确失败，不生成表单或写入角色。
 
 setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新版本（`version` 变化）后，已有会话会在下一次玩家动作时重跑该 setup runtime：仍在 setup 阶段的会话在 setup 带重跑，已进入主循环的会话经 late-setup 通道在 pre-turn 之前补跑，并重新计算重试预算。因此 setup runtime 的 guard 必须对已完成的工作返回 `{ skip: true }`（例如主角已存在、schema 已写入），否则升级会让玩家重新看到欢迎信息或表单。不声明 `version` 的插件按 `0.0.0` 处理，永远不会因升级重跑。
@@ -313,6 +317,8 @@ World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时
 - 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入，世界与插件一样是依赖方：唯一提供者自动加入且不被当作孤立依赖移除。无法满足的需求在 `unmet` 中返回，原因为 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`；前两种阻止创建会话，后两种是玩家的选择，不阻止。
 
 世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`；组合包使用 `requested/recommended`。推荐项不自动启用，也不会覆盖玩家显式排除。`GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始显式请求，准备页和创建端再使用同一解析器计算活动集合。该接口返回的各 `requested` 与 `defaultPluginIds` 只含已安装插件；世界或组合包请求但未安装的插件列在 `missing`，由准备页提示，不进入创建请求。
+
+准备页切换玩法包会替换上一个包贡献的请求，包括世界初始选中的包。初始默认请求中同时被初始包请求的插件归该包所有，即使它也命中世界的 `preferredTags`：切换后只有新包请求它才保留，所以新包的叙事引擎能替换旧包的引擎。其他初始默认请求、世界 `requested` 和玩家手动添加的请求保留，显式排除继续优先。手动修改会清除包卡片高亮，但旧包来源仍保留，下一次切换不会累加旧包；手动重新启用的包内插件作为手选保留。世界的 `requires` 仍由解析器独立校验，不能把 `requested` 当作不可取消的必需项。
 
 发现 DTO 区分 `kind`、宿主 `hostState` 与会话 `sessionState`，运行时提供 `outputContract`。未授权社区插件可保留在请求列表，但不能进入执行集合；许可绑定会话身份与审批范围。
 
