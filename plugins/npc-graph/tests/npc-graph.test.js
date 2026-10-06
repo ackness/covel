@@ -69,7 +69,7 @@ describe("npc-graph manifests", () => {
     expect(extractor.stage).toBe("post-turn");
     expect(extractor.completeAfterTools).toEqual(["upsert-npc-graph"]);
     expect(extractor.maxSteps).toBeUndefined(); // Inherit the framework budget.
-    expect(extractor.maxRetries).toBe(0);
+    expect(extractor.maxRetries).toBe(3);
     expect(extractor.outputContract).toBe("npc-graph@1");
     expect(extractor.tools?.plugin).toEqual(["upsert-npc-graph"]);
     expect(extractor.trigger?.type).toBe("scheduled");
