@@ -93,6 +93,8 @@ agent:
 
 叙事之后运行的 agent（`post-turn` / `audit`）读到的对话以本回合的故事正文结尾：它以 assistant 消息接在当前玩家输入之后，再跟一条框架提示。正文里说「对话里最后一段故事正文是本回合的叙事」即可让模型从正文结尾的局面出发；需要结构化取值或来源信息时仍读 `runtime-inputs.<binding>.value`。细节见 [Prompt 结构](../reference/prompt-structure.md#本回合正文)。
 
+正文里取值随剧情变化的模板变量（`{{ player.character }}`、`{{ characters.npcs }}`）会让 system prompt 每回合不同，服务商的前缀缓存就够不到历史。把这类内容改为回合级提示段的做法见 [Template 变量与数据边界](../reference/prompt-structure.md#4-template-变量与数据边界)。
+
 Function runtime 没有组装好的对话。`ctx.store.listTurnMessages()` / `readTurnMessages()` 只返回已提交的消息，不含正在执行的这一回合；本回合的内容从 `ctx.playerMessage`、`io.inputs` 绑定（如 `narrative-engine@1`）或内核输入 `turn-digest@1`（含 `playerMessage` 与 `narrativeText`）读取。
 
 ## 读取角色和自有数据

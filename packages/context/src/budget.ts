@@ -188,6 +188,9 @@ function isCompactedHistoryEnvelope(message: {
  *
  * Stops immediately AFTER encountering the Nth user message from the tail,
  * so that user message (and everything strictly after it) is protected.
+ * System messages directly ahead of it are protected with it: they are that
+ * turn's context (the turn context message, a note placed before the turn),
+ * and a request that keeps the turn without them answers it blind.
  * When there are fewer user messages than `protectLastUserTurns`, the
  * protect window is the entire list.
  */
@@ -203,7 +206,9 @@ function computeProtectStartIndex(
     if (messages[i]!.role === "user") {
       userSeen += 1;
       if (userSeen >= protectLastUserTurns) {
-        return i;
+        let start = i;
+        while (start > 0 && messages[start - 1]!.role === "system") start--;
+        return start;
       }
     }
   }

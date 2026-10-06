@@ -111,6 +111,7 @@ export type {
   StageMusicModel,
 } from "./extension-points.js";
 export { appendSummaryEntries } from "./session-summary.js";
+export { characterSheetSegments } from "./character-sheets.js";
 
 export {
   createNarrativeReview,

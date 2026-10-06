@@ -30,6 +30,9 @@ contracts:
     schema: ./schemas/narrative-engine.schema.json
 entry: ./server/index.js
 contributes:
+  extensions:
+    - point: prompt.segment@1
+      id: character-sheets
   settings:
     - key: narrativePerson
       type: select
@@ -154,13 +157,11 @@ Tags: {{ world.tags }}
 
 ## Player Character
 
-{{ player.character }}
+The `<player-character>` block holds the player character's current sheet.
 
 ## Character Profiles
 
-One line per non-player character: name [type] | description | fields.
-
-{{ characters.npcs }}
+The `<character-profiles>` block has one line per non-player character: name [type] | description | fields.
 
 ## NPC Relationship Context (injected by graph retrieval)
 

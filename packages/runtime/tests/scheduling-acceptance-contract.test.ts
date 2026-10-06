@@ -1478,7 +1478,9 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       completedResults: new Map(),
       activation: fnActivation!,
     });
-    const match = assembled.systemPrompt.match(
+    // A manual activation carries a payload: it is data of this run and
+    // follows the conversation.
+    const match = assembled.turnContext.match(
       /<runtime-activation>\n([\s\S]*?)\n<\/runtime-activation>/,
     );
     expect(match).toBeTruthy();

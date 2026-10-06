@@ -40,7 +40,7 @@ export default function (covel) {
 
 **`volatility` 字段作用范围**：`volatility` 仅在 `prompt.segment@1` 扩展点中有效，用于控制提示词缓存边界（`stable`/`session`/`turn`）。其他扩展点不消费此字段；UI 槽位、历史变换、压缩等扩展点的缓存策略由各自的实现决定。
 
-当前 `volatility` 仅对 `position: "system"` 和 `position: "pre-history"` 且 `role` 为 `system` 的段落生效——这些是系统提示字符串的组成部分，提示组装器可以在稳定区和 turn 区之间分割它们。`pre-history` 的非 system role 消息、`post-history` 和 `depth` position 的段落目前忽略此字段，其缓存行为由消息历史的整体 cache_control 布局决定。
+当前 `volatility` 仅对 `position: "system"` 和 `position: "pre-history"` 且 `role` 为 `system` 的段落生效。`position: "system"` 的段落由组装器按它决定去向：`stable` / `session` 进入系统提示字符串的稳定区，`turn` 进入历史之后的[回合上下文](prompt-structure.md#回合上下文)（仍是 system 角色），这样系统提示逐回合不变。`pre-history` 的 system 段落都留在系统提示里，`turn` 的排在最后一个缓存边界之后。`pre-history` 的非 system role 消息、`post-history` 和 `depth` position 的段落目前忽略此字段，其缓存行为由消息历史的整体 cache_control 布局决定。
 
 **`order` 与段落排序**：同一 `volatility` 层级内，段落按 `order`（升序，默认 0）排列。多个插件以相同 `order` 注册时，最终顺序由 `providerPluginId`（字典序）再到 `id` 决定，是确定性的实现细节而非设计承诺——这意味着插件改名会静默地改变它在同层的相对位置。需要明确相对顺序的插件应设置不同的 `order` 值。
 

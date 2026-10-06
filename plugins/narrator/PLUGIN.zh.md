@@ -31,13 +31,11 @@ contributes:
 
 ## 玩家角色
 
-{{ player.character }}
+`<player-character>` 块是玩家角色当前的角色卡。
 
 ## 角色档案
 
-每行是一位非玩家角色：姓名 [类型] | description | fields。
-
-{{ characters.npcs }}
+`<character-profiles>` 块里每行是一位非玩家角色：姓名 [类型] | description | fields。
 
 ## NPC 关系上下文（由图谱检索注入）
 

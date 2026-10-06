@@ -197,25 +197,24 @@ detached runtime 必须声明 effects；框架允许隔离的 assets/media、本
 玩家输入                      框架翻译层                         LLM 收到的
 ─────────                    ────────                         ──────────
 
-"我去探索沼泽"     ──►    Context Builder     ──►    System Prompt:
+"我去探索沼泽"     ──►    Context Builder     ──►    System Prompt（逐回合不变）:
                           │                          │  你是主叙事生成器...
                           │ 1. 加载 PLUGIN.md         │  <world-lore>九州・云梦泽...</world-lore>
-                          │    (agent 指令)           │  <world-dimensions>...</world-dimensions>
+                          │    (agent 指令)           │
+                          │                          │  History:
+                          │ 2. 注入世界观              │  ...此前的回合...
+                          │    {{ world.lore }}       │
+                          │                          │  回合上下文（每回合重发）:
+                          │ 3. 注入消息历史            │  <runtime-inputs>...</runtime-inputs>
+                          │    (append-only store)    │  <world-dimensions>...</world-dimensions>
                           │                          │  <player-character>
-                          │ 2. 注入世界观              │    名字: 陆青云, 灵根: 水灵根...
-                          │    {{ world.lore }}       │  </player-character>
-                          │                          │
-                          │ 3. 注入角色数据            │  History:
-                          │    {{ player.character }} │  [user] 我去探索沼泽
-                          │                          │
-                          │ 4. 注入上游输出            │  Tools available:
-                          │    {{ inputs.xxx }}       │  (根据 manifest.tools 注入)
-                          │                          │
-                          │ 5. 注入消息历史            │
-                          │    (append-only store)    │
-                          │                          │
-                          │ 6. 语言约束               │
-                          │    "用中文回复"            │
+                          │ 4. 注入本回合数据          │    名字: 陆青云, 灵根: 水灵根...
+                          │    上游输出、角色卡、      │  </player-character>
+                          │    回合级提示段            │
+                          │                          │  [user] 我去探索沼泽
+                          │ 5. 语言约束               │
+                          │    "用中文回复"            │  Tools available:
+                          │                          │  (根据 manifest.tools 注入)
 ```
 
 ### 3.2 输出方向：LLM → 玩家

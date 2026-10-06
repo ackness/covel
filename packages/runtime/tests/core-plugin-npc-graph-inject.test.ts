@@ -19,10 +19,14 @@ class CapturingLLM implements LLMAdapter {
   readonly systemPrompts: string[] = [];
 
   async generate(req: LLMRequest): Promise<LLMResponse> {
-    const system = req.messages.find((message) => message.role === "system");
-    if (typeof system?.content === "string") {
-      this.systemPrompts.push(system.content);
-    }
+    // The system prompt and the turn context that follows the conversation.
+    this.systemPrompts.push(
+      req.messages
+        .filter((message) => message.role === "system")
+        .map((message) => message.content)
+        .filter((content) => typeof content === "string")
+        .join("\n\n"),
+    );
     return {
       content: '{"narrativeOutput":"你记起了图谱中的关系。"}',
       toolCalls: [],

@@ -38,8 +38,8 @@ function assemble(segments: readonly PromptSegment[]) {
     injectCacheBreakpoints: true,
   });
 }
-it("places volatile system segments beyond every cache breakpoint", () => {
-  const { systemPrompt } = assemble([
+it("keeps stable and session system segments in the system prompt and moves turn-volatile ones out", () => {
+  const { systemPrompt, turnContext, messages } = assemble([
     segment("fresh memory"),
     segment("static", { volatility: "stable" }),
     segment("session", { volatility: "session" }),
@@ -47,23 +47,26 @@ it("places volatile system segments beyond every cache breakpoint", () => {
   expect(systemPrompt.indexOf("static")).toBeLessThan(
     systemPrompt.indexOf("session"),
   );
-  expect(systemPrompt.indexOf("fresh memory")).toBeGreaterThan(
-    systemPrompt.lastIndexOf(PROMPT_CACHE_BREAKPOINT_MARKER),
-  );
+  expect(systemPrompt).not.toContain("fresh memory");
+  expect(turnContext).toBe("fresh memory");
+  expect(messages).toEqual([
+    { role: "system", content: "fresh memory" },
+    { role: "user", content: "hello" },
+  ]);
 });
 it("scopes segments to their provider, story runtimes and declared contracts", () => {
-  const { systemPrompt } = assemble([
+  const { turnContext } = assemble([
     segment("private", { audience: "self" }),
     segment("own", { audience: "self", providerPluginId: "target" }),
     segment("story", { audience: "story" }),
     segment("matching", { audience: { contract: "example@1" } }),
     segment("unrelated", { audience: { contract: "other@1" } }),
   ]);
-  expect(systemPrompt).not.toContain("private");
-  expect(systemPrompt).not.toContain("unrelated");
-  expect(systemPrompt).toContain("own");
-  expect(systemPrompt).toContain("story");
-  expect(systemPrompt).toContain("matching");
+  expect(turnContext).not.toContain("private");
+  expect(turnContext).not.toContain("unrelated");
+  expect(turnContext).toContain("own");
+  expect(turnContext).toContain("story");
+  expect(turnContext).toContain("matching");
 });
 it("keeps message roles and post-history placement", () => {
   const { messages } = assemble([
@@ -131,12 +134,13 @@ it("breaks same-order provider ties by code units, not locale", () => {
   // localeCompare ranks "alpha" before "Zeta"; code-unit order puts "Zeta"
   // first. Both must agree with the extension host's provider ordering so
   // assembled bytes stay identical across ICU builds.
-  const { systemPrompt } = assemble([
+  const { turnContext } = assemble([
     segment("from-alpha", { providerPluginId: "alpha" }),
     segment("from-zeta", { providerPluginId: "Zeta" }),
   ]);
-  expect(systemPrompt.indexOf("from-zeta")).toBeLessThan(
-    systemPrompt.indexOf("from-alpha"),
+  expect(turnContext.indexOf("from-zeta")).toBeGreaterThanOrEqual(0);
+  expect(turnContext.indexOf("from-zeta")).toBeLessThan(
+    turnContext.indexOf("from-alpha"),
   );
 });
 

@@ -8,6 +8,7 @@
 - 依赖 `scene-stage` 的 cast runtime（`scene-cast@1`）提供当前在场角色上下文。
 - 可读取 `npc-graph/rag-retriever` 提供的人物关系上下文。
 - 常驻 prompt 只使用世界名称、简介和标签；由世界上下文扩展提供世界条目。
+- 玩家角色卡（`<player-character>`）由 entry 注册的回合级提示段提供，排在历史之后；正文里只写块名，system prompt 不随角色卡变化。
 - 可调用 `memory-search` 检索已离开当前窗口的旧对话、承诺和线索。
 - `advertiseEvents: true`，可调用 `emit-event` 发射当前会话已声明的领域事件。
 

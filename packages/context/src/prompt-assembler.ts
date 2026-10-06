@@ -9,16 +9,21 @@ import { selectPromptSegments } from "./extension-segments.js";
  * [2 Working Memory]            ← session-stable slow-vary
  * [3 Plugin Instructions]       ← PLUGIN.md body, per-plugin stable
  * [4 WorldInfo: before-plugin]  ← keyword-triggered
- * [5 Injects from upstream]     ← dynamic (this turn's upstream outputs)
+ * [5 Session injects]           ← the event directory
  * [6 WorldInfo: after-plugin]   ← keyword-triggered
  * ---- messages ----
  * [7 history (after pruning)]   ← dynamic (handled as messages)
+ * [8 Turn context]              ← this turn's data and turn-volatile segments
  *   current player message, then the story text this execution already
  *   produced and its closing cue (runtimes that run after the story)
- * [8 WorldInfo: at-depth:N]     ← placed before Nth-from-last message (depthContributions)
- * [9 Author's Note]             ← depth-4 instruction
+ * [9 WorldInfo: at-depth:N]     ← placed before Nth-from-last message (depthContributions)
  * [10 Post-History Instructions]← director-grade high-weight
  * ```
+ *
+ * Everything that changes with the turn comes after the history. A provider
+ * serves a request from its cache only as far as it matches an earlier one
+ * from the first byte, so a system prompt that carried this turn's inputs put
+ * the whole history out of reach.
  *
  * Empty segments are skipped during final concatenation so the output stays
  * clean. The returned `AssembledContext.messages` array contains history,
@@ -75,8 +80,19 @@ interface PromptSegments {
   readonly pluginInstructions: string;
   /** Segment 4 — lorebook `before-plugin` position. */
   readonly worldInfoBeforePlugin: string;
-  /** Segment 5 — upstream runtime injects (XML-wrapped). */
-  readonly upstreamInjects: string;
+  /**
+   * Segment 5 — blocks that hold from turn to turn: the event directory, and
+   * the activation of a staged run, which is the same every turn.
+   */
+  readonly sessionInjects: string;
+  /**
+   * Segment 8 — data of this turn: the runtime's own data, its inputs and
+   * exports, and the activation of an event or manual run, which carries a
+   * payload (XML-wrapped).
+   */
+  readonly turnData: string;
+  /** Segment 8 — `position: "system"` extension segments that change with the turn. */
+  readonly turnContextExtensions: string;
   /** Segment 6 — lorebook `after-plugin` position. */
   readonly worldInfoAfterPlugin: string;
   /**
@@ -245,12 +261,19 @@ function buildPromptSegmentsCommon(
   // inside model-authored or player-authored DATA, and the expansion result
   // was inserted raw, bypassing escaping entirely. The template is interpreted
   // exactly once, over the plugin's own PLUGIN.md body; injected data is data.
-  const upstreamInjects = [
-    rawInjects,
+  const activation = buildRuntimeActivationBlock(params);
+  const staged = params.activation?.source === "stage";
+  const sessionInjects = [
     buildAvailableEventsBlock(params),
+    staged ? activation : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const turnData = [
+    rawInjects,
     buildInputsBindingBlock(params),
     buildExportsBindingBlock(params),
-    buildRuntimeActivationBlock(params),
+    staged ? "" : activation,
   ]
     .filter(Boolean)
     .join("\n");
@@ -293,24 +316,34 @@ function buildPromptSegmentsCommon(
       content: segment.content,
       order: segment.order ?? 0,
     }));
-  // volatility filters stable vs. turn-scoped extensions for cache boundary optimization.
-  // Currently only applies to system-position segments (see docs/reference/extension-points.md).
-  // Other positions (pre-history, post-history, depth) do not yet respect volatility—
-  // extending it requires confirming no cache-key drift from turn-local segments landing in the stable zone.
+  // Volatility decides where a system segment goes (see
+  // docs/reference/extension-points.md). A `position: "system"` segment that
+  // changes with the turn joins the turn context after the history, so the
+  // system prompt holds from turn to turn. One that asked for `pre-history`
+  // stays ahead of the history, at the end of the system prompt. Other
+  // positions (non-system pre-history, post-history, depth) ignore volatility.
+  const turnSegments = systemSegments.filter(
+    (segment) => segment.volatility === "turn",
+  );
   return {
     stableExtensions: systemSegments
       .filter((segment) => segment.volatility !== "turn")
       .map((segment) => segment.content)
       .join("\n\n"),
-    turnExtensions: systemSegments
-      .filter((segment) => segment.volatility === "turn")
+    turnExtensions: turnSegments
+      .filter((segment) => segment.position === "pre-history")
+      .map((segment) => segment.content)
+      .join("\n\n"),
+    turnContextExtensions: turnSegments
+      .filter((segment) => segment.position === "system")
       .map((segment) => segment.content)
       .join("\n\n"),
     preHistoryExtensions,
     frameworkPreamble,
     pluginInstructions,
     worldInfoBeforePlugin,
-    upstreamInjects,
+    sessionInjects,
+    turnData,
     worldInfoAfterPlugin,
     postHistoryInstructions: extensionSegments
       .filter((segment) => segment.position === "post-history")
@@ -387,10 +420,14 @@ function finalizeSegmentedContext(
     params.executionStory ?? [],
     buildExecutionStoryCue(params.turnInput.locale),
   );
+  const currentMessage: LLMMessage = {
+    role: "user",
+    content: buildCurrentTurnUserMessage(params.turnInput),
+  };
   const baseMessages: readonly LLMMessage[] = [
     ...(segments.preHistoryExtensions ?? []),
     ...historyMessages,
-    { role: "user", content: buildCurrentTurnUserMessage(params.turnInput) },
+    currentMessage,
     ...storyMessages,
   ];
   const currentTurnUserMessages = storyMessages.length > 0 ? 2 : 1;
@@ -401,11 +438,24 @@ function finalizeSegmentedContext(
     segments.depthContributions,
   );
 
+  // Segment 8 — this turn's data and turn-volatile segments, as one system
+  // message between the history and the current turn. It was system prompt
+  // content and keeps that role; an adapter that lifts system messages to the
+  // top sends it as before. It is not the last thing before the reply: there,
+  // small models copied the syntax of the data blocks into their tool calls.
+  const turnContext = [segments.turnData, segments.turnContextExtensions]
+    .filter(Boolean)
+    .join("\n\n");
+  // Depth positions count conversation messages, so it goes in afterwards.
+  const turnStart = withDepthContributions.indexOf(currentMessage);
+
   // Segment 10 — append post-history instructions after everything else.
-  const messages: readonly LLMMessage[] =
-    segments.postHistoryInstructions.length > 0
-      ? [...withDepthContributions, ...segments.postHistoryInstructions]
-      : withDepthContributions;
+  const messages: readonly LLMMessage[] = [
+    ...withDepthContributions.slice(0, turnStart),
+    ...(turnContext ? [{ role: "system" as const, content: turnContext }] : []),
+    ...withDepthContributions.slice(turnStart),
+    ...segments.postHistoryInstructions,
+  ];
 
   const budgetEnabled =
     params.estimator !== undefined && params.contextBudget !== undefined;
@@ -419,11 +469,18 @@ function finalizeSegmentedContext(
       systemPrompt,
       frameworkHead,
       messages: result.messages,
+      turnContext,
       currentTurnUserMessages,
       budgetExceeded: result.budgetExceeded,
       prunedMessageCount: result.prunedMessageCount,
     };
   }
 
-  return { systemPrompt, frameworkHead, messages, currentTurnUserMessages };
+  return {
+    systemPrompt,
+    frameworkHead,
+    messages,
+    turnContext,
+    currentTurnUserMessages,
+  };
 }

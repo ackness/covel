@@ -47,6 +47,13 @@ export interface AssembledContext {
   /** Conversation messages (history + current user message). */
   readonly messages: readonly LLMMessage[];
   /**
+   * Content of the turn context message in `messages`: this turn's data and
+   * turn-volatile segments, placed between the history and the current turn.
+   * Empty when there is none. It is fixed overhead of the request, like
+   * `systemPrompt`.
+   */
+  readonly turnContext: string;
+  /**
    * User-role messages the current turn ends the base messages with: the
    * player message, and the cue that closes this turn's story when there is
    * one. A budget pass must keep all of them.
