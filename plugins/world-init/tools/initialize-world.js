@@ -3,7 +3,6 @@ import {
   getToolContent,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { dimensionsJsonEqual } from "@covel/shared";
 import makeSetWorldSchema, {
   createWorldAttributeSchema,
 } from "./set-world-schema.js";
@@ -18,7 +17,7 @@ export default function (toolkit) {
   return tool({
     name: "initialize-world",
     description:
-      "Initialize character schema and dimension declarations together. Author declarations are authoritative; only a world without them needs generated definitions. Never mirror global dimension values into character fields or lorebook.",
+      "Initialize character schema and dimension declarations together. Author declarations are authoritative; only a world without them needs generated definitions, and definitions sent for a world that has its own are not used. Never mirror global dimension values into character fields or lorebook.",
     parameters: z
       .strictObject({
         types: z.array(z.string().min(1)).default(["npc", "companion"]),
@@ -50,14 +49,10 @@ export default function (toolkit) {
       const declared =
         ctx.world?.worldRecord?.dimensions ??
         ctx.world?.worldRecord?.metadata?.dimensions;
-      if (
-        declared &&
-        definitions &&
-        !dimensionsJsonEqual(declared, definitions)
-      )
-        throw new Error(
-          "Generated definitions cannot replace world author declarations",
-        );
+      // The world's own declarations are used as they are. The prompt cannot
+      // tell the model whether the world has any, so a model often sends
+      // definitions as well. Refusing them cost another model call at the
+      // start of every session of such a world; they are left out instead.
       const schemaResult = await setSchema.execute({ types, attributes }, ctx);
       const dimensionsResult = await setDimensions.execute(
         { definitions: declared ?? definitions ?? {} },

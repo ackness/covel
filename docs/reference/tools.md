@@ -744,13 +744,13 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/initialize-world.js`)
 
-开局组合角色属性 schema 与维度声明，作为一个工具结果返回 `character.schema.set` 和 `dimension.initialize` proposals；任一部分失败不暴露半套写入，执行成功后由 finalizer 原子提交。作者已有声明时使用作者 definition，拒绝模型替换；没有声明的 lore-only 世界才可生成 definitions。不把资源结构转成角色字段或 constant lorebook。
+开局组合角色属性 schema 与维度声明，作为一个工具结果返回 `character.schema.set` 和 `dimension.initialize` proposals；任一部分失败不暴露半套写入，执行成功后由 finalizer 原子提交。作者已有声明时使用作者 definition：模型同时给出的 `definitions` 不被采用，调用照常成功（提示词无法告诉模型世界有没有声明，拒绝只会让每局开头多一次模型调用）；没有声明的 lore-only 世界才使用生成的 definitions。不把资源结构转成角色字段或 constant lorebook。
 
 | 参数          | 类型            | 必需 | 描述                                                                    |
 | ------------- | --------------- | ---- | ----------------------------------------------------------------------- |
 | `types`       | string[]        |      | 默认 `["npc", "companion"]`                                             |
 | `attributes`  | AttributeDef[]  | ✓    | 至少 15 项，覆盖 `stats` / `bio` / `abilities` / `equipment` / `social` |
-| `definitions` | WorldDimensions |      | 没有作者声明时可提供生成的 definition map                               |
+| `definitions` | WorldDimensions |      | 没有作者声明时可提供生成的 definition map；世界有声明时不被采用         |
 
 **输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
 
@@ -821,7 +821,7 @@ Attributes:
 
 叙事来源、逻辑回合号、读取版本集和每条更新的 `expectedVersion` 从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定：版本就是本次执行读到的那个，让模型照抄一遍只会多出「漏写」和「抄了历史回合的旧版本号」两种失败。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 
-校验前先整理几种含义明确的写法，不为此退回模型重交：路径里的 `/` 也当作分隔符（`call-0614/status`），除非当前值里已有包含该斜杠的键；写在单条 change 上或与 `updates` 并列的 `reason` 被去掉；模型写出的 `expectedVersion` 被去掉（见上）；条目自带的空 `updates: []` 被去掉；同一维度的多条 `changes` 条目合并为一条（`reason` 依次拼接）。同一维度若有一条给出完整 `value`，仍按重复 ID 拒绝。`id` 不是维度、却是某一个维度当前值里的条目名时（把地图里的一个房间当成了维度），报错会写明它属于哪个维度、路径该怎么写。
+校验前先整理几种含义明确的写法，不为此退回模型重交：路径里的 `/` 也当作分隔符（`call-0614/status`），除非当前值里已有包含该斜杠的键；写在单条 change 上或与 `updates` 并列的 `reason` 被去掉；模型写出的 `expectedVersion` 被去掉（见上）；条目自带的空 `updates: []` 被去掉；同一维度的多条 `changes` 条目合并为一条（`reason` 依次拼接）。只有一条 change 且 `path` 为空字符串时，它就是完整值（模型对数值或文本型维度会这样写），按 `value` 处理。同一维度若有一条给出完整 `value`，仍按重复 ID 拒绝。`id` 不是维度、却是某一个维度当前值里的条目名时（把地图里的一个房间当成了维度），报错会写明它属于哪个维度、路径该怎么写。
 
 本轮无变化也必须调用 `update-dimensions({updates:[]})`。既没有 `value`、`changes` 也为空或缺失的条目表示该维度未变化，工具直接略去它，不为此退回模型重交。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 

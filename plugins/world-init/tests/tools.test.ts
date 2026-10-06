@@ -114,19 +114,32 @@ describe("world-init domain tools", () => {
         worldRecord: { metadata: { dimensions: { reputation: definition } } },
       },
     };
-    await expect(
-      initializeWorld({ tool, z }).execute(
-        {
-          attributes,
-          definitions: { reputation: { ...definition, initialValue: 50 } },
-        },
-        ctx,
-      ),
-    ).rejects.toThrow("author");
+    // Definitions a model sends for a world that declares its own are left
+    // out, not refused: the call succeeds with the author's declarations.
+    const withGenerated = await initializeWorld({ tool, z }).execute(
+      {
+        attributes,
+        definitions: { reputation: { ...definition, initialValue: 50 } },
+      },
+      ctx,
+    );
+    expect(getPendingProposals(withGenerated)[1].payload.definitions).toEqual({
+      reputation: definition,
+    });
+    // The result keeps the shape the runtime's output schema allows.
+    expect(Object.keys(getToolContent(withGenerated)).sort()).toEqual([
+      "attributeCount",
+      "dimensionCount",
+      "preGameDone",
+      "success",
+      "worldSchema",
+    ]);
+    const withoutGenerated = await initializeWorld({ tool, z }).execute(
+      { attributes },
+      ctx,
+    );
     expect(
-      getPendingProposals(
-        await initializeWorld({ tool, z }).execute({ attributes }, ctx),
-      )[1].payload.definitions,
+      getPendingProposals(withoutGenerated)[1].payload.definitions,
     ).toEqual({ reputation: definition });
   });
   it("validates dimension schemas/ranges and exposes a single initialization proposal", async () => {
@@ -226,6 +239,23 @@ describe("world-init domain tools", () => {
         { id: "reputation", reason: "No change.", updates: [] },
       ]),
     ).toEqual([{ id: "reputation", expectedVersion: 4, value: 5 }]);
+    // The whole value written as one change at the empty path, as a model
+    // does for a dimension that is a number.
+    expect(
+      await settle([{ id: "reputation", changes: [{ path: "", value: 5 }] }]),
+    ).toEqual([{ id: "reputation", expectedVersion: 4, value: 5 }]);
+    // Two changes, one at the empty path, have no single meaning.
+    await expect(
+      settle([
+        {
+          id: "reputation",
+          changes: [
+            { path: "", value: 5 },
+            { path: "x", value: 1 },
+          ],
+        },
+      ]),
+    ).rejects.toThrow();
   });
   it("says what an unknown dimension is when it is an entry of one", async () => {
     const ctx = trackerContext();
