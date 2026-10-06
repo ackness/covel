@@ -67,11 +67,13 @@ function manifest(
 
 describe("executeTurn main-loop DAG scheduler", () => {
   it("runs independent narrator downstreams concurrently", async () => {
-    // narrator, then guide + codex + char-tracker in parallel (all depend only
-    // on narrator). Without the DAG scheduler they would execute strictly in
-    // priority order — this test forces them to overlap by making each handler
-    // take ≥ 40ms and asserting the wall-clock time of the downstream level is
-    // less than 3× the per-runtime delay.
+    // narrator, then guide + extractor + codex + char-tracker in parallel (all
+    // depend only on narrator). Without the DAG scheduler they would execute
+    // strictly in priority order. Each downstream handler holds until all four
+    // have started, so the order of events proves the overlap. No elapsed time
+    // is measured: a bound on it fails on a loaded machine. A scheduler that
+    // ran them one at a time would never release the first one, and the test
+    // would time out.
     const narrator = manifest("narrator", 500);
     const guide = manifest("guide", 550, {
       input: {
@@ -122,13 +124,26 @@ describe("executeTurn main-loop DAG scheduler", () => {
       },
     } as Partial<RuntimeManifest>);
 
-    const DELAY = 60;
-    const timings: Record<string, { start: number; end: number }> = {};
+    const downstreams = [
+      "guide",
+      "npc-graph/extractor",
+      "codex",
+      "char-creator/character-tracker",
+    ];
+    const events: string[] = [];
+    let started = 0;
+    let release!: () => void;
+    const allStarted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
 
     const makeHandler = (name: string) => async () => {
-      const start = Date.now();
-      await new Promise((r) => setTimeout(r, DELAY));
-      timings[name] = { start, end: Date.now() };
+      events.push(`start:${name}`);
+      if (downstreams.includes(name)) {
+        if (++started === downstreams.length) release();
+        await allStarted;
+      }
+      events.push(`end:${name}`);
       return { outcome: "success", value: { narrativeOutput: "x" } } as const;
     };
 
@@ -158,25 +173,19 @@ describe("executeTurn main-loop DAG scheduler", () => {
       true,
     );
 
-    // Narrator finished before any downstream started.
-    const nEnd = timings["narrator"].end;
-    const downstreams = [
-      "guide",
-      "npc-graph/extractor",
-      "codex",
-      "char-creator/character-tracker",
-    ];
-    for (const d of downstreams) {
-      expect(timings[d].start).toBeGreaterThanOrEqual(nEnd);
+    const at = (event: string) => {
+      const index = events.indexOf(event);
+      expect(index, event).toBeGreaterThanOrEqual(0);
+      return index;
+    };
+    const firstDownstreamEnd = Math.min(
+      ...downstreams.map((name) => at(`end:${name}`)),
+    );
+    for (const name of downstreams) {
+      // Narrator finished before any downstream started.
+      expect(at(`start:${name}`)).toBeGreaterThan(at("end:narrator"));
+      // Every downstream had started before the first one finished.
+      expect(at(`start:${name}`)).toBeLessThan(firstDownstreamEnd);
     }
-
-    // Downstream runtimes overlap in time — the max end minus the min start
-    // should be noticeably less than 4 * DELAY if they ran in parallel.
-    const dsStarts = downstreams.map((d) => timings[d].start);
-    const dsEnds = downstreams.map((d) => timings[d].end);
-    const wall = Math.max(...dsEnds) - Math.min(...dsStarts);
-    // Allow plenty of slack for CI flakiness, but strictly less than serial
-    // execution (which would be ~4 * DELAY = 240ms).
-    expect(wall).toBeLessThan(DELAY * 3);
   });
 });
