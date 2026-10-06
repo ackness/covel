@@ -130,6 +130,32 @@ describe("reasoning effort profiles", () => {
     ).toEqual({ enable_thinking: true });
   });
 
+  it("gives GPT-6 its levels without a model-database entry", () => {
+    // A model behind a proxy, under a provider name of the user's choice.
+    expect(
+      resolveReasoningEffortProfile(
+        "codex/gpt-6-luna",
+        "local",
+        "openai-chat-v1",
+      )?.options.map((option) => option.value),
+    ).toEqual(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+    const sent = (reasoningEffort: string) =>
+      extractReasoningRequestFields(
+        { reasoningEffort },
+        {
+          profile: { provider: "local" } as never,
+          preset: { provider: "local", model: "codex/gpt-6-luna" } as never,
+          mode: "text",
+        },
+        "openai-chat-v1",
+        "codex/gpt-6-luna",
+      );
+    expect(sent("low")).toEqual({ reasoning_effort: "low" });
+    expect(sent("max")).toEqual({ reasoning_effort: "max" });
+    // A bookkeeping runtime's default of no reasoning arrives here as `none`.
+    expect(sent("none")).toEqual({ reasoning_effort: "none" });
+  });
+
   it("only exposes high effort for gpt-5-pro", () => {
     expect(
       resolveReasoningEffortProfile(

@@ -11,6 +11,32 @@ export function isRetriableStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+// What Node and Undici report when the endpoint refused the connection or
+// closed it before it answered.
+const CONNECTION_ERROR_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+]);
+
+/**
+ * Whether a request failed because the connection was refused or dropped
+ * before a response arrived. An endpoint that restarts, a local proxy above
+ * all, is back a moment later, so such a request is sent again like one that
+ * got a 5xx. A timeout is not in this set: the attempt that set it decides.
+ */
+export function isConnectionError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+    const code = (current as Error & { code?: unknown }).code;
+    if (typeof code === "string" && CONNECTION_ERROR_CODES.has(code))
+      return true;
+    current = current.cause;
+  }
+  return false;
+}
+
 export function computeBackoffMs(attempt: number): number {
   const exp = BASE_BACKOFF_MS * Math.pow(2, attempt);
   const jitter = JITTER_MIN + Math.random() * (JITTER_MAX - JITTER_MIN);

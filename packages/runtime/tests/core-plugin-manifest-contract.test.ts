@@ -75,7 +75,7 @@ describe("core plugin manifest contract", () => {
       trigger: { type: "auto", maxTriggerCount: 1 },
       requireToolUse: true,
       completeAfterTools: ["initialize-world"],
-      maxRetries: 0,
+      maxRetries: 3,
       output: { schema: "./output.schema.json" },
     });
     expect(schemaGen.tools?.plugin).toEqual(["initialize-world"]);
@@ -92,7 +92,7 @@ describe("core plugin manifest contract", () => {
       trigger: { type: "auto" },
       requireToolUse: true,
       completeAfterTools: ["create-character-form"],
-      maxRetries: 0,
+      maxRetries: 3,
       // Order one-time setup providers without requiring them on form submission.
       after: [
         { capability: "session.opening@1" },
@@ -189,7 +189,7 @@ describe("core plugin manifest contract", () => {
         toolChoice: { name: "generate-guide" },
       },
       completeAfterTools: ["generate-guide"],
-      maxRetries: 0,
+      maxRetries: 3,
     });
     expect(
       requireRuntime(manifests, "char-creator/character-tracker"),
@@ -199,7 +199,7 @@ describe("core plugin manifest contract", () => {
       },
       completeAfterTools: ["sync-characters"],
       llm: { reasoningEffort: "disabled" },
-      maxRetries: 1,
+      maxRetries: 3,
       callTimeoutMs: 30000,
     });
 

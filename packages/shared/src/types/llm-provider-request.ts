@@ -13,8 +13,11 @@ export interface LLMProviderRequest {
   readonly transportAttempt: number;
   /** Transport attempt across all fallback targets/runtime retries, zero-based. */
   readonly logicalAttempt?: number;
-  /** Why this transport retried its prior HTTP response; absent on first send. */
-  readonly transportRetryReason?: "http-429" | "http-5xx";
+  /**
+   * Why this transport sent the request again: the prior response asked for
+   * it, or the connection gave no response. Absent on the first send.
+   */
+  readonly transportRetryReason?: "http-429" | "http-5xx" | "connection";
   /** HTTP acceptance is not a successful model/stream settlement. */
   readonly statusCode?: number;
   readonly failed?: true;
