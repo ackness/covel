@@ -292,3 +292,40 @@ describe("character tracker correction budget", () => {
     },
   );
 });
+
+describe("tracker read budget", () => {
+  // The first line of the framework preamble, as each instruction language has it.
+  const PREAMBLE = {
+    zh: "[RUNTIME] 你正在执行一个互动叙事引擎的游戏内 runtime。",
+    en: "[RUNTIME] You are executing an in-game runtime for an interactive narrative engine.",
+  };
+  const added = (preamble) =>
+    trackerReadBudget(
+      {},
+      {
+        runtimeId: "char-creator/character-tracker",
+        tools: [],
+        messages: [
+          { role: "system", content: `${preamble}\nbody` },
+          {
+            role: "assistant",
+            content: "",
+            toolCalls: [{ id: "c1", name: "get-character", arguments: "{}" }],
+          },
+        ],
+      },
+    ).replace.messages.at(-1).content;
+
+  it("adds its instruction in the language of the prompt it is added to", () => {
+    expect(added(PREAMBLE.zh)).toContain(
+      "调用 sync-characters 提交已确认的变化",
+    );
+    expect(added(PREAMBLE.zh).replace("sync-characters", "")).not.toMatch(
+      /[A-Za-z]/,
+    );
+    expect(added(PREAMBLE.en)).toContain(
+      "Call sync-characters with the confirmed changes",
+    );
+    expect(added("no preamble")).toBe(added(PREAMBLE.en));
+  });
+});

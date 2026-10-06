@@ -11,7 +11,7 @@
       "maxItems": 6,
       "items": {
         "type": "object",
-        "required": ["text", "kind"],
+        "required": ["text"],
         "properties": {
           "text": { "type": "string", "minLength": 1 },
           "kind": { "enum": ["observe", "ask", "act", "social"] }

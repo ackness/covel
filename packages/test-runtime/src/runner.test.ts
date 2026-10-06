@@ -10,8 +10,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
+import { runCli } from "./run-cli.js";
 import { runRuntimeCases, runRuntimeDebug } from "./runner.js";
 
 const roots: string[] = [];
@@ -20,6 +20,18 @@ afterEach(async () => {
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
+
+// Runs the CLI in this process. Starting `cli.ts` as a child loads the whole
+// workspace again, and how long that takes depends on the machine's load.
+async function runCliCaptured(args: string[]) {
+  let stdout = "";
+  let stderr = "";
+  const status = await runCli(args, {
+    stdout: { write: (text) => (stdout += text) },
+    stderr: { write: (text) => (stderr += text) },
+  });
+  return { status, stdout, stderr };
+}
 
 async function pluginFixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "covel-runtime-debug-"));
@@ -128,29 +140,22 @@ describe("runtime debug host integration", () => {
     expect(cases.cases[0]?.result.pluginData.notes?.[0]?.value).toMatchObject({
       text: "[formatted] hello",
     });
-    const cli = spawnSync(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        path.join(import.meta.dirname, "cli.ts"),
-        "lifecycle-probe/note",
-        "--plugins-dir",
-        root,
-        "--with-plugin",
-        "service-provider-probe",
-        "--with-plugin",
-        "service-provider-probe",
-        "--payload",
-        JSON.stringify(options.payload),
-      ],
-      { encoding: "utf8", timeout: 10_000 },
-    );
+    const cli = await runCliCaptured([
+      "lifecycle-probe/note",
+      "--plugins-dir",
+      root,
+      "--with-plugin",
+      "service-provider-probe",
+      "--with-plugin",
+      "service-provider-probe",
+      "--payload",
+      JSON.stringify(options.payload),
+    ]);
     expect(cli.status, cli.stderr).toBe(0);
     expect(JSON.parse(cli.stdout).pluginData.notes[0].value.text).toBe(
       "[formatted] hello",
     );
-  }, 20_000);
+  });
 
   it("does not discover an unselected or missing provider", async () => {
     const root = await mkdtemp(
@@ -291,8 +296,6 @@ describe("runtime debug host integration", () => {
     expect(report.cases[0]?.status).toBe("passed");
   });
 
-  // CLI cases include a fresh Node/tsx import graph. Keep the outer budget
-  // above the child's 10-second hard limit, including setup on loaded CI hosts.
   it.each([
     {
       mode: "skipped-follower",
@@ -354,23 +357,15 @@ describe("runtime debug host integration", () => {
       expect(cases.cases[0]?.result.jobs).toContainEqual(
         expect.objectContaining({ status: jobStatus }),
       );
-      const cli = spawnSync(
-        process.execPath,
-        [
-          "--import",
-          "tsx",
-          path.join(import.meta.dirname, "cli.ts"),
-          "probe/root",
-          "--plugins-dir",
-          root,
-          "--expects-background-follower",
-        ],
-        { encoding: "utf8", timeout: 10_000 },
-      );
+      const cli = await runCliCaptured([
+        "probe/root",
+        "--plugins-dir",
+        root,
+        "--expects-background-follower",
+      ]);
       expect(cli.status, cli.stderr).toBe(exitCode);
       expect(cases.cases[0]?.status).toBe(caseStatus);
     },
-    15_000,
   );
 
   it("commits and reports nested results from the initial runtime", async () => {
@@ -684,21 +679,10 @@ describe("runtime debug host integration", () => {
       pluginsDir: root,
     });
     expect(cases.cases[0]?.status).toBe("failed");
-    const cli = spawnSync(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        path.join(import.meta.dirname, "cli.ts"),
-        "probe/root",
-        "--plugins-dir",
-        root,
-      ],
-      { encoding: "utf8", timeout: 10_000 },
-    );
+    const cli = await runCliCaptured(["probe/root", "--plugins-dir", root]);
     expect(cli.status, cli.stderr).toBe(1);
     expect(JSON.parse(cli.stdout).commitStatus).toBe("failed");
-  }, 15_000);
+  });
 
   it("releases entry resources after repeated runs and a runner failure", async () => {
     const { root, pluginRoot } = await pluginFixture();

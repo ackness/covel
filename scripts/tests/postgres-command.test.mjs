@@ -42,7 +42,6 @@ function fixture(t, exitCode = 0) {
       return spawnSync(process.execPath, [command], {
         env,
         encoding: "utf8",
-        timeout: 15_000,
       });
     },
     calls() {

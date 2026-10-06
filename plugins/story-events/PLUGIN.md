@@ -54,9 +54,9 @@ contributes:
           Write events the player must not know in advance. `when` is one
           condition, or `all`, `any` or `not` over conditions. A condition reads
           a declared dimension (`dimension` plus `path`), a numeric world-time
-          field (`time`), or another event (`revealed`, with `turnsSinceGte` for
-          a follow-up some turns later). Reference only dimensions the world
-          declares. `payload` is a short brief for the narrative, not finished
+          field (`time`), another event (`revealed`, with `turnsSinceGte` for a
+          follow-up some turns later), or the session turn (`turnGte` /
+          `turnLte`). Reference only dimensions the world declares. `payload` is a short brief for the narrative, not finished
           prose, and it must not spoil later events.
         example: ./examples/story-events.json
         source:

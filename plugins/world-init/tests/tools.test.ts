@@ -201,6 +201,55 @@ describe("world-init domain tools", () => {
       ),
     ).rejects.toThrow();
   });
+  it("supplies the version of an update from the values the execution read", async () => {
+    const ctx = trackerContext();
+    ctx.world.dimensions.reputation.version = 4;
+    ctx.store.listPluginData = async () => [
+      { key: "reputation", value: { ...record, version: 4 } },
+    ];
+    const settle = async (updates: unknown[]) =>
+      getPendingProposals(
+        await updateDimensions({ tool, z }).execute({ updates }, ctx),
+      )[0]?.payload.updates;
+    // No version, and a version copied from an earlier turn: the tool is
+    // the one that knows what this execution read.
+    expect(await settle([{ id: "reputation", value: 5 }])).toEqual([
+      { id: "reputation", expectedVersion: 4, value: 5 },
+    ]);
+    expect(
+      await settle([{ id: "reputation", expectedVersion: 2, value: 5 }]),
+    ).toEqual([{ id: "reputation", expectedVersion: 4, value: 5 }]);
+    // An entry that says nothing changed, with an empty list of its own.
+    expect(
+      await settle([
+        { id: "reputation", value: 5 },
+        { id: "reputation", reason: "No change.", updates: [] },
+      ]),
+    ).toEqual([{ id: "reputation", expectedVersion: 4, value: 5 }]);
+  });
+  it("says what an unknown dimension is when it is an entry of one", async () => {
+    const ctx = trackerContext();
+    ctx.world.dimensions = {
+      ...ctx.world.dimensions,
+      board: {
+        name: "Case board",
+        schema: { type: "object" },
+        value: { letter: { status: "unverified" } },
+        version: 1,
+      },
+    };
+    const run = (id: string) =>
+      updateDimensions({ tool, z }).execute(
+        { updates: [{ id, changes: [{ path: "status", value: "x" }] }] },
+        ctx,
+      );
+    await expect(run("letter")).rejects.toThrow(
+      'Unknown dimension: letter. It is an entry of the dimension board: use id "board" and start each path with "letter."',
+    );
+    await expect(run("ledger")).rejects.toThrow(
+      "Unknown dimension: ledger. The dimensions are: reputation, board",
+    );
+  });
   it("patches large dimensions by path instead of rewriting them", async () => {
     const boardSchema = {
       type: "object",

@@ -27,7 +27,7 @@ test("browser smoke starts each owned server once and respects external stacks",
         `import config from ${JSON.stringify(configUrl.href)};
          console.log(JSON.stringify(config.webServer ?? []));`,
       ],
-      { cwd: repoRoot, env, encoding: "utf8", timeout: 15_000 },
+      { cwd: repoRoot, env, encoding: "utf8" },
     );
     assert.equal(result.status, 0, result.stderr);
     const servers = JSON.parse(result.stdout);

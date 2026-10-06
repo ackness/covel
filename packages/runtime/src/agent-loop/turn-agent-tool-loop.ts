@@ -272,7 +272,11 @@ async function runAgentToolLoopWithinBudget(
   // Set by a PostToolUse hook returning `terminate` — ends the loop after the
   // current response's tool calls are recorded.
   let terminatedByHook = false;
-  const reviewResponse = createResponseReviewer(hookOpts, messages);
+  const reviewResponse = createResponseReviewer(
+    hookOpts,
+    messages,
+    input.locale,
+  );
   // One correction for a bare finish that violates the tool-use contract.
   let noToolCallCorrections = 0;
   // Prose captured from steps that were extended by late steering (see the
@@ -322,6 +326,7 @@ async function runAgentToolLoopWithinBudget(
       retryPolicy,
       estimator,
       contextBudget,
+      locale: input.locale,
       llm: deps.llm,
       slot: llmRequest.model,
       emitter: deps.emitter,
@@ -338,6 +343,7 @@ async function runAgentToolLoopWithinBudget(
         effectiveModel: llmRequest.model,
         toolDefs: llmRequest.tools,
         responseFormat,
+        locale: input.locale,
         ...(budgetedRequest?.maxOutputTokens
           ? { maxOutputTokens: budgetedRequest.maxOutputTokens }
           : {}),
@@ -793,6 +799,7 @@ async function runAgentToolLoopWithinBudget(
           runtimeName: manifest.name,
           messages,
           state: loopGuardState,
+          locale: input.locale,
         });
       } catch (err) {
         // A failed story fails the whole player turn. A story stuck repeating

@@ -102,6 +102,62 @@ describe("parseJsonText", () => {
     ]);
   });
 
+  it("settles a closing bracket that does not match the open one", () => {
+    // The forms recorded from real runs, in an array sent as text: one `}`
+    // too many before the `]`, a `]` inside the last element, and a `}`
+    // where the final `]` belongs.
+    expect(
+      parseJsonText('[{"id":"a","payload":"x"},{"id":"b","payload":"y"}}]\n'),
+    ).toEqual([
+      { id: "a", payload: "x" },
+      { id: "b", payload: "y" },
+    ]);
+    expect(parseJsonText('[{"id":"a","payload":"says ]"]}]')).toEqual([
+      { id: "a", payload: "says ]" },
+    ]);
+    expect(parseJsonText('[{"id":"a"},{"id":"b","tags":["x"]}}\n')).toEqual([
+      { id: "a" },
+      { id: "b", tags: ["x"] },
+    ]);
+    expect(parseJsonText('{"a":[1,2]],"b":3}')).toEqual({ a: [1, 2], b: 3 });
+  });
+
+  it("closes the brackets open at the end of text the model ended itself", () => {
+    // An array sent as text inside arguments that parsed: the model closed
+    // the string after the last element and went on.
+    const text = '[{"id":"a","subjectIds":["x"]},{"id":"b","at":{"y":1}}\n';
+    expect(parseJsonText(text, { complete: true })).toEqual([
+      { id: "a", subjectIds: ["x"] },
+      { id: "b", at: { y: 1 } },
+    ]);
+    expect(
+      parseJsonText('[{"id":"a","tags":["x","y"]', { complete: true }),
+    ).toEqual([{ id: "a", tags: ["x", "y"] }]);
+    // The whole argument string can be output that was cut off.
+    expect(() => parseJsonText(text)).toThrow();
+    // A value that is not finished stays an error.
+    for (const cut of [
+      '[{"id":"a"},{"id":',
+      '[{"id":"a"},{"id":"b',
+      '[{"id":"a"},',
+    ])
+      expect(() => parseJsonText(cut, { complete: true }), cut).toThrow();
+  });
+
+  it("writes the opening of an object once where it is repeated", () => {
+    expect(
+      parseJsonText(
+        '[{"id":"a","attributes":{"topic":"lamp"}},{"{"id":"b","type":"interaction"}]',
+      ),
+    ).toEqual([
+      { id: "a", attributes: { topic: "lamp" } },
+      { id: "b", type: "interaction" },
+    ]);
+    // A string that holds the same characters is not touched.
+    const valid = '{"note":"{\\"{\\"id","x":{"{":1}}';
+    expect(parseJsonText(valid)).toEqual(JSON.parse(valid));
+  });
+
   it("settles more than one fault in one text", () => {
     expect(
       parseJsonText(
@@ -129,6 +185,12 @@ describe("parseJsonText", () => {
       // An open element, and closing brackets that do not add up.
       '[{"id":"a","at":{"x":1}, {"id":"b"}',
       '[{"id":"a","at":{"x":1}, {"id":"b"}]}',
+      // The wrong closing bracket in the middle: the array is not closed.
+      '{"a":[1,2},"b":3}',
+      // A value closed too early is not a bracket too many.
+      '{"a":{"b":1}},"c":2}',
+      // An opening written twice in an object that lacks a bracket as well.
+      '[{"id":"a"},{"{"id":"b","at":{"x":1}]',
       // The output stopped early.
       '{"entries": ',
       '{"entries": [{"content": "The lamp',
@@ -141,7 +203,6 @@ describe("parseJsonText", () => {
       '{"note": "She calls it a "lock", not a lamp."}',
       '{"note": "The rule "one lamp": one keeper."}',
       // Quote marks that do not come in pairs: a quote was repeated or lost.
-      '[{"id":"a","attributes":{"topic":"lamp"}},{"{"id":"b","type":"interaction"}]',
       '{"name": "Mira"", "role": "keeper"}',
       '{"name": ""Mira", "role": "keeper"}',
       '{"note": "a 6" pipe"}',

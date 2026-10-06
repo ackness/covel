@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { translate } from "../../lib/rules.js";
+import { pickLocaleText, translate } from "../../lib/rules.js";
 
 export default async function (ctx) {
   const rules =
@@ -28,7 +28,7 @@ export default async function (ctx) {
   if (ctx.manualPayload?.openForm === true) return openForm(ctx, rules);
   const sourceTurn = ctx.execution?.sourceTurnId ?? ctx.turnId;
   const previous = await ctx.pluginData.get("turn-checks", sourceTurn);
-  if (previous) return settled(previous);
+  if (previous) return settled(previous, ctx.locale);
   const submissions = await ctx.store.listPlayerInputs();
   const submitted = submissions.findLast((input) =>
     input.formId.startsWith(`${ctx.pluginId}-check-`),
@@ -73,17 +73,29 @@ export default async function (ctx) {
       await ctx.pluginData.set("turn-checks", sourceTurn, receipt);
     }
   }
-  return settled(receipt);
+  return settled(receipt, ctx.locale);
 }
 
-function settled(receipt) {
+/**
+ * What the narrative reads. `Settled tabletop check` is a marker that the
+ * narrative prompts name in both languages; the rest is an instruction.
+ */
+function settled(receipt, locale) {
   return {
     outcome: "success",
     value: {
       receipt: receipt ?? null,
       checkContext: receipt
-        ? `Settled tabletop check (do not reroll or change the result): ${JSON.stringify(receipt)}`
-        : "No tabletop check submitted. Do not invent a roll.",
+        ? pickLocaleText(
+            locale,
+            `Settled tabletop check（不要重掷，也不要改动结果）：${JSON.stringify(receipt)}`,
+            `Settled tabletop check (do not reroll or change the result): ${JSON.stringify(receipt)}`,
+          )
+        : pickLocaleText(
+            locale,
+            "没有提交跑团检定。不要编造掷骰。",
+            "No tabletop check submitted. Do not invent a roll.",
+          ),
     },
   };
 }

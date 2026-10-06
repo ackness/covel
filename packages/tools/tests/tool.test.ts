@@ -88,7 +88,45 @@ describe("tool()", () => {
     });
   });
 
-  it("drops closing brackets that follow a complete value in JSON text", async () => {
+  it("leaves a pattern that needs the `u` flag out of the JSON schema", async () => {
+    const mod = tool({
+      name: "relate",
+      description: "Relate two people",
+      parameters: z.object({
+        relation: z.string().regex(/^[\p{Letter}][\p{Letter}_]*$/u),
+        people: z.array(
+          z.object({ handle: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
+        ),
+      }),
+      execute: async (params) => params,
+    });
+    // A provider that checks tool schemas refuses `\p{Letter}` in a pattern:
+    // a JSON Schema pattern carries no flags.
+    expect(mod.jsonSchema).toMatchObject({
+      properties: {
+        relation: { type: "string" },
+        people: {
+          items: {
+            properties: { handle: { pattern: "^[a-z][a-z0-9-]*$" } },
+          },
+        },
+      },
+    });
+    expect(
+      (mod.jsonSchema.properties as Record<string, object>).relation,
+    ).not.toHaveProperty("pattern");
+    // The value is still checked.
+    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    await expect(
+      mod.execute({ relation: "1st", people: [] }, ctx),
+    ).rejects.toMatchObject({ details: [{ path: "relation" }] });
+    expect(await mod.execute({ relation: "师徒", people: [] }, ctx)).toEqual({
+      relation: "师徒",
+      people: [],
+    });
+  });
+
+  it("settles the closing brackets of JSON text", async () => {
     const mod = tool({
       name: "record",
       description: "Record changes",
@@ -98,21 +136,26 @@ describe("tool()", () => {
       execute: async (params) => params,
     });
     const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
-    // The model closed the arguments object inside the text of the array.
+    // The model closed the arguments object inside the text of the array,
+    // closed an element once too often, or ended the text before the last
+    // brackets.
     for (const text of [
       '[{"name":"Mira"}]}',
       '[{"name":"Mira"}]}\n',
       '[{"name":"Mira"}]}]',
+      '[{"name":"Mira"}}]',
+      '[{"name":"Mira"}',
+      '[{"name":"Mira"',
     ])
       expect(await mod.execute({ changes: text }, ctx), text).toEqual({
         changes: [{ name: "Mira" }],
       });
-    // Brackets are all it drops: other text after the value is an error, and
-    // so is a bracket that is missing or misplaced inside the value.
+    // Brackets are all it settles: other text after the value is an error,
+    // and so is a value that is not finished.
     for (const text of [
       '[{"name":"Mira"}] and more',
-      '[{"name":"Mira"}}]',
-      '[{"name":"Mira"',
+      '[{"name":"Mira",',
+      '[{"name":"Mi',
     ])
       await expect(
         mod.execute({ changes: text }, ctx),
@@ -148,17 +191,17 @@ describe("tool()", () => {
       execute: async (params) => params,
     });
     const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
-    // One closing brace too many: the text a model sends again and again
-    // when it is told only "expected array, received string".
+    // A colon is missing. Told only "expected array, received string", a
+    // model sends the same broken text again and again.
     const broken = await mod
-      .execute({ changes: '[{"name":"Mira"}}]' }, ctx)
+      .execute({ changes: '[{"name" "Mira"}]' }, ctx)
       .catch((error: unknown) => error);
     expect(broken).toMatchObject({
       details: [
         {
           path: "changes",
           message: expect.stringMatching(
-            /^Expected an array, but received text that is not valid JSON: .*position 16.* near `\[\{"name":"Mira"\}\}\]`\. Send the array itself as the value, not a string that contains it\.$/,
+            /^Expected an array, but received text that is not valid JSON: .*position 9.* near `\[\{"name" "Mira"\}\]`\. Send the array itself as the value, not a string that contains it\.$/,
           ),
         },
       ],

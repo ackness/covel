@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acquireLLMSlot,
   setLLMSlotCapForTests,
@@ -6,6 +6,7 @@ import {
 
 afterEach(() => {
   setLLMSlotCapForTests(undefined);
+  vi.useRealTimers();
 });
 
 describe("acquireLLMSlot", () => {
@@ -35,19 +36,20 @@ describe("acquireLLMSlot", () => {
   });
 
   it("reports queue wait time so callers can extend their deadline", async () => {
-    // Arrange
+    // Arrange — the test moves the clock, so the waits are exact on any machine.
+    vi.useFakeTimers({ toFake: ["Date"] });
     setLLMSlotCapForTests(1);
     const first = await acquireLLMSlot();
-    expect(first.waitedMs).toBeLessThan(20);
+    expect(first.waitedMs).toBe(0);
 
     // Act
     const queued = acquireLLMSlot();
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    vi.advanceTimersByTime(40);
     first.release();
     const second = await queued;
 
     // Assert
-    expect(second.waitedMs).toBeGreaterThanOrEqual(30);
+    expect(second.waitedMs).toBe(40);
     second.release();
   });
 
@@ -82,6 +84,7 @@ describe("acquireLLMSlot", () => {
 
   it("cap 0 disables the gate entirely", async () => {
     // Arrange
+    vi.useFakeTimers({ toFake: ["Date"] });
     setLLMSlotCapForTests(0);
 
     // Act — many concurrent holders, none queued.
@@ -91,7 +94,7 @@ describe("acquireLLMSlot", () => {
 
     // Assert
     for (const slot of slots) {
-      expect(slot.waitedMs).toBeLessThan(20);
+      expect(slot.waitedMs).toBe(0);
       slot.release();
     }
   });

@@ -1,13 +1,12 @@
-import { defineConfig } from "vitest/config";
+import base from "../../vitest.base.js";
 
-export default defineConfig({
+// The shared time limits apply here too: the PostgreSQL files create and drop
+// a real database, and a drop that waits for a checkpoint or retries takes
+// longer than Vitest's default of 10 s for a hook on a loaded machine.
+export default {
+  ...base,
   test: {
-    include: ["tests/**/*.test.ts"],
+    ...base.test,
     fileParallelism: false,
-    coverage: {
-      provider: "v8",
-      reporter: ["text", "lcov"],
-      include: ["src/**/*.ts"],
-    },
   },
-});
+};

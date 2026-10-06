@@ -46,6 +46,8 @@ describe("conditionIssues", () => {
             { dimension: "location", equals: "pier" },
             { time: "phase", gte: 2 },
             { not: { revealed: "first", turnsSinceLte: 2 } },
+            { turnGte: 9 },
+            { turnGte: 4, turnLte: 12 },
           ],
         },
         refs,
@@ -60,6 +62,8 @@ describe("conditionIssues", () => {
             { revealed: "missing" },
             { dimension: "location", gte: "high" },
             { dimension: "location", time: "phase", equals: 1 },
+            { turnGte: -1 },
+            { turnGte: 3, gte: 3 },
           ],
         },
         refs,
@@ -69,7 +73,9 @@ describe("conditionIssues", () => {
       "unknown time field: weekday",
       "unknown event: missing",
       "gte needs a number",
-      "a condition leaf references exactly one of dimension, time, revealed",
+      "a condition leaf references exactly one of dimension, time, revealed, or the session turn (turnGte / turnLte)",
+      "turnGte must be a non-negative integer",
+      "a turn condition takes no operator",
     ]);
   });
 });

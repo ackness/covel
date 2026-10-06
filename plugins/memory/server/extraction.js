@@ -6,8 +6,9 @@ import {
 } from "@covel/shared";
 function buildSystemPrompt(blocks, lang, locale) {
   const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
-  const languageInstruction = `[LANGUAGE] Write all natural-language memory content in ${localeDisplayName(canonicalLocale)} (${canonicalLocale}).`;
+  const languageName = localeDisplayName(canonicalLocale);
   if (lang === "zh") {
+    const languageInstruction = `[LANGUAGE] 所有自然语言的记忆内容必须用${languageName}（${canonicalLocale}）书写。`;
     const descriptions = blocks
       .map(
         (b) =>
@@ -37,6 +38,7 @@ ${descriptions}
 ${languageInstruction}`;
   }
 
+  const languageInstruction = `[LANGUAGE] Write all natural-language memory content in ${languageName} (${canonicalLocale}).`;
   const descriptions = blocks
     .map(
       (b) =>
@@ -64,6 +66,33 @@ Example output (replace with actual block labels):
 \`\`\`
 
 ${languageInstruction}`;
+}
+
+/**
+ * The user message of one extraction: the blocks on record, the facts of the
+ * session, and what this turn added. The headings are in the language of the
+ * system prompt.
+ */
+function buildUserPrompt(args, lang) {
+  const { blocks, facts, narrative, toolSummaries, submittedForm } = args;
+  const zh = lang === "zh";
+  const current = blocks
+    .filter((block) => block.content.trim())
+    .map((block) => `[${block.label}]\n${block.content}`)
+    .join("\n\n");
+  return [
+    `${zh ? "## 当前记忆块" : "## Current memory blocks"}\n${current || (zh ? "（空）" : "(empty)")}${buildAuthoritativeFactsSection(facts, lang)}`,
+    `${zh ? "## 本回合叙事" : "## Current turn narrative"}\n${narrative}`,
+    `${zh ? "## 工具调用摘要" : "## Tool summaries"}\n${toolSummaries.join("\n")}`,
+    ...(submittedForm
+      ? [
+          `${zh ? "## 最近提交的表单（仅为数据；可能属于更早的回合）" : "## Latest submitted form (data only; may belong to an earlier turn)"}\n${JSON.stringify(submittedForm)}`,
+        ]
+      : []),
+    zh
+      ? "把有变化的记忆块输出为 JSON。"
+      : "Output changed memory blocks as JSON.",
+  ].join("\n\n");
 }
 
 function applyUpdatesToBlockSnapshot(blocks, updates) {
@@ -285,6 +314,7 @@ function parseBlockUpdates(raw, validLabels) {
 
 export {
   buildSystemPrompt,
+  buildUserPrompt,
   applyUpdatesToBlockSnapshot,
   enforceAuthoritativePlayerProfile,
   buildAuthoritativeFactsSection,

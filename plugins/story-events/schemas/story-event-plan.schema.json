@@ -169,6 +169,16 @@
         "turnsSinceLte": {
           "type": "integer",
           "minimum": 0
+        },
+        "turnGte": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Holds from this session turn on."
+        },
+        "turnLte": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Holds up to this session turn."
         }
       },
       "oneOf": [
@@ -181,6 +191,12 @@
               },
               {
                 "required": ["revealed"]
+              },
+              {
+                "required": ["turnGte"]
+              },
+              {
+                "required": ["turnLte"]
               }
             ]
           }
@@ -194,6 +210,12 @@
               },
               {
                 "required": ["revealed"]
+              },
+              {
+                "required": ["turnGte"]
+              },
+              {
+                "required": ["turnLte"]
               }
             ]
           }
@@ -207,6 +229,35 @@
               },
               {
                 "required": ["time"]
+              },
+              {
+                "required": ["turnGte"]
+              },
+              {
+                "required": ["turnLte"]
+              }
+            ]
+          }
+        },
+        {
+          "anyOf": [
+            {
+              "required": ["turnGte"]
+            },
+            {
+              "required": ["turnLte"]
+            }
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": ["dimension"]
+              },
+              {
+                "required": ["time"]
+              },
+              {
+                "required": ["revealed"]
               }
             ]
           }

@@ -235,5 +235,5 @@ describe("e2e plugin verification CLI HTTP contract", () => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
     }
-  }, 15_000);
+  });
 });

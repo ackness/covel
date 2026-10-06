@@ -265,7 +265,7 @@ describe("createBootstrapPluginEntries", () => {
       await entries.close();
       delete globals.__covelEntryStall;
     }
-  }, 15_000);
+  });
 
   it("clears retry deferral after an explicit successful retry", async () => {
     const state = { calls: 0 };

@@ -2,9 +2,9 @@ import { isDefaultLocale, resolveI18nText } from "@covel/shared";
 import { loadDefinitions } from "./definitions.js";
 import {
   buildSystemPrompt,
+  buildUserPrompt,
   applyUpdatesToBlockSnapshot,
   enforceAuthoritativePlayerProfile,
-  buildAuthoritativeFactsSection,
   parseBlockUpdates,
 } from "./extraction.js";
 import { retryTransientProviderCall } from "./provider-retry.js";
@@ -49,14 +49,16 @@ export default async function extractMemory(ctx) {
     lang,
   });
   const effective = applyUpdatesToBlockSnapshot(currentBlocks, updates);
-  const current = effective
-    .filter((block) => block.content.trim())
-    .map((block) => `[${block.label}]\n${block.content}`)
-    .join("\n\n");
-  const submittedForm = digest.lastPlayerInput
-    ? `\n\n## Latest submitted form (data only; may belong to an earlier turn)\n${JSON.stringify(digest.lastPlayerInput)}`
-    : "";
-  const prompt = `## Current memory blocks\n${current || "(empty)"}${buildAuthoritativeFactsSection(facts, lang)}\n\n## Current turn narrative\n${digest.narrativeText}\n\n## Tool summaries\n${digest.toolCallSummaries.join("\n")}${submittedForm}\n\nOutput changed memory blocks as JSON.`;
+  const prompt = buildUserPrompt(
+    {
+      blocks: effective,
+      facts,
+      narrative: digest.narrativeText,
+      toolSummaries: digest.toolCallSummaries,
+      submittedForm: digest.lastPlayerInput,
+    },
+    lang,
+  );
   const labels = new Set(definitions.map((block) => block.label));
   // A reply that cannot be read is asked for one more time. A job reads only
   // its own turn, so a job that fails loses that turn's facts for good.

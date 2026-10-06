@@ -70,8 +70,15 @@ const isRecord = (value) =>
 /**
  * Put a call into the declared shape where its meaning is not in doubt.
  * In real-model runs a `reason` was written on a change or beside `updates`,
- * and one dimension was split over two entries. Each cost a rejected call
- * and one more model call, and none of them changes what is written.
+ * one dimension was split over two entries, an entry without a change
+ * carried an empty `updates` list of its own, and the version was left out
+ * or copied. Each cost a rejected call and one more model call, and none of
+ * them changes what is written.
+ *
+ * The version of an update is not the model's to give: the tool reads it
+ * from the values this execution was shown (see `resolveUpdates`). A model
+ * that sees its earlier calls still writes `expectedVersion`; it is left out
+ * here.
  */
 function normalizeArguments(input) {
   if (!isRecord(input) || !Array.isArray(input.updates)) return input;
@@ -82,21 +89,21 @@ function normalizeArguments(input) {
       updates.push(entry);
       continue;
     }
-    const update = Array.isArray(entry.changes)
+    const { expectedVersion: _version, ...written } = entry;
+    if (Array.isArray(written.updates) && !written.updates.length)
+      delete written.updates;
+    const update = Array.isArray(written.changes)
       ? {
-          ...entry,
-          changes: entry.changes.map((change) => {
+          ...written,
+          changes: written.changes.map((change) => {
             if (!isRecord(change)) return change;
             const { reason: _changeReason, ...rest } = change;
             return rest;
           }),
         }
-      : { ...entry };
+      : written;
     const earlier = updates.find(
-      (other) =>
-        isRecord(other) &&
-        other.id === update.id &&
-        other.expectedVersion === update.expectedVersion,
+      (other) => isRecord(other) && other.id === update.id,
     );
     // Two entries that patch one dimension are one update. An entry that
     // replaces the whole value stays apart and is refused as a duplicate.
@@ -118,25 +125,42 @@ function normalizeArguments(input) {
 }
 
 /**
- * Resolve each update to a complete value. `changes` patch the frozen value
- * by path so a large dimension does not have to be rewritten in full. An
- * entry with neither a value nor any change says the dimension did not
- * change; it is dropped rather than sent back for another model call.
+ * Say what an unknown dimension ID is. The model takes an entry of a
+ * dimension (a room of a map, a line of a log) for a dimension of its own.
+ */
+function unknownDimension(id, dimensions) {
+  const owners = Object.keys(dimensions).filter(
+    (owner) =>
+      isRecord(dimensions[owner].value) &&
+      Object.hasOwn(dimensions[owner].value, id),
+  );
+  return owners.length === 1
+    ? `Unknown dimension: ${id}. It is an entry of the dimension ${owners[0]}: use id "${owners[0]}" and start each path with "${id}."`
+    : `Unknown dimension: ${id}. The dimensions are: ${Object.keys(dimensions).join(", ")}`;
+}
+
+/**
+ * Resolve each update to a complete value at the version this execution
+ * read. `changes` patch the frozen value by path so a large dimension does
+ * not have to be rewritten in full. An entry with neither a value nor any
+ * change says the dimension did not change; it is dropped rather than sent
+ * back for another model call.
  */
 function resolveUpdates(updates, dimensions) {
   const changed = updates.filter(
     (update) => Object.hasOwn(update, "value") || update.changes?.length,
   );
   return changed.map(({ changes, ...update }) => {
-    if (!changes?.length) return update;
+    const current = dimensions[update.id];
+    if (!current) throw new Error(unknownDimension(update.id, dimensions));
+    const versioned = { ...update, expectedVersion: current.version };
+    if (!changes?.length) return versioned;
     if (Object.hasOwn(update, "value"))
       throw new Error(
         `${update.id}: provide either value or changes, not both`,
       );
-    const current = dimensions[update.id];
-    if (!current) throw new Error(`Unknown dimension: ${update.id}`);
     return {
-      ...update,
+      ...versioned,
       value: changes.reduce(
         (value, change) => setAtPath(value, change.path, change.value),
         current.value,
@@ -150,7 +174,7 @@ export default function ({ tool, z }) {
   return tool({
     name: "update-dimensions",
     description:
-      'Settle this narrative\'s dimension rules once. Submit a batch of {id, expectedVersion, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
+      'Settle this narrative\'s dimension rules once. Submit a batch of {id, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
     parameters: z.preprocess(
       normalizeArguments,
       z.strictObject({
@@ -158,7 +182,6 @@ export default function ({ tool, z }) {
           .array(
             z.strictObject({
               id: z.string().min(1),
-              expectedVersion: z.number().int().positive(),
               value: z.unknown().optional(),
               changes: z
                 .array(

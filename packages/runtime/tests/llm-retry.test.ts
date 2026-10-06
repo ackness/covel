@@ -269,6 +269,22 @@ describe("perturbMessages", () => {
     expect(last.content).toContain("called the same tool repeatedly");
   });
 
+  it("writes the hint in the instruction language of the session", () => {
+    for (const reason of [undefined, "tool-loop-detected"] as const) {
+      const hint = (locale?: string) =>
+        String(
+          perturbMessages(baseMessages, 1, reason, locale).at(-1)!.content,
+        );
+      // `[retry N]` and the tool name are markers; the sentences are Chinese.
+      expect(hint("zh-CN")).toMatch(/^\[retry 1\] \p{Script=Han}/u);
+      expect(
+        hint("zh-CN").replace("[retry 1]", "").replace("runtime-done", ""),
+      ).not.toMatch(/[A-Za-z]/);
+      expect(hint("zh-Hant-TW")).toBe(hint("en-US"));
+      expect(hint()).toBe(hint("en-US"));
+    }
+  });
+
   it("produces distinct byte strings per attempt (KV-cache break)", () => {
     const a = perturbMessages(baseMessages, 1)[baseMessages.length]!.content;
     const b = perturbMessages(baseMessages, 2)[baseMessages.length]!.content;
@@ -461,23 +477,27 @@ describe("callLLMWithRetry", () => {
         });
       },
     };
+    // The outer deadline is ten minutes away, so only the call timeout can
+    // end this call before the test's own time limit does. No elapsed time
+    // is measured: a bound on it fails on a loaded machine.
     const policy = buildRetryPolicy({
-      runtimeTimeoutMs: 3_000,
+      runtimeTimeoutMs: 600_000,
       callTimeoutMs: 100,
       maxRetries: 0,
     });
 
-    const start = Date.now();
     await expect(
       callLLMWithRetry({
         llm,
         messages: baseMessages,
         policy,
-        deadline: Date.now() + 3_000,
+        deadline: Date.now() + 600_000,
       }),
-    ).rejects.toThrow(LLMRetryError);
-    // Call timeout kicked in, not the outer deadline.
-    expect(Date.now() - start).toBeLessThan(2_000);
+    ).rejects.toMatchObject({
+      name: "LLMRetryError",
+      reason: "call-timeout",
+      attempts: 1,
+    });
   });
 });
 

@@ -217,3 +217,57 @@ describe("memory plugin extraction", () => {
     expect(result[0].content).not.toContain("<fake");
   });
 });
+
+describe("memory extraction prompts", () => {
+  const prompts = async (locale: string, narrativeText: string) => {
+    const { ctx, rows, gateway } = fixture();
+    rows.set("blocks/scene", { content: "On the road" });
+    const turn = {
+      ...ctx.inputs.turn.value,
+      locale,
+      narrativeText,
+      lastPlayerInput: { name: "Lin" },
+    };
+    await extract({ ...ctx, locale, inputs: { turn: { value: turn } } });
+    return gateway.generateText.mock.calls[0]![0] as unknown as {
+      system: string;
+      prompt: string;
+    };
+  };
+
+  it("writes both prompts of a Chinese session in Chinese", async () => {
+    const { system, prompt } = await prompts("zh-CN", "港口出现了。");
+    expect(system).toMatch(
+      /\[LANGUAGE\] 所有自然语言的记忆内容必须用.+（zh-CN）书写。$/,
+    );
+    expect(prompt).toBe(
+      [
+        "## 当前记忆块\n[scene]\nOn the road",
+        "## 本回合叙事\n港口出现了。",
+        "## 工具调用摘要\n",
+        '## 最近提交的表单（仅为数据；可能属于更早的回合）\n{"name":"Lin"}',
+        "把有变化的记忆块输出为 JSON。",
+      ].join("\n\n"),
+    );
+    // Block labels and the JSON example are data; no English sentence is left.
+    expect(system).not.toMatch(/\b(Write|Output|Keep|You are)\b/);
+  });
+
+  it("keeps the English prompts of every other session as they were", async () => {
+    for (const locale of ["en", "zh-Hant-TW"]) {
+      const { system, prompt } = await prompts(locale, "A harbour appears.");
+      expect(system).toMatch(
+        /\[LANGUAGE\] Write all natural-language memory content in .+\.$/,
+      );
+      expect(prompt).toBe(
+        [
+          "## Current memory blocks\n[scene]\nOn the road",
+          "## Current turn narrative\nA harbour appears.",
+          "## Tool summaries\n",
+          '## Latest submitted form (data only; may belong to an earlier turn)\n{"name":"Lin"}',
+          "Output changed memory blocks as JSON.",
+        ].join("\n\n"),
+      );
+    }
+  });
+});

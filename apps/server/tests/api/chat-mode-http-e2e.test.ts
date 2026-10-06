@@ -480,5 +480,5 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     const finalSession = await store.getSession(sessionId);
     expect(finalSession?.completedPlayerTurns).toBe(3);
-  }, 15_000);
+  });
 });

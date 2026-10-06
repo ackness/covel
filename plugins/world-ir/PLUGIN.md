@@ -110,7 +110,7 @@ For example, write relation strength as `attributes.strength`, and put an event'
 - Prefer `interaction`, `state_change`, `inventory_change`, `quest_change`, and `movement` for `event.type`.
 - Prefer `discovery`, `quest`, `lore`, `rule`, and `rumor` for `statement.type`.
 - Keep plugin-useful details in neutral `attributes`, for example `status`, `operation`, `quantity`, `giver`, `reward`, `objectives`, and `strength`.
-- Write each id as 1-3 lowercase words joined by hyphens, such as `field-radio` or `june-answers`. Do not add a type or session prefix. IDs are unique inside this output; create an entity once and reuse its id everywhere. Use the given `id` for a character from `characters`.
+- Write each id as 1-3 lowercase words joined by hyphens, such as `brass-key` or `tailor-agrees`. Do not add a type or session prefix. IDs are unique inside this output; create an entity once and reuse its id everywhere. Use the given `id` for a character from `characters`.
 
 ## Events with fixed fields
 

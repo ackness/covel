@@ -12,7 +12,7 @@
  * - Deterministic: same inputs always yield the same output.
  */
 
-import type { ContentPart } from "@covel/shared";
+import { instructionLocaleFor, type ContentPart } from "@covel/shared";
 
 /**
  * Convert a message `content` value (string or content-part array) into the
@@ -83,6 +83,15 @@ export interface BudgetOptions {
   readonly protectLastUserTurns?: number;
   /** Token estimator injected by the caller. */
   readonly estimator: TokenEstimator;
+  /** Session locale; the pruned-messages marker is in its instruction language. */
+  readonly locale?: string;
+}
+
+/** The message that stands in for the pruned ones. */
+function prunedMarker(count: number, locale: string | undefined): string {
+  return instructionLocaleFor(locale) === "zh"
+    ? `[... 为了不超出 token 预算，已裁掉 ${count} 条较早的消息 ...]`
+    : `[... ${count} older messages pruned to stay within token budget ...]`;
 }
 
 /** Result of a {@link applyBudget} call. */
@@ -337,18 +346,18 @@ export function applyBudget<
     };
   }
 
-  let placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+  let placeholderContent = prunedMarker(prunedMessageCount, options.locale);
   let placeholderTokens = estimator(placeholderContent);
 
   // The marker is part of the real request. Continue pruning if it is the
   // difference between fitting and overflowing; previous behaviour tolerated
   // this overshoot, which violates a hard context-window contract.
   while (total + placeholderTokens > budgetCap && pruneNext()) {
-    placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+    placeholderContent = prunedMarker(prunedMessageCount, options.locale);
     placeholderTokens = estimator(placeholderContent);
   }
   pruneOrphanedLeadingTools();
-  placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+  placeholderContent = prunedMarker(prunedMessageCount, options.locale);
   placeholderTokens = estimator(placeholderContent);
 
   const survivors = messages.filter((_, index) => !prunedIndices.has(index));

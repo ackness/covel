@@ -2,6 +2,7 @@ import type {
   ExtensionWorldCharacter,
   PromptSegment,
 } from "./extension-points.js";
+import { pickLocaleText } from "./locale-text.js";
 
 const PROFILES_BUDGET = 8000;
 const PROFILE_PART_CAP = 400;
@@ -26,7 +27,10 @@ const hasFields = (fields: unknown): fields is Record<string, unknown> =>
  * needed. No ids: a model looks characters up by name. The format of the
  * `{{ characters.npcs }}` template variable.
  */
-function profileLines(characters: readonly ExtensionWorldCharacter[]): string {
+function profileLines(
+  characters: readonly ExtensionWorldCharacter[],
+  locale: string | undefined,
+): string {
   const lines: string[] = [];
   const unlisted: string[] = [];
   let used = 0;
@@ -45,7 +49,13 @@ function profileLines(characters: readonly ExtensionWorldCharacter[]): string {
     used += line.length + 1;
   }
   if (unlisted.length > 0)
-    lines.push(`- (profiles not shown: ${unlisted.join(", ")})`);
+    lines.push(
+      pickLocaleText(
+        locale,
+        `- （未列出档案：${unlisted.join("、")}）`,
+        `- (profiles not shown: ${unlisted.join(", ")})`,
+      ),
+    );
   return lines.join("\n");
 }
 
@@ -67,11 +77,13 @@ function profileLines(characters: readonly ExtensionWorldCharacter[]): string {
  * });
  * ```
  *
- * Returns no segment when the session has no character to show.
+ * Returns no segment when the session has no character to show. Pass
+ * `ctx.locale` as `locale`: the one sentence this writes (the names of the
+ * profiles left out) is then in the language of the prompt body.
  */
 export function characterSheetSegments(
   characters: readonly ExtensionWorldCharacter[],
-  options: { readonly profiles?: boolean } = {},
+  options: { readonly profiles?: boolean; readonly locale?: string } = {},
 ): PromptSegment[] {
   const blocks: string[] = [];
   const player = characters.find((character) => character.type === "player");
@@ -84,7 +96,9 @@ export function characterSheetSegments(
     );
     blocks.push(`<player-character>\n${escapeXml(sheet)}\n</player-character>`);
   }
-  const profiles = options.profiles ? profileLines(characters) : "";
+  const profiles = options.profiles
+    ? profileLines(characters, options.locale)
+    : "";
   if (profiles)
     blocks.push(
       `<character-profiles>\n${escapeXml(profiles)}\n</character-profiles>`,

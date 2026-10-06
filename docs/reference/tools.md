@@ -145,7 +145,7 @@ handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明�
 
 #### 模型写错的参数 JSON
 
-模型写出的参数 JSON 有三种反复出现、含义唯一的笔误。框架在解析处直接改正，
+模型写出的参数 JSON 有几种反复出现、含义唯一的笔误。框架在解析处直接改正，
 省掉一轮模型重交；改正后的内容仍须通过工具的 schema。
 
 - **末尾多出收尾括号**：一个完整的 JSON 值后面多出至多四个 `]` / `}`
@@ -155,23 +155,40 @@ handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明�
   双引号（`"note": "铭文把它叫作"锁"而不是灯。"`）。结束 JSON 字符串的引号后面
   只能是 `,`、`}`、`]`、`:` 或文本结尾；后面跟着其他文字的引号属于值本身，按
   `\"` 处理。只有引号成对出现时才这样处理，键名从不改动：引号多一个或少一个
-  （`{"{"id": …`、`"name": "Mira"", …`）是结构错误，不属于这一类。
+  （`"name": "Mira"", …`）是结构错误，不属于这一类。
 - **数组元素没有收尾就开始了下一个**：元素的最后一个字段是对象时，模型只收了
   这个字段的括号（`[{"id":"a","attributes":{"kind":"lamp"}, {"id":"b"}]`）。对象
   内部逗号后面只能是键名，出现 `{` 说明它属于外层数组的下一个元素，缺的 `}`
   补在逗号前。同一位置的另一种读法是漏写了键名（`"summary":"…", {"role":"…"}}]`）；
   两种读法里只有一种的括号数目对得上，所以补完后必须原样通过解析才接受，
   按另一种读法写出的文本仍然报错。
+- **收尾括号和正开着的括号对不上**：没有对象开着的地方多了一个 `}`
+  （`[{"id":"a"},{"id":"b"}}]`），去掉它；文本最后一个括号写错了种类
+  （`[{"id":"a"},{"id":"b"}}`），换成对的那个。两种情况都不改变任何值，也不添加
+  文本里没有的内容。中间位置写错种类的括号（`{"a":[1,2},"b":3}`）不属于这一类。
+- **对象的开头写了两遍**：`[{"id":"a"},{"{"id":"b"}]`。合法 JSON 里键名前不会出现
+  `{"{"`，去掉重复的 `{"`。
 
-这三条对整段调用参数和字段内的 JSON 文本同样适用。其他错误不做猜测式修补，
-包括数组没有收尾、输出被截断、两个字符串之间缺逗号、值里的引号后面紧跟 `,`
-或 `:`：整段参数仍不是合法 JSON 时，调用以 `INVALID_ARGS` 失败，模型需要重新
-给出参数。
+后三条各自单独尝试，不叠加，并且改正后必须原样通过解析：叠加起来会把「漏写
+键名」的文本读成两个元素。这些规则对整段调用参数和字段内的 JSON 文本同样
+适用。其他错误不做猜测式修补，包括输出被截断、两个字符串之间缺逗号、值里的
+引号后面紧跟 `,` 或 `:`：整段参数仍不是合法 JSON 时，调用以 `INVALID_ARGS`
+失败，模型需要重新给出参数。
 
 模型有时还会把数组或对象参数写成一段 JSON 文本。schema 在该位置要求数组或
 对象时，`tool()` 先按上面的规则解析这段文本再校验一次，解析后的内容仍须通过
-同一 schema。文本解析不了时，`VALIDATION_ERROR` 会写明解析失败的原因和位置，
-并要求模型直接传数组或对象本身。
+同一 schema。这种字段内文本多一条规则：**文本结尾还开着的括号会被补上**
+（`[{"id":"a"},{"id":"b"}`）。外层参数已经解析成功，说明这段文本是模型自己收的
+尾，不是输出被截断；补完后同样必须原样通过解析，没写完的值
+（`[{"id":"a"},{"id":`）仍然报错。整段调用参数不做这一步：它可能是被截断的输出。
+文本解析不了时，`VALIDATION_ERROR` 会写明解析失败的原因和位置，并要求模型
+直接传数组或对象本身。
+
+`tool()` 生成给模型的 JSON Schema 时，会去掉含 Unicode 属性转义（`\p{Letter}`）的
+`pattern`：JSON Schema 的 `pattern` 不带正则标志，这类写法只有在 `u` 标志下才是
+作者想要的意思，校验工具 schema 的服务商会以「不是合法正则」拒绝整个请求，
+带这个工具的每次调用都会失败。Zod 仍按原正则校验参数值；规则本身写进字段的
+`describe()` 让模型看到。
 
 ### 失败定位与验证
 
@@ -800,11 +817,11 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/update-dimensions.js`)
 
-参数 `{updates:[{id,expectedVersion,value|changes,reason?}]}`，最多 64 项，ID 不重复。`value` 是新的完整值；`changes:[{path,value}]`（最多 32 项）按点路径在冻结的当前值上设置字段或新增条目，工具合并成完整值后提交，大维度不必整体重写；路径中含 `__proto__`、`constructor` 或 `prototype` 段时整批拒绝。两者二选一；删除命名记录/数组行仍提交完整 `value`。`dimension.update` proposal 里始终是完整值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
+参数 `{updates:[{id,value|changes,reason?}]}`，最多 64 项，ID 不重复。`value` 是新的完整值；`changes:[{path,value}]`（最多 32 项）按点路径在冻结的当前值上设置字段或新增条目，工具合并成完整值后提交，大维度不必整体重写；路径中含 `__proto__`、`constructor` 或 `prototype` 段时整批拒绝。两者二选一；删除命名记录/数组行仍提交完整 `value`。`dimension.update` proposal 里始终是完整值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
 
-叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
+叙事来源、逻辑回合号、读取版本集和每条更新的 `expectedVersion` 从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定：版本就是本次执行读到的那个，让模型照抄一遍只会多出「漏写」和「抄了历史回合的旧版本号」两种失败。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 
-校验前先整理几种含义明确的写法，不为此退回模型重交：路径里的 `/` 也当作分隔符（`call-0614/status`），除非当前值里已有包含该斜杠的键；写在单条 change 上或与 `updates` 并列的 `reason` 被去掉；同一维度、同一 `expectedVersion` 的多条 `changes` 条目合并为一条（`reason` 依次拼接）。同一维度若有一条给出完整 `value`，仍按重复 ID 拒绝。
+校验前先整理几种含义明确的写法，不为此退回模型重交：路径里的 `/` 也当作分隔符（`call-0614/status`），除非当前值里已有包含该斜杠的键；写在单条 change 上或与 `updates` 并列的 `reason` 被去掉；模型写出的 `expectedVersion` 被去掉（见上）；条目自带的空 `updates: []` 被去掉；同一维度的多条 `changes` 条目合并为一条（`reason` 依次拼接）。同一维度若有一条给出完整 `value`，仍按重复 ID 拒绝。`id` 不是维度、却是某一个维度当前值里的条目名时（把地图里的一个房间当成了维度），报错会写明它属于哪个维度、路径该怎么写。
 
 本轮无变化也必须调用 `update-dimensions({updates:[]})`。既没有 `value`、`changes` 也为空或缺失的条目表示该维度未变化，工具直接略去它，不为此退回模型重交。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 
@@ -822,7 +839,7 @@ Attributes:
 | `summary`                                          | ✓    | 本轮事实摘要                                                      |
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
-校验前先修正几类机械性失误，不再为此让模型重交：丢弃误抄进参数的抽取输入（`narrative` / `characters` / `vocabulary`），把写在事实顶层的额外细节移入该项 `attributes`。输出 token 数决定这一步的耗时，所以抽取输入中的会话角色不给真实 id（UUID 或带会话前缀的长串），而是由姓名生成的单词短名（如 `tomas-reed`；同名角色按 id 顺序加 `-2`），工具返回前把短名还原为真实 id（包括 `inventory_change` 的 `holder`）；提示词要求模型直接引用这些角色、不在 `entities` 中重复登记；关系、事件参与者和陈述主体引用的已知角色由工具按会话角色名册补登记（`type: character` 与 `name`）。另有两种引用也由工具处理：引用处写的是本次输出里某个实体的名称而不是 id，且只有一个实体叫这个名称时，改为该实体的 id；引用的是 `world-ir.vocabulary@1` 词表里的名称（会话已在追踪的物品或任务）而没有登记时，按词表给出的类型补登记（`{ id: 名称, type: 词表类型, name: 名称 }`）。引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
+校验前先修正几类机械性失误，不再为此让模型重交：丢弃误抄进参数的抽取输入（`narrative` / `characters` / `vocabulary`），把写在事实顶层的额外细节移入该项 `attributes`，给没有写 `id` 的关系、事件和陈述补一个（`event-3fa9c1d2`，取自该条事实内容的哈希：输出里没有任何地方引用这些 id，但按 id 跨回合保存事实的消费方不能看到两条不同的事实共用一个 id）。实体没有 `id` 仍然报错，其他事实要靠它引用。输出 token 数决定这一步的耗时，所以抽取输入中的会话角色不给真实 id（UUID 或带会话前缀的长串），而是由姓名生成的单词短名（如 `tomas-reed`；同名角色按 id 顺序加 `-2`），工具返回前把短名还原为真实 id（包括 `inventory_change` 的 `holder`）；提示词要求模型直接引用这些角色、不在 `entities` 中重复登记；关系、事件参与者和陈述主体引用的已知角色由工具按会话角色名册补登记（`type: character` 与 `name`）。短名写法有出入时也认：引用不是本次输出里任何实体的 id、而它的字母和数字与唯一一个角色的短名相同时（`雷恩-修女` 对 `雷恩修女`，或直接写了姓名 `Sister Wren` 对 `sister-wren`），按该角色处理；两个角色字母相同时不猜。另有三种引用也由工具处理：引用处写的是本次输出里某个实体的名称而不是 id，且只有一个实体叫这个名称时，改为该实体的 id；引用的是 `world-ir.vocabulary@1` 词表里的名称（会话已在追踪的物品或任务）而没有登记时，按词表给出的类型补登记（`{ id: 名称, type: 词表类型, name: 名称 }`）；陈述的 `subjectIds` 里写了本次输出中某条事件、陈述或关系的 id 时（模型用它表示「这条陈述说的是那件事」），去掉这个 id：主体只能是实体，那件事本身已经在输出里。引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
 
 两类事件另有固定字段，由工具一并校验（其余事件的 `attributes` 保持自由）。`inventory` 与 `core-quest` 的 function runtime 只读取这些字段，不再调用模型：
 

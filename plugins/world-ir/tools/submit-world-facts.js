@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
 import { characterHandles } from "./character-handles.js";
@@ -36,6 +37,42 @@ function referencedIds(facts) {
 const isRecord = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
+// Fact kinds whose `id` nothing in the output refers to.
+const ID_PREFIX = {
+  relations: "relation",
+  events: "event",
+  statements: "statement",
+};
+
+/**
+ * Give an id to each relation, event, and statement that has none. The model
+ * leaves them out for a whole output at a time, and nothing in the output
+ * refers to them, so a missing one is not worth a second extraction. The id
+ * comes from the fact's content: a consumer that keeps facts by id over
+ * several turns must not see two facts under one id.
+ */
+function withFactIds(facts) {
+  let changed = false;
+  const completed = { ...facts };
+  for (const [kind, prefix] of Object.entries(ID_PREFIX)) {
+    if (!Array.isArray(facts[kind])) continue;
+    const used = new Set(facts[kind].filter(isRecord).map((fact) => fact.id));
+    completed[kind] = facts[kind].map((fact) => {
+      if (!isRecord(fact) || (fact.id ?? "") !== "") return fact;
+      const digest = createHash("sha256")
+        .update(JSON.stringify(fact))
+        .digest("hex")
+        .slice(0, 8);
+      let id = `${prefix}-${digest}`;
+      for (let n = 2; used.has(id); n += 1) id = `${prefix}-${digest}-${n}`;
+      used.add(id);
+      changed = true;
+      return { ...fact, id };
+    });
+  }
+  return changed ? completed : facts;
+}
+
 /** Move details placed beside a fact's fields into its `attributes`. */
 function withDetailsInAttributes(fact, fields) {
   if (!isRecord(fact)) return fact;
@@ -56,10 +93,11 @@ function withDetailsInAttributes(fact, fields) {
 
 /**
  * Repair mechanical slips before validation instead of paying a model
- * round trip for them: copied extraction input is dropped, and details
- * written beside a fact's fields move into its `attributes`, as the prompt
- * asks. (`tool()` already parses a fact array sent as JSON text.) Anything
- * else still fails validation with its path.
+ * round trip for them: copied extraction input is dropped, details written
+ * beside a fact's fields move into its `attributes`, as the prompt asks, and
+ * a fact that only lacks its id gets one. (`tool()` already parses a fact
+ * array sent as JSON text.) Anything else still fails validation with its
+ * path.
  */
 function normalizeArguments(value) {
   if (!isRecord(value)) return value;
@@ -71,7 +109,7 @@ function normalizeArguments(value) {
         withDetailsInAttributes(fact, fields),
       );
   }
-  return withInventoryItems(facts);
+  return withInventoryItems(withFactIds(facts));
 }
 
 /**
@@ -120,12 +158,34 @@ function withInventoryItems(facts) {
   return changed ? { ...facts, entities, events } : facts;
 }
 
+/** The letters and digits of a handle or a name, in order. */
+const lettersOf = (text) =>
+  String(text)
+    .toLowerCase()
+    .match(/[\p{L}\p{N}]+/gu)
+    ?.join("") ?? "";
+
 /**
  * The model names session characters by their word handles; restore the real
  * ids wherever an id is expected, including an inventory change's holder.
+ *
+ * A handle is the character's name in lower case with hyphens. The model
+ * sometimes writes the name itself or puts the hyphen elsewhere (`雷恩-修女`
+ * for `雷恩修女`). A reference that no entity of this output has as its id
+ * means the one session character whose handle has the same letters and
+ * digits.
  */
 function withCharacterIds(facts, handles) {
-  const real = (id) => handles.get(id)?.id ?? id;
+  const declared = new Set(facts.entities.map((entity) => entity.id));
+  const byLetters = new Map();
+  for (const [handle, character] of handles) {
+    const letters = lettersOf(handle);
+    // Two characters with the same letters: the letters name neither.
+    byLetters.set(letters, byLetters.has(letters) ? null : character);
+  }
+  const real = (id) =>
+    handles.get(id)?.id ??
+    (declared.has(id) ? id : (byLetters.get(lettersOf(id))?.id ?? id));
   const realAll = (ids) => ids && ids.map(real);
   return {
     ...facts,
@@ -245,6 +305,40 @@ function withTrackedThings(facts, vocabulary) {
     : facts;
 }
 
+/**
+ * The subjects of a statement are entities. The model also lists the event
+ * that the statement is about, by the id that event has in this output. Such
+ * an id names a fact, not an entity, and is left out: the event is in the
+ * output, and the content says what the statement is about. An id that
+ * names nothing in the output still fails.
+ */
+function withEntitySubjects(facts) {
+  const entities = new Set(facts.entities.map((entity) => entity.id));
+  const otherFacts = new Set(
+    [...facts.relations, ...facts.events, ...facts.statements].map(
+      (fact) => fact.id,
+    ),
+  );
+  const isFactOnly = (id) => otherFacts.has(id) && !entities.has(id);
+  if (
+    !facts.statements.some((statement) =>
+      statement.subjectIds?.some(isFactOnly),
+    )
+  )
+    return facts;
+  return {
+    ...facts,
+    statements: facts.statements.map((statement) =>
+      statement.subjectIds
+        ? {
+            ...statement,
+            subjectIds: statement.subjectIds.filter((id) => !isFactOnly(id)),
+          }
+        : statement,
+    ),
+  };
+}
+
 export default function ({ tool }) {
   const facts = worldIRV1Schema
     .extend({
@@ -281,12 +375,14 @@ export default function ({ tool }) {
     parameters,
     execute: async (facts, context) => {
       const handles = characterHandles(context?.world?.characters ?? []);
-      const completed = withTrackedThings(
-        withKnownCharacters(
-          withCharacterIds(withIdsForEntityNames(facts), handles),
-          handles,
+      const completed = withEntitySubjects(
+        withTrackedThings(
+          withKnownCharacters(
+            withCharacterIds(withIdsForEntityNames(facts), handles),
+            handles,
+          ),
+          vocabularyEntries(context?.inputSlots?.vocabulary),
         ),
-        vocabularyEntries(context?.inputSlots?.vocabulary),
       );
       const validation = validateWorldIRV1(completed);
       if (validation.valid) return completed;

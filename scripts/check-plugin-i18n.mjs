@@ -171,18 +171,28 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/rpc-defaults/submit-form.ts": 6,
   "packages/shared/src/utils/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
-  "packages/context/src/prompt-internals.ts": 6,
-  "packages/plugin-handlers-utils/src/narrative-review.ts": 9,
+  "packages/context/src/message-insertion.ts": 1,
+  "packages/context/src/prompt-assembler.ts": 1,
+  "packages/context/src/prompt-internals.ts": 14,
+  "packages/context/src/session-context.ts": 1,
+  "packages/plugin-handlers-utils/src/character-sheets.ts": 1,
+  "packages/plugin-handlers-utils/src/narrative-review.ts": 14,
+  "packages/runtime/src/agent-loop/request-context-budget.ts": 2,
+  "packages/runtime/src/agent-loop/response-review.ts": 1,
   "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
+  "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
+  "packages/runtime/src/retry/retry-common.ts": 2,
+  "packages/shared/src/proposals/dimension-query.ts": 1,
+  // A pattern that matches Chinese text, and one Chinese variant of a marker.
+  "packages/context/src/budget.ts": 2,
   // Patterns that match Chinese text.
-  "packages/context/src/budget.ts": 1,
   "packages/create/src/validation-helpers.ts": 7,
   "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
   "packages/tools/src/builtin/tool-search.ts": 2,
   // Example input for tests and the CLI.
   "packages/plugin-test-utils/src/factories.ts": 1,
-  "packages/test-runtime/src/cli.ts": 1,
+  "packages/test-runtime/src/run-cli.ts": 1,
 };
 
 function frameworkRoots() {

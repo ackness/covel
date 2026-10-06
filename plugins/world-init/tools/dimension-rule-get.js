@@ -7,6 +7,7 @@ import {
   dimensionRecordSchema,
   dimensionSettlementReceiptSchema,
 } from "@covel/shared";
+import { schemaForTracker } from "../lib/schema-for-tracker.js";
 
 /** Tracker-only adopted rules, paged so large schemas never flood a model prompt. */
 export default function ({ tool, z }) {
@@ -41,7 +42,11 @@ export default function ({ tool, z }) {
       const text =
         part === "rule"
           ? (resolveI18nText(definition.updateRule, session.locale) ?? "")
-          : JSON.stringify(resolveI18nDeep(definition.schema, session.locale));
+          : JSON.stringify(
+              schemaForTracker(
+                resolveI18nDeep(definition.schema, session.locale),
+              ),
+            );
       const characters = Array.from(text);
       const content = characters.slice(offset, offset + limit).join("");
       const complete = offset + limit >= characters.length;
