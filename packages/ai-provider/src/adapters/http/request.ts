@@ -156,11 +156,7 @@ export async function postJson(
 
     let response = await fetchThroughDrops();
 
-    for (; retries < MAX_RETRIES; retries++) {
-      if (!isRetriableStatus(response.status)) {
-        return response;
-      }
-
+    while (retries < MAX_RETRIES && isRetriableStatus(response.status)) {
       // Discard rejected bodies without buffering an unbounded error stream.
       if (response.body) {
         await awaitLlmRequest(
@@ -180,6 +176,9 @@ export async function postJson(
       const delay = retryAfterMs ?? computeBackoffMs(retries);
       await sleepWithAbort(delay, effectiveSignal);
 
+      // Counted before the request is sent again, so a connection that drops
+      // during this retry cannot use the count a second time.
+      retries += 1;
       transportRetryReason = response.status === 429 ? "http-429" : "http-5xx";
       response = await fetchThroughDrops();
     }
