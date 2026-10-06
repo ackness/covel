@@ -88,7 +88,6 @@ if (process.env.FAIL_ON === process.argv.slice(2).join(" ")) process.exit(7);
         env,
         input,
         encoding: "utf8",
-        timeout: 30_000,
       });
     },
     calls() {
