@@ -175,8 +175,9 @@ execution (`dimension-snapshot-unavailable`) rejects execution finalization
 before any buffered proposals, journal messages, or player-turn counters
 commit. A story skipped for any other reason (its guard, a declared gate) does
 not reject the execution. Already durable client messages remain outside
-this transaction. A premature `runtime-done` first requests narrative with the
-remaining bounded model steps; an empty result becomes a failed runtime. This
+this transaction. A story runtime is not offered `runtime-done`; a model that
+calls it from habit is first asked for the narrative with the remaining bounded
+model steps; an empty result becomes a failed runtime. This
 does not retry or reverse external tool side effects. Optional system extractors
 can still fail after a valid story; their failure does not discard the story.
 

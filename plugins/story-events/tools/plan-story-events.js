@@ -42,6 +42,15 @@ function slotValue(context, name) {
   return slot && "value" in slot ? slot.value : undefined;
 }
 
+/** The first of `id-2`, `id-3`, … that no event has, within the ID limit. */
+function nextEventId(id, taken) {
+  for (let n = 2; ; n += 1) {
+    const suffix = `-${n}`;
+    const next = `${id.slice(0, 64 - suffix.length)}${suffix}`;
+    if (!taken.has(next)) return next;
+  }
+}
+
 /** "a, b, c", or what to do when there is nothing to choose from. */
 function choices(values, none) {
   const list = [...values];
@@ -166,7 +175,13 @@ function normalizeEvent(event) {
 
 function normalizeArguments(input) {
   if (!isRecord(input) || !Array.isArray(input.events)) return input;
-  return { ...input, events: input.events.map(normalizeEvent) };
+  // A text among the events is what is left of a broken end: in recorded
+  // calls `"reason ="` or `"reason:"` after the last event. It is no event,
+  // and it is left out when the call holds an event to keep.
+  const events = input.events.some(isRecord)
+    ? input.events.filter((event) => typeof event !== "string")
+    : input.events;
+  return { ...input, events: events.map(normalizeEvent) };
 }
 
 const typesOf = (node) =>
@@ -553,11 +568,13 @@ export default function ({ tool, z }) {
             .optional()
             .describe("Pending planned event IDs to withdraw"),
           // One or two sentences. The model does not count characters, so
-          // the limit is far from what the description asks for.
+          // the limit is far from what the description asks for. It is a
+          // note for debugging that nothing reads: a plan without it is
+          // taken.
           reason: z
             .string()
-            .min(1)
             .max(600)
+            .optional()
             .describe("Why these events, in one or two sentences"),
         })
         .strict(),
@@ -592,9 +609,16 @@ export default function ({ tool, z }) {
       for (const retired of params.retire ?? [])
         if (!pending.has(retired))
           issues.push(`${retired}: only pending planned events can be retired`);
-      const events = params.events.map((item) => {
-        if (known.includes(item.id) && !pending.has(item.id))
-          issues.push(`${item.id}: this event already fired`);
+      const events = params.events.map((written) => {
+        let item = written;
+        // An event that fired is never planned again. A model that plans
+        // what follows it writes the ID it reads in `revealed`: the plan is
+        // a new event, and it gets the next free ID. The model reads that ID
+        // in the result and, from the next turn, in `planned`.
+        if (known.includes(written.id) && !pending.has(written.id)) {
+          item = { ...written, id: nextEventId(written.id, refs.eventIds) };
+          refs.eventIds.add(item.id);
+        }
         const leaves = { all: [], none: [] };
         for (const key of ["all", "none"])
           for (const written of item[key] ?? []) {
@@ -628,7 +652,7 @@ export default function ({ tool, z }) {
           ...(item.priority === undefined ? {} : { priority: item.priority }),
         })),
         ...(params.retire?.length ? { retire: params.retire } : {}),
-        reason: params.reason,
+        ...(params.reason ? { reason: params.reason } : {}),
       };
     },
   });

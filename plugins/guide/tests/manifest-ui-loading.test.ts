@@ -43,7 +43,7 @@ describe("guide manifest and UI loading", () => {
       outputKind: "system",
       requireToolUse: true,
       completeAfterTools: ["generate-guide"],
-      maxRetries: 0,
+      maxRetries: 3,
       trigger: {
         type: "scheduled",
         interval: 1,

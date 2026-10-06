@@ -42,7 +42,7 @@ agent:
   loop:
     timeoutMs: 120000
     callTimeoutMs: 60000
-    maxRetries: 0
+    maxRetries: 3
     completion:
       require: explicit
       afterTools:

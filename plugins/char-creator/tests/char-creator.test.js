@@ -77,7 +77,7 @@ describe("char-creator plugin", () => {
       expect(manifest.requireToolUse).toBe(true);
       expect(manifest.completeAfterTools).toEqual(["create-character-form"]);
       expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
-      expect(manifest.maxRetries).toBe(0);
+      expect(manifest.maxRetries).toBe(3);
     });
 
     it("injects the same-turn pregame opening and generated world schema", () => {
@@ -150,9 +150,10 @@ describe("char-creator plugin", () => {
       expect(manifest.completeAfterTools).toEqual(["sync-characters"]);
       expect(manifest.tools?.defer).toBeUndefined();
       expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
-      // One retry rides out a stalled provider call; reasoning stays off so
-      // a normal settlement is a single short call.
-      expect(manifest.maxRetries).toBe(1);
+      // Retries ride out a stalled or failed provider call: four calls of
+      // 30 seconds fit the runtime's 120. Reasoning stays off so a normal
+      // settlement is a single short call.
+      expect(manifest.maxRetries).toBe(3);
       expect(manifest.callTimeoutMs).toBe(30000);
       expect(manifest.llm?.reasoningEffort).toBe("disabled");
     });

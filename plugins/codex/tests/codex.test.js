@@ -305,7 +305,7 @@ describe("codex plugin manifest", () => {
     expect(manifest.tools?.plugin).toEqual(["sync-codex-entries"]);
     expect(manifest.completeAfterTools).toEqual(["sync-codex-entries"]);
     expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
-    expect(manifest.maxRetries).toBe(0);
+    expect(manifest.maxRetries).toBe(3);
     // plugin-data-list was removed — existing entries now arrive via input.inject
     expect(manifest.tools?.builtin ?? []).not.toContain("plugin-data-list");
   });
