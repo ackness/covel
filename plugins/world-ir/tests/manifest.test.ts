@@ -28,7 +28,7 @@ describe("world-ir plugin contract", () => {
     expect(parsed?.manifest.tools?.plugin).toEqual(["submit-world-facts"]);
     expect(parsed?.manifest.requireToolUse).toBe(true);
     expect(parsed?.manifest.completeAfterTools).toEqual(["submit-world-facts"]);
-    expect(parsed?.manifest.maxRetries).toBe(0);
+    expect(parsed?.manifest.maxRetries).toBe(3);
     expect(parsed?.manifest.callTimeoutMs).toBe(60_000);
     expect(parsed?.manifest.inputs?.narrative).toEqual({
       from: { capability: "narrative-engine@1", cardinality: "one" },

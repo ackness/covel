@@ -36,6 +36,7 @@ import {
   buildCurrentTurnUserMessage,
   buildExecutionStoryCue,
   buildFrameworkPreamble,
+  type FrameworkCompletion,
   buildInjectBlocks,
   buildInjectBlocksAsync,
   escapeXmlContent,
@@ -119,9 +120,9 @@ interface PromptSegments {
  */
 function defaultFrameworkPreamble(
   locale: string | undefined,
-  terminatesWithRuntimeDone: boolean,
+  completion: FrameworkCompletion,
 ): string {
-  return buildFrameworkPreamble(locale, { terminatesWithRuntimeDone });
+  return buildFrameworkPreamble(locale, { completion });
 }
 
 /**
@@ -287,13 +288,18 @@ function buildPromptSegmentsCommon(
     .filter(Boolean)
     .join("\n");
 
-  // A schema-declared runtime terminates by emitting its JSON envelope and is
-  // never given `runtime-done`, so the completion instruction must match.
+  // The completion instruction must match how the runtime finishes. A story
+  // runtime finishes with its text and a schema-declared runtime with its
+  // JSON envelope; neither is given `runtime-done`.
   const frameworkPreamble =
     params.frameworkPreamble ??
     defaultFrameworkPreamble(
       params.turnInput.locale,
-      !params.manifest.output?.schema,
+      params.manifest.outputKind === "story"
+        ? "story"
+        : params.manifest.output?.schema
+          ? "structured-output"
+          : "runtime-done",
     );
 
   const extensionSegments = selectPromptSegments(

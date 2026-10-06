@@ -512,6 +512,13 @@ export function buildExecutionStoryCue(locale: string | undefined): string {
 }
 
 /**
+ * How a runtime finishes: by calling `runtime-done`, by its structured JSON
+ * output, or, for a story runtime, by the text of its reply.
+ */
+export type FrameworkCompletion =
+  "runtime-done" | "structured-output" | "story";
+
+/**
  * Framework preamble used by segment-based prompt assembly (segment 1).
  *
  * When a locale is provided, prepends a `[RUNTIME]` header that keeps
@@ -523,15 +530,19 @@ export function buildFrameworkPreamble(
   locale?: string,
   options?: {
     /**
-     * Whether this runtime terminates by calling `runtime-done`.
+     * How this runtime finishes; `runtime-done` when omitted.
      *
-     * Schema-declared runtimes do NOT get that tool — `buildToolDefinitions`
-     * withholds it so the early-exit branch cannot fire before the JSON
-     * envelope downstream consumers read. Instructing them to call it anyway
-     * asks for a tool that was never advertised: the model either hallucinates
-     * the call (rejected, wasting a round-trip) or stalls looking for it.
+     * Only a runtime that is given the `runtime-done` tool is told to call
+     * it. A schema-declared runtime does not get that tool:
+     * `buildToolDefinitions` withholds it so the early-exit branch cannot
+     * fire before the JSON envelope that downstream consumers read. A story
+     * runtime does not get it either: its result is the text of its reply.
+     * Told to "call `runtime-done` when no tool call is needed", a model
+     * that follows instructions to the letter ended the narrator's run with
+     * that call and wrote no story, three times in a row, and the turn was
+     * not committed.
      */
-    readonly terminatesWithRuntimeDone?: boolean;
+    readonly completion?: FrameworkCompletion;
   },
 ): string {
   if (!locale) {
@@ -545,24 +556,33 @@ export function buildFrameworkPreamble(
   // every successful tool call. Emitted in the session's instruction language
   // (English, or Chinese for a Chinese session) rather than every locale at once.
   const isZh = instructionLocaleFor(locale) === "zh";
-  const usesRuntimeDone = options?.terminatesWithRuntimeDone ?? true;
-  const completion = usesRuntimeDone
-    ? isZh
-      ? [
-          "[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。",
-          "[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。",
-        ]
-      : [
-          "[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text — calling `runtime-done` is the end signal.",
-          "[COMPLETION] If no tool call is needed this turn, just call `runtime-done` to finish (preferred), or return an empty string. Do not repeatedly call the same business tool.",
-        ]
-    : isZh
-      ? [
-          "[COMPLETION] 本 runtime 以**结构化 JSON 输出**结束：完成所有业务工具调用后，直接返回符合 schema 的 JSON。不要调用 `runtime-done`——本 runtime 没有该工具。",
-        ]
-      : [
-          "[COMPLETION] This runtime finishes by emitting its **structured JSON output**: once all tool work is done, return the JSON matching the declared schema. Do NOT call `runtime-done` — this runtime does not have that tool.",
-        ];
+  const mode = options?.completion ?? "runtime-done";
+  const completion =
+    mode === "story"
+      ? isZh
+        ? [
+            "[COMPLETION] 本 runtime 的结果是你回复里的故事正文。工具按下面的指令使用；最后一次工具结果之后，把正文作为回复写出来。只有工具调用、没有正文的回复不算完成。",
+          ]
+        : [
+            "[COMPLETION] The result of this runtime is the story text of your reply. Use tools as the instructions below say; after the last tool result, write the story as your reply. A reply with a tool call and no story text does not finish this runtime.",
+          ]
+      : mode === "runtime-done"
+        ? isZh
+          ? [
+              "[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。",
+              "[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。",
+            ]
+          : [
+              "[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text — calling `runtime-done` is the end signal.",
+              "[COMPLETION] If no tool call is needed this turn, just call `runtime-done` to finish (preferred), or return an empty string. Do not repeatedly call the same business tool.",
+            ]
+        : isZh
+          ? [
+              "[COMPLETION] 本 runtime 以**结构化 JSON 输出**结束：完成所有业务工具调用后，直接返回符合 schema 的 JSON。不要调用 `runtime-done`——本 runtime 没有该工具。",
+            ]
+          : [
+              "[COMPLETION] This runtime finishes by emitting its **structured JSON output**: once all tool work is done, return the JSON matching the declared schema. Do NOT call `runtime-done` — this runtime does not have that tool.",
+            ];
   // The whole preamble is in one language. With the frame and the language
   // rule in English and the completion rule in Chinese, a Chinese session
   // read a prompt that changed language twice before the plugin's own text.

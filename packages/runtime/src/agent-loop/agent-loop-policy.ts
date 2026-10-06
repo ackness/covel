@@ -124,6 +124,9 @@ export function buildAgentLoopPolicy({
     : undefined;
 
   const authorizedToolNames = new Set(declaredToolNames(manifest));
+  // A story runtime is not offered `runtime-done` (see `usesRuntimeDone`),
+  // but a model may call it from habit. The call stays authorized so that the
+  // loop can answer it by asking for the story, not with a tool error.
   if (!manifest.output?.schema) {
     authorizedToolNames.add("runtime-done");
   }

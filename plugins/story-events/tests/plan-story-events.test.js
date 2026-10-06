@@ -136,7 +136,52 @@ describe("plan-story-events", () => {
     ).rejects.toThrow("watch: an `afterTurns` condition has no other field");
   });
 
-  it("reports unknown references and fired events so the model can correct them", async () => {
+  it("plans what follows a fired event under a new ID", async () => {
+    // The shape of a recorded call: the event fired this turn, its thread was
+    // still open, and the model planned the next step under the ID and the
+    // title it read in `revealed`.
+    const follow = (id) =>
+      run({
+        events: [
+          {
+            id,
+            title: "Again",
+            all: [{ afterTurns: 1 }, { revealed: "meg-offer" }],
+            payload: "The offer comes back with a price.",
+          },
+        ],
+      });
+    expect((await follow("meg-offer")).events).toMatchObject([
+      { id: "meg-offer-2", when: { all: [{}, { revealed: "meg-offer" }] } },
+    ]);
+    // A pending event keeps its ID: the plan replaces it.
+    expect((await follow("dock-fire")).events[0].id).toBe("dock-fire");
+  });
+
+  it("leaves out a text among the events", async () => {
+    // The end of a recorded call: `…"payload":"…"},"reason ="]}`.
+    const event = plan({ all: [{ afterTurns: 1 }] }).events[0];
+    const result = await planTool.execute(
+      planTool.parameters.parse({ events: [event, "reason ="] }),
+      context(),
+    );
+    expect(result.events).toHaveLength(1);
+    // A call of texts alone holds no event to keep, and it is refused.
+    expect(() =>
+      planTool.parameters.parse({ events: ["The fangs come back."] }),
+    ).toThrow();
+  });
+
+  it("takes a plan without a reason", async () => {
+    // The reason is a note for debugging. A call without it was rejected.
+    const result = await planTool.execute(
+      planTool.parameters.parse({ events: [] }),
+      context(),
+    );
+    expect(result).toEqual({ events: [] });
+  });
+
+  it("reports unknown references so the model can correct them", async () => {
     await expect(
       run({
         events: [
@@ -158,10 +203,9 @@ describe("plan-story-events", () => {
       // does not guess again.
       [
         "meg-offer: only pending planned events can be retired",
-        "meg-offer: this event already fired",
-        "meg-offer: unknown dimension: weather. The dimensions are: factionStanding, alarm, map",
-        "meg-offer: unknown time field: period. The numeric fields of worldTime.value are: phase",
-        'meg-offer: unknown event: kings-secret. `revealed` takes the ID of a story event in storyEvents.value (meg-offer, dock-fire) or of an event in this call. Something that happened in the narrative is not a story event. Use one of these IDs, or remove the condition; to make the event come later, use { "afterTurns": n }',
+        "meg-offer-2: unknown dimension: weather. The dimensions are: factionStanding, alarm, map",
+        "meg-offer-2: unknown time field: period. The numeric fields of worldTime.value are: phase",
+        'meg-offer-2: unknown event: kings-secret. `revealed` takes the ID of a story event in storyEvents.value (meg-offer, dock-fire) or of an event in this call. Something that happened in the narrative is not a story event. Use one of these IDs, or remove the condition; to make the event come later, use { "afterTurns": n }',
       ].join("\n"),
     );
   });

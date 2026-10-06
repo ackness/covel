@@ -503,7 +503,7 @@ describe("affinity plugin manifest", () => {
     expect(packageManifest.entry).toBe("./server/index.js");
     expect(manifest.completeAfterTools).toEqual(["update-affinity"]);
     expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
-    expect(manifest.maxRetries).toBe(0);
+    expect(manifest.maxRetries).toBe(3);
   });
 
   it("accepts world data into the affinity namespace via dataSchemas", () => {

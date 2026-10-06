@@ -148,30 +148,24 @@ export default function ({ tool, z, shortIdBatch }) {
   return tool({
     name: "upsert-npc-graph",
     description:
-      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name. Edges are versioned by (sourceName, targetName, relation): resubmit a relation whose strength or fact changed and the tool supersedes the previous version; resubmitting an identical one is a no-op. No need to list existing data first — the tool merges and updates internally.",
+      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name. Edges are versioned by (sourceName, targetName, relation): resubmit a relation whose strength or fact changed and the tool supersedes the previous version; resubmitting an identical one is a no-op. No need to list existing data first — the tool merges and updates internally. A call with no node and no edge records nothing.",
     parameters: z.preprocess(
       withGraphNodesOnly,
-      z
-        .object({
-          nodes: z
-            .array(nodeInputSchema)
-            .max(8)
-            .optional()
-            .describe("Nodes to create or update this turn, max 8"),
-          edges: z
-            .array(edgeInputSchema)
-            .max(12)
-            .optional()
-            .describe("Relationship edges to create this turn, max 12"),
-        })
-        .refine(
-          (value) =>
-            (value.nodes?.length ?? 0) + (value.edges?.length ?? 0) > 0,
-          {
-            message:
-              "submit at least one node or edge; use runtime-done when nothing changed",
-          },
-        ),
+      // A call with no node and no edge is the answer "nothing changed". It
+      // succeeds and writes nothing: a refusal here cannot be put right,
+      // because `runtime-done` does not settle a failed call.
+      z.object({
+        nodes: z
+          .array(nodeInputSchema)
+          .max(8)
+          .optional()
+          .describe("Nodes to create or update this turn, max 8"),
+        edges: z
+          .array(edgeInputSchema)
+          .max(12)
+          .optional()
+          .describe("Relationship edges to create this turn, max 12"),
+      }),
     ),
     execute: async (params, context) => {
       const now = new Date().toISOString();

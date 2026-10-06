@@ -47,7 +47,11 @@ describe("prompt locale normalization", () => {
   it("writes every line of the preamble in the instruction language", () => {
     // A Chinese session read `[RUNTIME]` and `[LANGUAGE]` in English and
     // `[COMPLETION]` in Chinese.
-    for (const options of [undefined, { terminatesWithRuntimeDone: false }]) {
+    for (const options of [
+      undefined,
+      { completion: "structured-output" as const },
+      { completion: "story" as const },
+    ]) {
       const chinese = buildFrameworkPreamble("zh-CN", options).split("\n");
       expect(
         chinese.map((line) => line.slice(0, line.indexOf("]") + 1)),
@@ -59,6 +63,16 @@ describe("prompt locale normalization", () => {
       expect(buildFrameworkPreamble("en-US", options)).not.toMatch(
         /\p{Script=Han}/u,
       );
+    }
+  });
+
+  it("tells a story runtime to finish with its text, not with runtime-done", () => {
+    for (const locale of ["en-US", "zh-CN"]) {
+      const story = buildFrameworkPreamble(locale, { completion: "story" });
+      expect(story).not.toContain("runtime-done");
+      expect(story).toMatch(/story text of your reply|故事正文/);
+      // Every other runtime that has the tool is still told to call it.
+      expect(buildFrameworkPreamble(locale)).toContain("`runtime-done`");
     }
   });
 

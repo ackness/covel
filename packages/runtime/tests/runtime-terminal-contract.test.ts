@@ -211,7 +211,6 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
             stage: "narrative",
             outputKind: "story",
             trigger: { type: "auto" },
-            timeoutMs: 1000,
             maxRetries: 0,
             ...(scenario === "returned failure" && runtimeType === "agent"
               ? { outputKind: "plugin", requireExplicitCompletion: true }

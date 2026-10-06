@@ -112,6 +112,69 @@ describe("postJson retry wrapper", () => {
     expect(failB.bodyDrained).toBe(true);
   });
 
+  it("sends the request again when the connection was refused or dropped", async () => {
+    // What Undici throws when a local endpoint restarts.
+    const dropped = (code: string) =>
+      Object.assign(new TypeError("fetch failed"), {
+        cause: Object.assign(new Error(`connect ${code}`), { code }),
+      });
+    const ok = makeMockResponse({ status: 200 });
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(dropped("ECONNREFUSED"))
+      .mockRejectedValueOnce(dropped("ECONNRESET"))
+      .mockResolvedValueOnce(ok);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = postJson(CONFIG, "/chat/completions", { a: 1 });
+    await vi.runAllTimersAsync();
+    expect((await promise).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up on a connection that stays down, and counts both kinds of retry together", async () => {
+    const refused = () =>
+      Object.assign(new TypeError("fetch failed"), {
+        cause: Object.assign(new Error("connect ECONNREFUSED"), {
+          code: "ECONNREFUSED",
+        }),
+      });
+    const down = vi.fn().mockImplementation(async () => {
+      throw refused();
+    });
+    vi.stubGlobal("fetch", down);
+    const failing = postJson(CONFIG, "/chat/completions", { a: 1 });
+    const rejected = expect(failing).rejects.toThrow("fetch failed");
+    await vi.runAllTimersAsync();
+    await rejected;
+    // 1 original + 3 retries.
+    expect(down).toHaveBeenCalledTimes(4);
+
+    const mixed = vi
+      .fn()
+      .mockResolvedValueOnce(makeMockResponse({ status: 500 }))
+      .mockRejectedValueOnce(refused())
+      .mockResolvedValueOnce(makeMockResponse({ status: 500 }))
+      .mockResolvedValueOnce(makeMockResponse({ status: 500 }))
+      .mockResolvedValueOnce(makeMockResponse({ status: 200 }));
+    vi.stubGlobal("fetch", mixed);
+    const promise = postJson(CONFIG, "/chat/completions", { a: 1 });
+    await vi.runAllTimersAsync();
+    expect((await promise).status).toBe(500);
+    expect(mixed).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not retry an error that is no dropped connection", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new Error("Provider error: blocked address"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      postJson(CONFIG, "/chat/completions", { a: 1 }),
+    ).rejects.toThrow("blocked address");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("returns last 500 response when all retries are exhausted (4 attempts)", async () => {
     const fetchMock = vi
       .fn()
