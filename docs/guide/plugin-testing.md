@@ -150,7 +150,8 @@ pnpm vitest run plugins/<id>/tests
 
 源码入口：
 
-- [`packages/test-runtime/src/cli.ts`](../../packages/test-runtime/src/cli.ts)
+- [`packages/test-runtime/src/cli.ts`](../../packages/test-runtime/src/cli.ts)（进程入口）
+- [`packages/test-runtime/src/run-cli.ts`](../../packages/test-runtime/src/run-cli.ts)（参数解析、报告输出和退出码）
 - [`packages/test-runtime/src/runner.ts`](../../packages/test-runtime/src/runner.ts)
 - [`packages/test-runtime/src/cases.ts`](../../packages/test-runtime/src/cases.ts)
 - [`packages/test-runtime/src/reporting.ts`](../../packages/test-runtime/src/reporting.ts)
