@@ -1392,6 +1392,66 @@ sources:
     });
   });
 
+  it("lists imported characters as the author wrote them, and a sync keeps each one's place", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  cast:
+    kind: json
+    path: data/cast.json
+    to: characters
+    key: id
+`,
+      files: {
+        // Against the order of the IDs.
+        "data/cast.json": JSON.stringify([
+          { id: "npc-zoe", name: "Zoe", type: "npc" },
+          { id: "npc-adam", name: "Adam", type: "npc" },
+          { id: "npc-mira", name: "Mira", type: "npc" },
+        ]),
+      },
+    });
+    const store = await makeStore([]);
+    const options = {
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+    };
+    await importWorldDataForSession(options);
+    const roster = async () =>
+      (await store.listCharacters("sess-1")).map((row) => row.name);
+    expect(await roster()).toEqual(["Zoe", "Adam", "Mira"]);
+
+    // Play changed one character, so the sync leaves it alone; the package
+    // changed another and gained one. The rewritten character is not a new
+    // one: it stays where it was.
+    const adam = (await store.listCharacters("sess-1"))[1]!;
+    await store.upsertCharacter({ ...adam, name: "Adam, wounded" });
+    await writeFile(
+      path.join(worldRoot, "data/cast.json"),
+      JSON.stringify([
+        { id: "npc-zoe", name: "Zoe Hale", type: "npc" },
+        { id: "npc-adam", name: "Adam", type: "npc" },
+        { id: "npc-mira", name: "Mira", type: "npc" },
+        { id: "npc-bao", name: "Bao", type: "npc" },
+      ]),
+    );
+    expect(
+      await syncWorldDataForSession({
+        ...options,
+        now: "2026-02-01T00:00:00.000Z",
+      }),
+    ).toMatchObject({ conflicts: [{ reason: "modified", key: "npc-adam" }] });
+    expect(await roster()).toEqual([
+      "Zoe Hale",
+      "Adam, wounded",
+      "Mira",
+      "Bao",
+    ]);
+  });
+
   it("skips existing rows with merge skipExisting", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1

@@ -344,7 +344,7 @@ sources:
 `world.yaml` 没有 `worldData` 字段时，世界包按约定读取：约定路径上存在的每个文件（media 则是目录）就是一个 source，效果与在 descriptor 里写出同一条完全相同。约定来自两处：
 
 - 内核：`data/dimensions.yaml` → `world:metadata.dimensions`，`data/lorebook.yaml` → `lorebook`，`characters/characters.json` → `characters`；
-- 插件：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。`path` 是相对世界包根目录的路径，不能以 `/` 开头，也不能含 `..`。两个契约声明了同一个路径时，这个路径不算约定，世界包要用 descriptor 说明给谁。
+- 插件：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`；不符合的清单在加载时校验失败。世界包想把文件放在别的路径（例如中文文件名）时，在自己的 descriptor 里写这个路径。两个契约声明了同一个路径时，这个路径不算约定，世界包要用 descriptor 说明给谁。
 
 导入顺序是：维度，然后 media，然后其余契约数据，最后是 `characters`。
 
@@ -652,6 +652,8 @@ characterSchema:
 ## 领域角色与插件角色卡
 
 三个内置世界把两类内容分别交付：`characters/main-cast.json` 是可选的插件角色卡；`characters/characters.json` 是通用领域记录。
+
+领域角色按作者在文件里写的顺序进入会话：导入时每个角色的 `createdAt` 比前一个晚一毫秒，而角色列表（面板、提示词里的名册）按 `(createdAt, id)` 排列。多个 source 都写角色时，按 source 的导入顺序接着排。游玩中新建的角色排在它们之后。
 
 ```yaml
 schemaVersion: 1
@@ -1001,6 +1003,7 @@ POST /api/worlds/<world-id>/sync-data
 5. source 已移除且目标 row 也已缺失时，只清理 stale ledger，不报告 conflict。
 6. 普通导入 row 可通过 `force:true` 覆盖 modified/missing 冲突；维度的已演化值及待结算保护不因此解除。
 7. 有冲突的 row 保持原样并在 `conflicts` 里列出，不影响其余 row：没有账本记录的新 row（世界包后来新增的 source、新立绘）照常写入，未被改动的 row 照常更新或删除。
+8. 被同步改写的角色保留原来的 `createdAt`，在角色列表里的位置不变；世界包新增的角色排在已有角色之后。
 
 维度同步另有领域约束：作者 definition 的摘要未变时保留当前进度，不重复应用初值；新增维度以初值初始化。修改或删除已演化/手改的维度，或尚有待结算义务时，返回 `modified` 冲突并保留值和 definition。待结算保护按维度 provider 判定，不依赖导入账本：游玩中经 `dimension.initialize` 初始化、没有账本记录的维度同样受保护，声明未变时不算冲突。未改动的导入基线才可采用新声明或删除，schema 改变不自动迁移旧值。同步在事务内重验 hash 与版本，预检通过不授权随后无条件覆盖。有冲突时返回计划及冲突，不应用本次同步。
 

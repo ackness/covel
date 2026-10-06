@@ -488,7 +488,10 @@ session.
 Two more lists that reach a prompt have a total order on every backend.
 `listCharacters` returns `(createdAt, id)`, IDs compared byte by byte; without
 an order PostgreSQL returned rows as they lay on disk, where an updated row
-moves. `listTurnMessages` and `listUncompactedTurnMessages` return
+moves. The world-data importer gives the characters of one import creation
+times one millisecond apart, in the order the author wrote them, so that order
+is the roster's; a sync that rewrites a character keeps its creation time.
+`listTurnMessages` and `listUncompactedTurnMessages` return
 `(createdAt, order, id)`: two messages of one millisecond come in pipeline
 order, the player's message first.
 

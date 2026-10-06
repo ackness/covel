@@ -904,6 +904,27 @@ export async function syncWorldDataForSession(
         }
       }
 
+      // A character that is rewritten is deleted below and written again. It
+      // is not a new character: it keeps its creation time, and with it its
+      // place in the roster, which lists characters by that time.
+      const rewritesCharacters = materializedWritesToApply.some(
+        (write) => write.kind === "character",
+      );
+      const createdAtById = new Map(
+        rewritesCharacters
+          ? (await tx.listCharacters(options.sessionId)).map(
+              (record) => [record.id, record.createdAt] as const,
+            )
+          : [],
+      );
+      const writesToCommit = materializedWritesToApply.map((write) => {
+        if (write.kind !== "character") return write;
+        const createdAt = createdAtById.get(write.record.id);
+        return createdAt === undefined
+          ? write
+          : { ...write, record: { ...write.record, createdAt } };
+      });
+
       for (const ledger of ledgersToDelete) {
         if (!(
           ledger.namespace === DIMENSION_DATA_NAMESPACE &&
@@ -917,7 +938,7 @@ export async function syncWorldDataForSession(
           });
         await tx.deleteWorldDataImportLedger(options.sessionId, ledger.id);
       }
-      if (materializedWritesToApply.length > 0) {
+      if (writesToCommit.length > 0) {
         const writeResult = await writeImportPlan({
           store: tx,
           // Media-index writes were materialized above, before opening the DB
@@ -928,7 +949,7 @@ export async function syncWorldDataForSession(
           worldId,
           now: options.now,
           plan: {
-            writes: materializedWritesToApply,
+            writes: writesToCommit,
             diagnostics: [],
             mergeEvents: [],
             deferredProjectionOutputs: [],
