@@ -9,6 +9,7 @@ import type { ProviderConfig } from "../../types.js";
 import { outboundFetch } from "../../outbound-network.js";
 import {
   computeBackoffMs,
+  isConnectionError,
   isRetriableStatus,
   isRetryDisabled,
   MAX_RETRIES,
@@ -90,7 +91,7 @@ export async function postJson(
   const effectiveSignal = scope?.signal ?? signal ?? config.signal;
 
   let transportAttempt = 0;
-  let transportRetryReason: "http-429" | "http-5xx" | undefined;
+  let transportRetryReason: "http-429" | "http-5xx" | "connection" | undefined;
   const doFetch = async (): Promise<Response> => {
     if (scope)
       assertLlmRequestBudget(scope.budget, {
@@ -122,14 +123,40 @@ export async function postJson(
     );
   };
 
+  // Retries of both kinds, a response that asks for one and a connection
+  // that gave no response, count against one limit.
+  let retries = 0;
+  const fetchThroughDrops = async (): Promise<Response> => {
+    for (;;) {
+      try {
+        return await doFetch();
+      } catch (error) {
+        if (
+          retries >= MAX_RETRIES ||
+          effectiveSignal?.aborted ||
+          !isConnectionError(error)
+        )
+          throw error;
+        if (scope)
+          assertLlmRequestBudget(scope.budget, {
+            signal: effectiveSignal,
+            requireAttempt: true,
+          });
+        await sleepWithAbort(computeBackoffMs(retries), effectiveSignal);
+        retries += 1;
+        transportRetryReason = "connection";
+      }
+    }
+  };
+
   try {
     if (isRetryDisabled()) {
       return await doFetch();
     }
 
-    let response = await doFetch();
+    let response = await fetchThroughDrops();
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    for (; retries < MAX_RETRIES; retries++) {
       if (!isRetriableStatus(response.status)) {
         return response;
       }
@@ -150,11 +177,11 @@ export async function postJson(
       const retryAfterMs = parseRetryAfterMs(
         response.headers.get("retry-after"),
       );
-      const delay = retryAfterMs ?? computeBackoffMs(attempt);
+      const delay = retryAfterMs ?? computeBackoffMs(retries);
       await sleepWithAbort(delay, effectiveSignal);
 
       transportRetryReason = response.status === 429 ? "http-429" : "http-5xx";
-      response = await doFetch();
+      response = await fetchThroughDrops();
     }
 
     return response;
