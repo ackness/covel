@@ -225,6 +225,11 @@ export interface SuspensionRecord {
     readonly locale?: string;
     readonly logicalTurn?: number;
     readonly turnNumber?: number;
+    /**
+     * User messages of the suspended turn in `messages`. The context budget
+     * of the resume keeps all of them, as it did before the suspension.
+     */
+    readonly currentTurnUserMessages?: number;
     /** Events buffered before suspension; resume must not silently drop them. */
     readonly emittedEvents?: readonly unknown[];
     /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */

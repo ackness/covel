@@ -280,6 +280,8 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(s.resolvedAt).toBeUndefined();
     // pendingContinuation must include the suspendToolCallId
     expect(s.pendingContinuation.suspendToolCallId).toBe("tc-s1");
+    // The player's message is the one user message of this turn.
+    expect(s.pendingContinuation.currentTurnUserMessages).toBe(1);
     expect(s.pendingContinuation.executionContext).toEqual(
       turn.executionContext,
     );
@@ -1088,6 +1090,87 @@ describe("resumeSuspendedRuntime", () => {
     });
     expect(attempts).toBe(1);
     expect(firstMaxOutputTokens).toBe(100);
+  });
+
+  it("keeps the whole suspended turn under the context budget on resume", async () => {
+    const story = `CURRENT_STORY ${"s".repeat(1_200)}`;
+    // The transcript of a runtime that ran after this turn's story: the
+    // player's message and the cue after the story are both of this turn.
+    const continuation = (currentTurnUserMessages?: number) => ({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "player" as const,
+        countPolicy: "complete-player-turn" as const,
+        logicalTurnId: crypto.randomUUID(),
+      },
+      messages: [
+        { role: "system", content: "You are a test agent." },
+        { role: "user", content: "prior ".repeat(20) },
+        { role: "assistant", content: "history ".repeat(20) },
+        { role: "system", content: `CURRENT_CONTEXT ${"c".repeat(200)}` },
+        { role: "user", content: "I open the door." },
+        { role: "assistant", content: story },
+        { role: "user", content: "Do this runtime's task." },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "tc-turn", name: "ask", arguments: "{}" }],
+        },
+        { role: "tool", content: "", toolCallId: "tc-turn" },
+      ],
+      toolCallsSoFar: [],
+      pendingProposals: [],
+      suspendToolCallId: "tc-turn",
+      ...(currentTurnUserMessages !== undefined
+        ? { currentTurnUserMessages }
+        : {}),
+    });
+    const manifest = makeManifest();
+    const sentWith = async (currentTurnUserMessages?: number) => {
+      let sent: readonly { content?: unknown }[] = [];
+      const result = await resumeSuspendedRuntime(
+        {
+          id: "suspension-turn",
+          sessionId: "sess-resume",
+          turnId: "turn-resume",
+          runtimeId: "test-plugin",
+          pluginId: "test-plugin",
+          reason: "Test suspension",
+          resumeSchema: {},
+          pendingContinuation: continuation(currentTurnUserMessages),
+          createdAt: new Date().toISOString(),
+        },
+        "r".repeat(1_000),
+        manifest,
+        {
+          loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+          llm: {
+            async generate(params) {
+              sent = params.messages;
+              return {
+                content: '{"narrativeOutput": "noted"}',
+                toolCalls: [],
+                finishReason: "stop",
+                usage: { inputTokens: 1, outputTokens: 1 },
+              };
+            },
+          },
+          store,
+          toolExecutor: mockToolExecutor,
+          eventBus,
+          estimator: (text) => text.length,
+          contextBudget: { maxInputTokens: 2_200, reservedForResponse: 100 },
+        },
+      );
+      expect(result.status).toBe("success");
+      return sent.map((message) => String(message.content));
+    };
+
+    const kept = await sentWith(2);
+    expect(kept).toContain(story);
+    expect(kept.some((text) => text.startsWith("CURRENT_CONTEXT"))).toBe(true);
+    // Without the count only the cue is kept: the budget drops the story.
+    expect(await sentWith()).not.toContain(story);
   });
 
   it("fires PreLLMCall / PostLLMResponse hooks on the resume path", async () => {

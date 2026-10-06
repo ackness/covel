@@ -12,7 +12,7 @@ import type {
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { DEFAULT_PROTECT_LAST_USER_TURNS, buildContext } from "@covel/context";
+import { buildContext } from "@covel/context";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -293,21 +293,11 @@ export async function executeAgentRuntime({
     timeoutMs,
     messages,
     ...(budgetEligible
-      ? {
-          estimator: deps.estimator,
-          // The cue after this turn's story is one more user message of the
-          // current turn; the budget must keep the whole turn. These limits
-          // are a fallback each call replaces, so they are not checked here.
-          contextBudget: deps.contextBudget && {
-            ...deps.contextBudget,
-            protectLastUserTurns:
-              (deps.contextBudget.protectLastUserTurns ??
-                DEFAULT_PROTECT_LAST_USER_TURNS) +
-              assembled.currentTurnUserMessages -
-              1,
-          },
-        }
+      ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
       : {}),
+    // The cue after this turn's story is one more user message of the
+    // current turn; the budget must keep the whole turn.
+    currentTurnUserMessages: assembled.currentTurnUserMessages,
     hookPipeline,
     startTime,
     runId,
