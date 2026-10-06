@@ -142,6 +142,12 @@ describe("executeTurn main-loop DAG scheduler", () => {
       if (downstreams.includes(name)) {
         if (++started === downstreams.length) release();
         await allStarted;
+      } else {
+        // The narrator stays open across one turn of the event loop. A
+        // scheduler that started the downstreams beside it would then log
+        // their starts before its end; a narrator that returns at once ends
+        // first under any scheduler.
+        await new Promise((resolve) => setImmediate(resolve));
       }
       events.push(`end:${name}`);
       return { outcome: "success", value: { narrativeOutput: "x" } } as const;
