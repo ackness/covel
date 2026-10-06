@@ -170,6 +170,18 @@ describe("story completion contract", () => {
       (await store.getSession("session-story"))?.completedPlayerTurns,
     ).toBe(1);
   });
+  it("does not offer runtime-done to a story runtime", async () => {
+    // The run ends with the text. Offered the terminator, a model that
+    // follows instructions to the letter ended the run with it and no story.
+    const { requests, result } = await run([
+      response("You climb the lit stairs."),
+    ]);
+    expect(requests[0]?.tools?.map((offered) => offered.name)).toEqual([
+      "read-scene",
+    ]);
+    expect(result.runtimeResults[0]?.status).toBe("success");
+  });
+
   it("requires prose after runtime-done and commits the recovered story once", async () => {
     const { result, requests, committed, store } = await run([
       response(null, "read-scene"),

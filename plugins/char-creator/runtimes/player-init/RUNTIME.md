@@ -28,7 +28,7 @@ agent:
   loop:
     timeoutMs: 180000
     callTimeoutMs: 60000
-    maxRetries: 0
+    maxRetries: 3
     completion:
       require: tool-use
       afterTools:

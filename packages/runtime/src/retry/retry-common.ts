@@ -241,14 +241,16 @@ export function retryHint(
   locale?: string,
 ): string {
   const padding = " ".repeat(attempt);
+  // The hint does not say how to finish: a story runtime ends with its text
+  // and the others with a tool, and the instructions above say which.
   const zh = instructionLocaleFor(locale) === "zh";
   if (reason === "tool-loop-detected")
     return zh
-      ? `[retry ${attempt}] 上一次尝试反复调用了同一个工具。换一种做法，或调用 runtime-done 结束。${padding}`
-      : `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach or finish with runtime-done.${padding}`;
+      ? `[retry ${attempt}] 上一次尝试反复调用了同一个工具。换一种做法，或按指令的要求结束。${padding}`
+      : `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach, or finish as the instructions say.${padding}`;
   return zh
-    ? `[retry ${attempt}] 上一次尝试没有完成。给出简洁的回复；完成后调用 runtime-done。${padding}`
-    : `[retry ${attempt}] The previous attempt did not complete. Produce a concise reply; call runtime-done when finished.${padding}`;
+    ? `[retry ${attempt}] 上一次尝试没有完成。重新完成任务，并按指令的要求结束。${padding}`
+    : `[retry ${attempt}] The previous attempt did not complete. Do the task again and finish as the instructions say.${padding}`;
 }
 
 // ── Loop scaffolding ────────────────────────────────────────────────

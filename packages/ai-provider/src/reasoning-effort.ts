@@ -254,9 +254,25 @@ export function resolveReasoningEffortProfile(
   if (family === "openai") {
     const isReasoningModel =
       advertisesReasoning ||
-      /gpt-5/.test(model) ||
+      /gpt-[5-9]/.test(model) ||
       /(?:^|[/_-])o[134](?:-|$)/.test(model);
     if (!isReasoningModel) return null;
+    // GPT-6 and later take the levels of GPT-5.2 and `max` above them. No
+    // default is recorded: it is not the same for every model of the family.
+    if (/gpt-[6-9]/.test(model)) {
+      return {
+        family,
+        options: options(
+          "none",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+        ),
+      };
+    }
     if (/gpt-5-pro(?:-|$)/.test(model)) {
       return {
         family,

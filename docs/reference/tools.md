@@ -933,6 +933,8 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 **执行端授权**：工具白名单同时约束 LLM 广告面和执行面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
 
+故事 runtime（`io.visibility: story`）是广告面与授权面不同的一处：它以正文结束，工具列表里没有 `runtime-done`，`[COMPLETION]` 也不提它。授权仍然保留——模型出于习惯调用时，loop 用剩余步数追问正文，而不是返回 `UNAUTHORIZED`。把 `runtime-done` 列给故事 runtime 会让按字面执行指令的模型只调用它、不写正文。
+
 宿主通过 `@covel/tools` 的 `createDefaultToolRegistry({ store, eventDirectory })` 一次装配 UI、suspend、runtime-done、plugin-data、emit-event 和 character 内置工具。server 传入真实事件目录，并按会话覆盖角色写入工具；`test-runtime` 传入不允许任何主题的隔离目录。两者共享注册集合和默认规则，调试宿主不因此具有全部生产服务。
 
 插件作者在 `entry` 中使用 `covel.toolkit.tool()`；常用上下文、结果协议和 helper 由公开 `@covel/plugin-handlers-utils` 提供。registry 与内置工具构造器属于宿主 API。
