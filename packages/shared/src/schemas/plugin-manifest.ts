@@ -64,6 +64,10 @@ const dataAuthoringSchema = z
         path: z
           .string()
           .min(1)
+          .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+$/i, {
+            message:
+              "source path must be a world-package-relative path (no leading `/`, no `..` segments)",
+          })
           .meta({
             description:
               "Conventional path of the source inside a world package.",

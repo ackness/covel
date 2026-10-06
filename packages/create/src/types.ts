@@ -154,8 +154,9 @@ export interface WorldGenerationDataContract {
   readonly lorebook?: boolean;
   /**
    * The file the receiving plugin names for this contract's records
-   * (`authoring.source`). A world that has its records there needs no entry
-   * in a descriptor for them.
+   * (`authoring.source`), given only when that path is a convention: no
+   * other contract names it. A world that has its records there needs no
+   * entry in a descriptor for them.
    */
   readonly source?: {
     readonly kind: "yaml" | "json";

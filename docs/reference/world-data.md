@@ -200,7 +200,7 @@ dimensionSources:
 
 AI 创建器写出的包和手写的世界包一样按[约定路径](#按约定导入没有-descriptor)布局：维度在 `data/dimensions.yaml`，角色在 `characters/characters.json`，资料库与规则在 `data/lorebook.yaml`，设定正文只有一份 `WORLD.md`（世界自己的语言，由 `world.yaml` 的 `defaultLocale` 说明；`WORLD.<locale>.md` 是译文，新世界没有）。文件都在约定路径上时不写 descriptor，`world.yaml` 里也没有 `worldData`。
 
-插件内容由创作简报的 `contracts` 指定：生成器只为被选中的数据契约生成记录，每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`），接收插件会被加入 `pluginPolicy.requested`。未选中的契约不会进入提示词；模型为未选中的契约输出记录，或漏掉被选中的契约，都会让本次尝试失败并重试。一个契约的记录写进接收插件声明的文件（`authoring.source` 的 `path` 与 `kind`，例如 `data/memory-blocks.json`、`data/time.yaml`）：一条记录就是文件内容，多条写成数组。接收插件没有声明路径时，记录写成 `data/contract-<n>.json`，并由 `data/world.data.yaml` 这个 descriptor 列出全部 source；接收方声明了 lorebook 投影时目标为 `contract:<id>+lorebook`。
+插件内容由创作简报的 `contracts` 指定：生成器只为被选中的数据契约生成记录，每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`），接收插件会被加入 `pluginPolicy.requested`。未选中的契约不会进入提示词；模型为未选中的契约输出记录，或漏掉被选中的契约，都会让本次尝试失败并重试。一个契约的记录写进接收插件声明的文件（`authoring.source` 的 `path` 与 `kind`，例如 `data/memory-blocks.json`、`data/time.yaml`）：一条记录就是文件内容，多条写成数组。接收插件没有声明路径，或者声明的路径不是约定（已安装插件里另有契约声明了同一个路径，或它是包自己的文件，如 `world.yaml`、`WORLD.md` 和内核的数据文件）时，记录写成 `data/contract-<n>.json`，并由 `data/world.data.yaml` 这个 descriptor 列出全部 source；接收方声明了 lorebook 投影时目标为 `contract:<id>+lorebook`。
 
 `server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口直接使用经过校验的生成结果，把通用领域角色放入 `WorldRecord.metadata.embeddedCharacters`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
 
@@ -344,7 +344,7 @@ sources:
 `world.yaml` 没有 `worldData` 字段时，世界包按约定读取：约定路径上存在的每个文件（media 则是目录）就是一个 source，效果与在 descriptor 里写出同一条完全相同。约定来自两处：
 
 - 内核：`data/dimensions.yaml` → `world:metadata.dimensions`，`data/lorebook.yaml` → `lorebook`，`characters/characters.json` → `characters`；
-- 插件：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。两个契约声明了同一个路径时，这个路径不算约定，世界包要用 descriptor 说明给谁。
+- 插件：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。`path` 是相对世界包根目录的路径，不能以 `/` 开头，也不能含 `..`。两个契约声明了同一个路径时，这个路径不算约定，世界包要用 descriptor 说明给谁。
 
 导入顺序是：维度，然后 media，然后其余契约数据，最后是 `characters`。
 

@@ -266,6 +266,41 @@ describe("plugin manifest dataSchemas", () => {
         .success,
     ).toBe(false);
   });
+
+  it("accepts a world data source inside the world package and rejects one outside it", () => {
+    const withSource = (sourcePath: string) => ({
+      id: "probe",
+      kind: "plugin",
+      description: "Probe",
+      contributes: {
+        data: {
+          records: {
+            version: 1,
+            schema: "./schemas/records.json",
+            accepts: ["probe.records@1"],
+            authoring: {
+              title: "Records",
+              source: { kind: "json", path: sourcePath },
+            },
+          },
+        },
+      },
+    });
+    for (const inside of ["data/records.json", "media/scenes.registry.json"])
+      expect(pluginManifestSchema.safeParse(withSource(inside)).success).toBe(
+        true,
+      );
+    // The world generator writes a contract's records at this path.
+    for (const outside of [
+      "../escaped.json",
+      "data/../../escaped.json",
+      "/tmp/escaped.json",
+      "C:\\escaped.json",
+    ])
+      expect(pluginManifestSchema.safeParse(withSource(outside)).success).toBe(
+        false,
+      );
+  });
 });
 
 describe("plugin manifest semantic diagnostics", () => {

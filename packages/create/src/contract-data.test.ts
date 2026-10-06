@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
@@ -123,6 +123,74 @@ it("writes a contract's records to the file its plugin names, with no descriptor
     expect(
       parse(await readFile(path.join(root, "data/custom.yaml"), "utf8")),
     ).toEqual(record.value);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("writes no contract file outside the package", async () => {
+  const parent = await mkdtemp(path.join(tmpdir(), "covel-contract-data-"));
+  try {
+    const root = path.join(parent, "package");
+    const content = normalizeGeneratedPackage(
+      { contractData: [record] },
+      brief,
+      [contract],
+    ).content;
+    for (const escaping of ["../escaped.json", path.join(parent, "abs.json")])
+      await expect(
+        writeWorldDataFiles(root, {}, content, [
+          {
+            contract: contract.contract,
+            source: { kind: "json", path: escaping },
+          },
+        ]),
+      ).rejects.toThrow("outside the package");
+    expect(await readdir(parent)).toEqual([]);
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+it("gives each contract its own file when two name the same one", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "covel-contract-data-"));
+  try {
+    const manifest: Record<string, unknown> = {};
+    const names = ["first.records@1", "second.records@1", "third.records@1"];
+    const paths = ["data/shared.json", "Data/Shared.json", "world.yaml"];
+    await writeWorldDataFiles(
+      root,
+      manifest,
+      {
+        characters: [],
+        lorebook: [],
+        rules: [],
+        contractData: names.map((name) => ({
+          contract: name,
+          key: name,
+          value: { id: name },
+        })),
+      },
+      names.map((name, index) => ({
+        contract: name,
+        source: { kind: "json" as const, path: paths[index]! },
+      })),
+    );
+    // The descriptor says where each contract's records are; without it the
+    // shared path would be read for neither.
+    const { sources } = parse(
+      await readFile(path.join(root, String(manifest.worldData)), "utf8"),
+    );
+    const files = names.map((_, index) => sources[`contract${index}`].path);
+    expect(files).toEqual([
+      "data/shared.json",
+      "data/contract-1.json",
+      "data/contract-2.json",
+    ]);
+    for (const [index, file] of files.entries())
+      expect(JSON.parse(await readFile(path.join(root, file), "utf8"))).toEqual(
+        { id: names[index] },
+      );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

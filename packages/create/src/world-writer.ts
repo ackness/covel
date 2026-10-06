@@ -4,7 +4,8 @@
  * A generated world is laid out as a hand-authored one: each file at the path
  * the world conventions give it, in one language. A package whose files are
  * all at such paths has no descriptor; one is written only for records of a
- * contract whose plugin names no path.
+ * contract with no path of its own: its plugin names none, or names one that
+ * another source has.
  */
 
 import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
@@ -32,8 +33,46 @@ const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
 const GENERATED_CHARACTERS_PATH = "characters/characters.json";
 const GENERATED_LOREBOOK_PATH = "data/lorebook.yaml";
 
+/**
+ * The files of a package that are not a contract's to name: the ones the
+ * kernel reads and the ones the generator writes itself.
+ */
+const RESERVED_PATHS = [
+  GENERATED_WORLD_MARKER,
+  "WORLD.md",
+  "world.yaml",
+  GENERATED_WORLD_DATA_PATH,
+  GENERATED_DIMENSIONS_PATH,
+  GENERATED_CHARACTERS_PATH,
+  GENERATED_LOREBOOK_PATH,
+];
+
 /** What the writer needs to know about a contract: where its records go. */
 type ContractFile = Pick<WorldGenerationDataContract, "contract" | "source">;
+
+/**
+ * The place of a package file on disk. A path that a plugin names is not
+ * trusted to stay inside the package.
+ */
+function packageFile(worldDir: string, file: string): string {
+  const root = path.resolve(worldDir);
+  const full = path.resolve(root, file);
+  const relative = path.relative(root, full);
+  if (
+    path.isAbsolute(file) ||
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  )
+    throw new Error(`World data path is outside the package: ${file}`);
+  return full;
+}
+
+/** One file for paths that differ in spelling only, as on a disk that ignores case. */
+function fileKey(file: string): string {
+  return path.posix.normalize(file.replaceAll("\\", "/")).toLowerCase();
+}
 
 export interface WriteWorldPackageOptions {
   /**
@@ -152,7 +191,7 @@ export async function writeWorldDataFiles(
   const written: string[] = [];
   const sources: Record<string, Record<string, unknown>> = {};
   const write = async (file: string, kind: "yaml" | "json", value: unknown) => {
-    const full = path.join(worldDir, file);
+    const full = packageFile(worldDir, file);
     await mkdir(path.dirname(full), { recursive: true });
     await writeFile(
       full,
@@ -199,19 +238,33 @@ export async function writeWorldDataFiles(
   }
 
   // The records of one contract go into one file: the one its plugin names,
-  // or `data/contract-<n>.json` with an entry in a descriptor.
+  // or `data/contract-<n>.json` with an entry in a descriptor. A named file
+  // that another source of the package has is not this contract's: written
+  // there, its records would replace the other's.
   const byContract = new Map<string, typeof contractData>();
   for (const record of contractData)
     byContract.set(record.contract, [
       ...(byContract.get(record.contract) ?? []),
       record,
     ]);
+  const taken = new Set(RESERVED_PATHS.map(fileKey));
+  const claim = (file: string): boolean => {
+    const key = fileKey(file);
+    if (taken.has(key)) return false;
+    taken.add(key);
+    return true;
+  };
   let needsDescriptor = false;
   for (const [index, [contract, records]] of [...byContract].entries()) {
-    const named = dataContracts.find(
+    const declared = dataContracts.find(
       (item) => item.contract === contract,
     )?.source;
-    const file = named?.path ?? `data/contract-${index}.json`;
+    const named = declared && claim(declared.path) ? declared : undefined;
+    let file = named?.path;
+    for (let n = index; file === undefined; n++) {
+      const generated = `data/contract-${n}.json`;
+      if (claim(generated)) file = generated;
+    }
     const kind = named?.kind ?? "json";
     if (!named) needsDescriptor = true;
     const values = records.map((record) => record.value);
