@@ -12,7 +12,9 @@ const script = fileURLToPath(
 );
 
 describe("e2e plugin verification CLI HTTP contract", () => {
-  it("enables plugins, submits a form, and reads the current session view", async () => {
+  it("enables plugins, submits a form, and reads the current session view", async ({
+    signal,
+  }) => {
     const requests: Array<{ method: string; path: string; body: unknown }> = [];
     const fixtureErrors: unknown[] = [];
     let actionCount = 0;
@@ -160,6 +162,9 @@ describe("e2e plugin verification CLI HTTP contract", () => {
     try {
       // Native TypeScript support follows the repository's Node 26 requirement.
       // An empty environment prevents inheriting provider keys or local config.
+      // The child has no kill timer and the script keeps its default per-turn
+      // `--timeout`, which is far above the test's limit: the test's limit is
+      // the only one that can act, and `signal` stops the child at it.
       const { stdout } = await executeFile(
         process.execPath,
         [
@@ -173,10 +178,8 @@ describe("e2e plugin verification CLI HTTP contract", () => {
           "contract-plugin",
           "--form-values",
           '{"characterName":"Contract Player"}',
-          "--timeout",
-          "2",
         ],
-        { env: {}, timeout: 10_000 },
+        { env: {}, signal },
       );
 
       expect(fixtureErrors).toEqual([]);
