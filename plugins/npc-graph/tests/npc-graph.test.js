@@ -186,10 +186,17 @@ describe("upsert-npc-graph", () => {
     await expect(upsertTool.execute(edge("信任"), ctx)).resolves.toBeDefined();
   });
 
-  it("rejects an empty upsert", async () => {
-    await expect(upsertTool.execute({}, ctx)).rejects.toMatchObject({
-      code: "VALIDATION_ERROR",
-    });
+  it("takes an empty upsert as nothing changed", async () => {
+    // The shape of a recorded call. A refusal failed the runtime: the model
+    // went on to `runtime-done`, which does not settle a failed call.
+    for (const call of [{}, { nodes: [], edges: [] }]) {
+      const result = await upsertTool.execute(call, ctx);
+      expect(getToolContent(result)).toMatchObject({
+        nodes: { created: 0, updated: 0 },
+        edges: { created: 0 },
+      });
+      expect(result.pendingProposals).toEqual([]);
+    }
   });
 
   it("keeps people, groups, and factions when a call carries World IR entity types", async () => {
@@ -249,17 +256,19 @@ describe("upsert-npc-graph", () => {
         ctx,
       ),
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    // Nothing is left of a call that held only places.
-    await expect(
-      upsertTool.execute(
-        {
-          nodes: [
-            { name: "千灯廊", type: "location", summary: "墓门内侧的长廊。" },
-          ],
-        },
-        ctx,
-      ),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    // Nothing is left of a call that held only places: it records nothing.
+    const places = await upsertTool.execute(
+      {
+        nodes: [
+          { name: "千灯廊", type: "location", summary: "墓门内侧的长廊。" },
+        ],
+      },
+      ctx,
+    );
+    expect(getToolContent(places).nodes).toMatchObject({ created: 0 });
+    expect(getToolContent(await listTool.execute({}, ctx)).nodes).toHaveLength(
+      1,
+    );
   });
 
   it("creates new nodes with short IDs and persists them", async () => {
