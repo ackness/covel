@@ -12,8 +12,8 @@
     "tsconfig.json"
   ],
   "scripts": {
-    "dev": "tsx watch --include \"../../plugins/**/*.md\" --include \"../../plugins/**/*.js\" --include \"../../plugins/**/*.json\" --include \"../../plugins/**/*.yaml\" --exclude \"../../plugins/**/node_modules\" --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
-    "dev:pg": "node ../../scripts/run-with-env.mjs STORE_BACKEND=pg pnpm exec tsx watch --include \"../../plugins/**/*.md\" --include \"../../plugins/**/*.js\" --include \"../../plugins/**/*.json\" --include \"../../plugins/**/*.yaml\" --exclude \"../../plugins/**/node_modules\" --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
+    "dev": "tsx watch --include \"../../plugins/**/*.md\" --include \"../../plugins/**/*.js\" --include \"../../plugins/**/*.json\" --include \"../../plugins/**/*.yaml\" --exclude \"../../plugins/**/node_modules\" --include \"../../packages/plugin-handlers-utils/src/**/*.ts\" --import=../../scripts/ensure-plugin-sdk.mjs --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
+    "dev:pg": "node ../../scripts/run-with-env.mjs STORE_BACKEND=pg pnpm exec tsx watch --include \"../../plugins/**/*.md\" --include \"../../plugins/**/*.js\" --include \"../../plugins/**/*.json\" --include \"../../plugins/**/*.yaml\" --exclude \"../../plugins/**/node_modules\" --include \"../../packages/plugin-handlers-utils/src/**/*.ts\" --import=../../scripts/ensure-plugin-sdk.mjs --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc -b",
