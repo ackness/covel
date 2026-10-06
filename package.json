@@ -51,6 +51,8 @@
     "dev:electron": "pnpm --filter @covel/desktop dev",
     "build:electron": "pnpm --filter @covel/desktop dist && node apps/desktop/scripts/cleanup-artifacts.mjs --strip-unpacked",
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
+    "llm:replay": "node scripts/llm-replay/proxy.mjs",
+    "llm:replay:diff": "node scripts/llm-replay/diff-runs.mjs",
     "test:runtime": "tsx packages/test-runtime/src/cli.ts",
     "schemas:generate": "pnpm --filter @covel/shared generate:schemas && prettier --write --log-level warn packages/shared/schemas && node scripts/generate-schema-reference.mjs",
     "describe:authoring": "node --import tsx scripts/describe-authoring.ts",
@@ -71,6 +73,7 @@
     "node": ">=26 <27"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "1.43.0",
     "@playwright/test": "^1.63.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.2",

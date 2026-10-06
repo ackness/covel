@@ -42,6 +42,9 @@
  *   --slot <name>          Override the story runtimes' model slot (default: configured routing)
  *   --world <id>           World to use (default: first world returned by /api/worlds)
  *   --locale <tag>         Session content locale (default: zh-CN)
+ *   --session-id <id>      Create the session under this ID (default: the world ID plus a
+ *                          random suffix). A fixed ID is one of the conditions for two runs
+ *                          to send the same model requests.
  *   --turns <n>            Number of playing-phase turns to run after char-creation (default: 3)
  *   --runtime <id>         Filter output + assertions to this runtime only
  *   --plugin <id>          Filter output + assertions to this plugin only
@@ -91,6 +94,8 @@ interface CliArgs {
   world?: string;
   /** Content locale of the session; also selects the prompt language. */
   locale: string;
+  /** The session's ID; absent means the server allocates one. */
+  sessionId?: string;
   turns: number;
   runtimeFilter?: string;
   pluginFilter?: string;
@@ -152,6 +157,9 @@ function parseArgs(argv: string[]): CliArgs {
         break;
       case "--locale":
         args.locale = next();
+        break;
+      case "--session-id":
+        args.sessionId = next();
         break;
       case "--turns":
         args.turns = Number.parseInt(next(), 10);
@@ -251,6 +259,7 @@ Options:
                           pass only the xxx part (e.g. e2e, e2e_local)
   --world <id>            World to use (default: first available)
   --locale <tag>          Session content locale (default: zh-CN)
+  --session-id <id>       Create the session under this ID (default: allocated by the server)
   --turns <n>             Playing-phase turns after char creation (default: 3)
   --runtime <id>          Filter output + assertions to this runtime only
   --plugin <id>           Filter output + assertions to this plugin only
@@ -1752,6 +1761,7 @@ async function runMain(
   const session = await httpJson<SessionRecord>(args.server, "/sessions", {
     worldId: chosen.id,
     locale: args.locale,
+    ...(args.sessionId ? { id: args.sessionId } : {}),
     ...(plugins ? { plugins } : {}),
   });
   state.sessionId = session.id;

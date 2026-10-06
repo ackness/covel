@@ -24,22 +24,6 @@ export const AI_ENV_VARS = [
     description: "Disables provider HTTP retry when set to 1.",
   },
   {
-    name: "COVEL_LLM_REPLAY",
-    group: "ai",
-    type: "enum",
-    status: "documented",
-    values: ["auto", "record", "replay"],
-    description: "Documented dev LLM replay cache mode.",
-  },
-  {
-    name: "COVEL_LLM_REPLAY_DIR",
-    group: "ai",
-    type: "path",
-    status: "documented",
-    defaultValue: "debugs/llm-cache",
-    description: "Documented dev LLM replay cache directory.",
-  },
-  {
     name: "COVEL_IMG_KEY",
     group: "ai",
     type: "secret",
