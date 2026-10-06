@@ -88,7 +88,45 @@ describe("tool()", () => {
     });
   });
 
-  it("drops closing brackets that follow a complete value in JSON text", async () => {
+  it("leaves a pattern that needs the `u` flag out of the JSON schema", async () => {
+    const mod = tool({
+      name: "relate",
+      description: "Relate two people",
+      parameters: z.object({
+        relation: z.string().regex(/^[\p{Letter}][\p{Letter}_]*$/u),
+        people: z.array(
+          z.object({ handle: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
+        ),
+      }),
+      execute: async (params) => params,
+    });
+    // A provider that checks tool schemas refuses `\p{Letter}` in a pattern:
+    // a JSON Schema pattern carries no flags.
+    expect(mod.jsonSchema).toMatchObject({
+      properties: {
+        relation: { type: "string" },
+        people: {
+          items: {
+            properties: { handle: { pattern: "^[a-z][a-z0-9-]*$" } },
+          },
+        },
+      },
+    });
+    expect(
+      (mod.jsonSchema.properties as Record<string, object>).relation,
+    ).not.toHaveProperty("pattern");
+    // The value is still checked.
+    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    await expect(
+      mod.execute({ relation: "1st", people: [] }, ctx),
+    ).rejects.toMatchObject({ details: [{ path: "relation" }] });
+    expect(await mod.execute({ relation: "师徒", people: [] }, ctx)).toEqual({
+      relation: "师徒",
+      people: [],
+    });
+  });
+
+  it("settles the closing brackets of JSON text", async () => {
     const mod = tool({
       name: "record",
       description: "Record changes",

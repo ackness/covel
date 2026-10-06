@@ -150,6 +150,42 @@ describe("upsert-npc-graph", () => {
     });
   });
 
+  it("checks a relation label without a pattern in the schema", async () => {
+    // An API that checks tool schemas refuses a pattern with `\\p{Letter}`,
+    // and then every request of the extractor fails.
+    expect(
+      upsertTool.jsonSchema.properties.edges.items.properties.relation,
+    ).not.toHaveProperty("pattern");
+    const edge = (relation) => ({
+      nodes: [
+        { name: "Mira", type: "individual", summary: "The keeper." },
+        { name: "Ren", type: "individual", summary: "The stranger." },
+      ],
+      edges: [
+        {
+          sourceName: "Mira",
+          targetName: "Ren",
+          relation,
+          strength: 0.4,
+          fact: "Mira lets Ren into the lamp room.",
+        },
+      ],
+    });
+    await expect(
+      upsertTool.execute(edge("师徒/同门"), ctx),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: [
+        {
+          path: "edges.0.relation",
+          message:
+            "Start the relation with a letter; use letters, digits, spaces, `_`, and `-` only",
+        },
+      ],
+    });
+    await expect(upsertTool.execute(edge("信任"), ctx)).resolves.toBeDefined();
+  });
+
   it("rejects an empty upsert", async () => {
     await expect(upsertTool.execute({}, ctx)).rejects.toMatchObject({
       code: "VALIDATION_ERROR",

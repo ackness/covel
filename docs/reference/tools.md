@@ -184,6 +184,12 @@ handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明�
 文本解析不了时，`VALIDATION_ERROR` 会写明解析失败的原因和位置，并要求模型
 直接传数组或对象本身。
 
+`tool()` 生成给模型的 JSON Schema 时，会去掉含 Unicode 属性转义（`\p{Letter}`）的
+`pattern`：JSON Schema 的 `pattern` 不带正则标志，这类写法只有在 `u` 标志下才是
+作者想要的意思，校验工具 schema 的服务商会以「不是合法正则」拒绝整个请求，
+带这个工具的每次调用都会失败。Zod 仍按原正则校验参数值；规则本身写进字段的
+`describe()` 让模型看到。
+
 ### 失败定位与验证
 
 - 工具不在 LLM 清单：检查运行时是否声明了正确的 `tools.builtin` 或
