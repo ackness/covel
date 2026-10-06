@@ -172,7 +172,7 @@ reasoningEffort = "disabled"
 - Anthropic Messages：`output_config: { effort }`；已识别的自适应思考模型选择档位时启用 `thinking.type: "adaptive"`，默认请求可见摘要 `display: "summarized"`；不可关闭思考的模型不显示关闭选项。Claude 请求会移除与思考冲突的采样参数，关闭思考时清理继承的 effort，避免组合产生 400 错误。DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
 - Gemini 原生 `generateContent`：Gemini 3 使用 `generationConfig.thinkingConfig.thinkingLevel`；Gemini 2.5 使用 `thinkingBudget`。3 Pro 仅有 low/high，3.1 Pro 为 low/medium/high，3 Flash、3.5/3.6 Flash 及 3.1/3.5 Flash-Lite 为 minimal/low/medium/high，3.7/3.8 Flash 为 low/medium/high。2.5 Pro 不提供关闭；2.5 Flash/Flash-Lite 的 `none` 转为预算 0。2.5 的 low/medium/high 分别是应用预算预设 1024/8192/24576 token，不是 Google 原生档位。未知 Gemini 型号不推测档位。Google OpenAI 兼容接口仍发送 `reasoning_effort`，其中 `minimal` 在 3.1 Pro 映射为 low、在 2.5 映射为 1024 token；这不代表原生协议支持这些型号的 `minimal` 档位。
 
-当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 按型号与协议限定的子集、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/开启、原生档位或预算预设。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。Gemini 档位依据 [Google thinking 说明](https://ai.google.dev/gemini-api/docs/generate-content/thinking) 和 [OpenAI 兼容映射](https://ai.google.dev/gemini-api/docs/openai)。
+当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`（GPT-6 及之后的型号按名称识别，另有 `max`，不记录默认档位）、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 按型号与协议限定的子集、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/开启、原生档位或预算预设。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。Gemini 档位依据 [Google thinking 说明](https://ai.google.dev/gemini-api/docs/generate-content/thinking) 和 [OpenAI 兼容映射](https://ai.google.dev/gemini-api/docs/openai)。
 
 ## 媒体 wire 路由键（`providerRequestMetadata`）
 
