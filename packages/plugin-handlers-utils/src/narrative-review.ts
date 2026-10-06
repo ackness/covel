@@ -203,12 +203,16 @@ export function createNarrativeReview(pluginId: string) {
       }
       const text = response.content ?? "";
       const zh = readsChinese(payload.messages);
+      // A reply with no story is nearly always a bare `runtime-done`, so the
+      // correction names that tool. "Do not finish with only a tool call" got
+      // a story in 8 of 72 replays (gpt-6-luna, both languages); this wording
+      // in 24 of 72.
       const correction =
         payload.correction ||
         (!text.trim()
           ? zh
-            ? "现在用已读取到的事实写出实际的故事正文。不要只调用一个工具就结束。"
-            : "Write the actual story now using the retrieved facts. Do not finish with only a tool call."
+            ? "你还没有写出本回合的故事正文。现在根据已读取到的事实直接写出正文，作为这次回复的内容。写出正文之前不要调用 `runtime-done`。"
+            : "You have not written the story text of this turn. Write it now from the facts you have read, as the content of this reply. Do not call `runtime-done` before the story text is written."
           : [
               !/<\/?(?:system|system_warning|analysis|thinking|runtime-inputs|available-events)\b/i.test(
                 text,

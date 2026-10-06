@@ -115,14 +115,18 @@ describe("narrative perspective review", () => {
 
     const chinese = added("zh");
     expect(chinese[0]).toContain('玩家角色："林潮"。');
-    expect(chinese[1]).toContain("写出实际的故事正文");
+    expect(chinese[1]).toContain("写出正文之前不要调用 `runtime-done`");
     expect(chinese[2]).toContain("只输出游戏内的故事正文");
     expect(chinese[3]).toContain("违反了第二人称视角：我推开门。");
-    for (const text of chinese) expect(text, text).not.toMatch(/[A-Za-z]{2,}/);
+    // A tool name in backticks is a marker.
+    for (const text of chinese)
+      expect(text.replace(/`[^`]*`/g, ""), text).not.toMatch(/[A-Za-z]{2,}/);
 
     const english = added("en");
     expect(english[0]).toContain('Player character: "林潮". ');
-    expect(english[1]).toContain("Write the actual story now");
+    expect(english[1]).toContain(
+      "Do not call `runtime-done` before the story text is written.",
+    );
     expect(english[2]).toContain("Output only the in-world story");
     expect(english[3]).toContain("violates second-person perspective");
     review.cleanup(ctx);
