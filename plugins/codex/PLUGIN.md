@@ -84,7 +84,7 @@ The shared extraction agent has converted this turn's narrative to `contract:wor
 The framework has already injected the session's full set of entries into the `<existing-entries>` block below (via `input.inject: plugin-data`). **Do not** call any list tool to fetch them again. Each line reads:
 
 ```
-- <entryId> | <updatedAt> | <value-summary>
+- <entryId> | <value-summary>
 ```
 
 `<value-summary>` contains the entry title. To add to an existing entry, reuse its title; no entryId is needed. The tool matches titles case-insensitively, appends to a match, and creates an entry otherwise.

@@ -1071,7 +1071,7 @@ describe("ai world generation route", () => {
       );
       expect(
         JSON.parse(
-          await readFile(path.join(dir, "characters/main-cast.json"), "utf8"),
+          await readFile(path.join(dir, "characters/characters.json"), "utf8"),
         ).map((item: { id: string }) => item.id),
       ).toEqual(["keeper", "courier", "thief"]);
       expect(await readdir(worldsDir)).toEqual(["generated-world"]);

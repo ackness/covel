@@ -101,7 +101,12 @@ export default function ({ tool, z, shortIdBatch }) {
       }
       const assignedIds =
         newNames.length > 0
-          ? shortIdBatch("affinity", newNames, context.sessionId)
+          ? shortIdBatch(
+              "affinity",
+              newNames,
+              context.sessionId,
+              context.random,
+            )
           : [];
       /** @type {Map<string, string>} */
       const newNameToId = new Map();

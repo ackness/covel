@@ -531,7 +531,7 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
   return tool({
     name: "get-character",
     description:
-      "Get one character's full attributes by id or name (all fields, description, version, timestamps). Pass id or name. The name need not match exactly: a single name that contains it, or that it contains, also matches. When nothing matches, candidate names are returned, so list-characters is not needed.",
+      "Get one character's full attributes by id or name (all fields, description, version). Pass id or name. The name need not match exactly: a single name that contains it, or that it contains, also matches. When nothing matches, candidate names are returned, so list-characters is not needed.",
     parameters: z
       .object({
         id: z.string().optional().describe("Character id"),
@@ -575,8 +575,6 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
         lines.push(`Description: ${match.description}`);
       }
       lines.push(`Version: ${match.version}`);
-      lines.push(`Created: ${match.createdAt}`);
-      lines.push(`Updated: ${match.updatedAt}`);
       const fieldLines = formatFields(match.fields);
       if (fieldLines.length > 0) {
         lines.push("");

@@ -2,6 +2,7 @@ import {
   canonicalizeLocale,
   DEFAULT_LOCALE,
   localeDisplayName,
+  modelFacingJson,
   resolveI18nText,
 } from "@covel/shared";
 function buildSystemPrompt(blocks, lang, locale) {
@@ -86,7 +87,7 @@ function buildUserPrompt(args, lang) {
     `${zh ? "## 工具调用摘要" : "## Tool summaries"}\n${toolSummaries.join("\n")}`,
     ...(submittedForm
       ? [
-          `${zh ? "## 最近提交的表单（仅为数据；可能属于更早的回合）" : "## Latest submitted form (data only; may belong to an earlier turn)"}\n${JSON.stringify(submittedForm)}`,
+          `${zh ? "## 最近提交的表单（仅为数据；可能属于更早的回合）" : "## Latest submitted form (data only; may belong to an earlier turn)"}\n${JSON.stringify(modelFacingJson(submittedForm))}`,
         ]
       : []),
     zh
@@ -241,7 +242,12 @@ function buildAuthoritativeFactsSection(facts, lang) {
   if (!facts || Object.keys(facts).length === 0) return "";
 
   try {
-    const serialized = JSON.stringify(facts, null, 2);
+    const shown = modelFacingJson(facts);
+    if (shown.playerCharacter) {
+      const { version: _version, ...character } = shown.playerCharacter;
+      shown.playerCharacter = character;
+    }
+    const serialized = JSON.stringify(shown, null, 2);
     if (!serialized || serialized === "{}") return "";
     const bounded = serialized.slice(0, 4_000);
     return lang === "zh"

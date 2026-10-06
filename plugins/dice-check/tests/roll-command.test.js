@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { parseDiceNotation, rollDice } from "../rpc/dice.js";
 import roll from "../rpc/roll.js";
 import registerDiceCheck from "../server/index.js";
-import { loadPluginMessages } from "@covel/plugin-test-utils";
+import { loadPluginMessages, makeRandom } from "@covel/plugin-test-utils";
 
 // What the host gives a handler as `ctx.messages`: this plugin's
 // `locales/*.yaml` translations for the session's language.
@@ -98,7 +98,7 @@ describe("dice-check roll command", () => {
         argv: ["4d8"],
         args: { notation: "4d8" },
       },
-      { locale: "en-US", store: { setPluginData } },
+      { locale: "en-US", store: { setPluginData }, random: makeRandom() },
     );
 
     expect(result.ok).toBe(true);

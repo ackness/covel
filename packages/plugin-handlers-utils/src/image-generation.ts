@@ -21,6 +21,7 @@ export interface ImageGenerationHandlerContext {
   readonly manualPayload?: unknown;
   readonly userSettings?: unknown;
   readonly signal?: AbortSignal;
+  readonly random?: import("./function-runtime.js").PluginRandom;
   readonly images?: {
     isAvailable(presetId?: string): boolean;
     generate(request: Record<string, unknown>): Promise<{
@@ -197,7 +198,13 @@ export async function runImageGeneration(
     return { outcome: "skipped", skipReason: "image model unavailable" };
   }
 
-  const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix = ctx.random
+    ? ctx.random
+        .int(0, 36 ** 6)
+        .toString(36)
+        .padStart(6, "0")
+    : Math.random().toString(36).slice(2, 8);
+  const imageId = `img-${Date.now().toString(36)}-${suffix}`;
   const startedAt = new Date().toISOString();
   const baseRecord: Record<string, JsonValue> & { imageId: string } = {
     imageId,

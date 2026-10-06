@@ -19,6 +19,14 @@ export const TEST_ENV_VARS = [
     description: "Model slot used by the e2e plugin verification script.",
   },
   {
+    name: "COVEL_RANDOM_SEED",
+    group: "test",
+    type: "string",
+    status: "active",
+    description:
+      "Test servers only: plugins' ctx.random gives the same draws on every run instead of drawing from node:crypto.",
+  },
+  {
     name: "CI",
     group: "test",
     type: "boolean",

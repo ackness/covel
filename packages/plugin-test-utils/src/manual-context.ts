@@ -5,6 +5,7 @@
 import type { FunctionHandlerContext } from "@covel/shared/plugin-runtime";
 import type {
   FunctionStoreView,
+  PluginRandom,
   ProgressReporter,
 } from "@covel/plugin-handlers-utils";
 import type {
@@ -31,6 +32,19 @@ export interface ManualFunctionContextOptions {
   readonly execution?: ExecutionContext;
   /** Wire the real-time progress channel for tests exercising `ctx.progress`. */
   readonly progress?: ProgressReporter;
+  /** `ctx.random`; the default is `makeRandom()`. */
+  readonly random?: PluginRandom;
+}
+
+/** `ctx.random` for a test: the same numbers on every run, within each range. */
+export function makeRandom(seed = 1): PluginRandom {
+  let state = seed >>> 0;
+  return {
+    int(min, max) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return min + Math.floor((state / 2 ** 32) * (max - min));
+    },
+  };
 }
 
 export function makeManualFunctionContext({
@@ -46,6 +60,7 @@ export function makeManualFunctionContext({
   activation,
   execution,
   progress,
+  random = makeRandom(),
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
     sessionId,
@@ -72,6 +87,7 @@ export function makeManualFunctionContext({
     ...(activation ? { activation } : {}),
     ...(execution ? { execution } : {}),
     ...(progress ? { progress } : {}),
+    random,
   };
 }
 

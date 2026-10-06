@@ -268,7 +268,7 @@ describe("buildContext — plugin-data inject", () => {
     );
   });
 
-  it("renders summary format with key + updatedAt + truncated value", async () => {
+  it("renders summary format with key + truncated value, without the row's time", async () => {
     const entries = [
       makeEntry(
         "codex-fire-mountain",
@@ -285,12 +285,9 @@ describe("buildContext — plugin-data inject", () => {
     ];
     const store = makeStoreStub(entries);
     const result = await buildContext(makeParams(store));
-    expect(result.turnContext).toContain(
-      "- codex-fire-mountain | 2025-01-02T00:00:00.000Z",
-    );
-    expect(result.turnContext).toContain(
-      "- codex-blue-river | 2025-01-04T00:00:00.000Z",
-    );
+    expect(result.turnContext).toContain('- codex-fire-mountain | {"title"');
+    expect(result.turnContext).toContain('- codex-blue-river | {"title"');
+    expect(result.turnContext).not.toContain("2025-01-0");
     // Long value should be truncated with `...`
     expect(result.turnContext).toMatch(/火山[^\n]*\.\.\./);
   });
@@ -424,8 +421,11 @@ describe("buildContext — format variants", () => {
     "2025-01-02T00:00:00.000Z",
   );
 
-  async function buildWithFormat(format: "summary" | "full" | "ids-only") {
-    const store = makeStoreStub([entry]);
+  async function buildWithFormat(
+    format: "summary" | "full" | "ids-only",
+    row: PluginDataRecord = entry,
+  ) {
+    const store = makeStoreStub([row]);
     const manifest = makeManifest({
       input: {
         inject: [
@@ -461,11 +461,45 @@ describe("buildContext — format variants", () => {
     );
   });
 
-  it("summary includes updatedAt and compact JSON", async () => {
+  it("summary is the key and compact JSON", async () => {
     const result = await buildWithFormat("summary");
-    expect(result.turnContext).toContain(
-      "- codex-test | 2025-01-02T00:00:00.000Z |",
-    );
+    expect(result.turnContext).toContain("- codex-test | {");
     expect(result.turnContext).toContain("测试");
+  });
+
+  it("leaves a value's bookkeeping out of the summary and the full format", async () => {
+    const row = makeEntry(
+      "edge-knows-about-1",
+      {
+        id: "edge-knows-about-1",
+        fact: "认识守灯人",
+        validAt: 2,
+        evidenceTurnIds: ["a9a3b91b-04c1-4f6e-9a57-2f1d6c0b7e11"],
+        lastTurnId: "0f1efa4d-b478-4a0c-8665-c040097771b4",
+        sessionId: "lantern-barrow-replay",
+        unlockedAt: "2026-10-06T08:51:22.123Z",
+      },
+      "2025-01-01T00:00:00.000Z",
+      "2025-01-02T00:00:00.000Z",
+    );
+    // The row key is on the line, so the value does not repeat it as `id`.
+    expect((await buildWithFormat("summary", row)).turnContext).toContain(
+      '- edge-knows-about-1 | {"fact":"认识守灯人","validAt":2}',
+    );
+    expect((await buildWithFormat("full", row)).turnContext).toContain(
+      '- edge-knows-about-1: {"fact":"认识守灯人","validAt":2}',
+    );
+  });
+
+  it("keeps an id that is not the row key", async () => {
+    const row = makeEntry(
+      "turn-7",
+      { id: "npc-lin-yao", note: "见过" },
+      "2025-01-01T00:00:00.000Z",
+      "2025-01-02T00:00:00.000Z",
+    );
+    expect((await buildWithFormat("summary", row)).turnContext).toContain(
+      '- turn-7 | {"id":"npc-lin-yao","note":"见过"}',
+    );
   });
 });

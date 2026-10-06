@@ -27,7 +27,7 @@ export default async function handler(ctx) {
     typeof payload.blueprintForm === "object";
   const blueprint = normalizeBlueprint(
     readManualEntity(payload, "blueprint", (form) =>
-      blueprintFromForm(form, payload.instantiate === true, ctx.sessionId),
+      blueprintFromForm(form, payload.instantiate === true, ctx),
     ),
   );
   const shouldInstantiate =
@@ -74,12 +74,14 @@ export default async function handler(ctx) {
 /**
  * @param {Record<string, unknown>} form
  * @param {boolean} includeInstantiate
- * @param {string} sessionId
+ * @param {{ sessionId: string, random?: import("@covel/plugin-handlers-utils").PluginRandom }} ctx
  */
-function blueprintFromForm(form, includeInstantiate, sessionId) {
+function blueprintFromForm(form, includeInstantiate, ctx) {
   const name = normalizeRequiredString(form.name, "blueprint.name");
   const explicitId = optionalString(form.id);
-  const id = explicitId ?? shortId(rolePrefix(form.role), name, sessionId);
+  const id =
+    explicitId ??
+    shortId(rolePrefix(form.role), name, ctx.sessionId, ctx.random);
   const role =
     typeof form.role === "string" && form.role.trim().length > 0
       ? form.role.trim()

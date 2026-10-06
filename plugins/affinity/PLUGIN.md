@@ -117,7 +117,7 @@ The shared extraction agent has converted this turn's narrative to `contract:wor
 The framework has already injected the session's full set of affinity records into the `<existing-affinity>` block below (via `input.inject: plugin-data`). **Do not** call any list tool. Each line reads:
 
 ```
-- <id> | <updatedAt> | <value-summary>
+- <id> | <value-summary>
 ```
 
 To check whether an NPC already has a record, match its name against this list. The tool also de-duplicates by name (case-insensitive), so always use the NPC's canonical name.

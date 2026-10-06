@@ -1,15 +1,21 @@
 /**
  * World package file writing.
  *
- * Persists dimensions and optional portable characters/lore through a v1
- * worldData descriptor so generated worlds use the hand-authored import path.
+ * A generated world is laid out as a hand-authored one: each file at the path
+ * the world conventions give it, in one language. A package whose files are
+ * all at such paths has no descriptor; one is written only for records of a
+ * contract whose plugin names no path.
  */
 
 import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import { canonicalizeLocale, validateWorldManifest } from "@covel/shared";
-import type { GeneratedWorld, GeneratedWorldPackageContent } from "./types.js";
+import type {
+  GeneratedWorld,
+  GeneratedWorldPackageContent,
+  WorldGenerationDataContract,
+} from "./types.js";
 
 const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
 
@@ -21,18 +27,30 @@ const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
  * would lose: it has no marker and is never rewritten.
  */
 export const GENERATED_WORLD_MARKER = ".covel-generated.json";
+// The paths the kernel reads without a descriptor.
 const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
+const GENERATED_CHARACTERS_PATH = "characters/characters.json";
+const GENERATED_LOREBOOK_PATH = "data/lorebook.yaml";
 
-/** Publish one complete package without overwriting an existing world. */
-export async function writeWorldPackage(
-  outputDir: string,
-  world: GeneratedWorld,
+/** What the writer needs to know about a contract: where its records go. */
+type ContractFile = Pick<WorldGenerationDataContract, "contract" | "source">;
+
+export interface WriteWorldPackageOptions {
   /**
    * `replace` writes over the package of the same id, for a revised world.
    * The old directory is kept until the new one is in place, so a failure
    * leaves the old package as it was.
    */
-  options: { readonly replace?: boolean } = {},
+  readonly replace?: boolean;
+  /** The contracts the world was generated with; each may name its file. */
+  readonly dataContracts?: readonly ContractFile[];
+}
+
+/** Publish one complete package without overwriting an existing world. */
+export async function writeWorldPackage(
+  outputDir: string,
+  world: GeneratedWorld,
+  options: WriteWorldPackageOptions = {},
 ): Promise<string[]> {
   const { id, lore, packageContent } = world;
   const locale = canonicalizeLocale(world.locale);
@@ -60,13 +78,19 @@ export async function writeWorldPackage(
   await mkdir(outputDir, { recursive: true });
   const staging = await mkdtemp(path.join(outputDir, ".covel-create-"));
   try {
-    const files = await writeWorldDataFiles(staging, manifest, packageContent);
+    const files = await writeWorldDataFiles(
+      staging,
+      manifest,
+      packageContent,
+      options.dataContracts,
+    );
     await writeFile(
       path.join(staging, GENERATED_WORLD_MARKER),
       `${JSON.stringify({ schemaVersion: 1 })}\n`,
       "utf8",
     );
-    await writeFile(path.join(staging, `WORLD.${locale}.md`), lore, "utf8");
+    // The main file is in the world's own language. A `WORLD.<locale>.md`
+    // is a translation, and a new world has none.
     await writeFile(path.join(staging, "WORLD.md"), lore, "utf8");
     await writeFile(
       path.join(staging, "world.yaml"),
@@ -90,21 +114,21 @@ export async function writeWorldPackage(
       // non-empty and cannot be replaced by the loser's directory rename.
       await rename(staging, finalDir);
     }
-    return [...files, "world.yaml", `WORLD.${locale}.md`, "WORLD.md"].map(
-      (file) => `${id}/${file}`,
-    );
+    return [...files, "world.yaml", "WORLD.md"].map((file) => `${id}/${file}`);
   } finally {
     await rm(staging, { recursive: true, force: true }).catch(() => {});
   }
 }
 
 /**
- * Write all generated structured text through a v1 worldData descriptor.
+ * Write the structured data of a generated world, each kind to the path the
+ * world conventions read it from. Returns the files written.
  */
 export async function writeWorldDataFiles(
   worldDir: string,
   manifest: Record<string, unknown>,
   packageContent?: GeneratedWorldPackageContent,
+  dataContracts: readonly ContractFile[] = [],
 ): Promise<string[]> {
   const inline = manifest.dimensions as Record<string, unknown> | undefined;
   const hasDimensions = Boolean(
@@ -125,19 +149,23 @@ export async function writeWorldDataFiles(
     return [];
   }
 
-  const dataDir = path.join(worldDir, "data");
-  await mkdir(dataDir, { recursive: true });
   const written: string[] = [];
   const sources: Record<string, Record<string, unknown>> = {};
+  const write = async (file: string, kind: "yaml" | "json", value: unknown) => {
+    const full = path.join(worldDir, file);
+    await mkdir(path.dirname(full), { recursive: true });
+    await writeFile(
+      full,
+      kind === "yaml"
+        ? stringifyYaml(value, { lineWidth: 0 })
+        : `${JSON.stringify(value, null, 2)}\n`,
+      "utf8",
+    );
+    written.push(file);
+  };
 
   if (hasDimensions) {
-    const dimensionsPath = path.join(worldDir, GENERATED_DIMENSIONS_PATH);
-    await writeFile(
-      dimensionsPath,
-      stringifyYaml(inline, { lineWidth: 0 }),
-      "utf-8",
-    );
-    written.push(GENERATED_DIMENSIONS_PATH);
+    await write(GENERATED_DIMENSIONS_PATH, "yaml", inline);
     sources.dimensions = {
       kind: "yaml",
       path: GENERATED_DIMENSIONS_PATH,
@@ -149,17 +177,10 @@ export async function writeWorldDataFiles(
   }
 
   if (characters.length > 0) {
-    const charactersPath = "characters/main-cast.json";
-    await mkdir(path.join(worldDir, "characters"), { recursive: true });
-    await writeFile(
-      path.join(worldDir, charactersPath),
-      `${JSON.stringify(characters, null, 2)}\n`,
-      "utf-8",
-    );
-    written.push(charactersPath);
-    sources.cast = {
+    await write(GENERATED_CHARACTERS_PATH, "json", characters);
+    sources.characters = {
       kind: "json",
-      path: charactersPath,
+      path: GENERATED_CHARACTERS_PATH,
       to: "characters",
       key: "id",
       ...(hasDimensions ? { after: "dimensions" } : {}),
@@ -167,53 +188,50 @@ export async function writeWorldDataFiles(
   }
 
   if (lorebook.length > 0) {
-    const lorebookPath = "data/lorebook.yaml";
-    await writeFile(
-      path.join(worldDir, lorebookPath),
-      stringifyYaml(lorebook, { lineWidth: 0 }),
-      "utf-8",
-    );
-    written.push(lorebookPath);
+    await write(GENERATED_LOREBOOK_PATH, "yaml", lorebook);
     sources.lorebook = {
       kind: "yaml",
-      path: lorebookPath,
+      path: GENERATED_LOREBOOK_PATH,
       to: "lorebook",
       key: "id",
       ...(hasDimensions ? { after: "dimensions" } : {}),
     };
   }
 
-  for (const [index, record] of contractData.entries()) {
-    const recordPath = `data/contract-${index}.json`;
-    await writeFile(
-      path.join(worldDir, recordPath),
-      `${JSON.stringify(record.value, null, 2)}\n`,
-      "utf8",
-    );
-    written.push(recordPath);
+  // The records of one contract go into one file: the one its plugin names,
+  // or `data/contract-<n>.json` with an entry in a descriptor.
+  const byContract = new Map<string, typeof contractData>();
+  for (const record of contractData)
+    byContract.set(record.contract, [
+      ...(byContract.get(record.contract) ?? []),
+      record,
+    ]);
+  let needsDescriptor = false;
+  for (const [index, [contract, records]] of [...byContract].entries()) {
+    const named = dataContracts.find(
+      (item) => item.contract === contract,
+    )?.source;
+    const file = named?.path ?? `data/contract-${index}.json`;
+    const kind = named?.kind ?? "json";
+    if (!named) needsDescriptor = true;
+    const values = records.map((record) => record.value);
+    await write(file, kind, values.length === 1 ? values[0] : values);
     sources[`contract${index}`] = {
-      kind: "json",
-      path: recordPath,
-      schema: `contract:${record.contract}`,
-      to: `contract:${record.contract}${record.lorebook ? "+lorebook" : ""}`,
+      kind,
+      path: file,
+      schema: `contract:${contract}`,
+      to: `contract:${contract}${records[0]?.lorebook ? "+lorebook" : ""}`,
       key: "id",
     };
   }
 
-  const descriptorPath = path.join(worldDir, GENERATED_WORLD_DATA_PATH);
-  await writeFile(
-    descriptorPath,
-    stringifyYaml(
-      {
-        schemaVersion: 1,
-        sources,
-      },
-      { lineWidth: 0 },
-    ),
-    "utf-8",
-  );
-  manifest.worldData = GENERATED_WORLD_DATA_PATH;
-  written.push(GENERATED_WORLD_DATA_PATH);
+  if (needsDescriptor) {
+    await write(GENERATED_WORLD_DATA_PATH, "yaml", {
+      schemaVersion: 1,
+      sources,
+    });
+    manifest.worldData = GENERATED_WORLD_DATA_PATH;
+  }
 
   return written;
 }

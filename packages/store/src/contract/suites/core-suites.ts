@@ -639,6 +639,54 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("Characters", () => {
+    it("lists characters by creation time, then by ID, and keeps the order after an update", async () => {
+      const at = "2026-01-01T00:00:00.000Z";
+      const cast = [
+        makeCharacter({ id: "npc-b", sessionId: "sess-order", createdAt: at }),
+        makeCharacter({ id: "npc_a", sessionId: "sess-order", createdAt: at }),
+        makeCharacter({ id: "npc-a", sessionId: "sess-order", createdAt: at }),
+        makeCharacter({ id: "Zed", sessionId: "sess-order", createdAt: at }),
+        makeCharacter({
+          id: "char-late",
+          sessionId: "sess-order",
+          createdAt: "2026-01-02T00:00:00.000Z",
+        }),
+        makeCharacter({
+          id: "zz-first",
+          sessionId: "sess-order",
+          createdAt: "2025-12-31T00:00:00.000Z",
+        }),
+      ];
+      for (const character of cast) await store.upsertCharacter(character);
+      const expected = [
+        "zz-first",
+        "Zed",
+        "npc-a",
+        "npc-b",
+        "npc_a",
+        "char-late",
+      ];
+      expect(
+        (await store.listCharacters("sess-order")).map((row) => row.id),
+      ).toEqual(expected);
+
+      await store.upsertCharacter({
+        ...cast[1]!,
+        name: "Renamed",
+        version: 2,
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      });
+      await store.upsertCharacter({
+        ...cast[5]!,
+        name: "Renamed too",
+        version: 2,
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      });
+      expect(
+        (await store.listCharacters("sess-order")).map((row) => row.id),
+      ).toEqual(expected);
+    });
+
     it("should upsert and list characters", async () => {
       const char = makeCharacter({ sessionId: "sess-1" });
       await store.upsertCharacter(char);

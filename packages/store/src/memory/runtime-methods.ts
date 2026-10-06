@@ -5,6 +5,7 @@ import {
   sortByCursorAsc,
 } from "../common/pagination.js";
 import { characterKey, stateEntryKey } from "../common/keys.js";
+import type { TurnMessageRecord } from "../types.js";
 import { computeTurnMessageStats } from "../common/turn-message-stats.js";
 import {
   adoptPlayerInputMessage,
@@ -14,6 +15,18 @@ import type { SessionSummaryRecord } from "../types.js";
 import { settleFailedRuntimeResults } from "../records/runtime-records.js";
 import { replaceArrayContents } from "./collection-helpers.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+
+/** The JS mirror of `turnMessageOrder` in `common/sql-session-journal-records.ts`. */
+function sortTurnMessages(
+  rows: readonly TurnMessageRecord[],
+): TurnMessageRecord[] {
+  return [...rows].sort((a, b) => {
+    if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+    if (a.order !== b.order) return a.order - b.order;
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+    return 0;
+  });
+}
 
 export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
   return {
@@ -246,8 +259,8 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listCharacters(sessionId) {
-      return [...state.characters.values()].filter(
-        (r) => r.sessionId === sessionId,
+      return sortByCursorAsc(
+        [...state.characters.values()].filter((r) => r.sessionId === sessionId),
       );
     },
 
@@ -290,16 +303,18 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listTurnMessages(sessionId, pagination?) {
-      const filtered = state.turnMessages
-        .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const filtered = sortTurnMessages(
+        state.turnMessages.filter((r) => r.sessionId === sessionId),
+      );
       return applyPagination(filtered, pagination);
     },
 
     async listUncompactedTurnMessages(sessionId) {
-      return state.turnMessages
-        .filter((r) => r.sessionId === sessionId && r.compactedAtTurnId == null)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return sortTurnMessages(
+        state.turnMessages.filter(
+          (r) => r.sessionId === sessionId && r.compactedAtTurnId == null,
+        ),
+      );
     },
 
     async getTurnMessageStats(sessionId) {

@@ -31,7 +31,7 @@ contributes:
 框架已把当前 session 的全部好感记录注入到下方的 `<existing-affinity>` 块里（由 `input.inject: plugin-data` 提供），**不需要**调用任何 list 工具。每行格式为：
 
 ```
-- <id> | <updatedAt> | <value-summary>
+- <id> | <value-summary>
 ```
 
 判断某个 NPC 是否已有记录时按名字对照这份列表即可 —— 工具内部也会按名字去重（大小写不敏感），你只要始终使用 NPC 的规范名字。

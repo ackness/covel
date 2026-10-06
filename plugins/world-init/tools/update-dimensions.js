@@ -92,7 +92,7 @@ function normalizeArguments(input) {
     const { expectedVersion: _version, ...written } = entry;
     if (Array.isArray(written.updates) && !written.updates.length)
       delete written.updates;
-    const update = Array.isArray(written.changes)
+    const patched = Array.isArray(written.changes)
       ? {
           ...written,
           changes: written.changes.map((change) => {
@@ -102,6 +102,16 @@ function normalizeArguments(input) {
           }),
         }
       : written;
+    // One change at the empty path is the whole value: a model writes it for
+    // a dimension that is a number or a text, which has no path inside it.
+    const [only] = patched.changes ?? [];
+    const whole =
+      patched.changes?.length === 1 &&
+      isRecord(only) &&
+      only.path === "" &&
+      !Object.hasOwn(patched, "value");
+    const { changes: _changes, ...unpatched } = patched;
+    const update = whole ? { ...unpatched, value: only.value } : patched;
     const earlier = updates.find(
       (other) => isRecord(other) && other.id === update.id,
     );

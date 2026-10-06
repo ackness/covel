@@ -390,6 +390,7 @@ export default function ({ tool, z, shortIdBatch }) {
           "edge",
           [`${src.name}-${incoming.relation}-${tgt.name}`],
           context.sessionId,
+          context.random,
         );
         const edge = {
           id: edgeId,

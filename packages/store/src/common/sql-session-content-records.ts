@@ -56,7 +56,11 @@ type MessagesTable = Table & {
   metadata: Column;
   createdAt: Column;
 };
-type CharactersTable = Table & { id: Column; sessionId: Column };
+type CharactersTable = Table & {
+  id: Column;
+  sessionId: Column;
+  createdAt: Column;
+};
 
 export interface SqlSessionContentTables {
   readonly events: EventsTable;
@@ -68,6 +72,8 @@ export interface SqlSessionContentTables {
 export interface SqlSessionContentDeps {
   readonly runner: SqlRunner;
   readonly tables: SqlSessionContentTables;
+  /** A text column compared byte by byte; see `SqlDataCrudDeps.byteOrder`. */
+  readonly byteOrder?: (column: Column) => Column | SQL;
   readonly json: JsonReader;
   readonly values: Pick<
     InsertValueBuilders,
@@ -100,6 +106,7 @@ export function createSqlSessionContentRecords(
 ): SqlSessionContentRecords {
   const { runner, tables, json, values } = deps;
   const { events, messages, characters, characterSchemas } = tables;
+  const byteOrder = deps.byteOrder ?? ((column: Column) => column);
 
   return {
     async saveEvent(record: EventRecord): Promise<void> {
@@ -256,6 +263,10 @@ export function createSqlSessionContentRecords(
     async listCharacters(sessionId: string): Promise<CharacterRecord[]> {
       const rows = await runner.select<CharacterRow>(characters, {
         where: eq(characters.sessionId, sessionId),
+        // Without an order PostgreSQL returns rows as they lie on disk, and
+        // an updated row moves: the roster a prompt shows changed order
+        // after a character changed.
+        orderBy: [asc(characters.createdAt), asc(byteOrder(characters.id))],
       });
       return rows.map((row) => toCharacterRecord(row, json));
     },

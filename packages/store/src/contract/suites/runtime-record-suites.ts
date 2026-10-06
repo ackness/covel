@@ -526,6 +526,36 @@ export function registerRuntimeRecordStoreSuites(
   });
 
   describe("TurnMessages", () => {
+    it("lists two messages of one millisecond in pipeline order, then by ID", async () => {
+      const at = "2026-01-01T00:00:00.000Z";
+      const message = (id: string, order: number, createdAt = at) =>
+        makeTurnMessage({ id, sessionId: "sess-tie", order, createdAt });
+      // Appended against the order they must list in.
+      await store.appendTurnMessage(message("m-post", 700));
+      await store.appendTurnMessage(message("m-story-b", 500));
+      await store.appendTurnMessage(message("m-story-a", 500));
+      await store.appendTurnMessage(message("m-player", 0));
+      await store.appendTurnMessage(
+        message("m-earlier", 900, "2025-12-31T00:00:00.000Z"),
+      );
+
+      const expected = [
+        "m-earlier",
+        "m-player",
+        "m-story-a",
+        "m-story-b",
+        "m-post",
+      ];
+      expect(
+        (await store.listTurnMessages("sess-tie")).map((row) => row.id),
+      ).toEqual(expected);
+      expect(
+        (await store.listUncompactedTurnMessages("sess-tie")).map(
+          (row) => row.id,
+        ),
+      ).toEqual(expected);
+    });
+
     it("should appendTurnMessage and listTurnMessages", async () => {
       const m1 = makeTurnMessage({ sessionId: "sess-1", createdAt: ts(0) });
       const m2 = makeTurnMessage({ sessionId: "sess-1", createdAt: ts(100) });

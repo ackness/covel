@@ -151,7 +151,7 @@ export default function ({ tool, z, shortIdBatch }) {
         .filter((name) => name.trim() && !rowByName.has(normalizeName(name)));
       const assignedIds =
         newNames.length > 0
-          ? shortIdBatch("quest", newNames, context.sessionId)
+          ? shortIdBatch("quest", newNames, context.sessionId, context.random)
           : [];
       /** @type {Map<string, string>} */
       const newNameToId = new Map();

@@ -30,7 +30,7 @@ export default async function handler(ctx) {
   const payload = ctx.manualPayload ?? {};
   const rule = normalizeRule(
     readManualEntity(payload, "rule", (form) =>
-      ruleFromForm(form, payload.enabled !== false, ctx.sessionId),
+      ruleFromForm(form, payload.enabled !== false, ctx),
     ),
   );
   const now = new Date().toISOString();
@@ -70,16 +70,18 @@ export default async function handler(ctx) {
 /**
  * @param {Record<string, unknown>} form
  * @param {boolean} enabled
- * @param {string} sessionId
+ * @param {{ sessionId: string, random?: import("@covel/plugin-handlers-utils").PluginRandom }} ctx
  */
-function ruleFromForm(form, enabled, sessionId) {
+function ruleFromForm(form, enabled, ctx) {
   const position = optionalString(form.position);
   const depth = optionalNumber(form.depth);
   const title = optionalString(form.title);
   const content = normalizeRequiredString(form.content, "rule.content");
   return {
     schemaVersion: 1,
-    id: optionalString(form.id) ?? shortId("rule", title ?? content, sessionId),
+    id:
+      optionalString(form.id) ??
+      shortId("rule", title ?? content, ctx.sessionId, ctx.random),
     ...(title ? { title } : {}),
     content,
     kind: optionalString(form.kind) ?? "constant",

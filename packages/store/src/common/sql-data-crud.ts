@@ -13,7 +13,7 @@ import { lorebookOwnerKey } from "./lorebook-owner.js";
  */
 
 import { and, asc, eq } from "drizzle-orm";
-import type { Column, Table } from "drizzle-orm";
+import type { Column, SQL, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
@@ -43,9 +43,8 @@ type PluginDataTable = Table & {
   namespace: Column;
   key: Column;
   updatedAt: Column;
-  // Ordering keys for offset pagination — see the list methods below.
+  // The first ordering key of the list methods below.
   createdAt: Column;
-  id: Column;
 };
 type WorldDataLedgerTable = Table & {
   sessionId: Column;
@@ -68,6 +67,11 @@ export interface SqlDataCrudTables {
 export interface SqlDataCrudDeps {
   readonly runner: SqlRunner;
   readonly tables: SqlDataCrudTables;
+  /**
+   * A text column compared byte by byte. SQLite text already is; PostgreSQL
+   * compares with the database collation unless told otherwise.
+   */
+  readonly byteOrder?: (column: Column) => Column | SQL;
   readonly json: JsonReader;
   readonly values: Pick<
     InsertValueBuilders,
@@ -102,6 +106,16 @@ export type SqlDataCrud = Pick<
 export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
   const { runner, tables, json, values } = deps;
   const { pluginData, worldDataImportLedger, lorebookEntries } = tables;
+  const byteOrder = deps.byteOrder ?? ((column: Column) => column);
+  // One order for every plugin-data list. The key breaks a tie between rows
+  // written in the same millisecond: it is unique within a session, and it is
+  // the same in every run of a session and in a fork, where the row ID is not.
+  const pluginDataOrder = [
+    asc(pluginData.createdAt),
+    asc(byteOrder(pluginData.pluginId)),
+    asc(byteOrder(pluginData.namespace)),
+    asc(byteOrder(pluginData.key)),
+  ];
 
   return {
     async setPluginData(record: PluginDataRecord): Promise<void> {
@@ -199,9 +213,7 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
       const rows = await runner.select<PluginDataRow>(pluginData, {
         where: and(...conditions),
         // Offset pagination needs a total order the engine cannot perturb.
-        // `createdAt` survives upsert (only value/updatedAt are rewritten) and
-        // `id` breaks same-millisecond ties, so pages never skip or repeat.
-        orderBy: [asc(pluginData.createdAt), asc(pluginData.id)],
+        orderBy: pluginDataOrder,
         limit: pagination?.limit,
         offset: pagination?.offset,
       });
@@ -221,7 +233,7 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
         // Media GC pages through this to collect still-referenced asset ids;
         // without a stable total order PG may hand the same row twice or skip
         // it entirely, and a skipped row means live bytes get swept.
-        orderBy: [asc(pluginData.createdAt), asc(pluginData.id)],
+        orderBy: pluginDataOrder,
         limit: pagination?.limit,
         offset: pagination?.offset,
       });
@@ -237,7 +249,7 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
           eq(pluginData.sessionId, sessionId),
           eq(pluginData.namespace, namespace),
         ),
-        orderBy: [asc(pluginData.createdAt), asc(pluginData.id)],
+        orderBy: pluginDataOrder,
       });
       return rows.map((row) => toPluginDataRecord(row, json));
     },

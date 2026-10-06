@@ -73,6 +73,7 @@ type TraceEventsTable = Table & {
 type TurnMessagesTable = Table & {
   sessionId: Column;
   createdAt: Column;
+  order: Column;
   id: Column;
   sourceType: Column;
   sourceRuntimeId: Column;
@@ -131,6 +132,14 @@ export function createSqlSessionJournalRecords(
 ): SqlSessionJournalRecords {
   const { runner, tables, json, values } = deps;
   const { traceEvents, turnMessages, playerInputs, sessionSummaries } = tables;
+  // Two messages of one millisecond come in pipeline order (the player's
+  // message is 0, a runtime's the rank of its stage), then by ID: without a
+  // tie-break the engine was free to return them either way.
+  const turnMessageOrder = [
+    asc(turnMessages.createdAt),
+    asc(turnMessages.order),
+    asc(turnMessages.id),
+  ];
 
   return {
     async addTraceEvent(record: TraceEventRecord): Promise<void> {
@@ -188,7 +197,7 @@ export function createSqlSessionJournalRecords(
     ): Promise<TurnMessageRecord[]> {
       const rows = await runner.select<TurnMessageRow>(turnMessages, {
         where: eq(turnMessages.sessionId, sessionId),
-        orderBy: [asc(turnMessages.createdAt)],
+        orderBy: turnMessageOrder,
         limit: pagination?.limit,
         offset: pagination?.offset,
       });
@@ -203,7 +212,7 @@ export function createSqlSessionJournalRecords(
           eq(turnMessages.sessionId, sessionId),
           isNull(turnMessages.compactedAtTurnId),
         ),
-        orderBy: [asc(turnMessages.createdAt)],
+        orderBy: turnMessageOrder,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
     },

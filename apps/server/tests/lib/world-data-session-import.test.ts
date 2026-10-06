@@ -373,11 +373,12 @@ sources:
     });
 
     expect(result.written).toBe(2);
+    // One import writes its rows at one time; they list by key.
     expect(
       (await store.listPluginData("sess-1", "world-notes", "facts")).map(
         (row) => row.key,
       ),
-    ).toEqual(["rain", "gate"]);
+    ).toEqual(["gate", "rain"]);
     expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(2);
   });
 
@@ -1332,6 +1333,63 @@ sources:
       conflicts: [],
     });
     expect(await store.listCharacters("sess-1")).toEqual([]);
+  });
+
+  it("syncs the rows that are not in conflict and keeps the ones that are", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  cast:
+    kind: json
+    path: data/cast.json
+    to: characters
+    key: id
+`,
+      files: {
+        "data/cast.json": JSON.stringify([
+          { id: "npc", name: "Original", type: "npc" },
+        ]),
+      },
+    });
+    const store = await makeStore([]);
+    const options = {
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+    };
+    expect((await importWorldDataForSession(options)).written).toBe(1);
+    // Play changed one character; the world package then changed it too and
+    // gained another.
+    const character = (await store.listCharacters("sess-1"))[0]!;
+    await store.upsertCharacter({ ...character, name: "Player edit" });
+    await writeFile(
+      path.join(worldRoot, "data/cast.json"),
+      JSON.stringify([
+        { id: "npc", name: "Source edit", type: "npc" },
+        { id: "guide", name: "New in the package", type: "npc" },
+      ]),
+    );
+
+    expect(await syncWorldDataForSession(options)).toMatchObject({
+      dryRun: false,
+      upserted: 1,
+      conflicts: [{ reason: "modified", key: "npc" }],
+    });
+    const names = Object.fromEntries(
+      (await store.listCharacters("sess-1")).map((row) => [row.id, row.name]),
+    );
+    expect(names).toEqual({
+      npc: "Player edit",
+      guide: "New in the package",
+    });
+    // The new row is on the ledger: the next sync has nothing left to add.
+    expect(await syncWorldDataForSession(options)).toMatchObject({
+      upserted: 0,
+      unchanged: 1,
+      conflicts: [{ reason: "modified", key: "npc" }],
+    });
   });
 
   it("skips existing rows with merge skipExisting", async () => {

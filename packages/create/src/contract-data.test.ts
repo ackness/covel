@@ -102,6 +102,32 @@ it("writes portable contract records as validated contract-targeted world source
   }
 });
 
+it("writes a contract's records to the file its plugin names, with no descriptor", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "covel-contract-data-"));
+  try {
+    const manifest: Record<string, unknown> = {};
+    const content = normalizeGeneratedPackage(
+      { contractData: [record] },
+      brief,
+      [contract],
+    ).content;
+    const written = await writeWorldDataFiles(root, manifest, content, [
+      {
+        contract: contract.contract,
+        source: { kind: "yaml", path: "data/custom.yaml" },
+      },
+    ]);
+    expect(written).toEqual(["data/custom.yaml"]);
+    expect(manifest.worldData).toBeUndefined();
+    // One record is the file's content; the plugin's path decides the format.
+    expect(
+      parse(await readFile(path.join(root, "data/custom.yaml"), "utf8")),
+    ).toEqual(record.value);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("targets the lorebook projection when the receiver declares it", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "covel-contract-data-"));
   try {

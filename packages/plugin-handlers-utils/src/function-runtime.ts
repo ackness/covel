@@ -94,6 +94,17 @@ export interface PluginLogger {
   error(message: string, meta?: Record<string, unknown>): Promise<void>;
 }
 
+/**
+ * The host's source of chance for dice and other game rolls. Draw from it
+ * instead of `node:crypto` or `Math.random`: a test server started with
+ * `COVEL_RANDOM_SEED` then gives the same draws on every run of one scripted
+ * session.
+ */
+export interface PluginRandom {
+  /** A uniform integer `min <= n < max`, as `randomInt` of `node:crypto`. */
+  int(min: number, max: number): number;
+}
+
 export type JobStatusState =
   | "queued"
   | "running"
@@ -147,6 +158,8 @@ export interface PluginFunctionContext {
   readonly pluginData?: PluginDataWriter;
   readonly logger?: PluginLogger;
   readonly progress?: ProgressReporter;
+  /** Dice and other game rolls; a session host always supplies it. */
+  readonly random?: PluginRandom;
   readonly signal?: AbortSignal;
 }
 

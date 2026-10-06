@@ -380,7 +380,7 @@ aiRoutes.post(
         };
         if (saveTarget === "server-file") {
           createOpts.signal.throwIfAborted();
-          await writeWorldPackage(worldsDir, result);
+          await writeWorldPackage(worldsDir, result, { dataContracts });
           generatedWorldDir = path.join(worldsDir, result.id);
           loadedRecord = await loadSingleWorld(generatedWorldDir, metadata);
           if (!loadedRecord)
@@ -623,7 +623,10 @@ aiRoutes.post(
           if (saveTarget === "server-file") {
             signal.throwIfAborted();
             // The old package stays until the new one is in place.
-            await writeWorldPackage(worldsDir, result, { replace: true });
+            await writeWorldPackage(worldsDir, result, {
+              replace: true,
+              dataContracts,
+            });
             loaded = await loadSingleWorld(worldDir, metadata);
             if (!loaded)
               throw new Error(

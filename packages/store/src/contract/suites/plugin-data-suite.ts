@@ -461,7 +461,103 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
       expect(rows).toEqual([]);
     });
 
-    it("listPluginDataByNamespace returns one namespace across plugins in (createdAt, id) order", async () => {
+    it("lists rows written in the same millisecond by key, byte by byte, not by row ID", async () => {
+      const at = "2024-01-01T00:00:00.000Z";
+      // Row IDs in the opposite order of the keys, as random IDs may be.
+      const keys = ["ab", "a_b", "a-b", "a", "B"];
+      await store.setPluginDataBatch(
+        keys.map((key, index) => ({
+          id: `tie-${index}`,
+          sessionId: "sess-tie",
+          pluginId: "p1",
+          namespace: "entries",
+          key,
+          value: index,
+          createdAt: at,
+          updatedAt: at,
+        })),
+      );
+      await store.setPluginData({
+        id: "tie-first",
+        sessionId: "sess-tie",
+        pluginId: "p1",
+        namespace: "entries",
+        key: "z",
+        value: 0,
+        createdAt: "2023-12-31T23:59:59.000Z",
+        updatedAt: at,
+      });
+
+      const expected = ["z", "B", "a", "a-b", "a_b", "ab"];
+      const lists = await Promise.all([
+        store.listPluginData("sess-tie", "p1", "entries"),
+        store.listPluginData("sess-tie", "p1"),
+        store.listPluginDataSessionScope("sess-tie"),
+        store.listPluginDataByNamespace("sess-tie", "entries"),
+      ]);
+      for (const rows of lists)
+        expect(rows.map((row) => row.key)).toEqual(expected);
+    });
+
+    it("keeps a rewritten row's ID, creation time and place in the list", async () => {
+      const row = (key: string, createdAt: string, value: number) => ({
+        id: `keep-${key}-${value}`,
+        sessionId: "sess-keep",
+        pluginId: "p1",
+        namespace: "entries",
+        key,
+        value,
+        createdAt,
+        updatedAt: createdAt,
+      });
+      await store.setPluginData(row("a", "2024-01-01T00:00:01.000Z", 1));
+      await store.setPluginData(row("b", "2024-01-01T00:00:02.000Z", 1));
+      await store.setPluginData(row("c", "2024-01-01T00:00:03.000Z", 1));
+
+      await store.setPluginData(row("a", "2024-01-01T00:00:10.000Z", 2));
+      await store.setPluginDataBatch([row("b", "2024-01-01T00:00:11.000Z", 2)]);
+      expect(
+        await store.compareAndSetPluginData(
+          row("c", "2024-01-01T00:00:12.000Z", 2),
+          "2024-01-01T00:00:03.000Z",
+        ),
+      ).toBe(true);
+
+      const rows = await store.listPluginData("sess-keep", "p1", "entries");
+      expect(
+        rows.map(({ key, id, createdAt, updatedAt, value }) => ({
+          key,
+          id,
+          createdAt,
+          updatedAt,
+          value,
+        })),
+      ).toEqual([
+        {
+          key: "a",
+          id: "keep-a-1",
+          createdAt: "2024-01-01T00:00:01.000Z",
+          updatedAt: "2024-01-01T00:00:10.000Z",
+          value: 2,
+        },
+        {
+          key: "b",
+          id: "keep-b-1",
+          createdAt: "2024-01-01T00:00:02.000Z",
+          updatedAt: "2024-01-01T00:00:11.000Z",
+          value: 2,
+        },
+        {
+          key: "c",
+          id: "keep-c-1",
+          createdAt: "2024-01-01T00:00:03.000Z",
+          updatedAt: "2024-01-01T00:00:12.000Z",
+          value: 2,
+        },
+      ]);
+    });
+
+    it("listPluginDataByNamespace returns one namespace across plugins in creation order", async () => {
       const row = (
         id: string,
         sessionId: string,

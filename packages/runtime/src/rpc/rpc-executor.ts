@@ -21,6 +21,7 @@ import type {
   RpcHandlerContext,
   RpcRegistryEntry,
 } from "./rpc-registry.js";
+import { createPluginRandom } from "../function-runtime/plugin-random.js";
 
 export interface RpcDispatchRequest {
   readonly pluginId: string;
@@ -74,6 +75,11 @@ export function createRpcExecutor(deps: RpcDispatchDeps) {
         ...context,
         pluginId: req.pluginId,
         action: req.action,
+        random: createPluginRandom({
+          sessionId: context.sessionId,
+          pluginId: req.pluginId,
+          stream: `rpc:${req.action}`,
+        }),
       };
 
       try {

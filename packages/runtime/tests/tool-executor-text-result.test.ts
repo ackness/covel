@@ -122,6 +122,39 @@ describe("ToolExecutor text-result convention", () => {
     expect(result.parsedResult).toEqual({ doubled: 10 });
   });
 
+  it("leaves a record's bookkeeping out of the JSON the model reads, not out of the result", async () => {
+    const rowTool = tool({
+      name: "read-row",
+      description: "Returns a stored row",
+      parameters: z.object({}),
+      execute: async () => ({
+        found: true,
+        key: "cursor",
+        value: {
+          step: 3,
+          lastTurnId: "0f1efa4d-b478-4a0c-8665-c040097771b4",
+        },
+        updatedAt: "2026-10-06T08:51:22.123Z",
+      }),
+    });
+    const executor = createToolExecutor({
+      findTool: (name) => (name === "read-row" ? rowTool : undefined),
+      store,
+    });
+
+    const result = await executor.execute(makeCall("read-row", {}), ctx);
+
+    expect(result.result).toBe(
+      '{"found":true,"key":"cursor","value":{"step":3}}',
+    );
+    expect(result.parsedResult).toEqual({
+      found: true,
+      key: "cursor",
+      value: { step: 3, lastTurnId: "0f1efa4d-b478-4a0c-8665-c040097771b4" },
+      updatedAt: "2026-10-06T08:51:22.123Z",
+    });
+  });
+
   it("does not use _text when it is not a string (safety)", async () => {
     const weirdTool = tool({
       name: "weird",

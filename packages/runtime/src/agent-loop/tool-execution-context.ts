@@ -2,6 +2,7 @@ import type { DataStore } from "@covel/store";
 import type { ToolExecutionContext } from "@covel/tools";
 import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import { createFunctionStoreView } from "../function-runtime/plugin-handler-helpers.js";
+import { createPluginRandom } from "../function-runtime/plugin-random.js";
 import type { ToolCallContext } from "./tool-executor.js";
 
 /** Own input snapshots and bind read authority to this invocation's identity. */
@@ -79,6 +80,7 @@ export function createToolExecutionContext(
       ? { logicalTurn: caller.logicalTurn }
       : {}),
     signal,
+    random: createPluginRandom({ ...identity, stream: identity.runtimeId }),
     ...(view ? { store: view } : {}),
   });
   return {

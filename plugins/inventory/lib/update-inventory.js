@@ -146,7 +146,12 @@ export default function ({ tool, z, shortIdBatch }) {
         seenNewNames.add(lower);
         newNames.push(change.name);
       }
-      const assignedIds = shortIdBatch("item", newNames, context.sessionId);
+      const assignedIds = shortIdBatch(
+        "item",
+        newNames,
+        context.sessionId,
+        context.random,
+      );
       /** @type {Map<string, string>} */
       const idForNewName = new Map();
       for (let i = 0; i < newNames.length; i += 1) {

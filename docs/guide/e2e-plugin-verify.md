@@ -9,15 +9,15 @@
 - 插件或 runtime 改动后，验证全链路行为依然符合 `PLUGIN.md` 声明
 - 调整 `maxSteps`、`trigger`、`stage`、`cooldownTurns` 等触发规则后复现实际调度
 - 调试 LLM 工具循环（`generate-guide`、`upsert-npc-graph`、`list-characters` 等）的耗时与输出
-- 按实际配置跑一遍真实模型；或用 `--slot` 把故事 runtime 切到 `llmock` / 低成本 slot 做回归
+- 按实际配置跑一遍真实模型；或用 `--slot` 把故事 runtime 切到低成本 slot 做回归
+- 同一个脚本会话要反复跑时，录一遍模型应答，之后从录制回放（见[录制与回放](#录制与回放)）
 - 只排查单个插件时用 `--plugin` / `--runtime` 聚焦
 
 ## 前置条件
 
 1. **API server 已启动**（`pnpm dev:pg` 或 `pnpm dev:server`），默认监听 `http://localhost:3001`
-2. **llm.toml 配置可用**。脚本默认不覆盖模型：每个 runtime 按服务端配置路由（与玩家实际游玩一致），Phase 6 列出各 runtime 实际调用的 slot / provider / model。需要时用 `--slot` 只覆盖故事 runtime，例如本地 llmock 的 `e2e_local`
-3. **`.env.llm`** 含对应 provider 的 API key（或 `llmock` 本地 base URL）
-4. 可选：`npx llmock -p 4012 --record --provider-openai https://your-provider` 起一个本地录制代理
+2. **llm.toml 配置可用**。脚本默认不覆盖模型：每个 runtime 按服务端配置路由（与玩家实际游玩一致），Phase 6 列出各 runtime 实际调用的 slot / provider / model。需要时用 `--slot` 只覆盖故事 runtime
+3. **`.env.llm`** 含对应 provider 的 API key
 
 最小可执行流程如下（脚本本身不会启动 server，也不会自动创建 `llm.toml`）：
 
@@ -48,9 +48,9 @@ npx tsx --env-file=.env --env-file=.env.llm \
 # 1. 默认 3 turn 全流程跑一遍（按配置路由模型）
 npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts
 
-# 2. 本地 llmock + e2e_local slot，5 turn
+# 2. 故事 runtime 改用 utility slot，5 turn
 npx tsx --env-file=.env --env-file=.env.llm \
-  scripts/e2e-plugin-verify.ts --slot e2e_local --turns 5 --timeout 300
+  scripts/e2e-plugin-verify.ts --slot utility --turns 5 --timeout 300
 
 # 3. 只聚焦 guide 这一个插件的表现
 npx tsx --env-file=.env --env-file=.env.llm \
@@ -74,6 +74,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 | `--slot <name>`          | 按配置路由（或 `$E2E_MODEL_SLOT`） | 覆盖故事 runtime 的模型 slot；其余 runtime 仍按配置。**只写 `[covel.xxx]` 中的 xxx 部分**，不是 `covel.xxx` 全名 |
 | `--world <id>`           | `/api/worlds` 返回的第一个         | 使用的世界包 id                                                                                                  |
 | `--locale <tag>`         | `zh-CN`                            | 会话的内容语言，同时决定读取哪种语言的插件提示词；配合服务端的 `COVEL_INSTRUCTION_LOCALE` 可对比中英文指令       |
+| `--session-id <id>`      | 服务端分配（世界 ID 加随机后缀）   | 用这个 ID 建会话。固定的 ID 是两次运行发出相同模型请求的条件之一，见[录制与回放](#录制与回放)                    |
 | `--turns <n>`            | `3`                                | 角色创建之后的 playing 轮数                                                                                      |
 | `--runtime <id>`         | —                                  | 只聚焦某一个 runtime，其它依然会执行但不计入断言                                                                 |
 | `--plugin <id>`          | —                                  | 只聚焦某一个 plugin                                                                                              |
@@ -213,8 +214,8 @@ A: 该脚本只调用 API，不负责启动服务。确认 `pnpm dev:server` / `
 **Q: `preset not found`、`slot` 不存在或模型请求 401？**
 A: `--slot` 只接受 `[covel.xxx]` 的 `xxx`，不是完整表名；例如
 `[covel.e2e_local]` 应传 `--slot e2e_local`。确认 `.env.llm` 中 provider key 和
-`llm.toml` 的 slot/provider 配置有效。使用 llmock 时，直接把该 slot 的 `baseUrl`
-改为本地代理地址；`COVEL_STORY_BASE_URL` / `COVEL_PLUGIN_BASE_URL` 当前没有运行时读取方。
+`llm.toml` 的 slot/provider 配置有效。使用录制代理时，直接把该 slot 的 `baseUrl`
+改为代理地址；`COVEL_STORY_BASE_URL` / `COVEL_PLUGIN_BASE_URL` 当前没有运行时读取方。
 
 **Q: 想保留 session、trace 或失败现场？**
 A: 传 `--keep` 保留通过后的 session；默认日志和 JSON 在 `debugs/e2e-logs/`，传
@@ -227,7 +228,7 @@ A: 上游 LLM 会话被运营商断开，脚本会自动重读 turn 记录。只
 A: 期望推导按会话真实的 `activePlugins` 裁决。这些插件玩家没启用（不在世界种子集里）时就应当全程 `SKIP`，原因列会写 `plugin not in session active set`——这是正确行为，不是漏跑。要测它们就在建会话时激活对应插件。
 
 **Q: 我想只跑 `guide` 的回归？**
-A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行保证依赖链完整，但断言统计只算 `guide` 的表现。
+A: `--plugin guide --turns 2`。其它 runtime 依然会运行保证依赖链完整，但断言统计只算 `guide` 的表现。
 
 ## 与 PLUGIN.md 声明的对齐检查
 
@@ -248,12 +249,97 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 | `tools.builtin` / `tools.plugin`            | Tool Calls 表格里能观测实际调用次数和成功率                                 |
 | `runtimeType: function`                     | Tool Calls 表为空（function runtime 不跑 LLM）                              |
 
-## 在 CI 中运行
+## 录制与回放
 
-CI 中使用 `llmock` 自身的录制/回放代理控制成本：
+一局脚本会话的时间几乎都花在等模型上。`pnpm llm:replay` 在模型端点前面放一个代理（基于 `@copilotkit/aimock`）：第一遍把每个请求的应答录下来，之后同样的请求直接从录制里应答，不再调用模型。`lantern-barrow` 三回合会话有 47 次模型调用，录制用了 229 秒，回放 47 次全部命中，用了 4 秒。
 
-1. 用 `llmock` 录制一遍真实响应，落到 `debugs/llm-cache/`
-2. 后续运行让 `llmock` 读取该缓存
-3. 以脚本退出码 `0` 作为通过条件
+回放要求两遍会话发出**完全相同**的请求。一条请求不同，模型就会写出新内容，后面的请求全部跟着变。所以每一遍都要满足：
 
-`COVEL_LLM_REPLAY` / `COVEL_LLM_REPLAY_DIR` 当前没有运行时读取方，不要用它们替代 `llmock`。
+1. **固定会话 ID**：`--session-id <id>`。会话 ID 会出现在提示词里。
+2. **服务端设置 `COVEL_RANDOM_SEED`**：插件从 `ctx.random` 取的骰子和 ID 里的随机部分每遍相同。插件直接用 `node:crypto` 或 `Math.random` 取的数不受它控制。
+3. **每遍开始时这个会话 ID 不存在**：同一个 ID 不能建两次。最简单的做法是每遍用一个新的数据库文件。脚本通过后会删除会话，所以也可以在同一个服务端上接着跑下一遍；失败或带 `--keep` 时会话保留，要先删除。
+4. **世界、插件、提示词、语言和模型配置都没有变**。改了其中任何一项，受影响的请求就是新请求，这正是需要重新录制的时候。
+
+### 步骤
+
+准备一份把会用到的 slot 都指到代理的模型配置，例如 `debugs/llm-replay/llm.toml`（`debugs/` 不进版本库）。下面以一个监听 `127.0.0.1:3425` 的 OpenAI 兼容端点为例，provider 名和模型换成自己的：
+
+```toml
+[covel.story]
+provider = "local"
+model    = "codex/gpt-6-luna"
+baseUrl  = "http://127.0.0.1:4012/v1"
+protocol = "openai-chat-v1"
+
+[covel.plugin]
+provider = "local"
+model    = "codex/gpt-6-luna"
+baseUrl  = "http://127.0.0.1:4012/v1"
+protocol = "openai-chat-v1"
+```
+
+**录制**。三个终端依次启动代理、服务端和脚本会话。`--upstream` 是真实端点的 origin，不带 `/v1`。密钥仍由服务端按 provider 发送（这里是 `LOCAL_API_KEY`），代理原样转给上游：
+
+```bash
+pnpm llm:replay --mode record --fixtures debugs/llm-replay/demo --upstream http://127.0.0.1:3425
+```
+
+```bash
+SERVER_PORT=3160 COVEL_RANDOM_SEED=20261006 \
+  COVEL_LLM_TOML="$PWD/debugs/llm-replay/llm.toml" \
+  SQLITE_PATH="$PWD/debugs/llm-replay/run-a/covel.db" \
+  COVEL_LOGS_DIR="$PWD/debugs/llm-replay/run-a/logs" \
+  LOCAL_API_KEY=your-key \
+  pnpm --filter @covel/server exec tsx src/index.ts
+```
+
+```bash
+pnpm exec tsx scripts/e2e-plugin-verify.ts --server http://localhost:3160/api \
+  --world lantern-barrow --turns 3 --session-id lantern-barrow-replay
+```
+
+会话结束后停掉服务端，再用 Ctrl-C 停掉代理。代理退出时打印统计，并写出 `debugs/llm-replay/demo.record.stats.json` 和 `debugs/llm-replay/demo.record.requests/`（每条请求用来匹配的内容）。
+
+**回放**。代理换成 `--mode replay`，服务端换一个新的数据库文件，脚本命令不变：
+
+```bash
+pnpm llm:replay --mode replay --fixtures debugs/llm-replay/demo
+```
+
+```bash
+SERVER_PORT=3160 COVEL_RANDOM_SEED=20261006 \
+  COVEL_LLM_TOML="$PWD/debugs/llm-replay/llm.toml" \
+  SQLITE_PATH="$PWD/debugs/llm-replay/run-b/covel.db" \
+  COVEL_LOGS_DIR="$PWD/debugs/llm-replay/run-b/logs" \
+  LOCAL_API_KEY=your-key \
+  pnpm --filter @covel/server exec tsx src/index.ts
+```
+
+```bash
+pnpm exec tsx scripts/e2e-plugin-verify.ts --server http://localhost:3160/api \
+  --world lantern-barrow --turns 3 --session-id lantern-barrow-replay
+```
+
+统计里 `served` 的 `none 200` 是从录制应答的请求数，`proxy 200` 是转给上游的请求数。回放模式没有上游：没录过的请求得到错误，对应的 runtime 失败。
+
+### 没有全部命中时
+
+```bash
+pnpm llm:replay:diff debugs/llm-replay/demo.record.requests debugs/llm-replay/demo.replay.requests
+```
+
+它列出第二遍里第一遍没有的请求，以及每条请求从哪里开始与第一遍最接近的请求不同。先看序号最小的那条：后面的多半是它引起的。要让没命中的请求也有应答可看，第二遍也用 `--mode record`（同样带 `--upstream`）并加 `--tag <名字>`，没录过的请求会转给上游并补录。
+
+### 代理怎样匹配请求
+
+- 匹配键是整条请求的摘要。aimock 自带的键只看最后一条用户消息、模型名、assistant 消息数和有没有工具结果；Covel 里叙事之后的各个 agent 最后一条用户消息相同，用它会互相串。
+- 工具调用 ID 不进入匹配键。UUID、时间戳（包括被长度上限截断的）和未固定的会话 ID 也不进入，这是一层保险：内核写进提示词的记录已经不带这些值（见 [插件参考](../reference/plugins.md#输入和输出)），上面那局会话的两遍请求在替换之前就逐字相同。插件自己拼进提示词的值如果带着它们，匹配仍然不受影响。
+- 流式应答连同时序一起录制。回放默认把录下的延迟除以 1000；`--speed 1` 按录制时的节奏回放（同样规模的一份录制是 37 秒）。
+- 重启后的代理会加载已有的录制，录制模式下也是这样。
+- 录制时上游在 200 的流里返回过错误的请求，回放时仍得到一个错误，服务端因此走和录制时相同的重试路径。aimock 把这种应答录成没有内容也没有用量的回复，代理按这个特征识别它。
+
+### 已知范围
+
+- 只在 `lantern-barrow` 三回合会话上验证过整局回放。更长的会话、别的世界可能还有没处理的差异来源，用 `pnpm llm:replay:diff` 定位。
+- 回放时模型应答从几秒变成几毫秒。提示词如果依赖后台作业与下一回合的先后，两遍可能不同；上面的会话里没有出现。
+- 仓库的 CI 不运行这个脚本。回放模式不调用模型，以退出码 `0` 作为通过条件即可放进 CI；录制文件需要随提示词的改动重新生成。

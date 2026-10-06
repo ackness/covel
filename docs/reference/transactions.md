@@ -533,7 +533,9 @@ progress; a new declaration initializes its value. Changing or removing a
 record that has evolved or been edited, or has pending settlement, produces a
 conflict. `force` does not bypass those dimension protections or migrate values
 to a new schema. Apply rechecks ledger hashes and record versions in its
-transaction; conflicts preserve the existing definition/value/version.
+transaction; conflicts preserve the existing definition/value/version. A row in
+conflict is reported and left alone; it does not hold back the other rows of
+the sync.
 
 Media bytes live in `MediaStore`, which has a separate lifecycle from
 `DataStore`. World-data import validates media during preflight, writes the
@@ -591,7 +593,7 @@ the affected table in the relevant reference doc.
 
 ## World data 写入的一致性边界
 
-- **`POST /worlds/:id/sync-dimensions`** — 只同步维度账本与受保护 `_dimensions` 记录，在 **SessionLock + store transaction** 中重新验证并应用；不重建 `entries` 或 Lorebook。已演化/手改或待结算时返回冲突报告且不写入，存储异常整体回滚并返回 500。
+- **`POST /worlds/:id/sync-dimensions`** — 只同步维度账本与受保护 `_dimensions` 记录，在 **SessionLock + store transaction** 中重新验证并应用；不重建 `entries` 或 Lorebook。已演化/手改或待结算的维度保持原样并列在冲突报告里，其余维度照常写入；存储异常整体回滚并返回 500。
 - **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑，新扫描将改动报为正常 conflict；普通领域可显式 `force`，维度的已演化/待结算保护不因此解除。维度使用 batch CAS 并持有会话写屏障；路由同时持 SessionLock，挡住回合并发写。
 - **媒体与 DataStore 分属不同生命周期**。session create 和 sync 在语义事务前准备媒体，`put` 原子建立本次导入专属临时引用。发布成功先建立 session claims 再释放临时引用；提交前失败只释放本次临时引用，无归属字节交给 GC，不强制删除内容。提交后 finalization 失败则保留保护，创建回滚成功删除会话后才可释放。兼容调用入口若在 DataStore 事务内 materialize，也遵守同一引用规则。进程崩溃可能留下无自动过期的临时引用，需确认导入已停止后人工清理。
 - **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。

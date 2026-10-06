@@ -1,14 +1,45 @@
 import { pluginDataKey } from "../common/keys.js";
-import { applyPagination, sortByCursorAsc } from "../common/pagination.js";
+import { applyPagination } from "../common/pagination.js";
+import type { PluginDataRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 import {
   pluginDataVersion,
   validatePluginDataCasEntries,
 } from "../common/plugin-data-batch-cas.js";
 
+/**
+ * The order of every plugin-data list, the JS mirror of `pluginDataOrder` in
+ * `common/sql-data-crud.ts`: `createdAt`, then the row's own key.
+ */
+function sortPluginData(rows: readonly PluginDataRecord[]): PluginDataRecord[] {
+  const fields = ["createdAt", "pluginId", "namespace", "key"] as const;
+  return [...rows].sort((a, b) => {
+    for (const field of fields)
+      if (a[field] !== b[field]) return a[field] < b[field] ? -1 : 1;
+    return 0;
+  });
+}
+
 export function createPluginDataMethods(
   state: MemoryState,
 ): MemoryStoreMethods {
+  // A rewrite changes the value and `updatedAt` only, as the SQL upsert does:
+  // the row keeps its ID and its place in the lists.
+  const write = (record: PluginDataRecord): void => {
+    const key = pluginDataKey(
+      record.sessionId,
+      record.pluginId,
+      record.namespace,
+      record.key,
+    );
+    const existing = state.pluginData.get(key);
+    state.pluginData.set(
+      key,
+      existing
+        ? { ...record, id: existing.id, createdAt: existing.createdAt }
+        : record,
+    );
+  };
   return {
     async compareAndSetPluginDataBatch(sessionId, pluginId, entries) {
       validatePluginDataCasEntries(entries);
@@ -50,29 +81,11 @@ export function createPluginDataMethods(
     },
 
     async setPluginData(record) {
-      state.pluginData.set(
-        pluginDataKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        record,
-      );
+      write(record);
     },
 
     async setPluginDataBatch(records) {
-      for (const record of records) {
-        state.pluginData.set(
-          pluginDataKey(
-            record.sessionId,
-            record.pluginId,
-            record.namespace,
-            record.key,
-          ),
-          record,
-        );
-      }
+      for (const record of records) write(record);
     },
 
     async compareAndSetPluginData(record, expectedUpdatedAt) {
@@ -90,7 +103,7 @@ export function createPluginDataMethods(
       ) {
         return false;
       }
-      state.pluginData.set(key, record);
+      write(record);
       return true;
     },
 
@@ -109,18 +122,18 @@ export function createPluginDataMethods(
           r.pluginId === pluginId &&
           (namespace === undefined || r.namespace === namespace),
       );
-      return applyPagination(filtered, pagination);
+      return applyPagination(sortPluginData(filtered), pagination);
     },
 
     async listPluginDataSessionScope(sessionId, pagination?) {
       const filtered = [...state.pluginData.values()].filter(
         (r) => r.sessionId === sessionId,
       );
-      return applyPagination(filtered, pagination);
+      return applyPagination(sortPluginData(filtered), pagination);
     },
 
     async listPluginDataByNamespace(sessionId, namespace) {
-      return sortByCursorAsc(
+      return sortPluginData(
         [...state.pluginData.values()].filter(
           (r) => r.sessionId === sessionId && r.namespace === namespace,
         ),

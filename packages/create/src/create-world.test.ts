@@ -516,23 +516,21 @@ rules:
       path.join(tmp, "test-world", "world.yaml"),
       "utf8",
     );
-    const descriptor = await readFile(
-      path.join(tmp, "test-world", "data/world.data.yaml"),
-      "utf8",
-    );
     const dimensions = await readFile(
       path.join(tmp, "test-world", "data/dimensions.yaml"),
       "utf8",
     );
-    expect(manifest).toContain("worldData: data/world.data.yaml");
+    // The file is at the path the conventions read: no descriptor names it.
+    expect(manifest).not.toContain("worldData:");
+    await expect(
+      access(path.join(tmp, "test-world", "data/world.data.yaml")),
+    ).rejects.toThrow();
     expect(manifest).not.toContain("dimensionSources:");
     expect(manifest).not.toContain("dimensions:");
-    expect(descriptor).toContain("schema: covel://world/dimensions");
-    expect(descriptor).toContain("to: world:metadata.dimensions");
     expect(dimensions).toContain("geography:");
   });
 
-  it("writes an exact canonical locale lore variant without crossing scripts", async () => {
+  it("writes the lore once, as the main file in the world's own language", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
@@ -545,15 +543,15 @@ rules:
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
     if (!result.success) throw new Error(result.errors.join("; "));
     const files = await writeWorldPackage(tmp, result);
-    expect(files).toContain("test-world/WORLD.zh-Hant-TW.md");
     expect(files).toContain("test-world/WORLD.md");
-    expect(files).not.toContain("test-world/WORLD.zh.md");
-    await expect(
-      access(path.join(tmp, "test-world", "WORLD.zh-Hant-TW.md")),
-    ).resolves.toBeUndefined();
-    await expect(
-      access(path.join(tmp, "test-world", "WORLD.zh.md")),
-    ).rejects.toThrow();
+    // A `WORLD.<locale>.md` is a translation; a copy of the main file under
+    // the world's own locale would be a second text to keep in step.
+    for (const variant of ["WORLD.zh-Hant-TW.md", "WORLD.zh.md"]) {
+      expect(files).not.toContain(`test-world/${variant}`);
+      await expect(
+        access(path.join(tmp, "test-world", variant)),
+      ).rejects.toThrow();
+    }
   });
 
   it("writes full lore when the model omits the trailing end delimiter", async () => {
@@ -796,7 +794,7 @@ contractData:
     );
     const characters = JSON.parse(
       await readFile(
-        path.join(tmp, "test-world", "characters/main-cast.json"),
+        path.join(tmp, "test-world", "characters/characters.json"),
         "utf8",
       ),
     ) as unknown[];

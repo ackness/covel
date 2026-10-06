@@ -56,6 +56,7 @@ import {
 } from "./message-insertion.js";
 import {
   instructionLocaleFor,
+  modelFacingJson,
   PROMPT_CACHE_BREAKPOINT_MARKER,
 } from "@covel/shared";
 import type { InputSlot, InputSource } from "@covel/shared";
@@ -165,7 +166,8 @@ function buildRuntimeActivationBlock(params: ContextBuildParams): string {
 /**
  * Slots as the model sees them: the producing plugin and runtime stay as
  * provenance, but the result id, a UUID only tools and the kernel use (they
- * read it from `ctx.inputSlots`), is left out of the prompt.
+ * read it from `ctx.inputSlots`), is left out of the prompt, and so is the
+ * bookkeeping inside each value (`modelFacingJson`).
  */
 function modelFacingSlots(
   slots: Readonly<Record<string, InputSlot>>,
@@ -178,11 +180,16 @@ function modelFacingSlots(
     Object.entries(slots).map(([name, slot]) => [
       name,
       slot.cardinality === "one"
-        ? { ...slot, source: source(slot.source) }
+        ? {
+            ...slot,
+            value: modelFacingJson(slot.value),
+            source: source(slot.source),
+          }
         : {
             ...slot,
             items: slot.items.map((item) => ({
               ...item,
+              value: modelFacingJson(item.value),
               source: source(item.source),
             })),
           },

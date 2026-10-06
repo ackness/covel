@@ -3,6 +3,7 @@ export {
   turnDigestSchema,
 } from "./schemas/execution-snapshots.js";
 export * from "./extension-points/index.js";
+export { modelFacingJson } from "@covel/plugin-handlers-utils";
 export type {
   CharacterSchema,
   CharacterSchemaRecord,
