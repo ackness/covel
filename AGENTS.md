@@ -81,6 +81,7 @@ Toolchain versions come from `mise.toml` (Node 26, pnpm 12.6.0, actionlint).
 pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)
 pnpm dev              # web (5173) + server (3001), SqliteStore (./data/covel.db)
                       # server watches plugins/**/*.{md,js,json,yaml}; editing a PLUGIN.md, handler or locale file restarts it
+                      # at every start the server builds @covel/plugin-handlers-utils when its build is older than its source
 pnpm dev:web          # web only
 pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
@@ -233,7 +234,10 @@ relative imports**. Workspace packages export TS source directly
 (`"import": "./src/index.ts"`) with no build step for dev. The one exception is
 `@covel/plugin-handlers-utils`, which is consumed from `dist/` because it is built
 as the standalone author SDK: `pnpm install` and Turbo's `^build` edge rebuild it,
-but after editing its source a direct `pnpm --filter <pkg> test` needs
+and so does the dev server at every start of its process when the build is older
+than the source (`scripts/ensure-plugin-sdk.mjs`, preloaded by the server's `dev`
+scripts; a change to the SDK source restarts the server). After editing its
+source a direct `pnpm --filter <pkg> test` still needs
 `pnpm --filter @covel/plugin-handlers-utils build` first. It is not on npm, so
 nothing outside this workspace can depend on it by version — a standalone plugin
 ships self-contained and bundles the helpers it uses.

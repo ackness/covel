@@ -1,6 +1,6 @@
 # 包边界：谁需要知道哪个库
 
-Covel 是模块化单体，`packages/` 大多是工作区内部边界，并非每个包都要独立发布。判断一个库为何存在，要看它拥有的责任和实际调用者。唯一面向独立插件作者打包的库是 `@covel/plugin-handlers-utils`；它产出 `dist` 和声明文件，其余库主要由应用与框架在工作区内组合。
+Covel 是模块化单体，`packages/` 大多是工作区内部边界，并非每个包都要独立发布。判断一个库为何存在，要看它拥有的责任和实际调用者。唯一面向独立插件作者打包的库是 `@covel/plugin-handlers-utils`；它产出 `dist` 和声明文件，其余库主要由应用与框架在工作区内组合。工作区内也从这份 `dist` 读取它，所以构建产物比源码旧时（拉取新提交后没有重新 `pnpm install`），导入新名字的插件会加载失败；开发服务端每次启动进程时会检查并重新构建（`scripts/ensure-plugin-sdk.mjs`），单独运行某个包的测试前仍需手动执行 `pnpm --filter @covel/plugin-handlers-utils build`。
 
 ## 三条使用路径
 
