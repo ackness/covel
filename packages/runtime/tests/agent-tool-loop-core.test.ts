@@ -677,6 +677,36 @@ describe("runAgentToolLoop core", () => {
     expect(result.finalContent).toBe("walks ahead\n\nturns back");
   });
 
+  it("steering: an interjection keeps the player's own message under the budget's protection", async () => {
+    // Both are user messages of the current turn. A budget that protected
+    // only the last one dropped the player's message to make room and sent
+    // the interjection without what it answers. A call that cannot hold both
+    // fails instead.
+    const queue = ["等等，回头"];
+    const llm = new ScriptedLLM([prose("must not be reached")]);
+    await expect(
+      run({
+        llm,
+        manifest: manifest({
+          name: "plug/story",
+          outputKind: "story",
+          tools: {},
+        }),
+        deps: {
+          toolExecutor: undefined,
+          turnControl: { drainSteering: () => queue.splice(0) },
+        },
+        estimator: (text) => text.length,
+        contextBudget: { maxInputTokens: 600, reservedForResponse: 100 },
+        messages: [
+          { role: "system", content: "sys" },
+          { role: "user", content: `走进森林。${"x".repeat(600)}` },
+        ],
+      }),
+    ).rejects.toThrow(/Context budget exceeded before LLM call/);
+    expect(llm.calls).toBe(0);
+  });
+
   it("steering: plugin runtimes never see interjections", async () => {
     const drain = vi.fn(() => ["should not appear"]);
     const seenMessages: { role: string; content: unknown }[][] = [];
