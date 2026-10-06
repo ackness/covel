@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   cp,
   mkdir,
@@ -17,8 +17,27 @@ import { runRuntimeCases } from "./runner.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 
+// Runs `node` with the arguments and resolves when the child ends. It sets no
+// time limit of its own: the test's limit is the only one, and `signal` stops
+// the child when the test reaches it.
+function runNode(
+  args: string[],
+  options: { signal: AbortSignal; cwd?: string; env?: NodeJS.ProcessEnv },
+) {
+  return new Promise<{ status: number; stdout: string; stderr: string }>(
+    (resolve, reject) => {
+      execFile(process.execPath, args, options, (error, stdout, stderr) => {
+        if (!error) resolve({ status: 0, stdout, stderr });
+        else if (typeof error.code === "number")
+          resolve({ status: error.code, stdout, stderr });
+        else reject(error);
+      });
+    },
+  );
+}
+
 describe("plugin scaffolding", () => {
-  it.each([
+  it.for([
     { mode: "default", args: [], directory: "home/plugins" },
     {
       mode: "custom",
@@ -33,7 +52,7 @@ describe("plugin scaffolding", () => {
     },
   ])(
     "runs the generated $mode plugin cases",
-    async ({ mode, args, directory }) => {
+    async ({ mode, args, directory }, { signal }) => {
       const root = await mkdtemp(path.join(os.tmpdir(), "covel-scaffold-"));
       try {
         await mkdir(path.join(root, "scripts"));
@@ -47,10 +66,10 @@ describe("plugin scaffolding", () => {
           { recursive: true },
         );
         const pluginId = `fixture-${mode}`;
-        execFileSync(
-          process.execPath,
+        const created = await runNode(
           ["scripts/create-plugin.js", pluginId, ...args],
           {
+            signal,
             cwd: root,
             env: {
               ...process.env,
@@ -58,10 +77,9 @@ describe("plugin scaffolding", () => {
               COVEL_USER_PLUGINS_DIR:
                 mode === "custom" ? path.join(root, directory) : "",
             },
-            timeout: 10_000,
-            stdio: "pipe",
           },
         );
+        expect(created.status, created.stderr).toBe(0);
         const pluginRoot = path.join(root, directory, pluginId);
         // A new plugin starts on the current contract: manifests and prompts
         // in English, translated labels in locales/.
@@ -105,12 +123,8 @@ describe("plugin scaffolding", () => {
             "packages/test-runtime/node_modules/typescript/bin/tsc",
           );
           const check = () =>
-            spawnSync(
-              process.execPath,
-              [compiler, "--noEmit", "-p", pluginRoot],
-              { encoding: "utf8", timeout: 10000 },
-            );
-          const checked = check();
+            runNode([compiler, "--noEmit", "-p", pluginRoot], { signal });
+          const checked = await check();
           expect(checked.status, checked.stdout + checked.stderr).toBe(0);
           const handlerPath = path.join(pluginRoot, "tools/record-note.js");
           const handlerSource = await readFile(handlerPath, "utf8");
@@ -120,7 +134,7 @@ describe("plugin scaffolding", () => {
           );
           expect(invalidSource).not.toBe(handlerSource);
           await writeFile(handlerPath, invalidSource, "utf8");
-          const rejected = check();
+          const rejected = await check();
           expect(rejected.status).not.toBe(0);
           expect(rejected.stdout).toContain("missingTitle");
           await writeFile(handlerPath, handlerSource, "utf8");

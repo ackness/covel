@@ -142,6 +142,7 @@
       "cache": true,
       "inputs": [
         "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.base.ts",
         "$TURBO_ROOT$/scripts/create-plugin.js",
         "$TURBO_ROOT$/templates/**"
       ]
