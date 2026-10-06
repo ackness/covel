@@ -24,6 +24,7 @@ import {
   instructionLocaleFor,
   localeDisplayName,
   localeRegistry,
+  modelFacingJson,
   resolveI18nText,
   isHiddenPluginDataNamespace,
 } from "@covel/shared";
@@ -331,7 +332,9 @@ function formatEntry(
   if (format === "ids-only") {
     return `- ${entry.key}`;
   }
-  const json = safeStringify(entry.value);
+  // The row's own times and the IDs of rows, turns and the session are not
+  // for the model; `updatedAt` also changed the line at every rewrite.
+  const json = safeStringify(modelFacingJson(entry.value));
   if (format === "full") {
     return `- ${entry.key}: ${json}`;
   }
@@ -340,7 +343,7 @@ function formatEntry(
     json.length > SUMMARY_VALUE_CAP
       ? `${json.slice(0, SUMMARY_VALUE_CAP)}...`
       : json;
-  return `- ${entry.key} | ${entry.updatedAt} | ${compact}`;
+  return `- ${entry.key} | ${compact}`;
 }
 
 function safeStringify(value: unknown): string {

@@ -9,6 +9,7 @@ import {
   WORLD_LOCALIZED_TEXT_KEY,
   WORLD_PACKAGE_INFO_KEY,
   localizedWorldText,
+  modelFacingJson,
   resolveI18nDeep,
   resolveI18nText,
 } from "@covel/shared";
@@ -79,13 +80,13 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
     dimensionProviderPluginId: input.dimensionProviderPluginId,
     // Localize i18n leaves in the schema too (e.g. attribute `name` /
     // `description` records) so prompt-injected `<world-schema>` shows one
-    // language, mirroring how dimensions are resolved above.
+    // language, mirroring how dimensions are resolved above. The record's
+    // session ID and times are not part of what a prompt shows.
     schema:
       input.schemaMap !== undefined
-        ? (resolveI18nDeep(input.schemaMap, input.locale) as Record<
-            string,
-            unknown
-          >)
+        ? (modelFacingJson(
+            resolveI18nDeep(input.schemaMap, input.locale),
+          ) as Record<string, unknown>)
         : undefined,
     entries: entriesArray,
     extra,

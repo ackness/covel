@@ -21,6 +21,7 @@ import {
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
+import { modelFacingJson } from "@covel/shared";
 import type { ApprovalStatus, InputSlot, Proposal } from "@covel/shared";
 import { createToolExecutionContext } from "./tool-execution-context.js";
 import {
@@ -457,13 +458,15 @@ export function createToolExecutor(
         // (instead of JSON-stringifying the whole object). This keeps LLM
         // prompts human-readable while framework tracing still gets the full
         // structured object via `parsedResult`. Falls back to JSON.stringify
-        // for tools that don't opt in.
+        // for tools that don't opt in, without the bookkeeping a record carries
+        // (`updatedAt` of a plugin-data row, the time of a recalled message): a
+        // tool that hands the model an opaque handle writes it in `_text`.
         const resultStr =
           parsedResult &&
           typeof parsedResult === "object" &&
           typeof (parsedResult as { _text?: unknown })._text === "string"
             ? (parsedResult as { _text: string })._text
-            : JSON.stringify(parsedResult);
+            : JSON.stringify(modelFacingJson(parsedResult));
 
         const durationMs = Date.now() - startTime;
         await recordCall(

@@ -22,7 +22,7 @@ contributes:
 框架已经把当前 session 的全部条目自动注入到下方的 `<existing-entries>` 块里（由 `input.inject: plugin-data` 提供），**不需要**再调用任何 list 工具来获取。每行格式为：
 
 ```
-- <entryId> | <updatedAt> | <value-summary>
+- <entryId> | <value-summary>
 ```
 
 `<value-summary>` 里有条目标题。补充已有条目时照抄它的标题即可，不需要 entryId：工具按标题（不区分大小写）匹配已有条目，匹配到就追加内容，否则新建。
