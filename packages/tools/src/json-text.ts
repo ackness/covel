@@ -1,6 +1,6 @@
 /**
  * Parsing of JSON a model wrote: the arguments of a tool call, and an array
- * or object it sent as text inside one. Three slips come back in run after
+ * or object it sent as text inside one. A few slips come back in run after
  * run and have one meaning each, so they are settled here instead of costing
  * another model call. Anything else fails with the parser's own reason.
  */
@@ -167,13 +167,125 @@ function closeOpenElements(text: string): string | undefined {
 }
 
 /**
- * Parse JSON text written by a model. Accepts valid JSON as it is. Otherwise
- * it settles three slips and parses again: closing brackets after a complete
- * value, quote marks that stand inside a string value, and an array element
- * left open where the next one starts. Throws the original parse error when
- * the text is broken in any other way; no other bracket is guessed at.
+ * Settle a closing bracket that does not match the bracket that is open.
+ * Returns undefined when the text has none.
+ *
+ * `[{"id":"a"},{"id":"b"}}]`: a `}` where no object is open. Left out, the
+ * text is complete. At the very end of the text the wrong bracket stands
+ * where the right one belongs (`[{"id":"a"},{"id":"b"}}`), and the right one
+ * takes its place. In both cases no value changes, and nothing is added that
+ * the text does not have.
+ *
+ * With `closeAtEnd`, the brackets still open at the end of the text are
+ * closed as well (`[{"id":"a"},{"id":"b"}`). That is only safe for text the
+ * model ended itself: see `parseJsonText`.
+ *
+ * The caller accepts the result only when it parses as it is. A text that
+ * lacks a bracket elsewhere, or has the wrong one in the middle, stays an
+ * error.
  */
-export function parseJsonText(text: string): unknown {
+function withMatchingClosers(
+  text: string,
+  closeAtEnd: boolean,
+): string | undefined {
+  const open: ("{" | "[")[] = [];
+  let out = "";
+  let changed = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]!;
+    if (char === '"') {
+      let end = i + 1;
+      for (; end < text.length && text[end] !== '"'; end += 1)
+        if (text[end] === "\\") end += 1;
+      out += text.slice(i, end + 1);
+      i = end;
+      continue;
+    }
+    if (char === "{" || char === "[") open.push(char);
+    else if (char === "}" || char === "]") {
+      const top = open.at(-1);
+      const matching = top === "{" ? "}" : top === "[" ? "]" : undefined;
+      if (matching !== undefined && char !== matching) {
+        changed = true;
+        if (text.slice(i + 1).trim() === "") {
+          out += matching;
+          open.pop();
+        }
+        continue;
+      }
+      open.pop();
+    }
+    out += char;
+  }
+  if (closeAtEnd && open.length > 0) {
+    changed = true;
+    out =
+      out.trimEnd() +
+      open
+        .reverse()
+        .map((bracket) => (bracket === "{" ? "}" : "]"))
+        .join("");
+  }
+  return changed ? out : undefined;
+}
+
+/**
+ * Write the opening of an object once where the model wrote it twice.
+ * Returns undefined when the text has no such place.
+ *
+ * `[{"id":"a"},{"{"id":"b"}]`: the second element starts with `{"{"`. No
+ * JSON has `{"{"` before a key name, and the text has the brackets of one
+ * object there, so the second `{"` is a repetition. The caller accepts the
+ * result only when it parses as it is.
+ */
+function withoutRepeatedOpening(text: string): string | undefined {
+  let out = "";
+  let changed = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]!;
+    if (
+      char === "{" &&
+      text.startsWith('"{"', i + 1) &&
+      /[\p{L}_]/u.test(text[i + 4] ?? "")
+    ) {
+      // Keep `{`, drop `"{`: the next quote opens the key.
+      out += char;
+      i += 2;
+      changed = true;
+      continue;
+    }
+    if (char === '"') {
+      let end = i + 1;
+      for (; end < text.length && text[end] !== '"'; end += 1)
+        if (text[end] === "\\") end += 1;
+      out += text.slice(i, end + 1);
+      i = end;
+      continue;
+    }
+    out += char;
+  }
+  return changed ? out : undefined;
+}
+
+/**
+ * Parse JSON text written by a model. Accepts valid JSON as it is. Otherwise
+ * it settles these slips and parses again: closing brackets after a complete
+ * value, quote marks that stand inside a string value, an array element left
+ * open where the next one starts, a closing bracket that does not match the
+ * one that is open, and the opening of an object written twice. Each of the
+ * last three is tried alone: together they would read a text with a missing
+ * key as two elements. Throws the original parse error when the text is
+ * broken in any other way; no other bracket is guessed at.
+ *
+ * `complete` says that the model ended the text itself: it is a string value
+ * inside arguments that parsed. Brackets that are still open at its end are
+ * then closed. The whole argument string never gets them: it can be output
+ * that was cut off, and a value that was cut off must fail.
+ */
+export function parseJsonText(
+  text: string,
+  options?: { readonly complete?: boolean },
+): unknown {
   try {
     return JSON.parse(text);
   } catch (error) {
@@ -181,12 +293,17 @@ export function parseJsonText(text: string): unknown {
       if (candidate === undefined) continue;
       const value = withoutExtraClosers(candidate);
       if (value !== NOT_PARSED) return value;
-      const closed = closeOpenElements(candidate);
-      if (closed === undefined) continue;
-      try {
-        return JSON.parse(closed);
-      } catch {
-        // The brackets do not add up for this reading: not this slip.
+      for (const settled of [
+        closeOpenElements(candidate),
+        withMatchingClosers(candidate, options?.complete === true),
+        withoutRepeatedOpening(candidate),
+      ]) {
+        if (settled === undefined) continue;
+        try {
+          return JSON.parse(settled);
+        } catch {
+          // The brackets do not add up for this reading: not this slip.
+        }
       }
     }
     throw error;

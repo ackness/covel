@@ -98,21 +98,26 @@ describe("tool()", () => {
       execute: async (params) => params,
     });
     const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
-    // The model closed the arguments object inside the text of the array.
+    // The model closed the arguments object inside the text of the array,
+    // closed an element once too often, or ended the text before the last
+    // brackets.
     for (const text of [
       '[{"name":"Mira"}]}',
       '[{"name":"Mira"}]}\n',
       '[{"name":"Mira"}]}]',
+      '[{"name":"Mira"}}]',
+      '[{"name":"Mira"}',
+      '[{"name":"Mira"',
     ])
       expect(await mod.execute({ changes: text }, ctx), text).toEqual({
         changes: [{ name: "Mira" }],
       });
-    // Brackets are all it drops: other text after the value is an error, and
-    // so is a bracket that is missing or misplaced inside the value.
+    // Brackets are all it settles: other text after the value is an error,
+    // and so is a value that is not finished.
     for (const text of [
       '[{"name":"Mira"}] and more',
-      '[{"name":"Mira"}}]',
-      '[{"name":"Mira"',
+      '[{"name":"Mira",',
+      '[{"name":"Mi',
     ])
       await expect(
         mod.execute({ changes: text }, ctx),
@@ -148,17 +153,17 @@ describe("tool()", () => {
       execute: async (params) => params,
     });
     const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
-    // One closing brace too many: the text a model sends again and again
-    // when it is told only "expected array, received string".
+    // A colon is missing. Told only "expected array, received string", a
+    // model sends the same broken text again and again.
     const broken = await mod
-      .execute({ changes: '[{"name":"Mira"}}]' }, ctx)
+      .execute({ changes: '[{"name" "Mira"}]' }, ctx)
       .catch((error: unknown) => error);
     expect(broken).toMatchObject({
       details: [
         {
           path: "changes",
           message: expect.stringMatching(
-            /^Expected an array, but received text that is not valid JSON: .*position 16.* near `\[\{"name":"Mira"\}\}\]`\. Send the array itself as the value, not a string that contains it\.$/,
+            /^Expected an array, but received text that is not valid JSON: .*position 9.* near `\[\{"name" "Mira"\}\]`\. Send the array itself as the value, not a string that contains it\.$/,
           ),
         },
       ],

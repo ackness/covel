@@ -102,7 +102,8 @@ function withParsedJsonText(
     if (!/^\s*[[{]/.test(text)) continue;
     const path = issue.path.join(".");
     try {
-      const parsed: unknown = parseJsonText(text);
+      // The arguments around this text parsed, so the model ended it itself.
+      const parsed: unknown = parseJsonText(text, { complete: true });
       if (isStructure(parsed, issue.expected)) record[key] = parsed;
       else problems.set(path, jsonTextProblem(text, issue.expected));
     } catch (error) {
