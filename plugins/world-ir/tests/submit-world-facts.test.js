@@ -160,6 +160,145 @@ describe("submit-world-facts", () => {
     expect(result.statements[0].subjectIds).toEqual(["char-0b9d-ren"]);
   });
 
+  it("reads a handle whose hyphens are elsewhere, and a name, as that character", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      entities: [{ id: "sister", type: "concept", name: "The Sisterhood" }],
+      events: [
+        {
+          id: "takes-lamp",
+          type: "interaction",
+          // Handles: `sister-wren`, `mira-vale`. `Sister Wren` is the name,
+          // `sisterwren` and `mira_vale` move the hyphen.
+          participantIds: ["Sister Wren", "sisterwren", "mira_vale", "sister"],
+        },
+      ],
+    });
+    const result = await submitWorldFacts.execute(facts, {
+      world: {
+        characters: [
+          { id: "c-1", name: "Sister Wren", type: "companion" },
+          { id: "c-2", name: "Mira Vale", type: "npc" },
+        ],
+      },
+    });
+    // An id that an entity of the output has stays that entity.
+    expect(result.events[0].participantIds).toEqual([
+      "c-1",
+      "c-1",
+      "c-2",
+      "sister",
+    ]);
+  });
+
+  it("does not guess between two characters with the same letters", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      entities: [],
+      events: [{ id: "meet", type: "interaction", participantIds: ["annlee"] }],
+    });
+    await expect(
+      submitWorldFacts.execute(facts, {
+        world: {
+          characters: [
+            { id: "c-1", name: "Ann Lee", type: "npc" },
+            { id: "c-2", name: "Annlee", type: "npc" },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ events: [{ participantIds: ["c-2"] }] });
+    await expect(
+      submitWorldFacts.execute(
+        {
+          ...facts,
+          events: [{ ...facts.events[0], participantIds: ["ann.lee"] }],
+        },
+        {
+          world: {
+            characters: [
+              { id: "c-1", name: "Ann Lee", type: "npc" },
+              { id: "c-2", name: "Annlee", type: "npc" },
+            ],
+          },
+        },
+      ),
+    ).rejects.toThrow('entity reference "ann.lee" does not exist in entities');
+  });
+
+  it("gives an id to a relation, event, or statement that has none", async () => {
+    const written = {
+      ...VALID_FACTS,
+      relations: [{ type: "TRUSTS", from: "player-ren", to: "player-ren" }],
+      events: [
+        { type: "interaction", participantIds: ["player-ren"] },
+        { id: "named", type: "interaction", participantIds: ["player-ren"] },
+        { type: "interaction", participantIds: ["player-ren"] },
+      ],
+      statements: [{ type: "rule", content: "The lamp must not go out." }],
+    };
+    const facts = submitWorldFacts.parameters.parse(written);
+    expect(facts.events.map((event) => event.id)).toEqual([
+      expect.stringMatching(/^event-[0-9a-f]{8}$/),
+      "named",
+      // The same content twice: the ids still differ.
+      expect.stringMatching(/^event-[0-9a-f]{8}-2$/),
+    ]);
+    expect(facts.relations[0].id).toMatch(/^relation-[0-9a-f]{8}$/);
+    // The id comes from the content, so it is the same in the next turn only
+    // for the same statement.
+    expect(facts.statements[0].id).toBe(
+      submitWorldFacts.parameters.parse(written).statements[0].id,
+    );
+    expect(facts.statements[0].id).not.toBe(
+      submitWorldFacts.parameters.parse({
+        ...written,
+        statements: [{ type: "rule", content: "The door stays shut." }],
+      }).statements[0].id,
+    );
+    // An entity is what the other facts refer to: its id is not made up.
+    expect(
+      submitWorldFacts.parameters.safeParse({
+        ...VALID_FACTS,
+        entities: [{ type: "item", name: "Brass Key" }],
+        events: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("leaves out a statement subject that names a fact of the output", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      statements: [
+        {
+          id: "key-origin",
+          type: "discovery",
+          content: "The key came from the lamp room.",
+          subjectIds: ["found-key", "brass-key"],
+        },
+        {
+          id: "about-nothing",
+          type: "discovery",
+          content: "The door was open.",
+          subjectIds: ["key-origin"],
+        },
+      ],
+    });
+    const result = await submitWorldFacts.execute(facts);
+    expect(result.statements.map((statement) => statement.subjectIds)).toEqual([
+      ["brass-key"],
+      [],
+    ]);
+    // A subject that names nothing in the output is still an error.
+    await expect(
+      submitWorldFacts.execute({
+        ...facts,
+        statements: [{ ...facts.statements[0], subjectIds: ["lamp-room"] }],
+      }),
+    ).rejects.toThrow(
+      'entity reference "lamp-room" does not exist in entities',
+    );
+  });
+
   it("keeps a character the model declared under its handle", async () => {
     const facts = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,

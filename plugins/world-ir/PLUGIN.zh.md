@@ -34,7 +34,7 @@
 - `event.type` 优先使用 `interaction`、`state_change`、`inventory_change`、`quest_change`、`movement`
 - `statement.type` 优先使用 `discovery`、`quest`、`lore`、`rule`、`rumor`
 - 插件可能需要的细节放进 `attributes`，使用中立的事实字段，例如 `status`、`operation`、`quantity`、`giver`、`reward`、`objectives`、`strength`
-- id 用 1-3 个小写单词加连字符，不加类型或会话前缀，例如 `field-radio`、`june-answers`；在本输出内唯一，同一实体只建一次，所有引用复用同一个 id。`characters` 中的角色直接用其给出的 `id`
+- id 用 1-3 个小写单词加连字符，不加类型或会话前缀，例如 `brass-key`、`tailor-agrees`；在本输出内唯一，同一实体只建一次，所有引用复用同一个 id。`characters` 中的角色直接用其给出的 `id`
 
 ## 固定字段的事件
 
