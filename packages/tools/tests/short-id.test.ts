@@ -47,4 +47,16 @@ describe("entity ID allocation", () => {
       "char-lin-3",
     );
   });
+
+  it("gives a label without ASCII words the same ID in every session", async () => {
+    const { wordId } = await import("../src/short-id.js");
+    const first = wordId("npc", "雷恩修女", new Set());
+    vi.resetModules();
+    const restarted = await import("../src/short-id.js");
+    expect(restarted.wordId("npc", " 雷恩修女 ", new Set())).toBe(first);
+    expect(restarted.wordId("npc", "村长", new Set())).not.toBe(first);
+    expect(restarted.wordId("npc", "雷恩修女", new Set([first]))).toBe(
+      `${first}-2`,
+    );
+  });
 });

@@ -1,4 +1,3 @@
-import { randomInt } from "node:crypto";
 import { pickLocaleText, translate } from "../../lib/rules.js";
 
 export default async function (ctx) {
@@ -48,7 +47,7 @@ export default async function (ctx) {
       const modifier = player.fields?.[attribute];
       if (!Number.isSafeInteger(modifier))
         throw new Error("The selected attribute is not numeric");
-      const die = randomInt(1, 21);
+      const die = ctx.random.int(1, 21);
       const outcome =
         die === 20
           ? "critical-success"

@@ -370,6 +370,7 @@ export type {
   PluginTurnMessage,
   PluginDataWriter,
   PluginLogger,
+  PluginRandom,
   JobStatusState,
   ProgressEffect,
   ProgressReporter,

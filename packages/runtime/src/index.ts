@@ -277,6 +277,10 @@ export type {
   HandlerHelperContext,
   TrustedHandlerStore,
 } from "./function-runtime/plugin-handler-helpers.js";
+export {
+  createPluginRandom,
+  restartSessionRandom,
+} from "./function-runtime/plugin-random.js";
 
 export { resolveRequestContextBudget } from "./agent-loop/request-context-budget.js";
 export type {

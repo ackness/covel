@@ -46,6 +46,7 @@ import {
 import { withGatewayTrace } from "./gateway-trace.js";
 import { withUtilsTrace } from "./utils-trace.js";
 import { createRuntimeTools } from "./runtime-tools.js";
+import { createPluginRandom } from "./plugin-random.js";
 import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import {
@@ -503,6 +504,7 @@ export async function executeFunctionRuntime({
       ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
       ...(revocable.logger ? { logger: revocable.logger } : {}),
       ...(revocable.progress ? { progress: revocable.progress } : {}),
+      random: createPluginRandom({ ...helperCtx, stream: manifest.name }),
       signal: handlerAbort.signal,
     });
     const handlerWork = handlerPromise.then(async (result) => {

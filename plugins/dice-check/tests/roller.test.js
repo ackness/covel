@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeRandom } from "@covel/plugin-test-utils";
 import handler from "../runtimes/roller/handler.js";
 import { poolOf } from "../lib/turn-pool.js";
 
@@ -9,11 +10,32 @@ function makeCtx(overrides = {}) {
     sessionId: "sess-1",
     turnId: "turn-1",
     playerMessage: "",
+    random: makeRandom(),
     ...overrides,
   };
 }
 
 describe("dice-check roller handler", () => {
+  it("takes its dice from the host's ctx.random", async () => {
+    const drawn = [17, 2, 20];
+    const ranges = [];
+    const random = {
+      int(min, max) {
+        ranges.push([min, max]);
+        return drawn[ranges.length - 1];
+      },
+    };
+
+    const result = await handler(makeCtx({ random }));
+
+    expect(result.value.dice).toEqual([17, 2, 20]);
+    expect(ranges).toEqual([
+      [1, 21],
+      [1, 21],
+      [1, 21],
+    ]);
+  });
+
   it("rolls exactly three d20 values within 1..20", async () => {
     // Arrange — repeat to exercise the RNG bounds, not just one lucky draw
     const rolls = [];

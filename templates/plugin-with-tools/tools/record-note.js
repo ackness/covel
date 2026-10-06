@@ -26,7 +26,12 @@ export default function ({ tool, z, shortId, withPendingProposals }) {
         .describe("Category tags"),
     }),
     execute: async (params, context) => {
-      const key = shortId("note", params.title, context.sessionId);
+      const key = shortId(
+        "note",
+        params.title,
+        context.sessionId,
+        context.random,
+      );
       const now = new Date().toISOString();
       const note = {
         kind: "note",

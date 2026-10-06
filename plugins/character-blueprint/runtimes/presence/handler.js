@@ -21,7 +21,7 @@ export default async function handler(ctx) {
     payload = await replacementPayload(ctx, payload);
   const presence = normalizePresence(
     readManualEntity(payload, "presence", (form) =>
-      presenceFromForm(form, ctx.sessionId),
+      presenceFromForm(form, ctx),
     ),
   );
   const now = new Date().toISOString();
@@ -53,9 +53,9 @@ export default async function handler(ctx) {
 
 /**
  * @param {Record<string, unknown>} form
- * @param {string} sessionId
+ * @param {{ sessionId: string, random?: import("@covel/plugin-handlers-utils").PluginRandom }} ctx
  */
-function presenceFromForm(form, sessionId) {
+function presenceFromForm(form, ctx) {
   const displayName = optionalString(form.displayName);
   const presence = {
     schemaVersion: 1,
@@ -64,7 +64,8 @@ function presenceFromForm(form, sessionId) {
       shortId(
         "npc",
         displayName ?? optionalString(form.style) ?? "presence",
-        sessionId,
+        ctx.sessionId,
+        ctx.random,
       ),
     ...(displayName ? { displayName } : {}),
     ...(optionalString(form.style)

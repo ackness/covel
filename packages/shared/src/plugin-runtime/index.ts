@@ -47,6 +47,7 @@ export type {
   PluginTurnMessage,
   PluginDataWriter,
   PluginLogger,
+  PluginRandom,
   ProgressEffect,
   ProgressReporter,
   FunctionHandler,

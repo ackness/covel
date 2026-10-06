@@ -110,6 +110,8 @@ export interface RpcHandlerContext {
   readonly environment?: RpcCommandEnvironment;
   /** SSE push (no-op for sync mode). */
   readonly emit?: (event: { type: string; data: unknown }) => void;
+  /** Dice and other game rolls; the executor supplies it for every action. */
+  readonly random?: import("@covel/shared/plugin-runtime").PluginRandom;
 }
 
 /**

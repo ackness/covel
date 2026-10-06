@@ -1,4 +1,3 @@
-import { randomInt } from "node:crypto";
 import { translate } from "@covel/plugin-handlers-utils";
 import { parseDiceNotation, rollDice } from "./dice.js";
 
@@ -28,7 +27,7 @@ export default async function roll(payload, ctx) {
     };
   }
 
-  const result = rollDice(parsed, randomInt);
+  const result = rollDice(parsed, ctx.random.int);
   const joined = result.rolls.join(", ");
   const message = translate(ctx, "{notation}: {rolls} (total {total})", {
     notation: result.notation,

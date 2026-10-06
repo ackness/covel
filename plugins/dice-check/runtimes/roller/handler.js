@@ -1,4 +1,3 @@
-import { randomInt } from "node:crypto";
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
 import { DIFFICULTY_DCS, MODIFIER_LIMIT } from "../../lib/check-rules.js";
 import { rememberPool } from "../../lib/turn-pool.js";
@@ -16,9 +15,9 @@ const ROLLS_NAMESPACE = "rolls";
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
-  // randomInt's upper bound is exclusive → 1..20 inclusive.
+  // The upper bound is exclusive → 1..20 inclusive.
   const dice = Array.from({ length: DICE_COUNT }, () =>
-    randomInt(1, D20_SIDES + 1),
+    ctx.random.int(1, D20_SIDES + 1),
   );
   // A settled tabletop form owns the checks of its turn. The narrative then
   // gets no dice table, and the guard has nothing to compare a receipt with.

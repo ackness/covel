@@ -34,6 +34,7 @@ import {
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
+import { createPluginRandom } from "../function-runtime/plugin-random.js";
 import {
   combineAbortSignals,
   getTurnExecutionSignal,
@@ -290,6 +291,10 @@ export async function executeAgentGuard({
       ...(triggerEvent ? { triggerEvent } : {}),
       ...(guardUserSettings ? { userSettings: guardUserSettings } : {}),
       ...(guardLoggerHandle ? { logger: guardLoggerHandle } : {}),
+      random: createPluginRandom({
+        ...guardHelperCtx,
+        stream: manifest.name,
+      }),
       signal: guardSignal,
     });
     const guardWork = guardPromise.then(async (output) => {

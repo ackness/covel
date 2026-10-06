@@ -31,7 +31,11 @@ import {
 } from "@covel/plugin-loader";
 import type { SessionRecord } from "@covel/store";
 import { SessionAlreadyExistsError } from "@covel/store/errors";
-import { runSessionStartHook, runWithHookScope } from "@covel/runtime";
+import {
+  restartSessionRandom,
+  runSessionStartHook,
+  runWithHookScope,
+} from "@covel/runtime";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
 import { loadSessionHookScope } from "./session/hook-scope.js";
@@ -407,6 +411,8 @@ sessionRoutes.post("/", async (c) => {
         return importedWorldData.mediaRefs;
       });
       creationCommitted = true;
+      // A test server may create the same session ID again after deleting it.
+      restartSessionRandom(id);
     } catch (error) {
       // Media materialization intentionally happens before the transaction.
       // The outer finalizer releases this attempt's preparation claims; a
