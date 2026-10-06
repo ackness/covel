@@ -182,7 +182,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/tools/src/builtin/tool-search.ts": 2,
   // Example input for tests and the CLI.
   "packages/plugin-test-utils/src/factories.ts": 1,
-  "packages/test-runtime/src/cli.ts": 1,
+  "packages/test-runtime/src/run-cli.ts": 1,
 };
 
 function frameworkRoots() {
