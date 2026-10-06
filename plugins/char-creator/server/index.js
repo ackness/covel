@@ -13,8 +13,10 @@ const ROSTER_FIELDS_BUDGET = 12000;
  */
 function rosterRows(characters) {
   let used = 0;
-  return characters.map(({ id, name, type, version, description, fields }) => {
-    const row = { id, name, type, version, description };
+  // No record version: the tracker passes none, and it changes with every
+  // update of a character.
+  return characters.map(({ id, name, type, description, fields }) => {
+    const row = { id, name, type, description };
     const size = JSON.stringify(fields ?? {}).length;
     if (used + size > ROSTER_FIELDS_BUDGET)
       return { ...row, fieldsOmitted: true };

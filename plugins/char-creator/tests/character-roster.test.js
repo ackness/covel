@@ -37,6 +37,7 @@ describe("character roster segment", () => {
     );
     expect(rows[0].fields).toEqual({ injury: "left hand eaten by fog" });
     expect(rows[1].fields).toEqual({});
+    expect(rows[0]).not.toHaveProperty("version");
   });
 
   it("marks characters past the budget for an on-demand read", () => {

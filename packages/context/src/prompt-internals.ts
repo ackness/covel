@@ -333,8 +333,11 @@ function formatEntry(
     return `- ${entry.key}`;
   }
   // The row's own times and the IDs of rows, turns and the session are not
-  // for the model; `updatedAt` also changed the line at every rewrite.
-  const json = safeStringify(modelFacingJson(entry.value));
+  // for the model; `updatedAt` also changed the line at every rewrite. A
+  // value that repeats the row key as its `id` says it once, on the line.
+  const json = safeStringify(
+    withoutRowKey(modelFacingJson(entry.value), entry.key),
+  );
   if (format === "full") {
     return `- ${entry.key}: ${json}`;
   }
@@ -344,6 +347,18 @@ function formatEntry(
       ? `${json.slice(0, SUMMARY_VALUE_CAP)}...`
       : json;
   return `- ${entry.key} | ${compact}`;
+}
+
+function withoutRowKey(value: unknown, key: string): unknown {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    (value as { id?: unknown }).id !== key
+  )
+    return value;
+  const { id: _id, ...rest } = value as Record<string, unknown>;
+  return rest;
 }
 
 function safeStringify(value: unknown): string {

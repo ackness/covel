@@ -242,7 +242,12 @@ function buildAuthoritativeFactsSection(facts, lang) {
   if (!facts || Object.keys(facts).length === 0) return "";
 
   try {
-    const serialized = JSON.stringify(modelFacingJson(facts), null, 2);
+    const shown = modelFacingJson(facts);
+    if (shown.playerCharacter) {
+      const { version: _version, ...character } = shown.playerCharacter;
+      shown.playerCharacter = character;
+    }
+    const serialized = JSON.stringify(shown, null, 2);
     if (!serialized || serialized === "{}") return "";
     const bounded = serialized.slice(0, 4_000);
     return lang === "zh"

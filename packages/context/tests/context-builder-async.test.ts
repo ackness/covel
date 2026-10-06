@@ -482,11 +482,24 @@ describe("buildContext — format variants", () => {
       "2025-01-01T00:00:00.000Z",
       "2025-01-02T00:00:00.000Z",
     );
-    for (const format of ["summary", "full"] as const) {
-      const result = await buildWithFormat(format, row);
-      expect(result.turnContext).toContain(
-        '{"id":"edge-knows-about-1","fact":"认识守灯人","validAt":2}',
-      );
-    }
+    // The row key is on the line, so the value does not repeat it as `id`.
+    expect((await buildWithFormat("summary", row)).turnContext).toContain(
+      '- edge-knows-about-1 | {"fact":"认识守灯人","validAt":2}',
+    );
+    expect((await buildWithFormat("full", row)).turnContext).toContain(
+      '- edge-knows-about-1: {"fact":"认识守灯人","validAt":2}',
+    );
+  });
+
+  it("keeps an id that is not the row key", async () => {
+    const row = makeEntry(
+      "turn-7",
+      { id: "npc-lin-yao", note: "见过" },
+      "2025-01-01T00:00:00.000Z",
+      "2025-01-02T00:00:00.000Z",
+    );
+    expect((await buildWithFormat("summary", row)).turnContext).toContain(
+      '- turn-7 | {"id":"npc-lin-yao","note":"见过"}',
+    );
   });
 });
