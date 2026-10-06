@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   cpSync,
   mkdirSync,
@@ -59,27 +59,36 @@ syncBuiltinESMExports();
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  function run(args: string[] = [], failConversion = "") {
+  // Runs the script and resolves when the child ends. The child has no time
+  // limit of its own: the test's limit is the only one, and `signal` stops the
+  // child when the test reaches it.
+  function run(signal: AbortSignal, args: string[] = [], failConversion = "") {
     writeFileSync(
       path.join(root, "fail-at.txt"),
       failConversion || "0",
       "utf8",
     );
-    return spawnSync(
-      process.execPath,
-      ["--import", preloader, script, ...args],
-      {
-        cwd: root,
-        encoding: "utf8",
-        timeout: 10_000,
+    return new Promise<{ status: number; stdout: string; stderr: string }>(
+      (resolve, reject) => {
+        execFile(
+          process.execPath,
+          ["--import", preloader, script, ...args],
+          { cwd: root, signal },
+          (error, stdout, stderr) => {
+            if (!error) resolve({ status: 0, stdout, stderr });
+            else if (typeof error.code === "number")
+              resolve({ status: error.code, stdout, stderr });
+            else reject(error);
+          },
+        );
       },
     );
   }
 
-  it.each([[], ["apps/web/public/media/demo.mp4"]])(
+  it.for<string[]>([[], ["apps/web/public/media/demo.mp4"]])(
     "converts an existing output used as input: %j",
-    (...args) => {
-      const result = run(args);
+    async (args, { signal }) => {
+      const result = await run(signal, args);
       expect(result.status, result.stderr).toBe(0);
       expect(
         readFileSync(path.join(root, ".assets/images/demo.gif"), "utf8"),
@@ -94,8 +103,10 @@ syncBuiltinESMExports();
     },
   );
 
-  it("preserves existing assets if a later conversion fails", () => {
-    expect(run([], "4").status).toBe(1);
+  it("preserves existing assets if a later conversion fails", async ({
+    signal,
+  }) => {
+    expect((await run(signal, [], "4")).status).toBe(1);
     expect(
       readFileSync(path.join(root, ".assets/images/demo.gif"), "utf8"),
     ).toBe("original gif");
@@ -111,8 +122,10 @@ syncBuiltinESMExports();
     ]);
   });
 
-  it("rejects a missing explicit source instead of using a fallback", () => {
-    const result = run(["missing.mp4"]);
+  it("rejects a missing explicit source instead of using a fallback", async ({
+    signal,
+  }) => {
+    const result = await run(signal, ["missing.mp4"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("missing.mp4");
     expect(readFileSync(path.join(mediaDir, "demo.mp4"), "utf8")).toBe(

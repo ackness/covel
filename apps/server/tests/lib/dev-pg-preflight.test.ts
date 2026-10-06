@@ -6,13 +6,17 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
+// The children have no time limit of their own: the test's limit is the only
+// one, and `signal` stops the child when the test reaches it.
 const run = promisify(execFile);
 const script = resolve(
   import.meta.dirname,
   "../../../../scripts/dev-pg-preflight.mjs",
 );
 
-it("loads the root env and probes the configured database rather than port 5432", async () => {
+it("loads the root env and probes the configured database rather than port 5432", async ({
+  signal,
+}) => {
   const dir = await mkdtemp(join(tmpdir(), "covel-pg-preflight-"));
   const server = createServer((socket) => socket.end());
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
@@ -33,7 +37,7 @@ it("loads the root env and probes the configured database rather than port 5432"
         {
           cwd: dir,
           env,
-          timeout: 5000,
+          signal,
         },
       );
       expect(result.stderr).toBe("");
@@ -44,11 +48,13 @@ it("loads the root env and probes the configured database rather than port 5432"
   }
 });
 
-it("rejects an invalid database URL without printing credentials", async () => {
+it("rejects an invalid database URL without printing credentials", async ({
+  signal,
+}) => {
   await expect(
     run(process.execPath, [script], {
       env: { DATABASE_URL: "invalid:synthetic-secret" },
-      timeout: 5000,
+      signal,
     }),
   ).rejects.toMatchObject({
     code: 1,
