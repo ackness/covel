@@ -822,7 +822,12 @@ export async function syncWorldDataForSession(
     upserted++;
   }
 
-  if (dryRun || conflicts.length > 0) {
+  // A row in conflict is left as it is and reported; it does not hold back the
+  // rows that are not. A session that was played always has such rows (its
+  // dimensions evolved, and `force` does not override those), so a sync that
+  // stopped at the first conflict could never bring it what the world package
+  // gained since: new portraits, a new source.
+  if (dryRun) {
     return {
       imported: true,
       dryRun,

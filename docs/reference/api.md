@@ -1049,7 +1049,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 - 声明未变：保留演化值，不重新应用初值。
 - 新维度：用合法初值初始化。
 - 修改/删除：仅未偏离导入基线的记录可直接应用；已演化、手改或有待结算义务时返回冲突，保留 definition/value/version。
-- 有冲突时返回报告且不应用本次同步；事务内再次校验，竞态不覆盖新值。schema 改变不自动迁移当前数据。
+- 有冲突的维度保持原样并列在报告里，其余维度照常应用；事务内再次校验，竞态不覆盖新值。schema 改变不自动迁移当前数据。
 - 只处理维度账本，不清理其他导入领域。成功后公共读取从已提交当前值重新发布。
 
 **请求体:**
@@ -1115,7 +1115,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 同步已有 session 中由 worldData importer 管理的数据。默认 dry-run；传 `dryRun:false` 才写入。同步只处理 `world_data_import_ledger.managed=true` 的 row，并用 `valueHash` 检测玩家或插件是否修改过目标数据。
 
-维度声明也进入同一同步账本，包括 inline、dimensionSources 及存储型世界的有效定义。维度源未变不重置进度；作者变更/移除遇到已演化或手改数据、待结算回执时报告冲突。`force:true` 不解除这些维度保护，不触发结构迁移或强制重置。有冲突时报告计划而不应用本次同步。
+维度声明也进入同一同步账本，包括 inline、dimensionSources 及存储型世界的有效定义。维度源未变不重置进度；作者变更/移除遇到已演化或手改数据、待结算回执时报告冲突。`force:true` 不解除这些维度保护，不触发结构迁移或强制重置。有冲突的 row 保持原样并列在 `conflicts` 里，其余 row 照常同步：`upserted` / `deleted` 是实际写入和删除的数量。玩过的会话总有已演化的维度，所以冲突不拦住别的 row，否则世界包后来新增的资料（例如立绘）永远进不了旧会话。
 
 source 读取、schema 校验与 projection Worker 在 session 写锁外完成；dry-run 全程只读。实际写入取得短锁后会重新校验 world、locale、active plugin 与审批 scope，计划准备期间这些字段发生变化时返回 `409`（`world_data_sync_plan_stale`）。
 

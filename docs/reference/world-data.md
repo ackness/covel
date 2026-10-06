@@ -1000,6 +1000,7 @@ POST /api/worlds/<world-id>/sync-data
 4. planned write 仍存在但目标 row 缺失时返回 `conflicts.reason = "missing"`。
 5. source 已移除且目标 row 也已缺失时，只清理 stale ledger，不报告 conflict。
 6. 普通导入 row 可通过 `force:true` 覆盖 modified/missing 冲突；维度的已演化值及待结算保护不因此解除。
+7. 有冲突的 row 保持原样并在 `conflicts` 里列出，不影响其余 row：没有账本记录的新 row（世界包后来新增的 source、新立绘）照常写入，未被改动的 row 照常更新或删除。
 
 维度同步另有领域约束：作者 definition 的摘要未变时保留当前进度，不重复应用初值；新增维度以初值初始化。修改或删除已演化/手改的维度，或尚有待结算义务时，返回 `modified` 冲突并保留值和 definition。待结算保护按维度 provider 判定，不依赖导入账本：游玩中经 `dimension.initialize` 初始化、没有账本记录的维度同样受保护，声明未变时不算冲突。未改动的导入基线才可采用新声明或删除，schema 改变不自动迁移旧值。同步在事务内重验 hash 与版本，预检通过不授权随后无条件覆盖。有冲突时返回计划及冲突，不应用本次同步。
 
