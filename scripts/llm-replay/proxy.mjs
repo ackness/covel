@@ -131,7 +131,34 @@ const fixtureFiles = () =>
   readdirSync(FIXTURES).filter((name) => name.endsWith(".json"));
 // aimock keeps what it records in memory for the life of the process only:
 // what an earlier process recorded is loaded here, in record mode too.
-mock.addFixtures(loadFixturesFromDir(FIXTURES));
+//
+// A stream in which the upstream sent an error is recorded as an answer with
+// no content and no usage. Replayed as it is, the server would read an empty
+// answer where it had read an error and take another path, so that request is
+// answered with an error again, inside a 200 as the upstream sent it.
+const failedUpstream = ({ response }) =>
+  response?.content === "" &&
+  !response.toolCalls &&
+  !response.blocks &&
+  !response.usage;
+const recorded = loadFixturesFromDir(FIXTURES);
+mock.addFixtures(
+  recorded.map((fixture) =>
+    failedUpstream(fixture)
+      ? {
+          ...fixture,
+          response: {
+            status: 200,
+            error: {
+              type: "server_error",
+              message:
+                "The upstream answered with an error when this was recorded.",
+            },
+          },
+        }
+      : fixture,
+  ),
+);
 if (MODE === "record")
   mock.enableRecording({
     providers: { openai: UPSTREAM },
