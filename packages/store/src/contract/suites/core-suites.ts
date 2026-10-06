@@ -656,6 +656,10 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
           sessionId: "sess-order",
           createdAt: "2025-12-31T00:00:00.000Z",
         }),
+        // Two UTF-16 units that sort before the fullwidth letter, and four
+        // bytes that sort after it.
+        makeCharacter({ id: "🐉", sessionId: "sess-order", createdAt: at }),
+        makeCharacter({ id: "Ａ", sessionId: "sess-order", createdAt: at }),
       ];
       for (const character of cast) await store.upsertCharacter(character);
       const expected = [
@@ -664,6 +668,8 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         "npc-a",
         "npc-b",
         "npc_a",
+        "Ａ",
+        "🐉",
         "char-late",
       ];
       expect(
