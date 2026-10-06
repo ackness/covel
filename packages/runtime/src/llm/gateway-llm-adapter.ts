@@ -1,4 +1,5 @@
 import type { PluginLlmModelTarget } from "./model-resolver.js";
+import { instructionLocaleFor } from "@covel/shared";
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
@@ -293,7 +294,11 @@ export function createGatewayAdapter(
 
       // Convert LLMMessage[] → gateway TextMessage[]
       const messages = toGatewayMessages(
-        withResponseFormatInstruction(params.messages, params.responseFormat),
+        withResponseFormatInstruction(
+          params.messages,
+          params.responseFormat,
+          params.locale,
+        ),
       );
 
       const result = await gateway.generateText(
@@ -368,7 +373,11 @@ export function createGatewayAdapter(
       }
 
       const messages = toGatewayMessages(
-        withResponseFormatInstruction(params.messages, params.responseFormat),
+        withResponseFormatInstruction(
+          params.messages,
+          params.responseFormat,
+          params.locale,
+        ),
       );
       const tools = params.tools?.map(toGatewayTool);
 
@@ -487,16 +496,20 @@ export function resolveGatewayModelSelection(
  * compatible endpoints only support JSON mode rather than native strict
  * schemas; the provider wire hint guarantees JSON while this instruction
  * supplies the exact allowed fields that the runtime validates afterward.
+ * It is appended to the system prompt, so it is in the instruction language
+ * of the session locale.
  */
 function withResponseFormatInstruction(
   messages: readonly LLMMessage[],
   responseFormat: LLMResponseFormat | undefined,
+  locale: string | undefined,
 ): readonly LLMMessage[] {
   if (!responseFormat) return messages;
-  const instruction =
-    "Return only JSON that conforms exactly to the following JSON Schema. " +
-    "Do not add properties that the schema does not allow.\n" +
-    `<response-format>${JSON.stringify(responseFormat.schema)}</response-format>`;
+  const rule =
+    instructionLocaleFor(locale) === "zh"
+      ? "只返回完全符合下面这份 JSON Schema 的 JSON。不要添加 schema 不允许的属性。"
+      : "Return only JSON that conforms exactly to the following JSON Schema. Do not add properties that the schema does not allow.";
+  const instruction = `${rule}\n<response-format>${JSON.stringify(responseFormat.schema)}</response-format>`;
   const systemIndex = messages.findIndex(
     (message) => message.role === "system",
   );

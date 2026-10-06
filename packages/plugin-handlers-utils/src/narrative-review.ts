@@ -94,9 +94,25 @@ export function outsideDialogue(text: string): string {
   return openStart >= 0 ? result + text.slice(openStart) : result;
 }
 
+const personNames = { first: "一", second: "二", third: "三" } as const;
+
+/**
+ * Whether the request reads the Chinese prompt body. Every text this review
+ * adds to the request is in the language of that body.
+ */
+function readsChinese(messages: readonly ReviewMessage[]): boolean {
+  return messages.some(
+    (m) =>
+      m.role === "system" &&
+      typeof m.content === "string" &&
+      /输出要求|叙事规则/.test(m.content),
+  );
+}
+
 export function perspectiveError(
   text: string,
   person: Person,
+  language: "zh" | "en" = "en",
 ): string | undefined {
   const narration = outsideDialogue(text).replace(
     /自我|忘我|无我|你来我往|尔虞我诈|迷你/g,
@@ -111,7 +127,10 @@ export function perspectiveError(
   const match = narration.match(forbidden);
   if (!match) return undefined;
   const start = Math.max(0, (match.index ?? 0) - 18);
-  return `Narration violates ${person}-person perspective near: ${narration.slice(start, start + 65)}. Fix narration only; keep quoted speakers' pronouns.`;
+  const near = narration.slice(start, start + 65);
+  return language === "zh"
+    ? `旁白在这里违反了第${personNames[person]}人称视角：${near}。只改旁白；引号里说话者的人称保持不变。`
+    : `Narration violates ${person}-person perspective near: ${near}. Fix narration only; keep quoted speakers' pronouns.`;
 }
 
 /** Plugin-owned policy using the same public hooks available to community packages. */
@@ -143,15 +162,15 @@ export function createNarrativeReview(pluginId: string) {
     },
     prepare(ctx: SettingsContext, payload: Request) {
       if (payload.pluginId !== pluginId) return { action: "continue" as const };
-      const zh = payload.messages.some(
-        (m) =>
-          m.role === "system" &&
-          typeof m.content === "string" &&
-          /输出要求|叙事规则/.test(m.content),
-      );
+      const zh = readsChinese(payload.messages);
       const player = players.get(keyFor(ctx));
+      const playerLine = !player
+        ? ""
+        : zh
+          ? `玩家角色：${JSON.stringify(player)}。`
+          : `Player character: ${JSON.stringify(player)}. `;
       const instruction =
-        (player ? `Player character: ${JSON.stringify(player)}. ` : "") +
+        playerLine +
         perspectives[personFor(ctx)][zh ? "zh" : "en"] +
         (zh
           ? " 人物直接对白保留说话者人称。不要复述玩家输入、替玩家添加行动或内心想法。查询工具时只调用工具，不输出准备说明；工具返回后直接写场景，不写核对档案或写作过程。"
@@ -183,17 +202,22 @@ export function createNarrativeReview(pluginId: string) {
         };
       }
       const text = response.content ?? "";
+      const zh = readsChinese(payload.messages);
       const correction =
         payload.correction ||
         (!text.trim()
-          ? "Write the actual story now using the retrieved facts. Do not finish with only a tool call."
+          ? zh
+            ? "现在用已读取到的事实写出实际的故事正文。不要只调用一个工具就结束。"
+            : "Write the actual story now using the retrieved facts. Do not finish with only a tool call."
           : [
-              /<\/?(?:system|system_warning|analysis|thinking|runtime-inputs|available-events)\b/i.test(
+              !/<\/?(?:system|system_warning|analysis|thinking|runtime-inputs|available-events)\b/i.test(
                 text,
               )
-                ? "Output only the in-world story. Remove internal instruction tags and commentary."
-                : undefined,
-              perspectiveError(text, personFor(ctx)),
+                ? undefined
+                : zh
+                  ? "只输出游戏内的故事正文。去掉内部指令标签和说明文字。"
+                  : "Output only the in-world story. Remove internal instruction tags and commentary.",
+              perspectiveError(text, personFor(ctx), zh ? "zh" : "en"),
             ]
               .filter(Boolean)
               .join("\n"));

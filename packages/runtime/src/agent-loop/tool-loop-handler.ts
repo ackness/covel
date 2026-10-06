@@ -56,6 +56,8 @@ export interface RequestLLMResponseOptions {
   readonly effectiveModel: string | undefined;
   readonly toolDefs: readonly LLMToolDefinition[] | undefined;
   readonly responseFormat: LLMResponseFormat | undefined;
+  /** Session locale, for the instructions the retry layer and adapter add. */
+  readonly locale?: string;
   readonly maxOutputTokens?: number;
   readonly retryPolicy: RetryPolicy;
   readonly deadline: number;
@@ -119,6 +121,7 @@ export async function requestLLMResponse(
     messages,
     tools: toolDefs,
     responseFormat,
+    ...(opts.locale ? { locale: opts.locale } : {}),
     defaults: manifest.llm,
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     policy: retryPolicy,
