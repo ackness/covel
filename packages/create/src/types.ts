@@ -152,4 +152,13 @@ export interface WorldGenerationDataContract {
   readonly pluginId?: string;
   /** The receiver also wants each record projected into the lorebook. */
   readonly lorebook?: boolean;
+  /**
+   * The file the receiving plugin names for this contract's records
+   * (`authoring.source`). A world that has its records there needs no entry
+   * in a descriptor for them.
+   */
+  readonly source?: {
+    readonly kind: "yaml" | "json";
+    readonly path: string;
+  };
 }

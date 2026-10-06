@@ -196,11 +196,11 @@ dimensionSources:
 
 `@covel/create` 的 `createWorld({ llm, concept, ... })` 生成并验证内容，成功时返回 `id`、`manifest`、`lore`、`locale`、`packageContent` 与 `warnings`（数量低于简报目标的内容、被丢弃的无效维度）；失败时返回 `success: false` 和 `errors`。返回的 manifest 是 schema 校验后的规范值，包含 locale 的规范形式和 `characterSchema.types` 等默认值；三种保存目标消费同一份规范值。生成过程不写世界包，也不接收 `outputDir`。生成 manifest 必须包含内联数据，不能引用尚未生成的 `worldData` 或 `dimensionSources` 文件。 简报生成的 `memoryDefinitions` 在规范化时转换成 `packageContent.contractData` 中的 `memory.blocks@1/world` 记录；文件与非文件模式消费同一份合同数据，同一目标重复声明会被拒绝。
 
-需要文件包时显式调用 `await writeWorldPackage(outputDir, result)`。导出返回相对文件路径，在独立副本中把内联数据转换为文件引用，保留原生成结果；已有同名包会被拒绝，并发发布只允许一个完整包成功。
+需要文件包时显式调用 `await writeWorldPackage(outputDir, result, { dataContracts })`。导出返回相对文件路径，在独立副本中把内联数据转换为文件引用，保留原生成结果；已有同名包会被拒绝，并发发布只允许一个完整包成功。
 
-AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/lorebook.yaml`，并和 dimensions 一起写入 `data/world.data.yaml`。文件型世界在创建 session 时始终按 descriptor 导入。
+AI 创建器写出的包和手写的世界包一样按[约定路径](#按约定导入没有-descriptor)布局：维度在 `data/dimensions.yaml`，角色在 `characters/characters.json`，资料库与规则在 `data/lorebook.yaml`，设定正文只有一份 `WORLD.md`（世界自己的语言，由 `world.yaml` 的 `defaultLocale` 说明；`WORLD.<locale>.md` 是译文，新世界没有）。文件都在约定路径上时不写 descriptor，`world.yaml` 里也没有 `worldData`。
 
-插件内容由创作简报的 `contracts` 指定：生成器只为被选中的数据契约生成记录，每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`），接收插件会被加入 `pluginPolicy.requested`。未选中的契约不会进入提示词；模型为未选中的契约输出记录，或漏掉被选中的契约，都会让本次尝试失败并重试。每条记录写成 `data/contract-<n>.json`，接收方声明了 lorebook 投影时目标为 `contract:<id>+lorebook`。
+插件内容由创作简报的 `contracts` 指定：生成器只为被选中的数据契约生成记录，每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`），接收插件会被加入 `pluginPolicy.requested`。未选中的契约不会进入提示词；模型为未选中的契约输出记录，或漏掉被选中的契约，都会让本次尝试失败并重试。一个契约的记录写进接收插件声明的文件（`authoring.source` 的 `path` 与 `kind`，例如 `data/memory-blocks.json`、`data/time.yaml`）：一条记录就是文件内容，多条写成数组。接收插件没有声明路径时，记录写成 `data/contract-<n>.json`，并由 `data/world.data.yaml` 这个 descriptor 列出全部 source；接收方声明了 lorebook 投影时目标为 `contract:<id>+lorebook`。
 
 `server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口直接使用经过校验的生成结果，把通用领域角色放入 `WorldRecord.metadata.embeddedCharacters`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
 

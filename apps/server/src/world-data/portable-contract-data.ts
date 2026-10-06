@@ -110,6 +110,15 @@ export async function worldGenerationDataContracts(
       ...(item.example !== undefined ? { example: item.example } : {}),
       pluginId: item.pluginId,
       lorebook: item.source?.entry.to.endsWith("+lorebook") === true,
+      ...(item.source &&
+      (item.source.entry.kind === "yaml" || item.source.entry.kind === "json")
+        ? {
+            source: {
+              kind: item.source.entry.kind,
+              path: item.source.entry.path,
+            },
+          }
+        : {}),
     });
   }
   return result;

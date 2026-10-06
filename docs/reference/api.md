@@ -3103,7 +3103,7 @@ interface SseEnvelope {
 
 #### `POST /api/ai/generate-world`
 
-AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tags、dimensions、lore，并可同时创作主要角色、资料库、世界规则、题材记忆与开局配置。服务器把文本内容写成标准世界包：`data/dimensions.yaml`、`characters/main-cast.json`、`data/lorebook.yaml` 和 `data/world.data.yaml` descriptor。
+AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tags、dimensions、lore，并可同时创作主要角色、资料库、世界规则、题材记忆与开局配置。服务器把文本内容写成按约定路径布局的世界包：`WORLD.md`、`data/dimensions.yaml`、`characters/characters.json`、`data/lorebook.yaml`，以及每个插件数据契约在接收插件声明路径上的文件（如 `data/memory-blocks.json`）。文件都在约定路径上时没有 descriptor，详见 [World Data](world-data.md)。
 
 新世界按**部分**逐个生成，每个部分是一次模型请求：先是世界清单（`manifest`），再是 `WORLD.md`（`lore`），然后是简报里要求的每一类补充内容（`characters`、`lorebook`、`rules`），最后是每个插件数据契约（`contract:<契约 ID>`）。后面的部分会拿到已经写好的部分作为上下文。
 
