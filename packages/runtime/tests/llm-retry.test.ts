@@ -269,6 +269,22 @@ describe("perturbMessages", () => {
     expect(last.content).toContain("called the same tool repeatedly");
   });
 
+  it("writes the hint in the instruction language of the session", () => {
+    for (const reason of [undefined, "tool-loop-detected"] as const) {
+      const hint = (locale?: string) =>
+        String(
+          perturbMessages(baseMessages, 1, reason, locale).at(-1)!.content,
+        );
+      // `[retry N]` and the tool name are markers; the sentences are Chinese.
+      expect(hint("zh-CN")).toMatch(/^\[retry 1\] \p{Script=Han}/u);
+      expect(
+        hint("zh-CN").replace("[retry 1]", "").replace("runtime-done", ""),
+      ).not.toMatch(/[A-Za-z]/);
+      expect(hint("zh-Hant-TW")).toBe(hint("en-US"));
+      expect(hint()).toBe(hint("en-US"));
+    }
+  });
+
   it("produces distinct byte strings per attempt (KV-cache break)", () => {
     const a = perturbMessages(baseMessages, 1)[baseMessages.length]!.content;
     const b = perturbMessages(baseMessages, 2)[baseMessages.length]!.content;

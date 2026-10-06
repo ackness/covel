@@ -3,7 +3,7 @@
 // replace them, never rewrite an event that already fired, and always fire
 // at most once.
 
-import { OPERATORS } from "./conditions.js";
+import { OPERATORS, TURN_BOUNDS } from "./conditions.js";
 
 const EVENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const EVENT_FIELDS = new Set(["id", "title", "when", "payload", "priority"]);
@@ -14,6 +14,7 @@ const LEAF_FIELDS = new Set([
   "revealed",
   "turnsSinceGte",
   "turnsSinceLte",
+  ...TURN_BOUNDS,
   ...OPERATORS,
 ]);
 const NUMERIC_OPERATORS = new Set(["gte", "gt", "lte", "lt"]);
@@ -40,10 +41,20 @@ function leafIssues(node, refs, issues) {
   const kinds = ["dimension", "time", "revealed"].filter((key) =>
     Object.hasOwn(node, key),
   );
+  const turnBounds = TURN_BOUNDS.filter((key) => Object.hasOwn(node, key));
+  if (turnBounds.length) kinds.push("turn");
   if (kinds.length !== 1) {
     issues.push(
-      "a condition leaf references exactly one of dimension, time, revealed",
+      "a condition leaf references exactly one of dimension, time, revealed, or the session turn (turnGte / turnLte)",
     );
+    return;
+  }
+  if (kinds[0] === "turn") {
+    for (const key of turnBounds)
+      if (!(Number.isInteger(node[key]) && node[key] >= 0))
+        issues.push(`${key} must be a non-negative integer`);
+    if (OPERATORS.some((key) => Object.hasOwn(node, key)))
+      issues.push("a turn condition takes no operator");
     return;
   }
   if (kinds[0] === "revealed") {

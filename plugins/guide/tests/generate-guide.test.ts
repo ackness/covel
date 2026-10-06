@@ -149,6 +149,38 @@ describe("generate-guide", () => {
     expect(getToolContent(maximumResult).decision).toHaveLength(300);
   });
 
+  it("takes a reply written as plain text and shows it without a tag", async () => {
+    const guideTool = createGenerateGuide({ tool, z });
+    const result = await guideTool.execute(
+      {
+        scene: "石屋门外的问话",
+        recap: "屋里的人已经知道门外有人，布兰诺克刚踩响一块松石板。",
+        decision: "接下来是答话、绕路还是硬闯？",
+        prompts: [
+          "隔着门喊话，问他是不是科尔文",
+          { kind: "act", text: "绕到石屋侧面找窗或后门" },
+          "低声说自己是送灯油来的",
+        ],
+      },
+      context,
+    );
+    expect(getToolContent(result).prompts).toEqual([
+      { text: "隔着门喊话，问他是不是科尔文" },
+      expect.objectContaining({ kind: "act", icon: "zap" }),
+      { text: "低声说自己是送灯油来的" },
+    ]);
+    const items = getPendingProposals(result)[0]!.payload.items as Array<{
+      key: string;
+      value: unknown;
+    }>;
+    const value = (key: string) =>
+      items.find((item) => item.key === key)?.value;
+    expect(value("prompt1Text")).toBe("隔着门喊话，问他是不是科尔文");
+    expect(value("prompt1Label")).toBe("");
+    expect(value("prompt1Color")).toBe("");
+    expect(value("prompt2Color")).toBe("green");
+  });
+
   it("rejects recap and decision outside their documented boundaries", async () => {
     const guideTool = createGenerateGuide({ tool, z });
     const baseParams = {

@@ -53,7 +53,10 @@ import {
   insertDepthContributions,
   type RenderedDepthContribution,
 } from "./message-insertion.js";
-import { PROMPT_CACHE_BREAKPOINT_MARKER } from "@covel/shared";
+import {
+  instructionLocaleFor,
+  PROMPT_CACHE_BREAKPOINT_MARKER,
+} from "@covel/shared";
 import type { InputSlot, InputSource } from "@covel/shared";
 import type {
   AssembledContext,
@@ -125,20 +128,19 @@ function defaultFrameworkPreamble(
  * runtimes that opt in via `manifest.advertiseEvents: true`. Only the
  * emitting runtime pays for this — consumer-only runtimes never see it.
  *
- * Kept English-only (unlike the locale-branching `buildFrameworkPreamble`)
- * because `eventCatalogText` itself is already resolved to the session
- * locale by the event-directory service; this line is a fixed tool-use
- * instruction, not narrative-facing content.
+ * The closing line is an instruction, so it follows the instruction language
+ * like `buildFrameworkPreamble`. `eventCatalogText` is already resolved to the
+ * session locale by the event-directory service.
  */
 function buildAvailableEventsBlock(params: ContextBuildParams): string {
   if (params.manifest.advertiseEvents !== true) return "";
   const catalog = params.eventCatalogText;
   if (!catalog) return "";
-  return (
-    `<available-events>\n${escapeXmlContent(catalog)}\n\n` +
-    "When a declared domain event occurs in your narration, call the emit-event tool — " +
-    "one topic per call; tool calls are not part of the prose.\n</available-events>"
-  );
+  const instruction =
+    instructionLocaleFor(params.turnInput.locale) === "zh"
+      ? "叙事里发生了已声明的领域事件时，调用 emit-event 工具——每次调用一个 topic；工具调用不属于正文。"
+      : "When a declared domain event occurs in your narration, call the emit-event tool — one topic per call; tool calls are not part of the prose.";
+  return `<available-events>\n${escapeXmlContent(catalog)}\n\n${instruction}\n</available-events>`;
 }
 
 /**
@@ -411,6 +413,7 @@ function finalizeSegmentedContext(
   const historyMessages: LLMMessage[] = buildMessageHistoryWithSummaries(
     params.messageHistory ?? [],
     params.summaries ?? [],
+    params.turnInput.locale,
   );
 
   // Pre-history segments precede history and the current turn: the player
@@ -464,6 +467,7 @@ function finalizeSegmentedContext(
     const result = applyBudget(systemPrompt, messages, {
       ...params.contextBudget!,
       estimator: params.estimator!,
+      locale: params.turnInput.locale,
     });
     return {
       systemPrompt,

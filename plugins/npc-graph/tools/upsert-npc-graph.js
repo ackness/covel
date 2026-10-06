@@ -31,6 +31,9 @@ import {
   wordId,
 } from "@covel/plugin-handlers-utils";
 
+// A relation label starts with a letter, in any script.
+const RELATION = /^[\p{Letter}][\p{Letter}\p{Number}_\-\s]*$/u;
+
 // World IR, the extractor's input, types its entities with these words, and
 // a model copies them onto its nodes. A `character` is this graph's
 // `individual`. The other four are not people, groups, or factions, so they
@@ -115,9 +118,16 @@ export default function ({ tool, z, shortIdBatch }) {
       .string()
       .min(1)
       .max(48)
-      .regex(/^[\p{Letter}][\p{Letter}\p{Number}_\-\s]*$/u)
+      // Checked here and not as a `pattern` of the schema: a JSON Schema
+      // pattern has no flags, and a provider that checks tool schemas
+      // refuses one that needs the `u` flag. Every request of the runtime
+      // then fails.
+      .refine((value) => RELATION.test(value), {
+        message:
+          "Start the relation with a letter; use letters, digits, spaces, `_`, and `-` only",
+      })
       .describe(
-        "Relation type; accepts a structured English identifier or a natural-language relation label (e.g. TRUSTS, ALLIED_WITH, RIVALS)",
+        "Relation type; accepts a structured English identifier or a natural-language relation label (e.g. TRUSTS, ALLIED_WITH, RIVALS). It starts with a letter and has letters, digits, spaces, `_`, and `-` only",
       ),
     strength: z
       .number()

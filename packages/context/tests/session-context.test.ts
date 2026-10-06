@@ -367,7 +367,7 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
       kind: "lore_entry",
       sourceType: "world",
       sourceId: "rule-before",
-      content: "[World Rule: Rain Market]\n雨市里没人会直接说出真实姓名。",
+      content: "[世界规则：Rain Market]\n雨市里没人会直接说出真实姓名。",
       position: "before_plugin",
       order: 20,
       debugTrace: {
@@ -420,8 +420,20 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
     expect(loreContributions[0]).toMatchObject({
       position: "at_depth",
       depth: 2,
-      content: "[World Rule: 封印门]\n封印门只回应血脉、月光和旧誓。",
+      content: "[世界规则：封印门]\n封印门只回应血脉、月光和旧誓。",
     });
+
+    // The heading follows the instruction language, not the entry's text.
+    for (const locale of ["en-US", "zh-Hant-TW"]) {
+      const other = await buildSessionContextSnapshot(store, "sess-1", {
+        locale,
+        turnNumber: 4,
+        playerMessage: "我检查封印门上的月光痕迹。",
+      });
+      expect(
+        other.contributions.find((item) => item.kind === "lore_entry")?.content,
+      ).toBe("[World Rule: 封印门]\n封印门只回应血脉、月光和旧誓。");
+    }
   });
 
   it("rejects unrecognized positions with a warning and applies the documented default", async () => {

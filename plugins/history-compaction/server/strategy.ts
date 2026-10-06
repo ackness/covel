@@ -81,6 +81,14 @@ const COMPACTOR_TEXT = {
     "ru-RU":
       "Кратко изложи следующую историю диалога, уложившись примерно в {{ maxSummaryTokens }} токенов:\n\n{{ messages }}",
   },
+  language: {
+    "zh-CN":
+      "[LANGUAGE] 所有自然语言的摘要内容必须用{{ languageName }}（{{ locale }}）书写。",
+    "en-US":
+      "[LANGUAGE] Write all natural-language summary content in {{ languageName }} ({{ locale }}).",
+    "ru-RU":
+      "[LANGUAGE] Всё содержание резюме на естественном языке пиши на этом языке: {{ languageName }} ({{ locale }}).",
+  },
   truncated: {
     "zh-CN": "\n[摘要已按上下文预算截断]",
     "en-US": "\n[Summary truncated to context budget]",
@@ -125,9 +133,14 @@ async function buildCompactorSystemPrompt(
   const template = await loader("server", "compactor", locale);
   const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
   const languageName = resolveLocaleLanguageName(canonicalLocale);
+  // The language rule is in the language of the template it follows.
+  const languageRule = interpolate(compactorText("language", locale), {
+    languageName,
+    locale: canonicalLocale,
+  });
   return `${interpolate(template, {
     sections: effective.join("\n- "),
-  }).trimEnd()}\n\n[LANGUAGE] Write all natural-language summary content in ${languageName} (${canonicalLocale}).`;
+  }).trimEnd()}\n\n${languageRule}`;
 }
 
 /**

@@ -92,6 +92,28 @@ describe("evaluate handler", () => {
     expect(JSON.stringify(writes)).not.toContain("child");
   });
 
+  it("writes the cue instruction in the instruction language of the session", async () => {
+    const cue = async (locale) => {
+      const { ctx } = makeCtx();
+      const { cueContext } = (await handler({ ...ctx, locale })).value;
+      return cueContext.slice(0, cueContext.indexOf("\n\n"));
+    };
+    expect(await cue("zh-CN")).toContain("隐藏的故事事件");
+    expect(await cue("zh-CN")).not.toMatch(/[A-Za-z]/);
+    for (const locale of ["en-US", "zh-Hant-TW", "ru-RU"])
+      expect(await cue(locale)).toBe(
+        "A hidden story event has just been unlocked by the current state. Bring it into this turn naturally, as something that happens in the scene; do not mention conditions, triggers, or that it was hidden.",
+      );
+  });
+
+  it("keeps the text of a turn with no event, which the narrative prompts name", async () => {
+    for (const locale of ["zh-CN", "en-US"]) {
+      const { ctx } = makeCtx({ location: "harbor" });
+      const result = await handler({ ...ctx, locale });
+      expect(result.value.cueContext).toBe("No hidden story event this turn.");
+    }
+  });
+
   it("re-delivers the same cue when its source turn is retried", async () => {
     const { ctx, writes } = makeCtx({
       turnId: "t-retry",

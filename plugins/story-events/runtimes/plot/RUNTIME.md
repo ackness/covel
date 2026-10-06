@@ -83,17 +83,30 @@ Events must fit this world's genre, tone, and setting. Introduce no factions, te
 ## Inputs (`<runtime-inputs>`)
 
 - `narrative.value`: this turn's narrative.
-- `storyEvents.value`: `turn` is the current turn. `revealed` lists events that already happened. `planned` lists planted events that have not happened yet (ID and title only). The world author's own hidden events are never listed, and you do not need them.
-- `dimensions.value`: world dimensions, each with `name`, `schema`, and current `value`. A condition can only reference a dimension ID listed here. `path` is a dot path to a field that exists in the schema.
-- `worldTime.value`: current world time. Only numeric fields can be used in conditions (such as `phase` / `cycle` for phase clocks).
-- `worldIR.value` (may be absent): a structured extraction of this turn's narrative. `entities` are the people and factions involved. `relations` are relationship changes. `events` and `statements` are what happened and what was said aloud (promises, threats, lies). Use it to find threads and the people they involve precisely.
+- `storyEvents.value`: the story events of this session. `turn` is the current turn. `revealed` lists the story events that fired. `planned` lists the planted story events that wait (ID and title only). The world author's own hidden events are never listed, and you do not need them.
+- `dimensions.value`: world dimensions, each with `name`, `schema`, and current `value`.
+- `worldTime.value`: current world time.
+- `worldIR.value` (may be absent): this turn's narrative in structured form. `entities` are the people and factions involved. `relations` are relationship changes. `events` and `statements` are what happened and what was said aloud (promises, threats, lies). Use it to find threads and the people they involve precisely. Its records are not story events.
 
 ## Procedure
 
 1. Find threads in this turn's narrative that are still developing. Examples: a promise, a debt, a grudge, a person spared, an NPC acting behind the player character's back, unanswered foreshadowing.
 2. Plant one event only when a thread is clear, two at most. When nothing fits, submit an empty `events` list with your reason. When `planned` already holds six or more events, add nothing new. You can `retire` older plans the story has moved past.
-3. Write conditions that do not hold yet but will hold once the story develops along this thread. Examples: a dimension crosses a threshold, the player character reaches a place, a time of day arrives. Or chain onto a revealed or planned event with `revealed`, using `turnsSinceGte` to let consequences arrive later. Never write conditions that already hold.
+3. Write conditions that do not hold now but will hold once the story develops along this thread. Use the four forms under Conditions.
 4. `payload` is a brief of two to four sentences for the narrator. It says what happens, who is involved, and what choice it leaves the player character. It must not contain finished prose, a decision made for the player, or an answer to the world's central mysteries. It must not contradict the setting or kill a major character.
 5. Use a descriptive lowercase kebab-case `id`, such as `salt-fangs-collect`. `title` is a short name that becomes public only after the event fires.
 
 Call `plan-story-events` once. If the tool reports errors, fix them and submit again; a successful call completes this runtime.
+
+## Conditions
+
+An event fires on the first turn where every `all` condition holds and no `none` condition holds. A condition has one of four forms:
+
+- Dimension field: `{ "dimension": "<id>", "path": "<field>", "gte": 3 }`. `dimension` is an ID in `dimensions.value`. `path` is a dot path to one field that the `schema` of that dimension has. The third key is the operator, with the value to compare with. Use this form when a dimension crosses a threshold, or when a place or thing that it records changes state.
+- World-time field: `{ "time": "<field>", "gte": 4 }`. `time` is a numeric field of `worldTime.value`, such as `phase` / `cycle` for phase clocks. The second key is the operator, with a number. This form has no `dimension`.
+- Story event: `{ "revealed": "<event id>", "turnsSinceGte": 2 }`. It holds once that story event has fired, here two turns ago or more. The ID must be one that `storyEvents.value` lists, or the `id` of the other event of this call.
+- Wait: `{ "afterTurns": 2 }`. It holds from that many turns after this turn. Use it to let a consequence come later.
+
+The operators are `equals`, `notEquals`, `in`, `gte`, `gt`, `lte`, `lt`, and `exists`. A dimension or world-time condition has exactly one, written as a key: `"equals": "open"`, `"in": ["a", "b"]`, `"exists": true`. For a range, write two conditions.
+
+A condition cannot test what the narrative says. When no dimension records a fact, write no condition for it.

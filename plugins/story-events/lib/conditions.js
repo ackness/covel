@@ -12,6 +12,9 @@ export const OPERATORS = [
   "exists",
 ];
 
+/** Bounds of a turn condition: the first and the last session turn it holds on. */
+export const TURN_BOUNDS = ["turnGte", "turnLte"];
+
 function jsonEqual(left, right) {
   if (Object.is(left, right)) return true;
   if (!left || !right || typeof left !== "object" || typeof right !== "object")
@@ -102,6 +105,20 @@ function revealedLeaf(node, state, issues) {
 }
 
 /**
+ * `{ turnGte: n }` holds from session turn `n` on, `{ turnLte: n }` up to it;
+ * both together are a window. A planner uses it to make an event wait.
+ */
+function turnLeaf(node, state, issues) {
+  if (!Number.isInteger(state.turn)) {
+    issues.push("the session turn is unavailable");
+    return null;
+  }
+  if (Number.isInteger(node.turnGte) && state.turn < node.turnGte) return false;
+  if (Number.isInteger(node.turnLte) && state.turn > node.turnLte) return false;
+  return true;
+}
+
+/**
  * Evaluate a condition tree against `{ dimensions, time, revealed, turn }`.
  * `dimensions` maps dimension IDs to snapshot entries (`{ value, version }`);
  * `time` is the world-time context value, or null when world time is absent;
@@ -137,6 +154,8 @@ export function evaluateCondition(condition, state) {
     }
     if (typeof node.revealed === "string")
       return revealedLeaf(node, state, issues);
+    if (TURN_BOUNDS.some((key) => Object.hasOwn(node, key)))
+      return turnLeaf(node, state, issues);
     const operator = leafOperator(node);
     if (!operator)
       return undecided("a condition leaf needs exactly one operator");
@@ -153,7 +172,9 @@ export function evaluateCondition(condition, state) {
       if (!state.time) return undecided("world time is unavailable");
       return compare(operator, state.time[node.time], node[operator]);
     }
-    return undecided("a condition leaf must reference a dimension or time");
+    return undecided(
+      "a condition leaf must reference a dimension, time, an event, or the turn",
+    );
   };
   const met = visit(condition) === true;
   return { met, issues };

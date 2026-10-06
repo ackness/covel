@@ -102,7 +102,8 @@ function withParsedJsonText(
     if (!/^\s*[[{]/.test(text)) continue;
     const path = issue.path.join(".");
     try {
-      const parsed: unknown = parseJsonText(text);
+      // The arguments around this text parsed, so the model ended it itself.
+      const parsed: unknown = parseJsonText(text, { complete: true });
       if (isStructure(parsed, issue.expected)) record[key] = parsed;
       else problems.set(path, jsonTextProblem(text, issue.expected));
     } catch (error) {
@@ -111,6 +112,55 @@ function withParsedJsonText(
     }
   }
   return { repaired, problems };
+}
+
+// Keywords of a JSON Schema whose values are schemas, by the shape they have.
+const SCHEMA_MAPS = new Set(["properties", "$defs", "definitions"]);
+const SCHEMA_LISTS = new Set(["anyOf", "oneOf", "allOf", "prefixItems"]);
+const SCHEMAS = new Set([
+  "items",
+  "additionalProperties",
+  "propertyNames",
+  "contains",
+  "not",
+  "if",
+  "then",
+  "else",
+]);
+
+/**
+ * Leave out each `pattern` that a provider cannot read.
+ *
+ * A JSON Schema pattern has no flags. One with a Unicode property escape
+ * (`\p{Letter}`) means what its author wrote only under the `u` flag, and a
+ * provider that checks the schema of a tool refuses it ("is not a 'regex'").
+ * Every request that offers the tool then fails. The model does not need the
+ * pattern: Zod checks the value, and the description says the rule.
+ */
+function withPortablePatterns(schema: unknown): unknown {
+  if (schema === null || typeof schema !== "object" || Array.isArray(schema))
+    return schema;
+  const portable: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (
+      key === "pattern" &&
+      typeof value === "string" &&
+      /\\[pP]\{/.test(value)
+    )
+      continue;
+    if (SCHEMA_MAPS.has(key) && value !== null && typeof value === "object")
+      portable[key] = Object.fromEntries(
+        Object.entries(value).map(([name, child]) => [
+          name,
+          withPortablePatterns(child),
+        ]),
+      );
+    else if (SCHEMA_LISTS.has(key) && Array.isArray(value))
+      portable[key] = value.map(withPortablePatterns);
+    else if (SCHEMAS.has(key)) portable[key] = withPortablePatterns(value);
+    else portable[key] = value;
+  }
+  return portable;
 }
 
 /**
@@ -150,7 +200,7 @@ export function tool<TParams extends ZodType, TOutput>(
     const raw = definition.parameters.toJSONSchema({ io: "input" });
     // Strip $schema — LLM APIs don't need it and some reject it
     const { $schema: _drop, ...rest } = raw;
-    jsonSchema = rest;
+    jsonSchema = withPortablePatterns(rest) as typeof rest;
   } catch (cause) {
     throw new Error(
       `Tool "${definition.name}" parameters cannot be represented as JSON Schema: ${cause instanceof Error ? cause.message : String(cause)}`,

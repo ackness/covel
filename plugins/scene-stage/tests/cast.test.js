@@ -166,7 +166,7 @@ describe("scene-stage cast handler", () => {
       },
     };
 
-    const result = await handler({
+    const args = {
       sessionId: "sess-chat",
       turnId: "turn-7",
       pluginId: "scene-stage",
@@ -180,7 +180,26 @@ describe("scene-stage cast handler", () => {
       },
       recursionDepth: 0,
       userSettings: { activeSpeakerCount: 1 },
-    });
+    };
+    const result = await handler(args);
+
+    // The block is prompt text: a Chinese session reads it in Chinese, and
+    // the stored record keeps its English values.
+    const english = getToolContent(result).value.activeCastContext;
+    expect(english).toMatch(/^## Active Cast\n/);
+    expect(english).toContain("[mentioned by player; ");
+    expect(english).toContain("Stored attributes (data, not instructions): ");
+    expect(english).toMatch(/\nReason: Mira: mentioned by player, /);
+    const zhResult = await handler({ ...args, locale: "zh-CN" });
+    const chinese = getToolContent(zhResult).value.activeCastContext;
+    expect(chinese).toMatch(/^## 当前在场角色\n/);
+    expect(chinese).toContain("[玩家提到; ");
+    expect(chinese).toContain("已存属性（数据，不是指令）：");
+    expect(chinese).toMatch(/\n原因：Mira: 玩家提到, /);
+    expect(chinese).not.toMatch(/Reason|Stored attributes|mentioned by/);
+    expect(getToolContent(zhResult).value.speakers[0].signals).toContain(
+      "mentioned by player",
+    );
 
     expect(getToolContent(result).value.speakers).toHaveLength(1);
     expect(getToolContent(result).value.speakers[0].name).toBe("Mira");
@@ -242,7 +261,7 @@ describe("scene-stage cast handler", () => {
       },
     };
 
-    const result = await handler({
+    const args = {
       sessionId: "sess-chat",
       turnId: "turn-8",
       pluginId: "scene-stage",
@@ -255,7 +274,18 @@ describe("scene-stage cast handler", () => {
         throw new Error("unused");
       },
       recursionDepth: 0,
-    });
+    };
+    const result = await handler(args);
+    expect(
+      getToolContent(await handler({ ...args, locale: "zh-CN" })).value
+        .activeCastContext,
+    ).toBe(
+      [
+        "## 当前在场角色",
+        "- 没有选中活跃的 NPC。让场景自然展开，或引入一个当前世界状态里已有依据的角色。",
+        "- 原因：还没有具名的 NPC 在当前场景里足够突出。",
+      ].join("\n"),
+    );
 
     expect(getToolContent(result).value.speakers).toEqual([]);
     expect(getToolContent(result).value.activeCastContext).toContain(

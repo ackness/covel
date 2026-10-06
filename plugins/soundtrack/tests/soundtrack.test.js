@@ -246,10 +246,11 @@ describe("the stage.music@1 projection", () => {
   });
 
   it("tells the narrative which moods the world has music for", async () => {
-    const segments = (data) =>
+    const segments = (data, locale) =>
       handlers.get("music-moods")(
         { turnId: "t", playerMessage: "" },
         {
+          locale,
           pluginData: {
             get: async (namespace, key) =>
               data[`${namespace}/${key}`]
@@ -270,6 +271,16 @@ describe("the stage.music@1 projection", () => {
       volatility: "session",
     });
     expect(segment.content).toContain("- battle: 刀已出鞘，胜负未分。");
+    // The instruction is in the instruction language of the session.
+    expect(segment.content).toContain("emit `music.cue` with that mood");
+    const [chinese] = await segments(
+      { "tracks/music-registry": REGISTRY },
+      "zh-CN",
+    );
+    expect(chinese.content).toContain("发射 `music.cue` 并带上这种情绪");
+    expect(chinese.content.replace(/<[^>]+>|`[^`]*`|^- .*$/gm, "")).not.toMatch(
+      /[A-Za-z]/,
+    );
     expect(segment.content).toContain("- tense");
     expect(segment.content).toContain("- triumph");
 
