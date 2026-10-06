@@ -461,23 +461,27 @@ describe("callLLMWithRetry", () => {
         });
       },
     };
+    // The outer deadline is ten minutes away, so only the call timeout can
+    // end this call before the test's own time limit does. No elapsed time
+    // is measured: a bound on it fails on a loaded machine.
     const policy = buildRetryPolicy({
-      runtimeTimeoutMs: 3_000,
+      runtimeTimeoutMs: 600_000,
       callTimeoutMs: 100,
       maxRetries: 0,
     });
 
-    const start = Date.now();
     await expect(
       callLLMWithRetry({
         llm,
         messages: baseMessages,
         policy,
-        deadline: Date.now() + 3_000,
+        deadline: Date.now() + 600_000,
       }),
-    ).rejects.toThrow(LLMRetryError);
-    // Call timeout kicked in, not the outer deadline.
-    expect(Date.now() - start).toBeLessThan(2_000);
+    ).rejects.toMatchObject({
+      name: "LLMRetryError",
+      reason: "call-timeout",
+      attempts: 1,
+    });
   });
 });
 
