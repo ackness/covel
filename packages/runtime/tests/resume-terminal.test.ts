@@ -47,7 +47,6 @@ function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
     outputKind: "plugin",
     runtimeType,
     trigger: { type: "auto" },
-    timeoutMs: 1000,
     maxRetries: 0,
   };
   const suspension: SuspensionRecord = {
@@ -292,6 +291,7 @@ describe("resumed runtime terminal failures", () => {
 
   it("cannot recover a resumed function timeout through PostRuntime", async () => {
     vi.useFakeTimers();
+    const timeoutMs = 1000;
     const f = fixture("function", true);
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
@@ -303,7 +303,7 @@ describe("resumed runtime terminal failures", () => {
     const running = resumeSuspendedRuntime(
       f.suspension,
       {},
-      f.manifest,
+      { ...f.manifest, timeoutMs },
       f.deps,
     );
     const settled = running.then(
@@ -312,7 +312,7 @@ describe("resumed runtime terminal failures", () => {
     );
     try {
       await entered.promise;
-      await vi.advanceTimersByTimeAsync(1001);
+      await vi.advanceTimersByTimeAsync(timeoutMs + 1);
       const result = await settled;
       expect(result).toMatchObject({
         status: "failed",
