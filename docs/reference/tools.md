@@ -817,11 +817,11 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/update-dimensions.js`)
 
-参数 `{updates:[{id,expectedVersion,value|changes,reason?}]}`，最多 64 项，ID 不重复。`value` 是新的完整值；`changes:[{path,value}]`（最多 32 项）按点路径在冻结的当前值上设置字段或新增条目，工具合并成完整值后提交，大维度不必整体重写；路径中含 `__proto__`、`constructor` 或 `prototype` 段时整批拒绝。两者二选一；删除命名记录/数组行仍提交完整 `value`。`dimension.update` proposal 里始终是完整值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
+参数 `{updates:[{id,value|changes,reason?}]}`，最多 64 项，ID 不重复。`value` 是新的完整值；`changes:[{path,value}]`（最多 32 项）按点路径在冻结的当前值上设置字段或新增条目，工具合并成完整值后提交，大维度不必整体重写；路径中含 `__proto__`、`constructor` 或 `prototype` 段时整批拒绝。两者二选一；删除命名记录/数组行仍提交完整 `value`。`dimension.update` proposal 里始终是完整值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
 
-叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
+叙事来源、逻辑回合号、读取版本集和每条更新的 `expectedVersion` 从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定：版本就是本次执行读到的那个，让模型照抄一遍只会多出「漏写」和「抄了历史回合的旧版本号」两种失败。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 
-校验前先整理几种含义明确的写法，不为此退回模型重交：路径里的 `/` 也当作分隔符（`call-0614/status`），除非当前值里已有包含该斜杠的键；写在单条 change 上或与 `updates` 并列的 `reason` 被去掉；同一维度、同一 `expectedVersion` 的多条 `changes` 条目合并为一条（`reason` 依次拼接）。同一维度若有一条给出完整 `value`，仍按重复 ID 拒绝。
+校验前先整理几种含义明确的写法，不为此退回模型重交：路径里的 `/` 也当作分隔符（`call-0614/status`），除非当前值里已有包含该斜杠的键；写在单条 change 上或与 `updates` 并列的 `reason` 被去掉；模型写出的 `expectedVersion` 被去掉（见上）；条目自带的空 `updates: []` 被去掉；同一维度的多条 `changes` 条目合并为一条（`reason` 依次拼接）。同一维度若有一条给出完整 `value`，仍按重复 ID 拒绝。`id` 不是维度、却是某一个维度当前值里的条目名时（把地图里的一个房间当成了维度），报错会写明它属于哪个维度、路径该怎么写。
 
 本轮无变化也必须调用 `update-dimensions({updates:[]})`。既没有 `value`、`changes` 也为空或缺失的条目表示该维度未变化，工具直接略去它，不为此退回模型重交。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 

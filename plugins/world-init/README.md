@@ -8,7 +8,7 @@
 - `guard.js`：已有世界数据足够时跳过初始化（setup 幂等，不重置已演化值）。
 - `runtimes/schema-gen/`：开局一次性派生角色属性结构与维度定义的 agent runtime。
 - `runtimes/dimension-context/`：只读 pre-turn runtime，发布冻结的公共维度快照。
-- `runtimes/dimension-tracker/`：post-turn runtime，按作者 `updateRule` 结算维度演化（有非空规则才激活）。
+- `runtimes/dimension-tracker/`：post-turn runtime，按作者 `updateRule` 结算维度演化（有非空规则才激活）。它看到的 schema 里，文本字段的 `maxLength` 是作者所写值的 80%：模型不会数字数，告诉它 200 会写出 201、219，按 160 写则落在 200 以内；写入时校验的仍是作者的上限。更新的版本号由 `update-dimensions` 取本次执行读到的版本，不由模型填写。
 - `runtimes/edit-dimensions/`：manual runtime，承接玩家编辑与人工/跳过结算，仍提交 `dimension.update`。
 - `tools/`：`initialize-world`（原子初始化 schema+维度）、`set-world-schema`、`set-world-dimensions`、`update-dimensions`（tracker 提交）、`dimension-rule-get`（provider 内读规则/Schema）。
 

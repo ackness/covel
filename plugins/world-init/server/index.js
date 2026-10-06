@@ -6,6 +6,7 @@ import {
   resolveI18nDeep,
   resolveI18nText,
 } from "@covel/shared";
+import { schemaForTracker } from "../lib/schema-for-tracker.js";
 import makeDimensionRuleGet from "../tools/dimension-rule-get.js";
 import makeSetWorldSchema from "../tools/set-world-schema.js";
 import makeSetWorldDimensions from "../tools/set-world-dimensions.js";
@@ -124,7 +125,7 @@ export default function (covel) {
           `rule: ${rule}`,
           // Titles and enum labels are locale maps for the panels. The model
           // reads one language: the session's.
-          `schema: ${JSON.stringify(resolveI18nDeep(record.definition.schema, ctx.locale))}`,
+          `schema: ${JSON.stringify(schemaForTracker(resolveI18nDeep(record.definition.schema, ctx.locale)))}`,
           `value: ${JSON.stringify(frozen ? frozen.value : record.value)}`,
           "</dimension>",
         ].join("\n");

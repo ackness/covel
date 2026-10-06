@@ -45,6 +45,8 @@ pre-turn 的 function publisher 不调用模型，发布 Sₙ；本轮 `ctx.worl
 
 world-init 的 post-turn tracker 以本轮 narrative 为必要来源，WorldIR 为可选辅证。没有非空规则时零维护模型调用，也不强制抽取 WorldIR。已有但失败的共享 WorldIR 不能解释成无变化。
 
+tracker 的提示词（`<dimension-rules>`）和 `dimension-rule-get` 给出每个维度的规则、schema 和冻结值。给它看的 schema 里，文本字段的 `maxLength` 是作者所写值的 80%：模型不会数字数，按上限写经常多出几个到几十个字，整次提交被拒后还要再调一次模型；留出余量后，写得略超也仍在作者的上限以内。写入时校验的始终是作者写的上限。`update-dimensions` 每条更新的 `expectedVersion` 由工具取本次执行读到的版本，不由模型填写。
+
 ## 回执、恢复与玩家编辑
 
 host 在叙事提交边界独立登记义务，冻结原 `resultId`、`sourceTurnId`、readVersions，以及带非空 updateRule 的 definitions（静态设定不复制进每张回执）。回执不重复存正文；原文来自该来源的持久 turn artifact。状态为 `pending-settlement`、`settled`、`no-change`、`manual`、`skipped`。失败/未运行/跳过调度不是 no-change；自动失败保留叙事及待结算义务，不破坏其他普通 proposal 的全执行回滚语义。tracker 的模型调用在超时/瞬时错误时自动重试一次（`maxRetries: 1`），仍失败才留下待结算。下一次依赖叙事在义务解决前被阻止。
