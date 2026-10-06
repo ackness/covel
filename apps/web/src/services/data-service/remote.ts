@@ -175,7 +175,8 @@ export class RemoteDataService implements DataService {
   }
   async getSession(sessionId: string) {
     try {
-      return await api.getSession(sessionId);
+      // A session that is gone is an answer here (`null`), not an error to show.
+      return await api.getSession(sessionId, { silentStatuses: [404] });
     } catch (err) {
       return nullIfMissing(err);
     }

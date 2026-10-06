@@ -177,7 +177,7 @@ export async function listSessions(worldId?: string): Promise<SessionRecord[]> {
 
 export async function getSession(
   sessionId: string,
-  options?: { silentErrors?: boolean },
+  options?: { silentErrors?: boolean; silentStatuses?: readonly number[] },
 ): Promise<SessionRecord> {
   return request<SessionRecord>(
     `/api/sessions/${encodeURIComponent(sessionId)}`,
