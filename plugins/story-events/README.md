@@ -45,8 +45,9 @@ sources:
   priority: 10
 ```
 
-- 条件组合：`all` / `any` / `not`；叶子引用 `dimension`（可带 `path`，点号或数组）、`time`（world-time 输出的数值字段，如时段制的 `phase` / `cycle`，历法制的 `hour` / `day` / `month` / `weekdayIndex`）或 `revealed`（另一个事件）。
+- 条件组合：`all` / `any` / `not`；叶子引用 `dimension`（可带 `path`，点号或数组）、`time`（world-time 输出的数值字段，如时段制的 `phase` / `cycle`，历法制的 `hour` / `day` / `month` / `weekdayIndex`）、`revealed`（另一个事件）或会话回合数（`turnGte` / `turnLte`）。
 - 事件链：`{ revealed: <事件 ID> }` 在该事件发生过后成立，可加 `turnsSinceGte` / `turnsSinceLte` 限定距它最近一次发生过了多少回合；配合 `not` 可以写「某事还没发生」。`revealed` 叶子不需要比较运算符，引用不存在的事件 ID 属于无法判断（见下）并写入诊断；事件存在但尚未发生则是确定的“不成立”，`not` 可以正常取反。
+- 回合数：`{ turnGte: 6 }` 从会话第 6 回合起成立，`{ turnLte: 12 }` 到第 12 回合为止，两者写在一起是一个区间；放进 `not` 就是「到某回合就过期」。回合数与 `revealed` 的 `turnsSince*` 用同一种计数（玩家回合）。它不需要比较运算符。
 
 ```yaml
 - id: fangs-collect

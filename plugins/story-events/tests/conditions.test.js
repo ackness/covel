@@ -157,6 +157,26 @@ describe("revealed leaves", () => {
   });
 });
 
+describe("turn leaves", () => {
+  it("holds from, up to, or between session turns", () => {
+    const at = (turn) => ({ ...state, turn });
+    expect(evaluateCondition({ turnGte: 6 }, at(5)).met).toBe(false);
+    expect(evaluateCondition({ turnGte: 6 }, at(6)).met).toBe(true);
+    expect(evaluateCondition({ turnLte: 6 }, at(7)).met).toBe(false);
+    expect(evaluateCondition({ turnGte: 4, turnLte: 6 }, at(5)).met).toBe(true);
+    // "Not yet turn 6" is an event that expires.
+    expect(evaluateCondition({ not: { turnGte: 6 } }, at(5)).met).toBe(true);
+    expect(evaluateCondition({ not: { turnGte: 6 } }, at(6)).met).toBe(false);
+  });
+
+  it("stays unmet, also under `not`, when the turn is unknown", () => {
+    expect(evaluateCondition({ not: { turnGte: 6 } }, state)).toEqual({
+      met: false,
+      issues: ["the session turn is unavailable"],
+    });
+  });
+});
+
 describe("localizedText", () => {
   it("prefers the exact locale, then the same language and script, then English", () => {
     const text = { "zh-CN": "灯塔", "en-US": "Lighthouse" };

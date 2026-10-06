@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **A hidden story event can wait for a session turn.** A condition takes `turnGte` and `turnLte`: `{ turnGte: 6 }` holds from turn 6 on, `{ turnLte: 12 }` up to turn 12, both together are a window, and under `not` the event expires. World authors can write it in their hidden events (`contract:story.events@1`), and a plan (`story-event.plan@1`) can carry it. The story planner writes it as `{ "afterTurns": 2 }`, which `plan-story-events` turns into the turn to wait for. Until now a consequence that comes "a few turns later" had no form of its own: both models we test made up an event to count from, which the tool refused, or wrote conditions that held at once.
+
 ### Changed
 
 - **Action suggestions follow the story instead of a fixed set of types.** `guide` now asks for 3–4 options (it asked for 3–6) and writes each as a different answer to the decision at hand. It no longer has to offer one option of each type; the type is a display tag chosen after the option is written. At least one option must change the situation (a new event, a changed relationship, leaving the scene), and at most two may only gather information. The `scene-prompts@1` output is unchanged.
