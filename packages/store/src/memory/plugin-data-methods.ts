@@ -1,5 +1,5 @@
 import { pluginDataKey } from "../common/keys.js";
-import { applyPagination } from "../common/pagination.js";
+import { applyPagination, compareByteOrder } from "../common/pagination.js";
 import type { PluginDataRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 import {
@@ -12,10 +12,14 @@ import {
  * `common/sql-data-crud.ts`: `createdAt`, then the row's own key.
  */
 function sortPluginData(rows: readonly PluginDataRecord[]): PluginDataRecord[] {
-  const fields = ["createdAt", "pluginId", "namespace", "key"] as const;
+  const fields = ["pluginId", "namespace", "key"] as const;
   return [...rows].sort((a, b) => {
-    for (const field of fields)
-      if (a[field] !== b[field]) return a[field] < b[field] ? -1 : 1;
+    // A timestamp is ASCII: `<` orders it as its bytes do.
+    if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+    for (const field of fields) {
+      const order = compareByteOrder(a[field], b[field]);
+      if (order !== 0) return order;
+    }
     return 0;
   });
 }

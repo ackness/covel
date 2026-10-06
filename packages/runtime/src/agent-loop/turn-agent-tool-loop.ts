@@ -63,7 +63,11 @@ import {
   unresolvedToolFailures,
   type CompletionCalls,
 } from "./runtime-completion.js";
-import { type BudgetOptions, type TokenEstimator } from "@covel/context";
+import {
+  DEFAULT_PROTECT_LAST_USER_TURNS,
+  type BudgetOptions,
+  type TokenEstimator,
+} from "@covel/context";
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
@@ -114,6 +118,13 @@ export interface RunAgentToolLoopOptions {
   /** Re-applied after hooks and before every provider call. */
   readonly estimator?: TokenEstimator;
   readonly contextBudget?: Omit<BudgetOptions, "estimator">;
+  /**
+   * User messages of the current turn in `messages`: the player's, and the
+   * cue after this turn's story when there is one. The budget keeps the
+   * whole turn, so it protects that many more than `contextBudget` says.
+   * Default 1.
+   */
+  readonly currentTurnUserMessages?: number;
   readonly hookPipeline: HookPipeline | undefined;
   readonly startTime: number;
   readonly runId: string;
@@ -163,6 +174,7 @@ async function runAgentToolLoopWithinBudget(
     messages,
     estimator,
     contextBudget,
+    currentTurnUserMessages: initialTurnUserMessages = 1,
     hookPipeline,
     startTime,
     runId,
@@ -277,6 +289,8 @@ async function runAgentToolLoopWithinBudget(
     messages,
     input.locale,
   );
+  // A player's interjection is one more user message of the current turn.
+  let currentTurnUserMessages = initialTurnUserMessages;
   // One correction for a bare finish that violates the tool-use contract.
   let noToolCallCorrections = 0;
   // Prose captured from steps that were extended by late steering (see the
@@ -296,6 +310,7 @@ async function runAgentToolLoopWithinBudget(
     if (acceptsSteering) {
       for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
         messages.push({ role: "user", content: steer });
+        currentTurnUserMessages += 1;
       }
     }
 
@@ -325,7 +340,16 @@ async function runAgentToolLoopWithinBudget(
       responseFormat,
       retryPolicy,
       estimator,
-      contextBudget,
+      // These limits are a fallback each call replaces, so they are not
+      // checked here.
+      contextBudget: contextBudget && {
+        ...contextBudget,
+        protectLastUserTurns:
+          (contextBudget.protectLastUserTurns ??
+            DEFAULT_PROTECT_LAST_USER_TURNS) +
+          currentTurnUserMessages -
+          1,
+      },
       locale: input.locale,
       llm: deps.llm,
       slot: llmRequest.model,
@@ -612,6 +636,7 @@ async function runAgentToolLoopWithinBudget(
                 executionContext,
                 ...(logicalTurn !== undefined ? { logicalTurn } : {}),
                 ...(turnNumber !== undefined ? { turnNumber } : {}),
+                currentTurnUserMessages,
                 suspendToolCallId: effectiveTc.id,
                 startTime,
                 runId,
@@ -851,6 +876,7 @@ async function runAgentToolLoopWithinBudget(
         }
         for (const steer of lateSteering) {
           messages.push({ role: "user", content: steer });
+          currentTurnUserMessages += 1;
         }
         continue;
       }

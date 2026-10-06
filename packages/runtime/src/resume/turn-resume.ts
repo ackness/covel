@@ -220,6 +220,10 @@ async function executeResumedRuntime(
   const messages: LLMMessage[] = [
     ...(pendingContinuation.messages as LLMMessage[]),
   ];
+  // The transcript is still the suspended turn's: the budget keeps as much
+  // of it as it did before the suspension.
+  let currentTurnUserMessages =
+    pendingContinuation.currentTurnUserMessages ?? 1;
   if (pendingContinuation.suspendToolCallId) {
     const resumedToolResult: LLMMessage = {
       role: "tool",
@@ -246,6 +250,7 @@ async function executeResumedRuntime(
           ? resumeData
           : JSON.stringify(resumeData),
     });
+    currentTurnUserMessages += 1;
   }
 
   // The World Model base is what is committed now, as it is for a resumed
@@ -283,7 +288,11 @@ async function executeResumedRuntime(
     timeoutMs,
     messages,
     ...(deps.estimator && deps.contextBudget
-      ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
+      ? {
+          estimator: deps.estimator,
+          contextBudget: deps.contextBudget,
+          currentTurnUserMessages,
+        }
       : {}),
     hookPipeline,
     startTime,

@@ -162,6 +162,20 @@ describe("postJson retry wrapper", () => {
     await vi.runAllTimersAsync();
     expect((await promise).status).toBe(500);
     expect(mixed).toHaveBeenCalledTimes(4);
+
+    // The retry a response asked for is counted before the connection drops.
+    const thenDown = vi
+      .fn()
+      .mockResolvedValueOnce(makeMockResponse({ status: 500 }))
+      .mockImplementation(async () => {
+        throw refused();
+      });
+    vi.stubGlobal("fetch", thenDown);
+    const dropping = postJson(CONFIG, "/chat/completions", { a: 1 });
+    const dropped = expect(dropping).rejects.toThrow("fetch failed");
+    await vi.runAllTimersAsync();
+    await dropped;
+    expect(thenDown).toHaveBeenCalledTimes(4);
   });
 
   it("does not retry an error that is no dropped connection", async () => {

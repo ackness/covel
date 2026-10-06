@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { WorldGenerationDataContract } from "@covel/create";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { describeAuthoringSurface } from "../authoring/describe.js";
+import { conventionsOfPlugins } from "./conventions.js";
 import { resolveWorldDataSchema } from "./schema-registry.js";
 import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
@@ -80,6 +81,9 @@ export async function worldGenerationDataContracts(
 ): Promise<readonly WorldGenerationDataContract[]> {
   if (!registry) return [];
   const surface = await describeAuthoringSurface(registry);
+  // A file the generator writes without a descriptor entry is read back by
+  // these conventions, so a path that is not one of them is not passed on.
+  const conventions = conventionsOfPlugins(registry);
   const result: WorldGenerationDataContract[] = [];
   const seen = new Set<string>();
   for (const item of surface.contracts) {
@@ -90,6 +94,12 @@ export async function worldGenerationDataContracts(
     )
       continue;
     seen.add(item.contract);
+    const declared = item.source?.entry;
+    const conventional =
+      declared !== undefined &&
+      conventions.some(
+        ({ entry }) => entry.path === declared.path && entry.to === declared.to,
+      );
     const schema = await resolveWorldDataSchema({
       source: source(item.contract, result.length),
       deps: { registry },
@@ -109,15 +119,11 @@ export async function worldGenerationDataContracts(
       ...(item.hint ? { hint: item.hint } : {}),
       ...(item.example !== undefined ? { example: item.example } : {}),
       pluginId: item.pluginId,
-      lorebook: item.source?.entry.to.endsWith("+lorebook") === true,
-      ...(item.source &&
-      (item.source.entry.kind === "yaml" || item.source.entry.kind === "json")
-        ? {
-            source: {
-              kind: item.source.entry.kind,
-              path: item.source.entry.path,
-            },
-          }
+      lorebook: declared?.to.endsWith("+lorebook") === true,
+      ...(declared &&
+      conventional &&
+      (declared.kind === "yaml" || declared.kind === "json")
+        ? { source: { kind: declared.kind, path: declared.path } }
         : {}),
     });
   }

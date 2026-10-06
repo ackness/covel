@@ -121,6 +121,7 @@ const suspensions = createdRow.extend({
     locale: z.string().optional(),
     logicalTurn: z.number().int().optional(),
     turnNumber: z.number().int().optional(),
+    currentTurnUserMessages: z.number().int().positive().optional(),
     emittedEvents: z.array(jsonValue).optional(),
     suspendToolCallId: z.string().optional(),
   }),

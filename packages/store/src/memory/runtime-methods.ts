@@ -2,6 +2,7 @@ import {
   applyCursorAfter,
   applyCursorPage,
   applyPagination,
+  compareByteOrder,
   sortByCursorAsc,
 } from "../common/pagination.js";
 import { characterKey, stateEntryKey } from "../common/keys.js";
@@ -259,9 +260,15 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listCharacters(sessionId) {
-      return sortByCursorAsc(
-        [...state.characters.values()].filter((r) => r.sessionId === sessionId),
-      );
+      // An author writes a character ID, so it is compared as the SQL
+      // backends compare it, byte by byte.
+      return [...state.characters.values()]
+        .filter((r) => r.sessionId === sessionId)
+        .sort((a, b) => {
+          if (a.createdAt !== b.createdAt)
+            return a.createdAt < b.createdAt ? -1 : 1;
+          return compareByteOrder(a.id, b.id);
+        });
     },
 
     async deleteCharacter(sessionId, id) {

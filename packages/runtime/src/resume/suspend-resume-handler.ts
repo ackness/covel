@@ -42,6 +42,8 @@ export interface HandleSuspensionOptions {
   /** Numeric clock of this execution, restored into the tool context on resume. */
   readonly logicalTurn?: number;
   readonly turnNumber?: number;
+  /** User messages of the current turn in `messages`; the resume budget keeps them. */
+  readonly currentTurnUserMessages?: number;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly suspendToolCallId: string;
   readonly startTime: number;
@@ -92,6 +94,9 @@ export async function handleSuspension(
       ? { logicalTurn: opts.logicalTurn }
       : {}),
     ...(opts.turnNumber !== undefined ? { turnNumber: opts.turnNumber } : {}),
+    ...(opts.currentTurnUserMessages !== undefined
+      ? { currentTurnUserMessages: opts.currentTurnUserMessages }
+      : {}),
     // Store the suspend tool's call ID so resume can append a proper tool result
     suspendToolCallId,
   };

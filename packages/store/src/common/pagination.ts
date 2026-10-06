@@ -12,6 +12,27 @@ export function applyPagination<T>(
   return [...items];
 }
 
+/**
+ * Order of two strings by their UTF-8 bytes, which is the order of their code
+ * points: what SQLite's BINARY collation and PostgreSQL's `collate "C"` give.
+ * `<` compares UTF-16 code units instead, and puts a character above U+FFFF
+ * (an emoji) before U+E000–U+FFFF (a fullwidth letter).
+ */
+export function compareByteOrder(a: string, b: string): number {
+  const length = Math.min(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    const x = a.charCodeAt(i);
+    const y = b.charCodeAt(i);
+    if (x === y) continue;
+    // A surrogate is half of a code point above U+FFFF.
+    const xSurrogate = x >= 0xd800 && x <= 0xdfff;
+    const ySurrogate = y >= 0xd800 && y <= 0xdfff;
+    if (xSurrogate !== ySurrogate) return xSurrogate ? 1 : -1;
+    return x < y ? -1 : 1;
+  }
+  return a.length - b.length;
+}
+
 type Keyed = { readonly createdAt: string; readonly id: string };
 
 /**

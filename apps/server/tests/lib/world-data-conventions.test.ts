@@ -10,6 +10,7 @@ import {
   worldHasData,
 } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
+import { worldGenerationDataContracts } from "../../src/world-data/portable-contract-data.js";
 import {
   loadPluginCatalogue,
   validateWorldPackage,
@@ -165,5 +166,51 @@ describe("world data conventions", () => {
         .map((item) => item.file),
     ).toEqual(["data/journal.yaml"]);
     expect(diagnostics.filter((item) => item.level === "error")).toEqual([]);
+  });
+
+  it("gives the world generator a contract's path only while it is a convention", async () => {
+    const catalogue = await loadPluginCatalogue([PLUGINS]);
+    const target = (await worldGenerationDataContracts(catalogue)).find(
+      (item) => item.source,
+    )!;
+    expect(target.source).toBeDefined();
+
+    // A second plugin that names the same file for a contract of its own.
+    // A file the generator wrote there with no descriptor would be read for
+    // neither contract.
+    const owner = catalogue.get(target.pluginId!)!;
+    const plugin = owner.packageManifest!.plugin!;
+    const [namespace, declaration] = Object.entries(
+      plugin.contributes!.data!,
+    ).find(([, item]) => item.accepts?.includes(target.contract))!;
+    const rival = {
+      ...owner,
+      packageManifest: {
+        ...owner.packageManifest!,
+        plugin: {
+          ...plugin,
+          contributes: {
+            data: {
+              [namespace]: {
+                ...declaration,
+                accepts: ["rival.records@1"],
+                authoring: { ...declaration.authoring!, generate: undefined },
+              },
+            },
+          },
+        },
+      },
+    } as typeof owner;
+    const crowded = new Map([...catalogue.getAll(), ["rival", rival] as const]);
+    const contracts = await worldGenerationDataContracts({
+      get: (id) => crowded.get(id),
+      getAll: () => crowded,
+    });
+    expect(
+      contracts.find((item) => item.contract === target.contract),
+    ).toMatchObject({ contract: target.contract, pluginId: target.pluginId });
+    expect(
+      contracts.find((item) => item.contract === target.contract)?.source,
+    ).toBeUndefined();
   });
 });

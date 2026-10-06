@@ -463,8 +463,10 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
 
     it("lists rows written in the same millisecond by key, byte by byte, not by row ID", async () => {
       const at = "2024-01-01T00:00:00.000Z";
-      // Row IDs in the opposite order of the keys, as random IDs may be.
-      const keys = ["ab", "a_b", "a-b", "a", "B"];
+      // Row IDs in the opposite order of the keys, as random IDs may be. The
+      // emoji is two UTF-16 units that sort before the fullwidth letter, and
+      // four bytes that sort after it.
+      const keys = ["🐉", "Ａ", "ab", "a_b", "a-b", "a", "B"];
       await store.setPluginDataBatch(
         keys.map((key, index) => ({
           id: `tie-${index}`,
@@ -488,7 +490,7 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
         updatedAt: at,
       });
 
-      const expected = ["z", "B", "a", "a-b", "a_b", "ab"];
+      const expected = ["z", "B", "a", "a-b", "a_b", "ab", "Ａ", "🐉"];
       const lists = await Promise.all([
         store.listPluginData("sess-tie", "p1", "entries"),
         store.listPluginData("sess-tie", "p1"),
