@@ -171,7 +171,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/rpc-defaults/submit-form.ts": 6,
   "packages/shared/src/utils/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
-  "packages/context/src/prompt-internals.ts": 6,
+  "packages/context/src/prompt-internals.ts": 11,
   "packages/plugin-handlers-utils/src/narrative-review.ts": 9,
   "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,

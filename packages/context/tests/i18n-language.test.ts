@@ -35,6 +35,24 @@ describe("prompt locale normalization", () => {
     expect(preamble).toContain("繁體");
   });
 
+  it("writes every line of the preamble in the instruction language", () => {
+    // A Chinese session read `[RUNTIME]` and `[LANGUAGE]` in English and
+    // `[COMPLETION]` in Chinese.
+    for (const options of [undefined, { terminatesWithRuntimeDone: false }]) {
+      const chinese = buildFrameworkPreamble("zh-CN", options).split("\n");
+      expect(
+        chinese.map((line) => line.slice(0, line.indexOf("]") + 1)),
+      ).toEqual(
+        expect.arrayContaining(["[RUNTIME]", "[LANGUAGE]", "[COMPLETION]"]),
+      );
+      for (const line of chinese) expect(line, line).toMatch(/\p{Script=Han}/u);
+      expect(chinese.join("\n")).toContain("必须用简体中文书写");
+      expect(buildFrameworkPreamble("en-US", options)).not.toMatch(
+        /\p{Script=Han}/u,
+      );
+    }
+  });
+
   it("separates the instruction language from the output language", () => {
     vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
     const forcedEnglish = buildFrameworkPreamble("zh-CN");

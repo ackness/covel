@@ -552,18 +552,29 @@ export function buildFrameworkPreamble(
       : [
           "[COMPLETION] This runtime finishes by emitting its **structured JSON output**: once all tool work is done, return the JSON matching the declared schema. Do NOT call `runtime-done` — this runtime does not have that tool.",
         ];
-  return [
-    "[RUNTIME] You are executing an in-game runtime for an interactive narrative engine.",
-    "[RUNTIME] Follow the runtime instructions and world data below as the complete task context.",
-    "[RUNTIME] Produce only in-world narrative, structured runtime output, and required tool calls.",
-    // Scope the language rule to natural-language content only. The old
-    // wording covered "tool parameters" wholesale, which invited the model to
-    // translate enum members, plugin/runtime ids, event topics and schema
-    // keys — every one of which then fails Zod validation or dispatch.
-    `[LANGUAGE] You MUST write all natural-language content in ${languageName}: narrative, descriptions, summaries, and any free-text tool argument.`,
-    "[LANGUAGE] Do NOT translate machine values. Enum members, ids, keys, event topics, schema field names, and tool names must be copied EXACTLY as the schema spells them, in their original language.",
-    ...completion,
-  ].join("\n");
+  // The whole preamble is in one language. With the frame and the language
+  // rule in English and the completion rule in Chinese, a Chinese session
+  // read a prompt that changed language twice before the plugin's own text.
+  // The language rule covers natural-language content only: wording that
+  // covered "tool parameters" wholesale invited the model to translate enum
+  // members, plugin/runtime ids, event topics and schema keys, every one of
+  // which then fails Zod validation or dispatch.
+  const frame = isZh
+    ? [
+        "[RUNTIME] 你正在执行一个互动叙事引擎的游戏内 runtime。",
+        "[RUNTIME] 下面的 runtime 指令和世界数据是这次任务的全部上下文，按它们执行。",
+        "[RUNTIME] 只产出游戏内的叙事、结构化的 runtime 输出和要求的工具调用。",
+        `[LANGUAGE] 所有自然语言内容必须用${languageName}书写：叙事、描述、摘要，以及工具参数里的自由文本。`,
+        "[LANGUAGE] 不要翻译机器值。枚举值、id、键名、事件主题、schema 字段名和工具名必须按 schema 里的写法原样照抄，保持原来的语言。",
+      ]
+    : [
+        "[RUNTIME] You are executing an in-game runtime for an interactive narrative engine.",
+        "[RUNTIME] Follow the runtime instructions and world data below as the complete task context.",
+        "[RUNTIME] Produce only in-world narrative, structured runtime output, and required tool calls.",
+        `[LANGUAGE] You MUST write all natural-language content in ${languageName}: narrative, descriptions, summaries, and any free-text tool argument.`,
+        "[LANGUAGE] Do NOT translate machine values. Enum members, ids, keys, event topics, schema field names, and tool names must be copied EXACTLY as the schema spells them, in their original language.",
+      ];
+  return [...frame, ...completion].join("\n");
 }
 
 /**

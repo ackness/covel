@@ -113,7 +113,7 @@ provider 获得当前执行的 locale、只读世界视图和自身数据访问�
 
 `memory` 插件通过此扩展点把自身 `blocks` 数据渲染为回合段，块定义经 `memory.block-definitions@1` 服务收集。内核不读取某个记忆插件的私有 namespace，也不提供 Core Memory、Working Memory 或 persona 专用段。世界结构补充由 `session.world-context@1` 返回 `schema` / `entries` 与当前值 `dimensions`；维度不是 `entries` 或 constant lorebook 副本。世界书仍使用领域记录的 prompt position。
 
-`PostContextAssembly` 仍可改写最终 `systemPrompt` / `messages`。框架前置段（`[RUNTIME]` 运行框架、`[LANGUAGE]` 输出语言指令、`[COMPLETION]` 完成约定）不属于可丢弃的部分：hook 返回的 `systemPrompt` 若不以它开头，框架会把它补回最前面，所以只返回自己正文的裁剪型 hook 不需要、也无法去掉它。payload 里的 `frameworkHead` 是这段文本的只读副本。少了这段，模型就不知道会话用什么语言。它收到的原始本地化 `promptTemplate`、已解析 `inputSlots` 和角色摘要是只读来源；这些来源不接受 hook replacement。挂起时输入槽冻结进 continuation，恢复使用同一输入。
+`PostContextAssembly` 仍可改写最终 `systemPrompt` / `messages`。框架前置段（`[RUNTIME]` 运行框架、`[LANGUAGE]` 输出语言指令、`[COMPLETION]` 完成约定；三部分都用会话的[指令语言](i18n.md)写，简体中文会话整段是中文）不属于可丢弃的部分：hook 返回的 `systemPrompt` 若不以它开头，框架会把它补回最前面，所以只返回自己正文的裁剪型 hook 不需要、也无法去掉它。payload 里的 `frameworkHead` 是这段文本的只读副本。少了这段，模型就不知道会话用什么语言。它收到的原始本地化 `promptTemplate`、已解析 `inputSlots` 和角色摘要是只读来源；这些来源不接受 hook replacement。挂起时输入槽冻结进 continuation，恢复使用同一输入。
 
 ### Runtime LLM 请求默认值
 
