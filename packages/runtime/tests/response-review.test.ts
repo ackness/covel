@@ -27,7 +27,7 @@ const text = (content: string): LLMResponse => ({
 async function run(
   replies: LLMResponse[],
   maxSteps = 6,
-  { streaming = false } = {},
+  { streaming = false, locale = undefined as string | undefined } = {},
 ) {
   const store = createMemoryStore();
   const now = new Date().toISOString();
@@ -93,6 +93,7 @@ async function run(
       turnId: "turn",
       playerMessage: "Continue",
       origin: "player",
+      ...(locale ? { locale } : {}),
     },
     [{ ...story, maxSteps }],
     {
@@ -146,6 +147,20 @@ describe("plugin response validation", () => {
       status: "success",
       output: { narrativeOutput: "I watch the harbor." },
     });
+  });
+  it("tells a Chinese session in Chinese that the draft was not accepted", async () => {
+    const { generate } = await run(
+      [text("Rejected draft"), text("I watch the harbor.")],
+      6,
+      { locale: "zh-CN" },
+    );
+    const [rejection, correction] = String(
+      generate.mock.calls[1]![0].messages.at(-1)?.content,
+    ).split("\n");
+    expect(rejection).toContain("草稿未被接受");
+    expect(rejection).not.toMatch(/[A-Za-z]/);
+    // The plugin's own correction follows, as the plugin wrote it.
+    expect(correction).toBe("Use the selected perspective.");
   });
   it("sends a rejected draft back with its reasoning", async () => {
     const providerContinuation = {

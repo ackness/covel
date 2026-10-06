@@ -1,5 +1,6 @@
 import {
   makeProposal,
+  pickLocaleText,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
@@ -310,22 +311,39 @@ async function generateVariants(ctx, baseText, requested) {
   const wanted = Math.max(0, Math.min(requested, MAX_VARIANTS));
   if (wanted === 0 || !ctx.gateway) return [];
 
-  const localeHint =
+  // An instruction: English, and Chinese for a Simplified Chinese session.
+  const text = (zh, en) => pickLocaleText(ctx.locale, zh, en);
+  const locale =
     typeof ctx.locale === "string" && ctx.locale.trim()
-      ? ` The reader's locale is "${ctx.locale.trim()}".`
+      ? ctx.locale.trim()
       : "";
-  const system =
+  const localeHint = !locale
+    ? ""
+    : text(
+        `读者的 locale 是 "${locale}"。`,
+        ` The reader's locale is "${locale}".`,
+      );
+  const system = text(
+    "你把一段互动小说的叙事改写成几种不同的表述，供分支回复界面使用。" +
+      "保留完全相同的事件、角色、事实和结果——只改变措辞、节奏和语气。" +
+      "每一种表述都用与原文相同的语言书写。" +
+      localeHint +
+      `恰好输出 ${wanted} 种表述，相邻两种之间用只含三个连字符（---）的一行隔开。` +
+      "不要编号，也不要添加任何说明或开场白。",
     "You rewrite a single interactive-fiction narrative beat into alternative " +
-    "phrasings for a branching-reply UI. Preserve the exact same events, " +
-    "characters, facts, and outcome — vary only wording, rhythm, and tone. " +
-    "Write every alternative in the SAME language as the original passage." +
-    localeHint +
-    ` Output exactly ${wanted} alternative${wanted > 1 ? "s" : ""}, each ` +
-    "separated by a line containing only three hyphens (---). Do not number " +
-    "them and do not add any commentary or preamble.";
-  const prompt =
+      "phrasings for a branching-reply UI. Preserve the exact same events, " +
+      "characters, facts, and outcome — vary only wording, rhythm, and tone. " +
+      "Write every alternative in the SAME language as the original passage." +
+      localeHint +
+      ` Output exactly ${wanted} alternative${wanted > 1 ? "s" : ""}, each ` +
+      "separated by a line containing only three hyphens (---). Do not number " +
+      "them and do not add any commentary or preamble.",
+  );
+  const prompt = text(
+    `原文：\n\n${baseText}\n\n现在写出 ${wanted} 种不同的表述。`,
     `Original passage:\n\n${baseText}\n\n` +
-    `Produce ${wanted} alternative phrasing${wanted > 1 ? "s" : ""} now.`;
+      `Produce ${wanted} alternative phrasing${wanted > 1 ? "s" : ""} now.`,
+  );
 
   try {
     const result = await ctx.gateway.generateText({

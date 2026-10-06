@@ -140,6 +140,34 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
 });
 
 describe("branch-reply createCandidates (regenerate)", () => {
+  it("asks every other session in English", async () => {
+    for (const locale of ["en-US", "zh-Hant-TW"]) {
+      const gateway = {
+        generateText: vi.fn().mockResolvedValue({ text: "One.\n---\nTwo." }),
+      };
+      await handler(
+        ctx({
+          manualPayload: {
+            action: "createCandidates",
+            turnId: "turn-42",
+            baseText: "The original beat.",
+            count: 3,
+          },
+          gateway,
+          locale,
+        }),
+      );
+      const { system, prompt } = gateway.generateText.mock.calls[0][0];
+      expect(system).toContain(
+        `Write every alternative in the SAME language as the original passage. The reader's locale is "${locale}". Output exactly 2 alternatives, each separated by a line containing only three hyphens (---).`,
+      );
+      expect(prompt).toBe(
+        "Original passage:\n\nThe original beat.\n\nProduce 2 alternative phrasings now.",
+      );
+      expect(system + prompt).not.toMatch(/\p{Script=Han}/u);
+    }
+  });
+
   it("produces genuine LLM variants in addition to the original", async () => {
     const gateway = {
       generateText: vi.fn().mockResolvedValue({
@@ -166,6 +194,16 @@ describe("branch-reply createCandidates (regenerate)", () => {
     expect(gateway.generateText.mock.calls[0][0]).toMatchObject({
       presetId: "fast",
     });
+    // A Chinese session is asked in Chinese; the passage is the only other text.
+    const request = gateway.generateText.mock.calls[0][0];
+    expect(request.system).toContain("恰好输出 2 种表述");
+    expect(request.system).toContain('读者的 locale 是 "zh-CN"。');
+    expect(request.system.replace('"zh-CN"', "")).not.toMatch(
+      /[A-Za-z]{2,} [A-Za-z]{2,}/,
+    );
+    expect(request.prompt).toBe(
+      "原文：\n\nThe original beat as written by the narrator.\n\n现在写出 2 种不同的表述。",
+    );
 
     expect(getToolContent(result).value).toMatchObject({
       action: "createCandidates",

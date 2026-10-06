@@ -1,3 +1,4 @@
+import { instructionLocaleFor } from "@covel/shared";
 import type { LLMMessage, LLMResponse } from "../llm/llm-adapter.js";
 import { runPostLLMResponseHook } from "../hooks/wire-helpers.js";
 
@@ -5,8 +6,13 @@ import { runPostLLMResponseHook } from "../hooks/wire-helpers.js";
 export function createResponseReviewer(
   opts: Parameters<typeof runPostLLMResponseHook>[0],
   transcript: LLMMessage[],
+  locale?: string,
 ) {
   let corrections = 0;
+  const notAccepted =
+    instructionLocaleFor(locale) === "zh"
+      ? "草稿未被接受。改正后重新发送完整的回复——被拒绝的草稿不会被执行，也不会被提交。不要描述改正的过程。"
+      : "The draft was not accepted. Correct it and resend the complete response — the rejected draft will not be executed or committed. Do not describe the correction process.";
   return async (
     response: LLMResponse,
     requestMessages: readonly LLMMessage[],
@@ -35,7 +41,7 @@ export function createResponseReviewer(
     }
     transcript.push({
       role: "system",
-      content: `The draft was not accepted. Correct it and resend the complete response — the rejected draft will not be executed or committed. Do not describe the correction process.\n${reviewed.correction}`,
+      content: `${notAccepted}\n${reviewed.correction}`,
     });
     return undefined;
   };

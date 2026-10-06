@@ -435,4 +435,20 @@ describe("projectDimensionSnapshot", () => {
     expect(text).toContain(JSON.stringify("m".repeat(1500)));
     expect(text).toContain(JSON.stringify("s".repeat(300)));
   });
+
+  it("counts the omitted dimensions in the instruction language", () => {
+    const snapshot = Object.fromEntries(
+      Array.from({ length: 6 }, (_, index) => [
+        `d${index}`,
+        entry("v".repeat(200)),
+      ]),
+    );
+    expect(projectDimensionSnapshot(snapshot, "zh-CN", 700)).toMatch(
+      /\[有 \d 个维度未列出；需要详情时按 ID 查询。\]$/,
+    );
+    for (const locale of ["en-US", "zh-Hant-TW", undefined])
+      expect(projectDimensionSnapshot(snapshot, locale, 700)).toMatch(
+        /\[\d dimensions omitted; query by ID for details\.\]$/,
+      );
+  });
 });

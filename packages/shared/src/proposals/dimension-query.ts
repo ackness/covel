@@ -4,6 +4,7 @@ import {
   dimensionSnapshotSchema,
 } from "../schemas/dimensions.js";
 import { resolveI18nText } from "../utils/i18n.js";
+import { instructionLocaleFor } from "../utils/instruction-locale.js";
 import type { DimensionSnapshot } from "../types/dimensions.js";
 
 export const dimensionQuerySchema = z.strictObject({
@@ -191,6 +192,9 @@ export function projectDimensionSnapshot(
     text += line;
   }
   if (omitted)
-    text += `[${omitted} dimensions omitted; query by ID for details.]`;
+    text +=
+      instructionLocaleFor(locale) === "zh"
+        ? `[有 ${omitted} 个维度未列出；需要详情时按 ID 查询。]`
+        : `[${omitted} dimensions omitted; query by ID for details.]`;
   return text;
 }

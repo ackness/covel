@@ -3,6 +3,7 @@
  * into the `stage.music@1` slot, and tells the narrative which moods this
  * world has music for.
  */
+import { pickLocaleText } from "@covel/plugin-handlers-utils";
 import {
   ASSETS_NS,
   MOOD_KEY,
@@ -36,10 +37,15 @@ export default function (covel) {
       const lines = moods.map(({ id, when }) =>
         when ? `- ${id}: ${when}` : `- ${id}`,
       );
+      const instruction = pickLocaleText(
+        ctx.locale,
+        "这个世界为下面这些情绪配了音乐。故事的情绪明显变成其中某一种时，发射 `music.cue` 并带上这种情绪，按列出的写法原样填写。每回合最多发射一次，情绪没有变化时不要发射。情绪 `silence` 会停止音乐。",
+        "This world has music for the moods below. When the mood of the story clearly changes to one of them, emit `music.cue` with that mood, written exactly as listed. Emit at most once per turn, and not while the mood stays the same. The mood `silence` stops the music.",
+      );
       return [
         {
           id: "music-moods",
-          content: `<music-moods>\nThis world has music for the moods below. When the mood of the story clearly changes to one of them, emit \`music.cue\` with that mood, written exactly as listed. Emit at most once per turn, and not while the mood stays the same. The mood \`silence\` stops the music.\n${lines.join("\n")}\n</music-moods>`,
+          content: `<music-moods>\n${instruction}\n${lines.join("\n")}\n</music-moods>`,
           position: "system",
           audience: "story",
           volatility: "session",

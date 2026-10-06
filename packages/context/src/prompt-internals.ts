@@ -242,8 +242,9 @@ async function resolvePluginDataInject(
 
   const tagName = validateTagName(parseTagName(inject.as));
 
+  const zh = instructionLocaleFor(params.turnInput.locale) === "zh";
   if (entries.length === 0) {
-    return `<${tagName}>(none)</${tagName}>`;
+    return `<${tagName}>${zh ? "（无）" : "(none)"}</${tagName}>`;
   }
 
   const format = inject.format ?? "summary";
@@ -251,9 +252,11 @@ async function resolvePluginDataInject(
   const truncated = twoPassTruncate(entries, maxEntries);
   const serialized = escapeXmlContent(serializeEntries(truncated, format));
   const countLine =
-    entries.length > truncated.length
-      ? `\n[${entries.length} entries in total, ${truncated.length} shown]`
-      : "";
+    entries.length <= truncated.length
+      ? ""
+      : zh
+        ? `\n[共 ${entries.length} 条记录，显示其中 ${truncated.length} 条]`
+        : `\n[${entries.length} entries in total, ${truncated.length} shown]`;
 
   return `<${tagName}>\n${serialized}${countLine}\n</${tagName}>`;
 }
@@ -365,6 +368,7 @@ const capped = (text: string) =>
  */
 export function renderNpcProfiles(
   characters: readonly CharacterSummary[],
+  locale?: string,
 ): string {
   const lines: string[] = [];
   const unlisted: string[] = [];
@@ -384,7 +388,11 @@ export function renderNpcProfiles(
     used += line.length + 1;
   }
   if (unlisted.length > 0)
-    lines.push(`- (profiles not shown: ${unlisted.join(", ")})`);
+    lines.push(
+      instructionLocaleFor(locale) === "zh"
+        ? `- （未列出档案：${unlisted.join("、")}）`
+        : `- (profiles not shown: ${unlisted.join(", ")})`,
+    );
   return lines.join("\n");
 }
 
@@ -436,7 +444,7 @@ export function assemblePromptVariables(
       turnNumber: sessionMeta?.turnNumber ?? 0,
     },
     characters: {
-      npcs: renderNpcProfiles(sessionMeta?.characters ?? []),
+      npcs: renderNpcProfiles(sessionMeta?.characters ?? [], turnInput.locale),
     },
     player: {
       message: turnInput.playerMessage,

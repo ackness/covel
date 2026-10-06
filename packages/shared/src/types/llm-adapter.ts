@@ -190,6 +190,11 @@ export interface LLMAdapter {
     readonly tools?: readonly LLMToolDefinition[];
     readonly defaults?: LLMRequestDefaults;
     readonly responseFormat?: LLMResponseFormat;
+    /**
+     * Session locale. An instruction the adapter adds to the request (the
+     * response-format rule) is written in its instruction language.
+     */
+    readonly locale?: string;
     /** Hard per-request generation limit forwarded to the provider wire. */
     readonly maxOutputTokens?: number;
     /** Synchronously reports each concrete provider attempt made by a gateway. */
@@ -215,6 +220,8 @@ export interface LLMAdapter {
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
     readonly defaults?: LLMRequestDefaults;
+    /** @see generate.locale */
+    readonly locale?: string;
     /** @see generate.maxOutputTokens */
     readonly maxOutputTokens?: number;
     /** @see generate.onTargetAttempt */

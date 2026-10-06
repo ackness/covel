@@ -4,13 +4,18 @@ import {
   type TokenEstimator,
   type BudgetOptions,
 } from "@covel/context";
-import { resolveLlmTokenLimits, type LLMAdapter } from "@covel/shared";
+import {
+  instructionLocaleFor,
+  resolveLlmTokenLimits,
+  type LLMAdapter,
+} from "@covel/shared";
 import type {
   LLMMessage,
   LLMResponseFormat,
   LLMToolDefinition,
 } from "../llm/llm-adapter.js";
 import type { RetryPolicy } from "../retry/llm-retry.js";
+import { retryHint } from "../retry/retry-common.js";
 
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 
@@ -59,6 +64,8 @@ export function applyPerCallBudget(params: {
   readonly retryPolicy: RetryPolicy;
   readonly estimator: TokenEstimator;
   readonly contextBudget: Omit<BudgetOptions, "estimator">;
+  /** Session locale: the markers this adds are in its instruction language. */
+  readonly locale?: string;
 }): {
   readonly messages: LLMMessage[];
   readonly prunedMessageCount: number;
@@ -110,9 +117,14 @@ function budgetProviderRequest(
   const responseFormatText = params.responseFormat
     ? `<response_format>${JSON.stringify(params.responseFormat)}</response_format>`
     : "";
+  // The longest hint a retry can append, so a retried call still fits.
   const retryText =
     params.retryPolicy.maxRetries > 0
-      ? `[retry ${params.retryPolicy.maxRetries}] The previous attempt called the same tool repeatedly. Vary your approach, or finish as the instructions say.${" ".repeat(params.retryPolicy.maxRetries)}`
+      ? retryHint(
+          params.retryPolicy.maxRetries,
+          "tool-loop-detected",
+          params.locale,
+        )
       : "";
   const fixedInput = [
     primarySystemText,
@@ -125,7 +137,11 @@ function budgetProviderRequest(
   const budgeted = applyBudget(
     fixedInput,
     hasPrimarySystem ? rest : params.messages,
-    { ...params.contextBudget, estimator: params.estimator },
+    {
+      ...params.contextBudget,
+      estimator: params.estimator,
+      locale: params.locale,
+    },
   );
   const fixedInputTokens = params.estimator(fixedInput);
   const systemTokens = params.estimator(primarySystemText);
@@ -133,16 +149,19 @@ function budgetProviderRequest(
   const responseFormatTokens = params.estimator(responseFormatText);
   const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
   const overflow = Math.max(0, budgeted.totalTokens - inputLimit);
+  const zh = instructionLocaleFor(params.locale) === "zh";
   const compacted = compactToolResultsToFit(
     budgeted.messages,
     overflow,
     params.estimator,
+    zh ? TOOL_RESULT_TRUNCATION_MARKER.zh : TOOL_RESULT_TRUNCATION_MARKER.en,
   );
   const afterToolResults = budgeted.totalTokens - compacted.savedTokens;
   const compactedSummaries = compactSummaryEnvelopesToFit(
     compacted.messages,
     Math.max(0, afterToolResults - inputLimit),
     params.estimator,
+    zh ? SUMMARY_TRUNCATION_MARKER.zh : SUMMARY_TRUNCATION_MARKER.en,
   );
   const compactedTotal = afterToolResults - compactedSummaries.savedTokens;
   if (compactedTotal > inputLimit) {
@@ -162,10 +181,14 @@ function budgetProviderRequest(
   };
 }
 
-const TOOL_RESULT_TRUNCATION_MARKER =
-  "\n...[tool result truncated; query a narrower scope if needed]...\n";
-const SUMMARY_TRUNCATION_MARKER =
-  "\n...[compacted history truncated; durable copy unchanged]...\n";
+const TOOL_RESULT_TRUNCATION_MARKER = {
+  en: "\n...[tool result truncated; query a narrower scope if needed]...\n",
+  zh: "\n...[工具结果已截断；需要时查询更小的范围]...\n",
+};
+const SUMMARY_TRUNCATION_MARKER = {
+  en: "\n...[compacted history truncated; durable copy unchanged]...\n",
+  zh: "\n...[压缩历史已截断；持久保存的副本没有变]...\n",
+};
 
 /**
  * Tool messages after the current user turn cannot be removed without
@@ -177,6 +200,7 @@ function compactToolResultsToFit(
   messages: readonly LLMMessage[],
   tokensToSave: number,
   estimator: TokenEstimator,
+  marker: string,
 ): {
   readonly messages: LLMMessage[];
   readonly savedTokens: number;
@@ -199,7 +223,7 @@ function compactToolResultsToFit(
       continue;
     }
     const originalTokens = estimator(message.content);
-    const minimumTokens = estimator(TOOL_RESULT_TRUNCATION_MARKER);
+    const minimumTokens = estimator(marker);
     if (originalTokens <= minimumTokens) continue;
 
     // Keep a small safety token because heuristic estimators and integer
@@ -212,7 +236,7 @@ function compactToolResultsToFit(
       message.content,
       targetTokens,
       estimator,
-      TOOL_RESULT_TRUNCATION_MARKER,
+      marker,
     );
     const newTokens = estimator(content);
     const saved = Math.max(0, originalTokens - newTokens);
@@ -231,6 +255,7 @@ function compactSummaryEnvelopesToFit(
   messages: readonly LLMMessage[],
   tokensToSave: number,
   estimator: TokenEstimator,
+  marker: string,
 ): {
   readonly messages: LLMMessage[];
   readonly savedTokens: number;
@@ -253,7 +278,7 @@ function compactSummaryEnvelopesToFit(
       continue;
     }
     const originalTokens = estimator(message.content);
-    const minimumTokens = estimator(SUMMARY_TRUNCATION_MARKER);
+    const minimumTokens = estimator(marker);
     if (originalTokens <= minimumTokens) continue;
     const targetTokens = Math.max(
       minimumTokens,
@@ -263,7 +288,7 @@ function compactSummaryEnvelopesToFit(
       message.content,
       targetTokens,
       estimator,
-      SUMMARY_TRUNCATION_MARKER,
+      marker,
     );
     const newTokens = estimator(content);
     const saved = Math.max(0, originalTokens - newTokens);
