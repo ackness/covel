@@ -485,6 +485,13 @@ reach a prompt (world dimensions, a runtime's own data) are therefore in the sam
 order from turn to turn, in a fork, and in another run of the same scripted
 session.
 
+Two more lists that reach a prompt have a total order on every backend.
+`listCharacters` returns `(createdAt, id)`, IDs compared byte by byte; without
+an order PostgreSQL returned rows as they lay on disk, where an updated row
+moves. `listTurnMessages` and `listUncompactedTurnMessages` return
+`(createdAt, order, id)`: two messages of one millisecond come in pipeline
+order, the player's message first.
+
 | Owner / namespace                                                                        | Authority                                                                      | Plugin access                                                                                                                                                                           |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                                                         | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                                                                |
