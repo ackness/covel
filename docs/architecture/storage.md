@@ -476,6 +476,15 @@ Plugin-facing data APIs bind both session ID and plugin owner. A namespace is a
 name inside that owner's partition, not a way to select another owner. Ordinary
 plugin writes are buffered as proposals and committed under the source owner.
 
+Every plugin-data list returns rows in `(createdAt, pluginId, namespace, key)`
+order, compared byte by byte on MemoryStore, SQLite and PostgreSQL (PostgreSQL
+with `COLLATE "C"`). A rewrite changes a row's value and `updatedAt` only: its
+`id` and `createdAt` stay. Rows written in one commit share a `createdAt`, so the
+row key decides their order and the row ID, which is random, does not. Lists that
+reach a prompt (world dimensions, a runtime's own data) are therefore in the same
+order from turn to turn, in a fork, and in another run of the same scripted
+session.
+
 | Owner / namespace                                                                        | Authority                                                                      | Plugin access                                                                                                                                                                           |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                                                         | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                                                                |

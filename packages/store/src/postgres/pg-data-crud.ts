@@ -5,6 +5,7 @@
  * all query logic is shared with the SQLite backend.
  */
 
+import { sql } from "drizzle-orm";
 import { makeInsertValues } from "../common/insert-values.js";
 import { pgJsonReader } from "../common/json-readers.js";
 import { pgJsonWriter } from "../common/json-writers.js";
@@ -26,5 +27,6 @@ export function createPgDataCrud(getDb: () => PgDb): PgDataCrud {
     },
     json: pgJsonReader,
     values: makeInsertValues(pgJsonWriter),
+    byteOrder: (column) => sql`${column} collate "C"`,
   });
 }

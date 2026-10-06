@@ -373,11 +373,12 @@ sources:
     });
 
     expect(result.written).toBe(2);
+    // One import writes its rows at one time; they list by key.
     expect(
       (await store.listPluginData("sess-1", "world-notes", "facts")).map(
         (row) => row.key,
       ),
-    ).toEqual(["rain", "gate"]);
+    ).toEqual(["gate", "rain"]);
     expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(2);
   });
 

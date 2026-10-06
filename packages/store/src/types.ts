@@ -349,6 +349,12 @@ export interface PluginDataStore {
     namespace: string,
     key: string,
   ): Promise<PluginDataRecord | null>;
+  /**
+   * One plugin's rows in `(createdAt, pluginId, namespace, key)` order, the
+   * order of every plugin-data list. A rewrite keeps a row's `id` and
+   * `createdAt`, so the order of a session's rows is the same from turn to
+   * turn, in a fork, and in another run of the same scripted session.
+   */
   listPluginData(
     sessionId: string,
     pluginId: string,
@@ -372,8 +378,8 @@ export interface PluginDataStore {
     pagination?: PaginationOpts,
   ): Promise<readonly PluginDataRecord[]>;
   /**
-   * List one namespace's rows for a session across every pluginId, ordered by
-   * `(createdAt, id)`. Framework control planes (runtime jobs) keep one
+   * List one namespace's rows for a session across every pluginId, in the
+   * order of every plugin-data list: `(createdAt, pluginId, namespace, key)`. Framework control planes (runtime jobs) keep one
    * namespace per plugin and need the session-wide view without loading every
    * other plugin's data.
    */
