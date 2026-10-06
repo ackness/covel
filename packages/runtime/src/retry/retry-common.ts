@@ -231,8 +231,8 @@ export function perturbMessages(
   const padding = " ".repeat(attempt);
   const hint =
     reason === "tool-loop-detected"
-      ? `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach or finish with runtime-done.${padding}`
-      : `[retry ${attempt}] The previous attempt did not complete. Produce a concise reply; call runtime-done when finished.${padding}`;
+      ? `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach, or finish as the instructions say.${padding}`
+      : `[retry ${attempt}] The previous attempt did not complete. Do the task again and finish as the instructions say.${padding}`;
   return [...messages, { role: "system" as const, content: hint }];
 }
 

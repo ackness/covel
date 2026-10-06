@@ -667,7 +667,9 @@ describe("Resume Routes", () => {
       const app = createTestApp(
         makeDefaultDeps(store, {
           llmAdapter: { generate },
-          contextBudget: { maxInputTokens: 120, reservedForResponse: 40 },
+          // One token for the input: no request fits, whatever the system
+          // prompt and the tool definitions come to.
+          contextBudget: { maxInputTokens: 41, reservedForResponse: 40 },
         }),
       );
       const res = await app.request(

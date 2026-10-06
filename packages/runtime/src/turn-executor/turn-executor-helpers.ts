@@ -55,6 +55,17 @@ export function retainPreGameRuntimes(
 }
 
 /**
+ * Whether a runtime ends by calling `runtime-done`. A runtime with an output
+ * schema ends with its JSON or its completing tool, and a story runtime ends
+ * with its text.
+ */
+export function usesRuntimeDone(
+  manifest: Pick<RuntimeManifest, "output" | "outputKind">,
+): boolean {
+  return !manifest.output?.schema && manifest.outputKind !== "story";
+}
+
+/**
  * Build LLM tool definitions from a runtime's manifest declarations.
  * Looks up each declared tool in the ToolExecutor's registry to get its JSON schema.
  *
@@ -79,8 +90,11 @@ export function buildToolDefinitions(
   // tool calls. Schema-declared runtimes either emit final JSON text or use a
   // declared completing tool as their output channel, so `runtime-done` is
   // withheld; either path already has an explicit completion contract.
+  // A story runtime finishes with its text. Offered `runtime-done`, a model
+  // that follows instructions to the letter ends the run with it and writes
+  // no story.
   const frameworkNames = new Set<string>();
-  if (!manifest.output?.schema && !names.includes("runtime-done")) {
+  if (usesRuntimeDone(manifest) && !names.includes("runtime-done")) {
     names.push("runtime-done");
     frameworkNames.add("runtime-done");
   }

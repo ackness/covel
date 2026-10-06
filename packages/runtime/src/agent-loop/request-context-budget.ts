@@ -112,7 +112,7 @@ function budgetProviderRequest(
     : "";
   const retryText =
     params.retryPolicy.maxRetries > 0
-      ? `[retry ${params.retryPolicy.maxRetries}] The previous attempt called the same tool repeatedly. Vary your approach or finish with runtime-done.${" ".repeat(params.retryPolicy.maxRetries)}`
+      ? `[retry ${params.retryPolicy.maxRetries}] The previous attempt called the same tool repeatedly. Vary your approach, or finish as the instructions say.${" ".repeat(params.retryPolicy.maxRetries)}`
       : "";
   const fixedInput = [
     primarySystemText,
