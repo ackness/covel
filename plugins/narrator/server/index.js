@@ -8,7 +8,10 @@ export default function (covel) {
   // change the system prompt with them, every turn.
   covel.provideExtension("prompt.segment@1", "character-sheets", {
     handler: (_input, ctx) =>
-      characterSheetSegments(ctx.world.characters, { profiles: true }),
+      characterSheetSegments(ctx.world.characters, {
+        profiles: true,
+        locale: ctx.locale,
+      }),
   });
   const review = createNarrativeReview(covel.pluginId);
   covel.on("PostContextAssembly", review.context);

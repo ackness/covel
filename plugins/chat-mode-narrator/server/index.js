@@ -7,7 +7,8 @@ export default function (covel) {
   // The sheet changes as the story goes; in the prompt body it would change
   // the system prompt with it.
   covel.provideExtension("prompt.segment@1", "character-sheets", {
-    handler: (_input, ctx) => characterSheetSegments(ctx.world.characters),
+    handler: (_input, ctx) =>
+      characterSheetSegments(ctx.world.characters, { locale: ctx.locale }),
   });
   const review = createNarrativeReview(covel.pluginId);
   covel.on("PostContextAssembly", review.context);
