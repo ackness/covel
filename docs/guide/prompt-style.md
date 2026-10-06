@@ -35,17 +35,18 @@ Quest names are short and concrete, the way a player would write them in a noteb
 
 ## 契约区的规则
 
-| 规则                           | 说明                                                                                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 一句一条指令                   | 用祈使句和主动语态：`Call the tool one time.`，不写 `The tool should be called.`                                                     |
-| 句子要短                       | 步骤（列表项）不超过 20 个词，说明性句子不超过 25 个词。更长就拆成两句。                                                             |
-| 一词一义                       | 同一个东西始终用同一个词。术语取自 [glossary](../glossary.md) 的“提示词用词”表：写了 `turn` 就不要再写 `round`。                     |
-| 每条规则只说一次               | 同一条规则写在三个地方，改的时候只会改到一处。需要强调就放进 `Limits`。                                                              |
-| 用 `must` / `must not` / `can` | 不用 `should`：它没有说清是必须还是建议。                                                                                            |
-| 不写含糊的限定语               | `as appropriate`、`if necessary`、`try to`、`etc.` 把判断留给了模型却没说怎么判断。写出条件：`If the narrative names the giver, …`。 |
-| 标识符放在反引号里             | 工具名、字段名、枚举值、注入块的标签逐字拼写：`` `upsert-quests` ``、`` `runtime-inputs.worldIR.value` ``。                          |
-| 不规定输出语言                 | 框架会在正文之后加上输出语言的指令。正文里写 `Respond in Chinese` 会和它冲突。                                                       |
-| 不明显的规则带一句理由         | `Use the name on record. A second name makes a second quest.` 精确不等于只下命令：模型靠理由处理规则没列出的情况。                   |
+| 规则                           | 说明                                                                                                                                                              |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 一句一条指令                   | 用祈使句和主动语态：`Call the tool one time.`，不写 `The tool should be called.`                                                                                  |
+| 句子要短                       | 步骤（列表项）不超过 20 个词，说明性句子不超过 25 个词。更长就拆成两句。                                                                                          |
+| 一词一义                       | 同一个东西始终用同一个词。术语取自 [glossary](../glossary.md) 的“提示词用词”表：写了 `turn` 就不要再写 `round`。                                                  |
+| 每条规则只说一次               | 同一条规则写在三个地方，改的时候只会改到一处。需要强调就放进 `Limits`。                                                                                           |
+| 用 `must` / `must not` / `can` | 不用 `should`：它没有说清是必须还是建议。                                                                                                                         |
+| 不写含糊的限定语               | `as appropriate`、`if necessary`、`try to`、`etc.` 把判断留给了模型却没说怎么判断。写出条件：`If the narrative names the giver, …`。                              |
+| 标识符放在反引号里             | 工具名、字段名、枚举值、注入块的标签逐字拼写：`` `upsert-quests` ``、`` `runtime-inputs.worldIR.value` ``。                                                       |
+| 不规定输出语言                 | 框架会在正文之后加上输出语言的指令。正文里写 `Respond in Chinese` 会和它冲突。                                                                                    |
+| 不把簿记字段交给模型           | 会话 ID、UUID、时间戳和行版本对模型没有用，还会让同一个提示词每次都不一样。内核注入的块已经去掉它们；自己拼文本时用 `modelFacingJson`。提到“哪一回合”用回合序号。 |
+| 不明显的规则带一句理由         | `Use the name on record. A second name makes a second quest.` 精确不等于只下命令：模型靠理由处理规则没列出的情况。                                                |
 
 不采用 ASD-STE100 的许可词表，只取它的句法约束。
 

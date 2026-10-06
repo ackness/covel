@@ -94,6 +94,10 @@ pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
 pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
+pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, for repeating a scripted
+                      # session without model calls: pnpm llm:replay --mode record --upstream <origin>
+                      # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff
+                      # <a.requests> <b.requests> shows where two runs differ (docs/guide/e2e-plugin-verify.md)
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
 pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]
                       # default target is the user plugin dir; --with-tools scaffolds into plugins/
@@ -419,6 +423,13 @@ handling, and supported backend differences — those are not version compatibil
   gameplay logic.
 - Providers only through bindings: image generation uses `ctx.images` /
   `ctx.gateway.generateImage`, never a hand-rolled provider fetch.
+- Dice and other game randomness come from `ctx.random` (and `shortId`'s fourth
+  argument), never from `node:crypto` or `Math.random`: a test server started
+  with `COVEL_RANDOM_SEED` then repeats them.
+- A model reads no bookkeeping: no session ID, no UUID of a row, turn or result,
+  no timestamp. The kernel leaves them out of what it renders (`io.selfData`
+  lines, `<runtime-inputs>`, JSON tool results); text a plugin builds itself goes
+  through `modelFacingJson`. Name a turn by its number.
 - Declare `io.visibility` and the contracts a runtime provides or consumes. Agent
   limits live in `agent.loop`: `timeoutMs`, `callTimeoutMs` (a call that is not
   streamed), `maxRetries` (default 1), `firstTokenTimeoutMs` and `idleTimeoutMs`

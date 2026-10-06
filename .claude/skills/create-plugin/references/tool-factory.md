@@ -28,8 +28,8 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 |------|------|
 | `tool` | 工具定义包装函数 |
 | `z` | Zod schema 库 |
-| `shortId(prefix, label, sessionId)` | 生成 LLM 友好的短 ID（如 `item-fire-sword`） |
-| `shortIdBatch(prefix, labels, sessionId)` | 批量生成短 ID（自动去重） |
+| `shortId(prefix, label, sessionId, random?)` | 生成 LLM 友好的短 ID（如 `item-fire-sword`）；第四个参数传 `context.random` |
+| `shortIdBatch(prefix, labels, sessionId, random?)` | 批量生成短 ID（自动去重） |
 
 ## 带 UI 交互的工具
 

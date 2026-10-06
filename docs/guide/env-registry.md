@@ -23,12 +23,11 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 
 ## 状态
 
-| status       | 含义                                     |
-| ------------ | ---------------------------------------- |
-| `active`     | 代码已读取，属于当前运行契约             |
-| `documented` | 文档或示例已有，源码读取接入排期中       |
-| `planned`    | 设计文档中的未来开关                     |
-| `packaging`  | 打包工具链读取，应用运行时代码通常只透传 |
+| status      | 含义                                     |
+| ----------- | ---------------------------------------- |
+| `active`    | 代码已读取，属于当前运行契约             |
+| `planned`   | 设计文档中的未来开关                     |
+| `packaging` | 打包工具链读取，应用运行时代码通常只透传 |
 
 ## 文件职责
 
@@ -137,6 +136,7 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 | `COVEL_LLM_RETRY_DISABLED`                            | `false`                         | 设为 `1` 时关闭 provider HTTP 重试                     |
 | `COVEL_TRACE_TRUNCATE`                                | `false` / `planned`             | 计划中的 trace payload 截断开关，当前不可依赖          |
 | `E2E_BASE_URL` / `E2E_MODEL_SLOT`                     | `http://127.0.0.1:5181` / `e2e` | Playwright 外部环境覆盖地址及插件验证脚本 slot         |
+| `COVEL_RANDOM_SEED`                                   | —                               | 仅测试服务端：插件的 `ctx.random` 每次运行给出相同的数 |
 | `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | `dev:pg` 启动前的 TCP 检查目标                         |
 | `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` TCP 检查                        |
 | `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                            |
@@ -168,7 +168,8 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 - Electron 桌面端选择 `system` 时，sidecar 会针对每个目标 URL 通过 IPC 调用 Chromium 系统代理解析，并按系统返回的代理列表顺序处理连接级 fallback。Electron 会注入内部 capability `COVEL_DESKTOP_SYSTEM_PROXY_IPC=1`，因此普通 Node IPC/cluster 进程不会误启用该协议。`COVEL_SYSTEM_PROXY_URL` 仅作为不支持动态 IPC 的旧 shell 兼容入口；该配置用于核心 provider、模型数据库以及 GitHub 插件解析与下载请求，不应用到第三方插件的 `fetchWithRetry`。
 - `COVEL_LLM_MAX_CONCURRENT` 为 `active`（`packages/runtime/src/retry/llm-slots.ts` 消费）：进程内 LLM 调用并发上限，默认 `4`，`0` 或负数关闭闸门。排队时间顺延 runtime deadline。多会话托管部署可按 provider 吞吐调整。
 - `COVEL_BIND_HOST` 默认 `127.0.0.1`：本地 / 桌面部署只监听回环接口，网络上不可达。容器或多 pod 部署需显式设置 `COVEL_BIND_HOST=0.0.0.0`（`docker/docker-compose.yml` 已内置）——这是一次显式的部署决策，公开监听前请确认 `DEPLOYMENT_TIER` 与鉴权配置。
-- `COVEL_LLM_REPLAY`、`COVEL_LLM_REPLAY_DIR` 标记为 `documented`，源码不读取这两个变量，当前部署不得依赖 replay cache。`TRUSTED_PROXY_IPS` 已是 `active`（由 `middleware/rate-limit.ts` 的 X-Forwarded-For 信任检查消费）。SSRF guard 设计上即 open-by-default，因此没有 LLM host 白名单变量。
+- `COVEL_RANDOM_SEED` 只用于测试服务端。未设置时，插件的 `ctx.random.int(min, max)` 就是 `node:crypto` 的 `randomInt`。设置后，同一个 runtime（或同一个 RPC action）在一个会话里取的第 n 个数只由种子、插件 ID、runtime ID 和 n 决定，所以同一个脚本会话每次运行掷出的骰子相同；计数保存在进程内，同一个会话 ID 再次创建时从头开始。种子让骰子可以预测，不要在给玩家用的部署里设置。配合 `e2e:verify --session-id` 和 `pnpm llm:replay` 的用法见 [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)。模型请求的录制与回放由 `pnpm llm:replay` 这个外部代理完成，服务端进程内没有 replay cache，也没有对应的环境变量。
+- `TRUSTED_PROXY_IPS` 已是 `active`（由 `middleware/rate-limit.ts` 的 X-Forwarded-For 信任检查消费）。SSRF guard 设计上即 open-by-default，因此没有 LLM host 白名单变量。
 - `COVEL_COMPACTOR_CONTEXT_WINDOW` 为**可选的显式覆盖**：未设置时，压缩阈值与 prompt 硬裁剪预算按所有已启用 text slot 中最保守的模型 capability（最小 `contextWindow` 与最小 `maxOutputTokens`）动态解析，避免同一回合的 story / plugin / fast slot 窗口不一致时按较大窗口误放行；llm.toml 热重载即时生效，capability 也缺失时回退 `262144` / `16384`。请求级 story slot overlay 会与基础预算再次取较小值。设置 `COVEL_COMPACTOR_CONTEXT_WINDOW` 后固定覆盖 window，输出 reserve 仍取保守 capability。
 - `COVEL_SNAPSHOT_INTERVAL_TURNS` 默认 `5`，控制 `kind=auto` 快照的 checkpoint 节奏：`completedPlayerTurns <= 1` 时总是写入，其后每 N 个已完成玩家回合写一份；`1` 表示每回合。resume 路径无视该节流强制写入。每个 `completedPlayerTurns` 值只有一份自动快照（id 为 `auto-<计数>-<sessionId>`）：同一计数下后续的 detached、follower 或 resume 提交原地刷新它，使检查点包含该回合的后台结果而不重复存一份。构建快照 payload 需要全量读取消息历史与全部 session-scoped 集合，逐回合写入会导致 O(T²) 成本与存储膨胀。
 - `COVEL_TRACE_RETENTION_DAYS` 默认 `0`（保留全部）。设为 N 时，每次执行提交后删除该会话 N 天前的 runtime trace 事件；清理失败只记录警告，不影响提交结果。trace 是诊断数据，调试页面只能看到保留期内的记录。

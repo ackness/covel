@@ -567,7 +567,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 框架层面（`packages/runtime/src/agent-loop/tool-executor.ts`）检测 `_text` 字段：
 
 - 如果存在且为字符串 → LLM tool message content 直接写原始文本
-- 如果不存在 → 退回到旧的 `JSON.stringify(result)` 行为（向后兼容）
+- 如果不存在 → 把结果序列化为 JSON，其中记录的簿记字段（行的 `updatedAt`、消息的 `timestamp`、UUID 型的 `…Id`、`sessionId`）不给模型，规则见 [记录里的簿记字段](plugins.md#输入和输出)；`parsedResult` 和 `ctx.tools.call` 的返回值仍是完整对象
 
 这样的分层让 LLM 看到的是紧凑可读的自然语言（省 token、降噪），而框架依然有结构化数据做调试和追踪。其他 builtin 工具（如 `plugin-data-*`、`create-form`）目前保持 JSON 格式不变。
 
@@ -898,8 +898,8 @@ Attributes:
 
 模型会在注入数据里读到这些 ID，有时还要原样写回；每个字符都占 token，长随机串还容易抄错。所以 ID 尽量由单词组成，并保持在 `[a-z0-9-]` 字符集内（蓝图、规则和可移植 world data 的 ID 校验要求这一字符集）。
 
-- `wordId(prefix, label, taken)`（`@covel/plugin-handlers-utils`）：调用方能看到命名空间内全部已有 ID 时使用。返回前缀加标签单词（`npc-lin-yao`），已占用时加 `-2`、`-3`；标签没有 ASCII 字母或数字（中文、emoji）时用 8 位十六进制随机串（`char-3fa9c1d2`）。`codex`、`npc-graph` 节点和玩家角色使用它。
-- `shortId()` / `shortIdBatch()`：不读取命名空间时使用。标签单词（最多 32 个字符）加 8 位十六进制随机串，重复标签和截断后的 slug 也不会相撞，不依赖进程计数器。
+- `wordId(prefix, label, taken)`（`@covel/plugin-handlers-utils`）：调用方能看到命名空间内全部已有 ID 时使用。返回前缀加标签单词（`npc-lin-yao`），已占用时加 `-2`、`-3`；标签没有 ASCII 字母或数字（中文、emoji）时用标签的 8 位十六进制摘要（`char-3fa9c1d2`），同一个标签在每个会话里得到同一个 ID，已占用时同样加 `-2`、`-3`。`codex`、`npc-graph` 节点和玩家角色使用它。
+- `shortId()` / `shortIdBatch()`：不读取命名空间时使用。标签单词（最多 32 个字符）加 8 位十六进制随机串，重复标签和截断后的 slug 也不会相撞，不依赖进程计数器。第四个参数传上下文的 `random`，随机串就取自宿主的随机源（见 [`ctx.random`](plugins.md#输入和输出)）。
 
 ```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
@@ -907,7 +907,12 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
     name: "my-tool",
     parameters: z.object({ name: z.string() }),
     execute: async (params, context) => {
-      const id = shortId("item", params.name, context.sessionId);
+      const id = shortId(
+        "item",
+        params.name,
+        context.sessionId,
+        context.random,
+      );
       // Dragon Sword -> item-dragon-sword-<8 hex characters>
       // 龙息术 -> item-<8 hex characters>
       return { id };
@@ -918,7 +923,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 - `sessionId` 参数保留兼容性；唯一性不依赖该参数或进程内存。
 - 同一名称反复调用、跨批次调用、重启后调用均分配新 ID。名称去重由调用方查询已有实体完成；更新必须使用已保存的 ID，不能重新按名称计算。
-- `shortIdBatch(prefix, labels, sessionId)` 为每项独立分配 ID；英文标点清理、slug 截断和重复标签不会共享同一个编号。
+- `shortIdBatch(prefix, labels, sessionId, random?)` 为每项独立分配 ID；英文标点清理、slug 截断和重复标签不会共享同一个编号。
 - 旧 ID（包括 `npc-1` 等计数型编号）继续有效，不迁移、不重编号。新建写入仍应检查目标 key 是否已占用；`npc-graph` 会在持久化前拒绝冲突，包含当前执行中尚未提交的节点。
 
 ---
@@ -1100,13 +1105,13 @@ export default function ({ tool, z, shortId }) {
 
 **注入对象**:
 
-| 字段                   | 类型     | 描述                                                           |
-| ---------------------- | -------- | -------------------------------------------------------------- |
-| `tool`                 | function | `tool()` 包装函数，定义工具参数和执行逻辑                      |
-| `z`                    | object   | Zod schema 库，用于参数验证                                    |
-| `shortId`              | function | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID        |
-| `shortIdBatch`         | function | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID      |
-| `withPendingProposals` | function | 把工具返回值和待提交 proposal 绑定，交给 commit chain 统一落盘 |
+| 字段                   | 类型     | 描述                                                               |
+| ---------------------- | -------- | ------------------------------------------------------------------ |
+| `tool`                 | function | `tool()` 包装函数，定义工具参数和执行逻辑                          |
+| `z`                    | object   | Zod schema 库，用于参数验证                                        |
+| `shortId`              | function | `shortId(prefix, label, sessionId, random?)` — 生成单个短语义 ID   |
+| `shortIdBatch`         | function | `shortIdBatch(prefix, labels, sessionId, random?)` — 批量生成短 ID |
+| `withPendingProposals` | function | 把工具返回值和待提交 proposal 绑定，交给 commit chain 统一落盘     |
 
 **执行期读取与取消**：生产宿主和 `test-runtime` 在每次工具调用中注入 `context.store`，接口复用 `FunctionStoreView`：
 
