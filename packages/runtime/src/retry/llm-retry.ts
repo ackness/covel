@@ -111,6 +111,8 @@ export interface CallLLMWithRetryParams {
   readonly messages: readonly LLMMessage[];
   readonly tools?: readonly LLMToolDefinition[];
   readonly responseFormat?: LLMResponseFormat;
+  /** Session locale: retry hints and adapter instructions follow it. */
+  readonly locale?: string;
   /** Hard per-attempt provider generation limit. */
   readonly maxOutputTokens?: number;
   readonly defaults?: import("@covel/shared").LLMRequestDefaults;
@@ -254,7 +256,12 @@ export async function callLLMWithRetry(
         );
         const timeoutSignal = AbortSignal.timeout(budget);
         const signal = AbortSignal.any([timeoutSignal, requestScope.signal]);
-        const attemptMessages = perturbMessages(messages, attempt, lastReason);
+        const attemptMessages = perturbMessages(
+          messages,
+          attempt,
+          lastReason,
+          params.locale,
+        );
 
         const callStart = Date.now();
         const trace = createAttemptTrace(
@@ -273,6 +280,7 @@ export async function callLLMWithRetry(
               messages: attemptMessages,
               tools,
               responseFormat: params.responseFormat,
+              ...(params.locale ? { locale: params.locale } : {}),
               ...(params.defaults ? { defaults: params.defaults } : {}),
               ...(params.maxOutputTokens !== undefined
                 ? { maxOutputTokens: params.maxOutputTokens }
@@ -523,7 +531,12 @@ export async function streamLLMWithRetry(
         let streamedUsage = { inputTokens: 0, outputTokens: 0 };
         let streamFinishReason:
           "stop" | "tool_calls" | "length" | "error" | undefined;
-        const attemptMessages = perturbMessages(messages, attempt, lastReason);
+        const attemptMessages = perturbMessages(
+          messages,
+          attempt,
+          lastReason,
+          params.locale,
+        );
         const forwardDeltas = attempt === 0; // avoid duplicate text on retry
         const streamStart = Date.now();
         const trace = createAttemptTrace(
@@ -544,6 +557,7 @@ export async function streamLLMWithRetry(
               messages: attemptMessages,
               tools,
               responseFormat: params.responseFormat,
+              ...(params.locale ? { locale: params.locale } : {}),
               ...(params.defaults ? { defaults: params.defaults } : {}),
               ...(params.maxOutputTokens !== undefined
                 ? { maxOutputTokens: params.maxOutputTokens }

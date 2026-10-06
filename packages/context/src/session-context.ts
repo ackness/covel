@@ -1,5 +1,6 @@
 /** Captures committed world state and caller-resolved history summaries once per execution. */
 
+import { instructionLocaleFor } from "@covel/shared";
 import type {
   LorebookEntryRecord,
   SessionContextReadStore,
@@ -92,6 +93,7 @@ export async function buildSessionContextSnapshot(
       ...compileLorebookContributions(
         lorebookRecords,
         opts.playerMessage ?? "",
+        opts.locale,
       ),
     ],
   };
@@ -184,6 +186,7 @@ async function loadLorebookRecords(
 function compileLorebookContributions(
   records: readonly LorebookEntryRecord[],
   playerMessage: string,
+  locale: string,
 ): readonly ContextContribution[] {
   return records
     .filter((record) => record.enabled)
@@ -202,7 +205,7 @@ function compileLorebookContributions(
         kind: "lore_entry",
         sourceType: "world",
         sourceId: record.id,
-        content: formatLorebookContributionContent(record, extra.title),
+        content: formatLorebookContributionContent(record, locale, extra.title),
         position: coordinate.position ?? DEFAULT_LOREBOOK_POSITION,
         ...(coordinate.depth !== undefined ? { depth: coordinate.depth } : {}),
         order: record.insertionOrder,
@@ -318,12 +321,18 @@ function parseLorebookPosition(
 
 function formatLorebookContributionContent(
   record: LorebookEntryRecord,
+  locale: string,
   title?: string,
 ): string {
   const label =
     title ??
     (record.keys && record.keys.length > 0 ? record.keys[0] : record.id);
-  return [`[World Rule: ${label}]`, record.content].join("\n");
+  // The heading is in the instruction language, like the prompt it goes into.
+  const heading =
+    instructionLocaleFor(locale) === "zh"
+      ? `[世界规则：${label}]`
+      : `[World Rule: ${label}]`;
+  return [heading, record.content].join("\n");
 }
 
 function toLorebookEntryView(r: LorebookEntryRecord): LorebookEntryView {

@@ -6,6 +6,17 @@ const HIDDEN_EVENTS = "_hidden.events";
 // Events planned during play by other runtimes (see the intake runtime).
 const PLANNED = "_hidden.planned";
 const REVEALED = "revealed";
+// The value of `cueContext` in a turn with no event. The narrative prompts
+// name this text in both languages, so it is a marker and is not translated.
+const NO_CUE = "No hidden story event this turn.";
+// What the narrative is told to do with a cue: an instruction, so English,
+// and Chinese for a Simplified Chinese session.
+const CUE_INSTRUCTION = {
+  "en-US":
+    "A hidden story event has just been unlocked by the current state. Bring it into this turn naturally, as something that happens in the scene; do not mention conditions, triggers, or that it was hidden.",
+  "zh-CN":
+    "当前状态刚刚解锁了一个隐藏的故事事件。把它自然地带进本回合，写成场景里发生的事；不要提到条件、触发器，也不要提到它曾被隐藏。",
+};
 
 function storedEvents(rows) {
   return rows
@@ -42,7 +53,7 @@ function noCue(diagnostics, book) {
     outcome: "success",
     value: {
       cue: null,
-      cueContext: "No hidden story event this turn.",
+      cueContext: NO_CUE,
       ledger: book,
       ...(diagnostics.length ? { diagnostics } : {}),
     },
@@ -56,11 +67,7 @@ function cueResult(event, locale, diagnostics, book) {
     outcome: "success",
     value: {
       cue: { eventId: event.id, ...(title ? { title } : {}), payload },
-      cueContext:
-        "A hidden story event has just been unlocked by the current state. " +
-        "Bring it into this turn naturally, as something that happens in the scene; " +
-        "do not mention conditions, triggers, or that it was hidden.\n\n" +
-        payload,
+      cueContext: `${localizedText(CUE_INSTRUCTION, locale)}\n\n${payload}`,
       ledger: book,
       ...(diagnostics.length ? { diagnostics } : {}),
     },

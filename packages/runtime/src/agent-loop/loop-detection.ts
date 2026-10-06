@@ -32,6 +32,7 @@ export function guardAgainstToolLoop(args: {
   readonly runtimeName: string;
   readonly messages: LLMMessage[];
   readonly state: LoopGuardState;
+  readonly locale?: string;
 }): void {
   const { collectedToolCalls, threshold, runtimeName, messages, state } = args;
   if (threshold <= 0) return;
@@ -49,7 +50,7 @@ export function guardAgainstToolLoop(args: {
     );
   }
   state.loopPerturbations++;
-  const [hint] = perturbMessages([], 1, "tool-loop-detected");
+  const [hint] = perturbMessages([], 1, "tool-loop-detected", args.locale);
   if (hint) {
     messages.push(hint);
     console.warn(

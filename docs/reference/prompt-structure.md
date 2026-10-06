@@ -137,11 +137,14 @@ import { characterSheetSegments } from "@covel/plugin-handlers-utils";
 
 covel.provideExtension("prompt.segment@1", "character-sheets", {
   handler: (_input, ctx) =>
-    characterSheetSegments(ctx.world.characters, { profiles: true }),
+    characterSheetSegments(ctx.world.characters, {
+      profiles: true,
+      locale: ctx.locale,
+    }),
 });
 ```
 
-`<player-character>` 是玩家角色卡（与 `player.character` 相同的 JSON），`profiles: true` 时再加 `<character-profiles>`（与 `characters.npcs` 相同的行格式）。内置的 `narrator` 和 `chat-mode-narrator` 这样做。
+`<player-character>` 是玩家角色卡（与 `player.character` 相同的 JSON），`profiles: true` 时再加 `<character-profiles>`（与 `characters.npcs` 相同的行格式）。`locale` 决定“未列出档案”那一行用中文还是 English，与正文的语言一致。内置的 `narrator` 和 `chat-mode-narrator` 这样做。
 
 - `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。
 - `userSettings.*`，由根 `contributes.settings` 默认值和玩家配置合成。
@@ -173,6 +176,12 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 共享 `prompts/server` 当前保存世界生成与 lore 修复模板。历史摘要模板由 `plugins/history-compaction/prompts/server` 持有，插件通过自己的 `createPromptLoader(root)` 加载。修改 `COVEL_PROMPTS_DIR` 只替换默认共享 prompt root，不会接管插件的独立目录。
 
 共享加载器按 exact locale、兼容 script 的 primary language、English、canonical 文件依次解析；非法 locale 不进入路径查找，`zh-Hant` 不命中简体 `zh`。独立 loader 只在自己的目录内回退。`CreateWorldOptions.loadPrompt` 可注入宿主 loader；运行中的插件清单、本地化正文和静态扩展段则遵守已捕获的 registry generation。
+
+### 代码写进提示词的固定文字
+
+模板和正文之外，装配代码自己也写几句话：世界规则的标题、`<available-events>` 的事件发射说明、历史摘要块后的说明句、被裁掉或被截断内容的标记、重试提示、`output.schema` runtime 的 JSON 规则。这些都用会话的指令语言写，简体中文会话读到的是中文，其余会话是 English；标签名、`[retry N]` 这类标记和 id 不变。完整清单、插件代码的做法和不翻译的几类文字见 [i18n · 代码拼进提示词的文字](i18n.md#代码拼进提示词的文字)。
+
+工具定义和工具循环里返回给模型的结果、拒绝原因始终是 English。
 
 ## 7. 相关实现
 

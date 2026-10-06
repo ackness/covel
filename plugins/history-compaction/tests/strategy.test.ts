@@ -640,6 +640,42 @@ describe("maybeCompact", () => {
       expect(callArgs.systemPrompt).toMatch(/summarizer/i);
     });
 
+    it.each([
+      [
+        "zh-CN",
+        /\[LANGUAGE\] 所有自然语言的摘要内容必须用简体中文（zh-CN）书写。$/,
+      ],
+      [
+        "en-US",
+        /\[LANGUAGE\] Write all natural-language summary content in .+ \(en-US\)\.$/,
+      ],
+      ["ru-RU", /\[LANGUAGE\] Всё содержание резюме .+ \(ru-RU\)\.$/],
+      // No instruction set of its own: the English template and rule.
+      [
+        "zh-Hant-TW",
+        /\[LANGUAGE\] Write all natural-language summary content in .+ \(zh-Hant-TW\)\.$/,
+      ],
+    ])(
+      "writes the language rule in the language of the %s template",
+      async (locale, rule) => {
+        const deps: CompactorDeps = {
+          store,
+          estimator,
+          fastSlotLlm,
+          contextWindow: 1_000,
+        };
+        await maybeCompact("sess-1", "", makeSimpleHistory(20), deps, {
+          locale,
+        });
+        const { systemPrompt } = (
+          fastSlotLlm.complete as ReturnType<typeof vi.fn>
+        ).mock.calls[0]![0] as { systemPrompt: string };
+        expect(systemPrompt).toMatch(rule);
+        // One rule, in one language.
+        expect(systemPrompt.match(/\[LANGUAGE\]/g)).toHaveLength(1);
+      },
+    );
+
     it("uses ru-RU prompts and localized default focus sections", async () => {
       const messages = makeSimpleHistory(20);
       const deps: CompactorDeps = {

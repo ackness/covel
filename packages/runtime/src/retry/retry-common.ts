@@ -11,7 +11,7 @@
  */
 
 import { AiProviderError } from "@covel/ai-provider";
-import { LLMRequestBudgetError } from "@covel/shared";
+import { instructionLocaleFor, LLMRequestBudgetError } from "@covel/shared";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -220,20 +220,35 @@ export function extractMessage(err: unknown): string {
  * string per retry even when the provider has aggressive caching.
  *
  * Attempt 0 is the first attempt and produces no perturbation — only the
- * second attempt onward injects a hint.
+ * second attempt onward injects a hint. The hint is in the instruction
+ * language of the session locale.
  */
 export function perturbMessages(
   messages: readonly LLMMessage[],
   attempt: number,
   reason?: RetryReason,
+  locale?: string,
 ): readonly LLMMessage[] {
   if (attempt <= 0) return messages;
+  const content = retryHint(attempt, reason, locale);
+  return [...messages, { role: "system" as const, content }];
+}
+
+/** The text of the hint {@link perturbMessages} appends. */
+export function retryHint(
+  attempt: number,
+  reason?: RetryReason,
+  locale?: string,
+): string {
   const padding = " ".repeat(attempt);
-  const hint =
-    reason === "tool-loop-detected"
-      ? `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach or finish with runtime-done.${padding}`
-      : `[retry ${attempt}] The previous attempt did not complete. Produce a concise reply; call runtime-done when finished.${padding}`;
-  return [...messages, { role: "system" as const, content: hint }];
+  const zh = instructionLocaleFor(locale) === "zh";
+  if (reason === "tool-loop-detected")
+    return zh
+      ? `[retry ${attempt}] 上一次尝试反复调用了同一个工具。换一种做法，或调用 runtime-done 结束。${padding}`
+      : `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach or finish with runtime-done.${padding}`;
+  return zh
+    ? `[retry ${attempt}] 上一次尝试没有完成。给出简洁的回复；完成后调用 runtime-done。${padding}`
+    : `[retry ${attempt}] The previous attempt did not complete. Produce a concise reply; call runtime-done when finished.${padding}`;
 }
 
 // ── Loop scaffolding ────────────────────────────────────────────────
