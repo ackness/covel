@@ -67,11 +67,10 @@ function manifest(
 
 describe("executeTurn main-loop DAG scheduler", () => {
   it("runs independent narrator downstreams concurrently", async () => {
-    // narrator, then guide + codex + char-tracker in parallel (all depend only
-    // on narrator). Without the DAG scheduler they would execute strictly in
-    // priority order — this test forces them to overlap by making each handler
-    // take ≥ 40ms and asserting the wall-clock time of the downstream level is
-    // less than 3× the per-runtime delay.
+    // narrator, then guide + extractor + codex + char-tracker in parallel (all
+    // depend only on narrator). Without the DAG scheduler they would execute
+    // strictly in priority order — this test makes that impossible to finish:
+    // no downstream handler returns until all four have started.
     const narrator = manifest("narrator", 500);
     const guide = manifest("guide", 550, {
       input: {
@@ -122,13 +121,36 @@ describe("executeTurn main-loop DAG scheduler", () => {
       },
     } as Partial<RuntimeManifest>);
 
-    const DELAY = 60;
-    const timings: Record<string, { start: number; end: number }> = {};
+    const downstreams = [guide, extractor, codex, charTracker].map(
+      (m) => m.name,
+    );
+    // The order of handler starts and ends. Timestamps said the same thing
+    // only on an idle machine: under load the timers fired late and the
+    // overlap looked like serial execution.
+    const events: string[] = [];
+    // Each downstream reports its start and then waits here until all four
+    // have started. Run one after another, the first would wait forever and
+    // the test would end at the Vitest time limit, which is there to catch a
+    // hang.
+    let releaseDownstreams!: () => void;
+    const allDownstreamsStarted = new Promise<void>((resolve) => {
+      releaseDownstreams = resolve;
+    });
+    let startedDownstreams = 0;
 
     const makeHandler = (name: string) => async () => {
-      const start = Date.now();
-      await new Promise((r) => setTimeout(r, DELAY));
-      timings[name] = { start, end: Date.now() };
+      events.push(`start:${name}`);
+      if (name === narrator.name) {
+        // Stay open across one turn of the event loop, so that a scheduler
+        // which started the downstreams beside the narrator would log their
+        // starts before its end.
+        await new Promise((resolve) => setImmediate(resolve));
+      } else {
+        startedDownstreams += 1;
+        if (startedDownstreams === downstreams.length) releaseDownstreams();
+        await allDownstreamsStarted;
+      }
+      events.push(`end:${name}`);
       return { outcome: "success", value: { narrativeOutput: "x" } } as const;
     };
 
@@ -159,24 +181,15 @@ describe("executeTurn main-loop DAG scheduler", () => {
     );
 
     // Narrator finished before any downstream started.
-    const nEnd = timings["narrator"].end;
-    const downstreams = [
-      "guide",
-      "npc-graph/extractor",
-      "codex",
-      "char-creator/character-tracker",
-    ];
-    for (const d of downstreams) {
-      expect(timings[d].start).toBeGreaterThanOrEqual(nEnd);
-    }
+    expect(events.slice(0, 2)).toEqual(["start:narrator", "end:narrator"]);
 
-    // Downstream runtimes overlap in time — the max end minus the min start
-    // should be noticeably less than 4 * DELAY if they ran in parallel.
-    const dsStarts = downstreams.map((d) => timings[d].start);
-    const dsEnds = downstreams.map((d) => timings[d].end);
-    const wall = Math.max(...dsEnds) - Math.min(...dsStarts);
-    // Allow plenty of slack for CI flakiness, but strictly less than serial
-    // execution (which would be ~4 * DELAY = 240ms).
-    expect(wall).toBeLessThan(DELAY * 3);
+    // Downstream runtimes overlap — all four started before any of them
+    // ended. Order inside the level is not part of the contract.
+    expect(events.slice(2, 6).sort()).toEqual(
+      downstreams.map((d) => `start:${d}`).sort(),
+    );
+    expect(events.slice(6).sort()).toEqual(
+      downstreams.map((d) => `end:${d}`).sort(),
+    );
   });
 });
