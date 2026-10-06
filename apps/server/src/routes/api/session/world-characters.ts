@@ -16,8 +16,8 @@ export async function importWorldEmbeddedCharacters(
   if (values === undefined) return;
   if (!Array.isArray(values))
     throw new Error("embeddedCharacters must be an array");
-  const records = values.map((value) => {
-    const record = characterRecordFromValue(sessionId, value, now);
+  const records = values.map((value, index) => {
+    const record = characterRecordFromValue(sessionId, value, now, index);
     if (!record) throw new Error("Invalid embedded character record");
     return record;
   });

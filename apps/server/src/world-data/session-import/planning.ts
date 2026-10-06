@@ -92,6 +92,10 @@ async function appendStructuredPlans(options: {
 }): Promise<void> {
   const { source, target } = options;
   if (target.kind === "world-metadata" || target.kind === "media") return;
+  // The place of the next character among those this import has planned:
+  // the roster lists them in this order.
+  const characterOrder = () =>
+    options.writes.filter((write) => write.kind === "character").length;
   for (const value of sourceItems(options.value)) {
     const key = itemKey(source, value);
     if (!key) {
@@ -162,6 +166,7 @@ async function appendStructuredPlans(options: {
         options.sessionId,
         value,
         options.now,
+        characterOrder(),
       );
       if (!record) {
         options.diagnostics.push({
@@ -190,6 +195,7 @@ async function appendStructuredPlans(options: {
         options.sessionId,
         value,
         options.now,
+        characterOrder(),
       );
       if (!character) continue;
       options.writes.push({

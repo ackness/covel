@@ -71,7 +71,11 @@ contributes:
           value: definition,
         },
       ],
-      embeddedCharacters: [{ id: "guide", name: "Guide", type: "npc" }],
+      // Written against the order of their IDs: the roster keeps this order.
+      embeddedCharacters: [
+        { id: "guide", name: "Guide", type: "npc" },
+        { id: "archivist", name: "Archivist", type: "npc" },
+      ],
       embeddedLorebook: [
         { id: "tides", content: "Travel at low tide.", strategy: "constant" },
       ],
@@ -102,6 +106,7 @@ contributes:
   expect(await store.getCharacterSchema("portable-session")).toBeNull();
   expect(await store.listCharacters("portable-session")).toEqual([
     expect.objectContaining({ id: "guide", name: "Guide" }),
+    expect.objectContaining({ id: "archivist", name: "Archivist" }),
   ]);
   expect(await store.listSessionLorebookEntries("portable-session")).toEqual([
     expect.objectContaining({ id: "tides", content: "Travel at low tide." }),
