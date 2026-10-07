@@ -433,6 +433,8 @@ interface UIRenderPart {
 
 ### 插件记忆与向量搜索
 
+archival 的关键词和向量路径均排除 `enabled: false` 的 Lorebook 词条。异步索引尚未清理时，向量结果会与当前源校验，禁用、删除或内容改变的旧项不会发布；必要时回退到已过滤的关键词检索。重新启用恢复关键词检索，语义索引可复用或由后续 ingestion 重建。角色检索不受 Lorebook 开关影响；框架不扫描或修改其他插件的记忆块数据。
+
 `memory-search` 通过 `MemorySystem.search(sessionId, query, { scope, limit })` 查询，工具层仅处理参数和展示格式。同次 `scope: "all"` 查询并发搜索两个来源，共享一次同模型的 query embedding；缓存只活到该次查询结束。embedding 失败仍分别回退到关键词搜索。
 
 混合结果按两个来源各自的名次交替排列，同名次先 recall，某一来源不足时由另一来源补满。返回的 `score` 只表示来源内部的分数，不能跨来源比较或重新排序；这也适用于一侧向量检索、另一侧关键词回退的情况。指定单一 scope 时保留该来源原有顺序。

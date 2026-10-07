@@ -78,6 +78,8 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 
 ## Lorebook
 
+`enabled: false` 表示全面禁用该词条：不参与自动提示词注入，也不参与 archival 关键词或向量检索。已有异步索引尚未清理时，检索仍检查当前源状态，禁用词条的旧向量不会返回；后续 ingestion 清除其向量与索引进度。重新启用后恢复关键词检索；未清理的有效向量可立即复用，已清理的向量由后续 ingestion 重建。禁用不删除词条，不影响其他 owner 的同 ID 词条、角色或插件记忆块。
+
 Lorebook 使用 `(sessionId, owner, id)` 作为身份，`owner` 可为 world、player 或 plugin。世界导入条目属 world；玩家编辑 API 固定处理 player；插件 `lorebook.upsert` 的归属由 proposal 来源绑定，插件不能覆盖其他 owner 的同 ID 条目。管理 API 和导入目标分别见[Lorebook API](api.md#lorebook)与[世界数据目标](world-data.md#target-uri)。旧数据库中只有 `plugin_id` 的 Lorebook 表不自动升级；开发环境操作见[迁移说明](../guide/env-registry.md#plugin-extension-development-data)。
 
 维度结算回执进入终态后清空 definitions 和 readVersions，仅保留结果身份、状态和版本等幂等信息；待结算回执保留冻结定义用于恢复。下一次叙事的屏障只解析待结算项。

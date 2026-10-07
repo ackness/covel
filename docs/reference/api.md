@@ -610,6 +610,8 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### Lorebook
 
+`enabled: false` 全面禁用目标词条：自动注入、archival 关键词和向量检索均排除它，不必等待后台 ingestion 清理旧向量。重新启用恢复可检索性；如索引已清理，语义检索在后续 ingestion 重建后恢复，关键词检索不依赖索引。管理列表仍包含禁用词条，禁用不会删除记录或改变 `(sessionId, owner, entryId)` 的归属。
+
 Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表；这些管理端点提供玩家 UI 与程序化读写入口，**不走提案系统**。身份键是 `(sessionId, owner, entryId)`。`owner` 为 `{kind:"world"}`、`{kind:"player"}` 或 `{kind:"plugin",pluginId}`，不同所有者可使用相同 ID。列表包含所有所有者；此管理 API 的创建、更新和删除固定作用于 `player` 所有者，不能覆盖世界导入或插件词条。插件 `lorebook.upsert` 的所有者由提案来源绑定。
 
 | 方法   | 路径                                  | 描述                                                            |
