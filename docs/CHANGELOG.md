@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 ### Fixed
 
 - World ZIP activation rejects worldData errors with 400 before creating a record and removes only the new directory, allowing a repaired same-ID retry; warnings and startup seed tolerance remain unchanged.
+- Active EventBus subscriptions preserve replay epochs and sequences beyond the pinned-state eviction budget; released sessions remain eligible for normal LRU/TTL eviction.
 - Character sync overlays only new batch proposals onto world snapshots, preserving same-batch deduplication and sequential updates. Missing-character updates fail as tools, preventing partial function-runtime commits and false agent completion. Function tool calls preserve the execution's frozen logicalTurn.
 - Resume and unexpected snapshot/fork errors use standard production sanitization after cleanup; resume lock timeouts return `503 session_busy`. World translation streams sanitize unexpected and dynamic validation errors without changing their open HTTP status.
 - Request-body limits return standard 413 envelopes, not 500, for declared-length and streaming requests at the existing 1/20/64 MiB limits.

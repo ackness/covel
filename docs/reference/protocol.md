@@ -352,6 +352,8 @@ Provider 图片输入矩阵：
 
 解析用 `@covel/shared` 的 `parseSubscriptionEventId(id) → { epoch, seq } | undefined`（旧的纯数字 id 解析为 `undefined`，服务端一律以 `system.reset` 应答）。活跃 SSE 订阅期间该 session 的回放状态被 `pin` 住，不会被驱逐/换 epoch（H-06）。
 
+EventBus 的 `MAX_TRACKED_SESSIONS`（当前 256）是可驱逐回放状态的容量目标，不是活跃订阅的硬上限。pin 在容量清理之前登记；当所有状态都有活跃 pin 时，允许临时超过该目标，包括第 257 个不同会话。最后一个 pin 释放后，该状态重新具备 LRU/TTL 驱逐资格，后续触碰/容量压力触发清理；release 本身不立即驱逐。连接数量仍由 SSE 层现有预算限制，跨实例 transport-gap 的显式 reset 规则不变。
+
 #### `system.reset` 控制帧（H-05）
 
 带 `lastEventId` 重连时，若游标无法被桥接，服务端**不做部分回放**，而是发一条**无 `id:` 头**的 `system.reset` 命名事件，客户端应据此**清空本地游标（lastEventId）+ 重新拉取权威状态**，再继续消费实时事件：
