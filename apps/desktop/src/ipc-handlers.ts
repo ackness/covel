@@ -8,6 +8,8 @@ import {
   isTrustedFrameUrl,
   isTrustedStartupFrameUrl,
   navigateToApp,
+  setTitleBarColors,
+  type TitleBarColors,
 } from "./windows.js";
 import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
 import {
@@ -61,6 +63,18 @@ function isTrustedRecoverySender(
 }
 
 type DesktopPaths = ReturnType<typeof ensureUserPaths>;
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+function parseTitleBarColors(payload: unknown): TitleBarColors | null {
+  const { background, foreground } = (payload ?? {}) as Record<string, unknown>;
+  return typeof background === "string" &&
+    typeof foreground === "string" &&
+    HEX_COLOR.test(background) &&
+    HEX_COLOR.test(foreground)
+    ? { background, foreground }
+    : null;
+}
 
 function isSidecarUnavailable(error: unknown): boolean {
   return (
@@ -187,6 +201,15 @@ export function registerDesktopIpcHandlers({
         pendingRestart = null;
       });
     return pendingRestart;
+  });
+
+  // The app reports the colours under the window buttons when its theme
+  // changes. Only the window that shows the app takes them.
+  ipcMain.handle("covel:title-bar:set-colors", (event, payload: unknown) => {
+    if (!isTrustedSender(event, "covel:title-bar:set-colors")) return;
+    const colors = parseTitleBarColors(payload);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (colors && win) setTitleBarColors(win, colors);
   });
 
   // Pick a directory for the next data_root. Does NOT move data — that's

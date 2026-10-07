@@ -6,7 +6,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Blocks,
@@ -36,6 +36,7 @@ import { ToastHost } from "@/components/ui/toast-host";
 import { ConfirmHost } from "@/components/ui/confirm-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
+import { useWindowControlsColors } from "@/hooks/use-window-controls-colors.js";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { useSession } from "@/stores/session-store";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
@@ -85,6 +86,8 @@ function RootLayout() {
   // The rail is app chrome. The landing page keeps the top bar in every
   // layout: it carries the brand and the way in.
   const railNav = layoutNav === "rail" && isSession;
+  const headerRef = useRef<HTMLElement>(null);
+  useWindowControlsColors(headerRef, railNav);
   const showRouterDevtools = !isSessionRoute && !isDebugRoute;
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
@@ -300,7 +303,15 @@ function RootLayout() {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {railNav && (
+            <div
+              aria-hidden="true"
+              className="ui-window-controls-strip hidden shrink-0 lg:block"
+              style={isElectron ? dragStyle : undefined}
+            />
+          )}
           <header
+            ref={headerRef}
             className={`ui-app-header ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"} ${railNav ? "lg:hidden" : ""}`}
             style={isElectron ? dragStyle : undefined}
           >
@@ -344,18 +355,23 @@ function RootLayout() {
                 })}
               </nav>
               <div
-                className="flex items-center gap-1 md:gap-1.5 ml-auto"
+                className="ui-window-controls-clear flex items-center gap-1 md:gap-1.5 ml-auto"
                 style={isElectron ? noDragStyle : undefined}
               >
                 <ThemeToggle />
-                <label className="hidden lg:block">
-                  <span className="sr-only">
-                    {t("onboarding.language", "Language")}
-                  </span>
-                  {languageSelect(
-                    "h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary",
-                  )}
-                </label>
+                {/* Inside the app the language is a setting (General). The
+                    landing page has no way into Settings, so it keeps the
+                    select. */}
+                {!isSession && (
+                  <label className="hidden lg:block">
+                    <span className="sr-only">
+                      {t("onboarding.language", "Language")}
+                    </span>
+                    {languageSelect(
+                      "h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary",
+                    )}
+                  </label>
+                )}
                 {!isSession && (
                   <Button
                     variant="default"

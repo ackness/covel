@@ -4,8 +4,14 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Inside the app, the interface language is in Settings only.** The top bar of the session and debug pages no longer has a language select; Settings → General → Interface Language is the same setting. The landing page, which has no way into Settings, keeps the select, and so does the menu of a narrow window.
+
 ### Fixed
 
+- **The Windows window buttons no longer cover the right end of the top bar.** The desktop shell draws minimize, maximize and close over the top-right corner of the page, and the top bar reserved no room for them, so the control at its right end (the language select) was hidden. The top bar now leaves that width free. A layout with the icon rail has no top bar, so the first row of each page was under the buttons; on Windows it now gets a strip of the buttons' height above the page.
+- **The Windows window buttons take the colours of the page under them.** They were drawn on near-black with light symbols in every theme, a dark box in the corner of a light one. The app now reports the background and text colour of the top bar (of the page, in a layout with the icon rail) when the theme or the colour scheme changes, and the shell draws the buttons in them. Over the startup screen the buttons follow the system colour scheme, as that screen does.
 - The schemas of `story-events` and `scene-stage` no longer make Ajv log `strict mode` warnings in the server log and in test output. They accept the same values as before.
 
 ## [0.0.48] - 2026-10-07

@@ -27,6 +27,7 @@ const INVOKE_CHANNELS = [
   "covel:settings:backup",
   "covel:settings:backups",
   "covel:settings:read-backup",
+  "covel:title-bar:set-colors",
 ] as const;
 
 /** Channels main may emit TO the renderer. Renderer can subscribe to any of these. */

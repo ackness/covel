@@ -20,8 +20,10 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
       isDestroyed() { return this.destroyed; },
       webContents: { reload() { navigation.push("reload"); } },
     };
+    export const titleBarColors = [];
     export const app = {};
-    export const BrowserWindow = {};
+    export const BrowserWindow = { fromWebContents: () => window };
+    export const setTitleBarColors = (win, colors) => { titleBarColors.push(colors); };
     export const dialog = {};
     export const Menu = {};
     export const shell = {};
@@ -73,7 +75,7 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
   const { registerDesktopIpcHandlers } = await import(
     pathToFileURL(output).href
   );
-  const { handlers, navigation, window } = await import(
+  const { handlers, navigation, titleBarColors, window } = await import(
     pathToFileURL(fixture).href
   );
   const event = { senderFrame: { url: "http://127.0.0.1:9479/session" } };
@@ -161,6 +163,25 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     assert.equal(calls, 0);
     assert.deepEqual(navigation, []);
   });
+
+  await t.test(
+    "window button colours come only from the app, as hex",
+    async () => {
+      setup(async () => ({ ok: true, port: 5258 }));
+      const setColors = handlers.get("covel:title-bar:set-colors");
+      const colors = { background: "#f2ece3", foreground: "#1c140e" };
+      await setColors(
+        { senderFrame: { url: "https://untrusted.example" } },
+        colors,
+      );
+      await setColors(event, { background: "red", foreground: "#1c140e" });
+      await setColors(event, { background: "#f2ece3" });
+      await setColors(event, null);
+      assert.deepEqual(titleBarColors, []);
+      await setColors(event, colors);
+      assert.deepEqual(titleBarColors, [colors]);
+    },
+  );
 });
 
 test("automatic sidecar recovery owns readiness, navigation, and a finite restart budget", async (t) => {

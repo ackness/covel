@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   dialog,
   Menu,
+  nativeTheme,
   shell,
   type MenuItemConstructorOptions,
   type WebPreferences,
@@ -269,12 +270,41 @@ function sharedWebPreferences(): WebPreferences {
   };
 }
 
+/** The colours of the page under the window buttons, as `#rrggbb`. */
+export interface TitleBarColors {
+  readonly background: string;
+  readonly foreground: string;
+}
+
+/** The splash follows the system colour scheme; these are its colours. */
+function splashTitleBarColors(): TitleBarColors {
+  return nativeTheme.shouldUseDarkColors
+    ? { background: "#09090b", foreground: "#fafafa" }
+    : { background: "#fafafa", foreground: "#09090b" };
+}
+
+/**
+ * Windows paints the window buttons itself, in colours it has to be given.
+ * No other platform has that overlay, and Electron throws without it.
+ */
+export function setTitleBarColors(
+  win: BrowserWindow,
+  colors: TitleBarColors,
+): void {
+  if (process.platform !== "win32" || win.isDestroyed()) return;
+  win.setTitleBarOverlay({
+    color: colors.background,
+    symbolColor: colors.foreground,
+  });
+}
+
 export function createMainWindow(titleSuffix?: string): BrowserWindow {
   const restored = resolveInitialWindowOptions();
   const icon = resolveWindowIconPath();
 
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
+  const splashColors = splashTitleBarColors();
 
   const win = new BrowserWindow({
     x: restored.x,
@@ -289,11 +319,16 @@ export function createMainWindow(titleSuffix?: string): BrowserWindow {
     icon: icon && fs.existsSync(icon) ? icon : undefined,
     // Hide the native title bar so the in-app header can extend to the top
     // edge and follow the active theme. Traffic lights stay (hiddenInset on
-    // macOS); on Windows the WCO overlay draws controls in app colours.
+    // macOS); on Windows the WCO overlay draws controls in the colours of the
+    // page under them: the splash's here, the app's once it reports them.
     titleBarStyle: isMac ? "hiddenInset" : isWin ? "hidden" : "default",
     trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
     titleBarOverlay: isWin
-      ? { color: "#09090b", symbolColor: "#fafafa", height: 36 }
+      ? {
+          color: splashColors.background,
+          symbolColor: splashColors.foreground,
+          height: 36,
+        }
       : undefined,
     webPreferences: sharedWebPreferences(),
   });
@@ -347,6 +382,8 @@ export function createMainWindow(titleSuffix?: string): BrowserWindow {
 }
 
 export function loadSplashInto(win: BrowserWindow): void {
+  // The app may have set the colours of its theme; the splash has its own.
+  setTitleBarColors(win, splashTitleBarColors());
   const html = buildSplashHtml();
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
