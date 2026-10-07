@@ -1,4 +1,3 @@
-import { COVEL_EVENT_META } from "@covel/shared";
 import {
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
   validateBrowserCheckpoint,
@@ -7,9 +6,23 @@ import {
 } from "./browser-sync.js";
 import type { DataStore, SessionRecord, StoreTransaction } from "../types.js";
 
-const DIAGNOSTIC_TRACE_TYPES = Object.keys(COVEL_EVENT_META).filter(
-  (type) => type.startsWith("llm.") || type.startsWith("hook."),
-);
+/**
+ * A checkpoint is uploaded and downloaded whole at every action of a private
+ * session, so what it holds must not grow with every turn played. The state of
+ * the game does not; the journals of past executions do, and a session of a
+ * hundred turns reached the upload limit on them alone.
+ *
+ * The trace rows the execution status is read from: the start of the newest
+ * turn and how it ended. No other trace row is read outside the debug page.
+ */
+const RECOVERY_TRACE_TYPES = ["turn.started", "turn.completed", "turn.failed"];
+
+/**
+ * How many of the latest executions keep their results and runtime outputs.
+ * A retry names a recent turn as its source, and nothing else reads an older
+ * row. Messages, the prompt history and all game state are kept in full.
+ */
+const JOURNAL_EXECUTION_WINDOW = 40;
 
 export interface ExportSessionCheckpointOptions {
   readonly profile?: PersistenceProfile;
@@ -65,11 +78,13 @@ export async function exportSessionCheckpoint(
     store.listMessages(sessionId),
     store.listTurnMessages(sessionId),
     store.listTurnResults(sessionId),
-    store.listToolCalls(sessionId),
+    // The log of tool calls and the event trail have no reader: they stay in
+    // the workspace that produced them.
+    [] as Awaited<ReturnType<DataStore["listToolCalls"]>>,
     store.listRuntimeOutputs(sessionId),
     store.listInteractionRecords(sessionId),
-    store.listEvents(sessionId),
-    store.queryTraceEvents(sessionId, { excludeTypes: DIAGNOSTIC_TRACE_TYPES }),
+    [] as Awaited<ReturnType<DataStore["listEvents"]>>,
+    store.queryTraceEvents(sessionId, { types: RECOVERY_TRACE_TYPES }),
     store.listCharacters(sessionId),
     store.getCharacterSchema(sessionId),
     store.listPluginDataSessionScope(sessionId),
@@ -101,6 +116,13 @@ export async function exportSessionCheckpoint(
     )
   ).flat();
 
+  // Rows are in the order they were written; the latest executions are last.
+  const recentTurnIds = new Set(
+    [...new Set(turnResults.map((result) => result.turnId))].slice(
+      -JOURNAL_EXECUTION_WINDOW,
+    ),
+  );
+
   const checkpoint = {
     schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
     sessionId,
@@ -109,19 +131,16 @@ export async function exportSessionCheckpoint(
     world,
     messages,
     turnMessages,
-    turnResults,
-    toolCalls,
-    runtimeOutputs,
-    interactions,
-    // Diagnostics can contain whole model requests; copying them on every
-    // private action grows the upload quadratically with the conversation.
-    // Keep execution lifecycle records used by recovery, and leave detailed
-    // diagnostics in the server workspace that produced them.
-    events: events.filter((event) => event.topic !== "trace"),
-    traceEvents: traceEvents.filter(
-      (event) =>
-        !event.type.startsWith("llm.") && !event.type.startsWith("hook."),
+    turnResults: turnResults.filter((result) =>
+      recentTurnIds.has(result.turnId),
     ),
+    toolCalls,
+    runtimeOutputs: runtimeOutputs.filter((output) =>
+      recentTurnIds.has(output.turnId),
+    ),
+    interactions,
+    events,
+    traceEvents,
     characters,
     characterSchema,
     pluginData,

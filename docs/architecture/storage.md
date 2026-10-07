@@ -121,6 +121,16 @@ Session lists and lock ownership checks read these heads without decoding
 conversation history. Earlier development vaults must be recreated; there is no
 migration or fallback to reading old checkpoint rows.
 
+A checkpoint travels whole in both directions at every action, so it holds only
+what does not grow with each turn played, plus the conversation itself. All game
+state, messages and the prompt history are complete. Of the execution journals
+it carries the turn results and runtime outputs of the latest 40 executions (a
+retry names a recent turn as its source) and the `turn.started` /
+`turn.completed` / `turn.failed` trace rows that the execution status is read
+from. The tool-call log, the event trail and every other trace row have no
+reader outside the debug page and stay in the server workspace that produced
+them; the debug page of a private session therefore shows no model calls.
+
 The browser is authoritative in local mode. The server may read API keys from
 request headers and execute a turn, but it must not durably persist the player's
 checkpoint or credentials.
