@@ -1,3 +1,7 @@
+import {
+  characterSchemaSetPayloadSchema,
+  validateWorldModel,
+} from "@covel/shared";
 import type {
   WorldCreationBrief,
   WorldPackageContentKind,
@@ -68,16 +72,12 @@ function normalizeCharacter(
   const characterRules = Array.isArray(value.rules)
     ? value.rules.filter(isRecord)
     : undefined;
-  const authoredFields = isRecord(value.fields) ? value.fields : undefined;
-  const fields =
-    authoredFields ??
-    (attributes || persona || scenarioDefaults
-      ? {
-          ...attributes,
-          ...(persona ? { persona } : {}),
-          ...(scenarioDefaults ? { scenarioDefaults } : {}),
-        }
-      : undefined);
+  if (value.fields !== undefined && !isRecord(value.fields)) {
+    errors.push(`characters[${index}].fields must be an object`);
+    return null;
+  }
+  // Persona and scenario defaults are blueprint data, not domain fields.
+  const fields = isRecord(value.fields) ? value.fields : attributes;
   const instantiate = isRecord(value.instantiate)
     ? {
         ...value.instantiate,
@@ -110,6 +110,39 @@ function normalizeCharacter(
     ...(fields ? { fields } : {}),
     ...(instantiate ? { instantiate } : {}),
   };
+}
+
+/** Check the entire accepted roster using the same domain boundary as import. */
+export function validateGeneratedCharacters(
+  characters: readonly GeneratedWorldCharacter[],
+  manifest: Readonly<Record<string, unknown>>,
+): string[] {
+  try {
+    const schema =
+      manifest.characterSchema === undefined
+        ? null
+        : characterSchemaSetPayloadSchema.parse(manifest.characterSchema);
+    validateWorldModel({
+      characterSchema: schema
+        ? { ...schema, sessionId: "", version: 1, createdAt: "", updatedAt: "" }
+        : null,
+      characters: characters.map((character) => ({
+        id: character.id,
+        name: character.name,
+        type: character.type ?? "npc",
+        fields: character.fields,
+        sessionId: "",
+        version: 1,
+        createdAt: "",
+        updatedAt: "",
+      })),
+      dimensions: {},
+    });
+    return [];
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    return [error.message];
+  }
 }
 
 function normalizeLorebookEntry(

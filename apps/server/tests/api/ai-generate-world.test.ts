@@ -379,9 +379,17 @@ describe("ai world generation route", () => {
     },
   );
 
-  it.each(["server-file", "server-store", "return-only"] as const)(
-    "%s returns the same normalized manifest fields",
-    async (saveTarget) => {
+  it.each(
+    (["server-file", "server-store", "return-only"] as const).flatMap(
+      (saveTarget) => [
+        { saveTarget, locale: "zh_hant_tw", expectedLocale: "zh-Hant-TW" },
+        { saveTarget, locale: undefined, expectedLocale: "zh-CN" },
+      ],
+    ),
+  )(
+    "$saveTarget returns the same normalized manifest fields (request locale: $locale)",
+    async ({ saveTarget, locale, expectedLocale }) => {
+      const { WORLD_EDITIONS_KEY } = await import("@covel/shared");
       const yaml = WORLD_YAML.replace(
         "defaultLocale: zh-CN",
         "defaultLocale: zh_hant_tw",
@@ -404,7 +412,7 @@ describe("ai world generation route", () => {
       const response = await app.request("/api/ai/generate-world", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ concept: "Clockwork city", saveTarget }),
+        body: JSON.stringify({ concept: "Clockwork city", saveTarget, locale }),
       });
       const events = await readSseJson(response);
       expect(events.filter((event) => event.type === "error")).toEqual([]);
@@ -412,8 +420,9 @@ describe("ai world generation route", () => {
         world: import("@covel/store").WorldRecord;
       };
       expect(done.world).toMatchObject({
-        locale: "zh-Hant-TW",
+        locale: expectedLocale,
         metadata: {
+          [WORLD_EDITIONS_KEY]: [expectedLocale],
           characterSchema: {
             types: ["npc", "companion"],
             attributes: [
@@ -439,8 +448,11 @@ describe("ai world generation route", () => {
         expect(await store.getWorld(done.world.id)).toBeNull();
       } else {
         expect(await store.getWorld(done.world.id)).toMatchObject({
-          locale: "zh-Hant-TW",
-          metadata: { characterSchema: { types: ["npc", "companion"] } },
+          locale: expectedLocale,
+          metadata: {
+            [WORLD_EDITIONS_KEY]: [expectedLocale],
+            characterSchema: { types: ["npc", "companion"] },
+          },
         });
       }
     },

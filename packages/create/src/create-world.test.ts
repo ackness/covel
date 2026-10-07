@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import type {
   LLMAdapter,
   LLMResponse,
@@ -237,13 +238,15 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
       ),
       concept: "Clockwork city",
+      locale: "zh_hant_tw",
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
     if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.locale).toBe("zh-Hant-TW");
     expect(result.manifest).toMatchObject({
       defaultLocale: "zh-Hant-TW",
-      supportedLocales: ["zh-Hant-TW", "en-US"],
+      supportedLocales: ["zh-Hant-TW"],
       characterSchema: {
         types: ["npc", "companion"],
         attributes: [
@@ -259,6 +262,125 @@ describe("createWorld", () => {
         },
       },
     });
+  });
+
+  it("F-030 binds new manifest and export editions to the canonical request locale", async () => {
+    const yaml = WORLD_YAML.replace(
+      "defaultLocale: zh-CN",
+      "defaultLocale: en-US",
+    ).replace("supportedLocales: [zh-CN]", "supportedLocales: [en-US, ru-RU]");
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "Synthetic world",
+      locale: "zh_cn",
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.locale).toBe("zh-CN");
+    expect(result.manifest).toMatchObject({
+      defaultLocale: "zh-CN",
+      supportedLocales: ["zh-CN"],
+    });
+    await writeWorldPackage(tmp, result);
+    expect(
+      parseYaml(
+        await readFile(path.join(tmp, result.id, "world.yaml"), "utf8"),
+      ),
+    ).toMatchObject({ defaultLocale: "zh-CN", supportedLocales: ["zh-CN"] });
+    expect(await readdir(path.join(tmp, result.id))).not.toContain(
+      "WORLD.en-US.md",
+    );
+  });
+
+  it.each([
+    [
+      "field type",
+      "type: npc, fields: { persona: { voice: quiet } }",
+      "persona",
+    ],
+    ["field range", "type: npc, fields: { affinity: 101 }", "affinity"],
+    ["unknown type", "type: ghost", "Unknown character type: ghost"],
+    ["two players", "type: player", "at most one player"],
+    ["non-object fields", "type: npc, fields: [broken]", "fields"],
+  ])(
+    "F-005 retries then discards an invalid character set: %s",
+    async (_name, character, error) => {
+      const yaml =
+        WORLD_YAML +
+        `characterSchema:\n  attributes:\n    - { id: persona, name: Persona, type: string, category: bio }\n    - { id: affinity, name: Affinity, type: number, category: social, min: 0, max: 100 }\n`;
+      const pack = `characters:\n  - { id: first, name: First, ${character} }\n  - { id: second, name: Second, ${character} }\n`;
+      let characterCalls = 0;
+      const reports: WorldGenerationPart[][] = [];
+      const requests: string[] = [];
+      const answer = new FixedLlm(
+        `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${pack}\n===END===`,
+      );
+      const result = await createWorld({
+        llm: {
+          async generate(request) {
+            requests.push(JSON.stringify(request.messages));
+            if (
+              String(request.messages[1]?.content).includes(
+                "Write one part of the world package now: the `characters`",
+              )
+            )
+              characterCalls++;
+            return answer.generate();
+          },
+        },
+        concept: "Synthetic world",
+        brief: { content: ["characters"] },
+        onProgress: (parts) => reports.push([...parts]),
+      });
+      if (!result.success) throw new Error(result.errors.join("; "));
+      expect(result.packageContent.characters).toEqual([]);
+      expect(characterCalls).toBe(3);
+      expect(result.warnings).toContainEqual(expect.stringContaining(error));
+      expect(requests.at(-1)).toContain("could not be imported");
+      expect(
+        reports.at(-1)?.find((part) => part.id === "characters"),
+      ).toMatchObject({ state: "failed", attempt: 3 });
+    },
+  );
+
+  it("F-005 accepts a repaired set and preserves blueprint data without copying it into fields", async () => {
+    const yaml =
+      WORLD_YAML +
+      `characterSchema:\n  attributes:\n    - { id: persona, name: Persona, type: string, category: bio }\n`;
+    const invalid = `characters:\n  - { id: keeper, name: Keeper, fields: { persona: { voice: quiet } } }`;
+    const repaired = `characters:\n  - id: keeper\n    name: Keeper\n    type: npc\n    attributes: { undeclared: retained }\n    persona: { voice: quiet }\n    scenarioDefaults: { location: tower }`;
+    let characterCalls = 0;
+    const result = await createWorld({
+      llm: {
+        async generate(request) {
+          const cast = String(request.messages[1]?.content).includes(
+            "Write one part of the world package now: the `characters`",
+          );
+          const pack = cast && ++characterCalls > 1 ? repaired : invalid;
+          return new FixedLlm(
+            `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${pack}\n===END===`,
+          ).generate();
+        },
+      },
+      concept: "Synthetic world",
+      brief: { content: ["characters"] },
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(characterCalls).toBe(2);
+    expect(result.packageContent.characters).toHaveLength(1);
+    expect(result.packageContent.characters[0]).toMatchObject({
+      persona: { voice: "quiet" },
+      scenarioDefaults: { location: "tower" },
+      fields: { undeclared: "retained" },
+      instantiate: { fields: { undeclared: "retained" } },
+    });
+    expect(result.packageContent.characters[0]?.fields).not.toHaveProperty(
+      "persona",
+    );
+    expect(result.packageContent.characters[0]?.fields).not.toHaveProperty(
+      "scenarioDefaults",
+    );
   });
 
   it("rejects unresolved file references before returning generated content", async () => {
@@ -958,6 +1080,84 @@ describe("createWorld revision", () => {
       };
     }
   }
+
+  it("F-030 does not clamp existing revision editions to the request locale", async () => {
+    const yaml =
+      WORLD_YAML.replace(
+        "supportedLocales: [zh-CN]",
+        "supportedLocales: [zh-CN, en-US]",
+      ) +
+      `characterSchema:\n  attributes:\n    - { id: affinity, name: Affinity, type: number, category: social }\n`;
+    const result = await createWorld({
+      llm: new RecordingLlm([sections("UNCHANGED", "UNCHANGED", "UNCHANGED")]),
+      concept: "Synthetic world",
+      locale: "en_us",
+      revision: {
+        current: { ...current, yaml },
+        instruction: "Keep the content",
+      },
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.locale).toBe("en-US");
+    expect(result.manifest).toMatchObject({
+      defaultLocale: "zh-CN",
+      supportedLocales: ["zh-CN", "en-US"],
+      characterSchema: { types: ["npc", "companion"] },
+    });
+  });
+
+  it("F-005 rejects an invalid full revision roster rather than dropping existing characters", async () => {
+    const yaml =
+      WORLD_YAML +
+      `characterSchema:\n  attributes:\n    - { id: affinity, name: Affinity, type: number, category: social, min: 0, max: 100 }\n`;
+    const pack = `characters:\n${Array.from({ length: 6 }, (_, i) => `  - { id: keeper-${i}, name: Keeper ${i}, type: npc, fields: { affinity: ${i === 5 ? 101 : 10} } }`).join("\n")}`;
+    const llm = new RecordingLlm([
+      sections("UNCHANGED", "UNCHANGED", "UNCHANGED"),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Synthetic world",
+      revision: {
+        current: { ...current, yaml, packageYaml: pack },
+        instruction: "Keep the content",
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(result.errors?.join(" ")).toContain("affinity");
+    expect(llm.requests).toHaveLength(3);
+    expect(llm.requests[2]).toContain("could not be imported");
+  });
+
+  it("F-005 retries a schema revision that invalidates an unchanged character", async () => {
+    const yaml =
+      WORLD_YAML +
+      `characterSchema:\n  attributes:\n    - { id: affinity, name: Affinity, type: number, category: social, min: 0, max: 100 }\n`;
+    const pack =
+      "characters:\n  - { id: keeper, name: Keeper, type: npc, fields: { affinity: 80 } }";
+    const narrowed =
+      "characterSchema:\n  attributes:\n    - { id: affinity, name: Affinity, type: number, category: social, min: 0, max: 50 }";
+    const llm = new RecordingLlm([
+      sections(narrowed, "UNCHANGED", "UNCHANGED"),
+      sections(
+        narrowed,
+        "UNCHANGED",
+        "characters:\n  - { id: keeper, name: Keeper, type: npc, fields: { affinity: 40 } }",
+      ),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "Synthetic world",
+      revision: {
+        current: { ...current, yaml, packageYaml: pack },
+        instruction: "Narrow affinity",
+      },
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(llm.requests).toHaveLength(2);
+    expect(result.packageContent.characters[0]?.fields).toEqual({
+      affinity: 40,
+    });
+  });
 
   it("keeps each section the model marks UNCHANGED and takes the one it rewrote", async () => {
     const lore = `${WORLD_LORE}\n4. 一名自称对手的校时官开始抢先一步行动。`;
