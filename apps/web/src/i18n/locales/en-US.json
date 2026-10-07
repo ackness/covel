@@ -1654,6 +1654,7 @@
     "untranslatedHint": "This plugin has no text in your language. Its panels show English."
   },
   "pluginJob": {
+    "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",
     "completed": "{{target}} completed in {{duration}}",
     "failed": "{{target}} failed: {{error}}",
     "unknownError": "unknown error"

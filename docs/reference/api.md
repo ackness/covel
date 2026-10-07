@@ -2092,6 +2092,8 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 }
 ```
 
+`allow` 之后服务端立即为该会话加载这个插件已获授权的 runtime。有 runtime 加载不了（handler 或 guard 模块导入失败）时，响应多一个 `runtimeLoadErrors: [{ runtimeId, error }]`：批准 `runtime:<id>` 时只含这一个 runtime，批准 `covel:plugin-server-code` 时含此前已获授权的全部 runtime。授权本身仍然生效；该 runtime 在回合里按单个任务失败处理，不影响其他任务。
+
 **错误响应:**
 
 | 状态码 | 触发条件                                                                                                |

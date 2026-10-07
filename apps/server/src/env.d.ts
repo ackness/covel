@@ -45,6 +45,18 @@ type ActivatePluginServerCodeFn = (
   sessionId?: string,
 ) => Promise<void>;
 
+/**
+ * Load every runtime of a plugin for a session and return the ones that do
+ * not load. Called once the player has approved the plugin's code, so a
+ * handler that does not import is reported with the approval.
+ */
+type PreloadPluginRuntimesFn = (
+  pluginId: string,
+  sessionId: string,
+) => Promise<
+  readonly import("./routes/api/bootstrap/runtime-loader.js").RuntimeLoadFailure[]
+>;
+
 declare module "hono" {
   interface ContextVariableMap {
     /** Owns asynchronous request work, including SSE callbacks and cleanup. */
@@ -166,6 +178,8 @@ declare module "hono" {
      * Optional so tests with hand-built DI middleware don't have to wire it.
      */
     activatePluginServerCode?: ActivatePluginServerCodeFn;
+    /** Optional so tests with hand-built DI middleware don't have to wire it. */
+    preloadPluginRuntimes?: PreloadPluginRuntimesFn;
     /**
      * Introspection for the deferred community `entry` module: true when the
      * plugin declares an `entry` field, its trust is deferred (community), and

@@ -1654,6 +1654,7 @@
     "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。"
   },
   "pluginJob": {
+    "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
     "completed": "{{target}} 已完成（耗时 {{duration}}）",
     "failed": "{{target}} 失败：{{error}}",
     "unknownError": "未知错误"

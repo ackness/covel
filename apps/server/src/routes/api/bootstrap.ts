@@ -576,6 +576,16 @@ async function assembleApi(
   ): Promise<void> => {
     await pluginEntries.ensurePluginEntry(pluginId, sessionId);
   };
+  // For the routes that take the player's approval: the plugin's runtimes are
+  // loaded right then, and one that does not import is in their answer.
+  const preloadPluginRuntimes = async (pluginId: string, sessionId: string) => {
+    const failures = await runtimeLoader.preload(pluginId, sessionId);
+    for (const failure of failures)
+      console.error(
+        `[bootstrap] runtime ${failure.runtimeId} of plugin ${pluginId} does not load: ${failure.error}`,
+      );
+    return failures;
+  };
 
   const runtimeEnv = readRuntimeEnv();
   const budgetSource =
@@ -808,6 +818,7 @@ async function assembleApi(
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
+    c.set("preloadPluginRuntimes", preloadPluginRuntimes);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
     c.set("isPluginEntryPublished", pluginEntries.isEntryPublished);
     c.set("withPluginSnapshot", withPluginSnapshot);

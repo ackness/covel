@@ -1656,6 +1656,7 @@
     "untranslatedHint": "У этого плагина нет текста на вашем языке. Его панели показываются на английском."
   },
   "pluginJob": {
+    "runtimesNotLoaded": "{{plugin}} одобрен, но {{count}} его задач не загружаются и не будут выполняться.",
     "completed": "{{target}} завершено за {{duration}}",
     "failed": "{{target}} не удалось: {{error}}",
     "unknownError": "неизвестная ошибка"
