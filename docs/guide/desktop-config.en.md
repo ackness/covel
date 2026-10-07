@@ -88,6 +88,8 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 The server scans every `*_API_KEY` entry and injects it into the matching provider runtime. Key naming = provider name uppercase + `_API_KEY`. Written with mode `0600` by the app; if you edit manually, don't loosen the permissions.
 
+When the sidecar is unavailable, desktop IPC reads the existing keys and applies an incremental patch, preserving providers not mentioned in it. Saving writes an exclusive same-directory temporary file with mode `0600`, then atomically replaces the destination through rename. A write, permission-setting, or rename failure preserves the original file, attempts temporary-file cleanup, and reports failure. Key values containing line breaks are rejected before writing. This guarantees replacement integrity, not durability after a power loss.
+
 ## `~/.covel/llm.toml`
 
 The desktop shell always passes this user path to the server, even before the file exists. It never copies model configuration from app resources. First launch uses the built-in fallback; creating the user file and reloading applies it immediately.
