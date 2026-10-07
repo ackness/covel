@@ -35,7 +35,7 @@ export default async function handler(ctx) {
       dice,
       checkContext: owned
         ? ownedContext(ctx.locale)
-        : buildCheckContext(dice, ctx.locale),
+        : buildCheckContext(dice, ctx.locale, ctx.world),
     },
     effects: {
       // Audit trail: the raw pool survives even when the narrative never uses it.
@@ -57,6 +57,62 @@ function ownedContext(locale) {
 
 function signed(value) {
   return value > 0 ? `+${value}` : `${value}`;
+}
+
+/** Attribute names may be I18nText; the schema carries no per-locale files. */
+function nameOf(name, locale) {
+  if (typeof name === "string") return name;
+  if (name && typeof name === "object")
+    return name[locale] ?? name.en ?? Object.values(name)[0] ?? "";
+  return "";
+}
+
+/**
+ * The player character's number attributes with the modifier each converts
+ * to: `round((value - min) / (max - min) * MODIFIER_LIMIT)`. The narrative
+ * reads the modifier here instead of guessing one from a bare value — a 2/5
+ * is +4, not +2. Attributes without a declared range are left for the
+ * narrative to convert by itself.
+ */
+function playerModifiers(world, locale) {
+  const player = world?.characters?.find((c) => c.type === "player");
+  const attributes = world?.characterSchema?.attributes;
+  if (!player?.fields || !Array.isArray(attributes)) return [];
+  const lines = [];
+  for (const attr of attributes) {
+    if (attr.type !== "number" || typeof attr.max !== "number") continue;
+    const value = player.fields[attr.id];
+    if (typeof value !== "number") continue;
+    const min = typeof attr.min === "number" ? attr.min : 0;
+    if (attr.max <= min) continue;
+    const modifier = Math.round(
+      ((Math.min(Math.max(value, min), attr.max) - min) / (attr.max - min)) *
+        MODIFIER_LIMIT,
+    );
+    lines.push({ name: nameOf(attr.name, locale), value, min, max: attr.max, modifier });
+  }
+  return lines;
+}
+
+/** @param {ReadonlyArray<{name: string, value: number, min: number, max: number, modifier: number}>} modifiers */
+function modifierBlock(modifiers, locale) {
+  if (modifiers.length === 0) return "";
+  const items = modifiers.map(
+    (m) => `- ${m.name} ${m.value}/${m.max} → ${signed(m.modifier)}`,
+  );
+  return pickLocaleText(
+    locale,
+    [
+      "玩家角色数值属性的修正（已按量程换算：修正 = (数值 − 下限) ÷ 量程 × 10）：",
+      ...items,
+      "选用表中的属性时，修正按此表读取；只有不在表中的属性才由你换算成 -10 到 +10 的整数。",
+    ],
+    [
+      "Modifiers of the player character's number attributes (converted from their range: modifier = (value - min) ÷ range × 10):",
+      ...items,
+      "When the attribute is in this list, read the modifier from it. Convert by yourself, as an integer from -10 to +10, only for an attribute that is not listed.",
+    ],
+  ).join("\n");
 }
 
 /**
@@ -97,16 +153,29 @@ function table(dice, header, words) {
  * carry no dice rules of their own, so this block must stay self-contained:
  * everything the narrative needs to resolve and report a check is stated here.
  *
- * The narrative decides the attribute, the modifier and the difficulty. It
- * does not choose a die and it does not calculate: each check has one row,
- * and the row gives the outcome for every difficulty.
+ * The narrative decides the attribute and the difficulty. It does not choose
+ * a die and it does not calculate: each check has one row, the row gives the
+ * outcome for every difficulty, and the modifier of a ranged number attribute
+ * is pre-computed in the modifier list.
  *
  * @param {ReadonlyArray<number>} dice
  * @param {string | undefined} locale
  * @returns {string}
  */
-function buildCheckContext(dice, locale) {
+function buildCheckContext(dice, locale, world) {
   const dcs = Object.entries(DIFFICULTY_DCS);
+  const modifiers = modifierBlock(playerModifiers(world, locale), locale);
+  const step2 = modifiers
+    ? pickLocaleText(
+        locale,
+        "2. 选出这个行动用到的玩家角色卡属性，从下方修正表读取它的修正。",
+        "2. Choose the attribute on the player character's sheet that the action uses, and read its modifier from the modifier list below.",
+      )
+    : pickLocaleText(
+        locale,
+        `2. 选出这个行动用到的玩家角色卡属性。修正是 -${MODIFIER_LIMIT} 到 +${MODIFIER_LIMIT} 之间的整数，从该属性的数值换算。`,
+        `2. Choose the attribute on the player character's sheet that the action uses. The modifier is an integer from -${MODIFIER_LIMIT} to +${MODIFIER_LIMIT} that you derive from its numeric value.`,
+      );
   const english = [
     "## Dice checks for this turn",
     "",
@@ -115,9 +184,10 @@ function buildCheckContext(dice, locale) {
     "For each action with a real risk of failure (picking a lock, sneaking, persuading, climbing, a move in combat):",
     "",
     `1. Choose the difficulty from the fiction, before you look at the row: ${dcs.map(([name, dc]) => `${name} (DC ${dc})`).join(", ")}.`,
-    `2. Choose the attribute on the player character's sheet that the action uses. The modifier is an integer from -${MODIFIER_LIMIT} to +${MODIFIER_LIMIT} that you derive from its numeric value.`,
+    step2,
     "3. Read the outcome in the row of the check, in the column of the difficulty. Do not calculate the outcome in another way.",
     "",
+    ...(modifiers.length > 0 ? [modifiers, ""] : []),
     table(dice, ["check", "d20", ...dcs.map(([name]) => name)], {
       critSuccess: "critical success",
       critFailure: "critical failure",
@@ -143,9 +213,10 @@ function buildCheckContext(dice, locale) {
     "对每个**有失败风险**的行动（撬锁、潜行、说服、攀爬、战斗动作等）：",
     "",
     `1. 先根据情境定难度，定好之前不要看那一行：${dcs.map(([name, dc]) => `${names[name]} ${name}（DC ${dc}）`).join("、")}。`,
-    `2. 选出这个行动用到的玩家角色卡属性。修正是 -${MODIFIER_LIMIT} 到 +${MODIFIER_LIMIT} 之间的整数，从该属性的数值换算。`,
+    step2,
     "3. 在这次判定所在的行、所选难度所在的列读出结果。不要用别的方法计算结果。",
     "",
+    ...(modifiers.length > 0 ? [modifiers, ""] : []),
     table(dice, ["判定", "d20", ...dcs.map(([name]) => name)], {
       critSuccess: "大成功 critical-success",
       critFailure: "大失败 critical-failure",

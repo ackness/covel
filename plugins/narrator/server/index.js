@@ -11,6 +11,7 @@ export default function (covel) {
       characterSheetSegments(ctx.world.characters, {
         profiles: true,
         locale: ctx.locale,
+        schema: ctx.world.characterSchema,
       }),
   });
   const review = createNarrativeReview(covel.pluginId);

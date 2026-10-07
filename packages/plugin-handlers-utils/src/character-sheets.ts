@@ -1,4 +1,5 @@
 import type {
+  ExtensionCharacterSchema,
   ExtensionWorldCharacter,
   PromptSegment,
 } from "./extension-points.js";
@@ -23,6 +24,32 @@ const hasFields = (fields: unknown): fields is Record<string, unknown> =>
   Object.keys(fields).length > 0;
 
 /**
+ * `2/5` for a number attribute whose schema declares min/max (min 0), or
+ * `2 (1–5)` when the range starts elsewhere. A bare number tells the model
+ * nothing — 2/5 and 2/100 must not read the same.
+ */
+function withRanges(
+  fields: Record<string, unknown>,
+  schema: ExtensionCharacterSchema | null | undefined,
+): Record<string, unknown> {
+  if (!schema) return fields;
+  const ranges = new Map(
+    schema.attributes
+      .filter((a) => a.type === "number" && typeof a.max === "number")
+      .map((a) => [a.id, a]),
+  );
+  if (ranges.size === 0) return fields;
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => {
+      const def = ranges.get(key);
+      if (!def || typeof value !== "number") return [key, value];
+      const min = def.min ?? 0;
+      return [key, min === 0 ? `${value}/${def.max}` : `${value} (${min}–${def.max})`];
+    }),
+  );
+}
+
+/**
  * One line per non-player character: `- name [type] | description | fields`.
  * Past the budget the rest are listed by name only, to be looked up when
  * needed. No ids: a model looks characters up by name. The format of the
@@ -31,6 +58,7 @@ const hasFields = (fields: unknown): fields is Record<string, unknown> =>
 function profileLines(
   characters: readonly ExtensionWorldCharacter[],
   locale: string | undefined,
+  schema: ExtensionCharacterSchema | null | undefined,
 ): string {
   const lines: string[] = [];
   const unlisted: string[] = [];
@@ -40,7 +68,13 @@ function profileLines(
     const parts = [`- ${character.name} [${character.type}]`];
     if (character.description) parts.push(capped(character.description));
     if (hasFields(character.fields))
-      parts.push(capped(JSON.stringify(modelFacingJson(character.fields))));
+      parts.push(
+        capped(
+          JSON.stringify(
+            withRanges(modelFacingJson(character.fields), schema),
+          ),
+        ),
+      );
     const line = parts.join(" | ");
     if (unlisted.length > 0 || used + line.length > PROFILES_BUDGET) {
       unlisted.push(character.name);
@@ -74,31 +108,40 @@ function profileLines(
  *
  * ```js
  * covel.provideExtension("prompt.segment@1", "cast", {
- *   handler: (_input, ctx) => characterSheetSegments(ctx.world.characters),
+ *   handler: (_input, ctx) =>
+ *     characterSheetSegments(ctx.world.characters, {
+ *       schema: ctx.world.characterSchema,
+ *     }),
  * });
  * ```
  *
  * Returns no segment when the session has no character to show. Pass
  * `ctx.locale` as `locale`: the one sentence this writes (the names of the
- * profiles left out) is then in the language of the prompt body.
+ * profiles left out) is then in the language of the prompt body. Pass
+ * `ctx.world.characterSchema` as `schema` and a number attribute renders
+ * with its range (`"might": "2/5"`); without it the model sees a bare
+ * number and cannot tell 2/5 from 2/100.
  */
 export function characterSheetSegments(
   characters: readonly ExtensionWorldCharacter[],
-  options: { readonly profiles?: boolean; readonly locale?: string } = {},
+  options: {
+    readonly profiles?: boolean;
+    readonly locale?: string;
+    readonly schema?: ExtensionCharacterSchema | null;
+  } = {},
 ): PromptSegment[] {
   const blocks: string[] = [];
   const player = characters.find((character) => character.type === "player");
   if (player) {
     const { id, name, type, description, fields } = player;
-    const sheet = JSON.stringify(
-      modelFacingJson({ id, name, type, description, fields }),
-      null,
-      2,
-    );
+    const projected = modelFacingJson({ id, name, type, description, fields });
+    if (hasFields(projected.fields))
+      projected.fields = withRanges(projected.fields, options.schema);
+    const sheet = JSON.stringify(projected, null, 2);
     blocks.push(`<player-character>\n${escapeXml(sheet)}\n</player-character>`);
   }
   const profiles = options.profiles
-    ? profileLines(characters, options.locale)
+    ? profileLines(characters, options.locale, options.schema)
     : "";
   if (profiles)
     blocks.push(

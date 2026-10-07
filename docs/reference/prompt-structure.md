@@ -142,11 +142,12 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
     characterSheetSegments(ctx.world.characters, {
       profiles: true,
       locale: ctx.locale,
+      schema: ctx.world.characterSchema,
     }),
 });
 ```
 
-`<player-character>` 是玩家角色卡（与 `player.character` 相同的 JSON），`profiles: true` 时再加 `<character-profiles>`（与 `characters.npcs` 相同的行格式）。`locale` 决定“未列出档案”那一行用中文还是 English，与正文的语言一致。内置的 `narrator` 和 `chat-mode-narrator` 这样做。
+`<player-character>` 是玩家角色卡（与 `player.character` 相同的 JSON），`profiles: true` 时再加 `<character-profiles>`（与 `characters.npcs` 相同的行格式）。`locale` 决定“未列出档案”那一行用中文还是 English，与正文的语言一致。`schema` 让声明了 min/max 的数值属性带上量程渲染（`"might": "2/5"`），否则模型只看到一个光秃秃的数字，分不清 2/5 和 2/100。内置的 `narrator` 和 `chat-mode-narrator` 这样做。
 
 - `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。
 - `userSettings.*`，由根 `contributes.settings` 默认值和玩家配置合成。
