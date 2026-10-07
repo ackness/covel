@@ -110,6 +110,20 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **The NPC graph no longer takes places and items for people.** The extractor's prompt said that the `entities` of its input are people, groups, and factions. They also hold places, items, skills, and concepts, and the model wrote those as nodes: about a third of all nodes in replays of recorded turns, most of them labelled `group` or `individual` to fit the tool. The prompt now says what the entities are and that only people, groups, and factions are nodes. `upsert-npc-graph` reads the `character` type as `individual`, leaves out a node typed `location`, `item`, `skill`, or `concept` instead of rejecting the call, and skips an edge to it. Nodes of that kind that an earlier turn recorded stay in a session's graph.
 - **`submit-world-facts` accepts two more forms of reference.** A reference that holds the name of an entity of the same output, where its id goes, means that entity when no other entity has the name. A reference to an item or quest that the session already tracks (a name of the `world-ir.vocabulary@1` input) is declared from the vocabulary, as a session character is declared from the roster. On qwen3.8-flash these were 3 of the 7 recorded rejections for an undeclared reference.
 
+### Breaking contracts and upgrade notes
+
+- **This version does not read the data of an earlier version, and does not migrate it.** Sessions saved by an earlier version are lost. Covel is in early development and keeps no migration code for stored data.
+- Server database: `messages`, `trace_events` and `turn_results` have new columns. An earlier SQLite database opens, and nothing reports a problem at startup; then every chat read and write fails with `no such column: seq`. Delete the database file and its `-wal` and `-shm` files before starting this version: `<covelHome>/data/covel.db` (typically `~/.covel/data/covel.db`) for the desktop app, `./data/covel.db` for a development server without a Covel home. For PostgreSQL, recreate the schema.
+- Browser-private saves: BrowserVault is schema 6 and refuses an earlier vault. Delete the site's IndexedDB database `covel-browser-vault`.
+- `history.compact@1` is `history.compact@2`: the output is a list of summary segments, each with the summaries it replaces. A compaction provider written for `@1` is not called.
+- Prompt templates: `{{ world.tone }}`, `{{ world.openingScenario }}` and `{{ session.id }}` are removed. Read the tone and the opening from `<world-lore>` and the dimension projection; name a turn by its number.
+- Hooks: a handler that returns nothing continues. A handler that throws or times out vetoes only on `TurnStart`, `PreCompaction`, `PreRuntime`, `PreToolUse` and `PreStateCommit`; on every other event it is skipped.
+- Plugin packages: the loader rejects a runtime whose declared schema file is missing. `pnpm validate:plugin` and the installer also reject a referenced file that does not exist, an `auto` or `scheduled` runtime without a stage, an unknown framework tool name, and a plugin tool that `contributes.tools` does not list.
+- World packages: the import preview and `pnpm validate:world` reject a selective lorebook entry without a key, a lorebook record without `content`, and a character that does not fit `characterSchema`. `pnpm validate:world` also rejects an unknown `presetId` and an invalid plugin setting.
+- `create-character` gives a word ID (`char-lin-yao`) in place of a UUID.
+- `agent.loop.callTimeoutMs` limits a call that is not streamed. Every agent call streams when the model adapter can; such a call is limited by `firstTokenTimeoutMs` and `idleTimeoutMs`.
+- Desktop: the IPC channels `covel:import:pick-plugin` and `covel:import:pick-world` are removed. The import menus open the installer in Settings.
+
 ## [0.0.47] - 2026-10-05
 
 This release adds world galleries, scene- and mood-based background music, and author credits, and fixes world storage selection, background model readiness, runtime scheduling, and turn settlement.
