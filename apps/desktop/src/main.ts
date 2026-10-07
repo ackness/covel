@@ -18,6 +18,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 
 import {
   ensureUserPaths,
@@ -346,11 +347,17 @@ async function startServer(
   }
   writeLog("info", `node: ${nodeBin}`);
 
-  serverProcess = spawn(nodeBin, ["--import", tsxPath, serverEntry], {
-    cwd: projectRoot,
-    env: spawnEnv,
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
-  });
+  // `--import` takes a module specifier, not a path: Node reads the drive
+  // letter of an absolute Windows path as a URL scheme and refuses it.
+  serverProcess = spawn(
+    nodeBin,
+    ["--import", pathToFileURL(tsxPath).href, serverEntry],
+    {
+      cwd: projectRoot,
+      env: spawnEnv,
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    },
+  );
   serverPort = port;
   const startedAt = Date.now();
 
