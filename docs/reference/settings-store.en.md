@@ -27,6 +27,8 @@ The Data import preview validates each entry against its currently registered sc
 
 Key, global, and persistence-error subscriptions isolate each synchronous callback failure. A throwing observer cannot suppress siblings, turn a successful save into a failure, or replace the real I/O error. Diagnostics contain no setting key, value, or raw callback error.
 
+Serial workflows in the theme library and appearance studio await the actual success or rejection of `SettingsStoreApi.set()`, not a widget setter that handles errors without rejecting. Failed application does not clear overrides or the theme name, or report complete import success. Failed token edits and resets show an error and revert only that failed draft and preview, preserving later edits. The global fire-and-forget error handling in `useSetting` is unchanged.
+
 ## Generic setting controls
 
 A registered setting without a purpose-built pane renders through the generic widgets (`apps/web/src/settings/widgets/`): General and each plugin's settings.
