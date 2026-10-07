@@ -107,6 +107,8 @@ export async function handleTargetFailure(args: {
    * pass `false` for the final target or a non-fallbackable error.
    */
   canFallback: boolean;
+  /** The failure of the target tried before this one, when there was one. */
+  previous?: AiProviderError | null;
 }): Promise<AiProviderError> {
   const {
     error,
@@ -136,7 +138,23 @@ export async function handleTargetFailure(args: {
     failure = hookAbort;
   }
 
-  const normalized = targetFailure(failure, target);
+  const attempted = targetFailure(failure, target);
+  // A fallback that was skipped without a request says nothing about why the
+  // operation failed. The failure of the target before it stays the error,
+  // and the skip is added to it.
+  const normalized =
+    attempted.details?.fallbackSkipped === true && args.previous
+      ? new AiProviderError({
+          code: args.previous.code,
+          message: `${args.previous.message} Then: ${attempted.message}`,
+          provider: args.previous.provider,
+          model: args.previous.model,
+          retriable: args.previous.retriable,
+          statusCode: args.previous.statusCode,
+          details: args.previous.details,
+          cause: args.previous,
+        })
+      : attempted;
 
   if (options?.signal?.aborted || !canFallback || !shouldFallback(normalized)) {
     throw normalized;

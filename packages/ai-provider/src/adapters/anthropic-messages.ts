@@ -36,6 +36,7 @@ import type {
 } from "../types.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
 import { extractReasoningRequestFields } from "../reasoning-effort.js";
+import { anthropicModelTraits } from "../anthropic-model-traits.js";
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
@@ -78,27 +79,42 @@ function requestedToolChoice(
   context: ModelRequestContext | undefined,
 ): Record<string, unknown> {
   if (!params.tools?.length) return {};
-  const unsupportedForcedChoice =
-    /claude-(?:(?:opus|sonnet)-5[.-]5|(?:fable|mythos)-5[.-]1)(?:-|$)/i.test(
-      params.model,
-    );
-  if (unsupportedForcedChoice) return { tool_choice: { type: "auto" } };
-  if (!params.defaults?.toolChoice)
-    return params.providerRequestMetadata?.tool_choice
-      ? { tool_choice: params.providerRequestMetadata.tool_choice }
-      : {};
-  const body = {
-    ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
-    ...extractAnthropicParameterOverrides(
-      params.providerRequestMetadata,
-      context,
-      params.model,
-    ),
-  };
+  // The choice set for this provider wins over the runtime's default.
+  let choice: unknown = params.providerRequestMetadata?.tool_choice;
+  if (choice === undefined && params.defaults?.toolChoice) {
+    const body = {
+      ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+      ...extractAnthropicParameterOverrides(
+        params.providerRequestMetadata,
+        context,
+        params.model,
+      ),
+    };
+    choice = defaultToolChoice(params.defaults, body, "anthropic");
+  }
+  if (choice === undefined) return {};
   return {
-    tool_choice:
-      params.providerRequestMetadata?.tool_choice ??
-      defaultToolChoice(params.defaults, body, "anthropic"),
+    tool_choice: anthropicModelTraits(params.model).forcedToolChoice
+      ? choice
+      : withoutForcedToolChoice(choice),
+  };
+}
+
+/**
+ * `auto` in place of a forced choice, for a model that rejects `any` and
+ * `tool`. `auto` and `none` pass as they are, and a forced choice keeps its
+ * `disable_parallel_tool_use`, which `auto` also takes.
+ */
+function withoutForcedToolChoice(choice: unknown): unknown {
+  if (choice === null || typeof choice !== "object") return choice;
+  const { type, disable_parallel_tool_use: oneCall } = choice as {
+    type?: unknown;
+    disable_parallel_tool_use?: unknown;
+  };
+  if (type !== "any" && type !== "tool") return choice;
+  return {
+    type: "auto",
+    ...(oneCall === undefined ? {} : { disable_parallel_tool_use: oneCall }),
   };
 }
 

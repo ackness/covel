@@ -5,6 +5,7 @@ import type {
 } from "./types.js";
 
 import { REASONING_EFFORT_VALUES, type ReasoningEffort } from "@covel/shared";
+import { anthropicModelTraits } from "./anthropic-model-traits.js";
 export { REASONING_EFFORT_VALUES };
 export type { ReasoningEffort };
 
@@ -186,8 +187,8 @@ export function resolveReasoningEffortProfile(
       family,
       defaultValue: "high",
       options:
-        (adaptive && !/claude-(?:opus|sonnet)-5[.-]5/.test(model)) ||
-        /claude-opus-4-5/.test(model)
+        (adaptive || /claude-opus-4-5/.test(model)) &&
+        anthropicModelTraits(model).thinkingCanBeDisabled
           ? [...options("disabled"), ...levels]
           : levels,
     };

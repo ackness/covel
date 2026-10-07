@@ -536,6 +536,7 @@ export function createGateway(deps: GatewayDependencies) {
           startTime,
           options,
           canFallback: !emittedDelta && index < targets.length - 1,
+          previous: lastError,
         });
       }
     }
@@ -1095,6 +1096,7 @@ export function createGateway(deps: GatewayDependencies) {
           retriable: false,
           message: `Fallback model ${targetModel(target)} cannot fit the request: estimated ${inputTokens} input tokens plus ${limits.maxOutputTokens} output tokens exceed its ${limits.contextWindow} context window.`,
           details: {
+            fallbackSkipped: true,
             inputTokens,
             contextWindow: limits.contextWindow,
             maxOutputTokens: limits.maxOutputTokens,

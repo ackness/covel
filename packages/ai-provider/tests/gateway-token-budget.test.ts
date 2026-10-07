@@ -154,7 +154,7 @@ describe("gateway target output budgets", () => {
   );
 
   it.each(["generate", "object", "stream"] as const)(
-    "%s rejects an oversized fallback before invoking its provider",
+    "%s skips an oversized fallback and reports the failure of the primary",
     async (mode) => {
       const { gateway, calls, presetRegistry } = setup(503);
       presetRegistry.addPreset({
@@ -174,11 +174,13 @@ describe("gateway target output budgets", () => {
           /* drain */
         }
       };
-      await expect(invoke()).rejects.toMatchObject({
-        model: "backup",
-        retriable: false,
-        message: expect.stringContaining("cannot fit the request"),
-      });
+      // The backup was never asked, so the error is the one the primary gave;
+      // why the backup was skipped follows it.
+      const failure = await invoke().catch((error: unknown) => error);
+      expect(failure).toMatchObject({ model: "primary", statusCode: 503 });
+      expect((failure as Error).message).toMatch(
+        /Synthetic upstream failure.*backup.*cannot fit the request/s,
+      );
       expect(calls.map((call) => call.model)).toEqual(["primary"]);
     },
   );

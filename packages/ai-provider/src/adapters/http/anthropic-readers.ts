@@ -82,6 +82,10 @@ function isToolResultContent(content: string | readonly unknown[]): boolean {
   );
 }
 
+/** Opens a conversation whose first kept message is the model's. */
+const EARLIER_TURNS_OMITTED =
+  "(The conversation continues from earlier turns.)";
+
 export function toAnthropicMessages(
   messages: TextMessage[],
   target?: { model: string; config: ProviderConfig },
@@ -176,6 +180,12 @@ export function toAnthropicMessages(
       content: serializeAnthropicContent(msg.content),
     });
   }
+
+  // The Messages API takes a user turn first. A history that was pruned or
+  // compacted can start with the model's turn; the text of this opener is
+  // fixed, so it stays part of the cached prefix.
+  if (out.length > 0 && out[0]!.role !== "user")
+    out.unshift({ role: "user", content: EARLIER_TURNS_OMITTED });
 
   if (target?.config.cacheStrategy === "anthropic-explicit") {
     // One moving breakpoint covers conversation history and prior tool rounds.

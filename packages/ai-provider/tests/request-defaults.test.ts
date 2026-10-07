@@ -101,6 +101,53 @@ describe("runtime request defaults", () => {
   });
 
   it.each([
+    { set: { type: "none" }, sent: { type: "none" } },
+    {
+      set: { type: "auto", disable_parallel_tool_use: true },
+      sent: { type: "auto", disable_parallel_tool_use: true },
+    },
+    {
+      set: {
+        type: "tool",
+        name: "submit-facts",
+        disable_parallel_tool_use: true,
+      },
+      sent: { type: "auto", disable_parallel_tool_use: true },
+    },
+    { set: { type: "any" }, sent: { type: "auto" } },
+  ])(
+    "sends the tool choice set for a Claude model that rejects forced tools as $sent",
+    async ({ set, sent }) => {
+      const captured = captureResponse();
+      await createAnthropicMessagesAdapter().generateText(config, {
+        ...params,
+        model: "claude-opus-5-5",
+        providerRequestMetadata: { tool_choice: set },
+      });
+      expect(captured().tool_choice).toEqual(sent);
+    },
+  );
+
+  it("opens an Anthropic conversation with a user turn when the history starts with the model", async () => {
+    const captured = captureResponse();
+    await createAnthropicMessagesAdapter().generateText(config, {
+      model: "claude-opus-4-6",
+      messages: [
+        { role: "system", content: "Narrate." },
+        { role: "assistant", content: "The gate stands open." },
+        { role: "user", content: "I walk through." },
+      ],
+    });
+    const sent = captured().messages as { role: string; content: unknown }[];
+    expect(sent.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+    ]);
+    expect(JSON.stringify(sent[1])).toContain("The gate stands open.");
+  });
+
+  it.each([
     {
       create: createOpenAiChatAdapter,
       model: "qwen3.8-flash",

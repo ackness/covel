@@ -119,7 +119,7 @@ provider 获得当前执行的 locale、只读世界视图和自身数据访问�
 
 runtime 的 `agent` 分组可声明 `llm.reasoningEffort: disabled`，以及 `llm.toolChoice: { name: submit-facts }`（指定工具）或 `llm.toolChoice: required`（必须调用某个已声明工具，由模型选择）。叙事后的记账 runtime 收到的对话是故事正文，不强制工具时模型容易直接续写剧情。`required` 适合"无变化"也由同一个写入工具表达的 runtime（如 `update-dimensions({updates: []})`）；若无变化要改调 `runtime-done`，强制工具会让模型先提交一次被拒的空写入，而失败的写入不会被随后的 `runtime-done` 抵消。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
 
-provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，DeepSeek thinking 请求省略不兼容的 `tool_choice`。`deepseek-flash` 和 V4 模型未指定开关时也按默认开启思考处理；显式关闭后保留插件的工具选择偏好。此行为遵循 [DeepSeek Chat Completions 的工具选择限制](https://api-docs.deepseek.com/api/create-chat-completion/)，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
+provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，不接受强制工具调用的 Claude 模型（Fable 5.1、Mythos 5.1、Opus 5.5、Sonnet 5.5）同样退回 `auto`，玩家自己设的 `auto` / `none` 原样发送；DeepSeek thinking 请求省略不兼容的 `tool_choice`。`deepseek-flash` 和 V4 模型未指定开关时也按默认开启思考处理；显式关闭后保留插件的工具选择偏好。此行为遵循 [DeepSeek Chat Completions 的工具选择限制](https://api-docs.deepseek.com/api/create-chat-completion/)，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
 
 ## 4. Template 变量与数据边界
 
