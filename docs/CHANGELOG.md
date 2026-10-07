@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 - Theme application, import and save-as await persistence without clearing overrides or names or reporting false success on failure. Failed appearance edits, resets and ignored token submissions restore saved previews while protecting later edits and scheme switches.
 - Plugin catalog switches have accessible names and native keyboard activation without submitting forms; inputs, textareas and selects associate localized labels with stable unique IDs while retaining the panel interaction lock.
+- English and Russian model-role connectivity hints direct players to the current Providers & Models page instead of the retired API Keys pane.
 
 - Desktop key saving while the sidecar is unavailable now writes a private temporary file and atomically replaces the saved keys; write, permission-setting and rename failures preserve the existing keys.
 - Execution status reads reject a session deleted or recreated during an authorized lookup, rather than returning the replacement session’s retry input; polling remains non-blocking.
