@@ -102,6 +102,35 @@ describe("dice-check roller handler", () => {
     });
   });
 
+  it("lists the player character's modifiers converted from their ranges", async () => {
+    const world = {
+      characterSchema: {
+        attributes: [
+          { id: "grit", name: "坚毅", type: "number", min: 0, max: 5, category: "stats" },
+          { id: "vitality", name: "体力", type: "number", min: 0, max: 100, category: "stats" },
+          { id: "calling", name: "使命", type: "string", category: "bio" },
+        ],
+      },
+      characters: [
+        {
+          id: "p1",
+          type: "player",
+          name: "亚瑟",
+          fields: { grit: 2, vitality: 80, calling: "scholar" },
+        },
+      ],
+    };
+    const result = await handler(makeCtx({ locale: "zh-CN", world }));
+
+    expect(result.value.checkContext).toContain("坚毅 2/5 → +4");
+    expect(result.value.checkContext).toContain("体力 80/100 → +8");
+    expect(result.value.checkContext).not.toContain("使命");
+
+    // Without a world view there is no list, and the rules still stand.
+    const bare = await handler(makeCtx({ locale: "zh-CN" }));
+    expect(bare.value.checkContext).not.toContain("修正表读取");
+  });
+
   it("keeps the turn's dice for the guard that checks the receipt", async () => {
     const result = await handler(makeCtx({ turnId: "turn-guard" }));
     expect(poolOf("sess-1", "turn-guard")).toEqual(

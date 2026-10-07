@@ -6,7 +6,7 @@
 
 - `PLUGIN.md`：包级摘要与 server entry，注册玩家侧掷骰 action。
 - `rpc/roll.js`：`/roll [notation]`（别名 `/r`）命令处理器；接受 1-100 颗、2-1000 面的 `NdM` 骰式，缺省为 `1d20`。
-- `runtimes/roller/`：pre-turn function runtime，每回合用 `node:crypto` 预掷 3 个 d20，输出 `checkContext`（每次判定一行的结果表 + 判定规则 markdown）供叙事引擎注入。表里每个难度一列，直接给出结果或“修正达到多少为成功”，叙事查表即可，不做加法。
+- `runtimes/roller/`：pre-turn function runtime，每回合用 `node:crypto` 预掷 3 个 d20，输出 `checkContext`（每次判定一行的结果表 + 判定规则 markdown）供叙事引擎注入。表里每个难度一列，直接给出结果或“修正达到多少为成功”，叙事查表即可，不做加法。玩家角色有量程的数值属性的修正也由 roller 按量程预换算（(数值 − 下限) ÷ 量程 × 10）列在块里，叙事读取而不自行估算；无量程的属性才由叙事换算。
 - `hooks/verify-check-receipt.js`：`PreToolUse` 守卫，在叙事发出回执时对照骰子。
 - `lib/check-rules.js`：判定规则（难度对应的 DC、成败与大成功/大失败），roller、守卫和 recorder 共用。
 - `runtimes/recorder/`：event function runtime，订阅 `check.resolved` 回执并落库。
