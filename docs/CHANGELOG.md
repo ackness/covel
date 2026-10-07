@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Inside the app, the interface language is in Settings only.** The top bar of the session and debug pages no longer has a language select; Settings → General → Interface Language is the same setting. The landing page, which has no way into Settings, keeps the select, and so does the menu of a narrow window.
+
+### Fixed
+
+- **The Windows window buttons no longer cover the right end of the top bar.** The desktop shell draws minimize, maximize and close over the top-right corner of the page, and the top bar reserved no room for them, so the control at its right end (the language select) was hidden. The top bar now leaves that width free. A layout with the icon rail has no top bar, so the first row of each page was under the buttons; on Windows it now gets a strip of the buttons' height above the page.
+
 ## [0.0.48] - 2026-10-07
 
 This release lays out the prompt so that a provider's prefix cache reaches the history, keeps IDs and timestamps out of what a model reads, settles more of the slips for which a tool refused a model's call, adds sessions that replay from recorded model calls, and fixes the findings of a whole-codebase audit. **It does not read the data of an earlier version**: read the [upgrade notes](#breaking-changes-and-upgrade-notes-for-v0048) before installing it.

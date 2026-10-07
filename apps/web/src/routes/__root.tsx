@@ -300,6 +300,13 @@ function RootLayout() {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {railNav && (
+            <div
+              aria-hidden="true"
+              className="ui-window-controls-strip hidden shrink-0 lg:block"
+              style={isElectron ? dragStyle : undefined}
+            />
+          )}
           <header
             className={`ui-app-header ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"} ${railNav ? "lg:hidden" : ""}`}
             style={isElectron ? dragStyle : undefined}
@@ -344,18 +351,23 @@ function RootLayout() {
                 })}
               </nav>
               <div
-                className="flex items-center gap-1 md:gap-1.5 ml-auto"
+                className="ui-window-controls-clear flex items-center gap-1 md:gap-1.5 ml-auto"
                 style={isElectron ? noDragStyle : undefined}
               >
                 <ThemeToggle />
-                <label className="hidden lg:block">
-                  <span className="sr-only">
-                    {t("onboarding.language", "Language")}
-                  </span>
-                  {languageSelect(
-                    "h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary",
-                  )}
-                </label>
+                {/* Inside the app the language is a setting (General). The
+                    landing page has no way into Settings, so it keeps the
+                    select. */}
+                {!isSession && (
+                  <label className="hidden lg:block">
+                    <span className="sr-only">
+                      {t("onboarding.language", "Language")}
+                    </span>
+                    {languageSelect(
+                      "h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary",
+                    )}
+                  </label>
+                )}
                 {!isSession && (
                   <Button
                     variant="default"

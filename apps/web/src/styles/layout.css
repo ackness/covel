@@ -28,6 +28,22 @@
     }
   }
 
+  /* On Windows the Electron shell draws the window buttons over the top-right
+     corner of the page. The titlebar-area variables describe the strip beside
+     them, so this is the width the buttons cover. Without the overlay (macOS,
+     browsers) the fallbacks make it zero. */
+  .ui-window-controls-clear {
+    margin-inline-end: calc(
+      100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)
+    );
+  }
+
+  /* The rail layout has no top bar, so the first row of every page would sit
+     under those buttons. This strip above the page takes their height. */
+  .ui-window-controls-strip {
+    height: env(titlebar-area-height, 0px);
+  }
+
   /* ── backdrop: scene ────────────────────────────────────────── */
   .ui-session-scene-scrim {
     position: absolute;
