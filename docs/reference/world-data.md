@@ -4,7 +4,7 @@
 
 ## World Package
 
-世界包加载会读取声明语言对应的 `WORLD.<locale>.md`。叙事上下文按固定的会话语言选择正文，默认语言优先使用数据库中的已编辑内容；会话的 `loreOverride`（包括空字符串）优先。正文以有界的 `<world-lore>` 段进入故事提示词。翻译模型结果先保存在内存中，发布时在世界操作锁内核对创建时间、实际包路径和目录身份，再合并新语言及其正文，保留已保存的编辑；删除中或同 ID 重建的世界拒绝旧翻译，旧请求不会写入或清理新包文件。
+世界包加载会读取声明语言对应的 `WORLD.<locale>.md`。叙事上下文按固定的会话语言选择正文，默认语言优先使用数据库中的已编辑内容；会话的 `loreOverride`（包括空字符串）优先。正文以有界的 `<world-lore>` 段进入故事提示词：上限约 8,000 token（按估算 token 计，中文一字约一个、其他文字四个字符约一个），超出时在最后一个放得下的整行之后截断。翻译模型结果先保存在内存中，发布时在世界操作锁内核对创建时间、实际包路径和目录身份，再合并新语言及其正文，保留已保存的编辑；删除中或同 ID 重建的世界拒绝旧翻译，旧请求不会写入或清理新包文件。
 
 AI 修订发布时会在世界操作锁内复核原记录与文件包身份。生成期间的编辑、删除或同 ID 重建会使旧结果失效，不再用旧修订覆盖当前世界。
 
@@ -540,7 +540,7 @@ sources:
 
 运行时边界：
 
-- `strategy: selective`（或 `kind: triggered`）检查当前玩家消息；`scanDepth` 还可纳入最近已提交的对话（含已压缩消息，最多 20 条）。Latin 关键词按词边界匹配，CJK 关键词按子串匹配，大小写不敏感。
+- `strategy: selective`（或 `kind: triggered`）检查当前玩家消息；`scanDepth` 还可纳入最近已提交的对话（含已压缩消息，最多 20 条）。Latin 关键词按整词匹配，并接受复数和所有格词尾（`lantern` 也匹配 `lanterns`、`lantern's`，不匹配 `lanternfish`）；CJK 关键词按子串匹配，大小写不敏感。
 - `selective` 记录必须有非空 `keys`，静态校验和导入预检会拒绝缺失的记录。`constant` 每轮注入，不依赖 `keys`；省略 `strategy` / `kind` 时默认 `constant`。
 - 可选字段还包括 `position`、`insertionOrder`、`enabled` 和 `extra`。默认 `position` 是 `after_plugin`，默认 `enabled` 是 `true`。
 - `PLUGIN.md` 中的 Markdown 链接不会触发文件加载；`references/*.md` 及其自定义 `keywords` frontmatter 不是插件运行时契约。
@@ -1122,11 +1122,12 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 GitHub 世界包目录、多世界选择、代理下载和更新流程见 [世界目录与安装](./world-installation.md)。
 
-Static validation rejects invalid source target combinations: media sources use `to: media` and a contract `indexTo`; structured sources cannot target media. Empty sources produce a warning. Both conventional and descriptor-backed imports report unclaimed files recursively in `data/`, `characters/`, and `media/`; `dimensionSources` are checked even when no conventional data file exists. `pluginPolicy.presetId` must name a built-in or world pack, and plugin setting presets use the runtime type/range/option checks. Selective lore entries can set `extra.scanDepth` (0–20 prior committed messages, default 0); Latin keywords match whole words, while CJK keywords use substring matching.
+Static validation rejects invalid source target combinations: media sources use `to: media` and a contract `indexTo`; structured sources cannot target media. Empty sources produce a warning. Both conventional and descriptor-backed imports report unclaimed files recursively in `data/`, `characters/`, and `media/`; `dimensionSources` are checked even when no conventional data file exists. `pluginPolicy.presetId` must name a built-in or world pack, and plugin setting presets use the runtime type/range/option checks. Selective lore entries can set `extra.scanDepth` (0–20 prior committed messages, default 0); Latin keywords match whole words and their plural or possessive forms (`lantern` also matches `lanterns` and `lantern's`, not `lanternfish`), while CJK keywords use substring matching.
 
 `validate:world` also reports non-blocking prompt-size warnings: WORLD.md above
-8,000 characters (the story injection cap), constant lorebook content above
-2,000 characters per source, or initial dimension values above 8,000 characters.
-Keep essential setting instructions in WORLD.md and use selective entries for
-situational lore. These warnings are character measurements, not model token
-estimates.
+8,000 tokens (what the story prompt carries; longer lore is cut after the last
+line that fits), constant lorebook content above 2,000 tokens per source, or
+initial dimension values above 8,000 tokens. Keep essential setting
+instructions in WORLD.md and use selective entries for situational lore. The
+sizes are estimated tokens (one per CJK character, one per four other
+characters), so a world is measured the same in every language.

@@ -14,8 +14,10 @@ import { parse as parseYaml } from "yaml";
 import { createEventBus } from "@covel/events";
 import { BUILTIN_PLUGIN_PACKS } from "../config/plugin-packs.js";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "@covel/context";
 import {
   DEFAULT_LOCALE,
+  estimateTokens,
   isValidPluginSetting,
   applyLocaleOverlay,
   findInlineLocaleMaps,
@@ -168,6 +170,15 @@ function closestName(
   return best && best.distance <= limit ? best.name : undefined;
 }
 
+/**
+ * Sizes above which `validate:world` warns about what a world adds to every
+ * story prompt. They are estimated tokens, so a text weighs the same in any
+ * language: counted in characters, an English world passed the limit at a
+ * quarter of the content a Chinese world could hold.
+ */
+const CONSTANT_LORE_TOKEN_WARNING = 2000;
+const DIMENSION_TOKEN_WARNING = 8000;
+
 function declaredLocales(manifest: WorldManifestView): readonly string[] {
   return [
     ...new Set([manifest.defaultLocale, ...(manifest.supportedLocales ?? [])]),
@@ -242,14 +253,15 @@ async function checkLore(
     const file = await resolveLocaleFilePath(worldDir, "WORLD.md", locale);
     if (!file) missing.push(locale);
     else {
-      const size = (await readFile(file, "utf8")).length;
-      if (size > 8_000)
+      // The measure the story prompt cuts the lore with.
+      const lore = fitWorldLore(await readFile(file, "utf8"));
+      if (lore.truncated)
         diagnostics.push({
           level: "warning",
           code: "prompt-size",
           file: path.relative(worldDir, file),
           locales: [locale],
-          message: `WORLD.md has ${size} characters; the story context includes at most 8000.`,
+          message: `WORLD.md is about ${lore.tokens} tokens; the story context includes the first ${WORLD_LORE_TOKEN_BUDGET}.`,
           hint: "Keep essential setting instructions here; move situational facts into selective lorebook entries.",
         });
     }
@@ -532,16 +544,16 @@ async function checkLocaleFiles(
           entry.strategy !== "selective" &&
           entry.kind !== "triggered" &&
           typeof entry.content === "string"
-          ? total + entry.content.length
+          ? total + estimateTokens(entry.content)
           : total;
       }, 0);
-      if (constantSize > 2_000)
+      if (constantSize > CONSTANT_LORE_TOKEN_WARNING)
         diagnostics.push({
           level: "warning",
           code: "prompt-size",
           file,
           sourceId: source.id,
-          message: `Constant lorebook entries contribute ${constantSize} characters to every turn.`,
+          message: `Constant lorebook entries contribute about ${constantSize} tokens to every turn.`,
           hint: "Use selective entries with keys for situational lore, and avoid duplicating character profiles.",
         });
     }
@@ -686,16 +698,16 @@ async function checkWorldData(
     });
     const size = Object.values(dimensions).reduce(
       (total, dimension) =>
-        total + JSON.stringify(dimension.initialValue).length,
+        total + estimateTokens(JSON.stringify(dimension.initialValue)),
       0,
     );
-    if (size > 8_000)
+    if (size > DIMENSION_TOKEN_WARNING)
       diagnostics.push({
         level: "warning",
         code: "prompt-size",
         file: "world.yaml",
         pointer: "dimensions",
-        message: `Initial dimension values occupy ${size} characters in the prompt projection.`,
+        message: `Initial dimension values occupy about ${size} tokens in the prompt projection.`,
         hint: "Keep live state compact; move descriptive archives to selective lorebook entries or plugin data.",
       });
   } catch (error) {

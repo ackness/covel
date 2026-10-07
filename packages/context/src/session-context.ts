@@ -273,9 +273,12 @@ function isLorebookEntryActive(
     const needle = key.toLowerCase();
     if (!/^[\x20-\x7e]+$/.test(needle) || !/[a-z]/.test(needle))
       return haystack.includes(needle);
+    // A Latin key matches as a whole word, so `art` is not found in `start`.
+    // The word may carry a plural or possessive ending: an author who writes
+    // `lantern` means `lanterns` and `lantern's` too.
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp(
-      `(?:^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`,
+      `(?:^|[^\\p{L}\\p{N}_])${escaped}(?:e?s|['’]s)?(?=$|[^\\p{L}\\p{N}_])`,
       "u",
     ).test(haystack);
   });

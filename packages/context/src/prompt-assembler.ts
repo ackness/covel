@@ -43,6 +43,7 @@ import {
   resolveFrameworkCompletion,
 } from "./prompt-internals.js";
 import { serializeSystemPrompt } from "./prompt-serialization.js";
+import { fitWorldLore } from "./world-lore.js";
 import {
   activeContributions,
   collectDepthContributions,
@@ -342,7 +343,7 @@ function buildPromptSegmentsCommon(
       ? params.sessionContext?.world.lore
       : undefined;
   const worldLore = lore?.trim()
-    ? `<world-lore>\n${lore.slice(0, 8000)}${lore.length > 8000 ? "…" : ""}\n</world-lore>`
+    ? `<world-lore>\n${fitWorldLore(lore).text}\n</world-lore>`
     : "";
   return {
     stableExtensions: [

@@ -115,10 +115,10 @@ describe("validateWorldPackage", () => {
   it("warns about large permanent prompt contributions without rejecting the package", async () => {
     const worldDir = await makeWorld(
       {
-        "WORLD.md": "setting ".repeat(1100),
-        "data/lorebook.yaml": `- id: permanent\n  content: ${"lore ".repeat(500)}\n  strategy: constant\n`,
+        "WORLD.md": "setting ".repeat(4400),
+        "data/lorebook.yaml": `- id: permanent\n  content: ${"lore ".repeat(2000)}\n  strategy: constant\n`,
       },
-      `${MANIFEST}dimensions:\n  archive:\n    name: Archive\n    schema: {type: string}\n    initialValue: ${"fact ".repeat(1700)}\n`,
+      `${MANIFEST}dimensions:\n  archive:\n    name: Archive\n    schema: {type: string}\n    initialValue: ${"fact ".repeat(6800)}\n`,
     );
     const diagnostics = await validate(worldDir);
     expect(diagnostics.filter((item) => item.code === "prompt-size")).toEqual(
@@ -136,6 +136,27 @@ describe("validateWorldPackage", () => {
       ]),
     );
     expect(diagnostics.filter((item) => item.level === "error")).toEqual([]);
+  });
+
+  it("measures lore the same in Chinese and in English", async () => {
+    const warnsAboutLore = async (lore: string) =>
+      (await validate(await makeWorld({ "WORLD.md": lore }, MANIFEST))).some(
+        (item) => item.code === "prompt-size" && item.file === "WORLD.md",
+      );
+    // About 6,000 tokens in either language: both fit the story prompt.
+    expect(await warnsAboutLore("雾港的潮钟每日三鸣。\n".repeat(600))).toBe(
+      false,
+    );
+    expect(
+      await warnsAboutLore("The tide bell of Mistport rings.\n".repeat(730)),
+    ).toBe(false);
+    // About 10,000 tokens in either language: both are cut.
+    expect(await warnsAboutLore("雾港的潮钟每日三鸣。\n".repeat(1000))).toBe(
+      true,
+    );
+    expect(
+      await warnsAboutLore("The tide bell of Mistport rings.\n".repeat(1220)),
+    ).toBe(true);
   });
 
   it("rejects unknown presets and invalid values of declared settings", async () => {
@@ -169,7 +190,7 @@ describe("validateWorldPackage", () => {
           archive: {
             name: "Archive",
             schema: { type: "string" },
-            initialValue: "detail ".repeat(1300),
+            initialValue: "detail ".repeat(5200),
           },
         }),
       },

@@ -517,6 +517,35 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
     ).toBe(true);
   });
 
+  it.each([
+    { message: "Two lanterns hang by the door.", found: true },
+    { message: "The lantern's glass is cracked.", found: true },
+    { message: "She lit the Lantern.", found: true },
+    { message: "A lanternfish swims past.", found: false },
+    { message: "The unlantern is dark.", found: false },
+  ])(
+    "matches a Latin key with its plural and possessive forms: $message",
+    async ({ message, found }) => {
+      const store = createMemoryStore();
+      await store.createSession(makeSession());
+      await store.upsertLorebookEntries([
+        makeLorebookEntry({
+          id: "lantern",
+          strategy: "selective",
+          keys: ["lantern"],
+        }),
+      ]);
+      const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+        locale: "en-US",
+        turnNumber: 2,
+        playerMessage: message,
+      });
+      expect(
+        snapshot.contributions.some((entry) => entry.sourceId === "lantern"),
+      ).toBe(found);
+    },
+  );
+
   it("rejects unrecognized positions with a warning and applies the documented default", async () => {
     const store = createMemoryStore();
     await store.createSession(makeSession());
