@@ -1,4 +1,5 @@
 import type { ComponentRenderer } from "@json-render/react";
+import { useId } from "react";
 import { clsx } from "clsx";
 import { Search } from "lucide-react";
 import { useI18nResolver } from "./helpers.js";
@@ -9,14 +10,26 @@ export const inputBase =
   "ui-input-shell w-full bg-background border border-border px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring text-foreground placeholder:text-muted-foreground";
 
 /** Shared presentational label for form inputs. */
-function FormInputLabel({ label }: { label: string }) {
+function FormInputLabel({
+  label,
+  htmlFor,
+}: {
+  label: string;
+  htmlFor: string;
+}) {
   if (!label) return null;
   return (
-    <label className="ui-eyebrow text-xs text-muted-foreground">{label}</label>
+    <label
+      htmlFor={htmlFor}
+      className="ui-eyebrow text-xs text-muted-foreground"
+    >
+      {label}
+    </label>
   );
 }
 
 export const Input: ComponentRenderer = ({ element, bindings }) => {
+  const id = useId();
   const resolve = useI18nResolver();
   const placeholder = resolve(element.props?.placeholder);
   const { label, value, onChange } = useFormInputBinding(
@@ -27,8 +40,9 @@ export const Input: ComponentRenderer = ({ element, bindings }) => {
 
   return (
     <div className="space-y-1">
-      <FormInputLabel label={label} />
+      <FormInputLabel label={label} htmlFor={id} />
       <input
+        id={id}
         type="text"
         value={value}
         placeholder={placeholder}
@@ -40,6 +54,7 @@ export const Input: ComponentRenderer = ({ element, bindings }) => {
 };
 
 export const Textarea: ComponentRenderer = ({ element, bindings }) => {
+  const id = useId();
   const resolve = useI18nResolver();
   const placeholder = resolve(element.props?.placeholder);
   const rows = (element.props?.rows as number) ?? 8;
@@ -51,8 +66,9 @@ export const Textarea: ComponentRenderer = ({ element, bindings }) => {
 
   return (
     <div className="space-y-1">
-      <FormInputLabel label={label} />
+      <FormInputLabel label={label} htmlFor={id} />
       <textarea
+        id={id}
         value={value}
         rows={rows}
         placeholder={placeholder}
