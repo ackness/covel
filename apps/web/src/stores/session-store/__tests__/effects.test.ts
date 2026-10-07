@@ -13,7 +13,8 @@ const pluginStore = vi.hoisted(() => ({
 vi.mock("@/services/api", () => api);
 vi.mock("@/stores/plugin-data-store.js", () => pluginStore);
 
-const { useUiSpecHydrationEffect } = await import("../effects.js");
+const { useUiSpecHydrationEffect, usePersistExecutionStepsEffect } =
+  await import("../effects.js");
 
 const generationRef = { current: 0 };
 
@@ -128,4 +129,45 @@ describe("useUiSpecHydrationEffect", () => {
       expect.objectContaining({ type: "REPLACE_PLUGIN_DATA_NAMESPACE" }),
     );
   });
+});
+
+it("coalesces execution cache writes, bounds history, and flushes on unmount", async () => {
+  vi.useFakeTimers();
+  try {
+    const saveExecutionSteps = vi.fn().mockResolvedValue(undefined);
+    const ds = {
+      saveExecutionSteps,
+    } as unknown as import("@/services/data-service.js").DataService;
+    const session = {
+      id: "cache-session",
+      incarnation: "v1",
+    } as import("../types.js").SessionState["session"];
+    const steps = Array.from({ length: 510 }, (_, index) => ({
+      id: String(index),
+      runtimeId: "worker",
+      pluginId: "provider",
+      status: "completed",
+    })) as import("../types.js").SessionState["executionSteps"];
+    const { rerender, unmount } = renderHook(
+      ({ count }) =>
+        usePersistExecutionStepsEffect(
+          { session, executionSteps: steps.slice(0, count) },
+          ds,
+        ),
+      { initialProps: { count: 1 } },
+    );
+    rerender({ count: 400 });
+    rerender({ count: 510 });
+    expect(saveExecutionSteps).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(saveExecutionSteps).toHaveBeenCalledOnce();
+    expect(saveExecutionSteps.mock.calls[0]?.[1]).toEqual(steps.slice(-500));
+    rerender({ count: 509 });
+    unmount();
+    expect(saveExecutionSteps).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(saveExecutionSteps).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });

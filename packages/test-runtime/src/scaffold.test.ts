@@ -12,8 +12,14 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { validatePluginLabels } from "@covel/plugin-loader";
+import { MockLLM } from "@covel/plugin-test-utils";
+import { createMemoryStore } from "@covel/store/memory";
+import { createToolExecutor, executeTurn } from "@covel/runtime";
+import { createDefaultToolRegistry } from "@covel/tools";
+import { createDefaultToolApprovalPipeline } from "@covel/approval";
 import { describe, expect, it } from "vitest";
 import { runRuntimeCases } from "./runner.js";
+import { loadRuntimeBundle } from "./runtime-loading.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 
@@ -34,6 +40,151 @@ function runNode(
       });
     },
   );
+}
+
+/** Use the generated manifests in a player turn, where stage bindings resolve. */
+async function expectNarrativeBinding(pluginsDir: string, pluginId: string) {
+  const narrative = "The gatekeeper asks you to return before dawn.";
+  const providerId = "fixture-story";
+  const providerRoot = path.join(pluginsDir, providerId);
+  await mkdir(providerRoot);
+  await writeFile(
+    path.join(providerRoot, "package.json"),
+    JSON.stringify({
+      name: providerId,
+      version: "1.0.0",
+      type: "module",
+    }),
+  );
+  await writeFile(
+    path.join(providerRoot, "PLUGIN.md"),
+    `---
+id: ${providerId}
+kind: plugin
+version: 1.0.0
+description: Provides one narrative for the generated analyst.
+provides: [narrative-engine@1]
+contracts:
+  narrative-engine@1:
+    schema: ./output.json
+runtime:
+  type: function
+  schedule:
+    stage: narrative
+    trigger:
+      type: auto
+  io:
+    output:
+      contract: narrative-engine@1
+    visibility: plugin
+  function:
+    handler: ./handler.js
+---
+`,
+  );
+  await writeFile(
+    path.join(providerRoot, "output.json"),
+    JSON.stringify({
+      type: "object",
+      required: ["narrativeOutput"],
+      properties: { narrativeOutput: { type: "string" } },
+    }),
+  );
+  await writeFile(
+    path.join(providerRoot, "handler.js"),
+    `export default async function () {
+      return { outcome: "success", value: { narrativeOutput: ${JSON.stringify(narrative)} } };
+    }`,
+  );
+  const store = createMemoryStore();
+  let bundle: Awaited<ReturnType<typeof loadRuntimeBundle>> | undefined;
+  let toolExecutor: ReturnType<typeof createToolExecutor> | undefined;
+  try {
+    bundle = await loadRuntimeBundle({
+      pluginsDir,
+      pluginId,
+      runtimeId: `${pluginId}/analyst`,
+      locale: "en",
+      withPlugins: [providerId],
+      store,
+    });
+    const sessionId = "fixture-stage-binding";
+    await store.createSession({
+      id: sessionId,
+      locale: "en",
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: bundle.pluginIds,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const tools = createDefaultToolRegistry({
+      store,
+      eventDirectory: {
+        async listTopics() {
+          return [];
+        },
+        async validate() {
+          return { ok: false, reason: "fixture has no event contracts" };
+        },
+      },
+    });
+    toolExecutor = createToolExecutor({
+      findTool: (name, context) => tools.find(name, context.pluginId),
+      getToolSource: (name) => tools.source(name),
+      store,
+      approval: createDefaultToolApprovalPipeline(),
+    });
+    const llm = new MockLLM({
+      defaultResponse: {
+        content: null,
+        finishReason: "tool_calls",
+        toolCalls: [
+          {
+            id: "done",
+            name: "runtime-done",
+            arguments: '{"reason":"observed"}',
+          },
+        ],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    });
+    const { result } = await executeTurn(
+      {
+        sessionId,
+        turnId: "fixture-stage-turn",
+        playerMessage: "Speak to the gatekeeper.",
+        origin: "player",
+        locale: "en",
+      },
+      bundle.manifests,
+      {
+        store,
+        loadRuntime: async (manifest) => bundle!.loadedCache.get(manifest.name),
+        llm,
+        toolExecutor,
+      },
+    );
+    expect(result.runtimeResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ runtimeId: providerId, status: "success" }),
+        expect.objectContaining({
+          runtimeId: `${pluginId}/analyst`,
+          status: "success",
+        }),
+      ]),
+    );
+    expect(llm.calls).toHaveLength(1);
+    const prompt = JSON.stringify(llm.calls[0]?.messages);
+    expect(prompt).toContain("narrator-output");
+    expect(prompt).toContain(narrative);
+  } finally {
+    await toolExecutor?.close();
+    await bundle?.close();
+    await store.close();
+  }
 }
 
 describe("plugin scaffolding", () => {
@@ -149,6 +300,9 @@ describe("plugin scaffolding", () => {
           expect(entry.status, JSON.stringify(entry.result.assertions)).toBe(
             "passed",
           );
+        }
+        if (mode !== "with-tools") {
+          await expectNarrativeBinding(path.join(root, directory), pluginId);
         }
       } finally {
         await rm(root, { recursive: true, force: true });

@@ -55,6 +55,13 @@ export interface TranslateWorldResult {
   readonly failed: readonly { readonly id: string; readonly reason: string }[];
 }
 
+export interface PreparedWorldTranslation extends Omit<
+  TranslateWorldResult,
+  "written"
+> {
+  readonly translations: ReadonlyMap<string, string>;
+}
+
 /** The texts of a world that `locale` does not translate yet. */
 export async function untranslatedWorldTexts(
   worldDir: string,
@@ -91,16 +98,16 @@ export async function untranslatedWorldTexts(
 }
 
 /**
- * Translate what a world package lacks in `locale` and write the locale
- * files beside the main files.
+ * Generate the missing translations in memory without changing the package.
+ * A host may then check package ownership before publishing the result.
  *
  * A name must have one translation in every file. So the names and terms of
  * the world are listed first, the name fields are translated next, and each
  * later call is given the names its texts use.
  */
-export async function translateWorldPackage(
+export async function prepareWorldTranslation(
   options: TranslateWorldOptions,
-): Promise<TranslateWorldResult> {
+): Promise<PreparedWorldTranslation> {
   const { worldDir, locale, llm } = options;
   const signal = options.signal ?? new AbortController().signal;
   const { from, units, names, glossary } = await untranslatedWorldTexts(
@@ -108,7 +115,13 @@ export async function translateWorldPackage(
     locale,
   );
   if (units.length === 0)
-    return { from, total: 0, translated: 0, written: [], failed: [] };
+    return {
+      from,
+      total: 0,
+      translated: 0,
+      translations: new Map(),
+      failed: [],
+    };
 
   const model = {
     ...(options.model ? { model: options.model } : {}),
@@ -171,18 +184,26 @@ export async function translateWorldPackage(
       }
   }
 
-  const written = await writeWorldTranslations(
-    worldDir,
-    locale,
-    new Map(Object.entries(translations)),
-  );
   return {
     from,
     total: units.length,
     translated: Object.keys(translations).length,
-    written,
+    translations: new Map(Object.entries(translations)),
     failed,
   };
+}
+
+/** Translate a package owned by the caller and write its language files. */
+export async function translateWorldPackage(
+  options: TranslateWorldOptions,
+): Promise<TranslateWorldResult> {
+  const { translations, ...result } = await prepareWorldTranslation(options);
+  const written = await writeWorldTranslations(
+    options.worldDir,
+    options.locale,
+    translations,
+  );
+  return { ...result, written };
 }
 
 /**

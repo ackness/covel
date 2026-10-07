@@ -131,6 +131,47 @@ describe("dimension prompt segments", () => {
     ]);
   });
 
+  it("keeps static dimensions in a stable segment when dynamic values change", async () => {
+    const climate = {
+      ...definition,
+      updateRule: undefined,
+      initialValue: "cold",
+      schema: { type: "string" },
+    };
+    const data = [
+      {
+        key: "climate",
+        value: { definition: climate, value: "cold", version: 1 },
+      },
+      { key: "reputation", value: { definition, value: 3, version: 2 } },
+    ];
+    const project = (value: number) =>
+      handlers.get("dimensions")!(
+        {},
+        {
+          locale: "en-US",
+          pluginData: { list: async () => data },
+          world: {
+            dimensions: {
+              climate: { ...climate, value: "cold", version: 1 },
+              reputation: { ...definition, value, version: value },
+            },
+          },
+        },
+      );
+    const first = await project(3);
+    const next = await project(4);
+    expect(first[0]).toMatchObject({
+      id: "static-dimensions",
+      volatility: "session",
+    });
+    expect(first[1]).toMatchObject({ id: "dimensions", volatility: "turn" });
+    expect(first[0]).toEqual(next[0]);
+    expect(first[0]!.content).not.toContain("reputation");
+    expect(first[1]!.content).not.toContain("climate");
+    expect(first[1]!.content).not.toEqual(next[1]!.content);
+  });
+
   it("keeps the English sentences of every other session", async () => {
     for (const locale of ["en-US", "zh-Hant-TW"]) {
       expect(sentences(await segment("dimensions", locale))).toEqual([

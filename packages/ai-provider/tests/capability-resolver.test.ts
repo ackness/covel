@@ -11,6 +11,58 @@ import {
 afterEach(() => setModelDatabase(null));
 
 describe("model identity resolution", () => {
+  it("preserves exact database cache prices, including zero, instead of prefix defaults", () => {
+    const pricing = {
+      inputPerMToken: 2,
+      outputPerMToken: 10,
+      cacheReadPerMToken: 0.2,
+      cacheWritePerMToken: 0,
+    };
+    setModelDatabase(
+      createModelDatabase({
+        updatedAt: "2026-10-07",
+        source: "test",
+        count: 1,
+        models: {
+          "gpt-4o-priced": {
+            input: ["text"],
+            output: ["text"],
+            mode: "chat",
+            litellmProvider: "openai",
+            ...pricing,
+          },
+        },
+      }),
+    );
+    expect(
+      resolveCapabilityDetails("gpt-4o-priced", "openai", "openai-chat-v1"),
+    ).toMatchObject({ source: "model-database", capability: { pricing } });
+  });
+  it("prefers an exact database modality over a curated name prefix", () => {
+    setModelDatabase(
+      createModelDatabase({
+        updatedAt: "2026-10-07T00:00:00.000Z",
+        source: "test",
+        count: 1,
+        models: {
+          "gpt-4o-mini-tts": {
+            input: ["text"],
+            output: ["audio"],
+            mode: "audio_speech",
+            litellmProvider: "openai",
+          },
+        },
+      }),
+    );
+    expect(
+      resolveCapabilityDetails("gpt-4o-mini-tts", "openai", "openai-chat-v1"),
+    ).toMatchObject({
+      source: "model-database",
+      matchKind: "exact",
+      capability: { output: ["audio"] },
+    });
+  });
+
   it.each([
     "openai-chat-v1",
     "openai-responses-v1",

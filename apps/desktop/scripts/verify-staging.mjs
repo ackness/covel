@@ -2,10 +2,10 @@
  * Post-staging smoke test.
  *
  * Spawns the staged server exactly the way the packaged desktop app will:
- *   <node> <staging/server/node_modules/tsx/dist/cli.mjs> <staging/server/src/index.ts>
+ *   <node> --import <plugin TS loader> <staging/server/src/index.js>
  *
- * Polls /api/health until it responds OK (or times out), then kills the
- * child. If the server can't boot, we dump its stderr and exit non-zero
+ * Waits for private readiness IPC, verifies health and plugin entries, then
+ * requests and awaits an IPC drain. If boot fails, stderr is reported
  * so `electron-builder` never wraps a known-broken sidecar.
  *
  * Run with `--no-llm-toml` to exercise the "user has no config yet" path
@@ -28,7 +28,15 @@ const require = createRequire(import.meta.url);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const stagingDir = path.join(desktopRoot, "staging");
-const serverStaging = path.join(stagingDir, "server");
+const resourcesArgument = process.argv.indexOf("--resources");
+if (resourcesArgument !== -1 && !process.argv[resourcesArgument + 1]) {
+  throw new Error("--resources requires an unpacked app Resources directory");
+}
+const resourcesDir =
+  resourcesArgument === -1
+    ? stagingDir
+    : path.resolve(process.argv[resourcesArgument + 1]);
+const serverStaging = path.join(resourcesDir, "server");
 
 const noLlmToml = process.argv.includes("--no-llm-toml");
 const electronNode = process.argv.includes("--electron-node");
@@ -62,9 +70,9 @@ if (!fs.existsSync(serverStaging)) {
   );
 }
 
-const tsxCli = path.join(serverStaging, "node_modules/tsx/dist/cli.mjs");
-const entry = path.join(serverStaging, "src/index.ts");
-if (!fs.existsSync(tsxCli)) die(`tsx CLI missing at ${tsxCli}`);
+const tsxLoader = path.join(serverStaging, "node_modules/tsx/dist/loader.mjs");
+const entry = path.join(serverStaging, "src/index.js");
+if (!fs.existsSync(tsxLoader)) die(`plugin TS loader missing at ${tsxLoader}`);
 if (!fs.existsSync(entry)) die(`server entry missing at ${entry}`);
 
 assertNoPrivateConfig(serverStaging);
@@ -83,22 +91,6 @@ async function findFreePort() {
     });
     s.on("error", reject);
   });
-}
-
-async function poll(url, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  let interval = 150;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return;
-    } catch {
-      /* not ready */
-    }
-    await new Promise((r) => setTimeout(r, interval));
-    interval = Math.min(1000, Math.round(interval * 1.35));
-  }
-  throw new Error(`server did not respond at ${url} within ${timeoutMs}ms`);
 }
 
 const port = await findFreePort();
@@ -162,7 +154,7 @@ const env = {
   COVEL_HOME: tmpUserRoot,
   COVEL_LLM_TOML: smokeLlmToml,
   COVEL_LOGS_DIR: logsDir,
-  STATIC_DIR: path.join(stagingDir, "web-dist"),
+  STATIC_DIR: path.join(resourcesDir, "web-dist"),
 };
 
 console.log(
@@ -177,10 +169,31 @@ console.log(
 
 const stderrBuf = [];
 const nodeBinary = electronBinary ?? process.execPath;
-const child = spawn(nodeBinary, [tsxCli, entry], {
+const child = spawn(nodeBinary, ["--import", tsxLoader, entry], {
   cwd: serverStaging,
   env,
-  stdio: ["ignore", "pipe", "pipe"],
+  stdio: ["ignore", "pipe", "pipe", "ipc"],
+});
+
+const ready = new Promise((resolve, reject) => {
+  const timer = setTimeout(
+    () => reject(new Error("server readiness IPC timed out")),
+    TIMEOUT_MS,
+  );
+  child.once("error", (error) => {
+    clearTimeout(timer);
+    reject(error);
+  });
+  child.once("exit", () => {
+    clearTimeout(timer);
+    reject(new Error("server exited before readiness"));
+  });
+  child.on("message", (message) => {
+    if (message?.type === "covel:ready" && message.port === port) {
+      clearTimeout(timer);
+      resolve();
+    }
+  });
 });
 
 child.stdout.on("data", (data) => process.stdout.write(`[server] ${data}`));
@@ -227,10 +240,10 @@ function assertNoStartupPathErrors() {
 }
 
 try {
-  await poll(`http://127.0.0.1:${port}/api/health`, TIMEOUT_MS);
-  // Give the boot-time eager plugin load a moment to flush its stderr before we
-  // inspect it (the health endpoint can answer a hair before the last warn).
-  await new Promise((r) => setTimeout(r, 500));
+  await ready;
+  const health = await fetch(`http://127.0.0.1:${port}/api/health`);
+  if (!health.ok)
+    throw new Error("staged /api/health unavailable after readiness IPC");
   assertNoStartupPathErrors();
   assertNoPluginLoadErrors(stderrBuf);
   const pluginsResponse = await fetch(`http://127.0.0.1:${port}/api/plugins`);
@@ -247,9 +260,25 @@ try {
   );
 }
 
-child.kill("SIGTERM");
-// Give the process a moment to exit cleanly
-await new Promise((r) => setTimeout(r, 500));
-if (!child.killed) child.kill("SIGKILL");
+await new Promise((resolve, reject) => {
+  const timer = setTimeout(() => {
+    child.kill("SIGKILL");
+    reject(new Error("staged server did not drain within 12s"));
+  }, 12_000);
+  child.once("exit", (code, signal) => {
+    clearTimeout(timer);
+    if (code === 0 && signal === null) resolve();
+    else
+      reject(
+        new Error(
+          `staged server shutdown failed (code=${code}, signal=${signal})`,
+        ),
+      );
+  });
+  if (noLlmToml) child.disconnect();
+  else child.send({ type: "covel:shutdown" });
+});
 cleanupDb();
-console.log("[smoke] ✓ staging server is bootable");
+console.log(
+  `[smoke] ✓ staging server is bootable and drains on ${noLlmToml ? "parent disconnect" : "shutdown IPC"}`,
+);

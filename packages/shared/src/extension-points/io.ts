@@ -1,6 +1,6 @@
 import type { ExtensionPoint } from "./definition.js";
 import type { kernelExtensionPoints } from "./contracts.js";
-import type { historyCompactV1 } from "./history-compact.js";
+import type { historyCompactV2 } from "./history-compact.js";
 import type { mediaImageFlowV1 } from "./media-image-flow.js";
 import type { promptHistoryTransformV1 } from "./prompt-history-transform.js";
 import type { promptSegmentV1 } from "./prompt-segment.js";
@@ -23,9 +23,9 @@ type KernelPointId =
  * handler signatures to this map.
  */
 export interface KernelExtensionPointIo {
-  readonly "history.compact@1": {
-    readonly input: ExtensionPointInput<typeof historyCompactV1>;
-    readonly output: ExtensionPointOutput<typeof historyCompactV1>;
+  readonly "history.compact@2": {
+    readonly input: ExtensionPointInput<typeof historyCompactV2>;
+    readonly output: ExtensionPointOutput<typeof historyCompactV2>;
   };
   readonly "media.image-flow@1": {
     readonly input: ExtensionPointInput<typeof mediaImageFlowV1>;

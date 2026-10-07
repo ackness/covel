@@ -11,7 +11,7 @@ export function agentInputSlots(
   completedResults: ReadonlyMap<string, RuntimeResult>,
   inputs?: Readonly<Record<string, InputSlot>>,
 ): Readonly<Record<string, InputSlot>> {
-  const slots: Record<string, InputSlot> = {};
+  const slots: Record<string, InputSlot> = Object.create(null);
   for (const inject of manifest.input?.inject ?? []) {
     if (inject.kind !== "runtime") continue;
     const result = completedResults.get(inject.from);

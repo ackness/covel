@@ -287,7 +287,7 @@ it.each([
       operation === "set"
         ? { value: "current", untouched: "kept" }
         : { untouched: "kept" };
-    expect(stateRef.current.pluginData.plugin?.message).toEqual(expected);
+    expect(stateRef.current.pluginMessageData.plugin).toEqual(expected);
     expect(getPluginNamespaceSnapshot("plugin", "message")).toEqual(expected);
     expect(api.listPluginData).toHaveBeenCalledTimes(2);
   },
@@ -324,10 +324,10 @@ it.each([
         },
       ]);
     });
-    expect(stateRef.current.pluginData.plugin?.message).toEqual({
+    expect(stateRef.current.pluginMessageData.plugin).toEqual({
       value: "initial",
     });
-    expect(stateRef.current.pluginData[pluginId]?.[namespace]).toEqual({
+    expect(getPluginNamespaceSnapshot(pluginId, namespace)).toEqual({
       value: "current",
     });
     expect(api.listPluginData).toHaveBeenCalledOnce();
@@ -360,7 +360,7 @@ it("does not re-read or publish a dirty namespace after unmount", async () => {
     old.resolve([{ namespace: "message", key: "value", value: "obsolete" }]);
   });
   expect(api.listPluginData).toHaveBeenCalledOnce();
-  expect(stateRef.current.pluginData.plugin?.message).toEqual({
+  expect(stateRef.current.pluginMessageData.plugin).toEqual({
     value: "current",
   });
   expect(getPluginNamespaceSnapshot("plugin", "message")).toEqual({
@@ -403,7 +403,7 @@ it("does not let a previous same-session visit retry over the new visit", async 
     old.resolve([{ namespace: "message", key: "value", value: "obsolete" }]);
   });
   expect(api.listPluginData).toHaveBeenCalledTimes(2);
-  expect(stateRef.current.pluginData.plugin?.message).toEqual({
+  expect(stateRef.current.pluginMessageData.plugin).toEqual({
     value: "new-visit",
   });
 });
@@ -777,8 +777,8 @@ it.each([
     } else await hydratePluginDataForUiSpecs(session.id, dispatch);
     const expected = empty ? {} : { "current-turn": value };
     expect(getPluginNamespaceSnapshot("plugin", "message")).toEqual(expected);
-    expect(stateRef.current.pluginData.plugin?.message).toEqual(expected);
-    expect(stateRef.current.pluginData.plugin?.unrelated).toEqual({
+    expect(stateRef.current.pluginMessageData.plugin).toEqual(expected);
+    expect(getPluginNamespaceSnapshot("plugin", "unrelated")).toEqual({
       keep: true,
     });
     if (source === "provider")
@@ -801,15 +801,15 @@ it("retains an own __proto__ message key in both hydration stores", async () => 
   const external = getPluginNamespaceSnapshot("plugin", "message");
   expect(Object.hasOwn(external, "__proto__")).toBe(true);
   expect(
-    Object.hasOwn(stateRef.current.pluginData.plugin!.message!, "__proto__"),
+    Object.hasOwn(stateRef.current.pluginMessageData.plugin!, "__proto__"),
   ).toBe(true);
   expect(external["__proto__"]).toEqual(value);
-  expect(stateRef.current.pluginData.plugin!.message!["__proto__"]).toEqual(
+  expect(stateRef.current.pluginMessageData.plugin!["__proto__"]).toEqual(
     value,
   );
 });
 
-it("preserves and deletes special own plugin-data properties in both live stores", () => {
+it("preserves special plugin-data properties and mirrors only message snapshots", () => {
   const { stateRef, handler } = setup();
   const value = { marker: "retained" };
   for (const namespace of ["__proto__", "message"]) {
@@ -820,16 +820,13 @@ it("preserves and deletes special own plugin-data properties in both live stores
       }),
     );
     const external = getPluginNamespaceSnapshot("plugin", namespace);
-    expect(Object.hasOwn(stateRef.current.pluginData.plugin!, namespace)).toBe(
-      true,
-    );
+    if (namespace === "message")
+      expect(stateRef.current.pluginMessageData.plugin).toEqual(external);
     expect(Object.hasOwn(external, "__proto__")).toBe(true);
-    expect(
-      Object.hasOwn(
-        stateRef.current.pluginData.plugin![namespace]!,
-        "__proto__",
-      ),
-    ).toBe(true);
+    if (namespace === "message")
+      expect(
+        Object.hasOwn(stateRef.current.pluginMessageData.plugin!, "__proto__"),
+      ).toBe(true);
     expect(external["__proto__"]).toEqual(value);
     handler(
       event("plugin-data.changed", {
@@ -843,12 +840,10 @@ it("preserves and deletes special own plugin-data properties in both live stores
         "__proto__",
       ),
     ).toBe(false);
-    expect(
-      Object.hasOwn(
-        stateRef.current.pluginData.plugin![namespace]!,
-        "__proto__",
-      ),
-    ).toBe(false);
+    if (namespace === "message")
+      expect(
+        Object.hasOwn(stateRef.current.pluginMessageData.plugin!, "__proto__"),
+      ).toBe(false);
   }
 });
 
@@ -869,14 +864,9 @@ it("preserves special own namespace/key properties in whole-plugin recovery with
     expect(Object.getOwnPropertyDescriptor(Object.prototype, probe)).toEqual(
       original,
     );
-    expect(
-      Object.hasOwn(stateRef.current.pluginData.plugin!, "__proto__"),
-    ).toBe(true);
+    expect(stateRef.current.pluginMessageData.plugin).toBeUndefined();
     expect(
       Object.hasOwn(getPluginNamespaceSnapshot("plugin", "__proto__"), probe),
-    ).toBe(true);
-    expect(
-      Object.hasOwn(stateRef.current.pluginData.plugin!.panel!, "__proto__"),
     ).toBe(true);
     expect(
       Object.hasOwn(getPluginNamespaceSnapshot("plugin", "panel"), "__proto__"),
@@ -906,9 +896,7 @@ it("preserves special own namespace/key properties through the start-game namesp
     { namespace: "__proto__", key: "__proto__", value },
   ]);
   await hydratePluginDataForUiSpecs(session.id, dispatch);
-  const namespaces = stateRef.current.pluginData.plugin!;
-  expect(Object.hasOwn(namespaces, "__proto__")).toBe(true);
-  expect(Object.hasOwn(namespaces["__proto__"]!, "__proto__")).toBe(true);
+  expect(stateRef.current.pluginMessageData.plugin).toBeUndefined();
   expect(
     Object.hasOwn(
       getPluginNamespaceSnapshot("plugin", "__proto__"),

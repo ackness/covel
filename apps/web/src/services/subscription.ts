@@ -62,6 +62,8 @@ export interface SessionSubscription {
   off(topic: string, handler: SubscriptionEventHandler): void;
   /** Close the connection and clean up. */
   close(): void;
+  /** Retry immediately after a connection failure. */
+  reconnect(): void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -116,6 +118,7 @@ export function createSessionSubscription(
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
   let paused = shouldPause();
+  let resumeActionSilently = false;
   let clientErrorStreak = 0;
   let mirrorRecovery: Promise<boolean> | null = null;
 
@@ -167,12 +170,15 @@ export function createSessionSubscription(
     return dotIdx >= 0 ? eventType.slice(0, dotIdx) : eventType;
   }
 
-  async function connect(): Promise<void> {
+  async function connect(silent = false): Promise<void> {
     if (closed || paused) return;
 
     const controller = new AbortController();
     abortController = controller;
-    setState(connectionState === "connecting" ? "connecting" : "reconnecting");
+    if (!silent)
+      setState(
+        connectionState === "connecting" ? "connecting" : "reconnecting",
+      );
 
     try {
       // Keep connection backoff in this client, while sharing credential and
@@ -297,7 +303,9 @@ export function createSessionSubscription(
           console.error(
             `[subscription] giving up after ${clientErrorStreak} client errors: SSE stream ${err.status} ${err.body}`,
           );
-          close();
+          closed = true;
+          stopConnection();
+          setState("closed");
           return;
         }
       }
@@ -328,21 +336,29 @@ export function createSessionSubscription(
 
   function handlePauseChange(): void {
     const next = shouldPause();
+    const tabIsHidden =
+      typeof document !== "undefined" && document.visibilityState === "hidden";
+    if (tabIsHidden) resumeActionSilently = false;
     if (closed || paused === next) return;
     paused = next;
     if (paused) {
+      resumeActionSilently =
+        !tabIsHidden &&
+        activeActionStreams > 0 &&
+        connectionState === "connected";
       // One tab needs only its action stream while executing. Otherwise even
       // three visible tabs can exhaust HTTP/1.1 slots needed by stop/read APIs.
       stopConnection();
-      setState("paused");
+      if (!resumeActionSilently) setState("paused");
     } else {
       backoffMs = INITIAL_BACKOFF_MS;
-      void connect();
+      const silent = resumeActionSilently;
+      resumeActionSilently = false;
+      void connect(silent);
     }
   }
 
   function close(): void {
-    if (closed) return;
     closed = true;
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", handlePauseChange);
@@ -384,6 +400,16 @@ export function createSessionSubscription(
       }
     },
 
+    reconnect() {
+      stopConnection();
+      closed = false;
+      clientErrorStreak = 0;
+      backoffMs = INITIAL_BACKOFF_MS;
+      paused = shouldPause();
+      resumeActionSilently = false;
+      if (paused) setState("paused");
+      else void connect();
+    },
     close,
   };
 }

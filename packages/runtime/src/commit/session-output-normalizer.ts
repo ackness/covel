@@ -24,7 +24,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** A domain effect {@link normalizeOutput} cannot turn into a proposal. */
 export interface MalformedDomainEffect {
   /** Proposal type the malformed entry would have become. */
-  readonly type: "interaction.request" | "narrative.append" | "ui.render";
+  readonly type:
+    "interaction.request" | "narrative.append" | "ui.render" | "state.patch";
   readonly error: string;
 }
 
@@ -40,9 +41,12 @@ export function malformedDomainEffect(
   for (const [channel, type] of [
     ["interactions", "interaction.request"],
     ["notifications", "narrative.append"],
+    ["statePatches", "state.patch"],
   ] as const) {
     const entries: unknown = effects[channel];
-    if (!Array.isArray(entries)) continue;
+    if (entries === undefined || entries === null) continue;
+    if (!Array.isArray(entries))
+      return { type, error: `effects.${channel} is not an array` };
     const index = entries.findIndex((entry) => !isRecord(entry));
     if (index >= 0)
       return { type, error: `effects.${channel}[${index}] is not an object` };

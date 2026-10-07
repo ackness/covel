@@ -97,8 +97,10 @@ function initializeSqliteMediaStore(
     "DELETE FROM media_refs WHERE media_id = ?",
   );
   const deleteAsset = sqlite.transaction((id: string) => {
+    const row = select.get(id) as { path: string } | undefined;
     removeRefs.run(id);
     remove.run(id);
+    if (row?.path) rmSync(row.path, { force: true });
   });
   const selectAnyRef = sqlite.prepare(
     "SELECT 1 AS one FROM media_refs WHERE media_id = ? LIMIT 1",
@@ -109,6 +111,7 @@ function initializeSqliteMediaStore(
     if (!row || row.ownerSessionId !== null) return null;
     if (selectAnyRef.get(id)) return null;
     remove.run(id);
+    rmSync(row.path, { force: true });
     return row.path;
   });
 
@@ -148,6 +151,7 @@ function initializeSqliteMediaStore(
 
   const store: MediaStore = {
     async put(blob, mime, meta, initialRef) {
+      meta = toMeta(meta);
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
       return sqlite
@@ -230,15 +234,15 @@ function initializeSqliteMediaStore(
     },
 
     async delete(id) {
-      const row = select.get(id) as { path: string } | undefined;
+      if (sqlite.inTransaction)
+        throw new Error(
+          "SQLite media deletion must run outside an existing SQL transaction",
+        );
       // Clean up the inbound refs first so a foreign-key-style invariant holds
       // even though the schema has no explicit FK between the two tables. The
       // transaction also excludes a writer in another OS process from adding a
       // ref between the two statements and leaving it dangling.
-      deleteAsset(id);
-      if (row?.path) {
-        rmSync(row.path, { force: true });
-      }
+      deleteAsset.immediate(id);
     },
 
     async lookup(id) {
@@ -332,6 +336,10 @@ function initializeSqliteMediaStore(
     },
 
     async cleanup(protectedIds, policy) {
+      if (!policy?.dryRun && sqlite.inTransaction)
+        throw new Error(
+          "SQLite media cleanup must run outside an existing SQL transaction",
+        );
       const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
         inventory,
@@ -345,7 +353,6 @@ function initializeSqliteMediaStore(
           // across the final check and asset deletion.
           const path = deleteUnreferencedAsset.immediate(id);
           if (path === null) continue;
-          rmSync(path, { force: true });
           deletedIds.push(id);
         }
         return finalizeMediaCleanupResult(result, inventory, deletedIds);

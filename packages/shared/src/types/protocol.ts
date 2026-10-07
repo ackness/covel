@@ -517,7 +517,7 @@ export const COVEL_EVENT_META = {
   "message.completed": { forwardToActionStream: true },
   "block.emitted": { forwardToActionStream: true },
   "hook.fired": { forwardToActionStream: true },
-  "hook.rewrote": { forwardToActionStream: true },
+  "hook.rewrote": { forwardToActionStream: false },
   "hook.aborted": { forwardToActionStream: true },
   "plugin.service.completed": { forwardToActionStream: false },
   // Command lifecycle is consumed by traces/debug, not the gameplay stream.

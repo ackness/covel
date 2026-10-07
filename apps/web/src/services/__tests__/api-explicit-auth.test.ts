@@ -185,7 +185,7 @@ describe("explicit session auth on indirect routes", () => {
         ...okJson(),
         body: new ReadableStream({ start: (controller) => controller.close() }),
       })
-      .mockResolvedValueOnce(okJson())
+      .mockResolvedValueOnce(okJson({ ok: true, turnId: "turn-1" }))
       .mockResolvedValueOnce(okJson())
       .mockResolvedValueOnce(okJson({ id: "media-1" }))
       .mockResolvedValueOnce(okJson({ right: [] }))
@@ -263,15 +263,38 @@ describe("explicit session auth on indirect routes", () => {
         );
       vi.stubGlobal("fetch", fetchMock);
 
-      const invoke = () =>
+      const invoke = (): Promise<unknown> =>
         method === "steerTurn"
           ? api.steerTurn("sess-1", "hello")
           : api.abortTurn("sess-1");
 
-      await expect(invoke()).resolves.toBe(false);
+      // Steering resolves to the turn that took the message, or null.
+      await expect(invoke()).resolves.toBe(
+        method === "steerTurn" ? null : false,
+      );
       await expect(invoke()).rejects.toMatchObject({ status: 500 });
     },
   );
+
+  it("returns the steered turn, and null when the turn no longer takes interjections", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(okJson({ ok: true, turnId: "turn-7" }))
+        .mockResolvedValueOnce(
+          errorJson(409, {
+            error: "The active turn no longer takes interjections",
+            code: "steering_closed",
+          }),
+        ),
+    );
+
+    await expect(api.steerTurn("sess-1", "hello")).resolves.toEqual({
+      turnId: "turn-7",
+    });
+    await expect(api.steerTurn("sess-1", "too late")).resolves.toBeNull();
+  });
 });
 
 describe("operator auth on hosted administration routes", () => {

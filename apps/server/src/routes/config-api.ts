@@ -52,6 +52,7 @@ import { errorBody, listBody, readJsonBody } from "../api-error.js";
 import { parseEnvLines } from "../lib/env-file.js";
 import { LLM_TOML_STARTER } from "../ai-setup.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
+import { checkHostedOperator } from "./api/session/session-guard.js";
 import {
   configureOutboundProxy,
   getOutboundProxyStatus,
@@ -100,6 +101,20 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   }
 
   app.get("/api/config/info", (c) => {
+    if (checkHostedOperator(c)) {
+      return c.json({
+        isDesktop: false,
+        requiresAuth: true,
+        covelHome: null,
+        dataRoot: null,
+        dbPath: null,
+        logsDir: null,
+        llmTomlPath: null,
+        keysEnvPath: null,
+        pluginsDir: null,
+        worldsDir: null,
+      });
+    }
     const covelHome = resolveCovelHome();
     const env = readRuntimeEnv();
     const inDesktopMode = covelHome !== null;
@@ -365,31 +380,16 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         400,
       );
     }
+    let config: ReturnType<typeof normalizeOutboundProxyConfig>;
     try {
       const rawMode = (body as { mode?: unknown }).mode;
       if (typeof rawMode !== "string") {
         throw new Error("Proxy mode is required.");
       }
-      const config = normalizeOutboundProxyConfig({
+      config = normalizeOutboundProxyConfig({
         mode: rawMode as OutboundProxyMode,
         url: (body as { url?: string }).url,
       });
-      // Fail before hot-applying when a hand-edited config is malformed. The
-      // focused writer must never replace the only recoverable source copy.
-      readDesktopConfigFile(join(covelHome, "config.toml"));
-      const prepared = prepareOutboundProxy({
-        ...config,
-        systemProxyUrl: readRuntimeEnv().systemProxyUrl,
-        resolveSystemProxy,
-      });
-      // Keep the live dispatcher unchanged if the atomic config write fails.
-      try {
-        writeStoredProxyConfig(covelHome, config);
-      } catch (error) {
-        prepared.dispose();
-        throw error;
-      }
-      return c.json(prepared.commit());
     } catch (error) {
       return c.json(
         errorBody(error instanceof Error ? error.message : String(error), {
@@ -398,6 +398,32 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         400,
       );
     }
+    // Fail before hot-applying when a hand-edited config is malformed. The
+    // focused writer must never replace the only recoverable source copy.
+    readDesktopConfigFile(join(covelHome, "config.toml"));
+    let prepared: ReturnType<typeof prepareOutboundProxy>;
+    try {
+      prepared = prepareOutboundProxy({
+        ...config,
+        systemProxyUrl: readRuntimeEnv().systemProxyUrl,
+        resolveSystemProxy,
+      });
+    } catch (error) {
+      return c.json(
+        errorBody(error instanceof Error ? error.message : String(error), {
+          code: "invalid_proxy_config",
+        }),
+        400,
+      );
+    }
+    // Keep the live dispatcher unchanged if the atomic config write fails.
+    try {
+      writeStoredProxyConfig(covelHome, config);
+    } catch (error) {
+      prepared.dispose();
+      throw error;
+    }
+    return c.json(prepared.commit());
   });
 
   // PUT /api/config/data-root — body: { path: string }
@@ -441,17 +467,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       );
     }
 
-    try {
-      writeDataRootInConfig(covelHome, trimmed);
-    } catch (err) {
-      return c.json(
-        errorBody(
-          `Could not write config.toml: ${err instanceof Error ? err.message : err}`,
-          { code: "config_write_failed" },
-        ),
-        500,
-      );
-    }
+    writeDataRootInConfig(covelHome, trimmed);
 
     return c.json({ ok: true, restartRequired: true });
   });
@@ -483,7 +499,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       "keys.env": covelHome ? join(covelHome, "keys.env") : null,
     };
 
-    if (!target || !(target in targetMap)) {
+    if (!target || !Object.hasOwn(targetMap, target)) {
       return c.json(
         errorBody(
           `target must be one of: ${Object.keys(targetMap).join(", ")}`,
@@ -497,19 +513,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     // opening it for the first time seeds the file with that same default.
     let created = false;
     if (target === "llm.toml" && covelHome && path && !existsSync(path)) {
-      try {
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, LLM_TOML_STARTER, { flag: "wx" });
-        created = true;
-      } catch (err) {
-        return c.json(
-          errorBody(
-            `Could not create llm.toml: ${err instanceof Error ? err.message : err}`,
-            { code: "config_write_failed" },
-          ),
-          500,
-        );
-      }
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, LLM_TOML_STARTER, { flag: "wx" });
+      created = true;
     }
     if (!path || !existsSync(path)) {
       return c.json(
@@ -520,17 +526,8 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       );
     }
 
-    try {
-      await openInFileManager(path);
-      return c.json({ ok: true, created });
-    } catch (err) {
-      return c.json(
-        errorBody(err instanceof Error ? err.message : String(err), {
-          code: "open_target_failed",
-        }),
-        500,
-      );
-    }
+    await openInFileManager(path);
+    return c.json({ ok: true, created });
   });
 
   return app;
@@ -554,9 +551,12 @@ function openInFileManager(folder: string): Promise<void> {
       stdio: "ignore",
     });
     child.on("error", reject);
-    // Detach so the child survives this request's end.
-    child.unref();
-    resolvePromise();
+    child.on("spawn", () => {
+      // Detach only after successful startup; an asynchronous spawn failure
+      // must reach the request's error handler.
+      child.unref();
+      resolvePromise();
+    });
   });
 }
 

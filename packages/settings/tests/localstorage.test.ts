@@ -48,12 +48,44 @@ describe("LocalStorageBackend", () => {
     });
   });
 
+  it("keeps every backup when several are created in the same millisecond", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(123);
+    try {
+      const backend = createLocalStorageBackend(storage);
+      const names: string[] = [];
+      for (const value of ["first", "second", "third"]) {
+        storage.setItem("covel:settings", value);
+        names.push(await backend.backupBundle!());
+      }
+      expect(new Set(names).size).toBe(3);
+      expect(
+        await Promise.all(names.map((name) => backend.readBackup!(name))),
+      ).toEqual(["first", "second", "third"]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("round-trips secrets separately from entries", async () => {
     const be = createLocalStorageBackend(storage);
     await be.save({ "ui.locale": "en-US" });
     await be.saveSecrets({ openai: "sk-x" });
     expect(await be.load()).toEqual({ "ui.locale": "en-US" });
     expect(await be.loadSecrets()).toEqual({ openai: "sk-x" });
+  });
+
+  it("preserves prototype-named provider secrets when a second store saves another provider", async () => {
+    const first = new SettingsStore(createLocalStorageBackend(storage));
+    await first.init();
+    await first.set("keys.__proto__", "synthetic-prototype-secret");
+    const second = new SettingsStore(createLocalStorageBackend(storage));
+    await second.init();
+    expect(second.get("keys.__proto__")).toBe("synthetic-prototype-secret");
+    await second.set("keys.sibling", "synthetic-sibling-secret");
+    const stored = JSON.parse(storage.getItem("covel:keys")!);
+    expect(Object.hasOwn(stored, "__proto__")).toBe(true);
+    expect(stored.__proto__).toBe("synthetic-prototype-secret");
+    expect((await second.export()).entries).toEqual({});
   });
 
   it("preserves independent provider writes from two initialized stores", async () => {

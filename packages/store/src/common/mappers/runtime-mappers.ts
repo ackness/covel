@@ -21,6 +21,7 @@ export interface TurnResultRow {
   auditResult: unknown;
   origin: string;
   parentTurnId: string | null;
+  retryScope: unknown;
   commitStatus: string;
   durationMs: number;
   createdAt: string;
@@ -109,6 +110,13 @@ export function toTurnResultRecord(
     auditResult: json.read(row.auditResult),
     origin: requireExecutionOrigin(row.origin),
     ...(row.parentTurnId ? { parentTurnId: row.parentTurnId } : {}),
+    ...(row.retryScope == null
+      ? {}
+      : {
+          retryScope: json.readRequired(
+            row.retryScope,
+          ) as TurnResultRecord["retryScope"],
+        }),
     commitStatus: requireCommitStatus(row.commitStatus),
     durationMs: row.durationMs,
     createdAt: row.createdAt,

@@ -149,11 +149,12 @@ snapshotRoutes.post("/:id/snapshots", async (c) => {
     mutate: async (session) => {
       // Derive a turnId for the snapshot from the latest execution artifact,
       // or the authoritative completed-player-turn count for a fresh session.
-      const turnResults = await store.listTurnResults(sessionId);
+      const [latest] = await store.queryTurnResults(sessionId, {
+        newestFirst: true,
+        limit: 1,
+      });
       const latestTurnId =
-        turnResults.length > 0
-          ? turnResults[turnResults.length - 1]!.turnId
-          : `turn-${session.completedPlayerTurns}`;
+        latest?.turnId ?? `turn-${session.completedPlayerTurns}`;
 
       let payload;
       try {

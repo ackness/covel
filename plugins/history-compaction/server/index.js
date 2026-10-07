@@ -1,6 +1,6 @@
 import { compactHistory } from "./strategy.ts";
 export default function register(api) {
-  api.provideExtension("history.compact@1", "rolling-summary", {
+  api.provideExtension("history.compact@2", "segmented-summary", {
     async handler(input, ctx) {
       if (!ctx.gateway) return null;
       return compactHistory(input, {
@@ -12,6 +12,11 @@ export default function register(api) {
               messages: request.messages,
               signal: ctx.signal,
             });
+            if (
+              result.finishReason === "length" ||
+              result.finishReason === "max_tokens"
+            )
+              throw new Error("History summary generation was truncated");
             return { content: result.text };
           },
         },

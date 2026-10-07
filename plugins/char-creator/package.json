@@ -9,13 +9,13 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@covel/plugin-handlers-utils": "workspace:*",
-    "@covel/tools": "workspace:*"
+    "@covel/plugin-handlers-utils": "workspace:*"
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
     "vitest": "^5.0.1",
     "@covel/store": "workspace:*",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "@covel/tools": "workspace:*"
   }
 }

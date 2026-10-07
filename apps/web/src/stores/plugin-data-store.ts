@@ -376,3 +376,12 @@ export function usePluginJobs(pluginId: string): readonly PluginJobRecord[] {
 }
 
 const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
+
+/** Session identity only; changes to namespace rows do not rerender consumers. */
+export function usePluginDataSessionId(): string | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => activeSessionId,
+    () => null,
+  );
+}

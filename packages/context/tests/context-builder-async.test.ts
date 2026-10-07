@@ -5,7 +5,7 @@
  * these cases assert that:
  *   - sync path ignores plugin-data injects but still returns valid output
  *   - async path resolves runtime injects the same way the sync path does
- *   - async path materialises plugin-data injects via `store.listPluginData`
+ *   - async path materialises plugin-data injects via `store.getPluginDataPromptWindow`
  *   - empty namespaces render as `<tag>(none)</tag>`
  *   - two-pass truncation is stable and deterministic (anchors + recent)
  *   - summary / full / ids-only formats each serialise as specified
@@ -22,6 +22,7 @@ import {
   type TurnInput,
 } from "@covel/shared";
 import type { DataStore, PluginDataRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -77,23 +78,24 @@ function makeEntry(
   };
 }
 
-/**
- * Minimal DataStore stub — only implements `listPluginData`. Other methods
- * throw if touched, so tests fail loudly if the async build path accidentally
- * calls something besides `listPluginData`.
- */
+/** Keep accidental full-namespace reads visible while using the real projection. */
 function makeStoreStub(entries: PluginDataRecord[]): DataStore {
-  const handler: ProxyHandler<DataStore> = {
-    get(_target, prop) {
-      if (prop === "listPluginData") {
-        return vi.fn(async () => entries);
-      }
+  const store = createMemoryStore();
+  const seeded = store.setPluginDataBatch(entries);
+  return new Proxy(store, {
+    get(target, prop) {
+      if (prop === "getPluginDataPromptWindow")
+        return async (
+          ...args: Parameters<DataStore["getPluginDataPromptWindow"]>
+        ) => {
+          await seeded;
+          return target.getPluginDataPromptWindow(...args);
+        };
       return () => {
         throw new Error(`unexpected store call: ${String(prop)}`);
       };
     },
-  };
-  return new Proxy({} as DataStore, handler);
+  });
 }
 
 // ── needsAsyncBuild ──────────────────────────────────────────────
@@ -292,10 +294,10 @@ describe("buildContext — plugin-data inject", () => {
     expect(result.turnContext).toMatch(/火山[^\n]*\.\.\./);
   });
 
-  it("propagates listPluginData errors (no silent fallback)", async () => {
+  it("propagates bounded projection errors (no silent fallback)", async () => {
     const store = new Proxy({} as DataStore, {
       get(_t, prop) {
-        if (prop === "listPluginData") {
+        if (prop === "getPluginDataPromptWindow") {
           return async () => {
             throw new Error("store offline");
           };

@@ -27,6 +27,8 @@ const modelFeatureSchema = z.enum([
 const pricingSchema = z
   .object({
     inputPerMToken: z.number().optional(),
+    cacheReadPerMToken: z.number().nonnegative().optional(),
+    cacheWritePerMToken: z.number().nonnegative().optional(),
     outputPerMToken: z.number().optional(),
     imageInputPerMToken: z.number().optional(),
     audioInputPerMToken: z.number().optional(),

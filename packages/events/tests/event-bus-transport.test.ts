@@ -125,6 +125,77 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     expect(busB.getEventsAfter("sess-big", 0).events).toHaveLength(1);
   });
 
+  it("fans out oversized traces from their original journal without duplicating the payload", async () => {
+    const hub = createHub();
+    const store = createMemoryStore();
+    const a = createEventBus(store, { transport: hub.connect() });
+    const b = createEventBus(store, { transport: hub.connect() });
+    const received: SubscriptionEvent[] = [];
+    b.onEmit((event) => received.push(event));
+    const payload = { prompt: "x".repeat(20_000) };
+    await store.addTraceEvent({
+      id: "trace-large",
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      traceId: "trace-1",
+      type: "llm.request",
+      payload,
+      createdAt: new Date().toISOString(),
+    });
+    a.emit(
+      makeMessage({
+        id: "trace-large",
+        topic: "trace",
+        payload: { ...payload, _subType: "llm.request" },
+      }),
+    );
+    a.emit(makeMessage({ id: "state-change", topic: "world.changed" }));
+    await a.flush();
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+    expect(received[0]).toMatchObject({
+      topic: "trace",
+      type: "llm.request",
+      payload,
+    });
+    expect(await store.listEvents("sess-1")).toHaveLength(1);
+    expect(b.getEventsAfter("sess-1", 0).events).toHaveLength(1);
+    expect(b.getEventsAfter("sess-1", 0).gap).toBe(false);
+    await a.close();
+    await b.close();
+  });
+
+  it("keeps state replay intact when a live trace row failed to persist", async () => {
+    const hub = createHub();
+    const store = createMemoryStore();
+    const a = createEventBus(store, { transport: hub.connect() });
+    const b = createEventBus(store, { transport: hub.connect() });
+    const resets = vi.fn();
+    b.onReset(resets);
+    const received: SubscriptionEvent[] = [];
+    b.onEmit((event) => received.push(event));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      a.emit(
+        makeMessage({
+          id: "missing-trace",
+          topic: "trace",
+          payload: { prompt: "x".repeat(20000) },
+        }),
+      );
+      a.emit(makeMessage({ id: "after-trace", topic: "world.changed" }));
+      await a.flush();
+      await vi.waitFor(() => expect(received).toHaveLength(1));
+      expect(received[0]?.topic).toBe("world.changed");
+      expect(resets).not.toHaveBeenCalled();
+      expect(b.getEventsAfter("sess-1", 0).gap).toBe(false);
+      expect(b.getEventsAfter("sess-1", 0).events).toHaveLength(1);
+    } finally {
+      error.mockRestore();
+      await a.close();
+      await b.close();
+    }
+  });
+
   it("delivers oversize-then-inline frames in seq order", async () => {
     const hub = createHub();
     const shared = createMemoryStore();

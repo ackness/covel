@@ -1260,6 +1260,128 @@ describe("thinking stream activity", () => {
 describe("provider failure terminals", () => {
   const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 1 });
 
+  it("rejects a truncated response without retrying or releasing tool calls", async () => {
+    const llm = createScriptedLLM([
+      {
+        kind: "ok",
+        response: {
+          ...okResponse("unfinished"),
+          finishReason: "length",
+          toolCalls: [{ id: "call", name: "write", arguments: '{"value":' }],
+        },
+      },
+    ]);
+    await expect(
+      callLLMWithRetry({
+        llm,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+      }),
+    ).rejects.toThrow(/output limit/i);
+    expect(llm.calls).toHaveLength(1);
+  });
+
+  it.each(["length", "max_tokens", "MAX_TOKENS"])(
+    "rejects truncated streams (%s) without a non-streaming fallback",
+    async (finishReason) => {
+      const llm = createScriptedStreamLLM([
+        {
+          events: [
+            {
+              type: "tool-call",
+              id: "call",
+              name: "write",
+              arguments: '{"value":',
+            },
+            { type: "done", finishReason },
+          ],
+        },
+      ]);
+      const generate = vi.spyOn(llm, "generate");
+      await expect(
+        streamLLMWithRetry({
+          llm,
+          messages: [],
+          policy,
+          deadline: Date.now() + 10_000,
+        }),
+      ).rejects.toThrow(/output limit/i);
+      expect(llm.attempts).toBe(1);
+      expect(generate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps prose cut at the output limit when the caller allows it", async () => {
+    const generated = await callLLMWithRetry({
+      llm: createScriptedLLM([
+        {
+          kind: "ok",
+          response: { ...okResponse("The gate"), finishReason: "length" },
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(generated).toMatchObject({
+      content: "The gate",
+      finishReason: "length",
+    });
+
+    const streamed = await streamLLMWithRetry({
+      llm: createScriptedStreamLLM([
+        {
+          events: [
+            { type: "text-delta", textDelta: "The gate" },
+            { type: "done", finishReason: "MAX_TOKENS" },
+          ],
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(streamed.response).toMatchObject({
+      content: "The gate",
+      finishReason: "length",
+    });
+  });
+
+  it.each([
+    { name: "a tool call", content: "The gate", toolCalls: 1 },
+    { name: "no text", content: "", toolCalls: 0 },
+  ])(
+    "rejects a truncated response with $name even when prose may be kept",
+    async ({ content, toolCalls }) => {
+      const llm = createScriptedLLM([
+        {
+          kind: "ok",
+          response: {
+            ...okResponse(content),
+            finishReason: "length",
+            toolCalls: Array.from({ length: toolCalls }, () => ({
+              id: "call",
+              name: "write",
+              arguments: '{"value":',
+            })),
+          },
+        },
+      ]);
+      await expect(
+        callLLMWithRetry({
+          llm,
+          messages: [],
+          policy,
+          deadline: Date.now() + 10_000,
+          allowTruncatedText: true,
+        }),
+      ).rejects.toThrow(/output limit/i);
+    },
+  );
+
   it("rejects non-streaming error responses before success telemetry", async () => {
     const llm = createScriptedLLM([
       {

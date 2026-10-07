@@ -2,7 +2,7 @@ import {
   makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { worldDimensionsSchema } from "@covel/shared";
+import { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 
 export function createDimensionDefinitionSchema(z) {
   const text = z.union([z.string().min(1), z.record(z.string(), z.string())]);

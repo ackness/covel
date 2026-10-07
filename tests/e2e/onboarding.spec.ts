@@ -140,7 +140,7 @@ test("canonical provider configuration returns to the guide, keeps assignments, 
     guide.getByRole("heading", { name: "Connect a model for your story" }),
   ).toBeVisible();
   await expect(guide.getByRole("status")).toHaveText(
-    "Text model bindings detected",
+    "Add credentials for the configured models",
   );
   const before = await storedEntries(page);
   expect(before["llm.providers"][0].models[0].modelId).toBe("fixture-text");

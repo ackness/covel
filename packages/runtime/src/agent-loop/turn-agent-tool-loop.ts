@@ -252,7 +252,7 @@ async function runAgentToolLoopWithinBudget(
 
   // The loop's single narrative outlet — counts chunks for `message.completed`.
   const delta = createDeltaForwarder({
-    onDelta: deps.onDelta,
+    onDelta: manifest.outputKind === "story" ? deps.onDelta : undefined,
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
   });
@@ -381,7 +381,8 @@ async function runAgentToolLoopWithinBudget(
         onStreamTime: budget.extend,
         useStreaming: useStreaming && llmRequest.stream !== false,
         reportRetry,
-        onStreamDelta: delta.forward,
+        onStreamDelta:
+          manifest.outputKind === "story" ? delta.forward : async () => {},
       });
     } finally {
       budget.resumeAfterModel();
@@ -420,6 +421,8 @@ async function runAgentToolLoopWithinBudget(
       let successfulCompletingToolsInResponse = 0;
       let failedBusinessToolsInResponse = 0;
       let completingToolOutputInResponse: Record<string, unknown> | null = null;
+      // Where this response's calls start in `executedToolCalls`.
+      const firstCallOfResponse = executedToolCalls.length;
 
       for (
         let toolCallIndex = 0;
@@ -712,9 +715,13 @@ async function runAgentToolLoopWithinBudget(
       // already in collectedToolCalls and become the runtime's output.
       // See packages/tools/src/builtin/runtime-done.ts for the sentinel
       // and buildFrameworkPreamble for the prompt contract.
-      const doneCall = executedToolCalls.find((c) =>
-        isRuntimeDoneSentinel(c.result),
-      );
+      // Only this response's calls count. A `runtime-done` that was answered
+      // with a correction stays in `executedToolCalls`; read again after a
+      // later batch, it would end the loop before the model saw that batch's
+      // results.
+      const doneCall = executedToolCalls
+        .slice(firstCallOfResponse)
+        .find((c) => isRuntimeDoneSentinel(c.result));
       if (doneCall) {
         // The runtime-done tool itself should not appear as a business
         // output — drop it from collected calls so downstream consumers

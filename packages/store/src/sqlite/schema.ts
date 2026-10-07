@@ -72,9 +72,11 @@ export const turnResults = sqliteTable(
     // Execution origin + parent turn for recursive executions.
     origin: text("origin").notNull(),
     parentTurnId: text("parent_turn_id"),
+    retryScope: text("retry_scope"),
     commitStatus: text("commit_status").notNull(),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
+    seq: integer("seq").notNull(),
   },
   (table) => [
     index("turn_results_session_id_idx").on(table.sessionId),
@@ -202,12 +204,20 @@ export const messages = sqliteTable(
     content: text("content").notNull(),
     metadata: text("metadata"), // JSON
     createdAt: text("created_at").notNull(),
+    // The row's place among the session's rows of one `created_at`, numbered
+    // by the store on insert: the messages of one commit list as written.
+    seq: integer("seq").notNull(),
   },
   (table) => [
     index("messages_session_id_idx").on(table.sessionId),
     // Supports the keyset page query (WHERE session_id = ? ORDER BY created_at
-    // DESC … LIMIT) so a long chat log never scans every row to fetch a window.
-    index("messages_created_idx").on(table.sessionId, table.createdAt),
+    // DESC, seq DESC … LIMIT) so a long chat log never scans every row to
+    // fetch a window, and the lookup of the next `seq` on insert.
+    index("messages_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.seq,
+    ),
   ],
 );
 
@@ -257,6 +267,7 @@ export const pluginData = sqliteTable(
   },
   (table) => [
     index("plugin_data_session_id_idx").on(table.sessionId),
+    index("plugin_data_namespace_idx").on(table.namespace, table.sessionId),
     uniqueIndex("plugin_data_unique_idx").on(
       table.sessionId,
       table.pluginId,
@@ -308,13 +319,25 @@ export const traceEvents = sqliteTable(
     turnId: text("turn_id").notNull(),
     payload: text("payload"), // JSON
     createdAt: text("created_at").notNull(),
+    // Write order within one `created_at`; see `messages.seq`.
+    seq: integer("seq").notNull(),
   },
   (table) => [
     index("trace_events_session_id_idx").on(table.sessionId),
+    index("trace_events_type_idx").on(
+      table.sessionId,
+      table.type,
+      table.createdAt,
+    ),
     index("trace_events_trace_id_idx").on(table.sessionId, table.traceId),
     index("trace_events_turn_id_idx").on(table.sessionId, table.turnId),
-    // Supports the keyset page query on the fastest-growing table.
-    index("trace_events_created_idx").on(table.sessionId, table.createdAt),
+    // Supports the keyset page query on the fastest-growing table, and the
+    // lookup of the next `seq` on insert.
+    index("trace_events_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.seq,
+    ),
   ],
 );
 

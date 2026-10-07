@@ -43,7 +43,13 @@ test("packaged paths preserve config ownership and missing resource roots", asyn
         },
       ],
     });
-    const { ensureUserPaths } = await import(pathToFileURL(output).href);
+    const { ensureUserPaths, resolveServerEntry } = await import(
+      pathToFileURL(output).href
+    );
+    assert.equal(
+      resolveServerEntry(),
+      path.join(resources, "server/src/index.js"),
+    );
     const paths = ensureUserPaths();
     assert.equal(paths.userLlmTomlPath, path.join(home, "llm.toml"));
     assert.deepEqual(paths.pluginsDirs, [

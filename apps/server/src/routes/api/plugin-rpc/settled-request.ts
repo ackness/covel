@@ -7,7 +7,10 @@ import {
   publishRuntimeJobStatusEvent,
   runtimeJobIncarnation,
 } from "./runtime-job-worker.js";
-import type { QueuedActivatedRuntimeJob } from "./runtime-job-enqueue.js";
+import type {
+  QueuedActivatedRuntimeJob,
+  QueuedRuntimeJob,
+} from "./runtime-job-enqueue.js";
 import {
   checkSessionOwner,
   sessionIncarnationIdentity,
@@ -119,6 +122,39 @@ export function announceQueuedRuntimeJobs(
     if (services)
       c.get("runtimeJobCredentials")?.register(credentialKey, services);
     publishRuntimeJobStatusEvent(c.get("eventBus"), status);
+  }
+  for (const sessionId of new Set(queued.map(({ job }) => job.sessionId)))
+    c.get("runtimeJobWorker")?.wake(sessionId);
+}
+
+/** Announce detached stage jobs only after the transaction that queued them. */
+export async function announceDeferredRuntimeJobs(
+  c: Context,
+  queued: readonly QueuedRuntimeJob[],
+  writeEvent?: (payload: Record<string, unknown>) => Promise<void>,
+): Promise<void> {
+  const eventBus = c.get("eventBus");
+  for (const { job, status } of queued) {
+    if (eventBus) publishRuntimeJobStatusEvent(eventBus, status);
+    const payload = {
+      runtimeId: job.runtimeId,
+      pluginId: job.pluginId,
+      jobId: job.jobId,
+      sourceTurnId: job.origin.sourceTurnId,
+    };
+    await writeEvent?.(payload);
+    eventBus?.emit({
+      id: crypto.randomUUID(),
+      type: "event",
+      topic: "runtime",
+      sessionId: job.sessionId,
+      timestamp: new Date().toISOString(),
+      payload: {
+        ...payload,
+        _subTopic: "runtime",
+        _subType: "runtime.deferred",
+      },
+    });
   }
   for (const sessionId of new Set(queued.map(({ job }) => job.sessionId)))
     c.get("runtimeJobWorker")?.wake(sessionId);

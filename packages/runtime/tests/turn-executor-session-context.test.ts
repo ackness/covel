@@ -153,6 +153,70 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     vi.restoreAllMocks();
   });
 
+  it("reuses admitted rows and scans compacted recent messages for lore activation", async () => {
+    const store = createMemoryStore();
+    const sessionId = "scan-compacted";
+    await seedWorld(store, "scan-world", sessionId);
+    await store.appendTurnMessage({
+      id: "prior",
+      sessionId,
+      turnId: "prior",
+      sourceType: "player",
+      role: "user",
+      content: "Visit the observatory",
+      order: 0,
+      createdAt: ts(),
+      compactedAtTurnId: "summary",
+    });
+    await store.saveSessionSummary({
+      id: "summary",
+      sessionId,
+      turnRangeStart: "prior",
+      turnRangeEnd: "prior",
+      content: "A prior journey",
+      focusSections: [],
+      createdAt: ts(),
+    });
+    await store.upsertLorebookEntries([
+      {
+        id: "lore",
+        sessionId,
+        owner: { kind: "world", worldId: "scan-world" },
+        keys: ["observatory"],
+        content: "The observatory carries an ancient telescope",
+        strategy: "selective",
+        position: "before_plugin",
+        insertionOrder: 0,
+        enabled: true,
+        extra: { scanDepth: 20 },
+        createdAt: ts(),
+        updatedAt: ts(),
+      },
+    ]);
+    const getSession = vi.spyOn(store, "getSession");
+    const characters = vi.spyOn(store, "listCharacters");
+    const newest = vi.spyOn(store, "getLatestPlayerInput");
+    const listInputs = vi
+      .spyOn(store, "listPlayerInputs")
+      .mockRejectedValue(new Error("Full input log read"));
+    const llm = makeCapturingLLM();
+    const manifest = makeManifest();
+    const result = await executeTurn(makeTurnInput(sessionId), [manifest], {
+      store,
+      llm,
+      loadRuntime: async () => makeLoaded(manifest),
+    });
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(llm.captured.systemPrompts[0]).toContain("ancient telescope");
+    // Admission plus the dimension barrier and runtime world view; the prompt
+    // snapshot adds no second session read.
+    expect(getSession).toHaveBeenCalledTimes(3);
+    // Admission and the runtime world view each read characters once.
+    expect(characters).toHaveBeenCalledTimes(2);
+    expect(newest).toHaveBeenCalledTimes(1);
+    expect(listInputs).not.toHaveBeenCalled();
+  });
+
   it("snapshot world view populates prompt", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-sc-on";

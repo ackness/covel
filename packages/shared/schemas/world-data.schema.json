@@ -48,6 +48,15 @@
             "description": "Field that gives each record a stable key. Media sources use `filename`.",
             "examples": ["id"]
           },
+          "localeArrayKeys": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered."
+          },
           "indexTo": {
             "type": "string",
             "minLength": 1,

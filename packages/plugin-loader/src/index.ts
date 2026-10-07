@@ -105,3 +105,8 @@ export { resolveRuntimeProviders } from "./runtime-providers.js";
 export { contractReferenceDiagnostics } from "./contract-diagnostics.js";
 
 export { compileRuntimeManifest } from "./compile-manifest.js";
+
+export {
+  validatePluginFiles,
+  validateRuntimeDeclarations,
+} from "./static-validation.js";

@@ -176,18 +176,12 @@ describe("committed runtime recovery projection", () => {
       origin: "manual",
       commitStatus: "committed",
       runtimeResults: results,
+      retryScope: { sourceTurnId: "source", runtimeIds: ["a", "b"] },
       durationMs: 1,
       createdAt: "2026-01-02T00:00:00Z",
     });
-    await f.store.addTraceEvent({
-      id: "attempt-start",
-      sessionId: f.sessionId,
-      turnId: "attempt",
-      traceId: "attempt",
-      type: "turn.started",
-      payload: { sourceTurnId: "source", runtimeIds: ["a", "b"] },
-      createdAt: "2026-01-02T00:00:00Z",
-    });
+    // Trace retention must not erase the durable retry ledger.
+    await f.store.deleteTraceEventsBefore(f.sessionId, "9999-01-01");
     const plan = await prepareRuntimeRetry(
       f.store,
       f.sessionId,

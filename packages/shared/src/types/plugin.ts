@@ -23,6 +23,8 @@ export type RuntimeType = "agent" | "function";
  * prompt no longer grows with the session.
  */
 export interface RuntimeHistoryPolicy {
+  /** Retain persisted summaries alongside the bounded raw history. */
+  readonly includeSummaries?: boolean;
   readonly maxTurns: number;
 }
 

@@ -12,8 +12,10 @@
 
 import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { Context } from "hono";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
 import { errorBody } from "../../../api-error.js";
+import { ZodError } from "zod";
 
 // ── Limits (defensive against zip bombs) ────────────────────────
 
@@ -51,11 +53,25 @@ export function errorResponse(err: unknown): {
   status: number;
   body: { error: string; details?: unknown };
 } {
+  if (err instanceof ZodError)
+    return { status: 400, body: errorBody(err.message) };
   if (err instanceof Error) {
     const httpStatus = (err as Error & { httpStatus?: number }).httpStatus;
-    return { status: httpStatus ?? 400, body: errorBody(err.message) };
+    if (typeof httpStatus === "number")
+      return { status: httpStatus, body: errorBody(err.message) };
   }
-  return { status: 500, body: errorBody("unknown error") };
+  throw err;
+}
+
+/** Malformed request JSON is input validation; failures elsewhere still propagate. */
+export async function readInstallationJson(c: Context): Promise<unknown> {
+  try {
+    return await c.req.json<unknown>();
+  } catch (error) {
+    if (error instanceof SyntaxError)
+      throw httpError(400, "Invalid JSON request body");
+    throw error;
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -115,7 +131,7 @@ export async function readAllEntries(
   return new Promise((resolveFn, rejectFn) => {
     yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
       if (err || !zipfile) {
-        rejectFn(err ?? httpError(400, "failed to open zip"));
+        rejectFn(httpError(400, err?.message ?? "failed to open zip"));
         return;
       }
 
@@ -137,7 +153,9 @@ export async function readAllEntries(
           rejectFn(httpError(status, message));
         });
 
-      zf.on("error", (e) => finish(() => rejectFn(e)));
+      // This reader only consumes the uploaded Buffer: parser failures are
+      // invalid archive input, rather than filesystem or persistence failures.
+      zf.on("error", (e) => fail(400, e.message));
       zf.on("end", () =>
         finish(() => {
           const ratio =
@@ -205,7 +223,7 @@ export async function readAllEntries(
         zf.openReadStream(entry, (streamErr, readStream) => {
           if (streamErr || !readStream) {
             fail(
-              500,
+              400,
               `failed to read entry ${safeRel}: ${streamErr?.message ?? "unknown"}`,
             );
             return;
@@ -231,7 +249,7 @@ export async function readAllEntries(
           });
           readStream.on("error", (streamError) => {
             fail(
-              500,
+              400,
               `read stream error on ${safeRel}: ${streamError.message}`,
             );
           });

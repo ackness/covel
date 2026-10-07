@@ -86,6 +86,7 @@ export function createSqlStateRecords(
 ): SqlStateRecords {
   const { runner, tables, json, values } = deps;
   const { stateSchemas, stateEntries, stateChanges } = tables;
+  const { byteOrder } = runner;
 
   return {
     async saveStateSchema(record: StateSchemaRecord): Promise<void> {
@@ -150,6 +151,10 @@ export function createSqlStateRecords(
           eq(stateEntries.sessionId, sessionId),
           eq(stateEntries.tableName, tableName),
         ),
+        // The field name is unique within a table. Without an order
+        // PostgreSQL returns rows as they lie on disk, where an updated row
+        // moves.
+        orderBy: [asc(byteOrder(stateEntries.fieldName))],
       });
       return rows.map((row) => toStateEntryRecord(row, json));
     },

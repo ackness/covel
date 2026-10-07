@@ -44,6 +44,11 @@ const server = serve(
   },
   (info) => {
     console.log(`Server running at http://${info.address}:${info.port}`);
+    if (process.connected && process.send) {
+      process.send({ type: "covel:ready", port: info.port }, (error) => {
+        if (error) console.warn("[desktop] Readiness IPC failed:", error);
+      });
+    }
   },
 );
 

@@ -12,8 +12,8 @@ import { lorebookOwnerKey } from "./lorebook-owner.js";
  * the single source of truth for the data-CRUD surface.
  */
 
-import { and, asc, eq } from "drizzle-orm";
-import type { Column, SQL, Table } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
@@ -38,6 +38,7 @@ import type {
 } from "../types.js";
 
 type PluginDataTable = Table & {
+  value: Column;
   sessionId: Column;
   pluginId: Column;
   namespace: Column;
@@ -67,11 +68,6 @@ export interface SqlDataCrudTables {
 export interface SqlDataCrudDeps {
   readonly runner: SqlRunner;
   readonly tables: SqlDataCrudTables;
-  /**
-   * A text column compared byte by byte. SQLite text already is; PostgreSQL
-   * compares with the database collation unless told otherwise.
-   */
-  readonly byteOrder?: (column: Column) => Column | SQL;
   readonly json: JsonReader;
   readonly values: Pick<
     InsertValueBuilders,
@@ -93,6 +89,8 @@ export type SqlDataCrud = Pick<
   | "listPluginData"
   | "listPluginDataSessionScope"
   | "listPluginDataByNamespace"
+  | "queryPluginData"
+  | "getPluginDataPromptWindow"
   | "deletePluginData"
   | "saveWorldDataImportLedgerBatch"
   | "listWorldDataImportLedger"
@@ -106,7 +104,7 @@ export type SqlDataCrud = Pick<
 export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
   const { runner, tables, json, values } = deps;
   const { pluginData, worldDataImportLedger, lorebookEntries } = tables;
-  const byteOrder = deps.byteOrder ?? ((column: Column) => column);
+  const { byteOrder } = runner;
   // One order for every plugin-data list. The key breaks a tie between rows
   // written in the same millisecond: it is unique within a session, and it is
   // the same in every run of a session and in a fork, where the row ID is not.
@@ -118,6 +116,85 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
   ];
 
   return {
+    async getPluginDataPromptWindow(
+      sessionId,
+      pluginId,
+      namespace,
+      maxEntries,
+    ) {
+      const limit = Math.max(0, Math.floor(maxEntries));
+      const where = and(
+        eq(pluginData.sessionId, sessionId),
+        eq(pluginData.pluginId, pluginId),
+        eq(pluginData.namespace, namespace),
+      );
+      const counts = await runner.select<{ count: number | string }>(
+        pluginData,
+        {
+          columns: { count: sql`count(*)` },
+          where,
+        },
+      );
+      const total = Number(counts[0]?.count ?? 0);
+      if (limit === 0) return { entries: [], total };
+      const anchorLimit = total <= limit ? limit : Math.floor(limit / 2);
+      const anchors =
+        anchorLimit > 0
+          ? await runner.select<PluginDataRow>(pluginData, {
+              where,
+              orderBy: pluginDataOrder,
+              limit: anchorLimit,
+            })
+          : [];
+      const recent =
+        total <= limit
+          ? []
+          : await runner.select<PluginDataRow>(pluginData, {
+              where: and(
+                where,
+                anchors.length
+                  ? notInArray(
+                      pluginData.key,
+                      anchors.map((row) => row.key),
+                    )
+                  : undefined,
+              ),
+              orderBy: [
+                desc(pluginData.updatedAt),
+                asc(byteOrder(pluginData.key)),
+              ],
+              limit: limit - anchorLimit,
+            });
+      return {
+        entries: [...anchors, ...recent].map((row) =>
+          toPluginDataRecord(row, json),
+        ),
+        total,
+      };
+    },
+
+    async queryPluginData(options) {
+      const rows = await runner.select<PluginDataRow>(pluginData, {
+        where: and(
+          eq(pluginData.namespace, options.namespace),
+          options.sessionId === undefined
+            ? undefined
+            : eq(pluginData.sessionId, options.sessionId),
+          options.pluginId === undefined
+            ? undefined
+            : eq(pluginData.pluginId, options.pluginId),
+          options.valueFilter === undefined
+            ? undefined
+            : inArray(
+                sql`${pluginData.value} ->> ${options.valueFilter.field}`,
+                [...options.valueFilter.values],
+              ),
+        ),
+        orderBy: [asc(byteOrder(pluginData.sessionId)), ...pluginDataOrder],
+      });
+      return rows.map((row) => toPluginDataRecord(row, json));
+    },
+
     async setPluginData(record: PluginDataRecord): Promise<void> {
       await runner.insert(pluginData, values.pluginDataInsert(record), {
         target: [
@@ -300,7 +377,7 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
           where: eq(worldDataImportLedger.sessionId, sessionId),
           orderBy: [
             asc(worldDataImportLedger.importedAt),
-            asc(worldDataImportLedger.id),
+            asc(byteOrder(worldDataImportLedger.id)),
           ],
         },
       );
@@ -348,10 +425,13 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
     ): Promise<readonly LorebookEntryRecord[]> {
       const rows = await runner.select<LorebookEntryRow>(lorebookEntries, {
         where: eq(lorebookEntries.sessionId, sessionId),
+        // An author writes an entry's ID, and this is the order entries of
+        // one `insertionOrder` reach a prompt in: compared byte by byte, it is
+        // the same order on every backend.
         orderBy: [
           asc(lorebookEntries.insertionOrder),
-          asc(lorebookEntries.id),
-          asc(lorebookEntries.owner),
+          asc(byteOrder(lorebookEntries.id)),
+          asc(byteOrder(lorebookEntries.owner)),
         ],
       });
       return rows.map((row) => toLorebookEntryRecord(row, json));

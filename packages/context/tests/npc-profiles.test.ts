@@ -19,6 +19,22 @@ describe("characters.npcs", () => {
     ).toBe('- Tomas Reed [npc] | Chief technician. | {"trust":2}\n- Eli [npc]');
   });
 
+  it("filters nested bookkeeping before serializing fields without removing semantic ids", () => {
+    const fields = {
+      bond: {
+        id: "guild-keeper",
+        turnId: "06d6a521-f8a9-4a02-8fb9-81029b3113dd",
+        sessionId: "private-session",
+        updatedAt: "2026-10-07T00:00:00Z",
+        date: "1943-06-01T08:00:00Z",
+      },
+    };
+    expect(renderNpcProfiles([{ name: "Keeper", type: "npc", fields }])).toBe(
+      '- Keeper [npc] | {"bond":{"id":"guild-keeper","date":"1943-06-01T08:00:00Z"}}',
+    );
+    expect(fields.bond.sessionId).toBe("private-session");
+  });
+
   it("names the characters past the budget instead of dropping them", () => {
     const long = (name: string) => ({
       name,

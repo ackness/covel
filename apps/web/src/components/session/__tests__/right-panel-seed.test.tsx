@@ -201,9 +201,9 @@ it("refreshes the provider seed when active plugins change and removes vanished 
   await act(async () => {
     old.resolve([{ namespace: "removed", key: "stale", value: true }]);
   });
-  expect(state.pluginData.provider).toEqual({});
+  expect(state.pluginMessageData.provider).toBeUndefined();
   expect(getPluginNamespaceSnapshot("provider", "removed")).toEqual({});
-  expect(state.pluginData.other?.message).toEqual({ kept: true });
+  expect(state.pluginMessageData.other).toEqual({ kept: true });
   expect(getPluginNamespaceSnapshot("other", "message")).toEqual({
     kept: true,
   });
@@ -237,14 +237,10 @@ it.each(["namespace", "key"] as const)(
       expect(Object.getOwnPropertyDescriptor(Object.prototype, probe)).toEqual(
         original,
       );
-      expect(Object.hasOwn(state.pluginData.provider!, namespace)).toBe(true);
+      expect(state.pluginMessageData.provider).toBeUndefined();
       const external = getPluginNamespaceSnapshot("provider", namespace);
       expect(Object.hasOwn(external, key)).toBe(true);
-      expect(Object.hasOwn(state.pluginData.provider![namespace]!, key)).toBe(
-        true,
-      );
       expect(external[key]).toEqual(value);
-      expect(state.pluginData.provider![namespace]![key]).toEqual(value);
     } finally {
       hook.unmount();
       if (original) Object.defineProperty(Object.prototype, probe, original);

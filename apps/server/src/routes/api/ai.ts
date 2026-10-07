@@ -11,13 +11,15 @@ import { worldGenerationDataContracts } from "../../world-data/portable-contract
  */
 
 import { worldOperationLockId } from "../../world-lifecycle.js";
-import { rm } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
 import {
   createWorld,
   writeWorldPackage,
+  WorldPackageRecoveryError,
   type GeneratedWorldPackageContent,
 } from "@covel/create";
 import { worldRecordFromManifest } from "../../world-data/world-record.js";
@@ -26,6 +28,9 @@ import {
   readRuntimeEnv,
   WORLD_EXPERIENCE_MODES,
   WORLD_PACKAGE_CONTENT_KINDS,
+  i18nTextSchema,
+  resolveI18nText,
+  worldWireRecordSchema,
   type WorldCreationBrief,
   type WorldGenerationPart,
 } from "@covel/shared";
@@ -71,6 +76,24 @@ interface ErrorEvent {
   code?: "model_idle_timeout";
 }
 type GenerateEvent = ProgressEvent | DoneEvent | ErrorEvent;
+
+class WorldAuthoringConflictError extends Error {}
+
+function logAuthoringError(route: string, error: unknown): void {
+  if (error instanceof WorldAuthoringConflictError)
+    console.warn(`[ai/${route}] conflict:`, error.message);
+  else console.error(`[ai/${route}] unexpected error:`, error);
+}
+
+function authoringErrorMessage(error: unknown): string {
+  if (
+    error instanceof WorldAuthoringConflictError ||
+    error instanceof WorldPackageRecoveryError ||
+    readRuntimeEnv().nodeEnv !== "production"
+  )
+    return error instanceof Error ? error.message : String(error);
+  return "Internal server error";
+}
 
 /** Sends the progress of the parts in the order `createWorld` reported it. */
 function partProgress(send: (event: GenerateEvent) => Promise<void>) {
@@ -328,6 +351,15 @@ aiRoutes.post(
 
         const createOpts = {
           llm,
+          existingWorldIds: [
+            ...(await store.listWorlds()).map((world) => world.id),
+            ...(await readdir(worldsDir).catch(
+              (error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return [];
+                throw error;
+              },
+            )),
+          ],
           concept: (concept as string).trim(),
           model: typeof body.model === "string" ? body.model : undefined,
           locale: normalizeLocale(body.locale, DEFAULT_LOCALE),
@@ -414,7 +446,9 @@ aiRoutes.post(
                 store.createWorld(record),
               ))
           ) {
-            throw new Error(`World already exists: ${record.id}`);
+            throw new WorldAuthoringConflictError(
+              `World already exists: ${record.id}`,
+            );
           }
           activated = true;
         }
@@ -433,12 +467,12 @@ aiRoutes.post(
           ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error("[ai/generate-world] unexpected error:", msg);
+        if (c.req.raw.signal.aborted || shutdownSignal?.aborted) throw err;
+        logAuthoringError("generate-world", err);
         await progress.drained();
         await send({
           type: "error",
-          message: msg,
+          message: authoringErrorMessage(err),
         });
       } finally {
         if (saveTarget === "server-file" && generatedWorldDir && !activated) {
@@ -465,18 +499,27 @@ function revisableTarget(record: WorldRecord): SaveTarget | null {
 }
 
 /** The record a browser sends for a world that only it holds. */
+const browserRevisionWorldSchema = worldWireRecordSchema.extend({
+  name: i18nTextSchema,
+  description: i18nTextSchema,
+  lore: i18nTextSchema.optional(),
+});
+
 function browserWorld(value: unknown, worldId: string): WorldRecord | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Partial<WorldRecord>;
-  return record.id === worldId &&
-    record.metadata?.generated === true &&
-    typeof record.name === "string" &&
-    typeof record.description === "string" &&
-    (record.lore === undefined || typeof record.lore === "string") &&
-    (record.metadata === undefined ||
-      (record.metadata !== null && typeof record.metadata === "object"))
-    ? (record as WorldRecord)
-    : null;
+  const parsed = browserRevisionWorldSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const record = parsed.data;
+  if (record.id !== worldId || record.metadata?.generated !== true) return null;
+  const locale = normalizeLocale(record.locale, DEFAULT_LOCALE);
+  return {
+    ...record,
+    name: resolveI18nText(record.name, locale) ?? record.id,
+    description: resolveI18nText(record.description, locale) ?? "",
+    lore:
+      record.lore === undefined
+        ? undefined
+        : (resolveI18nText(record.lore, locale) ?? ""),
+  };
 }
 
 // POST /ai/revise-world
@@ -517,10 +560,25 @@ aiRoutes.post(
       return c.json(errorBody(idleTimeout.error), 400);
     }
 
-    const stored = await store.getWorld(worldId);
     let existing: WorldRecord;
     let saveTarget: SaveTarget;
-    if (stored) {
+    if (Object.hasOwn(body, "world")) {
+      // Browser authority is explicit. Its temporary server mirror (or an
+      // unrelated catalogue row with the same ID) must never select a save target.
+      const sent = browserWorld(body.world, worldId);
+      if (!sent) {
+        return c.json(errorBody("world must be a generated WorldRecord"), 400);
+      }
+      existing = sent;
+      saveTarget = "return-only";
+    } else {
+      const stored = await store.getWorld(worldId);
+      if (!stored) {
+        return c.json(
+          errorBody("World not found", { code: "world_not_found" }),
+          404,
+        );
+      }
       const target = revisableTarget(stored);
       if (!target) {
         return c.json(
@@ -543,23 +601,13 @@ aiRoutes.post(
       if (denied) return denied;
       existing = stored;
       saveTarget = target;
-    } else {
-      // A world that lives in the browser: the client sends it and keeps the
-      // result. Nothing is written on the server.
-      const sent = browserWorld(body.world, worldId);
-      if (!sent) {
-        return c.json(
-          errorBody("World not found", { code: "world_not_found" }),
-          404,
-        );
-      }
-      existing = sent;
-      saveTarget = "return-only";
     }
 
     const env = readRuntimeEnv();
     const worldsDir = resolveUserResourceDirs(env).worlds;
     const worldDir = path.join(worldsDir, existing.id);
+    const packageIdentity =
+      saveTarget === "server-file" ? await stat(worldDir) : undefined;
     const dataContracts = await worldGenerationDataContracts(
       c.get("pluginRegistry"),
     );
@@ -619,6 +667,32 @@ aiRoutes.post(
           storage: storageMetadata(saveTarget, env.storeBackend, worldsDir),
         };
         const save = async (): Promise<WorldRecord> => {
+          signal.throwIfAborted();
+          if (saveTarget !== "return-only") {
+            const current = await store.getWorld(existing.id);
+            if (
+              !current ||
+              isWorldDeleting(current) ||
+              !isDeepStrictEqual(current, existing)
+            )
+              throw new WorldAuthoringConflictError(
+                "World changed during revision; reload it and try again",
+              );
+            if (packageIdentity) {
+              const currentPackage = await stat(worldDir).catch(
+                () => undefined,
+              );
+              if (
+                !currentPackage ||
+                currentPackage.dev !== packageIdentity.dev ||
+                currentPackage.ino !== packageIdentity.ino ||
+                currentPackage.birthtimeMs !== packageIdentity.birthtimeMs
+              )
+                throw new WorldAuthoringConflictError(
+                  "World package changed during revision; reload it and try again",
+                );
+            }
+          }
           let loaded: WorldRecord | null;
           if (saveTarget === "server-file") {
             signal.throwIfAborted();
@@ -673,10 +747,10 @@ aiRoutes.post(
           ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error("[ai/revise-world] unexpected error:", msg);
+        if (c.req.raw.signal.aborted || shutdownSignal?.aborted) throw err;
+        logAuthoringError("revise-world", err);
         await progress.drained();
-        await send({ type: "error", message: msg });
+        await send({ type: "error", message: authoringErrorMessage(err) });
       }
     });
   },

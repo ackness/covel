@@ -1,6 +1,8 @@
 import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
 import { useModelCapabilities } from "./use-model-capabilities.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
+import { getSettings } from "@/settings/store.js";
+import { useSettingsRevision } from "@/settings/use-settings-revision.js";
 import { useState, useMemo, useCallback } from "react";
 import { useSetting } from "@/settings/use-settings.js";
 import {
@@ -21,6 +23,8 @@ export interface ResolvedSlot {
   label: string;
   /** Whether the effective binding exists and supports the role. */
   isAvailable?: boolean;
+  /** A matching client key or server credential exists; not a connectivity probe. */
+  hasCredentials?: boolean;
   /** Capability tag used for runtime binding compatibility. */
   tag: string;
   /** Server-configured model for this slot (from llm.toml). */
@@ -143,6 +147,15 @@ export function useSlotConfig(
     [localPresets, serverPresets],
   );
 
+  const credentialRevision = useSettingsRevision([
+    ...new Set([
+      ...allPresets.map((preset) => `keys.${preset.provider}`),
+      ...Object.values(llmConfig?.slots ?? {}).map(
+        (slot) => `keys.${slot.provider}`,
+      ),
+    ]),
+  ]);
+
   /** Resolve a slot name to a preset (checks user config, falls back to server default). */
   const resolveSlot = useCallback(
     (slotId: string): PresetSummary | null => {
@@ -259,6 +272,21 @@ export function useSlotConfig(
 
     return out.map((slot) => ({
       ...slot,
+      hasCredentials: (() => {
+        const provider = slot.preset?.provider ?? slot.serverProvider;
+        const localKey = provider
+          ? getSettings().get<string>(`keys.${provider}`)
+          : undefined;
+        if (localKey?.trim()) return true;
+        const server = llmConfig?.slots[slot.slotId];
+        return (
+          !!server?.serverKeyConfigured &&
+          server.provider === provider &&
+          (!slot.presetId ||
+            (slot.preset?.baseUrl === server.baseUrl &&
+              slot.preset?.scope !== "custom"))
+        );
+      })(),
       reasoningEffort:
         parameterOverrides?.[slot.slotId]?.reasoningEffort ??
         slot.preset?.reasoningEffort ??
@@ -274,6 +302,7 @@ export function useSlotConfig(
     llmConfig,
     parameterOverrides,
     capabilityOverrides,
+    credentialRevision,
   ]);
 
   return { slotConfig, resolvedSlots, allPresets, resolveSlot, refresh };

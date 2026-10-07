@@ -38,6 +38,7 @@ import {
   type ParsedRuntimeMd,
   type PluginDiscoveryResult,
   type PluginRegistry,
+  type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import {
   PluginEntryScope,
@@ -92,7 +93,10 @@ export interface BootstrapPluginEntriesParams {
   readonly runtimeLoader?: RuntimeLoader;
   readonly development?: boolean;
   readonly onReload?: (pluginId: string) => void | Promise<void>;
+  readonly prepareDeclarations?: (entry: PluginRegistryEntry) => Promise<void>;
   readonly discoveryMap: Map<string, PluginDiscoveryResult>;
+  /** Startup quarantine locations used only for static recovery and watching. */
+  readonly failedDiscoveryMap?: Map<string, PluginDiscoveryResult>;
   readonly manifestCache: Map<string, readonly ParsedRuntimeMd[]>;
   /** Expose activation failures through the existing plugin discovery DTO. */
   readonly pluginRegistry?: PluginRegistry;
@@ -258,13 +262,24 @@ export async function createBootstrapPluginEntries(
   // roots cannot be visible to one path and absent from the other.
   for (const [pluginId, discovery] of discoveryMap) {
     const registryEntry = params.pluginRegistry?.get(pluginId);
-    const definition = await loadPluginEntryDefinition(
-      discovery,
-      registryEntry
-        ? pluginDeclarations(registryEntry)
-        : pluginDeclarations(await loadPluginDefinition(discovery)),
-    );
-    entryDefinitions.set(pluginId, definition);
+    try {
+      const definition = await loadPluginEntryDefinition(
+        discovery,
+        registryEntry
+          ? pluginDeclarations(registryEntry)
+          : pluginDeclarations(await loadPluginDefinition(discovery)),
+      );
+      entryDefinitions.set(pluginId, definition);
+    } catch (error) {
+      // Discovery read the same files. One that changed since then costs this
+      // package its entry, never the other packages or the server's start.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[bootstrap] Failed to prepare the entry of plugin ${pluginId}:`,
+        message,
+      );
+      reportActivation(pluginId, message, error);
+    }
   }
 
   const prepareEntry = async (
@@ -519,7 +534,10 @@ export async function createBootstrapPluginEntries(
       if (closed) throw new Error("plugin entries are closed");
       if (!development)
         throw new Error("Plugin reload is available only in development mode");
-      const discovery = discoveryMap.get(pluginId);
+      const quarantined =
+        !discoveryMap.has(pluginId) && params.failedDiscoveryMap?.has(pluginId);
+      const discovery =
+        discoveryMap.get(pluginId) ?? params.failedDiscoveryMap?.get(pluginId);
       if (!discovery) throw new Error("Plugin not found");
       if (getPluginTrustInfo(pluginId, discovery.source).autoLoad)
         throw new Error("Bundled plugins cannot be hot reloaded");
@@ -532,12 +550,43 @@ export async function createBootstrapPluginEntries(
           approvedSession = candidate;
           break;
         }
-      if (!approvedSession)
+      if (!approvedSession && !quarantined)
         throw new Error("Plugin reload requires a live server-code approval");
       const next = await preparePluginReload(discovery, [
         ...(params.pluginRegistry?.getAll().values() ?? []),
       ]);
+      await params.prepareDeclarations?.(next.entry);
       const generation = crypto.randomUUID();
+      if (!approvedSession) {
+        // Only startup quarantine may recover without executing server code.
+        // Static loading validates identity, schemas and declarations; entry,
+        // handler and guard imports remain behind the normal approval gate.
+        await serialize(async () => {
+          if (closed) throw new Error("plugin entries are closed");
+          if (
+            discoveryMap.has(pluginId) ||
+            activeScopes.has(pluginId) ||
+            invokedPluginIds.has(pluginId)
+          )
+            throw new Error("Static recovery requires a quarantined plugin");
+          params.pluginRegistry?.register(next.entry);
+          discoveryMap.set(pluginId, next.discovery);
+          manifestCache.set(pluginId, next.definition.manifests);
+          entryDefinitions.set(pluginId, next.entryDefinition);
+          params.failedDiscoveryMap?.delete(pluginId);
+          artifactRevision += 1;
+          publishedRevision += 1;
+        });
+        try {
+          await params.onReload?.(pluginId);
+        } catch (error) {
+          console.warn("[plugin-entry] reload observer failed", {
+            pluginId,
+            error,
+          });
+        }
+        return { pluginId, generation };
+      }
       const batch = await prepareEntry(
         pluginId,
         next.entryDefinition,
@@ -580,11 +629,16 @@ export async function createBootstrapPluginEntries(
               ),
             );
             discoveryMap.set(pluginId, next.discovery);
+            params.failedDiscoveryMap?.delete(pluginId);
             manifestCache.set(pluginId, next.definition.manifests);
             entryDefinitions.set(pluginId, next.entryDefinition);
             publishRuntimeGeneration?.();
             activeScopes.set(pluginId, batch);
             invokedPluginIds.add(pluginId);
+            const sessions =
+              approvalSessions.get(pluginId) ?? new Set<string>();
+            sessions.add(approvedSession);
+            approvalSessions.set(pluginId, sessions);
             failedAt.delete(pluginId);
             publishedRevision += 1;
             artifactRevision += 1;
@@ -750,32 +804,42 @@ export async function createBootstrapPluginEntries(
     },
     watch() {
       if (!development || closed || watchers.length) return;
-      for (const [pluginId, discovery] of discoveryMap) {
+      const watchable = new Map([
+        ...(params.failedDiscoveryMap ?? []),
+        ...discoveryMap,
+      ]);
+      for (const [pluginId, discovery] of watchable) {
         if (getPluginTrustInfo(pluginId, discovery.source).autoLoad) continue;
-        const watcher = fsSync.watch(
-          discovery.rootPath,
-          { recursive: true, persistent: false },
-          (_event, filename) => {
-            if (
-              !filename ||
-              /(^|[/\\])(node_modules|\.git)([/\\]|$)/.test(String(filename))
-            )
-              return;
-            const existing = watchTimers.get(pluginId);
-            if (existing) clearTimeout(existing);
-            const timer = setTimeout(() => {
-              watchTimers.delete(pluginId);
-              void reload(pluginId).catch((error) =>
-                console.warn("[plugin-entry] watched reload failed", {
-                  pluginId,
-                  error,
-                }),
-              );
-            }, 150);
-            timer.unref?.();
-            watchTimers.set(pluginId, timer);
-          },
-        );
+        let watcher: fsSync.FSWatcher;
+        try {
+          watcher = fsSync.watch(
+            discovery.rootPath,
+            { recursive: true, persistent: false },
+            (_event, filename) => {
+              if (
+                !filename ||
+                /(^|[/\\])(node_modules|\.git)([/\\]|$)/.test(String(filename))
+              )
+                return;
+              const existing = watchTimers.get(pluginId);
+              if (existing) clearTimeout(existing);
+              const timer = setTimeout(() => {
+                watchTimers.delete(pluginId);
+                void reload(pluginId).catch((error) =>
+                  console.warn("[plugin-entry] watched reload failed", {
+                    pluginId,
+                    error,
+                  }),
+                );
+              }, 150);
+              timer.unref?.();
+              watchTimers.set(pluginId, timer);
+            },
+          );
+        } catch (error) {
+          console.warn("[plugin-entry] watcher failed", { pluginId, error });
+          continue;
+        }
         watcher.on("error", (error) =>
           console.warn("[plugin-entry] watcher failed", { pluginId, error }),
         );

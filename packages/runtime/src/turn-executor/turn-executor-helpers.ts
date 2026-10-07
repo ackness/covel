@@ -1,14 +1,11 @@
+import { isValidPluginSetting } from "@covel/shared";
 /**
  * Private helpers extracted from turn-executor.ts to keep it within the 1000-line budget.
  */
 
-import type {
-  PluginUserSettingSpec,
-  RuntimeManifest,
-  RuntimeResult,
-  TurnInput,
-} from "@covel/shared";
+import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import { isSetupRuntime } from "@covel/shared";
+import { resolveFrameworkCompletion } from "@covel/context";
 import type {
   ToolCallContext,
   ToolExecutor,
@@ -56,13 +53,21 @@ export function retainPreGameRuntimes(
 
 /**
  * Whether a runtime ends by calling `runtime-done`. A runtime with an output
- * schema ends with its JSON or its completing tool, and a story runtime ends
- * with its text.
+ * schema ends with its JSON or its completing tool, a runtime that must call
+ * a completing tool ends with that call, and a story runtime ends with its
+ * text.
+ *
+ * The answer is the one the prompt's `[COMPLETION]` instruction is written
+ * from, so a runtime is offered `runtime-done` exactly when it is told to
+ * call it.
  */
 export function usesRuntimeDone(
-  manifest: Pick<RuntimeManifest, "output" | "outputKind">,
+  manifest: Pick<
+    RuntimeManifest,
+    "output" | "outputKind" | "requireToolUse" | "completeAfterTools"
+  >,
 ): boolean {
-  return !manifest.output?.schema && manifest.outputKind !== "story";
+  return resolveFrameworkCompletion(manifest).completion === "runtime-done";
 }
 
 /**
@@ -90,6 +95,9 @@ export function buildToolDefinitions(
   // tool calls. Schema-declared runtimes either emit final JSON text or use a
   // declared completing tool as their output channel, so `runtime-done` is
   // withheld; either path already has an explicit completion contract.
+  // A runtime that must call a completing tool ends with that call. Offered
+  // `runtime-done`, a model ends a quiet turn with it; the terminator records
+  // nothing, so the loop answers with a correction and one more model call.
   // A story runtime finishes with its text. Offered `runtime-done`, a model
   // that follows instructions to the letter ends the run with it and writes
   // no story.
@@ -217,32 +225,6 @@ export function makeSkippedResult(
  * otherwise flow into `{{ userSettings.* }}`, guards, and numeric hook
  * comparisons. Invalid values fall back to the manifest default here.
  */
-function isValidForSpec(value: unknown, spec: PluginUserSettingSpec): boolean {
-  switch (spec.type) {
-    case "number":
-    case "integer":
-    case "slider":
-      if (typeof value !== "number" || !Number.isFinite(value)) return false;
-      if (spec.type === "integer" && !Number.isInteger(value)) return false;
-      if (typeof spec.min === "number" && value < spec.min) return false;
-      if (typeof spec.max === "number" && value > spec.max) return false;
-      return true;
-    case "toggle":
-      return typeof value === "boolean";
-    case "select":
-      return (
-        typeof value === "string" &&
-        (!spec.options ||
-          spec.options.length === 0 ||
-          spec.options.some((o) => o.value === value))
-      );
-    case "text":
-    case "textarea":
-      return typeof value === "string";
-    default:
-      return true;
-  }
-}
 
 export function resolveUserSettings(
   manifest: Pick<RuntimeManifest, "pluginId" | "userSettings">,
@@ -263,7 +245,9 @@ export function resolveUserSettings(
     // world/header value degrades to the manifest default rather than reaching
     // the runtime. spec.default itself is author-trusted and not re-checked.
     merged[spec.key] =
-      hasValue && candidate !== undefined && !isValidForSpec(candidate, spec)
+      hasValue &&
+      candidate !== undefined &&
+      !isValidPluginSetting(candidate, spec)
         ? spec.default
         : candidate;
   }

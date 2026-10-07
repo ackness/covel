@@ -95,6 +95,144 @@ it("merges different world fields across service instances", async () => {
   });
 });
 
+it.each(["edited", "deleted", "replaced"] as const)(
+  "rejects a generated revision after another vault %s the world",
+  async (change) => {
+    const expectedWorld = (await service.getWorld("world-a"))!;
+    if (change !== "edited") await second.deleteWorld("world-a");
+    if (change === "edited")
+      await second.updateWorld("world-a", { description: "Keep this edit" });
+    if (change === "replaced")
+      await second.saveGeneratedWorld({
+        ...expectedWorld,
+        description: "Keep this replacement",
+      });
+    const kept = await second.getWorld("world-a");
+    await expect(
+      service.saveGeneratedWorld(
+        { ...expectedWorld, lore: "Stale model result" },
+        { expectedWorld },
+      ),
+    ).rejects.toThrow("World changed during revision");
+    expect(await second.getWorld("world-a")).toEqual(kept);
+  },
+);
+
+it("compares revision baselines after waiting for the world lock", async () => {
+  const expectedWorld = (await service.getWorld("world-a"))!;
+  const read = deferred();
+  const release = deferred();
+  const getWorld = secondVault.getWorld.bind(secondVault);
+  vi.spyOn(secondVault, "getWorld").mockImplementationOnce(async (id) => {
+    const current = await getWorld(id);
+    read.resolve();
+    await release.promise;
+    return current;
+  });
+  const edit = second.updateWorld("world-a", { name: "Keep queued edit" });
+  await read.promise;
+  let done = false;
+  const revision = service
+    .saveGeneratedWorld(
+      { ...expectedWorld, lore: "Old revision" },
+      { expectedWorld },
+    )
+    .then(
+      () => "saved",
+      (error: Error) => error.message,
+    )
+    .finally(() => {
+      done = true;
+    });
+  try {
+    await waitForWorldWaiterOrDone(() => done);
+  } finally {
+    release.resolve();
+    await edit;
+  }
+  expect(await revision).toMatch(/World changed during revision/);
+  expect((await second.getWorld("world-a"))?.name).toBe("Keep queued edit");
+});
+
+it("compares the public dimensions shape and ignores object key insertion order", async () => {
+  const original = (await vault.getWorld("world-a"))!;
+  await vault.upsertWorld({
+    ...original,
+    metadata: { dimensions: {}, generated: true },
+  });
+  const expectedWorld = (await service.getWorld("world-a"))!;
+  expect(expectedWorld.dimensions).toEqual({});
+  await secondVault.upsertWorld({
+    ...original,
+    metadata: { generated: true, dimensions: {} },
+  });
+  await service.saveGeneratedWorld(
+    { ...expectedWorld, lore: "New revision" },
+    { expectedWorld },
+  );
+  expect((await second.getWorld("world-a"))?.lore).toBe("New revision");
+});
+
+it("keeps initial generated saves and snapshots revision inputs before waiting", async () => {
+  const expectedWorld = (await service.getWorld("world-a"))!;
+  const generated = { ...expectedWorld, lore: "New revision" };
+  const locked = deferred();
+  const release = deferred();
+  const owner = secondVault.withWorldLock("world-a", "exclusive", async () => {
+    locked.resolve();
+    await release.promise;
+  });
+  await locked.promise;
+  const saving = service.saveGeneratedWorld(generated, { expectedWorld });
+  generated.lore = "Later caller mutation";
+  expectedWorld.name = "Later caller mutation";
+  release.resolve();
+  await owner;
+  expect((await saving).lore).toBe("New revision");
+  await second.saveGeneratedWorld({ ...generated, id: "world-new" });
+  expect((await service.getWorld("world-new"))?.id).toBe("world-new");
+});
+
+it("does not overwrite a world another vault claimed while generation was running", async () => {
+  const generated = {
+    id: "world-new",
+    name: "Model result",
+    description: "Stale generation",
+    createdAt: "2026-01-01",
+  };
+  await second.saveGeneratedWorld({
+    ...generated,
+    name: "Keep the other window's world",
+  });
+  const kept = await second.getWorld(generated.id);
+  await expect(service.saveGeneratedWorld(generated)).rejects.toThrow(
+    "World already exists: world-new",
+  );
+  expect(await service.getWorld(generated.id)).toEqual(kept);
+  const original = await service.getWorld("world-a");
+  await expect(
+    second.saveGeneratedWorld({ ...generated, id: "world-a" }),
+  ).rejects.toThrow("World already exists: world-a");
+  expect(await service.getWorld("world-a")).toEqual(original);
+});
+
+it("lists and locks sessions through lightweight heads without loading history", async () => {
+  await service.createSession("world-a", "session-a");
+  await service.updateSession("session-a", { status: "paused" });
+  const checkpointRead = vi
+    .spyOn(secondVault, "getLatestCheckpoint")
+    .mockRejectedValue(new Error("Full checkpoint must not be read"));
+  expect(await second.listSessions("world-a")).toEqual([
+    expect.objectContaining({ id: "session-a", status: "paused" }),
+  ]);
+  expect(await second.getSession("session-a")).toMatchObject({
+    status: "paused",
+  });
+  await second.deleteSession("session-a");
+  expect(checkpointRead).not.toHaveBeenCalled();
+  expect(await vault.getSession("session-a")).toBeNull();
+});
+
 it("does not let a checkpoint overwrite a concurrent world edit", async () => {
   await service.createSession("world-a", "session-a");
   const committing = deferred();

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Label } from "@/components/ui/label.js";
 import {
   inputCls,
@@ -6,6 +7,7 @@ import {
   type TabProps,
 } from "../editor-helpers.js";
 import type { WorldTone, ContentRating } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
 const CONTENT_RATINGS: ContentRating[] = ["all-ages", "teen", "mature"];
 
@@ -15,11 +17,26 @@ const RATING_KEYS: Record<ContentRating, string> = {
   mature: "ratingMature",
 };
 
-export function ToneTab({ dimensions, onChange, t }: TabProps) {
+function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function ToneTab({ dimensions, onChange, t, problems }: TabProps) {
   const tone: WorldTone = dimensions.tone ?? {
     genres: [],
     contentRating: "teen",
   };
+  const problem = fieldProblems(problems);
+  // The two lists as the player types them. A field that showed the list
+  // built from its text would drop a comma, or a space after a word, on the
+  // key press that types it: neither is part of an entry yet.
+  const [genresText, setGenresText] = useState(() => tone.genres.join(", "));
+  const [themesText, setThemesText] = useState(() =>
+    (tone.themes ?? []).join(", "),
+  );
 
   function setTone(next: WorldTone) {
     onChange({ ...dimensions, tone: next });
@@ -33,17 +50,13 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
         <input
           id="world-tone-genres"
           className={inputCls}
-          value={tone.genres.join(", ")}
-          onChange={(e) =>
-            setTone({
-              ...tone,
-              genres: e.target.value
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean),
-            })
-          }
+          value={genresText}
+          onChange={(e) => {
+            setGenresText(e.target.value);
+            setTone({ ...tone, genres: splitList(e.target.value) });
+          }}
         />
+        {problem.at("genres")}
       </div>
 
       {/* Content Rating */}
@@ -68,6 +81,7 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
             </option>
           ))}
         </select>
+        {problem.at("contentRating")}
       </div>
 
       {/* Narrative Style */}
@@ -83,6 +97,7 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
           }
           onChange={(e) => setTone({ ...tone, narrativeStyle: e.target.value })}
         />
+        {problem.at("narrativeStyle")}
       </div>
 
       {/* Themes (comma-separated) */}
@@ -91,18 +106,15 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
         <input
           id="world-tone-themes"
           className={inputCls}
-          value={(tone.themes ?? []).join(", ")}
-          onChange={(e) =>
-            setTone({
-              ...tone,
-              themes: e.target.value
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean),
-            })
-          }
+          value={themesText}
+          onChange={(e) => {
+            setThemesText(e.target.value);
+            setTone({ ...tone, themes: splitList(e.target.value) });
+          }}
         />
+        {problem.at("themes")}
       </div>
+      {problem.rest()}
     </div>
   );
 }

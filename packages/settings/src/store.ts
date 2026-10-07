@@ -117,6 +117,7 @@ export class SettingsStore implements SettingsStoreApi {
             this.normalizeEntries(next, "synchronization");
           },
           (next) => this.replaceVisibleValues(next),
+          (next) => this.normalizeEntries(next, "synchronization"),
         );
       }
       this.hydrationError = null;
@@ -155,6 +156,8 @@ export class SettingsStore implements SettingsStoreApi {
       const entries = versioned
         ? (stored as SettingsPersistenceBundle).entries
         : (stored as Record<SettingKey, unknown>);
+      // Refuse misplaced credentials before any ordinary repair copies data.
+      for (const key of Object.keys(entries)) this.assertNonSecretEntry(key);
       const keys = this.refusedKeys(entries);
       if (keys.length === 0 || !this.adapter.backupBundle) return { stored };
       const backup = await this.adapter.backupBundle();
@@ -210,6 +213,7 @@ export class SettingsStore implements SettingsStoreApi {
         while (this.pendingRepairKeys.size > 0) {
           const keys = [...this.pendingRepairKeys];
           this.pendingRepairKeys.clear();
+          this.assertHydrated();
           const backup = await this.adapter.backupBundle!();
           await this.persist(
             "values",
@@ -616,6 +620,62 @@ export class SettingsStore implements SettingsStoreApi {
         ).then(() => {
           for (const [key] of updates) this.notify(key, this.get(key));
         }),
+      );
+    } catch (error) {
+      return this.observePersistence(Promise.reject(error));
+    }
+  }
+
+  replaceEntries(
+    entries: Readonly<Record<SettingKey, unknown>>,
+    expectedEntries: Readonly<Record<SettingKey, unknown>>,
+  ): Promise<void> {
+    if (this.repairing) {
+      return this.afterRepair(() =>
+        this.replaceEntries(entries, expectedEntries),
+      );
+    }
+    try {
+      this.assertHydrated();
+      const next = structuredClone(
+        this.normalizeEntries(entries, "replacement"),
+      );
+      // The editor base is already normalized by export(). Validate its secret
+      // boundary without transforming it a second time through author schemas.
+      for (const key of Object.keys(expectedEntries))
+        this.assertNonSecretEntry(key);
+      const expected = structuredClone(expectedEntries);
+      const current = this.serializeEntries();
+      const conflicts = [
+        ...new Set([...Object.keys(current), ...Object.keys(expected)]),
+      ].filter(
+        (key) =>
+          Object.hasOwn(current, key) !== Object.hasOwn(expected, key) ||
+          !sameSettingValue(current[key], expected[key]),
+      );
+      if (conflicts.length > 0) {
+        throw new SettingsRevisionConflictError(
+          this.versionedPersistence?.revision ?? 0,
+          conflicts,
+        );
+      }
+      const keys = [
+        ...new Set([...Object.keys(current), ...Object.keys(next)]),
+      ];
+      if (this.versionedPersistence) {
+        this.replaceVisibleValues(next);
+        return this.observePersistence(
+          this.versionedPersistence.persist(keys, next, expected),
+        );
+      }
+      return this.observePersistence(
+        this.persist(
+          "values",
+          () => {
+            this.replaceVisibleValues(next);
+          },
+          keys,
+        ),
       );
     } catch (error) {
       return this.observePersistence(Promise.reject(error));

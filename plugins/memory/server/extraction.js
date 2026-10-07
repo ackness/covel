@@ -4,7 +4,7 @@ import {
   localeDisplayName,
   modelFacingJson,
   resolveI18nText,
-} from "@covel/shared";
+} from "@covel/plugin-handlers-utils";
 function buildSystemPrompt(blocks, lang, locale) {
   const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
   const languageName = localeDisplayName(canonicalLocale);

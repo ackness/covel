@@ -114,10 +114,28 @@ describe("WorldRevisePanel", () => {
     act(() => emit({ type: "done", world: { ...world, lore: "Revised." } }));
 
     await waitFor(() => expect(onRevised).toHaveBeenCalledWith(saved));
-    expect(dataService.saveGeneratedWorld).toHaveBeenCalledWith({
-      ...world,
-      lore: "Revised.",
-    });
+    expect(dataService.saveGeneratedWorld).toHaveBeenCalledWith(
+      { ...world, lore: "Revised." },
+      { expectedWorld: world },
+    );
+  });
+
+  it("keeps the request and reports a local revision conflict without publishing it", async () => {
+    storage.mode = "local";
+    dataService.saveGeneratedWorld.mockRejectedValueOnce(
+      new Error("World changed during revision; reload it before trying again"),
+    );
+    const { onRevised, emit } = startRevision();
+    act(() =>
+      emit({ type: "done", world: { ...world, lore: "Stale result" } }),
+    );
+    expect(
+      await screen.findByText(/World changed during revision/),
+    ).toBeTruthy();
+    expect(onRevised).not.toHaveBeenCalled();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(
+      "  add a rival  ",
+    );
   });
 
   it("says that a revision removes the world's other editions", () => {

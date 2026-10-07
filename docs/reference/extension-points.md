@@ -4,7 +4,7 @@
 
 | 模式       | 组合方式                                       | 当前例子                                                             |
 | ---------- | ---------------------------------------------- | -------------------------------------------------------------------- |
-| `single`   | 解析一个有效提供者，缺失时由调用点决定默认行为 | `session.world-context@1`、`history.compact@1`、`media.image-flow@1` |
+| `single`   | 解析一个有效提供者，缺失时由调用点决定默认行为 | `session.world-context@1`、`history.compact@2`、`media.image-flow@1` |
 | `collect`  | 收集各提供者通过校验的输出                     | `prompt.segment@1`                                                   |
 | `pipeline` | 按声明顺序传递上一个有效结果                   | `prompt.history-transform@1`、`ui.slot@1`                            |
 
@@ -60,6 +60,12 @@ export default function (covel) {
 
 公共读取在一次执行内冻结；post-turn 更新提交后，下一执行重新发布新版。恢复入口分别指向 manual editor 和 tracker；玩家重试直接触发 tracker，并带 `retryFromTurnId`，不是 editor 递归调用 tracker。参见[动态维度快照](world-model.md#动态维度快照)与[编辑及恢复 API](api.md#维度编辑与待结算恢复)。
 
+## 历史压缩 `history.compact@2`
+
+输入包含 `messages`、`existingSummaries`、`locale`、`estimatedTokens`、`contextWindow`、`inputWindow` 与 `summaryBudget: {maxTokens, maxSegmentTokens, maxSegments}`。`contextWindow` 是 story 与 fast 扣除响应预留后的较小容量，用于触发阈值和摘要总预算；`inputWindow` 是 fast 自身输入容量，摘要请求须装入该容量。
+
+输出为 `null` 或 `{summaries: [{messageIds, replacesSummaryIds, content, focusSections, truncated?}]}`。每段必须覆盖连续未压缩消息前缀或最旧连续摘要段中的一种。宿主校验引用、顺序和预算，在事务中只替换被列出的摘要及其对应消息标记。默认提供者保留稳定分段，超出总预算或八段上限时才合并最旧连续段；单段预算随源文本量和窗口增长。具体预算见[提示词结构](prompt-structure.md)。
+
 ## 契约版本与兼容性
 
 契约 ID 中的 `@N` 是版本标识（如 `prompt.segment@1`）。内核采用 **current-only** 策略：每个扩展点只有一个当前版本，不做版本协商，旧版本不保留兼容期。
@@ -68,3 +74,7 @@ export default function (covel) {
 - `pnpm validate:plugin` 始终按当前内核契约校验插件
 
 外部插件需跟随主仓契约同步升级；CHANGELOG 会标注破坏性变更及迁移说明。
+
+插件 SDK 现在导出 `estimateTokens` 和 `FRAMEWORK_TOOL_NAMES`，无需为 token 估算或内置工具名称引入宿主内部包。hook 未返回值表示继续；守卫故障仍否决操作，转换故障保留之前成功的改写。
+
+公开 SDK 提供 `resolveI18nText` / `resolveI18nDeep`、locale registry、`estimateTokens`、表单工具和角色字段校验。`world.dimensions@1` 的提供者使用 `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer。Node 插件用 `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)` 加载自己的模板；该子入口不进入浏览器根模块。`shared` / `tools` / `context` 复用这些实现，插件代码只依赖 SDK。

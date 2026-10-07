@@ -198,6 +198,7 @@ describe.each([
 
   it("claims only from the woken session between maintenance passes", async () => {
     const listSessions = vi.spyOn(store, "listSessions");
+    const queryJobs = vi.spyOn(store, "queryPluginData");
     const executed: string[] = [];
     const worker = createRuntimeJobWorker({
       tryWithCommitLock,
@@ -217,9 +218,10 @@ describe.each([
         (found) => found?.status,
       );
 
-    // Startup runs a maintenance pass that scans every session.
+    // Startup shares one job namespace query across all maintenance steps.
     worker.wake();
-    await vi.waitFor(() => expect(listSessions).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(queryJobs).toHaveBeenCalledTimes(1));
+    expect(listSessions).not.toHaveBeenCalled();
 
     await createRuntimeJob(store, job("session-b", "b-1"));
     await createRuntimeJob(store, job("session-a", "a-1"));
@@ -228,7 +230,8 @@ describe.each([
       expect(await status("session-a", "a-1")).toBe("succeeded"),
     );
     expect(await status("session-b", "b-1")).toBe("queued");
-    expect(listSessions).toHaveBeenCalledTimes(3);
+    expect(listSessions).not.toHaveBeenCalled();
+    expect(queryJobs).toHaveBeenCalledTimes(1);
 
     // A wake without a session falls back to a full scan.
     worker.wake();
@@ -953,11 +956,11 @@ describe.each([
       leaseMs: 1_000,
       now: ENQUEUED_AT,
     });
-    const list = store.listPluginDataByNamespace.bind(store);
+    const list = store.queryPluginData.bind(store);
     const intercepted = vi
-      .spyOn(store, "listPluginDataByNamespace")
-      .mockImplementationOnce(async (sessionId, namespace) => {
-        const rows = await list(sessionId, namespace);
+      .spyOn(store, "queryPluginData")
+      .mockImplementationOnce(async (options) => {
+        const rows = await list(options);
         await renewRuntimeJobLease(store, {
           ...job(),
           ownerId: "worker",

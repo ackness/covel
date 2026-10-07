@@ -160,7 +160,7 @@ describe("session navigation lifecycle", () => {
     await act(async () => {
       await result.current.actions.resumeSession(session);
     });
-    api.steerTurn.mockResolvedValueOnce(true);
+    api.steerTurn.mockResolvedValueOnce({ turnId: "turn-live" });
     let applied!: boolean;
     await act(async () => {
       applied = await result.current.actions.steerMessage("current input");
@@ -188,6 +188,50 @@ describe("session navigation lifecycle", () => {
     ]);
   });
 
+  it("replaces the steering echo with the server's copy when the turn is recovered", async () => {
+    const { result } = setup();
+    await act(async () => {
+      await result.current.actions.resumeSession(session);
+    });
+    api.steerTurn.mockResolvedValueOnce({ turnId: "turn-live" });
+    await act(async () => {
+      await result.current.actions.steerMessage("wait, look up");
+    });
+    const [echo] = result.current.state.messages;
+    expect(echo).toMatchObject({ role: "user", turnId: "turn-live" });
+
+    // The server allocated its own ID for the same interjection.
+    const recovered = reducer(result.current.state, {
+      type: "MERGE_RECOVERED_MESSAGES",
+      messages: [
+        {
+          id: "server-steer-1",
+          role: "user",
+          content: "wait, look up",
+          timestamp: "2026-09-06T00:00:05.000Z",
+          turnId: "turn-live",
+        },
+      ],
+    });
+    expect(recovered.messages.map((message) => message.id)).toEqual([
+      "server-steer-1",
+    ]);
+  });
+
+  it("adds no echo when the turn does not take the interjection", async () => {
+    const { result } = setup();
+    await act(async () => {
+      await result.current.actions.resumeSession(session);
+    });
+    api.steerTurn.mockResolvedValueOnce(null);
+    let applied!: boolean;
+    await act(async () => {
+      applied = await result.current.actions.steerMessage("too late");
+    });
+    expect(applied).toBe(false);
+    expect(result.current.state.messages).toEqual([]);
+  });
+
   it.each(["sess-1", "sess-2"])(
     "drops a steering reply after navigating to %s",
     async (nextId) => {
@@ -195,7 +239,7 @@ describe("session navigation lifecycle", () => {
       await act(async () => {
         await result.current.actions.resumeSession(session);
       });
-      const response = deferred<boolean>();
+      const response = deferred<{ turnId: string }>();
       api.steerTurn.mockReturnValueOnce(response.promise);
       const steering =
         result.current.actions.steerMessage("old steering input");
@@ -205,7 +249,7 @@ describe("session navigation lifecycle", () => {
       });
       let applied!: boolean;
       await act(async () => {
-        response.resolve(true);
+        response.resolve({ turnId: "turn-old" });
         applied = await steering;
       });
       expect(applied).toBe(false);

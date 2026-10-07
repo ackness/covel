@@ -34,11 +34,14 @@ export function resolveJsonPointer(
   pointer: string,
 ): { readonly found: boolean; readonly value?: unknown } {
   if (pointer === "") return { found: true, value };
+  if (!pointer.startsWith("/") || /~(?:[^01]|$)/.test(pointer))
+    return { found: false };
   const tokens = pointer.split("/").slice(1).map(unescapeToken);
   let cursor: unknown = value;
   for (const token of tokens) {
     if (cursor === null || typeof cursor !== "object") return { found: false };
     if (Array.isArray(cursor)) {
+      if (!/^(0|[1-9][0-9]*)$/.test(token)) return { found: false };
       const idx = Number(token);
       if (!Number.isInteger(idx) || idx < 0 || idx >= cursor.length) {
         return { found: false };
@@ -66,17 +69,23 @@ export function projectSchemaBySelect(
 ): Schema | undefined {
   if (!schema) return undefined;
   if (!select || select === "") return schema;
+  if (!select.startsWith("/") || /~(?:[^01]|$)/.test(select)) return undefined;
   const tokens = select.split("/").slice(1).map(unescapeToken);
   let cursor: Schema | undefined = schema;
   for (const token of tokens) {
     if (!cursor) return undefined;
     const props: unknown = cursor.properties;
-    if (props && typeof props === "object" && token in (props as object)) {
+    if (
+      props &&
+      typeof props === "object" &&
+      Object.prototype.hasOwnProperty.call(props, token)
+    ) {
       cursor = (props as Record<string, Schema>)[token];
       continue;
     }
     const items: unknown = cursor.items;
     if (items && typeof items === "object" && !Array.isArray(items)) {
+      if (!/^(0|[1-9][0-9]*)$/.test(token)) return undefined;
       // Single `items` schema — array index tokens all share the element schema.
       cursor = items as Schema;
       continue;
@@ -296,14 +305,14 @@ function compareAnchoredPattern(
   return "indeterminate";
 }
 
-/** Extract a literal prefix from `^literal...` when the rest is plain text. */
+/** Only a wholly literal anchored pattern is a decidable prefix constraint. */
 function anchoredLiteralPrefix(pattern: string): string | undefined {
   if (!pattern.startsWith("^")) return undefined;
   const body = pattern.slice(1);
-  // Stop at the first regex metacharacter — the literal run before it is a
-  // safe lower bound on the required prefix.
+  // Alternation and quantifiers can make the apparent prefix optional. Even
+  // a guaranteed partial prefix does not prove that two regexes are disjoint.
   const meta = body.search(/[.*+?()[\]{}|\\$]/);
-  return meta === -1 ? body : body.slice(0, meta);
+  return meta === -1 ? body : undefined;
 }
 
 function compareObjects(

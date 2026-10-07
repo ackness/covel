@@ -26,6 +26,7 @@ import type {
   SetupAttemptRow,
 } from "./mappers/lifecycle-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
+import { withoutNul } from "./without-nul.js";
 import type {
   DataStore,
   JobStatusRecord,
@@ -96,6 +97,7 @@ export function createSqlLifecycleRecords(
 ): SqlLifecycleRecords {
   const { runner, tables, json, values } = deps;
   const { logicalTurnLedger, setupAttempts, jobStatus } = tables;
+  const { byteOrder } = runner;
 
   return {
     // ── Logical-turn completion ledger ───────────────────────────
@@ -135,7 +137,7 @@ export function createSqlLifecycleRecords(
           where: eq(logicalTurnLedger.sessionId, sessionId),
           orderBy: [
             asc(logicalTurnLedger.completedAt),
-            asc(logicalTurnLedger.logicalTurnId),
+            asc(byteOrder(logicalTurnLedger.logicalTurnId)),
           ],
         },
       );
@@ -169,7 +171,8 @@ export function createSqlLifecycleRecords(
       // terminalising caller passes finishedAt; a mid-flight transition may not.
       const set: Record<string, unknown> = { state: patch.state };
       if ("finishedAt" in patch) set.finishedAt = patch.finishedAt ?? null;
-      if ("error" in patch) set.error = patch.error ?? null;
+      // This row is built here, not by the value builders that drop U+0000.
+      if ("error" in patch) set.error = withoutNul(patch.error) ?? null;
       await runner.update(
         setupAttempts,
         set,
@@ -196,7 +199,10 @@ export function createSqlLifecycleRecords(
             ? eq(setupAttempts.generation, filter.generation)
             : undefined,
         ]),
-        orderBy: [asc(setupAttempts.startedAt), asc(setupAttempts.executionId)],
+        orderBy: [
+          asc(setupAttempts.startedAt),
+          asc(byteOrder(setupAttempts.executionId)),
+        ],
       });
       return rows.map(toSetupAttemptRecord);
     },
@@ -233,7 +239,7 @@ export function createSqlLifecycleRecords(
             ? eq(jobStatus.jobId, filter.jobId)
             : undefined,
         ]),
-        orderBy: [asc(jobStatus.jobId), asc(jobStatus.sequence)],
+        orderBy: [asc(byteOrder(jobStatus.jobId)), asc(jobStatus.sequence)],
       });
       return rows.map((row) => toJobStatusRecord(row, json));
     },

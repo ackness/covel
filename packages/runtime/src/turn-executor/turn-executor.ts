@@ -62,7 +62,11 @@ import {
   applySessionPhaseCountPolicy,
   createExecutionContext,
 } from "./execution-context.js";
-import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
+import {
+  isTurnExecutionAborted,
+  PLAYER_ABORT_REASON,
+  trackSteeringReaders,
+} from "./turn-control.js";
 import {
   detachedUpstreamResults,
   planTurnDetachment,
@@ -525,6 +529,7 @@ async function executeTurnImpl(
       deps,
       turnNumber,
       sessionSummaries,
+      sessionState,
     });
   let sessionContext = await loadSessionContext();
   if (dimensionProvider)
@@ -640,6 +645,23 @@ async function executeTurnImpl(
   // same barrier as top-level results.
   const nestedRuntimeResults: RuntimeResult[] = [];
 
+  // The runtimes of this execution that read the player's interjections. The
+  // queue closes when the last of them settles, so a later `/steer` is refused
+  // instead of accepted with no model call left to read it. A nested execution
+  // leaves the queue to its top-level execution.
+  const steeringReaders = trackSteeringReaders({
+    control: recursionDepth === 0 ? deps.turnControl : undefined,
+    scheduled: [
+      ...(isPreGamePending || isTargeted
+        ? []
+        : scheduledRuntimes.filter(isSetupRuntime)),
+      ...groups.flatMap((group) => group.runtimes),
+    ].filter((rt) => !detachmentPlan.eligibleRuntimeIds.has(rt.name)),
+    eventFollowers: scopedRecovery
+      ? []
+      : activeRuntimes.filter((rt) => rt.trigger?.type === "event"),
+  });
+
   // Single entry point for invoking one runtime. `sessionMeta` / `sessionContext`
   // are reassigned by recordPreGameCompletion between call sites, so this reads
   // them by closure each call rather than snapshotting a base object.
@@ -659,6 +681,7 @@ async function executeTurnImpl(
       providerStatus !== undefined &&
       providerStatus !== "success"
     ) {
+      steeringReaders.settled(manifest.name);
       return Promise.resolve(
         makeSkippedResult(
           manifest,
@@ -707,7 +730,7 @@ async function executeTurnImpl(
       collectNestedResults: (results) => {
         nestedRuntimeResults.push(...results);
       },
-    });
+    }).finally(() => steeringReaders.settled(manifest.name));
   };
 
   // Player abort — stop scheduling further groups/followers as soon as
@@ -909,6 +932,8 @@ async function executeTurnImpl(
           runtimeTriggerCounts,
           runtimeTurnsSinceLastTrigger,
         });
+  // No runtime starts after the fan-out, so nothing reads the queue from here.
+  steeringReaders.close();
 
   // ── Pre-Game completion tracking ────────────────────────────────
   //

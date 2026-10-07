@@ -11,7 +11,7 @@ import { stringify as stringifyYaml } from "yaml";
 import { validateDimensions } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
 import { errorBody, readJsonBody } from "../../../api-error.js";
-import { type WorldEnv } from "./shared.js";
+import { type WorldEnv, editedWorldMetadata } from "./shared.js";
 import { checkWorldWriteAccess } from "./world-write-guard.js";
 
 export const worldDimensionRoutes = new Hono<WorldEnv>();
@@ -76,10 +76,12 @@ worldDimensionRoutes.post("/:id/dimensions/import", async (c) => {
 
   return withWritableWorld(c, id, async (existing) => {
     const now = new Date().toISOString();
-    const meta = (existing.metadata as Record<string, unknown>) ?? {};
     const updated: WorldRecord = {
       ...existing,
-      metadata: { ...meta, dimensions: validation.data },
+      metadata: editedWorldMetadata(existing, {
+        ...existing.metadata,
+        dimensions: validation.data,
+      }),
       dimensions: validation.data as WorldRecord["dimensions"],
       updatedAt: now,
     };

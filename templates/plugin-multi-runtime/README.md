@@ -67,3 +67,5 @@ pnpm test:runtime -- {{pluginName}} --pretty
 - [docs/guide/collections.md](https://github.com/AcKnEsS/covel/blob/main/docs/guide/collections.md) —— 把世界和配套插件一起发布
 
 发布给安装器的目录必须自包含，不携带 workspace 运行时依赖；需要的 SDK helpers 在发布前打包。
+
+默认 analyst 示例在 `post-turn` 自动运行，读取本回合叙事绑定；note 示例保留手动函数入口。记录 ID 来自 `ctx.random`，时间戳由代码或存储写入，agent 只提交稳定的事实 key 和内容。

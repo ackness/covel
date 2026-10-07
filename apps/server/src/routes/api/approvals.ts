@@ -240,11 +240,27 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   // HTTP endpoint. Never await it while holding the non-reentrant HTTP
   // lifecycle lock. The activator rechecks the live approval scope and fails
   // closed if revoke/delete won the race after `decide`.
+  let runtimeLoadErrors: readonly { runtimeId: string; error: string }[] = [];
   if (decision.decision === "allow") {
     try {
       await c.get("activatePluginServerCode")?.(
         accepted.pluginId,
         accepted.sessionId,
+      );
+      // The code may run now, so its runtimes can be imported: one that does
+      // not load is told to the player who approved it, not found by a turn.
+      // An approval of one runtime answers for that runtime; the approval of
+      // the plugin's code answers for every runtime approved before it.
+      const approvedRuntime = accepted.action.startsWith("runtime:")
+        ? accepted.action.slice("runtime:".length)
+        : undefined;
+      runtimeLoadErrors = (
+        (await c.get("preloadPluginRuntimes")?.(
+          accepted.pluginId,
+          accepted.sessionId,
+        )) ?? []
+      ).filter(
+        (failure) => !approvedRuntime || failure.runtimeId === approvedRuntime,
       );
     } catch (err) {
       // Activation failure does not roll back the user's approval; the next
@@ -261,5 +277,6 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
     decision: decision.decision,
     scope: decision.scope ?? "once",
     pending: accepted,
+    ...(runtimeLoadErrors.length > 0 ? { runtimeLoadErrors } : {}),
   });
 });

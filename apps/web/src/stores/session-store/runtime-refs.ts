@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import { clearDomainEventPreviews } from "@/stores/domain-event-preview-store.js";
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
@@ -94,13 +94,16 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
     state.executionRecovery?.sessionId,
   ]);
 
-  return {
-    stateRef,
-    sessionIdRef,
-    sessionGenerationRef,
-    runtimeKindRef,
-    deltaBufferRef,
-    deltaRafRef,
-    lastBackfilledTurnIdRef,
-  };
+  return useMemo(
+    () => ({
+      stateRef,
+      sessionIdRef,
+      sessionGenerationRef,
+      runtimeKindRef,
+      deltaBufferRef,
+      deltaRafRef,
+      lastBackfilledTurnIdRef,
+    }),
+    [],
+  );
 }

@@ -260,6 +260,35 @@ describe("useGameViewComposer", () => {
     expect(onSendMessage).not.toHaveBeenCalled();
   });
 
+  it("returns a refused interjection to the input box and says it was not sent", async () => {
+    sessionMock.steerMessage.mockResolvedValueOnce(false);
+    const { result, onSendMessage } = setup([], true);
+
+    act(() => result.current.setInputValue("one more thing"));
+    act(() => result.current.handleSubmit());
+    expect(result.current.inputValue).toBe("");
+    // Typed while the request was in flight: kept, after the refused text.
+    act(() => result.current.setInputValue("and this"));
+
+    await waitFor(() =>
+      expect(result.current.inputValue).toBe("one more thing\nand this"),
+    );
+    expect(result.current.commandFeedback?.tone).toBe("info");
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("shows no refusal note for an interjection the turn took", async () => {
+    const { result } = setup([], true);
+
+    act(() => result.current.setInputValue("one more thing"));
+    act(() => result.current.handleSubmit());
+
+    await waitFor(() => expect(sessionMock.steerMessage).toHaveBeenCalled());
+    await act(async () => {});
+    expect(result.current.inputValue).toBe("");
+    expect(result.current.commandFeedback).toBeNull();
+  });
+
   it("completes a partial slash command before executing it", () => {
     const { result, onSendMessage } = setup([], false, "playing", [
       rollCommand,

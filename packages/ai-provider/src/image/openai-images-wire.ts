@@ -90,8 +90,11 @@ async function generate(
 ): Promise<ImageGenerationResult> {
   // `imageWire` is a routing hint the caller consumes before reaching here,
   // not a real request param — strip it so it never leaks onto the wire.
-  const { imageWire: _ignored, ...extra } =
-    params.providerRequestMetadata ?? {};
+  const {
+    imageWire: _ignored,
+    parameterOverrides: _parameters,
+    ...extra
+  } = params.providerRequestMetadata ?? {};
 
   const body: Record<string, unknown> = {
     model: params.model,
@@ -109,7 +112,14 @@ async function generate(
     );
   }
 
-  const response = await postJson(config, "/images/generations", body);
+  const response = await postJson(
+    config,
+    "/images/generations",
+    body,
+    undefined,
+    undefined,
+    { retry: false },
+  );
   const payload = await parseJson(response);
   assertSuccess(response, payload, "openai-images");
 

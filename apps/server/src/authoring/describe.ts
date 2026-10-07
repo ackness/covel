@@ -31,6 +31,7 @@ export interface AuthoringSourceEntry {
   readonly to: string;
   readonly indexTo?: string;
   readonly key?: string;
+  readonly localeArrayKeys?: readonly string[];
   readonly visibility?: "hidden";
 }
 

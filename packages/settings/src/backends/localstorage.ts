@@ -32,9 +32,12 @@ const BACKUP_KEY = /^covel:settings\..+\.bak$/;
 /** A backup key that holds nothing yet: an earlier copy is never written over. */
 function freeBackupKey(storage: Storage, label: string): string {
   const key = `${LOCAL_STORAGE_SETTINGS_KEY}.${label}.bak`;
-  return storage.getItem(key) === null
-    ? key
-    : `${LOCAL_STORAGE_SETTINGS_KEY}.${label}.${Date.now()}.bak`;
+  if (storage.getItem(key) === null) return key;
+  const timestamp = Date.now();
+  for (let suffix = 0; ; suffix += 1) {
+    const candidate = `${LOCAL_STORAGE_SETTINGS_KEY}.${label}.${timestamp}${suffix ? `.${suffix}` : ""}.bak`;
+    if (storage.getItem(candidate) === null) return candidate;
+  }
 }
 
 /**
@@ -66,12 +69,11 @@ function readSecrets(storage: Storage): Record<string, string> {
     ) {
       throw new Error("keys bundle must be an object");
     }
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    const entries = Object.entries(parsed as Record<string, unknown>);
+    for (const [k, v] of entries) {
       if (typeof v !== "string") throw new Error(`key ${k} must be a string`);
-      out[k] = v;
     }
-    return out;
+    return Object.fromEntries(entries) as Record<string, string>;
   } catch (error) {
     throw new Error(
       `settings localStorage keys are invalid: ${

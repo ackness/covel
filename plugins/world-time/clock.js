@@ -1,5 +1,5 @@
 import { translate } from "@covel/plugin-handlers-utils";
-import { resolveI18nText } from "@covel/shared";
+import { resolveI18nText } from "@covel/plugin-handlers-utils";
 import { worldTimeSchema, timeDefinitionRecordSchema } from "./schema.js";
 
 /**

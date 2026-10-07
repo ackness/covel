@@ -29,6 +29,7 @@ type Schema = Readonly<Record<string, unknown>>;
 
 /** The store surface the publisher needs — satisfied by DataStore and StoreTransaction alike. */
 interface ExportSink {
+  savepoint?<T>(fn: (sink: ExportSink) => Promise<T>): Promise<T>;
   getLatestRuntimeExport(
     sessionId: string,
     producerRuntimeId: string,
@@ -184,27 +185,33 @@ export async function publishExecutionExports(
         committedAt,
       });
 
-      const latest = await sink.getLatestRuntimeExport(
-        sessionId,
-        result.runtimeId,
-        decl.recordAs,
-      );
-      let inserted = await sink.appendRuntimeExport(
-        build((latest?.revision ?? 0) + 1),
-      );
-      if (!inserted) {
-        // Lost the race for that revision number — re-read and retry once. A
-        // single execution never publishes the same series concurrently, so one
-        // retry closes the only real window (a concurrent cross-execution write).
-        const again = await sink.getLatestRuntimeExport(
+      const append = async (target: ExportSink): Promise<boolean> => {
+        const latest = await target.getLatestRuntimeExport(
           sessionId,
           result.runtimeId,
           decl.recordAs,
         );
-        inserted = await sink.appendRuntimeExport(
-          build((again?.revision ?? 0) + 1),
+        let inserted = await target.appendRuntimeExport(
+          build((latest?.revision ?? 0) + 1),
         );
-      }
+        if (!inserted) {
+          // Lost the revision race: re-read and retry once within this scope.
+          const again = await target.getLatestRuntimeExport(
+            sessionId,
+            result.runtimeId,
+            decl.recordAs,
+          );
+          inserted = await target.appendRuntimeExport(
+            build((again?.revision ?? 0) + 1),
+          );
+        }
+        return inserted;
+      };
+      // Recover the transaction itself before swallowing an export failure:
+      // catching a SQL error alone leaves PostgreSQL's transaction aborted.
+      const inserted = sink.savepoint
+        ? await sink.savepoint(append)
+        : await append(sink);
       if (!inserted) {
         console.warn(
           `[runtime-export] ${result.runtimeId}: could not claim a revision for recordAs "${decl.recordAs}" — export skipped`,

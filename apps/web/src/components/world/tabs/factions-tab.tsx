@@ -9,6 +9,7 @@ import {
   type TabProps,
 } from "../editor-helpers.js";
 import type { WorldFaction, FactionType, InfluenceLevel } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
 const FACTION_TYPES: FactionType[] = [
   "political",
@@ -24,8 +25,9 @@ const INFLUENCE_LEVELS: InfluenceLevel[] = ["major", "minor"];
 
 let factionCounter = 0;
 
-export function FactionsTab({ dimensions, onChange, t }: TabProps) {
+export function FactionsTab({ dimensions, onChange, t, problems }: TabProps) {
   const factions: WorldFaction[] = [...(dimensions.factions ?? [])];
+  const problem = fieldProblems(problems);
 
   function setFactions(next: WorldFaction[]) {
     onChange({ ...dimensions, factions: next });
@@ -90,6 +92,7 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
                 value={text(faction.name)}
                 onChange={(e) => updateFaction(fi, { name: e.target.value })}
               />
+              {problem.at(`${fi}.name`)}
             </div>
             <div className="space-y-1">
               <Label htmlFor={`world-faction-${fi}-type`}>
@@ -109,6 +112,7 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
                   </option>
                 ))}
               </select>
+              {problem.at(`${fi}.type`)}
             </div>
           </div>
 
@@ -124,6 +128,7 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
                 updateFaction(fi, { description: e.target.value })
               }
             />
+            {problem.at(`${fi}.description`)}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -147,6 +152,7 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
                   </option>
                 ))}
               </select>
+              {problem.at(`${fi}.influence`)}
             </div>
             <div className="space-y-1">
               <Label htmlFor={`world-faction-${fi}-leader`}>
@@ -158,6 +164,7 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
                 value={text(faction.leader)}
                 onChange={(e) => updateFaction(fi, { leader: e.target.value })}
               />
+              {problem.at(`${fi}.leader`)}
             </div>
             <div className="space-y-1">
               <Label htmlFor={`world-faction-${fi}-headquarters`}>
@@ -171,10 +178,12 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
                   updateFaction(fi, { headquarters: e.target.value })
                 }
               />
+              {problem.at(`${fi}.headquarters`)}
             </div>
           </div>
         </div>
       ))}
+      {problem.rest()}
     </div>
   );
 }

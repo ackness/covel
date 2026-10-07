@@ -466,18 +466,23 @@ describe("runAgentToolLoop core", () => {
     },
   );
 
-  it("does NOT stream for plugin-output runtimes even when onDelta is wired", async () => {
-    const streamSpy = vi.fn();
+  it("streams plugin-output runtimes without forwarding their text to the story", async () => {
+    const streamSpy = vi.fn(async function* () {
+      yield { type: "text-delta" as const, textDelta: "plugin chatter" };
+      yield { type: "done" as const, finishReason: "stop" };
+    });
+    const onDelta = vi.fn();
     const llm: LLMAdapter = {
       generate: async () => prose("plugin chatter"),
-      stream: streamSpy as never,
+      stream: streamSpy,
     };
     const result = await run({
       llm,
-      deps: { toolExecutor: undefined, onDelta: async () => {} },
+      deps: { toolExecutor: undefined, onDelta },
     });
 
-    expect(streamSpy).not.toHaveBeenCalled();
+    expect(streamSpy).toHaveBeenCalledOnce();
+    expect(onDelta).not.toHaveBeenCalled();
     expect(result.streamDeltaCount).toBe(0);
     expect(result.finalContent).toBe("plugin chatter");
   });

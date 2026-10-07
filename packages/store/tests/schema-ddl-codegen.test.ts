@@ -190,6 +190,8 @@ function pgInfoType(sqlType: string): string {
   switch (sqlType) {
     case "serial":
       return "integer"; // SERIAL is an integer + sequence default
+    case "bigserial":
+      return "bigint"; // BIGSERIAL is a bigint + sequence default
     default:
       return sqlType;
   }
@@ -255,7 +257,9 @@ describe.skipIf(!pgAvailable)(
                   `[${cfg.name}.${c.name}] notNull PG=${got.is_nullable === "NO"} Drizzle=${c.notNull}`,
                 );
               }
-              const expHasDefault = c.hasDefault && c.default !== undefined;
+              const serial = ["serial", "bigserial"].includes(c.getSQLType());
+              const expHasDefault =
+                serial || (c.hasDefault && c.default !== undefined);
               if ((got.column_default !== null) !== expHasDefault) {
                 problems.push(
                   `[${cfg.name}.${c.name}] hasDefault PG=${got.column_default !== null} Drizzle=${expHasDefault}`,

@@ -266,6 +266,49 @@ export function registerRuntimeRecordStoreSuites(
       expect(list[0]).toEqual(te);
     });
 
+    it("filters traces by execution and type before limiting", async () => {
+      const first = makeTraceEvent({
+        id: "z-start",
+        sessionId: "sess-trace-query",
+        turnId: "turn-a",
+        type: "turn.started",
+        createdAt: ts(0),
+      });
+      const second = makeTraceEvent({
+        id: "a-start",
+        sessionId: first.sessionId,
+        turnId: "turn-b",
+        type: "turn.started",
+        createdAt: ts(0),
+      });
+      await store.addTraceEvent(first);
+      await store.addTraceEvent(second);
+      await store.addTraceEvent(
+        makeTraceEvent({
+          sessionId: first.sessionId,
+          turnId: "turn-b",
+          type: "llm.request",
+          createdAt: ts(100),
+        }),
+      );
+      expect(
+        await store.queryTraceEvents(first.sessionId, {
+          types: ["turn.started"],
+          newestFirst: true,
+          limit: 1,
+        }),
+      ).toEqual([second]);
+      expect(
+        await store.queryTraceEvents(first.sessionId, { turnId: "turn-a" }),
+      ).toEqual([first]);
+      expect(
+        await store.queryTraceEvents(first.sessionId, {
+          excludeTypes: ["llm.request"],
+          newestFirst: true,
+        }),
+      ).toEqual([second, first]);
+    });
+
     it("parity: listTraceEvents returns events sorted by createdAt", async () => {
       // Backend-divergence regression guard. SQL backends order by
       // `asc(createdAt)`; memory relied on push order and IDB on the
@@ -319,7 +362,7 @@ export function registerRuntimeRecordStoreSuites(
       expect(older.map((e) => e.id)).toEqual([e1.id]);
     });
 
-    it("listTraceEventsPage keyset breaks createdAt ties by id", async () => {
+    it("listTraceEventsPage preserves write order for createdAt ties", async () => {
       const same = ts(7);
       const a = makeTraceEvent({
         sessionId: "sess-tep-tie",
@@ -336,12 +379,12 @@ export function registerRuntimeRecordStoreSuites(
       const page1 = await store.listTraceEventsPage("sess-tep-tie", {
         limit: 1,
       });
-      expect(page1.map((e) => e.id)).toEqual(["te-b"]);
+      expect(page1.map((e) => e.id)).toEqual(["te-a"]);
       const page2 = await store.listTraceEventsPage("sess-tep-tie", {
         limit: 1,
         before: { createdAt: page1[0].createdAt, id: page1[0].id },
       });
-      expect(page2.map((e) => e.id)).toEqual(["te-a"]);
+      expect(page2.map((e) => e.id)).toEqual(["te-b"]);
     });
   });
 
@@ -873,6 +916,33 @@ export function registerRuntimeRecordStoreSuites(
   });
 
   describe("PlayerInputs", () => {
+    it("reads only the latest submission with deterministic timestamp ties and session isolation", async () => {
+      const oldest = makePlayerInput({
+        id: "oldest",
+        sessionId: "latest-input",
+        createdAt: ts(0),
+      });
+      const tiedA = makePlayerInput({
+        id: "tie-a",
+        sessionId: "latest-input",
+        createdAt: ts(1),
+      });
+      const tiedZ = makePlayerInput({
+        id: "tie-z",
+        sessionId: "latest-input",
+        createdAt: ts(1),
+      });
+      const foreign = makePlayerInput({
+        id: "foreign",
+        sessionId: "foreign-input",
+        createdAt: ts(2),
+      });
+      for (const row of [tiedZ, foreign, oldest, tiedA])
+        await store.savePlayerInput(row);
+      expect(await store.getLatestPlayerInput("latest-input")).toEqual(tiedZ);
+      expect(await store.getLatestPlayerInput("missing-input")).toBeNull();
+    });
+
     it("should listPlayerInputs for a session", async () => {
       const i1 = makePlayerInput({ sessionId: "sess-1", formId: "form-a" });
       const i2 = makePlayerInput({ sessionId: "sess-1", formId: "form-b" });
@@ -1115,6 +1185,57 @@ export function registerRuntimeRecordStoreSuites(
         (await store.listTurnMessages("sess-retag-other"))[0]
           ?.compactedAtTurnId,
       ).toBe("summary-other");
+    });
+
+    it("selectively replaces summaries and tags without touching retained spans", async () => {
+      const sessionId = "sess-selective-summary";
+      const summaries = ["first", "second", "retained"].map((suffix) =>
+        makeSessionSummary({ sessionId, id: `${sessionId}-${suffix}` }),
+      );
+      for (const summary of summaries) {
+        await store.saveSessionSummary(summary);
+        await store.appendTurnMessage(
+          makeTurnMessage({
+            sessionId,
+            id: `message-${summary.id}`,
+            compactedAtTurnId: summary.id,
+          }),
+        );
+      }
+      await store.withTransaction(async (tx) => {
+        await tx.retagCompactedTurnMessages(
+          sessionId,
+          "merged",
+          summaries.slice(0, 2).map((s) => s.id),
+        );
+        await tx.deleteSessionSummaries(
+          sessionId,
+          summaries.slice(0, 2).map((s) => s.id),
+        );
+        await tx.saveSessionSummary(
+          makeSessionSummary({ sessionId, id: "merged" }),
+        );
+      });
+      expect(
+        (await store.listSessionSummaries(sessionId)).map((s) => s.id).sort(),
+      ).toEqual(["merged", summaries[2]!.id].sort());
+      const rows = await store.listTurnMessages(sessionId);
+      expect(
+        rows.find((m) => m.id === `message-${summaries[0]!.id}`)
+          ?.compactedAtTurnId,
+      ).toBe("merged");
+      expect(
+        rows.find((m) => m.id === `message-${summaries[1]!.id}`)
+          ?.compactedAtTurnId,
+      ).toBe("merged");
+      expect(
+        rows.find((m) => m.id === `message-${summaries[2]!.id}`)
+          ?.compactedAtTurnId,
+      ).toBe(summaries[2]!.id);
+      await store.deleteSessionSummaries(sessionId, []);
+      await store.retagCompactedTurnMessages(sessionId, "none", []);
+      expect(await store.listTurnMessages(sessionId)).toEqual(rows);
+      expect(await store.listSessionSummaries(sessionId)).toHaveLength(2);
     });
 
     it("should not tag messages from other sessions", async () => {

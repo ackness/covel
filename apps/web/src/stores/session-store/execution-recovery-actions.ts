@@ -1,3 +1,4 @@
+import type { MutableRef } from "./runtime-refs.js";
 import { useCallback } from "react";
 import {
   actionRequestSchema,
@@ -25,17 +26,18 @@ export function createRecoveryActionRequest(
 }
 
 export function useExecutionRecoveryActions({
-  state,
+  stateRef,
   dispatch,
   runKernelAction,
   resumeSessionById,
 }: {
-  state: SessionState;
+  stateRef: MutableRef<SessionState>;
   dispatch: SessionDispatch;
   runKernelAction: (request: api.ActionRequest) => void;
   resumeSessionById: (sessionId: string) => Promise<void>;
 }) {
   const retryInterruptedTurn = useCallback(() => {
+    const state = stateRef.current;
     const recovery = state.executionRecovery;
     if (!recovery?.status || !state.session || state.executing) return;
     const request = createRecoveryActionRequest(
@@ -43,8 +45,9 @@ export function useExecutionRecoveryActions({
       state.session.id,
     );
     if (request) runKernelAction(request);
-  }, [state, runKernelAction]);
+  }, [stateRef, runKernelAction]);
   const refreshExecutionRecovery = useCallback(() => {
+    const state = stateRef.current;
     const recovery = state.executionRecovery;
     if (!recovery) return;
     if (!state.session && recovery.error) {
@@ -55,6 +58,6 @@ export function useExecutionRecoveryActions({
       type: "SET_EXECUTION_RECOVERY",
       recovery: { ...recovery, checking: true, error: undefined },
     });
-  }, [state, dispatch, resumeSessionById]);
+  }, [stateRef, dispatch, resumeSessionById]);
   return { retryInterruptedTurn, refreshExecutionRecovery };
 }

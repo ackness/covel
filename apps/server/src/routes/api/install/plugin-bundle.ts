@@ -1,6 +1,8 @@
+import path from "node:path";
 import { parse } from "yaml";
 import {
   parsePluginMd,
+  validatePluginFiles,
   compileInlineRuntime,
   parseRuntimeMd,
   validatePluginDeclarations,
@@ -163,25 +165,30 @@ export function validatePluginBundle(
         ),
       );
     validatePluginDeclarations([root]);
-    const provided = new Set(
-      (root.plugin!.provides ?? []).map((value) =>
-        typeof value === "string" ? value : value.contract,
-      ),
-    );
-    const outputs = new Set<string>();
-    for (const record of declarations) {
-      const contract = record.runtime?.io?.output?.contract;
-      if (!contract) continue;
-      if (!provided.has(contract))
-        throw new Error(
-          `Output contract ${contract} is not declared in root provides`,
-        );
-      if (outputs.has(contract))
-        throw new Error(
-          `Ambiguous output contract ${contract}; only one runtime may provide it`,
-        );
-      outputs.add(contract);
-    }
+    validatePluginFiles(root, declarations, (absolutePath) => {
+      const relative = path
+        .relative(path.resolve(canonicalId), absolutePath)
+        .split(path.sep)
+        .join("/");
+      const entry = entries.find(
+        (candidate) => candidate.relativePath === relative,
+      );
+      if (!entry) throw new Error("File not found");
+      return entry.content.toString("utf8");
+    });
+    const packaged = JSON.parse(
+      entries
+        .find((entry) => entry.relativePath === "package.json")!
+        .content.toString("utf8"),
+    ) as { version?: string };
+    if (
+      root.plugin.version &&
+      packaged.version &&
+      root.plugin.version !== packaged.version
+    )
+      throw new Error(
+        "PLUGIN.md and package.json must declare the same version",
+      );
     // Localizations may change presentation only; identity and code declarations
     // are reconciled against the canonical document before installation.
     for (const entry of entries) {

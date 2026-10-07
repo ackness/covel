@@ -89,6 +89,8 @@ export function createNoopIngestor(): VectorIngestor {
 export function createVectorIngestor(deps: {
   readonly store: VectorIngestStore;
   readonly embed: EmbedFn;
+  readonly embeddingBatchSize?: number;
+  readonly maxEmbeddingCharacters?: number;
   readonly runIngestExclusive?: RunIngestExclusive;
 }): VectorIngestor {
   const { store, embed, runIngestExclusive } = deps;
@@ -130,6 +132,10 @@ export function createVectorIngestor(deps: {
         (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
         expectedSessionCreatedAt,
+        {
+          batchSize: deps.embeddingBatchSize,
+          maxCharacters: deps.maxEmbeddingCharacters,
+        },
       );
       recall = result.written;
       more ||= result.more;
@@ -142,6 +148,10 @@ export function createVectorIngestor(deps: {
         (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
         expectedSessionCreatedAt,
+        {
+          batchSize: deps.embeddingBatchSize,
+          maxCharacters: deps.maxEmbeddingCharacters,
+        },
       );
       archival = result.written;
       more ||= result.more;
@@ -206,6 +216,7 @@ async function ingestRecall(
   embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
   expectedSessionCreatedAt: string,
+  limits: EmbeddingLimits,
 ): Promise<{ written: number; more: boolean }> {
   const progress = await readProgress<RecallCursor>(
     store,
@@ -233,6 +244,7 @@ async function ingestRecall(
         embeddable.map((m) => String(m.content)),
         sessionId,
         "recall",
+        limits,
       )
     : [];
 
@@ -252,6 +264,10 @@ async function ingestRecall(
     }
     const embedding = vectors[vectorIndex];
     vectorIndex += 1;
+    if (embedding === null) {
+      lastHandled = { createdAt: msg.createdAt, id: msg.id };
+      continue;
+    }
     if (!embedding || embedding.length === 0) break;
     upserts.push({
       namespace: RECALL_NAMESPACE,
@@ -292,6 +308,7 @@ async function ingestArchival(
   embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
   expectedSessionCreatedAt: string,
+  limits: EmbeddingLimits,
 ): Promise<{ written: number; more: boolean }> {
   const items = await collectArchivalItems(store, sessionId);
 
@@ -339,6 +356,7 @@ async function ingestArchival(
     batch.map((it) => it.text),
     sessionId,
     "archival",
+    limits,
   );
 
   const nextHashes: ArchivalHashes = { ...hashes };
@@ -346,6 +364,11 @@ async function ingestArchival(
   for (let i = 0; i < batch.length; i += 1) {
     const it = batch[i];
     const embedding = vectors[i];
+    if (embedding === null) {
+      nextHashes[it.vecKey] = contentHash(it.text);
+      deletes.push({ namespace: ARCHIVAL_NAMESPACE, key: it.vecKey });
+      continue;
+    }
     if (!embedding || embedding.length === 0) continue;
     upserts.push({
       namespace: ARCHIVAL_NAMESPACE,
@@ -372,7 +395,11 @@ async function ingestArchival(
   );
   return {
     written: upserts.length,
-    more: changed.length > batch.length && upserts.length === batch.length,
+    more:
+      changed.length > batch.length &&
+      batch.every(
+        (_, i) => vectors[i] === null || (vectors[i]?.length ?? 0) > 0,
+      ),
   };
 }
 
@@ -421,19 +448,85 @@ function warn(kind: string, sessionId: string, err: unknown): void {
   );
 }
 
+interface EmbeddingLimits {
+  readonly batchSize?: number;
+  readonly maxCharacters?: number;
+}
+
+/** Only an explicit per-input rejection can be skipped; config/auth failures retain progress. */
+function rejectedEmbeddingInput(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  const details = record.details as Record<string, unknown> | undefined;
+  const code = String(details?.providerCode ?? record.code ?? "").toLowerCase();
+  return (
+    record.statusCode === 413 ||
+    record.status === 413 ||
+    [
+      "context_length_exceeded",
+      "input_too_long",
+      "invalid_input",
+      "content_filter",
+    ].includes(code)
+  );
+}
+
 async function embedWithRetry(
   embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   texts: readonly string[],
   sessionId: string,
   kind: "recall" | "archival",
-): Promise<readonly Float32Array[]> {
-  return retryTransientProviderCall(() => embed(texts), {
-    onRetry: (error, nextAttempt) => {
-      console.warn(
-        `[memory] vector ingest (${kind}) provider call failed for ${sessionId}; retrying attempt ${nextAttempt}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    },
-  });
+  limits: EmbeddingLimits,
+): Promise<readonly (Float32Array | null | undefined)[]> {
+  const batchSize = Math.max(
+    1,
+    Math.min(
+      MAX_INGEST_BATCH,
+      Math.floor(Number.isFinite(limits.batchSize) ? limits.batchSize! : 16),
+    ),
+  );
+  const maxCharacters = Math.max(
+    1,
+    Math.floor(
+      Number.isFinite(limits.maxCharacters) ? limits.maxCharacters! : 8000,
+    ),
+  );
+  const run = async (
+    batch: readonly string[],
+  ): Promise<(Float32Array | null | undefined)[]> => {
+    try {
+      const vectors = await retryTransientProviderCall(() => embed(batch), {
+        onRetry: (error, nextAttempt) => {
+          console.warn(
+            `[memory] vector ingest (${kind}) provider call failed for ${sessionId}; retrying attempt ${nextAttempt}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        },
+      });
+      return batch.map((_, i) => vectors[i]);
+    } catch (error) {
+      if (!rejectedEmbeddingInput(error)) throw error;
+      if (batch.length === 1) {
+        console.warn(
+          `[memory] vector ingest (${kind}) skipped a rejected input for ${sessionId}`,
+        );
+        return [null];
+      }
+      const middle = Math.floor(batch.length / 2);
+      return [
+        ...(await run(batch.slice(0, middle))),
+        ...(await run(batch.slice(middle))),
+      ];
+    }
+  };
+  const vectors: (Float32Array | null | undefined)[] = [];
+  for (let i = 0; i < texts.length; i += batchSize) {
+    vectors.push(
+      ...(await run(
+        texts
+          .slice(i, i + batchSize)
+          .map((text) => text.slice(0, maxCharacters)),
+      )),
+    );
+  }
+  return vectors;
 }

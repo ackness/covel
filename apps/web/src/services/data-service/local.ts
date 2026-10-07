@@ -36,6 +36,7 @@ import {
 } from "./local-world-sync.js";
 import type {
   DataService,
+  GeneratedWorldSaveOptions,
   SessionPatch,
   SessionWorkspaceOperations,
   WorldPatch,
@@ -43,6 +44,19 @@ import type {
 
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
 const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
+
+/** World records are JSON; object insertion order is not part of identity. */
+function worldSnapshotJson(world: WorldRecord): string {
+  return JSON.stringify(world, (_key, value: unknown) =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value).sort(([left], [right]) =>
+            left.localeCompare(right),
+          ),
+        )
+      : value,
+  );
+}
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -305,13 +319,12 @@ export class LocalDataService implements DataService {
   ): Promise<T> {
     const vault = await this.ready();
     const worldId =
-      creatingWorldId ??
-      (await vault.getLatestCheckpoint(sessionId))?.session.worldId;
+      creatingWorldId ?? (await vault.getSession(sessionId))?.session.worldId;
     // Always acquire world before session. World deletion holds the exclusive
     // world lock before draining session locks, so reversing this order deadlocks.
     const run = () =>
       vault.withSessionLock(sessionId, async () => {
-        const current = await vault.getLatestCheckpoint(sessionId);
+        const current = await vault.getSession(sessionId);
         if (current && current.session.worldId !== worldId) {
           throw new Error(`Session world changed while waiting: ${sessionId}`);
         }
@@ -378,7 +391,14 @@ export class LocalDataService implements DataService {
     return world;
   }
 
-  async saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord> {
+  async saveGeneratedWorld(
+    world: WorldRecord,
+    options?: GeneratedWorldSaveOptions,
+  ): Promise<WorldRecord> {
+    world = structuredClone(world);
+    const expected = options?.expectedWorld
+      ? structuredClone(options.expectedWorld)
+      : undefined;
     const vault = await this.ready();
     const now = new Date().toISOString();
     const metadata: Record<string, unknown> = {
@@ -399,9 +419,24 @@ export class LocalDataService implements DataService {
       updatedAt: now,
       createdAt: world.createdAt ?? now,
     };
-    await vault.withWorldLock(record.id, "exclusive", () =>
-      vault.upsertWorld(record as StoreWorldRecord),
-    );
+    await vault.withWorldLock(record.id, "exclusive", async () => {
+      const current = await vault.getWorld(record.id);
+      if (expected) {
+        if (
+          expected.id !== record.id ||
+          !current ||
+          worldSnapshotJson(toFrontendWorld(current)) !==
+            worldSnapshotJson(toFrontendWorld(expected as StoreWorldRecord))
+        ) {
+          throw new Error(
+            "World changed during revision; reload it before trying again",
+          );
+        }
+      } else if (current) {
+        throw new Error("World already exists: " + record.id);
+      }
+      await vault.upsertWorld(record as StoreWorldRecord);
+    });
     return record;
   }
 
@@ -459,22 +494,15 @@ export class LocalDataService implements DataService {
 
   async listSessions(worldId?: string): Promise<SessionRecord[]> {
     const vault = await this.ready();
-    const sessions = await Promise.all(
-      (await vault.listSessions()).map((head) =>
-        vault.getLatestCheckpoint(head.sessionId),
-      ),
-    );
-    return sessions
-      .filter((checkpoint): checkpoint is BrowserCheckpoint => !!checkpoint)
-      .map((checkpoint) => checkpoint.session)
+    return (await vault.listSessions())
+      .map((head) => head.session)
       .filter((s) => !worldId || s.worldId === worldId)
       .map(toFrontendSession)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getSession(sessionId: string): Promise<SessionRecord | null> {
-    const s = (await (await this.ready()).getLatestCheckpoint(sessionId))
-      ?.session;
+    const s = (await (await this.ready()).getSession(sessionId))?.session;
     return s ? toFrontendSession(s) : null;
   }
 

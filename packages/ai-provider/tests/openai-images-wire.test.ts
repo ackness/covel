@@ -19,6 +19,30 @@ function mockFetchOnce(status: number, json: unknown) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("openai-images wire", () => {
+  it("keeps native image options while excluding text-generation bookkeeping", async () => {
+    const fn = mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
+    await openAiImagesWire.generate(
+      { baseUrl: "https://api.example.com" },
+      {
+        model: "gpt-image-1",
+        prompt: "synthetic",
+        providerRequestMetadata: {
+          imageWire: "openai-images",
+          parameterOverrides: { reasoningEffort: "disabled" },
+          output_format: "png",
+        },
+      },
+    );
+    const body = JSON.parse(
+      (fn.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body).toEqual({
+      model: "gpt-image-1",
+      prompt: "synthetic",
+      n: 1,
+      output_format: "png",
+    });
+  });
   it("posts to /v1/images/generations with normalized endpoint (base without /v1)", async () => {
     const fn = mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
     await openAiImagesWire.generate(

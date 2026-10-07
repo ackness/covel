@@ -2,6 +2,7 @@ import type {
   ExtensionWorldCharacter,
   PromptSegment,
 } from "./extension-points.js";
+import { modelFacingJson } from "./model-facing.js";
 import { pickLocaleText } from "./locale-text.js";
 
 const PROFILES_BUDGET = 8000;
@@ -39,7 +40,7 @@ function profileLines(
     const parts = [`- ${character.name} [${character.type}]`];
     if (character.description) parts.push(capped(character.description));
     if (hasFields(character.fields))
-      parts.push(capped(JSON.stringify(character.fields)));
+      parts.push(capped(JSON.stringify(modelFacingJson(character.fields))));
     const line = parts.join(" | ");
     if (unlisted.length > 0 || used + line.length > PROFILES_BUDGET) {
       unlisted.push(character.name);
@@ -90,7 +91,7 @@ export function characterSheetSegments(
   if (player) {
     const { id, name, type, description, fields } = player;
     const sheet = JSON.stringify(
-      { id, name, type, description, fields },
+      modelFacingJson({ id, name, type, description, fields }),
       null,
       2,
     );

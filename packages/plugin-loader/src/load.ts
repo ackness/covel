@@ -1,3 +1,4 @@
+import { validateRuntimeDeclarations } from "./static-validation.js";
 import { resolvePluginDeclarations } from "./declarations.js";
 import { loadPluginUiSpec } from "./ui-spec.js";
 import { readMessageCatalogs } from "./locale-messages.js";
@@ -281,6 +282,22 @@ export interface PluginDefinition {
   readonly languages: PluginLanguages;
 }
 
+async function readSchemaFile(
+  filePath: string,
+  field: string,
+): Promise<Record<string, unknown>> {
+  try {
+    return JSON.parse(await fs.readFile(filePath, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+  } catch (error) {
+    throw new Error(
+      `${filePath}: ${field}: ${error instanceof Error ? error.message : String(error)}; provide valid JSON at the declared path`,
+    );
+  }
+}
+
 export async function loadPluginDefinition(
   discovery: PluginDiscoveryResult,
   locale?: string,
@@ -297,9 +314,10 @@ export async function loadPluginDefinition(
   )) {
     const schemaPath = path.resolve(discovery.rootPath, declaration.schema);
     await assertInsideRoot(discovery.rootPath, schemaPath, "Contract schema");
-    contractSchemas[contract] = JSON.parse(
-      await fs.readFile(schemaPath, "utf-8"),
-    ) as Record<string, unknown>;
+    contractSchemas[contract] = await readSchemaFile(
+      schemaPath,
+      `contracts.${contract}.schema`,
+    );
   }
   for (const [namespace, declaration] of Object.entries(
     parsedPackage.plugin.contributes?.data ?? {},
@@ -334,91 +352,7 @@ export async function loadPluginDefinition(
     const runtime = compileInlineRuntime(packageManifest);
     if (runtime) manifests.push(runtime);
   }
-  const provided = new Set(
-    (plugin.provides ?? []).map((p) =>
-      typeof p === "string" ? p : p.contract,
-    ),
-  );
-  const outputs = new Set<string>();
-  for (const parsed of manifests) {
-    const contract = parsed.runtime?.io?.output?.contract;
-    if (!contract) continue;
-    if (!provided.has(contract))
-      throw new Error(
-        `${parsed.sourcePath}: output contract ${contract} is not declared in root provides`,
-      );
-    if (outputs.has(contract))
-      throw new Error(
-        `${parsed.sourcePath}: ambiguous output contract ${contract}; only one runtime may provide it`,
-      );
-    outputs.add(contract);
-  }
-  const dependencies = new Set([
-    ...(plugin.requires ?? []),
-    ...(plugin.optional ?? []),
-  ]);
-  for (const parsed of manifests) {
-    const runtimeReferences = [
-      ...(["needs", "after"] as const).flatMap((field) =>
-        (parsed.runtime?.schedule?.[field] ?? []).flatMap((reference, index) =>
-          typeof reference === "string"
-            ? [{ runtimeId: reference, field: `schedule.${field}[${index}]` }]
-            : "runtime" in reference
-              ? [
-                  {
-                    runtimeId: reference.runtime,
-                    field: `schedule.${field}[${index}].runtime`,
-                  },
-                ]
-              : [],
-        ),
-      ),
-      ...Object.entries(parsed.runtime?.io?.inputs ?? {}).flatMap(
-        ([name, input]) =>
-          "runtime" in input.from
-            ? [
-                {
-                  runtimeId: input.from.runtime,
-                  field: `io.inputs.${name}.from.runtime`,
-                },
-              ]
-            : [],
-      ),
-    ];
-    // Cross-package named runtime references are rejected by design (see docs/reference/plugins.md).
-    // Within-package references (pluginId/runtimeName) are permitted for internal coordination.
-    // Cross-package dependencies must use the contract system for stable, versioned coupling.
-    for (const { runtimeId, field } of runtimeReferences) {
-      if (runtimeId !== plugin.id && !runtimeId.startsWith(`${plugin.id}/`))
-        throw new Error(
-          `${parsed.sourcePath}: ${field} references runtime ${runtimeId} outside package ${plugin.id}; use a contract for cross-package dependencies`,
-        );
-    }
-    const references = [
-      ...(parsed.runtime?.schedule?.needs ?? []).flatMap((need) =>
-        typeof need === "object" && "contract" in need
-          ? [{ contract: need.contract, field: "schedule.needs" }]
-          : [],
-      ),
-      ...Object.entries(parsed.runtime?.io?.inputs ?? {}).flatMap(
-        ([name, input]) =>
-          "contract" in input.from
-            ? [
-                {
-                  contract: input.from.contract,
-                  field: `io.inputs.${name}.from.contract`,
-                },
-              ]
-            : [],
-      ),
-    ];
-    for (const { contract, field } of references) {
-      if (!dependencies.has(contract))
-        throw new Error(
-          `${parsed.sourcePath}: ${field} contract ${contract} must be declared in root requires or optional`,
-        );
-    }
-  }
+  validateRuntimeDeclarations(packageManifest, manifests);
   const definition = {
     packageManifest,
     manifests: await Promise.all(
@@ -552,8 +486,7 @@ async function loadUiSpecs(
  *
  * When `manifest.output.schema` declares a path, that exact file is loaded
  * (resolved against the runtime dir, containment-checked against the plugin
- * root); a declared-but-missing file warns instead of throwing so one bad
- * reference does not abort the load. With no declaration, fall back to the
+ * root); a declared-but-missing file rejects this runtime. With no declaration, fall back to the
  * `output.schema.json` convention — silently absent when the file is not there.
  */
 async function loadOutputSchema(
@@ -568,31 +501,23 @@ async function loadOutputSchema(
     const fullPath = path.resolve(runtimeDir, declaredPath);
     await assertInsideRoot(pluginRoot, fullPath, "Output schema");
     if (!(await fileExists(fullPath))) {
-      console.warn(
-        `[plugin-loader] declared output schema not found: ${declaredPath}`,
+      throw new Error(
+        `${fullPath}: io.output.schema: file not found; include the declared JSON Schema`,
       );
-      return undefined;
     }
-    return JSON.parse(await fs.readFile(fullPath, "utf-8")) as Record<
-      string,
-      unknown
-    >;
+    return readSchemaFile(fullPath, "io.output.schema");
   }
 
   const conventionPath = path.join(runtimeDir, "output.schema.json");
   if (!(await fileExists(conventionPath))) return undefined;
-  return JSON.parse(await fs.readFile(conventionPath, "utf-8")) as Record<
-    string,
-    unknown
-  >;
+  return readSchemaFile(conventionPath, "io.output.schema");
 }
 
 /**
  * Load a declared runtime-dir-relative JSON Schema (no convention fallback).
  * Used for `input.schema` (activation payload) and `inputs.<name>.accepts`
- * (binding value). Same containment + warn-on-missing contract as
- * {@link loadOutputSchema} — a bad reference degrades to `undefined`, never
- * aborts the load.
+ * (binding value). Same containment and declared-file validation as
+ * {@link loadOutputSchema}; a bad reference rejects this runtime.
  */
 async function loadDeclaredSchema(
   runtimeDir: string,
@@ -606,15 +531,11 @@ async function loadDeclaredSchema(
   const fullPath = path.resolve(runtimeDir, declaredPath);
   await assertInsideRoot(pluginRoot, fullPath, label);
   if (!(await fileExists(fullPath))) {
-    console.warn(
-      `[plugin-loader] declared ${label} not found: ${declaredPath}`,
+    throw new Error(
+      `${fullPath}: ${label}: file not found; include the declared JSON Schema`,
     );
-    return undefined;
   }
-  return JSON.parse(await fs.readFile(fullPath, "utf-8")) as Record<
-    string,
-    unknown
-  >;
+  return readSchemaFile(fullPath, label);
 }
 
 /**

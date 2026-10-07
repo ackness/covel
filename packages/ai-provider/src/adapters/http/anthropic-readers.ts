@@ -1,3 +1,4 @@
+import { stripPromptCacheMarkers } from "@covel/shared";
 import { continuationItems } from "../provider-continuation.js";
 import type { ProviderConfig } from "../../types.js";
 import type {
@@ -81,6 +82,10 @@ function isToolResultContent(content: string | readonly unknown[]): boolean {
   );
 }
 
+/** Opens a conversation whose first kept message is the model's. */
+const EARLIER_TURNS_OMITTED =
+  "(The conversation continues from earlier turns.)";
+
 export function toAnthropicMessages(
   messages: TextMessage[],
   target?: { model: string; config: ProviderConfig },
@@ -88,15 +93,28 @@ export function toAnthropicMessages(
   system: string;
   messages: Array<{ role: string; content: string | readonly unknown[] }>;
 } {
+  const firstConversation = messages.findIndex(
+    (message) => message.role !== "system",
+  );
+  const leadingCount =
+    firstConversation < 0 ? messages.length : firstConversation;
   const system = messages
-    .filter((m) => m.role === "system")
+    .slice(0, leadingCount)
     .map((m) => anthropicSystemText(m.content))
     .filter(Boolean)
     .join("\n\n");
 
   const out: Array<{ role: string; content: string | readonly unknown[] }> = [];
-  for (const msg of messages) {
-    if (msg.role === "system") continue;
+  for (const msg of messages.slice(leadingCount)) {
+    // The wire has no system role inside messages. Keep late kernel instructions
+    // in their original position so changing turn context preserves history.
+    if (msg.role === "system") {
+      out.push({
+        role: "user",
+        content: `<system-instruction>\n${stripPromptCacheMarkers(anthropicSystemText(msg.content))}\n</system-instruction>`,
+      });
+      continue;
+    }
 
     // Tool results ride on a `user` turn as `tool_result` blocks. Anthropic
     // requires every result for one assistant turn's parallel calls to sit in
@@ -105,7 +123,7 @@ export function toAnthropicMessages(
       const block = {
         type: "tool_result",
         tool_use_id: msg.toolCallId ?? "",
-        content: anthropicSystemText(msg.content),
+        content: stripPromptCacheMarkers(anthropicSystemText(msg.content)),
       };
       const last = out[out.length - 1];
       if (last && last.role === "user" && isToolResultContent(last.content)) {
@@ -163,6 +181,42 @@ export function toAnthropicMessages(
     });
   }
 
+  // The Messages API takes a user turn first. A history that was pruned or
+  // compacted can start with the model's turn; the text of this opener is
+  // fixed, so it stays part of the cached prefix.
+  if (out.length > 0 && out[0]!.role !== "user")
+    out.unshift({ role: "user", content: EARLIER_TURNS_OMITTED });
+
+  if (target?.config.cacheStrategy === "anthropic-explicit") {
+    // One moving breakpoint covers conversation history and prior tool rounds.
+    // Thinking blocks cannot carry explicit cache_control; cache the latest
+    // text, image or tool block without mutating a provider continuation.
+    for (let index = out.length - 1; index >= 0; index--) {
+      const message = out[index]!;
+      const blocks =
+        typeof message.content === "string"
+          ? message.content
+            ? [{ type: "text", text: message.content }]
+            : []
+          : [...message.content];
+      let cacheIndex = blocks.length - 1;
+      while (
+        cacheIndex >= 0 &&
+        !["text", "image", "tool_use", "tool_result"].includes(
+          String((blocks[cacheIndex] as Record<string, unknown>).type),
+        )
+      )
+        cacheIndex--;
+
+      if (cacheIndex < 0) continue;
+      blocks[cacheIndex] = {
+        ...(blocks[cacheIndex] as Record<string, unknown>),
+        cache_control: { type: "ephemeral" },
+      };
+      message.content = blocks;
+      break;
+    }
+  }
   return { system, messages: out };
 }
 
@@ -180,9 +234,11 @@ function anthropicSystemText(content: TextMessageContent): string {
 function serializeAnthropicContent(
   content: TextMessageContent,
 ): string | readonly unknown[] {
-  if (!Array.isArray(content)) return content ?? "";
+  if (typeof content === "string" || content === null)
+    return stripPromptCacheMarkers(content ?? "");
   return content.map((part) => {
-    if (part.type === "text") return { type: "text", text: part.text };
+    if (part.type === "text")
+      return { type: "text", text: stripPromptCacheMarkers(part.text) };
     if (part.image.url) {
       return { type: "image", source: { type: "url", url: part.image.url } };
     }

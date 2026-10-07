@@ -80,6 +80,13 @@ const dataAuthoringSchema = z
             "Field that gives each record a stable key. Media sources use `filename`.",
           )
           .optional(),
+        localeArrayKeys: z
+          .array(z.string().min(1))
+          .min(1)
+          .describe(
+            "Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered.",
+          )
+          .optional(),
         visibility: z
           .enum(["public", "hidden"])
           .describe(

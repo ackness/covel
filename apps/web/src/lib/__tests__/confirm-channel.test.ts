@@ -25,6 +25,15 @@ describe("confirm-channel", () => {
     expect(native).toHaveBeenCalledWith(REQUEST.message);
   });
 
+  it("names what the request acts on in the native fallback", async () => {
+    const native = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    await requestConfirm({ ...REQUEST, subject: "Lantern Barrow · Turn 3" });
+    expect(native).toHaveBeenCalledWith(
+      `${REQUEST.message}\n\nLantern Barrow · Turn 3`,
+    );
+  });
+
   it("resolves with the host's answer instead of the native dialog", async () => {
     const native = vi.spyOn(window, "confirm").mockReturnValue(true);
     const seen: PendingConfirm[] = [];

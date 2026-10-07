@@ -117,7 +117,7 @@ it.each(["null", '{match:"yes"}', "{timeoutMs:-1}", "{extra:true}"])(
 it("reports server-only built-in extension points while retaining turn extensions", async () => {
   const root = await fixture("async()=>({action:'continue'})", "TurnStart");
   const points = [
-    "history.compact@1",
+    "history.compact@2",
     "ui.slot@1",
     "media.image-flow@1",
     "prompt.segment@1",

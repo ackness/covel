@@ -179,6 +179,18 @@ export interface SessionStore {
 export interface RuntimeRecordStore {
   // ── Turn Results ──
   saveTurnResult(record: TurnResultRecord): Promise<void>;
+  /** Filter before decoding result payloads; recursive artifacts are excluded. */
+  queryTurnResults(
+    sessionId: string,
+    options: {
+      turnId?: string;
+      since?: string;
+      origins?: readonly TurnResultRecord["origin"][];
+      commitStatus?: TurnResultRecord["commitStatus"];
+      newestFirst?: boolean;
+      limit?: number;
+    },
+  ): Promise<TurnResultRecord[]>;
   listTurnResults(
     sessionId: string,
     limit?: number,
@@ -270,6 +282,7 @@ export interface EventStore {
    * `listEvents` scan.
    */
   getEventById(sessionId: string, id: string): Promise<EventRecord | null>;
+  deleteEventsBefore(sessionId: string, before: string): Promise<void>;
 }
 
 /** Chat/narrative message log. Part of `sql-session-content-records`. */
@@ -321,6 +334,20 @@ export interface PluginDataBatchCasEntry {
 
 /** Session-scoped plugin KV data (`common/sql-data-crud.ts`). */
 export interface PluginDataStore {
+  /** Bounded prompt projection: oldest half, then most recently updated rows. */
+  getPluginDataPromptWindow(
+    sessionId: string,
+    pluginId: string,
+    namespace: string,
+    maxEntries: number,
+  ): Promise<{ entries: PluginDataRecord[]; total: number }>;
+  /** Indexed namespace query, optionally filtered by a top-level JSON string field. */
+  queryPluginData(options: {
+    namespace: string;
+    sessionId?: string;
+    pluginId?: string;
+    valueFilter?: { field: string; values: readonly string[] };
+  }): Promise<PluginDataRecord[]>;
   /** All comparisons succeed and all rows commit, or no rows change. */
   compareAndSetPluginDataBatch(
     sessionId: string,
@@ -408,6 +435,20 @@ export interface WorldStore {
 /** Trace event journal. Part of `sql-session-journal-records`. */
 export interface TraceStore {
   addTraceEvent(record: TraceEventRecord): Promise<void>;
+  getTraceEventById(
+    sessionId: string,
+    id: string,
+  ): Promise<TraceEventRecord | null>;
+  queryTraceEvents(
+    sessionId: string,
+    options: {
+      turnId?: string;
+      types?: readonly string[];
+      excludeTypes?: readonly string[];
+      newestFirst?: boolean;
+      limit?: number;
+    },
+  ): Promise<TraceEventRecord[]>;
   listTraceEvents(
     sessionId: string,
     pagination?: PaginationOpts,
@@ -454,7 +495,10 @@ export interface TurnMessageStore {
    * enabled this read stays bounded for the life of a session, unlike
    * {@link listTurnMessages}.
    */
-  listUncompactedTurnMessages(sessionId: string): Promise<TurnMessageRecord[]>;
+  listUncompactedTurnMessages(
+    sessionId: string,
+    limit?: number,
+  ): Promise<TurnMessageRecord[]>;
   /**
    * Forward keyset read: the first `limit` messages strictly after the
    * `(createdAt, id)` cursor position, oldest-first (all messages from the
@@ -499,18 +543,21 @@ export interface TurnMessageStore {
     summaryId: string,
   ): Promise<void>;
   /**
-   * Repoint every already-compacted message in a session to a replacement
-   * rolling summary. Used when the compactor merges prior summaries so no
+   * Repoint selected already-compacted messages to a replacement summary.
+   * Omitting sourceSummaryIds selects all compacted messages in the session. Used when the compactor merges prior summaries so no
    * message retains an orphaned summary id.
    */
   retagCompactedTurnMessages(
     sessionId: string,
     summaryId: string,
+    sourceSummaryIds?: readonly string[],
   ): Promise<void>;
 }
 
 /** Player form-input records. Part of `sql-session-journal-records`. */
 export interface PlayerInputStore {
+  /** Newest form submission ordered by createdAt, then byte-ordered ID. */
+  getLatestPlayerInput(sessionId: string): Promise<PlayerInputRecord | null>;
   savePlayerInput(record: PlayerInputRecord): Promise<void>;
   listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]>;
 }
@@ -563,7 +610,10 @@ export interface SessionSummaryStore {
   listSessionSummaries(
     sessionId: string,
   ): Promise<readonly SessionSummaryRecord[]>;
-  deleteSessionSummaries(sessionId: string): Promise<void>;
+  deleteSessionSummaries(
+    sessionId: string,
+    summaryIds?: readonly string[],
+  ): Promise<void>;
 }
 
 /** Runtime suspension records. Part of `sql-snapshot-records`. */

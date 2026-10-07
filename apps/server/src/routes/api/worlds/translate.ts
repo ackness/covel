@@ -5,22 +5,31 @@
  *   language, written by the configured model. Streams Server-Sent Events.
  */
 
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
-import { canonicalizeLocale, isKnownLocale } from "@covel/shared";
+import {
+  WORLD_EDITIONS_KEY,
+  canonicalizeLocale,
+  isKnownLocale,
+} from "@covel/shared";
 import type { LLMAdapter } from "@covel/runtime";
 import type { WorldRecord } from "@covel/store";
-import { errorBody, readJsonBody } from "../../../api-error.js";
+import {
+  errorBody,
+  logRequestError,
+  readJsonBody,
+} from "../../../api-error.js";
 import { streamOwnedSSE } from "../../../application-work.js";
 import { orderedSend } from "../../../lib/ordered-send.js";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { rateLimiter, singleFlight } from "../../../middleware/rate-limit.js";
 import { parseIdleTimeoutMs } from "../../../world-data/authoring-timeout.js";
+import { writeWorldTranslations } from "../../../world-data/locale-tooling.js";
 import { resolveWorldRoot } from "../../../world-data/session-import/utils.js";
 import {
   declareWorldEdition,
-  translateWorldPackage,
+  prepareWorldTranslation,
   untranslatedWorldTexts,
   type TranslateWorldStep,
 } from "../../../world-data/translate-world.js";
@@ -28,7 +37,10 @@ import {
   isWorldDeleting,
   worldOperationLockId,
 } from "../../../world-lifecycle.js";
-import { loadSingleWorld } from "../../../world-seed-loader.js";
+import {
+  loadSingleWorld,
+  preserveWorldProvenance,
+} from "../../../world-seed-loader.js";
 import { checkHostedOperator } from "../session/session-guard.js";
 import type { WorldEnv } from "./shared.js";
 import { checkWorldWriteAccess } from "./world-write-guard.js";
@@ -56,6 +68,45 @@ export const worldTranslateRoutes = new Hono<WorldEnv>();
 function inside(parent: string, child: string): boolean {
   const relative = path.relative(parent, child);
   return !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+/**
+ * The record of a world whose files gained an edition.
+ *
+ * Whether a record follows its files is the rule of every package reload: a
+ * package edited in the app keeps its own content. Such a record takes the
+ * new edition and its translated text, so a session may use it; the other
+ * fields of the files would bring back the text the edit replaced.
+ */
+function withNewEdition(
+  loaded: WorldRecord,
+  current: WorldRecord,
+  locale: string,
+): WorldRecord {
+  const next = preserveWorldProvenance(loaded, current);
+  const editions = loaded.metadata?.[WORLD_EDITIONS_KEY];
+  const currentTexts = current.metadata?.localizedText as
+    Record<string, Record<string, string>> | undefined;
+  const loadedTexts = loaded.metadata?.localizedText as
+    Record<string, Record<string, string>> | undefined;
+  const localizedText = { ...currentTexts };
+  for (const field of ["name", "description", "lore"]) {
+    const translated = loadedTexts?.[field]?.[locale];
+    if (translated !== undefined)
+      localizedText[field] = { ...localizedText[field], [locale]: translated };
+  }
+  return {
+    ...next,
+    metadata: {
+      ...next.metadata,
+      localizedText: {
+        ...(next.metadata?.localizedText as object),
+        ...localizedText,
+      },
+      ...(editions === undefined ? {} : { [WORLD_EDITIONS_KEY]: editions }),
+    },
+    updatedAt: loaded.updatedAt,
+  };
 }
 
 // POST /worlds/:id/translate
@@ -114,6 +165,8 @@ worldTranslateRoutes.post(
         409,
       );
     }
+    const packagePath = await realpath(worldDir);
+    const packageIdentity = await stat(packagePath);
     if ((await untranslatedWorldTexts(worldDir, locale)).units.length === 0) {
       return c.json(
         errorBody("The world already has this language", {
@@ -135,7 +188,7 @@ worldTranslateRoutes.post(
           : c.req.raw.signal;
         // Progress is sent in order; a write that fails ends the stream.
         const progress = orderedSend(send);
-        const result = await translateWorldPackage({
+        const result = await prepareWorldTranslation({
           worldDir,
           locale,
           llm,
@@ -161,27 +214,59 @@ worldTranslateRoutes.post(
         const record = await c
           .get("sessionLock")
           .withLock(worldOperationLockId(worldId), async () => {
-            await declareWorldEdition(worldDir, locale);
-            const loaded = await loadSingleWorld(worldDir, {
-              ...(typeof world.metadata?.source === "string"
-                ? { source: world.metadata.source }
-                : {}),
-              ...(world.metadata?.storage &&
-              typeof world.metadata.storage === "object"
-                ? {
-                    storage: world.metadata.storage as Record<string, unknown>,
-                  }
-                : {}),
-            });
+            // Models run without the lock. Only the original record and package
+            // may receive their result; an editor patch keeps the same identity.
+            const current = await store.getWorld(worldId);
+            if (
+              !current ||
+              isWorldDeleting(current) ||
+              current.createdAt !== world.createdAt
+            ) {
+              return undefined;
+            }
+            const currentRoot = await resolveWorldRoot(
+              worldId,
+              c.get("worldsDirs") ?? [],
+            );
+            const currentPath = currentRoot
+              ? await realpath(currentRoot).catch(() => undefined)
+              : undefined;
+            if (currentPath !== packagePath) return undefined;
+            const identity = await stat(currentPath).catch(() => undefined);
+            // createdAt can be supplied on creation. A replacement at the same
+            // path must still be rejected if it reused that timestamp.
+            if (
+              !identity ||
+              identity.dev !== packageIdentity.dev ||
+              identity.ino !== packageIdentity.ino ||
+              identity.birthtimeMs !== packageIdentity.birthtimeMs
+            )
+              return undefined;
+            signal.throwIfAborted();
+            await writeWorldTranslations(
+              packagePath,
+              locale,
+              result.translations,
+            );
+            await declareWorldEdition(packagePath, locale);
+            const loaded = await loadSingleWorld(packagePath);
             if (!loaded)
               throw new Error(
                 `World "${worldId}" failed validation after translation`,
               );
-            const next: WorldRecord = { ...loaded, createdAt: world.createdAt };
+            const next = withNewEdition(loaded, current, locale);
             await store.upsertWorld(next);
             // The record as the store gives it, in the shape of `GET /worlds/:id`.
             return (await store.getWorld(worldId)) ?? next;
           });
+        if (!record) {
+          await send({
+            type: "error",
+            message:
+              "The world was deleted or replaced while it was translated",
+          });
+          return;
+        }
         console.log(
           `[worlds/translate] ${worldId} → ${locale}: ${result.translated}/${result.total} text(s), ${result.failed.length} failed`,
         );
@@ -194,7 +279,7 @@ worldTranslateRoutes.post(
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error("[worlds/translate] unexpected error:", message);
+        logRequestError(c, "[worlds/translate] unexpected error", err);
         await send({ type: "error", message });
       }
     });

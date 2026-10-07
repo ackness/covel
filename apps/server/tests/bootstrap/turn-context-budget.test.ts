@@ -63,6 +63,7 @@ describe("createBootstrapCompactorRunner", () => {
         createdAt: new Date(index).toISOString(),
       }),
     );
+    for (const message of messages) await store.appendTurnMessage(message);
 
     const services = new PluginServiceRegistry({
       list: async () => ["history-compaction"],
@@ -114,7 +115,7 @@ describe("createBootstrapCompactorRunner", () => {
       traceId: "current-flow",
       payload: {
         outcome: "success",
-        extension: { point: "history.compact@1" },
+        extension: { point: "history.compact@2" },
         seq: 1,
       },
     });
@@ -129,4 +130,63 @@ describe("createBootstrapCompactorRunner", () => {
     ).toEqual([0, 1, 2]);
     await store.close();
   });
+
+  it.each([
+    { story: 1_000, fast: 10_000 },
+    { story: 10_000, fast: 1_000 },
+  ])(
+    "uses the smaller story/fast capacity for admission and fast capacity for summary input: %j",
+    async ({ story, fast }) => {
+      const store = createMemoryStore();
+      const services = new PluginServiceRegistry({
+        list: async () => ["summary-provider"],
+        ensure: async () => {},
+      });
+      const extensions = new PluginExtensionHost(services);
+      const handler = vi.fn(async () => null);
+      extensions.register(
+        "summary-provider",
+        { point: "history.compact@2", id: "summary" },
+        { handler },
+      );
+      const generate = vi.fn(async (): Promise<LLMResponse> => ({
+        content: "summary",
+        toolCalls: [],
+        finishReason: "stop",
+      }));
+      const llmAdapter: LLMAdapter = {
+        generate,
+        resolveBudget: (slot) => ({
+          contextWindow: slot === "story" ? story : fast,
+          maxOutputTokens: 200,
+        }),
+      };
+      const runner = createBootstrapCompactorRunner({
+        extensions,
+        store,
+        llmAdapter,
+      });
+      const message: TurnMessageRecord = {
+        id: "history",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        role: "user",
+        sourceType: "player",
+        order: 0,
+        content: "x".repeat(2_000),
+        createdAt: new Date(0).toISOString(),
+      };
+      await runner.run("session-1", "", [message], "en-US");
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contextWindow: 800,
+          inputWindow: fast - 200,
+          summaryBudget: expect.objectContaining({ maxTokens: 128 }),
+        }),
+        expect.anything(),
+      );
+      expect(generate).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { SessionExecutionStatus, TimeCursor } from "@covel/shared";
-import type { DataStore, TraceEventRecord } from "@covel/store";
+import type { SessionExecutionStatus } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import { getActiveTurn } from "../turn-control.js";
 import type { SessionLock } from "../../../lib/session-lock.js";
 
@@ -54,8 +54,8 @@ export function recoveryAction(
 }
 
 /**
- * Foreground actions alone record turn.started. Read backwards in bounded
- * pages until its latest marker is found, including long tool-heavy turns.
+ * Foreground actions alone record turn.started. Read the latest marker and
+ * only its terminal events, including long tool-heavy turns.
  * This does not acquire the session lock: a refresh must observe a running
  * turn without waiting for its LLM or final transaction to finish.
  */
@@ -81,27 +81,17 @@ async function readExecutionStatus(
   store: DataStore,
   sessionId: string,
 ): Promise<SessionExecutionStatus> {
-  let before: TimeCursor | undefined;
-  let started: TraceEventRecord | undefined;
-  const trailing: TraceEventRecord[] = [];
-  while (true) {
-    const page = await store.listTraceEventsPage(sessionId, {
-      limit: 200,
-      before,
-    });
-    // Events emitted within the same millisecond use random IDs to break
-    // pagination ties. A terminal row can sort before its own start marker.
-    trailing.push(...page);
-    started ??= [...page]
-      .reverse()
-      .find((event) => event.type === "turn.started");
-    if (page.length < 200) break;
-    const oldest = page[0]!;
-    // Finish the start marker's millisecond across page boundaries: terminal
-    // rows with smaller random IDs may still be on the next page.
-    if (started && oldest.createdAt < started.createdAt) break;
-    before = { createdAt: oldest.createdAt, id: oldest.id };
-  }
+  const [started] = await store.queryTraceEvents(sessionId, {
+    types: ["turn.started"],
+    newestFirst: true,
+    limit: 1,
+  });
+  const trailing = started
+    ? await store.queryTraceEvents(sessionId, {
+        turnId: started.turnId,
+        types: ["turn.completed", "turn.failed"],
+      })
+    : [];
 
   // An action may have acquired the lock while the trace query was in flight.
   const newlyActive = getActiveTurn(sessionId);
@@ -135,8 +125,10 @@ async function readExecutionStatus(
 
   // The transaction may have committed immediately before the process died,
   // leaving no terminal trace. Durable business state takes precedence.
-  const results = await store.listTurnResults(sessionId);
-  const artifact = results.find((row) => row.turnId === started.turnId);
+  const [artifact] = await store.queryTurnResults(sessionId, {
+    turnId: started.turnId,
+    limit: 1,
+  });
   if (
     artifact?.commitStatus === "committed" ||
     (terminal && !artifact && terminalPayload?.committed !== false)
@@ -151,28 +143,9 @@ async function readExecutionStatus(
         event.turnId === started.turnId && event.type === "turn.failed",
     );
   const parsed = recoveryActionSchema.safeParse(payload.recoveryAction);
-  let retry: SessionExecutionStatus["retry"] = parsed.success
+  const retry: SessionExecutionStatus["retry"] = parsed.success
     ? parsed.data
     : undefined;
-  if (!retry && !failed) {
-    // Legacy opening continuations share a traceId with the committed setup
-    // turn from the same HTTP action. A zero player-turn count alone cannot
-    // distinguish the opening from the first real (uncommitted) player input.
-    const prior = (await store.listTraceEvents(sessionId)).find(
-      (event) =>
-        event.type === "turn.started" &&
-        event.traceId === started.traceId &&
-        event.turnId !== started.turnId &&
-        results.some(
-          (row) =>
-            row.turnId === event.turnId && row.commitStatus === "committed",
-        ),
-    );
-    if (prior) {
-      retry = { type: "retry_turn", payload: {} };
-      identity.origin = "continuation";
-    }
-  }
   return {
     ...identity,
     state: failed ? "failed" : "interrupted",

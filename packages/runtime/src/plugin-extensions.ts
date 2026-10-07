@@ -4,7 +4,7 @@ import {
   sessionWorldContextV1,
   uiSlotV1,
   mediaImageFlowV1,
-  historyCompactV1,
+  historyCompactV2,
   type ExtensionDeclaration,
   type ExtensionMode,
   type ExtensionPluginDataRecord,
@@ -58,7 +58,7 @@ export const kernelExtensionPoints: readonly ExtensionPoint<
   promptSegmentV1,
   sessionWorldContextV1,
   uiSlotV1,
-  historyCompactV1,
+  historyCompactV2,
   mediaImageFlowV1,
 ];
 

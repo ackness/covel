@@ -52,6 +52,211 @@ describe("validateWorldPackage", () => {
     expect(await validate(await makeWorld({}))).toEqual([]);
   });
 
+  it("checks each character and lorebook record before session creation", async () => {
+    const worldDir = await makeWorld(
+      {
+        "characters/characters.json": JSON.stringify([
+          { id: "unknown", name: "Unknown", type: "ghost" },
+          {
+            id: "bad-fields",
+            name: "Bad fields",
+            type: "npc",
+            fields: { health: "full" },
+          },
+          { id: "valid", name: "Valid", type: "npc", fields: { health: 10 } },
+        ]),
+        "data/lorebook.yaml": [
+          "- id: typo",
+          "  text: Wrong content field.",
+          "- id: no-keys",
+          "  content: Never selected.",
+          "  strategy: selective",
+          "- id: valid",
+          "  content: Valid lore.",
+          "  insertionOrder: 410.5",
+        ].join("\n"),
+      },
+      `${MANIFEST}characterSchema:\n  types: [npc]\n  attributes:\n    - id: health\n      name: Health\n      type: number\n      category: stats\n`,
+    );
+    const errors = (await validate(worldDir)).filter(
+      (item) => item.level === "error",
+    );
+    expect(errors).toHaveLength(4);
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          file: "characters/characters.json",
+          pointer: "[0]",
+          message: expect.stringContaining("Unknown character type: ghost"),
+          hint: expect.any(String),
+        }),
+        expect.objectContaining({
+          file: "characters/characters.json",
+          pointer: "[1]",
+          message: expect.stringContaining("fields.health"),
+          hint: expect.any(String),
+        }),
+        expect.objectContaining({
+          file: "data/lorebook.yaml",
+          pointer: "[0]",
+          message: expect.stringContaining("content"),
+          hint: expect.any(String),
+        }),
+        expect.objectContaining({
+          file: "data/lorebook.yaml",
+          pointer: "[1]",
+          message: expect.stringContaining("has no key"),
+          hint: expect.any(String),
+        }),
+      ]),
+    );
+  });
+
+  it("warns about large permanent prompt contributions without rejecting the package", async () => {
+    const worldDir = await makeWorld(
+      {
+        "WORLD.md": "setting ".repeat(4400),
+        "data/lorebook.yaml": `- id: permanent\n  content: ${"lore ".repeat(2000)}\n  strategy: constant\n`,
+      },
+      `${MANIFEST}dimensions:\n  archive:\n    name: Archive\n    schema: {type: string}\n    initialValue: ${"fact ".repeat(6800)}\n`,
+    );
+    const diagnostics = await validate(worldDir);
+    expect(diagnostics.filter((item) => item.code === "prompt-size")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ level: "warning", file: "WORLD.md" }),
+        expect.objectContaining({
+          level: "warning",
+          file: "world.yaml",
+          pointer: "dimensions",
+        }),
+        expect.objectContaining({
+          level: "warning",
+          file: "data/lorebook.yaml",
+        }),
+      ]),
+    );
+    expect(diagnostics.filter((item) => item.level === "error")).toEqual([]);
+  });
+
+  it("measures lore the same in Chinese and in English", async () => {
+    const warnsAboutLore = async (lore: string) =>
+      (await validate(await makeWorld({ "WORLD.md": lore }, MANIFEST))).some(
+        (item) => item.code === "prompt-size" && item.file === "WORLD.md",
+      );
+    // About 6,000 tokens in either language: both fit the story prompt.
+    expect(await warnsAboutLore("雾港的潮钟每日三鸣。\n".repeat(600))).toBe(
+      false,
+    );
+    expect(
+      await warnsAboutLore("The tide bell of Mistport rings.\n".repeat(730)),
+    ).toBe(false);
+    // About 10,000 tokens in either language: both are cut.
+    expect(await warnsAboutLore("雾港的潮钟每日三鸣。\n".repeat(1000))).toBe(
+      true,
+    );
+    expect(
+      await warnsAboutLore("The tide bell of Mistport rings.\n".repeat(1220)),
+    ).toBe(true);
+  });
+
+  it("rejects unknown presets and invalid values of declared settings", async () => {
+    const worldDir = await makeWorld(
+      {},
+      `${MANIFEST}pluginPolicy:\n  presetId: missing-pack\npluginSettings:\n  story-events:\n    planner: "yes"\n`,
+    );
+    const diagnostics = await validate(worldDir);
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          code: "unknown-preset",
+          pointer: "pluginPolicy.presetId",
+        }),
+        expect.objectContaining({
+          level: "error",
+          code: "invalid-setting",
+          pointer: "pluginSettings.story-events.planner",
+        }),
+      ]),
+    );
+  });
+
+  it("counts descriptor-backed dimensions in prompt size diagnostics", async () => {
+    const worldDir = await makeWorld(
+      {
+        "data/world.data.yaml":
+          "schemaVersion: 1\nsources:\n  dimensions:\n    kind: json\n    path: data/dimensions.json\n    to: world:metadata.dimensions\n",
+        "data/dimensions.json": JSON.stringify({
+          archive: {
+            name: "Archive",
+            schema: { type: "string" },
+            initialValue: "detail ".repeat(5200),
+          },
+        }),
+      },
+      `${MANIFEST}worldData: data/world.data.yaml\n`,
+    );
+    expect(await validate(worldDir)).toContainEqual(
+      expect.objectContaining({ code: "prompt-size", pointer: "dimensions" }),
+    );
+  });
+
+  it("checks dimension sources even without conventional data files", async () => {
+    const worldDir = await makeWorld(
+      {},
+      `${MANIFEST}dimensionSources:\n  climate: data/missing.yaml\n`,
+    );
+    expect(await validate(worldDir)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          code: "world-data",
+          pointer: "dimensionSources",
+        }),
+      ]),
+    );
+  });
+
+  it("finds unclaimed files recursively in all data directories", async () => {
+    const files = {
+      "data/nested/forgotten.json": "[]",
+      "characters/custom.json": "[]",
+      "media/custom/portrait.png": "image",
+    };
+    const diagnostics = await validate(await makeWorld(files));
+    expect(
+      diagnostics
+        .filter((item) => item.code === "data-file-unused")
+        .map((item) => item.file)
+        .sort(),
+    ).toEqual(Object.keys(files).sort());
+  });
+
+  it("finds undeclared files beside an explicit descriptor without flagging its sources", async () => {
+    const worldDir = await makeWorld(
+      {
+        "data/world.data.yaml":
+          "schemaVersion: 1\nsources:\n  lore:\n    kind: json\n    path: data/known.json\n    to: lorebook\n    key: id\n",
+        "data/known.json": JSON.stringify([
+          { id: "known", content: "Known lore." },
+        ]),
+        "data/known.zh-CN.json": JSON.stringify([
+          { id: "known", content: "已知设定。" },
+        ]),
+        "data/nested/forgotten.md": "An unclaimed story fragment.",
+        "characters/custom.json": "[]",
+      },
+      `${MANIFEST}worldData: data/world.data.yaml\n`,
+    );
+    const unused = (await validate(worldDir)).filter(
+      (item) => item.code === "data-file-unused",
+    );
+    expect(unused.map((item) => item.file).sort()).toEqual([
+      "characters/custom.json",
+      "data/nested/forgotten.md",
+    ]);
+  });
+
   it("reports a manifest schema error with its field path", async () => {
     const worldDir = await makeWorld({}, `${MANIFEST}unknownField: true\n`);
     const diagnostics = await validate(worldDir);

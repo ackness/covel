@@ -13,6 +13,7 @@ import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
 import { createFormTool } from "../../packages/tools/src/builtin/ui-tools.js";
 import { createMemoryStore } from "../../packages/store/src/memory-entry.js";
 import { createSubmitFormHandler } from "../../packages/runtime/src/rpc-defaults/submit-form.js";
+import { makeRandom } from "../../packages/plugin-test-utils/src/manual-context.js";
 
 // API tests exercise ZIP installation, authorization and durable commits. Here the
 // real plugin handler and form validator feed the browser without a live model.
@@ -51,6 +52,7 @@ for (const width of [1512, 390]) {
       turnId: "ordinary",
       locale,
       messages,
+      random: makeRandom(),
       store: { listPlayerInputs: () => store.listPlayerInputs(fixture.id) },
       pluginData: {
         get: async (ns: string, key: string) => data.get(`${ns}/${key}`),

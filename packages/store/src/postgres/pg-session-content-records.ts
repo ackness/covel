@@ -6,7 +6,6 @@
  * SQLite backend.
  */
 
-import { sql } from "drizzle-orm";
 import { makeInsertValues } from "../common/insert-values.js";
 import { pgJsonReader } from "../common/json-readers.js";
 import { pgJsonWriter } from "../common/json-writers.js";
@@ -29,7 +28,6 @@ export function createPgSessionContentRecords(
       runner,
       json,
       values,
-      byteOrder: (column) => sql`${column} collate "C"`,
       tables: {
         events: schema.events,
         messages: schema.messages,

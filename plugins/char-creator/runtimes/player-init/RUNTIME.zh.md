@@ -10,7 +10,6 @@
 <world-summary>
 名称：{{ world.name }}
 简介：{{ world.description }}
-开场：{{ world.openingScenario }}
 </world-summary>
 
 ## 角色属性 Schema

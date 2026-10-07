@@ -10,12 +10,112 @@ import {
   makeEvent,
   makeMessage,
   makeLorebookEntry,
+  makeRuntimeOutput,
   makeSession,
+  makeToolCall,
   makeTurnMessage,
+  makeTurnResult,
+  makeTraceEvent,
   makeWorld,
 } from "../src/contract/test-fixtures.js";
 
 describe("session checkpoint transfer", () => {
+  it("keeps recovery records without copying model diagnostics into a private checkpoint", async () => {
+    const store = createMemoryStore();
+    const session = makeSession();
+    await store.createSession(session);
+    const payload = {
+      request: { messages: [{ content: "x".repeat(1_000_000) }] },
+    };
+    await store.addTraceEvent(
+      makeTraceEvent({ sessionId: session.id, type: "llm.calling", payload }),
+    );
+    await store.saveEvent(
+      makeEvent({ sessionId: session.id, topic: "trace", payload }),
+    );
+    await store.addTraceEvent(
+      makeTraceEvent({
+        sessionId: session.id,
+        id: "recovery",
+        type: "turn.started",
+        payload: { recoveryAction: { type: "send_message" } },
+      }),
+    );
+    const checkpoint = await exportSessionCheckpoint(store, session.id, {
+      revision: 1,
+      actionId: "test",
+    });
+    expect(checkpoint.traceEvents.map((event) => event.id)).toEqual([
+      "recovery",
+    ]);
+    expect(checkpoint.events).toEqual([]);
+    expect(JSON.stringify(checkpoint).length).toBeLessThan(10_000);
+    expect(await store.listTraceEvents(session.id)).toHaveLength(2);
+  });
+  it("keeps the journals of the latest executions and all of the conversation", async () => {
+    const store = createMemoryStore();
+    const session = makeSession();
+    await store.createSession(session);
+    const turns = 60;
+    for (let turn = 0; turn < turns; turn += 1) {
+      const turnId = `turn-${turn}`;
+      const createdAt = new Date(Date.UTC(2026, 9, 7, 0, turn)).toISOString();
+      const at = { sessionId: session.id, turnId, createdAt };
+      await store.addMessage(
+        makeMessage({
+          sessionId: session.id,
+          id: `message-${turn}`,
+          createdAt,
+        }),
+      );
+      await store.appendTurnMessage(
+        makeTurnMessage({ ...at, id: `turn-message-${turn}` }),
+      );
+      await store.saveTurnResult(
+        makeTurnResult({ ...at, id: `result-${turn}` }),
+      );
+      await store.saveRuntimeOutput(
+        makeRuntimeOutput({
+          ...at,
+          id: `output-${turn}`,
+          timestamp: createdAt,
+        }),
+      );
+      await store.saveToolCall(makeToolCall({ ...at, id: `call-${turn}` }));
+      await store.saveEvent(makeEvent({ ...at, id: `event-${turn}` }));
+      for (const type of [
+        "turn.started",
+        "runtime.completed",
+        "turn.completed",
+      ])
+        await store.addTraceEvent(
+          makeTraceEvent({ ...at, id: `${type}-${turn}`, type }),
+        );
+    }
+    const checkpoint = await exportSessionCheckpoint(store, session.id, {
+      revision: 1,
+      actionId: "test",
+    });
+    // What a later turn reads is whole.
+    expect(checkpoint.messages).toHaveLength(turns);
+    expect(checkpoint.turnMessages).toHaveLength(turns);
+    // The status of every execution can still be read.
+    expect(checkpoint.traceEvents.map((event) => event.type).sort()).toEqual([
+      ...Array.from({ length: turns }, () => "turn.completed"),
+      ...Array.from({ length: turns }, () => "turn.started"),
+    ]);
+    // Results and outputs are those of the latest executions.
+    expect(checkpoint.turnResults).toHaveLength(40);
+    expect(checkpoint.turnResults.at(-1)?.turnId).toBe(`turn-${turns - 1}`);
+    expect(checkpoint.runtimeOutputs.map((output) => output.turnId)).toEqual(
+      expect.arrayContaining(["turn-20", `turn-${turns - 1}`]),
+    );
+    expect(checkpoint.runtimeOutputs).toHaveLength(40);
+    // Logs that nothing reads stay behind.
+    expect(checkpoint.toolCalls).toEqual([]);
+    expect(checkpoint.events).toEqual([]);
+  });
+
   it("exports and atomically restores durable session domains", async () => {
     const source = createMemoryStore();
     const target = createMemoryStore();

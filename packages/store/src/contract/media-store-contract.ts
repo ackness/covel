@@ -52,6 +52,23 @@ export function runMediaStoreContractTests(
       expect(a.id).not.toBe(c.id);
     });
 
+    it("cleans NUL metadata while preserving bytes and rejecting colliding JSON keys", async () => {
+      const store = await createStore();
+      const metadata = { prompt: "left\u0000right", nested: ["a\u0000b"] };
+      const bytes = new Uint8Array([0, 1, 0, 2]);
+      const ref = await store.put(bytes, "image/png", metadata);
+      expect(ref.meta).toEqual({ prompt: "leftright", nested: ["ab"] });
+      expect((await store.listAssets())[0]?.meta).toEqual(ref.meta);
+      expect([...(await toUint8Array(await store.get(ref)))]).toEqual([
+        ...bytes,
+      ]);
+      expect(metadata.prompt).toBe("left\u0000right");
+      await expect(
+        store.put(OTHER, "image/png", { a: 1, "a\u0000": 2 }),
+      ).rejects.toThrow(/duplicate JSON keys/);
+      expect(await store.listAssets()).toHaveLength(1);
+    });
+
     it("pins new and duplicate bytes atomically until the initial ref is removed", async () => {
       const store = await createStore();
       const bytes = [PNG, OTHER];

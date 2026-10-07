@@ -8,6 +8,7 @@ import {
   sessionWorldContextV1,
   type TurnInput,
 } from "@covel/shared";
+import type { LoadedTurnSessionState } from "./session-state.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
 export async function loadSessionSummaries(args: {
@@ -24,16 +25,27 @@ export async function refreshSessionContextSnapshot(args: {
   readonly deps: TurnExecutorDeps;
   readonly turnNumber: number;
   readonly sessionSummaries: readonly SessionSummaryRecord[];
+  /**
+   * What `loadTurnSessionState` read for this execution. The snapshot is built
+   * from these rows instead of re-reading the session, characters and newest
+   * form submission. A prompt shows the same form values the runtimes got.
+   */
+  readonly sessionState?: Pick<
+    LoadedTurnSessionState,
+    "session" | "sessionMeta" | "recentMessages"
+  >;
 }): Promise<SessionContextSnapshot | undefined> {
-  const { input, deps, turnNumber, sessionSummaries } = args;
+  const { input, deps, turnNumber, sessionSummaries, sessionState } = args;
   if (!deps.store) return undefined;
 
   try {
-    const sessionRecord = await deps.store.getSession(input.sessionId);
-    const worldContext = await deps.extensionExecution?.run(
-      sessionWorldContextV1,
-      {},
-    );
+    // The session row and the world context do not depend on each other.
+    const [sessionRecord, worldContext] = await Promise.all([
+      sessionState
+        ? sessionState.session
+        : deps.store.getSession(input.sessionId),
+      deps.extensionExecution?.run(sessionWorldContextV1, {}),
+    ]);
     if (
       deps.dimensionProviderPluginId &&
       (worldContext?.dimensionProviderPluginId !==
@@ -51,6 +63,16 @@ export async function refreshSessionContextSnapshot(args: {
         worldContext,
         summaries: sessionSummaries,
         playerMessage: input.playerMessage,
+        recentMessages: sessionState?.recentMessages,
+        loaded: {
+          session: sessionRecord,
+          ...(sessionState
+            ? {
+                characters: sessionState.sessionMeta.characters,
+                lastFormValues: sessionState.sessionMeta.lastFormValues ?? null,
+              }
+            : {}),
+        },
       },
     );
     return deps.dimensionContext

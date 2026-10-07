@@ -536,9 +536,16 @@ export async function finalizeExecution(
     // runtimeId -> why its writes were dropped.
     const isolated = new Map<string, string>();
     const manifestByRuntime = new Map(runtimes.map((rt) => [rt.name, rt]));
-    const lostUpstreamOf = (result: FinalizableResult): string | undefined => {
+    // A result stands on its hard upstreams when it succeeded, and also when
+    // it has writes to commit whatever its status: a guard that wrote and then
+    // returned `{ skip: true }` leaves a skipped result with buffered writes.
+    const lostUpstreamOf = (
+      result: FinalizableResult,
+      writes: PreparedRuntimeProposals,
+    ): string | undefined => {
       const manifest = manifestByRuntime.get(result.runtimeId);
-      return manifest && result.status === "success"
+      return manifest &&
+        (result.status === "success" || writes.proposals.length > 0)
         ? droppedUpstream(manifest, {
             runtimes,
             results,
@@ -684,7 +691,7 @@ export async function finalizeExecution(
         // the runtimes that depend on it.
         for (const result of results) {
           args.signal?.throwIfAborted();
-          const lostUpstream = lostUpstreamOf(result);
+          const lostUpstream = lostUpstreamOf(result, prepared.get(result)!);
           if (lostUpstream) {
             const error = `upstream ${lostUpstream} did not commit`;
             // A story or setup runtime cannot stand on writes that did not land.

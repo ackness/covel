@@ -40,6 +40,11 @@ test("a new profile opens in Stage and a saved appearance survives reload", asyn
 });
 
 const themes = [
+  { theme: "book", scheme: "dark", size: "17px", lineHeight: "31.45px" },
+  { theme: "book", scheme: "light", size: "17px", lineHeight: "31.45px" },
+  { theme: "panel", scheme: "dark", size: "16px", lineHeight: "30.4px" },
+  { theme: "panel", scheme: "light", size: "16px", lineHeight: "30.4px" },
+  { theme: "stage", scheme: "dark", size: "16px", lineHeight: "30.4px" },
   { theme: "paper", scheme: "dark", size: "16px", lineHeight: "28.48px" },
   { theme: "paper", scheme: "light", size: "16px", lineHeight: "28.48px" },
   { theme: "modern", scheme: "dark", size: "17px", lineHeight: "30.6px" },

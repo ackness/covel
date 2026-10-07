@@ -3,15 +3,8 @@ import { useTranslation } from "react-i18next";
 import { History, Plus, Settings, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogClose,
-} from "@/components/ui/dialog.js";
 import { ActiveModelSlots } from "./active-model-slots.js";
+import { confirmDeleteSession } from "./confirm-delete-session.js";
 import { PluginListPanel } from "./plugin-list-panel.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type {
@@ -25,9 +18,12 @@ import {
   sessionStatusLabel,
   sessionTurnLabel,
 } from "@/lib/session-display.js";
+import { ignoreError } from "@/lib/ignore-error.js";
 
 export interface LeftPanelProps {
   session: SessionRecord;
+  /** Name of the session's world; names a save in the delete prompt. */
+  worldName?: string;
   isLeftCollapsed: boolean;
   showSessionList: boolean;
   otherSessions: SessionRecord[];
@@ -48,6 +44,7 @@ export interface LeftPanelProps {
 
 export function LeftPanel({
   session,
+  worldName,
   showSessionList,
   otherSessions,
   enabledPlugins,
@@ -64,19 +61,27 @@ export function LeftPanel({
   onTogglePlugin,
 }: LeftPanelProps) {
   const { t, i18n } = useTranslation();
-  const [deleteTarget, setDeleteTarget] = useState<SessionRecord | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await onDeleteSession(deleteTarget.id);
-    } finally {
-      setDeleting(false);
-      setDeleteTarget(null);
-    }
-  }, [deleteTarget, onDeleteSession]);
+  const handleRequestDelete = useCallback(
+    async (target: SessionRecord) => {
+      if (deletingId) return;
+      const approved = await confirmDeleteSession(
+        t,
+        i18n.resolvedLanguage ?? i18n.language,
+        target,
+        worldName,
+      );
+      if (!approved) return;
+      setDeletingId(target.id);
+      try {
+        await onDeleteSession(target.id);
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [deletingId, t, i18n, worldName, onDeleteSession],
+  );
 
   return (
     <>
@@ -152,8 +157,14 @@ export function LeftPanel({
                         </span>
                       </button>
                       <button
-                        onClick={() => setDeleteTarget(s)}
-                        className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={() =>
+                          void handleRequestDelete(s).catch(
+                            // The transport has already reported why it failed.
+                            ignoreError("delete session"),
+                          )
+                        }
+                        disabled={Boolean(deletingId)}
+                        className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
                         title={t("common.delete", "Delete")}
                         aria-label={t("session.deleteSessionAria", {
                           id: s.id,
@@ -228,58 +239,6 @@ export function LeftPanel({
           <span className="truncate">{t("common.newSession")}</span>
         </button>
       </div>
-
-      {/* Delete session confirmation */}
-      <Dialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-      >
-        <DialogContent
-          className="max-w-sm"
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || deleting) return;
-            event.preventDefault();
-            void handleConfirmDelete();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>
-              {t("session.deleteConfirmTitle", "Delete Session")}
-            </DialogTitle>
-            <DialogDescription>
-              {t(
-                "session.deleteConfirmDesc",
-                "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.",
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {deleteTarget && (
-            <p className="text-xs font-mono text-muted-foreground bg-muted px-2 py-1.5 break-all">
-              {deleteTarget.id}
-            </p>
-          )}
-          <div className="flex justify-end gap-2 mt-2">
-            <DialogClose asChild>
-              <Button variant="outline" size="sm" disabled={deleting}>
-                {t("common.cancel", "Cancel")}
-              </Button>
-            </DialogClose>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={deleting}
-              aria-keyshortcuts="Enter"
-              onClick={() => void handleConfirmDelete()}
-            >
-              {deleting
-                ? t("common.deleting", "Deleting...")
-                : t("common.delete", "Delete")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

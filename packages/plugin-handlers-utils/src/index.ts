@@ -402,3 +402,22 @@ export {
   overlayPluginDataValue,
   overlayPluginDataRows,
 } from "./proposal-overlay.js";
+
+export { estimateTokens } from "./token-estimation.js";
+
+export { FRAMEWORK_TOOL_NAMES } from "./framework-tool-names.js";
+
+export * from "./i18n.js";
+export * from "./locale-registry.js";
+export * from "./instruction-locale.js";
+export * from "./character-schema.js";
+export * from "./character-fields.js";
+export * from "./json-text.js";
+export * from "./tool.js";
+export * from "./ui-tools.js";
+
+export * from "./character-field-values.js";
+export type { MediaReference } from "./types.js";
+export * from "./prompt-text.js";
+export type { SimpleCompletionAdapter } from "./completion-adapter.js";
+export type TokenEstimator = (text: string) => number;

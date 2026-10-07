@@ -26,21 +26,26 @@ export function ModelStep({
   onOpenSettings,
 }: SettingsActionProps & { slots: ResolvedSlot[] }) {
   const { t } = useTranslation();
+  const credentialReady = slots.some((slot) => slot.hasCredentials === true);
   return (
     <div className="space-y-4">
       <section className="rounded-(--radius-card) border border-border p-4 space-y-3">
         <p className="text-sm font-medium" role="status">
           {t(
-            slots.length
-              ? "onboarding.modelsDetected"
-              : "onboarding.modelsMissing",
+            !slots.length
+              ? "onboarding.modelsMissing"
+              : credentialReady
+                ? "onboarding.modelsDetected"
+                : "onboarding.credentialsMissing",
           )}
         </p>
         <p className="text-xs text-muted-foreground leading-relaxed">
           {t(
-            slots.length
-              ? "onboarding.modelsDetectedHint"
-              : "onboarding.modelsMissingHint",
+            !slots.length
+              ? "onboarding.modelsMissingHint"
+              : credentialReady
+                ? "onboarding.modelsDetectedHint"
+                : "onboarding.credentialsMissingHint",
           )}
         </p>
         {slots.length > 0 && (

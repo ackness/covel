@@ -4,12 +4,26 @@ This document describes how to build Covel desktop artifacts. The official GitHu
 
 ## One-off prep
 
+The desktop takes a single-instance lock before starting its sidecar. Opening a second instance focuses the existing window. Renderer storage uses Electron's persistent default session, and the sidecar prefers the previous port to keep its page origin stable. Sidecar recovery preserves the current page and reports its status in the app.
+
+Native Import Plugin / Import World menus open Settings → Plugins → Install and manage. ZIP selection, validation, authorization and success/error feedback use the shared package installer; arbitrary native directory copying is not an installation path.
+
 1. Install the Node toolchain and dependencies at the repo root (`pnpm install`).
 2. Stage resources: `pnpm --filter @covel/desktop build` (produces `apps/desktop/dist/`, `apps/desktop/staging/`). A clean checkout copies the committed LiteLLM snapshot and verifies `node_modules/@covel/ai-provider/data/model-db.json` is present in staging. The build performs no model-database network request.
 
 The bundled snapshot is generated from the fixed LiteLLM commit declared in `packages/ai-provider/model-db-source.json`. To update it, change the 40-character revision and its commit timestamp, run `pnpm --filter @covel/ai-provider update-model-db`, review the generated JSON diff, and commit the manifest and snapshot together. Release preflight rejects an untracked snapshot or manifest, and the final installer verifier checks that the snapshot survives packaging. The Settings refresh action remains the opt-in path for downloading newer data into the user's configuration directory.
 
 Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
+
+The staged sidecar starts the precompiled `server/src/index.js` directly in
+Electron's Node mode. The build also compiles every staged workspace package
+beside its source and points runtime package exports at the generated `.js`;
+`import.meta.url` therefore keeps the same relative locations for model data and
+prompt assets. The `tsx` loader remains available for dynamically imported
+TypeScript plugin code. Framework modules do not need startup transpilation.
+After the HTTP listener binds, the child sends a private `covel:ready` message
+with its port; the desktop loads the app immediately after this acknowledgement.
+Readiness waits fail on child exit, IPC disconnect, or the 30-second deadline.
 
 The staging tree owns its files: after `pnpm deploy`, the build replaces hardlinks
 with independent copies before rewriting resources or caching the output. Neither
@@ -18,7 +32,7 @@ store. Turbo's desktop task waits for the server build and includes server code,
 workspace packages, bundled plugins, prompts and worlds in its cache inputs;
 generated output, dependency directories and task logs are excluded.
 
-Builds do not bundle the developer's `llm.toml` or other private server configuration. Staging and unpacked-installer checks reject these files at the server resource root. Startup smoke tests use a temporary synthetic configuration and a separate no-configuration run; neither requires provider credentials or calls a model. Installed applications always read `llm.toml` from the user configuration root, including when the file is created after first launch. Missing bundled resource directories retain their positions in discovery; user plugins never inherit builtin trust because installation resources are absent.
+Builds do not bundle the developer's `llm.toml` or other private server configuration. Staging and unpacked-installer checks reject these files at the server resource root. Startup smoke tests use a temporary synthetic configuration and a separate no-configuration run; neither requires provider credentials or calls a model. They verify readiness IPC and clean exit for both a shutdown request and parent disconnect. Installed applications always read `llm.toml` from the user configuration root, including when the file is created after first launch. Missing bundled resource directories retain their positions in discovery; user plugins never inherit builtin trust because installation resources are absent.
 
 The startup smoke test also rejects bundled plugin load failures, including
 `[plugin-entry]` factory initialization failures. A successful health response
@@ -164,12 +178,28 @@ still lands on two files:
 
 Release CI verifies the unpacked application resources on each platform before uploading only the distributable files. Signature checks are intentionally absent while official builds are unsigned.
 
+After creating a local macOS arm64 unpacked build, the same sidecar smoke can
+check the resources that electron-builder actually copied:
+
+```bash
+node apps/desktop/scripts/verify-staging.mjs --electron-node \
+  --resources release/electron/mac-arm64/Covel.app/Contents/Resources
+```
+
+Add `--no-llm-toml` to check default config and parent-disconnect drain. Smoke
+data stays in temporary directories under desktop staging; app resources and
+user data are read-only.
+
 ## Sidecar shutdown
 
 Normal application quit waits for the sidecar to exit before allowing Electron
 to terminate. Restart uses the same stop barrier. A private parent-child IPC
 message requests the server drain on every platform; SIGTERM is only a fallback
 when IPC is unavailable (Windows terminates forcibly on that fallback).
+A sidecar that loses its parent IPC connection also runs the same drain, so a
+crashed desktop cannot leave an orphan holding the database.
+If the parent exits during bootstrap, the sidecar detects the disconnected
+IPC channel when initialization finishes and drains immediately.
 The sidecar has 12 seconds to finish its server drain (whose own force-exit
 budget is 10 seconds), then
 receives SIGKILL; failure to observe exit within another second is reported

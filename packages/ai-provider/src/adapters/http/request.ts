@@ -62,6 +62,7 @@ export async function postJson(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   overrideHeaders?: Record<string, string>,
+  options?: { retry?: boolean },
 ): Promise<Response> {
   assertAllowedBaseUrl(config.baseUrl);
 
@@ -150,7 +151,7 @@ export async function postJson(
   };
 
   try {
-    if (isRetryDisabled()) {
+    if (options?.retry === false || isRetryDisabled()) {
       return await doFetch();
     }
 

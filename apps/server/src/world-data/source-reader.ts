@@ -11,7 +11,7 @@ import {
   pickLocaleOverlay,
   type LocaleOverlayFile,
 } from "./locale-overlays.js";
-import { resolveContainedPath } from "./safe-path.js";
+import { explainUnresolvedPath, resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
 const MAX_STRUCTURED_BYTES = 2 * 1024 * 1024;
@@ -110,13 +110,29 @@ export async function readWorldDataSource(
     : null;
   const resolved = mainPath ?? (await resolveSourcePath(source, locale));
   if (!resolved) {
+    const declared = source.descriptor.path;
+    const reason = await explainUnresolvedPath(root, declared);
+    const what = source.descriptor.kind === "media" ? "directory" : "file";
     return {
       diagnostics: [
         {
           level: "error",
           sourceId: source.id,
-          path: source.descriptor.path,
-          message: `source path is invalid or escapes descriptor root: ${source.descriptor.path}`,
+          path: declared,
+          ...(reason === "missing"
+            ? {
+                message: `source "${source.id}" names a ${what} that does not exist: ${declared}`,
+                hint: `Create ${declared}, or correct \`path\` of the source. A path is relative to the world directory.`,
+              }
+            : reason === "symlink"
+              ? {
+                  message: `source "${source.id}" names a symbolic link, which is not read: ${declared}`,
+                  hint: `Put the ${what} itself at ${declared}.`,
+                }
+              : {
+                  message: `source "${source.id}" names a path outside the world directory: ${declared}`,
+                  hint: "Use a path inside the world directory, without `..` and without a leading `/`.",
+                }),
         },
       ],
     };
@@ -139,7 +155,8 @@ export async function readWorldDataSource(
           level: "error",
           sourceId: source.id,
           path: source.descriptor.path,
-          message: "source path must be a regular file",
+          message: `source "${source.id}" must name a file; ${source.descriptor.path} is not one`,
+          hint: "Name one file in `path`. A directory of pictures or audio is a `kind: media` source.",
         },
       ],
     };
@@ -153,7 +170,8 @@ export async function readWorldDataSource(
           level: "error",
           sourceId: source.id,
           path: source.descriptor.path,
-          message: `source file exceeds ${limit} bytes`,
+          message: `source "${source.id}": ${source.descriptor.path} is ${fileStat.size} bytes; a ${source.descriptor.kind} source is read up to ${limit} bytes`,
+          hint: "Split the content into several files, each with its own source.",
         },
       ],
     };
@@ -194,7 +212,11 @@ export async function readWorldDataSource(
             mode: options.overlays ? "compile" : "resolve",
             locale: overlay.locale,
             baseLocale: options.overlays?.baseLocale ?? DEFAULT_LOCALE,
-            arrayKey: source.descriptor.key,
+            arrayKey: [
+              source.descriptor.key ?? "id",
+              "id",
+              ...(source.descriptor.localeArrayKeys ?? []),
+            ],
           },
         );
         value = merged.value;
@@ -234,7 +256,7 @@ export async function readWorldDataSource(
           level: "error",
           sourceId: source.id,
           path: source.descriptor.path,
-          message: `failed to parse source: ${err instanceof Error ? err.message : String(err)}`,
+          message: `source "${source.id}": ${source.descriptor.path} cannot be read as ${source.descriptor.kind}: ${err instanceof Error ? err.message : String(err)}`,
         },
       ],
     };

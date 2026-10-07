@@ -138,7 +138,7 @@ export function resolveServerEntry(): string {
   if (isDev) {
     return path.join(root, "apps/server/src/index.ts");
   }
-  return path.join(root, "src/index.ts");
+  return path.join(root, "src/index.js");
 }
 
 function resolveBundledWorldsDir(): string {
@@ -150,13 +150,13 @@ function resolveBundledPluginsDir(): string {
 }
 
 /**
- * Find tsx CLI entry point. Packaged apps include node_modules under
+ * Find the tsx loader for dynamically imported TypeScript plugins. Packaged apps include node_modules under
  * `resources/server`.
  */
 export function resolveTsx(): string {
   const baseDir = resolveProjectRoot();
 
-  const direct = path.join(baseDir, "node_modules/tsx/dist/cli.mjs");
+  const direct = path.join(baseDir, "node_modules/tsx/dist/loader.mjs");
   if (fs.existsSync(direct)) return direct;
 
   const pnpmDir = path.join(baseDir, "node_modules/.pnpm");
@@ -166,7 +166,7 @@ export function resolveTsx(): string {
         const candidate = path.join(
           pnpmDir,
           entry,
-          "node_modules/tsx/dist/cli.mjs",
+          "node_modules/tsx/dist/loader.mjs",
         );
         if (fs.existsSync(candidate)) return candidate;
       }

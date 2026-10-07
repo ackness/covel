@@ -20,6 +20,19 @@ It blocks:
 - cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`);
 - non-`https` URLs on remote hosts, and non-`http(s)` protocols.
 
+IP literals are checked against the same complete public-address policy as DNS
+answers before transport selection. This also blocks carrier-grade NAT,
+benchmark, documentation, unspecified and multicast ranges, and applies to
+IPv4 embedded in IPv6. Literal connections do not invoke socket DNS lookup;
+they cannot rely on the DNS dispatcher alone. The explicit loopback targets
+below retain their local-server exception.
+
+IPv6's `2000::/3` allocation is insufficient to establish public reachability.
+The guard also rejects reserved/benchmark IETF protocol space, both `2001:db8::/32`
+and `3fff::/20` documentation ranges, and Teredo/6to4 transition prefixes.
+Specific globally reachable IETF allocations remain allowed. The special-purpose
+classifications follow the [IANA IPv6 registry](https://www.iana.org/assignments/iana-ipv6-special-registry/).
+
 Loopback (`localhost`, `127.0.0.1`, `::1`) bypasses the `https` requirement so
 Ollama-style local servers work in development.
 
@@ -142,6 +155,18 @@ The limits on it:
   does not show them. An install preview shows the author's name and no links.
 
 ## Other server guards
+
+Desktop menu imports open the shared package installer and use the same server validation, archive limits and trust flow as web imports. The old native IPC channels that copied a directory or ZIP directly into resource directories are no longer exposed.
+
+A hook that returns no value continues. A transform hook failure retains earlier successful rewrites. Security guard exceptions and timeouts remain fail-closed; only treating every hook fault as a continuation would bypass approval and commit guards. Rewrite traces contain changed-key summaries rather than full before/after prompts.
+
+Session mutations, player actions, suspension resumes and action RPCs share the
+live-session guard in `routes/api/session/locked-mutation.ts`. While holding the
+session lock, they recheck existence, owner authorization, immutable incarnation,
+the deletion marker and the caller's allowed statuses before writing. An action
+whose SSE response is already open reports an entry denial through
+`error.occurred` with the same machine-readable code as the JSON guard. Detached
+runtime jobs retain their separate admission and commit locks.
 
 | Guard              | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Code                                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |

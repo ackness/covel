@@ -139,7 +139,7 @@ export function Media(props: MediaProps): ReactElement {
       }
     };
     // sessionId rarely changes, but it does affect token scoping.
-  }, [refForResolve, sessionId]);
+  }, [refForResolve?.id, refForResolve?.url, refForResolve?.mime, sessionId]);
 
   const kind: RenderKind = useMemo(
     () => pickRenderKind(refMime, as),

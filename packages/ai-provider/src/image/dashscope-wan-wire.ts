@@ -169,6 +169,9 @@ async function generate(
       config,
       "/api/v1/services/aigc/multimodal-generation/generation",
       body,
+      undefined,
+      undefined,
+      { retry: false },
     );
     const payload = await parseJson(response);
     assertSuccess(response, payload, "dashscope-wan");
@@ -185,6 +188,7 @@ async function generate(
     body,
     undefined,
     { "X-DashScope-Async": "enable" },
+    { retry: false },
   );
   const submitPayload = await parseJson(submitResponse);
   assertSuccess(submitResponse, submitPayload, "dashscope-wan");

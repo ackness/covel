@@ -4,6 +4,7 @@ import type {
   MediaRef,
   MediaRefRecord,
 } from "@covel/shared";
+import { withoutNul } from "../common/without-nul.js";
 
 export interface IdbMediaAssetRecord {
   readonly id: string;
@@ -105,7 +106,7 @@ export function cloneMeta(
 ): Readonly<Record<string, unknown>> | undefined {
   return meta === undefined
     ? undefined
-    : structuredClone(meta as Record<string, unknown>);
+    : withoutNul(structuredClone(meta as Record<string, unknown>));
 }
 
 export function sortAssetRecords(

@@ -71,6 +71,30 @@ export interface SessionLock {
   withLocks<T>(keys: readonly string[], fn: () => Promise<T>): Promise<T>;
 }
 
+/** Durable work may outlive a foreground lock-acquire timeout, but never its own lease. */
+export async function withBackgroundSessionLock<T>(
+  lock: SessionLock,
+  sessionId: string,
+  fn: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  for (;;) {
+    signal?.throwIfAborted();
+    let entered = false;
+    try {
+      return await lock.withLock(sessionId, async () => {
+        entered = true;
+        signal?.throwIfAborted();
+        return fn();
+      });
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (entered || !signal || !(error instanceof SessionLockTimeoutError))
+        throw error;
+    }
+  }
+}
+
 type ChainTail = Promise<unknown>;
 
 type InProcessSessionLock = SessionLock & {

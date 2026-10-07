@@ -4,7 +4,6 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
 import type { DataStore, StoreTransaction } from "@covel/store";
 import { withRequestLlmOptions } from "../../../request-llm-context.js";
-import { topLevelTurnResults } from "../actions/turn-history.js";
 import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
@@ -165,9 +164,12 @@ export function createRuntimeJobExecutor(deps: {
       ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
     };
     const retrySeedResults = payload.retryFromTurnId
-      ? (topLevelTurnResults(await store.listTurnResults(job.sessionId)).find(
-          (row) => row.turnId === payload.retryFromTurnId,
-        )?.runtimeResults as readonly RuntimeResult[] | undefined)
+      ? ((
+          await store.queryTurnResults(job.sessionId, {
+            turnId: payload.retryFromTurnId,
+            limit: 1,
+          })
+        )[0]?.runtimeResults as readonly RuntimeResult[] | undefined)
       : undefined;
     const commit =
       payload.activation === "manual"

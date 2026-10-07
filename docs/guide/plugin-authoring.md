@@ -42,6 +42,7 @@ pnpm --filter @covel/plugin-my-plugin test
 id: my-plugin
 kind: plugin
 description: Adds a brief observation after narration.
+requires: [narrative-engine@1]
 runtime:
   type: agent
   schedule:
@@ -98,3 +99,9 @@ Agent 正文放在相应 `PLUGIN.md` 或 `RUNTIME.md`。静态附加段用根 `c
 - 根清单可用 `covel: ">=0.0.45"` 声明适配的宿主版本范围，安装器会拒绝范围之外的宿主；语法见[合集指南](./collections.md#版本范围)。把插件和世界一起发布见同一页。
 
 测试应验证用户可观察的结果、非法输入、数据归属，以及失败时不发生部分提交。CI 前运行项目的 `pnpm lint` 和 `pnpm test`；涉及玩家 UI 流程时补相应浏览器验收。
+
+公开 SDK 提供 `resolveI18nText` / `resolveI18nDeep`、locale registry、`estimateTokens`、表单工具和角色字段校验。`world.dimensions@1` 的提供者使用 `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer。Node 插件用 `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)` 加载自己的模板；该子入口不进入浏览器根模块。`shared` / `tools` / `context` 复用这些实现，插件代码只依赖 SDK。
+
+默认 analyst 示例在 `post-turn` 自动运行，读取本回合叙事绑定；note 示例保留手动函数入口。记录 ID 来自 `ctx.random`，时间戳由代码或存储写入，agent 只提交稳定的事实 key 和内容。
+
+当 `contributes.data.<namespace>.authoring.source` 的数据包含使用其他稳定键的嵌套列表时，可声明 `localeArrayKeys: [label]`。译文保留该键，主文件插入或调整列表顺序后仍匹配同一条记录。自定义 worldData descriptor 的 source 使用同名字段。

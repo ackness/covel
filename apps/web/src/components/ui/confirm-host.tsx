@@ -19,6 +19,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
+import { isImeComposing } from "@/lib/ime-composition.js";
+
+/** Controls on which Enter already does something of its own. */
+const OWN_ENTER_SELECTOR = "button, a[href], input, select, textarea";
 
 export function ConfirmHost() {
   const [queue, setQueue] = useState<readonly PendingConfirm[]>([]);
@@ -65,6 +69,8 @@ export function ConfirmHost() {
     setQueue((prev) => prev.filter((entry) => entry.id !== current.id));
   };
 
+  const confirmDisabled = current?.choices !== undefined && checked.size === 0;
+
   return (
     <Dialog
       open={current !== undefined}
@@ -72,13 +78,35 @@ export function ConfirmHost() {
         if (!open) settle(false);
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || isImeComposing(event)) return;
+          // Enter approves only while no control has the focus. On a control
+          // it keeps that control's own meaning: the dialog opens with the
+          // focus on Cancel, and Enter there has to cancel. A prompt with
+          // entries to tick is approved with its button, never in passing.
+          const target = event.target;
+          if (
+            current?.choices ||
+            (target instanceof Element && target.closest(OWN_ENTER_SELECTOR))
+          )
+            return;
+          event.preventDefault();
+          settle(true);
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{current?.title}</DialogTitle>
           <DialogDescription className="whitespace-pre-line pt-1 wrap-anywhere">
             {current?.message}
           </DialogDescription>
         </DialogHeader>
+        {current?.subject && (
+          <p className="bg-muted px-2 py-1.5 text-sm font-medium wrap-anywhere">
+            {current.subject}
+          </p>
+        )}
         {current?.choices && (
           <ul className="max-h-64 space-y-2 overflow-y-auto">
             {current.choices.map((choice) => (
@@ -114,7 +142,8 @@ export function ConfirmHost() {
           </Button>
           <Button
             size="sm"
-            disabled={current?.choices !== undefined && checked.size === 0}
+            variant={current?.destructive ? "destructive" : "default"}
+            disabled={confirmDisabled}
             onClick={() => settle(true)}
           >
             {current?.confirmLabel}

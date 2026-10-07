@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,7 @@ import { z } from "zod";
 import { SettingsStore } from "@covel/settings";
 import i18n from "@/i18n";
 import { RawConfigPane } from "../RawConfigPane.js";
+import { ApiError } from "@/services/api/request.js";
 
 const mocks = vi.hoisted(() => ({
   store: null as unknown as SettingsStore,
@@ -141,4 +143,122 @@ it("saves a file against the digest it was read with and reloads the model roles
     "digest-1",
   );
   expect(mocks.boot).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a late file read from replacing the newly selected file", async () => {
+  mocks.files = ["llm.toml", "config.toml"].map((name) => ({
+    name,
+    path: `/etc/${name}`,
+    exists: true,
+    applies: "restart",
+  }));
+  let finishOld!: (value: unknown) => void;
+  mocks.read.mockImplementation((name: string) =>
+    name === "llm.toml"
+      ? new Promise((resolve) => {
+          finishOld = resolve;
+        })
+      : Promise.resolve({
+          content: "[desktop]",
+          digest: "config-digest",
+          exists: true,
+        }),
+  );
+  render(<RawConfigPane />);
+  await editor("Settings (JSON)");
+  fireEvent.click(await screen.findByRole("tab", { name: "llm.toml" }));
+  await waitFor(() => expect(mocks.read).toHaveBeenCalledWith("llm.toml"));
+  fireEvent.click(screen.getByRole("tab", { name: "config.toml" }));
+  const area = await editor("config.toml");
+  expect(area.value).toBe("[desktop]");
+  await act(async () => {
+    finishOld({ content: "[covel.story]", digest: "llm-digest", exists: true });
+  });
+  expect(area.value).toBe("[desktop]");
+  mocks.save.mockResolvedValue({
+    content: "[desktop]\nport = 3001",
+    digest: "next-digest",
+  });
+  fireEvent.change(area, { target: { value: "[desktop]\nport = 3001" } });
+  save();
+  await waitFor(() =>
+    expect(mocks.save).toHaveBeenCalledExactlyOnceWith(
+      "config.toml",
+      "[desktop]\nport = 3001",
+      "config-digest",
+    ),
+  );
+});
+
+it("rejects a stale whole-settings edit instead of deleting another window's values", async () => {
+  render(<RawConfigPane />);
+  const area = await editor("Settings (JSON)");
+  fireEvent.change(area, {
+    target: { value: JSON.stringify({ "ui.scheme": "light" }) },
+  });
+  await act(async () => {
+    await mocks.store.set("concurrent", "Keep this");
+  });
+  save();
+  expect((await screen.findByRole("alert")).textContent).toMatch(
+    /changed|conflict/i,
+  );
+  expect(mocks.store.get("concurrent")).toBe("Keep this");
+  expect(mocks.store.get("ui.scheme")).toBe("dark");
+  expect(mocks.store.get("extra")).toBe(1);
+});
+
+it("preserves a conflicting file draft and its baseline until explicitly reloaded", async () => {
+  mocks.files = [
+    {
+      name: "llm.toml",
+      path: "/etc/llm.toml",
+      exists: true,
+      applies: "reload",
+    },
+  ];
+  mocks.read.mockResolvedValue({
+    content: "[covel.story]",
+    digest: "old-digest",
+    exists: true,
+  });
+  mocks.save.mockRejectedValue(
+    new ApiError(
+      409,
+      "/api/config/raw",
+      JSON.stringify({
+        error: "File changed",
+        code: "config_file_changed",
+      }),
+    ),
+  );
+  render(<RawConfigPane />);
+  fireEvent.click(await screen.findByRole("tab", { name: "llm.toml" }));
+  const area = await editor("llm.toml");
+  fireEvent.change(area, { target: { value: "[covel.plot]" } });
+  save();
+  await screen.findByRole("alert");
+  expect(area.value).toBe("[covel.plot]");
+  expect(mocks.save).toHaveBeenLastCalledWith(
+    "llm.toml",
+    "[covel.plot]",
+    "old-digest",
+  );
+  expect(mocks.boot).not.toHaveBeenCalled();
+  mocks.read.mockResolvedValue({
+    content: "[covel.utility]",
+    digest: "current-digest",
+    exists: true,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+  await waitFor(() => expect(area.value).toBe("[covel.utility]"));
+  fireEvent.change(area, { target: { value: "[covel.plot]" } });
+  save();
+  await waitFor(() =>
+    expect(mocks.save).toHaveBeenLastCalledWith(
+      "llm.toml",
+      "[covel.plot]",
+      "current-digest",
+    ),
+  );
 });

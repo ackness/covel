@@ -9,7 +9,7 @@ const layers = {
   shared: ["plugin-handlers-utils"],
   "ai-provider": ["shared"],
   approval: ["shared"],
-  context: ["shared"],
+  context: ["shared", "plugin-handlers-utils"],
   create: ["context", "shared"],
   events: ["shared"],
   memory: ["shared", "store"],

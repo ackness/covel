@@ -45,9 +45,15 @@ export function readSettingsBundle(
 function freeBackupPath(settingsFile: string, label: string): string {
   const { dir, name, ext } = path.parse(settingsFile);
   const backup = path.join(dir, `${name}.${label}.bak${ext}`);
-  return fs.existsSync(backup)
-    ? path.join(dir, `${name}.${label}.${Date.now()}.bak${ext}`)
-    : backup;
+  if (!fs.existsSync(backup)) return backup;
+  const timestamp = Date.now();
+  for (let suffix = 0; ; suffix += 1) {
+    const candidate = path.join(
+      dir,
+      `${name}.${label}.${timestamp}${suffix ? `.${suffix}` : ""}.bak${ext}`,
+    );
+    if (!fs.existsSync(candidate)) return candidate;
+  }
 }
 
 /**

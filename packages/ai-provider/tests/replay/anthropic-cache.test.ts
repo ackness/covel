@@ -99,6 +99,41 @@ describe("Anthropic adapter — cache_control injection", () => {
     vi.clearAllMocks();
   });
 
+  it("caches the growing tool transcript and keeps late instructions after history", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeTextResponse()));
+    const messages: TextMessage[] = [
+      { role: "system", content: `stable${PROMPT_CACHE_BREAKPOINT_MARKER}` },
+      { role: "user", content: "start" },
+      { role: "assistant", content: "previous story" },
+      { role: "system", content: "current turn instructions" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "call-1", name: "read", arguments: "{}" }],
+      },
+      { role: "tool", toolCallId: "call-1", content: "result" },
+    ];
+    await createAnthropicMessagesAdapter().generateText(
+      { ...ANTHROPIC_CONFIG_BASE, cacheStrategy: "anthropic-explicit" },
+      { model: "claude-sonnet-4-6", messages },
+    );
+    const body = readPostedBody();
+    expect(JSON.stringify(body.system)).not.toContain(
+      "current turn instructions",
+    );
+    const turns = body.messages as Array<{ role: string; content: unknown }>;
+    expect(JSON.stringify(turns[2])).toContain("current turn instructions");
+    expect(turns.at(-1)?.content).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: "call-1",
+        content: "result",
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
+    expect(JSON.stringify(messages)).not.toContain("cache_control");
+  });
+
   describe("cacheStrategy: 'anthropic-explicit' + sentinel present", () => {
     it("emits an array `system` field with cache_control on each sentinel-preceded segment", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeTextResponse()));
@@ -131,11 +166,11 @@ describe("Anthropic adapter — cache_control injection", () => {
         );
       }
 
-      // All three segments sat BEFORE a sentinel → all three are cacheable.
+      // Keep the first and last stable boundary; reserve room for messages.
       const cacheHints = blocks
         .map((b) => b.cache_control as Record<string, unknown> | undefined)
         .filter(Boolean);
-      expect(cacheHints.length).toBe(3);
+      expect(cacheHints.length).toBe(2);
       for (const hint of cacheHints) {
         expect(hint).toEqual({ type: "ephemeral" });
       }
@@ -166,7 +201,7 @@ describe("Anthropic adapter — cache_control injection", () => {
       const blocks = body.system as Array<Record<string, unknown>>;
       const cacheHintCount = blocks.filter((b) => b.cache_control).length;
       expect(cacheHintCount).toBeLessThanOrEqual(4);
-      expect(cacheHintCount).toBe(4);
+      expect(cacheHintCount).toBe(2);
 
       // The last block is the open tail and must NOT carry cache_control.
       const lastBlock = blocks[blocks.length - 1]!;

@@ -7,7 +7,9 @@ import {
   createPluginRegistry,
   discoverPluginsMulti,
   loadPluginDefinition,
+  loadPluginEntryDefinition,
   loadPluginSummary,
+  pluginDeclarations,
   type ParsedRuntimeMd,
   type PluginDiscoveryResult,
   type PluginRegistry,
@@ -22,6 +24,8 @@ export interface DiscoverAndRegisterPluginsConfig {
 export interface DiscoverAndRegisterPluginsResult {
   readonly registry: PluginRegistry;
   readonly discoveryMap: Map<string, PluginDiscoveryResult>;
+  /** Static recovery locations only; never a source of executable capabilities. */
+  readonly failedDiscoveryMap: Map<string, PluginDiscoveryResult>;
   readonly manifestCache: Map<string, readonly ParsedRuntimeMd[]>;
 }
 
@@ -46,11 +50,19 @@ export async function discoverAndRegisterPlugins(
   );
 
   const discoveryMap = new Map<string, PluginDiscoveryResult>();
+  const failedDiscoveryMap = new Map<string, PluginDiscoveryResult>();
   const manifestCache = new Map<string, readonly ParsedRuntimeMd[]>();
 
   for (const discovery of discoveries) {
     try {
       const definition = await loadPluginDefinition(discovery);
+      // The root's localized variants belong to the package. A variant that
+      // does not parse fails this package here, like any other load error,
+      // and not later at entry bootstrap, where it stopped the server.
+      await loadPluginEntryDefinition(
+        discovery,
+        pluginDeclarations(definition),
+      );
       const { packageManifest, manifests } = definition;
       const summary = {
         ...(await loadPluginSummary(discovery, undefined, definition)),
@@ -121,6 +133,7 @@ export async function discoverAndRegisterPlugins(
       // when validation failed before the sets executed.
       discoveryMap.delete(discovery.id);
       manifestCache.delete(discovery.id);
+      failedDiscoveryMap.set(discovery.id, discovery);
 
       const message = err instanceof Error ? err.message : String(err);
       console.error(
@@ -151,5 +164,5 @@ export async function discoverAndRegisterPlugins(
   ))
     console.warn(`[bootstrap] ${message}`);
 
-  return { registry, discoveryMap, manifestCache };
+  return { registry, discoveryMap, failedDiscoveryMap, manifestCache };
 }

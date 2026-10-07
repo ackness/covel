@@ -13,6 +13,7 @@ import type {
   PowerSystemType,
   PowerTier,
 } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
 const POWER_TYPES: PowerSystemType[] = [
   "magic",
@@ -23,13 +24,19 @@ const POWER_TYPES: PowerSystemType[] = [
   "other",
 ];
 
-export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
+export function PowerSystemTab({
+  dimensions,
+  onChange,
+  t,
+  problems,
+}: TabProps) {
   const ps: WorldPowerSystem = dimensions.powerSystem ?? {
     name: "",
     type: "magic",
     description: "",
     rules: [],
   };
+  const problem = fieldProblems(problems);
 
   function setPs(next: WorldPowerSystem) {
     onChange({ ...dimensions, powerSystem: next });
@@ -77,6 +84,7 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
             value={text(ps.name)}
             onChange={(e) => setPs({ ...ps, name: e.target.value })}
           />
+          {problem.at("name")}
         </div>
         <div className="space-y-1">
           <Label htmlFor="world-power-system-type">
@@ -96,6 +104,7 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
               </option>
             ))}
           </select>
+          {problem.at("type")}
         </div>
       </div>
 
@@ -109,6 +118,7 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
           value={text(ps.description)}
           onChange={(e) => setPs({ ...ps, description: e.target.value })}
         />
+        {problem.at("description")}
       </div>
 
       {/* Rules */}
@@ -120,14 +130,18 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addRule")}
           </Button>
         </div>
+        {problem.at("rules")}
         {ps.rules.map((rule, ri) => (
           <div key={ri} className="flex items-center gap-2">
-            <input
-              aria-label={`${t("world.rules")} ${ri + 1}`}
-              className={inputCls}
-              value={text(rule)}
-              onChange={(e) => updateRule(ri, e.target.value)}
-            />
+            <div className="min-w-0 flex-1 space-y-1">
+              <input
+                aria-label={`${t("world.rules")} ${ri + 1}`}
+                className={inputCls}
+                value={text(rule)}
+                onChange={(e) => updateRule(ri, e.target.value)}
+              />
+              {problem.at(`rules.${ri}`)}
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -149,6 +163,7 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addTier")}
           </Button>
         </div>
+        {problem.at("tiers")}
         {(ps.tiers ?? []).map((tier, ti) => (
           <div key={ti} className="flex items-start gap-2">
             <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_6rem]">
@@ -169,6 +184,8 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
                   updateTier(ti, { rank: Number(e.target.value) || 0 })
                 }
               />
+              {problem.at(`tiers.${ti}.name`, t("world.name"))}
+              {problem.at(`tiers.${ti}.rank`, t("world.rank"))}
             </div>
             <Button
               variant="ghost"
@@ -181,6 +198,7 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
           </div>
         ))}
       </div>
+      {problem.rest()}
     </div>
   );
 }

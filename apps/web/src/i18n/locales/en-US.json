@@ -438,7 +438,11 @@
     "worldsScrollForward": "More worlds",
     "allPanels": "All panels",
     "musicMute": "Mute the music",
-    "musicUnmute": "Play the music"
+    "musicUnmute": "Play the music",
+    "panelLoadFailed": "Plugin panels could not be loaded.",
+    "modelCredentialsMissing": "Add an API key in provider settings before starting.",
+    "steerNotTaken": "This turn did not take your message. It is back in the input box for you to send next.",
+    "outputTruncated": "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -653,7 +657,19 @@
     "galleryNext": "Next picture",
     "slidesPause": "Pause the backdrop slideshow",
     "slidesPlay": "Play the backdrop slideshow",
-    "slideShow": "Show backdrop {{index}}"
+    "slideShow": "Show backdrop {{index}}",
+    "dimensionError": {
+      "unavailable": "Dimension controls are unavailable. Refresh the session and try again.",
+      "failed": "The dimension update failed.",
+      "conflict": "The values changed while you were editing. Review the refreshed values and try again.",
+      "pending": "Settlement is still pending. Retry it or skip it before continuing."
+    },
+    "resourceNameMissing": "Name this resource, or remove it.",
+    "resourceNameRepeated": "Another resource has this name.",
+    "listNeedsEntry": "Add at least one entry.",
+    "numberTooSmall": "Enter {{minimum}} or more.",
+    "wholeNumberNeeded": "Enter a whole number.",
+    "fixMarkedFields": "Fix the marked fields before saving."
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",
@@ -1638,6 +1654,7 @@
     "untranslatedHint": "This plugin has no text in your language. Its panels show English."
   },
   "pluginJob": {
+    "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",
     "completed": "{{target}} completed in {{duration}}",
     "failed": "{{target}} failed: {{error}}",
     "unknownError": "unknown error"
@@ -1725,7 +1742,9 @@
     "reopenHint": "Reopen this guide from the world selection page. Models and appearance can be adjusted in Settings at any time.",
     "chooseWorld": "Choose a world",
     "testBindings": "Review and test existing models ({{count}} roles)",
-    "languageExperimental": "experimental"
+    "languageExperimental": "experimental",
+    "credentialsMissing": "Add credentials for the configured models",
+    "credentialsMissingHint": "Your model bindings are saved. Configure a provider API key before starting, or explicitly test a local service that requires no key."
   },
   "character": {
     "noCharacters": "Characters will appear here once created.",
@@ -2129,5 +2148,13 @@
       "site": "Site: {{host}}",
       "confirm": "Open link"
     }
+  },
+  "serverStatus": {
+    "restarting": "The local server stopped. Restarting…",
+    "restartingHint": "This page reloads when the server is back.",
+    "down": "Disconnected from the local server",
+    "downHint": "Covel cannot reach its local server. Completed turns are saved. Restart the server to continue.",
+    "restartFailed": "The server did not start. Try again, or quit and reopen Covel.",
+    "restart": "Restart server"
   }
 }

@@ -32,6 +32,8 @@ export interface ModelDbEntry {
   mode: string;
   litellmProvider?: string;
   inputPerMToken?: number;
+  cacheReadPerMToken?: number;
+  cacheWritePerMToken?: number;
   outputPerMToken?: number;
   perImage?: number;
   audioInputPerMToken?: number;
@@ -180,28 +182,37 @@ export function createModelDatabase(
   }
 
   function toCapability(entry: ModelDbEntry): ModelCapability {
-    const pricing: ModelPricing | undefined =
-      (entry.inputPerMToken ??
-      entry.outputPerMToken ??
-      entry.perImage ??
-      entry.audioInputPerMToken ??
-      entry.audioOutputPerMToken)
-        ? {
-            ...(entry.inputPerMToken != null
-              ? { inputPerMToken: entry.inputPerMToken }
-              : {}),
-            ...(entry.outputPerMToken != null
-              ? { outputPerMToken: entry.outputPerMToken }
-              : {}),
-            ...(entry.perImage != null ? { perImage: entry.perImage } : {}),
-            ...(entry.audioInputPerMToken != null
-              ? { audioInputPerMToken: entry.audioInputPerMToken }
-              : {}),
-            ...(entry.audioOutputPerMToken != null
-              ? { audioOutputPerMToken: entry.audioOutputPerMToken }
-              : {}),
-          }
-        : undefined;
+    const pricing: ModelPricing | undefined = [
+      entry.inputPerMToken,
+      entry.outputPerMToken,
+      entry.perImage,
+      entry.audioInputPerMToken,
+      entry.audioOutputPerMToken,
+      entry.cacheReadPerMToken,
+      entry.cacheWritePerMToken,
+    ].some((price) => price !== undefined)
+      ? {
+          ...(entry.cacheReadPerMToken != null
+            ? { cacheReadPerMToken: entry.cacheReadPerMToken }
+            : {}),
+          ...(entry.cacheWritePerMToken != null
+            ? { cacheWritePerMToken: entry.cacheWritePerMToken }
+            : {}),
+          ...(entry.inputPerMToken != null
+            ? { inputPerMToken: entry.inputPerMToken }
+            : {}),
+          ...(entry.outputPerMToken != null
+            ? { outputPerMToken: entry.outputPerMToken }
+            : {}),
+          ...(entry.perImage != null ? { perImage: entry.perImage } : {}),
+          ...(entry.audioInputPerMToken != null
+            ? { audioInputPerMToken: entry.audioInputPerMToken }
+            : {}),
+          ...(entry.audioOutputPerMToken != null
+            ? { audioOutputPerMToken: entry.audioOutputPerMToken }
+            : {}),
+        }
+      : undefined;
 
     return {
       input: entry.input,
@@ -341,13 +352,21 @@ function transformLiteLlmEntry(
     mode,
   };
 
+  for (const [field, target] of [
+    ["cache_read_input_token_cost", "cacheReadPerMToken"],
+    ["cache_creation_input_token_cost", "cacheWritePerMToken"],
+  ] as const) {
+    const cost = raw[field];
+    if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0)
+      entry[target] = roundPrice(cost * 1e6);
+  }
   if (raw.litellm_provider)
     entry.litellmProvider = raw.litellm_provider as string;
-  if (raw.input_cost_per_token)
+  if (typeof raw.input_cost_per_token === "number")
     entry.inputPerMToken = roundPrice(
       (raw.input_cost_per_token as number) * 1e6,
     );
-  if (raw.output_cost_per_token)
+  if (typeof raw.output_cost_per_token === "number")
     entry.outputPerMToken = roundPrice(
       (raw.output_cost_per_token as number) * 1e6,
     );

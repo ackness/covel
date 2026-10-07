@@ -5,10 +5,7 @@ import type { PluginRpcEventRequest } from "@covel/shared";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
-import {
-  mergePluginUserSettings,
-  readWorldPluginSettings,
-} from "../plugin-user-settings.js";
+import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
 import {
   checkHostedOperator,
   sessionApprovalScope,
@@ -215,9 +212,9 @@ export async function dispatchPluginEvent(
     });
   }
 
-  const world = session.worldId ? await store.getWorld(session.worldId) : null;
-  const userSettings = mergePluginUserSettings(
-    readWorldPluginSettings(world?.metadata),
+  const userSettings = await loadSessionPluginUserSettings(
+    store,
+    session,
     playerSettings,
   );
 
@@ -263,13 +260,7 @@ export async function dispatchPluginEvent(
         errorBody(err.message, { code: "background_queue_full" }),
         429,
       );
-    return c.json(
-      errorBody(
-        err instanceof Error ? err.message : "failed to enqueue event jobs",
-        { code: "background_enqueue_failed" },
-      ),
-      500,
-    );
+    throw err;
   }
   announceQueuedRuntimeJobs(c, queued);
   return c.json({

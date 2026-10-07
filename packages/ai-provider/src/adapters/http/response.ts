@@ -110,9 +110,16 @@ export function assertSuccess(
       provider,
       retriable: isRateLimit || response.status >= 500,
       statusCode: response.status,
-      details: errorMessage
-        ? { message: errorMessage, type: errorType }
-        : (errorObj ?? undefined),
+      details: {
+        ...errorObj,
+        ...(errorMessage ? { message: errorMessage } : {}),
+        ...(typeof errorType === "string"
+          ? { type: errorType, providerType: errorType }
+          : {}),
+        ...(typeof errorObj?.code === "string"
+          ? { providerCode: errorObj.code }
+          : {}),
+      },
     }),
   );
 }

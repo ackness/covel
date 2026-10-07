@@ -13,7 +13,56 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  withBackgroundSessionLock,
+  SessionLockTimeoutError,
+} from "../../src/lib/session-lock.js";
+
+it("keeps a durable commit waiting after an acquire timeout, but never retries its callback", async () => {
+  const base = createInProcessSessionLock();
+  let attempts = 0;
+  const lock = {
+    ...base,
+    withLock: async <T>(id: string, fn: () => Promise<T>) => {
+      if (++attempts === 1) throw new SessionLockTimeoutError("busy");
+      return base.withLock(id, fn);
+    },
+  };
+  const signal = new AbortController().signal;
+  await expect(
+    withBackgroundSessionLock(lock, "session", async () => "committed", signal),
+  ).resolves.toBe("committed");
+  expect(attempts).toBe(2);
+  await expect(
+    withBackgroundSessionLock(
+      lock,
+      "session",
+      async () => {
+        throw new SessionLockTimeoutError("callback failure");
+      },
+      signal,
+    ),
+  ).rejects.toThrow("callback failure");
+  expect(attempts).toBe(3);
+});
+
+it("rejects a late lock acquisition after the durable job has been cancelled", async () => {
+  const control = new AbortController();
+  const lock = createInProcessSessionLock();
+  let called = false;
+  const pending = withBackgroundSessionLock(
+    lock,
+    "session",
+    async () => {
+      called = true;
+    },
+    control.signal,
+  );
+  control.abort(new Error("lease expired"));
+  await expect(pending).rejects.toThrow("lease expired");
+  expect(called).toBe(false);
+});
 
 describe("createInProcessSessionLock", () => {
   it("does not queue a probe behind another owner and excludes new contenders", async () => {

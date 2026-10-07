@@ -26,6 +26,7 @@ id: fact-index
 kind: plugin
 description: Extracts and retrieves narrative facts.
 provides: [facts.index@1, facts.query@1]
+requires: [narrative-engine@1]
 contributes:
   data:
     facts:
@@ -148,7 +149,7 @@ Function 通过 `function.tools` 声明 `ctx.tools.call` 的白名单，不能�
 
 `ctx.world` 是执行视图，包含 committed 状态和合法上游及当前 proposals。角色 schema 变更与角色写入走同一领域校验。不得把上游 proposals 复制到本 runtime 的提交缓冲。
 
-记忆块是 memory 插件的数据和服务；世界自定义块通过 `memory.blocks@1` 导入，默认定义由 `memory.block-definitions@1` 服务提供。历史压缩经 `history.compact@1` 扩展处理。框架不会读取 `memoryBlocks/summaryFocus` 作者字段或维护独立 working_memory 数据。
+记忆块是 memory 插件的数据和服务；世界自定义块通过 `memory.blocks@1` 导入，默认定义由 `memory.block-definitions@1` 服务提供。历史压缩经 `history.compact@2` 扩展处理。框架不会读取 `memoryBlocks/summaryFocus` 作者字段或维护独立 working_memory 数据。
 
 ## 本地化与加载快照
 

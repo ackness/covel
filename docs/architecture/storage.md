@@ -114,6 +114,23 @@ browser display caches remain the frontend's responsibility.
 
 ## Browser-Private Protocol
 
+BrowserVault schema 6 stores a small session head beside each checkpoint. The
+head contains the session record, revision and commit time; checkpoint writes,
+commit application and deletion update it in the same IndexedDB transaction.
+Session lists and lock ownership checks read these heads without decoding
+conversation history. Earlier development vaults must be recreated; there is no
+migration or fallback to reading old checkpoint rows.
+
+A checkpoint travels whole in both directions at every action, so it holds only
+what does not grow with each turn played, plus the conversation itself. All game
+state, messages and the prompt history are complete. Of the execution journals
+it carries the turn results and runtime outputs of the latest 40 executions (a
+retry names a recent turn as its source) and the `turn.started` /
+`turn.completed` / `turn.failed` trace rows that the execution status is read
+from. The tool-call log, the event trail and every other trace row have no
+reader outside the debug page and stay in the server workspace that produced
+them; the debug page of a private session therefore shows no model calls.
+
 The browser is authoritative in local mode. The server may read API keys from
 request headers and execute a turn, but it must not durably persist the player's
 checkpoint or credentials.
@@ -177,8 +194,16 @@ New session creation queued behind deletion rechecks the world and fails if it
 is gone. Lock acquisition always follows world then session; workspace callbacks
 must not recursively request local world or session locks. The low-level vault
 write methods rely on this service-level ownership, rather than acquiring locks
-again inside an existing operation. Explicit generated-world saves replace the
+again inside an existing operation. Generated-world revision saves replace the
 entire record; they are not field patches or a merge of stale documents.
+Revision saves additionally supply the world captured before the model request.
+Inside exclusive ownership, the service compares that baseline with the latest
+public world shape (including dimensions surfaced from metadata), ignoring JSON
+object key order. A changed or missing world rejects the stale result without
+overwriting edits or resurrecting a deletion. Initial generation has no revision
+baseline and requires an unused ID inside the same lock; it cannot overwrite a
+world another window created during generation. Both generated content and its
+baseline are copied before awaiting I/O.
 
 Browser-private execution requires Web Locks (HTTPS or localhost in a supported
 browser). Missing support produces a workspace error before any action is
@@ -406,6 +431,19 @@ metadata must not supply an override the snapshot did not capture. See [snapshot
 
 ## Record Identity
 
+Text and JSON content lose U+0000 before persistence on every backend, including nested values. Record identifiers containing U+0000 are rejected; cleaning JSON keys that would collide is also rejected. Fractional lorebook insertion order is preserved. Text tie-breakers use byte order, and same-timestamp conversation rows retain insertion order.
+
+PostgreSQL allocates message, trace and turn-artifact positions with per-table
+sequences, including simultaneous connections. SQLite allocates under its
+serialized write boundary. Sequence gaps after rollback are valid; sequential
+imports assign fresh positions in the imported list order. Cursor pages use the
+same positions as full lists. The data-schema metadata version is 4 on both SQL
+backends; existing development databases must be recreated.
+
+Vector search applies session/plugin/namespace filters before exact top-K selection. Memory, SQLite and PostgreSQL return Euclidean L2 distance. PostgreSQL materializes the filtered candidates rather than using a global approximate index that can lose hits after filtering.
+
+Browser checkpoints exclude diagnostic LLM/hook trace payloads and duplicate trace-topic event rows. The server remains the source for these diagnostics. Checkpoints still carry gameplay and execution recovery state; this is not an incremental checkpoint protocol.
+
 World dimensions are normalized at the shared record boundary. Character identity
 is `(sessionId, id)`. Lorebook identity also includes its owner: world, player, or
 a specific plugin. A plugin can modify only its own lore entries, including when
@@ -530,3 +568,7 @@ New kernel subsystems may introduce
 additional `_<name>` namespaces without breaking changes. Plugin authors must never
 rely on `_` namespaces for their own data or assume they can write to kernel-reserved
 names.
+
+Execution reads use `queryTurnResults` (root artifacts only) and `queryTraceEvents` to filter before decoding payloads. Turn artifacts persist `retryScope` independently of trace retention and preserve insertion order for timestamp ties. `queryPluginData` supports indexed namespace reads across sessions and optional top-level string filtering; the dimension barrier requests only pending receipts, and worker maintenance shares one queue snapshot. Wakes received while that snapshot is read or maintained remain queued for the next pass, and reconciliation advances only through the snapshot's read-start time. `deleteEventsBefore` provides explicit event-log retention. This changes the development database schema (`turn_results.retry_scope`, log positions, and PostgreSQL fractional lore order); recreate affected development databases. No old-schema migration is provided.
+
+Prompt reads are bounded at the storage boundary. `getLatestPlayerInput(sessionId)` selects one form submission ordered by descending `createdAt` and byte-ordered ID, so execution admission does not load the input log. `getPluginDataPromptWindow(sessionId, pluginId, namespace, maxEntries)` returns `{ entries, total }`: below the cap it returns creation order; above the cap it selects the oldest half plus the most recently updated remainder, excluding duplicate anchors. SQL backends count rows without loading JSON and apply limits before record decoding. MemoryStore implements the same selection and ownership contract.

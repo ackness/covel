@@ -22,8 +22,8 @@
  * support explicit cache hints (currently Anthropic Messages) split on the
  * sentinel and attach `cache_control: { type: 'ephemeral' }` to the
  * preceding segment. Adapters that rely on automatic prefix matching
- * (OpenAI / DeepSeek / Qwen) leave the string untouched — the sentinel is
- * stable across calls, so it does not break prefix stability.
+ * (OpenAI / DeepSeek / Qwen) remove the marker at serialization. Internal
+ * cache metadata is never part of the text delivered to a model.
  *
  * ## Invisibility guarantees
  *
@@ -102,9 +102,7 @@ export function splitPromptCacheSegments(
  *
  * Useful for adapters that support automatic prefix-based caching and do
  * not need the segment structure — they can drop the sentinels entirely
- * and send a clean string. Note that leaving the sentinels in place is
- * also fine; this helper exists for adapters that want to minimize wire
- * bytes and keep upstream logs clean.
+ * and send a clean string without exposing internal metadata to the model.
  */
 export function stripPromptCacheMarkers(systemPrompt: string): string {
   if (!systemPrompt || !systemPrompt.includes(PROMPT_CACHE_BREAKPOINT_MARKER)) {

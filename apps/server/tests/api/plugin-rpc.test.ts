@@ -34,12 +34,14 @@ import { sessionRoutes } from "../../src/routes/api/session.js";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import {
   createInProcessSessionLock,
+  SessionLockTimeoutError,
   type SessionLock,
 } from "../../src/lib/session-lock.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 import { publicPluginDataValue } from "../../src/routes/api/plugin-rpc/runtime-job-public.js";
 import branchReplyHandler from "../../../../plugins/branch-reply/handler.js";
 import branchReplyEntry from "../../../../plugins/branch-reply/server/index.js";
+import { makeErrorHandler } from "../../src/api-error.js";
 
 type Env = {
   Variables: {
@@ -73,6 +75,7 @@ function setup(): {
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
   const app = new Hono<Env>();
+  app.onError(makeErrorHandler("[test]", false));
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("rpcExecutor", executor);
@@ -193,6 +196,51 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   beforeEach(async () => {
     ({ app, store, registry, pluginRegistry, sessionLock } = setup());
     await seedSession(store);
+  });
+
+  it("lets the global handler report lock contention and log unexpected dispatch failures", async () => {
+    await seedSession(store, "sess-rpc-error");
+    for (const [error, status, body] of [
+      [
+        new SessionLockTimeoutError("private session lock detail"),
+        503,
+        { error: "Session is busy, please retry", code: "session_busy" },
+      ],
+      [
+        new Error("private storage detail"),
+        500,
+        { error: "Internal server error" },
+      ],
+    ] as const) {
+      const log = vi
+        .spyOn(console, status === 503 ? "warn" : "error")
+        .mockImplementation(() => {});
+      const lock = vi
+        .spyOn(sessionLock, "withLock")
+        .mockRejectedValueOnce(error);
+      try {
+        const response = await app.request(
+          "/api/sessions/sess-rpc-error/plugin-rpc",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              kind: "action",
+              pluginId: "framework",
+              action: "echo",
+              payload: {},
+            }),
+          },
+        );
+        expect(response.status).toBe(status);
+        expect(await response.json()).toEqual(body);
+        expect(log).toHaveBeenCalled();
+        expect(log.mock.calls[0]?.[0]).toContain("POST");
+      } finally {
+        lock.mockRestore();
+        log.mockRestore();
+      }
+    }
   });
 
   it("returns 404 for unknown session", async () => {
@@ -562,6 +610,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       }),
     });
     expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Internal server error" });
     expect(exposed).toEqual([]);
     expect((await store.getSession("sess-rpc-1"))?.status).toBe("active");
     expect(

@@ -4,19 +4,20 @@ import {
   localeRegistry,
   localeDisplayName,
   resolveI18nText,
-  type I18nText,
-  type SimpleCompletionAdapter,
-  type HistoryCompactionInput,
-  type HistoryCompactionOutput,
-} from "@covel/shared";
-import {
-  createPromptLoader,
   interpolate,
   estimateTokens,
-  type PromptLoader,
+  type I18nText,
+  type SimpleCompletionAdapter,
   type TokenEstimator,
-} from "@covel/context";
-import type { TurnMessageRecord, SessionSummaryRecord } from "@covel/store";
+  type HistoryCompactInput as HistoryCompactionInput,
+  type HistoryCompactOutput as HistoryCompactionOutput,
+  type ExtensionHistoryMessage as TurnMessageRecord,
+  type HistoryCompactSummary as SessionSummaryRecord,
+} from "@covel/plugin-handlers-utils";
+import {
+  createPromptLoader,
+  type PromptLoader,
+} from "@covel/plugin-handlers-utils/prompts";
 import { fileURLToPath } from "node:url";
 const loadPrompt = createPromptLoader(
   fileURLToPath(new URL("../prompts", import.meta.url)),
@@ -37,9 +38,6 @@ export interface CompactionPolicyOptions {
 }
 const DEFAULT_PROTECT_LAST_USER_TURNS = 2;
 const DEFAULT_PROTECT_LAST_N_MESSAGES = 5;
-const SUMMARY_TOKEN_FRACTION = 0.04;
-const MIN_SUMMARY_TOKENS = 128;
-const MAX_SUMMARY_TOKENS = 1_024;
 
 /**
  * Default focus sections used when the caller does not supply any. The actual
@@ -67,11 +65,11 @@ const DEFAULT_FOCUS_SECTIONS: readonly I18nText[] = [
 const COMPACTOR_TEXT = {
   mergeSummary: {
     "zh-CN":
-      "请把已有滚动摘要与新增对话合并成一份完整摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 {{ maxSummaryTokens }} tokens。\n\n<已有滚动摘要>\n{{ prior }}\n</已有滚动摘要>\n\n<新增对话>\n{{ messages }}\n</新增对话>",
+      "请把所选连续摘要合并成一份摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 {{ maxSummaryTokens }} tokens。\n\n<所选历史摘要>\n{{ prior }}\n</所选历史摘要>\n\n<新增对话>\n{{ messages }}\n</新增对话>",
     "en-US":
-      "Merge the existing rolling summary and new conversation into one complete summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately {{ maxSummaryTokens }} tokens.\n\n<existing_rolling_summary>\n{{ prior }}\n</existing_rolling_summary>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
+      "Merge only the selected consecutive historical summaries into one summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately {{ maxSummaryTokens }} tokens.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
     "ru-RU":
-      "Объедини существующее накопительное резюме и новый диалог в одно полное резюме. Сохрани все по-прежнему актуальные имена, договорённости, места, отношения, состояния и причинно-следственные связи. Итоговое резюме должно занимать не более примерно {{ maxSummaryTokens }} токенов.\n\n<existing_rolling_summary>\n{{ prior }}\n</existing_rolling_summary>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
+      "Объедини выбранные последовательные исторические резюме в одно резюме. Сохрани все по-прежнему актуальные имена, договорённости, места, отношения, состояния и причинно-следственные связи. Итоговое резюме должно занимать не более примерно {{ maxSummaryTokens }} токенов.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
   },
   summarize: {
     "zh-CN":
@@ -172,16 +170,6 @@ function buildCompactorUserPrompt(
   );
 }
 
-function resolveSummaryTokenBudget(contextWindow: number): number {
-  return Math.min(
-    MAX_SUMMARY_TOKENS,
-    Math.max(
-      MIN_SUMMARY_TOKENS,
-      Math.floor(contextWindow * SUMMARY_TOKEN_FRACTION),
-    ),
-  );
-}
-
 function boundSummaryContent(
   content: string,
   maxTokens: number,
@@ -194,6 +182,12 @@ function boundSummaryContent(
   }
 
   const marker = compactorText("truncated", locale);
+  if (estimator(marker.trim()) > maxTokens) {
+    return {
+      content: trimmed.slice(0, Math.max(1, maxTokens)),
+      truncated: true,
+    };
+  }
   let low = 0;
   let high = trimmed.length;
   while (low < high) {
@@ -263,7 +257,7 @@ export async function compactHistory(
   },
   opts: CompactionPolicyOptions = {},
 ): Promise<HistoryCompactionOutput> {
-  const { messages, existingSummaries, contextWindow, locale } = input;
+  const { messages, existingSummaries, locale } = input;
   const estimator = deps.estimator ?? estimateTokens;
   const protectStart = computeProtectStart(
     messages,
@@ -273,48 +267,158 @@ export async function compactHistory(
   const lastCompactedIndex = messages.findLastIndex(
     (m) => m.compactedAtTurnId != null,
   );
-  const toCompact = messages.slice(lastCompactedIndex + 1, protectStart);
+  let toCompact = messages.slice(lastCompactedIndex + 1, protectStart);
   if (!toCompact.length) return null;
-  const maxSummaryTokens = resolveSummaryTokenBudget(contextWindow);
-  const mergedFocusSections = [
-    ...new Set([
-      ...existingSummaries.flatMap((s) => s.focusSections),
-      ...(opts.focusSections ?? []),
-    ]),
-  ];
+  const { summaryBudget } = input;
+  const focusSections = [...new Set(opts.focusSections ?? [])];
+  const freshSystemPrompt = await buildCompactorSystemPrompt(
+    locale,
+    focusSections,
+    deps.loadPrompt ?? loadPrompt,
+  ).catch(() => null);
+  if (freshSystemPrompt === null) {
+    console.warn("[history-compaction] Failed to load prompt template");
+    return null;
+  }
+  // Pick the largest contiguous prefix that the fast model can actually read.
+  // Never truncate a source message: its original content stays visible until
+  // a complete summary can replace it.
+  let low = 0;
+  let high = toCompact.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const prompt = buildCompactorUserPrompt(
+      toCompact.slice(0, mid),
+      locale,
+      [],
+      summaryBudget.maxSegmentTokens,
+    );
+    if (estimator(freshSystemPrompt) + estimator(prompt) <= input.inputWindow)
+      low = mid;
+    else high = mid - 1;
+  }
+  toCompact = toCompact.slice(0, low);
+  if (!toCompact.length) return null;
+  const sourceTokens = toCompact.reduce(
+    (n, message) => n + estimator(message.content),
+    0,
+  );
+  let newBudget = Math.min(
+    summaryBudget.maxSegmentTokens,
+    Math.max(128, Math.ceil(sourceTokens * 0.25)),
+  );
   try {
-    const systemPrompt = await buildCompactorSystemPrompt(
-      locale,
-      mergedFocusSections,
-      deps.loadPrompt ?? loadPrompt,
-    );
-    const response = await deps.fastSlotLlm.complete({
-      systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: buildCompactorUserPrompt(
-            toCompact,
-            locale,
-            existingSummaries,
-            maxSummaryTokens,
-          ),
-        },
-      ],
-    });
-    if (!response.content.trim()) return null;
-    const bounded = boundSummaryContent(
-      response.content,
-      maxSummaryTokens,
-      estimator,
-      locale,
-    );
-    return {
-      messageIds: toCompact.map((m) => m.id),
-      content: bounded.content,
-      focusSections: mergedFocusSections,
-      truncated: bounded.truncated,
+    const summarize = async (
+      selectedMessages: readonly TurnMessageRecord[],
+      selectedSummaries: readonly SessionSummaryRecord[],
+      maxTokens: number,
+      sections: readonly string[],
+    ) => {
+      const systemPrompt =
+        selectedSummaries.length === 0
+          ? freshSystemPrompt
+          : await buildCompactorSystemPrompt(
+              locale,
+              sections,
+              deps.loadPrompt ?? loadPrompt,
+            );
+      const userPrompt = buildCompactorUserPrompt(
+        selectedMessages,
+        locale,
+        selectedSummaries,
+        maxTokens,
+      );
+      if (estimator(systemPrompt) + estimator(userPrompt) > input.inputWindow)
+        return null;
+      const response = await deps.fastSlotLlm.complete({
+        systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+      if (!response.content.trim()) return null;
+      const bounded = boundSummaryContent(
+        response.content,
+        maxTokens,
+        estimator,
+        locale,
+      );
+      if (!bounded.content.trim() || estimator(bounded.content) > maxTokens)
+        return null;
+      return {
+        content: bounded.content,
+        focusSections: sections,
+        truncated: bounded.truncated,
+      };
     };
+    let fresh = await summarize(toCompact, [], newBudget, focusSections);
+    if (!fresh) return null;
+    const totalExistingTokens = existingSummaries.reduce(
+      (n, summary) => n + estimator(summary.content),
+      0,
+    );
+    let mergeCount = 0;
+    let retainedTokens = totalExistingTokens;
+    let mergeBudget = 0;
+    let freshTokens = estimator(fresh.content);
+    if (
+      existingSummaries.length > 0 &&
+      totalExistingTokens + freshTokens > summaryBudget.maxTokens
+    ) {
+      // A tiny window cannot hold two full-sized segments. Bound only this
+      // fresh result once more, reserving room for the old prefix's merge.
+      newBudget = Math.min(newBudget, Math.floor(summaryBudget.maxTokens / 2));
+      if (newBudget < 1) return null;
+      const bounded = boundSummaryContent(
+        fresh.content,
+        newBudget,
+        estimator,
+        locale,
+      );
+      if (estimator(bounded.content) > newBudget) return null;
+      fresh = {
+        ...fresh,
+        content: bounded.content,
+        truncated: fresh.truncated || bounded.truncated,
+      };
+      freshTokens = estimator(fresh.content);
+    }
+    // Use actual generated sizes rather than the maximum allocation: small
+    // segments must not trigger an unnecessary rewrite of older history.
+    while (
+      mergeCount < existingSummaries.length &&
+      (existingSummaries.length - mergeCount + 1 + (mergeCount > 0 ? 1 : 0) >
+        summaryBudget.maxSegments ||
+        retainedTokens + freshTokens + mergeBudget > summaryBudget.maxTokens)
+    ) {
+      retainedTokens -= estimator(existingSummaries[mergeCount]!.content);
+      mergeCount += 1;
+      const selectedTokens = totalExistingTokens - retainedTokens;
+      mergeBudget = Math.min(
+        summaryBudget.maxSegmentTokens,
+        Math.max(1, summaryBudget.maxTokens - freshTokens - retainedTokens),
+        Math.max(1, Math.ceil(selectedTokens * 0.75)),
+      );
+    }
+    const summaries: NonNullable<HistoryCompactionOutput>["summaries"][number][] =
+      [];
+    if (mergeCount > 0) {
+      const selected = existingSummaries.slice(0, mergeCount);
+      const mergedSections = [
+        ...new Set(selected.flatMap((summary) => summary.focusSections)),
+      ];
+      const merged = await summarize([], selected, mergeBudget, mergedSections);
+      if (!merged) return null;
+      summaries.push({
+        ...merged,
+        messageIds: [],
+        replacesSummaryIds: selected.map((summary) => summary.id),
+      });
+    }
+    summaries.push({
+      ...fresh,
+      messageIds: toCompact.map((message) => message.id),
+      replacesSummaryIds: [],
+    });
+    return { summaries };
   } catch (error) {
     console.warn(
       `[history-compaction] Failed to load prompt template or generate summary: ${error instanceof Error ? error.message : String(error)}`,

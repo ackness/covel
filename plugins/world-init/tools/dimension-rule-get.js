@@ -1,12 +1,12 @@
+import { resolveI18nText } from "@covel/plugin-handlers-utils";
+import { resolveI18nDeep } from "@covel/plugin-handlers-utils";
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
-  resolveI18nDeep,
-  resolveI18nText,
   dimensionIdSchema,
   dimensionRecordSchema,
   dimensionSettlementReceiptSchema,
-} from "@covel/shared";
+} from "@covel/plugin-handlers-utils/dimensions";
 import { schemaForTracker } from "../lib/schema-for-tracker.js";
 
 /** Tracker-only adopted rules, paged so large schemas never flood a model prompt. */

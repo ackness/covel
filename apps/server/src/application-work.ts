@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { setMaxListeners } from "node:events";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
+import { holdSingleFlight } from "./middleware/rate-limit.js";
 import { errorBody } from "./api-error.js";
 
 export interface RequestWork {
@@ -102,6 +103,7 @@ export function streamOwnedSSE(
 ): Response {
   return streamSSE(c, (stream) =>
     trackRequestWork(c, async () => {
+      const releaseFlight = holdSingleFlight(c);
       const signal = c.get("requestWork")?.signal;
       const abort = () => stream.abort();
       signal?.addEventListener("abort", abort, { once: true });
@@ -110,6 +112,7 @@ export function streamOwnedSSE(
         await run(stream);
       } finally {
         signal?.removeEventListener("abort", abort);
+        releaseFlight();
       }
     }),
   );

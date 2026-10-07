@@ -4,6 +4,7 @@ import {
   validateSessionCommit,
   type BrowserCheckpoint,
   type SessionCommit,
+  type SessionRecord,
   type WorldRecord,
 } from "@covel/store/browser-sync";
 import Dexie, { type Table } from "dexie";
@@ -16,6 +17,7 @@ export interface ApplySessionCommitResult {
 }
 
 export interface BrowserVaultSession {
+  readonly session: SessionRecord;
   readonly sessionId: string;
   readonly revision: number;
   readonly updatedAt: string;
@@ -26,7 +28,7 @@ export interface BrowserVaultOptions {
 }
 
 const BROWSER_VAULT_DB_NAME = "covel-browser-vault";
-const BROWSER_VAULT_SCHEMA_VERSION = 5;
+const BROWSER_VAULT_SCHEMA_VERSION = 6;
 
 class BrowserVaultError extends Error {
   constructor(message: string) {
@@ -74,6 +76,7 @@ interface PendingCommitRecord {
 
 class BrowserVaultDatabase extends Dexie {
   checkpoints!: Table<CheckpointRecord, string>;
+  heads!: Table<BrowserVaultSession, string>;
   commits!: Table<CommitRecord, string>;
   pendingCommits!: Table<PendingCommitRecord, string>;
   worlds!: Table<WorldRecord, string>;
@@ -84,6 +87,7 @@ class BrowserVaultDatabase extends Dexie {
     this.version(BROWSER_VAULT_SCHEMA_VERSION)
       .stores({
         checkpoints: "sessionId, revision, committedAt",
+        heads: "sessionId, session.worldId",
         commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
         pendingCommits: "sessionId, actionId, stagedAt",
         worlds: "id, createdAt, updatedAt",
@@ -226,6 +230,7 @@ export class BrowserVault {
     return this.db.transaction(
       "rw",
       this.db.checkpoints,
+      this.db.heads,
       this.db.worlds,
       async () => {
         const current = await this.db.checkpoints.get(checkpoint.sessionId);
@@ -251,6 +256,12 @@ export class BrowserVault {
           checkpoint: cloneCheckpoint(checkpoint),
           committedAt: checkpoint.committedAt,
         });
+        await this.db.heads.put({
+          sessionId: checkpoint.sessionId,
+          revision: checkpoint.revision,
+          updatedAt: checkpoint.committedAt,
+          session: structuredClone(checkpoint.session),
+        });
         if (checkpoint.world) {
           await this.db.worlds.put(structuredClone(checkpoint.world));
         }
@@ -270,6 +281,7 @@ export class BrowserVault {
     return this.db.transaction(
       "rw",
       this.db.checkpoints,
+      this.db.heads,
       this.db.commits,
       this.db.worlds,
       async () => {
@@ -309,6 +321,12 @@ export class BrowserVault {
           revision: next.revision,
           checkpoint: cloneCheckpoint(next),
           committedAt: next.committedAt,
+        });
+        await this.db.heads.put({
+          sessionId: next.sessionId,
+          revision: next.revision,
+          updatedAt: next.committedAt,
+          session: structuredClone(next.session),
         });
         await this.db.commits.add({
           id,
@@ -371,23 +389,11 @@ export class BrowserVault {
   }
 
   async getSession(sessionId: string): Promise<BrowserVaultSession | null> {
-    const record = await this.db.checkpoints.get(sessionId);
-    return record
-      ? {
-          sessionId,
-          revision: record.revision,
-          updatedAt: record.committedAt,
-        }
-      : null;
+    return (await this.db.heads.get(sessionId)) ?? null;
   }
 
   async listSessions(): Promise<readonly BrowserVaultSession[]> {
-    const records = await this.db.checkpoints.orderBy("sessionId").toArray();
-    return records.map((record) => ({
-      sessionId: record.sessionId,
-      revision: record.revision,
-      updatedAt: record.committedAt,
-    }));
+    return this.db.heads.orderBy("sessionId").toArray();
   }
 
   async listWorlds(): Promise<readonly WorldRecord[]> {
@@ -433,12 +439,15 @@ export class BrowserVault {
       "rw",
       this.db.worlds,
       this.db.checkpoints,
+      this.db.heads,
       this.db.commits,
       this.db.pendingCommits,
       async () => {
-        const sessions = await this.db.checkpoints
-          .filter((record) => record.checkpoint.session.worldId === id)
+        const sessions = await this.db.heads
+          .where("session.worldId")
+          .equals(id)
           .primaryKeys();
+        await this.db.heads.bulkDelete(sessions);
         await this.db.checkpoints.bulkDelete(sessions);
         await this.db.pendingCommits.bulkDelete(sessions);
         await this.db.commits.where("sessionId").anyOf(sessions).delete();
@@ -451,11 +460,13 @@ export class BrowserVault {
     await this.db.transaction(
       "rw",
       this.db.checkpoints,
+      this.db.heads,
       this.db.commits,
       this.db.pendingCommits,
       async () => {
         await Promise.all([
           this.db.checkpoints.delete(sessionId),
+          this.db.heads.delete(sessionId),
           this.db.commits.where("sessionId").equals(sessionId).delete(),
           this.db.pendingCommits.delete(sessionId),
         ]);
@@ -466,14 +477,18 @@ export class BrowserVault {
   async clear(): Promise<void> {
     await this.db.transaction(
       "rw",
-      this.db.checkpoints,
-      this.db.commits,
-      this.db.pendingCommits,
-      this.db.worlds,
-      this.db.initialization,
+      [
+        this.db.checkpoints,
+        this.db.heads,
+        this.db.commits,
+        this.db.pendingCommits,
+        this.db.worlds,
+        this.db.initialization,
+      ],
       async () => {
         await Promise.all([
           this.db.checkpoints.clear(),
+          this.db.heads.clear(),
           this.db.commits.clear(),
           this.db.pendingCommits.clear(),
           this.db.worlds.clear(),

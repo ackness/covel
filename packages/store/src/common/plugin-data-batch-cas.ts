@@ -2,7 +2,9 @@ import type {
   PluginDataBatchCasEntry,
   PluginDataRecord,
   PluginDataStore,
+  SessionStore,
 } from "../types.js";
+import { SessionNotFoundError } from "../errors.js";
 
 export function pluginDataVersion(value: unknown): number | undefined {
   if (!value || typeof value !== "object" || !Object.hasOwn(value, "version"))
@@ -34,12 +36,15 @@ export function validatePluginDataCasEntries(
 
 /** Caller owns a transaction and the per-session write barrier before any read. */
 export async function applyPluginDataBatchCas(
-  store: Pick<PluginDataStore, "getPluginData" | "setPluginDataBatch">,
+  store: Pick<PluginDataStore, "getPluginData" | "setPluginDataBatch"> &
+    Pick<SessionStore, "getSession">,
   sessionId: string,
   pluginId: string,
   entries: readonly PluginDataBatchCasEntry[],
 ): Promise<boolean> {
   validatePluginDataCasEntries(entries);
+  if (!(await store.getSession(sessionId)))
+    throw new SessionNotFoundError(sessionId);
   const rows: PluginDataRecord[] = [];
   for (const entry of entries) {
     const existing = await store.getPluginData(

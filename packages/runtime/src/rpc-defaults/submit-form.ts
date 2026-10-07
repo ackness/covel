@@ -419,7 +419,10 @@ function fillTemplate(
   located: LocatedInteraction,
   labels: SubmitFormLabels,
 ): string {
-  let template = located.message.content;
+  // A choice or confirmation takes its template from the interaction only.
+  // The message that carries it holds the runtime's own text, so reading that
+  // as a template would return the AI's prose as the player's answer.
+  let template = sub.type === "form" ? located.message.content : "";
   if (typeof located.interaction.narrativeTemplate === "string") {
     template = located.interaction.narrativeTemplate;
   }

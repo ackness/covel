@@ -25,6 +25,7 @@ import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { OnboardingWizard } from "@/components/onboarding-wizard.js";
 import { isOnboarded } from "@/components/onboarding-wizard/persistence.js";
 import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
+import { ServerStatusOverlay } from "@/components/desktop/server-status-overlay.js";
 
 // Lazy-load the in-game surface (chat + stage + json-render panels + plugin
 // UI) — the single heaviest component tree in the app, but only reachable once
@@ -54,6 +55,17 @@ export const Route = createFileRoute("/session")({
 });
 
 function SessionPage() {
+  return (
+    <>
+      {/* Above every screen of this route, so a stopped desktop server is
+          reported whichever one the player is on. */}
+      <ServerStatusOverlay />
+      <SessionScreen />
+    </>
+  );
+}
+
+function SessionScreen() {
   const { t } = useTranslation();
   const {
     state,
@@ -121,6 +133,8 @@ function SessionPage() {
   useEffect(() => {
     return initDesktopBridge({
       onOpenSettings: () => settings.setOpen(true),
+      onImportPlugin: () => settings.openWithKey("packages"),
+      onImportWorld: () => settings.openWithKey("packages"),
       onNewWorld: () => navigateRef.current({ to: "/session", search: {} }),
       onExportChat: () => {
         const tt = tRef.current;

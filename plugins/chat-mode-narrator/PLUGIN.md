@@ -202,7 +202,7 @@ Tags: {{ world.tags }}
 
 ## Opening Scene
 
-{{ world.openingScenario }}
+Use the opening situation described in `<world-lore>` and `<world-dimensions>`.
 
 ## Player Character
 

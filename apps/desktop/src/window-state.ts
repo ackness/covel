@@ -1,7 +1,7 @@
 /**
  * Persist and restore BrowserWindow size, position, and maximized/fullscreen state.
  *
- * Stored as JSON at `<userData>/window-state.json`. Simpler than
+ * Stored as JSON at `<covelHome>/window-state.json`. Simpler than
  * `electron-window-state` for our needs: one window, small surface.
  *
  * Design choices:
@@ -15,6 +15,7 @@
 import { BrowserWindow, screen } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import { covelHome } from "./paths.js";
 
 interface WindowState {
@@ -36,6 +37,19 @@ const DEFAULT_STATE: WindowState = {
 const STATE_VERSION = 1;
 const DEBOUNCE_MS = 250;
 
+const coordinateSchema = z.number().int().min(-2147483648).max(2147483647);
+const persistedSchema = z.object({
+  version: z.literal(STATE_VERSION),
+  state: z.object({
+    x: coordinateSchema.optional(),
+    y: coordinateSchema.optional(),
+    width: coordinateSchema.positive().default(DEFAULT_STATE.width),
+    height: coordinateSchema.positive().default(DEFAULT_STATE.height),
+    isMaximized: z.boolean().default(false),
+    isFullScreen: z.boolean().default(false),
+  }),
+});
+
 interface Persisted {
   version: number;
   state: WindowState;
@@ -48,11 +62,7 @@ function stateFile(): string {
 function readPersisted(): WindowState {
   try {
     const raw = fs.readFileSync(stateFile(), "utf-8");
-    const parsed = JSON.parse(raw) as Partial<Persisted>;
-    if (parsed.version !== STATE_VERSION || !parsed.state) {
-      return DEFAULT_STATE;
-    }
-    return { ...DEFAULT_STATE, ...parsed.state };
+    return persistedSchema.parse(JSON.parse(raw)).state;
   } catch {
     return DEFAULT_STATE;
   }

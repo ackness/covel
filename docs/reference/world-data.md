@@ -4,6 +4,12 @@
 
 ## World Package
 
+世界包加载会读取声明语言对应的 `WORLD.<locale>.md`。叙事上下文按固定的会话语言选择正文，默认语言优先使用数据库中的已编辑内容；会话的 `loreOverride`（包括空字符串）优先。正文以有界的 `<world-lore>` 段进入故事提示词：上限约 8,000 token（按估算 token 计，中文一字约一个、其他文字四个字符约一个），超出时在最后一个放得下的整行之后截断。翻译模型结果先保存在内存中，发布时在世界操作锁内核对创建时间、实际包路径和目录身份，再合并新语言及其正文，保留已保存的编辑；删除中或同 ID 重建的世界拒绝旧翻译，旧请求不会写入或清理新包文件。
+
+AI 修订发布时会在世界操作锁内复核原记录与文件包身份。生成期间的编辑、删除或同 ID 重建会使旧结果失效，不再用旧修订覆盖当前世界。
+
+维度 ID 始终开放。框架不从 `tone` 或 `startingConditions` 提取专用提示词字段，作者通过通用世界正文和维度投影表达它们。
+
 **最小的世界包**是两个文件：`world.yaml`（`schemaVersion`、`id`、`name`、`summary`、`defaultLocale` 五个必填字段）和 `WORLD.md`。之后每增加一种内容，就在约定的位置加一个文件，不需要再登记：
 
 | 文件                         | 内容                                                                                                                   |
@@ -337,7 +343,7 @@ sources:
 
 `memory` 插件在 `contributes.data.definitions.accepts` 声明 `memory.blocks@1`，因此该对象导入其自身 `definitions/world` 记录。世界清单与世界 metadata 不承载记忆定义专用字段。提取结果保存在该插件的 `blocks` namespace，并经 `prompt.segment@1` 注入提示词。
 
-标签必须符合 `^[a-z][a-z0-9_]*$`，`displayName/extractionHint` 支持 I18nText，`maxChars` 为正整数。插件先加载固定的基础定义，再加载活跃插件的 `memory.block-definitions@1` 服务，最后加载世界定义；已占用标签保留先前定义。三个内置世界均采用此文件与 contract 结构。
+标签必须符合 `^[a-z][a-z0-9_]*$`，`displayName/extractionHint` 支持 I18nText，`maxChars` 为正整数。插件先加载固定的基础定义，再加载活跃插件的 `memory.block-definitions@1` 服务，最后加载世界定义；已占用标签保留先前定义。四个内置世界均采用此文件与 contract 结构。
 
 ## 按约定导入（没有 descriptor）
 
@@ -352,7 +358,7 @@ sources:
 
 **什么时候仍然写 descriptor**：文件不在约定路径上（比如规则文件叫 `data/rules/tide-mystery.yaml`）、一个契约有多个文件、需要 `after` 指定顺序、或要关掉某个 source。写了 `worldData` 之后只认 descriptor，约定不再生效，因此 descriptor 要列全。
 
-没有 descriptor 时，`data/` 下不属于任何约定的 YAML / JSON 文件不会被导入；`pnpm validate:world` 对这种文件给出 `data-file-unused` 提醒，并列出当前可用的约定路径。服务端按已安装插件的约定读取；某个插件没装，它的文件就不在约定里，同样会得到这条提醒。
+没有 descriptor 时，服务端按已安装插件的约定读取数据；有 descriptor 时，只读取声明的 source。`pnpm validate:world` 递归检查 `data/`、`characters/`、`media/` 中未被 source 或框架资源声明使用的文件，给出 `data-file-unused` 提醒。已有 source 的语言变体、本地 schema、维度文件、主题音乐和画廊资源不会被误报；README 属于作者说明，也不参与此检查。
 
 ## Descriptor
 
@@ -465,9 +471,10 @@ characterSchema:
 
 合并规则（`@covel/shared` 的 `applyLocaleOverlay`）：
 
-- 对象按 key 合并；对象列表按 `id` 合并（worldData source 用它声明的 `key`），元素没有 `id` 时按位置合并。
+- 对象按 key 合并；对象列表先按 source 的 `key`、再按 `id` 合并；source 的 `localeArrayKeys` 可额外声明嵌套列表的稳定键（如 `localeArrayKeys: [label]`）。每个列表采用所有元素均有的第一个键，译文须保留该键，插入、删除或调整主文件顺序不改变译文归属。没有这些键时按位置合并。
+- 翻译工具不提取当前列表实际采用的身份字段，即使该字段是中文或看起来像展示文本。身份值保持原样；其他位置的同名展示字段仍可翻译。
 - 语言文件只能翻译主文件里已有的文本。出现主文件没有的 key 或 id、在结构位置写文本、改动数字或布尔值，这一条都会被忽略并报告，主文件的值保留。
-- 没翻译的文本回退到主文件，所以可以逐步翻译。把主文件整份复制再改文字也是合法的语言文件。
+- 没翻译的文本回退到主文件，所以可以逐步翻译。语言文件应只包含匹配用的稳定键和译文，避免复制媒体哈希、路径等会变化的字符串数据。
 - 纯文本列表（例如别名）作为一个整体翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。
 - 文件名里的 `<locale>` 必须是真实语言的标签（`en`、`en-US`、`zh-Hant`）；`items.backup.yaml` 不会被当成语言文件。
 
@@ -481,7 +488,7 @@ characterSchema:
 
 - 会话语言在创建时确定；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时取 `session.locale`。`zh-Hant-TW` 不会读取 `zh` 的文件。
 - 语言文件是 source 的一部分：改动任何一份都会改变该 source 的摘要，`sync-data` 能看到。
-- **主文件不再写内联 locale map**（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。此前用内联写法的世界包需要拆成主文件加语言文件；内置的三个双语世界已经这样迁移。
+- **主文件不再写内联 locale map**（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。此前用内联写法的世界包需要拆成主文件加语言文件；内置的四个世界已经这样迁移。
 - 维度值里只有 schema 标了 `x-i18n: true` 的文本节点可以翻译；翻译其他节点会让该维度校验失败。
 
 `source id` 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。descriptor 顶层目前只接受 `schemaVersion: 1` 和 `sources`。
@@ -533,8 +540,8 @@ sources:
 
 运行时边界：
 
-- `strategy: selective`（或 `kind: triggered`）只检查**当前玩家消息**；消息包含任一 `keys` 项时激活，大小写不敏感，按子串匹配。
-- `selective` 记录没有非空 `keys` 时不会激活。`constant` 每轮注入，不依赖 `keys`；省略 `strategy` / `kind` 时默认 `constant`。
+- `strategy: selective`（或 `kind: triggered`）检查当前玩家消息；`scanDepth` 还可纳入最近已提交的对话（含已压缩消息，最多 20 条）。Latin 关键词按整词匹配，并接受复数和所有格词尾（`lantern` 也匹配 `lanterns`、`lantern's`，不匹配 `lanternfish`）；CJK 关键词按子串匹配，大小写不敏感。
+- `selective` 记录必须有非空 `keys`，静态校验和导入预检会拒绝缺失的记录。`constant` 每轮注入，不依赖 `keys`；省略 `strategy` / `kind` 时默认 `constant`。
 - 可选字段还包括 `position`、`insertionOrder`、`enabled` 和 `extra`。默认 `position` 是 `after_plugin`，默认 `enabled` 是 `true`。
 - `PLUGIN.md` 中的 Markdown 链接不会触发文件加载；`references/*.md` 及其自定义 `keywords` frontmatter 不是插件运行时契约。
 
@@ -651,7 +658,7 @@ characterSchema:
 
 ## 领域角色与插件角色卡
 
-三个内置世界把两类内容分别交付：`characters/main-cast.json` 是可选的插件角色卡；`characters/characters.json` 是通用领域记录。
+四个内置世界把两类内容分别交付：`characters/main-cast.json` 是可选的插件角色卡；`characters/characters.json` 是通用领域记录。
 
 领域角色按作者在文件里写的顺序进入会话：导入时每个角色的 `createdAt` 比前一个晚一毫秒，而角色列表（面板、提示词里的名册）按 `(createdAt, id)` 排列。多个 source 都写角色时，按 source 的导入顺序接着排。游玩中新建的角色排在它们之后。
 
@@ -1071,6 +1078,8 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 校验器不创建会话、不执行插件代码，但复用建会话时的 worldData 预检，因此这里通过的数据在建会话时不会再因记录内容失败。插件目录取仓库 `plugins/` 加上每个 `--plugins <dir>`。
 
+角色 source 和 `effects: [characters]` 使用世界的 `characterSchema` 检查类型与属性，并检查合并后的角色中最多只有一个玩家。直接导入的世界书记录必须提供 `content`；直接记录和 `+lorebook` 投影的 selective 条目都必须有非空 `keys`。这些检查不依赖 source 是否声明额外 schema；错误包含文件、记录序号和 key，导入前发现错误就拒绝整个计划，不写入其中其余有效记录。
+
 | 诊断 code               | 级别             | 含义                                                                                                        |
 | ----------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
 | `manifest-invalid`      | error            | `world.yaml` 无法解析或不符合 schema                                                                        |
@@ -1085,7 +1094,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `locale-script`         | warning          | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词                                |
 | `edition-incomplete`    | warning          | `supportedLocales` 声明了某种语言，但该语言的版本缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
 | `inline-locale-map`     | error            | 主文件里把文本写成了 locale map；主文件只写一种语言，译文放进语言文件                                       |
-| `data-file-unused`      | warning          | 世界包没有 descriptor，而 `data/` 下这个文件不在任何约定路径上，不会被导入                                  |
+| `data-file-unused`      | warning          | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架资源声明使用                                   |
 
 标为“error 或 warning”的三项：拼写接近某个已知 ID 时判为 error 并提示 “Did you mean”；否则默认是 warning（提供者可能是未扫描的社区插件），加 `--strict` 后一律为 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
 
@@ -1112,3 +1121,13 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 世界时间由插件拥有的 `world.time-definition@1` 数据契约承载，记录为 `{ id: world, definition }`，通过 `schema` 与 `to` 的同名契约导入。它不属于世界维度。AI 生成的通用 `contractData` 记录在文件、服务端存储和浏览器私有世界中保留相同契约身份；便携记录要求 `key === value.id`。字段、倒流/随机规则及会话快照语义见 [World time](./world-time.md)。
 
 GitHub 世界包目录、多世界选择、代理下载和更新流程见 [世界目录与安装](./world-installation.md)。
+
+Static validation rejects invalid source target combinations: media sources use `to: media` and a contract `indexTo`; structured sources cannot target media. Empty sources produce a warning. Both conventional and descriptor-backed imports report unclaimed files recursively in `data/`, `characters/`, and `media/`; `dimensionSources` are checked even when no conventional data file exists. `pluginPolicy.presetId` must name a built-in or world pack, and plugin setting presets use the runtime type/range/option checks. Selective lore entries can set `extra.scanDepth` (0–20 prior committed messages, default 0); Latin keywords match whole words and their plural or possessive forms (`lantern` also matches `lanterns` and `lantern's`, not `lanternfish`), while CJK keywords use substring matching.
+
+`validate:world` also reports non-blocking prompt-size warnings: WORLD.md above
+8,000 tokens (what the story prompt carries; longer lore is cut after the last
+line that fits), constant lorebook content above 2,000 tokens per source, or
+initial dimension values above 8,000 tokens. Keep essential setting
+instructions in WORLD.md and use selective entries for situational lore. The
+sizes are estimated tokens (one per CJK character, one per four other
+characters), so a world is measured the same in every language.

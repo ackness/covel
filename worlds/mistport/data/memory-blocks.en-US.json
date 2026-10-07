@@ -1,18 +1,22 @@
 {
   "blocks": [
     {
+      "label": "clues",
       "displayName": "Testimony & Reasoning",
       "extractionHint": "Exact testimony, contradicting details, lines of reasoning, and untested theories. Each lead's verification status lives in the Case Board dimension; do not repeat it here."
     },
     {
+      "label": "relics",
       "displayName": "Relics",
       "extractionHint": "Ancient relics obtained or seen, their appraisals, effects, risks, and ownership."
     },
     {
+      "label": "tides",
       "displayName": "Tide Lore",
       "extractionHint": "Observations and rumors about ebb timing, fog-beast sightings, and safe/danger windows. The deep-withdrawal stage lives in the Deep Withdrawal dimension and the hero's fog-rot in character attributes; do not repeat them."
     },
     {
+      "label": "commitments",
       "displayName": "Allegiances & Debts",
       "extractionHint": "The story behind promises and deals made to the Council, Guild, Salt Fangs, and Congregation: who, for what, and on what terms. Attitude scores and permit/warrant/favor marks live in the Faction Standing dimension."
     }

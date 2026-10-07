@@ -43,12 +43,17 @@ export async function dimensionExecutionBarrier(args: {
   if (bound !== undefined && bound !== providers[0])
     return "Dimension provider unavailable; restore it before continuing";
   if (!args.willNarrate || !providers[0]) return undefined;
-  const rows = await args.store.listPluginData(
-    args.sessionId,
-    providers[0],
-    DIMENSION_SETTLEMENT_NAMESPACE,
-  );
+  const rows = await args.store.queryPluginData({
+    sessionId: args.sessionId,
+    pluginId: providers[0],
+    namespace: DIMENSION_SETTLEMENT_NAMESPACE,
+    valueFilter: { field: "status", values: ["pending-settlement"] },
+  });
   const pending = rows
+    .filter((row) => {
+      const value = row.value as { status?: unknown } | null;
+      return value?.status === "pending-settlement";
+    })
     .map((row) => dimensionSettlementReceiptSchema.parse(row.value))
     .find((receipt) => receipt.status === "pending-settlement");
   return pending

@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { loadLlmConfig, parseLlmConfig } from "@covel/ai-provider";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
 import { LLM_TOML_STARTER } from "../../src/ai-setup.js";
+import { makeErrorHandler } from "../../src/api-error.js";
 import { loadKeysEnv } from "../../../desktop/src/env-files.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
@@ -26,6 +27,7 @@ const ENV_KEYS = [
 
 function buildApp(apiKeys: Record<string, string>): Hono {
   const app = new Hono();
+  app.onError(makeErrorHandler("[config-test]", false));
   app.route("/", createConfigApiRoutes({ apiKeys }));
   return app;
 }
@@ -101,7 +103,9 @@ describe("config API env and file contracts", () => {
     fs.writeFileSync(override, "# Test config\n", "utf8");
     fs.writeFileSync(path.join(tmpHome, "llm.toml"), "# Home config\n", "utf8");
     vi.mocked(spawn).mockReturnValue({
-      on: vi.fn(),
+      on: vi.fn((event, listener) => {
+        if (event === "spawn") queueMicrotask(listener);
+      }),
       unref: vi.fn(),
     } as unknown as ReturnType<typeof spawn>);
 
@@ -123,7 +127,9 @@ describe("config API env and file contracts", () => {
     process.env.COVEL_DESKTOP_REST = "1";
     const llmToml = path.join(tmpHome, "llm.toml");
     vi.mocked(spawn).mockReturnValue({
-      on: vi.fn(),
+      on: vi.fn((event, listener) => {
+        if (event === "spawn") queueMicrotask(listener);
+      }),
       unref: vi.fn(),
     } as unknown as ReturnType<typeof spawn>);
     const app = buildApp(apiKeys);
@@ -159,6 +165,41 @@ describe("config API env and file contracts", () => {
 
     expect(res.status).toBe(400);
     expect(fs.existsSync(llmToml)).toBe(false);
+  });
+
+  it("reports an asynchronous file-manager startup failure through the sanitized error handler", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
+    vi.mocked(spawn).mockReturnValue({
+      on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+        if (event === "error")
+          queueMicrotask(() =>
+            listener(
+              new Error("Synthetic open failure /private/operator/path"),
+            ),
+          );
+      }),
+      unref: vi.fn(),
+    } as unknown as ReturnType<typeof spawn>);
+    const app = buildApp(apiKeys);
+    const response = await app.request("/api/config/open-folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "config" }),
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      error: "Internal server error",
+    });
+    expect(
+      (
+        await app.request("/api/config/open-folder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: "toString" }),
+        })
+      ).status,
+    ).toBe(400);
   });
 
   it("reports desktop paths from runtime env", async () => {
@@ -490,7 +531,7 @@ describe("config API env and file contracts", () => {
     });
     expect(rejected.status).toBe(500);
     await expect(rejected.json()).resolves.toMatchObject({
-      code: "config_write_failed",
+      error: "Internal server error",
     });
     expect(fs.readFileSync(configPath, "utf-8")).toBe(corrupt);
   });
@@ -562,7 +603,7 @@ describe("config API env and file contracts", () => {
       body: JSON.stringify({ mode: "http", url: "127.0.0.1:7890" }),
     });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(500);
     expect(fs.readFileSync(configPath, "utf-8")).toBe(corrupt);
   });
 

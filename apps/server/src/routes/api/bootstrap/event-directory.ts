@@ -8,8 +8,8 @@ import type { PackageManifest } from "@covel/plugin-loader";
  *
  * Declarations are re-aggregated on every call (session activation can
  * change between turns) — only the compiled ajv validators are cached,
- * keyed by resolved schema path, mirroring the pattern in
- * `apps/server/src/world-data/schema-registry.ts`.
+ * keyed by declaration identity and resolved schema path. A replacement
+ * generation gets a fresh validator while captured declarations retain theirs.
  */
 
 import { readFile } from "node:fs/promises";
@@ -89,9 +89,19 @@ function requiredFieldsSummary(raw: AnySchema): string {
     .join(", ");
 }
 
-export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
+export function createEventDirectory(
+  deps: EventDirectoryDeps,
+): EventDirectory & {
+  prepareDeclarations(
+    manifests: readonly PackageManifest[],
+    pluginDir: string | undefined,
+  ): Promise<void>;
+} {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
-  const schemaCache = new Map<string, LoadedSchema>();
+  const schemaCache = new WeakMap<
+    PluginEventDecl,
+    Map<string, Promise<LoadedSchema>>
+  >();
   /** So a cross-plugin topic conflict warns once per (session, topic), not every call. */
   const warnedConflicts = new Set<string>();
 
@@ -136,8 +146,19 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
   }
 
   async function loadSchema(entry: ResolvedEventEntry): Promise<LoadedSchema> {
-    const cached = schemaCache.get(entry.schemaKey);
+    let declarationCache = schemaCache.get(entry.decl);
+    if (!declarationCache) {
+      declarationCache = new Map();
+      schemaCache.set(entry.decl, declarationCache);
+    }
+    const cached = declarationCache.get(entry.schemaKey);
     if (cached) return cached;
+    const pending = readSchema(entry);
+    declarationCache.set(entry.schemaKey, pending);
+    return pending;
+  }
+
+  async function readSchema(entry: ResolvedEventEntry): Promise<LoadedSchema> {
     if (!entry.pluginDir) {
       throw new Error(`plugin "${entry.pluginId}" root path is not resolvable`);
     }
@@ -155,12 +176,32 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
       );
     }
     const raw = JSON.parse(await readFile(absPath, "utf-8")) as AnySchema;
-    const loaded: LoadedSchema = { validate: ajv.compile(raw), raw };
-    schemaCache.set(entry.schemaKey, loaded);
-    return loaded;
+    // Schema IDs are local to this declaration, never registered across
+    // generations or plugins. Local $refs still resolve within the document.
+    const compiler = new Ajv2020({ allErrors: true, strict: false });
+    return { validate: compiler.compile(raw), raw };
   }
 
   return {
+    async prepareDeclarations(manifests, pluginDir) {
+      // Capture schemas before publishing a generation, including failures.
+      // Runtime validation reports unreadable schemas; another generation
+      // must be prepared to retry, rather than changing an admitted contract.
+      await Promise.allSettled(
+        manifests.flatMap((manifest) =>
+          (manifest.events ?? []).map((decl) =>
+            loadSchema({
+              pluginId: manifest.pluginId,
+              decl,
+              pluginDir,
+              schemaKey: pluginDir
+                ? path.resolve(pluginDir, decl.schema)
+                : `${manifest.pluginId}:${decl.schema}`,
+            }),
+          ),
+        ),
+      );
+    },
     // Only advertised topics are emittable via the builtin emit-event tool.
     // advertise:false topics are internal — reachable by a plugin's own
     // function runtime, never surfaced to an agent (keeps the generation gate

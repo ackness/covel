@@ -178,6 +178,173 @@ describe("ai world generation route", () => {
     await rm(worldsDir, { recursive: true, force: true });
   });
 
+  it.each(["generate-world", "revise-world"] as const)(
+    "%s keeps unexpected exceptions out of production SSE and logs the original error",
+    async (route) => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "cross-author-token");
+      const originalError = new Error(
+        "synthetic SQL failure at /private/covel/worlds",
+      );
+      const logger = vi.spyOn(console, "error").mockImplementation(() => {});
+      const created = await readSseJson(
+        await app.request("/api/ai/generate-world", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer cross-author-token",
+          },
+          body: JSON.stringify({
+            concept: "Clockwork city",
+            saveTarget: "return-only",
+          }),
+        }),
+      );
+      const world = created.find((event) => event.type === "done")!.world;
+      vi.spyOn(worldCreation, "createWorld").mockRejectedValue(originalError);
+      const events = await readSseJson(
+        await app.request(`/api/ai/${route}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer cross-author-token",
+          },
+          body: JSON.stringify(
+            route === "generate-world"
+              ? { concept: "Clockwork city", saveTarget: "return-only" }
+              : {
+                  worldId: "generated-world",
+                  world,
+                  instruction: "Add a clock",
+                },
+          ),
+        }),
+      );
+      expect(events.filter((event) => event.type === "error")).toEqual([
+        { type: "error", message: "Internal server error" },
+      ]);
+      expect(logger).toHaveBeenCalledWith(
+        `[ai/${route}] unexpected error:`,
+        originalError,
+      );
+    },
+  );
+
+  it.each(["generate-world", "revise-world"] as const)(
+    "%s keeps unknown provider details in logs while preserving actionable failure SSE",
+    async (route) => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "cross-author-token");
+      const originalError = new Error(
+        "upstream secret at /private/provider/keys.env",
+      );
+      const logger = vi.spyOn(console, "error").mockImplementation(() => {});
+      const created = await readSseJson(
+        await app.request("/api/ai/generate-world", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer cross-author-token",
+          },
+          body: JSON.stringify({
+            concept: "Clockwork city",
+            saveTarget: "return-only",
+          }),
+        }),
+      );
+      const world = created.find((event) => event.type === "done")!.world;
+      app = createTestApp(store, {
+        generate: async () => {
+          throw originalError;
+        },
+      });
+      const events = await readSseJson(
+        await app.request(`/api/ai/${route}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer cross-author-token",
+          },
+          body: JSON.stringify(
+            route === "generate-world"
+              ? { concept: "Clockwork city", saveTarget: "return-only" }
+              : {
+                  worldId: "generated-world",
+                  world,
+                  instruction: "Add a clock",
+                },
+          ),
+        }),
+      );
+      const error = events.find((event) => event.type === "error");
+      expect(error?.message).toContain(
+        "check model configuration or server logs",
+      );
+      expect(JSON.stringify(events)).not.toContain("/private/");
+      expect(
+        logger.mock.calls.some((args) => args.includes(originalError)),
+      ).toBe(true);
+    },
+  );
+
+  it("keeps optional provider failure as a warning without exposing its details", async () => {
+    const fixed = new FixedLlm();
+    let calls = 0;
+    app = createTestApp(store, {
+      generate: async () => {
+        if (++calls > 2)
+          throw new Error("private optional error at /private/keys.env");
+        return fixed.generate();
+      },
+    });
+    const events = await readSseJson(
+      await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer cross-author-token",
+        },
+        body: JSON.stringify({
+          concept: "Clockwork city",
+          saveTarget: "return-only",
+          brief: { content: ["characters"] },
+        }),
+      }),
+    );
+    expect(events.some((event) => event.type === "error")).toBe(false);
+    const done = events.find((event) => event.type === "done");
+    expect(JSON.stringify(done?.warnings)).toContain(
+      "check model configuration or server logs",
+    );
+    expect(JSON.stringify(events)).not.toContain("/private/");
+  });
+
+  it("keeps the recovery location actionable for an authorized production author", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "cross-author-token");
+    const error = new worldCreation.WorldPackageRecoveryError(
+      "/private/backup/package",
+      [new Error("publish"), new Error("restore")],
+    );
+    vi.spyOn(worldCreation, "writeWorldPackage").mockRejectedValue(error);
+    const events = await readSseJson(
+      await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer cross-author-token",
+        },
+        body: JSON.stringify({
+          concept: "Clockwork city",
+          saveTarget: "server-file",
+        }),
+      }),
+    );
+    expect(events.find((event) => event.type === "error")?.message).toBe(
+      error.message,
+    );
+  });
+
   it.each(["server-store", "return-only"] as const)(
     "%s uses validated generation content without exporting a temporary package",
     async (saveTarget) => {
@@ -622,7 +789,7 @@ describe("ai world generation route", () => {
   });
 
   it.each(["collision", "database-error"])(
-    "cleans a newly generated package after %s without overwriting stored worlds",
+    "handles %s without overwriting stored worlds or leaving failed packages",
     async (failure) => {
       if (failure === "collision") {
         await store.upsertWorld({
@@ -647,11 +814,17 @@ describe("ai world generation route", () => {
           }),
         });
       const events = await readSseJson(await generate());
-      expect(events.some((event) => event.type === "error")).toBe(true);
-      expect(events.some((event) => event.type === "done")).toBe(false);
       expect(await store.getWorld("generated-world")).toEqual(before);
-      expect(await readdir(worldsDir)).toEqual([]);
-      if (failure === "database-error") {
+      if (failure === "collision") {
+        const done = events.find((event) => event.type === "done");
+        expect(done?.world.id).toBe("generated-world-2");
+        expect(events.some((event) => event.type === "error")).toBe(false);
+        expect(await store.getWorld("generated-world-2")).not.toBeNull();
+        expect(await readdir(worldsDir)).toEqual(["generated-world-2"]);
+      } else {
+        expect(events.some((event) => event.type === "error")).toBe(true);
+        expect(events.some((event) => event.type === "done")).toBe(false);
+        expect(await readdir(worldsDir)).toEqual([]);
         expect(
           (await readSseJson(await generate())).some(
             (event) => event.type === "done",
@@ -745,6 +918,7 @@ describe("ai world generation route", () => {
 
   it("keeps return-only generation public in production browser-private mode", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "cross-author-token");
     vi.stubEnv("DEPLOYMENT_TIER", "self");
     vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
     const res = await app.request("/api/ai/generate-world", {
@@ -768,6 +942,7 @@ describe("ai world generation route", () => {
 
   it("allows an operator to persist a generated world in production browser-private mode", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "cross-author-token");
     vi.stubEnv("DEPLOYMENT_TIER", "self");
     vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-world-operator");
     const res = await app.request("/api/ai/generate-world", {
@@ -1021,7 +1196,10 @@ describe("ai world generation route", () => {
     const post = (route: string, body: object) =>
       app.request(`/api/ai/${route}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer cross-author-token",
+        },
         body: JSON.stringify(body),
       });
     const worldOf = async (response: Response) => {
@@ -1044,6 +1222,77 @@ describe("ai world generation route", () => {
         }),
       );
     };
+
+    it.each([
+      ["server-store", "deleted"],
+      ["server-store", "edited"],
+      ["server-store", "replaced"],
+      ["server-file", "deleted"],
+      ["server-file", "edited"],
+      ["server-file", "replaced"],
+    ] as const)(
+      "does not publish a stale revision after %s is %s",
+      async (target, change) => {
+        vi.stubEnv("NODE_ENV", "production");
+        vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "cross-author-token");
+        const llm = new SequenceLlm([...CREATED, REVISED]);
+        const created = await generate(target, llm);
+        const original = (await store.getWorld(created.id))!;
+        let release!: () => void;
+        let entered!: () => void;
+        const waiting = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const started = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const answer = llm.generate.bind(llm);
+        vi.spyOn(llm, "generate").mockImplementation(async (request) => {
+          entered();
+          await waiting;
+          return answer(request);
+        });
+        const pending = post("revise-world", {
+          worldId: created.id,
+          instruction: "Add the rival",
+        }).then(readSseJson);
+        await started;
+        if (change === "deleted") {
+          await store.deleteWorld(created.id);
+          if (target === "server-file")
+            await rm(path.join(worldsDir, created.id), { recursive: true });
+        } else {
+          if (change === "replaced") await store.deleteWorld(created.id);
+          await store.upsertWorld({
+            ...original,
+            name: "Concurrent change",
+            description: "Keep this edit",
+            updatedAt: original.updatedAt,
+          });
+        }
+        const kept = await store.getWorld(created.id);
+        release();
+        const events = await pending;
+        expect(events.some((event) => event.type === "done")).toBe(false);
+        expect(events.find((event) => event.type === "error")?.message).toMatch(
+          /changed during revision/,
+        );
+        expect(await store.getWorld(created.id)).toEqual(kept);
+        if (target === "server-file") {
+          if (change === "deleted")
+            await expect(
+              readFile(path.join(worldsDir, created.id, "WORLD.md")),
+            ).rejects.toThrow();
+          else
+            expect(
+              await readFile(
+                path.join(worldsDir, created.id, "WORLD.md"),
+                "utf8",
+              ),
+            ).toBe(WORLD_MD);
+        }
+      },
+    );
 
     it("rewrites the package of a world that has files, and keeps what the request did not touch", async () => {
       const llm = new SequenceLlm([...CREATED, REVISED]);
@@ -1148,6 +1397,67 @@ describe("ai world generation route", () => {
       expect(revised.metadata.characterBlueprints).toHaveLength(3);
       expect(await store.getWorld("generated-world")).toBeNull();
       expect(await readdir(worldsDir)).toEqual([]);
+    });
+
+    it.each(["browser-indexeddb", "server-store"])(
+      "keeps an explicit browser revision transient when a %s row has the same ID",
+      async (source) => {
+        const llm = new SequenceLlm([...CREATED, REVISED]);
+        const local = await generate("return-only", llm);
+        await store.createWorld({
+          ...local,
+          name: "Keep server catalogue",
+          description: "Keep server description",
+          metadata: { ...local.metadata, source },
+        });
+        const kept = await store.getWorld(local.id);
+        const revised = await worldOf(
+          await post("revise-world", {
+            worldId: local.id,
+            instruction: "Add the rival",
+            world: local,
+          }),
+        );
+        expect(revised.lore).toBe(REVISED_MD);
+        expect(await store.getWorld(local.id)).toEqual(kept);
+        expect(await readdir(worldsDir)).toEqual([]);
+      },
+    );
+
+    it("resolves browser locale maps to the world's content locale for revision", async () => {
+      const llm = new SequenceLlm([...CREATED, REVISED]);
+      const local = await generate("return-only", llm);
+      const revised = await worldOf(
+        await post("revise-world", {
+          worldId: local.id,
+          instruction: "Add the rival",
+          world: {
+            ...local,
+            locale: "zh-CN",
+            name: { "zh-CN": "本地钟城", "en-US": "Local clock city" },
+            description: { "zh-CN": "本地钟城设定", "en-US": "Local setting" },
+            lore: { "zh-CN": WORLD_MD, "en-US": "English edition lore" },
+          },
+        }),
+      );
+      expect(revised.lore).toBe(REVISED_MD);
+      expect(llm.requests.at(-1)).toContain("本地钟城设定");
+      expect(llm.requests.at(-1)).not.toContain("English edition lore");
+      expect(await store.getWorld(local.id)).toBeNull();
+    });
+
+    it("rejects an invalid explicit browser record without falling back to a stored world", async () => {
+      const llm = new SequenceLlm([...CREATED, REVISED]);
+      const created = await generate("server-store", llm);
+      const kept = await store.getWorld(created.id);
+      const response = await post("revise-world", {
+        worldId: created.id,
+        instruction: "Add the rival",
+        world: null,
+      });
+      expect(response.status).toBe(400);
+      expect(await store.getWorld(created.id)).toEqual(kept);
+      expect(llm.requests).toHaveLength(CREATED.length);
     });
 
     it("does not rewrite a world package that the generator did not write", async () => {

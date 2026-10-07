@@ -278,6 +278,56 @@ describe("package declarations across framework consumers", () => {
     },
   );
 
+  it("reports a runtime whose handler does not import when the plugin is preloaded", async () => {
+    const { registry, store, discoveryMap, manifestCache } = await seed(true);
+    // The file exists, so static validation accepts it; only an import shows
+    // that it is broken.
+    await write(
+      "runtimes/implementation/handler.mjs",
+      'import "./missing-dependency.mjs";\nexport default async () => ({});',
+    );
+    await store.createSession({
+      id: "s1",
+      worldId: "world",
+      status: "active",
+      phase: "playing",
+      locale: "en-US",
+      activePlugins: ["inspector"],
+      createdAt: "2026-10-07T00:00:00.000Z",
+      updatedAt: "2026-10-07T00:00:00.000Z",
+    } as never);
+    const entries = await createBootstrapPluginEntries({
+      discoveryMap,
+      manifestCache,
+      pluginRegistry: registry,
+      store,
+      tools: new ToolRegistry(),
+      hookPipeline: createHookPipeline(),
+      rpcRegistry: createPluginRpcRegistry(),
+    });
+    try {
+      const loader = createRuntimeLoader({
+        pluginRegistry: registry,
+        discoveryMap,
+        manifestCache,
+        store,
+        getApprovalGate: () => createRpcApprovalGate(),
+      });
+      loader.bindPluginEntry(entries.ensurePluginEntry);
+      expect(await loader.preload("inspector", "s1")).toEqual([
+        {
+          runtimeId: "inspector/implementation",
+          error: expect.stringContaining("missing-dependency"),
+        },
+      ]);
+      // A session that does not exist has nothing to load for.
+      expect(await loader.preload("inspector", "missing")).toEqual([]);
+    } finally {
+      await entries.close();
+      await store.close();
+    }
+  });
+
   it("keeps a zero-runtime community entry behind each session's approval", async () => {
     const { registry, store, discoveryMap, manifestCache } = await seed(false);
     const discovery = discoveryMap.get("inspector")!;

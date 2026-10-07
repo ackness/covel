@@ -172,13 +172,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*.authoring.source`
 
-| Field        | Type                              | Required | Description                                                                                      |
-| ------------ | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `kind`       | `"yaml"` or `"json"` or `"media"` | yes      | Reader type of the source. `media` is a directory whose index this namespace receives.           |
-| `path`       | string                            | yes      | Conventional path of the source inside a world package. Example: `"data/quests.yaml"`.           |
-| `key`        | string                            | no       | Field that gives each record a stable key. Media sources use `filename`.                         |
-| `visibility` | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`. |
-| `lorebook`   | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                |
+| Field             | Type                              | Required | Description                                                                                                                                                         |
+| ----------------- | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`            | `"yaml"` or `"json"` or `"media"` | yes      | Reader type of the source. `media` is a directory whose index this namespace receives.                                                                              |
+| `path`            | string                            | yes      | Conventional path of the source inside a world package. Example: `"data/quests.yaml"`.                                                                              |
+| `key`             | string                            | no       | Field that gives each record a stable key. Media sources use `filename`.                                                                                            |
+| `localeArrayKeys` | list of string                    | no       | Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered. |
+| `visibility`      | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.                                                                    |
+| `lorebook`        | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                                                                                   |
 
 ## `contributes.ui`
 
@@ -384,9 +385,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.agent.history`
 
-| Field      | Type    | Required | Description                                                                           |
-| ---------- | ------- | -------- | ------------------------------------------------------------------------------------- |
-| `maxTurns` | integer | yes      | Number of most recent turns kept in the agent's prompt history. `0` sends no history. |
+| Field              | Type    | Required | Description                                                                           |
+| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------- |
+| `includeSummaries` | boolean | no       | Include persisted summaries alongside the bounded history window. Defaults to false.  |
+| `maxTurns`         | integer | yes      | Number of most recent turns kept in the agent's prompt history. `0` sends no history. |
 
 ## `runtime.agent.tools`
 

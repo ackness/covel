@@ -7,7 +7,7 @@ import {
 import {
   CharacterFieldValidationError,
   mergeSchemaDefaults,
-} from "@covel/tools";
+} from "@covel/plugin-handlers-utils";
 
 /**
  * guard.js — Pre-execution gate for player-init runtime.

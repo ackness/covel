@@ -1,30 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ToolModule, ToolSource } from "./types.js";
 
-/** Reserved even when a host does not install an optional or virtual builtin. */
-export const FRAMEWORK_TOOL_NAMES = [
-  "render-ui",
-  "create-form",
-  "create-choices",
-  "create-notification",
-  "suspend",
-  "runtime-done",
-  "search-tools",
-  "plugin-data-set",
-  "plugin-data-set-batch",
-  "plugin-data-get",
-  "plugin-data-list",
-  "emit-event",
-  "create-character",
-  "update-character",
-  "sync-characters",
-  "list-characters",
-  "get-character",
-  "get-character-schema",
-  "memory-search",
-  "world-dimension-get",
-  "world-dimension-list",
-] as const;
+import { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
+export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 
 const reservedNames: ReadonlySet<string> = new Set(FRAMEWORK_TOOL_NAMES);
 

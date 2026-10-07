@@ -173,7 +173,11 @@ it("gives each contract its own file when two name the same one", async () => {
       },
       names.map((name, index) => ({
         contract: name,
-        source: { kind: "json" as const, path: paths[index]! },
+        source: {
+          kind: "json" as const,
+          path: paths[index]!,
+          localeArrayKeys: ["label"],
+        },
       })),
     );
     // The descriptor says where each contract's records are; without it the
@@ -187,6 +191,8 @@ it("gives each contract its own file when two name the same one", async () => {
       "data/contract-1.json",
       "data/contract-2.json",
     ]);
+    for (const index of names.keys())
+      expect(sources[`contract${index}`].localeArrayKeys).toEqual(["label"]);
     for (const [index, file] of files.entries())
       expect(JSON.parse(await readFile(path.join(root, file), "utf8"))).toEqual(
         { id: names[index] },

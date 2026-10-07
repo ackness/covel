@@ -8,6 +8,8 @@ import {
   writeWorldTranslations,
 } from "../../src/world-data/locale-tooling.js";
 import { validateWorldPackage } from "../../src/world-data/validate-world-package.js";
+import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
+import { readWorldDataSource } from "../../src/world-data/source-reader.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../../..");
 
@@ -46,6 +48,89 @@ describe("world translation tooling", () => {
       { localeFile: "WORLD.en.md", total: 1, missing: [] },
     );
   });
+
+  it("extracts nested block translations by identity and preserves them after insertion", async () => {
+    const blockFile = path.join(worldDir, "data/memory-blocks.json");
+    const base = JSON.parse(await readFile(blockFile, "utf-8"));
+    base.blocks.unshift({
+      label: "new",
+      displayName: "新块",
+      extractionHint: "记住新的故事线索。",
+    });
+    await writeFile(blockFile, JSON.stringify(base));
+    const status = await worldTranslationStatus(worldDir, "en-US");
+    const blocks = status.files.find(
+      (file) => file.file === "data/memory-blocks.json",
+    )!;
+    expect(blocks.missing.map((unit) => unit.pointer)).toEqual([
+      "blocks[label=new].displayName",
+      "blocks[label=new].extractionHint",
+    ]);
+    await writeWorldTranslations(
+      worldDir,
+      "en-US",
+      new Map(
+        blocks.missing.map((unit) => [
+          unit.id,
+          unit.pointer.endsWith("displayName")
+            ? "New"
+            : "Remember the new clues.",
+        ]),
+      ),
+    );
+    const after = await worldTranslationStatus(worldDir, "en-US");
+    expect(
+      after.files.find((file) => file.file === blocks.file)!.missing,
+    ).toEqual([]);
+    const overlay = JSON.parse(
+      await readFile(path.join(worldDir, blocks.localeFile), "utf-8"),
+    );
+    expect(
+      overlay.blocks.find((block: { label: string }) => block.label === "new"),
+    ).toMatchObject({ displayName: "New" });
+  });
+
+  it.each(["新线索", "New clues"])(
+    "keeps the selected array identity %s out of translation units and written overlays",
+    async (label) => {
+      const blockFile = path.join(worldDir, "data/memory-blocks.json");
+      const base = JSON.parse(await readFile(blockFile, "utf-8"));
+      base.blocks.unshift({ label, displayName: "新线索名称" });
+      await writeFile(blockFile, JSON.stringify(base));
+      const status = await worldTranslationStatus(worldDir, "en-US");
+      const blocks = status.files.find(
+        (file) => file.file === "data/memory-blocks.json",
+      )!;
+      expect(blocks.missing.map((unit) => unit.pointer)).toEqual([
+        `blocks[label=${label}].displayName`,
+      ]);
+      await writeWorldTranslations(
+        worldDir,
+        "en-US",
+        new Map(blocks.missing.map((unit) => [unit.id, "New clues name"])),
+      );
+      const overlay = JSON.parse(
+        await readFile(path.join(worldDir, blocks.localeFile), "utf-8"),
+      );
+      expect(overlay.blocks[0]).toEqual({
+        label,
+        displayName: "New clues name",
+      });
+      const descriptor = await loadWorldDataDescriptor({
+        worldRoot: worldDir,
+        worldDataPath: "data/world.data.yaml",
+      });
+      const source = descriptor.sources.find(
+        (source) => source.descriptor.path === "data/memory-blocks.json",
+      )!;
+      const read = await readWorldDataSource(source, "en-US");
+      expect(read.diagnostics).toEqual([]);
+      expect((read.value as { blocks: unknown[] }).blocks[0]).toEqual({
+        label,
+        displayName: "New clues name",
+      });
+    },
+  );
 
   it("leaves the author's name and the license as written", async () => {
     const manifestPath = path.join(worldDir, "world.yaml");

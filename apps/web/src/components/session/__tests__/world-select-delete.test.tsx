@@ -11,6 +11,7 @@ import {
 } from "vitest";
 import { getDataService } from "@/services/data-service.js";
 import type { WorldRecord } from "@/services/api.js";
+import { ConfirmHost } from "@/components/ui/confirm-host.js";
 import { WorldSelectScreen } from "../world-select-screen.js";
 
 // These assertions exercise the card list, independently of the startup style.
@@ -41,15 +42,19 @@ const CUSTOM_WORLD = {
 
 function renderScreen(onWorldDeleted = vi.fn()) {
   render(
-    <WorldSelectScreen
-      worlds={[BUILT_IN_WORLD, CUSTOM_WORLD]}
-      plugins={[]}
-      resolvedSlots={[]}
-      settingsOpen={false}
-      onSettingsOpenChange={() => {}}
-      onSelectWorld={() => {}}
-      onWorldDeleted={onWorldDeleted}
-    />,
+    <>
+      {/* The app shell mounts the host that shows the delete prompt. */}
+      <ConfirmHost />
+      <WorldSelectScreen
+        worlds={[BUILT_IN_WORLD, CUSTOM_WORLD]}
+        plugins={[]}
+        resolvedSlots={[]}
+        settingsOpen={false}
+        onSettingsOpenChange={() => {}}
+        onSelectWorld={() => {}}
+        onWorldDeleted={onWorldDeleted}
+      />
+    </>,
   );
   return onWorldDeleted;
 }
@@ -77,8 +82,11 @@ describe("world select — deleting player-created worlds", () => {
     const onWorldDeleted = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
-    expect(screen.getByText("删除世界？")).toBeTruthy();
-    expect(screen.getByText(/关联的所有会话数据/)).toBeTruthy();
+    expect(await screen.findByText("删除世界？")).toBeTruthy();
+    // The prompt names the world, so the player can check what goes.
+    expect(
+      screen.getByText(/「自定义世界」及其关联的所有会话数据/),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
 
     await waitFor(() => {
@@ -87,14 +95,14 @@ describe("world select — deleting player-created worlds", () => {
     });
   });
 
-  it("confirms world deletion with Enter", async () => {
+  it("confirms world deletion with Enter while no button has the focus", async () => {
     const deleteWorld = vi
       .spyOn(getDataService(), "deleteWorld")
       .mockResolvedValue();
     const onWorldDeleted = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+    fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Enter" });
 
     await waitFor(() => {
       expect(deleteWorld).toHaveBeenCalledTimes(1);
@@ -103,14 +111,31 @@ describe("world select — deleting player-created worlds", () => {
     });
   });
 
-  it("opens the same delete confirmation from custom-world details", () => {
+  it("leaves Enter on Cancel to that button instead of deleting", async () => {
+    const deleteWorld = vi
+      .spyOn(getDataService(), "deleteWorld")
+      .mockResolvedValue();
+    renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
+    const cancel = await screen.findByRole("button", { name: "取消" });
+    cancel.focus();
+    // Not prevented: the browser goes on to press the focused button.
+    expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+    fireEvent.click(cancel);
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(deleteWorld).not.toHaveBeenCalled();
+  });
+
+  it("opens the same delete confirmation from custom-world details", async () => {
     renderScreen();
 
     const detailButtons = screen.getAllByRole("button", { name: "查看详情" });
     fireEvent.click(detailButtons[1]!);
 
     fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(await screen.findByRole("dialog")).toBeTruthy();
     expect(screen.getByText("删除世界？")).toBeTruthy();
   });
 });

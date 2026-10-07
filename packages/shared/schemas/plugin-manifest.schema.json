@@ -755,6 +755,15 @@
                         "minLength": 1,
                         "description": "Field that gives each record a stable key. Media sources use `filename`."
                       },
+                      "localeArrayKeys": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": "Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered."
+                      },
                       "visibility": {
                         "type": "string",
                         "enum": ["public", "hidden"],
@@ -1368,6 +1377,10 @@
             "history": {
               "type": "object",
               "properties": {
+                "includeSummaries": {
+                  "description": "Include persisted summaries alongside the bounded history window. Defaults to false.",
+                  "type": "boolean"
+                },
                 "maxTurns": {
                   "type": "integer",
                   "minimum": 0,

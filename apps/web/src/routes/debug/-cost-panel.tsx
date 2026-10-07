@@ -28,9 +28,7 @@ import { resolveLocalModelPrices, type ModelPrice } from "./-model-prices.js";
  *
  * Pricing comes from `/api/model-db/lookup` (LiteLLM-derived per-M-token
  * prices) via the existing `lookupModelCapability` service, with unambiguous
- * local provider/model pricing overrides applied for display only. The model DB does
- * not yet expose provider-specific cache read/write prices, so those token
- * subsets are shown separately and excluded from the USD estimate. Missing
+ * local provider/model pricing overrides applied for display only. The model DB carries provider-specific cache read/write prices when available. Missing
  * input/output prices are also excluded component-wise, so a partial estimate
  * is explicitly rendered as a lower bound.
  */
@@ -257,8 +255,17 @@ function lookupPrice(
   const promise = lookupModelCapability(model, provider)
     .then((cap) =>
       cap &&
-      (cap.inputPerMToken !== undefined || cap.outputPerMToken !== undefined)
+      (cap.inputPerMToken !== undefined ||
+        cap.outputPerMToken !== undefined ||
+        cap.cacheReadPerMToken !== undefined ||
+        cap.cacheWritePerMToken !== undefined)
         ? {
+            ...(cap.cacheReadPerMToken !== undefined
+              ? { cacheReadPerMToken: cap.cacheReadPerMToken }
+              : {}),
+            ...(cap.cacheWritePerMToken !== undefined
+              ? { cacheWritePerMToken: cap.cacheWritePerMToken }
+              : {}),
             ...(cap.inputPerMToken !== undefined
               ? { inputPerMToken: cap.inputPerMToken }
               : {}),
@@ -325,6 +332,8 @@ export function estimateCostUsd(
     multiplier *
     (((inputTokens - cachedInputTokens - cacheWriteInputTokens) / 1_000_000) *
       (price.inputPerMToken ?? 0) +
+      (cachedInputTokens / 1_000_000) * (price.cacheReadPerMToken ?? 0) +
+      (cacheWriteInputTokens / 1_000_000) * (price.cacheWritePerMToken ?? 0) +
       (tokenCount(agg.outputTokens) / 1_000_000) * (price.outputPerMToken ?? 0))
   );
 }
@@ -362,12 +371,18 @@ export function estimateModelCost(
   const pricedInput =
     price.inputPerMToken === undefined ? 0 : uncachedInputTokens;
   const pricedOutput = price.outputPerMToken === undefined ? 0 : outputTokens;
+  const pricedCacheRead =
+    price.cacheReadPerMToken === undefined ? 0 : cachedInputTokens;
+  const pricedCacheWrite =
+    price.cacheWritePerMToken === undefined ? 0 : cacheWriteInputTokens;
   return {
     usd: estimateCostUsd(agg, price, multiplier),
-    pricedTokens: pricedInput + pricedOutput,
+    pricedTokens:
+      pricedInput + pricedOutput + pricedCacheRead + pricedCacheWrite,
     unpricedTokens:
-      cachedInputTokens +
-      cacheWriteInputTokens +
+      cachedInputTokens -
+      pricedCacheRead +
+      (cacheWriteInputTokens - pricedCacheWrite) +
       (uncachedInputTokens - pricedInput) +
       (outputTokens - pricedOutput),
   };

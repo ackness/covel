@@ -123,11 +123,44 @@ export interface SessionMeta {
   readonly characters: readonly CharacterSummary[];
   /**
    * Latest player form submission for this session. Populated from the
-   * `player_inputs` table — the most recent row wins. Plugins read this via
+   * `player_inputs` table — the newest row by time wins. Plugins read this via
    * `{{ player.lastFormValues }}` to process form submissions without
    * server-side magic.
    */
   readonly lastFormValues?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * How a runtime finishes: by calling `runtime-done`, by a successful call to
+ * one of its completing tools, by its structured JSON output, or, for a story
+ * runtime, by the text of its reply.
+ */
+export type FrameworkCompletion =
+  "runtime-done" | "completing-tool" | "structured-output" | "story";
+
+/** How a runtime finishes, with what its `[COMPLETION]` instruction names. */
+export interface FrameworkCompletionContract {
+  /**
+   * How this runtime finishes; `runtime-done` when omitted.
+   *
+   * Only a runtime that is given the `runtime-done` tool is told to call
+   * it. A schema-declared runtime does not get that tool:
+   * `buildToolDefinitions` withholds it so the early-exit branch cannot
+   * fire before the JSON envelope that downstream consumers read. A story
+   * runtime does not get it either: its result is the text of its reply.
+   * Told to "call `runtime-done` when no tool call is needed", a model
+   * that follows instructions to the letter ended the narrator's run with
+   * that call and wrote no story, three times in a row, and the turn was
+   * not committed.
+   */
+  readonly completion?: FrameworkCompletion;
+  /** Tools whose successful call ends the run. Named by `completing-tool`. */
+  readonly completingTools?: readonly string[];
+  /**
+   * The run must record its result with a business tool: `runtime-done`
+   * alone does not finish it. Read by `runtime-done`.
+   */
+  readonly requireToolUse?: boolean;
 }
 
 /** Parameters for building an execution context. */
@@ -244,8 +277,6 @@ export interface WorldContextView {
   readonly description?: string;
   readonly tags?: readonly string[];
   readonly lore?: string;
-  readonly tone?: string;
-  readonly openingScenario?: string;
   readonly dimensions?: import("@covel/shared").DimensionSnapshot;
   readonly dimensionProviderPluginId?: string;
   readonly schema?: Readonly<Record<string, unknown>>;

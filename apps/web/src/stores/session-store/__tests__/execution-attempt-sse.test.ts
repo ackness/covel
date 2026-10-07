@@ -8,6 +8,7 @@ import {
 } from "../sse-handler.js";
 import { projectExecutionTurns } from "../execution-projection.js";
 import type { SessionAction } from "../types.js";
+import { subscribeToast } from "@/lib/toast-channel.js";
 
 function harness(retrying = true) {
   let state = {
@@ -40,6 +41,7 @@ function harness(retrying = true) {
   const handler = createSseEventHandler(deps);
   return {
     getState: () => state,
+    dispatch: deps.dispatch,
     send: (type: string, payload: Record<string, unknown>) =>
       handler({
         type,
@@ -63,7 +65,48 @@ function harness(retrying = true) {
   };
 }
 
+describe("a story cut at the output limit", () => {
+  it.each([
+    { finishReason: "length", notices: 1 },
+    { finishReason: "stop", notices: 0 },
+  ])(
+    "shows $notices notice(s) for a response that finished with $finishReason",
+    ({ finishReason, notices }) => {
+      const shown: string[] = [];
+      const unsubscribe = subscribeToast((toast) => shown.push(toast.kind));
+      try {
+        harness(false).send("llm.responded", { finishReason });
+      } finally {
+        unsubscribe();
+      }
+      expect(shown).toHaveLength(notices);
+    },
+  );
+});
+
 describe("SSE retry commit settlement", () => {
+  it.each(["player-aborted", "commit rejected"])(
+    "removes all uncommitted assistant output but retains player input: %s",
+    (abortReason) => {
+      const h = harness(false);
+      for (const [id, role, turnId] of [
+        ["old-story", "assistant", "previous"],
+        ["input", "user", "attempt"],
+        ["story", "assistant", "attempt"],
+        ["form", "assistant", "attempt"],
+      ] as const) {
+        h.dispatch({
+          type: "ADD_MESSAGE",
+          message: { id, role, turnId, content: id, timestamp: "2026-10-06" },
+        });
+      }
+      h.send("execution.completed", { committed: false, abortReason });
+      expect(h.getState().messages.map((message) => message.id)).toEqual([
+        "old-story",
+        "input",
+      ]);
+    },
+  );
   it("keeps the durable terminal when a batched action stream delivers an old queue and handoff", () => {
     const h = harness(false);
     const job = {

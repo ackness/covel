@@ -146,15 +146,7 @@ export type LLMStreamEvent =
  * duplicated `CompactorLLMAdapter` / `MemoryLLMAdapter` definitions one source
  * of truth without loosening either's contract.
  */
-export interface SimpleCompletionAdapter<
-  Role extends "user" | "assistant" = "user" | "assistant",
-> {
-  complete(params: {
-    systemPrompt: string;
-    messages: readonly { role: Role; content: string }[];
-    model?: string;
-  }): Promise<{ content: string }>;
-}
+export type { SimpleCompletionAdapter } from "@covel/plugin-handlers-utils";
 
 /** Provider/model identity resolved from an LLM slot for observability. */
 export interface LLMTargetIdentity {

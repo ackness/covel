@@ -186,7 +186,10 @@ export async function executeAgentRuntime({
         ? applyHistoryWindow(visibleHistory, historyPolicy)
         : visibleHistory,
       sessionMeta,
-      summaries: historyPolicy ? [] : effectiveSessionSummaries,
+      summaries:
+        historyPolicy && !historyPolicy.includeSummaries
+          ? []
+          : effectiveSessionSummaries,
       ...(visibleStory.length > 0 ? { executionStory: visibleStory } : {}),
       // Thread the unified snapshot into context building so templates can
       // read structured session data via `world`, `session`, and `player`.
@@ -207,7 +210,7 @@ export async function executeAgentRuntime({
 
   let assembled = await assembleContext();
   // Compaction exists to fit the shared history view; a bounded runtime never
-  // reads summaries, so it neither waits on nor triggers the turn's barrier.
+  // requires compaction, so it neither waits on nor triggers the turn's barrier.
   if (prepareCompactedContext && !historyPolicy) {
     // The turn context is fixed overhead like the system prompt, which it was
     // part of; the threshold estimate counts both.

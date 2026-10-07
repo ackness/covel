@@ -2,10 +2,7 @@ import { pluginDeclarations, type PluginRegistry } from "@covel/plugin-loader";
 import { buildHookSettings, type HookScope } from "@covel/runtime";
 import type { TurnInput } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
-import {
-  mergePluginUserSettings,
-  readWorldPluginSettings,
-} from "../plugin-user-settings.js";
+import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
 
 /** Resolve before mutating: a settings read failure must not follow a durable write. */
 export async function loadSessionHookScope(args: {
@@ -14,14 +11,12 @@ export async function loadSessionHookScope(args: {
   readonly session: Pick<SessionRecord, "activePlugins" | "worldId">;
   readonly userSettings?: TurnInput["userSettings"];
 }): Promise<HookScope> {
-  const world = args.session.worldId
-    ? await args.store.getWorld(args.session.worldId)
-    : null;
   return buildSessionHookScope({
     pluginRegistry: args.pluginRegistry,
     activePluginIds: args.session.activePlugins,
-    userSettings: mergePluginUserSettings(
-      readWorldPluginSettings(world?.metadata),
+    userSettings: await loadSessionPluginUserSettings(
+      args.store,
+      args.session,
       args.userSettings,
     ),
   });

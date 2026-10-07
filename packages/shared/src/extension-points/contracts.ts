@@ -1,6 +1,6 @@
 /** Dependency-free identities shared by authoring schemas, hosts and activation. */
 export const kernelExtensionPoints = {
-  historyCompact: { id: "history.compact@1", mode: "single" },
+  historyCompact: { id: "history.compact@2", mode: "single" },
   mediaImageFlow: { id: "media.image-flow@1", mode: "single" },
   promptHistoryTransform: {
     id: "prompt.history-transform@1",

@@ -1,3 +1,4 @@
+import { stripPromptCacheMarkers } from "@covel/shared";
 import {
   withTextRequestDefaults,
   defaultToolChoice,
@@ -62,6 +63,7 @@ const OPENAI_PROTECTED_KEYS = new Set([
   "stream",
   "stream_options",
   "max_tokens",
+  "max_completion_tokens",
   "response_format",
   // `input` is protected for embeddings — it is built from params.values.
   "input",
@@ -90,7 +92,12 @@ function extractOpenAiParameterOverrides(
   model: string,
 ): Record<string, unknown> {
   return {
-    ...extractParameterOverrides(meta, OPENAI_PARAMETER_FIELD_MAP),
+    ...extractParameterOverrides(meta, {
+      ...OPENAI_PARAMETER_FIELD_MAP,
+      maxOutputTokens: /(?:^|\/)gpt-[5-9]|(?:^|\/)o[134](?:-|$)/i.test(model)
+        ? "max_completion_tokens"
+        : "max_tokens",
+    }),
     ...extractReasoningRequestFields(meta, context, "openai-chat-v1", model),
   };
 }
@@ -114,9 +121,11 @@ function buildEmbeddingInput(values: string[], format: string): unknown {
 }
 
 function serializeOpenAiChatContent(content: TextMessageContent): unknown {
+  if (typeof content === "string") return stripPromptCacheMarkers(content);
   if (!Array.isArray(content)) return content;
   return content.map((part) => {
-    if (part.type === "text") return { type: "text", text: part.text };
+    if (part.type === "text")
+      return { type: "text", text: stripPromptCacheMarkers(part.text) };
     if (part.image.url) {
       return { type: "image_url", image_url: { url: part.image.url } };
     }

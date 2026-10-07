@@ -25,7 +25,6 @@ rg -n "ponytail:" apps packages plugins
 
 | Location                                     | Accepted limit                                                     | Revisit when                                      |
 | -------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
-| `apps/server/src/routes/api/plugin-rpc.ts`   | Scoped retry scans persisted turn artifacts                        | Long sessions show this scan in profiles          |
 | `apps/server/src/routes/api/turn-control.ts` | An in-process map limits steer/abort to the pod executing the turn | Multi-pod deployments need cross-pod turn control |
 
 ## Web UI

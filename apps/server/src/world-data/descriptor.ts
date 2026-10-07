@@ -56,16 +56,18 @@ async function readDescriptorFile(
         : worldDataDescriptorSchema
     ).safeParse(raw);
     if (!validation.success) {
-      diagnostics.push({
-        level: "error",
-        path: relativePath,
-        message: validation.error.issues
-          .map(
-            (issue) =>
-              `  - ${issue.path.join(".") || "<root>"}: ${issue.message}`,
-          )
-          .join("\n"),
-      });
+      for (const issue of validation.error.issues) {
+        diagnostics.push({
+          level: "error",
+          path: relativePath,
+          sourceId:
+            issue.path[0] === "sources" && typeof issue.path[1] === "string"
+              ? issue.path[1]
+              : undefined,
+          pointer: issue.path.join(".") || undefined,
+          message: `${issue.path.join(".") || "<root>"}: ${issue.message}`,
+        });
+      }
       return { path: fullPath, diagnostics };
     }
     return {

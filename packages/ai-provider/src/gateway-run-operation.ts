@@ -228,6 +228,7 @@ export function createRunOperation(
             startTime,
             options,
             canFallback: index < targets.length - 1,
+            previous: lastError,
           });
         }
       }

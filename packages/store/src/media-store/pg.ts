@@ -92,6 +92,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
 
   return {
     async put(blob, mime, meta, initialRef) {
+      meta = toMeta(meta);
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
       return sql.begin(async (tx) => {

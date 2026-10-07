@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMemoryStore } from "../src/memory/memory-store.js";
 import { createSqliteStore } from "../src/sqlite/sqlite-store.js";
 import type { DataStore, PluginDataBatchCasEntry } from "../src/types.js";
+import { makeSession } from "../src/contract/test-fixtures.js";
 
 const at = "2026-10-01T00:00:00.000Z";
 const entry = (
@@ -23,8 +24,10 @@ for (const [name, create] of [
 ] as const) {
   describe(`plugin-data batch CAS: ${name}`, () => {
     let store: DataStore;
-    beforeEach(() => {
+    beforeEach(async () => {
       store = create();
+      await store.createSession(makeSession({ id: "s" }));
+      await store.createSession(makeSession({ id: "other" }));
     });
     afterEach(async () => {
       await store.close();

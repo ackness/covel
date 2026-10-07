@@ -18,15 +18,8 @@ import {
 import * as api from "@/services/api.js";
 import { Button } from "@/components/ui/button.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogClose,
-} from "@/components/ui/dialog.js";
 import { SessionBreadcrumb } from "./session-breadcrumb.js";
+import { confirmDeleteSession } from "./confirm-delete-session.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import {
@@ -75,7 +68,7 @@ export function SessionPrepScreen({
   onSettingsOpenChange,
   settingsInitialKey,
 }: SessionPrepScreenProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const worldPluginSettings = worldPluginSettingsSchema.safeParse(
     world.metadata?.pluginSettings,
   );
@@ -163,10 +156,7 @@ export function SessionPrepScreen({
   const [existingSessions, setExistingSessions] = useState<api.SessionRecord[]>(
     [],
   );
-  const [deleteTarget, setDeleteTarget] = useState<api.SessionRecord | null>(
-    null,
-  );
-  const [deleting, setDeleting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     getDataService()
@@ -175,17 +165,26 @@ export function SessionPrepScreen({
       .catch(ignoreError("list existing sessions"));
   }, [world.id]);
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await onDeleteSession(deleteTarget.id);
-      setExistingSessions((prev) => removeSessionById(prev, deleteTarget.id));
-    } finally {
-      setDeleting(false);
-      setDeleteTarget(null);
-    }
-  }, [deleteTarget, onDeleteSession]);
+  const handleRequestDelete = useCallback(
+    async (target: api.SessionRecord) => {
+      if (deletingId) return;
+      const approved = await confirmDeleteSession(
+        t,
+        i18n.resolvedLanguage ?? i18n.language,
+        target,
+        text(world.name),
+      );
+      if (!approved) return;
+      setDeletingId(target.id);
+      try {
+        await onDeleteSession(target.id);
+        setExistingSessions((prev) => removeSessionById(prev, target.id));
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [deletingId, t, i18n, world.name, onDeleteSession],
+  );
 
   const originalLore = text(world.lore);
   const lore = useWorldLore(world.id, originalLore);
@@ -536,7 +535,13 @@ export function SessionPrepScreen({
                 onToggle={() => setSessionsExpanded(!sessionsExpanded)}
                 onResume={handleResume}
                 resumingId={resumingId}
-                onRequestDelete={setDeleteTarget}
+                deletingId={deletingId}
+                onRequestDelete={(session) =>
+                  void handleRequestDelete(session).catch(
+                    // The transport has already reported why it failed.
+                    ignoreError("delete session"),
+                  )
+                }
               />
 
               <WorldLoreCard
@@ -630,57 +635,6 @@ export function SessionPrepScreen({
             : t("session.startGame", "Start Game")}
         </Button>
       </div>
-
-      <Dialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-      >
-        <DialogContent
-          className="max-w-sm"
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || deleting) return;
-            event.preventDefault();
-            void handleConfirmDelete();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>
-              {t("session.deleteConfirmTitle", "Delete Session")}
-            </DialogTitle>
-            <DialogDescription>
-              {t(
-                "session.deleteConfirmDesc",
-                "This will permanently delete the session and all its data (messages, game state, etc.). This action cannot be undone.",
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {deleteTarget && (
-            <p className="text-xs font-mono text-muted-foreground bg-muted px-2 py-1.5 break-all">
-              {deleteTarget.id}
-            </p>
-          )}
-          <div className="flex justify-end gap-2 mt-2">
-            <DialogClose asChild>
-              <Button variant="outline" size="sm" disabled={deleting}>
-                {t("common.cancel", "Cancel")}
-              </Button>
-            </DialogClose>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={deleting}
-              aria-keyshortcuts="Enter"
-              onClick={() => void handleConfirmDelete()}
-            >
-              {deleting
-                ? t("common.deleting", "Deleting...")
-                : t("common.delete", "Delete")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

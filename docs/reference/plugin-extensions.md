@@ -85,9 +85,13 @@ entry 在宿主内按插件激活一次，**不属于某个会话**。禁用一�
 
 仅 `NODE_ENV=development` 启用社区插件热重载，builtin 包与生产环境不允许。`POST /api/plugins/:id/reload` 接收可选 `{ "sessionId": "..." }`；操作须通过安装 API 的本机/管理员鉴权，并由指定会话（省略时使用曾批准此插件的会话）提供当前有效的 server-code 授权。开发宿主同时监听社区插件目录，150 ms 合并文件变化后使用相同路径重载；没有有效授权时拒绝执行插件代码。
 
+启动时静态解析失败的社区插件也保留独立的发现位置并接受文件监听。修正文件后，如果它从未发布活动能力，宿主可以在没有 server-code 授权时重新校验并发布静态声明；不会导入 entry、handler 或 guard，首次激活仍须走正常审批。已有活动代的插件不能使用此恢复路径。监听目录消失只记录警告，不中断宿主启动。
+
 宿主先解析新声明、运行新 entry 工厂并校验注册契约，再预加载已获 server-code 与 runtime 双授权的 handler/guard，最后一次发布工具、Hook、RPC、服务、表单校验器、wire 与 runtime 元数据。准备失败保留旧代。进行中的执行捕获旧代引用；后续执行使用新代。旧代停止接收新查找，等待已捕获执行及超时后仍未结束的 provider promise 释放，再调用 `onDispose()`。快照不保留授权，调用和提交仍检查实时撤销状态。
 
 重载发布后，每个会话的下一次执行会在捕获新快照前，按原始请求、显式排除和当前授权重新解析依赖图。新增的必需契约缺少提供者或产生互斥冲突时，该插件不能沿用旧的激活结果执行；修正声明后仍保留用户原始选择。已开始的执行保留原有激活图和服务引用，但显式停用、撤销授权或替换会话仍使其失效。
+
+事件 schema 在启动及新代准备期间读取并编译，编译结果和失败都按声明代际缓存，然后才发布新声明。同一路径的文件修正通过下一次重载生效；已捕获的旧代即使尚未调用过该事件，也保持原有校验器，不受磁盘后续编辑影响。
 
 直接 entry、handler 与 guard 模块使用代次 URL 重新导入。**相对导入的依赖模块不会随之失效**：需热更新的逻辑必须位于直接加载模块或其 entry 工厂内部，相对依赖应保持稳定；修改相对依赖、宿主代码或不能安全清理的顶层资源时重启服务。ESM 的旧模块缓存由 Node 持有，长时间反复开发重载可通过重启回收。
 
@@ -225,3 +229,7 @@ const response = await window.covel.invoke("invokePluginAction", {
 具有回合 emitter 的扩展、压缩与 function service 调用使用同一 `plugin.service.completed` 完成事件写入持久 trace，嵌套调用继承 emitter 并携带 parentCallId。事件只包含身份、扩展 point/id/slot、耗时和固定结果分类，不含调用输入、输出、原始错误、凭据或私有 session incarnation。复用既有 TurnEmitter 的 traceId、seq 和重试范围，等待写入尝试完成；存储失败沿用 trace 的尽力记录语义，不改变插件结果，耗时不包含 trace I/O。没有回合 emitter 的 UI 后台投影只保留进程内诊断窗口。
 
 诊断按当前返回的最近 100 条调用（全进程最多保留 500 条）计算 point/provider 的 total、success、error、timeout、cancelled。缓存命中与同执行并发合并不增加事件或统计；未激活或未批准的提供者在 discovery 被排除，不算调用失败；调用发出后准入失败则保留失败事件。该统计仅代表当前窗口，会随淘汰变化，不是累计用量。
+
+`@covel/plugin-handlers-utils` 导出 `estimateTokens` 和 `FRAMEWORK_TOOL_NAMES`，宿主使用相同实现。hook 未返回值时继续；转换 hook 故障不撤销之前的改写，安全守卫故障仍拒绝操作。
+
+公开 SDK 提供 `resolveI18nText` / `resolveI18nDeep`、locale registry、`estimateTokens`、表单工具和角色字段校验。`world.dimensions@1` 的提供者使用 `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer。Node 插件用 `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)` 加载自己的模板；该子入口不进入浏览器根模块。`shared` / `tools` / `context` 复用这些实现，插件代码只依赖 SDK。

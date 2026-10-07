@@ -6,6 +6,7 @@ import {
   RotateCw,
 } from "lucide-react";
 import { useState } from "react";
+import { classifyActionableError } from "@/lib/actionable-error.js";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import type { ExecutionStep } from "@/stores/session-store.js";
@@ -165,6 +166,7 @@ export function ExecutionTimeline({
 }) {
   const { i18n, t } = useTranslation();
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
+  const [modelSettingsKey, setModelSettingsKey] = useState("llm.slots");
   // Keep runtime details folded until explicitly opened; the summary carries
   // live progress and retry actions without interrupting the story flow.
   const [foldOverrides, setFoldOverrides] = useState<Record<string, boolean>>(
@@ -378,7 +380,14 @@ export function ExecutionTimeline({
                     key={rt.runtimeId}
                     rt={rt}
                     canRetry={canRetry && retryableFailures.includes(rt)}
-                    onConfigureModel={() => setModelSettingsOpen(true)}
+                    onConfigureModel={() => {
+                      setModelSettingsKey(
+                        classifyActionableError(rt.detail) === "auth"
+                          ? "llm.providers"
+                          : "llm.slots",
+                      );
+                      setModelSettingsOpen(true);
+                    }}
                     onRetry={
                       onRetryRuntime
                         ? (rid) => onRetryRuntime(rid, group.turnId)
@@ -415,7 +424,7 @@ export function ExecutionTimeline({
         <SettingsDialog
           open
           onOpenChange={setModelSettingsOpen}
-          initialKey="llm.slots"
+          initialKey={modelSettingsKey}
           plugins={plugins}
         />
       )}

@@ -1,20 +1,20 @@
 - id: emberback-relay
+  strategy: selective
+  keys: [Emberback, relay]
   content: Emberback Relay is a cooperative communications station built into a rust-red ridge on Vesper's habitable Duskline. Its three masts connect six thousand people across the western relay chain. The station's promise is simple—no call goes unanswered—but power, parts, and time are always limited.
 - id: vesper
+  strategy: selective
+  keys: [Vesper, Duskline]
   content: Vesper is tidally locked. Its day side is hot enough to soften exposed metal and its night side lies under moving ice. Human settlement follows the Duskline between them, where long shadows make heat and cold survivable.
 - id: crownfire
+  strategy: selective
+  keys: [Crownfire, storm]
   content: Crownfire is a charged atmospheric storm that runs along the Duskline. It paints gold ribbons in the sky, overloads exposed electronics, scrambles ordinary radio, and can carry time-shifted echoes much farther than normal.
 - id: echo-traffic
+  strategy: selective
+  keys: [echo, signal]
   content: Echo traffic is a recorded signal that arrives before its source transmission. Nightglass has verified short weather echoes, but the player's seventy-two-hour distress call is unprecedented. An echo describes a possible future; acting on it may prevent, change, or cause the event.
 - id: mile-seventeen
+  strategy: selective
+  keys: [Mile Seventeen, convoy]
   content: Mile Seventeen is an exposed crossing on the Brightward Road with a field repeater and a natural basalt arch. A medical convoy carrying thirty cryo-packs is heading there now. The future call says not to let it arrive.
-- id: tomas-reed
-  content: Tomas Reed is Emberback's fifty-eight-year-old chief technician and the player's mentor. Calm, patient, and famous for bad coffee, he values verified evidence and public safety. The future call specifically warns the player not to let Tomas shut down the signal.
-- id: june-okafor
-  content: June Okafor is a Sunrunner courier and Emberback's best crawler pilot. She is fast, funny, direct, and currently escorting the medical convoy toward Mile Seventeen. She trusts the player to speak plainly when the road turns dangerous.
-- id: mina-park
-  content: Dr. Mina Park leads the Nightglass Observatory. She has spent months proving that some radio echoes arrive before they are sent. She is climbing Emberback's main tower with a storm reader when the future call warns the player to keep her off it.
-- id: priya-nair
-  content: Priya Nair is Emberback's lead medic. She runs the eight-bed clinic and its cold room, has two heat-stroke patients this morning, and argues for the clinic's reserve power against every other system. Dry, practical, and impossible to rush.
-- id: eli-varga
-  content: Eli Varga is the nineteen-year-old night-shift signal operator who logged the 06:14 call. Gifted with receivers and anxious under pressure, he believes something else was buried in the static after the call ended, and has not told anyone yet.

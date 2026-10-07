@@ -15,6 +15,21 @@ export class LlmIdleTimeoutError extends Error {
   }
 }
 
+/** A partial answer cannot be validated or repaired as a complete document. */
+export class LlmIncompleteOutputError extends Error {
+  constructor(reason: string) {
+    super(
+      `The model did not complete its answer (${reason}); increase its output limit or request a smaller part`,
+    );
+    this.name = "LlmIncompleteOutputError";
+  }
+}
+
+function requireComplete(reason: string | undefined): void {
+  if (reason === "length" || reason === "max_tokens" || reason === "error")
+    throw new LlmIncompleteOutputError(reason);
+}
+
 interface LlmRequestOptions {
   readonly llm: LLMAdapter;
   readonly messages: readonly LLMMessage[];
@@ -67,12 +82,14 @@ export async function requestLlmResponse(
         signal,
       );
       signal.throwIfAborted();
+      requireComplete(response.finishReason);
       return response;
     }
 
     let content = "";
     let finishReason: LLMResponse["finishReason"] = "stop";
     let reasoningContent = "";
+    let completed = false;
 
     for await (const event of iterateLlmRequest(
       options.llm.stream(request),
@@ -88,6 +105,8 @@ export async function requestLlmResponse(
       } else if (event.type === "reasoning-delta") {
         if (event.reasoningDelta.length > 0) wait();
       } else if (event.type === "done") {
+        requireComplete(event.finishReason);
+        completed = true;
         finishReason =
           event.finishReason === "tool_calls" ||
           event.finishReason === "length" ||
@@ -99,6 +118,7 @@ export async function requestLlmResponse(
     }
 
     signal.throwIfAborted();
+    if (!completed) throw new LlmIncompleteOutputError("missing done event");
 
     return {
       content: content || null,

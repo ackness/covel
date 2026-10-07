@@ -226,7 +226,9 @@ export function createPluginRegistry(
         )) {
           const existing = other.packageManifest?.contractSchemas?.[contract];
           if (existing && canonicalSchema(existing) !== canonicalSchema(schema))
-            throw new Error(`Conflicting schema for contract ${contract}`);
+            throw new Error(
+              `Conflicting schema for contract ${contract} between ${entry.id} and ${id}; publish one shared schema or a new contract version`,
+            );
         }
       }
       entries.set(entry.id, {

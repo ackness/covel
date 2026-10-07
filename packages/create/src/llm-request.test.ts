@@ -3,6 +3,41 @@ import type { LLMAdapter } from "@covel/shared";
 import { LlmIdleTimeoutError, requestLlmResponse } from "./llm-request.js";
 
 describe("requestLlmResponse", () => {
+  it("rejects a stream that closes without a completion event", async () => {
+    await expect(
+      requestLlmResponse({
+        llm: {
+          generate: vi.fn(),
+          async *stream() {
+            yield {
+              type: "text-delta",
+              textDelta: '{"valid":"but partial"}',
+            } as const;
+          },
+        },
+        messages: [],
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({ name: "LlmIncompleteOutputError" });
+  });
+  it.each(["length", "max_tokens", "error"])(
+    "rejects incomplete streamed output (%s)",
+    async (reason) => {
+      await expect(
+        requestLlmResponse({
+          llm: {
+            generate: vi.fn(),
+            async *stream() {
+              yield { type: "text-delta", textDelta: "partial" } as const;
+              yield { type: "done", finishReason: reason } as const;
+            },
+          },
+          messages: [],
+          signal: new AbortController().signal,
+        }),
+      ).rejects.toMatchObject({ name: "LlmIncompleteOutputError" });
+    },
+  );
   it("does not call a provider after cancellation", async () => {
     const generate = vi.fn();
     const stream = vi.fn();
@@ -66,7 +101,7 @@ describe("requestLlmResponse", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it("preserves the existing streaming response behavior", async () => {
+  it("preserves complete streamed content and reasoning", async () => {
     const llm: LLMAdapter = {
       async generate() {
         throw new Error("generate() should not be used when stream() exists");
@@ -76,7 +111,7 @@ describe("requestLlmResponse", () => {
         yield { type: "text-delta", textDelta: "lore" } as const;
         yield {
           type: "done",
-          finishReason: "length",
+          finishReason: "stop",
           reasoningContent: "repair reasoning",
         } as const;
       },
@@ -89,7 +124,7 @@ describe("requestLlmResponse", () => {
     });
 
     expect(response.content).toBe("repaired lore");
-    expect(response.finishReason).toBe("length");
+    expect(response.finishReason).toBe("stop");
     expect(response.reasoningContent).toBe("repair reasoning");
   });
 });

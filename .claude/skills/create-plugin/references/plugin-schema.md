@@ -71,4 +71,4 @@ function:
 
 Agents group settings in `agent`: `model`, `llm`, `tools`, `advertiseEvents`, and `loop`. `agent.loop` holds timeout/step/retry limits and `completion: {require: tool-use|explicit, afterTools: [...]}`. Functions group `handler` and `timeoutMs` in `function`. HTTP allowlists and effect declarations remain runtime-level `permissions` and `effects`. Guard modules use runtime-level `guard`.
 
-Memory policy is plugin behavior: use `memory.block-definitions@1` services and `memory.blocks@1` world data. Compression strategy uses `history.compact@1`. Do not declare removed root memory policy fields.
+Memory policy is plugin behavior: use `memory.block-definitions@1` services and `memory.blocks@1` world data. Compression strategy uses `history.compact@2`; see `docs/reference/extension-points.md` for bounded summary segments and replacement IDs. Do not declare removed root memory policy fields.

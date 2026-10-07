@@ -82,6 +82,8 @@ export type ModelFeature =
 export interface ModelPricing {
   /** Cost per 1M text input tokens (USD) */
   inputPerMToken?: number;
+  cacheReadPerMToken?: number;
+  cacheWritePerMToken?: number;
   /** Cost per 1M text output tokens (USD) */
   outputPerMToken?: number;
   /** Cost per 1M image input tokens (USD) — vision models */

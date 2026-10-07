@@ -20,7 +20,9 @@ import { instructionLocaleFor, type ContentPart } from "@covel/shared";
  * MediaRef id so the estimate stays stable across runs without pretending
  * image bytes have a token cost.
  */
-function flattenContent(content: string | readonly ContentPart[]): string {
+export function flattenMessageContent(
+  content: string | readonly ContentPart[],
+): string {
   if (typeof content === "string") return content;
   return content
     .map((part) =>
@@ -34,29 +36,10 @@ function flattenContent(content: string | readonly ContentPart[]): string {
  * intentionally tiny so `@covel/context` stays free of runtime deps on any
  * tokenizer package.
  */
-export type TokenEstimator = (text: string) => number;
+import type { TokenEstimator } from "@covel/plugin-handlers-utils";
+export type { TokenEstimator } from "@covel/plugin-handlers-utils";
 
-/**
- * CJK ranges: radicals/kana/ideographs (2E80–9FFF), Hangul syllables
- * (AC00–D7AF), compatibility ideographs (F900–FAFF), fullwidth forms
- * (FF00–FFEF).
- */
-const CJK_RE = /[⺀-鿿가-힯豈-﫿＀-￯]/g;
-
-/**
- * Default character-heuristic token estimator, CJK-aware.
- *
- * The naive `chars / 4` rule undercounts CJK text ~3× (CJK runs at roughly
- * 1–1.7 characters per token across common tokenizers), which let Chinese
- * sessions blow past the real model window long before the estimate tripped
- * any threshold. Count CJK characters at 1 token each (deliberately on the
- * high side — overestimating triggers compaction early, which is the safe
- * direction) and everything else at 4 chars per token.
- */
-export function estimateTokens(text: string): number {
-  const cjkCount = text.match(CJK_RE)?.length ?? 0;
-  return cjkCount + Math.ceil((text.length - cjkCount) / 4);
-}
+export { estimateTokens } from "@covel/shared";
 
 /** Configuration for a single {@link applyBudget} call. */
 export interface BudgetOptions {
@@ -87,12 +70,28 @@ export interface BudgetOptions {
   readonly locale?: string;
 }
 
-/** The message that stands in for the pruned ones. */
-function prunedMarker(count: number, locale: string | undefined): string {
+/**
+ * The message that stands in for the pruned ones. It does not say how many
+ * were pruned: the number changed whenever the cut moved, and with it the
+ * first message of every request.
+ */
+function prunedMarker(locale: string | undefined): string {
   return instructionLocaleFor(locale) === "zh"
-    ? `[... 为了不超出 token 预算，已裁掉 ${count} 条较早的消息 ...]`
-    : `[... ${count} older messages pruned to stay within token budget ...]`;
+    ? "[... 为了不超出 token 预算，已裁掉较早的消息 ...]"
+    : "[... older messages pruned to stay within token budget ...]";
 }
+
+/**
+ * Share of the input cap that one pruning step removes.
+ *
+ * Pruning starts again from the full history at every request. Dropping only
+ * what did not fit moved the first kept message at every turn, so no request
+ * matched the one before it past the system prompt, and a provider's prefix
+ * cache never reached the history. Whole steps are dropped instead: the
+ * request is cut to about 70% of the cap, and the cut stays where it is until
+ * the history has grown by another step.
+ */
+const PRUNE_STEP_RATIO = 0.3;
 
 /** Result of a {@link applyBudget} call. */
 export interface BudgetResult<M> {
@@ -174,14 +173,15 @@ function estimateMessageTokens<
       : {}),
   };
   return (
-    estimator(flattenContent(message.content)) +
+    estimator(flattenMessageContent(message.content)) +
     (Object.keys(auxiliary).length > 0
       ? estimator(JSON.stringify(auxiliary))
       : 0)
   );
 }
 
-function isCompactedHistoryEnvelope(message: {
+/** Whether a message is the envelope a compaction summary is sent in. */
+export function isCompactedHistoryEnvelope(message: {
   readonly content: string | readonly ContentPart[];
 }): boolean {
   return (
@@ -229,6 +229,8 @@ function computeProtectStartIndex(
  * Pure pruning pass. Given a system prompt and an ordered message list,
  * drop the OLDEST messages that are outside the protect window until the
  * estimated total fits within `(maxInputTokens - reservedForResponse)`.
+ * Messages go in whole steps of the cap (see `PRUNE_STEP_RATIO`), so the
+ * list that is kept starts at the same message for several turns.
  * If anything is pruned, a single synthetic placeholder system message is
  * inserted at the start of the remaining list.
  *
@@ -307,10 +309,21 @@ export function applyBudget<
     return true;
   };
 
-  // Drain the pruneable prefix from the left until we fit or run out.
-  while (total > budgetCap && pruneNext()) {
-    // Continue until the request fits or only the preserved summary and
-    // protected tail remain.
+  // The marker is part of the real request, so the kept messages must leave
+  // room for it. What has to go is rounded up to whole steps: the amount, and
+  // with it the first kept message, changes only when the history has grown
+  // by a step, not at every turn.
+  const placeholderContent = prunedMarker(options.locale);
+  const placeholderTokens = estimator(placeholderContent);
+  const pruneStep = Math.max(1, Math.floor(budgetCap * PRUNE_STEP_RATIO));
+  const pruneTarget =
+    Math.ceil((total + placeholderTokens - budgetCap) / pruneStep) * pruneStep;
+  const unprunedTotal = total;
+
+  // Drain the pruneable prefix from the left until the target is met or only
+  // the preserved summaries and the protected tail remain.
+  while (unprunedTotal - total < pruneTarget && pruneNext()) {
+    // pruneNext does the work.
   }
 
   // Tool-pair integrity: a `tool` message is only valid when the assistant
@@ -320,21 +333,18 @@ export function applyBudget<
   // the cut orphaned. Without this the whole pruning pass was unusable for
   // tool-declaring runtimes (i.e. every main agent), which is why they were
   // excluded from hard budget enforcement entirely.
-  const pruneOrphanedLeadingTools = (): void => {
-    while (
-      pruneCursor < messages.length &&
-      prunedMessageCount > 0 &&
-      messages[pruneCursor]!.role === "tool"
-    ) {
-      if (!prunedIndices.has(pruneCursor)) {
-        total -= messageTokens[pruneCursor]!;
-        prunedIndices.add(pruneCursor);
-        prunedMessageCount += 1;
-      }
-      pruneCursor += 1;
+  while (
+    pruneCursor < messages.length &&
+    prunedMessageCount > 0 &&
+    messages[pruneCursor]!.role === "tool"
+  ) {
+    if (!prunedIndices.has(pruneCursor)) {
+      total -= messageTokens[pruneCursor]!;
+      prunedIndices.add(pruneCursor);
+      prunedMessageCount += 1;
     }
-  };
-  pruneOrphanedLeadingTools();
+    pruneCursor += 1;
+  }
 
   // Nothing was actually prunable (protectLastUserTurns covered everything).
   if (prunedMessageCount === 0) {
@@ -345,20 +355,6 @@ export function applyBudget<
       budgetExceeded: true,
     };
   }
-
-  let placeholderContent = prunedMarker(prunedMessageCount, options.locale);
-  let placeholderTokens = estimator(placeholderContent);
-
-  // The marker is part of the real request. Continue pruning if it is the
-  // difference between fitting and overflowing; previous behaviour tolerated
-  // this overshoot, which violates a hard context-window contract.
-  while (total + placeholderTokens > budgetCap && pruneNext()) {
-    placeholderContent = prunedMarker(prunedMessageCount, options.locale);
-    placeholderTokens = estimator(placeholderContent);
-  }
-  pruneOrphanedLeadingTools();
-  placeholderContent = prunedMarker(prunedMessageCount, options.locale);
-  placeholderTokens = estimator(placeholderContent);
 
   const survivors = messages.filter((_, index) => !prunedIndices.has(index));
   // The placeholder is a synthetic message matching the caller's message

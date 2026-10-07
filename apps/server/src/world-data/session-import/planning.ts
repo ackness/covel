@@ -3,7 +3,14 @@ import {
   type ResolvedWorldDataTarget,
 } from "../contract-targets.js";
 import path from "node:path";
-import { hiddenPluginDataNamespace } from "@covel/shared";
+import {
+  hiddenPluginDataNamespace,
+  characterSchemaSetPayloadSchema,
+  validateWorldModel,
+  type CharacterSchemaRecord,
+} from "@covel/shared";
+import type { CharacterRecord } from "@covel/store";
+import { ZodError } from "zod";
 import { canonicalJson, digestFile, sha256Hex } from "../digest.js";
 import { collectMediaSourceFiles } from "../media.js";
 import { readWorldDataSource } from "../source-reader.js";
@@ -30,8 +37,11 @@ import type {
   PluginDataTarget,
   WorldDataImportPreflightDeps,
 } from "./types.js";
-import { isRecord, sourceItems } from "./utils.js";
+import { isRecord, recordLocation, sourceItems } from "./utils.js";
 import {
+  checkLorebookRecord,
+  checkProjectedLorebookRecord,
+  type LorebookRecordCheck,
   preflightPluginTarget,
   validatePluginDataValue,
   validateSourceSchemaValues,
@@ -89,6 +99,7 @@ async function appendStructuredPlans(options: {
   schema: WorldDataSchemaRef | null;
   deps?: WorldDataImportPreflightDeps;
   includeKernelEffects?: boolean;
+  characterSchema: CharacterSchemaRecord | null;
 }): Promise<void> {
   const { source, target } = options;
   if (target.kind === "world-metadata" || target.kind === "media") return;
@@ -96,14 +107,74 @@ async function appendStructuredPlans(options: {
   // the roster lists them in this order.
   const characterOrder = () =>
     options.writes.filter((write) => write.kind === "character").length;
-  for (const value of sourceItems(options.value)) {
+  for (const [index, value] of sourceItems(options.value).entries()) {
+    const location = recordLocation(
+      source,
+      value,
+      index,
+      Array.isArray(options.value),
+    );
+    const report = (
+      level: "error" | "warning",
+      message: string,
+      hint?: string,
+    ) => {
+      options.diagnostics.push({
+        level,
+        sourceId: source.id,
+        path: location.path,
+        pointer: location.pointer,
+        message: `${location.label} of source "${source.id}": ${message}`,
+        ...(hint ? { hint } : {}),
+      });
+    };
+    const validateLorebook = (check: LorebookRecordCheck) => {
+      for (const message of check.errors) report("error", message, check.hint);
+      for (const message of check.warnings)
+        report("warning", message, check.hint);
+      return check.errors.length === 0;
+    };
+    const validateCharacter = (record: CharacterRecord | null) => {
+      if (!record) {
+        report(
+          "error",
+          "item cannot become a character record",
+          "Provide non-empty id and name fields.",
+        );
+        return false;
+      }
+      try {
+        validateWorldModel({
+          characterSchema: options.characterSchema,
+          characters: [record],
+          dimensions: {},
+        });
+        return true;
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        const message =
+          error instanceof ZodError
+            ? error.issues
+                .map(
+                  (issue) => `fields.${issue.path.join(".")}: ${issue.message}`,
+                )
+                .join("; ")
+            : error.message;
+        report(
+          "error",
+          message,
+          "Match the character type and fields to world.yaml characterSchema.",
+        );
+        return false;
+      }
+    };
     const key = itemKey(source, value);
     if (!key) {
-      options.diagnostics.push({
-        level: "error",
-        sourceId: source.id,
-        message: `source "${source.id}" needs a resolvable key for target ${source.descriptor.to}`,
-      });
+      report(
+        "error",
+        `needs a resolvable key for target ${source.descriptor.to}`,
+        `Set the source's key field on this record (${source.descriptor.key ?? "key is missing"}).`,
+      );
       continue;
     }
 
@@ -115,12 +186,20 @@ async function appendStructuredPlans(options: {
         value: pluginValue,
         schema: options.schema,
         deps: options.deps,
+        record: location,
       });
       if (validationError) {
         options.diagnostics.push(validationError);
         continue;
       }
       const hidden = source.descriptor.visibility === "hidden";
+      if (
+        !hidden &&
+        target.lorebook &&
+        options.includeKernelEffects !== false &&
+        !validateLorebook(checkProjectedLorebookRecord(value))
+      )
+        continue;
       options.writes.push({
         kind: "plugin-data",
         target: source.descriptor.to,
@@ -151,6 +230,8 @@ async function appendStructuredPlans(options: {
         });
       }
     } else if (target.kind === "lorebook") {
+      if (!validateLorebook(checkLorebookRecord(value, source.descriptor.key)))
+        continue;
       options.writes.push({
         kind: "lorebook",
         target: source.descriptor.to,
@@ -168,14 +249,7 @@ async function appendStructuredPlans(options: {
         options.now,
         characterOrder(),
       );
-      if (!record) {
-        options.diagnostics.push({
-          level: "error",
-          sourceId: source.id,
-          message: `source "${source.id}" item cannot become a character record`,
-        });
-        continue;
-      }
+      if (!validateCharacter(record) || !record) continue;
       options.writes.push({
         kind: "character",
         target: source.descriptor.to,
@@ -197,7 +271,7 @@ async function appendStructuredPlans(options: {
         options.now,
         characterOrder(),
       );
-      if (!character) continue;
+      if (!validateCharacter(character) || !character) continue;
       options.writes.push({
         kind: "character",
         target: "characters",
@@ -238,9 +312,39 @@ export async function buildImportPlan(options: {
   now: string;
   /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
   locale?: string;
+  characterSchema?: unknown;
 }): Promise<ImportPlan> {
   const writes: PlannedWrite[] = [];
   const diagnostics: WorldDataDiagnostic[] = [];
+  let characterSchema: CharacterSchemaRecord | null = null;
+  if (options.characterSchema !== undefined) {
+    const parsed = characterSchemaSetPayloadSchema.safeParse(
+      options.characterSchema,
+    );
+    if (!parsed.success) {
+      return {
+        writes: [],
+        mergeEvents: [],
+        deferredProjectionOutputs: [],
+        diagnostics: [
+          {
+            level: "error",
+            path: "world.yaml",
+            pointer: "characterSchema",
+            message: `Invalid characterSchema: ${parsed.error.message}`,
+            hint: "Use the current world characterSchema contract.",
+          },
+        ],
+      };
+    }
+    characterSchema = {
+      ...parsed.data,
+      version: 1,
+      sessionId: options.sessionId,
+      createdAt: options.now,
+      updatedAt: options.now,
+    };
+  }
   const deferredProjectionOutputs: ImportPlan["deferredProjectionOutputs"][number][] =
     [];
 
@@ -410,6 +514,7 @@ export async function buildImportPlan(options: {
         schema: resolvedSchema,
         deps: options.deps,
         includeKernelEffects: target === targets[0],
+        characterSchema,
       });
     }
 
@@ -429,6 +534,31 @@ export async function buildImportPlan(options: {
     writes.push(...projections.writes);
     diagnostics.push(...projections.diagnostics);
     deferredProjectionOutputs.push(...projections.deferredProjectionOutputs);
+  }
+
+  for (const source of options.sources) {
+    // Metadata is applied by world loading; projections may be deferred in
+    // a static preflight. Neither implies a broken session-data source.
+    if (parseWorldDataTarget(source.descriptor.to)?.kind === "world-metadata")
+      continue;
+    if (
+      writes.some((write) => write.source.id === source.id) ||
+      deferredProjectionOutputs.some(
+        (output) => output.sourceId === source.id,
+      ) ||
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.sourceId === source.id && diagnostic.level === "error",
+      )
+    )
+      continue;
+    diagnostics.push({
+      level: "warning",
+      sourceId: source.id,
+      path: source.descriptor.path,
+      message: `source "${source.id}" produces no session records`,
+      hint: "Check that the source has records and an active plugin accepts its target contract.",
+    });
   }
 
   const sameSource = new Map<
@@ -528,6 +658,18 @@ export async function buildImportPlan(options: {
     }
   }
 
+  const players = merged.filter(
+    (write) => write.kind === "character" && write.record.type === "player",
+  );
+  if (players.length > 1) {
+    diagnostics.push({
+      level: "error",
+      sourceId: players[1]!.source.id,
+      path: players[1]!.source.descriptor.path,
+      message: "A session may have at most one player character",
+      hint: "Keep only one player record across the world's character sources.",
+    });
+  }
   return {
     writes: merged,
     diagnostics,

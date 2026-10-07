@@ -45,6 +45,25 @@ export function isSameTrustedOrigin(
   return loopbackHttpOrigin(candidateUrl) === trusted;
 }
 
+/**
+ * The address to load once the sidecar answers on `port`. A window that shows
+ * an app page stays on that page: path, query and fragment carry over and only
+ * the port changes, so a restarted sidecar does not send the player from a
+ * running session back to the world list. Any other page (the splash, a blank
+ * window) opens the start page.
+ */
+export function appUrlOnPort(
+  currentUrl: string | null | undefined,
+  port: number,
+): string {
+  const origin = `http://127.0.0.1:${port}`;
+  if (!currentUrl || !loopbackHttpOrigin(currentUrl)) {
+    return `${origin}/session`;
+  }
+  const current = new URL(currentUrl);
+  return `${origin}${current.pathname}${current.search}${current.hash}`;
+}
+
 const SPLASH_DATA_URL_PREFIX = "data:text/html;charset=utf-8,";
 
 /**

@@ -15,6 +15,7 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
   keys.env                   ← provider API keys, plain KEY=VALUE lines
   settings.json              ← front-end preferences (unified SettingsStore: locale / appearance / slot overrides / per-plugin settings)
   app-update.json            ← ignored desktop app release
+  window-state.json          ← window size, position, maximized and fullscreen state
   plugins/                   ← user plugins (merged on top of bundled cores)
 
 <data_root>/                 ← default ~/.covel/data; redirectable
@@ -25,7 +26,7 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
     server.log               ← Node sidecar stdout/stderr
     desktop.log.1 … .N       ← rotated copies, oldest dropped past max_files
     server.log.1 … .N
-  server.port                ← last boot port (diagnostics)
+  server.port                ← last boot port (preferred on the next launch)
 ```
 
 Sidecar stderr is recorded as `error` by default. Recoverable framework warnings carry a `[covel:warn]` transport marker; collectors remove the marker and persist them at `warn`, so `policy: warn` scheduling diagnostics and automatic retries do not inflate error counts.
@@ -118,6 +119,8 @@ Plugins such as image generation may declare a `modelPresetId` provider slot. If
 
 ## Frontend entry point
 
+Window state is stored in `window-state.json` under the configuration root. Startup validates dimensions, coordinates and boolean flags, falling back to the default window for malformed records. Coordinates on disconnected displays are ignored; valid negative coordinates still restore a window on a secondary display.
+
 After installing a plugin or world package, use the restart prompt. The main process waits for the
 new backend and navigates the window to its new port. Saved sessions remain available; process-local
 community plugin grants may need approval again. Application versions come from package manifests,
@@ -137,6 +140,23 @@ settings/proxy/app updates
 require `Authorization: Bearer <token>`. `/api/config/info` and the provider
 name-only `/api/config/keys` response remain public. Development web/server
 mode keeps the token gate disabled when the variable is absent.
+
+## Startup and recovery
+
+The app takes a single-instance lock before starting its sidecar; another launch
+focuses the existing window. The child acknowledges its bound listener through
+private IPC, and the desktop immediately loads the app. A disconnected desktop
+parent makes the sidecar drain and exit.
+
+The app reuses the port saved in `server.port` when it is free, falling back to
+another free port when needed. Renderer storage uses Electron's persistent default
+session. The page origin includes the port, so what an earlier port stored (the
+media cache, the panel layout) is never read again: at startup the app clears
+the storage of every earlier loopback origin and, when it found one, the HTTP
+cache. Sidecar restarts retain the current page path and query; the app
+shows crash, restart and recovery status. Native Import Plugin / Import World
+menus open Settings → Plugins → Install and manage, which owns ZIP preview,
+authorization and result feedback.
 
 ## Related docs
 

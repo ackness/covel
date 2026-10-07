@@ -34,7 +34,7 @@ try {
   );
   assert.equal(manifest.private, undefined);
   assert.deepEqual(manifest.dependencies ?? {}, {});
-  assert.deepEqual(manifest.peerDependencies, { zod: "^4.4.3" });
+  assert.deepEqual(manifest.peerDependencies, { zod: "^4.6.5" });
   // Zod is a public peer. Resolve it from the SDK package and place only
   // that peer beside the packed artifact; no private workspace package is
   // visible to the consumer.
@@ -93,14 +93,14 @@ api.provideExtension("prompt.segment@1", "note", {handler: (input) => {
   void t;
   return [{id: "s", content: "c", position: "system", audience: "all", volatility: "turn"}];
 }});
-api.provideExtension("history.compact@1", "summary", {handler: async (_input, context) => {
+api.provideExtension("history.compact@2", "summary", {handler: async (_input, context) => {
   const response = await context.gateway?.generateText({prompt: "Summarize the history"});
   const verdict = context.utils?.validateBaseUrl("https://example.com");
   const request = context.utils?.fetchWithRetry("https://example.com");
-  const geography = context.world.worldRecord?.dimensions?.geography?.regions;
-  const opening = context.world.worldRecord?.dimensions?.startingConditions?.openingHook;
+  const geography = context.world.dimensions.geography?.value;
+  const opening = context.world.dimensions.startingConditions?.value;
   void [verdict, request, geography, opening];
-  return {messageIds: [], content: response?.text ?? "", focusSections: []};
+  return {summaries: [{messageIds: [], replacesSummaryIds: [], content: response?.text ?? "", focusSections: []}]};
 }});
 const entry: PluginEntryFactory = (covel) => {
   covel.registerTool(covel.toolkit.tool({

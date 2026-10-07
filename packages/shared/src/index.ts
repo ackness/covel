@@ -488,3 +488,11 @@ export {
 } from "./schemas/runtime-manifest.js";
 
 export * from "./schemas/catalog.js";
+
+export { estimateTokens } from "@covel/plugin-handlers-utils";
+
+export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
+
+export { isValidPluginSetting } from "./plugin-settings.js";
+
+export * from "./world-data-target.js";

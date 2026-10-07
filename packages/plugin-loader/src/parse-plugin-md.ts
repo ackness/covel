@@ -49,9 +49,16 @@ function frontmatter(
   };
 }
 function invalid(filePath: string, error: unknown): never {
-  throw new Error(
-    `[plugin-loader] ${filePath}: invalid manifest frontmatter — ${error instanceof Error ? error.message : String(error)}\nFix: Use root PLUGIN.md {id,kind,contributes,runtime?} or runtime RUNTIME.md {type,schedule,io,agent/function}; old flat fields are not accepted.`,
-  );
+  const details =
+    error instanceof Error && "issues" in error && Array.isArray(error.issues)
+      ? (error.issues as { path: PropertyKey[]; message: string }[])
+          .map(
+            (issue) =>
+              `${filePath}: ${issue.path.join(".") || "frontmatter"}: ${issue.message}; correct this field using the current plugin manifest reference`,
+          )
+          .join("\n")
+      : `${filePath}: ${error instanceof Error ? error.message : String(error)}`;
+  throw new Error(`[plugin-loader] invalid manifest frontmatter\n${details}`);
 }
 export function parsePluginMd(
   content: string,

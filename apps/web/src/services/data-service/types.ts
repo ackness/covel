@@ -8,6 +8,11 @@ import type {
 
 export type WorldPatch = WorldPatchRequest;
 
+export interface GeneratedWorldSaveOptions {
+  /** Revision baseline captured before the model request. */
+  expectedWorld?: WorldRecord;
+}
+
 export type SessionPatch = Partial<
   Pick<SessionRecord, "status" | "runtimeModelOverrides">
 >;
@@ -36,7 +41,10 @@ export interface DataService {
   listWorlds(): Promise<WorldRecord[]>;
   getWorld(id: string): Promise<WorldRecord | null>;
   createWorld(name: string, description: string): Promise<WorldRecord>;
-  saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord>;
+  saveGeneratedWorld(
+    world: WorldRecord,
+    options?: GeneratedWorldSaveOptions,
+  ): Promise<WorldRecord>;
   updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord>;
   /** Delete the world and its sessions from the authoritative store. */
   deleteWorld(id: string): Promise<void>;

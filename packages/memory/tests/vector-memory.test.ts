@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 
 import type { DataStore } from "@covel/store";
+import { assertSuccess } from "../../ai-provider/src/adapters/http/response.js";
+import { normalizeError } from "../../ai-provider/src/gateway-lifecycle.js";
 
 import { createMemorySystem } from "../src/memory-system.js";
 import { createVectorIngestor } from "../src/vector-ingest.js";
@@ -176,6 +178,69 @@ describe("vector recall (semantic)", () => {
       namespace: RECALL_NAMESPACE,
     });
     expect(hits.length).toBe(3);
+  });
+
+  it("isolates a rejected input and advances recall instead of retrying it forever", async () => {
+    const store = createMemoryStore();
+    const sessionId = "poison-input";
+    await lockModel(store, sessionId);
+    await addMessage(store, sessionId, "user", "accepted first");
+    await addMessage(store, sessionId, "assistant", "rejected input");
+    await addMessage(store, sessionId, "user", "accepted last");
+    const calls: string[][] = [];
+    const ingest = createVectorIngestor({
+      store,
+      embed: async (texts) => {
+        calls.push([...texts]);
+        if (texts.some((text) => text.includes("rejected")))
+          throw Object.assign(new Error("Input rejected"), {
+            code: "invalid_input",
+            retriable: false,
+          });
+        return texts.map(embedText);
+      },
+    });
+    expect((await ingest.ingest(sessionId)).recall).toBe(2);
+    const firstSweepCalls = calls.length;
+    expect((await ingest.ingest(sessionId)).recall).toBe(0);
+    expect(calls).toHaveLength(firstSweepCalls);
+  });
+
+  it("isolates the actual normalized HTTP rejection returned by an embedding adapter", async () => {
+    const store = createMemoryStore();
+    const sessionId = "http-poison-input";
+    await lockModel(store, sessionId);
+    await addMessage(store, sessionId, "user", "rejected input");
+    await addMessage(store, sessionId, "user", "accepted input");
+    const calls: string[][] = [];
+    const ingest = createVectorIngestor({
+      store,
+      embed: async (texts) => {
+        calls.push([...texts]);
+        if (texts.some((text) => text.includes("rejected"))) {
+          try {
+            assertSuccess(
+              new Response("", { status: 400 }),
+              {
+                error: {
+                  code: "context_length_exceeded",
+                  type: "invalid_request_error",
+                  message: "Input exceeds the embedding window",
+                },
+              },
+              "openai-chat",
+            );
+          } catch (error) {
+            throw normalizeError(error, "openai-chat");
+          }
+        }
+        return texts.map(embedText);
+      },
+    });
+    expect((await ingest.ingest(sessionId)).recall).toBe(1);
+    const firstCalls = calls.length;
+    expect((await ingest.ingest(sessionId)).recall).toBe(0);
+    expect(calls).toHaveLength(firstCalls);
   });
 
   it("ranks the semantically closest message first", async () => {

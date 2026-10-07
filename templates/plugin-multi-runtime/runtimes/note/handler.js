@@ -10,7 +10,7 @@ const NOTES_NAMESPACE = "notes";
 
 /** @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler} */
 export default async function noteHandler(ctx) {
-  const { pluginData, logger, manualPayload, turnId } = ctx;
+  const { pluginData, logger, manualPayload, turnId, random } = ctx;
 
   if (!pluginData || typeof pluginData.set !== "function") {
     return {
@@ -26,7 +26,11 @@ export default async function noteHandler(ctx) {
     "Replace this placeholder note with plugin-specific state.";
   const tags = stringArray(payload.tags);
   const createdAt = new Date().toISOString();
-  const key = `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  if (!random) throw new Error("The host must provide ctx.random");
+  let key;
+  do {
+    key = `note-${random.int(0, 0x100000000).toString(36)}`;
+  } while (await pluginData.get(NOTES_NAMESPACE, key));
 
   const record = {
     id: key,

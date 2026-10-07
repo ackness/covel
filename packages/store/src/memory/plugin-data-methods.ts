@@ -1,4 +1,5 @@
 import { pluginDataKey } from "../common/keys.js";
+import { SessionNotFoundError } from "../errors.js";
 import { applyPagination, compareByteOrder } from "../common/pagination.js";
 import type { PluginDataRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
@@ -47,6 +48,8 @@ export function createPluginDataMethods(
   return {
     async compareAndSetPluginDataBatch(sessionId, pluginId, entries) {
       validatePluginDataCasEntries(entries);
+      if (!state.sessions.has(sessionId))
+        throw new SessionNotFoundError(sessionId);
       const rows = entries.map((entry) => {
         const key = pluginDataKey(
           sessionId,
@@ -134,6 +137,59 @@ export function createPluginDataMethods(
         (r) => r.sessionId === sessionId,
       );
       return applyPagination(sortPluginData(filtered), pagination);
+    },
+
+    async getPluginDataPromptWindow(
+      sessionId,
+      pluginId,
+      namespace,
+      maxEntries,
+    ) {
+      const limit = Math.max(0, Math.floor(maxEntries));
+      const rows = sortPluginData(
+        [...state.pluginData.values()].filter(
+          (row) =>
+            row.sessionId === sessionId &&
+            row.pluginId === pluginId &&
+            row.namespace === namespace,
+        ),
+      );
+      if (rows.length <= limit) return { entries: rows, total: rows.length };
+      const anchors = rows.slice(0, Math.floor(limit / 2));
+      const keys = new Set(anchors.map((row) => row.key));
+      const recent = rows
+        .filter((row) => !keys.has(row.key))
+        .sort((a, b) =>
+          a.updatedAt === b.updatedAt
+            ? compareByteOrder(a.key, b.key)
+            : a.updatedAt > b.updatedAt
+              ? -1
+              : 1,
+        )
+        .slice(0, limit - anchors.length);
+      return { entries: [...anchors, ...recent], total: rows.length };
+    },
+
+    async queryPluginData(options) {
+      const rows = [...state.pluginData.values()].filter((row) => {
+        if (
+          row.namespace !== options.namespace ||
+          (options.sessionId !== undefined &&
+            row.sessionId !== options.sessionId) ||
+          (options.pluginId !== undefined && row.pluginId !== options.pluginId)
+        )
+          return false;
+        if (!options.valueFilter) return true;
+        const value = row.value as Record<string, unknown> | null;
+        const field = value?.[options.valueFilter.field];
+        return (
+          typeof field === "string" &&
+          options.valueFilter.values.includes(field)
+        );
+      });
+      return sortPluginData(rows).sort((a, b) =>
+        compareByteOrder(a.sessionId, b.sessionId),
+      );
     },
 
     async listPluginDataByNamespace(sessionId, namespace) {

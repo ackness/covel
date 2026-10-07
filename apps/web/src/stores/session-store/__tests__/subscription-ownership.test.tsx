@@ -20,7 +20,10 @@ const api = vi.hoisted(() => ({
   listSuspensions: vi.fn(),
 }));
 const subscription = vi.hoisted(() => ({ createSessionSubscription: vi.fn() }));
-const connection = vi.hoisted(() => ({ setConnectionState: vi.fn() }));
+const connection = vi.hoisted(() => ({
+  setConnectionState: vi.fn(),
+  registerConnectionRetry: vi.fn(() => () => {}),
+}));
 vi.mock("@/services/api", () => api);
 vi.mock("@/services/subscription.js", () => subscription);
 vi.mock("@/stores/connection-store.js", () => connection);
@@ -493,9 +496,14 @@ it.each([false, true])(
       pendingPlugins.resolve(plugins("current"));
     });
     expect(api.getSessionView).toHaveBeenCalledTimes(2);
-    expect(
-      options.stateRef.current.pluginData.current?._runtime_jobs?.job,
-    ).toEqual(done);
+    expect(options.stateRef.current.executionSteps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtimeId: "current/background",
+          status: "completed",
+        }),
+      ]),
+    );
     expect(options.workspace.checkpoint).toHaveBeenCalledOnce();
   },
 );

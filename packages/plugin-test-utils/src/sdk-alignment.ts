@@ -91,7 +91,7 @@ type IoMember<P extends keyof KernelExtensionPointIo> = MutuallyAssignable<
   KernelExtensionPointIo[P],
   ExtensionPointIo[P]
 >;
-type _Compact = Assert<IoMember<"history.compact@1">>;
+type _Compact = Assert<IoMember<"history.compact@2">>;
 type _ImageFlow = Assert<IoMember<"media.image-flow@1">>;
 type _HistoryTransform = Assert<IoMember<"prompt.history-transform@1">>;
 type _Segment = Assert<IoMember<"prompt.segment@1">>;
@@ -124,7 +124,7 @@ type Def<P extends keyof ExtensionPointIo> = PluginExtensionDefinition<
 >;
 type _SdkDef<P extends keyof ExtensionPointIo> =
   SdkExtensionDefinition<P> extends Def<P> ? true : false;
-type _DefCompact = Assert<_SdkDef<"history.compact@1">>;
+type _DefCompact = Assert<_SdkDef<"history.compact@2">>;
 type _DefImageFlow = Assert<_SdkDef<"media.image-flow@1">>;
 type _DefHistoryTransform = Assert<_SdkDef<"prompt.history-transform@1">>;
 type _DefSegment = Assert<_SdkDef<"prompt.segment@1">>;
@@ -158,7 +158,7 @@ api.provideExtension("prompt.segment@1", "segments", {
     ];
   },
 });
-api.provideExtension("history.compact@1", "compact", {
+api.provideExtension("history.compact@2", "compact", {
   handler: async (_input, context) => {
     const response = await context.gateway?.generateText({
       prompt: "Summarize",
@@ -168,7 +168,16 @@ api.provideExtension("history.compact@1", "compact", {
     // @ts-expect-error The service gateway has no write-capable store surface.
     context.gateway?.getSession();
     void [verdict, result];
-    return { messageIds: [], content: response?.text ?? "", focusSections: [] };
+    return {
+      summaries: [
+        {
+          messageIds: [],
+          replacesSummaryIds: [],
+          content: response?.text ?? "",
+          focusSections: [],
+        },
+      ],
+    };
   },
 });
 

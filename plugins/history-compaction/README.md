@@ -1,8 +1,12 @@
 # History Compaction
 
-This core plugin supplies the default `history.compact@1` extension. It protects recent dialogue, selects older messages, and merges them with the prior rolling summary using the host's completion adapter.
+This core plugin supplies the default `history.compact@2` extension. It protects recent dialogue and summarizes consecutive older prefixes independently using the host's completion adapter. Existing segments stay unchanged until the aggregate token budget or eight-segment limit requires merging only the oldest consecutive segments.
 
-The kernel decides when history exceeds the available budget, validates the returned source message IDs, and persists the summary and message tags in one transaction. Source messages remain available for inspection and snapshots. The plugin owns the summary prompts and selection policy, and does not write storage directly.
+The kernel triggers against the smaller available story/fast input window, validates the returned source message and replacement-summary IDs, and persists selective summary replacement and message tags in one transaction. Source messages remain available for inspection and snapshots. The plugin owns the summary prompts and selection policy, and does not write storage directly.
+
+Summary tokens are bounded to 12% of the effective window (minimum 128, maximum 8192, and never greater than the window itself). Each segment targets 25% of its source size, with a 128-token floor and a ceiling of 4% of the window / 2048 tokens, further bounded by the total budget. Actual output sizes determine whether a merge is needed. Small windows divide the available budget between the merged old prefix and the fresh segment. Summary requests use the fast model's own available input capacity; an individually oversized source message is left raw.
+
+`history.compact@2` returns `{ summaries: [{ messageIds, replacesSummaryIds, content, focusSections, truncated? }] }`. Each result segment covers either a consecutive raw prefix or selected old summary segments, never both. Old merges retain the earliest replaced summary's ID and timestamp to preserve chronological ordering. Providers must upgrade from `@1`; no version compatibility path is provided. Existing persisted summaries can continue to be read.
 
 An explicit provider of the same contract replaces this default. Disabling the plugin removes its compaction policy; ordinary context budget pruning remains a kernel operation.
 

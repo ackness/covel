@@ -1,3 +1,4 @@
+import { keywordTerms, keywordExcerpt } from "./keyword-terms.js";
 /**
  * Archival Memory — Long-term cross-plugin knowledge search (keyword search).
  *
@@ -36,10 +37,7 @@ export function createKeywordArchivalSearcher(
     ): Promise<readonly ArchivalSearchResult[]> {
       const results: ArchivalSearchResult[] = [];
       const queryLower = query.toLowerCase();
-      const queryTerms = query
-        .toLowerCase()
-        .split(/[\s,.:;!?，。：；！？]+/)
-        .filter((t) => t.length >= 2);
+      const queryTerms = keywordTerms(query);
 
       if (queryTerms.length === 0) return [];
 
@@ -61,7 +59,7 @@ export function createKeywordArchivalSearcher(
             if (score > 0) {
               results.push({
                 key: entry.keys?.[0] ?? entry.id,
-                content: content.slice(0, 500),
+                content: keywordExcerpt(content, queryTerms),
                 score,
                 source: "lorebook",
                 pluginId:
@@ -85,11 +83,10 @@ export function createKeywordArchivalSearcher(
           if (score > 0) {
             results.push({
               key: char.name,
-              content:
-                `[${char.type}] ${char.name}: ${JSON.stringify(char.fields ?? {})} ${char.description ?? ""}`.slice(
-                  0,
-                  500,
-                ),
+              content: keywordExcerpt(
+                `[${char.type}] ${char.name}: ${JSON.stringify(char.fields ?? {})} ${char.description ?? ""}`,
+                queryTerms,
+              ),
               score,
               source: "character",
             });

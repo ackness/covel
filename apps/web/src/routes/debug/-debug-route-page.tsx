@@ -62,6 +62,7 @@ export function DebugRoutePage({
     selectSession,
     openSelectedSession,
     refresh,
+    refreshSnapshot,
     loadOlder,
     loadAll,
     setAutoRefresh,
@@ -290,6 +291,7 @@ export function DebugRoutePage({
               />
             ) : debugView === "data" ? (
               <SessionDataView
+                onRefresh={refreshSnapshot}
                 selectedSessionId={selectedSessionId}
                 snapshotData={snapshotData}
                 snapshotLoading={snapshotLoading}

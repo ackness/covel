@@ -163,6 +163,63 @@ async function setupBasicSession() {
 }
 
 describe("event directory", () => {
+  it("refreshes a replaced declaration's schema while preserving a captured validator", async () => {
+    const registry = createPluginRegistry();
+    const root = await makePluginRoot();
+    const manifest = () =>
+      parsedManifest({
+        name: "schema-owner/main",
+        pluginId: "schema-owner",
+        events: [
+          { topic: "value.changed", schema: "event.json", advertise: true },
+        ],
+      });
+    const schema = (type: string) => ({
+      $id: "https://example.invalid/event",
+      type: "object",
+      required: ["value"],
+      properties: { value: { type } },
+    });
+    await writeSchema(root, "event.json", schema("string"));
+    const previous = manifest();
+    registerPlugin(registry, "schema-owner", previous, root);
+    registry.syncSessionActivations("session", ["schema-owner"]);
+    const directory = createEventDirectory({
+      registry,
+      resolvePluginDir: () => root,
+    });
+    await directory.prepareDeclarations([previous.manifest], root);
+    await registry.withSnapshot(async () => {
+      await writeSchema(root, "event.json", schema("number"));
+      const next = manifest();
+      await directory.prepareDeclarations([next.manifest], root);
+      registerPlugin(registry, "schema-owner", next, root);
+      // The captured generation has never validated this event before reload.
+      expect(
+        await directory.validate("session", "value.changed", { value: "old" }),
+      ).toEqual({ ok: true });
+      expect(
+        await directory.validateOwn(
+          "session",
+          "schema-owner",
+          "value.changed",
+          { value: "old" },
+        ),
+      ).toEqual({ ok: true });
+    });
+    expect(
+      await directory.validate("session", "value.changed", { value: 7 }),
+    ).toEqual({ ok: true });
+    expect(
+      await directory.validateOwn("session", "schema-owner", "value.changed", {
+        value: "old",
+      }),
+    ).toMatchObject({ ok: false, code: "invalid" });
+    expect(await directory.catalogText("session", "en-US")).toContain(
+      '"type":"number"',
+    );
+  });
+
   it("lists active plugins' advertised topics, excluding inactive plugins and advertise:false", async () => {
     const { directory } = await setupBasicSession();
     const topics = await directory.listTopics("sess-1");

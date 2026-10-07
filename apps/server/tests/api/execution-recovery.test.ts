@@ -122,7 +122,7 @@ describe("foreground execution recovery", () => {
       assertRecoverableTurn(store, "recovery", "opening"),
     ).resolves.toMatchObject({ state: "failed" });
   });
-  it("reports an interrupted legacy opening without mutating its trace", async () => {
+  it("does not infer an action absent from the current recovery contract", async () => {
     const { store, trace } = await fixture();
     await store.addTraceEvent({
       id: "setup-start",
@@ -144,10 +144,11 @@ describe("foreground execution recovery", () => {
     });
     await trace("turn.started");
     await trace("runtime.started", { runtimeId: "story" });
-    expect(await getSessionExecutionStatus(store, "recovery")).toMatchObject({
+    const status = await getSessionExecutionStatus(store, "recovery");
+    expect(status.retry).toBeUndefined();
+    expect(status).toMatchObject({
       state: "interrupted",
       turnId: "opening",
-      retry: { type: "retry_turn", payload: {} },
     });
     expect(
       (await store.listTraceEvents("recovery")).map((event) => event.type),

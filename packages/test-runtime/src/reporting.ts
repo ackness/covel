@@ -69,7 +69,10 @@ export async function listPluginDataByNamespace(
   pluginId: string,
 ): Promise<Record<string, Array<{ key: string; value: unknown }>>> {
   const rows = await store.listPluginData(sessionId, pluginId);
-  const out: Record<string, Array<{ key: string; value: unknown }>> = {};
+  const out: Record<
+    string,
+    Array<{ key: string; value: unknown }>
+  > = Object.create(null);
   for (const row of rows) {
     const list = out[row.namespace] ?? [];
     list.push({ key: row.key, value: row.value });
@@ -126,14 +129,17 @@ export function evaluateExpectations(
     });
   }
   for (const expected of expect.pluginData ?? []) {
-    const rows = result.pluginData[expected.namespace] ?? [];
+    const rows = Object.hasOwn(result.pluginData, expected.namespace)
+      ? result.pluginData[expected.namespace]
+      : [];
     const matched = rows.some((row) => {
       if (expected.key && row.key !== expected.key) return false;
       const value = row.value;
       if (!value || typeof value !== "object") return false;
       const record = value as Record<string, unknown>;
       if (expected.status && record.status !== expected.status) return false;
-      if (expected.field && !(expected.field in record)) return false;
+      if (expected.field && !Object.hasOwn(record, expected.field))
+        return false;
       return true;
     });
     assertions.push({
@@ -146,7 +152,8 @@ export function evaluateExpectations(
       (asset) => {
         if (expected.modality && asset.modality !== expected.modality)
           return false;
-        if (expected.field && !(expected.field in asset)) return false;
+        if (expected.field && !Object.hasOwn(asset, expected.field))
+          return false;
         return true;
       },
     );
@@ -218,11 +225,14 @@ export async function saveImageArtifacts(args: {
   if (!saveImages) return [];
   const namespace = saveImages.namespace ?? "images";
   const field = saveImages.field ?? "ref";
-  const rows = args.result.pluginData[namespace] ?? [];
+  const rows = Object.hasOwn(args.result.pluginData, namespace)
+    ? args.result.pluginData[namespace]
+    : [];
   const outDir = path.resolve(args.pluginRoot, saveImages.dir ?? "tests/tmp");
   fs.mkdirSync(outDir, { recursive: true });
 
   const artifacts: CaseArtifact[] = [];
+  const usedFileNames = new Set<string>();
   for (const row of rows) {
     const value = row.value;
     if (!value || typeof value !== "object") continue;
@@ -233,7 +243,11 @@ export async function saveImageArtifacts(args: {
       refMime ??
       (typeof record.mimeType === "string" ? record.mimeType : undefined);
     const ext = extensionFromMime(mimeType);
-    const fileName = `${safeFilePart(args.result.caseName ?? args.result.runtimeId)}-${safeFilePart(row.key)}${ext}`;
+    const baseName = `${safeFilePart(args.result.caseName ?? args.result.runtimeId)}-${safeFilePart(row.key)}`;
+    let fileName = `${baseName}${ext}`;
+    for (let suffix = 1; usedFileNames.has(fileName); suffix += 1)
+      fileName = `${baseName}.${suffix}${ext}`;
+    usedFileNames.add(fileName);
     const filePath = path.join(outDir, fileName);
 
     if (isMediaRef(maybeRef) && args.mediaStore) {

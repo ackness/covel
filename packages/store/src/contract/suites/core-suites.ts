@@ -7,6 +7,7 @@ import type {
 import {
   id,
   makeCharacter,
+  makeLorebookEntry,
   makeEvent,
   makeMessage,
   makeSession,
@@ -23,6 +24,53 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
 
   beforeEach(() => {
     store = getStore();
+  });
+
+  describe("Text persistence", () => {
+    it("removes NUL from content while preserving fractional order", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      const entry = makeStateEntry({
+        sessionId: session.id,
+        value: { text: "left\u0000right", nested: ["a\u0000b"] },
+      });
+      await store.upsertStateEntry(entry);
+      expect(
+        (
+          await store.getStateEntry(
+            session.id,
+            entry.tableName,
+            entry.fieldName,
+          )
+        )?.value,
+      ).toEqual({ text: "leftright", nested: ["ab"] });
+      const lore = makeLorebookEntry({
+        sessionId: session.id,
+        insertionOrder: 1.5,
+      });
+      await store.upsertLorebookEntries([lore]);
+      expect(
+        (await store.listSessionLorebookEntries(session.id)).find(
+          (entry) => entry.id === lore.id,
+        )?.insertionOrder,
+      ).toBe(1.5);
+    });
+
+    it("rejects identity rewriting and collisions between cleaned JSON keys", async () => {
+      await expect(
+        store.createSession(makeSession({ id: "bad\u0000id" })),
+      ).rejects.toThrow("U+0000");
+      const session = makeSession();
+      await store.createSession(session);
+      await expect(
+        store.upsertStateEntry(
+          makeStateEntry({
+            sessionId: session.id,
+            value: { "a\u0000": 1, a: 2 },
+          }),
+        ),
+      ).rejects.toThrow("duplicate JSON keys");
+    });
   });
 
   describe("Character schema", () => {
@@ -285,6 +333,48 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(list[1].id).toBe(tr2.id);
     });
 
+    it("queries a root execution and preserves its retry ledger after trace cleanup", async () => {
+      const source = makeTurnResult({
+        id: "z-source",
+        sessionId: "sess-query",
+        turnId: "source",
+        origin: "player",
+        createdAt: ts(0),
+      });
+      const attempt = makeTurnResult({
+        id: "a-attempt",
+        sessionId: source.sessionId,
+        turnId: "attempt",
+        origin: "manual",
+        createdAt: ts(0),
+        retryScope: { sourceTurnId: "source", runtimeIds: ["worker"] },
+      });
+      await store.saveTurnResult(source);
+      await store.saveTurnResult(attempt);
+      await store.saveTurnResult(
+        makeTurnResult({
+          sessionId: source.sessionId,
+          turnId: "attempt",
+          origin: "recursive",
+          parentTurnId: "attempt",
+          createdAt: ts(100),
+        }),
+      );
+      await store.deleteTraceEventsBefore(source.sessionId, ts(1000));
+      expect(
+        await store.queryTurnResults(source.sessionId, { turnId: "attempt" }),
+      ).toEqual([attempt]);
+      expect(
+        await store.queryTurnResults(source.sessionId, {
+          newestFirst: true,
+          limit: 1,
+        }),
+      ).toEqual([attempt]);
+      expect(
+        await store.queryTurnResults(source.sessionId, { origins: ["player"] }),
+      ).toEqual([source]);
+    });
+
     it("should respect limit parameter", async () => {
       const tr1 = makeTurnResult({ sessionId: "sess-1", createdAt: ts(0) });
       const tr2 = makeTurnResult({ sessionId: "sess-1", createdAt: ts(100) });
@@ -515,6 +605,23 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("Events", () => {
+    it("prunes only events before a session cutoff and rolls back failed cleanup", async () => {
+      const cutoff = ts(100);
+      const old = makeEvent({ sessionId: "sess-1", createdAt: ts(0) });
+      const recent = makeEvent({ sessionId: "sess-1", createdAt: cutoff });
+      const other = makeEvent({ sessionId: "sess-2", createdAt: ts(0) });
+      for (const event of [old, recent, other]) await store.saveEvent(event);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.deleteEventsBefore("sess-1", cutoff);
+          throw new Error("rollback cleanup");
+        }),
+      ).rejects.toThrow("rollback cleanup");
+      expect(await store.listEvents("sess-1")).toHaveLength(2);
+      await store.deleteEventsBefore("sess-1", cutoff);
+      expect(await store.listEvents("sess-1")).toEqual([recent]);
+      expect(await store.listEvents("sess-2")).toEqual([other]);
+    });
     it("should save and list events by sessionId", async () => {
       const event = makeEvent({ sessionId: "sess-1" });
       await store.saveEvent(event);
@@ -594,9 +701,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(none).toEqual([]);
     });
 
-    it("listMessagesPage keyset breaks createdAt ties by id (no skip/repeat)", async () => {
-      // `messages` has no monotonic `order` column and same-turn proposals
-      // routinely share a millisecond, so the cursor must fall back to id.
+    it("listMessagesPage preserves write order for createdAt ties (no skip/repeat)", async () => {
       const same = ts(50);
       const a = makeMessage({
         sessionId: "sess-tie",
@@ -618,13 +723,18 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       await store.addMessage(a);
 
       const page1 = await store.listMessagesPage("sess-tie", { limit: 2 });
-      expect(page1.map((m) => m.id)).toEqual(["id-b", "id-c"]);
+      expect((await store.listMessages("sess-tie")).map((m) => m.id)).toEqual([
+        "id-b",
+        "id-c",
+        "id-a",
+      ]);
+      expect(page1.map((m) => m.id)).toEqual(["id-c", "id-a"]);
 
       const page2 = await store.listMessagesPage("sess-tie", {
         limit: 2,
         before: { createdAt: page1[0].createdAt, id: page1[0].id },
       });
-      expect(page2.map((m) => m.id)).toEqual(["id-a"]);
+      expect(page2.map((m) => m.id)).toEqual(["id-b"]);
     });
 
     it("listMessagesPage returns [] for a non-positive limit", async () => {

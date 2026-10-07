@@ -1,12 +1,12 @@
+import { resolveI18nText } from "@covel/plugin-handlers-utils";
+import { resolveI18nDeep } from "@covel/plugin-handlers-utils";
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
 import {
   DIMENSION_DATA_NAMESPACE,
   dimensionRecordSchema,
   dimensionSnapshotFromRecords,
   projectDimensionSnapshot,
-  resolveI18nDeep,
-  resolveI18nText,
-} from "@covel/shared";
+} from "@covel/plugin-handlers-utils/dimensions";
 import { schemaForTracker } from "../lib/schema-for-tracker.js";
 import makeDimensionRuleGet from "../tools/dimension-rule-get.js";
 import makeSetWorldSchema from "../tools/set-world-schema.js";
@@ -91,22 +91,36 @@ export default function (covel) {
     },
   });
   covel.provideExtension("prompt.segment@1", "dimensions", {
-    handler(_input, ctx) {
-      const content = projectDimensionSnapshot(
-        ctx.world.dimensions,
-        ctx.locale,
+    async handler(_input, ctx) {
+      const rows = await ctx.pluginData.list(DIMENSION_DATA_NAMESPACE);
+      const dynamicIds = new Set(
+        rows
+          .filter(
+            (row) =>
+              dimensionRecordSchema.parse(row.value).definition.updateRule,
+          )
+          .map((row) => row.key),
       );
-      return content
-        ? [
-            {
-              id: "dimensions",
-              content: `<world-dimensions>\n${content}\n${inPromptLanguage(ctx.locale, VALUES_NOTE)}\n</world-dimensions>`,
-              position: "system",
-              audience: "story",
-              volatility: "turn",
-            },
-          ]
-        : [];
+      return ["session", "turn"].flatMap((volatility) => {
+        const dimensions = Object.fromEntries(
+          Object.entries(ctx.world.dimensions ?? {}).filter(
+            ([id]) => dynamicIds.has(id) === (volatility === "turn"),
+          ),
+        );
+        const content = projectDimensionSnapshot(dimensions, ctx.locale);
+        return content
+          ? [
+              {
+                id:
+                  volatility === "session" ? "static-dimensions" : "dimensions",
+                content: `<world-dimensions>\n${content}\n${inPromptLanguage(ctx.locale, VALUES_NOTE)}\n</world-dimensions>`,
+                position: "system",
+                audience: "story",
+                volatility,
+              },
+            ]
+          : [];
+      });
     },
   });
   covel.provideExtension("prompt.segment@1", "dimension-rules", {

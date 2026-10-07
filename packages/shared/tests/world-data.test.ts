@@ -81,7 +81,7 @@ describe("world data schemas", () => {
         cast: {
           kind: "json",
           path: "data/characters/cast.json",
-          to: "plugin:character-blueprint/blueprints",
+          to: "contract:character-blueprints@1",
           key: "id",
           after: "dimensions",
           effects: ["characters"],

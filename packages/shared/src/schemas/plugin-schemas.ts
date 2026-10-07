@@ -609,6 +609,12 @@ export const MAX_SETTLE_WAIT_MS = 120_000;
 
 /** Agent prompt history window, counted in turns of visible history. */
 const runtimeHistoryPolicySchema = z.strictObject({
+  includeSummaries: z
+    .boolean()
+    .optional()
+    .describe(
+      "Include persisted summaries alongside the bounded history window. Defaults to false.",
+    ),
   maxTurns: z
     .number()
     .int()

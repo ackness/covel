@@ -115,6 +115,9 @@ export const checkpointRecordArrays = {
       auditResult: jsonValue.optional(),
       origin: executionOrigin,
       parentTurnId: z.string().optional(),
+      retryScope: z
+        .object({ sourceTurnId: z.string(), runtimeIds: z.array(z.string()) })
+        .optional(),
       commitStatus: z.enum(["pending", "committed", "failed"]),
       durationMs: z.number(),
     }),

@@ -438,7 +438,11 @@
     "worldsScrollForward": "向后翻",
     "allPanels": "全部面板",
     "musicMute": "关闭背景音乐",
-    "musicUnmute": "播放背景音乐"
+    "musicUnmute": "播放背景音乐",
+    "panelLoadFailed": "插件面板加载失败。",
+    "modelCredentialsMissing": "开始前请先在服务商设置中填写 API 密钥。",
+    "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。",
+    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -653,7 +657,19 @@
     "galleryNext": "下一张",
     "slidesPause": "暂停背景轮播",
     "slidesPlay": "播放背景轮播",
-    "slideShow": "显示第 {{index}} 张背景"
+    "slideShow": "显示第 {{index}} 张背景",
+    "dimensionError": {
+      "unavailable": "维度操作暂不可用，请刷新会话后重试。",
+      "failed": "维度更新失败。",
+      "conflict": "编辑期间数值已发生变化，请核对刷新后的数值再提交。",
+      "pending": "结算尚未完成，请重试或跳过后继续。"
+    },
+    "resourceNameMissing": "请填写资源名称，或删除此项。",
+    "resourceNameRepeated": "已有同名资源。",
+    "listNeedsEntry": "请至少添加一项。",
+    "numberTooSmall": "请输入不小于 {{minimum}} 的数值。",
+    "wholeNumberNeeded": "请输入整数。",
+    "fixMarkedFields": "请修正标记的字段后再保存。"
   },
   "settings": {
     "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",
@@ -1638,6 +1654,7 @@
     "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。"
   },
   "pluginJob": {
+    "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
     "completed": "{{target}} 已完成（耗时 {{duration}}）",
     "failed": "{{target}} 失败：{{error}}",
     "unknownError": "未知错误"
@@ -1725,7 +1742,9 @@
     "reopenHint": "以后可在世界选择页点击“新手引导”重看；模型和外观随时可在设置中调整。",
     "chooseWorld": "去选择世界",
     "testBindings": "查看并测试已有模型（{{count}} 个用途）",
-    "languageExperimental": "实验性"
+    "languageExperimental": "实验性",
+    "credentialsMissing": "已绑定模型，还需配置凭据",
+    "credentialsMissingHint": "模型绑定已保存。开始前请填写服务商 API 密钥；若本地服务不需要密钥，可以主动测试连接。"
   },
   "character": {
     "noCharacters": "角色信息将在创建角色后显示。",
@@ -2129,5 +2148,13 @@
       "site": "网站：{{host}}",
       "confirm": "打开链接"
     }
+  },
+  "serverStatus": {
+    "restarting": "本地服务已停止，正在重启…",
+    "restartingHint": "服务恢复后将自动重新加载此页面。",
+    "down": "已与本地服务断开连接",
+    "downHint": "Covel 无法连接本地服务。已完成的回合已保存，请重启服务后继续。",
+    "restartFailed": "服务启动失败，请重试或退出并重新打开 Covel。",
+    "restart": "重启服务"
   }
 }

@@ -3,7 +3,7 @@ import {
   type PluginExtensionHost,
   type LLMAdapter,
 } from "@covel/runtime";
-import { historyCompactV1, resolveLlmTokenLimits } from "@covel/shared";
+import { historyCompactV2, resolveLlmTokenLimits } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   estimateTokens,
@@ -46,6 +46,11 @@ export function createBootstrapCompactorRunner(
         createTurnContextBudget(params),
         llmAdapter,
         "fast",
+      );
+      const storyBudget = resolveRequestContextBudget(
+        createTurnContextBudget(params),
+        llmAdapter,
+        "story",
       );
       const execution = extensions.createExecution({
         sessionId,
@@ -101,9 +106,13 @@ export function createBootstrapCompactorRunner(
         {
           store,
           estimator: estimateTokens,
-          compact: (input) => execution.run(historyCompactV1, input),
-          contextWindow:
+          compact: (input) => execution.run(historyCompactV2, input),
+          inputWindow:
             budget.maxInputTokens - (budget.reservedForResponse ?? 0),
+          contextWindow: Math.min(
+            budget.maxInputTokens - (budget.reservedForResponse ?? 0),
+            storyBudget.maxInputTokens - (storyBudget.reservedForResponse ?? 0),
+          ),
         },
         {
           ...(locale ? { locale } : {}),

@@ -150,6 +150,7 @@ const MAX_TRANSPORT_INLINE_BYTES = 7500;
 interface SessionState {
   /** Locally assigned replay sequence used only for SSE ids/buffering. */
   seq: number;
+  replayFloor: number;
   /** Per-origin transport sequence; remote delivery never increments it. */
   transportSeq: number;
   /** Changes every time this state is (re)created — wire ids never repeat. */
@@ -173,7 +174,11 @@ interface TransportFrame {
   readonly stream?: string;
   readonly seq: number;
   readonly event?: SubscriptionEvent;
-  readonly ref?: { readonly sessionId: string; readonly eventId: string };
+  readonly ref?: {
+    readonly sessionId: string;
+    readonly eventId: string;
+    readonly journal?: "trace";
+  };
 }
 
 /** Per-(origin, session) receive-side ordering state. */
@@ -252,7 +257,8 @@ function parseTransportFrame(payload: string): TransportFrame | undefined {
       typeof r !== "object" ||
       r === null ||
       typeof r.sessionId !== "string" ||
-      typeof r.eventId !== "string"
+      typeof r.eventId !== "string" ||
+      (r.journal !== undefined && r.journal !== "trace")
     ) {
       return undefined;
     }
@@ -326,6 +332,7 @@ export function createEventBus(
         epoch: nextEpoch(),
         pinCount: 0,
         buffer: new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX),
+        replayFloor: 0,
         lastTouchedMs: now,
       };
     }
@@ -360,6 +367,7 @@ export function createEventBus(
     state.transportSeq = 0;
     state.epoch = nextEpoch();
     state.buffer = new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX);
+    state.replayFloor = 0;
     const reset: EventBusReset = { sessionId, reason: "transport-gap" };
     for (const cb of resetCallbacks) {
       try {
@@ -437,6 +445,16 @@ export function createEventBus(
     });
   }
 
+  function retain(state: SessionState, event: SubscriptionEvent): void {
+    // Diagnostic payloads already have their own journal and are live-only.
+    if (event.topic === "trace") return;
+    const evicted = state.buffer.push(event);
+    if (evicted)
+      state.replayFloor = Number(
+        evicted.id.slice(evicted.id.lastIndexOf(":") + 1),
+      );
+  }
+
   /** Append a remote event to local state with a locally-assigned epoch:seq id. */
   function deliverRemote(remote: SubscriptionEvent): void {
     const state = touchSession(remote.sessionId);
@@ -445,7 +463,7 @@ export function createEventBus(
       ...remote,
       id: `${state.epoch}:${state.seq}`,
     };
-    state.buffer.push(event);
+    retain(state, event);
     broadcast(event);
   }
 
@@ -459,10 +477,26 @@ export function createEventBus(
     if (!store) {
       throw new Error("transport ref cannot be fetched without a store");
     }
-    const record = await store.getEventById(
-      frame.ref.sessionId,
-      frame.ref.eventId,
-    );
+    const trace =
+      frame.ref.journal === "trace"
+        ? await store.getTraceEventById?.(
+            frame.ref.sessionId,
+            frame.ref.eventId,
+          )
+        : undefined;
+    const record =
+      frame.ref.journal === "trace"
+        ? trace && {
+            ...trace,
+            topic: "trace",
+            payload: {
+              ...(trace.payload as Record<string, unknown>),
+              sessionId: trace.sessionId,
+              turnId: trace.turnId,
+              _subType: trace.type,
+            },
+          }
+        : await store.getEventById(frame.ref.sessionId, frame.ref.eventId);
     if (closed) return;
     if (!record) {
       throw new Error(
@@ -483,7 +517,7 @@ export function createEventBus(
       state.epoch,
       state.seq,
     );
-    state.buffer.push(event);
+    retain(state, event);
     broadcast(event);
   }
 
@@ -517,7 +551,9 @@ export function createEventBus(
         // A received ref can still be unreadable or gone from storage. Its
         // origin seq has already advanced, so invalidate here on the delivery
         // chain before successors receive apparently contiguous replay ids.
-        if (!closed) invalidateReplay(rs.sessionId);
+        // Losing a live-only diagnostic cannot create a hole in state replay.
+        if (!closed && frame.ref?.journal !== "trace")
+          invalidateReplay(rs.sessionId);
       });
     // Track even evicted receive states until their pending store reads end.
     const delivery = rs.chain;
@@ -613,7 +649,7 @@ export function createEventBus(
         state.epoch,
         seq,
       );
-      state.buffer.push(subEvent);
+      retain(state, subEvent);
       broadcast(subEvent);
 
       // ── Cross-pod fan-out (per-session serialized outbox) ──
@@ -641,13 +677,20 @@ export function createEventBus(
             origin: originId,
             stream: state.epoch,
             seq: transportSeq,
-            ref: { sessionId: message.sessionId, eventId: message.id },
+            ref: {
+              sessionId: message.sessionId,
+              eventId: message.id,
+              ...(message.topic === "trace"
+                ? { journal: "trace" as const }
+                : {}),
+            },
           } satisfies TransportFrame);
           let settle!: (ok: boolean) => void;
           const saved = new Promise<boolean>((resolve) => {
             settle = resolve;
           });
           persistSettle = settle;
+          if (message.topic === "trace") settle(true);
           enqueueOutbox(message.sessionId, async () => {
             if (await saved) {
               await transport.publish(refFrame);
@@ -665,7 +708,7 @@ export function createEventBus(
       }
 
       // Persist to store for audit trail (non-blocking, bounded queue).
-      if (store) {
+      if (store && message.topic !== "trace") {
         enqueuePersist({
           record: {
             id: message.id,
@@ -698,23 +741,14 @@ export function createEventBus(
       state.lastTouchedMs = Date.now();
       sessions.delete(sessionId);
       sessions.set(sessionId, state);
-      // Buffer holds the contiguous seq range [latestSeq - size + 1, latestSeq].
       const retained = state.buffer.toArray();
       const latestSeq = state.seq;
-      const oldestSeq =
-        retained.length > 0 ? latestSeq - retained.length + 1 : 0;
-      // Gap: the event right after the cursor was already overwritten (ring
-      // wrapped), or the cursor claims a seq we never issued this epoch.
-      const gap =
-        afterSeq > latestSeq ||
-        (retained.length > 0 ? afterSeq + 1 < oldestSeq : afterSeq < latestSeq);
-      const missedCount = Math.min(
-        retained.length,
-        Math.max(0, latestSeq - afterSeq),
-      );
+      const eventSeq = (event: SubscriptionEvent) =>
+        Number(event.id.slice(event.id.lastIndexOf(":") + 1));
+      const oldestSeq = retained.length > 0 ? eventSeq(retained[0]!) : 0;
+      const gap = afterSeq > latestSeq || afterSeq < state.replayFloor;
       return {
-        events:
-          missedCount > 0 ? retained.slice(retained.length - missedCount) : [],
+        events: retained.filter((event) => eventSeq(event) > afterSeq),
         gap,
         epoch: state.epoch,
         oldestSeq,

@@ -230,3 +230,34 @@ it("bounds successful recovery callbacks when the stream stays missing", async (
   expect(hydrate).toHaveBeenCalledTimes(5);
   expect(fetch).toHaveBeenCalledTimes(6);
 });
+
+it("manually reconnects after giving up and retains registered event handlers", async () => {
+  const fetch = vi.fn(
+    async () => new Response("unauthorized", { status: 401 }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const sub = createSessionSubscription("manual-reconnect");
+  const received = vi.fn();
+  sub.on("state", received);
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(sub.state).toBe("closed");
+  fetch.mockImplementation(
+    async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'id: epoch:1\nevent: state.changed\ndata: {"payload":{}}\n\n',
+              ),
+            );
+          },
+        }),
+      ),
+  );
+  sub.reconnect();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sub.state).toBe("connected");
+  expect(received).toHaveBeenCalledOnce();
+  sub.close();
+});

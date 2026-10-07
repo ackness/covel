@@ -27,11 +27,36 @@ describe("turn-control registry", () => {
     expect(abortActiveTurn("sess-1")).toEqual({ turnId: "turn-1" });
     expect(turnControl.signal?.aborted).toBe(true);
     // An aborted turn no longer accepts steering.
-    expect(steerActiveTurn("sess-1", "late")).toBeNull();
+    expect(steerActiveTurn("sess-1", "late")).toEqual({
+      refused: "steering_closed",
+    });
 
     release();
     expect(hasActiveTurn("sess-1")).toBe(false);
     expect(abortActiveTurn("sess-1")).toBeNull();
+    expect(steerActiveTurn("sess-1", "after")).toEqual({
+      refused: "no_active_turn",
+    });
+  });
+
+  it("refuses steering once the executor closed the queue", () => {
+    const { turnControl, release } = registerActiveTurn("sess-c", "turn-c");
+    try {
+      expect(steerActiveTurn("sess-c", "in time")).toEqual({
+        turnId: "turn-c",
+      });
+      turnControl.closeSteering?.();
+
+      // The turn is still registered (bookkeeping, commit), but nothing reads
+      // the queue any more, so a new interjection is not queued.
+      expect(hasActiveTurn("sess-c")).toBe(true);
+      expect(steerActiveTurn("sess-c", "too late")).toEqual({
+        refused: "steering_closed",
+      });
+      expect(turnControl.drainSteering?.()).toEqual(["in time"]);
+    } finally {
+      release();
+    }
   });
 
   it("a newer registration replaces a stale one; stale release is a no-op", () => {
@@ -87,6 +112,7 @@ describe("steer/abort routes", () => {
       body: JSON.stringify({ message: "hi" }),
     });
     expect(noTurn.status).toBe(409);
+    expect(await noTurn.json()).toMatchObject({ code: "no_active_turn" });
 
     const noSession = await app.request("/api/sessions/nope/steer", {
       method: "POST",
@@ -140,6 +166,28 @@ describe("steer/abort routes", () => {
     }
   });
 
+  it("409s with steering_closed and stores nothing once the queue is closed", async () => {
+    const { app, store } = await makeApp();
+    const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");
+    try {
+      turnControl.closeSteering?.();
+
+      const res = await app.request("/api/sessions/sess-r/steer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "one more thing" }),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: "steering_closed" });
+      // Refused text is neither queued nor shown in the chat log as sent.
+      expect(turnControl.drainSteering?.()).toEqual([]);
+      expect(await store.listMessages("sess-r")).toEqual([]);
+    } finally {
+      release();
+    }
+  });
+
   it("steers and aborts an active turn; steered message is persisted", async () => {
     const { app, store } = await makeApp();
     const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");
@@ -150,6 +198,8 @@ describe("steer/abort routes", () => {
         body: JSON.stringify({ message: "take the left path" }),
       });
       expect(steer.status).toBe(200);
+      // The client stamps its local echo with this turn.
+      expect(await steer.json()).toEqual({ ok: true, turnId: "turn-r" });
       expect(turnControl.drainSteering?.()).toEqual(["take the left path"]);
 
       const messages = await store.listMessages("sess-r");

@@ -11,6 +11,9 @@
  * {@link JsonWriter} so the per-backend modules only supply that thin
  * serialization gateway. The shapes returned structurally satisfy each
  * backend's drizzle `$inferInsert` type.
+ *
+ * Every value a builder returns is free of U+0000, which PostgreSQL stores in
+ * neither a text nor a jsonb column — see {@link withoutNul}.
  */
 
 import type {
@@ -42,6 +45,7 @@ import type {
   WorldRecord,
 } from "../types.js";
 import { lorebookOwnerKey } from "./lorebook-owner.js";
+import { assertStoreIdentifiers, withoutNul } from "./without-nul.js";
 import { normalizeWorldRecord } from "../records/world-records.js";
 
 /**
@@ -135,6 +139,31 @@ export interface InsertValueBuilders {
 }
 
 export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
+  // U+0000 leaves a JSON value before the writer encodes it: SQLite's writer
+  // returns JSON text, in which the character is already an escape sequence.
+  const builders = buildInsertValues({
+    writeJson: (value) => json.writeJson(withoutNul(value)),
+    writeNullableJson: (value) => json.writeNullableJson(withoutNul(value)),
+  });
+  // It leaves a text column once the builder has assembled the row.
+  const cleaned = {} as Record<keyof InsertValueBuilders, unknown>;
+  for (const name of Object.keys(builders) as (keyof InsertValueBuilders)[]) {
+    const build = builders[name] as (
+      ...args: unknown[]
+    ) => Record<string, unknown>;
+    cleaned[name] = (...args: unknown[]) => {
+      assertStoreIdentifiers(args);
+      const row = build(...args);
+      for (const [column, value] of Object.entries(row)) {
+        if (typeof value === "string") row[column] = withoutNul(value);
+      }
+      return row;
+    };
+  }
+  return cleaned as InsertValueBuilders;
+}
+
+function buildInsertValues(json: JsonWriter): InsertValueBuilders {
   return {
     pluginDataInsert(record) {
       return {
@@ -216,6 +245,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         auditResult: json.writeNullableJson(record.auditResult),
         origin: record.origin,
         parentTurnId: record.parentTurnId ?? null,
+        retryScope: json.writeNullableJson(record.retryScope),
         commitStatus: record.commitStatus,
         durationMs: record.durationMs,
         createdAt: record.createdAt,

@@ -70,6 +70,7 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
   （由 `routes/api/session/session-guard.ts#resolveSessionParam` 集中产生）。
   query/body 携带 session id 的端点同样返回 `code: "session_not_found"`。
 - `plugin-rpc` 的 4xx/5xx 也使用这套通用错误信封；`status` 只用于 2xx 的业务响应分支。
+- 插件 RPC 和安装路由仅在本地处理已识别的校验、授权、队列和 HTTP 领域错误；其他异常交给全局处理器记录 method、脱敏 URL 和 stack。生产环境的未知异常返回 500 `Internal server error`，文件权限或数据库错误不会被安装器改成 400。
 - 连通性探测或配置重载可能以 `200 { "ok": false, "error": "..." }` 表示“请求已成功执行，但被探测对象不可用”。这是领域结果，不是 HTTP/API 失败。
 
 ### 鉴权：Session owner token
@@ -129,6 +130,18 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 ## Personal configuration API
 
 `GET /api/llm-config` returns active slots with `serverKeyConfigured` (boolean), plus `source: { kind: "file" | "builtin", path }` and an optional load `error`. `POST /api/llm-config/reload` applies valid TOML in place; invalid reloads return `ok: false` and retain the active configuration. UI settings remain request-scoped overlays and are not written into TOML.
+
+On `demo` / `commercial`, the public `GET /api/llm-config` retains the model
+catalog used at client startup but omits `source` and load `error`; only the
+operator token unlocks those diagnostics. Public `GET /api/config/info` returns
+`isDesktop: false`, `requiresAuth: true`, and null path fields on those tiers.
+An operator request receives the complete deployment paths. Local `self` and
+desktop discovery retain their existing response.
+
+Configuration filesystem and file-manager startup failures use the global
+logged error handler: production responses are generic 500 errors. Invalid
+submitted TOML or proxy configuration still returns a specific 400 diagnostic;
+unreadable existing configuration is retained and is not treated as bad input.
 
 `GET /api/provider-keys` returns only `{ providers: { [provider]: { configured: true } } }` from the live runtime credential map. No raw or masked key material crosses this endpoint, including authenticated desktop requests. Browsers never import these server defaults into personal secrets.
 
@@ -1174,6 +1187,8 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 只写**用户世界目录**（`COVEL_USER_WORLDS_DIR`）里的世界包：应用内生成的和安装的世界。内置世界自带语言版本，存储在数据库或浏览器里的世界没有文件可写，这两种返回 409。译文是模型草稿，人名地名和语气需要人看一遍。hosted 部署需要 operator token。
 
+模型生成期间不持有世界操作锁，也不写语言文件。发布时在锁内核对世界的创建时间、包的实际路径与目录身份，再写语言文件并合并语言元数据；保留模型等待期间保存的编辑。删除中、已删除或同 ID 重建的世界会收到 SSE `error`，旧请求不会写入或清理新包的文件。
+
 SSE 事件：
 
 | `type`     | 字段                                     | 含义                                                               |
@@ -2077,6 +2092,8 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 }
 ```
 
+`allow` 之后服务端立即为该会话加载这个插件已获授权的 runtime。有 runtime 加载不了（handler 或 guard 模块导入失败）时，响应多一个 `runtimeLoadErrors: [{ runtimeId, error }]`：批准 `runtime:<id>` 时只含这一个 runtime，批准 `covel:plugin-server-code` 时含此前已获授权的全部 runtime。授权本身仍然生效；该 runtime 在回合里按单个任务失败处理，不影响其他任务。
+
 **错误响应:**
 
 | 状态码 | 触发条件                                                                                                |
@@ -2369,7 +2386,7 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 
 #### `GET /api/sessions/:id/state`
 
-获取会话的所有状态表及其数据。
+获取会话的所有状态表及其数据。表名和数据键按原名保留，包括 `__proto__` 等合法 JSON 键。
 
 **参数:**
 
@@ -2776,7 +2793,7 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
 2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / runtimeModelOverrides，并把可选的 `loreOverride` 恢复到子会话 metadata。后续父会话或世界背景编辑不改变已捕获的覆盖值，子快照也保留该值以支持连续分叉；当前合同中缺少该可选字段表示使用世界背景，不从父会话当前 metadata 推测历史值。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
 3. **拷贝** characters / state entries / plugin data / character schema / state schemas / unresolved suspensions 到新 session。当前 v3 payload 用必需的 `stateSchemas` 冻结表结构，空数组表示快照时没有表；fork 重建表 ID，并将子表结构写入子快照，父会话后续修改不影响再次分叉。任何状态记录缺少对应表结构时返回 `409 snapshot_schema_missing` 并回滚，不返回状态不完整的分支； 后台任务与日志等控制面命名空间（`_runtime_jobs`、`_runtime_job_control`、`_logs`，以及旧版 `_jobs`）不进入子会话，也不进入子快照，即使源快照早于这条排除规则生成。
-4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。这些字段为必需字段，不读取父消息当前标签推测历史。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
+4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续分段摘要合并和重标历史消息不会改变旧快照的分叉结果。这些字段为必需字段，不读取父消息当前标签推测历史。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
    界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。子快照写入新的消息边界，支持继续分叉。
    当前 v3 payload 必需的 `runtimeExports` 冻结各生产者/名称在捕获时可见的最新导出修订及其值；空数组表示没有导出。分叉、连续分叉及检查点传输均使用这份记录，后续同毫秒提交不会混入。捕获使用 `listRuntimeExports(sessionId, { latestOnly: true })`，SQL 在数据库内筛选每组最高修订，避免读取全部历史 JSON。自动快照仍使用全部提案提交完成后的实际捕获时间。
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
@@ -2840,6 +2857,11 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 #### `POST /api/sessions/:id/characters`
 
 创建或更新一个角色（upsert 语义）。该兼容管理端点内部通过 `character.upsert` proposal 提交，因此后续可继续接入 commit pipeline 的 hook / trace 策略，同时保持原 URL 和响应形状。
+
+Rejected character proposals return 400 with validation details; unexpected
+persistence failures use the logged, sanitized 500 handler. The aggregated
+session state view also returns 500 when a required character or plugin-data
+query fails, instead of reporting a successful but incomplete database view.
 
 **参数:**
 
@@ -3113,6 +3135,8 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 - 补充内容或契约数据三次都失败时，世界照常创建，只是没有这一部分，`done` 帧的 `warnings` 说明缺了什么；之后可以用 `revise-world` 补上。
 - 校验完成前不会写入半成品。
 
+内容校验、模型无输出或输出不完整的诊断仍通过 SSE 报告。未知模型请求异常只将详情写入服务端日志，公开提示检查模型配置或日志；生产环境其他未知异常返回 `Internal server error`。修订冲突保留重新加载提示，发布与恢复同时失败时保留完整备份路径供已授权的操作者恢复。
+
 模型请求按**无响应时间**限时，不按总时长：模型每输出一段正文或推理，计时重新开始，所以输出慢但持续的模型可以写完很长的内容。连续 `idleTimeoutMs` 没有任何输出才算超时。不支持流式的适配器一次返回整个回答，这时无响应时间等于整个请求的时长。单次请求另有 30 分钟的总上限，只用来结束永不停止输出的模型。
 
 无响应超时**不重试**：这个时间是玩家愿意等的上限，重试只会让玩家多等几倍才知道模型没有响应。`manifest` 或 `lore` 超时，生成立即失败；补充部分超时，这一部分和它之后的部分都不再请求，世界用已经写好的部分创建，`warnings` 逐条列出缺少的部分。因此模型不响应时，最多等一个 `idleTimeoutMs` 就有结论。
@@ -3179,7 +3203,7 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 }
 ```
 
-Web 前端在每次生成前等待 `/api/health` 成功响应，再根据 `storage.data.frontendMode` 选择保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 Dexie `BrowserVault.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。成功响应缺少 `frontendMode` 时使用 `server-file`；请求失败或尚未完成时不启动模型调用，失败后保留创作简报供重试，等待期间取消则不再发起生成。同 ID 的生成结果替换已有世界列表项。
+Web 前端在每次生成前等待 `/api/health` 成功响应，再根据 `storage.data.frontendMode` 选择保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 `LocalDataService.saveGeneratedWorld()` 在世界锁内确认 ID 尚未被占用，再保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。成功响应缺少 `frontendMode` 时使用 `server-file`；请求失败或尚未完成时不启动模型调用，失败后保留创作简报供重试，等待期间取消则不再发起生成。浏览器生成结果若与已有本地世界同 ID（包括生成期间另一窗口创建的世界），保存失败并保留原世界；修改已有世界必须使用带请求基线的修订路径。
 
 **响应 200:** SSE 帧。
 
@@ -3241,19 +3265,21 @@ data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; th
 }
 ```
 
-| 字段            | 类型   | 必填 | 说明                                                                             |
-| --------------- | ------ | ---- | -------------------------------------------------------------------------------- |
-| `worldId`       | string | 是   | 要修改的世界                                                                     |
-| `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                                       |
-| `world`         | object | 否   | 只存在于浏览器的世界（`return-only` 生成的）由客户端随请求带上它的 `WorldRecord` |
-| `model`         | string | 否   | 覆盖 LLM 模型                                                                    |
-| `idleTimeoutMs` | number | 否   | 等待模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同         |
+| 字段            | 类型   | 必填 | 说明                                                                                                                                         |
+| --------------- | ------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worldId`       | string | 是   | 要修改的世界                                                                                                                                 |
+| `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                                                                                                   |
+| `world`         | object | 否   | 浏览器负责保存的世界随请求带上其 `WorldRecord`；显式提供时结果始终只返回，忽略服务端同 ID 镜像或目录记录；文本 locale map 按世界内容语言解析 |
+| `model`         | string | 否   | 覆盖 LLM 模型                                                                                                                                |
+| `idleTimeoutMs` | number | 否   | 等待模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同                                                                     |
 
 只有带生成标记的世界可以修改：`metadata.generated === true`。生成器写出的世界包里有一个 `.covel-generated.json` 文件，世界记录据此带上这个标记；手写的或安装的世界包没有它，因为这类包里可能有立绘、额外的数据源和语言文件，整包重写会丢掉它们。
 
-世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，失败时旧包不变）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
+世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，发布失败时恢复旧目录；若恢复也失败，旧包保留在 `.covel-replaced-*/package`，错误会报告恢复路径，不删除它）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
 
-SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修订是一次模型请求，`parts` 里只有一个 `revision`。
+SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修订是一次模型请求，`parts` 里只有一个 `revision`。模型运行期间不持有世界操作锁；发布时在锁内复核原记录以及文件包身份。期间的编辑、删除或替换会使旧修订失败，既有编辑和新包保留，玩家重新加载后可再发起修订。
+
+浏览器保存 `done` 结果时也在跨窗口世界锁内比较请求开始时的完整世界基线。另一窗口期间的编辑、删除或替换会拒绝本地保存，保留当前记录及玩家的修订要求；重新加载世界后可重试。显式 `world` 无效时返回 400，不回退到服务端同 ID 世界。
 
 | 状态码 | `code`                | 含义                                                                             |
 | ------ | --------------------- | -------------------------------------------------------------------------------- |
@@ -3316,8 +3342,8 @@ SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修
   `operation`、`provider`、`model`、`slot`、`attempt`、`durationMs`、`startedAt`、`error`
   、`warning`、`tool` 与 `prompt`。失败详情位于 `diagnostic.error.{message,code?,details?}`；提示词
   摘要位于 `diagnostic.prompt`，其中 `contentAvailable` 表示正文是否已记录，
-  `contentPath` 指向原始正文所在的 `payload.messages`（旧记录可能是
-  `payload.data.messages`）。原始 `payload` 保持不变以兼容现有消费者。
+  `contentPath` 指向原始正文所在的 `payload.messages`。摘要只读取当前契约的
+  payload 顶层字段，原始 `payload` 保持不变用于详细检查。
 - `diagnostic.severity` 为 `info`、`warning` 或 `error`；错误优先于慢调用警告。
   成功的 LLM/gateway/utils/tool/runtime 调用或任务耗时达到 1000ms 时带有
   `warning: { code: "slow", thresholdMs: 1000 }`。
@@ -3787,3 +3813,7 @@ by `value: null`.
 `media.image-flow@1` extension has a 500 ms provider budget and skips failed
 providers. Runtime IDs returned by a provider must belong to that provider's
 own plugin.
+
+AI 世界生成在写完 manifest 后为已存在的 ID 分配可用后缀。局部校验失败时，修正请求携带上一份答案和校验错误；输出截断或模型流缺少完成事件时立即报告错误，不把残缺内容当成完整包继续重写。最终保存仍有原子冲突检查，防止生成期间新出现的同名世界被覆盖。生成、修订和翻译的并发互斥覆盖完整 SSE 生命周期。
+
+World-data locale overlays honor each source's `localeArrayKeys` when translating nested object lists. Preflight, import, sync and the translation endpoint share this identity matching; reordering the main list does not reassign a keyed translation.

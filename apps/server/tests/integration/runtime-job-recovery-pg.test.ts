@@ -177,17 +177,18 @@ describe.skipIf(!database)(
 
     it("does not orphan a lease renewed by another connection after the scan", async () => {
       const key = await seed(false);
-      const list = recoveryStore.listPluginDataByNamespace.bind(recoveryStore);
+      const query = recoveryStore.queryPluginData.bind(recoveryStore);
       const intercepted = vi
-        .spyOn(recoveryStore, "listPluginDataByNamespace")
-        .mockImplementation(async (sessionId, namespace) => {
-          const rows = await list(sessionId, namespace);
-          if (sessionId === key.sessionId) {
-            await renewRuntimeJobLease(ownerStore, {
+        .spyOn(recoveryStore, "queryPluginData")
+        .mockImplementation(async (options) => {
+          const rows = await query(options);
+          if (rows.some((row) => row.sessionId === key.sessionId)) {
+            const renewed = await renewRuntimeJobLease(ownerStore, {
               ...key,
               ownerId: "owner",
               leaseMs: 30_000,
             });
+            expect(renewed).not.toBeNull();
           }
           return rows;
         });
@@ -195,6 +196,7 @@ describe.skipIf(!database)(
         await recoverExpiredRuntimeJobs(recoveryStore, {
           tryWithCommitLock: recoveryLock.tryWithLock!.bind(recoveryLock),
         });
+        expect(intercepted).toHaveBeenCalledTimes(1);
         await expect(getRuntimeJob(recoveryStore, key)).resolves.toMatchObject({
           status: "running",
         });

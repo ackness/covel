@@ -64,6 +64,7 @@ import {
   isBlobLike,
   materializeEntries,
   readAllEntries,
+  readInstallationJson,
   rejectByContentLength,
   type ExtractedEntry,
   type HttpError,
@@ -214,7 +215,9 @@ export const githubCollectionRoutes = new Hono();
 
 githubCollectionRoutes.post("/github/preview", async (c) => {
   try {
-    const { url } = githubPluginPreviewRequestSchema.parse(await c.req.json());
+    const { url } = githubPluginPreviewRequestSchema.parse(
+      await readInstallationJson(c),
+    );
     const signal = c.req.raw.signal;
     const location = parseGithubUrl(url);
     const { commit, tracking } = await resolveGithubRevision(location, signal);
@@ -383,7 +386,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
 githubCollectionRoutes.post("/github/batch", async (c) => {
   try {
     const { tokens } = githubBatchInstallRequestSchema.parse(
-      await c.req.json(),
+      await readInstallationJson(c),
     );
     const signal = c.req.raw.signal;
     const reserved = c.get("reservedPluginIds") ?? new Set<string>();

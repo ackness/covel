@@ -44,7 +44,7 @@ export function applyPluginMessageSurface(
   );
   if (!uiEntry || uiEntry.specs.length === 0) return state;
 
-  const namespaceState = state.pluginData[pluginId]?.message ?? {};
+  const namespaceState = state.pluginMessageData[pluginId] ?? {};
   const resolveTurn = pluginMessageTurnResolver(
     state.executionSteps,
     state.messages,
@@ -122,7 +122,7 @@ export function refreshPluginMessageSurfaces(
   state: SessionState,
 ): SessionState {
   for (const entry of state.messageUiSpecs) {
-    if (state.pluginData[entry.pluginId]?.message) {
+    if (state.pluginMessageData[entry.pluginId]) {
       state = applyPluginMessageSurface(state, entry.pluginId);
     }
   }

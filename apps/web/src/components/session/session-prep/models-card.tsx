@@ -42,6 +42,13 @@ export function ModelsCard({
           {resolvedSlots.length}
         </Badge>
       </CollapsibleCardHeader>
+      {resolvedSlots.some(
+        (slot) => slot.tag === "text" && !slot.hasCredentials,
+      ) && (
+        <p role="status" className="px-4 pb-3 text-xs text-destructive">
+          {t("session.modelCredentialsMissing")}
+        </p>
+      )}
       {expanded && (
         <CardContent id="models-card-content" className="space-y-2 px-4 pb-4">
           <ActiveModelSlots slots={resolvedSlots} />

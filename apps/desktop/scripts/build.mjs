@@ -4,7 +4,7 @@
  * Steps:
  *   1. Build the web frontend (pnpm --filter @covel/web build)
  *   2. Bundle main process with esbuild (TS → single ESM file)
- *   3. Copy web-dist + server source to staging area
+ *   3. Copy web-dist and precompile server/workspace modules in staging
  *   4. Run electron-builder to create distributable
  */
 
@@ -16,6 +16,7 @@ import fs from "node:fs";
 
 import { ensureElectronBinary } from "./ensure-electron.mjs";
 import { detachStagingHardlinks } from "./staging-files.mjs";
+import { compileStagedServer } from "./compile-server.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
@@ -252,8 +253,8 @@ function verifyStagedServerRuntime() {
   );
   const betterSqlitePkgPath = path.join(betterSqliteDir, "package.json");
   const checks = [
-    path.join(serverStaging, "src/index.ts"),
-    path.join(serverStaging, "node_modules/tsx/dist/cli.mjs"),
+    path.join(serverStaging, "src/index.js"),
+    path.join(serverStaging, "node_modules/tsx/dist/loader.mjs"),
     path.join(serverStaging, "node_modules/esbuild/package.json"),
     path.join(
       serverStaging,
@@ -425,6 +426,9 @@ for (const entry of sideCarResources) {
   });
 }
 console.log("  ✓ plugins/prompts/worlds copied (node_modules/dist excluded)");
+
+const compiledModules = await compileStagedServer(serverStaging);
+console.log(`  ✓ precompiled ${compiledModules} server/workspace modules`);
 
 // User configuration belongs to the installed app's data directory. Never
 // copy the developer's llm.toml into distributable resources or Turbo caches.

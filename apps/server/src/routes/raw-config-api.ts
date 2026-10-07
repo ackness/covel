@@ -135,16 +135,7 @@ export function createRawConfigApiRoutes(deps: { ai: AiStack }): Hono {
         404,
       );
     }
-    try {
-      return c.json(read(file));
-    } catch (err) {
-      return c.json(
-        errorBody(err instanceof Error ? err.message : String(err), {
-          code: "config_file_unreadable",
-        }),
-        500,
-      );
-    }
+    return c.json(read(file));
   });
 
   // PUT /api/config/raw/:name — body: { content, baseDigest }.
@@ -223,12 +214,7 @@ export function createRawConfigApiRoutes(deps: { ai: AiStack }): Hono {
       } catch {
         // Keep the write error.
       }
-      return c.json(
-        errorBody(err instanceof Error ? err.message : String(err), {
-          code: "config_write_failed",
-        }),
-        500,
-      );
+      throw err;
     }
 
     const reload: AiReloadResult | undefined =

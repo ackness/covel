@@ -36,28 +36,27 @@ export function compareByteOrder(a: string, b: string): number {
 type Keyed = { readonly createdAt: string; readonly id: string };
 
 /**
- * Total order on `(createdAt, id)` — the JS mirror of the SQL keyset order.
+ * Total order on `(createdAt, id)` — the JS mirror of the SQL keyset order
+ * (`cursorPageOrder` / `cursorAfterOrder`).
  *
- * Uses code-unit `<` (NOT `localeCompare`) so the tie-break matches SQLite's
- * BINARY collation and {@link applyCursorPage}'s own `<` comparison exactly: for
- * ASCII ids (all framework-generated + client-supplied ids in practice), a
- * code-unit compare equals a byte compare. `localeCompare` would order e.g.
- * `"alpha"` before `"Zeta"` while SQLite orders `"Zeta"` first, so memory/idb
- * and the SQL backends would pick DIFFERENT rows for the same same-`createdAt`
- * cursor page — a store-backend-parity bug (skip/duplicate at page boundary).
+ * The `id` tie-break is {@link compareByteOrder}, the order the SQL backends
+ * give it (`SqlRunner.byteOrder`). `localeCompare` would order e.g. `"alpha"`
+ * before `"Zeta"` while SQLite orders `"Zeta"` first, so MemoryStore and the
+ * SQL backends would pick DIFFERENT rows for the same same-`createdAt` cursor
+ * page — a store-backend-parity bug (skip/duplicate at page boundary).
  */
 export function sortByCursorAsc<T extends Keyed>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => {
+    // A timestamp is ASCII: `<` orders it as its bytes do.
     if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
-    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
-    return 0;
+    return compareByteOrder(a.id, b.id);
   });
 }
 
 /**
  * Apply a {@link CursorPageOpts} keyset page to rows already sorted ascending
- * by `(createdAt, id)`. Returns oldest-first (the memory/idb counterpart to the
- * SQL `desc … limit … reverse` path). `limit <= 0` ⇒ `[]`.
+ * by `(createdAt, id)`. Returns oldest-first (the MemoryStore counterpart to
+ * the SQL `desc … limit … reverse` path). `limit <= 0` ⇒ `[]`.
  */
 export function applyCursorPage<T extends Keyed>(
   rowsAscending: readonly T[],
@@ -69,7 +68,8 @@ export function applyCursorPage<T extends Keyed>(
     ? rowsAscending.filter(
         (r) =>
           r.createdAt < before.createdAt ||
-          (r.createdAt === before.createdAt && r.id < before.id),
+          (r.createdAt === before.createdAt &&
+            compareByteOrder(r.id, before.id) < 0),
       )
     : rowsAscending;
   return older.slice(-opts.limit);
@@ -78,7 +78,7 @@ export function applyCursorPage<T extends Keyed>(
 /**
  * Forward keyset read over rows already sorted ascending by `(createdAt, id)`:
  * the first `limit` rows strictly after `after` (all rows from the start when
- * `after` is null). The memory/idb counterpart to `cursorAfterWhere`.
+ * `after` is null). The MemoryStore counterpart to `cursorAfterWhere`.
  * `limit <= 0` ⇒ `[]`.
  */
 export function applyCursorAfter<T extends Keyed>(
@@ -91,8 +91,48 @@ export function applyCursorAfter<T extends Keyed>(
     ? rowsAscending.filter(
         (r) =>
           r.createdAt > after.createdAt ||
-          (r.createdAt === after.createdAt && r.id > after.id),
+          (r.createdAt === after.createdAt &&
+            compareByteOrder(r.id, after.id) > 0),
       )
     : rowsAscending;
   return newer.slice(0, limit);
+}
+
+/**
+ * The rows of a write-order log, oldest-first — the JS mirror of
+ * `writeOrderAsc` in `cursor.ts`. MemoryStore appends such a log to an array,
+ * so a row's place in the array is its `seq`: pass the rows as the array holds
+ * them. The sort is stable, and rows of one `createdAt` keep that order.
+ */
+export function sortByWriteOrder<T extends { readonly createdAt: string }>(
+  rowsAsWritten: readonly T[],
+): T[] {
+  return [...rowsAsWritten].sort((a, b) =>
+    a.createdAt === b.createdAt ? 0 : a.createdAt < b.createdAt ? -1 : 1,
+  );
+}
+
+/**
+ * Apply a {@link CursorPageOpts} keyset page to rows from
+ * {@link sortByWriteOrder} — the JS mirror of `writeOrderPageWhere`. The
+ * cursor names a row by `id` and `createdAt`; rows of that millisecond count
+ * as older when they come before it. When no row matches the cursor, only rows
+ * of an earlier `createdAt` are older. `limit <= 0` ⇒ `[]`.
+ */
+export function applyWriteOrderPage<T extends Keyed>(
+  rowsAscending: readonly T[],
+  opts: CursorPageOpts,
+): T[] {
+  if (opts.limit <= 0) return [];
+  const before = opts.before;
+  if (!before) return rowsAscending.slice(-opts.limit);
+  const cursorAt = rowsAscending.findIndex(
+    (r) => r.id === before.id && r.createdAt === before.createdAt,
+  );
+  const older = rowsAscending.filter(
+    (r, index) =>
+      r.createdAt < before.createdAt ||
+      (r.createdAt === before.createdAt && cursorAt !== -1 && index < cursorAt),
+  );
+  return older.slice(-opts.limit);
 }

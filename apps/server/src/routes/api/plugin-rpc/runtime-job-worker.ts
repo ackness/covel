@@ -14,6 +14,8 @@ import {
   claimNextRuntimeJob,
   getRuntimeJob,
   listRuntimeJobs,
+  listAllRuntimeJobs,
+  TERMINAL_RUNTIME_JOB_STATUSES,
   pruneTerminalRuntimeJobs,
   recoverExpiredRuntimeJobs,
   renewRuntimeJobLease,
@@ -704,35 +706,46 @@ export function createRuntimeJobWorker(args: {
   const touchedSessions = new Set<string>();
   const reconcileTerminalJobs = async (
     scope: "all" | "touched",
+    snapshot?: readonly RuntimeJobRecord[],
+    snapshotStartedAt?: number,
   ): Promise<void> => {
     // Durable state can outlive its event projection after a crash or a
     // failed notification. Reconcile it independently of execution capacity.
-    const startedAt = Date.now();
+    const startedAt = snapshotStartedAt ?? Date.now();
     const since =
       reconciledThrough === undefined
         ? -Infinity
         : reconciledThrough - RECONCILE_OVERLAP_MS;
-    const sessionIds =
+    const jobs =
       scope === "all"
-        ? (await args.store.listSessions()).map((session) => session.id)
-        : [...touchedSessions];
+        ? (snapshot ?? (await listAllRuntimeJobs(args.store)))
+        : undefined;
+    const sessionIds = jobs
+      ? [...new Set(jobs.map((job) => job.sessionId))]
+      : [...touchedSessions];
     touchedSessions.clear();
     for (const sessionId of sessionIds) {
       if (closed) return;
       const terminal = await pruneTerminalRuntimeJobs(
         args.store,
         sessionId,
-        await listRuntimeJobs(args.store, {
-          sessionId,
-          statuses: [
-            "succeeded",
-            "failed",
-            "timed_out",
-            "cancelled",
-            "stale",
-            "orphaned",
-          ],
-        }),
+        jobs
+          ? jobs.filter(
+              (job) =>
+                job.sessionId === sessionId &&
+                TERMINAL_RUNTIME_JOB_STATUSES.has(job.status),
+            )
+          : await listRuntimeJobs(args.store, {
+              sessionId,
+              statuses: [
+                "succeeded",
+                "failed",
+                "timed_out",
+                "cancelled",
+                "stale",
+                "orphaned",
+              ],
+            }),
       );
       for (const job of terminal) {
         if (closed) return;
@@ -759,13 +772,32 @@ export function createRuntimeJobWorker(args: {
   };
 
   const drain = async (): Promise<void> => {
+    // Consume only the hints that existed when this pass started. A wake
+    // during any awaited snapshot/maintenance read belongs to the next pass.
+    const requestedFullScan = fullScanRequested;
+    const requestedSessions = [...hintedSessions];
+    fullScanRequested = false;
+    hintedSessions.clear();
     let maintained = false;
+    let snapshot: RuntimeJobRecord[] | undefined;
     if (!closed && Date.now() >= nextMaintenanceAt) {
       try {
+        const snapshotStartedAt = Date.now();
+        snapshot = await listAllRuntimeJobs(args.store);
         await recoverExpiredRuntimeJobs(args.store, {
           tryWithCommitLock: args.tryWithCommitLock,
+          jobs: snapshot,
+          onChanged: (job) => {
+            const index = snapshot!.findIndex(
+              (entry) =>
+                entry.sessionId === job.sessionId &&
+                entry.pluginId === job.pluginId &&
+                entry.jobId === job.jobId,
+            );
+            snapshot![index] = job;
+          },
         });
-        await reconcileTerminalJobs("all");
+        await reconcileTerminalJobs("all", snapshot, snapshotStartedAt);
         maintained = true;
         nextMaintenanceAt = Date.now() + MAINTENANCE_INTERVAL_MS;
       } catch (error) {
@@ -775,14 +807,13 @@ export function createRuntimeJobWorker(args: {
     }
 
     const scope =
-      maintained || fullScanRequested ? undefined : [...hintedSessions];
-    fullScanRequested = false;
-    hintedSessions.clear();
+      maintained || requestedFullScan ? undefined : requestedSessions;
     if (scope?.length === 0) {
       if (!maintained) await reconcileTerminalJobs("touched");
       return;
     }
 
+    if (!scope && !snapshot) snapshot = await listAllRuntimeJobs(args.store);
     while (!closed) {
       if (activeCount >= concurrency) {
         // A finishing job wakes the worker; resume this pass's scope then.
@@ -794,6 +825,7 @@ export function createRuntimeJobWorker(args: {
       const claimed = await claimNextRuntimeJob(args.store, {
         ownerId,
         leaseMs,
+        jobs: snapshot,
         ...(scope ? { sessionIds: scope } : {}),
         ...(sessionCursor ? { afterSessionId: sessionCursor } : {}),
         excludeRuntimeKeys: activeRuntimeKeys,

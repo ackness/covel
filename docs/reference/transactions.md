@@ -60,6 +60,18 @@ record. SQL backends enforce ownership in the atomic conflict update, including
 concurrent first inserts. A ledger batch with any ownership conflict rolls back
 the entire batch; the error also rolls back a surrounding store transaction.
 
+History compaction through `history.compact@2` uses one transaction for selective
+summary deletion, replacement-summary insertion, source-message tagging, and
+retagging of messages belonging to replaced summaries. `deleteSessionSummaries`
+accepts an optional summary-ID list; `retagCompactedTurnMessages` accepts an
+optional source-summary-ID list. An empty list changes no rows, and omitting the
+list selects all summaries or all compacted messages in that session. The
+compactor always passes explicit IDs, preserves retained segments, and checks
+that summaries did not change while the provider generated its result. Replacing
+an old prefix retains its earliest summary ID and timestamp, preserving the
+ordering used when only uncompacted raw history is loaded. Original source text
+remains stored. Failure of any write rolls back the whole replacement.
+
 ### Contract tests
 
 `packages/store/src/contract/store-contract.ts` runs the shared behavioral
@@ -104,6 +116,10 @@ row changes. A conflict returns `false` with no writes; invalid or duplicate
 (namespace, key) entries and infrastructure failures throw. An enclosing
 transaction still owns rollback of every other write. This is not a new table,
 a generic JSON merge API, or a permission to write another plugin's partition.
+
+Every backend requires an existing parent session, including for an empty batch
+used as a write barrier. A missing or deleted session throws
+`SessionNotFoundError` (`code: session_not_found`) without creating orphan rows.
 
 - Memory compares and replaces the batch under its serialized store boundary.
 - SQLite uses `BEGIN IMMEDIATE` when it owns the transaction; a caller's
@@ -394,7 +410,7 @@ server transaction API in the browser.
 > **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
 > `recursiveCall` 结果）聚合进单一事务：
 >
-> - **叙事优先的失败边界**——抛出的 store 错误总是整回合回滚。handler 校验失败返回
+> - **叙事优先的失败边界**——领域写入抛出的 store 错误使整回合回滚。handler 校验失败返回
 >   的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）在本次执
 >   行有成功的 story 结果时，只回滚提出它的那个可选 runtime：每个非 story、非 setup
 >   的 runtime 在自己的 savepoint 内提交，被拒绝时只撤销它自己的写入，叙事与其他
@@ -403,9 +419,10 @@ server transaction API in the browser.
 >   （主回合以 `proposal.failed` 与该 runtime 的 `runtime.failed` SSE 告知）。没有 story
 >   的执行（manual、background、detached、setup）仍是整体原子：任一 proposal 失败即整体
 >   回滚，作业不会为未落库的写入报告成功。结果里无法变成 proposal 的 effect 条目
->   （`effects.ui[].parts`、`effects.interactions`、`effects.notifications` 中的非对象）
+>   （`effects.ui[].parts`、`effects.interactions`、`effects.notifications`、`effects.statePatches` 中的非对象，以及后三个通道的非数组内容）
 >   同样算作该 runtime 被拒绝的写入，按上述边界处理，不会以异常拖垮整回合；function
 >   runtime 在 handler 返回时就以 `output-schema-invalid` 失败。
+> - **导出发布的独立失败边界**——每个 `recordAs` export 的读取、序号分配与追加放在一个 savepoint 中。单个 export 的存储失败先回滚该 savepoint，再记录诊断并继续其他 export 与领域提交；PostgreSQL 不会把已捕获的 SQL 错误留在 aborted transaction 中。缺失声明 schema 和公共输出契约校验失败仍在正常执行校验边界处理。
 > - **只有上游真正提交，下游才提交**——结果按执行顺序提交，被丢弃 runtime 的硬依赖方
 >   一并丢弃（`commit/commit-dependencies.ts`）：turn 作用域的 `needs` 目标、必填
 >   `inputs` 来源，以及触发事件的全部发出者都被丢弃的事件订阅者。`after` 与
@@ -606,6 +623,8 @@ the affected table in the relevant reference doc.
 
 ## Derived vector-index progress
 
+Embedding ingestion uses bounded batches and caps each input text. An explicit content-local rejection is bisected until the offending entry is isolated; that entry advances the cursor without a vector so later entries can proceed. Authentication, unknown and transient failures do not permanently skip entries. Archive replacements remove stale vectors even when the new content cannot be embedded.
+
 `VectorStoreCapability` exposes `getVectorIndexProgress(scope)` and
 `commitVectorIndexBatch(input)` for atomic vector and index-progress writes.
 Scope is `(sessionId, pluginId, namespace)`. Updates require both the previously
@@ -634,3 +653,5 @@ cannot overwrite the vectors owned by a newer progress value. Optional
 cross-process ingestion locks reduce duplicate embedding work; correctness does
 not depend on them. Embedding provider calls never run inside the index commit
 transaction or a business-data transaction.
+
+World-data import and sync resolve locale overlays before planning any writes. Source `localeArrayKeys` provide nested list identities (after `key` and `id`), so translated records keep their association when the authored list is reordered.

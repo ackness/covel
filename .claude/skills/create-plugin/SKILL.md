@@ -36,6 +36,8 @@ Without `-t` (or `--with-tools`) the scaffolder writes to the user plugin
 directory (`~/.covel/plugins`), not the repository. See
 [examples](references/example-plugins.md) for packages that show each pattern.
 
+The default analyst runs automatically in `post-turn` and consumes the current narrative binding. Function notes remain manual; generate keys through `ctx.random` and timestamps in code.
+
 ### 3. Declare the manifest
 
 Read [manifest fields](references/plugin-schema.md) first. Root `PLUGIN.md` is

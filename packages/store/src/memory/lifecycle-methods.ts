@@ -22,6 +22,7 @@ import type {
   SetupAttemptState,
 } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+import { compareByteOrder } from "../common/pagination.js";
 
 // Map keys are JSON-serialised composite-key tuples — collision-free regardless
 // of identifier contents (no separator character to clash with).
@@ -70,7 +71,7 @@ export function createLifecycleMethods(state: MemoryState): MemoryStoreMethods {
         .sort(
           (a, b) =>
             a.completedAt.localeCompare(b.completedAt) ||
-            a.logicalTurnId.localeCompare(b.logicalTurnId),
+            compareByteOrder(a.logicalTurnId, b.logicalTurnId),
         );
     },
 
@@ -130,7 +131,7 @@ export function createLifecycleMethods(state: MemoryState): MemoryStoreMethods {
         .sort(
           (a, b) =>
             a.startedAt.localeCompare(b.startedAt) ||
-            a.executionId.localeCompare(b.executionId),
+            compareByteOrder(a.executionId, b.executionId),
         );
     },
 
@@ -162,7 +163,8 @@ export function createLifecycleMethods(state: MemoryState): MemoryStoreMethods {
             (filter?.jobId === undefined || r.jobId === filter.jobId),
         )
         .sort(
-          (a, b) => a.jobId.localeCompare(b.jobId) || a.sequence - b.sequence,
+          (a, b) =>
+            compareByteOrder(a.jobId, b.jobId) || a.sequence - b.sequence,
         );
     },
   };

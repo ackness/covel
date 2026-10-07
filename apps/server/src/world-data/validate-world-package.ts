@@ -12,9 +12,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { createEventBus } from "@covel/events";
+import { BUILTIN_PLUGIN_PACKS } from "../config/plugin-packs.js";
 import type { PluginRegistry } from "@covel/plugin-loader";
+import { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "@covel/context";
 import {
   DEFAULT_LOCALE,
+  estimateTokens,
+  isValidPluginSetting,
   applyLocaleOverlay,
   findInlineLocaleMaps,
   validateWorldManifest,
@@ -24,7 +28,6 @@ import { resolveLocaleFilePath } from "../world-seed-loader.js";
 import {
   conventionsOfPlugins,
   setWorldDataConventions,
-  worldDataConventions,
   worldHasData,
 } from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
@@ -35,6 +38,7 @@ import {
 } from "./locale-overlays.js";
 import { worldTranslationStatus } from "./locale-tooling.js";
 import { preflightWorldDataForSession } from "./session-import.js";
+import { readEffectiveDimensions } from "./session-import/dimensions.js";
 import { fileExists } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
 import { resolveWorldThemeMusic } from "./gallery.js";
@@ -51,6 +55,8 @@ export interface WorldPackageDiagnostic {
     | "lore-fallback-missing"
     | "unknown-plugin"
     | "unknown-setting"
+    | "invalid-setting"
+    | "unknown-preset"
     | "unprovided-contract"
     | "unresolved-contract"
     | "world-data"
@@ -59,6 +65,7 @@ export interface WorldPackageDiagnostic {
     | "edition-incomplete"
     | "data-file-unused"
     | "inline-locale-map"
+    | "prompt-size"
     | "theme-music";
   /** Path relative to the world directory. */
   readonly file?: string;
@@ -96,12 +103,16 @@ interface WorldManifestView {
   readonly defaultLocale: string;
   readonly supportedLocales?: readonly string[];
   readonly worldData?: string;
+  readonly dimensions?: unknown;
+  readonly dimensionSources?: Readonly<Record<string, string>>;
   readonly themeMusic?: string;
   readonly pluginPolicy?: {
+    readonly presetId?: string;
     readonly requested?: readonly string[];
     readonly recommended?: readonly string[];
     readonly requires?: readonly string[];
     readonly packs?: readonly {
+      readonly id?: string;
       readonly requested?: readonly string[];
       readonly recommended?: readonly string[];
     }[];
@@ -158,6 +169,15 @@ function closestName(
   const limit = Math.max(1, Math.floor(name.length / 4));
   return best && best.distance <= limit ? best.name : undefined;
 }
+
+/**
+ * Sizes above which `validate:world` warns about what a world adds to every
+ * story prompt. They are estimated tokens, so a text weighs the same in any
+ * language: counted in characters, an English world passed the limit at a
+ * quarter of the content a Chinese world could hold.
+ */
+const CONSTANT_LORE_TOKEN_WARNING = 2000;
+const DIMENSION_TOKEN_WARNING = 8000;
 
 function declaredLocales(manifest: WorldManifestView): readonly string[] {
   return [
@@ -229,9 +249,23 @@ async function checkLore(
   const diagnostics: WorldPackageDiagnostic[] = [];
   const locales = declaredLocales(manifest);
   const missing: string[] = [];
-  for (const locale of locales)
-    if (!(await resolveLocaleFilePath(worldDir, "WORLD.md", locale)))
-      missing.push(locale);
+  for (const locale of locales) {
+    const file = await resolveLocaleFilePath(worldDir, "WORLD.md", locale);
+    if (!file) missing.push(locale);
+    else {
+      // The measure the story prompt cuts the lore with.
+      const lore = fitWorldLore(await readFile(file, "utf8"));
+      if (lore.truncated)
+        diagnostics.push({
+          level: "warning",
+          code: "prompt-size",
+          file: path.relative(worldDir, file),
+          locales: [locale],
+          message: `WORLD.md is about ${lore.tokens} tokens; the story context includes the first ${WORLD_LORE_TOKEN_BUDGET}.`,
+          hint: "Keep essential setting instructions here; move situational facts into selective lorebook entries.",
+        });
+    }
+  }
   if (missing.length > 0)
     diagnostics.push({
       level: "error",
@@ -259,6 +293,20 @@ function checkPluginReferences(
 ): WorldPackageDiagnostic[] {
   const diagnostics: WorldPackageDiagnostic[] = [];
   const known = [...catalogue.getAll().keys()];
+  const preset = manifest.pluginPolicy?.presetId;
+  const presetIds = [
+    ...BUILTIN_PLUGIN_PACKS.map((pack) => pack.id),
+    ...(manifest.pluginPolicy?.packs ?? []).map((pack) => pack.id),
+  ];
+  if (preset && !presetIds.includes(preset))
+    diagnostics.push({
+      level: "error",
+      code: "unknown-preset",
+      file: "world.yaml",
+      pointer: "pluginPolicy.presetId",
+      message: `Unknown plugin preset "${preset}"`,
+      hint: `Choose one of: ${presetIds.filter(Boolean).join(", ")}.`,
+    });
   const references: { id: string; pointer: string }[] = [];
   const collect = (ids: readonly string[] | undefined, pointer: string) =>
     ids?.forEach((id, index) =>
@@ -293,13 +341,25 @@ function checkPluginReferences(
   for (const [pluginId, settings] of Object.entries(
     manifest.pluginSettings ?? {},
   )) {
-    const declared = (
+    const specs =
       catalogue.get(pluginId)?.packageManifest?.plugin?.contributes?.settings ??
-      []
-    ).map((setting) => setting.key);
+      [];
+    const declared = specs.map((setting) => setting.key);
     if (!catalogue.get(pluginId)) continue;
     for (const key of Object.keys(settings)) {
-      if (declared.includes(key)) continue;
+      const spec = specs.find((setting) => setting.key === key);
+      if (spec) {
+        if (!isValidPluginSetting(settings[key], spec))
+          diagnostics.push({
+            level: "error",
+            code: "invalid-setting",
+            file: "world.yaml",
+            pointer: `pluginSettings.${pluginId}.${key}`,
+            message: `Value does not satisfy the ${spec.type} setting declared by ${pluginId}`,
+            hint: `Use a value allowed by this setting's type, range and options. Default: ${JSON.stringify(spec.default)}.`,
+          });
+        continue;
+      }
       const suggestion = closestName(key, declared);
       diagnostics.push({
         level: "warning",
@@ -467,6 +527,36 @@ async function checkLocaleFiles(
     const main = await readWorldDataSource(source);
     if (!main.path || main.value === undefined) continue;
     const file = path.relative(worldDir, main.path);
+    const target = parseWorldDataTarget(source.descriptor.to);
+    if (
+      target?.kind === "lorebook" ||
+      (target?.kind === "contract-data" && target.lorebook)
+    ) {
+      const records = Array.isArray(main.value)
+        ? main.value
+        : Object.values(
+            main.value && typeof main.value === "object" ? main.value : {},
+          );
+      const constantSize = records.reduce((total: number, row: unknown) => {
+        if (!row || typeof row !== "object") return total;
+        const entry = row as Record<string, unknown>;
+        return entry.enabled !== false &&
+          entry.strategy !== "selective" &&
+          entry.kind !== "triggered" &&
+          typeof entry.content === "string"
+          ? total + estimateTokens(entry.content)
+          : total;
+      }, 0);
+      if (constantSize > CONSTANT_LORE_TOKEN_WARNING)
+        diagnostics.push({
+          level: "warning",
+          code: "prompt-size",
+          file,
+          sourceId: source.id,
+          message: `Constant lorebook entries contribute about ${constantSize} tokens to every turn.`,
+          hint: "Use selective entries with keys for situational lore, and avoid duplicating character profiles.",
+        });
+    }
     diagnostics.push(
       ...inlineLocaleMapDiagnostics(
         file,
@@ -500,7 +590,11 @@ async function checkLocaleFiles(
             mode: "resolve",
             locale: overlay.locale,
             baseLocale: manifest.defaultLocale ?? DEFAULT_LOCALE,
-            arrayKey: source.descriptor.key,
+            arrayKey: [
+              source.descriptor.key ?? "id",
+              "id",
+              ...(source.descriptor.localeArrayKeys ?? []),
+            ],
           }).issues.map((issue) => ({
             ...issue,
             file: path.relative(worldDir, overlay.path),
@@ -513,42 +607,74 @@ async function checkLocaleFiles(
   return diagnostics;
 }
 
-/**
- * In a package read by convention, a data file that no convention names is
- * not imported, and nothing else says so. With a descriptor every source is
- * written down, so this check is for the conventional case only.
- */
+/** Find unconsumed files for both conventional and explicit source lists. */
 async function unclaimedDataFiles(
   worldDir: string,
+  manifest: WorldManifestView,
+  sources: readonly OrderedWorldDataSource[],
 ): Promise<WorldPackageDiagnostic[]> {
-  const claimed = new Set(
-    worldDataConventions().map((source) => source.entry.path),
-  );
-  let names: string[];
-  try {
-    names = await readdir(path.join(worldDir, "data"));
-  } catch {
-    return [];
+  const claimed = new Set([
+    ...sources.map((source) => source.descriptor.path),
+    // Framework preview and art-authoring manifests are not session imports.
+    "media/gallery.json",
+    "media/portraits.json",
+    "media/scenes.json",
+  ]);
+  if (manifest.worldData) claimed.add(manifest.worldData);
+  for (const source of sources) {
+    const schema = source.descriptor.schema;
+    if (schema && !schema.includes(":")) claimed.add(schema);
   }
+  for (const file of Object.values(manifest.dimensionSources ?? {}))
+    claimed.add(file);
+  if (manifest.themeMusic) claimed.add(manifest.themeMusic);
+  const directories = sources
+    .filter((source) => source.descriptor.kind === "media")
+    .map((source) => source.descriptor.path.replace(/\/$/, "") + "/");
+  directories.push("media/gallery/");
   const diagnostics: WorldPackageDiagnostic[] = [];
-  for (const name of names.sort()) {
-    const file = `data/${name}`;
-    if (!/\.(ya?ml|json)$/.test(name) || claimed.has(file)) continue;
-    // `quests.zh-CN.yaml` translates `quests.yaml`; it is not a source.
-    const base = name.replace(
-      /\.[A-Za-z]{2,3}(-[A-Za-z0-9]+)*(\.[^.]+)$/,
-      "$2",
-    );
-    if (base !== name && claimed.has(`data/${base}`)) continue;
-    diagnostics.push({
-      level: "warning",
-      code: "data-file-unused",
-      file,
-      message:
-        "this file is not imported: the package has no descriptor, and no scanned plugin names this path for its data",
-      hint: `Paths that are read without a descriptor: ${[...claimed].sort().join(", ")}. For another path, list the file in a descriptor (\`worldData\` in world.yaml).`,
+  async function visit(directory: string): Promise<void> {
+    const entries = await readdir(path.join(worldDir, directory), {
+      withFileTypes: true,
+    }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
     });
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const file = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) {
+        await visit(file);
+        continue;
+      }
+      if (
+        !entry.isFile() ||
+        entry.name.startsWith(".") ||
+        /^readme(?:\.[^.]+)?\.md$/i.test(entry.name)
+      )
+        continue;
+      if (
+        claimed.has(file) ||
+        directories.some((prefix) => file.startsWith(prefix))
+      )
+        continue;
+      // `quests.zh-CN.yaml` translates `quests.yaml`; it is not a source.
+      const base = file.replace(
+        /\.[A-Za-z]{2,3}(-[A-Za-z0-9]+)*(\.[^.]+)$/,
+        "$2",
+      );
+      if (base !== file && claimed.has(base)) continue;
+      diagnostics.push({
+        level: "warning",
+        code: "data-file-unused",
+        file,
+        message:
+          "this file is not imported: no active source or framework asset declaration claims this path",
+        hint: `Declared paths: ${[...claimed].sort().join(", ")}. Add a source for this file to the descriptor (\`worldData\` in world.yaml), or use a conventional source path.`,
+      });
+    }
   }
+  for (const directory of ["data", "characters", "media"])
+    await visit(directory);
   return diagnostics;
 }
 
@@ -559,8 +685,46 @@ async function checkWorldData(
   strict: boolean,
 ): Promise<WorldPackageDiagnostic[]> {
   const diagnostics: WorldPackageDiagnostic[] = [];
+  const descriptor = await loadWorldDataDescriptor({
+    worldRoot: worldDir,
+    worldId: manifest.id,
+    worldDataPath: manifest.worldData,
+  });
+  try {
+    const dimensions = await readEffectiveDimensions({
+      worldRoot: worldDir,
+      manifest,
+      sources: descriptor.sources,
+    });
+    const size = Object.values(dimensions).reduce(
+      (total, dimension) =>
+        total + estimateTokens(JSON.stringify(dimension.initialValue)),
+      0,
+    );
+    if (size > DIMENSION_TOKEN_WARNING)
+      diagnostics.push({
+        level: "warning",
+        code: "prompt-size",
+        file: "world.yaml",
+        pointer: "dimensions",
+        message: `Initial dimension values occupy about ${size} tokens in the prompt projection.`,
+        hint: "Keep live state compact; move descriptive archives to selective lorebook entries or plugin data.",
+      });
+  } catch (error) {
+    diagnostics.push({
+      level: "error",
+      code: "world-data",
+      file: "world.yaml",
+      pointer: "dimensionSources",
+      message: error instanceof Error ? error.message : String(error),
+      hint: "Check each dimensionSources path and dimension definition.",
+    });
+  }
+  if (!descriptor.diagnostics.some((item) => item.level === "error"))
+    diagnostics.push(
+      ...(await unclaimedDataFiles(worldDir, manifest, descriptor.sources)),
+    );
   if (!manifest.worldData) {
-    diagnostics.push(...(await unclaimedDataFiles(worldDir)));
     if (!(await worldHasData(worldDir, undefined))) return diagnostics;
   }
   // Where a problem of the descriptor itself is reported.
@@ -574,11 +738,6 @@ async function checkWorldData(
     worldDataPath: manifest.worldData,
     covelHome: NO_OVERRIDES_HOME,
   });
-  const descriptor = await loadWorldDataDescriptor({
-    worldRoot: worldDir,
-    worldId: manifest.id,
-    worldDataPath: manifest.worldData,
-  });
   const fileOf = new Map(
     descriptor.sources.map((source) => [source.id, source.descriptor.path]),
   );
@@ -589,10 +748,14 @@ async function checkWorldData(
     diagnostics.push({
       level: "error",
       code: "world-data",
-      file: diagnostic.sourceId
-        ? (fileOf.get(diagnostic.sourceId) ?? descriptorFile)
-        : descriptorFile,
+      file:
+        diagnostic.path ??
+        (diagnostic.sourceId
+          ? (fileOf.get(diagnostic.sourceId) ?? descriptorFile)
+          : descriptorFile),
       sourceId: diagnostic.sourceId,
+      pointer: diagnostic.pointer,
+      hint: diagnostic.hint,
       message: diagnostic.message,
     });
   if (loadErrors.length > 0) return diagnostics;
@@ -657,10 +820,14 @@ async function checkWorldData(
       seen.set(identity, {
         level: diagnostic.level,
         code: "world-data",
-        file: diagnostic.sourceId
-          ? (fileOf.get(diagnostic.sourceId) ?? descriptorFile)
-          : descriptorFile,
+        file:
+          ("path" in diagnostic ? diagnostic.path : undefined) ??
+          (diagnostic.sourceId
+            ? (fileOf.get(diagnostic.sourceId) ?? descriptorFile)
+            : descriptorFile),
         sourceId: diagnostic.sourceId,
+        ...("pointer" in diagnostic && { pointer: diagnostic.pointer }),
+        ...("hint" in diagnostic && { hint: diagnostic.hint }),
         locales: [locale],
         message: diagnostic.message,
       });

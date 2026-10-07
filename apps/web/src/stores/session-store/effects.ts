@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
@@ -9,6 +9,7 @@ import {
   replacePluginDataForSession,
 } from "@/stores/plugin-data-store.js";
 import type { SessionDispatch, SessionState } from "./types.js";
+import { pluginDataNamespaces } from "./plugin-data-records.js";
 
 export function useBootEffect(
   state: Pick<SessionState, "booted" | "bootError">,
@@ -25,13 +26,31 @@ export function usePersistExecutionStepsEffect(
   state: Pick<SessionState, "executionSteps" | "session">,
   ds: DataService,
 ): void {
+  const pending = useRef<(() => void) | null>(null);
+  const sessionId = state.session?.id;
+  const incarnation = state.session?.incarnation;
+  useEffect(
+    () => () => {
+      pending.current?.();
+      pending.current = null;
+    },
+    [ds, sessionId, incarnation],
+  );
   useEffect(() => {
-    const sid = state.session?.id;
-    if (!sid || state.executionSteps.length === 0) return;
-    ds.saveExecutionSteps(sid, state.executionSteps, state.session!).catch(
-      ignoreError("save execution steps"),
-    );
-  }, [state.executionSteps, state.session?.id, state.session?.incarnation, ds]);
+    const session = state.session;
+    if (!session || state.executionSteps.length === 0) return;
+    // This is a display cache; durable recovery comes from the server journal.
+    const steps = state.executionSteps.slice(-500);
+    const save = () => {
+      pending.current = null;
+      void ds
+        .saveExecutionSteps(session.id, steps, session)
+        .catch(ignoreError("save execution steps"));
+    };
+    pending.current = save;
+    const timer = setTimeout(save, 250);
+    return () => clearTimeout(timer);
+  }, [state.executionSteps, sessionId, incarnation, ds]);
 }
 
 export function useUiSpecHydrationEffect(
@@ -72,14 +91,7 @@ export function useUiSpecHydrationEffect(
               isCurrent,
               read: () => api.listPluginData(sessionId, pluginId),
               apply: (items) => {
-                const namespaces: Record<
-                  string,
-                  Record<string, unknown>
-                > = Object.create(null);
-                for (const item of items)
-                  (namespaces[item.namespace] ??= Object.create(null))[
-                    item.key
-                  ] = item.value;
+                const namespaces = pluginDataNamespaces(items);
                 if (
                   replacePluginDataForSession(sessionId, pluginId, namespaces)
                 ) {

@@ -1,3 +1,6 @@
+import i18n from "i18next";
+import type { MutableRef } from "./runtime-refs.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { applyUiSlotEvent } from "@/stores/ui-slot-store.js";
 import { reasoningAction } from "./reasoning.js";
 import {
@@ -40,10 +43,6 @@ import type {
   SnapshotCharacter,
   StreamMessage,
 } from "./types.js";
-
-interface MutableRef<T> {
-  current: T;
-}
 
 interface DeltaBufferEntry {
   turnId: string;
@@ -285,6 +284,18 @@ export function createSseEventHandler(
     switch (eventType) {
       case "llm.responded":
       case "gateway.responded": {
+        // Only a story is kept when it is cut at the model's output limit;
+        // the text stays on screen, so say that it is not whole.
+        if (eventType === "llm.responded" && payload.finishReason === "length")
+          emitToast(
+            "info",
+            i18n.t("session.outputTruncated", {
+              defaultValue:
+                "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
+            }),
+            undefined,
+            { durationMs: 12_000 },
+          );
         const action = reasoningAction(
           eventType,
           payload,
@@ -515,6 +526,9 @@ export function createSseEventHandler(
         if (currentSessionId) {
           clearDomainEventPreviewsForTurn(currentSessionId, turnId);
         }
+        if (!committed && turnId) {
+          deps.dispatch({ type: "REMOVE_MESSAGES_FROM_TURN", turnId });
+        }
         // A turn aborted before producing output (e.g. by a TurnStart hook)
         // carries an abortReason — surface it so the player isn't left with
         // a silent empty turn. A player-initiated abort is NOT an error: the
@@ -571,39 +585,7 @@ export function createSseEventHandler(
         });
         break;
       }
-      case "event.emitted": {
-        const topic = (payload.topic as string) ?? (payload.type as string);
-        const eventData = payload.data ?? payload;
-        if (topic) {
-          const id = statePatchId(envelope, "evt");
-          deps.dispatch({
-            type: "ADD_STATE_PATCH",
-            patch: {
-              id,
-              summary: `event: ${topic}`,
-              packageName: (payload.pluginId as string) ?? "system",
-              data: {
-                events: [
-                  {
-                    id,
-                    title: topic,
-                    type: (payload.eventType as string) ?? topic,
-                    status: "active",
-                    description:
-                      typeof eventData === "object"
-                        ? JSON.stringify(eventData)
-                        : String(eventData),
-                    turnCreated: turnId
-                      ? parseInt(turnId.split("-").pop() ?? "0", 10)
-                      : undefined,
-                  },
-                ],
-              },
-            },
-          });
-        }
-        break;
-      }
+      case "event.emitted":
       case "ui.slot.changed":
       case "ui.slot.preview":
       case "ui.slot.cleared":

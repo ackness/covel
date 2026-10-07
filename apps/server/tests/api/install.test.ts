@@ -31,6 +31,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
 import { installRoutes } from "../../src/routes/api/install.js";
 import { createRequestBodyLimitMiddleware } from "../../src/middleware/request-body-limit.js";
+import { makeErrorHandler } from "../../src/api-error.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
@@ -41,6 +42,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 function createTestApp(store = createMemoryStore()): Hono {
   const app = new Hono();
+  app.onError(makeErrorHandler("[test]", false));
   const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -92,6 +94,15 @@ function buildZip(entries: Record<string, string>): Promise<Buffer> {
   }
   return zipToBuffer(zip);
 }
+
+it("rejects an unsupported uploaded ZIP compression method as client input", async () => {
+  const zip = await buildZip({ "package.json": "{}" });
+  const central = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  zip.writeUInt16LE(99, 8);
+  zip.writeUInt16LE(99, central + 10);
+  const response = await postZip(createTestApp(), "/api/install/plugin", zip);
+  expect(response.status).toBe(400);
+});
 
 function isYazlSafe(name: string): boolean {
   if (name.length === 0) return false;
@@ -524,9 +535,9 @@ describe("POST /api/install/plugin", () => {
     );
 
     const res = await postZip(app, "/api/install/plugin", zip);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({
-      error: "synthetic access denied",
+      error: "Internal server error",
     });
     expect(await readdir(pluginsDir)).toEqual([]);
   });

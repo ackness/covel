@@ -105,6 +105,44 @@ export function detectToolLoop(
 
 // ── Non-streaming retry ─────────────────────────────────────────────
 
+/**
+ * The finish reason of a response that may be used, in the kernel's terms.
+ *
+ * A response cut at the output limit is an error: a cut tool call has broken
+ * arguments, and cut JSON is not the runtime's result. The exception is text
+ * the caller asked to keep (`keptText`), with no tool call beside it: a story
+ * the player has already read as it streamed stays, and the caller is told by
+ * `length` that it is not whole.
+ */
+function requireCompleteOutput(
+  reason: string,
+  keptText?: {
+    readonly allowed: boolean | undefined;
+    readonly text: string | null | undefined;
+    readonly toolCalls: number;
+  },
+): LLMResponse["finishReason"] {
+  const normalized = reason.toLowerCase();
+  if (normalized === "length" || normalized === "max_tokens") {
+    if (keptText?.allowed && keptText.toolCalls === 0 && keptText.text?.trim())
+      return "length";
+    throw new AiProviderError({
+      code: "PROVIDER_ERROR",
+      provider: "runtime",
+      message:
+        "Model output reached the output limit and was truncated. Increase the maximum output tokens or choose another model, then retry this task.",
+      retriable: false,
+      details: { finishReason: "length" },
+    });
+  }
+  if (normalized === "error") {
+    throw new Error("PROVIDER_ERROR: model generation ended with an error");
+  }
+  return normalized === "tool_calls" || normalized === "tool_use"
+    ? "tool_calls"
+    : "stop";
+}
+
 export interface CallLLMWithRetryParams {
   readonly llm: LLMAdapter;
   readonly model?: string;
@@ -116,6 +154,12 @@ export interface CallLLMWithRetryParams {
   /** Hard per-attempt provider generation limit. */
   readonly maxOutputTokens?: number;
   readonly defaults?: import("@covel/shared").LLMRequestDefaults;
+  /**
+   * Keep text that was cut at the output limit instead of failing the call.
+   * For a runtime whose result is prose; the response then finishes with
+   * `length`.
+   */
+  readonly allowTruncatedText?: boolean;
   readonly policy: RetryPolicy;
   /**
    * Called with the queue wait (ms) each time an attempt had to wait for an
@@ -295,11 +339,11 @@ export async function callLLMWithRetry(
             signal,
           );
           throwIfTurnAborted(params.abortSignal);
-          if (response.finishReason === "error") {
-            throw new Error(
-              "PROVIDER_ERROR: model generation ended with an error",
-            );
-          }
+          requireCompleteOutput(response.finishReason, {
+            allowed: params.allowTruncatedText,
+            text: response.content,
+            toolCalls: response.toolCalls.length,
+          });
           await trace.ensureCalling();
           await emitLlmRespondedSuccess(params.emitter, {
             runtimeId: params.runtimeId,
@@ -589,13 +633,11 @@ export async function streamLLMWithRetry(
               });
             } else if (event.type === "done") {
               await trace.ensureCalling();
-              streamFinishReason = event.finishReason as
-                "stop" | "tool_calls" | "length" | "error";
-              if (streamFinishReason === "error") {
-                throw new Error(
-                  "PROVIDER_ERROR: model stream ended with an error",
-                );
-              }
+              streamFinishReason = requireCompleteOutput(event.finishReason, {
+                allowed: params.allowTruncatedText,
+                text: streamedContent,
+                toolCalls: streamedToolCalls.length,
+              });
               if (event.reasoningContent)
                 streamedReasoningContent = event.reasoningContent;
               if (event.usage) streamedUsage = event.usage;

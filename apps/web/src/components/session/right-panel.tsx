@@ -1,11 +1,4 @@
-import {
-  memo,
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { memo, useState, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Database,
@@ -29,35 +22,30 @@ import {
 import { Badge } from "@/components/ui/badge.js";
 import { WorldDocumentPanel } from "./world-document-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
-import type { PluginPanelStateCache } from "./plugin-panel.js";
+import {
+  useRightPanelState,
+  type RightPanelState,
+  type StorageStatusData,
+} from "./right-panel-state.js";
+export type { StorageStatusData } from "./right-panel-state.js";
 import { DatabasePanel } from "./database-panel.js";
-import { fetchServerHealth, fetchUiSpecs } from "@/services/api.js";
 import type { WorldRecord } from "@/services/api.js";
 import type { ServerStoreBackend } from "@/services/data-service.js";
 import {
-  aggregateSpecsIntoGroups,
   compactTabLabel,
   groupShortLabel,
   panelProviderLabel,
   planPluginPanelProviders,
-  resolvePluginPanelTarget,
   pluginPanelKey,
   selectedPluginPanelIndex,
-  type PluginPanelTabGroup,
 } from "@/lib/plugin-panel-tabs.js";
 import { useSession, useSessionActions } from "@/stores/session-store.js";
 import { type RightPanelRequest } from "@/lib/nav-events.js";
-import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { useOverflowEdges } from "@/hooks/use-overflow-edges.js";
 import { PanelStatus } from "./panel-status.js";
 import { PanelTabMenu } from "./panel-tab-menu.js";
-
-export interface StorageStatusData {
-  readonly backend?: ServerStoreBackend;
-  readonly frontendMode?: "local" | "remote";
-}
 
 export interface StorageStatus {
   readonly browserAuthority: boolean;
@@ -100,6 +88,7 @@ function resolvePluginIcon(name: string): LucideIcon {
 }
 
 interface RightPanelProps {
+  panelState?: RightPanelState;
   panelRequest?: RightPanelRequest | null;
   sessionId: string;
   /** Currently loaded world — its `lore` (WORLD.md) is rendered in the World tab. */
@@ -129,30 +118,42 @@ interface RightPanelProps {
  * follow its props.
  */
 export const RightPanel = memo(function RightPanel(props: RightPanelProps) {
-  return <SessionRightPanel key={props.sessionId} {...props} />;
+  return props.panelState ? (
+    <SessionRightPanel
+      key={props.sessionId}
+      {...props}
+      panelState={props.panelState}
+    />
+  ) : (
+    <OwnedRightPanel key={props.sessionId} {...props} />
+  );
 });
+
+function OwnedRightPanel(props: RightPanelProps) {
+  const panelState = useRightPanelState(props.sessionId, props.panelRequest);
+  return <SessionRightPanel {...props} panelState={panelState} />;
+}
 
 function SessionRightPanel({
   sessionId,
   world,
   statePatches,
-  panelRequest,
-}: RightPanelProps) {
+  panelState,
+}: RightPanelProps & { panelState: RightPanelState }) {
   const { t, i18n } = useTranslation();
-  const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
   const tabRailRef = useRef<HTMLDivElement>(null);
-  const [storageData, setStorageData] = useState<StorageStatusData | null>(
-    null,
-  );
-  const [pluginTabGroups, setPluginTabGroups] = useState<PluginPanelTabGroup[]>(
-    [],
-  );
-  const [activePluginSubTab, setActivePluginSubTab] = useState<
-    Record<string, string>
-  >({});
-  const [activeTab, setActiveTab] = useState("world");
-  const [pendingPanelRequest, setPendingPanelRequest] =
-    useState<RightPanelRequest | null>(null);
+  const {
+    storageData,
+    pluginTabGroups,
+    activePluginSubTab,
+    selectPluginSubTab,
+    activeTab,
+    setActiveTab,
+    panelStateCache,
+    specsStatus,
+    specsError,
+    retrySpecs,
+  } = panelState;
   const { state: sessionState } = useSession();
   const { upsertInteractionDraft } = useSessionActions();
   // Key of the plugin panel shown in the large dialog, if any.
@@ -186,16 +187,6 @@ function SessionRightPanel({
   );
   // `bar` puts labelled tabs across the top; `rail` keeps the icon strip.
   const barTabs = useThemeLayout().panelTabs === "bar";
-  const activePluginKey = useMemo(
-    () =>
-      sessionState.sessionPlugins
-        .filter((plugin) => plugin.active)
-        .map((plugin) => plugin.id)
-        .sort()
-        .join("\u001f"),
-    [sessionState.sessionPlugins],
-  );
-
   const tabItems = useMemo<RightPanelTabItem[]>(
     () => [
       {
@@ -220,12 +211,6 @@ function SessionRightPanel({
     ],
     [pluginTabGroups, t],
   );
-
-  useEffect(() => {
-    fetchServerHealth()
-      .then((h) => setStorageData(h.storage?.data ?? null))
-      .catch(ignoreError("fetch server health"));
-  }, []);
 
   const storageStatus = resolveStorageStatus(storageData);
 
@@ -261,95 +246,22 @@ function SessionRightPanel({
     ? activeTab
     : "world";
 
-  useEffect(() => {
-    if (panelRequest) setPendingPanelRequest(panelRequest);
-  }, [panelRequest]);
-
-  // Preserve the intent until both the drawer and asynchronous plugin specs
-  // exist. Repeated requests use a new object even when the target is the same.
-  useEffect(() => {
-    if (!pendingPanelRequest) return;
-    const { event } = pendingPanelRequest;
-    if (event === "open-database") {
-      setActiveTab("database");
-      setPendingPanelRequest(null);
-      return;
-    }
-    const imageGroup =
-      event === "open-images"
-        ? pluginTabGroups.find((group) =>
-            group.subPanels.some((sub) => sub.icon === "image"),
-          )
-        : undefined;
-    const imagePanel = imageGroup?.subPanels.find(
-      (sub) => sub.icon === "image",
-    );
-    const target =
-      typeof event === "object"
-        ? resolvePluginPanelTarget(
-            pluginTabGroups,
-            event.pluginId,
-            event.panelId,
-          )
-        : imageGroup && imagePanel
-          ? {
-              groupId: imageGroup.id,
-              subPanelIndex: imageGroup.subPanels.indexOf(imagePanel),
-            }
-          : null;
-    if (!target) return;
-    const group = pluginTabGroups.find((item) => item.id === target.groupId)!;
-    setActivePluginSubTab((previous) => ({
-      ...previous,
-      [target.groupId]: pluginPanelKey(group.subPanels[target.subPanelIndex]!),
-    }));
-    setActiveTab(`plugin-${target.groupId}`);
-    setPendingPanelRequest(null);
-  }, [pendingPanelRequest, pluginTabGroups]);
-
-  // Load localized panel definitions; the session provider owns data hydration.
-  useEffect(() => {
-    if (!sessionId) return;
-    let cancelled = false;
-    fetchUiSpecs(sessionId)
-      .then((specs) => {
-        if (cancelled) return;
-
-        // Surface server-side validation diagnostics for rejected specs so a
-        // plugin author sees the exact plugin/field/problem in dev instead of
-        // a panel silently missing its tab.
-        if (import.meta.env.DEV && specs.diagnostics?.length) {
-          for (const diag of specs.diagnostics) {
-            const where = `${diag.pluginId} (${diag.runtimeId}) ${diag.slot}[${diag.specIndex}]${
-              diag.specId ? ` "${diag.specId}"` : ""
-            }`;
-            const why = diag.issues
-              .map((issue) => `${issue.path}: ${issue.message}`)
-              .join("; ");
-            // eslint-disable-next-line no-console
-            console.warn(`[ui-specs] dropped invalid spec — ${where}: ${why}`);
-          }
-        }
-
-        setPluginTabGroups(
-          aggregateSpecsIntoGroups(specs.right, i18n.language, {
-            warn: (message) => {
-              if (import.meta.env.DEV) {
-                // eslint-disable-next-line no-console
-                console.warn(message);
-              }
-            },
-          }),
-        );
-      })
-      .catch(ignoreError("fetch ui specs for right panel"));
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, activePluginKey, i18n.language]);
-
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      {specsStatus === "loading" && (
+        <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
+          {t("common.loading")}
+        </p>
+      )}
+      {specsStatus === "error" && (
+        <div role="alert" className="px-3 py-2 text-xs text-destructive">
+          <p>{t("session.panelLoadFailed")}</p>
+          <p className="wrap-break-word">{specsError}</p>
+          <button type="button" className="underline" onClick={retrySpecs}>
+            {t("common.retry")}
+          </button>
+        </div>
+      )}
       <Tabs
         value={shownTab}
         onValueChange={setActiveTab}
@@ -523,12 +435,10 @@ function SessionRightPanel({
                               // jump to first sub-panel of this provider
                               const firstIdx = p.subs[0]?.idx;
                               if (typeof firstIdx === "number") {
-                                setActivePluginSubTab((prev) => ({
-                                  ...prev,
-                                  [group.id]: pluginPanelKey(
-                                    group.subPanels[firstIdx]!,
-                                  ),
-                                }));
+                                selectPluginSubTab(
+                                  group.id,
+                                  pluginPanelKey(group.subPanels[firstIdx]!),
+                                );
                               }
                             }}
                             className={`px-2 py-0.5 text-[10px] font-medium tracking-wider transition-colors max-w-40 truncate ${
@@ -568,10 +478,7 @@ function SessionRightPanel({
                           key={pluginPanelKey(sub)}
                           type="button"
                           onClick={() =>
-                            setActivePluginSubTab((prev) => ({
-                              ...prev,
-                              [group.id]: pluginPanelKey(sub),
-                            }))
+                            selectPluginSubTab(group.id, pluginPanelKey(sub))
                           }
                           className={`flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
                             isActive
@@ -614,7 +521,7 @@ function SessionRightPanel({
                         panelId={currentSub.id}
                         pluginId={currentSub.pluginId}
                         spec={currentSub.spec}
-                        stateCache={pluginPanelStateCacheRef.current}
+                        stateCache={panelStateCache}
                         handlers={panelHandlers}
                         enableDevtools={import.meta.env.DEV}
                       />
@@ -635,7 +542,7 @@ function SessionRightPanel({
                             panelId={currentSub.id}
                             pluginId={currentSub.pluginId}
                             spec={currentSub.spec}
-                            stateCache={pluginPanelStateCacheRef.current}
+                            stateCache={panelStateCache}
                             handlers={panelHandlers}
                             expanded
                           />

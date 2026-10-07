@@ -269,9 +269,9 @@ export function resolveCapabilityDetails(
     (candidate) => candidate.id,
   );
   const known = lookupKnownModel(modelId, provider);
-  const dbMatch = known
-    ? null
-    : (_modelDb?.lookupMatch(modelId, provider) ?? null);
+  const dbMatch = _modelDb?.lookupMatch(modelId, provider) ?? null;
+  const useKnown =
+    known && !(known.kind === "prefix" && dbMatch && dbMatch.kind !== "prefix");
 
   let base: ModelCapability;
   let source: CapabilitySource;
@@ -279,7 +279,7 @@ export function resolveCapabilityDetails(
   let matchKind: ModelMatchKind | undefined;
   let matchedProvider: string | undefined;
 
-  if (known) {
+  if (useKnown) {
     base = {
       input: known.entry.input,
       output: known.entry.output,

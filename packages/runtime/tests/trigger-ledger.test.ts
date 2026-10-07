@@ -80,6 +80,66 @@ async function playTurn(
 }
 
 describe("runtime trigger ledger", () => {
+  it("runs a never-triggered runtime before a long cooldown starts", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: "s",
+      worldId: null,
+      phase: "playing",
+      status: "active",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: ["tracker"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const manifest = {
+      ...cooled,
+      trigger: { type: "auto" as const, cooldownTurns: 1000 },
+    };
+    const run = async (turn: number) =>
+      executeTurn(
+        {
+          sessionId: "s",
+          turnId: `long-${turn}`,
+          origin: "player",
+          playerMessage: "go",
+        },
+        [manifest],
+        {
+          store,
+          loadRuntime: async () => ({
+            manifest,
+            promptTemplate: "",
+            handler: async () => ({
+              outcome: "success" as const,
+              value: { ready: true },
+            }),
+          }),
+        },
+      );
+    const first = await run(1);
+    expect(first.runtimeResults.map((result) => result.runtimeId)).toEqual([
+      manifest.name,
+    ]);
+    expect(
+      (
+        await finalizeExecution({
+          store,
+          sessionId: "s",
+          executionContext: first.executionContext,
+          runtimes: [manifest],
+          results: first.runtimeResults,
+          runtimeTriggers: collectExecutionTriggers(first),
+          turnIds: [],
+          sessionClock: { now },
+        })
+      ).status,
+    ).toBe("committed");
+    expect((await run(2)).runtimeResults).toEqual([]);
+  });
+
   it("gates maxTriggerCount and cooldownTurns on committed runs only", async () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();

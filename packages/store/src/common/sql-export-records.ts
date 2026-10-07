@@ -57,6 +57,7 @@ export function createSqlExportRecords(
 ): SqlExportRecords {
   const { runner, tables, json, values } = deps;
   const { runtimeExports } = tables;
+  const { byteOrder } = runner;
 
   return {
     async appendRuntimeExport(record: RuntimeExportRecord): Promise<boolean> {
@@ -125,8 +126,8 @@ export function createSqlExportRecords(
             : undefined,
         ]),
         orderBy: [
-          asc(runtimeExports.producerRuntimeId),
-          asc(runtimeExports.recordAs),
+          asc(byteOrder(runtimeExports.producerRuntimeId)),
+          asc(byteOrder(runtimeExports.recordAs)),
           asc(runtimeExports.revision),
         ],
       });

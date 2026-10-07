@@ -59,6 +59,7 @@ export interface AuthoringSourceDeclaration {
   readonly kind: "yaml" | "json" | "media";
   readonly path: string;
   readonly key?: string;
+  readonly localeArrayKeys?: readonly string[];
   readonly visibility?: "public" | "hidden";
   readonly lorebook?: boolean;
 }
@@ -82,6 +83,9 @@ export function pluginSourceEntry(
     schema: `contract:${contract}`,
     to: `contract:${contract}${source.lorebook ? "+lorebook" : ""}`,
     ...(source.key ? { key: source.key } : {}),
+    ...(source.localeArrayKeys
+      ? { localeArrayKeys: [...source.localeArrayKeys] }
+      : {}),
     ...(source.visibility === "hidden" ? { visibility: "hidden" } : {}),
   };
 }

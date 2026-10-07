@@ -27,6 +27,34 @@ describe("EventBus", () => {
     bus = createEventBus(createMemoryStore());
   });
 
+  it("keeps diagnostic traces out of persistence and replay without creating cursor gaps", async () => {
+    const store = createMemoryStore();
+    const local = createEventBus(store);
+    local.emit(makeMessage({ id: "first", topic: "world.changed" }));
+    for (let i = 0; i < 2000; i++)
+      local.emit(
+        makeMessage({
+          id: `trace-${i}`,
+          topic: "trace",
+          payload: { text: "prompt" },
+        }),
+      );
+    local.emit(makeMessage({ id: "last", topic: "world.changed" }));
+    await local.flush();
+    expect(await store.listEvents("sess-1")).toHaveLength(2);
+    expect(local.getEventsAfter("sess-1", 0)).toMatchObject({
+      gap: false,
+      latestSeq: 2002,
+    });
+    expect(local.getEventsAfter("sess-1", 0).events.map(seqOf)).toEqual([
+      1, 2002,
+    ]);
+    expect(local.getEventsAfter("sess-1", 1000).events.map(seqOf)).toEqual([
+      2002,
+    ]);
+    await local.close();
+  });
+
   describe("onEmit", () => {
     it("should call callback for every emitted event", () => {
       const cb = vi.fn();

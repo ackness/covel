@@ -8,9 +8,11 @@ import {
   type TabProps,
 } from "../editor-helpers.js";
 import type { WorldEconomy, WorldCurrency } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
-export function EconomyTab({ dimensions, onChange, t }: TabProps) {
+export function EconomyTab({ dimensions, onChange, t, problems }: TabProps) {
   const eco: WorldEconomy = dimensions.economy ?? { currencies: [] };
+  const problem = fieldProblems(problems);
 
   function setEco(next: WorldEconomy) {
     onChange({ ...dimensions, economy: next });
@@ -69,6 +71,7 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addCurrency")}
           </Button>
         </div>
+        {problem.at("currencies")}
         {eco.currencies.map((cur, ci) => (
           <div key={ci} className="border border-border p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -95,6 +98,7 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
                   value={text(cur.name)}
                   onChange={(e) => updateCurrency(ci, { name: e.target.value })}
                 />
+                {problem.at(`currencies.${ci}.name`)}
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`world-currency-${ci}-symbol`}>
@@ -108,6 +112,7 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
                     updateCurrency(ci, { symbol: e.target.value })
                   }
                 />
+                {problem.at(`currencies.${ci}.symbol`)}
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`world-currency-${ci}-description`}>
@@ -121,6 +126,7 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
                     updateCurrency(ci, { description: e.target.value })
                   }
                 />
+                {problem.at(`currencies.${ci}.description`)}
               </div>
             </div>
           </div>
@@ -136,14 +142,18 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addResource")}
           </Button>
         </div>
+        {problem.at("resources")}
         {(eco.resources ?? []).map((res, ri) => (
           <div key={ri} className="flex items-center gap-2">
-            <input
-              aria-label={`${t("world.resources")} ${ri + 1}`}
-              className={inputCls}
-              value={text(res)}
-              onChange={(e) => updateResource(ri, e.target.value)}
-            />
+            <div className="min-w-0 flex-1 space-y-1">
+              <input
+                aria-label={`${t("world.resources")} ${ri + 1}`}
+                className={inputCls}
+                value={text(res)}
+                onChange={(e) => updateResource(ri, e.target.value)}
+              />
+              {problem.at(`resources.${ri}`)}
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -167,7 +177,9 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
           value={text(eco.tradeNotes)}
           onChange={(e) => setEco({ ...eco, tradeNotes: e.target.value })}
         />
+        {problem.at("tradeNotes")}
       </div>
+      {problem.rest()}
     </div>
   );
 }

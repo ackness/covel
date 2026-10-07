@@ -34,7 +34,6 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     export const writeLog = () => {};
     export const patchKeysEnv = () => {};
     export const loadKeysEnv = () => {};
-    export const importAsset = () => {};
     export const writeDataRoot = () => {};
     export const setDesktopLocaleFromSettings = () => {};
     export const t = (value) => value;
@@ -63,7 +62,7 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
           builder.onResolve(
             {
               filter:
-                /^(electron|\.\/(env-files|import-assets|paths|windows|logging|main-i18n|settings-json)\.js)$/,
+                /^(electron|\.\/(env-files|paths|windows|logging|main-i18n|settings-json)\.js)$/,
             },
             () => ({ path: fixture, external: true }),
           );

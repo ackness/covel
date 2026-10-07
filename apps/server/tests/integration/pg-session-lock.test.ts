@@ -24,6 +24,10 @@ import {
   createPgAdvisorySessionLock,
   hashSessionId,
 } from "../../src/lib/pg-session-lock.js";
+import {
+  SessionLockTimeoutError,
+  withBackgroundSessionLock,
+} from "../../src/lib/session-lock.js";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ??
@@ -50,6 +54,77 @@ async function pgReachable(): Promise<boolean> {
 const pgAvailable = await pgReachable();
 
 describe.skipIf(!pgAvailable)("pg-session-lock", () => {
+  it("retries background acquisition after real PG timeouts and honors cancellation", async () => {
+    const ownerPool = postgres(DATABASE_URL, { max: 1 });
+    const waiterPool = postgres(DATABASE_URL, { max: 1 });
+    const owner = createPgAdvisorySessionLock(ownerPool);
+    const waiter = createPgAdvisorySessionLock(waiterPool, {
+      acquireTimeoutMs: 40,
+      pollIntervalMs: 5,
+    });
+    const sessionId = `background-retry-${globalThis.crypto.randomUUID()}`;
+    try {
+      for (const cancel of [false, true]) {
+        const acquired = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        const timedOut = Promise.withResolvers<void>();
+        const controller = new AbortController();
+        let calls = 0;
+        const holder = owner.withLock(sessionId, async () => {
+          acquired.resolve();
+          await release.promise;
+        });
+        await acquired.promise;
+        const observed = {
+          ...waiter,
+          async withLock<T>(key: string, fn: () => Promise<T>) {
+            try {
+              return await waiter.withLock(key, fn);
+            } catch (error) {
+              if (error instanceof SessionLockTimeoutError) timedOut.resolve();
+              throw error;
+            }
+          },
+        };
+        const pending = withBackgroundSessionLock(
+          observed,
+          sessionId,
+          async () => {
+            calls++;
+            return "committed";
+          },
+          controller.signal,
+        );
+        // Observe rejection immediately, before cancellation can settle it.
+        const outcome = pending.then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        );
+        try {
+          await timedOut.promise;
+          expect(calls).toBe(0);
+          if (cancel) {
+            controller.abort(new Error("lease cancelled"));
+            const settled = await outcome;
+            expect("error" in settled && settled.error).toMatchObject({
+              message: "lease cancelled",
+            });
+            expect(calls).toBe(0);
+          } else {
+            release.resolve();
+            expect(await outcome).toEqual({ value: "committed" });
+            expect(calls).toBe(1);
+          }
+        } finally {
+          release.resolve();
+          await holder;
+          await outcome;
+        }
+      }
+    } finally {
+      await Promise.all([ownerPool.end(), waiterPool.end()]);
+    }
+  });
   it("serializes concurrent withLock() calls on the same sessionId", async () => {
     const sql = postgres(DATABASE_URL, { max: 4 });
     const lock = createPgAdvisorySessionLock(sql);

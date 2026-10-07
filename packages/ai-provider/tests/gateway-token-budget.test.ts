@@ -153,6 +153,38 @@ describe("gateway target output budgets", () => {
     },
   );
 
+  it.each(["generate", "object", "stream"] as const)(
+    "%s skips an oversized fallback and reports the failure of the primary",
+    async (mode) => {
+      const { gateway, calls, presetRegistry } = setup(503);
+      presetRegistry.addPreset({
+        ...presetRegistry.resolvePreset("backup")!,
+        capability: { contextWindow: 1024, maxOutputTokens: 512 },
+      });
+      const input = {
+        messages: [
+          { role: "user" as const, content: "long context ".repeat(2000) },
+        ],
+      };
+      const invoke = async () => {
+        if (mode === "generate") return gateway.generateText(input);
+        if (mode === "object")
+          return gateway.generateObject({ ...input, schema: z.object({}) });
+        for await (const _ of gateway.streamText(input)) {
+          /* drain */
+        }
+      };
+      // The backup was never asked, so the error is the one the primary gave;
+      // why the backup was skipped follows it.
+      const failure = await invoke().catch((error: unknown) => error);
+      expect(failure).toMatchObject({ model: "primary", statusCode: 503 });
+      expect((failure as Error).message).toMatch(
+        /Synthetic upstream failure.*backup.*cannot fit the request/s,
+      );
+      expect(calls.map((call) => call.model)).toEqual(["primary"]);
+    },
+  );
+
   it("uses 16k for direct gateway calls without a runtime budget", async () => {
     const { gateway, calls } = setup();
     expect(gateway.resolveSlot(undefined)).toMatchObject({

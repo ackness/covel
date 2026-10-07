@@ -1,9 +1,10 @@
 import {
   applyCursorAfter,
-  applyCursorPage,
   applyPagination,
+  applyWriteOrderPage,
   compareByteOrder,
   sortByCursorAsc,
+  sortByWriteOrder,
 } from "../common/pagination.js";
 import { characterKey, stateEntryKey } from "../common/keys.js";
 import type { TurnMessageRecord } from "../types.js";
@@ -24,8 +25,7 @@ function sortTurnMessages(
   return [...rows].sort((a, b) => {
     if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
     if (a.order !== b.order) return a.order - b.order;
-    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
-    return 0;
+    return compareByteOrder(a.id, b.id);
   });
 }
 
@@ -63,15 +63,36 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return limit !== undefined ? filtered.slice(0, limit) : filtered;
     },
 
+    async queryTurnResults(sessionId, options) {
+      const rows = sortByWriteOrder(
+        state.turnResults.filter(
+          (row) =>
+            row.sessionId === sessionId &&
+            !row.parentTurnId &&
+            row.origin !== "recursive" &&
+            (options.turnId === undefined || row.turnId === options.turnId) &&
+            (options.since === undefined || row.createdAt >= options.since) &&
+            (options.origins === undefined ||
+              options.origins.includes(row.origin)) &&
+            (options.commitStatus === undefined ||
+              row.commitStatus === options.commitStatus),
+        ),
+      );
+      if (options.newestFirst) rows.reverse();
+      return options.limit === undefined ? rows : rows.slice(0, options.limit);
+    },
+
     async saveToolCall(record) {
       state.toolCalls.push(record);
     },
 
     async listToolCalls(sessionId, turnId?) {
-      return state.toolCalls.filter(
-        (r) =>
-          r.sessionId === sessionId &&
-          (turnId === undefined || r.turnId === turnId),
+      return sortByCursorAsc(
+        state.toolCalls.filter(
+          (r) =>
+            r.sessionId === sessionId &&
+            (turnId === undefined || r.turnId === turnId),
+        ),
       );
     },
 
@@ -101,7 +122,8 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       // `id` tie-break mirrors the SQL backends so offset paging is stable.
       rows = [...rows].sort(
         (a, b) =>
-          b.timestamp.localeCompare(a.timestamp) || b.id.localeCompare(a.id),
+          b.timestamp.localeCompare(a.timestamp) ||
+          compareByteOrder(b.id, a.id),
       );
       const offset = filters?.offset ?? 0;
       if (offset > 0 || filters?.limit !== undefined) {
@@ -138,7 +160,18 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async saveStateSchema(record) {
-      state.stateSchemas.push(record);
+      // A second save under one `id` replaces that row's schema and nothing
+      // else, as the SQL upsert does.
+      const index = state.stateSchemas.findIndex((r) => r.id === record.id);
+      if (index === -1) {
+        state.stateSchemas.push(record);
+      } else {
+        // Replace instead of mutating: transaction snapshots share row objects.
+        state.stateSchemas[index] = {
+          ...state.stateSchemas[index]!,
+          schema: record.schema,
+        };
+      }
     },
 
     async listStateSchemas(sessionId) {
@@ -146,10 +179,13 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async deleteStateSchema(sessionId, tableName) {
-      const idx = state.stateSchemas.findIndex(
-        (r) => r.sessionId === sessionId && r.tableName === tableName,
+      // Every schema row of the table, as the SQL DELETE removes.
+      replaceArrayContents(
+        state.stateSchemas,
+        state.stateSchemas.filter(
+          (r) => r.sessionId !== sessionId || r.tableName !== tableName,
+        ),
       );
-      if (idx !== -1) state.stateSchemas.splice(idx, 1);
     },
 
     async getStateEntry(sessionId, tableName, fieldName) {
@@ -168,9 +204,9 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listStateEntries(sessionId, tableName) {
-      return [...state.stateEntries.values()].filter(
-        (r) => r.sessionId === sessionId && r.tableName === tableName,
-      );
+      return [...state.stateEntries.values()]
+        .filter((r) => r.sessionId === sessionId && r.tableName === tableName)
+        .sort((a, b) => compareByteOrder(a.fieldName, b.fieldName));
     },
 
     async addStateChange(record) {
@@ -203,6 +239,15 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return filtered;
     },
 
+    async deleteEventsBefore(sessionId, before) {
+      replaceArrayContents(
+        state.events,
+        state.events.filter(
+          (row) => row.sessionId !== sessionId || row.createdAt >= before,
+        ),
+      );
+    },
+
     async getEventById(sessionId, id) {
       return (
         state.events.find((r) => r.sessionId === sessionId && r.id === id) ??
@@ -231,17 +276,17 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listMessages(sessionId, pagination?) {
-      const filtered = state.messages
-        .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      return applyPagination(filtered, pagination);
+      const sorted = sortByWriteOrder(
+        state.messages.filter((r) => r.sessionId === sessionId),
+      );
+      return applyPagination(sorted, pagination);
     },
 
     async listMessagesPage(sessionId, opts) {
-      const sorted = sortByCursorAsc(
+      const sorted = sortByWriteOrder(
         state.messages.filter((r) => r.sessionId === sessionId),
       );
-      return applyCursorPage(sorted, opts);
+      return applyWriteOrderPage(sorted, opts);
     },
 
     async getCharacterSchema(sessionId) {
@@ -280,13 +325,35 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listTraceEvents(sessionId, pagination?) {
-      // Sort by createdAt to match the SQL backends (`asc(createdAt)`); the
-      // append order is usually chronological but resume/replay/backfill can
-      // insert out of order, and paging must return a stable time window.
-      const filtered = state.traceEvents
-        .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      return applyPagination(filtered, pagination);
+      // Sort by createdAt to match the SQL backends; the append order is
+      // usually chronological but resume/replay/backfill can insert out of
+      // order, and paging must return a stable time window.
+      const sorted = sortByWriteOrder(
+        state.traceEvents.filter((r) => r.sessionId === sessionId),
+      );
+      return applyPagination(sorted, pagination);
+    },
+
+    async getTraceEventById(sessionId, id) {
+      return (
+        state.traceEvents.find(
+          (row) => row.sessionId === sessionId && row.id === id,
+        ) ?? null
+      );
+    },
+
+    async queryTraceEvents(sessionId, options) {
+      const rows = sortByWriteOrder(
+        state.traceEvents.filter(
+          (row) =>
+            row.sessionId === sessionId &&
+            (options.turnId === undefined || row.turnId === options.turnId) &&
+            (options.types === undefined || options.types.includes(row.type)) &&
+            !options.excludeTypes?.includes(row.type),
+        ),
+      );
+      if (options.newestFirst) rows.reverse();
+      return options.limit === undefined ? rows : rows.slice(0, options.limit);
     },
 
     async deleteTraceEventsBefore(sessionId, before) {
@@ -299,10 +366,10 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listTraceEventsPage(sessionId, opts) {
-      const sorted = sortByCursorAsc(
+      const sorted = sortByWriteOrder(
         state.traceEvents.filter((r) => r.sessionId === sessionId),
       );
-      return applyCursorPage(sorted, opts);
+      return applyWriteOrderPage(sorted, opts);
     },
 
     async appendTurnMessage(record) {
@@ -316,12 +383,12 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return applyPagination(filtered, pagination);
     },
 
-    async listUncompactedTurnMessages(sessionId) {
+    async listUncompactedTurnMessages(sessionId, limit) {
       return sortTurnMessages(
         state.turnMessages.filter(
           (r) => r.sessionId === sessionId && r.compactedAtTurnId == null,
         ),
-      );
+      ).slice(0, limit);
     },
 
     async getTurnMessageStats(sessionId) {
@@ -339,7 +406,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
 
     async listRecentTurnMessages(sessionId, limit) {
       if (limit <= 0) return [];
-      const sorted = sortByCursorAsc(
+      const sorted = sortTurnMessages(
         state.turnMessages.filter((r) => r.sessionId === sessionId),
       );
       return sorted.slice(-limit);
@@ -349,8 +416,25 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       state.playerInputs.push(record);
     },
 
+    async getLatestPlayerInput(sessionId) {
+      let newest: import("../types.js").PlayerInputRecord | null = null;
+      for (const row of state.playerInputs) {
+        if (row.sessionId !== sessionId) continue;
+        if (
+          !newest ||
+          row.createdAt > newest.createdAt ||
+          (row.createdAt === newest.createdAt &&
+            compareByteOrder(row.id, newest.id) > 0)
+        )
+          newest = row;
+      }
+      return newest;
+    },
+
     async listPlayerInputs(sessionId) {
-      return state.playerInputs.filter((r) => r.sessionId === sessionId);
+      return sortByCursorAsc(
+        state.playerInputs.filter((r) => r.sessionId === sessionId),
+      );
     },
 
     async saveSessionSummary(record: SessionSummaryRecord): Promise<void> {
@@ -365,9 +449,17 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       );
     },
 
-    async deleteSessionSummaries(sessionId: string): Promise<void> {
+    async deleteSessionSummaries(
+      sessionId: string,
+      summaryIds?: readonly string[],
+    ): Promise<void> {
+      const selected = summaryIds ? new Set(summaryIds) : undefined;
       for (let i = state.sessionSummaries.length - 1; i >= 0; i -= 1) {
-        if (state.sessionSummaries[i]!.sessionId === sessionId) {
+        const summary = state.sessionSummaries[i]!;
+        if (
+          summary.sessionId === sessionId &&
+          (!selected || selected.has(summary.id))
+        ) {
           state.sessionSummaries.splice(i, 1);
         }
       }
@@ -390,10 +482,16 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     async retagCompactedTurnMessages(
       sessionId: string,
       summaryId: string,
+      sourceSummaryIds?: readonly string[],
     ): Promise<void> {
+      const selected = sourceSummaryIds ? new Set(sourceSummaryIds) : undefined;
       for (let i = 0; i < state.turnMessages.length; i += 1) {
         const msg = state.turnMessages[i]!;
-        if (msg.sessionId === sessionId && msg.compactedAtTurnId != null) {
+        if (
+          msg.sessionId === sessionId &&
+          msg.compactedAtTurnId != null &&
+          (!selected || selected.has(msg.compactedAtTurnId))
+        ) {
           state.turnMessages[i] = { ...msg, compactedAtTurnId: summaryId };
         }
       }

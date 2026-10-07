@@ -52,6 +52,8 @@ export function createModelDbRoutes(ai: AiStack): Hono {
       contextWindow: entry.contextWindow,
       maxOutputTokens: entry.maxOutputTokens,
       inputPerMToken: entry.inputPerMToken,
+      cacheReadPerMToken: entry.cacheReadPerMToken,
+      cacheWritePerMToken: entry.cacheWritePerMToken,
       outputPerMToken: entry.outputPerMToken,
     }));
     return c.json(listBody(results));
@@ -96,6 +98,8 @@ export function createModelDbRoutes(ai: AiStack): Hono {
       capability: {
         ...result.capability,
         inputPerMToken: result.capability.pricing?.inputPerMToken,
+        cacheReadPerMToken: result.capability.pricing?.cacheReadPerMToken,
+        cacheWritePerMToken: result.capability.pricing?.cacheWritePerMToken,
         outputPerMToken: result.capability.pricing?.outputPerMToken,
       },
       ...(usesBuiltinAdapter !== undefined ? { usesBuiltinAdapter } : {}),

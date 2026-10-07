@@ -426,7 +426,7 @@ describe("usePluginSelection", () => {
   });
 
   it("explicitly replaces a core single-point provider and keeps it disabled", async () => {
-    const extension = { point: "history.compact@1", id: "summary" };
+    const extension = { point: "history.compact@2", id: "summary" };
     const original = plugin("original", {
       kind: "core",
       extensions: [extension],

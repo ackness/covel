@@ -9,7 +9,7 @@ import {
   dimensionSettlementReceiptSchema,
   dimensionUpdatePayloadSchema,
   materializeDimensionRecords,
-} from "@covel/shared";
+} from "@covel/plugin-handlers-utils/dimensions";
 
 // Path segments that would reach an object's prototype instead of its data.
 const UNSAFE_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);

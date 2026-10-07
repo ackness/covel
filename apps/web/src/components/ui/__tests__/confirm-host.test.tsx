@@ -6,7 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
-import { requestChoices } from "@/lib/confirm-channel.js";
+import { requestChoices, requestConfirm } from "@/lib/confirm-channel.js";
 import { ConfirmHost } from "../confirm-host.js";
 
 const REQUEST = {
@@ -56,6 +56,56 @@ it("cannot authorize an empty selection, and declining authorizes nothing", asyn
       }) as HTMLButtonElement
     ).disabled,
   ).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+
+  await expect(answer).resolves.toEqual([]);
+});
+
+const DELETE_REQUEST = {
+  title: "Delete Session",
+  message: "This cannot be undone.",
+  subject: "Lantern Barrow · Turn 3",
+  confirmLabel: "Delete",
+  cancelLabel: "Cancel",
+  destructive: true,
+};
+
+async function openDelete() {
+  render(<ConfirmHost />);
+  let answer!: Promise<boolean>;
+  await act(async () => {
+    answer = requestConfirm(DELETE_REQUEST);
+  });
+  return { answer };
+}
+
+it("names what a request acts on and approves it with Enter", async () => {
+  const { answer } = await openDelete();
+
+  expect(screen.getByText("Lantern Barrow · Turn 3")).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+
+  await expect(answer).resolves.toBe(true);
+});
+
+it("does not approve on Enter while Cancel has the focus", async () => {
+  const { answer } = await openDelete();
+
+  const cancel = screen.getByRole("button", { name: "Cancel" });
+  cancel.focus();
+  // Left alone, so the browser presses the focused button.
+  expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  fireEvent.click(cancel);
+
+  await expect(answer).resolves.toBe(false);
+});
+
+it("never approves a prompt with entries to tick on Enter", async () => {
+  const { answer } = await open();
+
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+  expect(screen.getByRole("dialog")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Not now" }));
 
   await expect(answer).resolves.toEqual([]);

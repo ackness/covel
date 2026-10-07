@@ -49,6 +49,16 @@ describe("prompt locale normalization", () => {
     // `[COMPLETION]` in Chinese.
     for (const options of [
       undefined,
+      { completion: "runtime-done" as const, requireToolUse: true },
+      { completion: "completing-tool" as const },
+      {
+        completion: "completing-tool" as const,
+        completingTools: ["save-facts"],
+      },
+      {
+        completion: "completing-tool" as const,
+        completingTools: ["save-facts", "save-notes"],
+      },
       { completion: "structured-output" as const },
       { completion: "story" as const },
     ]) {
@@ -73,6 +83,48 @@ describe("prompt locale normalization", () => {
       expect(story).toMatch(/story text of your reply|故事正文/);
       // Every other runtime that has the tool is still told to call it.
       expect(buildFrameworkPreamble(locale)).toContain("`runtime-done`");
+    }
+  });
+
+  it("tells a runtime that ends with a completing tool to end with it, not with runtime-done", () => {
+    // The loop ends such a run when the tool succeeds and rejects a bare
+    // `runtime-done`; the instruction said to end a quiet turn with it.
+    for (const locale of ["en-US", "zh-CN"]) {
+      const one = buildFrameworkPreamble(locale, {
+        completion: "completing-tool",
+        completingTools: ["save-facts"],
+      });
+      expect(one).toMatch(
+        /ends when a call to `save-facts` succeeds|在成功调用 `save-facts` 后结束/,
+      );
+      expect(one).toMatch(/nothing changed|无变化/);
+      expect(one).toMatch(/does not have that tool|没有该工具/);
+      expect(one).not.toMatch(/IMMEDIATELY|立即调用|empty string|空字符串/);
+
+      const several = buildFrameworkPreamble(locale, {
+        completion: "completing-tool",
+        completingTools: ["save-facts", "save-notes"],
+      });
+      expect(several).toMatch(
+        /one of `save-facts`, `save-notes`|`save-facts`、`save-notes` 中的任意一个/,
+      );
+    }
+  });
+
+  it("does not tell a runtime that must call a tool to end a quiet turn with runtime-done alone", () => {
+    for (const locale of ["en-US", "zh-CN"]) {
+      const preamble = buildFrameworkPreamble(locale, {
+        completion: "runtime-done",
+        requireToolUse: true,
+      });
+      expect(preamble).toMatch(/alone records nothing|不会记录任何内容/);
+      expect(preamble).not.toMatch(
+        /If no tool call is needed|无需任何工具调用|empty string|空字符串/,
+      );
+      // Without the requirement the quiet-turn exit stays.
+      expect(buildFrameworkPreamble(locale)).toMatch(
+        /If no tool call is needed|无需任何工具调用/,
+      );
     }
   });
 
@@ -189,9 +241,9 @@ describe("fixed text of the prompt assembly", () => {
           ...(locale ? { locale } : {}),
         },
       ).messages[0]!.content;
-    expect(marker("zh-CN")).toMatch(/^\[\.\.\. .*已裁掉 \d+ 条较早的消息/);
+    expect(marker("zh-CN")).toMatch(/^\[\.\.\. .*已裁掉较早的消息/);
     noEnglishSentence(String(marker("zh-CN")));
-    expect(marker("en-US")).toMatch(/^\[\.\.\. \d+ older messages pruned/);
+    expect(marker("en-US")).toMatch(/^\[\.\.\. older messages pruned/);
     expect(marker()).toMatch(/older messages pruned/);
   });
 
@@ -241,7 +293,12 @@ describe("fixed text of the prompt assembly", () => {
                 ],
               },
             },
-            store: { listPluginData: async () => records(count) },
+            store: {
+              getPluginDataPromptWindow: async () => ({
+                entries: records(Math.min(count, 4)),
+                total: count,
+              }),
+            },
           }),
         )
       ).turnContext;

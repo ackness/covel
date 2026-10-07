@@ -3,7 +3,7 @@ import {
   withPendingProposals,
   translate,
 } from "@covel/plugin-handlers-utils";
-import { worldDimensionsSchema } from "@covel/shared";
+import { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 
 /** Adopt author declarations without deriving character attributes from global state. */
 export default async function guard(ctx) {

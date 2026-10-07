@@ -28,6 +28,7 @@ import {
 interface CompactorDeps extends Omit<BudgetDeps, "compact"> {
   fastSlotLlm: CompactorLLMAdapter;
 }
+const minimalHistories = new WeakMap<object, Map<string, TurnMessageRecord>>();
 const defaultPromptsRoot = new URL("../prompts", import.meta.url).pathname;
 let loadPrompt = createPromptLoader(defaultPromptsRoot);
 async function maybeCompact(
@@ -37,6 +38,12 @@ async function maybeCompact(
   deps: CompactorDeps,
   opts?: CompactorOptions & CompactionPolicyOptions,
 ) {
+  const minimalHistory = minimalHistories.get(deps.store);
+  if (minimalHistory)
+    for (const message of messages) {
+      if (!minimalHistory.has(message.id))
+        minimalHistory.set(message.id, message);
+    }
   return applyCompaction(
     sessionId,
     system,
@@ -48,6 +55,7 @@ async function maybeCompact(
     opts,
   );
 }
+import { createMemoryStore } from "@covel/store/memory";
 import type {
   DataStore,
   StoreTransaction,
@@ -84,6 +92,7 @@ function makeSimpleHistory(size = 10): TurnMessageRecord[] {
         `msg-${i}`,
         i % 2 === 0 ? "user" : "assistant",
         `message content ${i} `.repeat(50), // ~600 chars each
+        { createdAt: new Date(i).toISOString() },
       ),
     );
   }
@@ -95,13 +104,22 @@ function makeMinimalStore(): DataStore {
   const messages = new Map<string, TurnMessageRecord>();
 
   const store = {
+    listUncompactedTurnMessages: async (_sessionId: string, limit?: number) =>
+      [...messages.values()]
+        .filter((message) => message.compactedAtTurnId == null)
+        .slice(0, limit),
     saveSessionSummary: vi.fn(async (s: SessionSummaryRecord) => {
       summaries.push(s);
     }),
     listSessionSummaries: vi.fn(async () => [...summaries]),
-    deleteSessionSummaries: vi.fn(async () => {
-      summaries.splice(0, summaries.length);
-    }),
+    deleteSessionSummaries: vi.fn(
+      async (_sessionId: string, ids?: readonly string[]) => {
+        for (let index = summaries.length - 1; index >= 0; index--) {
+          if (!ids || ids.includes(summaries[index]!.id))
+            summaries.splice(index, 1);
+        }
+      },
+    ),
     tagTurnMessagesCompacted: vi.fn(
       async (
         _sessionId: string,
@@ -117,9 +135,16 @@ function makeMinimalStore(): DataStore {
       },
     ),
     retagCompactedTurnMessages: vi.fn(
-      async (_sessionId: string, summaryId: string) => {
+      async (
+        _sessionId: string,
+        summaryId: string,
+        sourceIds?: readonly string[],
+      ) => {
         for (const [id, message] of messages) {
-          if (message.compactedAtTurnId != null) {
+          if (
+            message.compactedAtTurnId != null &&
+            (!sourceIds || sourceIds.includes(message.compactedAtTurnId))
+          ) {
             messages.set(id, { ...message, compactedAtTurnId: summaryId });
           }
         }
@@ -130,6 +155,7 @@ function makeMinimalStore(): DataStore {
       fn: (tx: StoreTransaction) => Promise<T>,
     ): Promise<T> => fn(store as unknown as StoreTransaction),
   } as unknown as DataStore;
+  minimalHistories.set(store, messages);
   return store;
 }
 
@@ -303,6 +329,7 @@ describe("maybeCompact", () => {
         estimator,
         fastSlotLlm,
         contextWindow: 100,
+        inputWindow: 10_000,
       };
 
       await maybeCompact("sess-1", "", messages, deps, {
@@ -400,6 +427,7 @@ describe("maybeCompact", () => {
         estimator,
         fastSlotLlm,
         contextWindow: 1_000,
+        inputWindow: 10_000,
       };
 
       // Round 1
@@ -435,12 +463,18 @@ describe("maybeCompact", () => {
         ),
       ).toBe(false);
       expect(fastSlotLlm.complete).toHaveBeenCalledTimes(3);
-      expect(await store.listSessionSummaries("sess-1")).toHaveLength(1);
-      expect(store.deleteSessionSummaries).toHaveBeenCalledTimes(2);
-      expect(store.retagCompactedTurnMessages).toHaveBeenCalledTimes(2);
+      expect(await store.listSessionSummaries("sess-1")).toHaveLength(3);
+      expect(store.deleteSessionSummaries).not.toHaveBeenCalled();
+      expect(store.retagCompactedTurnMessages).not.toHaveBeenCalled();
+      const laterPrompts = vi.mocked(fastSlotLlm.complete).mock.calls.slice(1);
+      for (const [request] of laterPrompts) {
+        expect(request.messages[0]!.content).not.toContain(
+          "Compact summary content.",
+        );
+      }
     });
 
-    it("bounds the persisted rolling summary even when the provider overshoots", async () => {
+    it("bounds a persisted segment even when the provider overshoots", async () => {
       const oversized = "长期摘要内容".repeat(2_000);
       const deps: CompactorDeps = {
         store,
@@ -464,12 +498,13 @@ describe("maybeCompact", () => {
       expect(summaries[0]!.content).toContain("摘要已按上下文预算截断");
     });
 
-    it("does not re-compact when nothing new arrived since the last round", async () => {
+    it("does not re-compact when all eligible messages are already summarized", async () => {
       const deps: CompactorDeps = {
         store,
         estimator,
         fastSlotLlm,
         contextWindow: 1_000,
+        inputWindow: 10_000,
       };
 
       let messages = growHistory(0, 20);
@@ -904,5 +939,327 @@ describe("maybeCompact", () => {
       };
       expect(callArgs.systemPrompt).toContain("combat-log");
     });
+  });
+});
+
+describe("segmented history persistence", () => {
+  const estimator = makeEstimator();
+  const options = {
+    threshold: 0,
+    protectLastNUserTurns: 0,
+    protectLastNMessages: 0,
+    locale: "en-US",
+  };
+  async function fixture(count: number) {
+    const store = createMemoryStore();
+    for (let index = 0; index < count; index++) {
+      await store.saveSessionSummary({
+        id: `summary-${index}`,
+        sessionId: "sess-1",
+        turnRangeStart: `old-turn-${index}`,
+        turnRangeEnd: `old-turn-${index}`,
+        content: `Preserved event ${index}.`,
+        focusSections: [`focus-${index}`],
+        createdAt: new Date(index).toISOString(),
+      });
+      await store.appendTurnMessage(
+        makeTurnMessage(
+          `old-${index}`,
+          "assistant",
+          `Original event ${index}`,
+          {
+            turnId: `old-turn-${index}`,
+            compactedAtTurnId: `summary-${index}`,
+            createdAt: new Date(index).toISOString(),
+          },
+        ),
+      );
+    }
+    await store.appendTurnMessage(
+      makeTurnMessage("fresh", "user", "New adventure. ".repeat(100), {
+        turnId: "fresh-turn",
+        createdAt: new Date(100).toISOString(),
+      }),
+    );
+    return store;
+  }
+
+  it("merges only the oldest two segments at the eight-segment bound", async () => {
+    const store = await fixture(8);
+    const before = await store.listSessionSummaries("sess-1");
+    const complete = vi.fn(
+      async (request: Parameters<CompactorLLMAdapter["complete"]>[0]) => ({
+        content: request.messages[0]!.content.includes(
+          "selected_history_summaries",
+        )
+          ? "Merged events zero and one."
+          : "Fresh event.",
+      }),
+    );
+    const result = await maybeCompact(
+      "sess-1",
+      "",
+      await store.listTurnMessages("sess-1"),
+      {
+        store,
+        estimator,
+        fastSlotLlm: { complete },
+        contextWindow: 10_000,
+      },
+      options,
+    );
+    expect(result.compacted).toBe(true);
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete.mock.calls[1]![0].messages[0]!.content).toContain(
+      "Preserved event 0.",
+    );
+    expect(complete.mock.calls[1]![0].messages[0]!.content).toContain(
+      "Preserved event 1.",
+    );
+    expect(complete.mock.calls[1]![0].messages[0]!.content).not.toContain(
+      "Preserved event 2.",
+    );
+    const after = await store.listSessionSummaries("sess-1");
+    expect(after).toHaveLength(8);
+    expect(after[0]).toMatchObject({
+      id: "summary-0",
+      turnRangeStart: "old-turn-0",
+      turnRangeEnd: "old-turn-1",
+      createdAt: before[0]!.createdAt,
+    });
+    expect(after.slice(1, 7)).toEqual(before.slice(2));
+    const messages = await store.listTurnMessages("sess-1");
+    expect(messages.find((m) => m.id === "old-1")?.compactedAtTurnId).toBe(
+      "summary-0",
+    );
+    expect(messages.find((m) => m.id === "old-2")?.compactedAtTurnId).toBe(
+      "summary-2",
+    );
+    expect(messages.find((m) => m.id === "fresh")?.compactedAtTurnId).toBe(
+      result.summaryId,
+    );
+  });
+
+  it("bounds the aggregate when both LLM responses exceed their allocations", async () => {
+    const store = await fixture(3);
+    await maybeCompact(
+      "sess-1",
+      "",
+      await store.listTurnMessages("sess-1"),
+      {
+        store,
+        estimator,
+        inputWindow: 10_000,
+        contextWindow: 1_000,
+        fastSlotLlm: makeFastLlm("Oversized output. ".repeat(1_000)),
+      },
+      options,
+    );
+    const summaries = await store.listSessionSummaries("sess-1");
+    expect(summaries.length).toBeGreaterThanOrEqual(2);
+    expect(
+      summaries.reduce((n, s) => n + estimator(s.content), 0),
+    ).toBeLessThanOrEqual(128);
+    expect(summaries.every((s) => estimator(s.content) <= 128)).toBe(true);
+  });
+
+  it("rolls back selective replacement if retagging fails", async () => {
+    const store = await fixture(8);
+    const summaries = await store.listSessionSummaries("sess-1");
+    const messages = await store.listTurnMessages("sess-1");
+    const failingStore: DataStore = {
+      ...store,
+      withTransaction: (fn) =>
+        store.withTransaction((tx) =>
+          fn({
+            ...tx,
+            retagCompactedTurnMessages: async () => {
+              throw new Error("retag failed");
+            },
+          }),
+        ),
+    };
+    await expect(
+      maybeCompact(
+        "sess-1",
+        "",
+        messages,
+        {
+          store: failingStore,
+          estimator,
+          contextWindow: 10_000,
+          fastSlotLlm: makeFastLlm(),
+        },
+        options,
+      ),
+    ).rejects.toThrow("retag failed");
+    expect(await store.listSessionSummaries("sess-1")).toEqual(summaries);
+    expect(await store.listTurnMessages("sess-1")).toEqual(messages);
+  });
+
+  it.each([
+    { messageIds: ["fresh"], replacesSummaryIds: ["foreign"] },
+    { messageIds: [], replacesSummaryIds: ["summary-1"] },
+    { messageIds: [], replacesSummaryIds: ["foreign"] },
+    { messageIds: [], replacesSummaryIds: ["summary-0", "summary-0"] },
+    { messageIds: ["foreign"], replacesSummaryIds: [] },
+    { messageIds: ["fresh", "fresh"], replacesSummaryIds: [] },
+  ])(
+    "rejects invalid source selection before persistence: %j",
+    async (selection) => {
+      const store = await fixture(3);
+      const summaries = await store.listSessionSummaries("sess-1");
+      const messages = await store.listTurnMessages("sess-1");
+      await expect(
+        applyCompaction(
+          "sess-1",
+          "",
+          messages,
+          {
+            store,
+            estimator,
+            contextWindow: 10_000,
+            compact: async () => ({
+              summaries: [
+                {
+                  ...selection,
+                  content: "Untrusted summary",
+                  focusSections: [],
+                },
+              ],
+            }),
+          },
+          { threshold: 0 },
+        ),
+      ).rejects.toThrow("Invalid history compaction result");
+      expect(await store.listSessionSummaries("sess-1")).toEqual(summaries);
+      expect(await store.listTurnMessages("sess-1")).toEqual(messages);
+    },
+  );
+
+  it("rejects provider output exceeding the aggregate summary budget", async () => {
+    const store = await fixture(3);
+    const before = await store.listSessionSummaries("sess-1");
+    const messages = await store.listTurnMessages("sess-1");
+    await expect(
+      applyCompaction(
+        "sess-1",
+        "",
+        messages,
+        {
+          store,
+          estimator,
+          contextWindow: 1_000,
+          compact: async () => ({
+            summaries: [
+              {
+                messageIds: ["fresh"],
+                replacesSummaryIds: [],
+                content: "x".repeat(128 * 4),
+                focusSections: [],
+              },
+            ],
+          }),
+        },
+        { threshold: 0 },
+      ),
+    ).rejects.toThrow("Invalid history compaction result");
+    expect(await store.listSessionSummaries("sess-1")).toEqual(before);
+    expect(await store.listTurnMessages("sess-1")).toEqual(messages);
+  });
+
+  it("refuses a stale provider result when summaries changed during generation", async () => {
+    const store = await fixture(3);
+    const before = await store.listSessionSummaries("sess-1");
+    const messages = await store.listTurnMessages("sess-1");
+    await expect(
+      applyCompaction(
+        "sess-1",
+        "",
+        messages,
+        {
+          store,
+          estimator,
+          contextWindow: 10_000,
+          compact: async () => {
+            await store.saveSessionSummary({
+              ...before[0]!,
+              id: "concurrent",
+              createdAt: new Date(50).toISOString(),
+            });
+            return {
+              summaries: [
+                {
+                  messageIds: ["fresh"],
+                  replacesSummaryIds: [],
+                  content: "fresh summary",
+                  focusSections: [],
+                },
+              ],
+            };
+          },
+        },
+        { threshold: 0 },
+      ),
+    ).rejects.toThrow("History summaries changed during compaction");
+    expect(await store.listSessionSummaries("sess-1")).toHaveLength(4);
+    expect(await store.listTurnMessages("sess-1")).toEqual(messages);
+  });
+
+  it("keeps summary requests inside the fast input capacity and leaves the rest raw", async () => {
+    const store = createMemoryStore();
+    const messages = makeSimpleHistory(20);
+    for (const message of messages) await store.appendTurnMessage(message);
+    const complete = vi.fn<CompactorLLMAdapter["complete"]>(async () => ({
+      content: "Bounded new segment",
+    }));
+    await maybeCompact(
+      "sess-1",
+      "",
+      messages,
+      {
+        store,
+        estimator,
+        contextWindow: 1_000,
+        inputWindow: 1_000,
+        fastSlotLlm: { complete },
+      },
+      options,
+    );
+    const request = complete.mock.calls[0]?.[0] as
+      Parameters<CompactorLLMAdapter["complete"]>[0] | undefined;
+    expect(request).toBeDefined();
+    expect(
+      estimator(request!.systemPrompt) +
+        estimator(request!.messages[0]!.content),
+    ).toBeLessThanOrEqual(1_000);
+    const raw = await store.listUncompactedTurnMessages("sess-1");
+    expect(raw.length).toBeGreaterThan(0);
+    expect(raw.length).toBeLessThan(messages.length);
+  });
+
+  it("leaves an individually oversized source message uncompacted", async () => {
+    const store = createMemoryStore();
+    const message = makeTurnMessage("huge", "user", "x".repeat(100_000));
+    await store.appendTurnMessage(message);
+    const llm = makeFastLlm();
+    const result = await maybeCompact(
+      "sess-1",
+      "",
+      [message],
+      {
+        store,
+        estimator,
+        contextWindow: 1_000,
+        fastSlotLlm: llm,
+      },
+      options,
+    );
+    expect(result.compacted).toBe(false);
+    expect(llm.complete).not.toHaveBeenCalled();
+    expect(await store.listSessionSummaries("sess-1")).toEqual([]);
+    expect(await store.listUncompactedTurnMessages("sess-1")).toEqual([
+      message,
+    ]);
   });
 });

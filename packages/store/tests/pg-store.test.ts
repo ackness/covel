@@ -37,6 +37,66 @@ if (pgAvailable) {
     const store = await createPgStore(isolated.url, { freshSchema: true });
     return store;
   });
+  it("allocates distinct log positions across simultaneous PostgreSQL clients", async () => {
+    const { default: postgres } = await import("postgres");
+    const { makeSession, makeMessage, makeTraceEvent, makeTurnResult } =
+      await import("../src/contract/test-fixtures.js");
+    const left = await createPgStore(isolated.url, { freshSchema: true });
+    const right = await createPgStore(isolated.url);
+    const sql = postgres(isolated.url);
+    const createdAt = "2026-10-07T00:00:00.000Z";
+    try {
+      await left.createSession(makeSession({ id: "concurrent" }));
+      await Promise.all(
+        Array.from({ length: 40 }, async (_, index) => {
+          const store = index % 2 === 0 ? left : right;
+          const id = `row-${String(40 - index).padStart(3, "0")}`;
+          await Promise.all([
+            store.addMessage(
+              makeMessage({ id, sessionId: "concurrent", createdAt }),
+            ),
+            store.addTraceEvent(
+              makeTraceEvent({ id, sessionId: "concurrent", createdAt }),
+            ),
+            store.saveTurnResult(
+              makeTurnResult({ id, sessionId: "concurrent", createdAt }),
+            ),
+          ]);
+        }),
+      );
+      for (const table of ["messages", "trace_events", "turn_results"]) {
+        const [counts] = await sql.unsafe(
+          `SELECT count(*)::int AS total, count(DISTINCT seq)::int AS positions FROM ${table}`,
+        );
+        expect(counts).toEqual({ total: 40, positions: 40 });
+      }
+      for (const [list, page] of [
+        [
+          () => left.listMessages("concurrent"),
+          (before?: { id: string; createdAt: string }) =>
+            right.listMessagesPage("concurrent", { limit: 7, before }),
+        ],
+        [
+          () => left.listTraceEvents("concurrent"),
+          (before?: { id: string; createdAt: string }) =>
+            right.listTraceEventsPage("concurrent", { limit: 7, before }),
+        ],
+      ] as const) {
+        const expected = await list();
+        const seen: string[] = [];
+        let before: { id: string; createdAt: string } | undefined;
+        for (;;) {
+          const rows = await page(before);
+          if (rows.length === 0) break;
+          seen.unshift(...rows.map((row) => row.id));
+          before = rows[0];
+        }
+        expect(seen).toEqual(expected.map((row) => row.id));
+      }
+    } finally {
+      await Promise.all([left.close(), right.close(), sql.end()]);
+    }
+  });
   it("batch CAS serializes independent PostgreSQL clients and rejects partial stale batches", async () => {
     const left = await createPgStore(isolated.url, { freshSchema: true });
     const right = await createPgStore(isolated.url);

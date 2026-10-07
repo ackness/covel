@@ -1,3 +1,4 @@
+import { keywordTerms, keywordExcerpt } from "./keyword-terms.js";
 /**
  * Recall Memory — Searchable conversation history (keyword search).
  *
@@ -48,7 +49,7 @@ export function createKeywordRecallSearcher(
       if (candidates.length === 0) return [];
 
       // Tokenize query into terms (split on whitespace and punctuation)
-      const queryTerms = tokenize(query);
+      const queryTerms = keywordTerms(query);
       if (queryTerms.length === 0) return [];
 
       // Score each message
@@ -58,7 +59,7 @@ export function createKeywordRecallSearcher(
         const content = String(msg.content ?? "");
         if (!content.trim()) continue;
 
-        const msgTerms = tokenize(content);
+        const msgTerms = keywordTerms(content);
         if (msgTerms.length === 0) continue;
 
         // Count how many query terms appear in the message
@@ -87,22 +88,10 @@ export function createKeywordRecallSearcher(
       return scored.slice(0, limit).map(({ msg, score }) => ({
         turnId: msg.turnId ?? "",
         role: msg.role,
-        content: String(msg.content ?? ""),
+        content: keywordExcerpt(String(msg.content ?? ""), queryTerms),
         score,
         timestamp: msg.createdAt,
       }));
     },
   };
-}
-
-/** Simple tokenizer: split on whitespace/punctuation, lowercase, dedupe. */
-function tokenize(text: string): string[] {
-  return [
-    ...new Set(
-      text
-        .toLowerCase()
-        .split(/[\s,.:;!?，。：；！？、\-—""''()（）【】[\]{}]+/)
-        .filter((t) => t.length >= 2),
-    ),
-  ];
 }

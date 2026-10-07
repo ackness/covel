@@ -12,9 +12,16 @@ import type {
   SocialClass,
   WorldRace,
 } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
-export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
+export function SocialStructureTab({
+  dimensions,
+  onChange,
+  t,
+  problems,
+}: TabProps) {
   const ss: WorldSocialStructure = dimensions.socialStructure ?? {};
+  const problem = fieldProblems(problems);
 
   function setSs(next: WorldSocialStructure) {
     onChange({ ...dimensions, socialStructure: next });
@@ -79,6 +86,7 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addClass")}
           </Button>
         </div>
+        {problem.at("classes")}
         {(ss.classes ?? []).map((cls, ci) => (
           <div key={ci} className="flex items-start gap-2">
             <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem]">
@@ -110,6 +118,9 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
                   })
                 }
               />
+              {problem.at(`classes.${ci}.name`, t("world.name"))}
+              {problem.at(`classes.${ci}.description`, t("world.description"))}
+              {problem.at(`classes.${ci}.rank`, t("world.rank"))}
             </div>
             <Button
               variant="ghost"
@@ -132,6 +143,7 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addRace")}
           </Button>
         </div>
+        {problem.at("races")}
         {(ss.races ?? []).map((race, ri) => (
           <div key={ri} className="flex items-start gap-2">
             <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -151,6 +163,8 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
                   updateRace(ri, { description: e.target.value })
                 }
               />
+              {problem.at(`races.${ri}.name`, t("world.name"))}
+              {problem.at(`races.${ri}.description`, t("world.description"))}
             </div>
             <Button
               variant="ghost"
@@ -173,7 +187,9 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
           value={text(ss.notes)}
           onChange={(e) => setSs({ ...ss, notes: e.target.value })}
         />
+        {problem.at("notes")}
       </div>
+      {problem.rest()}
     </div>
   );
 }

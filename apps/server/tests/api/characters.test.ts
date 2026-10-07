@@ -12,10 +12,12 @@ import { Hono } from "hono";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { characterRoutes } from "../../src/routes/api/characters.js";
+import { makeErrorHandler } from "../../src/api-error.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function buildApp(store: DataStore): Hono {
   const app = new Hono();
+  app.onError(makeErrorHandler("[character-test]", false));
   // The route serializes writes on the session lock, same as the turn path.
   const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
@@ -151,6 +153,16 @@ describe("Character REST API routes", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ code: "session_not_active" });
+    expect(await store.listCharacters(sessionId)).toEqual([]);
+  });
+
+  it("returns client validation errors separately from persistence failures", async () => {
+    const invalid = await app.request(`/api/sessions/${sessionId}/characters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "invalid", name: "Invalid", version: -1 }),
+    });
+    expect(invalid.status).toBe(400);
     expect(await store.listCharacters(sessionId)).toEqual([]);
   });
 

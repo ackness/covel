@@ -1,4 +1,4 @@
-import { createFormTool } from "@covel/tools";
+import { createFormTool } from "@covel/plugin-handlers-utils";
 import makeCharacterForm from "../tools/create-character-form.js";
 import trackerReadBudget from "../hooks/tracker-read-budget.js";
 import protectCharacterProfiles from "../hooks/protect-character-profiles.js";

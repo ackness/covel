@@ -153,8 +153,8 @@ if (resourceDirs.length === 0) {
 
 for (const resourcesDir of resourceDirs) {
   assertNoPrivateConfig(path.join(resourcesDir, "server"));
-  mustExist(resourcesDir, "server/src/index.ts");
-  mustExist(resourcesDir, "server/node_modules/tsx/dist/cli.mjs");
+  mustExist(resourcesDir, "server/src/index.js");
+  mustExist(resourcesDir, "server/node_modules/tsx/dist/loader.mjs");
   mustExist(resourcesDir, "server/node_modules/esbuild/package.json");
   mustExist(
     resourcesDir,
