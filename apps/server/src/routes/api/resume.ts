@@ -296,14 +296,8 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 
         if (result.status !== "success" || !result.output) {
           await releaseClaim();
-          return c.json(
-            {
-              ...errorBody(
-                `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
-              ),
-              result,
-            },
-            500,
+          throw new Error(
+            `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
           );
         }
 
@@ -372,11 +366,8 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             outcome.failedProposals
               .map((fp) => `${fp.proposal.type}: ${fp.error}`)
               .join("; ");
-          return c.json(
-            errorBody(
-              `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`,
-            ),
-            500,
+          throw new Error(
+            `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`,
           );
         }
         const events = outcome.events;
@@ -391,8 +382,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     // `unresolved` and appears in subsequent `listSuspensions`.
     await releaseClaim();
 
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json(errorBody(`Resume failed: ${message}`), 500);
+    throw err;
   }
 });
 

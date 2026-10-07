@@ -1213,6 +1213,8 @@ SSE 事件：
 | 409    | `world_already_translated` | 这种语言已经没有缺的文字                           |
 | 409    | `world_deleting`           | 世界正在删除                                       |
 
+SSE 已打开后 HTTP 状态保持 200，失败使用既有 `{ type: "error", message }`。未知存储、provider 或含动态诊断的翻译验证错误在生产环境使用 `Internal server error`；开发态保留原诊断。锁超时消息为 `Session is busy, please retry`。固定的无翻译/非 JSON 业务提示及世界已删除或替换提示保留；内部原因记服务端日志。此错误消息投影不改变文件发布的事务性保证。
+
 #### `GET /api/worlds/:id/gallery`
 
 列出世界包自带的图片。会话创建时才把世界包的 `kind: media` 来源导入媒体库，世界列表和世界详情还没有会话，所以从世界包直接读文件。
@@ -2645,12 +2647,15 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 **错误码:**
 
-| 状态  | 触发条件                                               |
-| ----- | ------------------------------------------------------ |
-| `400` | JSON body/结构错误或 data schema 校验失败              |
-| `404` | session、suspension 不存在，或 runtime manifest 找不到 |
-| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）    |
-| `500` | `resumeSuspendedRuntime()` 抛出错误                    |
+| 状态  | 触发条件                                                                         |
+| ----- | -------------------------------------------------------------------------------- |
+| `400` | JSON body/结构错误或 data schema 校验失败                                        |
+| `404` | session、suspension 不存在，或 runtime manifest 找不到                           |
+| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                              |
+| `500` | runtime 执行、提交或其他未知错误；生产正文为 `Internal server error`             |
+| `503` | 会话锁获取超时，`code: "session_busy"`，固定消息 `Session is busy, please retry` |
+
+失败响应只使用通用错误信封，不返回内部 runtime result 或提案诊断；成功响应仍为 `{ result, events }`。失败时释放本次已取得的 suspension claim（仍须满足同一会话 incarnation 的生命周期检查），以便重试；内部原因记录在服务端日志。
 
 #### `GET /api/sessions/:id/suspensions`
 
@@ -2701,6 +2706,8 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取 `auto`、`manual`、`fork` 三种；手动快照通过 snapshots 集合创建。
 
 #### `POST /api/sessions/:id/snapshots`
+
+快照构建及 fork 的未知错误进入标准分类器，生产环境返回通用 500，不再使用 `build_failed` / `fork_failed` 携带内部诊断。已识别的业务冲突维持原 code/status。媒体引用写入失败保持 `500 fork_media_reference_failed`，正文固定为 `Failed to reference media for fork`，底层原因只进日志；事务回滚和已添加引用的补偿仍先于错误响应。
 
 当前快照 v3 合同要求 `stateSchemas`、`runtimeExports`、`sessionSummaries`、`compactedMessageSummaryIds` 和 `displayMessagesBoundary` 全部存在。空数组、空映射及 `null` 聊天边界有明确含义；缺失字段的旧开发快照必须重建，不迁移、不使用父会话当前状态补全。存储写入、SQL 读取和 browser checkpoint 共用 payload schema 校验；摘要映射必须指向快照中实际捕获的摘要，非法引用会被拒绝。
 

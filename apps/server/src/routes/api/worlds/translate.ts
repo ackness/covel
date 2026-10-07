@@ -10,12 +10,14 @@ import path from "node:path";
 import { Hono } from "hono";
 import {
   WORLD_EDITIONS_KEY,
+  readRuntimeEnv,
   canonicalizeLocale,
   isKnownLocale,
 } from "@covel/shared";
 import type { LLMAdapter } from "@covel/runtime";
 import type { WorldRecord } from "@covel/store";
 import {
+  classifyApiError,
   errorBody,
   logRequestError,
   readJsonBody,
@@ -203,10 +205,19 @@ worldTranslateRoutes.post(
         await progress.settled();
         signal.throwIfAborted();
         if (result.translated === 0) {
+          const reason = result.failed[0]?.reason;
+          // Only fixed validation messages are public. Other reasons can
+          // contain model text (for example, rejected placeholders).
+          if (
+            reason &&
+            reason !== "no translation" &&
+            reason !== "the reply was not a JSON object"
+          ) {
+            throw new Error(reason);
+          }
           await send({
             type: "error",
-            message:
-              result.failed[0]?.reason ?? "The model returned no translation",
+            message: reason ?? "The model returned no translation",
           });
           return;
         }
@@ -278,9 +289,12 @@ worldTranslateRoutes.post(
           failed: result.failed.length,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
         logRequestError(c, "[worlds/translate] unexpected error", err);
-        await send({ type: "error", message });
+        const { body } = classifyApiError(
+          err,
+          readRuntimeEnv().nodeEnv !== "production",
+        );
+        await send({ type: "error", message: body.error });
       }
     });
   },

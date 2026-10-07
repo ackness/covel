@@ -14,7 +14,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  SessionLockTimeoutError,
+  createInProcessSessionLock,
+} from "../../src/lib/session-lock.js";
+import { makeErrorHandler } from "../../src/api-error.js";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 
@@ -119,6 +123,7 @@ describe("POST /api/worlds/:id/translate", () => {
     llm = new BracketTranslator();
     const sessionLock = createInProcessSessionLock();
     app = new Hono();
+    app.onError(makeErrorHandler("[translate test]", false));
     app.use("*", async (c, next) => {
       c.set("store" as never, store as never);
       c.set("llmAdapter" as never, llm as never);
@@ -132,6 +137,114 @@ describe("POST /api/worlds/:id/translate", () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     await rm(home, { recursive: true, force: true });
+  });
+
+  it.each(["store", "model", "validation"])(
+    "redacts %s failures on the already-open SSE stream",
+    async (seam) => {
+      vi.stubEnv("NODE_ENV", "production");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      await writeWorld(userWorlds, "failure-world");
+      const marker = "INTERNAL_TRANSLATION_DIAGNOSTIC";
+      if (seam === "store")
+        vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(new Error(marker));
+      else if (seam === "validation")
+        vi.spyOn(llm, "generate").mockImplementation(async (request) => {
+          const content = String(request.messages[0]!.content);
+          const start = content.indexOf("Texts:\n");
+          const texts =
+            start < 0
+              ? {}
+              : JSON.parse(content.slice(start + "Texts:\n".length));
+          return {
+            content: JSON.stringify(
+              Object.fromEntries(
+                Object.keys(texts).map((id) => [id, `{${marker}}`]),
+              ),
+            ),
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        });
+      else
+        vi.spyOn(llm, "generate").mockImplementation(async (request) => {
+          // Glossary succeeds; provider failures reach the stream catch.
+          if (String(request.messages[0]!.content).includes("Texts:\n"))
+            throw new Error(marker);
+          return {
+            content: "{}",
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        });
+      const response = await translate("failure-world", { locale: "ja-JP" });
+      expect(response.status).toBe(200);
+      const events = await readSse(response);
+      expect(events.filter((e) => e.type === "error")).toEqual([
+        { type: "error", message: "Internal server error" },
+      ]);
+      expect(events.some((e) => e.type === "done")).toBe(false);
+      expect(JSON.stringify(events)).not.toContain(marker);
+      expect(log.mock.calls.flat().join(" ")).toContain(marker);
+    },
+  );
+
+  it.each(["production", "development"])(
+    "keeps the known no-translation message in %s",
+    async (nodeEnv) => {
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      await writeWorld(userWorlds, "empty-translation");
+      vi.spyOn(llm, "generate").mockResolvedValue({
+        content: "{}",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+      const events = await readSse(
+        await translate("empty-translation", { locale: "ja-JP" }),
+      );
+      expect(events.filter((event) => event.type === "error")).toEqual([
+        { type: "error", message: "no translation" },
+      ]);
+    },
+  );
+
+  it.each(["production", "development"])(
+    "uses the safe lock-busy message after opening SSE in %s",
+    async (nodeEnv) => {
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      await writeWorld(userWorlds, "busy-translation");
+      vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(
+        new SessionLockTimeoutError("INTERNAL_TRANSLATION_LOCK"),
+      );
+      const response = await translate("busy-translation", { locale: "ja-JP" });
+      expect(response.status).toBe(200);
+      const events = await readSse(response);
+      expect(events.filter((event) => event.type === "error")).toEqual([
+        { type: "error", message: "Session is busy, please retry" },
+      ]);
+      expect(log.mock.calls.flat().join(" ")).toContain(
+        "INTERNAL_TRANSLATION_LOCK",
+      );
+    },
+  );
+
+  it("retains development diagnostics on SSE without adding response fields", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await writeWorld(userWorlds, "dev-translation");
+    vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(
+      new Error("SYNTHETIC_DEV_DIAGNOSTIC"),
+    );
+    const events = await readSse(
+      await translate("dev-translation", { locale: "ja-JP" }),
+    );
+    expect(events.filter((event) => event.type === "error")).toEqual([
+      { type: "error", message: "SYNTHETIC_DEV_DIAGNOSTIC" },
+    ]);
   });
 
   it("writes the edition beside the world's files and declares it", async () => {

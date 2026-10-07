@@ -5,6 +5,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { Hono, type Context } from "hono";
+import { HTTPException } from "hono/http-exception";
 import {
   makeErrorHandler,
   readJsonBody,
@@ -20,6 +21,30 @@ function fakeContext(url: string): Context {
 }
 
 describe("makeErrorHandler", () => {
+  it.each([false, true])(
+    "keeps unknown HTTPException messages private except in dev=%s",
+    (isDev) => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const response = makeErrorHandler("test", isDev)(
+          new HTTPException(413, { message: "INTERNAL_HTTP_EXCEPTION" }),
+          fakeContext("http://localhost/api/test"),
+        ) as unknown as { body: { error: string }; status: number };
+        expect(response).toEqual({
+          status: 500,
+          body: {
+            error: isDev ? "INTERNAL_HTTP_EXCEPTION" : "Internal server error",
+          },
+        });
+        expect(log.mock.calls.flat().join(" ")).toContain(
+          "INTERNAL_HTTP_EXCEPTION",
+        );
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
   it("redacts the media token query param from the logged URL", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const handler = makeErrorHandler("test", false);

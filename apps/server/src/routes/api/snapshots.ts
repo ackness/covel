@@ -23,7 +23,7 @@ import { scheduleMemoryIngest } from "./commit-execution.js";
 
 import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { z } from "zod";
 import {
   DIMENSION_DATA_NAMESPACE,
@@ -47,11 +47,8 @@ import type {
 import { buildSnapshotPayload } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import type { EventBus } from "@covel/events";
-import { errorBody, parseJsonBody } from "../../api-error.js";
-import {
-  SessionLockTimeoutError,
-  type SessionLock,
-} from "../../lib/session-lock.js";
+import { errorBody, logRequestError, parseJsonBody } from "../../api-error.js";
+import type { SessionLock } from "../../lib/session-lock.js";
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 import {
@@ -109,25 +106,6 @@ class ForkMediaReferenceWriteError extends Error {
   }
 }
 
-/**
- * Translate a bounded lock-acquire timeout (PG advisory lock, 30s) into a
- * coded 503 — a turn can legitimately hold the session lock longer than the
- * acquire budget, and callers should retry rather than see a generic 500.
- */
-function rethrowUnlessLockBusy(c: Context<Env>) {
-  return (err: unknown) => {
-    if (err instanceof SessionLockTimeoutError) {
-      return c.json(
-        errorBody("Session is busy executing a turn; retry shortly", {
-          code: "session_busy",
-        }),
-        503,
-      );
-    }
-    throw err;
-  };
-}
-
 export const snapshotRoutes = new Hono<Env>();
 
 // ── POST /api/sessions/:id/snapshots — manual snapshot ────────────
@@ -156,18 +134,11 @@ snapshotRoutes.post("/:id/snapshots", async (c) => {
       const latestTurnId =
         latest?.turnId ?? `turn-${session.completedPlayerTurns}`;
 
-      let payload;
-      try {
-        payload = await buildSnapshotPayload(store, sessionId, latestTurnId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return c.json(
-          errorBody(`Failed to build snapshot payload: ${message}`, {
-            code: "build_failed",
-          }),
-          500,
-        );
-      }
+      const payload = await buildSnapshotPayload(
+        store,
+        sessionId,
+        latestTurnId,
+      );
 
       const now = new Date().toISOString();
       const snapshot: SnapshotRecord = {
@@ -203,7 +174,7 @@ snapshotRoutes.post("/:id/snapshots", async (c) => {
 
       return c.json(snapshot, 201);
     },
-  }).catch(rethrowUnlessLockBusy(c));
+  });
 });
 
 // ── GET /api/sessions/:id/snapshots — list snapshot metadata ──────
@@ -681,8 +652,11 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             );
           }
           if (err instanceof ForkMediaReferenceWriteError) {
+            logRequestError(c, "[snapshots] fork media reference failed", err);
             return c.json(
-              errorBody(err.message, { code: "fork_media_reference_failed" }),
+              errorBody("Failed to reference media for fork", {
+                code: "fork_media_reference_failed",
+              }),
               500,
             );
           }
@@ -706,11 +680,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               403,
             );
           }
-          const message = err instanceof Error ? err.message : String(err);
-          return c.json(
-            errorBody(`Fork failed: ${message}`, { code: "fork_failed" }),
-            500,
-          );
+          throw err;
         }
 
         scheduleMemoryIngest(c.get("memorySystem"), childSessionId);
@@ -770,5 +740,5 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         );
       });
     },
-  }).catch(rethrowUnlessLockBusy(c));
+  });
 });

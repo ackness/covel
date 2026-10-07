@@ -154,6 +154,8 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 `code` 是可选的稳定错误码（如 `"session_busy"`），客户端可据此做 i18n/重试语义；无 `code` 时按 `message` 展示。
 
+世界翻译端点使用独立的 `{ type: "error", message }` SSE 事件，不新增 `code` 字段。流已打开后不再改变 HTTP 状态；未知生产错误与 JSON 分类器采用相同的 `Internal server error` 消息，锁超时采用固定安全忙碌提示，原始诊断只进服务端日志。此处不改变 action 的 `error.occurred` 结构或传输队列。
+
 ### 世界事件
 
 | 事件类型                   | 方向 | 描述                       | 负载                         |
