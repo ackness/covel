@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- The schemas of `story-events` and `scene-stage` no longer make Ajv log `strict mode` warnings in the server log and in test output. They accept the same values as before.
+
 ## [0.0.48] - 2026-10-07
 
 This release lays out the prompt so that a provider's prefix cache reaches the history, keeps IDs and timestamps out of what a model reads, settles more of the slips for which a tool refused a model's call, adds sessions that replay from recorded model calls, and fixes the findings of a whole-codebase audit. **It does not read the data of an earlier version**: read the [upgrade notes](#breaking-changes-and-upgrade-notes-for-v0048) before installing it.
