@@ -8,7 +8,10 @@ export default function (covel) {
   // the system prompt with it.
   covel.provideExtension("prompt.segment@1", "character-sheets", {
     handler: (_input, ctx) =>
-      characterSheetSegments(ctx.world.characters, { locale: ctx.locale }),
+      characterSheetSegments(ctx.world.characters, {
+        locale: ctx.locale,
+        schema: ctx.world.characterSchema,
+      }),
   });
   const review = createNarrativeReview(covel.pluginId);
   covel.on("PostContextAssembly", review.context);

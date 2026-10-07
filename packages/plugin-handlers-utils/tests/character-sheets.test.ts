@@ -102,6 +102,39 @@ describe("characterSheetSegments", () => {
     expect(characterSheetSegments([], { profiles: true })).toEqual([]);
   });
 
+  it("annotates a number field with its schema range", () => {
+    const schema = {
+      version: 1,
+      types: ["npc"],
+      sessionId: "s",
+      createdAt: "2026-10-06T00:00:00.000Z",
+      updatedAt: "2026-10-06T00:00:00.000Z",
+      attributes: [
+        { id: "might", name: "Might", type: "number", min: 0, max: 5, category: "abilities" },
+        { id: "hp", name: "HP", type: "number", min: 1, max: 20, category: "stats" },
+        { id: "calling", name: "Calling", type: "string", category: "bio" },
+      ],
+    } as const;
+    const cast = [
+      character({
+        name: "Aria",
+        type: "player",
+        fields: { might: 5, hp: 8, calling: "scholar", unlisted: 3 },
+      }),
+      character({ name: "Brannock", type: "npc", fields: { might: 2 } }),
+    ];
+    const [segment] = characterSheetSegments(cast, {
+      profiles: true,
+      schema,
+    });
+
+    expect(segment!.content).toContain('"might": "5/5"');
+    expect(segment!.content).toContain('"hp": "8 (1–20)"');
+    expect(segment!.content).toContain('"calling": "scholar"');
+    expect(segment!.content).toContain('"unlisted": 3');
+    expect(segment!.content).toContain('{"might":"2/5"}');
+  });
+
   it("keeps a description from closing its block", () => {
     const [segment] = characterSheetSegments(
       [

@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 ### Changed
 
 - **Inside the app, the interface language is in Settings only.** The top bar of the session and debug pages no longer has a language select; Settings → General → Interface Language is the same setting. The landing page, which has no way into Settings, keeps the select, and so does the menu of a narrow window.
+- **The narrators' character sheets show a number attribute with its range.** `characterSheetSegments` takes `schema` (pass `ctx.world.characterSchema`); a number attribute whose schema declares min/max renders as `"might": "2/5"` in the player sheet and the NPC profiles, so the model can tell a maxed strongman from a feeble 5/100. `narrator` and `chat-mode-narrator` pass it.
 
 ### Fixed
 
