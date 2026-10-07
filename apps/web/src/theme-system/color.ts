@@ -60,10 +60,32 @@ export function toSwatchHex(input: string): string | null {
   ctx.fillStyle = normalized;
   ctx.fillRect(0, 0, 1, 1);
   const channels = ctx.getImageData(0, 0, 1, 1).data;
+  return channelsHex(channels);
+}
+
+function channelsHex(channels: Uint8ClampedArray): string {
   return `#${[...channels]
     .slice(0, 3)
     .map((value) => value.toString(16).padStart(2, "0"))
     .join("")}`;
+}
+
+/**
+ * The sRGB `#rrggbb` of CSS colours painted over each other, the first at the
+ * bottom. Null when a colour is invalid or the result is not opaque.
+ */
+export function flattenToHex(...layers: readonly string[]): string | null {
+  const ctx = getContext();
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, 1, 1);
+  for (const layer of layers) {
+    const normalized = normalizeCssColor(layer);
+    if (!normalized) return null;
+    ctx.fillStyle = normalized;
+    ctx.fillRect(0, 0, 1, 1);
+  }
+  const channels = ctx.getImageData(0, 0, 1, 1).data;
+  return channels[3] === 255 ? channelsHex(channels) : null;
 }
 
 export function isValidCssColor(input: string): boolean {

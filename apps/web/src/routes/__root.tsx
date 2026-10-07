@@ -6,7 +6,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Blocks,
@@ -36,6 +36,7 @@ import { ToastHost } from "@/components/ui/toast-host";
 import { ConfirmHost } from "@/components/ui/confirm-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
+import { useWindowControlsColors } from "@/hooks/use-window-controls-colors.js";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { useSession } from "@/stores/session-store";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
@@ -85,6 +86,8 @@ function RootLayout() {
   // The rail is app chrome. The landing page keeps the top bar in every
   // layout: it carries the brand and the way in.
   const railNav = layoutNav === "rail" && isSession;
+  const headerRef = useRef<HTMLElement>(null);
+  useWindowControlsColors(headerRef, railNav);
   const showRouterDevtools = !isSessionRoute && !isDebugRoute;
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
@@ -308,6 +311,7 @@ function RootLayout() {
             />
           )}
           <header
+            ref={headerRef}
             className={`ui-app-header ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"} ${railNav ? "lg:hidden" : ""}`}
             style={isElectron ? dragStyle : undefined}
           >
