@@ -303,7 +303,12 @@ describe("resolveExportBindings", () => {
         cfg: binding({ from: { capability: "cfg-provider" } }),
       },
       activeRuntimes: [provider("p/gen")],
-      acceptsSchemas: { cfg: { properties: { threshold: { minimum: 10 } } } },
+      acceptsSchemas: {
+        cfg: {
+          type: "object",
+          properties: { threshold: { type: "number", minimum: 10 } },
+        },
+      },
       contractSchemas: { cfg: SCHEMA },
       getFrozenExport: async () => record({ threshold: 7 }),
     });
@@ -424,7 +429,10 @@ describe("resolveExportBindings", () => {
     { type: "array", maxItems: 1, items: SCHEMA },
     {
       type: "array",
-      items: { ...SCHEMA, properties: { threshold: { minimum: 2 } } },
+      items: {
+        ...SCHEMA,
+        properties: { threshold: { type: "number", minimum: 2 } },
+      },
     },
   ])("rejects all committed values violating accepts %j", async (schema) => {
     const res = await resolveAll(schema);

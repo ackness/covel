@@ -81,6 +81,7 @@ describe("validateOutput", () => {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       type: "array",
       prefixItems: [{ type: "string" }],
+      minItems: 1,
       items: false,
     } as const;
 
@@ -93,6 +94,7 @@ describe("validateOutput", () => {
       $schema: "http://json-schema.org/draft-07/schema#",
       type: "array",
       items: [{ type: "string" }],
+      minItems: 1,
       additionalItems: false,
     } as const;
 
