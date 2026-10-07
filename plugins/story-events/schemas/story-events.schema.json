@@ -114,7 +114,7 @@
             {
               "type": "array",
               "items": {
-                "type": ["string", "integer"]
+                "anyOf": [{ "type": "string" }, { "type": "integer" }]
               }
             }
           ]
