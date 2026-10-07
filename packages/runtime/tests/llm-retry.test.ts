@@ -1312,6 +1312,76 @@ describe("provider failure terminals", () => {
     },
   );
 
+  it("keeps prose cut at the output limit when the caller allows it", async () => {
+    const generated = await callLLMWithRetry({
+      llm: createScriptedLLM([
+        {
+          kind: "ok",
+          response: { ...okResponse("The gate"), finishReason: "length" },
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(generated).toMatchObject({
+      content: "The gate",
+      finishReason: "length",
+    });
+
+    const streamed = await streamLLMWithRetry({
+      llm: createScriptedStreamLLM([
+        {
+          events: [
+            { type: "text-delta", textDelta: "The gate" },
+            { type: "done", finishReason: "MAX_TOKENS" },
+          ],
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(streamed.response).toMatchObject({
+      content: "The gate",
+      finishReason: "length",
+    });
+  });
+
+  it.each([
+    { name: "a tool call", content: "The gate", toolCalls: 1 },
+    { name: "no text", content: "", toolCalls: 0 },
+  ])(
+    "rejects a truncated response with $name even when prose may be kept",
+    async ({ content, toolCalls }) => {
+      const llm = createScriptedLLM([
+        {
+          kind: "ok",
+          response: {
+            ...okResponse(content),
+            finishReason: "length",
+            toolCalls: Array.from({ length: toolCalls }, () => ({
+              id: "call",
+              name: "write",
+              arguments: '{"value":',
+            })),
+          },
+        },
+      ]);
+      await expect(
+        callLLMWithRetry({
+          llm,
+          messages: [],
+          policy,
+          deadline: Date.now() + 10_000,
+          allowTruncatedText: true,
+        }),
+      ).rejects.toThrow(/output limit/i);
+    },
+  );
+
   it("rejects non-streaming error responses before success telemetry", async () => {
     const llm = createScriptedLLM([
       {

@@ -124,6 +124,9 @@ export async function requestLLMResponse(
     ...(opts.locale ? { locale: opts.locale } : {}),
     defaults: manifest.llm,
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    // The player has read a story as it streamed. Cut at the output limit,
+    // it is kept and marked `length`; any other output must be whole.
+    allowTruncatedText: manifest.outputKind === "story",
     policy: retryPolicy,
     deadline,
     requestBudget: requestScope.budget,

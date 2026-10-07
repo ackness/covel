@@ -8,6 +8,7 @@ import {
 } from "../sse-handler.js";
 import { projectExecutionTurns } from "../execution-projection.js";
 import type { SessionAction } from "../types.js";
+import { subscribeToast } from "@/lib/toast-channel.js";
 
 function harness(retrying = true) {
   let state = {
@@ -63,6 +64,25 @@ function harness(retrying = true) {
       } as SseEnvelope),
   };
 }
+
+describe("a story cut at the output limit", () => {
+  it.each([
+    { finishReason: "length", notices: 1 },
+    { finishReason: "stop", notices: 0 },
+  ])(
+    "shows $notices notice(s) for a response that finished with $finishReason",
+    ({ finishReason, notices }) => {
+      const shown: string[] = [];
+      const unsubscribe = subscribeToast((toast) => shown.push(toast.kind));
+      try {
+        harness(false).send("llm.responded", { finishReason });
+      } finally {
+        unsubscribe();
+      }
+      expect(shown).toHaveLength(notices);
+    },
+  );
+});
 
 describe("SSE retry commit settlement", () => {
   it.each(["player-aborted", "commit rejected"])(

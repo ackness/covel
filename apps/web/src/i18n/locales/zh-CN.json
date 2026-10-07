@@ -441,7 +441,8 @@
     "musicUnmute": "播放背景音乐",
     "panelLoadFailed": "插件面板加载失败。",
     "modelCredentialsMissing": "开始前请先在服务商设置中填写 API 密钥。",
-    "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。"
+    "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。",
+    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

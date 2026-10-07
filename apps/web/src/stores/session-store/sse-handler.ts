@@ -1,4 +1,6 @@
+import i18n from "i18next";
 import type { MutableRef } from "./runtime-refs.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { applyUiSlotEvent } from "@/stores/ui-slot-store.js";
 import { reasoningAction } from "./reasoning.js";
 import {
@@ -282,6 +284,18 @@ export function createSseEventHandler(
     switch (eventType) {
       case "llm.responded":
       case "gateway.responded": {
+        // Only a story is kept when it is cut at the model's output limit;
+        // the text stays on screen, so say that it is not whole.
+        if (eventType === "llm.responded" && payload.finishReason === "length")
+          emitToast(
+            "info",
+            i18n.t("session.outputTruncated", {
+              defaultValue:
+                "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
+            }),
+            undefined,
+            { durationMs: 12_000 },
+          );
         const action = reasoningAction(
           eventType,
           payload,

@@ -441,7 +441,8 @@
     "musicUnmute": "Play the music",
     "panelLoadFailed": "Plugin panels could not be loaded.",
     "modelCredentialsMissing": "Add an API key in provider settings before starting.",
-    "steerNotTaken": "This turn did not take your message. It is back in the input box for you to send next."
+    "steerNotTaken": "This turn did not take your message. It is back in the input box for you to send next.",
+    "outputTruncated": "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
