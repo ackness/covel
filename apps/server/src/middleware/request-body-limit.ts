@@ -1,14 +1,24 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { errorBody } from "../api-error.js";
 
 export const DEFAULT_BODY_LIMIT_BYTES = 1 * 1024 * 1024;
 export const INSTALL_BODY_LIMIT_BYTES = 20 * 1024 * 1024;
 export const BROWSER_CHECKPOINT_BODY_LIMIT_BYTES = 64 * 1024 * 1024;
 
-const defaultBodyLimit = bodyLimit({ maxSize: DEFAULT_BODY_LIMIT_BYTES });
-const installBodyLimit = bodyLimit({ maxSize: INSTALL_BODY_LIMIT_BYTES });
+const onBodyTooLarge = (c: Context) =>
+  c.json(errorBody("Payload Too Large"), 413);
+const defaultBodyLimit = bodyLimit({
+  maxSize: DEFAULT_BODY_LIMIT_BYTES,
+  onError: onBodyTooLarge,
+});
+const installBodyLimit = bodyLimit({
+  maxSize: INSTALL_BODY_LIMIT_BYTES,
+  onError: onBodyTooLarge,
+});
 const browserCheckpointBodyLimit = bodyLimit({
   maxSize: BROWSER_CHECKPOINT_BODY_LIMIT_BYTES,
+  onError: onBodyTooLarge,
 });
 
 export function createRequestBodyLimitMiddleware(): MiddlewareHandler {

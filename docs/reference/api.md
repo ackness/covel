@@ -59,6 +59,8 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
 }
 ```
 
+- 请求体超限统一返回 `413 { "error": "Payload Too Large" }`，不会进入业务 handler。普通 API 上限为 1 MiB，`/api/install` 及其子路径、`/api/media` 为 20 MiB，`PUT /api/sessions/:id/browser-checkpoint` 为 64 MiB；Content-Length 与无该头的流式请求采用相同额度。
+
 - `error` 字段始终存在。需要前端按错误码分流的端点（如 `plugin-rpc`、`media`）会同时给出 `code`。
 - **会话锁竞争统一为 503**：任何路由等待该 session 的执行锁超时（PG 部署下默认 30s）都返回
   `503 { "error": "Session is busy, please retry", "code": "session_busy" }`，由全局
