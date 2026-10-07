@@ -228,6 +228,8 @@ io:
 
 普通输入读同一 execution 的已完成上游结果，`select` 为结果值上的 JSON Pointer。跨 execution 读取使用 `scope: committed` 和 `recordAs`。Schema 可以是本地路径或 `contract:<contractId>`；跨提供者契约 schema 在加载时解析。提示词中的绑定位于 `runtime-inputs.<binding>.value`，不要再依赖旧注入标签。 输入绑定名称只匹配显式声明的 schema 和 slot；`constructor`、`toString` 这样的名称不读取 JavaScript 继承属性。
 
+CLI 和安装器的静态校验同样检查 `scope: turn` 与 `scope: committed` 的输入：本地 `accepts` 文件必须存在且为有效 JSON，直接引用的 producer runtime 必须存在于同一插件包。`scope: committed` 不允许声明 `select`（包括空字符串），错误定位到 `io.inputs.<binding>.select`；普通 turn 输入仍支持 JSON Pointer。可选外部契约不因此要求 provider 已安装。
+
 `select` 遵循 RFC 6901：数组索引使用 `0` 或无前导零的十进制整数，`/01`、`/+1` 等不匹配数组元素。`required: false` 的输入在静态 schema 不兼容或实际值未通过校验时省略该槽位，消费者仍运行并解析其他输入。静态 pattern 证明只处理完整的锚定字面前缀（如 `^audio/`）；含分组、量词或分支的正则交给实际值校验，不截取表面前缀来拒绝有效输入。
 
 发布 runtime 输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。同一契约 ID 的所有提供者必须发布一致的 schema；替代插件的 `provides` 与本插件 runtime 的 `io.output.contract` 必须对齐，其他已安装插件的产出不能替它满足声明。缺少被消费契约的 schema 或只有声明而无产出的提供者会产生加载诊断。

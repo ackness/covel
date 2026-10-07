@@ -131,7 +131,7 @@ export const runtimeAuthoringManifestSchema = z
                 .string()
                 .meta({
                   description:
-                    "JSON Pointer applied to the upstream value. Not supported with `scope: committed`.",
+                    "JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export.",
                   examples: ["/narrativeOutput"],
                 })
                 .optional(),
@@ -376,6 +376,13 @@ export const runtimeAuthoringManifestSchema = z
         message: "Agent runtime cannot declare function",
       });
     for (const [name, binding] of Object.entries(value.io?.inputs ?? {})) {
+      if (binding.scope === "committed" && binding.select !== undefined)
+        ctx.addIssue({
+          code: "custom",
+          path: ["io", "inputs", name, "select"],
+          message:
+            "Committed input cannot declare select; scope: committed reads the complete export",
+        });
       if (
         binding.scope === "committed" &&
         (!binding.recordAs || "kernel" in binding.from)

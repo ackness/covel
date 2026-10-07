@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 ### Fixed
 
 - Character sync overlays only new batch proposals onto world snapshots, preserving same-batch deduplication and sequential updates. Missing-character updates fail as tools, preventing partial function-runtime commits and false agent completion. Function tool calls preserve the execution's frozen logicalTurn.
+- Plugin CLI/ZIP validation checks committed input schema files and same-package producers and rejects committed+select before installation writes; normal turn select and optional external contracts remain supported.
 - Theme application, import and save-as await persistence without clearing overrides or names or reporting false success on failure. Failed appearance edits, resets and ignored token submissions restore saved previews while protecting later edits and scheme switches.
 - Plugin catalog switches have accessible names and native keyboard activation without submitting forms; inputs, textareas and selects associate localized labels with stable unique IDs while retaining the panel interaction lock.
 - English and Russian model-role connectivity hints direct players to the current Providers & Models page instead of the retired API Keys pane.
