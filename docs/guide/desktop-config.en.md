@@ -150,7 +150,10 @@ parent makes the sidecar drain and exit.
 
 The app reuses the port saved in `server.port` when it is free, falling back to
 another free port when needed. Renderer storage uses Electron's persistent default
-session. Sidecar restarts retain the current page path and query; the app
+session. The page origin includes the port, so what an earlier port stored (the
+media cache, the panel layout) is never read again: at startup the app clears
+the storage of every earlier loopback origin and, when it found one, the HTTP
+cache. Sidecar restarts retain the current page path and query; the app
 shows crash, restart and recovery status. Native Import Plugin / Import World
 menus open Settings → Plugins → Install and manage, which owns ZIP preview,
 authorization and result feedback.

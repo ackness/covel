@@ -61,6 +61,7 @@ import { createQuitHandler, stopServerProcess } from "./server-shutdown.js";
 import { waitForServerProcess } from "./server-readiness.js";
 import { createServerRecovery, findStartablePort } from "./server-recovery.js";
 import { claimSingleInstance } from "./single-instance.js";
+import { staleLoopbackOrigins } from "./stale-origins.js";
 import {
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
@@ -243,6 +244,36 @@ function readPreviousPort(portFile: string): number | undefined {
   } catch {
     // First launch, or an unreadable file: there is no port to prefer.
     return undefined;
+  }
+}
+
+/**
+ * Clear what the page origins of earlier launches stored. Nothing reads it
+ * again: the origin of this launch is another one (see `stale-origins.ts`).
+ * The HTTP cache is keyed by URL, so its entries of those origins go with it.
+ */
+async function clearStaleOriginStorage(port: number): Promise<void> {
+  try {
+    const stale = staleLoopbackOrigins(
+      await fs.promises.readdir(
+        path.join(app.getPath("userData"), "IndexedDB"),
+      ),
+      port,
+    );
+    if (stale.length === 0) return;
+    for (const origin of stale)
+      await session.defaultSession.clearStorageData({ origin });
+    await session.defaultSession.clearCache();
+    writeLog(
+      "info",
+      `Cleared the storage of ${stale.length} earlier page origin(s)`,
+    );
+  } catch (error) {
+    // Left-over storage costs disk space only; the app runs without this.
+    writeLog(
+      "warn",
+      `Could not clear earlier page storage: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -509,6 +540,7 @@ async function productionStartup(
       await startServer(paths);
       if (quitting) return;
       navigateToApp(win, serverPort);
+      void clearStaleOriginStorage(serverPort);
     } catch (err) {
       if (quitting) return;
       const diag = diagnoseStartupError(err);
