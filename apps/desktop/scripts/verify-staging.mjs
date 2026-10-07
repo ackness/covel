@@ -2,7 +2,7 @@
  * Post-staging smoke test.
  *
  * Spawns the staged server exactly the way the packaged desktop app will:
- *   <node> --import <plugin TS loader> <staging/server/src/index.js>
+ *   <node> --import <file URL of the plugin TS loader> <staging/server/src/index.js>
  *
  * Waits for private readiness IPC, verifies health and plugin entries, then
  * requests and awaits an IPC drain. If boot fails, stderr is reported
@@ -17,7 +17,7 @@ import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
 import fs from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { assertNoPrivateConfig } from "./private-config.mjs";
 import {
   assertLoadedBuiltinPluginEntries,
@@ -169,11 +169,17 @@ console.log(
 
 const stderrBuf = [];
 const nodeBinary = electronBinary ?? process.execPath;
-const child = spawn(nodeBinary, ["--import", tsxLoader, entry], {
-  cwd: serverStaging,
-  env,
-  stdio: ["ignore", "pipe", "pipe", "ipc"],
-});
+// A file URL, as the desktop app passes it: an absolute Windows path is not
+// a module specifier.
+const child = spawn(
+  nodeBinary,
+  ["--import", pathToFileURL(tsxLoader).href, entry],
+  {
+    cwd: serverStaging,
+    env,
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+  },
+);
 
 const ready = new Promise((resolve, reject) => {
   const timer = setTimeout(
