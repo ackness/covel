@@ -37,6 +37,7 @@ import {
   type SessionActionOwner,
   type SessionRuntimeRefs,
 } from "./runtime-refs.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
@@ -574,18 +575,24 @@ export function useBuildSessionActions({
   const loadSessionPlugins = useCallback(async () => {
     const sid = sessionIdRef.current;
     if (!sid) return;
+    const generation = sessionGenerationRef.current;
     try {
-      const res = await api.listSessionPlugins(sid);
-      if (sessionIdRef.current !== sid) return;
-      dispatch({
-        type: "LOAD_SESSION_PLUGINS",
-        plugins: [...res.items],
-        commands: [...res.commands],
+      await refreshSessionResource(dispatch, ["plugins", sid], {
+        isCurrent: () =>
+          sessionIdRef.current === sid &&
+          sessionGenerationRef.current === generation,
+        read: () => api.listSessionPlugins(sid),
+        apply: (res) =>
+          dispatch({
+            type: "LOAD_SESSION_PLUGINS",
+            plugins: [...res.items],
+            commands: [...res.commands],
+          }),
       });
     } catch {
       // Non-critical: plugins panel is optional.
     }
-  }, [dispatch, sessionIdRef]);
+  }, [dispatch, sessionIdRef, sessionGenerationRef]);
 
   const toggleSessionPlugin = useCallback(
     async (pluginId: string, enable: boolean) => {

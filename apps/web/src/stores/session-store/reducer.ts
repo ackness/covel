@@ -377,6 +377,9 @@ export function reducer(
           state.messages,
           action.messages,
           state.executing,
+          action.actionGeneration === (state.actionGeneration ?? 0)
+            ? action.terminalTurnId
+            : undefined,
         ),
       };
     case "PREPEND_MESSAGES": {

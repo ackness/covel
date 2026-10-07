@@ -70,6 +70,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     state,
     stateRef: refs.stateRef,
     sessionIdRef: refs.sessionIdRef,
+    sessionGenerationRef: refs.sessionGenerationRef,
+    deltaBufferRef: refs.deltaBufferRef,
+    deltaRafRef: refs.deltaRafRef,
     dispatch,
     workspace,
   });
@@ -88,6 +91,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     sessionIdRef: refs.sessionIdRef,
     stateRef: refs.stateRef,
     activeTurnIdRef: refs.lastBackfilledTurnIdRef,
+    deltaBufferRef: refs.deltaBufferRef,
+    deltaRafRef: refs.deltaRafRef,
     sessionGenerationRef: refs.sessionGenerationRef,
   });
 

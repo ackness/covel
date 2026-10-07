@@ -272,7 +272,20 @@ snapshot publication schedules one subsequent recovery. These signals are not
 buffered for replay. Terminal background-job notifications trigger their browser
 checkpoint immediately after session/visit validation, before any UI recovery
 buffering; restarting a display refresh cannot discard the required persistence.
-Initial history merges retain current messages with the same ID. Cached state patches fill initial state only before any authoritative snapshot
+Initial history merges retain current messages with the same ID.
+
+Reconnect and execution-recovery observations retain the loaded history and its
+older-message cursor. If the recent snapshot does not overlap loaded durable
+messages, they page backward through the existing message API until the windows
+connect or the start of history is reached, checking visit and read ownership
+between pages. A failed or non-advancing bridge is not published: the existing
+continuous window remains visible, an error is shown, and read-only recovery
+retries. Terminal narrative takeover clears only the matching turn/runtime
+streaming buffers; a newer healthy POST stream remains authoritative. Explicit
+plugin catalogue reloads share the same provider resource ownership and
+visit-generation checks as restore and reconnect reads.
+
+Cached state patches fill initial state only before any authoritative snapshot
 has arrived; an empty authoritative snapshot still prevents deleted fields from
 being restored from the cache. Character increments update reducer state directly.
 

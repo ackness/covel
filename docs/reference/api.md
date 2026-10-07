@@ -413,6 +413,8 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
+恢复已有会话时，最近窗口与已加载消息不重叠则用同一 `/messages/page` 接口向旧锚点补读，再合并连续窗口；不把中间页当作全局最旧页，不覆盖旧历史或它的分页游标。补读失败保留旧窗口并提示、重试只读恢复。该补偿不新增 API，也不触发回合重发。
+
 ### 刷新与未完成回合恢复
 
 `GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，遵循相同的会话归属校验；`GET /api/sessions/:id/view` 的可选 `execution` 字段提供同一状态。`state` 为 `idle`、`running`、`completed`、`failed` 或 `interrupted`，可带 `turnId`、`requestId`、`startedAt`、`origin`、`abortReason` 和显式重试用的 `retry: { type, payload }`。此接口不会等待长回合锁；PG 使用非阻塞 advisory lock 探测，另一进程仍持锁或暂时无法取得连接时保守返回 `running`，可能没有回合标识。

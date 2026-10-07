@@ -378,6 +378,8 @@ data: {
 
 Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。服务端对 SSE write 使用单一有界串行队列（256），连接预算为每 session 8、进程总计 512；超限返回 429，慢客户端溢出时主动断开。
 
+断流恢复只在访问代次与执行所有权仍匹配时，用同一 `turnId/runtimeId` 的持久化终态叙事替换流式占位，并移除该占位的外部文本与待刷新 delta；新的健康 POST 流仍拥有其现场输出。恢复快照的最近窗口若与已加载历史不重叠，客户端先通过既有消息分页接口只读补齐至旧锚点，再合并发布，不删除旧窗口，也不重新发送动作。
+
 `apps/web/src/services/subscription.ts` 的通用缺省订阅 topic 为 `runtime / state / game / plugin / session / system`（不含 `store`）；session store 为恢复后台任务另外显式订阅 `job`。客户端按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks / job`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic，`job` 承载 `job-status.updated`。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 
 ### 转发的运行时内部事件（`/api/actions` 转发，已纳入 `CovelEvent`）
