@@ -23,7 +23,10 @@ import {
   steerActiveTurn,
   type SteerRefusal,
 } from "./turn-control.js";
-import { checkSessionOwner } from "./session/session-guard.js";
+import {
+  checkSessionOwner,
+  sessionIncarnationIdentity,
+} from "./session/session-guard.js";
 import { getSessionExecutionStatus } from "./actions/execution-recovery.js";
 
 type Env = {
@@ -46,6 +49,10 @@ turnControlRoutes.get("/:id/execution", async (c) => {
   if (!session) return c.json(errorBody("Session not found"), 404);
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
+  c.set("sessionReadIncarnation", {
+    sessionId,
+    identity: sessionIncarnationIdentity(session),
+  });
   return c.json(
     await getSessionExecutionStatus(store, sessionId, c.get("sessionLock")),
   );

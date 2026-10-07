@@ -221,6 +221,14 @@ whose SSE response is already open reports an entry denial through
 `error.occurred` with the same machine-readable code as the JSON guard. Detached
 runtime jobs retain their separate admission and commit locks.
 
+Execution status reads (`GET /api/sessions/:id/execution`) bind the session
+incarnation that passed owner authorization to the existing response-side read
+barrier. If that session disappears or is recreated under the same public ID
+while the lookup is in flight, the response is replaced with
+`409 session_incarnation_changed`; retry input from the replacement is not
+returned to the old request. This check does not wait for a long-running session
+action to release its lock.
+
 | Guard              | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Code                                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | Bind address       | `127.0.0.1` by default; `COVEL_BIND_HOST` opts into `0.0.0.0`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `apps/server/src/app.ts`                     |
