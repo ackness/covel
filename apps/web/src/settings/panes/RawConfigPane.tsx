@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCw, Save, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -44,6 +44,14 @@ export function RawConfigPane() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const loadRequest = useRef(0);
+  useEffect(
+    () => () => {
+      loadRequest.current += 1;
+    },
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const file = files.find((item) => item.name === source);
@@ -69,7 +77,10 @@ export function RawConfigPane() {
 
   const load = useCallback(
     async (name: string) => {
+      const request = ++loadRequest.current;
       setBusy(true);
+      setLoaded(null);
+      setDraft("");
       setError(null);
       try {
         const next: Loaded =
@@ -82,13 +93,15 @@ export function RawConfigPane() {
                 digest: read.digest,
                 missing: !read.exists,
               }));
+        if (request !== loadRequest.current) return;
         setLoaded(next);
         setDraft(next.text);
       } catch (err) {
+        if (request !== loadRequest.current) return;
         setLoaded(null);
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setBusy(false);
+        if (request === loadRequest.current) setBusy(false);
       }
     },
     [store],
@@ -99,7 +112,7 @@ export function RawConfigPane() {
     void load(source);
   }, [source, load]);
 
-  /** Apply the edited settings: only the keys that differ are written. */
+  /** Replace the displayed snapshot in one write, rejecting concurrent edits. */
   async function saveSettings(): Promise<string | null> {
     let next: unknown;
     try {
@@ -138,25 +151,16 @@ export function RawConfigPane() {
         t("settings.rawConfigRefused", { keys: settingLabels(refused) }),
       );
     }
-    const current = (await store.export()).entries;
-    const changed = Object.fromEntries(
-      Object.entries(entries).filter(
-        ([key, value]) =>
-          !Object.hasOwn(current, key) || !sameJson(current[key], value),
-      ),
-    );
-    const removed = Object.keys(current).filter(
-      (key) => !Object.hasOwn(entries, key),
-    );
-    if (Object.keys(changed).length === 0 && removed.length === 0) return null;
+    const expected = JSON.parse(loaded!.text) as Record<string, unknown>;
+    if (sameJson(entries, expected)) return null;
     const backup = await store.backup("edit");
-    await store.setMany(changed);
-    for (const key of removed) await store.clear(key);
+    await store.replaceEntries(entries, expected);
     return backup;
   }
 
   async function save() {
     if (busy || !loaded) return;
+    setSaving(true);
     setBusy(true);
     setError(null);
     setNote(null);
@@ -202,30 +206,38 @@ export function RawConfigPane() {
               : String(err),
       );
     } finally {
+      setSaving(false);
       setBusy(false);
     }
   }
 
   /** Put an earlier copy of the settings in the editor; saving applies it. */
   async function loadBackup(name: string) {
+    const request = ++loadRequest.current;
+    setBusy(true);
     setError(null);
-    const text = await store.readBackup(name).catch(() => null);
-    if (text === null) return setError(t("settings.backupUnreadable"));
     try {
-      const parsed = JSON.parse(text) as { entries?: unknown };
-      setDraft(
-        JSON.stringify(
-          parsed && typeof parsed === "object" && "entries" in parsed
-            ? parsed.entries
-            : parsed,
-          null,
-          2,
-        ),
-      );
-    } catch {
-      setDraft(text);
+      const text = await store.readBackup(name).catch(() => null);
+      if (request !== loadRequest.current) return;
+      if (text === null) return setError(t("settings.backupUnreadable"));
+      try {
+        const parsed = JSON.parse(text) as { entries?: unknown };
+        setDraft(
+          JSON.stringify(
+            parsed && typeof parsed === "object" && "entries" in parsed
+              ? parsed.entries
+              : parsed,
+            null,
+            2,
+          ),
+        );
+      } catch {
+        setDraft(text);
+      }
+      setNote(t("settings.rawConfigBackupLoaded", { name }));
+    } finally {
+      if (request === loadRequest.current) setBusy(false);
     }
-    setNote(t("settings.rawConfigBackupLoaded", { name }));
   }
 
   const tabs = [
@@ -246,6 +258,7 @@ export function RawConfigPane() {
             type="button"
             role="tab"
             aria-selected={source === tab.id}
+            disabled={saving}
             onClick={() => setSource(tab.id)}
             className={
               "px-3 py-1.5 font-mono text-xs transition-colors " +

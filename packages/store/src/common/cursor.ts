@@ -1,29 +1,28 @@
 /**
  * Keyset ("cursor") pagination helpers for the shared SQL record modules.
  *
- * Both `sql-session-content-records.ts` (messages) and
- * `sql-session-journal-records.ts` (trace events) page an append-only,
- * time-ordered log by the same `(createdAt, id)` tuple, so the WHERE/ORDER
- * construction lives here once. The tuple is a *total* order even when rows
- * share a millisecond `createdAt`, so pages never skip or repeat a row — see
- * {@link CursorPageOpts}.
+ * Two kinds of log are paged here:
  *
- * Collation note: the `id` tie-break compares strings with the column's default
- * collation — SQLite `text` is BINARY (byte order), matching the JS backends'
- * code-unit `<` (`sortByCursorAsc`). PostgreSQL `text` uses the database's
- * default collation, which for MIXED-CASE / non-ASCII ids can order differently
- * from byte order. This never bites in practice: every framework-generated id
- * is a lowercase-ASCII UUID (`crypto.randomUUID()`), for which all collations
- * agree. The only way a non-lowercase id enters is a client-supplied
- * `messages/sync` id — if strict byte-order parity for arbitrary ids on PG is
- * ever required, the `id` columns need `COLLATE "C"` (drizzle 0.45 does not
- * model column collation, so it would be a codegen/migration change).
+ *  - A log ordered by `(createdAt, id)` (snapshots, the forward read of turn
+ *    messages). The tuple is a *total* order even when rows share a
+ *    millisecond `createdAt`, so pages never skip or repeat a row — see
+ *    {@link CursorPageOpts}.
+ *  - A log that keeps the order its rows were written in (chat messages, trace
+ *    events), ordered by `(createdAt, seq, id)` — see {@link WriteOrderTable}.
+ *
+ * The `id` of either order is compared byte by byte on every backend
+ * (`SqlRunner.byteOrder`): an ID a client supplied can be mixed-case or
+ * non-ASCII, and PostgreSQL's database collation would place it elsewhere than
+ * SQLite and MemoryStore do.
  */
 
-import { and, asc, desc, eq, gt, lt, or } from "drizzle-orm";
-import type { Column, SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, or, sql } from "drizzle-orm";
+import type { Column, SQL, Table } from "drizzle-orm";
 
 import type { CursorPageOpts } from "../records/pagination-records.js";
+
+/** A text column compared byte by byte; see `SqlRunner.byteOrder`. */
+export type ByteOrder = (column: Column) => SQL;
 
 /** The three columns a keyset page reads from. */
 export interface CursorColumns {
@@ -39,13 +38,17 @@ export interface CursorColumns {
 export function cursorPageWhere(
   cols: CursorColumns,
   sessionId: string,
-  before?: CursorPageOpts["before"],
+  before: CursorPageOpts["before"],
+  byteOrder: ByteOrder,
 ): SQL | undefined {
   const base = eq(cols.sessionId, sessionId);
   if (!before) return base;
   const older = or(
     lt(cols.createdAt, before.createdAt),
-    and(eq(cols.createdAt, before.createdAt), lt(cols.id, before.id)),
+    and(
+      eq(cols.createdAt, before.createdAt),
+      lt(byteOrder(cols.id), before.id),
+    ),
   );
   return and(base, older);
 }
@@ -54,8 +57,11 @@ export function cursorPageWhere(
  * ORDER BY for a keyset page. Descending so the DB returns the newest window;
  * callers `.reverse()` the rows back to oldest-first.
  */
-export function cursorPageOrder(cols: CursorColumns): SQL[] {
-  return [desc(cols.createdAt), desc(cols.id)];
+export function cursorPageOrder(
+  cols: CursorColumns,
+  byteOrder: ByteOrder,
+): SQL[] {
+  return [desc(cols.createdAt), desc(byteOrder(cols.id))];
 }
 
 /**
@@ -67,18 +73,99 @@ export function cursorPageOrder(cols: CursorColumns): SQL[] {
 export function cursorAfterWhere(
   cols: CursorColumns,
   sessionId: string,
-  after?: { readonly createdAt: string; readonly id: string } | null,
+  after: { readonly createdAt: string; readonly id: string } | null,
+  byteOrder: ByteOrder,
 ): SQL | undefined {
   const base = eq(cols.sessionId, sessionId);
   if (!after) return base;
   const newer = or(
     gt(cols.createdAt, after.createdAt),
-    and(eq(cols.createdAt, after.createdAt), gt(cols.id, after.id)),
+    and(eq(cols.createdAt, after.createdAt), gt(byteOrder(cols.id), after.id)),
   );
   return and(base, newer);
 }
 
 /** ORDER BY for a forward keyset read — oldest-first, no reverse needed. */
-export function cursorAfterOrder(cols: CursorColumns): SQL[] {
-  return [asc(cols.createdAt), asc(cols.id)];
+export function cursorAfterOrder(
+  cols: CursorColumns,
+  byteOrder: ByteOrder,
+): SQL[] {
+  return [asc(cols.createdAt), asc(byteOrder(cols.id))];
+}
+
+/**
+ * A log that keeps the order its rows were written in.
+ *
+ * `createdAt` has millisecond precision and the rows of one commit share it,
+ * so `(createdAt, id)` lists them in the order of their random IDs. The store
+ * numbers rows as it inserts them (`seq`), and the log is ordered by
+ * `(createdAt, seq, id)`. SQLite numbers within one session and `createdAt`
+ * under its serialized write boundary; PostgreSQL uses a per-table sequence
+ * so simultaneous connections cannot allocate the same number.
+ *
+ * `seq` is not part of a record. A copy of the log — a fork, a checkpoint
+ * import — that is inserted in list order is numbered in that order again.
+ */
+export type WriteOrderTable = Table & CursorColumns & { readonly seq: Column };
+
+/**
+ * SQLite's `seq` of a row about to be inserted: one more than the highest of its
+ * session and `createdAt`. A subquery of the INSERT itself, so the number is
+ * taken in the same statement that writes the row.
+ */
+export function nextWriteOrderSeq(
+  table: WriteOrderTable,
+  row: { readonly sessionId: string; readonly createdAt: string },
+): SQL {
+  return sql`(select coalesce(max(${table.seq}), -1) + 1 from ${table} where ${table.sessionId} = ${row.sessionId} and ${table.createdAt} = ${row.createdAt})`;
+}
+
+/** ORDER BY of a write-order log, oldest-first. */
+export function writeOrderAsc(
+  table: WriteOrderTable,
+  byteOrder: ByteOrder,
+): SQL[] {
+  return [asc(table.createdAt), asc(table.seq), asc(byteOrder(table.id))];
+}
+
+/**
+ * ORDER BY for a keyset page of a write-order log. Descending, like
+ * {@link cursorPageOrder}; callers reverse the rows.
+ */
+export function writeOrderPageOrder(
+  table: WriteOrderTable,
+  byteOrder: ByteOrder,
+): SQL[] {
+  return [desc(table.createdAt), desc(table.seq), desc(byteOrder(table.id))];
+}
+
+/**
+ * WHERE for a keyset page of a write-order log: the rows strictly before the
+ * cursor in `(createdAt, seq, id)`.
+ *
+ * A cursor carries `(createdAt, id)` only, so the `seq` it stands for is read
+ * from the row it names. When no row of the session has that `id` and
+ * `createdAt`, the subquery is NULL and no row of the cursor's millisecond
+ * matches: the page holds rows of an earlier `createdAt` only.
+ */
+export function writeOrderPageWhere(
+  table: WriteOrderTable,
+  sessionId: string,
+  before: CursorPageOpts["before"],
+  byteOrder: ByteOrder,
+): SQL | undefined {
+  const base = eq(table.sessionId, sessionId);
+  if (!before) return base;
+  const cursorSeq = sql`(select ${table.seq} from ${table} where ${table.sessionId} = ${sessionId} and ${table.id} = ${before.id} and ${table.createdAt} = ${before.createdAt})`;
+  const older = or(
+    lt(table.createdAt, before.createdAt),
+    and(
+      eq(table.createdAt, before.createdAt),
+      or(
+        lt(table.seq, cursorSeq),
+        and(eq(table.seq, cursorSeq), lt(byteOrder(table.id), before.id)),
+      ),
+    ),
+  );
+  return and(base, older);
 }

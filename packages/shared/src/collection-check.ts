@@ -6,6 +6,7 @@ import { satisfiesHostVersionRange } from "./utils/host-version-range.js";
 export interface CollectionPluginFacts {
   readonly id: string;
   readonly contracts: readonly string[];
+  readonly requires?: readonly string[];
   /** The plugin's `covel` host range, when it declares one. */
   readonly hostRange?: string;
 }
@@ -36,6 +37,7 @@ export function collectionPluginFacts(
     : {};
   return {
     id: String(manifest.id),
+    requires: strings(manifest.requires),
     contracts: providedContracts({
       provides: Array.isArray(manifest.provides)
         ? (manifest.provides as NonNullable<ContractSource["provides"]>)
@@ -104,6 +106,19 @@ export function checkCollection(args: {
         packageId: plugin.id,
         message: `Plugin ${plugin.id} needs Covel ${plugin.hostRange}; this host runs ${args.hostVersion}.`,
       });
+
+  for (const plugin of args.plugins) {
+    for (const contract of plugin.requires ?? []) {
+      if (
+        !everyPlugin.some((provider) => provider.contracts.includes(contract))
+      )
+        problems.push({
+          level: "error",
+          packageId: plugin.id,
+          message: `Plugin ${plugin.id} requires ${contract}, and no installed or included plugin provides it.`,
+        });
+    }
+  }
 
   const seen = new Set<string>();
   for (const { kind, id } of [

@@ -5,7 +5,12 @@ import {
   githubPluginPreviewRequestSchema,
 } from "@covel/shared";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
-import { errorResponse, httpError, materializeEntries } from "./shared.js";
+import {
+  errorResponse,
+  httpError,
+  materializeEntries,
+  readInstallationJson,
+} from "./shared.js";
 import {
   inspectBundle,
   previewLifetime,
@@ -44,7 +49,7 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
   githubPluginRoutes.post(`/${kind}/github/preview`, async (c) => {
     try {
       const { url } = githubPluginPreviewRequestSchema.parse(
-        await c.req.json(),
+        await readInstallationJson(c),
       );
       const location = parseGithubUrl(url);
       const { commit, tracking } = await resolveGithubRevision(
@@ -86,7 +91,7 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
   githubPluginRoutes.post(`/${kind}/github`, async (c) => {
     try {
       const { token } = githubPluginInstallRequestSchema.parse(
-        await c.req.json(),
+        await readInstallationJson(c),
       );
       const signed = verifyPreview(token);
       if (signed.action !== action)

@@ -1,3 +1,5 @@
+import process from "node:process";
+
 type ShutdownSignal = "SIGINT" | "SIGTERM";
 
 const SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
@@ -27,7 +29,7 @@ export const registerGracefulShutdown = (
 ): void => {
   let shuttingDown = false;
 
-  const shutdown = (signal: ShutdownSignal | "IPC") => {
+  const shutdown = (signal: ShutdownSignal | "IPC" | "disconnect") => {
     if (shuttingDown) {
       return;
     }
@@ -78,6 +80,12 @@ export const registerGracefulShutdown = (
 
   // The desktop owns this private parent-child channel. Windows kill(SIGTERM)
   // terminates abruptly, so request the same drain cooperatively over IPC.
+  if (typeof process.send === "function") {
+    process.once("disconnect", () => shutdown("disconnect"));
+    // Bootstrap can finish after the parent has already exited. Node keeps
+    // process.send on IPC children after disconnect, so do not miss that exit.
+    if (!process.connected) shutdown("disconnect");
+  }
   process.on("message", (message) => {
     if (
       message !== null &&

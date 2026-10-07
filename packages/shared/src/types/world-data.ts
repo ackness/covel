@@ -16,6 +16,8 @@ export interface WorldDataSourceDescriptor {
   readonly schema?: string;
   readonly to: string;
   readonly key?: WorldDataKey;
+  /** Stable identities for nested object arrays in locale overlays. */
+  readonly localeArrayKeys?: readonly string[];
   readonly indexTo?: string;
   readonly effects?: readonly WorldDataEffect[];
   readonly enabled?: boolean;

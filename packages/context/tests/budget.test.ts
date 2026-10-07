@@ -116,7 +116,7 @@ describe("applyBudget", () => {
     expect(result.prunedMessageCount).toBe(6);
     expect(result.messages[0]!.role).toBe("system");
     expect(result.messages[0]!.content).toMatch(
-      /\[\.\.\. 6 older messages pruned/,
+      /^\[\.\.\. older messages pruned/,
     );
     // Protected messages at indices 6..9 survive + one placeholder.
     expect(result.messages.length).toBe(5);
@@ -301,8 +301,8 @@ describe("applyBudget", () => {
     // Pruneable = indices 0..1 (2 messages, 20 tokens).
     // After draining both: total = 70 - 20 = 50. Still > 20 (cap). No more to prune.
     // prunedMessageCount = 2.
-    // Placeholder content = '[... 2 older messages pruned to stay within token budget ...]'
-    //   length = 57 chars → ceil(57/4) = 15 tokens.
+    // Placeholder content = '[... older messages pruned to stay within token budget ...]'
+    //   length = 59 chars → ceil(59/4) = 15 tokens.
     // Expected totalTokens = 50 + 15 = 65.
     const result = applyBudget(systemPrompt, messages, {
       maxInputTokens: 100,
@@ -343,6 +343,58 @@ describe("applyBudget", () => {
       result.messages.map((message) => message.content).join("\n"),
     ).toContain("<compacted_history>");
     expect(result.totalTokens).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("applyBudget — a cut that holds from turn to turn", () => {
+  // Pruning starts from the full history at every request. Cut to just fit,
+  // the kept history began one or two messages later at every turn, and no
+  // request shared a prefix with the one before it.
+  //
+  // 50 tokens a message and a cap of 1000: one pruning step is 300 tokens.
+  const turn = (index: number): TestMessage[] => [
+    msg("user", `u${index}`.padEnd(200, "a")),
+    msg("assistant", `a${index}`.padEnd(200, "a")),
+  ];
+  const prune = (turns: number) =>
+    applyBudget(
+      "",
+      [
+        ...Array.from({ length: turns }, (_, index) => turn(index)).flat(),
+        msg("user", "now"),
+      ],
+      {
+        maxInputTokens: 1000,
+        reservedForResponse: 0,
+        estimator: mockEstimator,
+      },
+    );
+
+  it("starts the kept history at the same message until the history has grown by a step", () => {
+    // 1001 tokens: one over the cap, and a whole step goes.
+    const first = prune(10);
+    expect(first.prunedMessageCount).toBe(6);
+    expect(first.totalTokens).toBeLessThanOrEqual(1000);
+    const kept = first.messages.slice(0, -1);
+    expect(kept[1]!.content).toMatch(/^u3a/);
+
+    for (const turns of [11, 12]) {
+      const next = prune(turns);
+      expect(next.totalTokens).toBeLessThanOrEqual(1000);
+      // The marker and every message the earlier request kept, unchanged.
+      expect(next.messages.slice(0, kept.length)).toEqual(kept);
+    }
+
+    // The margin is used up: the cut moves by one more step.
+    const later = prune(13);
+    expect(later.prunedMessageCount).toBe(12);
+    expect(later.totalTokens).toBeLessThanOrEqual(1000);
+  });
+
+  it("writes the same marker whatever the number of pruned messages", () => {
+    const marker = prune(10).messages[0]!;
+    expect(prune(13).messages[0]).toEqual(marker);
+    expect(marker.content).not.toMatch(/\d/);
   });
 });
 

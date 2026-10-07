@@ -163,6 +163,8 @@ describe("core plugin manifest contract", () => {
       "get-character",
       "memory-search",
       "emit-event",
+      "world-dimension-get",
+      "world-dimension-list",
     ]);
     expect(chatModeNarrator.tools?.builtin).toEqual([
       "list-characters",

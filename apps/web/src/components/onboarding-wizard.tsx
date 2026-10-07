@@ -14,7 +14,7 @@ import { getSettings } from "@/settings/store.js";
 import { LocaleToggle, StepIndicator } from "./onboarding-wizard/chrome.js";
 import { markOnboarded } from "./onboarding-wizard/persistence.js";
 import { ModelStep, PlayStep, WelcomeStep } from "./onboarding-wizard/steps.js";
-import { configuredTextSlots } from "./onboarding-wizard/model-state.js";
+import { boundTextSlots } from "./onboarding-wizard/model-state.js";
 import type { OnboardingStep } from "./onboarding-wizard/types.js";
 
 export { resetOnboarding } from "./onboarding-wizard/persistence.js";
@@ -38,7 +38,7 @@ export function OnboardingWizard({
   const [step, setStep] = useState<OnboardingStep>(0);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  const slots = configuredTextSlots(resolvedSlots);
+  const slots = boundTextSlots(resolvedSlots);
   const dismiss = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -97,7 +97,7 @@ export function OnboardingWizard({
           )}
           {step === 2 && (
             <PlayStep
-              hasModel={slots.length > 0}
+              hasModel={slots.some((slot) => slot.hasCredentials === true)}
               onOpenSettings={onOpenSettings}
             />
           )}

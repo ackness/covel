@@ -9,6 +9,144 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
   });
 
   describe("PluginData", () => {
+    it("rejects batch CAS for missing sessions, including an empty write barrier", async () => {
+      for (const entries of [
+        [],
+        [
+          {
+            namespace: "data",
+            key: "one",
+            expectedVersion: null,
+            value: { version: 1 },
+            timestamp: "2026-10-07",
+          },
+        ],
+      ] as const) {
+        await expect(
+          store.compareAndSetPluginDataBatch(
+            "missing-session",
+            "owner",
+            entries,
+          ),
+        ).rejects.toMatchObject({ code: "session_not_found" });
+        await expect(
+          store.withTransaction((tx) =>
+            tx.compareAndSetPluginDataBatch(
+              "missing-session",
+              "owner",
+              entries,
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "session_not_found" });
+      }
+      expect(await store.listPluginData("missing-session", "owner")).toEqual(
+        [],
+      );
+    });
+    it("projects oldest anchors and recent updates without repeating an anchor", async () => {
+      for (let index = 0; index < 8; index++) {
+        await store.setPluginData({
+          id: `window-${index}`,
+          sessionId: "prompt-window",
+          pluginId: "owner",
+          namespace: "entries",
+          key: `key-${index}`,
+          value: { content: `value-${index}` },
+          createdAt: new Date(index).toISOString(),
+          updatedAt: new Date(index).toISOString(),
+        });
+      }
+      await store.setPluginData({
+        id: "rewritten-anchor",
+        sessionId: "prompt-window",
+        pluginId: "owner",
+        namespace: "entries",
+        key: "key-0",
+        value: { content: "changed" },
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(100).toISOString(),
+      });
+      const window = await store.getPluginDataPromptWindow(
+        "prompt-window",
+        "owner",
+        "entries",
+        4,
+      );
+      expect(window.total).toBe(8);
+      expect(window.entries.map((row) => row.key)).toEqual([
+        "key-0",
+        "key-1",
+        "key-7",
+        "key-6",
+      ]);
+      expect(
+        (
+          await store.getPluginDataPromptWindow(
+            "prompt-window",
+            "owner",
+            "entries",
+            10,
+          )
+        ).entries.map((row) => row.key),
+      ).toEqual(Array.from({ length: 8 }, (_, index) => `key-${index}`));
+      expect(
+        await store.getPluginDataPromptWindow(
+          "prompt-window",
+          "other",
+          "entries",
+          4,
+        ),
+      ).toEqual({ entries: [], total: 0 });
+      expect(
+        await store.getPluginDataPromptWindow(
+          "prompt-window",
+          "owner",
+          "entries",
+          0,
+        ),
+      ).toEqual({ entries: [], total: 8 });
+    });
+
+    it("queries a namespace across sessions and filters JSON status before returning rows", async () => {
+      for (const [index, sessionId, status] of [
+        [1, "a", "pending"],
+        [2, "b", "pending"],
+        [3, "a", "done"],
+      ] as const) {
+        await store.setPluginData({
+          id: `query-${index}`,
+          sessionId,
+          pluginId: "provider",
+          namespace: "_receipts",
+          key: String(index),
+          value: { status },
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+        });
+      }
+      const filter = {
+        namespace: "_receipts",
+        valueFilter: { field: "status", values: ["pending"] },
+      };
+      expect(
+        (await store.queryPluginData(filter)).map((row) => row.id),
+      ).toEqual(["query-1", "query-2"]);
+      expect(
+        (await store.queryPluginData({ ...filter, sessionId: "b" })).map(
+          (row) => row.id,
+        ),
+      ).toEqual(["query-2"]);
+      expect(
+        await store.queryPluginData({ ...filter, pluginId: "other" }),
+      ).toEqual([]);
+      expect(
+        await store.queryPluginData({
+          namespace: "_receipts",
+          valueFilter: { field: "status", values: [] },
+        }),
+      ).toEqual([]);
+    });
+
     it("should set and get plugin data", async () => {
       const record = {
         id: "pd-1",

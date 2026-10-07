@@ -70,6 +70,7 @@ it("uses each consumer's injected source through compaction and persistence", as
         {
           store,
           estimator: (text) => text.length,
+          inputWindow: 10_000,
           contextWindow: 100,
           fastSlotLlm: { complete },
           loadPrompt: loader,
@@ -104,6 +105,7 @@ it("preserves history when the injected template source fails", async () => {
       {
         store,
         estimator: (text) => text.length,
+        inputWindow: 10_000,
         contextWindow: 100,
         fastSlotLlm: { complete },
         loadPrompt: async () => {
@@ -122,3 +124,57 @@ it("preserves history when the injected template source fails", async () => {
     warn.mockRestore();
   }
 });
+
+it.each(["length", "max_tokens"])(
+  "keeps raw history when the gateway summary ends with %s",
+  async (finishReason) => {
+    const { default: register } = await import("../server/index.js");
+    let handler;
+    register({
+      provideExtension(_point, _id, registration) {
+        handler = registration.handler;
+      },
+    });
+    const store = createMemoryStore();
+    const messages = Array.from({ length: 10 }, (_, index) => ({
+      ...history("truncated")[0]!,
+      id: `message-${index}`,
+      turnId: `turn-${index}`,
+      role: index % 2 ? "assistant" : "user",
+      createdAt: new Date(index).toISOString(),
+    }));
+    for (const message of messages) await store.appendTurnMessage(message);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = await applyCompaction(
+        "truncated",
+        "",
+        messages,
+        {
+          store,
+          estimator: (text) => text.length,
+          contextWindow: 10000,
+          inputWindow: 20000,
+          compact: (input) =>
+            handler(input, {
+              signal: new AbortController().signal,
+              gateway: {
+                generateText: async () => ({
+                  text: "An unfinished summary",
+                  finishReason,
+                }),
+              },
+            }),
+        },
+        { threshold: 0 },
+      );
+      expect(result.compacted).toBe(false);
+      expect(await store.listSessionSummaries("truncated")).toEqual([]);
+      expect(await store.listUncompactedTurnMessages("truncated")).toEqual(
+        messages,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  },
+);

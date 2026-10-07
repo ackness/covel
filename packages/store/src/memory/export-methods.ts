@@ -10,6 +10,7 @@
  */
 
 import type { RuntimeExportRecord } from "../types.js";
+import { compareByteOrder } from "../common/pagination.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
 // Map keys are JSON-serialised composite-key tuples — collision-free regardless
@@ -81,8 +82,8 @@ export function createExportMethods(state: MemoryState): MemoryStoreMethods {
       }
       return rows.sort(
         (a, b) =>
-          a.producerRuntimeId.localeCompare(b.producerRuntimeId) ||
-          a.recordAs.localeCompare(b.recordAs) ||
+          compareByteOrder(a.producerRuntimeId, b.producerRuntimeId) ||
+          compareByteOrder(a.recordAs, b.recordAs) ||
           a.revision - b.revision,
       );
     },

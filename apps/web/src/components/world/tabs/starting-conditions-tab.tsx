@@ -5,16 +5,26 @@ import {
   text,
   inputCls,
   textareaCls,
+  newResourceRow,
+  resourceNameProblem,
+  type ResourceRow,
+  type StartingConditionsDraft,
   type TabProps,
 } from "../editor-helpers.js";
-import type { WorldStartingConditions } from "@covel/shared";
+import { fieldProblems, ProblemText } from "./field-problems.js";
 
-export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
-  const sc: WorldStartingConditions = dimensions.startingConditions ?? {
+export function StartingConditionsTab({
+  dimensions,
+  onChange,
+  t,
+  problems,
+}: TabProps) {
+  const sc: StartingConditionsDraft = dimensions.startingConditions ?? {
     openingScenario: "",
   };
+  const problem = fieldProblems(problems);
 
-  function setSc(next: WorldStartingConditions) {
+  function setSc(next: StartingConditionsDraft) {
     onChange({ ...dimensions, startingConditions: next });
   }
 
@@ -44,35 +54,31 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
     });
   }
 
-  // Starting resources (key-value pairs)
-  const resourceEntries = Object.entries(sc.startingResources ?? {});
+  // Starting resources. Each row is found by its ID, never by its name: a
+  // name that is being typed can be empty, or be for a moment the name of
+  // another row, and neither may move a value or drop it.
+  const resourceRows = sc.startingResources ?? [];
 
   function addResourceEntry() {
+    setSc({ ...sc, startingResources: [...resourceRows, newResourceRow()] });
+  }
+
+  function removeResourceEntry(id: string) {
     setSc({
       ...sc,
-      startingResources: { ...sc.startingResources, "": 0 },
+      startingResources: resourceRows.filter((row) => row.id !== id),
     });
   }
 
-  function removeResourceEntry(key: string) {
-    const next = { ...sc.startingResources };
-    delete next[key];
-    setSc({ ...sc, startingResources: next });
-  }
-
-  function updateResourceKey(oldKey: string, newKey: string) {
-    const entries = Object.entries(sc.startingResources ?? {});
-    const updated: Record<string, number> = {};
-    for (const [k, v] of entries) {
-      updated[k === oldKey ? newKey : k] = v;
-    }
-    setSc({ ...sc, startingResources: updated });
-  }
-
-  function updateResourceValue(key: string, value: number) {
+  function updateResourceEntry(
+    id: string,
+    patch: Partial<Omit<ResourceRow, "id">>,
+  ) {
     setSc({
       ...sc,
-      startingResources: { ...sc.startingResources, [key]: value },
+      startingResources: resourceRows.map((row) =>
+        row.id === id ? { ...row, ...patch } : row,
+      ),
     });
   }
 
@@ -89,6 +95,7 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
           value={text(sc.openingScenario)}
           onChange={(e) => setSc({ ...sc, openingScenario: e.target.value })}
         />
+        {problem.at("openingScenario")}
       </div>
 
       {/* Starting Location */}
@@ -102,6 +109,7 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
           value={text(sc.startingLocation)}
           onChange={(e) => setSc({ ...sc, startingLocation: e.target.value })}
         />
+        {problem.at("startingLocation")}
       </div>
 
       {/* Player Constraints */}
@@ -113,14 +121,18 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addConstraint")}
           </Button>
         </div>
+        {problem.at("playerConstraints")}
         {(sc.playerConstraints ?? []).map((c, ci) => (
           <div key={ci} className="flex items-center gap-2">
-            <input
-              aria-label={`${t("world.playerConstraints")} ${ci + 1}`}
-              className={inputCls}
-              value={text(c)}
-              onChange={(e) => updateConstraint(ci, e.target.value)}
-            />
+            <div className="min-w-0 flex-1 space-y-1">
+              <input
+                aria-label={`${t("world.playerConstraints")} ${ci + 1}`}
+                className={inputCls}
+                value={text(c)}
+                onChange={(e) => updateConstraint(ci, e.target.value)}
+              />
+              {problem.at(`playerConstraints.${ci}`)}
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -142,38 +154,50 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addResource_kv")}
           </Button>
         </div>
-        {resourceEntries.map(([key, value], ri) => (
-          <div key={ri} className="flex items-start gap-2">
-            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
-              <input
-                aria-label={`${t("world.key")} ${ri + 1}`}
-                className={inputCls}
-                placeholder={t("world.key")}
-                value={key}
-                onChange={(e) => updateResourceKey(key, e.target.value)}
-              />
-              <input
-                aria-label={`${t("world.value")} ${ri + 1}`}
-                className="w-full border border-border bg-background px-3 py-2 text-sm"
-                type="number"
-                placeholder={t("world.value")}
-                value={value}
-                onChange={(e) =>
-                  updateResourceValue(key, Number(e.target.value) || 0)
-                }
-              />
+        {problem.at("startingResources")}
+        {resourceRows.map((row, ri) => {
+          // A repeated name shows at once. The save adds the empty names.
+          const repeated = resourceNameProblem(resourceRows, ri, t);
+          return (
+            <div key={row.id} className="flex items-start gap-2">
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                <input
+                  aria-label={`${t("world.key")} ${ri + 1}`}
+                  className={inputCls}
+                  placeholder={t("world.key")}
+                  value={row.name}
+                  onChange={(e) =>
+                    updateResourceEntry(row.id, { name: e.target.value })
+                  }
+                />
+                <input
+                  aria-label={`${t("world.value")} ${ri + 1}`}
+                  className="w-full border border-border bg-background px-3 py-2 text-sm"
+                  type="number"
+                  placeholder={t("world.value")}
+                  value={row.value}
+                  onChange={(e) =>
+                    updateResourceEntry(row.id, {
+                      value: Number(e.target.value) || 0,
+                    })
+                  }
+                />
+                {problem.at(`startingResources.${ri}`) ??
+                  (repeated && <ProblemText>{repeated}</ProblemText>)}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("world.remove")}
+                onClick={() => removeResourceEntry(row.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("world.remove")}
-              onClick={() => removeResourceEntry(key)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {problem.rest()}
     </div>
   );
 }

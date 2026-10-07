@@ -126,18 +126,13 @@ describe("source player input snapshot", () => {
 it("selects the newest persisted submission independently of store enumeration order", async () => {
   const store = createMemoryStore();
   const later = { ...form, id: "z", createdAt: "2026-09-28T00:00:01.000Z" };
-  vi.spyOn(store, "listPlayerInputs").mockResolvedValue([
-    later,
-    { ...later, id: "b" },
-    form,
-  ]);
+  for (const input of [later, { ...later, id: "b" }, form])
+    await store.savePlayerInput(input);
+  const list = vi
+    .spyOn(store, "listPlayerInputs")
+    .mockRejectedValue(new Error("Full input log must not be loaded"));
   expect(await loadLastPlayerInput(store, "session")).toEqual(later);
-  vi.mocked(store.listPlayerInputs).mockResolvedValue([
-    form,
-    { ...later, id: "b" },
-    later,
-  ]);
-  expect(await loadLastPlayerInput(store, "session")).toEqual(later);
+  expect(list).not.toHaveBeenCalled();
   await store.close();
 });
 

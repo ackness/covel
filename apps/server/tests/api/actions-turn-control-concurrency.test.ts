@@ -26,6 +26,7 @@ import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { abortActiveTurn } from "../../src/routes/api/turn-control.js";
 import { parseJsonFrames } from "./sse-test-utils.js";
 import { createApplicationWork } from "../../src/application-work.js";
+import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guard.js";
 
 const PLUGIN_ID = "test-concurrency";
 const RUNTIME = "test-concurrency/main";
@@ -109,6 +110,112 @@ async function drain(
 }
 
 describe("POST /api/actions — steer/abort targets the executing turn, not a queued one (A-02)", () => {
+  it.each([
+    ["pause", "session_not_active"],
+    ["deletion", "session_deleting"],
+    ["replacement", "session_incarnation_changed"],
+    ["owner", "session_owner_required"],
+  ])("revalidates %s before a queued action writes", async (change, code) => {
+    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
+    const store = createMemoryStore();
+    const registry = createPluginRegistry();
+    const handler = vi.fn(async () => ({
+      outcome: "success" as const,
+      value: {},
+    }));
+    const entry = makeRegistryEntry(handler);
+    registry.register(entry);
+    const sessionLock = createInProcessSessionLock();
+    const eventBus = createEventBus(store);
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("pluginRegistry", registry);
+      c.set("sessionLock", sessionLock);
+      c.set("eventBus", eventBus);
+      c.set("loadRuntimeFn", async () => entry.loadedRuntimes.get(RUNTIME));
+      c.set("resolveModel", () => undefined);
+      await next();
+    });
+    app.route("/api/actions", actionRoutes);
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: null,
+      locale: "en",
+      metadata: {
+        ownerTokenHash: hashSessionOwnerToken("original-owner"),
+        sessionIncarnationNonce: "original-incarnation",
+      },
+      phase: "playing",
+      status: "active",
+      activePlugins: [PLUGIN_ID],
+      setupRuntimes: {},
+      completedPlayerTurns: 1,
+      createdAt: new Date().toISOString(),
+    });
+    const locked = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const blocker = sessionLock.withLock(SESSION_ID, async () => {
+      locked.resolve();
+      await release.promise;
+    });
+    let streamed: Promise<string> | undefined;
+    try {
+      await locked.promise;
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Session-Token": "original-owner",
+        },
+        body: JSON.stringify({
+          requestId: `queued-${change}`,
+          sessionId: SESSION_ID,
+          type: "send_message",
+          payload: { content: "Do not execute." },
+        }),
+      });
+      expect(response.status).toBe(200);
+      streamed = response.text();
+      await store.updateSession(
+        SESSION_ID,
+        change === "pause"
+          ? { status: "paused" }
+          : {
+              metadata:
+                change === "deletion"
+                  ? { deletionPendingNonce: "pending-delete" }
+                  : change === "replacement"
+                    ? { sessionIncarnationNonce: "new-incarnation" }
+                    : { ownerTokenHash: hashSessionOwnerToken("new-owner") },
+            },
+      );
+      release.resolve();
+      await blocker;
+      const events = parseJsonFrames<ActionEnvelope>(await streamed);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "error.occurred",
+          payload: expect.objectContaining({ code }),
+        }),
+      );
+      expect(handler).not.toHaveBeenCalled();
+      expect(await store.listTurnMessages(SESSION_ID)).toEqual([]);
+      expect(await store.listTurnResults(SESSION_ID)).toEqual([]);
+      expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(
+        1,
+      );
+    } finally {
+      release.resolve();
+      await blocker;
+      await streamed;
+      await eventBus.close();
+      await store.close();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("rejects an admitted action still waiting for its session lock when the host closes", async () => {
     const store = createMemoryStore();
     const registry = createPluginRegistry();

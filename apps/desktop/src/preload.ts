@@ -27,10 +27,6 @@ const INVOKE_CHANNELS = [
   "covel:settings:backup",
   "covel:settings:backups",
   "covel:settings:read-backup",
-  // Import is dialog-only: the renderer triggers a native file chooser in the
-  // main process. No renderer-supplied path channels.
-  "covel:import:pick-plugin",
-  "covel:import:pick-world",
 ] as const;
 
 /** Channels main may emit TO the renderer. Renderer can subscribe to any of these. */

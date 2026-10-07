@@ -344,6 +344,7 @@ describe("GitHub plugin installation", () => {
     archive = await zip({
       "plugins/note/package.json": fixture["package.json"],
       "plugins/note/PLUGIN.md": fixture["PLUGIN.md"],
+      "plugins/note/server/index.js": fixture["server/index.js"],
       "plugins/note/runtimes/one/RUNTIME.md":
         "---\ntype: agent\ndescription: One\nschedule:\n  trigger: { type: manual }\n---\n",
       "plugins/note/runtimes/two/RUNTIME.md":

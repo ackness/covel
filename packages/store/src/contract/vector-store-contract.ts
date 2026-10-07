@@ -96,6 +96,70 @@ export function runVectorStoreContractTests(
       await store.close();
     });
 
+    it("cleans NUL from vector payloads and rejects NUL identities", async () => {
+      await setupSessionWithModel(store, "nul-session", 2);
+      const input = {
+        sessionId: "nul-session",
+        pluginId: "owner",
+        namespace: "recall",
+        key: "chunk",
+        embedding: new Float32Array([0, 1]),
+        payload: "left\u0000right",
+      };
+      await store.upsertVector(input);
+      const rows = await store.searchVectors({
+        sessionId: "nul-session",
+        query: input.embedding,
+        topK: 10,
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.payload).toBe("leftright");
+      await expect(
+        store.upsertVector({ ...input, key: "bad\u0000key" }),
+      ).rejects.toThrow("U+0000");
+      expect(
+        await store.searchVectors({
+          sessionId: "nul-session",
+          query: input.embedding,
+          topK: 10,
+        }),
+      ).toHaveLength(1);
+      expect(input.payload).toBe("left\u0000right");
+    });
+
+    it("reports Euclidean distance and fills topK after filtering other sessions", async () => {
+      await setupSessionWithModel(store, "target", 2);
+      await setupSessionWithModel(store, "other", 2);
+      for (let index = 0; index < 70; index++) {
+        await store.upsertVector({
+          sessionId: "other",
+          pluginId: "owner",
+          namespace: "recall",
+          key: String(index),
+          embedding: new Float32Array([0, 0]),
+        });
+      }
+      for (const [key, embedding] of [
+        ["near", [3, 4]],
+        ["far", [6, 8]],
+      ] as const) {
+        await store.upsertVector({
+          sessionId: "target",
+          pluginId: "owner",
+          namespace: "recall",
+          key,
+          embedding: new Float32Array(embedding),
+        });
+      }
+      const results = await store.searchVectors({
+        sessionId: "target",
+        query: new Float32Array([0, 0]),
+        topK: 2,
+      });
+      expect(results.map(({ key }) => key)).toEqual(["near", "far"]);
+      expect(results.map(({ distance }) => distance)).toEqual([5, 10]);
+    });
+
     it("deletes one key without removing surviving vectors or other namespaces", async () => {
       await setupSessionWithModel(store, "s1", 2);
       const embedding = new Float32Array([1, 0]);

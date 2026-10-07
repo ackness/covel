@@ -153,6 +153,25 @@ export function redactSensitiveQueryParamsInText(text: string): string {
 }
 
 /**
+ * Log a failure with the request it came from: method, URL (sensitive query
+ * params redacted) and the error itself, so the stack is in the log. The
+ * global handler uses it for every unhandled error. A route that answers a
+ * failure itself — a coded or deliberately generic body, or an event on a
+ * stream that is already open — calls it too, so the cause is not lost.
+ */
+export function logRequestError(
+  c: Context,
+  logPrefix: string,
+  err: unknown,
+): void {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(
+    `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
+    err,
+  );
+}
+
+/**
  * Single wire representation of "lost the race for the session lock".
  * Shared by the JSON error handler below and the actions SSE stream
  * (`routes/api/actions.ts`), which cannot return a coded 503 once its stream
@@ -196,10 +215,7 @@ export function makeErrorHandler(
       );
     }
 
-    console.error(
-      `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
-      err,
-    );
+    logRequestError(c, logPrefix, err);
     return c.json(errorBody(isDev ? message : "Internal server error"), 500);
   };
 }

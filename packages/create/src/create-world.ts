@@ -40,7 +40,11 @@ import {
   normalizeGeneratedManifest,
   normalizeLoreDocument,
 } from "./validation-helpers.js";
-import { LlmIdleTimeoutError, requestLlmResponse } from "./llm-request.js";
+import {
+  LlmIdleTimeoutError,
+  LlmIncompleteOutputError,
+  requestLlmResponse,
+} from "./llm-request.js";
 import { repairWorldLore } from "./lore-repair.js";
 import {
   applyCreationBriefToManifest,
@@ -109,6 +113,13 @@ function checkManifest(
   const repairs = normalizeGeneratedManifest(yamlData);
   if (repairs.length > 0) {
     log(options, "info", "applied YAML repair:", repairs.join("; "));
+  }
+  if (!options.revision && typeof yamlData.id === "string") {
+    const occupied = new Set(options.existingWorldIds);
+    const baseId = yamlData.id;
+    let suffix = 2;
+    while (occupied.has(yamlData.id as string))
+      yamlData.id = `${baseId}-${suffix++}`;
   }
   const warnings = dropInvalidDimensions(yamlData);
   if (warnings.length > 0) {
@@ -218,10 +229,19 @@ async function checkLore(
     return { lore: repairedLore };
   } catch (err) {
     signal.throwIfAborted();
-    if (err instanceof LlmIdleTimeoutError) throw err;
+    if (
+      err instanceof LlmIdleTimeoutError ||
+      err instanceof LlmIncompleteOutputError
+    )
+      throw err;
     const repairError = `WORLD.md targeted repair LLM error: ${messageOf(err)}`;
-    log(options, "error", repairError);
-    return { errors: [...loreMetaErrors, repairError] };
+    log(options, "error", repairError, err);
+    return {
+      errors: [
+        ...loreMetaErrors,
+        "WORLD.md repair request failed; check model configuration or server logs",
+      ],
+    };
   }
 }
 
@@ -256,6 +276,7 @@ async function askUntilAccepted(args: {
 > {
   const { options, signal, name } = args;
   let errors: string[] = [];
+  let previousAnswer: string | undefined;
   const silent = (err: LlmIdleTimeoutError) => {
     log(options, "error", `${name}: ${err.message}`);
     args.report({ state: "failed" });
@@ -288,6 +309,9 @@ async function askUntilAccepted(args: {
         messages: [
           { role: "system", content: args.prompt },
           { role: "user", content: args.request },
+          ...(previousAnswer
+            ? [{ role: "assistant" as const, content: previousAnswer }]
+            : []),
           ...(attempt > 0
             ? [
                 {
@@ -306,8 +330,17 @@ async function askUntilAccepted(args: {
     } catch (err) {
       signal.throwIfAborted();
       if (err instanceof LlmIdleTimeoutError) return silent(err);
-      log(options, "error", `${name}: LLM request failed: ${messageOf(err)}`);
-      errors = [`LLM error: ${messageOf(err)}`];
+      if (err instanceof LlmIncompleteOutputError) {
+        args.report({ state: "failed" });
+        return { accepted: false, errors: [err.message], idleTimeout: false };
+      }
+      log(
+        options,
+        "error",
+        `${name}: LLM request failed: ${messageOf(err)}`,
+        err,
+      );
+      errors = ["LLM request failed; check model configuration or server logs"];
       continue;
     }
 
@@ -324,11 +357,16 @@ async function askUntilAccepted(args: {
       continue;
     }
 
+    previousAnswer = response.content;
     try {
       errors = await args.take(response.content);
     } catch (err) {
       // A check may ask the model for a repair, which can stay silent too.
       if (err instanceof LlmIdleTimeoutError) return silent(err);
+      if (err instanceof LlmIncompleteOutputError) {
+        args.report({ state: "failed" });
+        return { accepted: false, errors: [err.message], idleTimeout: false };
+      }
       throw err;
     }
     if (errors.length === 0) {
@@ -532,8 +570,6 @@ function partRequest(plan: PartPlan, draft: Draft): string {
       : []),
   ];
   return [
-    `Write one part of the world package now: ${plan.label}.`,
-    `Return the delimiter ===${plan.marker}=== on the first line, then ${plan.body}, then ===END===. Do not write any other part.`,
     ...(written.length > 0
       ? [
           "",
@@ -543,6 +579,8 @@ function partRequest(plan: PartPlan, draft: Draft): string {
           "===END===",
         ]
       : []),
+    `Write one part of the world package now: ${plan.label}.`,
+    `Return the delimiter ===${plan.marker}=== on the first line, then ${plan.body}, then ===END===. Do not write any other part.`,
   ].join("\n");
 }
 

@@ -35,3 +35,24 @@ export async function resolveContainedPath(
   const realResolved = await realpath(resolved);
   return isInsideRoot(rootRealPath, realResolved) ? realResolved : null;
 }
+
+/**
+ * Why `resolveContainedPath` gives no path for `relativePath`, so that a
+ * message can tell a file that is not there from a path that is not allowed.
+ */
+export async function explainUnresolvedPath(
+  root: string,
+  relativePath: string,
+): Promise<"missing" | "symlink" | "outside"> {
+  if (path.isAbsolute(relativePath)) return "outside";
+  const rootRealPath = await realpath(root);
+  const resolved = path.resolve(rootRealPath, relativePath);
+  const lexicalRel = path.relative(rootRealPath, resolved);
+  if (lexicalRel.startsWith("..") || path.isAbsolute(lexicalRel))
+    return "outside";
+  try {
+    return (await lstat(resolved)).isSymbolicLink() ? "symlink" : "outside";
+  } catch {
+    return "missing";
+  }
+}

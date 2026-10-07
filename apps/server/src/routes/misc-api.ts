@@ -141,6 +141,7 @@ export function createMiscApiRoutes(
 
   // GET /api/llm-config — return slot configuration with capability info
   app.get("/api/llm-config", (c) => {
+    const canReadDiagnostics = !checkHostedOperator(c);
     const slots = ai.slotRegistry.listSlots();
     const slotsInfo: Record<string, Record<string, unknown>> = {};
 
@@ -183,9 +184,11 @@ export function createMiscApiRoutes(
       providers: [
         ...new Set(ai.presetRegistry.listPresets().map((p) => p.provider)),
       ],
-      source: ai.configSource,
+      ...(canReadDiagnostics ? { source: ai.configSource } : {}),
       // Reload failures preserve the last valid active configuration.
-      ...(ai.lastLoadError ? { error: ai.lastLoadError } : {}),
+      ...(canReadDiagnostics && ai.lastLoadError
+        ? { error: ai.lastLoadError }
+        : {}),
     });
   });
 

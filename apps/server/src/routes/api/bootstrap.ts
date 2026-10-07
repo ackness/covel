@@ -34,6 +34,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import {
   loadPluginLlmConfig,
   pluginRuntimeManifests,
+  pluginDeclarations,
   resolvePluginRuntimeManifest,
   deriveBuiltinPluginIds,
   type PluginRegistry,
@@ -346,7 +347,7 @@ async function assembleApi(
   // on every setPluginData / setPluginDataBatch call, regardless of caller.
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
 
-  const { registry, discoveryMap, manifestCache } =
+  const { registry, discoveryMap, failedDiscoveryMap, manifestCache } =
     await discoverAndRegisterPlugins({
       pluginsDir: config.pluginsDir,
       pluginsDirs: config.pluginsDirs,
@@ -377,6 +378,17 @@ async function assembleApi(
     registry,
     resolvePluginDir: (pluginId) => discoveryMap.get(pluginId)?.rootPath,
   });
+  const prepareEventDeclarations = async (
+    entry: import("@covel/plugin-loader").PluginRegistryEntry,
+  ) => {
+    await eventDirectory.prepareDeclarations(
+      pluginDeclarations(entry).map(({ manifest }) => manifest),
+      entry.rootPath,
+    );
+  };
+  await Promise.all(
+    [...registry.getAll().values()].map(prepareEventDeclarations),
+  );
 
   // 3. Load plugin-level llm.toml configs for model resolution
   const pluginLlmConfigs = new Map<string, PluginLlmConfig>();
@@ -502,6 +514,7 @@ async function assembleApi(
     await createBootstrapPluginEntries({
       sessionLock,
       discoveryMap,
+      failedDiscoveryMap,
       manifestCache,
       pluginRegistry: registry,
       store,
@@ -511,7 +524,9 @@ async function assembleApi(
       isCommunityServerCodeApproved,
       isCommunityHookApproved,
       runtimeLoader,
+      prepareDeclarations: prepareEventDeclarations,
       onReload: async () => {
+        setWorldDataConventions(conventionsOfPlugins(registry));
         for (const session of await store.listSessions())
           uiSlots.invalidateSession(session.id);
       },

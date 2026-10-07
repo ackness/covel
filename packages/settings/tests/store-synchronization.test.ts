@@ -36,6 +36,109 @@ function backend(initial: Record<string, unknown> = {}) {
 }
 
 describe("settings synchronization", () => {
+  it("preserves prototype-named unknown keys as ordinary entries", async () => {
+    const { adapter, read } = backend();
+    const store = new SettingsStore(adapter);
+    await store.init();
+    const replacement = JSON.parse(
+      '{"__proto__":{"value":1},"constructor":"ordinary"}',
+    );
+    await store.replaceEntries(replacement, {});
+    expect(Object.hasOwn(read().entries, "__proto__")).toBe(true);
+    expect(read().entries).toEqual(replacement);
+    expect((await store.export()).entries).toEqual(replacement);
+  });
+
+  it("replaces additions and deletions in one confirmed revision", async () => {
+    const { adapter, read } = backend({ remove: "old", unknown: { value: 1 } });
+    const store = new SettingsStore(adapter);
+    await store.init();
+    const base = (await store.export()).entries;
+    await store.replaceEntries({ unknown: { value: 2 }, added: true }, base);
+    expect(read().entries).toEqual({ unknown: { value: 2 }, added: true });
+    expect(adapter.saveWithRevision).toHaveBeenCalledTimes(1);
+    expect((await store.export()).entries).toEqual(read().entries);
+  });
+
+  it.each(["addition", "deletion", "modification"])(
+    "rejects a replacement after remote %s, without partially saving",
+    async (operation) => {
+      const { adapter, read } = backend({ shared: "old", remove: true });
+      const remote = new SettingsStore(adapter);
+      const local = new SettingsStore(adapter);
+      await Promise.all([remote.init(), local.init()]);
+      const base = (await local.export()).entries;
+      if (operation === "addition") await remote.set("remote", true);
+      else if (operation === "deletion") await remote.clear("shared");
+      else await remote.set("shared", "remote");
+      const confirmed = read();
+      await expect(
+        local.replaceEntries({ shared: "edit" }, base),
+      ).rejects.toBeInstanceOf(SettingsRevisionConflictError);
+      expect(read()).toEqual(confirmed);
+      expect((await local.export()).entries).toEqual(confirmed.entries);
+    },
+  );
+
+  it("rejects a remote addition racing the first replacement CAS", async () => {
+    const { adapter, read } = backend({ shared: "old" });
+    const store = new SettingsStore(adapter);
+    await store.init();
+    const base = (await store.export()).entries;
+    const save = vi.mocked(adapter.saveWithRevision!);
+    const persist = save.getMockImplementation()!;
+    save.mockImplementationOnce(async (entries, revision) => {
+      await persist({ shared: "old", remote: "new" }, revision);
+      return persist(entries, revision);
+    });
+    await expect(
+      store.replaceEntries({ shared: "edit" }, base),
+    ).rejects.toMatchObject({
+      conflictingKeys: ["remote"],
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(read().entries).toEqual({ shared: "old", remote: "new" });
+  });
+
+  it("compares replacement bases with normalized stored values", async () => {
+    const { adapter, read } = backend({ display: { title: "Initial" } });
+    const store = new SettingsStore(adapter);
+    store.register({
+      key: "display",
+      schema: z.object({
+        title: z.string(),
+        input: z.array(z.string()).default(["text"]),
+      }),
+      default: { title: "Default", input: ["text"] },
+      group: "general",
+      label: "Display",
+    });
+    await store.init();
+    const base = (await store.export()).entries;
+    await store.replaceEntries({ display: { title: "Changed" } }, base);
+    expect(read().entries).toEqual({
+      display: { title: "Changed", input: ["text"] },
+    });
+  });
+
+  it("keeps a queued replacement conditional on prior local writes succeeding", async () => {
+    const { adapter, read } = backend({ shared: "old" });
+    const store = new SettingsStore(adapter);
+    await store.init();
+    vi.mocked(adapter.saveWithRevision!).mockRejectedValueOnce(
+      new Error("I/O failure"),
+    );
+    const first = store.set("shared", "pending");
+    const base = (await store.export()).entries;
+    const replacement = store.replaceEntries({ shared: "replacement" }, base);
+    const results = await Promise.allSettled([first, replacement]);
+    expect(results.map((result) => result.status)).toEqual([
+      "rejected",
+      "rejected",
+    ]);
+    expect(read().entries).toEqual({ shared: "old" });
+  });
+
   it("normalizes refreshed values and preserves the raw revision baseline", async () => {
     const { adapter, read } = backend({ display: { title: "Initial" } });
     const remote = new SettingsStore(adapter);

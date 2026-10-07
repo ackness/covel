@@ -45,6 +45,7 @@ contributes:
           kind: json
           path: data/memory-blocks.json
           key: id
+          localeArrayKeys: [label]
     blocks:
       version: 1
       schema: ./schemas/blocks.schema.json

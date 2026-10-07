@@ -28,6 +28,20 @@ const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
  * would lose: it has no marker and is never rewritten.
  */
 export const GENERATED_WORLD_MARKER = ".covel-generated.json";
+
+/** Publication and restoration both failed; the complete old package remains. */
+export class WorldPackageRecoveryError extends AggregateError {
+  constructor(
+    readonly backupPath: string,
+    errors: readonly unknown[],
+  ) {
+    super(
+      errors,
+      `World replacement failed; the original package is preserved at ${backupPath}`,
+    );
+    this.name = "WorldPackageRecoveryError";
+  }
+}
 // The paths the kernel reads without a descriptor.
 const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
 const GENERATED_CHARACTERS_PATH = "characters/characters.json";
@@ -140,13 +154,20 @@ export async function writeWorldPackage(
       const previous = await mkdtemp(path.join(outputDir, ".covel-replaced-"));
       const kept = path.join(previous, "package");
       await rename(finalDir, kept);
+      let removePrevious = true;
       try {
         await rename(staging, finalDir);
       } catch (error) {
-        await rename(kept, finalDir);
+        try {
+          await rename(kept, finalDir);
+        } catch (restoreError) {
+          removePrevious = false;
+          throw new WorldPackageRecoveryError(kept, [error, restoreError]);
+        }
         throw error;
       } finally {
-        await rm(previous, { recursive: true, force: true }).catch(() => {});
+        if (removePrevious)
+          await rm(previous, { recursive: true, force: true }).catch(() => {});
       }
     } else {
       // Concurrent creators race only at publication; a complete winner is
@@ -275,6 +296,9 @@ export async function writeWorldDataFiles(
       schema: `contract:${contract}`,
       to: `contract:${contract}${records[0]?.lorebook ? "+lorebook" : ""}`,
       key: "id",
+      ...(declared?.localeArrayKeys
+        ? { localeArrayKeys: [...declared.localeArrayKeys] }
+        : {}),
     };
   }
 

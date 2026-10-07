@@ -26,6 +26,72 @@ function registerSecret(
 }
 
 describe("settings secret boundaries", () => {
+  it("cancels a queued ordinary repair when later registration discovers a secret", async () => {
+    const adapter = createMemoryAdapter({
+      "ui.choice": "retired",
+      credential: "synthetic-test-value",
+    });
+    const backup = vi.fn(async () => "synthetic-backup");
+    adapter.backupBundle = backup;
+    const store = new SettingsStore(adapter);
+    await store.init();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      store.register({
+        key: "ui.choice",
+        schema: z.enum(["current"]),
+        default: "current",
+        group: "general",
+        label: "Choice",
+      });
+      store.register({
+        key: "credential",
+        schema: z.string(),
+        default: "",
+        group: "llm",
+        label: "Credential",
+        secret: true,
+      });
+      await expect(store.set("ordinary", true)).rejects.toThrow("never loaded");
+      expect(backup).not.toHaveBeenCalled();
+      expect(adapter.readEntries()).toEqual({
+        "ui.choice": "retired",
+        credential: "synthetic-test-value",
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it("refuses misplaced secrets before copying or repairing another invalid setting", async () => {
+    const adapter = createMemoryAdapter({
+      "keys.synthetic": "synthetic-test-value",
+      "ui.choice": "retired",
+    });
+    const backup = vi.fn(async () => "synthetic-backup");
+    adapter.backupBundle = backup;
+    const save = vi.spyOn(adapter, "save");
+    const store = new SettingsStore(adapter);
+    store.register({
+      key: "ui.choice",
+      schema: z.enum(["current"]),
+      default: "current",
+      group: "general",
+      label: "Choice",
+    });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await store.init();
+      expect(store.isHydrated()).toBe(false);
+      expect(backup).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(adapter.readEntries()).toEqual({
+        "keys.synthetic": "synthetic-test-value",
+        "ui.choice": "retired",
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
   it.each(secretCases)(
     "rejects selected secret entry $key before writing any part of an import",
     async (entry) => {

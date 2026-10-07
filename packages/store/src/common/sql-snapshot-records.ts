@@ -15,7 +15,7 @@
  * `changes`).
  */
 
-import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
@@ -101,6 +101,7 @@ export function createSqlSnapshotRecords(
 ): SqlSnapshotRecords {
   const { runner, tables, json, values } = deps;
   const { stateSnapshots, suspensions } = tables;
+  const { byteOrder } = runner;
 
   return {
     // ── Snapshots ────────────────────────────────────────────────
@@ -154,8 +155,13 @@ export function createSqlSnapshotRecords(
           createdAt: stateSnapshots.createdAt,
           size: sql<number>`length(cast(${stateSnapshots.payload} as text))`,
         },
-        where: cursorPageWhere(stateSnapshots, sessionId, opts.before),
-        orderBy: cursorPageOrder(stateSnapshots),
+        where: cursorPageWhere(
+          stateSnapshots,
+          sessionId,
+          opts.before,
+          byteOrder,
+        ),
+        orderBy: cursorPageOrder(stateSnapshots, byteOrder),
         limit: opts.limit,
       });
       return rows.reverse().map((row) => ({
@@ -176,7 +182,7 @@ export function createSqlSnapshotRecords(
           eq(stateSnapshots.sessionId, sessionId),
           eq(stateSnapshots.kind, "auto"),
         ),
-        orderBy: [desc(stateSnapshots.createdAt), desc(stateSnapshots.id)],
+        orderBy: cursorPageOrder(stateSnapshots, byteOrder),
       });
       const candidates = autos.slice(Math.max(0, keep)).map((row) => row.id);
       if (candidates.length === 0) return 0;

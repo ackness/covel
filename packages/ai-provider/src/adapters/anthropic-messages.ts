@@ -77,7 +77,16 @@ function requestedToolChoice(
   params: import("../types.js").TextGenerationParams,
   context: ModelRequestContext | undefined,
 ): Record<string, unknown> {
-  if (!params.tools?.length || !params.defaults?.toolChoice) return {};
+  if (!params.tools?.length) return {};
+  const unsupportedForcedChoice =
+    /claude-(?:(?:opus|sonnet)-5[.-]5|(?:fable|mythos)-5[.-]1)(?:-|$)/i.test(
+      params.model,
+    );
+  if (unsupportedForcedChoice) return { tool_choice: { type: "auto" } };
+  if (!params.defaults?.toolChoice)
+    return params.providerRequestMetadata?.tool_choice
+      ? { tool_choice: params.providerRequestMetadata.tool_choice }
+      : {};
   const body = {
     ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
     ...extractAnthropicParameterOverrides(
@@ -88,7 +97,8 @@ function requestedToolChoice(
   };
   return {
     tool_choice:
-      body.tool_choice ?? defaultToolChoice(params.defaults, body, "anthropic"),
+      params.providerRequestMetadata?.tool_choice ??
+      defaultToolChoice(params.defaults, body, "anthropic"),
   };
 }
 
@@ -100,6 +110,7 @@ const ANTHROPIC_PROTECTED_KEYS = new Set([
   "max_tokens",
   "system",
   "tools",
+  "tool_choice",
   "parameterOverrides",
   "reasoning_effort",
   "reasoningEffort",
@@ -249,14 +260,16 @@ function buildAnthropicSystemField(
   // clamped to Anthropic's maximum breakpoint count.
   const hasOpenTail = !endsWithSentinel || suffixBecomesTail;
   const segmentCount = nonEmpty.length + (suffixBecomesTail ? 1 : 0);
-  const cacheableCount = Math.min(
-    hasOpenTail ? segmentCount - 1 : segmentCount,
-    MAX_CACHE_BREAKPOINTS,
-  );
+  const cacheableCount = hasOpenTail ? segmentCount - 1 : segmentCount;
+  // Keep the first stable segment and the full stable prefix. Reserve room
+  // for the moving message breakpoint and future tool-definition caching.
+  const systemBreakpointBudget = Math.min(2, MAX_CACHE_BREAKPOINTS - 1);
 
   const blocks: AnthropicSystemBlock[] = [];
   for (let i = 0; i < nonEmpty.length; i++) {
-    const isCacheable = i < cacheableCount;
+    const isCacheable =
+      i < cacheableCount &&
+      (i === 0 || (systemBreakpointBudget > 1 && i === cacheableCount - 1));
     let text = nonEmpty[i]!;
     // In-place suffix merge when there's an open tail already.
     if (!suffixBecomesTail && i === nonEmpty.length - 1 && optionalSuffix) {

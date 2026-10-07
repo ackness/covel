@@ -204,10 +204,8 @@ describe("buildInjectBlocks", () => {
     };
 
     const result = buildInjectBlocks(params);
-    expect(result).toContain(
-      '<same-turn-world-schema>{\n  "character-attributes"',
-    );
-    expect(result).toContain('"id": "club"');
+    expect(result).toContain('<same-turn-world-schema>{"character-attributes"');
+    expect(result).toContain('"id":"club"');
     expect(result).toContain("</same-turn-world-schema>");
     expect(result).not.toContain("[object Object]");
   });

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { isAssetGenerateView } from "@covel/shared";
 import { AssetRender } from "@/components/asset-render/index.js";
@@ -187,14 +187,17 @@ function HistoryBlock({
   label: string;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
   if (!collapsed) return children;
   return (
     <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
       className="rounded border border-border/50 px-3 py-2 text-xs text-muted-foreground"
       data-testid="history-interaction"
     >
       <summary className="cursor-pointer">{label}</summary>
-      <div className="mt-3">{children}</div>
+      {open && <div className="mt-3">{children}</div>}
     </details>
   );
 }

@@ -12,7 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "lint": "tsc --noEmit",
-    "test": "node --test scripts/staging-files.test.mjs scripts/private-config.test.mjs scripts/plugin-load-check.test.mjs scripts/paths.test.mjs scripts/import-assets.test.mjs scripts/restart-server.test.mjs scripts/window-state.test.mjs && tsx src/server-shutdown.selfcheck.ts && tsx src/zip-extract.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts && tsx src/logging.selfcheck.ts && tsx src/system-proxy.selfcheck.ts && tsx src/network.selfcheck.ts && tsx src/env-files.selfcheck.ts && tsx src/settings-json.selfcheck.ts && tsx src/app-update.selfcheck.ts && tsx src/main-i18n.selfcheck.ts",
+    "test": "node --test scripts/compile-server.test.mjs scripts/staging-files.test.mjs scripts/private-config.test.mjs scripts/plugin-load-check.test.mjs scripts/paths.test.mjs scripts/restart-server.test.mjs scripts/window-state.test.mjs && tsx src/server-shutdown.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts && tsx src/logging.selfcheck.ts && tsx src/system-proxy.selfcheck.ts && tsx src/network.selfcheck.ts && tsx src/env-files.selfcheck.ts && tsx src/settings-json.selfcheck.ts && tsx src/app-update.selfcheck.ts && tsx src/main-i18n.selfcheck.ts",
     "test:coverage": "node ../../scripts/remove-paths.mjs coverage && node ../../scripts/run-with-env.mjs NODE_V8_COVERAGE=coverage pnpm test",
     "smoke:restart": "node scripts/restart-navigation.smoke.mjs",
     "pack": "pnpm build && electron-builder --dir",
@@ -24,7 +24,8 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
-    "tsx": "4.23.15"
+    "tsx": "4.23.15",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@covel/web": "workspace:*",

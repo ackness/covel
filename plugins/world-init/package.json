@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@covel/plugin-handlers-utils": "workspace:*",
-    "@covel/shared": "workspace:*",
     "zod": "^4.6.5"
   },
   "devDependencies": {

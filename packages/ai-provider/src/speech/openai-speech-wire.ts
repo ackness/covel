@@ -19,13 +19,20 @@ async function synthesize(
     ...extra
   } = params.providerRequestMetadata ?? {};
 
-  const response = await postJson(config, "/audio/speech", {
-    model: params.model,
-    input: params.text,
-    ...(params.voice ? { voice: params.voice } : {}),
-    ...(params.format ? { response_format: params.format } : {}),
-    ...extra,
-  });
+  const response = await postJson(
+    config,
+    "/audio/speech",
+    {
+      model: params.model,
+      input: params.text,
+      ...(params.voice ? { voice: params.voice } : {}),
+      ...(params.format ? { response_format: params.format } : {}),
+      ...extra,
+    },
+    undefined,
+    undefined,
+    { retry: false },
+  );
 
   if (!response.ok) {
     const payload = await parseJson(response);

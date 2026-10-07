@@ -5,6 +5,7 @@ import type { MessageRecord, SessionRecord } from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import { ApiError } from "@/services/api/request.js";
 import { claimSessionAction } from "../runtime-refs.js";
+import { initialState } from "../reducer.js";
 
 const { sendAction, submitInputs, getSessionView } = vi.hoisted(() => ({
   sendAction: vi.fn(),
@@ -170,6 +171,12 @@ describe("durable player input identity", () => {
     const pending = submitInteractionBlock(
       {
         ...f,
+        stateRef: {
+          current: {
+            ...initialState,
+            session: { id: "session-1", status: "active" } as SessionRecord,
+          },
+        },
         submitBlock: vi.fn(),
         resyncSession: vi.fn(),
         inFlight: new Set(),

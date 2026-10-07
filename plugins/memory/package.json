@@ -7,7 +7,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*"
+    "@covel/plugin-handlers-utils": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^5.0.1",

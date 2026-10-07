@@ -45,7 +45,6 @@ The opening summary is in the `runtime-inputs.pregame-opening.value` block at th
 <world-summary>
 Name: {{ world.name }}
 Description: {{ world.description }}
-Opening: {{ world.openingScenario }}
 </world-summary>
 
 ## Character attribute schema

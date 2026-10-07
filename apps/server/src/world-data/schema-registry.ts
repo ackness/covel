@@ -241,18 +241,35 @@ export async function resolveWorldDataSchema(options: {
   return { kind: "local", uri, path: schemaPath, validate };
 }
 
+/**
+ * The schema errors of the last value a validator rejected, one per entry:
+ * the place in the value and what is wrong there.
+ */
+export function schemaErrorLines(validate: ValidateFunction): string[] {
+  return (validate.errors ?? []).map((error) =>
+    `${error.instancePath || "(root)"} ${error.message ?? "is invalid"}`.trim(),
+  );
+}
+
 export function validateWorldDataSchemaValue(options: {
   readonly schema: WorldDataSchemaRef;
   readonly source: OrderedWorldDataSource;
   readonly value: unknown;
   readonly label?: string;
+  /** The file, and the record in it, that `value` was read from. */
+  readonly at?: Pick<WorldDataDiagnostic, "path" | "pointer">;
 }): WorldDataDiagnostic | null {
+  const at = {
+    ...(options.at?.path ? { path: options.at.path } : {}),
+    ...(options.at?.pointer ? { pointer: options.at.pointer } : {}),
+  };
   if (options.schema.kind === "builtin") {
     const validation = validateDimensions(options.value);
     if (validation.valid) return null;
     return {
       level: "error",
       sourceId: options.source.id,
+      ...at,
       schema: options.schema.uri,
       message: `invalid world dimensions:\n${formatValidationErrors(validation.errors ?? [])}`,
     };
@@ -263,7 +280,13 @@ export function validateWorldDataSchemaValue(options: {
   return {
     level: "error",
     sourceId: options.source.id,
+    ...at,
     schema: options.schema.uri,
     message: `${options.label ?? "worldData value"} failed schema validation: ${ajvDraft7.errorsText(options.schema.validate.errors)}`,
+    hint:
+      options.schema.kind === "local" &&
+      !options.schema.uri.startsWith("contract:")
+        ? `Change the record so that it fits ${options.schema.uri}.`
+        : "Change the record so that it fits the data contract. `pnpm describe:authoring` shows the fields of each contract with an example.",
   };
 }

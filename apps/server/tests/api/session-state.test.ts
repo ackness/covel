@@ -315,6 +315,27 @@ describe("State Routes", () => {
   });
 
   describe("GET /api/sessions/:id/state", () => {
+    it("retains prototype-named plugin data keys in the actual JSON response", async () => {
+      const now = new Date().toISOString();
+      await store.setPluginData({
+        id: "prototype-record",
+        sessionId,
+        pluginId: "probe",
+        namespace: "state",
+        key: "__proto__",
+        value: { retained: true },
+        createdAt: now,
+        updatedAt: now,
+      });
+      const response = await app.request(`/api/sessions/${sessionId}/state`);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        tables: Record<string, { data: Record<string, unknown> }>;
+      };
+      const rows = body.tables["plugin_data/probe:state"].data;
+      expect(Object.hasOwn(rows, "__proto__")).toBe(true);
+      expect(rows.__proto__).toEqual({ retained: true });
+    });
     it("returns only the synthetic session table when no user state exists", async () => {
       // Post-2026-04: the endpoint always surfaces the `session` record as a
       // virtual table so the right-panel Database tab has something to show

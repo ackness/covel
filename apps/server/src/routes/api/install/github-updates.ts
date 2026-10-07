@@ -32,7 +32,12 @@ import {
   pendingPackageUpdate,
   queuePackageUpdate,
 } from "./package-updates.js";
-import { errorResponse, httpError, type ExtractedEntry } from "./shared.js";
+import {
+  errorResponse,
+  httpError,
+  readInstallationJson,
+  type ExtractedEntry,
+} from "./shared.js";
 
 function compareFiles(
   previous: readonly ExtractedEntry[],
@@ -91,7 +96,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
   githubUpdateRoutes.post(`/${kind}/github/update/preview`, async (c) => {
     try {
       const { id, url } = githubPluginUpdateCheckRequestSchema.parse(
-        await c.req.json(),
+        await readInstallationJson(c),
       );
       const root = resourceRoot();
       const reserved = c.get("reservedPluginIds") ?? new Set<string>();
@@ -181,7 +186,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
   githubUpdateRoutes.post(`/${kind}/github/update`, async (c) => {
     try {
       const { token } = githubPluginInstallRequestSchema.parse(
-        await c.req.json(),
+        await readInstallationJson(c),
       );
       const signed = verifyPreview(token);
       if (signed.action !== action || !("previous" in signed))

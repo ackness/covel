@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
-import { configuredTextSlots } from "../model-state.js";
+import { boundTextSlots } from "../model-state.js";
 
 const server: ResolvedSlot = {
   slotId: "story",
@@ -10,6 +10,7 @@ const server: ResolvedSlot = {
   tag: "text",
   label: "story",
   serverModel: "server-model",
+  hasCredentials: true,
 };
 const local: ResolvedSlot = {
   ...server,
@@ -27,12 +28,14 @@ const local: ResolvedSlot = {
 };
 
 describe("onboarding model detection", () => {
-  it("accepts server and canonical client bindings without requiring another key", () => {
-    expect(configuredTextSlots([server, local])).toEqual([server, local]);
+  it("keeps server and client bindings available for review without credentials", () => {
+    expect(
+      boundTextSlots([server, { ...local, hasCredentials: false }]),
+    ).toEqual([server, { ...local, hasCredentials: false }]);
   });
   it("does not describe image, disabled, missing or unresolved bindings as configured text models", () => {
     expect(
-      configuredTextSlots([
+      boundTextSlots([
         { ...server, tag: "image" },
         { ...server, serverModel: "" },
         { ...local, preset: null },

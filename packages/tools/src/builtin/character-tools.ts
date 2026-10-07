@@ -37,6 +37,7 @@ import {
 } from "../result.js";
 import { overlayCharacters } from "../proposal-overlay.js";
 import { validateFieldsAgainstSchema } from "../schema-validator.js";
+import { wordId } from "../short-id.js";
 import {
   buildFieldsZod,
   assertCharacterFields,
@@ -85,6 +86,19 @@ async function mergeCharacterViews(
       context.sessionId,
     ).values(),
   ];
+}
+
+/** Ids of the characters this execution holds buffered writes for. */
+function bufferedCharacterIds(context: ToolExecutionContext): string[] {
+  return [
+    ...(context.upstreamProposals ?? []),
+    ...(context.pendingProposals ?? []),
+  ].flatMap((proposal) =>
+    proposal.type === "character.upsert" &&
+    proposal.sessionId === context.sessionId
+      ? [proposal.payload.id]
+      : [],
+  );
 }
 
 /** Build a session-scoped character proposal. */
@@ -171,7 +185,18 @@ function createCreateCharacterTool(
       }
       const fields = mergeSchemaDefaults(params.fields, schema);
 
-      const id = `char-${crypto.randomUUID()}`;
+      // A word id from the name (`char-lin-yao`): models read character ids in
+      // every roster and write them back, and a UUID is long and easy to
+      // miscopy. Ids buffered in this execution are taken too: a batch of
+      // creates does not show in `existing` until the loop records it.
+      const id = wordId(
+        "char",
+        params.name,
+        new Set([
+          ...existing.map((character) => character.id),
+          ...bufferedCharacterIds(context),
+        ]),
+      );
       // Write buffers into a character.upsert proposal — the commit handler
       // persists the character inside the execution transaction.
       const proposal = makeCharacterUpsertProposal(

@@ -371,7 +371,7 @@ export async function loadEntryTools(
   // Prompt/world/history-transform providers run in executeTurn. These three
   // built-in points are driven only by the server's UI, HTTP or compaction host.
   const hostOnlyPoints = new Set([
-    "history.compact@1",
+    "history.compact@2",
     "ui.slot@1",
     "media.image-flow@1",
   ]);

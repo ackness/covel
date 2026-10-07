@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
+import { makeErrorHandler } from "../../src/api-error.js";
 import { getOutboundProxyStatus, outboundFetch } from "@covel/ai-provider";
 import { resetOutboundProxyForTests } from "../../../../packages/ai-provider/src/outbound-network.js";
 
@@ -30,6 +31,7 @@ it("keeps the live proxy dispatcher and disk setting when persistence fails", as
   const configPath = path.join(home, "config.toml");
   fs.writeFileSync(configPath, '[network]\nproxy_mode = "direct"\n', "utf8");
   const app = createConfigApiRoutes({ apiKeys: {} });
+  app.onError(makeErrorHandler("[proxy-test]", false));
   const dispatchers: unknown[] = [];
   vi.stubGlobal(
     "fetch",
@@ -53,7 +55,8 @@ it("keeps the live proxy dispatcher and disk setting when persistence fails", as
     throw new Error("Synthetic rename failure");
   });
   const failed = await request();
-  expect(failed.status).toBe(400);
+  expect(failed.status).toBe(500);
+  expect(await failed.json()).toMatchObject({ error: "Internal server error" });
   expect(getOutboundProxyStatus()).toMatchObject({
     mode: "direct",
     effective: "direct",

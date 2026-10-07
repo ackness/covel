@@ -2,11 +2,12 @@
  * Covel Desktop — Electron main process.
  *
  * Architecture: sidecar pattern.
+ *   0. Take the single-instance lock; a second launch focuses the first
  *   1. Resolve paths, ensure userData directories exist
- *   2. Find a free port (detecting conflicts)
+ *   2. Pick the port: the previous one while it is free, else a free one
  *   3. Show splash screen with loading animation
  *   4. Spawn the Hono API server as a child process
- *   5. Wait for /api/health, with progress updates and retry on failure
+ *   5. Wait for private readiness IPC, with progress updates and retry on failure
  *   6. Navigate to the app URL; bind menu and IPC handlers
  *   7. Monitor the server and auto-restart on unexpected exit
  *   8. Clean up on quit
@@ -27,7 +28,12 @@ import {
   userServerPortFile,
 } from "./paths.js";
 import { loadChildEnvironment } from "./env-files.js";
-import { fetchWithTimeout, findFreePort, waitForServer } from "./network.js";
+import {
+  fetchWithTimeout,
+  findPreferredPort,
+  parseStoredPort,
+  waitForServer,
+} from "./network.js";
 import { diagnoseStartupError, type DiagnosedError } from "./startup-errors.js";
 import {
   initPersistentLog,
@@ -54,10 +60,18 @@ import { showAppUpdateNotification } from "./app-update-notification.js";
 import { createQuitHandler, stopServerProcess } from "./server-shutdown.js";
 import { waitForServerProcess } from "./server-readiness.js";
 import { createServerRecovery, findStartablePort } from "./server-recovery.js";
+import { claimSingleInstance } from "./single-instance.js";
 import {
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
 } from "@covel/shared/settings-persistence";
+
+// Before anything else starts: a second Covel must not reach the point where
+// it prepares directories or spawns a sidecar on the database the first one
+// has open. The lock is tied to the user-data directory, which follows the
+// name set above. A development shell starts no sidecar and shares that name
+// with the installed app, so it takes no lock.
+const ownsInstance = isDev || claimSingleInstance(app, getMainWindow);
 
 // ── Splash screen ──────────────────────────────────────────────
 
@@ -222,17 +236,28 @@ function broadcastStartupError(diag: DiagnosedError, logs: string): void {
   }
 }
 
+/** The port the last sidecar ran on, from `server.port`. */
+function readPreviousPort(portFile: string): number | undefined {
+  try {
+    return parseStoredPort(fs.readFileSync(portFile, "utf-8"));
+  } catch {
+    // First launch, or an unreadable file: there is no port to prefer.
+    return undefined;
+  }
+}
+
 async function startServer(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<number> {
   if (serverProcess) throw new Error("Server process is already running");
   manualStop = false;
   serverPaths = paths;
+  const portFile = userServerPortFile();
   const port = await findStartablePort(
-    findFreePort,
+    () => findPreferredPort(readPreviousPort(portFile)),
     () => quitting || manualStop,
   );
-  fs.writeFileSync(userServerPortFile(), String(port), "utf-8");
+  fs.writeFileSync(portFile, String(port), "utf-8");
 
   const serverEntry = resolveServerEntry();
   const projectRoot = resolveProjectRoot();
@@ -276,7 +301,7 @@ async function startServer(
   }
 
   writeLog("info", `Starting server on port ${port}`);
-  writeLog("info", `tsx: ${tsxPath}`);
+  writeLog("info", `plugin TypeScript loader: ${tsxPath}`);
   writeLog("info", `entry: ${serverEntry}`);
   writeLog("info", `cwd: ${projectRoot}`);
   writeLog("info", `db: ${paths.dbPath}`);
@@ -290,7 +315,7 @@ async function startServer(
   }
   writeLog("info", `node: ${nodeBin}`);
 
-  serverProcess = spawn(nodeBin, [tsxPath, serverEntry], {
+  serverProcess = spawn(nodeBin, ["--import", tsxPath, serverEntry], {
     cwd: projectRoot,
     env: spawnEnv,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -348,9 +373,9 @@ async function startServer(
     if (!manualStop && !quitting) serverRecovery.exited(child);
   });
 
-  // Wait for health check with progress updates
+  // Wait for this child's listening acknowledgement with progress updates
   const healthUrl = `http://127.0.0.1:${port}/api/health`;
-  writeLog("info", `Waiting for ${healthUrl}`);
+  writeLog("info", `Waiting for sidecar readiness IPC on port ${port}`);
   broadcastProgress(t("startup.status.startingServer"));
 
   const PROGRESS_STEPS: Array<{ threshold: number; label: string }> = [
@@ -361,7 +386,7 @@ async function startServer(
   ];
 
   try {
-    await waitForServerProcess(child, healthUrl, (elapsed) => {
+    await waitForServerProcess(child, port, (elapsed) => {
       if (quitting || manualStop)
         throw new Error("Application is shutting down");
       let currentLabel = PROGRESS_STEPS[0].label;
@@ -480,8 +505,8 @@ async function productionStartup(
   const attemptStart = async (): Promise<void> => {
     serverStderrLines.length = 0;
     try {
+      // The sidecar has acknowledged listening, so load the app now.
       await startServer(paths);
-      await new Promise((r) => setTimeout(r, 400));
       if (quitting) return;
       navigateToApp(win, serverPort);
     } catch (err) {
@@ -560,8 +585,11 @@ app.on("before-quit", (event) => {
   quitAfterServerStops(event);
 });
 
+// The first Covel shows its window when this launch is turned away.
+if (!ownsInstance) app.quit();
+
 app.whenReady().then(async () => {
-  if (quitting) return;
+  if (quitting || !ownsInstance) return;
   const paths = ensureUserPaths();
   initDesktopI18n(paths.userSettingsJsonPath, app.getLocale());
   initPersistentLog(paths.logsDir, paths.logRotation, app.getVersion());

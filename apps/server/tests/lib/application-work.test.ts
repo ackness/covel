@@ -7,6 +7,7 @@ import {
   trackRequestWork,
   type RequestWork,
 } from "../../src/application-work.js";
+import { singleFlight } from "../../src/middleware/rate-limit.js";
 import { createServerResourceDrain } from "../../src/server-resources.js";
 
 afterEach(() => {
@@ -17,6 +18,23 @@ afterEach(() => {
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("application work ownership", () => {
+  it("holds single-flight until the streaming work ends", async () => {
+    const app = new Hono();
+    const release = Promise.withResolvers<void>();
+    app.get("/stream", singleFlight(), (c) =>
+      streamOwnedSSE(c, async (stream) => {
+        await release.promise;
+        await stream.writeSSE({ data: "done" });
+      }),
+    );
+    const first = await app.request("/stream");
+    expect((await app.request("/stream")).status).toBe(429);
+    release.resolve();
+    await first.text();
+    await tick();
+    expect((await app.request("/stream")).status).toBe(200);
+  });
+
   it("unblocks backpressured SSE writes when the host closes", async () => {
     const work = createApplicationWork();
     const app = new Hono();

@@ -161,6 +161,44 @@ describe("createWorld", () => {
     if (tmp) await rm(tmp, { recursive: true, force: true });
   });
 
+  it("chooses an unused ID before writing the remaining parts", async () => {
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "Clockwork city",
+      existingWorldIds: ["test-world", "test-world-2"],
+    });
+    expect(result).toMatchObject({
+      success: true,
+      id: "test-world-3",
+      manifest: { id: "test-world-3" },
+    });
+  });
+
+  it("includes the rejected answer when asking for a repair", async () => {
+    const rejected = "===WORLD_YAML===\nnot: a-world\n===END===";
+    const requests: unknown[] = [];
+    const valid = new FixedLlm(
+      `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+    );
+    await createWorld({
+      concept: "Clockwork city",
+      llm: {
+        async generate(request) {
+          requests.push(request.messages);
+          return requests.length === 1
+            ? { ...(await valid.generate()), content: rejected }
+            : valid.generate();
+        },
+      },
+    });
+    expect(requests[1]).toContainEqual({
+      role: "assistant",
+      content: rejected,
+    });
+  });
+
   it("returns portable content without writes and exports without mutating it", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
@@ -288,7 +326,11 @@ describe("createWorld", () => {
     const result = await createWorld({
       llm: {
         async generate({ messages, signal }) {
-          const request = String(messages[1]?.content).split("\n")[0]!;
+          const request = String(messages[1]?.content)
+            .split("\n")
+            .find((line) =>
+              line.startsWith("Write one part of the world package now:"),
+            )!;
           requests.push(request);
           if (!request.includes("`lorebook`")) {
             return {
@@ -343,7 +385,13 @@ describe("createWorld", () => {
     const result = await createWorld({
       llm: {
         async generate({ messages }) {
-          requests.push(String(messages[1]?.content).split("\n")[0]!);
+          requests.push(
+            String(messages[1]?.content)
+              .split("\n")
+              .find((line) =>
+                line.startsWith("Write one part of the world package now:"),
+              )!,
+          );
           return {
             content: answer,
             toolCalls: [],
@@ -394,7 +442,11 @@ describe("createWorld", () => {
     const result = await createWorld({
       llm: {
         async generate({ messages }) {
-          const request = String(messages[1]?.content).split("\n")[0]!;
+          const request = String(messages[1]?.content)
+            .split("\n")
+            .find((line) =>
+              line.startsWith("Write one part of the world package now:"),
+            )!;
           requests.push(request);
           return {
             content: request.includes("`characters`")

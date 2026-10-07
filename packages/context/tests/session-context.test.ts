@@ -146,6 +146,34 @@ describe("buildSessionContextSnapshot — basic shape", () => {
 // ── Test B: Structured world context ────────────────────────────
 
 describe("buildSessionContextSnapshot — world context", () => {
+  it.each([
+    ["en-US", "Edited default lore"],
+    ["zh-CN", "Translated lore"],
+  ])(
+    "uses the requested world lore edition for %s",
+    async (locale, expected) => {
+      const store = createMemoryStore();
+      await store.upsertWorld(
+        makeWorld({
+          locale: "en-US",
+          lore: "Edited default lore",
+          metadata: {
+            localizedText: {
+              lore: { "en-US": "Old file lore", "zh-CN": "Translated lore" },
+            },
+          },
+        }),
+      );
+      await store.createSession(makeSession());
+      const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+        locale,
+        turnNumber: 1,
+        worldId: "w1",
+      });
+      expect(snapshot.world.lore).toBe(expected);
+    },
+  );
+
   it.each(["Player-edited lore", ""])(
     "uses the session lore override on every context rebuild (%j)",
     async (loreOverride) => {
@@ -226,11 +254,8 @@ describe("buildSessionContextSnapshot — world context", () => {
     expect(snapshot.world.name).toBe(world.name);
     expect(snapshot.world.description).toBe(world.description);
     expect(snapshot.world.lore).toBe("The land of Ash");
-    // `world.tone` is derived from the tone dimension's value so authored
-    // prompts (`{{ world.tone }}`) keep resolving after dimensions became
-    // open snapshot entries.
-    expect(snapshot.world.tone).toBe("noir");
-    expect(snapshot.world.openingScenario).toBeUndefined();
+    expect(snapshot.world).not.toHaveProperty("tone");
+    expect(snapshot.world).not.toHaveProperty("openingScenario");
     expect(snapshot.world.dimensions).toEqual({
       tone: {
         name: "Tone",
@@ -436,6 +461,62 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
     }
   });
 
+  it("bounds selective history scans and matches Latin words without substring false positives", async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession());
+    await store.upsertLorebookEntries([
+      makeLorebookEntry({ id: "art", strategy: "selective", keys: ["art"] }),
+      makeLorebookEntry({
+        id: "moon",
+        strategy: "selective",
+        keys: ["月光"],
+        extra: { scanDepth: 1 },
+      }),
+      makeLorebookEntry({
+        id: "gate",
+        strategy: "selective",
+        keys: ["gate"],
+        extra: { scanDepth: 2 },
+      }),
+      makeLorebookEntry({
+        id: "default",
+        strategy: "selective",
+        keys: ["月光"],
+      }),
+      makeLorebookEntry({
+        id: "too-old",
+        strategy: "selective",
+        keys: ["castle"],
+        extra: { scanDepth: 2 },
+      }),
+    ]);
+    const opts = {
+      locale: "en-US",
+      turnNumber: 4,
+      recentMessages: [
+        { content: "castle" },
+        { content: "The gate opens." },
+        { content: "月光照亮了庭院。" },
+      ],
+    };
+    const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+      ...opts,
+      playerMessage: "Join the party.",
+    });
+    expect(
+      snapshot.contributions
+        .filter((entry) => entry.kind === "lore_entry")
+        .map((entry) => entry.sourceId),
+    ).toEqual(["gate", "moon"]);
+    const matched = await buildSessionContextSnapshot(store, "sess-1", {
+      ...opts,
+      playerMessage: "Inspect ART, then leave.",
+    });
+    expect(
+      matched.contributions.some((entry) => entry.sourceId === "art"),
+    ).toBe(true);
+  });
+
   it("rejects unrecognized positions with a warning and applies the documented default", async () => {
     const store = createMemoryStore();
     await store.createSession(makeSession());
@@ -517,7 +598,7 @@ describe("buildSessionContextSnapshot — graceful degradation", () => {
       listCharacters: async () => {
         throw new Error("boom");
       },
-      listPlayerInputs: async () => {
+      getLatestPlayerInput: async () => {
         throw new Error("boom");
       },
       listSessionLorebookEntries: async () => {

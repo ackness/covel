@@ -3,6 +3,7 @@ import { resolveMediaImageFlow } from "./media-image-flow.js";
 import { listRuntimeJobs } from "./plugin-rpc/jobs.js";
 import {
   announceQueuedRuntimeJobs,
+  announceDeferredRuntimeJobs,
   withSettledExecutionLock,
   requestJobServices,
 } from "./plugin-rpc/settled-request.js";
@@ -47,6 +48,7 @@ import {
   errorBody,
   SESSION_BUSY_CODE,
   SESSION_BUSY_MESSAGE,
+  type ApiErrorResponse,
 } from "../../api-error.js";
 import { SessionLockTimeoutError } from "../../lib/session-lock.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
@@ -56,21 +58,17 @@ import {
   enqueueEventFollowers,
   type QueuedActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import { publishRuntimeJobStatusEvent } from "./plugin-rpc/runtime-job-worker.js";
 import {
   decodePluginUserSettingsHeader,
-  mergePluginUserSettings,
-  readWorldPluginSettings,
+  loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
 import { registerActiveTurn } from "./turn-control.js";
 import {
   assertRecoverableTurn,
   recoveryAction,
 } from "./actions/execution-recovery.js";
-import {
-  checkSessionOwner,
-  sessionIncarnationIdentity,
-} from "./session/session-guard.js";
+import { checkSessionOwner } from "./session/session-guard.js";
+import { readLockedSession } from "./session/locked-mutation.js";
 import { validateActionRequest } from "./actions/request.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
@@ -108,13 +106,22 @@ type Env = {
 
 export const actionRoutes = new Hono<Env>();
 
+/** An entry denial after the SSE response opens keeps the JSON guard's code. */
+class SessionEntryRejectedError extends Error {
+  readonly code?: string;
+
+  constructor(body: ApiErrorResponse) {
+    super(body.error);
+    this.code = body.code;
+  }
+}
+
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const eventBus = c.get("eventBus");
   const mediaStore = c.get("mediaStore");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
-  const runtimeJobWorker = c.get("runtimeJobWorker");
 
   const rawBody = await c.req.json<unknown>().catch(() => null);
   const bodyResult = validateActionRequest(rawBody);
@@ -155,7 +162,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // on the session's behalf.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
-  const expectedIncarnation = sessionIncarnationIdentity(session);
 
   // Fast path: a paused/ended session takes no actions. The
   // authoritative re-check happens under the session lock below (this read is
@@ -348,15 +354,16 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       currentRetryScope = undefined;
       const readLiveActionSession = async () => {
         c.get("requestWork")?.signal.throwIfAborted();
-        const live = await store.getSession(sessionId);
-        if (!live)
-          throw new Error("session was deleted while the action was queued");
-        if (sessionIncarnationIdentity(live) !== expectedIncarnation) {
-          throw new Error("session was replaced while the action was queued");
-        }
-        if (live.status !== "active") {
-          throw new Error(
-            `session is ${live.status}; it must be active to accept actions`,
+        const live = await readLockedSession({
+          c,
+          store,
+          sessionId,
+          expectedSession: session,
+          allowedStatuses: ["active"],
+        });
+        if (live instanceof Response) {
+          throw new SessionEntryRejectedError(
+            (await live.json()) as ApiErrorResponse,
           );
         }
         return live;
@@ -556,12 +563,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // manifest default. Without this the scheduled loop only ever saw
           // manifest defaults — player + world tuning were silently dropped on the
           // main route (only plugin-rpc read the header).
-          const world = session.worldId
-            ? await store.getWorld(session.worldId)
-            : null;
           const userSettings = snapshotUserSettings(
-            mergePluginUserSettings(
-              readWorldPluginSettings(world?.metadata),
+            await loadSessionPluginUserSettings(
+              store,
+              effectiveSession,
               decodedUserSettings.settings,
             ),
           );
@@ -868,29 +873,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // session lock releases: a slow client draining execution.completed must
       // not extend the critical section.
 
-      for (const queued of queuedRuntimeJobs) {
-        publishRuntimeJobStatusEvent(eventBus, queued.status);
-        const payload = {
-          runtimeId: queued.job.runtimeId,
-          pluginId: queued.job.pluginId,
-          jobId: queued.job.jobId,
-          sourceTurnId: queued.job.origin.sourceTurnId,
-        };
-        await writeEvent("runtime.deferred", payload);
-        eventBus.emit({
-          id: crypto.randomUUID(),
-          type: "event",
-          topic: "runtime",
-          sessionId,
-          timestamp: new Date().toISOString(),
-          payload: {
-            ...payload,
-            _subTopic: "runtime",
-            _subType: "runtime.deferred",
-          },
-        });
-      }
-      if (queuedRuntimeJobs.length > 0) runtimeJobWorker?.wake(sessionId);
+      await announceDeferredRuntimeJobs(c, queuedRuntimeJobs, (payload) =>
+        writeEvent("runtime.deferred", payload),
+      );
 
       announceQueuedRuntimeJobs(c, followerJobs);
 
@@ -1010,7 +995,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         "error.occurred",
         lockBusy
           ? { message: SESSION_BUSY_MESSAGE, code: SESSION_BUSY_CODE }
-          : { message: isDev ? message : "Internal server error" },
+          : err instanceof SessionEntryRejectedError
+            ? { message: err.message, code: err.code }
+            : { message: isDev ? message : "Internal server error" },
       ).catch(() => {});
     } finally {
       releaseTurnControl?.();

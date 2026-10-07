@@ -9,11 +9,13 @@ import {
   type TabProps,
 } from "../editor-helpers.js";
 import type { WorldHistoryEvent, HistorySignificance } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
 const SIGNIFICANCE_LEVELS: HistorySignificance[] = ["major", "minor"];
 
-export function HistoryTab({ dimensions, onChange, t }: TabProps) {
+export function HistoryTab({ dimensions, onChange, t, problems }: TabProps) {
   const events: WorldHistoryEvent[] = [...(dimensions.history ?? [])];
+  const problem = fieldProblems(problems);
 
   function setEvents(next: WorldHistoryEvent[]) {
     onChange({ ...dimensions, history: next });
@@ -71,6 +73,7 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
                 value={text(ev.era)}
                 onChange={(e) => updateEvent(ei, { era: e.target.value })}
               />
+              {problem.at(`${ei}.era`)}
             </div>
             <div className="space-y-1">
               <Label htmlFor={`world-history-${ei}-year`}>
@@ -82,6 +85,7 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
                 value={text(ev.year)}
                 onChange={(e) => updateEvent(ei, { year: e.target.value })}
               />
+              {problem.at(`${ei}.year`)}
             </div>
             <div className="space-y-1">
               <Label htmlFor={`world-history-${ei}-name`}>
@@ -93,6 +97,7 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
                 value={text(ev.name)}
                 onChange={(e) => updateEvent(ei, { name: e.target.value })}
               />
+              {problem.at(`${ei}.name`)}
             </div>
             <div className="space-y-1">
               <Label htmlFor={`world-history-${ei}-significance`}>
@@ -114,6 +119,7 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
                   </option>
                 ))}
               </select>
+              {problem.at(`${ei}.significance`)}
             </div>
           </div>
 
@@ -127,9 +133,11 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
               value={text(ev.description)}
               onChange={(e) => updateEvent(ei, { description: e.target.value })}
             />
+            {problem.at(`${ei}.description`)}
           </div>
         </div>
       ))}
+      {problem.rest()}
     </div>
   );
 }

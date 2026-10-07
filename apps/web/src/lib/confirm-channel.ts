@@ -18,8 +18,15 @@ export interface ConfirmChoice {
 export interface ConfirmRequest {
   readonly title: string;
   readonly message: string;
+  /**
+   * Readable name of what the request acts on (the save, the world). Shown on
+   * its own line so the player can check it before approving.
+   */
+  readonly subject?: string;
   readonly confirmLabel: string;
   readonly cancelLabel: string;
+  /** The approval cannot be undone; the host marks its button as such. */
+  readonly destructive?: boolean;
   /** When present, the player ticks which entries the approval covers. */
   readonly choices?: readonly ConfirmChoice[];
 }
@@ -47,12 +54,21 @@ export function requestConfirm(request: ConfirmRequest): Promise<boolean> {
   const current = subscriber;
   if (!current) {
     return Promise.resolve(
-      typeof window === "undefined" ? false : window.confirm(request.message),
+      typeof window === "undefined"
+        ? false
+        : window.confirm(nativeText(request)),
     );
   }
   return new Promise<boolean>((resolve) => {
     current({ ...request, id: nextId++, resolve });
   });
+}
+
+/** The native dialog has one text: the message, then what it applies to. */
+function nativeText(request: ConfirmRequest): string {
+  return request.subject
+    ? `${request.message}\n\n${request.subject}`
+    : request.message;
 }
 
 /**
@@ -69,7 +85,7 @@ export function requestChoices(
   const current = subscriber;
   if (!current) {
     const text = [
-      request.message,
+      nativeText(request),
       ...request.choices.map((choice) => `• ${choice.label}`),
     ].join("\n");
     return Promise.resolve(

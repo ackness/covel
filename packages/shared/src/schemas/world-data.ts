@@ -1,3 +1,7 @@
+import {
+  parseWorldDataTarget,
+  parseWorldDataIndexTarget,
+} from "../world-data-target.js";
 import { z } from "zod";
 
 export const worldDataSourceIdRegex = /^[a-z][a-zA-Z0-9_-]{0,63}$/;
@@ -32,7 +36,7 @@ const afterSchema = z.union([
   z.array(worldDataSourceIdSchema).min(1),
 ]);
 
-export const worldDataSourceDescriptorSchema = z
+const worldDataSourceDescriptorBaseSchema = z
   .object({
     kind: worldDataSourceKindSchema.describe(
       "Reader type. `media` reads a directory of media files.",
@@ -71,6 +75,13 @@ export const worldDataSourceDescriptorSchema = z
         examples: ["id"],
       })
       .optional(),
+    localeArrayKeys: z
+      .array(z.string().min(1))
+      .min(1)
+      .describe(
+        "Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered.",
+      )
+      .optional(),
     indexTo: z
       .string()
       .min(1)
@@ -106,6 +117,34 @@ export const worldDataSourceDescriptorSchema = z
   })
   .strict();
 
+export const worldDataSourceDescriptorSchema =
+  worldDataSourceDescriptorBaseSchema.superRefine((source, ctx) => {
+    const issue = (field: string, message: string) =>
+      ctx.addIssue({ code: "custom", path: [field], message });
+    if (!parseWorldDataTarget(source.to))
+      issue(
+        "to",
+        "Use a supported destination; contract targets start with contract:",
+      );
+    if (source.kind === "media") {
+      if (source.to !== "media")
+        issue(
+          "to",
+          "A media reader must target media; set indexTo to its receiving contract",
+        );
+      if (!source.indexTo || !parseWorldDataIndexTarget(source.indexTo))
+        issue("indexTo", "Media requires a contract:<id> index destination");
+    } else {
+      if (source.to === "media")
+        issue(
+          "kind",
+          "The media destination requires a media directory reader",
+        );
+      if (source.indexTo !== undefined)
+        issue("indexTo", "Only media readers produce a media index");
+    }
+  });
+
 export const worldDataDescriptorSchema = z
   .object({
     schemaVersion: z.literal(1).describe("Descriptor format version."),
@@ -118,7 +157,7 @@ export const worldDataDescriptorSchema = z
   .strict();
 
 export const worldDataSourceDescriptorOverrideSchema =
-  worldDataSourceDescriptorSchema.partial().strict();
+  worldDataSourceDescriptorBaseSchema.partial().strict();
 
 export const worldDataDescriptorOverrideSchema = z
   .object({

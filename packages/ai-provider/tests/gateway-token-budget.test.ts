@@ -153,6 +153,36 @@ describe("gateway target output budgets", () => {
     },
   );
 
+  it.each(["generate", "object", "stream"] as const)(
+    "%s rejects an oversized fallback before invoking its provider",
+    async (mode) => {
+      const { gateway, calls, presetRegistry } = setup(503);
+      presetRegistry.addPreset({
+        ...presetRegistry.resolvePreset("backup")!,
+        capability: { contextWindow: 1024, maxOutputTokens: 512 },
+      });
+      const input = {
+        messages: [
+          { role: "user" as const, content: "long context ".repeat(2000) },
+        ],
+      };
+      const invoke = async () => {
+        if (mode === "generate") return gateway.generateText(input);
+        if (mode === "object")
+          return gateway.generateObject({ ...input, schema: z.object({}) });
+        for await (const _ of gateway.streamText(input)) {
+          /* drain */
+        }
+      };
+      await expect(invoke()).rejects.toMatchObject({
+        model: "backup",
+        retriable: false,
+        message: expect.stringContaining("cannot fit the request"),
+      });
+      expect(calls.map((call) => call.model)).toEqual(["primary"]);
+    },
+  );
+
   it("uses 16k for direct gateway calls without a runtime budget", async () => {
     const { gateway, calls } = setup();
     expect(gateway.resolveSlot(undefined)).toMatchObject({

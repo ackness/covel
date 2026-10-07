@@ -14,13 +14,13 @@ import type {
   MemoryVectorRow,
 } from "./memory-types.js";
 
-function squaredL2(a: Float32Array, b: Float32Array): number {
+function l2Distance(a: Float32Array, b: Float32Array): number {
   let sum = 0;
   for (let i = 0; i < a.length; i += 1) {
     const diff = a[i] - b[i];
     sum += diff * diff;
   }
-  return sum;
+  return Math.sqrt(sum);
 }
 
 export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
@@ -149,7 +149,7 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         ) {
           continue;
         }
-        scored.push({ row, distance: squaredL2(input.query, row.embedding) });
+        scored.push({ row, distance: l2Distance(input.query, row.embedding) });
       }
       scored.sort((a, b) => a.distance - b.distance);
       return scored.slice(0, topK).map(({ row, distance }) => ({

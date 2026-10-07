@@ -1,3 +1,4 @@
+import type { MutableRef } from "./runtime-refs.js";
 import { applyUiSlotEvent } from "@/stores/ui-slot-store.js";
 import { reasoningAction } from "./reasoning.js";
 import {
@@ -40,10 +41,6 @@ import type {
   SnapshotCharacter,
   StreamMessage,
 } from "./types.js";
-
-interface MutableRef<T> {
-  current: T;
-}
 
 interface DeltaBufferEntry {
   turnId: string;
@@ -515,6 +512,9 @@ export function createSseEventHandler(
         if (currentSessionId) {
           clearDomainEventPreviewsForTurn(currentSessionId, turnId);
         }
+        if (!committed && turnId) {
+          deps.dispatch({ type: "REMOVE_MESSAGES_FROM_TURN", turnId });
+        }
         // A turn aborted before producing output (e.g. by a TurnStart hook)
         // carries an abortReason — surface it so the player isn't left with
         // a silent empty turn. A player-initiated abort is NOT an error: the
@@ -571,39 +571,7 @@ export function createSseEventHandler(
         });
         break;
       }
-      case "event.emitted": {
-        const topic = (payload.topic as string) ?? (payload.type as string);
-        const eventData = payload.data ?? payload;
-        if (topic) {
-          const id = statePatchId(envelope, "evt");
-          deps.dispatch({
-            type: "ADD_STATE_PATCH",
-            patch: {
-              id,
-              summary: `event: ${topic}`,
-              packageName: (payload.pluginId as string) ?? "system",
-              data: {
-                events: [
-                  {
-                    id,
-                    title: topic,
-                    type: (payload.eventType as string) ?? topic,
-                    status: "active",
-                    description:
-                      typeof eventData === "object"
-                        ? JSON.stringify(eventData)
-                        : String(eventData),
-                    turnCreated: turnId
-                      ? parseInt(turnId.split("-").pop() ?? "0", 10)
-                      : undefined,
-                  },
-                ],
-              },
-            },
-          });
-        }
-        break;
-      }
+      case "event.emitted":
       case "ui.slot.changed":
       case "ui.slot.preview":
       case "ui.slot.cleared":

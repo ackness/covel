@@ -2,6 +2,8 @@ import type * as api from "@/services/api.js";
 
 export interface ModelPrice {
   readonly inputPerMToken?: number;
+  readonly cacheReadPerMToken?: number;
+  readonly cacheWritePerMToken?: number;
   readonly outputPerMToken?: number;
 }
 
@@ -37,6 +39,12 @@ export function resolveLocalModelPrices(args: {
     const pricing = override.pricing;
     if (!pricing) continue;
     const price = {
+      ...(validPrice(pricing.cacheReadPerMToken)
+        ? { cacheReadPerMToken: pricing.cacheReadPerMToken }
+        : {}),
+      ...(validPrice(pricing.cacheWritePerMToken)
+        ? { cacheWritePerMToken: pricing.cacheWritePerMToken }
+        : {}),
       ...(validPrice(pricing.inputPerMToken)
         ? { inputPerMToken: pricing.inputPerMToken }
         : {}),
@@ -62,7 +70,9 @@ export function resolveLocalModelPrices(args: {
       previous === null ||
       (previous &&
         (previous.inputPerMToken !== price.inputPerMToken ||
-          previous.outputPerMToken !== price.outputPerMToken))
+          previous.outputPerMToken !== price.outputPerMToken ||
+          previous.cacheReadPerMToken !== price.cacheReadPerMToken ||
+          previous.cacheWritePerMToken !== price.cacheWritePerMToken))
         ? null
         : price;
   }

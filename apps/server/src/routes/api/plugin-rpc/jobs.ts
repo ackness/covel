@@ -67,7 +67,7 @@ type RuntimeJobStore = Pick<
   | "getPluginData"
   | "listPluginData"
   | "listPluginDataByNamespace"
-  | "listSessions"
+  | "queryPluginData"
 > &
   Partial<Pick<DataStore, "withTransaction">>;
 
@@ -129,14 +129,15 @@ export class RuntimeJobQueueFullError extends Error {
   }
 }
 
-const TERMINAL_RUNTIME_JOB_STATUSES: ReadonlySet<RuntimeJobStatus> = new Set([
-  "succeeded",
-  "failed",
-  "timed_out",
-  "cancelled",
-  "stale",
-  "orphaned",
-]);
+export const TERMINAL_RUNTIME_JOB_STATUSES: ReadonlySet<RuntimeJobStatus> =
+  new Set([
+    "succeeded",
+    "failed",
+    "timed_out",
+    "cancelled",
+    "stale",
+    "orphaned",
+  ]);
 
 const LEGAL_RUNTIME_JOB_TRANSITIONS: Readonly<
   Record<RuntimeJobStatus, ReadonlySet<RuntimeJobStatus>>
@@ -390,6 +391,21 @@ export async function getRuntimeJob(
   return row ? fromRuntimeJobRow(row) : null;
 }
 
+/** One namespace scan shared by maintenance, reconciliation and claiming. */
+export async function listAllRuntimeJobs(
+  store: Pick<DataStore, "queryPluginData">,
+): Promise<RuntimeJobRecord[]> {
+  return (await store.queryPluginData({ namespace: RUNTIME_JOB_NAMESPACE }))
+    .map(fromRuntimeJobRow)
+    .filter((job): job is RuntimeJobRecord => job !== null)
+    .sort(
+      (a, b) =>
+        a.sequence - b.sequence ||
+        a.enqueuedAt.localeCompare(b.enqueuedAt) ||
+        a.jobId.localeCompare(b.jobId),
+    );
+}
+
 export async function listRuntimeJobs(
   store: Pick<
     DataStore | StoreTransaction,
@@ -613,6 +629,7 @@ export async function claimNextRuntimeJob(
     readonly ownerId: string;
     readonly leaseMs: number;
     readonly afterSessionId?: string;
+    readonly jobs?: readonly RuntimeJobRecord[];
     /** Only these sessions; every session when omitted. */
     readonly sessionIds?: readonly string[];
     readonly excludeRuntimeKeys?: ReadonlySet<string>;
@@ -620,9 +637,16 @@ export async function claimNextRuntimeJob(
     readonly canClaim?: (job: RuntimeJobRecord) => boolean | Promise<boolean>;
   },
 ): Promise<ClaimedRuntimeJob | null> {
+  const jobs =
+    args.jobs ??
+    (args.sessionIds ? undefined : await listAllRuntimeJobs(store));
   const sessionIds = [
-    ...(args.sessionIds ??
-      (await store.listSessions()).map((session) => session.id)),
+    ...new Set(
+      args.sessionIds ??
+        jobs!
+          .filter((job) => job.status === "queued")
+          .map((job) => job.sessionId),
+    ),
   ].sort();
   if (sessionIds.length === 0) return null;
   const cursorIndex = args.afterSessionId
@@ -633,10 +657,14 @@ export async function claimNextRuntimeJob(
     ...sessionIds.slice(0, cursorIndex + 1),
   ];
   for (const sessionId of rotated) {
-    const candidates = await listRuntimeJobs(store, {
-      sessionId,
-      statuses: ["queued"],
-    });
+    const candidates = jobs
+      ? jobs.filter(
+          (job) => job.sessionId === sessionId && job.status === "queued",
+        )
+      : await listRuntimeJobs(store, {
+          sessionId,
+          statuses: ["queued"],
+        });
     for (const candidate of candidates) {
       if (
         args.excludeRuntimeKeys?.has(
@@ -705,6 +733,8 @@ export async function recoverExpiredRuntimeJobs(
   store: RuntimeJobStore,
   opts: {
     readonly now?: string;
+    readonly jobs?: readonly RuntimeJobRecord[];
+    readonly onChanged?: (job: RuntimeJobRecord) => void;
     readonly tryWithCommitLock: NonNullable<SessionLock["tryWithLock"]>;
   },
 ): Promise<{ readonly timedOut: number; readonly orphaned: number }> {
@@ -712,8 +742,8 @@ export async function recoverExpiredRuntimeJobs(
   const nowMs = Date.parse(now);
   let timedOut = 0;
   let orphaned = 0;
-  for (const session of await store.listSessions()) {
-    const jobs = await listRuntimeJobs(store, { sessionId: session.id });
+  const jobs = opts.jobs ?? (await listAllRuntimeJobs(store));
+  {
     for (const job of jobs) {
       if (job.status === "queued") {
         const queueDeadline =
@@ -733,7 +763,10 @@ export async function recoverExpiredRuntimeJobs(
             now,
             reason: "queue-deadline-exceeded",
           });
-          if (changed) timedOut++;
+          if (changed) {
+            timedOut++;
+            opts.onChanged?.(changed);
+          }
         }
         continue;
       }
@@ -763,9 +796,16 @@ export async function recoverExpiredRuntimeJobs(
             job.sessionId,
             recover,
           );
-          if (recovered.acquired && recovered.value) orphaned++;
-        } else if (await recover()) {
-          orphaned++;
+          if (recovered.acquired && recovered.value) {
+            orphaned++;
+            opts.onChanged?.(recovered.value);
+          }
+        } else {
+          const recovered = await recover();
+          if (recovered) {
+            orphaned++;
+            opts.onChanged?.(recovered);
+          }
         }
       }
     }

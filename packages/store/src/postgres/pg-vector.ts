@@ -48,6 +48,7 @@ import type {
   CommitVectorIndexBatchInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
+import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
 
 // ── Safety helpers ───────────────────────────────────────────────
 
@@ -111,9 +112,6 @@ export function createPgVectorCapability(
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (session_id, plugin_id, namespace, key)
       );
-      CREATE INDEX IF NOT EXISTS idx_${tname}_hnsw
-        ON ${tname} USING hnsw (embedding vector_l2_ops)
-        WITH (m = 16, ef_construction = 64);
       CREATE INDEX IF NOT EXISTS idx_${tname}_session
         ON ${tname} (session_id, plugin_id, namespace);
     `);
@@ -324,6 +322,8 @@ export function createPgVectorCapability(
     tx: TransactionSql,
     input: UpsertVectorInput,
   ): Promise<void> {
+    assertStoreIdentifiers(input);
+    input = withoutNul(input);
     // The extension and physical tables are created by ensureVectorModel. Do
     // not resolve a session binding here: the binding, model row, incarnation
     // guard, and INSERT must all be observed under one parent-row lock.
@@ -450,11 +450,14 @@ export function createPgVectorCapability(
 
     const whereSql = extraClauses.join(" AND ");
     const rows = (await client.unsafe(
-      `SELECT session_id, plugin_id, namespace, key, payload,
+      `WITH candidates AS MATERIALIZED (
+         SELECT session_id, plugin_id, namespace, key, payload, embedding
+           FROM ${tname} WHERE ${whereSql}
+       )
+       SELECT session_id, plugin_id, namespace, key, payload,
               embedding <-> $1::vector AS distance
-         FROM ${tname}
-        WHERE ${whereSql}
-        ORDER BY distance
+         FROM candidates
+        ORDER BY distance, plugin_id COLLATE "C", namespace COLLATE "C", key COLLATE "C"
         LIMIT $${paramIdx}`,
       [vecStr, ...extraParams, topK],
     )) as Array<{

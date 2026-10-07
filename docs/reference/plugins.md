@@ -226,7 +226,9 @@ io:
     recordAs: latest-facts
 ```
 
-普通输入读同一 execution 的已完成上游结果，`select` 为结果值上的 JSON Pointer。跨 execution 读取使用 `scope: committed` 和 `recordAs`。Schema 可以是本地路径或 `contract:<contractId>`；跨提供者契约 schema 在加载时解析。提示词中的绑定位于 `runtime-inputs.<binding>.value`，不要再依赖旧注入标签。
+普通输入读同一 execution 的已完成上游结果，`select` 为结果值上的 JSON Pointer。跨 execution 读取使用 `scope: committed` 和 `recordAs`。Schema 可以是本地路径或 `contract:<contractId>`；跨提供者契约 schema 在加载时解析。提示词中的绑定位于 `runtime-inputs.<binding>.value`，不要再依赖旧注入标签。 输入绑定名称只匹配显式声明的 schema 和 slot；`constructor`、`toString` 这样的名称不读取 JavaScript 继承属性。
+
+`select` 遵循 RFC 6901：数组索引使用 `0` 或无前导零的十进制整数，`/01`、`/+1` 等不匹配数组元素。`required: false` 的输入在静态 schema 不兼容或实际值未通过校验时省略该槽位，消费者仍运行并解析其他输入。静态 pattern 证明只处理完整的锚定字面前缀（如 `^audio/`）；含分组、量词或分支的正则交给实际值校验，不截取表面前缀来拒绝有效输入。
 
 发布 runtime 输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。同一契约 ID 的所有提供者必须发布一致的 schema；替代插件的 `provides` 与本插件 runtime 的 `io.output.contract` 必须对齐，其他已安装插件的产出不能替它满足声明。缺少被消费契约的 schema 或只有声明而无产出的提供者会产生加载诊断。
 
@@ -234,7 +236,7 @@ io:
 
 内部 `RuntimeResult` 分别保存 `output`（业务输出）、`effects`（显式副作用）和 `completion`（`done` / `pending`）。提交、事件后继和待处理交互读取 `effects`，setup 完成判断读取 `completion`。`outputKind: story` 的 `output.narrativeOutput` 仍按声明发布叙事。
 
-Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`。运行时用 `canonicalValue` 保存原始业务值；对象投影为 `output`，标量、数组和 `null` 投影为 `{ value }`，缺省值投影为空对象。业务值中的 `events`、`pluginData`、`interactions` 或 `preGameDone` 等同名字段不会发起副作用或完成 setup；这些意图必须通过 `HandlerResult.effects` 和 `HandlerResult.completion` 表达。`effects.ui[].parts`、`effects.interactions` 与 `effects.notifications` 的条目必须是对象：function 返回非对象条目时以 `output-schema-invalid` 失败，其他途径带入的同类条目在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](transactions.md)）。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
+Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`。运行时用 `canonicalValue` 保存原始业务值；对象投影为 `output`，标量、数组和 `null` 投影为 `{ value }`，缺省值投影为空对象。业务值中的 `events`、`pluginData`、`interactions` 或 `preGameDone` 等同名字段不会发起副作用或完成 setup；这些意图必须通过 `HandlerResult.effects` 和 `HandlerResult.completion` 表达。`effects.interactions`、`effects.notifications` 与 `effects.statePatches` 必须为数组，条目及 `effects.ui[].parts` 必须是对象：function 返回非数组通道或非对象条目时以 `output-schema-invalid` 失败，其他途径带入的同类内容在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](transactions.md)）。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
 
 Agent 继续使用现有的提示词输出协议。执行边界统一将声明的副作用和工具结果归入 `effects`，将 `preGameDone: true` 转为 `completion: "done"`；包含 `topic` 的事件归入副作用，WorldIR 的业务事件保留在 `output.events`。Agent 的公共契约值为拆分后的业务 `output`，普通执行与 resume 使用相同边界。
 
@@ -246,7 +248,7 @@ Agent 继续使用现有的提示词输出协议。执行边界统一将声明�
 
 `ctx.random` 是宿主提供的随机源，函数 handler、agent guard、插件工具和 RPC action 的上下文里都有。骰子和其他游戏内的随机取数用 `ctx.random.int(min, max)`（返回 `min <= n < max` 的整数，与 `node:crypto` 的 `randomInt` 相同），不要直接用 `node:crypto` 或 `Math.random`。平时它就是 `randomInt`；测试服务端设置 `COVEL_RANDOM_SEED` 后，同一个 runtime（或同一个 RPC action）取的第 n 个数每次运行都相同，脚本会话因此可以重复（见 [环境变量](../guide/env-registry.md#runtime-contract) 与 [录制与回放](../guide/e2e-plugin-verify.md#录制与回放)）。`shortId` / `shortIdBatch` 的第四个参数接受它，ID 的随机部分也随之可重复。
 
-**记录里的簿记字段不给模型。** 会话 ID、行 / 回合 / 结果的 UUID 和写入时间对模型没有用：占 token，抄回来容易抄错，时间戳在行每次重写时都会改变提示词，同一个会话跑两遍它们也各不相同。内核把记录写进提示词时会去掉它们：`io.selfData` 的每一行是 `- <key> | <值的 JSON>`（`summary` 格式截断到 200 字符），不带行的 `updatedAt`，值里与 key 相同的 `id` 也不再重复；`<runtime-inputs>` / `<runtime-exports>` 的值、`{{ world.schema }}`，以及没有 `_text` 的工具结果在交给模型前也经过同一个投影。属性名和取值都符合才算：名为 `id` 或以 `Id` / `Ids` 结尾且取值是 UUID（或全是 UUID 的数组），名为 `timestamp` 或以 `At` 结尾且取值是 ISO 时间，以及 `sessionId`。`id: "npc-lin-yao"`、`date: "1943-06-01T08:00:00Z"` 这样的值保留。这个判断只看名字和取值的形状，分不出剧情里的时间：故事内的时刻若存成 `diedAt: "1943-06-01T08:00:00Z"`（名字以 `At` 结尾或叫 `timestamp`，取值是 ISO 时间），模型同样看不到它，而且没有任何报错。要给模型看的剧情时间换一个名字（`date`、`diedOn`），或者不写成 ISO 时间（`"1943 年 6 月 1 日清晨"`）；世界包里的数据和插件自己存的数据都适用。代码读到的记录不变：`ctx.inputs`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。插件自己拼提示词（例如直接调用 `ctx.gateway`）时用 `@covel/plugin-handlers-utils` 导出的 `modelFacingJson(value)` 做同样的事；工具要把一个不透明句柄交给模型时写在 `_text` 里。
+**记录里的簿记字段不给模型。** 会话 ID、行 / 回合 / 结果的 UUID 和写入时间对模型没有用：占 token，抄回来容易抄错，时间戳在行每次重写时都会改变提示词，同一个会话跑两遍它们也各不相同。内核把记录写进提示词时会去掉它们：`io.selfData` 的每一行是 `- <key> | <值的 JSON>`（`summary` 格式截断到 200 字符），不带行的 `updatedAt`，值里与 key 相同的 `id` 也不再重复；`<runtime-inputs>` / `<runtime-exports>` 的值、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表与 NPC fields，以及没有 `_text` 的工具结果在交给模型前也经过同一个投影。属性名和取值都符合才算：名为 `id` 或以 `Id` / `Ids` 结尾且取值是 UUID（或全是 UUID 的数组），名为 `timestamp` 或以 `At` 结尾且取值是 ISO 时间，以及 `sessionId`。`id: "npc-lin-yao"`、`date: "1943-06-01T08:00:00Z"` 这样的值保留。这个判断只看名字和取值的形状，分不出剧情里的时间：故事内的时刻若存成 `diedAt: "1943-06-01T08:00:00Z"`（名字以 `At` 结尾或叫 `timestamp`，取值是 ISO 时间），模型同样看不到它，而且没有任何报错。要给模型看的剧情时间换一个名字（`date`、`diedOn`），或者不写成 ISO 时间（`"1943 年 6 月 1 日清晨"`）；世界包里的数据和插件自己存的数据都适用。代码读到的记录不变：`ctx.inputs`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。插件自己拼提示词（例如直接调用 `ctx.gateway`）时用 `@covel/plugin-handlers-utils` 导出的 `modelFacingJson(value)` 做同样的事；工具要把一个不透明句柄交给模型时写在 `_text` 里。
 
 内核输入 `turn-digest@1` 冻结同一份 lastPlayerInput 快照及 `runtimeResults`。后者包含已经观察到的终态 `{runtimeId, status}`，status 为 `success/failed/skipped/suspended`；没有把尚未结束的 runtime 预测为成功。detached worker 消费源执行快照，不重新查询最新表单或回合状态。此输入契约更新后，旧作业与快照需要重建，不做兼容读取。
 
@@ -305,7 +307,7 @@ World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时
 
 静态段放在 `contributes.prompt`，每项包含 `id/content/position`，可选 `role`。位置为 `system`、`pre-history`、`post-history` 或 `{depth: number}`。host 自动注册静态段，无需再次声明扩展；`static-prompt` 为保留注册 ID。
 
-动态提示词使用 `prompt.segment@1`，世界上下文使用 `session.world-context@1`，历史变换使用 `prompt.history-transform@1`，历史压缩使用 `history.compact@1`。详见[插件扩展点](plugin-extensions.md)。这些扩展使用同一个 execution 的快照，不在每次调用时重读清单。
+动态提示词使用 `prompt.segment@1`，世界上下文使用 `session.world-context@1`，历史变换使用 `prompt.history-transform@1`，历史压缩使用 `history.compact@2`。详见[插件扩展点](plugin-extensions.md)。这些扩展使用同一个 execution 的快照，不在每次调用时重读清单。
 
 记忆块属于 memory 插件：默认定义经 `memory.block-definitions@1` 服务提供，世界自定义定义经 `memory.blocks@1` 数据契约导入。框架不再聚合 `memoryBlocks` 或 `summaryFocus` 字段，也不维护独立 working_memory 表。
 
@@ -327,6 +329,10 @@ World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时
 发现 DTO 区分 `kind`、宿主 `hostState` 与会话 `sessionState`，运行时提供 `outputContract`。未授权社区插件可保留在请求列表，但不能进入执行集合；许可绑定会话身份与审批范围。
 
 ## 本地化与验证
+
+目录级 `pnpm validate:plugin <dir>` 与 ZIP 安装共用静态文件和 runtime 检查：引用的 entry、handler、guard、JSON Schema 和 UI 文件必须存在于包内；自动/定时 runtime 必须有 stage；builtin 工具名和插件工具声明、包内 runtime 引用以及根契约依赖必须一致。这些检查不执行插件代码，不能替代启动时的注册一致性检查。
+
+`agent.history.includeSummaries: true` 可让有限 `maxTurns` 窗口继续读取持久摘要；默认仍不带摘要。带窗口的 runtime 不触发共享历史压缩。内置 guide 使用最近两个回合和摘要。
 
 canonical `PLUGIN.md` / `RUNTIME.md` 的正文和 `contributes.prompt` 固定段必须是 English。只有简体中文有变体：根文件用 `PLUGIN.zh.md`，子 runtime 用 `RUNTIME.zh.md`，其中只写正文和固定段的 `content`，frontmatter 可以为空。结构字段由 canonical 文件决定，变体不能改变契约、工具、stage、超时、提示词段 ID 或位置。简体中文会话读取中文变体，其余语言（包括繁体中文）读取 canonical；其他语言的变体文件不被读取。`COVEL_INSTRUCTION_LOCALE=en|zh` 可以为所有会话固定指令语言。玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`）在主清单里写 English，译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节、只写译文，可以是任意语言；加载器把它们编译成 locale map。标签文件只能翻译这些字段，写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误；主清单里的内联 locale map 同样报错。同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）：界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。格式见 [i18n](./i18n.md#2-本地化插件)。
 
@@ -366,3 +372,5 @@ pnpm lint
 ### 保留的数据命名空间
 
 整个 `_` 前缀保留给内核，插件不能经通用 plugin-data API 或 proposal 写入或删除这些 namespace，包括未知的 `_` 名和旧 `_memory`。`_hidden.<namespace>` 存放 `visibility: hidden` 世界数据和插件在剧情中追加的隐藏内容，只有所属插件的 runtime 能读，也只有所属插件自己的代码能写。插件日志通过受限 logger API 产生；业务数据使用 `blocks`、`definitions` 等普通名称。`__kernel:<subsystem>` 是不同的 owner 分区，插件绑定的读取接口不可访问它。完整清单与读取权限见[存储架构](../architecture/storage.md#plugin-data-ownership-and-reserved-names)。
+
+World data authoring sources may declare `localeArrayKeys` (for example `[label]`) alongside `key`. These additional identity fields match nested object lists to sparse translations after the source key and `id`; keep each matching key in the locale file. See [World Data](./world-data.md#语言文件namelocaleext).

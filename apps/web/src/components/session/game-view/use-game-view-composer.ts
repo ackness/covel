@@ -290,6 +290,8 @@ export function useGameViewComposer({
       void runSlashCommand(selectedCommand, val);
       return;
     }
+    // A note about an earlier submission does not describe this one.
+    setCommandFeedback(null);
     // Queued selections ride along with the typed line as a single turn.
     if (!executing && pendingDrafts.length > 0) {
       setInputValue("");
@@ -297,20 +299,28 @@ export function useGameViewComposer({
       return;
     }
     if (executing) {
-      // Steer the in-flight turn; on failure (e.g. the turn ended first — 409)
-      // restore the steered text to the composer so the player can re-send it.
-      // Merge with anything typed during the round-trip instead of dropping it:
-      // steered text first, newer draft after.
+      // Steer the in-flight turn. The turn may not take the text (409): it
+      // ended first, or its story is written and only bookkeeping is left.
+      // Then the text was never sent, so restore it to the composer and say
+      // so; the player sends it as the next message. Merge with anything typed
+      // during the round-trip instead of dropping it: steered text first,
+      // newer draft after.
       setInputValue("");
+      const restoreSteeredText = () => {
+        setInputValue((current) => (current ? `${val}\n${current}` : val));
+        setCommandFeedback({
+          tone: "info",
+          message: t(
+            "session.steerNotTaken",
+            "This turn did not take your message. It is back in the input box for you to send next.",
+          ),
+        });
+      };
       void steerMessage(val)
         .then((ok) => {
-          if (!ok) {
-            setInputValue((current) => (current ? `${val}\n${current}` : val));
-          }
+          if (!ok) restoreSteeredText();
         })
-        .catch(() => {
-          setInputValue((current) => (current ? `${val}\n${current}` : val));
-        });
+        .catch(restoreSteeredText);
       return;
     }
     onSendMessage(val);
@@ -329,6 +339,7 @@ export function useGameViewComposer({
     commitDrafts,
     steerMessage,
     onSendMessage,
+    t,
   ]);
 
   const handleAbort = useCallback(() => {

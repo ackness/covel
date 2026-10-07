@@ -185,7 +185,11 @@ export function resolveReasoningEffortProfile(
     return {
       family,
       defaultValue: "high",
-      options: adaptive ? [...options("disabled"), ...levels] : levels,
+      options:
+        (adaptive && !/claude-(?:opus|sonnet)-5[.-]5/.test(model)) ||
+        /claude-opus-4-5/.test(model)
+          ? [...options("disabled"), ...levels]
+          : levels,
     };
   }
 

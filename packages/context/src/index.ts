@@ -7,6 +7,8 @@ export type {
   SessionMeta,
   CharacterSummary,
   SummaryRecord,
+  FrameworkCompletion,
+  FrameworkCompletionContract,
 } from "./types.js";
 
 // ── Context Builder ─────────────────────────────────────────────
@@ -14,6 +16,7 @@ export {
   interpolateTemplate,
   buildInjectBlocks,
   buildContext,
+  resolveFrameworkCompletion,
 } from "./context-builder.js";
 
 // ── Token Budget ────────────────────────────────────────────────
@@ -21,6 +24,8 @@ export {
   DEFAULT_PROTECT_LAST_USER_TURNS,
   applyBudget,
   estimateTokens,
+  flattenMessageContent,
+  isCompactedHistoryEnvelope,
   resolveBudgetOptions,
 } from "./budget.js";
 export type {

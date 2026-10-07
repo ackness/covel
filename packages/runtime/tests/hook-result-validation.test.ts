@@ -5,7 +5,6 @@ import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookResult } from "../src/hooks/types.js";
 
 const invalidResults: Array<[string, unknown]> = [
-  ["missing return", undefined],
   ["null", null],
   ["string", "private player content"],
   ["number", 1],
@@ -26,6 +25,24 @@ const invalidResults: Array<[string, unknown]> = [
 describe.each(["PreRuntime", "TurnStop"] as const)(
   "%s dynamic Hook results",
   (event) => {
+    it("continues past a missing return without treating it as a veto", async () => {
+      const pipeline = createHookPipeline();
+      const next = vi.fn(async () => ({ action: "continue" as const }));
+      pipeline.register({
+        id: "no-decision",
+        event,
+        handler: async () => undefined as unknown as HookResult<unknown>,
+      });
+      pipeline.register({ id: "next", event, enforce: "post", handler: next });
+      await expect(
+        pipeline.run(
+          event,
+          { event, sessionId: "session", turnId: "turn" },
+          {},
+        ),
+      ).resolves.toMatchObject({ action: "continue" });
+      expect(next).toHaveBeenCalledOnce();
+    });
     it.each(invalidResults)(
       "isolates %s through Hook failure semantics",
       async (_label, value) => {

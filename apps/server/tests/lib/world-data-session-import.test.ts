@@ -906,7 +906,9 @@ sources:
           registry: registry({ "world-notes": ["facts"] }),
         },
       }),
-    ).rejects.toThrow(/source "facts" value failed schema validation/);
+    ).rejects.toThrow(
+      /record \[0\] \(id "rain"\) of source "facts" failed schema validation/,
+    );
   });
 
   it("supports explicit draft-07 world-local schemas", async () => {
@@ -1333,6 +1335,108 @@ sources:
       conflicts: [],
     });
     expect(await store.listCharacters("sess-1")).toEqual([]);
+  });
+
+  it("rejects invalid kernel records before writing any import rows", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  lore:
+    kind: json
+    path: data/lore.json
+    to: lorebook
+    key: id
+  cast:
+    kind: json
+    path: data/cast.json
+    to: characters
+    key: id
+`,
+      files: {
+        "data/lore.json": JSON.stringify([
+          { id: "good", content: "Good lore." },
+        ]),
+        "data/cast.json": JSON.stringify([
+          { id: "bad", name: "Bad", type: "unknown" },
+        ]),
+      },
+    });
+    const store = await makeStore([]);
+    const options = {
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+    };
+    const preview = await preflightWorldDataForSession(options);
+    expect(preview.diagnostics).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        path: "data/cast.json",
+        pointer: "[0]",
+        message: expect.stringContaining('id "bad"'),
+      }),
+    );
+    await expect(importWorldDataForSession(options)).rejects.toThrow(
+      "Unknown character type",
+    );
+    expect(await store.listCharacters("sess-1")).toEqual([]);
+    expect(await store.listSessionLorebookEntries("sess-1")).toEqual([]);
+  });
+
+  it("validates character effects and projected lorebook fields before import", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: contract:world-notes.facts@1+lorebook
+    key: id
+    effects: [characters]
+`,
+      files: {
+        "data/facts.json": JSON.stringify([
+          {
+            id: "silent",
+            name: "Silent",
+            content: "Hidden without keys",
+            strategy: "selective",
+          },
+          {
+            id: "bad-type",
+            name: "Wrong type",
+            type: "ghost",
+            content: "Visible lore",
+          },
+        ]),
+      },
+    });
+    const result = await preflightWorldDataForSession({
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        registry: registry({ "world-notes": ["facts"] }),
+        activePlugins: ["world-notes"],
+      },
+    });
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          pointer: "[0]",
+          message: expect.stringContaining("has no key"),
+        }),
+        expect.objectContaining({
+          level: "error",
+          pointer: "[1]",
+          message: expect.stringContaining("Unknown character type: ghost"),
+        }),
+      ]),
+    );
   });
 
   it("syncs the rows that are not in conflict and keeps the ones that are", async () => {

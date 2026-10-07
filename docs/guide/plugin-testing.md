@@ -6,6 +6,8 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 
 ## 选择测试入口
 
+Directory validation checks declared files, scheduling stages, builtin tool names, contributed plugin tool names and contract/runtime references without importing server code. It cannot verify that an entry actually registers what it declares; run the package's tests and host bootstrap check for that.
+
 | 入口            | 包 / 脚本                                              | 适合验证什么                                                                                                                                                                                                                                                                                                                                                                                                                                         | 需要 server / API key       |
 | --------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | Manifest schema | `pnpm validate:plugin <file \| plugin-dir>`            | `PLUGIN.md` frontmatter：loader 解析 + 原始 frontmatter 的 strict authoring schema（拒绝非法字段及 `auto`/`scheduled` 缺 `stage`，保留 Hook/UI-only 和 multi-runtime 元数据声明）。传插件目录、根 `PLUGIN.md` 或 `runtimes/<id>/RUNTIME.md` 时均收集完整包，检查 `PLUGIN.md` 与 `package.json` 的版本是否一致、共享声明引用和跨 runtime 冲突（插件级贡献由根 PLUGIN.md 唯一声明，见 [plugin-authoring-advanced.md](./plugin-authoring-advanced.md)） | 否                          |
@@ -25,6 +27,8 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 4. 最后再跑 `scripts/e2e-plugin-verify.ts` 验证 server、SSE、approval 和真实 session store。mock 通过不代表 provider/API 或审批链路已通过。
 
 `test:runtime` 的插件目录依次取 `--plugins-dir`、`COVEL_USER_PLUGINS_DIR`、`$COVEL_HOME/plugins`、`~/.covel/plugins`。`--mode mock` 是默认值；live 配置路径见下文。缺少凭据时应停留在 mock，不要把凭据写进仓库。
+
+Runtime case 的 pluginData 报告与期望只按自有 namespace / field 查询；`constructor`、`toString` 等普通名称不与 JavaScript 继承属性冲突，缺少的 namespace 判为未满足期望。保存图片使用同一 namespace 查询规则；同次运行中不同数据键清洗成相同文件名时追加序号，避免图片相互覆盖。
 
 没有 runtime case 时，CLI 会对同名的单 runtime 做一次默认 mock smoke test。默认 mock
 不会自行构造业务 tool call：声明了 `requireToolUse` 的 runtime 应添加
@@ -103,7 +107,7 @@ it("saves data via a plugin.data proposal", async () => {
 });
 ```
 
-事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），直接断言 `HandlerResult.effects` 的产物，范例见 [`plugins/scene-stage/tests/handler.test.js`](../../plugins/scene-stage/tests/handler.test.js)（事件触发）与 [`packages/plugin-handlers-utils/tests/image-generation.test.ts`](../../packages/plugin-handlers-utils/tests/image-generation.test.ts)（媒体生成）。`expectAssetGenerated` 接受 `RuntimeResult`、结果数组或 `TurnResult`，只检查显式 effects，不接受裸业务输出。
+`makeManualFunctionContext` 接受完整 handler context 的可选能力（例如 `pluginData`、`images`、`world`、`tools`、`signal` 和 `triggerEvent`），原样传入测试提供的桩，不模拟持久化提交。缺失的 store 读取仍显式报错。事件触发 / 媒体生成类 handler 可以传入这些桩并直接断言 `HandlerResult.effects` 的产物，范例见 [`plugins/scene-stage/tests/handler.test.js`](../../plugins/scene-stage/tests/handler.test.js)（事件触发）与 [`packages/plugin-handlers-utils/tests/image-generation.test.ts`](../../packages/plugin-handlers-utils/tests/image-generation.test.ts)（媒体生成）。`expectAssetGenerated` 接受 `RuntimeResult`、结果数组或 `TurnResult`，只检查显式 effects，不接受裸业务输出。
 
 ### In-process turn（手搓 turn-executor）
 
@@ -147,7 +151,7 @@ pnpm vitest run plugins/<id>/tests
 
 初始执行和首层 deferred follower 均使用生产 `executeTurn` 和 `commitExecution`，复用声明设置的默认值、工具权限、写缓冲、超时与能力撤销。每次执行的顶层和递归结果、对话 journal、suspensions 在一次事务内提交；失败写入不会留在 plugin-data，提交失败也不会启动该次执行产生的 followers。报告的 `commitStatus` / `commitError` 表示初始执行的提交结果。提交失败、runtime 失败或 job 失败都会使单次 CLI 退出非零，包括 `skipped` follower 和 `--expects-background-follower` 检测到任务缺失。case 可以明确期待某个 runtime 的失败；只有对应 runtime 的失败 job 随该预期被接受，提交失败和其它意外失败仍使 case 失败。
 
-工具仍是隔离调试环境：entry 实际注册 tools、services 和回合 Hook，并通过真实 HookPipeline 执行。SessionStart/End、Pre/PostCompaction、RPC、form validator、media wire，以及 `history.compact@1`、`ui.slot@1`、`media.image-flow@1` 扩展需要完整宿主，会列入报告的 `unsupportedCapabilities`（pluginId、kind、name），CLI 同时输出警告。CLI 执行初始 turn 及它产生的首层后台 followers，不运行长期队列；首层 follower 再产生的任务列在 `pendingDeferredFollowers`，需用真实 server 验证其后续调度。`runtimeResults` 包含已经执行的递归与同步 event 结果。follower 的 `failed` / `skipped` 对应失败 job；成功提交的 `suspended` 保留暂停结果和 suspension，但 job 为 `done`，表示本次后台调用已结束，不表示暂停交互已恢复。真实 provider、审批、恢复和多跳调度仍由 HTTP/浏览器测试覆盖。
+工具仍是隔离调试环境：entry 实际注册 tools、services 和回合 Hook，并通过真实 HookPipeline 执行。SessionStart/End、Pre/PostCompaction、RPC、form validator、media wire，以及 `history.compact@2`、`ui.slot@1`、`media.image-flow@1` 扩展需要完整宿主，会列入报告的 `unsupportedCapabilities`（pluginId、kind、name），CLI 同时输出警告。CLI 执行初始 turn 及它产生的首层后台 followers，不运行长期队列；首层 follower 再产生的任务列在 `pendingDeferredFollowers`，需用真实 server 验证其后续调度。`runtimeResults` 包含已经执行的递归与同步 event 结果。follower 的 `failed` / `skipped` 对应失败 job；成功提交的 `suspended` 保留暂停结果和 suspension，但 job 为 `done`，表示本次后台调用已结束，不表示暂停交互已恢复。真实 provider、审批、恢复和多跳调度仍由 HTTP/浏览器测试覆盖。
 
 源码入口：
 
@@ -248,3 +252,5 @@ pnpm exec tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts \
 - 公开 guide 保持短：解释“选哪个入口”和“跑哪个命令”。
 - 详细 copy-paste 模板、mock context、runtime case 断言和生成插件策略放在 `.claude/skills/create-plugin/references/plugin-testing.md`。
 - 测试文档涉及实际 API 时，先核对 `packages/plugin-test-utils` 和 `packages/test-runtime` 源码。
+
+默认 analyst 示例在 `post-turn` 自动运行，读取本回合叙事绑定；note 示例保留手动函数入口。记录 ID 来自 `ctx.random`，时间戳由代码或存储写入，agent 只提交稳定的事实 key 和内容。

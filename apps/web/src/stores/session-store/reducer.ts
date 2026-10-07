@@ -130,7 +130,7 @@ export const initialState: SessionState = {
   statePatches: [],
   gameState: {},
   hasGameStateSnapshot: false,
-  pluginData: {},
+  pluginMessageData: {},
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
   sessionPlugins: [],
@@ -154,7 +154,7 @@ const SESSION_RESET: Partial<SessionState> = {
   statePatches: [],
   gameState: {},
   hasGameStateSnapshot: false,
-  pluginData: {},
+  pluginMessageData: {},
   executing: false,
   executionError: null,
   executionSteps: [],
@@ -379,25 +379,9 @@ export function reducer(
           state.executing,
         ),
       };
-    case "LOAD_MESSAGES": {
-      // LOAD_MESSAGES overwrites `messages` with the server snapshot, so any
-      // plugin-message entries previously synthesised from plugin-data hydration
-      // would be wiped. Re-apply the surface for every plugin that declared a
-      // `ui.message` spec AND already has populated namespace state. Without
-      // this, plugins whose only chat output is the json-render surface (e.g.
-      // guide) never show up on page refresh after hydration+snapshot
-      // race to completion in the unfavourable order.
-      let nextState: SessionState = { ...state, messages: action.messages };
-      for (const entry of nextState.messageUiSpecs) {
-        if (nextState.pluginData[entry.pluginId]?.message) {
-          nextState = applyPluginMessageSurface(nextState, entry.pluginId);
-        }
-      }
-      return nextState;
-    }
     case "PREPEND_MESSAGES": {
       // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，
-      // 仅补入尚未出现的历史条目（按 id 去重）。绝不复用 LOAD_MESSAGES（整体覆盖会丢历史）。
+      // 仅补入尚未出现的历史条目（按 id 去重）。整体覆盖会丢失历史。
       const existingIds = new Set(state.messages.map((m) => m.id));
       const older = action.messages.filter((m) => !existingIds.has(m.id));
       if (older.length === 0) {
@@ -614,15 +598,8 @@ export function reducer(
       };
     }
     case "REMOVE_MESSAGES_FROM_TURN": {
-      // Remove messages from a specific turn, except those from cached runtimes
-      const keepMsg = (
-        turnId: string | undefined,
-        runtimeId?: string,
-      ): boolean =>
-        turnId !== action.turnId ||
-        (runtimeId !== undefined && action.keepRuntimeIds.has(runtimeId));
-      const filtered = state.messages.filter((m) =>
-        keepMsg(m.turnId, m.runtimeId),
+      const filtered = state.messages.filter(
+        (m) => m.turnId !== action.turnId || m.role !== "assistant",
       );
       return { ...state, messages: filtered };
     }
@@ -638,21 +615,24 @@ export function reducer(
                   ? action.namespaces
                   : { [action.namespace]: action.data },
             };
-      let nextState: SessionState = {
-        ...state,
-        pluginData:
-          action.type === "REPLACE_PLUGIN_DATA"
-            ? replacements
-            : action.type === "REPLACE_PLUGIN_DATA_NAMESPACE"
-              ? {
-                  ...state.pluginData,
-                  [action.pluginId]: {
-                    ...state.pluginData[action.pluginId],
-                    ...replacements[action.pluginId],
-                  },
-                }
-              : { ...state.pluginData, ...replacements },
-      };
+      const messageReplacements = Object.fromEntries(
+        Object.entries(replacements)
+          .filter(([, namespaces]) => Object.hasOwn(namespaces, "message"))
+          .map(([pluginId, namespaces]) => [pluginId, namespaces.message!]),
+      );
+      let pluginMessageData = state.pluginMessageData;
+      if (action.type === "REPLACE_PLUGIN_DATA")
+        pluginMessageData = messageReplacements;
+      else if (action.type === "REPLACE_PLUGIN_DATA_FOR_PLUGIN") {
+        pluginMessageData = { ...pluginMessageData };
+        delete pluginMessageData[action.pluginId];
+        pluginMessageData = { ...pluginMessageData, ...messageReplacements };
+      } else if (action.namespace === "message")
+        pluginMessageData = { ...pluginMessageData, ...messageReplacements };
+      let nextState: SessionState =
+        pluginMessageData === state.pluginMessageData
+          ? state
+          : { ...state, pluginMessageData };
       for (const [pluginId, namespaces] of Object.entries(replacements)) {
         for (const [jobId, value] of Object.entries(
           namespaces._runtime_jobs ?? {},
@@ -676,7 +656,9 @@ export function reducer(
       for (const entry of nextState.messageUiSpecs) {
         if (
           action.type === "REPLACE_PLUGIN_DATA" ||
-          entry.pluginId === action.pluginId
+          (entry.pluginId === action.pluginId &&
+            (action.type !== "REPLACE_PLUGIN_DATA_NAMESPACE" ||
+              action.namespace === "message"))
         ) {
           nextState = applyPluginMessageSurface(nextState, entry.pluginId);
         }
@@ -685,22 +667,30 @@ export function reducer(
     }
     case "PLUGIN_DATA_CHANGED": {
       const { pluginId, changes } = action;
-      const prev = state.pluginData;
-      let pluginNs = { ...prev[pluginId] };
-      for (const change of changes) {
-        const ns = {
-          ...pluginNs[change.namespace],
-          ...(change.operation === "delete"
-            ? {}
-            : { [change.key]: change.value }),
+      const messageChanges = changes.filter(
+        (change) => change.namespace === "message",
+      );
+      let nextState = state;
+      if (messageChanges.length > 0) {
+        const messageData = { ...state.pluginMessageData[pluginId] };
+        for (const change of messageChanges) {
+          if (change.operation === "delete") delete messageData[change.key];
+          else
+            Object.defineProperty(messageData, change.key, {
+              value: change.value,
+              writable: true,
+              enumerable: true,
+              configurable: true,
+            });
+        }
+        nextState = {
+          ...state,
+          pluginMessageData: {
+            ...state.pluginMessageData,
+            [pluginId]: messageData,
+          },
         };
-        if (change.operation === "delete") delete ns[change.key];
-        pluginNs = { ...pluginNs, [change.namespace]: ns };
       }
-      let nextState: SessionState = {
-        ...state,
-        pluginData: { ...prev, [pluginId]: pluginNs },
-      };
       for (const change of changes) {
         if (
           change.namespace !== "_runtime_jobs" ||

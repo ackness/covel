@@ -137,7 +137,9 @@ export function createExecutionStepUpdate(args: {
     // (possibly undefined). Completed / skipped branches omit it entirely.
     ...(status === "failed"
       ? { detail: payload.error as string | undefined }
-      : {}),
+      : status === "skipped" && typeof payload.reason === "string"
+        ? { detail: payload.reason }
+        : {}),
   };
 }
 

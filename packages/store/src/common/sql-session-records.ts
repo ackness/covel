@@ -16,7 +16,7 @@
  * SQLite cascade vs PG transactional cascade) and is out of scope here.
  */
 
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -31,7 +31,7 @@ import {
   SessionAlreadyExistsError,
 } from "../errors.js";
 
-type SessionsTable = Table & { id: Column };
+type SessionsTable = Table & { id: Column; createdAt: Column };
 
 export interface SqlSessionTables {
   readonly sessions: SessionsTable;
@@ -97,7 +97,11 @@ export function createSqlSessionRecords(
     },
 
     async listSessions(): Promise<SessionRecord[]> {
-      const rows = await runner.select<SessionRow>(sessions);
+      const rows = await runner.select<SessionRow>(sessions, {
+        // Without an order PostgreSQL returns rows as they lie on disk, where
+        // an updated session moves.
+        orderBy: [asc(sessions.createdAt), asc(runner.byteOrder(sessions.id))],
+      });
       return rows.map((row) => toSessionRecord(row, json));
     },
   };

@@ -12,7 +12,7 @@
 
 1. 读取 canonical `turn_messages` 中未压缩的后缀和全量消息统计。当前玩家输入先保留在 execution journal，提交成功后才落库。
 2. 对历史副本运行 `prompt.history-transform@1` pipeline。每个 provider 接收前一个 provider 的结果；该投影不改写 canonical 消息，也不改变调度计数。
-3. 按当前 runtime 过滤其他插件的结构化历史输出和没有文本的 runtime 行，组装实际 system prompt，并合并已持久化摘要。声明了 `agent.history.maxTurns` 的 runtime 只保留最近 N 个回合（按 `turnId` 计数）的可见消息，不合并摘要。
+3. 按当前 runtime 过滤其他插件的结构化历史输出和没有文本的 runtime 行，组装实际 system prompt，并合并已持久化摘要。声明了 `agent.history.maxTurns` 的 runtime 只保留最近 N 个回合（按 `turnId` 计数）的可见消息，默认不合并摘要，`agent.history.includeSummaries: true` 可保留持久摘要。
 4. 把本次执行已经产出的故事正文接在当前玩家输入之后（见下方「本回合正文」）。
 5. 首个使用共享历史视图的 agent 以这个 system prompt 估算压缩需求。同一 turn 的这类 agent 共用一次压缩屏障；成功后重载历史与摘要，重新投影并组装 context。声明了历史窗口的 runtime 不触发也不等待该屏障。
 6. 执行 `PostContextAssembly`，应用预算；每次 `PreLLMCall` 后再按实际请求校验预算。
@@ -28,9 +28,9 @@
 
 没有这一步时，叙事之后运行的 agent 读到的对话停在「上一回合的正文 + 本回合玩家输入」，模型会把上一回合结尾当成当下；`<runtime-inputs>` 里虽然有本回合正文，但那是数据块里的一个字段，不是对话的一部分。同一个 runtime 在提交后被重试时，历史里已经有本回合正文，两种情况现在读到的对话一致。
 
-`history.compact@1` 是 single 扩展点。框架负责阈值、返回值校验及摘要与消息标记的原子持久化；默认 `history-compaction` 插件负责选择连续历史前缀、调用摘要模型和限制摘要长度。当前默认策略保护最近两个用户回合和最后五条消息，将旧摘要与新前缀合并为单块滚动摘要，预算为 context window 的 4%，最少 128、最多 1024 estimated tokens。
+`history.compact@2` 是 single 扩展点。框架负责阈值、返回值校验及摘要与消息标记的原子持久化；默认 `history-compaction` 插件负责选择连续历史前缀、调用摘要模型和限制摘要长度。当前默认策略保护最近两个用户回合和最后五条消息，按 fast 模型可读的输入容量选择连续前缀，为新历史生成独立摘要。旧段原文保持稳定，只有总预算或最多八段的限制要求收缩时才合并最旧连续段。单段目标为源文本 estimated tokens 的 25%，下限 128，上限为有效窗口的 4% 与 2048 中较小值；总预算为有效窗口的 12%，下限 128、上限 8192，且不超过窗口自身。实际生成的摘要长度决定是否合并；小窗口会在合并旧段和新段之间分配预算。有效窗口取 story 与 fast 输入容量（扣除各自响应预留）的较小值，摘要模型请求仍使用 fast 自身容量。单条源消息装不进 fast 时保留原文，不截断源消息。
 
-框架只接受同一 session 中连续未压缩前缀的消息 ID，拒绝跳过、重排或引用外部消息的结果。摘要以 `user` 角色、经过 XML 转义的 `<compacted_history>` 数据信封进入上下文。原始消息仍留在日志中；压缩只替换 prompt 中的表示。
+输出为 `{ summaries: [{ messageIds, replacesSummaryIds, content, focusSections, truncated? }] }`。每段只能覆盖新消息或旧摘要中的一种；框架只接受同一 session 中连续未压缩前缀的消息 ID，以及从最旧段开始连续选择的旧摘要 ID，拒绝跳过、重排、重复和外部来源。保留段加新段须满足总量、单段和段数限制。合并沿用最旧被替换段的 ID、起始回合与创建时间，只删除选中的旧段并重标记对应消息，保留段不变；全部写入在同一事务内提交。提供者需升级至 `@2`，不提供旧契约分支；已持久化摘要的记录形状未变。摘要以 `user` 角色、经过 XML 转义的 `<compacted_history>` 数据信封进入上下文。原始消息仍留在日志中；压缩只替换 prompt 中的表示。
 
 ## 2. 段位与排序
 
@@ -65,7 +65,7 @@ messages
 
 原因是服务商的前缀缓存：一次请求只有从第一个字节起与之前的请求相同的部分才能命中。数据块在 system prompt 里时，system prompt 每回合都不同，排在它后面的整段历史就无法命中，会话越长浪费越多。现在 system prompt 逐回合保持不变，缓存可以一直覆盖到上一回合的历史。
 
-- 这段内容仍是 system 角色，其中由插件写给模型的指令（如掷骰步骤）权重不变。把 system 消息提到顶部的 adapter（Anthropic）发出的请求和以前一样。
+- 这段内容仍是 system 角色，其中由插件写给模型的指令（如掷骰步骤）权重不变。Anthropic 仅将开头的 system 消息放入顶层 system；历史之后的回合指令保留位置，以带 `<system-instruction>` 的 user 内容发送。
 - 它不放在请求的最后。请求仍以本回合的消息和 post-history 段结尾：数据块紧挨着回复时，较小的模型会把数据块的写法带进工具参数（把参数包成输入块的形状、在字段后面补一个闭合标签）。
 - depth 插入按对话消息计数，回合上下文不占位置。
 - 预算裁剪把紧挨在受保护回合之前的 system 消息一并保留，所以它不会被丢掉。压缩阈值的估算把它和 system prompt 一起计入。`AssembledContext.turnContext` 是它的内容，没有时为空字符串。
@@ -123,6 +123,8 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 
 ## 4. Template 变量与数据边界
 
+模板变量只读取对象自有属性。`inputs` 的 plugin/runtime lookup 按字符串键隔离；名为 `constructor` 或 `toString` 的插件与字段照常读取显式值，不访问或改写 JavaScript 继承对象。
+
 根内联 runtime 的 `PLUGIN.md` 正文，或子 runtime 的 `RUNTIME.md` 正文，支持 `{{ variable }}` 插值。常用变量包括：
 
 - `player.message`、`player.lastFormValues`、`player.character`。
@@ -161,7 +163,7 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 
 pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post-turn 提交后新执行再发布新版，不反向绑定 tracker 输出，不以 `recordAs` 或世界初值兜底。来源重试通过 `retryFromTurnId` 使用原 turn artifact，失败/未结算不是无变化。完整状态见 [World Model](world-model.md#回合时序与结算回执)。本期没有 #97 的隐藏事件载荷或条件触发层。
 
-内核写进提示词的记录不带簿记字段：`io.selfData` 的行是 `- <key> | <值的 JSON>`，没有行的 `updatedAt`，值里与 key 相同的 `id` 不重复；这些行、`<runtime-inputs>` / `<runtime-exports>` 的值和 `{{ world.schema }}` 里，UUID 型的 ID、ISO 时间和 `sessionId` 都被去掉。规则与理由见 [插件参考](plugins.md#输入和输出)。
+内核写进提示词的记录不带簿记字段：`io.selfData` 的行是 `- <key> | <值的 JSON>`，没有行的 `updatedAt`，值里与 key 相同的 `id` 不重复；这些行、`<runtime-inputs>` / `<runtime-exports>` 的值和 `{{ world.schema }}` 里，UUID 型的 ID、ISO 时间和 `sessionId` 都被去掉。`characterSheetSegments()` 的玩家表和 NPC fields，以及 `{{ characters.npcs }}` 的 fields，也在序列化前递归使用同一投影；可读语义 ID 与 `date` 等剧情字段保留。规则与理由见 [插件参考](plugins.md#输入和输出)。
 
 声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过[回合上下文](#回合上下文)里的 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。提示词里的 provenance 只有 `pluginId` 与 `runtimeId`：`resultId` 是只供工具和内核使用的 UUID，工具从 `ctx.inputSlots` 读取，不进入提示词（`<runtime-exports>` 同理）。
 
@@ -198,3 +200,11 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 扩展声明与调用边界见 [插件扩展参考](./plugin-extensions.md)，作者格式见 [插件参考](./plugins.md)。
 
 `world-ir` 的 `PostContextAssembly` Hook 继续负责裁剪自身历史输出及相关记忆，而非追加一个提示词段；这类变换保留 Hook，新增内容使用 `prompt.segment@1`。
+
+Anthropic 保留至多两个稳定 system 缓存边界，并在最新可缓存的历史/工具块上设置移动边界；thinking 块不带缓存控制。其他协议在序列化时移除内部 `COVEL_CACHE_BREAK` 标记。硬裁剪为后续回合预留空间，裁剪标记不含变化的消息计数。压缩触发窗口取 story 与摘要调用槽位输入窗口的较小值，摘要请求仍使用摘要槽位。
+
+The dimension provider separates definitions without an `updateRule` into session-stable prompt segments and tracked values into turn segments. The Emberback lore example uses keyword activation and omits character biographies already supplied by the character records. A lore entry may opt into `extra.scanDepth` prior committed messages (0–20); the current player message is always scanned.
+
+Plugin-data injects request a bounded storage projection instead of loading a whole namespace before trimming. The default 50 rows retain the oldest 25 anchors and up to 25 most recently updated other rows; smaller namespaces retain creation order. The total count still appears in the truncation note. The execution reads its newest form once via `getLatestPlayerInput` and reuses that row in the context snapshot. A summary model response ending in `length` / `max_tokens` is discarded before any history tags or summaries change; explicit budget shortening of a completed summary remains marked `truncated`.
+
+Before persisting a generated segment, the transaction verifies its message IDs against a bounded read of the canonical uncompacted prefix. A history transform that filters or reorders that prefix may still shape the prompt, but cannot tag a disconnected span as compacted; the compaction attempt is skipped and original history remains unchanged. Lorebook scan depth reads a bounded canonical tail, including compacted messages.

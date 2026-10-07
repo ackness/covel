@@ -41,7 +41,6 @@ describe("CovelEvent contract", () => {
       "gateway.responded",
       "hook.aborted",
       "hook.fired",
-      "hook.rewrote",
       "job-status.updated",
       "llm.calling",
       "llm.responded",

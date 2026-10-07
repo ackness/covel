@@ -5,9 +5,9 @@ Use maintained packages rather than copied historic manifests.
 Main checkout:
 
 - `templates/plugin-with-tools`: inline grouped agent runtime and a declared entry tool.
-- `templates/plugin-multi-runtime`: root contributions plus child `RUNTIME.md` files, own data, and manual invocation.
+- `templates/plugin-multi-runtime`: root contributions plus child `RUNTIME.md` files, own data, and a post-turn analyst with a narrative input binding.
 - `plugins/memory`: detached `turn-digest@1`, `prompt.segment@1`, and public block-definition services.
-- `plugins/history-compaction`: `history.compact@1` implementation.
+- `plugins/history-compaction`: `history.compact@2` implementation with bounded summary segments.
 - `plugins/world-init`: World Model schema initialization and own public services.
 
 Community checkout (`covel-plugins`, https://github.com/covel-ai/covel-plugins):

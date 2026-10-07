@@ -29,6 +29,7 @@ import {
   formatValidationErrors,
   dimensionIdSchema,
   localeLookupCandidates,
+  WORLD_LOCALIZED_TEXT_KEY,
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
@@ -232,6 +233,20 @@ export async function loadSingleWorld(
   const mergedDimensions = { ...inlineDims, ...externalDims };
 
   const lore = await readLore(worldDir, defaultLocale);
+  const loreEditions = Object.fromEntries(
+    await Promise.all(
+      [
+        ...new Set([
+          defaultLocale,
+          ...((manifest.supportedLocales as string[] | undefined) ?? []),
+        ]),
+      ]
+        .filter((locale): locale is string => typeof locale === "string")
+        .map(
+          async (locale) => [locale, await readLore(worldDir, locale)] as const,
+        ),
+    ),
+  );
   const now = new Date().toISOString();
 
   const packageReceipt = await readReceipt(worldDir).catch(() => null);
@@ -267,7 +282,14 @@ export async function loadSingleWorld(
     worldId,
     worldDataPath,
     defaultLocale,
-    metadata: baseRecord.metadata,
+    metadata: {
+      ...baseRecord.metadata,
+      [WORLD_LOCALIZED_TEXT_KEY]: {
+        ...(baseRecord.metadata?.[WORLD_LOCALIZED_TEXT_KEY] as
+          Record<string, unknown> | undefined),
+        lore: loreEditions,
+      },
+    },
     now,
   });
   for (const diagnostic of worldData.diagnostics) {

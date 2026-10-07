@@ -28,7 +28,7 @@ export type ExtensionPointId = keyof ExtensionPointIo;
  * point id. Mirror of `KernelExtensionPointIo` in `@covel/shared`.
  */
 export type ExtensionPointIo = {
-  readonly "history.compact@1": {
+  readonly "history.compact@2": {
     readonly input: HistoryCompactInput;
     readonly output: HistoryCompactOutput;
   };
@@ -102,7 +102,7 @@ export type PromptHistoryTransformOutput = {
   readonly messages: readonly ExtensionHistoryMessage[];
 };
 
-// ── history.compact@1 ────────────────────────────────────────────
+// ── history.compact@2 ────────────────────────────────────────────
 
 export type HistoryCompactSummary = {
   readonly id: string;
@@ -118,15 +118,24 @@ export type HistoryCompactInput = {
   readonly messages: readonly ExtensionHistoryMessage[];
   readonly existingSummaries: readonly HistoryCompactSummary[];
   readonly contextWindow: number;
+  readonly inputWindow: number;
+  readonly summaryBudget: {
+    readonly maxTokens: number;
+    readonly maxSegmentTokens: number;
+    readonly maxSegments: number;
+  };
   readonly estimatedTokens: number;
   readonly locale: string;
 };
 
 export type HistoryCompactOutput = {
-  readonly messageIds: readonly string[];
-  readonly content: string;
-  readonly focusSections: readonly string[];
-  readonly truncated?: boolean;
+  readonly summaries: readonly {
+    readonly messageIds: readonly string[];
+    readonly replacesSummaryIds: readonly string[];
+    readonly content: string;
+    readonly focusSections: readonly string[];
+    readonly truncated?: boolean;
+  }[];
 } | null;
 
 // ── media.image-flow@1 ───────────────────────────────────────────

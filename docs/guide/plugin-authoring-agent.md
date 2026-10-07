@@ -11,6 +11,7 @@ Agent 负责语言理解，本地工具负责结构化验证和确定性写入�
 id: notebook
 kind: plugin
 description: Saves a brief note after narration.
+requires: [narrative-engine@1]
 entry: ./server/index.js
 contributes:
   tools: [save-note]
@@ -190,3 +191,5 @@ export default async function handler(ctx) {
 为工具测试使用项目 toolkit 或 `@covel/plugin-test-utils`；在纯函数中隔离规则，测试有效输入、非法输入、无数据和重复调用。返回 proposals 的测试应检查归属、类型和 payload。涉及角色修改时使用实际 CharacterSchema 验证。
 
 可参考 [guide 工具](../../plugins/guide/tools/generate-guide.js)、[world-time RPC](../../plugins/world-time/rpc/time.js) 和各插件 `tests/`。运行对应 workspace 测试后，再执行 `pnpm validate:plugin`。
+
+需要有限历史又需长期背景时，可声明 `agent.history: { maxTurns: 2, includeSummaries: true }`。默认的有限窗口不带摘要；该 runtime 不触发共享压缩。

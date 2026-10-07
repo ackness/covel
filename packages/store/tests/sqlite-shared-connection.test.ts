@@ -155,6 +155,59 @@ describe("sqlite shared connection", () => {
     expect(a.open).toBe(false);
   });
 
+  it.each(["delete", "cleanup"] as const)(
+    "does not lose bytes when %s is requested inside a rolled-back data transaction",
+    async (operation) => {
+      const store = createSqliteStore(dbPath);
+      const media = createSqliteMediaStore(dbPath);
+      try {
+        const bytes = new Uint8Array([7, 8, 9]);
+        const ref = await media.put(bytes, "image/png");
+        if (operation === "delete") await media.addRef(ref.id, "owner");
+        await expect(
+          store.withTransaction(async () => {
+            const remove =
+              operation === "delete"
+                ? media.delete(ref.id)
+                : media.cleanup(new Set(), { maxBytes: 0, dryRun: false });
+            await expect(remove).rejects.toThrow(
+              "outside an existing SQL transaction",
+            );
+            expect(await media.lookup(ref.id)).not.toBeNull();
+            if (operation === "delete")
+              expect(await media.isReferencedBy(ref.id, "owner")).toBe(true);
+            throw new Error("Synthetic rollback");
+          }),
+        ).rejects.toThrow("Synthetic rollback");
+        expect(await media.lookup(ref.id)).not.toBeNull();
+        expect(await media.get(ref)).toEqual(bytes);
+        if (operation === "delete")
+          expect(await media.isReferencedBy(ref.id, "owner")).toBe(true);
+      } finally {
+        await media.close?.();
+        await store.close();
+      }
+    },
+  );
+
+  it("permits a media cleanup dry run inside a data transaction", async () => {
+    const store = createSqliteStore(dbPath);
+    const media = createSqliteMediaStore(dbPath);
+    try {
+      const bytes = new Uint8Array([9]);
+      const ref = await media.put(bytes, "image/png");
+      await store.withTransaction(async () => {
+        expect(
+          await media.cleanup(new Set(), { maxBytes: 0, dryRun: true }),
+        ).toMatchObject({ deleted: 1 });
+      });
+      expect(await media.get(ref)).toEqual(bytes);
+    } finally {
+      await media.close?.();
+      await store.close();
+    }
+  });
+
   it("never shares :memory: connections", () => {
     const a = acquireSqliteConnection(":memory:");
     const b = acquireSqliteConnection(":memory:");

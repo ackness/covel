@@ -39,6 +39,10 @@ interface MediaStore {
 
 `put()` computes a SHA-256 id from the bytes and deduplicates repeated content. The first stored metadata wins for duplicate content.
 
+Metadata JSON removes U+0000 on all four backends without mutating the caller's
+object. Keys that would collide after cleaning are rejected before publication.
+Binary bytes, including zero bytes, remain unchanged and determine the digest.
+
 ## HTTP content safety
 
 `POST /api/media` accepts image uploads and normalizes the MIME type/subtype to
@@ -210,6 +214,16 @@ critical section/transaction as deletion (PG advisory transaction lock +
 synchronous map check). A reference or owner created after the route scan
 therefore retains the asset; the returned cleanup counters/ids are reconciled
 to what was actually deleted rather than the stale plan.
+
+SQLite keeps its `BEGIN IMMEDIATE` lock through removal of the content file,
+preventing a concurrent same-digest `put()` from recreating bytes before an old
+deletion finishes. An unlink failure rolls back metadata and reference removal.
+Physical `delete()` and non-dry-run `cleanup()` must run outside an existing SQL
+transaction; they reject before changing metadata or refs when the shared
+connection already has one open. Callers run them after their DataStore
+transaction settles. A filesystem unlink cannot be undone by an outer SQL
+rollback. This restriction does not apply to `put()` or a cleanup dry run, which
+may use the shared connection inside a DataStore transaction.
 
 The endpoint is unavailable in `commercial` deployments. In `demo`, it
 requires the configured operator bearer token before feature-flag or policy

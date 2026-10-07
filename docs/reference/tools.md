@@ -265,6 +265,8 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 ## Builtin 工具
 
+公开 SDK 导出 `FRAMEWORK_TOOL_NAMES`，工具注册和插件静态校验使用同一份名称表。`plugin-data-get` / `plugin-data-list` 不向模型暴露任何 `_` 前缀的内核 namespace。角色创建使用可读短 ID；对象模板变量去掉簿记字段并使用紧凑 JSON。
+
 框架级原语，定义在 `packages/tools/src/builtin/*.ts`。所有插件可通过 `tools.builtin` 声明引用，无需编写代码。
 
 ### create-form

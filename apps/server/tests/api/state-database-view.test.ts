@@ -11,14 +11,16 @@
  *     plugin_data namespace, keyed by the record's `key`
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { stateRoutes } from "../../src/routes/api/state.js";
+import { makeErrorHandler } from "../../src/api-error.js";
 
 function buildApp(store: DataStore): Hono {
   const app = new Hono();
+  app.onError(makeErrorHandler("[state-test]", false));
   app.use("*", async (c, next) => {
     c.set("store", store);
     await next();
@@ -262,4 +264,29 @@ describe("GET /api/sessions/:id/state — database view", () => {
     const res = await app.request(`/api/sessions/does-not-exist/state`);
     expect(res.status).toBe(404);
   });
+
+  it.each(["listCharacters", "listPluginDataSessionScope"] as const)(
+    "does not report a successful partial view when %s fails",
+    async (method) => {
+      const read = vi
+        .spyOn(store, method)
+        .mockRejectedValueOnce(
+          new Error("Synthetic database failure /private/operator/path"),
+        );
+      const log = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      try {
+        const res = await app.request(`/api/sessions/${sessionId}/state`);
+        expect(res.status).toBe(500);
+        expect(await res.json()).toMatchObject({
+          error: "Internal server error",
+        });
+        expect(log).toHaveBeenCalled();
+      } finally {
+        read.mockRestore();
+        log.mockRestore();
+      }
+    },
+  );
 });

@@ -255,7 +255,13 @@ export function createDimensionCommitHandlers(
           namespace: DIMENSION_SETTLEMENT_NAMESPACE,
           key: receipt.source.resultId,
           expectedVersion: receipt.version,
-          value: { ...settled, status, version: receipt.version + 1 },
+          value: {
+            ...settled,
+            definitions: {},
+            readVersions: {},
+            status,
+            version: receipt.version + 1,
+          },
           timestamp: proposal.timestamp,
         });
       }

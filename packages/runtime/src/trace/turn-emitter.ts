@@ -91,13 +91,14 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
       };
       const enriched = concealed ? concealTracePayload(full) : full;
       const createdAt = new Date().toISOString();
+      const eventId = crypto.randomUUID();
 
       // Invoke inside the guard: adapters may throw before returning a promise.
-      // Keep persistence owned by this emit while broadcasting independently.
+      // Persist first so an oversized cross-process frame can reference this row.
       const persist = (async () => {
         try {
           await opts.store.addTraceEvent({
-            id: crypto.randomUUID(),
+            id: eventId,
             sessionId: opts.sessionId,
             type,
             traceId,
@@ -115,10 +116,11 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
         }
       })();
 
+      await persist;
       if (opts.eventBus) {
         try {
           opts.eventBus.emit({
-            id: crypto.randomUUID(),
+            id: eventId,
             type: "event",
             topic: "trace",
             sessionId: opts.sessionId,
@@ -140,8 +142,6 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
           });
         }
       }
-
-      await persist;
     },
   };
 }

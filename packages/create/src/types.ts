@@ -21,6 +21,8 @@ export interface CreateWorldOptions {
   readonly llm: LLMAdapter;
   /** Core concept or longer creative direction. */
   readonly concept: string;
+  /** IDs already present in the destination; new manifests receive a free suffix. */
+  readonly existingWorldIds?: readonly string[];
   /** Model slot to use (default: 'default'). */
   readonly model?: string;
   /** Locale for generated content (default: 'zh-CN'). */
@@ -161,5 +163,6 @@ export interface WorldGenerationDataContract {
   readonly source?: {
     readonly kind: "yaml" | "json";
     readonly path: string;
+    readonly localeArrayKeys?: readonly string[];
   };
 }

@@ -169,11 +169,11 @@ const FRAMEWORK_CHINESE_LINES = {
   "apps/server/src/routes/api/session/commands.ts": 4,
   "apps/server/src/routes/misc-api/plugin-flow.ts": 6,
   "packages/runtime/src/rpc-defaults/submit-form.ts": 6,
-  "packages/shared/src/utils/locale-registry.ts": 4,
+  "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
   "packages/context/src/message-insertion.ts": 1,
   "packages/context/src/prompt-assembler.ts": 1,
-  "packages/context/src/prompt-internals.ts": 15,
+  "packages/context/src/prompt-internals.ts": 20,
   "packages/context/src/session-context.ts": 1,
   "packages/plugin-handlers-utils/src/character-sheets.ts": 1,
   "packages/plugin-handlers-utils/src/narrative-review.ts": 14,
@@ -183,10 +183,11 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
   "packages/runtime/src/retry/retry-common.ts": 2,
-  "packages/shared/src/proposals/dimension-query.ts": 1,
-  // A pattern that matches Chinese text, and one Chinese variant of a marker.
-  "packages/context/src/budget.ts": 2,
+  "packages/plugin-handlers-utils/src/dimension-query.ts": 1,
+  // A Chinese variant of a context-truncation marker.
+  "packages/context/src/budget.ts": 1,
   // Patterns that match Chinese text.
+  "packages/plugin-handlers-utils/src/token-estimation.ts": 1,
   "packages/create/src/validation-helpers.ts": 7,
   "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
   "packages/tools/src/builtin/tool-search.ts": 2,

@@ -176,6 +176,14 @@ export function RuntimeChip({
           {rt.toolName}
         </span>
       )}
+      {rt.status === "skipped" && rt.detail && (
+        <span
+          className="max-w-60 truncate text-[10px]"
+          title={resolveI18nSentinel(rt.detail, t)}
+        >
+          {resolveI18nSentinel(rt.detail, t)}
+        </span>
+      )}
       {rt.detail === "[cached]" && (
         <span className="text-[10px] text-muted-foreground/60 italic">
           cached

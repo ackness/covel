@@ -272,14 +272,14 @@ describe("createTrustedHandlerStore with a write buffer", () => {
     ).toThrow(/execution context and write buffer/);
   });
 
-  it("keeps buffered and committed NUL-containing plugin-data tuples distinct", async () => {
+  it("keeps buffered and committed delimiter-containing plugin-data tuples distinct", async () => {
     const store = createMemoryStore();
     const buffer = createExecutionWriteBuffer();
     const trusted = createTrustedHandlerStore(store, CTX, buffer);
     const now = new Date().toISOString();
     const rows = [
-      { namespace: "a", key: "b\u0000c", value: "first" },
-      { namespace: "a\u0000b", key: "c", value: "second" },
+      { namespace: "a", key: "b:c", value: "first" },
+      { namespace: "a:b", key: "c", value: "second" },
     ].map((entry, index) => ({
       ...entry,
       id: `pd-${index}`,
@@ -296,7 +296,7 @@ describe("createTrustedHandlerStore with a write buffer", () => {
 
     await store.setPluginDataBatch(rows);
     buffer.length = 0;
-    await trusted.deletePluginData("a\u0000b", "c");
+    await trusted.deletePluginData("a:b", "c");
     expect(await trusted.listPluginData()).toEqual([rows[0]]);
     expect(await store.listPluginData(CTX.sessionId, CTX.pluginId)).toEqual(
       rows,

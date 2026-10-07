@@ -42,7 +42,7 @@ function stateFor(
     statePatches: [],
     gameState: {},
     hasGameStateSnapshot: false,
-    pluginData: {},
+    pluginMessageData: {},
     messageUiSpecs: [],
     pendingInteractionDrafts: [],
     assetsByTurn: new Map(),

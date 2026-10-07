@@ -64,6 +64,9 @@ runtime:
       contract: scene-prompts@1
     visibility: system
   agent:
+    history:
+      maxTurns: 2
+      includeSummaries: true
     model: plugin
     llm:
       reasoningEffort: disabled

@@ -19,15 +19,29 @@ export const historyCompactionInputSchema = z.strictObject({
     )
     .readonly(),
   contextWindow: z.number().positive(),
+  inputWindow: z.number().positive(),
+  summaryBudget: z.strictObject({
+    maxTokens: z.number().int().positive(),
+    maxSegmentTokens: z.number().int().positive(),
+    maxSegments: z.number().int().positive(),
+  }),
   estimatedTokens: z.number().nonnegative(),
   locale: z.string(),
 });
 export const historyCompactionOutputSchema = z
   .strictObject({
-    messageIds: z.array(z.string()).min(1).readonly(),
-    content: z.string().min(1),
-    focusSections: z.array(z.string()).readonly(),
-    truncated: z.boolean().optional(),
+    summaries: z
+      .array(
+        z.strictObject({
+          messageIds: z.array(z.string()).readonly(),
+          replacesSummaryIds: z.array(z.string()).readonly(),
+          content: z.string().min(1),
+          focusSections: z.array(z.string()).readonly(),
+          truncated: z.boolean().optional(),
+        }),
+      )
+      .min(1)
+      .readonly(),
   })
   .nullable();
 export type HistoryCompactionInput = z.infer<
@@ -36,7 +50,7 @@ export type HistoryCompactionInput = z.infer<
 export type HistoryCompactionOutput = z.infer<
   typeof historyCompactionOutputSchema
 >;
-export const historyCompactV1 = defineExtensionPoint({
+export const historyCompactV2 = defineExtensionPoint({
   ...kernelExtensionPoints.historyCompact,
   input: historyCompactionInputSchema,
   output: historyCompactionOutputSchema,

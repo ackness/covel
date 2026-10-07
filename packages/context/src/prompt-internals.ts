@@ -18,6 +18,7 @@ import type {
   InputInjectDecl,
   PluginDataInjectDecl,
   RuntimeInjectDecl,
+  RuntimeManifest,
 } from "@covel/shared";
 import {
   canonicalizeLocale,
@@ -29,7 +30,11 @@ import {
   isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import type { PluginDataRecord } from "./session-context-store.js";
-import type { CharacterSummary, ContextBuildParams } from "./types.js";
+import type {
+  CharacterSummary,
+  ContextBuildParams,
+  FrameworkCompletionContract,
+} from "./types.js";
 
 /**
  * Resolve a dot-separated path against a nested object.
@@ -46,7 +51,8 @@ function resolvePath(
     if (
       current === null ||
       current === undefined ||
-      typeof current !== "object"
+      typeof current !== "object" ||
+      !Object.hasOwn(current, segment)
     ) {
       return undefined;
     }
@@ -80,11 +86,10 @@ function renderTemplateValue(value: unknown): string {
   }
   if (typeof value === "bigint") return value.toString();
   if (typeof value === "object") {
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return String(value);
-    }
+    // A record is written the way `<runtime-inputs>` writes one: compact, and
+    // without the bookkeeping a model has no use for (`modelFacingJson`).
+    // Indentation only added tokens to every prompt that showed an object.
+    return safeStringify(modelFacingJson(value));
   }
   return String(value);
 }
@@ -177,9 +182,9 @@ export function buildInjectBlocks(params: ContextBuildParams): string {
  * Async variant of {@link buildInjectBlocks} — handles both `kind: 'runtime'`
  * and `kind: 'plugin-data'` declarations.
  *
- * `plugin-data` entries trigger a `store.listPluginData(sessionId, pluginId,
+ * `plugin-data` entries trigger a `store.getPluginDataPromptWindow(sessionId, pluginId,
  * namespace)` call to fetch the runtime's own plugin-data, which is then
- * truncated via {@link twoPassTruncate} and serialised via
+ * read through the bounded prompt window and serialised via
  * {@link serializeEntries}. Store errors are not caught — they propagate to
  * the caller so the containing runtime fails cleanly and its error stays on
  * the observability channel (see Phase 0 audit notes in the ticket).
@@ -212,7 +217,7 @@ export async function buildInjectBlocksAsync(
 /**
  * Resolve a `kind: 'plugin-data'` inject to an XML block.
  *
- * Calls `store.listPluginData(sessionId, pluginId, namespace)` — pluginId
+ * Calls `store.getPluginDataPromptWindow(sessionId, pluginId, namespace)` — pluginId
  * comes from the runtime's own manifest, so cross-plugin reads are
  * structurally impossible through this path. Errors bubble up to the
  * caller (runtime fail → Phase 0 audit guarantees no context pollution).
@@ -235,10 +240,11 @@ async function resolvePluginDataInject(
     );
   }
 
-  const entries = await params.store.listPluginData(
+  const { entries, total } = await params.store.getPluginDataPromptWindow(
     params.turnInput.sessionId,
     params.manifest.pluginId,
     inject.namespace,
+    inject.maxEntries ?? 50,
   );
 
   const tagName = validateTagName(parseTagName(inject.as));
@@ -249,63 +255,15 @@ async function resolvePluginDataInject(
   }
 
   const format = inject.format ?? "summary";
-  const maxEntries = inject.maxEntries ?? 50;
-  const truncated = twoPassTruncate(entries, maxEntries);
-  const serialized = escapeXmlContent(serializeEntries(truncated, format));
+  const serialized = escapeXmlContent(serializeEntries(entries, format));
   const countLine =
-    entries.length <= truncated.length
+    total <= entries.length
       ? ""
       : zh
-        ? `\n[共 ${entries.length} 条记录，显示其中 ${truncated.length} 条]`
-        : `\n[${entries.length} entries in total, ${truncated.length} shown]`;
+        ? `\n[共 ${total} 条记录，显示其中 ${entries.length} 条]`
+        : `\n[${total} entries in total, ${entries.length} shown]`;
 
   return `<${tagName}>\n${serialized}${countLine}\n</${tagName}>`;
-}
-
-/**
- * Two-pass deterministic truncation for plugin-data summaries.
- *
- * When the namespace has fewer rows than `max`, returns them in their
- * natural order (caller-observed). Otherwise splits the quota:
- *
- * - **Anchor half** (`floor(max/2)`): oldest entries by `createdAt` — keeps
- *   long-lived references visible even in late-game turns, so the LLM can
- *   still match early-session codex entries when narrating a callback.
- * - **Recent half** (`max - floor(max/2)`): most recently updated entries
- *   by `updatedAt`, excluding anything already in the anchor half.
- *
- * The returned array orders anchors first, then recent entries, so the
- * LLM reads a stable timeline-like layout. Deduplication by `key` ensures
- * an entry never appears twice in the output even when it qualifies for
- * both slices.
- */
-function twoPassTruncate(
-  entries: readonly PluginDataRecord[],
-  max: number,
-): PluginDataRecord[] {
-  if (entries.length <= max) return [...entries];
-
-  const anchorQuota = Math.floor(max / 2);
-  const recentQuota = max - anchorQuota;
-
-  const byCreatedAsc = [...entries].sort((a, b) => {
-    const diff = a.createdAt.localeCompare(b.createdAt);
-    if (diff !== 0) return diff;
-    return a.key.localeCompare(b.key);
-  });
-  const anchors = byCreatedAsc.slice(0, anchorQuota);
-  const anchorKeys = new Set(anchors.map((e) => e.key));
-
-  const byUpdatedDesc = [...entries]
-    .filter((e) => !anchorKeys.has(e.key))
-    .sort((a, b) => {
-      const diff = b.updatedAt.localeCompare(a.updatedAt);
-      if (diff !== 0) return diff;
-      return a.key.localeCompare(b.key);
-    });
-  const recent = byUpdatedDesc.slice(0, recentQuota);
-
-  return [...anchors, ...recent];
 }
 
 const SUMMARY_VALUE_CAP = 200;
@@ -396,7 +354,7 @@ export function renderNpcProfiles(
     const parts = [`- ${character.name} [${character.type}]`];
     if (character.description) parts.push(capped(character.description));
     if (character.fields && Object.keys(character.fields).length > 0)
-      parts.push(capped(safeStringify(character.fields)));
+      parts.push(capped(safeStringify(modelFacingJson(character.fields))));
     const line = parts.join(" | ");
     if (unlisted.length > 0 || used + line.length > NPC_PROFILES_BUDGET) {
       unlisted.push(character.name);
@@ -429,7 +387,10 @@ export function assemblePromptVariables(
   const world = params.sessionContext?.world ?? {};
 
   // Build the `inputs` lookup map: pluginId → runtimeId → output.
-  const inputsMap: Record<string, Record<string, Record<string, unknown>>> = {};
+  const inputsMap: Record<
+    string,
+    Record<string, Record<string, unknown>>
+  > = Object.create(null);
   for (const [key, result] of completedResults) {
     if (!result.output) continue;
     const slashIdx = key.indexOf("/");
@@ -438,7 +399,7 @@ export function assemblePromptVariables(
     const pluginId = slashIdx >= 0 ? key.slice(0, slashIdx) : key;
     const runtimeId = slashIdx >= 0 ? key.slice(slashIdx + 1) : key;
     if (!inputsMap[pluginId]) {
-      inputsMap[pluginId] = {};
+      inputsMap[pluginId] = Object.create(null);
     }
     inputsMap[pluginId][runtimeId] = result.output;
   }
@@ -446,19 +407,20 @@ export function assemblePromptVariables(
   const playerChar =
     sessionMeta?.characters?.find((c) => c.type === "player") ?? null;
 
-  // Stringify the latest form submission so template interpolation renders
-  // a JSON blob (LLM-friendly) instead of "[object Object]".
+  // The latest form submission renders as JSON, and as nothing when the form
+  // had no values.
   const lastFormValuesRaw = sessionMeta?.lastFormValues;
   const lastFormValuesStr =
     lastFormValuesRaw && Object.keys(lastFormValuesRaw).length > 0
-      ? JSON.stringify(lastFormValuesRaw, null, 2)
+      ? renderTemplateValue(lastFormValuesRaw)
       : "";
 
   return {
     inputs: inputsMap,
     world,
+    // A turn is named by its number. The session ID is bookkeeping: a model
+    // has no use for it, and it differs between two runs of one session.
     session: {
-      id: turnInput.sessionId,
       turnNumber: sessionMeta?.turnNumber ?? 0,
     },
     characters: {
@@ -527,11 +489,103 @@ export function buildExecutionStoryCue(locale: string | undefined): string {
 }
 
 /**
- * How a runtime finishes: by calling `runtime-done`, by its structured JSON
- * output, or, for a story runtime, by the text of its reply.
+ * How a runtime finishes, from the manifest fields the agent loop builds its
+ * policy from (`requireToolUse`, `completeAfterTools`, the output schema).
+ *
+ * The `[COMPLETION]` instruction and the tools the runtime is offered both
+ * come from this one answer. Derived apart, they disagreed: a runtime that
+ * must call a tool was offered `runtime-done` and told to end a quiet turn
+ * with it, a call the loop answers with a correction and one more model call.
  */
-export type FrameworkCompletion =
-  "runtime-done" | "structured-output" | "story";
+export function resolveFrameworkCompletion(
+  manifest: Pick<
+    RuntimeManifest,
+    "output" | "outputKind" | "requireToolUse" | "completeAfterTools"
+  >,
+): FrameworkCompletionContract {
+  if (manifest.outputKind === "story") return { completion: "story" };
+  const completingTools = manifest.completeAfterTools ?? [];
+  // The loop ends such a run when one of these tools succeeds, and takes the
+  // tool's result as the output of a runtime that declares a schema.
+  if (manifest.requireToolUse === true && completingTools.length > 0)
+    return { completion: "completing-tool", completingTools };
+  if (manifest.output?.schema) return { completion: "structured-output" };
+  return {
+    completion: "runtime-done",
+    requireToolUse: manifest.requireToolUse === true,
+  };
+}
+
+/** The `[COMPLETION]` lines of the preamble for one way of finishing. */
+function completionInstruction(
+  contract: FrameworkCompletionContract | undefined,
+  isZh: boolean,
+): readonly string[] {
+  const mode = contract?.completion ?? "runtime-done";
+  if (mode === "story") {
+    return isZh
+      ? [
+          "[COMPLETION] 本 runtime 的结果是你回复里的故事正文。工具按下面的指令使用；最后一次工具结果之后，把正文作为回复写出来。只有工具调用、没有正文的回复不算完成。",
+        ]
+      : [
+          "[COMPLETION] The result of this runtime is the story text of your reply. Use tools as the instructions below say; after the last tool result, write the story as your reply. A reply with a tool call and no story text does not finish this runtime.",
+        ];
+  }
+  if (mode === "completing-tool") {
+    // The run ends with the tool, and a quiet turn is recorded through it
+    // too: this runtime is not given `runtime-done`, which records nothing.
+    const names = (contract?.completingTools ?? []).map(
+      (name) => `\`${name}\``,
+    );
+    if (isZh) {
+      const tool =
+        names.length === 0
+          ? "完成工具"
+          : names.length === 1
+            ? ` ${names[0]} `
+            : ` ${names.join("、")} 中的任意一个`;
+      return [
+        `[COMPLETION] 本 runtime 在成功调用${tool}后结束：调用成功后框架会自动结束本次运行。之后不要输出额外终止文本，也不要调用 \`runtime-done\`——本 runtime 没有该工具。`,
+        "[COMPLETION] 本回合确实无变化时，也通过同一个工具记录：按工具说明提交空结果。",
+      ];
+    }
+    const tool =
+      names.length === 0
+        ? "its completing tool"
+        : names.length === 1
+          ? names[0]
+          : `one of ${names.join(", ")}`;
+    return [
+      `[COMPLETION] This runtime ends when a call to ${tool} succeeds: the framework then finishes the run. Do not emit terminator text after it, and do not call \`runtime-done\` — this runtime does not have that tool.`,
+      "[COMPLETION] A turn in which nothing changed is recorded through the same tool: submit the empty result its description allows.",
+    ];
+  }
+  if (mode === "structured-output") {
+    return isZh
+      ? [
+          "[COMPLETION] 本 runtime 以**结构化 JSON 输出**结束：完成所有业务工具调用后，直接返回符合 schema 的 JSON。不要调用 `runtime-done`——本 runtime 没有该工具。",
+        ]
+      : [
+          "[COMPLETION] This runtime finishes by emitting its **structured JSON output**: once all tool work is done, return the JSON matching the declared schema. Do NOT call `runtime-done` — this runtime does not have that tool.",
+        ];
+  }
+  // A runtime that must record its result is not told that `runtime-done`
+  // alone ends a quiet turn: the loop rejects that call.
+  if (isZh) {
+    return [
+      "[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。",
+      contract?.requireToolUse
+        ? "[COMPLETION] 本 runtime 必须用声明的业务工具提交结果：只调用 `runtime-done` 不会记录任何内容。本回合确实无变化时，也要按工具说明提交空结果，再调用 `runtime-done`。不要反复调用同一个业务工具。"
+        : "[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。",
+    ];
+  }
+  return [
+    "[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text — calling `runtime-done` is the end signal.",
+    contract?.requireToolUse
+      ? "[COMPLETION] This runtime must record its result with a declared business tool: `runtime-done` alone records nothing. If nothing changed this turn, submit the empty result the tool's description allows, then call `runtime-done`. Do not repeatedly call the same business tool."
+      : "[COMPLETION] If no tool call is needed this turn, just call `runtime-done` to finish (preferred), or return an empty string. Do not repeatedly call the same business tool.",
+  ];
+}
 
 /**
  * Framework preamble used by segment-based prompt assembly (segment 1).
@@ -543,22 +597,7 @@ export type FrameworkCompletion =
  */
 export function buildFrameworkPreamble(
   locale?: string,
-  options?: {
-    /**
-     * How this runtime finishes; `runtime-done` when omitted.
-     *
-     * Only a runtime that is given the `runtime-done` tool is told to call
-     * it. A schema-declared runtime does not get that tool:
-     * `buildToolDefinitions` withholds it so the early-exit branch cannot
-     * fire before the JSON envelope that downstream consumers read. A story
-     * runtime does not get it either: its result is the text of its reply.
-     * Told to "call `runtime-done` when no tool call is needed", a model
-     * that follows instructions to the letter ended the narrator's run with
-     * that call and wrote no story, three times in a row, and the turn was
-     * not committed.
-     */
-    readonly completion?: FrameworkCompletion;
-  },
+  options?: FrameworkCompletionContract,
 ): string {
   if (!locale) {
     return "";
@@ -571,33 +610,7 @@ export function buildFrameworkPreamble(
   // every successful tool call. Emitted in the session's instruction language
   // (English, or Chinese for a Chinese session) rather than every locale at once.
   const isZh = instructionLocaleFor(locale) === "zh";
-  const mode = options?.completion ?? "runtime-done";
-  const completion =
-    mode === "story"
-      ? isZh
-        ? [
-            "[COMPLETION] 本 runtime 的结果是你回复里的故事正文。工具按下面的指令使用；最后一次工具结果之后，把正文作为回复写出来。只有工具调用、没有正文的回复不算完成。",
-          ]
-        : [
-            "[COMPLETION] The result of this runtime is the story text of your reply. Use tools as the instructions below say; after the last tool result, write the story as your reply. A reply with a tool call and no story text does not finish this runtime.",
-          ]
-      : mode === "runtime-done"
-        ? isZh
-          ? [
-              "[COMPLETION] 本 runtime 完成所有业务工具调用后，必须立即调用 `runtime-done` 工具结束。不要输出额外终止文本——调用 `runtime-done` 就是结束信号。",
-              "[COMPLETION] 如果判断本回合无需任何工具调用，直接调用 `runtime-done` 结束（优先）或返回空字符串。不要反复调用同一个业务工具。",
-            ]
-          : [
-              "[COMPLETION] When you have finished all tool work for this runtime, call the `runtime-done` tool IMMEDIATELY. Do not emit terminator text — calling `runtime-done` is the end signal.",
-              "[COMPLETION] If no tool call is needed this turn, just call `runtime-done` to finish (preferred), or return an empty string. Do not repeatedly call the same business tool.",
-            ]
-        : isZh
-          ? [
-              "[COMPLETION] 本 runtime 以**结构化 JSON 输出**结束：完成所有业务工具调用后，直接返回符合 schema 的 JSON。不要调用 `runtime-done`——本 runtime 没有该工具。",
-            ]
-          : [
-              "[COMPLETION] This runtime finishes by emitting its **structured JSON output**: once all tool work is done, return the JSON matching the declared schema. Do NOT call `runtime-done` — this runtime does not have that tool.",
-            ];
+  const completion = completionInstruction(options, isZh);
   // The whole preamble is in one language. With the frame and the language
   // rule in English and the completion rule in Chinese, a Chinese session
   // read a prompt that changed language twice before the plugin's own text.

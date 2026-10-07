@@ -16,9 +16,7 @@ import type { SessionRecord } from "@covel/store";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import {
   checkHostedOperator,
-  sessionIncarnationIdentity,
   sessionApprovalScope,
-  SESSION_DELETION_PENDING_KEY,
 } from "../session/session-guard.js";
 import {
   buildCommandEnvironment,
@@ -28,6 +26,7 @@ import {
 import { runTracedCommand } from "./command-trace.js";
 import { preflightFormApprovals } from "./form-approvals.js";
 import { errorBody } from "../../../api-error.js";
+import { readLockedSession } from "../session/locked-mutation.js";
 
 /** Action dispatch and form authorization share the same session commit lock. */
 export async function dispatchPluginAction(
@@ -41,7 +40,6 @@ export async function dispatchPluginAction(
   const store = c.get("store");
   const executor = c.get("rpcExecutor");
   const sessionId = session.id;
-  const expectedIncarnation = sessionIncarnationIdentity(session);
   // Approval gate. Look up the resolved entry first so we know its
   // trust level, then ask the gate whether the call can proceed.
   // Builtin trust auto-allows; community trust either re-uses a cached
@@ -248,39 +246,14 @@ export async function dispatchPluginAction(
       // community code: disable/revoke/delete+recreate may have rotated it
       // while this request waited. Do not evaluate twice on the normal path —
       // that would consume a one-time grant twice.
-      const liveSession = await store.getSession(sessionId);
-      if (!liveSession) {
-        return c.json(
-          errorBody(`Session "${sessionId}" not found`, {
-            code: "session_not_found",
-          }),
-          404,
-        );
-      }
-      if (sessionIncarnationIdentity(liveSession) !== expectedIncarnation) {
-        return c.json(
-          errorBody("session was replaced while the request was waiting", {
-            code: "session_incarnation_changed",
-          }),
-          409,
-        );
-      }
-      if (
-        liveSession.status !== "active" ||
-        liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
-      ) {
-        return c.json(
-          errorBody(
-            `session is ${liveSession.status}; plugin RPC execution refused`,
-            {
-              code: liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
-                ? "session_deleting"
-                : "session_not_active",
-            },
-          ),
-          409,
-        );
-      }
+      const liveSession = await readLockedSession({
+        c,
+        store,
+        sessionId,
+        expectedSession: session,
+        allowedStatuses: ["active"],
+      });
+      if (liveSession instanceof Response) return liveSession;
       if (
         entryTrust === "community" &&
         sessionApprovalScope(liveSession, pluginId) !== approvalScope
@@ -434,18 +407,13 @@ export async function dispatchPluginAction(
     if (err instanceof RpcValidationError) {
       return c.json(errorBody(err.message), 400);
     }
-    if (err instanceof RpcDispatchError) {
+    if (err instanceof RpcDispatchError && err.code !== "handler-threw") {
       const httpStatus = err.code === "unknown-action" ? 404 : 500;
       return c.json(
         errorBody(err.message, { code: err.code.replaceAll("-", "_") }),
         httpStatus,
       );
     }
-    return c.json(
-      errorBody(
-        err instanceof Error ? err.message : "plugin-rpc dispatch failed",
-      ),
-      500,
-    );
+    throw err;
   }
 }

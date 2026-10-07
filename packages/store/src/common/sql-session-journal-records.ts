@@ -28,6 +28,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  notInArray,
   lt,
   sql,
 } from "drizzle-orm";
@@ -36,8 +37,9 @@ import type { Column, Table } from "drizzle-orm";
 import {
   cursorAfterOrder,
   cursorAfterWhere,
-  cursorPageOrder,
-  cursorPageWhere,
+  writeOrderAsc,
+  writeOrderPageOrder,
+  writeOrderPageWhere,
 } from "./cursor.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
@@ -69,6 +71,9 @@ type TraceEventsTable = Table & {
   id: Column;
   sessionId: Column;
   createdAt: Column;
+  seq: Column;
+  turnId: Column;
+  type: Column;
 };
 type TurnMessagesTable = Table & {
   sessionId: Column;
@@ -79,7 +84,12 @@ type TurnMessagesTable = Table & {
   sourceRuntimeId: Column;
   compactedAtTurnId: Column;
 };
-type PlayerInputsTable = Table & { sessionId: Column; formId: Column };
+type PlayerInputsTable = Table & {
+  id: Column;
+  sessionId: Column;
+  formId: Column;
+  createdAt: Column;
+};
 type SessionSummariesTable = Table & {
   id: Column;
   sessionId: Column;
@@ -109,7 +119,9 @@ export interface SqlSessionJournalDeps {
 export type SqlSessionJournalRecords = Pick<
   DataStore,
   | "addTraceEvent"
+  | "getTraceEventById"
   | "listTraceEvents"
+  | "queryTraceEvents"
   | "listTraceEventsPage"
   | "deleteTraceEventsBefore"
   | "appendTurnMessage"
@@ -122,6 +134,7 @@ export type SqlSessionJournalRecords = Pick<
   | "retagCompactedTurnMessages"
   | "savePlayerInput"
   | "listPlayerInputs"
+  | "getLatestPlayerInput"
   | "saveSessionSummary"
   | "listSessionSummaries"
   | "deleteSessionSummaries"
@@ -132,18 +145,22 @@ export function createSqlSessionJournalRecords(
 ): SqlSessionJournalRecords {
   const { runner, tables, json, values } = deps;
   const { traceEvents, turnMessages, playerInputs, sessionSummaries } = tables;
+  const { byteOrder } = runner;
   // Two messages of one millisecond come in pipeline order (the player's
   // message is 0, a runtime's the rank of its stage), then by ID: without a
   // tie-break the engine was free to return them either way.
   const turnMessageOrder = [
     asc(turnMessages.createdAt),
     asc(turnMessages.order),
-    asc(turnMessages.id),
+    asc(byteOrder(turnMessages.id)),
   ];
 
   return {
     async addTraceEvent(record: TraceEventRecord): Promise<void> {
-      await runner.insert(traceEvents, values.traceEventInsert(record));
+      await runner.insert(traceEvents, {
+        ...values.traceEventInsert(record),
+        seq: runner.nextWriteOrderSeq(traceEvents, record),
+      });
     },
 
     async listTraceEvents(
@@ -152,11 +169,43 @@ export function createSqlSessionJournalRecords(
     ): Promise<TraceEventRecord[]> {
       const rows = await runner.select<TraceEventRow>(traceEvents, {
         where: eq(traceEvents.sessionId, sessionId),
-        // `id` breaks same-millisecond ties so offset pagination cannot swap
-        // rows between pages (media GC pages through this).
-        orderBy: [asc(traceEvents.createdAt), asc(traceEvents.id)],
+        // A total order, so offset pagination cannot swap rows between pages
+        // (media GC pages through this), and the order the page read gives.
+        orderBy: writeOrderAsc(traceEvents, byteOrder),
         limit: pagination?.limit,
         offset: pagination?.offset,
+      });
+      return rows.map((row) => toTraceEventRecord(row, json));
+    },
+
+    async getTraceEventById(sessionId, id) {
+      const row = await runner.selectFirst<TraceEventRow>(traceEvents, {
+        where: and(
+          eq(traceEvents.sessionId, sessionId),
+          eq(traceEvents.id, id),
+        ),
+      });
+      return row ? toTraceEventRecord(row, json) : null;
+    },
+
+    async queryTraceEvents(sessionId, options) {
+      const rows = await runner.select<TraceEventRow>(traceEvents, {
+        where: and(
+          eq(traceEvents.sessionId, sessionId),
+          options.turnId === undefined
+            ? undefined
+            : eq(traceEvents.turnId, options.turnId),
+          options.types === undefined
+            ? undefined
+            : inArray(traceEvents.type, [...options.types]),
+          options.excludeTypes?.length
+            ? notInArray(traceEvents.type, [...options.excludeTypes])
+            : undefined,
+        ),
+        orderBy: options.newestFirst
+          ? writeOrderPageOrder(traceEvents, byteOrder)
+          : writeOrderAsc(traceEvents, byteOrder),
+        limit: options.limit,
       });
       return rows.map((row) => toTraceEventRecord(row, json));
     },
@@ -180,8 +229,13 @@ export function createSqlSessionJournalRecords(
     ): Promise<TraceEventRecord[]> {
       if (opts.limit <= 0) return [];
       const rows = await runner.select<TraceEventRow>(traceEvents, {
-        where: cursorPageWhere(traceEvents, sessionId, opts.before),
-        orderBy: cursorPageOrder(traceEvents),
+        where: writeOrderPageWhere(
+          traceEvents,
+          sessionId,
+          opts.before,
+          byteOrder,
+        ),
+        orderBy: writeOrderPageOrder(traceEvents, byteOrder),
         limit: opts.limit,
       });
       return rows.reverse().map((row) => toTraceEventRecord(row, json));
@@ -206,6 +260,7 @@ export function createSqlSessionJournalRecords(
 
     async listUncompactedTurnMessages(
       sessionId: string,
+      limit?: number,
     ): Promise<TurnMessageRecord[]> {
       const rows = await runner.select<TurnMessageRow>(turnMessages, {
         where: and(
@@ -213,6 +268,7 @@ export function createSqlSessionJournalRecords(
           isNull(turnMessages.compactedAtTurnId),
         ),
         orderBy: turnMessageOrder,
+        limit,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
     },
@@ -224,8 +280,8 @@ export function createSqlSessionJournalRecords(
     ): Promise<TurnMessageRecord[]> {
       if (limit <= 0) return [];
       const rows = await runner.select<TurnMessageRow>(turnMessages, {
-        where: cursorAfterWhere(turnMessages, sessionId, after),
-        orderBy: cursorAfterOrder(turnMessages),
+        where: cursorAfterWhere(turnMessages, sessionId, after, byteOrder),
+        orderBy: cursorAfterOrder(turnMessages, byteOrder),
         limit,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
@@ -256,9 +312,13 @@ export function createSqlSessionJournalRecords(
       // restore the oldest-first order every caller expects from the tail.
       const rows = await runner.select<TurnMessageRow>(turnMessages, {
         where: eq(turnMessages.sessionId, sessionId),
-        // Tie-break on id so the truncation boundary picks the same rows as
-        // memory/idb (sortByCursorAsc) when several share a createdAt.
-        orderBy: [desc(turnMessages.createdAt), desc(turnMessages.id)],
+        // `turnMessageOrder` downwards: the tail of `listTurnMessages`, cut
+        // at the same rows when several share a createdAt.
+        orderBy: [
+          desc(turnMessages.createdAt),
+          desc(turnMessages.order),
+          desc(byteOrder(turnMessages.id)),
+        ],
         limit,
       });
       return rows.reverse().map((row) => toTurnMessageRecord(row, json));
@@ -285,13 +345,17 @@ export function createSqlSessionJournalRecords(
     async retagCompactedTurnMessages(
       sessionId: string,
       summaryId: string,
+      sourceSummaryIds?: readonly string[],
     ): Promise<void> {
+      if (sourceSummaryIds?.length === 0) return;
       await runner.update(
         turnMessages,
         { compactedAtTurnId: summaryId },
         and(
           eq(turnMessages.sessionId, sessionId),
-          isNotNull(turnMessages.compactedAtTurnId),
+          sourceSummaryIds
+            ? inArray(turnMessages.compactedAtTurnId, [...sourceSummaryIds])
+            : isNotNull(turnMessages.compactedAtTurnId),
         ),
       );
     },
@@ -300,9 +364,26 @@ export function createSqlSessionJournalRecords(
       await runner.insert(playerInputs, values.playerInputInsert(record));
     },
 
+    async getLatestPlayerInput(
+      sessionId: string,
+    ): Promise<PlayerInputRecord | null> {
+      const rows = await runner.select<PlayerInputRow>(playerInputs, {
+        where: eq(playerInputs.sessionId, sessionId),
+        orderBy: [
+          desc(playerInputs.createdAt),
+          desc(byteOrder(playerInputs.id)),
+        ],
+        limit: 1,
+      });
+      return rows[0] ? toPlayerInputRecord(rows[0], json) : null;
+    },
+
     async listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]> {
       const rows = await runner.select<PlayerInputRow>(playerInputs, {
         where: eq(playerInputs.sessionId, sessionId),
+        // Oldest first, so the last row is the latest submission. Without an
+        // order PostgreSQL returns rows as they lie on disk.
+        orderBy: [asc(playerInputs.createdAt), asc(byteOrder(playerInputs.id))],
       });
       return rows.map((row) => toPlayerInputRecord(row, json));
     },
@@ -319,15 +400,27 @@ export function createSqlSessionJournalRecords(
     ): Promise<readonly SessionSummaryRecord[]> {
       const rows = await runner.select<SessionSummaryRow>(sessionSummaries, {
         where: eq(sessionSummaries.sessionId, sessionId),
-        orderBy: [asc(sessionSummaries.createdAt), asc(sessionSummaries.id)],
+        orderBy: [
+          asc(sessionSummaries.createdAt),
+          asc(byteOrder(sessionSummaries.id)),
+        ],
       });
       return rows.map((row) => toSessionSummaryRecord(row, json));
     },
 
-    async deleteSessionSummaries(sessionId: string): Promise<void> {
+    async deleteSessionSummaries(
+      sessionId: string,
+      summaryIds?: readonly string[],
+    ): Promise<void> {
+      if (summaryIds?.length === 0) return;
       await runner.delete(
         sessionSummaries,
-        eq(sessionSummaries.sessionId, sessionId),
+        and(
+          eq(sessionSummaries.sessionId, sessionId),
+          summaryIds
+            ? inArray(sessionSummaries.id, [...summaryIds])
+            : undefined,
+        ),
       );
     },
   };

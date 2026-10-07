@@ -8,7 +8,7 @@
 
 - **整份数据用不了**：更早的格式（`v1`）、没有版本号（`unversioned`）、不是合法数据（`damaged`）。加载时把它原样移到一旁，设置从默认值开始。浏览器存为 `covel:settings.<标签>.bak`，桌面端在启动时把文件改名为 `settings.<标签>.bak.json`。更新版本写的数据不在此列：读取和覆盖写入均会拒绝，原内容保留，SettingsStore 只读。
 - **个别值用不了**：存储的值不被该键当前注册的 schema 接受（升级后某个选项被移除、插件的设置改了取值范围）。这以前会让整个 SettingsStore 只读。现在先留一份完整副本（`covel:settings.conflict.bak` / `settings.conflict.bak.json`），再从存储中去掉这些键，它们读回默认值，其余设置不变。加载之后才注册的键（插件设置）同样处理；处理完成前发起的写入会排在它后面。
-- 副本从不覆盖已有的副本（重名时加时间戳）。副本写不进去、或后端没有 `backupBundle` 时，什么都不丢弃，SettingsStore 保持只读。
+- 副本从不覆盖已有的副本（重名时加时间戳，同毫秒仍冲突时追加序号）。副本写不进去、或后端没有 `backupBundle` 时，什么都不丢弃，SettingsStore 保持只读。
 - 提示经 `subscribeRepairs` 和 `SettingsBackendAdapter.takeArchivedBundle()` 给出；副本可在“设置 → 数据”查看和下载（`listBackups` / `readBackup`，桌面 IPC `covel:settings:backup`、`covel:settings:backups`、`covel:settings:read-backup`）。密钥通道不受影响，副本里没有 API 密钥。设置导入/导出的 `SettingsExportBundle.schemaVersion: 1` 是独立的当前合同，不受此限制影响。
 
 设置后端由当前设备确定：存在 Electron IPC 时使用个人文件，否则始终使用浏览器 localStorage。服务端 `/api/config/info` 只用于发现管理能力，`COVEL_HOME` 和 `isDesktop` 都不会把浏览器设置切换成服务端共享文件。管理探测失败不阻止本地设置初始化。
@@ -40,7 +40,7 @@
 
 Toast 渲染在 `document.body` 下，位于所有弹窗之上；点击 toast 不会关闭它下面的弹窗。
 
-“配置文件”页把原始配置作为文本编辑：这台设备的设置（JSON，不含密钥）以及服务端提供的 `llm.toml`、桌面模式下的 `config.toml`（见 [API](./api.md) 的 `/api/config/raw`）。设置的 JSON 保存时逐项用注册的 schema 检查，只写入有变化的键，被删掉的键恢复默认；保存前留一份副本（`covel:settings.edit.bak` / `settings.edit.bak.json`），之前的副本也可以载入编辑框后再保存。
+“配置文件”页把原始配置作为文本编辑：这台设备的设置（JSON，不含密钥）以及服务端提供的 `llm.toml`、桌面模式下的 `config.toml`（见 [API](./api.md) 的 `/api/config/raw`）。设置的 JSON 保存时逐项用注册的 schema 检查，并通过 `replaceEntries(entries, expectedEntries)` 一次替换完整普通设置快照，被删掉的键恢复默认；加载编辑器后的新增、删除或修改都会造成冲突，必须重新加载后保存，避免覆盖其他窗口的修改；保存前留一份副本（`covel:settings.edit.bak` / `settings.edit.bak.json`），之前的副本也可以载入编辑框后再保存。
 
 “运维访问”页只在需要它的地方出现：`/api/health` 的 `operatorTokenRequired` 为 `false` 且此浏览器没有保存令牌时隐藏；服务端尚未应答时保留，托管部署的运维人员才有地方填写令牌。语言列表用各语言自己的名称。
 
@@ -64,11 +64,13 @@ Web 在 `covel:settings` 的 storage 事件、窗口 focus 和恢复可见时刷
 
 `SettingsBackendAdapter.saveSecrets(patch)`、桌面 `covel:keys:save` 和 REST `/api/config/keys` 都接受 provider 到 `string | null` 的增量映射。未提及的 provider 保持不变，`null` 明确删除；不同实例写入不同 provider 不会覆盖彼此。同一 provider 按后端接收的写入顺序生效，显式重复设置旧值或删除不存在于本地缓存的 key 仍会提交。此通道不提供同键 CAS。`clearAll()` 只删除当前实例已知的 provider，不删除其他实例后来新增的未知 provider。
 
+localStorage 读取密钥映射时按自有数据属性保留 provider 名称，包括 `__proto__` 等与对象原型同名的键；后续增量保存不会因普通对象赋值语义静默丢弃这些凭据。
+
 localStorage 后端必须在 Web Lock 内读取最新密钥、应用 patch 并写回；缺少 Web Locks 时拒绝密钥保存，需使用支持的 HTTPS 或 localhost 环境。REST 由服务端应用 patch，桌面 IPC 在侧车不可用时同步读取并合并本地文件。密钥不进入普通 settings、revision 广播或默认导出。自定义 adapter 必须实现相同的原子 patch 合同，不再接收完整密钥快照。
 
 `keys.*` 命名空间以及注册为 `backend: "keys"` 或 `secret: true` 的条目使用独立 secrets 通道，普通后端声明不能覆盖 `keys.*` 的含义。导入选中的普通 `entries` 若包含此类条目，会在任何写入前明确拒绝；密钥必须位于 `bundle.keys`，并显式设置 `includeSecrets: true`。普通序列化和导出始终过滤已知 secret 条目。
 
-初始化或刷新时发现普通 settings 快照携带 secret 条目，会拒绝发布或重放该快照；初始化失败保持只读并保留原文件。动态注册发现已有普通条目实际为 secret 时也会禁用写入并从普通导出排除它。系统不会自动迁移、删除或复制这类错误放置的密钥。
+初始化或刷新时发现普通 settings 快照携带 secret 条目，会拒绝发布或重放该快照；初始化在普通 schema 修复的备份和写入前先检查此边界，失败保持只读并保留原文件。动态注册发现已有普通条目实际为 secret 时也会禁用写入并从普通导出排除它，取消尚未开始的普通修复。系统不会自动迁移、删除或复制这类错误放置的密钥。
 
 ## 有效模型与能力来源
 
@@ -112,6 +114,8 @@ localStorage 后端必须在 Web Lock 内读取最新密钥、应用 patch 并�
 连接 ID 与模型 `ref` 在全部连接中必须分别唯一；普通设置注册与模型文件导入共用同一校验，冲突整批拒绝，不静默合并或重写引用。同一模型 ID 可以有多个不同 `ref` 的配置。
 
 `SettingsStoreApi.setMany(entries)` 先验证全部普通设置，再以一次持久化操作保存；任何字段非法或混入密钥都会在写入前拒绝。相关键共同参与 revision 冲突检查，失败时不会只提交其中一部分。通用设置导入也会在写入前验证全部已选普通键，非法字段不再被跳过后继续写其它键。密钥仍使用独立通道，不属于这项原子性保证。
+
+`SettingsStoreApi.replaceEntries(entries, expectedEntries)` 一次保存完整普通设置快照，包括删除遗漏键，保留传入的未注册普通键。`expectedEntries` 是编辑器加载时 `export().entries` 的快照；调用时和每次 CAS 尝试前都按完整归一化快照检查，远端新增、删除、修改任意键均以 `SettingsRevisionConflictError` 拒绝。所有新值在写入前校验，密钥条目拒绝；I/O 失败整包回滚。普通 `setMany` 继续按涉及的键合并，`import` 继续按所选键合并。未提供 revision 能力的自定义后端只能检查同一实例的编辑基值。
 
 `setProviderProfiles(profiles, slotConfig?)` 返回 Promise，把连接/模型和槽位绑定一起保存。删除最后一个模型只移除指向它的本地绑定，保留空连接及其密钥；空连接可继续编辑、添加模型、导出和导入。显式删除连接后，先等待普通设置保存成功，再清理捕获的连接密钥；同一 store 中后来的连接重建或密钥变更会阻止过期清理。清理失败通过返回值 `unclearedProviderIds`、不包含密钥值的日志和界面提示单独报告，已经成功保存的普通设置不会假装被回滚。独立密钥通道尚不提供跨窗口 CAS 或与普通设置的跨通道事务。
 

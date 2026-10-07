@@ -219,8 +219,16 @@ function textUnits(
       return;
     }
     if (value === null || typeof value !== "object") return;
-    for (const [name, child] of Object.entries(value))
+    const identity = steps.at(-1);
+    for (const [name, child] of Object.entries(value)) {
+      if (
+        typeof identity === "object" &&
+        "by" in identity &&
+        name === identity.by
+      )
+        continue;
       walk(child, [...steps, name], name);
+    }
   };
   walk(source.value, [], "");
   return units;
@@ -410,7 +418,14 @@ function buildOverlay(
   }
   if (main === null || typeof main !== "object") return undefined;
   const result: Record<string, unknown> = {};
+  const identity = steps.at(-1);
   for (const [name, child] of Object.entries(main)) {
+    if (
+      typeof identity === "object" &&
+      "by" in identity &&
+      name === identity.by
+    )
+      continue;
     const overlay = buildOverlay(
       child,
       existing !== null &&
@@ -478,14 +493,16 @@ async function worldFiles(worldDir: string): Promise<WorldFiles> {
       worldId: String(manifest.id),
     });
     for (const source of descriptor.sources) {
-      const { kind, path: file, key } = source.descriptor;
+      const { kind, path: file, key, localeArrayKeys = [] } = source.descriptor;
       if (source.inlineValue !== undefined || typeof file !== "string")
         continue;
       if (kind === "yaml" || kind === "json")
         structured.push({
           file,
           format: kind,
-          arrayKeys: [...new Set([...(key ? [key] : []), "id"])],
+          arrayKeys: [
+            ...new Set([...(key ? [key] : []), "id", ...localeArrayKeys]),
+          ],
           value: await readStructured(worldDir, file),
           ...(source.descriptor.to === "world:metadata.dimensions"
             ? { dimensions: true as const }

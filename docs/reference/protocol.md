@@ -35,6 +35,10 @@
 
 ## 宿主执行与提交边界
 
+未提交执行结束时，客户端撤下该执行生成的 assistant 内容并保留玩家输入。执行期间的表单提交在取得流所有权之前检查互斥，不能夺走进行中的 action 流。叙事之后的插话不再被接收成模型无法消费的输入；插话持久化与实时消息使用一致身份。
+
+生成、修订、翻译等 SSE 操作的 single-flight 标记持续到流回调完成，包括清理阶段。后台作业等待会话锁时可在超时后继续等待，并响应取消；普通交互请求仍按锁超时返回忙碌结果。
+
 `@covel/runtime.executeTurn` 和 `resumeSuspendedRuntime` 返回 `{ result, commit }`。
 `result` 是可用于响应的执行结果；`commit` 是留在宿主的完整提交计划，包含顶层和递归结果、
 待提交命令、对话 journal、暂停记录、Hook 设置快照、回合计数责任和执行时加载的输出 schema。
@@ -312,17 +316,17 @@ Provider 图片输入矩阵：
 
 插件记忆与其他插件数据一样，在提交后发出 `plugin-data.changed`，由所属插件的 namespace 决定更新内容。detached 提取的失败与完成状态通过通用 job/执行记录恢复；后续执行在 `before-next-execution` 屏障后读取已提交快照。没有独立的工作记忆变更事件。
 
-`context.compacted` 是 trace-only 事件，由历史压缩编排写入 `trace_events`，不进入 `CovelEvent` union。摘要策略通过 `history.compact@1` 扩展提供。`recursive.calling/completed/failed` 是 union 内 trace 事件，仅由订阅 topic `trace` 下发，不转发到 `/api/actions`。
+`context.compacted` 是 trace-only 事件，由历史压缩编排写入 `trace_events`，不进入 `CovelEvent` union。摘要策略通过 `history.compact@2` 扩展提供。`recursive.calling/completed/failed` 是 union 内 trace 事件，仅由订阅 topic `trace` 下发，不转发到 `/api/actions`。
 
-| 事件                            | 触发点                | payload                                                             |
-| ------------------------------- | --------------------- | ------------------------------------------------------------------- |
-| `character-schema.changed`      | domain schema 提交    | `{schema}`                                                          |
-| `character.upserted`            | domain character 提交 | `{character}`                                                       |
-| `dimensions.changed`            | dimension batch 提交  | `{providerPluginId, dimensions, settlement?}`                       |
-| `dimensions.settlement.changed` | 回执提交              | `{providerPluginId, source, sourceTurnId, version, status, error?}` |
-| `plugin-data.changed`           | 所属插件数据提交      | pluginId、namespace 和受影响 key                                    |
-| `proposal.failed`               | proposal 提交失败     | `{proposalId,proposalType,runtimeId,pluginId,error}`                |
-| `context.compacted`             | 压缩摘要保存          | `{summaryId,messagesCompacted,tokenSavings,focusSections}`          |
+| 事件                            | 触发点                | payload                                                                                                                                 |
+| ------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `character-schema.changed`      | domain schema 提交    | `{schema}`                                                                                                                              |
+| `character.upserted`            | domain character 提交 | `{character}`                                                                                                                           |
+| `dimensions.changed`            | dimension batch 提交  | `{providerPluginId, dimensions, settlement?}`                                                                                           |
+| `dimensions.settlement.changed` | 回执提交              | `{providerPluginId, source, sourceTurnId, version, status, error?}`                                                                     |
+| `plugin-data.changed`           | 所属插件数据提交      | pluginId、namespace 和受影响 key                                                                                                        |
+| `proposal.failed`               | proposal 提交失败     | `{proposalId,proposalType,runtimeId,pluginId,error}`                                                                                    |
+| `context.compacted`             | 压缩摘要保存          | `{summaryId,summaryIds,messagesCompacted,tokenSavings,focusSections,summariesMerged,summaryTokens,totalSummaryTokens,summaryTruncated}` |
 
 提交失败会扣留执行完成屏障；客户端将错误呈现为执行失败。后台结果不能重新打开已经结束的 action stream，重连使用持久化会话状态恢复。
 
@@ -750,3 +754,7 @@ updates must not overwrite those updates when its response arrives.
 `plugin.service.completed` 是 trace-only 事件，`forwardToActionStream: false`。payload 包含 `callId/parentCallId?/sessionId/turnId?/runtimeId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`；扩展调用另含宿主注册元数据 `extension: { point, id, slot? }`。不记录输入、输出、原始异常或私有 `diagnosticScope`。
 
 输出的原始校验、归属处理 `attributeOutput` 和最终校验在同一次调用的完成边界内进行，失败记为一次 `output-validation`；缓存命中不新增调用。具有真实 TurnEmitter 的执行复用其 `traceId/retryScope/seq` 并等待持久化尝试，`durationMs` 不包含 trace I/O；观察失败只发固定警告，不改变插件结果。没有回合 emitter 的 UI 后台投影仅进入有界进程窗口，不伪造回合 trace。
+
+Diagnostic `trace` events are live-only on the event bus: they do not occupy subscription replay buffers or duplicate their payload in `events`. A reconnect fetches diagnostics through the trace API. Large cross-process trace frames reference the original persisted trace row; ordinary state events retain ordered replay and gap detection.
+
+A missing or unreadable live-only trace reference is logged without invalidating state replay. State-event references still trigger replay reset on a failed fetch, because their loss changes the consumer's view of committed state.

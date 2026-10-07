@@ -1,5 +1,6 @@
-import type { CharacterUpsertPayload } from "@covel/shared";
-import type { MediaRef } from "@covel/shared";
+import type { PluginProposalPayloads } from "@covel/plugin-handlers-utils";
+type CharacterUpsertPayload = PluginProposalPayloads["character.upsert"];
+import type { MediaReference as MediaRef } from "@covel/plugin-handlers-utils";
 
 export type CharacterBlueprintRole =
   "player" | "npc" | "companion" | (string & {});

@@ -186,6 +186,34 @@ try {
   assert.equal(readSettingsBackup(settingsFile, "settings.json"), null);
   assert.equal(readSettingsBackup(settingsFile, "../settings.json"), null);
 
+  // Repeated archive/copy operations can share a millisecond. Each one must
+  // retain its own original bytes rather than replacing an earlier backup.
+  const originalNow = Date.now;
+  Date.now = () => 123;
+  try {
+    for (const archive of [true, false]) {
+      const names: string[] = [];
+      const contents: string[] = [];
+      for (let index = 0; index < 3; index++) {
+        const bytes = JSON.stringify({ schemaVersion: 1, entries: { index } });
+        fs.writeFileSync(settingsFile, bytes, "utf-8");
+        names.push(
+          archive
+            ? archiveUnusableSettingsFile(settingsFile)!
+            : backupSettingsFile(settingsFile, "repeat"),
+        );
+        contents.push(bytes);
+      }
+      assert.equal(new Set(names).size, 3);
+      assert.deepEqual(
+        names.map((name) => readSettingsBackup(settingsFile, name)),
+        contents,
+      );
+    }
+  } finally {
+    Date.now = originalNow;
+  }
+
   console.log("settings-json selfcheck: OK");
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });

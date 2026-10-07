@@ -27,6 +27,7 @@
  */
 
 import type { Column, SQL, Table } from "drizzle-orm";
+import type { WriteOrderTable } from "./cursor.js";
 
 /** Conflict target for an upsert — one or more columns of the target table. */
 export type ConflictTarget = Column | Column[];
@@ -76,6 +77,11 @@ export interface UpsertRow {
  * are the only modules allowed to know the concrete dialect/driver types.
  */
 export interface SqlRunner {
+  /** SQLite allocates under its serialized write boundary; PG uses a column sequence. */
+  readonly nextWriteOrderSeq: (
+    table: WriteOrderTable,
+    row: { readonly sessionId: string; readonly createdAt: string },
+  ) => SQL | undefined;
   /** SELECT rows from `table`, optionally filtered/ordered/paginated. */
   select<Row>(table: Table, opts?: SelectOpts): Promise<Row[]>;
 
@@ -134,4 +140,15 @@ export interface SqlRunner {
 
   /** DELETE rows matching `where` (all rows when omitted). */
   delete(table: Table, where?: SQL): Promise<void>;
+
+  /**
+   * A text column compared byte by byte, for an ORDER BY term or a keyset
+   * predicate. SQLite text already is (BINARY); PostgreSQL compares with the
+   * database collation unless told otherwise, and that collation puts
+   * mixed-case and non-ASCII keys in another order. Every text key a list is
+   * ordered by goes through this, so the lists are in one order on every
+   * backend (MemoryStore mirrors it with `compareByteOrder`). A timestamp is
+   * ASCII of one shape and needs none.
+   */
+  readonly byteOrder: (column: Column) => SQL;
 }

@@ -23,7 +23,10 @@ import type {
   TurnInput,
 } from "@covel/shared";
 
-import type { SessionLock } from "../../../lib/session-lock.js";
+import {
+  withBackgroundSessionLock,
+  type SessionLock,
+} from "../../../lib/session-lock.js";
 import type {
   ManualTurnSummary,
   TurnCommitOutcome,
@@ -454,7 +457,8 @@ export function createPluginRpcRuntimeTurnRunner(
               // Detached work does not hold the main session lock during provider
               // execution. Take it briefly to linearize authorization against a
               // concurrent revoke/disable/delete before spending external work.
-              const executionScope = await ctx.sessionLock.withLock(
+              const executionScope = await withBackgroundSessionLock(
+                ctx.sessionLock,
                 ctx.sessionId,
                 async () => {
                   const live = await requireLiveApprovedSession(runtimeId);
@@ -478,6 +482,7 @@ export function createPluginRpcRuntimeTurnRunner(
                   executionSignal?.throwIfAborted();
                   return hookScopeFor(live.activePlugins, userSettings);
                 },
+                executionSignal,
               );
               const execution = await executeTurn(
                 executionInput,
@@ -506,7 +511,8 @@ export function createPluginRpcRuntimeTurnRunner(
                   "detached stage runtimes cannot suspend for input",
                 );
               }
-              const outcome = await ctx.sessionLock.withLock(
+              const outcome = await withBackgroundSessionLock(
+                ctx.sessionLock,
                 ctx.sessionId,
                 async () => {
                   // Minutes can pass while the generation runs, so the session state
@@ -553,6 +559,7 @@ export function createPluginRpcRuntimeTurnRunner(
                     },
                   );
                 },
+                executionSignal,
               );
               return { turnResult: result, commit: outcome };
             },

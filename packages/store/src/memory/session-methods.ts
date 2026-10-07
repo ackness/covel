@@ -1,3 +1,4 @@
+import { sortByCursorAsc } from "../common/pagination.js";
 import { SESSION_SCOPED_TABLES } from "../table-registry.js";
 import { mergeSessionPatch } from "../types.js";
 import { SessionAlreadyExistsError } from "../errors.js";
@@ -29,7 +30,7 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listSessions() {
-      return [...state.sessions.values()];
+      return sortByCursorAsc([...state.sessions.values()]);
     },
 
     async deleteSession(id) {

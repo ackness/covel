@@ -1,9 +1,10 @@
 /** Captures committed world state and caller-resolved history summaries once per execution. */
 
-import { instructionLocaleFor } from "@covel/shared";
+import { instructionLocaleFor, localizedWorldText } from "@covel/shared";
 import type {
   LorebookEntryRecord,
   SessionContextReadStore,
+  SessionRecord,
   WorldRecord,
 } from "./session-context-store.js";
 import type {
@@ -41,6 +42,18 @@ export interface BuildSessionContextSnapshotOpts {
   readonly summaries?: readonly SummaryRecord[];
   /** Current player text for selective lorebook activation. */
   readonly playerMessage?: string;
+  /** Committed recent messages for per-entry extra.scanDepth (0–20). */
+  readonly recentMessages?: readonly { readonly content: string }[];
+  /**
+   * Rows the caller has already read for this execution. A field that is set
+   * is used as given and not read again, so the prompt shows the rows the
+   * execution's runtimes got; `null` says the caller looked and found none.
+   */
+  readonly loaded?: {
+    readonly session?: Pick<SessionRecord, "metadata"> | null;
+    readonly characters?: readonly CharacterSummary[];
+    readonly lastFormValues?: Readonly<Record<string, unknown>> | null;
+  };
 }
 
 export async function buildSessionContextSnapshot(
@@ -48,23 +61,37 @@ export async function buildSessionContextSnapshot(
   sessionId: string,
   opts: BuildSessionContextSnapshotOpts,
 ): Promise<SessionContextSnapshot> {
+  const { loaded } = opts;
   // Session read is for completeness — caller already gates on active status.
-  const [sessionRecord, characters, lastFormValues, lorebookRecords] =
-    await Promise.all([
-      safeGetSession(store, sessionId),
-      loadCharacters(store, sessionId),
-      loadLastFormValues(store, sessionId),
-      loadLorebookRecords(store, sessionId),
-    ]);
+  // None of these reads needs the result of another.
+  const [
+    sessionRecord,
+    characters,
+    lastFormValues,
+    lorebookRecords,
+    storedWorldRecord,
+  ] = await Promise.all([
+    loaded?.session !== undefined
+      ? loaded.session
+      : safeGetSession(store, sessionId),
+    loaded?.characters ?? loadCharacters(store, sessionId),
+    loaded?.lastFormValues !== undefined
+      ? (loaded.lastFormValues ?? undefined)
+      : loadLastFormValues(store, sessionId),
+    loadLorebookRecords(store, sessionId),
+    opts.worldId ? safeGetWorld(store, opts.worldId) : null,
+  ]);
 
-  const storedWorldRecord = opts.worldId
-    ? await safeGetWorld(store, opts.worldId)
-    : null;
   const loreOverride = sessionRecord?.metadata?.loreOverride;
-  const worldRecord =
-    storedWorldRecord && typeof loreOverride === "string"
-      ? { ...storedWorldRecord, lore: loreOverride }
-      : storedWorldRecord;
+  const worldRecord = storedWorldRecord
+    ? {
+        ...storedWorldRecord,
+        lore:
+          typeof loreOverride === "string"
+            ? loreOverride
+            : localizedWorldText(storedWorldRecord, opts.locale).lore,
+      }
+    : null;
 
   const worldSchema = opts.worldContext?.schema;
   const worldEntriesMap = {
@@ -94,6 +121,7 @@ export async function buildSessionContextSnapshot(
         lorebookRecords,
         opts.playerMessage ?? "",
         opts.locale,
+        opts.recentMessages ?? [],
       ),
     ],
   };
@@ -158,9 +186,7 @@ async function loadLastFormValues(
 ): Promise<Readonly<Record<string, unknown>> | undefined> {
   // Non-critical: player inputs may not exist yet
   try {
-    const inputs = await store.listPlayerInputs(sessionId);
-    if (inputs.length === 0) return undefined;
-    const latest = inputs[inputs.length - 1];
+    const latest = await store.getLatestPlayerInput(sessionId);
     if (latest?.values && typeof latest.values === "object") {
       return latest.values as Record<string, unknown>;
     }
@@ -187,10 +213,13 @@ function compileLorebookContributions(
   records: readonly LorebookEntryRecord[],
   playerMessage: string,
   locale: string,
+  recentMessages: readonly { readonly content: string }[],
 ): readonly ContextContribution[] {
   return records
     .filter((record) => record.enabled)
-    .filter((record) => isLorebookEntryActive(record, playerMessage))
+    .filter((record) =>
+      isLorebookEntryActive(record, playerMessage, recentMessages),
+    )
     .slice()
     .sort(
       (a, b) => a.insertionOrder - b.insertionOrder || a.id.localeCompare(b.id),
@@ -222,16 +251,38 @@ function compileLorebookContributions(
 function isLorebookEntryActive(
   record: LorebookEntryRecord,
   playerMessage: string,
+  recentMessages: readonly { readonly content: string }[],
 ): boolean {
   if (record.strategy === "constant") return true;
   if (!record.keys || record.keys.length === 0) return false;
-  const haystack = playerMessage.toLowerCase();
-  return record.keys.some(
-    (key) => key.length > 0 && haystack.includes(key.toLowerCase()),
-  );
+  const rawDepth = normalizeLorebookExtra(record.extra).scanDepth;
+  const depth =
+    typeof rawDepth === "number" && Number.isInteger(rawDepth)
+      ? Math.max(0, Math.min(20, rawDepth))
+      : 0;
+  const haystack = [
+    ...(depth > 0
+      ? recentMessages.slice(-depth).map((message) => message.content)
+      : []),
+    playerMessage,
+  ]
+    .join("\n")
+    .toLowerCase();
+  return record.keys.some((key) => {
+    if (!key.trim()) return false;
+    const needle = key.toLowerCase();
+    if (!/^[\x20-\x7e]+$/.test(needle) || !/[a-z]/.test(needle))
+      return haystack.includes(needle);
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(
+      `(?:^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`,
+      "u",
+    ).test(haystack);
+  });
 }
 
 interface NormalizedLorebookExtra {
+  readonly scanDepth?: number;
   readonly title?: string;
   readonly coordinate?: {
     readonly position?: unknown;
@@ -249,6 +300,9 @@ function normalizeLorebookExtra(value: unknown): NormalizedLorebookExtra {
       : undefined;
   const source = nestedExtra ?? root;
   return {
+    ...(typeof source.scanDepth === "number"
+      ? { scanDepth: source.scanDepth }
+      : {}),
     ...(typeof source.title === "string" && source.title.length > 0
       ? { title: source.title }
       : {}),

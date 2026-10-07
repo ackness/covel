@@ -6,34 +6,13 @@ import type { FunctionHandlerContext } from "@covel/shared/plugin-runtime";
 import type {
   FunctionStoreView,
   PluginRandom,
-  ProgressReporter,
 } from "@covel/plugin-handlers-utils";
-import type {
-  InputSlot,
-  RuntimeActivation,
-  ExecutionContext,
-} from "@covel/shared";
-
-export interface ManualFunctionContextOptions {
+export interface ManualFunctionContextOptions extends Partial<
+  Omit<FunctionHandlerContext, "pluginId" | "store">
+> {
   readonly pluginId: string;
-  readonly runtimeId?: string;
-  readonly sessionId?: string;
-  readonly turnId?: string;
-  readonly playerMessage?: string;
-  readonly locale?: string;
   /** Stub only the reads exercised by this test; omitted methods reject. */
   readonly store?: Partial<FunctionStoreView>;
-  readonly manualPayload?: Readonly<Record<string, unknown>>;
-  /** Provenance-wrapped input bindings exposed as `ctx.inputs`. */
-  readonly inputs?: Readonly<Record<string, InputSlot>>;
-  /** Canonical activation exposed as `ctx.activation`. */
-  readonly activation?: RuntimeActivation;
-  /** Execution identity exposed as `ctx.execution`. */
-  readonly execution?: ExecutionContext;
-  /** Wire the real-time progress channel for tests exercising `ctx.progress`. */
-  readonly progress?: ProgressReporter;
-  /** `ctx.random`; the default is `makeRandom()`. */
-  readonly random?: PluginRandom;
 }
 
 /** `ctx.random` for a test: the same numbers on every run, within each range. */
@@ -56,11 +35,8 @@ export function makeManualFunctionContext({
   locale,
   store = {},
   manualPayload = {},
-  inputs,
-  activation,
-  execution,
-  progress,
   random = makeRandom(),
+  ...capabilities
 }: ManualFunctionContextOptions): FunctionHandlerContext {
   return {
     sessionId,
@@ -83,11 +59,8 @@ export function makeManualFunctionContext({
     },
     recursionDepth: 0,
     manualPayload,
-    ...(inputs ? { inputs } : {}),
-    ...(activation ? { activation } : {}),
-    ...(execution ? { execution } : {}),
-    ...(progress ? { progress } : {}),
     random,
+    ...capabilities,
   };
 }
 

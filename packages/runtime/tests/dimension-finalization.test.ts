@@ -202,8 +202,8 @@ for (const [backend, create] of [
       expect(await record(store)).toMatchObject({ value: 5, version: 2 });
       expect(await receipt(store)).toMatchObject({
         status: "settled",
-        definitions: { reputation: definition },
-        readVersions: { reputation: 1 },
+        definitions: {},
+        readVersions: {},
       });
       expect(await receipt(store)).not.toHaveProperty("narrative");
       expect(
@@ -266,7 +266,7 @@ for (const [backend, create] of [
       expect(await record(store)).toMatchObject({ value: 5, version: 2 });
       expect(await receipt(store)).toMatchObject({
         status: "settled",
-        definitions: { reputation: definition },
+        definitions: {},
       });
     });
     it("records explicit no-change without incrementing the value version", async () => {
@@ -592,7 +592,11 @@ for (const [backend, create] of [
       ]);
       expect(result.every((entry) => entry.committed)).toBe(true);
       expect(await record(store)).toMatchObject({ value: 7, version: 2 });
-      expect(await receipt(store)).toMatchObject({ status: "settled" });
+      expect(await receipt(store)).toMatchObject({
+        status: "settled",
+        definitions: {},
+        readVersions: {},
+      });
       // A second retry against the now-settled source is a deduplicated no-op,
       // not a double-application.
       const again = await createCommitPipeline(store).commitAll([

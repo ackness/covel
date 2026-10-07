@@ -36,11 +36,25 @@ interface CovelIpcApi {
   on(channel: string, handler: (payload: unknown) => void): () => void;
 }
 
-interface ServerStatus {
+/**
+ * State of the local sidecar as the desktop main process reports it:
+ * `restarting` after it exited and a restart is scheduled, `down` when the
+ * restarts are used up or a health check got no answer, `degraded` when a
+ * health check was answered with an error, `up` when it answers again.
+ */
+export interface ServerStatus {
   state: "up" | "down" | "degraded" | "restarting";
+  /** Restart attempts so far; absent on health-check reports. */
   attempts?: number;
   delay?: number;
 }
+
+const SERVER_STATES: ReadonlySet<string> = new Set([
+  "up",
+  "down",
+  "degraded",
+  "restarting",
+]);
 
 interface DesktopBridgeHandlers {
   onOpenSettings: () => void;
@@ -48,13 +62,11 @@ interface DesktopBridgeHandlers {
   onExportChat: () => void;
   /**
    * Fired when the user picks Import Plugin / World from the native menu.
-   * If not supplied, the bridge falls back to invoking the native picker
-   * + import flow directly and dispatches a `covel:import:complete`
-   * CustomEvent so page components can refresh their lists.
+   * Opens the shared package installer, which validates and reports results.
+   * Without a specialized handler, opens Settings.
    */
   onImportPlugin?: () => void;
   onImportWorld?: () => void;
-  onServerStatus?: (status: ServerStatus) => void;
 }
 
 declare global {
@@ -166,42 +178,40 @@ export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
     cleanups.push(
       ipc.on(IPC_CHANNELS.exportChat, () => handlers.onExportChat()),
     );
-    const defaultImportHandler = (kind: ImportKind) => async () => {
-      try {
-        const result = await pickAndImport(kind);
-        if (result) {
-          window.dispatchEvent(
-            new CustomEvent("covel:import:complete", { detail: result }),
-          );
-        }
-      } catch (err) {
-        console.warn(`[desktop-bridge] import ${kind} failed:`, err);
-      }
-    };
     cleanups.push(
       ipc.on(IPC_CHANNELS.importPlugin, () => {
         if (handlers.onImportPlugin) handlers.onImportPlugin();
-        else void defaultImportHandler("plugin")();
+        else handlers.onOpenSettings();
       }),
     );
     cleanups.push(
       ipc.on(IPC_CHANNELS.importWorld, () => {
         if (handlers.onImportWorld) handlers.onImportWorld();
-        else void defaultImportHandler("world")();
+        else handlers.onOpenSettings();
       }),
     );
-    if (handlers.onServerStatus) {
-      cleanups.push(
-        ipc.on(IPC_CHANNELS.serverStatus, (payload) => {
-          handlers.onServerStatus?.(payload as ServerStatus);
-        }),
-      );
-    }
   }
 
   return () => {
     for (const cleanup of cleanups) cleanup();
   };
+}
+
+/**
+ * Follow the sidecar status the desktop main process broadcasts. Nothing is
+ * delivered in a browser, where no main process watches the server. Returns
+ * the unsubscribe function.
+ */
+export function subscribeServerStatus(
+  handler: (status: ServerStatus) => void,
+): CleanupFn {
+  const ipc = getCovelIpc();
+  if (!ipc) return () => {};
+  return ipc.on(IPC_CHANNELS.serverStatus, (payload) => {
+    const state = (payload as { state?: unknown } | null)?.state;
+    if (typeof state !== "string" || !SERVER_STATES.has(state)) return;
+    handler(payload as ServerStatus);
+  });
 }
 
 async function desktopConfigFetch(
@@ -436,23 +446,4 @@ export async function getDesktopInfo(): Promise<{
   } catch {
     return null;
   }
-}
-
-// ── Asset import ──────────────────────────────────────────────────
-
-type ImportKind = "plugin" | "world";
-
-interface ImportResult {
-  readonly ok: boolean;
-  readonly kind: ImportKind;
-  readonly targetPath?: string;
-  readonly itemName?: string;
-  readonly message?: string;
-}
-
-/** Open the native file chooser and import the selected file / folder. */
-async function pickAndImport(kind: ImportKind): Promise<ImportResult | null> {
-  const ipc = getCovelIpc();
-  if (!ipc) return null;
-  return ipc.invoke<ImportResult>(`covel:import:pick-${kind}`);
 }

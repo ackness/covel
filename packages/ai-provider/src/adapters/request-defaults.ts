@@ -1,3 +1,4 @@
+import type { ModelRequestContext, ProviderProtocol } from "../types.js";
 import type { LLMRequestDefaults } from "@covel/shared";
 import {
   readReasoningEffort,
@@ -8,6 +9,9 @@ import type { TextGenerationParams } from "../types.js";
 /** User slot/preset metadata and parameter overrides always beat runtime defaults. */
 export function withTextRequestDefaults(
   params: TextGenerationParams,
+  context?: ModelRequestContext,
+  protocol?: ProviderProtocol,
+  warn?: (message: string) => void,
 ): TextGenerationParams {
   const metadata = params.providerRequestMetadata;
   const overrides = metadata?.parameterOverrides;
@@ -35,12 +39,26 @@ export function withTextRequestDefaults(
       "output_config",
     ].some((key) => metadata?.[key] !== undefined);
   if (!params.defaults?.reasoningEffort || hasReasoning) return params;
-  const profile = resolveReasoningEffortProfile(params.model);
-  const defaultSelection = profile?.options.some(
-    (option) => option.value === "none",
-  )
-    ? "none"
-    : params.defaults.reasoningEffort;
+  const profile = resolveReasoningEffortProfile(
+    params.model,
+    context?.preset?.provider ?? context?.profile?.provider,
+    protocol,
+  );
+  if (!profile) {
+    warn?.(
+      `Reasoning controls for ${params.model} are unknown; the runtime default was omitted.`,
+    );
+    return params;
+  }
+  const defaultSelection =
+    profile.options.find(
+      (option) => option.value === "none" || option.value === "disabled",
+    )?.value ?? profile.options[0]?.value;
+  if (!defaultSelection) return params;
+  if (defaultSelection !== "none" && defaultSelection !== "disabled")
+    warn?.(
+      `${params.model} cannot disable thinking; using its lowest supported setting (${defaultSelection}).`,
+    );
   return {
     ...params,
     providerRequestMetadata: {

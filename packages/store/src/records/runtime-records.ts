@@ -43,6 +43,11 @@ export interface TurnResultRecord {
   readonly origin: ExecutionOrigin;
   /** Parent turnId for `recursive` executions whose delta overrode turnId. */
   readonly parentTurnId?: string;
+  /** Durable retry provenance, independent of diagnostic trace retention. */
+  readonly retryScope?: {
+    readonly sourceTurnId: string;
+    readonly runtimeIds: readonly string[];
+  };
   /**
    * Whether this execution's proposals were committed.
    *

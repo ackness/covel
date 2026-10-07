@@ -23,6 +23,7 @@ import {
   doublePrecision,
   jsonb,
   serial,
+  bigserial,
   index,
   primaryKey,
   uniqueIndex,
@@ -84,9 +85,11 @@ export const turnResults = pgTable(
     // Execution origin + parent turn for recursive executions.
     origin: text("origin").notNull(),
     parentTurnId: text("parent_turn_id"),
+    retryScope: jsonb("retry_scope"),
     commitStatus: text("commit_status").notNull(),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
+    seq: bigserial("seq", { mode: "number" }).notNull(),
   },
   (table) => [
     index("pg_turn_results_session_id_idx").on(table.sessionId),
@@ -214,12 +217,20 @@ export const messages = pgTable(
     content: text("content").notNull(),
     metadata: jsonb("metadata"), // JSON
     createdAt: text("created_at").notNull(),
+    // Database-allocated write order; concurrent connections never share a
+    // number. Gaps after transaction rollback do not change log ordering.
+    seq: bigserial("seq", { mode: "number" }).notNull(),
   },
   (table) => [
     index("pg_messages_session_id_idx").on(table.sessionId),
     // Supports the keyset page query (WHERE session_id = ? ORDER BY created_at
-    // DESC … LIMIT) so a long chat log never scans every row to fetch a window.
-    index("pg_messages_created_idx").on(table.sessionId, table.createdAt),
+    // DESC, seq DESC … LIMIT) so a long chat log never scans every row to
+    // fetch a window, and the lookup of the next `seq` on insert.
+    index("pg_messages_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.seq,
+    ),
   ],
 );
 
@@ -269,6 +280,7 @@ export const pluginData = pgTable(
   },
   (table) => [
     index("pg_plugin_data_session_id_idx").on(table.sessionId),
+    index("pg_plugin_data_namespace_idx").on(table.namespace, table.sessionId),
     uniqueIndex("pg_plugin_data_unique_idx").on(
       table.sessionId,
       table.pluginId,
@@ -320,13 +332,25 @@ export const traceEvents = pgTable(
     turnId: text("turn_id").notNull(),
     payload: jsonb("payload"), // JSON
     createdAt: text("created_at").notNull(),
+    // Write order within one `created_at`; see `messages.seq`.
+    seq: bigserial("seq", { mode: "number" }).notNull(),
   },
   (table) => [
     index("pg_trace_events_session_id_idx").on(table.sessionId),
+    index("pg_trace_events_type_idx").on(
+      table.sessionId,
+      table.type,
+      table.createdAt,
+    ),
     index("pg_trace_events_trace_id_idx").on(table.sessionId, table.traceId),
     index("pg_trace_events_turn_id_idx").on(table.sessionId, table.turnId),
-    // Supports the keyset page query on the fastest-growing table.
-    index("pg_trace_events_created_idx").on(table.sessionId, table.createdAt),
+    // Supports the keyset page query on the fastest-growing table, and the
+    // lookup of the next `seq` on insert.
+    index("pg_trace_events_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.seq,
+    ),
   ],
 );
 
@@ -455,7 +479,7 @@ export const lorebookEntries = pgTable(
     content: text("content").notNull(),
     strategy: text("strategy").notNull(), // 'constant' | 'selective'
     position: text("position").notNull(),
-    insertionOrder: integer("insertion_order").notNull().default(100),
+    insertionOrder: doublePrecision("insertion_order").notNull().default(100),
     enabled: integer("enabled").notNull().default(1), // 0/1
     extra: jsonb("extra"), // JSON | null
     createdAt: text("created_at").notNull(),

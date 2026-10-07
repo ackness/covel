@@ -36,7 +36,7 @@
             {
               "id": "tc-record-analysis",
               "name": "plugin-data-set",
-              "arguments": "{\"namespace\":\"notes\",\"key\":\"analysis-test\",\"value\":{\"kind\":\"analysis\",\"title\":\"Gatekeeper promise\",\"text\":\"The player promised the gatekeeper to return before dawn.\",\"tags\":[\"promise\"],\"createdAt\":\"2026-05-17T00:00:00.000Z\"}}"
+              "arguments": "{\"namespace\":\"notes\",\"key\":\"analysis-test\",\"value\":{\"kind\":\"analysis\",\"title\":\"Gatekeeper promise\",\"text\":\"The player promised the gatekeeper to return before dawn.\",\"tags\":[\"promise\"]}}"
             },
             {
               "id": "tc-runtime-done",

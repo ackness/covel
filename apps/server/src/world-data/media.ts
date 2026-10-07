@@ -5,7 +5,8 @@ import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
 export const MAX_MEDIA_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_MEDIA_SOURCE_BYTES = 100 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = new Set([
+/** The file types a media source imports. */
+export const MEDIA_SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
   ".png",
   ".jpg",
   ".jpeg",
@@ -14,6 +15,10 @@ const ALLOWED_EXTENSIONS = new Set([
   ".wav",
   ".mp4",
 ]);
+
+function megabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export interface MediaSourceFiles {
   readonly files: readonly string[];
@@ -44,10 +49,19 @@ export async function collectMediaSourceFiles(
       level: "error",
       sourceId: source.id,
       path: source.descriptor.path,
-      message: "media source must be a file or directory",
+      message: `media source "${source.id}" must name a file or a directory; ${source.descriptor.path} is neither`,
     });
     return { files: [], bytes: 0, digest: sha256Hex(""), diagnostics };
   }
+
+  // A file is named as the author finds it: by its path in the package.
+  const packagePath = (file: string): string =>
+    sourceStat.isDirectory()
+      ? path.posix.join(
+          source.descriptor.path.replaceAll("\\", "/"),
+          path.basename(file),
+        )
+      : source.descriptor.path;
 
   files.sort((a, b) => a.localeCompare(b));
   let totalBytes = 0;
@@ -55,12 +69,13 @@ export async function collectMediaSourceFiles(
   const acceptedFiles: string[] = [];
   for (const file of files) {
     const ext = path.extname(file).toLowerCase();
-    if (!ALLOWED_EXTENSIONS.has(ext)) {
+    if (!MEDIA_SOURCE_EXTENSIONS.has(ext)) {
       diagnostics.push({
         level: "warning",
         sourceId: source.id,
-        path: path.relative(path.dirname(resolvedPath), file),
-        message: `media file extension is not in v1 allowlist: ${ext}`,
+        path: packagePath(file),
+        message: `${packagePath(file)} is not imported: a media source reads ${[...MEDIA_SOURCE_EXTENSIONS].join(", ")} files, not ${ext || "files without an extension"}`,
+        hint: "Convert the file to one of these types, or move it out of the media directory.",
       });
       continue;
     }
@@ -69,8 +84,9 @@ export async function collectMediaSourceFiles(
       diagnostics.push({
         level: "error",
         sourceId: source.id,
-        path: path.relative(path.dirname(resolvedPath), file),
-        message: `media file exceeds ${MAX_MEDIA_FILE_BYTES} bytes`,
+        path: packagePath(file),
+        message: `${packagePath(file)} is ${megabytes(fileStat.size)}; a media file may be at most ${megabytes(MAX_MEDIA_FILE_BYTES)}`,
+        hint: "Compress or resize the file, or remove it from the media directory.",
       });
       continue;
     }
@@ -80,7 +96,8 @@ export async function collectMediaSourceFiles(
         level: "error",
         sourceId: source.id,
         path: source.descriptor.path,
-        message: `media source exceeds ${MAX_MEDIA_SOURCE_BYTES} bytes`,
+        message: `media source "${source.id}" passes ${megabytes(MAX_MEDIA_SOURCE_BYTES)} in total at ${packagePath(file)}`,
+        hint: "Compress the files, or split the directory into several media sources.",
       });
       break;
     }

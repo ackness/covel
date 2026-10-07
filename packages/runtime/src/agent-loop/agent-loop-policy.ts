@@ -160,11 +160,7 @@ export function buildAgentLoopPolicy({
         : undefined,
     outputFromCompletingTool,
     runtimeModelOverride,
-    useStreaming: !!(
-      deps.onDelta &&
-      deps.llm.stream &&
-      manifest.outputKind === "story"
-    ),
+    useStreaming: !!deps.llm.stream,
     effectiveMaxSteps: manifest.maxSteps ?? maxSteps,
     retryPolicy: buildRetryPolicy({
       maxRetries: manifest.maxRetries,

@@ -1,39 +1,70 @@
 import type { ChildProcess } from "node:child_process";
-import { waitForServer } from "./network.js";
 
-/** Stop readiness polling when this child fails, even if its port is reused. */
-export async function waitForServerProcess(
+/** Only this sidecar's listening acknowledgement can complete its startup. */
+export function waitForServerProcess(
   child: ChildProcess,
-  healthUrl: string,
+  port: number,
   onProgress?: (elapsed: number, total: number) => void,
+  timeoutMs = 30_000,
 ): Promise<void> {
-  let failure: Error | undefined;
-  const onError = (error: Error): void => {
-    failure = error;
-  };
-  const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
-    failure = new Error(
-      `Server exited before readiness (code=${code}, signal=${signal})`,
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let progressTimer: ReturnType<typeof setInterval> | undefined;
+    const finish = (error?: Error): void => {
+      clearTimeout(timer);
+      clearInterval(progressTimer);
+      child.removeListener("message", onMessage);
+      child.removeListener("error", onError);
+      child.removeListener("exit", onExit);
+      child.removeListener("disconnect", onDisconnect);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onError = (error: Error): void => finish(error);
+    const onExit = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): void => {
+      finish(
+        new Error(
+          `Server exited before readiness (code=${code}, signal=${signal})`,
+        ),
+      );
+    };
+    const onDisconnect = (): void =>
+      finish(new Error("Server IPC disconnected before readiness"));
+    const onMessage = (message: unknown): void => {
+      if (
+        message !== null &&
+        typeof message === "object" &&
+        "type" in message &&
+        message.type === "covel:ready" &&
+        "port" in message &&
+        message.port === port
+      )
+        finish();
+    };
+    const reportProgress = (): void => {
+      try {
+        onProgress?.(Date.now() - startedAt, timeoutMs);
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    child.on("message", onMessage);
+    child.once("error", onError);
+    child.once("exit", onExit);
+    child.once("disconnect", onDisconnect);
+    timer = setTimeout(
+      () => finish(new Error(`Server did not start within ${timeoutMs}ms`)),
+      timeoutMs,
     );
-  };
-  child.once("error", onError);
-  child.once("exit", onExit);
-  const assertRunning = (): void => {
-    if (failure) throw failure;
+    progressTimer = setInterval(reportProgress, 250);
     if (child.exitCode !== null || child.signalCode !== null) {
       onExit(child.exitCode, child.signalCode);
-      throw failure;
+    } else {
+      reportProgress();
     }
-  };
-  try {
-    assertRunning();
-    await waitForServer(healthUrl, 30_000, 150, (elapsed, total) => {
-      assertRunning();
-      onProgress?.(elapsed, total);
-    });
-    assertRunning();
-  } finally {
-    child.removeListener("error", onError);
-    child.removeListener("exit", onExit);
-  }
+  });
 }

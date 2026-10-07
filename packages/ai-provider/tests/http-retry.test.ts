@@ -61,6 +61,38 @@ describe("postJson retry wrapper", () => {
     delete process.env.COVEL_LLM_RETRY_DISABLED;
   });
 
+  it.each([429, 503])(
+    "does not resend an irreversible generation after HTTP %s",
+    async (status) => {
+      const fetchMock = vi.fn().mockResolvedValue(makeMockResponse({ status }));
+      vi.stubGlobal("fetch", fetchMock);
+      const result = await postJson(
+        CONFIG,
+        "/images/generations",
+        {},
+        undefined,
+        undefined,
+        { retry: false },
+      );
+      expect(result.status).toBe(status);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("does not resend an irreversible generation after an ambiguous connection drop", async () => {
+    const failure = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }),
+    });
+    const fetchMock = vi.fn().mockRejectedValue(failure);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      postJson(CONFIG, "/images/generations", {}, undefined, undefined, {
+        retry: false,
+      }),
+    ).rejects.toThrow("ECONNRESET");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("happy path: returns 200 on first try with one fetch call", async () => {
     const ok = makeMockResponse({ status: 200 });
     const fetchMock = vi.fn().mockResolvedValue(ok);

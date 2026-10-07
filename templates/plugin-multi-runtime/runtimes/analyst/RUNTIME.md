@@ -4,10 +4,9 @@ description: >-
   Reads the current narrator output and this plugin's notes, then records one
   actionable observation when useful. Agent-runtime starter.
 schedule:
+  stage: post-turn
   trigger:
-    type: manual
-  manual:
-    execution: sync
+    type: auto
 io:
   inputs:
     narrator-output:
@@ -56,10 +55,10 @@ Replace this section with the real goal. Examples: track player promises, record
 
 Call `plugin-data-set` with:
 
-| Param       | Value                                                                                                                                                        |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `namespace` | `notes`                                                                                                                                                      |
-| `key`       | `analysis-` plus a short timestamp or stable short ID, e.g. `analysis-lz0abc`                                                                                |
-| `value`     | `{ "kind": "analysis", "title": "<short title>", "text": "<one or two actionable sentences>", "tags": ["<1-3 tags>"], "createdAt": "<ISO 8601 timestamp>" }` |
+| Param       | Value                                                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `namespace` | `notes`                                                                                                                 |
+| `key`       | A stable short fact key, e.g. `gatekeeper-promise`                                                                      |
+| `value`     | `{ "kind": "analysis", "title": "<short title>", "text": "<one or two actionable sentences>", "tags": ["<1-3 tags>"] }` |
 
 Keep the note short, concrete, and useful for later runtimes or UI. Do not emit explanatory prose.

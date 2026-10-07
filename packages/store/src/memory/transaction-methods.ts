@@ -75,6 +75,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   upsertStateEntry: ["stateEntries"],
   addStateChange: ["stateChanges"],
   saveEvent: ["events"],
+  deleteEventsBefore: ["events"],
   addMessage: ["messages"],
   commitPlayerInputMessage: ["messages"],
   upsertCharacter: ["characters"],

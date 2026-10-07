@@ -200,8 +200,7 @@ function toApiTraceEvent(
   eventOrder: number,
 ) {
   const payload = (record.payload ?? {}) as Record<string, unknown>;
-  const legacyData = isRecord(payload.data) ? payload.data : undefined;
-  const runtimeId = readString(payload, legacyData, "runtimeId");
+  const runtimeId = readString(payload, "runtimeId");
   const runtimeContext = runtimeId
     ? contexts.get(runtimeDiagnosticKey(record.turnId, runtimeId))
     : undefined;
@@ -227,13 +226,12 @@ function buildRuntimeDiagnosticContexts(
   const contexts = new Map<string, RuntimeDiagnosticContext>();
   for (const record of records) {
     const payload = (record.payload ?? {}) as Record<string, unknown>;
-    const legacyData = isRecord(payload.data) ? payload.data : undefined;
-    const runtimeId = readString(payload, legacyData, "runtimeId");
+    const runtimeId = readString(payload, "runtimeId");
     if (!runtimeId) continue;
     const key = runtimeDiagnosticKey(record.turnId, runtimeId);
     const current = contexts.get(key);
-    const pluginId = readString(payload, legacyData, "pluginId");
-    const stage = readString(payload, legacyData, "stage");
+    const pluginId = readString(payload, "pluginId");
+    const stage = readString(payload, "stage");
     contexts.set(key, {
       ...(current?.pluginId
         ? { pluginId: current.pluginId }
@@ -269,23 +267,23 @@ interface TracePromptDiagnostic {
   promptChars: number;
   roles: string[];
   toolCount: number;
-  contentPath?: "payload.messages" | "payload.data.messages";
+  contentPath?: "payload.messages";
 }
 
 interface TraceToolDiagnostic {
   name?: string;
   callId?: string;
   argumentsAvailable: boolean;
-  argumentsPath?: "payload.arguments" | "payload.data.arguments";
+  argumentsPath?: "payload.arguments";
   resultAvailable: boolean;
-  resultPath?: "payload.result" | "payload.data.result";
+  resultPath?: "payload.result";
   success?: boolean;
   durationMs?: number;
 }
 
 /**
  * Stable, compact fields for debug consumers. The raw payload remains intact
- * for backwards compatibility; this summary prevents every client from
+ * for detailed inspection; this summary prevents every client from
  * reverse-engineering event-specific payload shapes just to locate a failure
  * or identify the prompt that was sent.
  */
@@ -294,30 +292,24 @@ function buildTraceDiagnostic(
   payload: Record<string, unknown>,
   runtimeContext: RuntimeDiagnosticContext | undefined,
 ) {
-  const legacyData = isRecord(payload.data) ? payload.data : undefined;
-  const displayType =
-    type === "runtime.progress" && typeof payload.type === "string"
-      ? payload.type
-      : type;
-  const runtimeId = readString(payload, legacyData, "runtimeId");
-  const pluginId =
-    readString(payload, legacyData, "pluginId") ?? runtimeContext?.pluginId;
-  const stage =
-    readString(payload, legacyData, "stage") ?? runtimeContext?.stage;
-  const provider = readString(payload, legacyData, "provider");
-  const model = readString(payload, legacyData, "model");
-  const slot = readString(payload, legacyData, "slot");
+  const displayType = type;
+  const runtimeId = readString(payload, "runtimeId");
+  const pluginId = readString(payload, "pluginId") ?? runtimeContext?.pluginId;
+  const stage = readString(payload, "stage") ?? runtimeContext?.stage;
+  const provider = readString(payload, "provider");
+  const model = readString(payload, "model");
+  const slot = readString(payload, "slot");
   const operation =
-    readString(payload, legacyData, "toolName") ??
-    readString(payload, legacyData, "method") ??
-    readString(payload, legacyData, "hookName");
-  const attempt = readNumber(payload, legacyData, "attempt");
-  const durationMs = readNumber(payload, legacyData, "durationMs");
-  const startedAt = readString(payload, legacyData, "startedAt");
-  const error = buildTraceError(displayType, payload, legacyData);
+    readString(payload, "toolName") ??
+    readString(payload, "method") ??
+    readString(payload, "hookName");
+  const attempt = readNumber(payload, "attempt");
+  const durationMs = readNumber(payload, "durationMs");
+  const startedAt = readString(payload, "startedAt");
+  const error = buildTraceError(displayType, payload);
   const warning = buildSlowWarning(displayType, durationMs, error);
-  const tool = buildToolDiagnostic(displayType, payload, legacyData);
-  const prompt = buildPromptDiagnostic(displayType, payload, legacyData);
+  const tool = buildToolDiagnostic(displayType, payload);
+  const prompt = buildPromptDiagnostic(displayType, payload);
 
   return {
     displayType,
@@ -367,41 +359,28 @@ function buildSlowWarning(
 function buildToolDiagnostic(
   displayType: string,
   payload: Record<string, unknown>,
-  legacyData: Record<string, unknown> | undefined,
 ): TraceToolDiagnostic | undefined {
   if (!displayType.startsWith("tool.")) return undefined;
   const directArgs = hasOwn(payload, "arguments");
-  const legacyArgs = !directArgs && hasOwn(legacyData, "arguments");
   const directResult = hasOwn(payload, "result");
-  const legacyResult = !directResult && hasOwn(legacyData, "result");
-  const name = readString(payload, legacyData, "toolName");
-  const callId = readString(payload, legacyData, "toolCallId");
-  const durationMs = readNumber(payload, legacyData, "durationMs");
+  const name = readString(payload, "toolName");
+  const callId = readString(payload, "toolCallId");
+  const durationMs = readNumber(payload, "durationMs");
   const success =
     typeof payload.success === "boolean"
       ? payload.success
-      : typeof legacyData?.success === "boolean"
-        ? legacyData.success
-        : displayType === "tool.completed"
-          ? true
-          : displayType === "tool.failed"
-            ? false
-            : undefined;
+      : displayType === "tool.completed"
+        ? true
+        : displayType === "tool.failed"
+          ? false
+          : undefined;
   return {
     ...(name ? { name } : {}),
     ...(callId ? { callId } : {}),
-    argumentsAvailable: directArgs || legacyArgs,
-    ...(directArgs
-      ? { argumentsPath: "payload.arguments" as const }
-      : legacyArgs
-        ? { argumentsPath: "payload.data.arguments" as const }
-        : {}),
-    resultAvailable: directResult || legacyResult,
-    ...(directResult
-      ? { resultPath: "payload.result" as const }
-      : legacyResult
-        ? { resultPath: "payload.data.result" as const }
-        : {}),
+    argumentsAvailable: directArgs,
+    ...(directArgs ? { argumentsPath: "payload.arguments" as const } : {}),
+    resultAvailable: directResult,
+    ...(directResult ? { resultPath: "payload.result" as const } : {}),
     ...(success == null ? {} : { success }),
     ...(durationMs == null ? {} : { durationMs }),
   };
@@ -410,28 +389,26 @@ function buildToolDiagnostic(
 function buildTraceError(
   displayType: string,
   payload: Record<string, unknown>,
-  legacyData: Record<string, unknown> | undefined,
 ): TraceDiagnosticError | undefined {
-  const finishReason = readString(payload, legacyData, "finishReason");
+  const finishReason = readString(payload, "finishReason");
   const isFailure =
     displayType.endsWith(".failed") ||
     displayType === "error.occurred" ||
     displayType === "proposal.failed" ||
     (displayType === "runtime.completed" &&
-      readString(payload, legacyData, "status") === "failed") ||
-    (displayType === "turn.completed" &&
-      (payload.committed ?? legacyData?.committed) === false) ||
+      readString(payload, "status") === "failed") ||
+    (displayType === "turn.completed" && payload.committed === false) ||
     (displayType === "llm.responded" && finishReason === "error");
   if (!isFailure) return undefined;
 
   const message =
-    readString(payload, legacyData, "error") ??
-    readString(payload, legacyData, "message") ??
-    readString(payload, legacyData, "reason") ??
-    readString(payload, legacyData, "detail") ??
+    readString(payload, "error") ??
+    readString(payload, "message") ??
+    readString(payload, "reason") ??
+    readString(payload, "detail") ??
     displayType;
-  const code = readString(payload, legacyData, "code");
-  const details = payload.details ?? legacyData?.details;
+  const code = readString(payload, "code");
+  const details = payload.details;
 
   return {
     message,
@@ -443,24 +420,15 @@ function buildTraceError(
 function buildPromptDiagnostic(
   displayType: string,
   payload: Record<string, unknown>,
-  legacyData: Record<string, unknown> | undefined,
 ): TracePromptDiagnostic | undefined {
   if (displayType !== "llm.calling" && displayType !== "gateway.calling") {
     return undefined;
   }
 
-  const directMessages = Array.isArray(payload.messages)
+  const messages = Array.isArray(payload.messages)
     ? payload.messages
     : undefined;
-  const legacyMessages = Array.isArray(legacyData?.messages)
-    ? legacyData.messages
-    : undefined;
-  const messages = directMessages ?? legacyMessages;
-  const tools = Array.isArray(payload.tools)
-    ? payload.tools
-    : Array.isArray(legacyData?.tools)
-      ? legacyData.tools
-      : [];
+  const tools = Array.isArray(payload.tools) ? payload.tools : [];
 
   if (messages) {
     const roles: string[] = [];
@@ -478,16 +446,14 @@ function buildPromptDiagnostic(
       promptChars,
       roles,
       toolCount: tools.length,
-      contentPath: directMessages
-        ? "payload.messages"
-        : "payload.data.messages",
+      contentPath: "payload.messages",
     };
   }
 
   return {
     contentAvailable: false,
-    messageCount: readNumber(payload, legacyData, "messageCount") ?? 0,
-    promptChars: readNumber(payload, legacyData, "promptChars") ?? 0,
+    messageCount: readNumber(payload, "messageCount") ?? 0,
+    promptChars: readNumber(payload, "promptChars") ?? 0,
     roles: [],
     toolCount: tools.length,
   };
@@ -495,19 +461,17 @@ function buildPromptDiagnostic(
 
 function readString(
   payload: Record<string, unknown>,
-  legacyData: Record<string, unknown> | undefined,
   key: string,
 ): string | undefined {
-  const value = payload[key] ?? legacyData?.[key];
+  const value = payload[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function readNumber(
   payload: Record<string, unknown>,
-  legacyData: Record<string, unknown> | undefined,
   key: string,
 ): number | undefined {
-  const value = payload[key] ?? legacyData?.[key];
+  const value = payload[key];
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;

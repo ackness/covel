@@ -64,6 +64,10 @@
 
 ## 右侧面板（Plugin-Driven）
 
+右侧面板的标签、规格和交互状态由会话视图持有，手机抽屉关闭后再次打开会恢复原状态。加载失败会显示错误和重试入口，并保留之前成功读取的面板。历史回合的只读插件卡片仅在展开时挂载。
+
+执行状态会展示 runtime 的跳过原因；订阅断线后可手动重试。普通 action 流结束后恢复后台订阅不会被当作网络重连。执行步骤的本地显示缓存合并 250ms 内的更新，最多保留最近 500 行，离开会话时保存待写内容；持久恢复仍以服务端执行记录为准。
+
 页签条在选中项、字体、菜单及容器尺寸变化后保持当前页签可见。横向文字页签居中显示；纵向图标条只滚动到足以显示选中项的位置。
 
 ### 设计原则
@@ -696,3 +700,10 @@ Panel data bindings and action `pluginId` fields may reference only the owning
 plugin. The loader rejects foreign or dynamic plugin targets. Use kernel slots
 or World Model for data shared between plugins. A component that reads kernel
 data before its namespace has records must set `alwaysRender: true`.
+
+Historical message panels render their stored `stateOverride` without subscribing to live namespaces, jobs, or the full session context. Folded history cards are not mounted.
+
+Live plugin namespaces have one frontend authority, the external plugin-data
+store. The session reducer retains only the `message` namespace needed to build
+historical message-card snapshots, plus derived durable job execution steps.
+Updates to unrelated namespaces do not replace the session context value.

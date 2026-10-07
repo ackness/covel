@@ -569,6 +569,47 @@ describe("finalizeExecution", () => {
     expect(await commitStatusOf(store)).toBe("committed");
   });
 
+  it.each([
+    { statePatches: [null] },
+    { statePatches: { length: 1 } },
+    { interactions: { length: 1 } },
+    { notifications: { length: 1 } },
+  ])(
+    "keeps a committed story when a sibling returns a malformed effect channel: %j",
+    async (effects) => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
+      const story = makeResult("story", { narrativeOutput: "The door opens." });
+      const sibling = makeResult(
+        "sibling",
+        {},
+        effects as unknown as RuntimeEffects,
+      );
+      const result = await finalizeExecution({
+        store,
+        sessionId: SESSION_ID,
+        executionContext: {
+          executionId: "malformed-effects",
+          origin: "player",
+          countPolicy: "none",
+        },
+        runtimes: [makeRuntime("story", "story"), makeRuntime("sibling")],
+        results: [story, sibling],
+        turnIds: [TURN_ID],
+      });
+      expect(result.status).toBe("committed");
+      expect(result.isolatedRuntimes).toEqual([
+        expect.objectContaining({ runtimeId: "sibling" }),
+      ]);
+      expect(
+        (await store.listMessages(SESSION_ID)).map(
+          (message) => message.content,
+        ),
+      ).toEqual(["The door opens."]);
+      expect(await commitStatusOf(store)).toBe("committed");
+    },
+  );
+
   it("keeps a committed story when an optional sibling returned a malformed UI part", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);
@@ -921,39 +962,56 @@ describe("finalizeExecution — dependents of a dropped runtime", () => {
     };
   }
 
-  it("drops what needs a dropped upstream, keeps ordering-only edges, and settles both as failed", async () => {
-    const { store, outcome, statuses } = await finalize(
-      [
-        manifest("up"),
-        manifest("down", { needs: ["up"] }),
-        manifest("late", { after: ["up"] }),
-      ],
-      [
-        makeResult("up", {}, badStatePatch()),
-        makeResult("down", {}, statePatch("derived", 2)),
-        makeResult("late", {}, statePatch("late", 3)),
-      ],
-    );
+  it.each(["success", "skipped"] as const)(
+    "drops %s results that need a dropped upstream, keeping ordering-only edges",
+    async (status) => {
+      const { store, outcome, statuses } = await finalize(
+        [
+          manifest("up"),
+          manifest("down", { needs: ["up"] }),
+          manifest("late", { after: ["up"] }),
+        ],
+        [
+          makeResult("up", {}, badStatePatch()),
+          {
+            ...makeResult("down"),
+            status,
+            pendingProposals: [
+              {
+                id: "guard-write",
+                type: "state.patch" as const,
+                sessionId: SESSION_ID,
+                turnId: TURN_ID,
+                source: { pluginId: "down", runtimeId: "down" },
+                timestamp: new Date().toISOString(),
+                payload: { table: "stats", field: "derived", value: 2 },
+              },
+            ],
+          },
+          makeResult("late", {}, statePatch("late", 3)),
+        ],
+      );
 
-    expect(outcome).toMatchObject({
-      status: "committed",
-      isolatedRuntimes: [
-        { runtimeId: "up", error: expect.any(String) },
-        { runtimeId: "down", error: "upstream up did not commit" },
-      ],
-    });
-    expect(await store.getStateEntry(SESSION_ID, "stats", "derived")).toBe(
-      null,
-    );
-    expect(
-      (await store.getStateEntry(SESSION_ID, "stats", "late"))?.value,
-    ).toBe(3);
-    expect(statuses).toEqual({
-      up: "failed",
-      down: "failed",
-      late: "success",
-    });
-  });
+      expect(outcome).toMatchObject({
+        status: "committed",
+        isolatedRuntimes: [
+          { runtimeId: "up", error: expect.any(String) },
+          { runtimeId: "down", error: "upstream up did not commit" },
+        ],
+      });
+      expect(await store.getStateEntry(SESSION_ID, "stats", "derived")).toBe(
+        null,
+      );
+      expect(
+        (await store.getStateEntry(SESSION_ID, "stats", "late"))?.value,
+      ).toBe(3);
+      expect(statuses).toEqual({
+        up: "failed",
+        down: "failed",
+        late: "success",
+      });
+    },
+  );
 
   it("drops a required input consumer and an event follower whose only emitter was dropped", async () => {
     const { store, outcome } = await finalize(

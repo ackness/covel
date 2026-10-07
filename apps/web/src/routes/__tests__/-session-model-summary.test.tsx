@@ -77,6 +77,7 @@ vi.mock("@/components/onboarding-wizard/persistence.js", () => ({
 
 vi.mock("@/lib/desktop-bridge.js", () => ({
   initDesktopBridge: () => vi.fn(),
+  subscribeServerStatus: () => vi.fn(),
 }));
 
 beforeAll(async () => {

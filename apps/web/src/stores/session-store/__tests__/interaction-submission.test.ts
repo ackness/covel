@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { submitInteractionBlock } from "../interaction-submission.js";
 import { claimSessionAction } from "../runtime-refs.js";
+import { initialState } from "../reducer.js";
 
 const api = vi.hoisted(() => ({
   submitInputs: vi.fn(),
@@ -38,6 +39,14 @@ function makeDeps(): Parameters<typeof submitInteractionBlock>[0] {
     dispatch: vi.fn(),
     workspace: { run: async (_sid, _requestId, action) => action() },
     sessionIdRef,
+    stateRef: {
+      current: {
+        ...initialState,
+        session: { id: "session-1", status: "active" } as NonNullable<
+          typeof initialState.session
+        >,
+      },
+    },
     claimAction: (sid) =>
       claimSessionAction(activeActionRef, sessionIdRef, sid),
     submitBlock: vi.fn(),
@@ -55,6 +64,15 @@ beforeEach(() => {
 });
 
 describe("interaction submission", () => {
+  it("does not steal the running turn's stream ownership", async () => {
+    const deps = makeDeps();
+    const running = deps.claimAction("session-1");
+    deps.stateRef.current.executing = true;
+    await submitInteractionBlock(deps, submission);
+    expect(running.isCurrent()).toBe(true);
+    expect(api.submitInputs).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalled();
+  });
   it("refreshes authorization even when the restored form then fails validation", async () => {
     const deps = makeDeps();
     confirm.mockResolvedValue(true);

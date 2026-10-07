@@ -14,7 +14,7 @@
  * cannot await inside a transaction), preserving the legacy atomic batch loops.
  */
 
-import type { SQL, Table } from "drizzle-orm";
+import { sql, type SQL, type Table } from "drizzle-orm";
 import type {
   IndexColumn,
   SelectedFields,
@@ -29,6 +29,7 @@ import type {
   UpsertRow,
 } from "../common/sql-runner.js";
 import type { SqliteDb } from "./sqlite-types.js";
+import { nextWriteOrderSeq } from "../common/cursor.js";
 
 /** SQLite-cast a loose conflict clause to the driver's onConflict config. */
 function sqliteConflictConfig(conflict: ConflictClause): {
@@ -170,5 +171,9 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
       }
       return Promise.resolve();
     },
+
+    // SQLite text columns use the BINARY collation.
+    nextWriteOrderSeq,
+    byteOrder: (column) => sql`${column}`,
   };
 }

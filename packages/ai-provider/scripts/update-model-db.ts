@@ -58,6 +58,8 @@ interface ModelDbEntry {
   litellmProvider?: string;
   /** Pricing: cost per 1M input tokens (USD) */
   inputPerMToken?: number;
+  cacheReadPerMToken?: number;
+  cacheWritePerMToken?: number;
   /** Pricing: cost per 1M output tokens (USD) */
   outputPerMToken?: number;
   /** Pricing: cost per image */
@@ -86,6 +88,8 @@ interface LiteLlmEntry {
   max_input_tokens?: number;
   max_output_tokens?: number;
   input_cost_per_token?: number;
+  cache_read_input_token_cost?: number;
+  cache_creation_input_token_cost?: number;
   output_cost_per_token?: number;
   input_cost_per_image?: number;
   input_cost_per_audio_token?: number;
@@ -138,11 +142,19 @@ function transformEntry(key: string, raw: LiteLlmEntry): ModelDbEntry | null {
 
   if (raw.litellm_provider) entry.litellmProvider = raw.litellm_provider;
 
+  for (const [field, target] of [
+    ["cache_read_input_token_cost", "cacheReadPerMToken"],
+    ["cache_creation_input_token_cost", "cacheWritePerMToken"],
+  ] as const) {
+    const cost = raw[field];
+    if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0)
+      entry[target] = roundPrice(cost * 1e6);
+  }
   // Pricing (convert per-token to per-million-token)
-  if (raw.input_cost_per_token) {
+  if (typeof raw.input_cost_per_token === "number") {
     entry.inputPerMToken = roundPrice(raw.input_cost_per_token * 1_000_000);
   }
-  if (raw.output_cost_per_token) {
+  if (typeof raw.output_cost_per_token === "number") {
     entry.outputPerMToken = roundPrice(raw.output_cost_per_token * 1_000_000);
   }
   if (raw.input_cost_per_image) {

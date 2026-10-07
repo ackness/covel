@@ -17,6 +17,7 @@ import {
 import {
   buildInjectBlocks as _buildInjectBlocks,
   interpolateTemplate as _interpolateTemplate,
+  resolveFrameworkCompletion as _resolveFrameworkCompletion,
 } from "./prompt-internals.js";
 import type { AssembledContext, ContextBuildParams } from "./types.js";
 
@@ -25,7 +26,7 @@ import type { AssembledContext, ContextBuildParams } from "./types.js";
  *
  * Supported variable paths:
  * - `{{ inputs.pluginId.runtimeId.fieldName }}` -- other runtime's output field
- * - `{{ session.id }}` -- session info
+ * - `{{ session.turnNumber }}` -- the session's turn count
  * - `{{ player.message }}` -- player's current message
  *
  * Unresolved variables are replaced with an empty string.
@@ -54,6 +55,16 @@ export const interpolateTemplate = _interpolateTemplate;
  * wraps the specified field value in the declared XML tag.
  */
 export const buildInjectBlocks = _buildInjectBlocks;
+
+/**
+ * How a runtime finishes: with `runtime-done`, with a completing tool, with
+ * its structured output, or with its story text.
+ *
+ * The prompt's `[COMPLETION]` instruction is written from this answer. A
+ * caller that decides which tools a runtime is offered reads the same answer,
+ * so the prompt never names a terminator the runtime does not have.
+ */
+export const resolveFrameworkCompletion = _resolveFrameworkCompletion;
 
 /** Synchronous assembler used internally when no store read is needed. */
 export function buildContextSync(params: ContextBuildParams): AssembledContext {

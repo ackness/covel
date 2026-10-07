@@ -7,7 +7,7 @@ import {
   readResponsesReasoning,
   ResponsesReasoningAccumulator,
 } from "./http/reasoning-readers.js";
-import type { LLMResponseFormat } from "@covel/shared";
+import { stripPromptCacheMarkers, type LLMResponseFormat } from "@covel/shared";
 import {
   withTextRequestDefaults,
   defaultToolChoice,
@@ -160,9 +160,11 @@ function terminalResponseStatus(eventType: unknown): string | undefined {
 }
 
 function serializeResponsesContent(content: TextMessageContent): unknown {
+  if (typeof content === "string") return stripPromptCacheMarkers(content);
   if (!Array.isArray(content)) return content;
   return content.map((part) => {
-    if (part.type === "text") return { type: "input_text", text: part.text };
+    if (part.type === "text")
+      return { type: "input_text", text: stripPromptCacheMarkers(part.text) };
     if (part.image.url)
       return { type: "input_image", image_url: part.image.url };
     return { type: "input_text", text: mediaRefFallbackText(part) };
@@ -176,10 +178,12 @@ function serializeResponsesContent(content: TextMessageContent): unknown {
  */
 function responsesContentToText(content: TextMessageContent): string {
   if (content == null) return "";
-  if (typeof content === "string") return content;
+  if (typeof content === "string") return stripPromptCacheMarkers(content);
   return content
     .map((part) =>
-      part.type === "text" ? part.text : mediaRefFallbackText(part),
+      part.type === "text"
+        ? stripPromptCacheMarkers(part.text)
+        : mediaRefFallbackText(part),
     )
     .join("");
 }

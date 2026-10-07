@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button.js";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog.js";
@@ -17,6 +16,7 @@ import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import { WorldListView } from "@/components/world/world-list-view.js";
 import { getDataService } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import type {
   PluginSummary,
   SessionRecord,
@@ -96,7 +96,9 @@ export function WorldSelectScreen({
   onWorldDeleted,
 }: WorldSelectScreenProps) {
   const { t, i18n: translation } = useTranslation();
-  const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
+  const primarySlotLabel = resolvedSlots[0]?.hasCredentials
+    ? formatSlotLabel(resolvedSlots[0])
+    : null;
   const enabledPluginCount = plugins.length;
   const prioritizedWorlds = useMemo(
     () =>
@@ -114,9 +116,8 @@ export function WorldSelectScreen({
   const [settingsTarget, setSettingsTarget] = useState<string>();
   const [enteringWorldId, setEnteringWorldId] = useState<string | null>(null);
   const [pendingWorldId, setPendingWorldId] = useState<string | null>(null);
+  // The world whose deletion is running, so a second request cannot overlap.
   const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   // Entering a world used to defer the actual navigation to
   // `requestAnimationFrame`, so the busy state could paint one frame first.
@@ -184,21 +185,28 @@ export function WorldSelectScreen({
 
   function handleDeleteClick(e: React.MouseEvent, worldId: string) {
     e.stopPropagation();
-    setDeletingWorldId(worldId);
-    setDeleteConfirmOpen(true);
+    void deleteWorldAfterConfirm(worldId);
   }
 
-  function handleDeleteFromDetail(worldId: string) {
+  async function deleteWorldAfterConfirm(worldId: string) {
+    if (deletingWorldId) return;
+    const world = worlds.find((item) => item.id === worldId);
+    const approved = await requestConfirm({
+      title: t("world.deleteConfirmTitle", "Delete world?"),
+      message: t(
+        "world.deleteConfirmDesc",
+        'This will permanently delete "{{name}}". This action cannot be undone.',
+        { name: world ? text(world.name) : worldId },
+      ),
+      confirmLabel: t("world.deleteConfirmAction", "Delete"),
+      cancelLabel: t("common.cancel", "Cancel"),
+      destructive: true,
+    });
+    if (!approved) return;
     setDeletingWorldId(worldId);
-    setDeleteConfirmOpen(true);
-  }
-
-  async function handleDeleteConfirm() {
-    if (!deletingWorldId || deleting) return;
-    setDeleting(true);
     try {
-      await getDataService().deleteWorld(deletingWorldId);
-      onWorldDeleted?.(deletingWorldId);
+      await getDataService().deleteWorld(worldId);
+      onWorldDeleted?.(worldId);
       handleBack();
     } catch (error) {
       emitToast(
@@ -206,15 +214,10 @@ export function WorldSelectScreen({
         error instanceof Error ? error.message : String(error),
       );
     } finally {
-      setDeleting(false);
       setDeletingWorldId(null);
-      setDeleteConfirmOpen(false);
     }
   }
 
-  const deletingWorld = deletingWorldId
-    ? worlds.find((world) => world.id === deletingWorldId)
-    : null;
   const pendingWorld = pendingWorldId
     ? worlds.find((world) => world.id === pendingWorldId)
     : null;
@@ -307,62 +310,10 @@ export function WorldSelectScreen({
     </Dialog>
   );
 
-  const deleteDialog = (
-    <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-      <DialogContent
-        className="max-w-sm"
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" || deleting) return;
-          event.preventDefault();
-          void handleDeleteConfirm();
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>
-            {t("world.deleteConfirmTitle", "Delete world?")}
-          </DialogTitle>
-          <DialogDescription>
-            {t(
-              "world.deleteConfirmDesc",
-              'This will permanently delete "{{name}}". This action cannot be undone.',
-              {
-                name: deletingWorld
-                  ? text(deletingWorld.name)
-                  : deletingWorldId,
-              },
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-end gap-2 mt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={deleting}
-            onClick={() => setDeleteConfirmOpen(false)}
-          >
-            {t("common.cancel", "Cancel")}
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={deleting}
-            aria-keyshortcuts="Enter"
-            onClick={() => void handleDeleteConfirm()}
-          >
-            {deleting
-              ? t("common.deleting", "Deleting...")
-              : t("world.deleteConfirmAction", "Delete")}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-
   if (mode === "detail" && selectedWorld) {
     return (
       <>
         {localeMismatchDialog}
-        {deleteDialog}
         <WorldDetailView
           world={selectedWorld}
           onClose={handleBack}
@@ -370,7 +321,7 @@ export function WorldSelectScreen({
           onRevised={onWorldUpdated}
           onDelete={
             isWorldDeletable(selectedWorld)
-              ? () => handleDeleteFromDetail(selectedWorld.id)
+              ? () => void deleteWorldAfterConfirm(selectedWorld.id)
               : undefined
           }
         />
@@ -391,7 +342,6 @@ export function WorldSelectScreen({
   return (
     <div className="flex h-full w-full overflow-hidden">
       {localeMismatchDialog}
-      {deleteDialog}
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={(open) => {

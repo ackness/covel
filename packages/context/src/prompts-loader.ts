@@ -32,21 +32,16 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  canonicalizeLocale,
-  localeLookupCandidates,
-  localeRegistry,
-  readRuntimeEnv,
-} from "@covel/shared";
+import { readRuntimeEnv } from "@covel/shared";
 
-import { interpolateTemplate } from "./prompt-internals.js";
+export { interpolate } from "@covel/plugin-handlers-utils";
 
 /** Locale-aware template source, injectable into prompt consumers. */
-export type PromptLoader = (
-  dir: string,
-  name: string,
-  locale?: string,
-) => Promise<string>;
+import { createPromptLoader } from "@covel/plugin-handlers-utils/prompts";
+export {
+  createPromptLoader,
+  type PromptLoader,
+} from "@covel/plugin-handlers-utils/prompts";
 
 // ── Path resolution ─────────────────────────────────────────────
 
@@ -113,37 +108,6 @@ async function findPromptsRoot(): Promise<string> {
  * For `ru-RU`: `ru-RU`, `ru`, `en-US`, `en`, then the locale-less default.
  * For undefined locale: `['<name>.md']`
  */
-function localeCandidates(name: string, locale?: string): string[] {
-  if (!locale) return [`${name}.md`];
-
-  const canonicalLocale = canonicalizeLocale(locale);
-  if (!canonicalLocale) {
-    throw new Error(`[loadPrompt] Invalid locale: ${JSON.stringify(locale)}`);
-  }
-
-  const seen = new Set<string>();
-  const out: string[] = [];
-
-  const locales = [
-    canonicalLocale,
-    ...localeRegistry.fallbackLocalesFor(canonicalLocale),
-  ];
-  const candidates = locales.flatMap((candidateLocale) =>
-    localeLookupCandidates(candidateLocale).map(
-      (candidate) => `${name}.${candidate}.md`,
-    ),
-  );
-  candidates.push(`${name}.md`);
-
-  for (const candidate of candidates) {
-    if (!seen.has(candidate)) {
-      seen.add(candidate);
-      out.push(candidate);
-    }
-  }
-  return out;
-}
-
 // ── Public API ──────────────────────────────────────────────────
 
 /**
@@ -168,67 +132,5 @@ export async function loadPrompt(
   name: string,
   locale?: string,
 ): Promise<string> {
-  return loadPromptFromRoot(await findPromptsRoot(), dir, name, locale);
-}
-
-/**
- * Bind a loader to an explicit root without changing the process default.
- * Relative roots are resolved at creation; templates are read on every call
- * so edits remain visible. Locale fallback matches `loadPrompt`.
- */
-export function createPromptLoader(root: string): PromptLoader {
-  const resolvedRoot = path.resolve(root);
-  return (dir, name, locale) =>
-    loadPromptFromRoot(resolvedRoot, dir, name, locale);
-}
-
-async function loadPromptFromRoot(
-  root: string,
-  dir: string,
-  name: string,
-  locale?: string,
-): Promise<string> {
-  const subDir = path.join(root, dir);
-  const candidates = localeCandidates(name, locale);
-
-  const tried: string[] = [];
-  for (const filename of candidates) {
-    const full = path.join(subDir, filename);
-    tried.push(full);
-    try {
-      return await fs.readFile(full, "utf8");
-    } catch (err: unknown) {
-      // ENOENT — keep trying. Anything else (permissions, etc.) bubbles up.
-      const code = (err as NodeJS.ErrnoException)?.code;
-      if (code !== "ENOENT") {
-        throw err;
-      }
-    }
-  }
-
-  throw new Error(
-    `[loadPrompt] No prompt file found for dir="${dir}" name="${name}" locale="${locale ?? "(none)"}". ` +
-      `Tried:\n  ${tried.join("\n  ")}`,
-  );
-}
-
-/**
- * Interpolate `{{ key }}` placeholders in a template using a flat variable map.
- *
- * Thin shim over `interpolateTemplate` so callers don't need to nest their
- * variables under an arbitrary root key.
- *
- * @example
- * ```ts
- * interpolate('Hello {{ name }}', { name: 'world' }) // 'Hello world'
- * ```
- */
-export function interpolate(
-  template: string,
-  variables: Readonly<Record<string, string | number>>,
-): string {
-  return interpolateTemplate(
-    template,
-    variables as Readonly<Record<string, unknown>>,
-  );
+  return createPromptLoader(await findPromptsRoot())(dir, name, locale);
 }

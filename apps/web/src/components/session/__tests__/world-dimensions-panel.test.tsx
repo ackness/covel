@@ -26,6 +26,23 @@ describe("WorldDimensionsPanel", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("en-US");
   });
+  it("keeps gameplay values read-only and hides internal versions", () => {
+    render(<WorldDimensionsPanel dimensions={dimensions} onEdit={vi.fn()} />);
+    expect(screen.getByRole("cell", { name: "1" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /edit$/i })).toBeNull();
+    expect(screen.queryByText(/v7|version 7/i)).toBeNull();
+  });
+
+  it("does not mount a recovery notice when nothing needs recovery", () => {
+    const { container } = render(
+      <WorldDimensionsPanel
+        recoveryOnly
+        dimensions={dimensions}
+        onEdit={vi.fn()}
+      />,
+    );
+    expect(container.childElementCount).toBe(0);
+  });
   it("shows localized titles and enum labels while storing enum IDs", async () => {
     await i18n.changeLanguage("zh-CN");
     const onEdit = vi.fn().mockResolvedValue(undefined);
@@ -53,7 +70,13 @@ describe("WorldDimensionsPanel", () => {
         version: 2,
       },
     };
-    render(<WorldDimensionsPanel dimensions={board} onEdit={onEdit} />);
+    render(
+      <WorldDimensionsPanel
+        allowValueEditing
+        dimensions={board}
+        onEdit={onEdit}
+      />,
+    );
     expect(screen.getByRole("columnheader", { name: "状态" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "未核实" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /编辑|edit$/i }));
@@ -79,7 +102,13 @@ describe("WorldDimensionsPanel", () => {
   });
   it("edits named-map fields and adds schema-directed rows with the captured version", async () => {
     const onEdit = vi.fn().mockResolvedValue(undefined);
-    render(<WorldDimensionsPanel dimensions={dimensions} onEdit={onEdit} />);
+    render(
+      <WorldDimensionsPanel
+        allowValueEditing
+        dimensions={dimensions}
+        onEdit={onEdit}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /edit$/i }));
     fireEvent.change(screen.getByRole("spinbutton", { name: "Wealth" }), {
       target: { value: "4" },
@@ -107,11 +136,16 @@ describe("WorldDimensionsPanel", () => {
       .fn()
       .mockRejectedValue(new Error("dimension-version-conflict"));
     const view = render(
-      <WorldDimensionsPanel dimensions={dimensions} onEdit={onEdit} />,
+      <WorldDimensionsPanel
+        allowValueEditing
+        dimensions={dimensions}
+        onEdit={onEdit}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: /edit$/i }));
     view.rerender(
       <WorldDimensionsPanel
+        allowValueEditing
         dimensions={{ cities: { ...dimensions.cities!, version: 8 } }}
         onEdit={onEdit}
       />,
@@ -125,7 +159,11 @@ describe("WorldDimensionsPanel", () => {
   it("validates field edits and shows pending debt even without values", async () => {
     const onEdit = vi.fn();
     const view = render(
-      <WorldDimensionsPanel dimensions={dimensions} onEdit={onEdit} />,
+      <WorldDimensionsPanel
+        allowValueEditing
+        dimensions={dimensions}
+        onEdit={onEdit}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: /edit$/i }));
     fireEvent.change(screen.getByRole("spinbutton", { name: "Wealth" }), {
@@ -137,6 +175,7 @@ describe("WorldDimensionsPanel", () => {
     view.unmount();
     render(
       <WorldDimensionsPanel
+        allowValueEditing
         dimensions={{}}
         settlements={[
           {

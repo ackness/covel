@@ -13,6 +13,7 @@ import type {
   CombatStyle,
   DifficultyLevel,
 } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
 const COMBAT_STYLES: CombatStyle[] = [
   "turn-based",
@@ -37,8 +38,9 @@ const DIFFICULTY_KEYS: Record<DifficultyLevel, string> = {
   adaptive: "difficultyAdaptive",
 };
 
-export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
+export function MechanicsTab({ dimensions, onChange, t, problems }: TabProps) {
   const mech: WorldMechanics = dimensions.mechanics ?? {};
+  const problem = fieldProblems(problems);
 
   function setMech(next: WorldMechanics) {
     onChange({ ...dimensions, mechanics: next });
@@ -88,6 +90,7 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
               </option>
             ))}
           </select>
+          {problem.at("combatStyle")}
         </div>
         <div className="space-y-1">
           <Label htmlFor="world-mechanics-difficulty">
@@ -110,6 +113,7 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
               </option>
             ))}
           </select>
+          {problem.at("difficulty")}
         </div>
       </div>
 
@@ -123,6 +127,7 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
           value={text(mech.skillSystem)}
           onChange={(e) => setMech({ ...mech, skillSystem: e.target.value })}
         />
+        {problem.at("skillSystem")}
       </div>
 
       {/* Custom Rules */}
@@ -134,14 +139,18 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addCustomRule")}
           </Button>
         </div>
+        {problem.at("customRules")}
         {(mech.customRules ?? []).map((rule, ri) => (
           <div key={ri} className="flex items-center gap-2">
-            <input
-              aria-label={`${t("world.customRules")} ${ri + 1}`}
-              className={inputCls}
-              value={text(rule)}
-              onChange={(e) => updateCustomRule(ri, e.target.value)}
-            />
+            <div className="min-w-0 flex-1 space-y-1">
+              <input
+                aria-label={`${t("world.customRules")} ${ri + 1}`}
+                className={inputCls}
+                value={text(rule)}
+                onChange={(e) => updateCustomRule(ri, e.target.value)}
+              />
+              {problem.at(`customRules.${ri}`)}
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -153,6 +162,7 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
           </div>
         ))}
       </div>
+      {problem.rest()}
     </div>
   );
 }

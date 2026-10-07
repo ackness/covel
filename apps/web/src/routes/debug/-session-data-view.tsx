@@ -1,3 +1,4 @@
+import { SessionDimensionsPanel } from "@/components/session/session-dimensions-panel.js";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
@@ -25,6 +26,7 @@ export function SessionDataView({
   snapshotError = false,
   snapshotUpdatedAt,
   traceDiscovery,
+  onRefresh,
 }: {
   selectedSessionId: string | null;
   snapshotData: DebugPageData["snapshotData"];
@@ -32,6 +34,7 @@ export function SessionDataView({
   snapshotError?: boolean;
   snapshotUpdatedAt?: string | null;
   traceDiscovery: DebugPageData["traceDiscovery"];
+  onRefresh?: () => Promise<void>;
 }) {
   const { t } = useTranslation();
 
@@ -67,6 +70,11 @@ export function SessionDataView({
         )}
         {snapshotData && (
           <>
+            <SessionDimensionsPanel
+              snapshot={snapshotData}
+              onRefresh={onRefresh}
+              allowValueEditing
+            />
             <DataSection
               title={t("debugger.dataSection.session")}
               icon={<Layers className="w-3.5 h-3.5" />}

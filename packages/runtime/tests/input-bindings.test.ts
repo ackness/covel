@@ -144,6 +144,16 @@ describe("deriveActivation", () => {
 });
 
 describe("resolveJsonPointer / projectSchemaBySelect", () => {
+  it("withholds noncanonical array indices instead of selecting another index", () => {
+    for (const pointer of ["/01", "/+1", "/1.0", "/1e0", "/ ", "1", "/~2"]) {
+      expect(resolveJsonPointer(["zero", "one"], pointer).found).toBe(false);
+    }
+    expect(resolveJsonPointer(["zero", "one"], "/1")).toEqual({
+      found: true,
+      value: "one",
+    });
+  });
+
   it("resolves a pointer and distinguishes absent from null", () => {
     expect(resolveJsonPointer({ a: { b: 3 } }, "/a/b")).toEqual({
       found: true,
@@ -194,6 +204,24 @@ describe("checkAcceptsCompatibility (decidable subset)", () => {
   });
 
   it("compares numeric bounds and anchored mime prefixes", () => {
+    expect(
+      checkAcceptsCompatibility(
+        { type: "string", pattern: "^image/" },
+        { type: "string", pattern: "^audio/" },
+      ),
+    ).toBe("incompatible");
+    expect(
+      checkAcceptsCompatibility(
+        { type: "string", pattern: "^audio/|^image/" },
+        { type: "string", pattern: "^audio/" },
+      ),
+    ).toBe("indeterminate");
+    expect(
+      checkAcceptsCompatibility(
+        { type: "string", pattern: "^audio/" },
+        { type: "string", pattern: "^audio/(ogg|opus)" },
+      ),
+    ).toBe("indeterminate");
     expect(
       checkAcceptsCompatibility(
         { type: "number", minimum: 2 },
@@ -433,6 +461,70 @@ describe("resolveInputBindings — select & required/optional", () => {
 });
 
 describe("resolveInputBindings — accepts double layer", () => {
+  it("omits a statically incompatible optional slot and resolves later slots", async () => {
+    const provider = rt("p/gen");
+    const res = await resolveInputBindings(
+      baseArgs({
+        manifest: rt("c/main", {
+          inputs: {
+            optional: {
+              from: { runtime: provider.name },
+              accepts: "./string.json",
+              required: false,
+            },
+            needed: { from: { runtime: provider.name } },
+          },
+        }),
+        activeRuntimes: [provider],
+        completedResults: new Map([
+          [provider.name, success(provider.name, { n: 5 })],
+        ]),
+        acceptsSchemas: { optional: { type: "string" } },
+        loadProducerSchema: async () => ({
+          type: "object",
+          properties: { n: { type: "number" } },
+        }),
+      }),
+    );
+    expect(res).toMatchObject({
+      ok: true,
+      slots: { needed: { value: { n: 5 } } },
+    });
+    if (res.ok) expect(res.slots.optional).toBeUndefined();
+    expect(res.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "input-schema-incompatible",
+        severity: "warn",
+      }),
+    );
+  });
+
+  it("defers a nonliteral pattern to runtime validation instead of rejecting its valid value", async () => {
+    const provider = rt("p/gen");
+    const res = await resolveInputBindings(
+      baseArgs({
+        manifest: rt("c/main", {
+          inputs: {
+            data: { from: { runtime: provider.name }, accepts: "./audio.json" },
+          },
+        }),
+        activeRuntimes: [provider],
+        completedResults: new Map([
+          [provider.name, success(provider.name, "audio/ogg")],
+        ]),
+        acceptsSchemas: { data: { type: "string", pattern: "^audio/" } },
+        loadProducerSchema: async () => ({
+          type: "string",
+          pattern: "^aud(io|ible)/",
+        }),
+      }),
+    );
+    expect(res).toMatchObject({
+      ok: true,
+      slots: { data: { value: "audio/ogg" } },
+    });
+  });
+
   const provider = rt("p/gen", { outputContract: "prov" });
   const args = (
     accepts: Schema,
@@ -777,4 +869,32 @@ describe("source-anchored manual IO recovery", () => {
     });
     expect(wrong).toMatchObject({ ok: false, skipReason: "upstream-failed" });
   });
+});
+
+describe("prototype-named input bindings", () => {
+  it.each(["constructor", "toString", "__proto__"])(
+    "resolves %s without an inherited accepts schema",
+    async (name) => {
+      const producer = rt("p/source");
+      const consumer = rt("p/consumer", {
+        inputs: Object.fromEntries([
+          [name, { from: { runtime: producer.name } }],
+        ]),
+      });
+      const result = await resolveInputBindings(
+        baseArgs({
+          manifest: consumer,
+          activeRuntimes: [producer, consumer],
+          completedResults: new Map([
+            [producer.name, success(producer.name, { value: "business" })],
+          ]),
+        }),
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(Object.hasOwn(result.slots, name)).toBe(true);
+        expect(result.slots[name]?.value).toEqual({ value: "business" });
+      }
+    },
+  );
 });

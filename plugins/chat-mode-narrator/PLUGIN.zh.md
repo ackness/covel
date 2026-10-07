@@ -44,7 +44,7 @@ contributes:
 
 ## 开场场景
 
-{{ world.openingScenario }}
+使用 `<world-lore>` 和 `<world-dimensions>` 中描述的开场情境。
 
 ## 玩家角色
 

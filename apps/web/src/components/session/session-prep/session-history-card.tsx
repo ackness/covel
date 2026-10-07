@@ -18,6 +18,8 @@ interface SessionHistoryCardProps {
   onResume: (session: api.SessionRecord) => void;
   /** Session id currently being resumed — locks its Resume button. */
   resumingId?: string | null;
+  /** Session id being deleted — locks the delete buttons until it settles. */
+  deletingId?: string | null;
   onRequestDelete: (session: api.SessionRecord) => void;
 }
 
@@ -27,6 +29,7 @@ export function SessionHistoryCard({
   onToggle,
   onResume,
   resumingId,
+  deletingId,
   onRequestDelete,
 }: SessionHistoryCardProps) {
   const { t, i18n } = useTranslation();
@@ -107,12 +110,17 @@ export function SessionHistoryCard({
                   aria-label={t("session.deleteSessionAria", {
                     id: session.id.slice(0, 16),
                   })}
+                  disabled={Boolean(deletingId)}
                   onClick={(event) => {
                     event.stopPropagation();
                     onRequestDelete(session);
                   }}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  {deletingId === session.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
                 </Button>
               </div>
             </div>

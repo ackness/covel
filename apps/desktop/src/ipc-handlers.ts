@@ -1,10 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { loadKeysEnv, patchKeysEnv } from "./env-files.js";
-import {
-  importAsset,
-  type ImportKind,
-  type ImportResult,
-} from "./import-assets.js";
 import { writeLog } from "./logging.js";
 import { writeDataRoot, type ensureUserPaths } from "./paths.js";
 import {
@@ -344,72 +339,5 @@ export function registerDesktopIpcHandlers({
       writeLog("error", "settings:save failed:", err);
       return { ok: false };
     }
-  });
-
-  // Asset import — the sourcePath always originates from a native dialog in the
-  // MAIN process (see `pickAndImport` below), never from a renderer-supplied
-  // string. The old renderer-facing `covel:import:{plugin,world}` channels were
-  // removed (arbitrary-path vector) — they had no callers.
-  async function handleImport(
-    kind: ImportKind,
-    payload: unknown,
-  ): Promise<ImportResult> {
-    if (!payload || typeof payload !== "object") {
-      return { ok: false, kind, message: t("import.invalidPayload") };
-    }
-    const sourcePath = (payload as { sourcePath?: string }).sourcePath;
-    if (typeof sourcePath !== "string") {
-      return { ok: false, kind, message: t("import.sourcePathRequired") };
-    }
-    try {
-      const result = await importAsset(kind, sourcePath);
-      writeLog(
-        result.ok ? "info" : "warn",
-        `import(${kind}) ${result.ok ? "ok" : "failed"}: ${
-          result.message ?? result.itemName ?? ""
-        }`,
-      );
-      return result;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      writeLog("error", `import(${kind}) threw: ${message}`);
-      return { ok: false, kind, message };
-    }
-  }
-
-  // Dialog-backed entry points. Open a native file chooser, then import.
-  async function pickAndImport(kind: ImportKind): Promise<ImportResult> {
-    const win = getMainWindow() ?? undefined;
-    const picked = await dialog.showOpenDialog(win as BrowserWindow, {
-      title:
-        kind === "plugin"
-          ? t("dialog.importPlugin.title")
-          : t("dialog.importWorld.title"),
-      properties: ["openFile", "openDirectory", "treatPackageAsDirectory"],
-      filters: [
-        { name: t("dialog.filter.zipArchives"), extensions: ["zip"] },
-        { name: t("dialog.filter.allFiles"), extensions: ["*"] },
-      ],
-    });
-    if (picked.canceled || picked.filePaths.length === 0) {
-      return { ok: false, kind, message: t("import.cancelled") };
-    }
-    return handleImport(kind, { sourcePath: picked.filePaths[0] });
-  }
-
-  // Audit 2026-07-16 L-4: these drive a native import dialog (installs a
-  // plugin/world) — a strictly worse action than opening a dir — so gate them
-  // on the same trusted-sender check as the other dialog-backed channels.
-  ipcMain.handle("covel:import:pick-plugin", (event) => {
-    if (!isTrustedSender(event, "covel:import:pick-plugin")) {
-      return { ok: false, kind: "plugin", message: t("import.cancelled") };
-    }
-    return pickAndImport("plugin");
-  });
-  ipcMain.handle("covel:import:pick-world", (event) => {
-    if (!isTrustedSender(event, "covel:import:pick-world")) {
-      return { ok: false, kind: "world", message: t("import.cancelled") };
-    }
-    return pickAndImport("world");
   });
 }

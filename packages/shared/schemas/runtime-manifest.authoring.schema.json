@@ -152,6 +152,10 @@
     "history": {
       "type": "object",
       "properties": {
+        "includeSummaries": {
+          "description": "Include persisted summaries alongside the bounded history window. Defaults to false.",
+          "type": "boolean"
+        },
         "maxTurns": {
           "type": "integer",
           "minimum": 0,

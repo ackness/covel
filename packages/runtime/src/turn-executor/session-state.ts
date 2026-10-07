@@ -13,7 +13,7 @@ import {
   stageMessageOrder,
   turnDigestSchema,
 } from "@covel/shared";
-import type { TurnMessageRecord } from "@covel/store";
+import type { SessionRecord, TurnMessageRecord } from "@covel/store";
 import { journalOf } from "../execution-journal.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import {
@@ -40,7 +40,14 @@ export interface TurnSessionMeta {
 }
 
 export interface LoadedTurnSessionState {
+  /**
+   * The session row as this execution read it, `null` without a store or a
+   * row. The context snapshot is built from it, not from a second read.
+   */
+  readonly session: SessionRecord | null;
   readonly messageHistory: readonly TurnMessageRecord[];
+  /** Bounded canonical tail for lore scanning, including compacted rows. */
+  readonly recentMessages: readonly TurnMessageRecord[];
   /** Player message waiting for the execution's commit transaction. */
   readonly journalMessages: readonly TurnMessageRecord[];
   /** Committed runs per runtime (`maxTriggerCount`). */
@@ -65,47 +72,7 @@ export async function loadTurnSessionState(args: {
 }): Promise<LoadedTurnSessionState> {
   const { input, deps, shouldAppendPlayerMessage } = args;
 
-  // Bounded per-turn reads: the player count is a store-side aggregate over
-  // the FULL log and trigger history comes from the trigger ledger, while the
-  // in-memory history is only the uncompacted suffix — the compacted prefix is
-  // represented by session summaries at prompt-build time, so a long session
-  // never re-loads its whole history every turn.
-  let messageHistory: readonly TurnMessageRecord[] = [];
-  let turnNumber = 0;
-  let triggerLedger: ReadonlyMap<string, RuntimeTriggerRecord> = new Map();
-  const journalMessages: TurnMessageRecord[] = [];
-  if (deps.store) {
-    const [uncompacted, stats, ledger] = await Promise.all([
-      deps.store.listUncompactedTurnMessages(input.sessionId),
-      deps.store.getTurnMessageStats(input.sessionId),
-      readRuntimeTriggerLedger(deps.store, input.sessionId),
-    ]);
-    messageHistory = uncompacted;
-    turnNumber = stats.playerMessageCount;
-    triggerLedger = ledger;
-  }
-
-  if (deps.store && shouldAppendPlayerMessage) {
-    const playerMessage: TurnMessageRecord = {
-      id: crypto.randomUUID(),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      sourceType: "player",
-      role: "user",
-      content: input.playerMessage,
-      order: 0,
-      createdAt: new Date().toISOString(),
-    };
-    journalMessages.push(playerMessage);
-  }
-
-  // Trigger history comes only from committed executions; this execution's
-  // runs are counted when finalize succeeds.
-  let sessionStatus: "active" | "paused" | "ended" = "active";
-  let phase: "setup" | "playing" = "playing";
-  let completedPlayerTurns = 0;
-  let setupRuntimes: Readonly<Record<string, SetupRuntimeState>> = {};
-  let sessionCharacters: TurnSessionCharacter[] = [];
+  // A detached stage reads the form its source turn saw, not the newest one.
   const sourceDigest = input.detachedStage
     ? turnDigestSchema.parse(input.detachedStage.turnDigest)
     : null;
@@ -123,16 +90,47 @@ export async function loadTurnSessionState(args: {
     sourceDigest?.lastPlayerInput ?? null,
   );
 
+  // Bounded per-turn reads: the player count is a store-side aggregate over
+  // the FULL log and trigger history comes from the trigger ledger, while the
+  // in-memory history is only the uncompacted suffix — the compacted prefix is
+  // represented by session summaries at prompt-build time, so a long session
+  // never re-loads its whole history every turn.
+  let messageHistory: readonly TurnMessageRecord[] = [];
+  let recentMessages: readonly TurnMessageRecord[] = [];
+  let turnNumber = 0;
+  // Trigger history comes only from committed executions; this execution's
+  // runs are counted when finalize succeeds.
+  let triggerLedger: ReadonlyMap<string, RuntimeTriggerRecord> = new Map();
+  let session: SessionRecord | null = null;
+  let sessionCharacters: TurnSessionCharacter[] = [];
+  const journalMessages: TurnMessageRecord[] = [];
   if (deps.store) {
-    const session = await deps.store.getSession(input.sessionId);
-    if (session) {
-      sessionStatus = session.status;
-      phase = session.phase;
-      completedPlayerTurns = session.completedPlayerTurns;
-      setupRuntimes = session.setupRuntimes;
-    }
-
-    const charRecords = await deps.store.listCharacters(input.sessionId);
+    // No read here needs the result of another, so the turn waits for the
+    // slowest of them, not for their sum.
+    const [
+      uncompacted,
+      stats,
+      ledger,
+      sessionRecord,
+      charRecords,
+      newest,
+      recent,
+    ] = await Promise.all([
+      deps.store.listUncompactedTurnMessages(input.sessionId),
+      deps.store.getTurnMessageStats(input.sessionId),
+      readRuntimeTriggerLedger(deps.store, input.sessionId),
+      deps.store.getSession(input.sessionId),
+      deps.store.listCharacters(input.sessionId),
+      input.detachedStage
+        ? lastPlayerInput
+        : loadLastPlayerInput(deps.store, input.sessionId),
+      deps.store.listRecentTurnMessages(input.sessionId, 20),
+    ]);
+    messageHistory = uncompacted;
+    recentMessages = recent;
+    turnNumber = stats.playerMessageCount;
+    triggerLedger = ledger;
+    session = sessionRecord;
     sessionCharacters = charRecords.map((c) => ({
       id: c.id,
       name: c.name,
@@ -140,14 +138,32 @@ export async function loadTurnSessionState(args: {
       description: c.description,
       fields: c.fields as Record<string, unknown>,
     }));
-
-    if (!input.detachedStage) {
-      lastPlayerInput = await loadLastPlayerInput(deps.store, input.sessionId);
-    }
+    lastPlayerInput = newest;
   }
 
+  if (deps.store && shouldAppendPlayerMessage) {
+    const playerMessage: TurnMessageRecord = {
+      id: crypto.randomUUID(),
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      sourceType: "player",
+      role: "user",
+      content: input.playerMessage,
+      order: 0,
+      createdAt: new Date().toISOString(),
+    };
+    journalMessages.push(playerMessage);
+  }
+
+  const sessionStatus = session?.status ?? "active";
+  const phase = session?.phase ?? "playing";
+  const completedPlayerTurns = session?.completedPlayerTurns ?? 0;
+  const setupRuntimes = session?.setupRuntimes ?? {};
+
   return {
+    session,
     messageHistory,
+    recentMessages,
     journalMessages,
     runtimeTriggerCounts: new Map(
       [...triggerLedger].map(([runtimeId, record]) => [
@@ -256,19 +272,7 @@ export async function loadLastPlayerInput(
   store: import("@covel/store").DataStore | undefined,
   sessionId: string,
 ): Promise<PlayerInputSubmission | null> {
-  const inputs = await store?.listPlayerInputs(sessionId);
-  // Store enumeration order is not chronological (SQL has no ORDER BY).
-  // Persisted UTC timestamps define recency; IDs break equal-time ties stably.
-  const latest = inputs?.reduce<
-    import("@covel/store").PlayerInputRecord | null
-  >(
-    (current, candidate) =>
-      !current ||
-      candidate.createdAt > current.createdAt ||
-      (candidate.createdAt === current.createdAt && candidate.id > current.id)
-        ? candidate
-        : current,
-    null,
+  return snapshotPlayerInput(
+    (await store?.getLatestPlayerInput(sessionId)) ?? null,
   );
-  return snapshotPlayerInput(latest ?? null);
 }

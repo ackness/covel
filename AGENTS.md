@@ -187,10 +187,12 @@ bundled `worlds/` and `plugins/`.
 
 - `apps/web` (React/Vite client), `apps/server` (Hono API; composes every feature
   package), `apps/desktop` (Electron shell).
+  The desktop shell validates persisted window geometry with its direct Zod dependency.
 - `packages/` — framework libraries; responsibilities and consumers are in
   `docs/architecture/packages.md`:
   - `plugin-handlers-utils` — the public plugin-author SDK (`PluginAPI`, handler,
-    proposal, and tool-result contracts)
+    proposal, and tool-result contracts; `/dimensions` serves dimension
+    providers and `/prompts` loads plugin-owned templates in Node)
   - `shared` — domain types, Zod schemas, extension-point contracts, env registry
   - `plugin-loader` — discovers, validates, and compiles plugin packages
   - `runtime` — the kernel: scheduling, execution, suspend/resume, commit, hooks

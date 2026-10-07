@@ -343,3 +343,20 @@ describe("cost-panel aggregate", () => {
     expect(unknown.inputTokens).toBe(20);
   });
 });
+
+it("prices cache reads and writes independently, including a zero write price", () => {
+  const usage = {
+    inputTokens: 1_000_000,
+    outputTokens: 100_000,
+    cachedInputTokens: 600_000,
+    cacheWriteInputTokens: 100_000,
+  };
+  expect(
+    estimateModelCost(usage, {
+      inputPerMToken: 2,
+      outputPerMToken: 10,
+      cacheReadPerMToken: 0.2,
+      cacheWritePerMToken: 0,
+    }),
+  ).toEqual({ usd: 1.72, pricedTokens: 1_100_000, unpricedTokens: 0 });
+});

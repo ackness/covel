@@ -136,7 +136,6 @@ runtime:
         - get-character
         - memory-search
         - emit-event
-      plugin:
         - world-dimension-get
         - world-dimension-list
     advertiseEvents: true
@@ -191,7 +190,7 @@ When `tabletopCheck.value` in `<runtime-inputs>` contains `Settled tabletop chec
 - Weave in the player background
 - Advance through environment, reactions, and sensory details
 - Open in motion or dialogue, use one or two sensory details to build the beat toward a single turn or reveal, and stop where the player's decision begins
-- Adjust tone and style to match the narrative tone ({{ world.tone }})
+- Adjust tone and style to match the world lore and the authored world dimensions
 
 ## World time
 

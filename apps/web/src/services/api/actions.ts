@@ -113,28 +113,33 @@ export function sendAction(
 
 // -- Mid-turn player control ----------------------------------
 
+const steerAcceptedSchema = z.object({ turnId: z.string().min(1) });
+
 /**
  * Interject a player message into the session's in-flight turn. The server
- * merges it into the next LLM step of story runtimes and persists it to
- * history. 409 (no active turn) resolves to false so callers can fall back
- * to a normal send.
+ * merges it into the next LLM step of story runtimes and persists it to the
+ * chat log. Resolves to the turn that took the message. A 409 resolves to
+ * null: no turn is active, or the active turn is past the point where a story
+ * runtime reads interjections. The message was not taken, so the caller keeps
+ * the text for a normal send.
  */
 export async function steerTurn(
   sessionId: string,
   message: string,
-): Promise<boolean> {
+): Promise<{ turnId: string } | null> {
   try {
-    await request<{ ok: true; turnId: string }>(
+    const accepted = await request(
       `/api/sessions/${encodeURIComponent(sessionId)}/steer`,
       {
         method: "POST",
         body: JSON.stringify({ message }),
         silentStatuses: [409],
+        schema: steerAcceptedSchema,
       },
     );
-    return true;
+    return { turnId: accepted.turnId };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 409) return false;
+    if (error instanceof ApiError && error.status === 409) return null;
     throw error;
   }
 }

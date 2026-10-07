@@ -58,6 +58,7 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
     if (!request || working) return;
     const run = ++runRef.current;
     const local = getStorageMode() === "local";
+    const expectedWorld = structuredClone(world);
     setPhase("generating");
     setError(null);
     setErrorCode(undefined);
@@ -84,7 +85,9 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
             try {
               // A world that lives in this browser is kept here.
               const revised = local
-                ? await getDataService().saveGeneratedWorld(event.world)
+                ? await getDataService().saveGeneratedWorld(event.world, {
+                    expectedWorld,
+                  })
                 : event.world;
               if (run !== runRef.current) return;
               abortRef.current = null;
@@ -98,7 +101,7 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
           })();
       },
       (err) => fail(err.message),
-      local ? { world } : undefined,
+      local ? { world: expectedWorld } : undefined,
     );
   }, [instruction, onRevised, working, world]);
 

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   dimensionSnapshotSchema,
   dimensionsJsonEqual,
@@ -12,21 +13,69 @@ import {
   type DimensionEditRequest,
 } from "./world-dimensions-panel.js";
 
-/** Session values come only from the host snapshot, never WorldRecord initial values. */
-export function SessionDimensionsPanel() {
+interface SessionDimensionsPanelProps {
+  snapshot?: Awaited<ReturnType<typeof getSessionView>>;
+  onRefresh?: () => Promise<void>;
+  allowValueEditing?: boolean;
+  recoveryOnly?: boolean;
+}
+
+/** Debug snapshots and the active game session have separate owners. */
+export function SessionDimensionsPanel(
+  props: SessionDimensionsPanelProps = {},
+) {
+  if (props.snapshot)
+    return (
+      <DimensionsView
+        {...props}
+        view={props.snapshot}
+        sessionId={props.snapshot.session.id}
+        disabled={false}
+        onRefresh={props.onRefresh ?? (async () => {})}
+      />
+    );
+  return <ActiveSessionDimensionsPanel {...props} />;
+}
+
+function ActiveSessionDimensionsPanel(props: SessionDimensionsPanelProps) {
   const { state, resumeSessionById } = useSession();
-  const dimensions = dimensionSnapshotSchema.parse(
-    state.gameState.dimensions ?? {},
+  return (
+    <DimensionsView
+      {...props}
+      view={state.gameState}
+      sessionId={state.session?.id}
+      disabled={state.executing}
+      onRefresh={async () => {
+        if (state.session) await resumeSessionById(state.session.id);
+      }}
+    />
   );
-  const recovery = state.gameState.dimensionRecovery as
-    DimensionRecovery | undefined;
-  const provider = state.gameState.dimensionProviderPluginId;
-  const settlements = (state.gameState.dimensionSettlements ??
+}
+
+function DimensionsView({
+  view,
+  sessionId,
+  disabled,
+  onRefresh,
+  allowValueEditing = false,
+  recoveryOnly = false,
+}: SessionDimensionsPanelProps & {
+  view:
+    | ReturnType<typeof useSession>["state"]["gameState"]
+    | Awaited<ReturnType<typeof getSessionView>>;
+  sessionId?: string;
+  disabled: boolean;
+  onRefresh: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const dimensions = dimensionSnapshotSchema.parse(view.dimensions ?? {});
+  const recovery = view.dimensionRecovery as DimensionRecovery | undefined;
+  const provider = view.dimensionProviderPluginId;
+  const settlements = (view.dimensionSettlements ??
     []) as readonly DimensionSettlementSummary[];
   async function edit(payload: DimensionEditRequest, sourceTurnId?: string) {
-    const sessionId = state.session?.id;
     if (!sessionId || typeof provider !== "string" || !recovery)
-      throw new Error("Dimension editor unavailable");
+      throw new Error(t("world.dimensionError.unavailable"));
     let result: Awaited<ReturnType<typeof postPluginRpc>>;
     try {
       result = await getSessionWorkspace().run(
@@ -47,24 +96,23 @@ export function SessionDimensionsPanel() {
           }),
       );
     } catch (error) {
-      await resumeSessionById(sessionId);
+      await onRefresh();
       throw error;
     }
     const current = await getSessionView(sessionId);
-    await resumeSessionById(sessionId);
+    await onRefresh();
     if (result.status !== "ok")
-      throw new Error(`Dimension edit: ${result.status}`);
+      throw new Error(t("world.dimensionError.failed"));
     for (const runtime of result.runtimeResults ?? []) {
       const output = runtime.output as { code?: string } | undefined;
       if (output?.code === "dimension-version-conflict")
-        throw new Error(
-          "dimension-version-conflict: refreshed to current values; review and submit again",
-        );
+        throw new Error(t("world.dimensionError.conflict"));
     }
     const failed = result.runtimeResults?.find(
       (runtime) => runtime.status === "failed",
     );
-    if (failed) throw new Error(failed.error ?? "Dimension edit failed");
+    if (failed)
+      throw new Error(failed.error ?? t("world.dimensionError.failed"));
     for (const update of payload.updates) {
       const entry = current?.dimensions[update.id];
       // Validate against the server's returned state, not a predicted +0/+1
@@ -77,9 +125,7 @@ export function SessionDimensionsPanel() {
         entry.version < update.expectedVersion ||
         !dimensionsJsonEqual(entry.value, update.value)
       )
-        throw new Error(
-          `dimension-version-conflict: ${update.id} currentVersion=${entry?.version ?? "missing"}`,
-        );
+        throw new Error(t("world.dimensionError.conflict"));
     }
     if (
       payload.resultId &&
@@ -89,15 +135,15 @@ export function SessionDimensionsPanel() {
           receipt.status === "pending-settlement",
       )
     )
-      throw new Error(
-        "Dimension settlement is still pending; review the receipt and retry or resolve explicitly",
-      );
+      throw new Error(t("world.dimensionError.pending"));
   }
   return (
     <WorldDimensionsPanel
       dimensions={dimensions}
+      allowValueEditing={allowValueEditing}
+      recoveryOnly={recoveryOnly}
       settlements={settlements}
-      disabled={state.executing}
+      disabled={disabled}
       {...(recovery && typeof provider === "string" ? { onEdit: edit } : {})}
     />
   );

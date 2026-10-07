@@ -113,9 +113,16 @@ export function rateLimiter({ max }: RateLimitOptions): MiddlewareHandler {
   };
 }
 
+/** Per request: takes one more hold on the mark of its single-flight guard. */
+const flightHolds = new WeakMap<Context, () => () => void>();
+
 /**
  * Single-flight guard — allows only one concurrent execution per key.
  * Useful for expensive operations like model-db refresh.
+ *
+ * The mark is held while the handler runs. A handler that streams returns its
+ * Response before its work ends, so the work takes its own hold with
+ * {@link holdSingleFlight}; the mark goes when the last hold is released.
  */
 export function singleFlight(): MiddlewareHandler {
   const inflight = new Set<string>();
@@ -132,10 +139,36 @@ export function singleFlight(): MiddlewareHandler {
     }
 
     inflight.add(key);
+    // The handler is the first hold.
+    let holds = 1;
+    const release = () => {
+      if (--holds === 0) inflight.delete(key);
+    };
+    flightHolds.set(c, () => {
+      // The mark is gone: another request may own the key by now.
+      if (holds === 0) return () => {};
+      holds++;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        release();
+      };
+    });
     try {
       await next();
     } finally {
-      inflight.delete(key);
+      release();
     }
   };
+}
+
+/**
+ * Keep the single-flight mark of this request until the returned function is
+ * called. For work that outlives the handler, such as the callback of an SSE
+ * stream: call this before the callback's first `await`, and release in its
+ * `finally`. On a route without the guard the returned function does nothing.
+ */
+export function holdSingleFlight(c: Context): () => void {
+  return flightHolds.get(c)?.() ?? (() => {});
 }

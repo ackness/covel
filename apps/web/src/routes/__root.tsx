@@ -223,7 +223,7 @@ function RootLayout() {
     <>
       <ToastHost />
       <ConfirmHost />
-      <div className="ui-app-shell h-screen w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex overflow-hidden">
+      <div className="ui-app-shell h-dvh w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex overflow-hidden">
         {/* Icon rail — the `nav: "rail"` layout. Desktop widths only; phones
             keep the top bar and its menu dialog. */}
         {railNav && (

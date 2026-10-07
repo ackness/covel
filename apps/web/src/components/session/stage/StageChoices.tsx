@@ -14,6 +14,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useChoiceHotkeys } from "@/hooks/use-choice-hotkeys.js";
+import { isImeComposing } from "@/lib/ime-composition.js";
 import {
   mergeChoices,
   type StageChoiceItem,
@@ -78,6 +79,8 @@ export function StageChoices({
   };
 
   const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter and Escape belong to the input method while it is composing.
+    if (isImeComposing(event)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submitDraft();

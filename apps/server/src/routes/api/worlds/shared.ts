@@ -5,7 +5,7 @@
  */
 
 import { validateDimensions } from "@covel/shared";
-import type { DataStore, MediaStore } from "@covel/store";
+import type { DataStore, MediaStore, WorldRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { errorBody, type ApiErrorResponse } from "../../../api-error.js";
@@ -26,6 +26,27 @@ export type WorldEnv = {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The metadata of a world whose authored content was changed in the app.
+ *
+ * The change is in the store only. For a world that a package manages, the
+ * files no longer hold what the record holds, so the record is marked: a
+ * package reload or update keeps a marked record instead of replacing it
+ * with the files. Every route that changes a world's content saves its
+ * metadata through this.
+ */
+export function editedWorldMetadata(
+  existing: WorldRecord,
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): Record<string, unknown> {
+  return {
+    ...metadata,
+    ...(existing.metadata?.packageManaged
+      ? { packageManaged: true, packageModified: true }
+      : {}),
+  };
 }
 
 export function resolveWorldMetadata(

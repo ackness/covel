@@ -335,8 +335,14 @@ describe("plugin generation reload", () => {
     await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(1, true));
     const capture = vi.spyOn(f.runtimeLoader!, "capture");
     await expect(
-      f.manager.withSnapshot("session", async () => {}),
-    ).rejects.toThrow("failed to activate");
+      f.manager.withSnapshot("session", async () => {
+        const manifest = f.registry.getActiveRuntimes("session")[0]!;
+        await expect(
+          f.runtimeLoader!.loadRuntimeFn(manifest, "en", "session"),
+        ).rejects.toThrow("failed to activate");
+        return "other runtimes can continue";
+      }),
+    ).resolves.toBe("other runtimes can continue");
     expect(capture).toHaveBeenCalledOnce();
     expect(f.disposed).toEqual([1]);
     expect(f.manager.isEntryRetryDeferred(f.id)).toBe(true);

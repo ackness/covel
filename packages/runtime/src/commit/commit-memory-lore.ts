@@ -67,6 +67,20 @@ export function createMemoryLoreCommitHandlers(
           `lorebook.upsert: entry ${entry.id} has invalid strategy`,
         );
       }
+      // The column is a 32-bit integer on PostgreSQL. SQLite and the memory
+      // store would keep a fraction or a larger number, so reject it here,
+      // before one backend fails inside the commit transaction.
+      if (
+        typeof entry.insertionOrder === "number" &&
+        !(
+          Number.isInteger(entry.insertionOrder) &&
+          Math.abs(entry.insertionOrder) <= 0x7fffffff
+        )
+      ) {
+        return commitError(
+          `lorebook.upsert: entry ${entry.id} insertionOrder must be a 32-bit integer`,
+        );
+      }
       const keys = Array.isArray(entry.keys)
         ? (entry.keys as unknown[]).filter(
             (k): k is string => typeof k === "string",

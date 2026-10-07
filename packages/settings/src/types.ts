@@ -114,6 +114,11 @@ export interface SettingsStoreApi {
   set<T>(key: SettingKey, value: T): Promise<void>;
   /** Validate and persist ordinary settings together; secret keys are rejected. */
   setMany(entries: Readonly<Record<SettingKey, unknown>>): Promise<void>;
+  /** Atomically replace ordinary entries only if the complete editor base still matches. */
+  replaceEntries(
+    entries: Readonly<Record<SettingKey, unknown>>,
+    expectedEntries: Readonly<Record<SettingKey, unknown>>,
+  ): Promise<void>;
   clear(key: SettingKey): Promise<void>;
   clearAll(): Promise<void>;
   import(

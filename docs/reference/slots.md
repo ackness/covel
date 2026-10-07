@@ -258,6 +258,14 @@ includeThoughts = true
 
 ## Provider 流式响应
 
+所有 agent runtime 在 adapter 提供流式接口时都使用它；只有故事 runtime 将文本增量转发到玩家界面。`length` / `max_tokens` 截断结果不能作为成功结果提交，必须调整输出额度后重试。HTTP 200 内的 provider 错误保留消息、code/type，确定性拒绝不会变成空的可重试错误。
+
+备用模型在调用前重新检查实际消息、工具、结构化输出 schema 和输出预留所需的窗口。装不下的目标不会收到该请求。能力解析优先选择模型数据库的精确匹配，再考虑精选表的前缀匹配，避免把语音子型号识别为文本模型。
+
+runtime 默认关闭思考时，已知型号使用支持的关闭值，否则使用其最低档并记诊断；未知兼容型号不自动发送思考字段。用户显式参数仍优先。较新的 OpenAI reasoning/ GPT 型号使用 `max_completion_tokens`；不接受强制工具或关闭思考的 Anthropic 型号按其能力收窄请求。
+
+内置图片和语音生成提交不做 HTTP 层自动重发；超时或连接断开时，客户端不能据此判断上游是否已生成。文本调用的重试策略不受此规则改变。
+
 四种内置文本协议共用的 SSE 帧解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。Gemini 原生协议使用 `streamGenerateContent` 的响应格式，不能用 `[DONE]` 判定其终态。
 
 Chat、Responses、Anthropic 的文本流必须包含各自协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表这些协议的模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。Gemini 原生流依据 `streamGenerateContent` 的候选结束原因判定完成，不依赖 OpenAI 的 `[DONE]` 标记。
@@ -278,7 +286,7 @@ Key 永远不进 `llm.toml`：dev 放 `.env.llm`，桌面端放 `~/.covel/keys.e
 
 ## 音频请求
 
-内置 `openai-speech` wire 将 `SpeechSynthesisParams.format` 映射为服务商请求的 `response_format`。内置 `openai-transcription` wire 只上传 `audio.data` 视图中的字节，支持 `Uint8Array` 和 Node `Buffer` 切片，不包含底层共享 buffer 的其它内容。
+内置 `openai-speech` wire 将 `SpeechSynthesisParams.format` 映射为服务商请求的 `response_format`。内置 `openai-transcription` wire 只上传 `audio.data` 视图中的字节，支持 `Uint8Array` 和 Node `Buffer` 切片，不包含底层共享 buffer 的其它内容。OpenAI 图片、语音与转写 wire 均剥离文本生成专用的 `parameterOverrides`，保留各自原生媒体参数。
 
 ## HTTP retry cleanup
 
@@ -305,3 +313,7 @@ Runtime 的同目标重试优先读取结构化 provider 错误的 `code`、`sta
 关闭设置后点击“重试此任务”，请求重新读取当前模型和参数；已提交的剧情和其他成功任务仍保留。最大输出限制与输入上下文窗口是两个独立的设置，调低输出不会删除会话历史。
 
 非流式文本与对象生成同样拒绝 provider 错误正文或 `finishReason: error`，即使 HTTP 为 200、正文仍可解析，也不会上报成功或交给函数插件写入记忆。Responses 必须处于 `completed` 或 `incomplete` 终态；排队、处理中、取消、失败或缺失状态均按 provider error 处理。`incomplete` 仍映射为 `length`，保留调用方既有截断策略。无输出的 provider error 可按已配置的备用模型策略回退。
+
+Model pricing may include `cacheReadPerMToken` and `cacheWritePerMToken` (USD per million tokens). The pinned LiteLLM database carries explicit read/write rates, including zero rates. Debug cost estimates price these subsets separately; missing rates remain unpriced rather than using the regular input price.
+
+HTTP error normalization preserves the provider's original `code` and `type` in `details.providerCode` / `details.providerType`. Vector ingestion uses explicit input-rejection codes to bisect a failed batch and skip only the offending input; authentication, configuration, and transient failures keep the cursor unchanged.

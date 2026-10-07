@@ -14,6 +14,8 @@ export interface CompactorDeps {
   readonly store: SessionContextStore;
   readonly estimator: TokenEstimator;
   readonly contextWindow: number;
+  /** Input capacity of the summary model after its output reserve. */
+  readonly inputWindow?: number;
   readonly compact: (
     input: HistoryCompactionInput,
   ) => Promise<HistoryCompactionOutput | undefined>;
@@ -62,78 +64,159 @@ export async function maybeCompact(
     existingSummaries.reduce((n, s) => n + deps.estimator(s.content), 0);
   if (estimatedTokens <= deps.contextWindow * (opts?.threshold ?? 0.6))
     return { compacted: false };
+  const maxTokens = Math.max(
+    1,
+    Math.min(
+      Math.floor(deps.contextWindow),
+      Math.max(128, Math.min(8_192, Math.floor(deps.contextWindow * 0.12))),
+    ),
+  );
+  const summaryBudget = {
+    maxTokens,
+    maxSegmentTokens: Math.min(
+      maxTokens,
+      Math.max(128, Math.min(2_048, Math.floor(deps.contextWindow * 0.04))),
+    ),
+    maxSegments: 8,
+  };
   const result = await deps.compact({
     messages,
     existingSummaries,
     contextWindow: deps.contextWindow,
+    inputWindow: deps.inputWindow ?? deps.contextWindow,
+    summaryBudget,
     estimatedTokens,
     locale: opts?.locale ?? DEFAULT_LOCALE,
   });
-  if (!result || !result.content.trim() || !result.messageIds.length)
-    return { compacted: false };
-  // A provider may replace only a contiguous, uncompacted prefix in this session.
-  // Reordering, skipping or referring to foreign messages must never hide history.
-  const toCompact = untagged.slice(0, result.messageIds.length);
-  if (
-    toCompact.length !== result.messageIds.length ||
-    toCompact.some(
-      (m, i) => m.sessionId !== sessionId || m.id !== result.messageIds[i],
-    ) ||
-    new Set(result.messageIds).size !== result.messageIds.length ||
-    deps.estimator(result.content) > deps.contextWindow
-  ) {
+  if (!result) return { compacted: false };
+
+  const invalid = (): never => {
     throw new Error("Invalid history compaction result");
-  }
-  // 4. Persist the summary record
-  const summaryId = crypto.randomUUID();
+  };
+  if (!result.summaries.length) invalid();
+  const replacedIds = new Set<string>();
+  const messageIds: string[] = [];
+  let replacementCursor = 0;
+  let summaryTokens = 0;
   const now = new Date().toISOString();
+  let nextCreatedAt = existingSummaries.reduce(
+    (latest, s) => Math.max(latest, Date.parse(s.createdAt) + 1),
+    Date.parse(now),
+  );
+  const records = result.summaries.map((segment): SessionSummaryRecord => {
+    // New raw history and old summary merges have separate chronological spans.
+    // A provider must never merge a disconnected old span with a fresh tail.
+    if (
+      !segment.content.trim() ||
+      (segment.messageIds.length === 0) ===
+        (segment.replacesSummaryIds.length === 0) ||
+      deps.estimator(segment.content) > summaryBudget.maxSegmentTokens
+    )
+      invalid();
+    const replaced = segment.replacesSummaryIds.map((id, index) => {
+      const summary = existingSummaries[replacementCursor + index];
+      if (
+        !summary ||
+        summary.id !== id ||
+        summary.sessionId !== sessionId ||
+        replacedIds.has(id)
+      )
+        invalid();
+      replacedIds.add(id);
+      return summary!;
+    });
+    replacementCursor += replaced.length;
+    const source = untagged.slice(
+      messageIds.length,
+      messageIds.length + segment.messageIds.length,
+    );
+    if (
+      source.length !== segment.messageIds.length ||
+      source.some(
+        (m, index) =>
+          m.sessionId !== sessionId || m.id !== segment.messageIds[index],
+      )
+    )
+      invalid();
+    messageIds.push(...segment.messageIds);
+    summaryTokens += deps.estimator(segment.content);
+    return {
+      id: replaced[0]?.id ?? crypto.randomUUID(),
+      sessionId,
+      turnRangeStart: replaced[0]?.turnRangeStart ?? source[0]!.turnId,
+      turnRangeEnd: replaced.at(-1)?.turnRangeEnd ?? source.at(-1)!.turnId,
+      content: segment.content,
+      focusSections: segment.focusSections,
+      // Replacing an old prefix retains its chronological position when only
+      // uncompacted messages are loaded and summaries are rendered up front.
+      createdAt:
+        replaced[0]?.createdAt ?? new Date(nextCreatedAt++).toISOString(),
+    };
+  });
+  if (new Set(messageIds).size !== messageIds.length) invalid();
+  const retained = existingSummaries.filter((s) => !replacedIds.has(s.id));
+  if (
+    retained.length + records.length > summaryBudget.maxSegments ||
+    summaryTokens +
+      retained.reduce((n, s) => n + deps.estimator(s.content), 0) >
+      summaryBudget.maxTokens
+  )
+    invalid();
 
-  // Determine turn range from the first/last messages in toCompact
-  const turnRangeStart =
-    existingSummaries[0]?.turnRangeStart ?? toCompact[0]!.turnId;
-  const turnRangeEnd = toCompact[toCompact.length - 1]!.turnId;
-
-  const summaryRecord: SessionSummaryRecord = {
-    id: summaryId,
-    sessionId,
-    turnRangeStart,
-    turnRangeEnd,
-    content: result.content,
-    focusSections: result.focusSections,
-    createdAt: now,
-  };
-
-  // 5. Persist the summary AND tag the compacted messages atomically.
-  //
-  // These two writes are one logical operation. Saving the summary without
-  // tagging leaves an orphan: `message-insertion.ts` renders the summary as a
-  // system message while the original history is still untagged and therefore
-  // still injected — the same content twice, with the summary carrying system
-  // authority. Tagging without a summary is worse: the history is hidden with
-  // nothing standing in for it.
-  const messageIds = toCompact.map((m) => m.id);
-  const persistCompaction = async (
-    store: Pick<
-      typeof deps.store,
-      | "deleteSessionSummaries"
-      | "retagCompactedTurnMessages"
-      | "saveSessionSummary"
-      | "tagTurnMessagesCompacted"
-    >,
-  ): Promise<void> => {
-    if (existingSummaries.length > 0) {
-      await store.deleteSessionSummaries(sessionId);
+  const persisted = await deps.store.withTransaction(async (store) => {
+    // Recheck inside the transaction so stale generation cannot replace a
+    // newer compaction that completed during the provider call.
+    const current = (await store.listSessionSummaries?.(sessionId)) ?? [];
+    if (
+      current.length !== existingSummaries.length ||
+      current.some(
+        (s, i) =>
+          s.id !== existingSummaries[i]!.id ||
+          s.content !== existingSummaries[i]!.content,
+      )
+    )
+      throw new Error("History summaries changed during compaction");
+    if (messageIds.length > 0) {
+      // A history transform may filter or reorder its prompt projection. Only
+      // a prefix of the canonical log may be hidden behind an upfront summary.
+      const canonical = await store.listUncompactedTurnMessages(
+        sessionId,
+        messageIds.length,
+      );
+      if (
+        canonical.length !== messageIds.length ||
+        canonical.some((message, index) => message.id !== messageIds[index])
+      )
+        return false;
     }
-    await store.saveSessionSummary(summaryRecord);
-    if (existingSummaries.length > 0) {
-      await store.retagCompactedTurnMessages(sessionId, summaryId);
+    for (let index = 0; index < records.length; index++) {
+      const record = records[index]!;
+      const segment = result.summaries[index]!;
+      if (segment.replacesSummaryIds.length) {
+        await store.retagCompactedTurnMessages(
+          sessionId,
+          record.id,
+          segment.replacesSummaryIds,
+        );
+        await store.deleteSessionSummaries(
+          sessionId,
+          segment.replacesSummaryIds,
+        );
+      }
+      await store.saveSessionSummary(record);
+      if (segment.messageIds.length) {
+        await store.tagTurnMessagesCompacted(
+          sessionId,
+          segment.messageIds,
+          record.id,
+        );
+      }
     }
-    await store.tagTurnMessagesCompacted(sessionId, messageIds, summaryId);
-  };
-
-  await deps.store.withTransaction(persistCompaction);
-
-  // 6. Emit trace event
+    return true;
+  });
+  if (!persisted) return { compacted: false };
+  const summaryId = records.at(-1)!.id;
+  const turnRangeEnd = records.at(-1)!.turnRangeEnd;
   try {
     await deps.store.addTraceEvent({
       id: crypto.randomUUID(),
@@ -143,21 +226,25 @@ export async function maybeCompact(
       turnId: turnRangeEnd,
       payload: {
         summaryId,
-        messagesCompacted: toCompact.length,
-        tokenSavings: toCompact.reduce(
-          (sum, m) => sum + deps.estimator(m.content),
-          0,
-        ),
-        focusSections: result.focusSections,
-        summariesMerged: existingSummaries.length,
-        summaryTokens: deps.estimator(result.content),
-        summaryTruncated: result.truncated ?? false,
+        summaryIds: records.map((record) => record.id),
+        messagesCompacted: messageIds.length,
+        tokenSavings: untagged
+          .slice(0, messageIds.length)
+          .reduce((n, m) => n + deps.estimator(m.content), 0),
+        focusSections: [
+          ...new Set(records.flatMap((record) => record.focusSections)),
+        ],
+        summariesMerged: replacedIds.size,
+        summaryTokens,
+        totalSummaryTokens:
+          summaryTokens +
+          retained.reduce((n, s) => n + deps.estimator(s.content), 0),
+        summaryTruncated: result.summaries.some((segment) => segment.truncated),
       },
       createdAt: now,
     });
   } catch {
-    // Non-critical trace event — don't fail compaction if trace write fails
+    // Trace persistence is non-critical after the summary transaction commits.
   }
-
   return { compacted: true, summaryId };
 }

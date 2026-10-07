@@ -1,5 +1,7 @@
 import {
   applyBudget,
+  flattenMessageContent,
+  isCompactedHistoryEnvelope,
   resolveBudgetOptions,
   type TokenEstimator,
   type BudgetOptions,
@@ -43,15 +45,6 @@ export function resolveRequestContextBudget(
       reservedForResponse: limits.maxOutputTokens,
     }),
   };
-}
-
-function contentForBudget(content: LLMMessage["content"]): string {
-  if (typeof content === "string") return content;
-  return content
-    .map((part) =>
-      part.type === "text" ? part.text : `[image:${part.image.id}]`,
-    )
-    .join("\n");
 }
 
 export function applyPerCallBudget(params: {
@@ -108,7 +101,7 @@ function budgetProviderRequest(
   const hasPrimarySystem = first?.role === "system";
   const primarySystem = hasPrimarySystem ? first : undefined;
   const primarySystemText = primarySystem
-    ? contentForBudget(primarySystem.content)
+    ? flattenMessageContent(primarySystem.content)
     : "";
   const toolDefinitionsText =
     params.tools && params.tools.length > 0
@@ -150,18 +143,25 @@ function budgetProviderRequest(
   const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
   const overflow = Math.max(0, budgeted.totalTokens - inputLimit);
   const zh = instructionLocaleFor(params.locale) === "zh";
-  const compacted = compactToolResultsToFit(
+  // Tool messages after the current user turn cannot be removed without
+  // breaking provider tool-call pairing. When a read tool returns more data
+  // than the next call can carry, a marked head/tail preview stays in the
+  // request; the full parsed result remains in RuntimeResult.toolCalls and
+  // traces.
+  const compacted = truncateMessagesToFit(
     budgeted.messages,
     overflow,
     params.estimator,
     zh ? TOOL_RESULT_TRUNCATION_MARKER.zh : TOOL_RESULT_TRUNCATION_MARKER.en,
+    (message) => message.role === "tool",
   );
   const afterToolResults = budgeted.totalTokens - compacted.savedTokens;
-  const compactedSummaries = compactSummaryEnvelopesToFit(
+  const compactedSummaries = truncateMessagesToFit(
     compacted.messages,
     Math.max(0, afterToolResults - inputLimit),
     params.estimator,
     zh ? SUMMARY_TRUNCATION_MARKER.zh : SUMMARY_TRUNCATION_MARKER.en,
+    isCompactedHistoryEnvelope,
   );
   const compactedTotal = afterToolResults - compactedSummaries.savedTokens;
   if (compactedTotal > inputLimit) {
@@ -191,16 +191,15 @@ const SUMMARY_TRUNCATION_MARKER = {
 };
 
 /**
- * Tool messages after the current user turn cannot be removed without
- * breaking provider tool-call pairing. When a read tool returns more data
- * than the next call can carry, retain a marked head/tail preview while the
- * full parsed result remains available in RuntimeResult.toolCalls and traces.
+ * Shorten the text messages `eligible` selects until `tokensToSave` tokens
+ * are saved. A shortened message keeps a marked head and tail.
  */
-function compactToolResultsToFit(
+function truncateMessagesToFit(
   messages: readonly LLMMessage[],
   tokensToSave: number,
   estimator: TokenEstimator,
   marker: string,
+  eligible: (message: LLMMessage) => boolean,
 ): {
   readonly messages: LLMMessage[];
   readonly savedTokens: number;
@@ -215,13 +214,12 @@ function compactToolResultsToFit(
   let savedTokens = 0;
   let truncatedCount = 0;
 
-  // Oldest tool results lose detail first; the most recent result is usually
-  // the one the model requested to refine an earlier, broader lookup.
+  // The oldest message loses detail first; of several tool results the most
+  // recent is usually the one the model requested to refine an earlier,
+  // broader lookup.
   for (let index = 0; index < compacted.length && remaining > 0; index += 1) {
     const message = compacted[index]!;
-    if (message.role !== "tool" || typeof message.content !== "string") {
-      continue;
-    }
+    if (typeof message.content !== "string" || !eligible(message)) continue;
     const originalTokens = estimator(message.content);
     const minimumTokens = estimator(marker);
     if (originalTokens <= minimumTokens) continue;
@@ -248,56 +246,6 @@ function compactToolResultsToFit(
     truncatedCount += 1;
   }
 
-  return { messages: compacted, savedTokens, truncatedCount };
-}
-
-function compactSummaryEnvelopesToFit(
-  messages: readonly LLMMessage[],
-  tokensToSave: number,
-  estimator: TokenEstimator,
-  marker: string,
-): {
-  readonly messages: LLMMessage[];
-  readonly savedTokens: number;
-  readonly truncatedCount: number;
-} {
-  if (tokensToSave <= 0) {
-    return { messages: [...messages], savedTokens: 0, truncatedCount: 0 };
-  }
-
-  const compacted = [...messages];
-  let remaining = tokensToSave;
-  let savedTokens = 0;
-  let truncatedCount = 0;
-  for (let index = 0; index < compacted.length && remaining > 0; index += 1) {
-    const message = compacted[index]!;
-    if (
-      typeof message.content !== "string" ||
-      !message.content.trimStart().startsWith("<compacted_history>\n")
-    ) {
-      continue;
-    }
-    const originalTokens = estimator(message.content);
-    const minimumTokens = estimator(marker);
-    if (originalTokens <= minimumTokens) continue;
-    const targetTokens = Math.max(
-      minimumTokens,
-      originalTokens - remaining - 1,
-    );
-    const content = truncateContentHeadTail(
-      message.content,
-      targetTokens,
-      estimator,
-      marker,
-    );
-    const newTokens = estimator(content);
-    const saved = Math.max(0, originalTokens - newTokens);
-    if (saved === 0) continue;
-    compacted[index] = { ...message, content };
-    savedTokens += saved;
-    remaining = Math.max(0, remaining - saved);
-    truncatedCount += 1;
-  }
   return { messages: compacted, savedTokens, truncatedCount };
 }
 

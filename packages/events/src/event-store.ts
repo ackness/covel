@@ -16,6 +16,17 @@ export interface EventStoreRecord {
  */
 export interface EventStore {
   saveEvent(record: EventStoreRecord): Promise<void>;
+  /** Trace producers persist before publishing; oversized trace frames reuse that row. */
+  getTraceEventById?(
+    sessionId: string,
+    id: string,
+  ): Promise<{
+    sessionId: string;
+    turnId: string;
+    type: string;
+    payload: unknown;
+    createdAt: string;
+  } | null>;
   /** Session-scoped lookup used to receive oversize transport frames. */
   getEventById(sessionId: string, id: string): Promise<EventStoreRecord | null>;
 }

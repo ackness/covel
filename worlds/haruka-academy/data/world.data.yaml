@@ -57,6 +57,7 @@ sources:
   memoryBlocks:
     kind: json
     path: data/memory-blocks.json
+    localeArrayKeys: [label]
     to: contract:memory.blocks@1
     key: id
   timeDefinition:

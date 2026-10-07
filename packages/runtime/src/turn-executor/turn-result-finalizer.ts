@@ -99,6 +99,16 @@ async function persistTurnResult(
     // non-player execution through `ExecutionContext.countPolicy`.
     origin: executionContext.origin,
     ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
+    ...(input.manualTrigger?.sourceTurnId
+      ? {
+          retryScope: {
+            sourceTurnId: input.manualTrigger.sourceTurnId,
+            runtimeIds: input.manualTrigger.runtimeIds ?? [
+              input.manualTrigger.runtimeId,
+            ],
+          },
+        }
+      : {}),
     // Written before the commit runs, so it starts `pending`. The
     // commit-owning caller settles it — a row left `pending` is a crash, not
     // a successful turn, and previously the two were indistinguishable.

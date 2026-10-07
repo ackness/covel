@@ -1,3 +1,5 @@
+import type { MutableRef } from "./runtime-refs.js";
+import { pluginDataNamespaces } from "./plugin-data-records.js";
 import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
@@ -9,7 +11,10 @@ import {
   type SessionSubscription,
   type SubscriptionEvent,
 } from "@/services/subscription.js";
-import { setConnectionState } from "@/stores/connection-store.js";
+import {
+  setConnectionState,
+  registerConnectionRetry,
+} from "@/stores/connection-store.js";
 import {
   replaceSessionPluginData,
   type PluginData,
@@ -36,10 +41,6 @@ import {
   runtimeJobCorrelationId,
 } from "./execution-steps.js";
 import type { SessionAction, SessionState } from "./types.js";
-
-interface MutableRef<T> {
-  current: T;
-}
 
 interface UseSessionSubscriptionOptions {
   sessionId: string | null | undefined;
@@ -285,14 +286,7 @@ export async function rehydrateSessionSideState(
       apply: (rowsByPlugin) => {
         const pluginData: PluginData = Object.create(null);
         for (const { pluginId, rows } of rowsByPlugin) {
-          const namespaces: Record<
-            string,
-            Record<string, unknown>
-          > = Object.create(null);
-          for (const row of rows)
-            (namespaces[row.namespace] ??= Object.create(null))[row.key] =
-              row.value;
-          pluginData[pluginId] = namespaces;
+          pluginData[pluginId] = pluginDataNamespaces(rows);
         }
         replaceSessionPluginData(sessionId, pluginData);
         dispatch({ type: "REPLACE_PLUGIN_DATA", pluginData });
@@ -567,11 +561,13 @@ export function useSessionSubscription({
           : undefined,
     });
     subscriptionRef.current = sub;
+    const unregisterRetry = registerConnectionRetry(() => sub.reconnect());
 
     sub.on("*", handleSubscriptionEvent);
 
     return () => {
       closed = true;
+      unregisterRetry();
       sub.close();
       recoveryGeneration += 1;
       bufferedEvents = [];

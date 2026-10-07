@@ -11,10 +11,14 @@
  * the single source of truth for the session-content surface.
  */
 
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, lt } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
-import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
+import {
+  writeOrderAsc,
+  writeOrderPageOrder,
+  writeOrderPageWhere,
+} from "./cursor.js";
 import {
   adoptPlayerInputMessage,
   assertCommittedPlayerInput,
@@ -55,6 +59,7 @@ type MessagesTable = Table & {
   content: Column;
   metadata: Column;
   createdAt: Column;
+  seq: Column;
 };
 type CharactersTable = Table & {
   id: Column;
@@ -72,8 +77,6 @@ export interface SqlSessionContentTables {
 export interface SqlSessionContentDeps {
   readonly runner: SqlRunner;
   readonly tables: SqlSessionContentTables;
-  /** A text column compared byte by byte; see `SqlDataCrudDeps.byteOrder`. */
-  readonly byteOrder?: (column: Column) => Column | SQL;
   readonly json: JsonReader;
   readonly values: Pick<
     InsertValueBuilders,
@@ -89,6 +92,7 @@ export type SqlSessionContentRecords = Pick<
   DataStore,
   | "saveEvent"
   | "listEvents"
+  | "deleteEventsBefore"
   | "getEventById"
   | "addMessage"
   | "commitPlayerInputMessage"
@@ -106,11 +110,24 @@ export function createSqlSessionContentRecords(
 ): SqlSessionContentRecords {
   const { runner, tables, json, values } = deps;
   const { events, messages, characters, characterSchemas } = tables;
-  const byteOrder = deps.byteOrder ?? ((column: Column) => column);
+  const { byteOrder } = runner;
+  // A message row with the place the store gives it among the session's
+  // messages of the same millisecond.
+  const messageRow = (record: MessageRecord): Record<string, unknown> => ({
+    ...values.messageInsert(record),
+    seq: runner.nextWriteOrderSeq(messages, record),
+  });
 
   return {
     async saveEvent(record: EventRecord): Promise<void> {
       await runner.insert(events, values.eventInsert(record));
+    },
+
+    async deleteEventsBefore(sessionId, before) {
+      await runner.delete(
+        events,
+        and(eq(events.sessionId, sessionId), lt(events.createdAt, before)),
+      );
     },
 
     async listEvents(
@@ -142,7 +159,7 @@ export function createSqlSessionContentRecords(
     },
 
     async addMessage(record: MessageRecord): Promise<void> {
-      await runner.insert(messages, values.messageInsert(record));
+      await runner.insert(messages, messageRow(record));
     },
 
     async commitPlayerInputMessage(record: MessageRecord): Promise<void> {
@@ -150,7 +167,7 @@ export function createSqlSessionContentRecords(
       if (
         await runner.insertIgnoreReturningCount(
           messages,
-          values.messageInsert(record),
+          messageRow(record),
           messages.id,
         )
       )
@@ -197,9 +214,9 @@ export function createSqlSessionContentRecords(
     ): Promise<MessageRecord[]> {
       const rows = await runner.select<MessageRow>(messages, {
         where: eq(messages.sessionId, sessionId),
-        // `id` breaks same-millisecond ties so offset pagination cannot swap
-        // rows between pages (media GC pages through this).
-        orderBy: [asc(messages.createdAt), asc(messages.id)],
+        // A total order, so offset pagination cannot swap rows between pages
+        // (media GC pages through this), and the order the page read gives.
+        orderBy: writeOrderAsc(messages, byteOrder),
         limit: pagination?.limit,
         offset: pagination?.offset,
       });
@@ -212,8 +229,8 @@ export function createSqlSessionContentRecords(
     ): Promise<MessageRecord[]> {
       if (opts.limit <= 0) return [];
       const rows = await runner.select<MessageRow>(messages, {
-        where: cursorPageWhere(messages, sessionId, opts.before),
-        orderBy: cursorPageOrder(messages),
+        where: writeOrderPageWhere(messages, sessionId, opts.before, byteOrder),
+        orderBy: writeOrderPageOrder(messages, byteOrder),
         limit: opts.limit,
       });
       return rows.reverse().map((row) => toMessageRecord(row, json));

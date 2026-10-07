@@ -153,6 +153,7 @@ describe("detached runtime cross-process lock boundary", () => {
   it("cancels provider work and rejects a late follower's domain output", async () => {
     const started = deferred();
     const abort = new AbortController();
+    const completeInTx = vi.fn();
     let providerSignal: AbortSignal | undefined;
     const { runner, store } = await setup(async (ctx) => {
       providerSignal = ctx.signal;
@@ -173,12 +174,13 @@ describe("detached runtime cross-process lock boundary", () => {
       runtimeId: RUNTIME_A,
       triggerEvent,
       executionSignal: abort.signal,
+      completeInTx,
     });
     await started.promise;
     abort.abort(new Error("host shutdown"));
-    const result = await running;
+    await expect(running).rejects.toThrow("host shutdown");
     expect(providerSignal?.aborted).toBe(true);
-    expect(result.commit.committed).toBe(false);
+    expect(completeInTx).not.toHaveBeenCalled();
     expect(await store.listPluginData(SESSION_ID, PLUGIN_ID, "images")).toEqual(
       [],
     );

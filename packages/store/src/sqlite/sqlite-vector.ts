@@ -56,6 +56,7 @@ import type {
   CommitVectorIndexBatchInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
+import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
 
 // ── Safety helpers ───────────────────────────────────────────────
 
@@ -320,6 +321,8 @@ export function createSqliteVectorCapability(
   }
 
   function upsertVectorInTransaction(input: UpsertVectorInput): void {
+    assertStoreIdentifiers(input);
+    input = withoutNul(input);
     const target = resolveVectorTarget(input.sessionId);
     if (!target) {
       throw new Error(

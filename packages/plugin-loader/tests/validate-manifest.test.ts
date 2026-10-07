@@ -29,6 +29,10 @@ async function fixture(fields: Record<string, unknown> = {}) {
 async function write(root: string, filename: string, value: unknown) {
   await mkdir(root, { recursive: true });
   await writeFile(
+    path.join(root, "handler.js"),
+    "export default () => ({ outcome: 'success' });",
+  );
+  await writeFile(
     path.join(root, filename),
     `---\n${JSON.stringify(value)}\n---\n`,
     "utf8",
@@ -53,6 +57,37 @@ const runtime = {
 };
 describe("manifest authoring CLI", () => {
   it.each([
+    { runtime: { ...runtime, function: { handler: "./missing.js" } } },
+    { runtime: { type: "function", function: { handler: "./handler.js" } } },
+    {
+      runtime: {
+        ...runtime,
+        function: {
+          handler: "./handler.js",
+          tools: { builtin: ["unknown-tool"] },
+        },
+      },
+    },
+    { contributes: { ui: { right: ["./missing.json"] } } },
+    {
+      runtime: {
+        ...runtime,
+        io: { output: { schema: "./missing.schema.json" } },
+      },
+    },
+  ])(
+    "rejects unusable static declarations before loading code: %j",
+    async (fields) => {
+      const result = await validate(await fixture(fields));
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("PLUGIN.md");
+      expect(result.stderr).toMatch(
+        /handler|schedule.stage|ui.right|output.schema|tools.builtin/,
+      );
+    },
+  );
+
+  it.each([
     "name",
     "stage",
     "capabilities",
@@ -72,6 +107,13 @@ describe("manifest authoring CLI", () => {
         prompt: [{ id: "guide", content: "Guidance", position: { depth: 2 } }],
       },
     });
+    await mkdir(path.join(root, "server"), { recursive: true });
+    await mkdir(path.join(root, "ui"), { recursive: true });
+    await writeFile(
+      path.join(root, "server/index.js"),
+      "export default () => {};",
+    );
+    await writeFile(path.join(root, "ui/panel.json"), "{}");
     await mkdir(path.join(root, "locales"));
     await writeFile(
       path.join(root, "locales/zh.yaml"),

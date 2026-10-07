@@ -94,17 +94,19 @@ describe("subscription visibility", () => {
         vi.fn(),
         vi.fn(),
       );
-      expect(subscription.state).toBe("paused");
+      expect(subscription.state).toBe("connected");
       await vi.waitFor(() => expect(actionStream).toBeDefined());
       if (end === "complete") actionStream.close();
       else if (end === "error") actionStream.error(new Error("Disconnected"));
       else action.abort();
       await vi.waitFor(() => expect(subscription!.state).toBe("connected"));
-      expect(
-        fetch.mock.calls
-          .map(([url]) => url)
-          .filter((url) => url.includes("/api/events/stream")),
-      ).toHaveLength(2);
+      await vi.waitFor(() =>
+        expect(
+          fetch.mock.calls
+            .map(([url]) => url)
+            .filter((url) => url.includes("/api/events/stream")),
+        ).toHaveLength(2),
+      );
     },
   );
 

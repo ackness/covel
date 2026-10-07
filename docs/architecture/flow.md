@@ -616,6 +616,8 @@ turn_messages (canonical 追加式执行日志):
   按 runtime 记录已提交的运行次数和最后一次运行时的
   completedPlayerTurns，随 finalize 事务写入，回滚的执行不计数。
   maxTriggerCount / cooldownTurns 读它，不再数 runtime 行，也不受压缩影响。
+  从未运行过的 runtime 不受 cooldownTurns 阻止，首次提交后才开始计算冷却；
+  冷却值超过 999 也遵循此规则。
 
   canonical 未压缩后缀
     → prompt.history-transform@1 投影
@@ -624,7 +626,7 @@ turn_messages (canonical 追加式执行日志):
     → token budget → LLM messages[]
 
   玩家消息计数读取 canonical 日志，trigger 历史读取台账；prompt 投影不改写它们。
-  history.compact@1 生成摘要，框架原子保存摘要与压缩标记。
+  history.compact@2 生成摘要，框架原子保存摘要与压缩标记。
 
   注意：玩家输入只以 `user` 角色追加一行（叙事模板填充结果），
   框架不再为 player-input 生成合成的 `assistant` 镜像消息。

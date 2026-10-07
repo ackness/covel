@@ -123,7 +123,15 @@ export async function worldGenerationDataContracts(
       ...(declared &&
       conventional &&
       (declared.kind === "yaml" || declared.kind === "json")
-        ? { source: { kind: declared.kind, path: declared.path } }
+        ? {
+            source: {
+              kind: declared.kind,
+              path: declared.path,
+              ...(declared.localeArrayKeys
+                ? { localeArrayKeys: declared.localeArrayKeys }
+                : {}),
+            },
+          }
         : {}),
     });
   }

@@ -61,6 +61,23 @@ export const HOOK_SEMANTICS: Record<HookEvent, HookSemantic> = {
   SessionEnd: "parallel",
 };
 
+/**
+ * Sequential events whose call site acts on `abort`: it vetoes the turn, the
+ * compaction, the runtime, the tool call or the proposal. A handler of one of
+ * these that throws, times out or returns a malformed result fails closed —
+ * the pipeline answers `abort`, since a broken policy must not let the guarded
+ * operation through. Every other sequential event only transforms its payload
+ * and reads `abort` as "no change", so a failed handler there is skipped and
+ * the replacements of the handlers before it are kept.
+ */
+export const GUARD_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>([
+  "TurnStart",
+  "PreCompaction",
+  "PreRuntime",
+  "PreToolUse",
+  "PreStateCommit",
+]);
+
 // `HookEnforce` and `HookDeclaration` are owned by @covel/shared (single
 // source of truth) and re-exported here so the runtime hooks barrel keeps a
 // stable surface for existing importers.

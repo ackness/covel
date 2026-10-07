@@ -9,7 +9,6 @@
  */
 
 import {
-  isHiddenPluginDataNamespace,
   reservedPluginDataNamespaceError,
   type PluginDataBatchPayload,
   type PluginDataPayload,
@@ -97,6 +96,16 @@ function makePluginDataBatchProposal(
 function assertModelWritableNamespace(namespace: string): void {
   const reserved = reservedPluginDataNamespaceError(namespace);
   if (reserved) throw new Error(reserved);
+}
+
+/**
+ * Whether a read tool may return rows of `namespace`. Tool results enter the
+ * model's context, so reads stop where writes do: every `_` namespace holds
+ * framework bookkeeping (job rows, logs, settlement receipts) or hidden world
+ * data, never what a plugin stored for its agent.
+ */
+function isModelReadableNamespace(namespace: string): boolean {
+  return reservedPluginDataNamespaceError(namespace) === null;
 }
 
 // ── plugin-data-set ─────────────────────────────────────────────
@@ -200,8 +209,7 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
       key: z.string().min(1).describe("Data key"),
     }),
     execute: async (params, context) => {
-      // Tool results enter the model's context; hidden world data stays out.
-      if (isHiddenPluginDataNamespace(params.namespace))
+      if (!isModelReadableNamespace(params.namespace))
         return { found: false, namespace: params.namespace, key: params.key };
       const targetPlugin = context.pluginId;
       const pending = overlayPluginDataValue(
@@ -259,7 +267,7 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
     }),
     execute: async (params, context) => {
       const targetPlugin = context.pluginId;
-      if (params.namespace && isHiddenPluginDataNamespace(params.namespace))
+      if (params.namespace && !isModelReadableNamespace(params.namespace))
         return { count: 0, items: [] };
       const records = (
         await store.listPluginData(
@@ -267,7 +275,7 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
           targetPlugin,
           params.namespace,
         )
-      ).filter((record) => !isHiddenPluginDataNamespace(record.namespace));
+      ).filter((record) => isModelReadableNamespace(record.namespace));
 
       const now = new Date().toISOString();
       const merged = new Map<
@@ -292,6 +300,8 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         targetPlugin,
         params.namespace,
       )) {
+        // The plugin's own code may buffer writes to its hidden buckets.
+        if (!isModelReadableNamespace(namespace)) continue;
         if (deleted) merged.delete(overlayKey);
         else merged.set(overlayKey, { namespace, key, value, updatedAt: now });
       }

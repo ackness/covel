@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { StreamMessage } from "@/stores/session-store.js";
 
@@ -61,13 +61,15 @@ export function TurnUpdates({
   readonly children: ReactNode;
 }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(defaultOpen);
   const titles = [
     ...new Set(messages.map(turnUpdateTitle).filter(Boolean)),
   ] as string[];
   const preview = titles.slice(0, PREVIEW_TITLES).join(" · ");
   return (
     <details
-      open={defaultOpen}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
       className="ui-turn-updates group rounded border border-border/50 px-3 py-2 text-xs text-muted-foreground"
       data-testid="turn-updates"
     >
@@ -82,7 +84,7 @@ export function TurnUpdates({
           </span>
         )}
       </summary>
-      <div className="mt-3 space-y-3">{children}</div>
+      {open && <div className="mt-3 space-y-3">{children}</div>}
     </details>
   );
 }

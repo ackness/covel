@@ -17,6 +17,7 @@ import { covelRegistry } from "@/lib/catalog.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import {
   usePluginJobs,
+  usePluginDataSessionId,
   usePluginNamespaces,
   usePluginNamespace,
 } from "@/stores/plugin-data-store.js";
@@ -69,22 +70,33 @@ function resolveEmptyMessage(value: unknown, locale: string): string {
   return resolveDisplayText(value, locale).trim();
 }
 
-export function PluginPanel({
-  pluginId,
-  panelId,
-  spec,
-  stateCache,
-  handlers: explicitHandlers,
-  stateOverride,
-  interactionLocked = false,
-  surfaceContext,
-  enableDevtools = false,
-  expanded = false,
-}: PluginPanelProps) {
-  const interactionLockedRef = useRef(interactionLocked);
-  interactionLockedRef.current = interactionLocked;
-  const { t, i18n } = useTranslation();
-  const activeLocale = i18n.resolvedLanguage ?? i18n.language;
+const EMPTY_SOURCES: Record<string, Record<string, unknown>> = {};
+const EMPTY_JOBS: ReturnType<typeof usePluginJobs> = [];
+
+export function PluginPanel(props: PluginPanelProps) {
+  return props.stateOverride !== undefined ? (
+    <SnapshotPluginPanel {...props} />
+  ) : (
+    <LivePluginPanel {...props} />
+  );
+}
+
+function SnapshotPluginPanel(props: PluginPanelProps) {
+  const sessionId = usePluginDataSessionId() ?? undefined;
+  return (
+    <PluginPanelView
+      {...props}
+      data={props.stateOverride!}
+      sources={EMPTY_SOURCES}
+      jobs={EMPTY_JOBS}
+      sessionId={sessionId}
+    />
+  );
+}
+
+function LivePluginPanel(props: PluginPanelProps) {
+  const { pluginId, spec } = props;
+  const { t } = useTranslation();
   const dataSource = spec.dataSource as
     | { namespace?: string; source?: string; bindings?: Record<string, string> }
     | undefined;
@@ -122,7 +134,44 @@ export function PluginPanel({
             ]),
           )
         : liveData;
-  const data = stateOverride ?? frameworkData;
+  return (
+    <PluginPanelView
+      {...props}
+      data={frameworkData}
+      sources={sources}
+      jobs={jobs}
+      sessionId={sessionState.session?.id}
+    />
+  );
+}
+
+function PluginPanelView({
+  pluginId,
+  panelId,
+  spec,
+  stateCache,
+  handlers: explicitHandlers,
+  interactionLocked = false,
+  surfaceContext,
+  enableDevtools = false,
+  expanded = false,
+  data,
+  sources,
+  jobs,
+  sessionId,
+}: PluginPanelProps & {
+  data: Record<string, unknown>;
+  sources: Record<string, Record<string, unknown>>;
+  jobs: ReturnType<typeof usePluginJobs>;
+  sessionId?: string;
+}) {
+  const interactionLockedRef = useRef(interactionLocked);
+  interactionLockedRef.current = interactionLocked;
+  const { t, i18n } = useTranslation();
+  const activeLocale = i18n.resolvedLanguage ?? i18n.language;
+  const namespace =
+    (spec.dataSource as { namespace?: string } | undefined)?.namespace ??
+    "default";
 
   // Per-action in-flight tracking — surfaced to json-render state under
   // `/_invoking/<key>` so the catalog Button can show a loading spinner while
@@ -202,8 +251,6 @@ export function PluginPanel({
       return null;
     }
   }, [spec.view, spec.webview]);
-
-  const sessionId = sessionState.session?.id;
 
   // Framework-provided default handlers wire plugin buttons to plugin-rpc.
   //

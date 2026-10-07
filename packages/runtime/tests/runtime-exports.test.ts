@@ -39,6 +39,48 @@ function successResult(runtimeId: string, value: unknown) {
 describe("publishExecutionExports", () => {
   const decl = { recordAs: "cfg", pluginId: "p", pluginVersion: "1.0.0" };
 
+  it("rolls back a failed export savepoint while preserving domain writes and later exports", async () => {
+    const store = createMemoryStore();
+    await store.withTransaction(async (tx) => {
+      await tx.upsertStateEntry({
+        id: "domain",
+        sessionId: "s",
+        tableName: "stats",
+        fieldName: "hp",
+        value: 7,
+        updatedAt: "2026-10-07T00:00:00.000Z",
+      });
+      const failingSink = (sink: typeof tx): typeof tx => ({
+        ...sink,
+        async appendRuntimeExport(record) {
+          const inserted = await sink.appendRuntimeExport(record);
+          if (record.producerRuntimeId === "p/broken")
+            throw new Error("Export persistence failed");
+          return inserted;
+        },
+        savepoint: (fn) => sink.savepoint!(async (sp) => fn(failingSink(sp))),
+      });
+      await publishExecutionExports({
+        sink: failingSink(tx),
+        sessionId: "s",
+        results: [
+          successResult("p/broken", { threshold: 1 }),
+          successResult("p/healthy", { threshold: 2 }),
+        ],
+        declFor: () => decl,
+        loadOutputSchema: async () => SCHEMA,
+        committedAt: "2026-10-07T00:00:00.000Z",
+      });
+    });
+    expect((await store.getStateEntry("s", "stats", "hp"))?.value).toBe(7);
+    expect(
+      await store.getLatestRuntimeExport("s", "p/broken", "cfg"),
+    ).toBeNull();
+    expect(
+      (await store.getLatestRuntimeExport("s", "p/healthy", "cfg"))?.value,
+    ).toEqual({ threshold: 2 });
+  });
+
   it("increments revision monotonically per (runtime, recordAs)", async () => {
     const store = createMemoryStore();
     const args = (value: unknown) => ({
@@ -167,6 +209,24 @@ describe("resolveExportBindings", () => {
     value: value as RuntimeExportRecord["value"],
     committedAt: "2020-01-01T00:00:00.000Z",
   });
+
+  it.each(["constructor", "toString", "__proto__"])(
+    "resolves prototype-named export %s without an inherited accepts schema",
+    async (name) => {
+      const result = await resolveExportBindings({
+        consumerRuntimeId: "c/main",
+        exportBindings: Object.fromEntries([[name, binding({ name })]]),
+        activeRuntimes: [provider("p/gen")],
+        acceptsSchemas: {},
+        getFrozenExport: async () => record({ threshold: 7 }),
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(Object.hasOwn(result.slots, name)).toBe(true);
+        expect(result.slots[name]?.value).toEqual({ threshold: 7 });
+      }
+    },
+  );
 
   it("resolves a present export into a provenance-wrapped slot", async () => {
     const res = await resolveExportBindings({

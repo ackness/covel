@@ -8,9 +8,11 @@ import {
   type TabProps,
 } from "../editor-helpers.js";
 import type { WorldGeography, WorldRegion, WorldLandmark } from "@covel/shared";
+import { fieldProblems } from "./field-problems.js";
 
-export function GeographyTab({ dimensions, onChange, t }: TabProps) {
+export function GeographyTab({ dimensions, onChange, t, problems }: TabProps) {
   const geo: WorldGeography = dimensions.geography ?? { regions: [] };
+  const problem = fieldProblems(problems);
 
   function setGeo(next: WorldGeography) {
     onChange({ ...dimensions, geography: next });
@@ -77,6 +79,7 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
           value={text(geo.overview)}
           onChange={(e) => setGeo({ ...geo, overview: e.target.value })}
         />
+        {problem.at("overview")}
       </div>
 
       {/* Regions */}
@@ -88,6 +91,7 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
             {t("world.addRegion")}
           </Button>
         </div>
+        {problem.at("regions")}
 
         {geo.regions.map((region, ri) => (
           <div key={ri} className="border border-border p-4 space-y-3">
@@ -116,6 +120,7 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
                   value={text(region.name)}
                   onChange={(e) => updateRegion(ri, { name: e.target.value })}
                 />
+                {problem.at(`regions.${ri}.name`)}
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`world-region-${ri}-climate`}>
@@ -129,6 +134,7 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
                     updateRegion(ri, { climate: e.target.value })
                   }
                 />
+                {problem.at(`regions.${ri}.climate`)}
               </div>
             </div>
 
@@ -144,6 +150,7 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
                   updateRegion(ri, { description: e.target.value })
                 }
               />
+              {problem.at(`regions.${ri}.description`)}
             </div>
 
             {/* Landmarks */}
@@ -182,6 +189,14 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
                         })
                       }
                     />
+                    {problem.at(
+                      `regions.${ri}.landmarks.${li}.name`,
+                      t("world.name"),
+                    )}
+                    {problem.at(
+                      `regions.${ri}.landmarks.${li}.description`,
+                      t("world.description"),
+                    )}
                   </div>
                   <Button
                     variant="ghost"
@@ -197,6 +212,7 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
           </div>
         ))}
       </div>
+      {problem.rest()}
     </div>
   );
 }

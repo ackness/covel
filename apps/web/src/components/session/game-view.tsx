@@ -1,3 +1,4 @@
+import { SessionDimensionsPanel } from "./session-dimensions-panel.js";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
@@ -30,6 +31,7 @@ import type { SessionRecord } from "@/services/api.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { useDocumentSessionState } from "@/hooks/use-document-session-state.js";
 import { LeftPanel } from "./left-panel.js";
+import { useRightPanelState } from "./right-panel-state.js";
 import { RightPanel } from "./right-panel.js";
 import {
   GameViewHeader,
@@ -284,6 +286,7 @@ export function GameView({
     requestedPanel,
     onPanelHandled,
   });
+  const rightPanelState = useRightPanelState(session.id, panelRequest);
 
   const direction = "horizontal";
   const visual = worldVisual(world);
@@ -379,7 +382,7 @@ export function GameView({
             {t("session.toggleContextPanel")}
           </DialogTitle>
           <RightPanel
-            panelRequest={panelRequest}
+            panelState={rightPanelState}
             sessionId={session.id}
             world={world}
             statePatches={statePatches}
@@ -515,6 +518,7 @@ export function GameView({
           )}
 
           {/* Messages */}
+          {stageActive && <SessionDimensionsPanel recoveryOnly />}
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             onRetry={retryInterruptedTurn}
@@ -574,6 +578,8 @@ export function GameView({
                 onRemoveDraft={removeInteractionDraft}
               />
 
+              <SessionDimensionsPanel recoveryOnly />
+
               {/* Input — always fixed at bottom */}
               <MessageComposer
                 executionState={executionState}
@@ -620,7 +626,7 @@ export function GameView({
               className="ui-rail flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
-                panelRequest={panelRequest}
+                panelState={rightPanelState}
                 sessionId={session.id}
                 world={world}
                 statePatches={statePatches}

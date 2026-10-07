@@ -4,6 +4,7 @@ import { EventEmitter, once } from "node:events";
 import { test } from "node:test";
 import { createQuitHandler, stopServerProcess } from "./server-shutdown.js";
 import { waitForServerProcess } from "./server-readiness.js";
+import { claimSingleInstance } from "./single-instance.js";
 
 function fakeChild(
   kill: (signal?: NodeJS.Signals | number) => boolean,
@@ -25,7 +26,7 @@ await test("a failed spawn is reported by readiness instead of an unhandled erro
     stdio: "ignore",
   });
   await assert.rejects(
-    waitForServerProcess(child, "http://127.0.0.1:0/health"),
+    waitForServerProcess(child, 0),
     (error: unknown) =>
       error instanceof Error && "code" in error && error.code === "ENOENT",
   );
@@ -37,9 +38,45 @@ await test("a failed spawn is reported by readiness instead of an unhandled erro
 await test("an already exited sidecar cannot become ready from an unrelated health response", async () => {
   const child = fakeChild(() => true, 1);
   await assert.rejects(
-    waitForServerProcess(child, "http://127.0.0.1:0/health"),
+    waitForServerProcess(child, 0),
     /exited before readiness/,
   );
+});
+
+await test("readiness accepts only this child's port and clears every listener", async () => {
+  const child = fakeChild(() => true);
+  let ready = false;
+  const pending = waitForServerProcess(child, 4321).then(() => {
+    ready = true;
+  });
+  child.emit("message", { type: "covel:system-proxy:result", port: 4321 });
+  child.emit("message", { type: "covel:ready", port: 4322 });
+  await Promise.resolve();
+  assert.equal(ready, false);
+  child.emit("message", { type: "covel:ready", port: 4321 });
+  await pending;
+  assert.equal(ready, true);
+  for (const event of ["message", "error", "exit", "disconnect"])
+    assert.equal(child.listenerCount(event), 0);
+});
+
+await test("readiness rejects IPC disconnect and a missing acknowledgement", async (t) => {
+  const child = fakeChild(() => true);
+  const disconnected = assert.rejects(
+    waitForServerProcess(child, 4321),
+    /disconnected/,
+  );
+  child.emit("disconnect");
+  await disconnected;
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+  const timeout = assert.rejects(
+    waitForServerProcess(child, 4321, undefined, 100),
+    /within 100ms/,
+  );
+  t.mock.timers.tick(100);
+  await timeout;
+  for (const event of ["message", "error", "exit", "disconnect"])
+    assert.equal(child.listenerCount(event), 0);
 });
 
 await test("waits for a real sidecar to finish its IPC drain", async (t) => {
@@ -154,6 +191,63 @@ await test("an already exited child needs no new signal", async () => {
     throw new Error("must not signal");
   }, 0);
   await stopServerProcess(child, log);
+});
+
+await test("a second launch starts nothing and brings the first window forward", () => {
+  const calls: string[] = [];
+  const window = {
+    destroyed: false,
+    minimized: true,
+    isDestroyed() {
+      return this.destroyed;
+    },
+    isMinimized() {
+      return this.minimized;
+    },
+    restore: () => calls.push("restore"),
+    show: () => calls.push("show"),
+    focus: () => calls.push("focus"),
+  };
+  let secondLaunch!: () => void;
+  const first = {
+    requestSingleInstanceLock: () => true,
+    on: (_event: "second-instance", listener: () => void) => {
+      secondLaunch = listener;
+    },
+  };
+  let current: typeof window | null = null;
+  assert.equal(
+    claimSingleInstance(first, () => current),
+    true,
+  );
+
+  // The lock is refused to the later launch, which must not listen or start.
+  const later = {
+    requestSingleInstanceLock: () => false,
+    on: () => assert.fail("a refused launch must not wait for other launches"),
+  };
+  assert.equal(
+    claimSingleInstance(later, () => window),
+    false,
+  );
+
+  // Still on the way up: there is no window to show yet.
+  secondLaunch();
+  assert.deepEqual(calls, []);
+
+  current = window;
+  secondLaunch();
+  assert.deepEqual(calls, ["restore", "show", "focus"]);
+
+  calls.length = 0;
+  window.minimized = false;
+  secondLaunch();
+  assert.deepEqual(calls, ["show", "focus"]);
+
+  calls.length = 0;
+  window.destroyed = true;
+  secondLaunch();
+  assert.deepEqual(calls, []);
 });
 
 await test("quit waits for one shared drain and permits the final re-entry", async () => {

@@ -53,7 +53,7 @@ stateRoutes.get("/:id/state", async (c) => {
   const tables: Record<
     string,
     { schema: unknown; data: Record<string, unknown> }
-  > = {};
+  > = Object.create(null);
 
   // ── State tables ──────────────────────────────────────────────────
   const schemas = await getTableSchemas(store, id);
@@ -85,10 +85,10 @@ stateRoutes.get("/:id/state", async (c) => {
   };
 
   // ── characters ────────────────────────────────────────────────────
-  try {
+  {
     const characters = await store.listCharacters(id);
     if (characters.length > 0) {
-      const data: Record<string, unknown> = {};
+      const data: Record<string, unknown> = Object.create(null);
       for (const ch of characters) {
         data[ch.id] = ch;
       }
@@ -106,13 +106,10 @@ stateRoutes.get("/:id/state", async (c) => {
         data,
       };
     }
-  } catch (err) {
-    // Non-critical: characters table optional on slim stores.
-    console.warn(`[state] characters query failed for session ${id}:`, err);
   }
 
   // ── plugin_data grouped by (pluginId, namespace) ──────────────────
-  try {
+  {
     const pluginRows = await store.listPluginDataSessionScope(id);
     const byTable = new Map<
       string,
@@ -123,7 +120,7 @@ stateRoutes.get("/:id/state", async (c) => {
       const tableName = `plugin_data/${row.pluginId}:${row.namespace}`;
       let entry = byTable.get(tableName);
       if (!entry) {
-        entry = { keys: new Set(), data: {} };
+        entry = { keys: new Set(), data: Object.create(null) };
         byTable.set(tableName, entry);
       }
       entry.data[row.key] = publicPluginDataValue(row);
@@ -145,9 +142,6 @@ stateRoutes.get("/:id/state", async (c) => {
         data: entry.data,
       };
     }
-  } catch (err) {
-    // Non-critical: session may have no plugin_data rows yet.
-    console.warn(`[state] plugin_data query failed for session ${id}:`, err);
   }
 
   return c.json({ tables });

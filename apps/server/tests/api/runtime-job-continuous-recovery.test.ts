@@ -224,13 +224,13 @@ describe.each([
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     releaseGates.push(() => release.resolve());
-    const list = store.listPluginDataByNamespace.bind(store);
+    const query = store.queryPluginData.bind(store);
     const read = vi
-      .spyOn(store, "listPluginDataByNamespace")
-      .mockImplementationOnce(async (sessionId, namespace) => {
+      .spyOn(store, "queryPluginData")
+      .mockImplementationOnce(async (options) => {
         entered.resolve();
         await release.promise;
-        return list(sessionId, namespace);
+        return query(options);
       });
     const worker = start();
     await vi.advanceTimersByTimeAsync(1);
@@ -246,6 +246,75 @@ describe.each([
     const calls = read.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60_000);
     expect(read).toHaveBeenCalledTimes(calls);
+  });
+
+  it("retains wakes for jobs enqueued after a maintenance snapshot was captured", async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    releaseGates.push(() => release.resolve());
+    const query = store.queryPluginData.bind(store);
+    vi.spyOn(store, "queryPluginData").mockImplementationOnce(
+      async (options) => {
+        const snapshot = await query(options);
+        entered.resolve();
+        await release.promise;
+        return snapshot;
+      },
+    );
+    const execute = vi.fn(async (job, control) => {
+      await control.beforeCommit({
+        backgroundTurnId: "turn",
+        backgroundExecutionId: "execution",
+      });
+      await store.withTransaction((tx) => control.completeInTx(tx, {}));
+    });
+    const worker = start({ execute });
+    await vi.advanceTimersByTimeAsync(1);
+    await entered.promise;
+    await seed("queued", "new-job");
+    worker.wake(SESSION_ID);
+    release.resolve();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(execute).toHaveBeenCalledOnce();
+    await expect(getRuntimeJob(store, key("new-job"))).resolves.toMatchObject({
+      status: "succeeded",
+    });
+  });
+
+  it("reconciles terminals committed while a shared snapshot is delayed beyond the overlap window", async () => {
+    await seed("running");
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    releaseGates.push(() => release.resolve());
+    const query = store.queryPluginData.bind(store);
+    vi.spyOn(store, "queryPluginData").mockImplementationOnce(
+      async (options) => {
+        const snapshot = await query(options);
+        entered.resolve();
+        await release.promise;
+        return snapshot;
+      },
+    );
+    start();
+    await vi.advanceTimersByTimeAsync(1);
+    await entered.promise;
+    // Another worker persisted a terminal row but crashed before its event projection.
+    await transitionRuntimeJob(store, {
+      ...key(),
+      from: ["running"],
+      to: "failed",
+      ownerId: "dead-owner",
+    });
+    await vi.advanceTimersByTimeAsync(6_000);
+    release.resolve();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(
+      await store.listJobStatus(SESSION_ID, { jobId: "dead-job" }),
+    ).toEqual([]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(
+      (await store.listJobStatus(SESSION_ID, { jobId: "dead-job" })).at(-1),
+    ).toMatchObject({ state: "failed", data: { durableStatus: "failed" } });
   });
 
   it("keeps an acquired recovery lock owned until close drains its callback", async () => {
@@ -288,7 +357,7 @@ describe.each([
   it("retries a failed scan with sanitized diagnostics", async () => {
     await seed();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(store, "listPluginDataByNamespace").mockRejectedValueOnce(
+    vi.spyOn(store, "queryPluginData").mockRejectedValueOnce(
       new Error("synthetic-secret-in-store-error"),
     );
     start();

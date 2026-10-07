@@ -36,11 +36,11 @@ import {
   buildCurrentTurnUserMessage,
   buildExecutionStoryCue,
   buildFrameworkPreamble,
-  type FrameworkCompletion,
   buildInjectBlocks,
   buildInjectBlocksAsync,
   escapeXmlContent,
   interpolateTemplate,
+  resolveFrameworkCompletion,
 } from "./prompt-internals.js";
 import { serializeSystemPrompt } from "./prompt-serialization.js";
 import {
@@ -63,6 +63,7 @@ import type { InputSlot, InputSource } from "@covel/shared";
 import type {
   AssembledContext,
   ContextBuildParams,
+  FrameworkCompletionContract,
   LLMMessage,
 } from "./types.js";
 
@@ -120,9 +121,9 @@ interface PromptSegments {
  */
 function defaultFrameworkPreamble(
   locale: string | undefined,
-  completion: FrameworkCompletion,
+  completion: FrameworkCompletionContract,
 ): string {
-  return buildFrameworkPreamble(locale, { completion });
+  return buildFrameworkPreamble(locale, completion);
 }
 
 /**
@@ -288,18 +289,14 @@ function buildPromptSegmentsCommon(
     .filter(Boolean)
     .join("\n");
 
-  // The completion instruction must match how the runtime finishes. A story
-  // runtime finishes with its text and a schema-declared runtime with its
-  // JSON envelope; neither is given `runtime-done`.
+  // The completion instruction must match how the runtime finishes. The loop
+  // decides which tools the runtime is offered from the same answer, so a
+  // runtime is told to call `runtime-done` only when it is given that tool.
   const frameworkPreamble =
     params.frameworkPreamble ??
     defaultFrameworkPreamble(
       params.turnInput.locale,
-      params.manifest.outputKind === "story"
-        ? "story"
-        : params.manifest.output?.schema
-          ? "structured-output"
-          : "runtime-done",
+      resolveFrameworkCompletion(params.manifest),
     );
 
   const extensionSegments = selectPromptSegments(
@@ -340,10 +337,21 @@ function buildPromptSegmentsCommon(
   const turnSegments = systemSegments.filter(
     (segment) => segment.volatility === "turn",
   );
+  const lore =
+    params.manifest.outputKind === "story"
+      ? params.sessionContext?.world.lore
+      : undefined;
+  const worldLore = lore?.trim()
+    ? `<world-lore>\n${lore.slice(0, 8000)}${lore.length > 8000 ? "…" : ""}\n</world-lore>`
+    : "";
   return {
-    stableExtensions: systemSegments
-      .filter((segment) => segment.volatility !== "turn")
-      .map((segment) => segment.content)
+    stableExtensions: [
+      worldLore,
+      ...systemSegments
+        .filter((segment) => segment.volatility !== "turn")
+        .map((segment) => segment.content),
+    ]
+      .filter(Boolean)
       .join("\n\n"),
     turnExtensions: turnSegments
       .filter((segment) => segment.position === "pre-history")

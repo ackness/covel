@@ -4,6 +4,7 @@
  */
 import assert from "node:assert/strict";
 import {
+  appUrlOnPort,
   isSameStartupSplashDocument,
   isSameTrustedOrigin,
   loopbackHttpOrigin,
@@ -44,6 +45,25 @@ assert.equal(isSameTrustedOrigin("data:text/html,splash", app), false);
 assert.equal(isSameTrustedOrigin(undefined, app), false);
 
 const splash = "data:text/html;charset=utf-8,%3Ch1%3ECovel%3C%2Fh1%3E";
+
+// appUrlOnPort: a restarted sidecar keeps the page the window shows; only the
+// port changes. Pages that are not the app open the start page.
+assert.equal(
+  appUrlOnPort("http://127.0.0.1:3001/session?sid=s-1&panel=plugins", 4002),
+  "http://127.0.0.1:4002/session?sid=s-1&panel=plugins",
+);
+assert.equal(
+  appUrlOnPort("http://127.0.0.1:3001/debug?sid=s-1#turn-3", 3001),
+  "http://127.0.0.1:3001/debug?sid=s-1#turn-3",
+);
+assert.equal(appUrlOnPort(splash, 4002), "http://127.0.0.1:4002/session");
+assert.equal(appUrlOnPort("", 4002), "http://127.0.0.1:4002/session");
+assert.equal(appUrlOnPort(undefined, 4002), "http://127.0.0.1:4002/session");
+// Only the path is taken from the current page, never its host.
+assert.equal(
+  appUrlOnPort("https://attacker.example/session?sid=s-1", 4002),
+  "http://127.0.0.1:4002/session",
+);
 assert.equal(isSameStartupSplashDocument(splash, splash), true);
 assert.equal(
   isSameStartupSplashDocument(splash, `${splash}%3Cscript%3E`),

@@ -10,7 +10,8 @@ import {
 } from "./game-state.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
-import type { SessionDispatch } from "./types.js";
+import type { SessionDispatch, SessionState } from "./types.js";
+import { canRunSessionAction } from "./selectors.js";
 import {
   finalizeActionExecution,
   reportWorkspaceSyncError,
@@ -21,6 +22,7 @@ interface SubmissionDependencies {
   dispatch: SessionDispatch;
   workspace: Pick<SessionWorkspace, "run">;
   sessionIdRef: MutableRef<string | null>;
+  stateRef: MutableRef<SessionState>;
   submitBlock: SessionActions["submitBlock"];
   runSingleAction: (
     content: string,
@@ -40,7 +42,7 @@ export async function submitInteractionBlock(
     submission;
   const { dispatch, sessionIdRef, inFlight } = deps;
   const sid = sessionIdRef.current;
-  if (!sid) return;
+  if (!sid || !canRunSessionAction(deps.stateRef.current)) return;
   const key = `${sid}:${blockId}`;
   if (inFlight.has(key)) return;
   inFlight.add(key);

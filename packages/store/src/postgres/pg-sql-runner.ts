@@ -160,5 +160,10 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
       const stmt = getDb().delete(table as PgTable);
       await (where ? stmt.where(where) : stmt);
     },
+
+    // The bigserial default allocates atomically across connections. MAX+1 in
+    // an INSERT subquery gives simultaneous writers the same snapshot value.
+    nextWriteOrderSeq: () => undefined,
+    byteOrder: (column) => sql`${column} collate "C"`,
   };
 }

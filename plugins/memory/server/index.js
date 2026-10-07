@@ -1,4 +1,4 @@
-import { resolveI18nText } from "@covel/shared";
+import { resolveI18nText } from "@covel/plugin-handlers-utils";
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./blocks.js";
 const escapeXml = (text) =>
   String(text)

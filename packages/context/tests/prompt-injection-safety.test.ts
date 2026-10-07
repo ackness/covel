@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContextBuildParams } from "@covel/context";
+import { interpolateTemplate } from "@covel/context";
 import { buildSegmentedContext } from "../src/prompt-assembler.js";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 
@@ -64,6 +65,51 @@ function baselineParams(
 }
 
 describe("prompt injection safety", () => {
+  it.each(["constructor", "toString", "__proto__"])(
+    "isolates runtime outputs for prototype-named plugin %s across builds",
+    (pluginId) => {
+      const runtimeId = "auditOutput";
+      const inherited = ({} as Record<string, unknown>)[pluginId] as object;
+      const previous = Object.getOwnPropertyDescriptor(inherited, runtimeId);
+      try {
+        const params = baselineParams({
+          promptTemplate: `{{ inputs.${pluginId}.${runtimeId}.value }}`,
+          completedResults: new Map([
+            [
+              `${pluginId}/${runtimeId}`,
+              makeRuntimeResult({ output: { value: "local-only" } }),
+            ],
+          ]),
+        });
+        const context = buildSegmentedContext(params);
+        expect(context.systemPrompt).toContain("local-only");
+        expect(Object.getOwnPropertyDescriptor(inherited, runtimeId)).toEqual(
+          previous,
+        );
+        expect(
+          buildSegmentedContext({ ...params, completedResults: new Map() })
+            .systemPrompt,
+        ).not.toContain("local-only");
+      } finally {
+        if (previous) Object.defineProperty(inherited, runtimeId, previous);
+        else Reflect.deleteProperty(inherited, runtimeId);
+      }
+    },
+  );
+
+  it("reads explicitly owned constructor keys but does not resolve inherited template values", () => {
+    expect(
+      interpolateTemplate("{{ data.value }}", {
+        data: Object.create({ value: "inherited" }),
+      }),
+    ).toBe("");
+    expect(
+      interpolateTemplate("{{ data.constructor.value }}", {
+        data: { constructor: { value: "owned" } },
+      }),
+    ).toBe("owned");
+  });
+
   it("does NOT re-interpolate {{ }} sequences inside injected upstream data", () => {
     // The upstream runtime's output carries a literal template token. A single
     // interpolation pass (over PLUGIN.md only) must leave it untouched; a second

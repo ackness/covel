@@ -1,4 +1,4 @@
-import { isDefaultLocale, resolveI18nText } from "@covel/shared";
+import { isDefaultLocale, resolveI18nText } from "@covel/plugin-handlers-utils";
 import { loadDefinitions } from "./definitions.js";
 import {
   buildSystemPrompt,

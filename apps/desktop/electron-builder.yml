@@ -39,7 +39,7 @@ extraResources:
       - "**/*"
       - "!**/*.map"
       - "!**/*.d.ts"
-  # Server 源码 + pnpm deploy 产出的扁平 node_modules。
+  # Precompiled server/workspace modules + flat pnpm deploy dependencies.
   # 注意：electron-builder 的 extraResources 把 node_modules 单独列出才会
   # 完整复制（见 electron-builder #867、#6289），放进包含 node_modules
   # 的父目录时内部 fileMatcher 会按 "不打包源码的 deps" 规则跳过它。
@@ -70,8 +70,8 @@ extraResources:
 
 asar: true
 asarUnpack:
-  # tsx and its loader must be unpacked because they are spawned as a
-  # child process that reads source files directly from disk.
+  # Keep the plugin TypeScript loader available to the sidecar on disk.
+  # The server and workspace modules are precompiled during staging.
   - "**/node_modules/tsx/**"
   - "**/node_modules/esbuild/**"
   - "**/node_modules/@esbuild/**"

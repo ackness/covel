@@ -185,8 +185,8 @@ describe("session plugin contract resolution", () => {
     const plan = resolveSessionPlugins({
       requested: ["b", "a"],
       plugins: [
-        p("a", { extensions: [{ point: "history.compact@1", id: "compact" }] }),
-        p("b", { extensions: [{ point: "history.compact@1", id: "compact" }] }),
+        p("a", { extensions: [{ point: "history.compact@2", id: "compact" }] }),
+        p("b", { extensions: [{ point: "history.compact@2", id: "compact" }] }),
       ],
     });
     expect(plan.active).toEqual(["b"]);

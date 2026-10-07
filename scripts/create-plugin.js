@@ -422,7 +422,7 @@ const NOTES_NAMESPACE = 'notes';
 
 /** @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler} */
 export default async function ${camelize(runtimeName)}Handler(ctx) {
-  const { pluginData, logger, manualPayload, turnId } = ctx;
+  const { pluginData, logger, manualPayload, turnId, random } = ctx;
 
   if (!pluginData || typeof pluginData.set !== 'function') {
     return {
@@ -436,7 +436,11 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
       ? manualPayload.title.trim()
       : '${runtimeName} checkpoint';
   const now = new Date().toISOString();
-  const key = \`${runtimeName}-\${Date.now().toString(36)}\`;
+  if (!random) throw new Error('The host must provide ctx.random');
+  let key;
+  do {
+    key = \`${runtimeName}-\${random.int(0, 0x100000000).toString(36)}\`;
+  } while (await pluginData.get(NOTES_NAMESPACE, key));
   const note = {
     kind: 'function',
     title,
@@ -458,8 +462,8 @@ function renderAgentStubManifest(runtimeName) {
 type: agent
 description: ${runtimeName} agent runtime, replace with the real responsibility.
 schedule:
-  trigger: { type: manual }
-  manual: { execution: sync }
+  stage: post-turn
+  trigger: { type: auto }
 io:
   inputs:
     narrator-output:
@@ -510,8 +514,8 @@ Call \`plugin-data-set\` with:
 | Param       | Value |
 | ----------- | ----- |
 | \`namespace\` | \`notes\` |
-| \`key\`       | \`${runtimeName}-\` plus a short timestamp or stable short ID |
-| \`value\`     | \`{ "kind": "analysis", "title": "<short title>", "text": "<one or two actionable sentences>", "tags": ["<1-3 tags>"], "createdAt": "<ISO 8601 timestamp>" }\` |
+| \`key\`       | \`${runtimeName}-\` plus a stable short fact key |
+| \`value\`     | \`{ "kind": "analysis", "title": "<short title>", "text": "<one or two actionable sentences>", "tags": ["<1-3 tags>"] }\` |
 
 Keep the note short and concrete. Do not emit explanatory prose.
 `;
@@ -578,7 +582,6 @@ function renderCustomRuntimeCases(runtimes) {
                   title: `${rt.name} test note`,
                   text: "The player promised the gatekeeper to return before dawn.",
                   tags: ["test"],
-                  createdAt: "2026-05-17T00:00:00.000Z",
                 },
               }),
             },

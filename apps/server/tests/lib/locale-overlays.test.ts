@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readWorldDataSource } from "../../src/world-data/source-reader.js";
@@ -74,6 +74,73 @@ describe("locale overlays of world files", () => {
       { id: "lantern", name: "提灯", quantity: 1 },
       { id: "rope", name: "麻绳", quantity: 2 },
     ]);
+  });
+
+  it("keeps nested translations attached to declared identities after insertion", async () => {
+    const root = await world({
+      "data/items.yaml": `id: world
+blocks:
+  - { label: new, displayName: 新块 }
+  - { label: clues, displayName: 线索 }
+  - { label: debts, displayName: 人情 }
+`,
+      "data/items.en.yaml": `blocks:
+  - { label: debts, displayName: Debts }
+  - { label: clues, displayName: Clues }
+`,
+    });
+    const items = source(root, "data/items.yaml");
+    const read = await readWorldDataSource(
+      {
+        ...items,
+        descriptor: { ...items.descriptor, localeArrayKeys: ["label"] },
+      },
+      "en-US",
+    );
+    expect(read.diagnostics).toEqual([]);
+    expect(read.value).toEqual({
+      id: "world",
+      blocks: [
+        { label: "new", displayName: "新块" },
+        { label: "clues", displayName: "Clues" },
+        { label: "debts", displayName: "Debts" },
+      ],
+    });
+  });
+
+  it("uses regenerated portrait refs for an English Mistport session", async () => {
+    const bundled = path.resolve(
+      import.meta.dirname,
+      "../../../../worlds/mistport/media",
+    );
+    const original = JSON.parse(
+      await readFile(path.join(bundled, "presence.json"), "utf8"),
+    );
+    const portrait = original[0];
+    portrait.avatar.id = "b".repeat(64);
+    portrait.sprite.id = "b".repeat(64);
+    const root = await world({
+      "media/presence.json": JSON.stringify(original),
+      "media/presence.en.json": await readFile(
+        path.join(bundled, "presence.en.json"),
+        "utf8",
+      ),
+    });
+    const input = source(root, "media/presence.json");
+    const read = await readWorldDataSource(
+      {
+        ...input,
+        descriptor: { ...input.descriptor, kind: "json", key: "characterId" },
+      },
+      "en-US",
+    );
+    expect(read.diagnostics).toEqual([]);
+    expect((read.value as typeof original)[0]).toMatchObject({
+      characterId: portrait.characterId,
+      displayName: "Lin Yuanzhou",
+      avatar: { id: "b".repeat(64) },
+      sprite: { id: "b".repeat(64) },
+    });
   });
 
   it("warns about an overlay entry it cannot place and keeps the main text", async () => {

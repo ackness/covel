@@ -1260,6 +1260,58 @@ describe("thinking stream activity", () => {
 describe("provider failure terminals", () => {
   const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 1 });
 
+  it("rejects a truncated response without retrying or releasing tool calls", async () => {
+    const llm = createScriptedLLM([
+      {
+        kind: "ok",
+        response: {
+          ...okResponse("unfinished"),
+          finishReason: "length",
+          toolCalls: [{ id: "call", name: "write", arguments: '{"value":' }],
+        },
+      },
+    ]);
+    await expect(
+      callLLMWithRetry({
+        llm,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+      }),
+    ).rejects.toThrow(/output limit/i);
+    expect(llm.calls).toHaveLength(1);
+  });
+
+  it.each(["length", "max_tokens", "MAX_TOKENS"])(
+    "rejects truncated streams (%s) without a non-streaming fallback",
+    async (finishReason) => {
+      const llm = createScriptedStreamLLM([
+        {
+          events: [
+            {
+              type: "tool-call",
+              id: "call",
+              name: "write",
+              arguments: '{"value":',
+            },
+            { type: "done", finishReason },
+          ],
+        },
+      ]);
+      const generate = vi.spyOn(llm, "generate");
+      await expect(
+        streamLLMWithRetry({
+          llm,
+          messages: [],
+          policy,
+          deadline: Date.now() + 10_000,
+        }),
+      ).rejects.toThrow(/output limit/i);
+      expect(llm.attempts).toBe(1);
+      expect(generate).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects non-streaming error responses before success telemetry", async () => {
     const llm = createScriptedLLM([
       {

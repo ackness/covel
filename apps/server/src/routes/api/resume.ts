@@ -2,13 +2,13 @@ import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
   requestJobServices,
+  announceDeferredRuntimeJobs,
   withSettledExecutionLock,
 } from "./plugin-rpc/settled-request.js";
 import {
   enqueueDeferredRuntimeJobs,
   type QueuedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import { publishRuntimeJobStatusEvent } from "./plugin-rpc/runtime-job-worker.js";
 /**
  * Resume route — resumes a suspended runtime.
  *
@@ -38,10 +38,7 @@ import { publishRuntimeJobStatusEvent } from "./plugin-rpc/runtime-job-worker.js
 import { Hono } from "hono";
 import { trackRequestWork } from "../../application-work.js";
 import { z } from "zod";
-// Ajv 8 ships as CJS with both `module.exports = Ajv` and `exports.default = Ajv`.
-// Under NodeNext + esModuleInterop, TS sees the default-import as the module's
-// namespace rather than the class constructor. The named export works cleanly.
-import { Ajv, type ErrorObject } from "ajv";
+import { validateResumeData } from "../../lib/resume-schema.js";
 import type { DataStore, StoreTransaction } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
@@ -60,17 +57,18 @@ import {
 import type { EventBus } from "@covel/events";
 import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
-  checkSessionOwner,
   resolveSessionParam,
   SESSION_DELETION_PENDING_KEY,
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
-import { withLockedSessionMutation } from "./session/locked-mutation.js";
+import {
+  readLockedSession,
+  withLockedSessionMutation,
+} from "./session/locked-mutation.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
 import {
   decodePluginUserSettingsHeader,
-  mergePluginUserSettings,
-  readWorldPluginSettings,
+  loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
 import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
 import { buildSessionHookScope } from "./session/hook-scope.js";
@@ -95,55 +93,6 @@ type Env = {
 };
 
 export const resumeRoutes = new Hono<Env>();
-
-// ── JSON Schema validator (Ajv, audit 2026-04-20 finding 5) ──────
-//
-// Previous hand-rolled validator handled type + top-level required + shallow
-// property type-checks only. It silently accepted enum violations, nested
-// objects, min/max, minLength/maxLength, pattern, array items, oneOf/anyOf.
-// Plugins that declare a rich resumeSchema expected full JSON Schema
-// semantics, so we now compile with Ajv.
-//
-// Compiled validators are cached per-suspension via their schema's structural
-// key to avoid compile cost on retries. Strict mode is off so plugins can use
-// convenience keywords like `minimum` on string-coerced numeric inputs.
-const ajv = new Ajv({ allErrors: false, strict: false });
-const compiledCache = new WeakMap<object, ReturnType<typeof ajv.compile>>();
-
-function validateAgainstJsonSchema(
-  data: unknown,
-  schema: unknown,
-): string | null {
-  if (!schema || typeof schema !== "object") return null; // no schema = no validation
-
-  const schemaObj = schema as object;
-  let validate = compiledCache.get(schemaObj);
-  if (!validate) {
-    try {
-      validate = ajv.compile(schemaObj as Record<string, unknown>);
-      compiledCache.set(schemaObj, validate);
-    } catch (err) {
-      // Bad schema — log a warning and skip validation (fail open is safer
-      // than blocking resume on malformed plugin metadata, but the plugin
-      // author should fix this).
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[resume] resumeSchema failed to compile:",
-        err instanceof Error ? err.message : String(err),
-      );
-      return null;
-    }
-  }
-
-  if (validate(data)) return null;
-
-  const errors = validate.errors ?? [];
-  return errors
-    .map(
-      (e: ErrorObject) => `${e.instancePath || "$"} ${e.message ?? "invalid"}`,
-    )
-    .join("; ");
-}
 
 // ── Route ────────────────────────────────────────────────────────
 
@@ -192,10 +141,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   }
 
   // Validate resume data against stored resumeSchema (Ajv — finding 5)
-  const validationError = validateAgainstJsonSchema(
-    data,
-    suspension.resumeSchema,
-  );
+  const validationError = validateResumeData(data, suspension.resumeSchema);
   if (validationError !== null) {
     return c.json(
       errorBody(`Resume data validation failed: ${validationError}`),
@@ -263,45 +209,14 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
       c.get("requestWork")?.signal.throwIfAborted();
       // Active gate under the lock — a paused/ended session must
       // not accept a resume (it would commit state and write history).
-      const liveSession = await store.getSession(sessionId);
-      if (!liveSession) {
-        return c.json(
-          errorBody(`Session not found: ${sessionId}`, {
-            code: "session_not_found",
-          }),
-          404,
-        );
-      }
-      const ownerDenied = checkSessionOwner(c, liveSession);
-      if (ownerDenied) return ownerDenied;
-      if (
-        sessionIncarnationIdentity(liveSession) !==
-        sessionIncarnationIdentity(guard.session)
-      ) {
-        return c.json(
-          errorBody("Session was replaced while resume was waiting", {
-            code: "session_incarnation_changed",
-          }),
-          409,
-        );
-      }
-      if (liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]) {
-        return c.json(
-          errorBody("Session deletion is in progress; retry DELETE", {
-            code: "session_deleting",
-          }),
-          409,
-        );
-      }
-      if (liveSession.status !== "active") {
-        return c.json(
-          errorBody(
-            `session is ${liveSession.status}; it must be active to resume`,
-            { code: "session_not_active" },
-          ),
-          409,
-        );
-      }
+      const liveSession = await readLockedSession({
+        c,
+        store,
+        sessionId,
+        expectedSession: guard.session,
+        allowedStatuses: ["active"],
+      });
+      if (liveSession instanceof Response) return liveSession;
 
       const liveSuspension = await store.getSuspension(suspensionId);
       if (!liveSuspension || liveSuspension.sessionId !== sessionId) {
@@ -310,7 +225,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
       if (liveSuspension.resolvedAt) {
         return c.json(errorBody("Suspension already resolved"), 409);
       }
-      const liveValidationError = validateAgainstJsonSchema(
+      const liveValidationError = validateResumeData(
         data,
         liveSuspension.resumeSchema,
       );
@@ -339,12 +254,10 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           404,
         );
       }
-      const world = liveSession.worldId
-        ? await store.getWorld(liveSession.worldId)
-        : null;
       const userSettings = snapshotUserSettings(
-        mergePluginUserSettings(
-          readWorldPluginSettings(world?.metadata),
+        await loadSessionPluginUserSettings(
+          store,
+          liveSession,
           decodedUserSettings.settings,
         ),
       );
@@ -467,26 +380,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           );
         }
         const events = outcome.events;
-        for (const queued of queuedRuntimeJobs) {
-          if (eventBus) publishRuntimeJobStatusEvent(eventBus, queued.status);
-          eventBus?.emit({
-            id: crypto.randomUUID(),
-            type: "event",
-            topic: "runtime",
-            sessionId,
-            timestamp: new Date().toISOString(),
-            payload: {
-              runtimeId: queued.job.runtimeId,
-              pluginId: queued.job.pluginId,
-              jobId: queued.job.jobId,
-              sourceTurnId: queued.job.origin.sourceTurnId,
-              _subTopic: "runtime",
-              _subType: "runtime.deferred",
-            },
-          });
-        }
-        if (queuedRuntimeJobs.length > 0)
-          c.get("runtimeJobWorker")?.wake(sessionId);
+        await announceDeferredRuntimeJobs(c, queuedRuntimeJobs);
 
         return c.json({ result, events });
       });

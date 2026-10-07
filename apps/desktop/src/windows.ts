@@ -18,6 +18,7 @@ import { buildSplashHtml } from "./splash-screen.js";
 import { writeLog } from "./logging.js";
 import { t } from "./main-i18n.js";
 import {
+  appUrlOnPort,
   isSameStartupSplashDocument,
   isSameTrustedOrigin,
 } from "./trusted-origin.js";
@@ -350,8 +351,14 @@ export function loadSplashInto(win: BrowserWindow): void {
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 
+/**
+ * Point the window at the sidecar on `port`, keeping the page it shows now
+ * (see {@link appUrlOnPort}). Loading the address the window is already on
+ * reloads it, which is what a sidecar restarted on its old port needs.
+ */
 export function navigateToApp(win: BrowserWindow, port: number): void {
-  const url = `http://127.0.0.1:${port}/session`;
-  writeLog("info", `Loading ${url}`);
+  const url = appUrlOnPort(win.webContents.getURL(), port);
+  // The query can carry a session id; the log keeps to the page.
+  writeLog("info", `Loading ${url.split("?")[0]}`);
   win.loadURL(url);
 }

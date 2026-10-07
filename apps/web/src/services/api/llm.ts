@@ -23,6 +23,8 @@ export type ModelFeature =
 
 export interface ModelPricing {
   inputPerMToken?: number;
+  cacheReadPerMToken?: number;
+  cacheWritePerMToken?: number;
   outputPerMToken?: number;
   imageInputPerMToken?: number;
   audioInputPerMToken?: number;
@@ -42,6 +44,8 @@ export interface ModelCapabilityInfo {
    * by `GET /api/model-db/lookup`.
    */
   inputPerMToken?: number;
+  cacheReadPerMToken?: number;
+  cacheWritePerMToken?: number;
   outputPerMToken?: number;
 }
 

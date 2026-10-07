@@ -1,6 +1,7 @@
 import type { LorebookOwner } from "@covel/shared";
 import { lorebookOwnerKey } from "../common/lorebook-owner.js";
 import { lorebookEntryKey } from "../common/keys.js";
+import { compareByteOrder } from "../common/pagination.js";
 import type {
   LorebookEntryRecord,
   WorldDataImportLedgerRecord,
@@ -40,7 +41,7 @@ export function createWorldDataImportLedgerMethods(
         .sort((a, b) => {
           const timeDiff = a.importedAt.localeCompare(b.importedAt);
           if (timeDiff !== 0) return timeDiff;
-          return a.id.localeCompare(b.id);
+          return compareByteOrder(a.id, b.id);
         });
     },
 
@@ -79,9 +80,10 @@ export function createLorebookMethods(state: MemoryState): MemoryStoreMethods {
         if (a.insertionOrder !== b.insertionOrder) {
           return a.insertionOrder - b.insertionOrder;
         }
+        // Byte by byte, as the SQL backends order the two columns.
         return (
-          a.id.localeCompare(b.id) ||
-          lorebookOwnerKey(a.owner).localeCompare(lorebookOwnerKey(b.owner))
+          compareByteOrder(a.id, b.id) ||
+          compareByteOrder(lorebookOwnerKey(a.owner), lorebookOwnerKey(b.owner))
         );
       });
       return out;

@@ -27,6 +27,18 @@ afterEach(() => {
 });
 
 describe("core request DNS SSRF safety", () => {
+  it.each(["2001:2::1", "2001:100::1", "2002:a00:1::1", "3fff::1"])(
+    "rejects special IPv6 DNS answer %s on hosted and plugin paths",
+    async (address) => {
+      vi.stubEnv("DEPLOYMENT_TIER", "demo");
+      lookupMock.mockResolvedValue([{ address, family: 6 }] as never);
+      for (const trusted of [false, true]) {
+        await expect(
+          createPinnedDispatcher(new URL("https://special.example"), trusted),
+        ).rejects.toThrow("disallowed address");
+      }
+    },
+  );
   // Hosted tiers keep the strict public-only policy on the core provider path.
   it("rejects a POST to a hostname resolving to a private IP (hosted tier)", async () => {
     vi.stubEnv("DEPLOYMENT_TIER", "demo");

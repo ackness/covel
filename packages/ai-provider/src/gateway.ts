@@ -1,8 +1,12 @@
+import { withTextRequestDefaults } from "./adapters/request-defaults.js";
+import { objectResponseFormat } from "./adapters/structured-output.js";
 import {
   assertLlmRequestBudget,
   createLlmRequestScope,
   iterateLlmRequest,
   noteLlmRequestProgress,
+  estimateTokens,
+  resolveLlmTokenLimits,
   type LLMResponseFormat,
   type LLMRequestDefaults,
   type LLMProviderWarning,
@@ -245,6 +249,7 @@ export function createGateway(deps: GatewayDependencies) {
     options?: GatewayOptions,
   ) {
     let metadataTarget: string | undefined;
+    let initialTarget: ResolvedTarget | undefined;
     return runOperation(
       {
         presetId: input.presetId,
@@ -260,6 +265,7 @@ export function createGateway(deps: GatewayDependencies) {
             input,
             options,
             metadataTarget,
+            (initialTarget ??= target),
           );
           const result = await resolved.adapter.generateText(
             configWithSignal(resolved.config, options, {
@@ -303,6 +309,7 @@ export function createGateway(deps: GatewayDependencies) {
     options?: GatewayOptions,
   ) {
     let metadataTarget: string | undefined;
+    let initialTarget: ResolvedTarget | undefined;
     return runOperation(
       {
         presetId: input.presetId,
@@ -320,6 +327,7 @@ export function createGateway(deps: GatewayDependencies) {
             input,
             options,
             metadataTarget,
+            (initialTarget ??= target),
           );
           const result = await resolved.adapter.generateObject(
             configWithSignal(resolved.config, options, {
@@ -419,6 +427,7 @@ export function createGateway(deps: GatewayDependencies) {
     );
     let lastError: AiProviderError | null = null;
     let metadataTarget: string | undefined;
+    let initialTarget: ResolvedTarget | undefined;
 
     for (const [index, target] of targets.entries()) {
       const { provider, resolved } = prepareTarget(
@@ -444,6 +453,7 @@ export function createGateway(deps: GatewayDependencies) {
           input,
           options,
           metadataTarget,
+          (initialTarget ??= target),
         );
         notifyTargetAttempt(options?.onTargetAttempt, target);
         await notifyStart(
@@ -1000,11 +1010,17 @@ export function createGateway(deps: GatewayDependencies) {
     resolved: ProviderResolution,
     input: {
       presetId?: string;
+      messages: TextMessage[];
+      tools?: ToolDefinition[];
+      schema?: ZodType;
+      defaults?: LLMRequestDefaults;
+      responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
       providerOptions?: ProviderOptions;
     },
     options: GatewayOptions | undefined,
     metadataTarget: string,
+    initialTarget: ResolvedTarget,
   ): { metadata: Record<string, unknown>; warnings: LLMProviderWarning[] } {
     const provider = targetProvider(target);
     const presetOptions = resolveProviderOptions(
@@ -1036,7 +1052,7 @@ export function createGateway(deps: GatewayDependencies) {
             "Unscoped provider metadata was omitted after fallback changed the provider, protocol or endpoint. Use providerOptions to configure each target.",
         });
     }
-    const metadata =
+    let metadata =
       withPresetMetadata(
         target,
         { ...callMetadata, ...callOptions.metadata },
@@ -1050,6 +1066,61 @@ export function createGateway(deps: GatewayDependencies) {
     warnings.push(
       ...validateParameterMetadata(metadata, provider, resolved.protocol),
     );
+    if (initialTarget !== target) {
+      const parameters = metadata.parameterOverrides as
+        { maxOutputTokens?: number } | undefined;
+      const limits = resolveLlmTokenLimits({
+        ...target.preset?.capability,
+        contextWindow:
+          target.preset?.capability?.contextWindow ??
+          target.profile.contextWindow,
+        requestedMaxOutputTokens: parameters?.maxOutputTokens,
+      });
+      const inputTokens = estimateTokens(
+        JSON.stringify({
+          messages: input.messages,
+          tools: input.tools,
+          responseFormat:
+            input.responseFormat ??
+            (input.schema
+              ? objectResponseFormat(input.schema, provider)
+              : undefined),
+        }),
+      );
+      if (inputTokens + limits.maxOutputTokens > limits.contextWindow) {
+        throw new AiProviderError({
+          code: "PROVIDER_ERROR",
+          provider,
+          model: targetModel(target),
+          retriable: false,
+          message: `Fallback model ${targetModel(target)} cannot fit the request: estimated ${inputTokens} input tokens plus ${limits.maxOutputTokens} output tokens exceed its ${limits.contextWindow} context window.`,
+          details: {
+            inputTokens,
+            contextWindow: limits.contextWindow,
+            maxOutputTokens: limits.maxOutputTokens,
+          },
+        });
+      }
+    }
+    if (resolved.usesBuiltinAdapter && input.defaults) {
+      metadata =
+        withTextRequestDefaults(
+          {
+            model: targetModel(target),
+            messages: input.messages,
+            defaults: input.defaults,
+            providerRequestMetadata: metadata,
+          },
+          textContext(target, resolved, "text"),
+          resolved.protocol,
+          (message) =>
+            warnings.push({
+              type: "compatibility",
+              feature: "reasoningEffort",
+              message,
+            }),
+        ).providerRequestMetadata ?? metadata;
+    }
     const reasoningEffort = readReasoningEffort(metadata);
     if (
       resolved.usesBuiltinAdapter &&

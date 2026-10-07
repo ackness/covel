@@ -1,3 +1,4 @@
+import type { MutableRef } from "./runtime-refs.js";
 import i18n from "i18next";
 import * as api from "@/services/api";
 import { worldPlayLocale } from "@/lib/world-locale.js";
@@ -10,10 +11,6 @@ import {
 import { refreshSessionResource } from "./session-resource-reads.js";
 import { hydratePluginDataForUiSpecs } from "./plugin-data-hydration.js";
 import type { SessionDispatch } from "./types.js";
-
-interface MutableRef<T> {
-  current: T;
-}
 
 interface StartGameOptions {
   ds: DataService;

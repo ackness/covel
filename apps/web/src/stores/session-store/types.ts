@@ -196,7 +196,8 @@ export interface SessionState {
   hasGameStateSnapshot: boolean;
 
   /** Plugin data keyed by pluginId -> namespace -> key -> value. Updated via plugin-data.changed events. */
-  pluginData: Record<string, Record<string, Record<string, unknown>>>;
+  /** Snapshot inputs needed to synthesize historical message cards. Live namespaces live in plugin-data-store. */
+  pluginMessageData: Record<string, Record<string, unknown>>;
 
   /**
    * Message-slot UI specs loaded from /api/ui-specs. Each entry contributes
@@ -292,11 +293,10 @@ export type SessionAction =
         data?: unknown;
       };
     }
-  | { type: "LOAD_MESSAGES"; messages: StreamMessage[] }
   | { type: "MERGE_RECOVERED_MESSAGES"; messages: StreamMessage[] }
   | {
       // 把更旧的一批消息合并到 messages 前部（按 id 去重、整体保持 createdAt 正序），
-      // 并把 olderMessagesCursor 更新为返回的 nextCursor。区别于 LOAD_MESSAGES（整体覆盖）。
+      // 并把 olderMessagesCursor 更新为返回的 nextCursor。保留现有消息。
       type: "PREPEND_MESSAGES";
       messages: StreamMessage[];
       cursor: PageCursor | null;
@@ -334,7 +334,6 @@ export type SessionAction =
   | {
       type: "REMOVE_MESSAGES_FROM_TURN";
       turnId: string;
-      keepRuntimeIds: ReadonlySet<string>;
     }
   | {
       type: "MERGE_COMMITTED_DIMENSIONS";

@@ -1,3 +1,4 @@
+import { COVEL_EVENT_META } from "@covel/shared";
 import {
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
   validateBrowserCheckpoint,
@@ -5,6 +6,10 @@ import {
   type PersistenceProfile,
 } from "./browser-sync.js";
 import type { DataStore, SessionRecord, StoreTransaction } from "../types.js";
+
+const DIAGNOSTIC_TRACE_TYPES = Object.keys(COVEL_EVENT_META).filter(
+  (type) => type.startsWith("llm.") || type.startsWith("hook."),
+);
 
 export interface ExportSessionCheckpointOptions {
   readonly profile?: PersistenceProfile;
@@ -64,7 +69,7 @@ export async function exportSessionCheckpoint(
     store.listRuntimeOutputs(sessionId),
     store.listInteractionRecords(sessionId),
     store.listEvents(sessionId),
-    store.listTraceEvents(sessionId),
+    store.queryTraceEvents(sessionId, { excludeTypes: DIAGNOSTIC_TRACE_TYPES }),
     store.listCharacters(sessionId),
     store.getCharacterSchema(sessionId),
     store.listPluginDataSessionScope(sessionId),
@@ -108,8 +113,15 @@ export async function exportSessionCheckpoint(
     toolCalls,
     runtimeOutputs,
     interactions,
-    events,
-    traceEvents,
+    // Diagnostics can contain whole model requests; copying them on every
+    // private action grows the upload quadratically with the conversation.
+    // Keep execution lifecycle records used by recovery, and leave detailed
+    // diagnostics in the server workspace that produced them.
+    events: events.filter((event) => event.topic !== "trace"),
+    traceEvents: traceEvents.filter(
+      (event) =>
+        !event.type.startsWith("llm.") && !event.type.startsWith("hook."),
+    ),
     characters,
     characterSchema,
     pluginData,

@@ -40,6 +40,7 @@ function harness(retrying = true) {
   const handler = createSseEventHandler(deps);
   return {
     getState: () => state,
+    dispatch: deps.dispatch,
     send: (type: string, payload: Record<string, unknown>) =>
       handler({
         type,
@@ -64,6 +65,28 @@ function harness(retrying = true) {
 }
 
 describe("SSE retry commit settlement", () => {
+  it.each(["player-aborted", "commit rejected"])(
+    "removes all uncommitted assistant output but retains player input: %s",
+    (abortReason) => {
+      const h = harness(false);
+      for (const [id, role, turnId] of [
+        ["old-story", "assistant", "previous"],
+        ["input", "user", "attempt"],
+        ["story", "assistant", "attempt"],
+        ["form", "assistant", "attempt"],
+      ] as const) {
+        h.dispatch({
+          type: "ADD_MESSAGE",
+          message: { id, role, turnId, content: id, timestamp: "2026-10-06" },
+        });
+      }
+      h.send("execution.completed", { committed: false, abortReason });
+      expect(h.getState().messages.map((message) => message.id)).toEqual([
+        "old-story",
+        "input",
+      ]);
+    },
+  );
   it("keeps the durable terminal when a batched action stream delivers an old queue and handoff", () => {
     const h = harness(false);
     const job = {

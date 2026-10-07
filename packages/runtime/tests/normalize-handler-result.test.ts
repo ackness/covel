@@ -41,6 +41,7 @@ describe("normalizeHandlerResult", () => {
   it.each([
     ["ui", [{ parts: [null] }], "effects.ui[0].parts[0]"],
     ["interactions", [null], "effects.interactions[0]"],
+    ["statePatches", [null], "effects.statePatches[0]"],
     ["notifications", [{ title: "ok" }, "text"], "effects.notifications[1]"],
   ])(
     "rejects a success envelope whose %s effect holds a non-object entry",

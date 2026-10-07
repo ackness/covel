@@ -1,3 +1,4 @@
+import type { MutableRef } from "./runtime-refs.js";
 import * as api from "@/services/api";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -11,10 +12,6 @@ import {
   publishSessionGameState,
 } from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
-
-interface MutableRef<T> {
-  current: T;
-}
 
 interface RestoreSessionOptions {
   ds: DataService;

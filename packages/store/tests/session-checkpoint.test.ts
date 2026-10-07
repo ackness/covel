@@ -12,10 +12,43 @@ import {
   makeLorebookEntry,
   makeSession,
   makeTurnMessage,
+  makeTraceEvent,
   makeWorld,
 } from "../src/contract/test-fixtures.js";
 
 describe("session checkpoint transfer", () => {
+  it("keeps recovery records without copying model diagnostics into a private checkpoint", async () => {
+    const store = createMemoryStore();
+    const session = makeSession();
+    await store.createSession(session);
+    const payload = {
+      request: { messages: [{ content: "x".repeat(1_000_000) }] },
+    };
+    await store.addTraceEvent(
+      makeTraceEvent({ sessionId: session.id, type: "llm.calling", payload }),
+    );
+    await store.saveEvent(
+      makeEvent({ sessionId: session.id, topic: "trace", payload }),
+    );
+    await store.addTraceEvent(
+      makeTraceEvent({
+        sessionId: session.id,
+        id: "recovery",
+        type: "turn.started",
+        payload: { recoveryAction: { type: "send_message" } },
+      }),
+    );
+    const checkpoint = await exportSessionCheckpoint(store, session.id, {
+      revision: 1,
+      actionId: "test",
+    });
+    expect(checkpoint.traceEvents.map((event) => event.id)).toEqual([
+      "recovery",
+    ]);
+    expect(checkpoint.events).toEqual([]);
+    expect(JSON.stringify(checkpoint).length).toBeLessThan(10_000);
+    expect(await store.listTraceEvents(session.id)).toHaveLength(2);
+  });
   it("exports and atomically restores durable session domains", async () => {
     const source = createMemoryStore();
     const target = createMemoryStore();

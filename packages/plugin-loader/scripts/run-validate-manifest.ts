@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { validatePluginFiles } from "../src/static-validation.js";
 /** Statically validate current-format packages; never execute plugin entries. */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -65,6 +67,11 @@ export async function runValidateManifest(
         ),
         pluginMdPaths,
       });
+      validatePluginFiles(
+        definition.packageManifest,
+        definition.manifests,
+        (file) => readFileSync(file, "utf8"),
+      );
       // The installer shows the version in package.json and the host uses the
       // one in PLUGIN.md. A package that states both must state one version.
       const declared = definition.packageManifest.plugin.version;

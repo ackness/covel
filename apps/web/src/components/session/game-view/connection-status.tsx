@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { Loader2, WifiOff } from "lucide-react";
-import { useConnectionState } from "@/stores/connection-store.js";
+import {
+  useConnectionState,
+  retryConnection,
+} from "@/stores/connection-store.js";
 
 /**
  * Non-blocking SSE connection indicator. Stays out of the way while the
@@ -34,6 +37,15 @@ export function ConnectionStatus() {
         <WifiOff className="h-3 w-3" />
       )}
       {label}
+      {!isConnecting && (
+        <button
+          type="button"
+          className="ml-1 underline"
+          onClick={retryConnection}
+        >
+          {t("common.retry")}
+        </button>
+      )}
     </span>
   );
 }

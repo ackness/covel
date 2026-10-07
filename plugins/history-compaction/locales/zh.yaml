@@ -4,4 +4,4 @@
 
 PLUGIN.md:
   displayName: 历史压缩
-  description: 把较早的对话整理成滚动摘要，让上下文保持在限定长度内。
+  description: 把较早的对话整理成分段摘要，让上下文保持在限定长度内。

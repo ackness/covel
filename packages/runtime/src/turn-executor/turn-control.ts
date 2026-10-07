@@ -7,6 +7,8 @@
  * without cycles.
  */
 
+import type { RuntimeManifest } from "@covel/shared";
+
 /** Abort reason surfaced on `TurnResult.abortReason` for player aborts.
  *  Defined in @covel/shared (wire-protocol constant — the web client keys
  *  its abort terminal state on it); re-exported here for runtime callers. */
@@ -31,6 +33,70 @@ export interface TurnControl {
    * plugin runtimes never see steering.
    */
   readonly drainSteering?: () => readonly string[];
+  /**
+   * Stop accepting player interjections. The turn executor calls this once
+   * no runtime left in the execution reads the queue, so the queue's owner
+   * can refuse a late interjection instead of accepting text that no model
+   * call will see.
+   */
+  readonly closeSteering?: () => void;
+}
+
+/**
+ * Whether a runtime reads the steering queue. Only an agent with story output
+ * merges interjections into its transcript: a plugin agent runs a structured
+ * task that an interjection would corrupt, and a function runtime calls no
+ * model.
+ */
+export function runtimeAcceptsSteering(
+  manifest: Pick<RuntimeManifest, "outputKind" | "runtimeType">,
+): boolean {
+  return manifest.outputKind === "story" && manifest.runtimeType !== "function";
+}
+
+/** The runtimes of one execution that can still read the steering queue. */
+export interface SteeringReaders {
+  /** The runtime finished, failed or was skipped: it reads nothing further. */
+  settled(runtimeId: string): void;
+  /** Nothing else of the execution runs. */
+  close(): void;
+}
+
+/**
+ * Close the steering queue as soon as no runtime of the execution can read it.
+ * `scheduled` holds the runtimes the execution runs in its foreground.
+ * `eventFollowers` holds the runtimes an event fan-out may still start: a
+ * reader among them keeps the queue open until the caller calls `close()`.
+ */
+export function trackSteeringReaders(args: {
+  readonly control: TurnControl | undefined;
+  readonly scheduled: readonly RuntimeManifest[];
+  readonly eventFollowers: readonly RuntimeManifest[];
+}): SteeringReaders {
+  const pending = new Set(
+    args.scheduled
+      .filter(runtimeAcceptsSteering)
+      .map((manifest) => manifest.name),
+  );
+  let awaitingFanOut = args.eventFollowers.some(runtimeAcceptsSteering);
+  let closed = false;
+  const closeWhenUnread = (): void => {
+    if (closed || pending.size > 0 || awaitingFanOut) return;
+    closed = true;
+    args.control?.closeSteering?.();
+  };
+  closeWhenUnread();
+  return {
+    settled(runtimeId) {
+      pending.delete(runtimeId);
+      closeWhenUnread();
+    },
+    close() {
+      pending.clear();
+      awaitingFanOut = false;
+      closeWhenUnread();
+    },
+  };
 }
 
 export function combineAbortSignals(

@@ -10,7 +10,7 @@ import {
   dimensionSettlementReceiptSchema,
   dimensionUpdatePayloadSchema,
   materializeDimensionRecords,
-} from "@covel/shared";
+} from "@covel/plugin-handlers-utils/dimensions";
 import { z } from "zod";
 
 const requestSchema = z.strictObject({

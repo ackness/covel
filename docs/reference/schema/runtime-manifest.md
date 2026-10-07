@@ -174,9 +174,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `agent.history`
 
-| Field      | Type    | Required | Description                                                                           |
-| ---------- | ------- | -------- | ------------------------------------------------------------------------------------- |
-| `maxTurns` | integer | yes      | Number of most recent turns kept in the agent's prompt history. `0` sends no history. |
+| Field              | Type    | Required | Description                                                                           |
+| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------- |
+| `includeSummaries` | boolean | no       | Include persisted summaries alongside the bounded history window. Defaults to false.  |
+| `maxTurns`         | integer | yes      | Number of most recent turns kept in the agent's prompt history. `0` sends no history. |
 
 ## `agent.tools`
 

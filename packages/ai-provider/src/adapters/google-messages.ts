@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
+import { stripPromptCacheMarkers } from "@covel/shared";
 import type {
   ProviderConfig,
   TextMessage,
@@ -18,9 +19,11 @@ type Call = { name: string; id?: string; order: number };
 function serializeContent(
   content: TextMessageContent,
 ): Record<string, unknown>[] {
-  if (typeof content === "string") return content ? [{ text: content }] : [];
+  if (typeof content === "string")
+    return content ? [{ text: stripPromptCacheMarkers(content) }] : [];
   return (content ?? []).map((part) => {
-    if (part.type === "text") return { text: part.text };
+    if (part.type === "text")
+      return { text: stripPromptCacheMarkers(part.text) };
     const { url, mime } = part.image;
     const data = url?.match(
       /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i,

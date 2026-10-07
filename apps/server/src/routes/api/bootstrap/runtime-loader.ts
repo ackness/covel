@@ -62,6 +62,8 @@ export function createRuntimeLoader(
     locale?: string;
     loaded: ReadonlyMap<string, LoadedRuntime>;
     prompts: ReadonlyMap<string, ParsedRuntimeMd>;
+    /** Runtimes whose artifacts did not load, with the reason. */
+    failed: ReadonlyMap<string, string>;
   }>();
 
   const authorized = async (
@@ -105,10 +107,14 @@ export function createRuntimeLoader(
         if (captured.sessionId !== sessionId)
           throw new Error("Runtime snapshot belongs to another session");
         const loaded = captured.loaded.get(manifest.name);
-        if (!loaded)
+        if (!loaded) {
+          const reason = captured.failed.get(manifest.name);
           throw new Error(
-            `Runtime ${manifest.name} was not admitted in this execution snapshot`,
+            reason
+              ? `[runtime-loader] ${pluginId}/${manifest.name} failed to load: ${reason}`
+              : `Runtime ${manifest.name} was not admitted in this execution snapshot`,
           );
+        }
         return {
           ...loaded,
           promptTemplate: resolveRuntimePrompt(
@@ -227,15 +233,31 @@ export function createRuntimeLoader(
       const effectiveLocale = session.locale;
       const loaded = new Map<string, LoadedRuntime>();
       const prompts = new Map<string, ParsedRuntimeMd>();
+      const failed = new Map<string, string>();
       for (const pluginId of session.activePlugins) {
         for (const parsed of manifestCache.get(pluginId) ?? []) {
           if (!(await authorized(pluginId, parsed.manifest.name, sessionId)))
             continue;
-          const runtime = await loadRuntimeFn(
-            parsed.manifest,
-            effectiveLocale,
-            sessionId,
-          );
+          // Every admitted runtime is loaded here, scheduled or not. A handler
+          // that does not import is the fault of one runtime: it fails when it
+          // runs, with this reason, and the other runtimes are not touched.
+          let runtime: LoadedRuntime | undefined;
+          try {
+            runtime = await loadRuntimeFn(
+              parsed.manifest,
+              effectiveLocale,
+              sessionId,
+            );
+          } catch (error) {
+            const reason =
+              error instanceof Error ? error.message : String(error);
+            failed.set(parsed.manifest.name, reason);
+            console.error(
+              `[runtime-loader] ${pluginId}/${parsed.manifest.name} failed to load for session ${sessionId}:`,
+              error,
+            );
+            continue;
+          }
           if (runtime) {
             loaded.set(parsed.manifest.name, runtime);
             prompts.set(parsed.manifest.name, parsed);
@@ -245,7 +267,7 @@ export function createRuntimeLoader(
       return {
         run: (fn) =>
           snapshots.run(
-            { sessionId, locale: effectiveLocale, loaded, prompts },
+            { sessionId, locale: effectiveLocale, loaded, prompts, failed },
             fn,
           ),
       };

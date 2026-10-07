@@ -27,6 +27,7 @@ import type {
   SessionRecord,
   SessionSummaryRecord,
   TraceEventRecord,
+  TurnMessageRecord,
   WorldRecord,
 } from "./store-records.js";
 
@@ -35,7 +36,13 @@ export interface SessionContextReadStore {
   getSession(sessionId: string): Promise<SessionRecord | null>;
   getWorld(worldId: string): Promise<WorldRecord | null>;
   listCharacters(sessionId: string): Promise<readonly CharacterSummaryRecord[]>;
-  listPlayerInputs(sessionId: string): Promise<readonly PlayerInputRecord[]>;
+  getLatestPlayerInput(sessionId: string): Promise<PlayerInputRecord | null>;
+  getPluginDataPromptWindow(
+    sessionId: string,
+    pluginId: string,
+    namespace: string,
+    maxEntries: number,
+  ): Promise<{ entries: readonly PluginDataRecord[]; total: number }>;
   listPluginData(
     sessionId: string,
     pluginId: string,
@@ -57,6 +64,12 @@ export interface SessionContextReadStore {
 }
 
 export interface SessionContextStore extends SessionContextReadStore {
+  /** Bounded canonical prefix for transactional compaction admission. */
+  listUncompactedTurnMessages(
+    sessionId: string,
+    limit?: number,
+  ): Promise<readonly TurnMessageRecord[]>;
+
   // ── Writes (compactor.ts) ───────────────────────────────────────
   saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
   tagTurnMessagesCompacted(
@@ -67,8 +80,12 @@ export interface SessionContextStore extends SessionContextReadStore {
   retagCompactedTurnMessages(
     sessionId: string,
     summaryId: string,
+    sourceSummaryIds: readonly string[],
   ): Promise<void>;
-  deleteSessionSummaries(sessionId: string): Promise<void>;
+  deleteSessionSummaries(
+    sessionId: string,
+    summaryIds: readonly string[],
+  ): Promise<void>;
   addTraceEvent(record: TraceEventRecord): Promise<void>;
 
   /**

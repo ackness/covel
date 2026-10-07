@@ -9,6 +9,7 @@ import { StylePicker } from "@/components/appearance/StylePicker.js";
 import { TokenControl } from "@/components/appearance/TokenControl.js";
 import { useSetting, useSettingsStore } from "@/settings/use-settings.js";
 import { THEME_SCHEME_KEY } from "@/lib/appearance.js";
+import { isImeComposing } from "@/lib/ime-composition.js";
 import {
   getRegisteredThemes,
   saveCustomTheme,
@@ -238,7 +239,9 @@ export function AppearancePane() {
             placeholder={t("appearance.themeNamePlaceholder")}
             onChange={(event) => setThemeName(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") void handleSaveAsTheme();
+              // Enter that picks an input-method candidate is not a save.
+              if (event.key === "Enter" && !isImeComposing(event))
+                void handleSaveAsTheme();
             }}
             className="w-44 rounded-(--radius-control) border border-(--rule-color) bg-(--surface-page) px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-(--accent-primary)"
           />

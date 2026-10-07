@@ -58,8 +58,7 @@ import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { validatePluginRpcBody } from "./plugin-rpc/body.js";
 import {
   decodePluginUserSettingsHeader,
-  mergePluginUserSettings,
-  readWorldPluginSettings,
+  loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
 import {
   enqueueActivatedRuntimeJob,
@@ -84,7 +83,6 @@ import {
   resolveSessionCommand,
 } from "./session/commands.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
-import { topLevelTurnResults } from "./actions/turn-history.js";
 import {
   concealResultSummaries,
   registeredConcealedRuntimeIds,
@@ -316,11 +314,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // Merge the world's authored defaults (WorldRecord.metadata.pluginSettings)
     // under the player's header overrides — same resolution chain as the main
     // turn route (player override → world default → manifest default).
-    const world = session.worldId
-      ? await store.getWorld(session.worldId)
-      : null;
-    const userSettingsMap = mergePluginUserSettings(
-      readWorldPluginSettings(world?.metadata),
+    const userSettingsMap = await loadSessionPluginUserSettings(
+      store,
+      session,
       decodedUserSettings.settings,
     );
 
@@ -338,11 +334,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // (narrative etc.) instead of empty manual-trigger context.
     let retrySeedResults: readonly RuntimeResult[] | undefined;
     if (body.retryFromTurnId) {
-      // ponytail: full artifact scan (listTurnResults sorts ascending, so a
-      // head-limit would miss recent turns) — add a keyed getter to the store
-      // contract if long sessions make this show up in traces.
-      const rows = topLevelTurnResults(await store.listTurnResults(sessionId));
-      const row = rows.find((r) => r.turnId === body.retryFromTurnId);
+      const [row] = await store.queryTurnResults(sessionId, {
+        turnId: body.retryFromTurnId,
+        limit: 1,
+      });
       if (!row) {
         return c.json(
           errorBody(
@@ -420,13 +415,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           errorBody(err.message, { code: "background_queue_full" }),
           429,
         );
-      return c.json(
-        errorBody(
-          err instanceof Error ? err.message : "failed to enqueue runtime job",
-          { code: "background_enqueue_failed" },
-        ),
-        500,
-      );
+      throw err;
     };
 
     // ── Background mode / expected follower ────────────────────────
@@ -583,13 +572,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           429,
         );
       }
-      return c.json(
-        errorBody(
-          err instanceof Error ? err.message : "runtime execution failed",
-          { code: "runtime_execution_failed" },
-        ),
-        500,
-      );
+      throw err;
     }
   }
 

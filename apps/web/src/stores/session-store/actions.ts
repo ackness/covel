@@ -101,10 +101,10 @@ export function useBuildSessionActions({
       sessionIdRef.current = null;
       setActivePluginDataSession(null);
       dispatch({ type: "RESET_SESSION" });
-      const world = state.worlds.find((item) => item.id === worldId);
+      const world = stateRef.current.worlds.find((item) => item.id === worldId);
       if (world) dispatch({ type: "SET_WORLD", world });
     },
-    [dispatch, state.worlds, sessionGenerationRef, sessionIdRef],
+    [dispatch, stateRef, sessionGenerationRef, sessionIdRef],
   );
 
   const startGame = useCallback(
@@ -113,20 +113,21 @@ export function useBuildSessionActions({
       loreOverride?: string,
       excludedPlugins?: string[],
     ) => {
-      if (!state.world) return;
+      const world = stateRef.current.world;
+      if (!world) return;
       await startGameSession({
         ds,
         workspace,
         dispatch,
         sessionIdRef,
         sessionGenerationRef,
-        world: state.world,
+        world,
         plugins,
         loreOverride,
         excludedPlugins,
       });
     },
-    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.world],
+    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, stateRef],
   );
 
   const resyncSession = useCallback(
@@ -144,6 +145,7 @@ export function useBuildSessionActions({
   );
 
   const beginAdventure = useCallback(() => {
+    const state = stateRef.current;
     if (!canRunSessionAction(state)) return;
     const sessionId = state.session?.id;
     if (!sessionId) return;
@@ -187,7 +189,7 @@ export function useBuildSessionActions({
       });
   }, [
     workspace,
-    state,
+    stateRef,
     handleSseEvent,
     dispatch,
     resyncSession,
@@ -203,11 +205,11 @@ export function useBuildSessionActions({
         dispatch,
         sessionIdRef,
         sessionGenerationRef,
-        worlds: state.worlds,
+        worlds: stateRef.current.worlds,
         session,
       });
     },
-    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.worlds],
+    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, stateRef],
   );
 
   const resumeSessionById = useCallback(
@@ -218,22 +220,24 @@ export function useBuildSessionActions({
         dispatch,
         sessionIdRef,
         sessionGenerationRef,
-        worlds: state.worlds,
+        worlds: stateRef.current.worlds,
         sessionId,
       });
     },
-    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.worlds],
+    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, stateRef],
   );
 
   const loadWorldSessions = useCallback(async () => {
-    if (!state.world) return;
+    const world = stateRef.current.world;
+    if (!world) return;
     try {
-      const sessions = await ds.listSessions(state.world.id);
+      const sessions = await ds.listSessions(world.id);
+      if (stateRef.current.world?.id !== world.id) return;
       dispatch({ type: "SET_WORLD_SESSIONS", sessions });
     } catch {
       // Non-critical: the picker can retry.
     }
-  }, [ds, dispatch, state.world]);
+  }, [ds, dispatch, stateRef]);
 
   const deleteSession = useCallback(
     async (sessionId: string) => {
@@ -248,23 +252,26 @@ export function useBuildSessionActions({
     (
       content: string,
       opts: { echoUserMessage: boolean; owner: SessionActionOwner },
-    ): Promise<void> =>
-      state.session
+    ): Promise<void> => {
+      const session = stateRef.current.session;
+      return session
         ? runSingleSessionAction({
             content,
             ...opts,
-            session: state.session,
+            session,
             workspace,
             dispatch,
             handleSseEvent,
             sessionIdRef,
           })
-        : Promise.resolve(),
-    [workspace, dispatch, state.session, handleSseEvent, sessionIdRef],
+        : Promise.resolve();
+    },
+    [workspace, dispatch, stateRef, handleSseEvent, sessionIdRef],
   );
 
   const sendMessage = useCallback(
     (content: string) => {
+      const state = stateRef.current;
       if (!canRunSessionAction(state) || !state.session) return;
       const owner = claimAction(state.session.id);
 
@@ -283,7 +290,7 @@ export function useBuildSessionActions({
     },
     [
       dispatch,
-      state,
+      stateRef,
       runSingleAction,
       resyncSession,
       sessionIdRef,
@@ -293,34 +300,45 @@ export function useBuildSessionActions({
 
   const steerMessage = useCallback(
     async (content: string): Promise<boolean> => {
-      const session = state.session;
+      const session = stateRef.current.session;
       if (!session || !content) return false;
       const generation = sessionGenerationRef.current;
-      const ok = await api.steerTurn(session.id, content).catch(() => false);
+      const steered = await api
+        .steerTurn(session.id, content)
+        .catch(() => null);
       if (
-        !ok ||
+        !steered ||
         sessionIdRef.current !== session.id ||
         sessionGenerationRef.current !== generation
       )
         return false;
       // Echo in the UI. The in-flight action commit captures the authoritative
       // server copy; writing a second local revision here would conflict with
-      // that commit.
+      // that commit. The echo carries the turn that took the message, so the
+      // recovery after the turn replaces it with the server's copy and does
+      // not add a second row.
       const id = crypto.randomUUID();
       const ts = new Date().toISOString();
       dispatch({
         type: "ADD_MESSAGE",
-        message: { id, role: "user", content, timestamp: ts },
+        message: {
+          id,
+          role: "user",
+          content,
+          timestamp: ts,
+          turnId: steered.turnId,
+        },
       });
       return true;
     },
-    [dispatch, state.session, sessionIdRef, sessionGenerationRef],
+    [dispatch, stateRef, sessionIdRef, sessionGenerationRef],
   );
 
   const abortActiveTurn = useCallback(async (): Promise<void> => {
+    const state = stateRef.current;
     const sid = state.session?.id ?? state.executionRecovery?.sessionId;
     if (sid) await api.abortTurn(sid);
-  }, [state.session, state.executionRecovery?.sessionId]);
+  }, [stateRef]);
 
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -378,6 +396,7 @@ export function useBuildSessionActions({
           resyncSession,
           inFlight: submittingInteractions.current,
           claimAction,
+          stateRef,
         },
         submission,
       ),
@@ -389,6 +408,7 @@ export function useBuildSessionActions({
       runSingleAction,
       resyncSession,
       claimAction,
+      stateRef,
     ],
   );
 
@@ -437,6 +457,7 @@ export function useBuildSessionActions({
 
   const executeCommand = useCallback(
     (command: string) => {
+      const state = stateRef.current;
       if (!canRunSessionAction(state)) return;
       const sessionId = state.session?.id;
       if (!sessionId) return;
@@ -448,12 +469,12 @@ export function useBuildSessionActions({
         payload: { command },
       });
     },
-    [state, runKernelAction],
+    [stateRef, runKernelAction],
   );
 
   const { retryInterruptedTurn, refreshExecutionRecovery } =
     useExecutionRecoveryActions({
-      state,
+      stateRef,
       dispatch,
       runKernelAction,
       resumeSessionById,
@@ -461,6 +482,7 @@ export function useBuildSessionActions({
 
   const retryRuntime = useCallback(
     (runtimeId?: string | readonly string[], sourceTurnId?: string) => {
+      const state = stateRef.current;
       if (!canRunSessionAction(state)) return;
       const sessionId = state.session?.id;
       if (!sessionId) return;
@@ -496,7 +518,7 @@ export function useBuildSessionActions({
         },
       });
     },
-    [state, runKernelAction, retryInterruptedTurn],
+    [stateRef, runKernelAction, retryInterruptedTurn],
   );
 
   const resetSession = useCallback(() => {
@@ -903,6 +925,8 @@ export function useBuildSessionActions({
       deleteSession,
       sendMessage,
       loadOlderMessages,
+      steerMessage,
+      abortActiveTurn,
       submitBlock,
       submitInteraction,
       executeCommand,

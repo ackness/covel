@@ -37,3 +37,16 @@ export function setConnectionState(next: ConnectionState): void {
 export function useConnectionState(): ConnectionState {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
+
+let reconnect: (() => void) | undefined;
+
+export function registerConnectionRetry(retry: () => void): () => void {
+  reconnect = retry;
+  return () => {
+    if (reconnect === retry) reconnect = undefined;
+  };
+}
+
+export function retryConnection(): void {
+  reconnect?.();
+}

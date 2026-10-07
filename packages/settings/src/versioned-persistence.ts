@@ -39,8 +39,14 @@ function sameEntry(left: Entries, right: Entries, key: string): boolean {
 function applyChanges(entries: Entries, changes: readonly Change[]): Entries {
   const next = { ...entries };
   for (const { key, after } of changes) {
-    if (Object.hasOwn(after, key)) next[key] = after[key];
-    else delete next[key];
+    if (Object.hasOwn(after, key)) {
+      Object.defineProperty(next, key, {
+        value: after[key],
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    } else delete next[key];
   }
   return next;
 }
@@ -59,13 +65,23 @@ export class VersionedSettingsPersistence {
     private bundle: SettingsPersistenceBundle,
     private readonly validate: (entries: Entries) => void,
     private readonly replaceVisible: (entries: Entries) => void,
+    private readonly normalize: (entries: Entries) => Entries,
   ) {
     this.bundle = structuredClone(bundle);
   }
 
-  persist(keys: readonly string[], after: Entries): Promise<void> {
+  get revision(): number {
+    return this.bundle.revision;
+  }
+
+  persist(
+    keys: readonly string[],
+    after: Entries,
+    expectedEntries?: Entries,
+  ): Promise<void> {
     const before = structuredClone(this.bundle.entries);
     const desired = structuredClone(after);
+    const expected = expectedEntries && structuredClone(expectedEntries);
     // Intent matters even when the optimistic value is identical. A previous
     // queued write may fail, so a repeated set/clear still owns a real promise.
     const changes = [...new Set(keys)].map((key) => ({
@@ -76,8 +92,8 @@ export class VersionedSettingsPersistence {
     this.pending.push(changes);
     return this.enqueue(async () => {
       try {
-        if (changes.length > 0) {
-          await this.saveChanges(changes);
+        if (changes.length > 0 || expected) {
+          await this.saveChanges(changes, expected);
           this.advancePendingBases(changes);
         }
       } finally {
@@ -123,22 +139,42 @@ export class VersionedSettingsPersistence {
         // base. Remote changes and failed writes cannot grant that authority.
         const nextBase = { ...change.before };
         if (Object.hasOwn(this.bundle.entries, change.key)) {
-          nextBase[change.key] = structuredClone(
-            this.bundle.entries[change.key],
-          );
+          Object.defineProperty(nextBase, change.key, {
+            value: structuredClone(this.bundle.entries[change.key]),
+            enumerable: true,
+            configurable: true,
+            writable: true,
+          });
         } else delete nextBase[change.key];
         change.before = nextBase;
       }
     }
   }
 
-  private async saveChanges(changes: Change[]): Promise<void> {
+  private async saveChanges(
+    changes: Change[],
+    expected?: Entries,
+  ): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const conflicts = changes.filter(
-        ({ key, before, after }) =>
-          !sameEntry(this.bundle.entries, before, key) &&
-          !sameEntry(this.bundle.entries, after, key),
-      );
+      if (expected) {
+        const current = this.normalize(this.bundle.entries);
+        const conflicts = [
+          ...new Set([...Object.keys(current), ...Object.keys(expected)]),
+        ].filter((key) => !sameEntry(current, expected, key));
+        if (conflicts.length > 0) {
+          throw new SettingsRevisionConflictError(
+            this.bundle.revision,
+            conflicts,
+          );
+        }
+      }
+      const conflicts = expected
+        ? []
+        : changes.filter(
+            ({ key, before, after }) =>
+              !sameEntry(this.bundle.entries, before, key) &&
+              !sameEntry(this.bundle.entries, after, key),
+          );
       if (conflicts.length > 0) {
         throw new SettingsRevisionConflictError(
           this.bundle.revision,

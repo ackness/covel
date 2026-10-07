@@ -123,6 +123,32 @@ describe("StageChoices", () => {
     expect((input as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("leaves Enter and Escape to an input method that is still composing", () => {
+    const onSendMessage = vi.fn();
+    render(
+      <StageChoices
+        {...baseProps}
+        suggestions={{ choices: [] }}
+        onSendMessage={onSendMessage}
+      />,
+    );
+
+    const input = screen.getByTestId(
+      "stage-decision-input",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "我先 chakan" } });
+    // Enter picks the candidate; Escape discards it. Neither is the field's.
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    // Safari reports the committing key after the composition has ended.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(input.value).toBe("我先 chakan");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSendMessage).toHaveBeenCalledWith("我先 chakan");
+  });
+
   it("uses the current story and scene to contextualize legacy prompt data", () => {
     render(
       <StageChoices

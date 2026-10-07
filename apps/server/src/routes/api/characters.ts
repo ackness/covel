@@ -135,7 +135,7 @@ characterRoutes.post("/:id/characters", async (c) => {
   if (committed instanceof Response) return committed;
   const result = committed;
   if (!result.committed) {
-    return c.json(errorBody(result.error ?? "Failed to upsert character"), 500);
+    return c.json(errorBody(result.error ?? "Failed to upsert character"), 400);
   }
 
   return c.json(record);

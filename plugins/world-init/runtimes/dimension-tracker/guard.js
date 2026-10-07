@@ -1,10 +1,10 @@
+import { resolveI18nText } from "@covel/plugin-handlers-utils";
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
   dimensionRecordSchema,
   dimensionSettlementReceiptSchema,
-  resolveI18nText,
-} from "@covel/shared";
+} from "@covel/plugin-handlers-utils/dimensions";
 
 export default async function guard(ctx) {
   const source = ctx.inputs?.narrative?.source;

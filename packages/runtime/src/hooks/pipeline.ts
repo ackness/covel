@@ -7,16 +7,21 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * - enforce groups run pre → normal → post.
  * - Inside each enforce group, global hooks run first; plugin hooks keep declared order after.
  * - Each handler has an individual timeout (default 5000ms).
- * - Thrown exceptions are treated as abort with the error message.
+ * - A handler that returns nothing made no decision: the pipeline continues.
+ * - A handler that throws, times out or returns a malformed result is a failed
+ *   handler. On a guard event (GUARD_HOOK_EVENTS) the pipeline fails closed and
+ *   answers abort with the error message. On every other event the handler is
+ *   skipped: later handlers run and earlier replacements are kept.
  * - All aborts/timeouts/errors emit observability events via the EventBus.
  */
 
 import { invokeWithSignal } from "./invoke-with-signal.js";
 import { cloneHookData } from "./hook-data.js";
+import { describeReplacement } from "./rewrite-summary.js";
 import { z } from "zod";
 import type { EventBus } from "@covel/events";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
-import { HOOK_SEMANTICS } from "./types.js";
+import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "./types.js";
 import {
   currentActivePluginIds,
   currentOwnSettings,
@@ -305,8 +310,8 @@ export class HookPipeline {
     };
 
     try {
-      // Filters are plugin code too: failures follow this event's abort or
-      // observe-only semantics and retain the registering hook's identity.
+      // Filters are plugin code too: a failure is a failed handler of this
+      // event and retains the registering hook's identity.
       if (reg.match && !reg.match(cloneHookData(payload)))
         return { action: "continue" };
 
@@ -331,6 +336,10 @@ export class HookPipeline {
             cloneHookData(payload),
           );
           signal.throwIfAborted();
+          // A handler written without a `return` decided nothing. Reading it
+          // as a veto would reject every proposal or tool call it sees.
+          if (returned === undefined)
+            return { action: "continue" } satisfies HookResult<P>;
           // Take ownership before trace awaits or the next handler can yield.
           const owned = cloneHookData(returned);
           if (!hookResultSchema.safeParse(owned).success) {
@@ -357,7 +366,12 @@ export class HookPipeline {
           reason,
         },
       );
-      return { action: "abort", reason };
+      // A guard fails closed. Elsewhere the failed handler changed nothing, so
+      // the chain goes on without it and keeps what earlier handlers replaced.
+      // A cancelled execution always ends the chain.
+      return GUARD_HOOK_EVENTS.has(event) || ctx.signal?.aborted
+        ? { action: "abort", reason }
+        : { action: "continue" };
     }
 
     if (result.action === "abort") {
@@ -385,8 +399,6 @@ export class HookPipeline {
     }
 
     if ("replace" in result && result.replace !== undefined && opts?.emitter) {
-      const before = payload;
-      const after = { ...payload, ...result.replace };
       const proposalType = extractProposalType(event, payload);
       await emitHookTrace(opts.emitter, ctx, reg, "hook.rewrote", {
         event,
@@ -394,7 +406,8 @@ export class HookPipeline {
         pluginId: reg.pluginId ?? null,
         runtimeId: ctx.runtimeId,
         targetId: extractTargetId(event, payload),
-        diff: cloneHookData({ before, after }),
+        // Replaced keys with a short description of each side, not the values.
+        diff: describeReplacement(payload, result.replace),
         ...(proposalType ? { proposalType } : {}),
       });
     }

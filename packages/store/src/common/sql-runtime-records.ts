@@ -10,7 +10,8 @@
  * runtime-records surface.
  */
 
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { writeOrderAsc, writeOrderPageOrder } from "./cursor.js";
+import { and, asc, desc, eq, gte, inArray, isNull, ne } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -41,12 +42,21 @@ import type {
 } from "../types.js";
 
 type TurnResultsTable = Table & {
+  seq: Column;
+  id: Column;
+  sessionId: Column;
+  turnId: Column;
+  createdAt: Column;
+  parentTurnId: Column;
+  origin: Column;
+  commitStatus: Column;
+};
+type ToolCallsTable = Table & {
   id: Column;
   sessionId: Column;
   turnId: Column;
   createdAt: Column;
 };
-type ToolCallsTable = Table & { sessionId: Column; turnId: Column };
 type RuntimeOutputsTable = Table & {
   sessionId: Column;
   id: Column;
@@ -87,6 +97,7 @@ export type SqlRuntimeRecords = Pick<
   DataStore,
   | "saveTurnResult"
   | "listTurnResults"
+  | "queryTurnResults"
   | "setTurnResultCommitStatus"
   | "saveToolCall"
   | "listToolCalls"
@@ -102,10 +113,41 @@ export function createSqlRuntimeRecords(
 ): SqlRuntimeRecords {
   const { runner, tables, json, values } = deps;
   const { turnResults, toolCalls, runtimeOutputs, interactionRecords } = tables;
+  const { byteOrder } = runner;
 
   return {
     async saveTurnResult(record: TurnResultRecord): Promise<void> {
-      await runner.insert(turnResults, values.turnResultInsert(record));
+      await runner.insert(turnResults, {
+        ...values.turnResultInsert(record),
+        seq: runner.nextWriteOrderSeq(turnResults, record),
+      });
+    },
+
+    async queryTurnResults(sessionId, options) {
+      const rows = await runner.select<TurnResultRow>(turnResults, {
+        where: and(
+          eq(turnResults.sessionId, sessionId),
+          isNull(turnResults.parentTurnId),
+          ne(turnResults.origin, "recursive"),
+          options.turnId === undefined
+            ? undefined
+            : eq(turnResults.turnId, options.turnId),
+          options.since === undefined
+            ? undefined
+            : gte(turnResults.createdAt, options.since),
+          options.origins === undefined
+            ? undefined
+            : inArray(turnResults.origin, [...options.origins]),
+          options.commitStatus === undefined
+            ? undefined
+            : eq(turnResults.commitStatus, options.commitStatus),
+        ),
+        orderBy: options.newestFirst
+          ? writeOrderPageOrder(turnResults, byteOrder)
+          : writeOrderAsc(turnResults, byteOrder),
+        limit: options.limit,
+      });
+      return rows.map((row) => toTurnResultRecord(row, json));
     },
 
     async listTurnResults(
@@ -114,7 +156,7 @@ export function createSqlRuntimeRecords(
     ): Promise<TurnResultRecord[]> {
       const rows = await runner.select<TurnResultRow>(turnResults, {
         where: eq(turnResults.sessionId, sessionId),
-        orderBy: [asc(turnResults.createdAt)],
+        orderBy: writeOrderAsc(turnResults, byteOrder),
         limit,
       });
       return rows.map((row) => toTurnResultRecord(row, json));
@@ -168,7 +210,11 @@ export function createSqlRuntimeRecords(
               eq(toolCalls.turnId, turnId),
             )
           : eq(toolCalls.sessionId, sessionId);
-      const rows = await runner.select<ToolCallRow>(toolCalls, { where });
+      const rows = await runner.select<ToolCallRow>(toolCalls, {
+        where,
+        // Without an order PostgreSQL returns rows as they lie on disk.
+        orderBy: [asc(toolCalls.createdAt), asc(byteOrder(toolCalls.id))],
+      });
       return rows.map((row) => toToolCallRecord(row, json));
     },
 
@@ -206,7 +252,10 @@ export function createSqlRuntimeRecords(
       const rows = await runner.select<RuntimeOutputRow>(runtimeOutputs, {
         where: and(...conditions),
         // `id` breaks same-timestamp ties so offset pagination is stable.
-        orderBy: [desc(runtimeOutputs.timestamp), desc(runtimeOutputs.id)],
+        orderBy: [
+          desc(runtimeOutputs.timestamp),
+          desc(byteOrder(runtimeOutputs.id)),
+        ],
         limit: filters?.limit,
         offset: filters?.offset,
       });

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { withoutNul } from "../common/without-nul.js";
 
 export async function toBytes(blob: Uint8Array | Blob): Promise<Uint8Array> {
   if (blob instanceof Uint8Array) return new Uint8Array(blob);
@@ -19,7 +20,7 @@ export function toMeta(
 ): Readonly<Record<string, unknown>> | undefined {
   return meta === undefined
     ? undefined
-    : structuredClone(meta as Record<string, unknown>);
+    : withoutNul(structuredClone(meta as Record<string, unknown>));
 }
 
 export function bytesToReadableStream(

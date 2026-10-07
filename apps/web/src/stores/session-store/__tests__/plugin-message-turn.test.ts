@@ -43,7 +43,7 @@ function state(): SessionState {
         ],
       },
     ],
-    pluginData: { external: { message: namespace } },
+    pluginMessageData: { external: namespace },
   };
 }
 
@@ -59,7 +59,9 @@ describe("legacy third-party message recovery", () => {
         });
       current = reducer(current, {
         type: "REPLACE_PLUGIN_DATA",
-        pluginData: current.pluginData,
+        pluginData: {
+          external: { message: current.pluginMessageData.external! },
+        },
       });
       if (!stepsFirst)
         current = reducer(current, {
@@ -78,7 +80,7 @@ describe("legacy third-party message recovery", () => {
           pluginMessageTurnResolver(current.executionSteps, current.messages),
         ),
       ).toBe(suggestions);
-      expect(current.pluginData.external?.message?.__turnId).toBe("retry");
+      expect(current.pluginMessageData.external?.__turnId).toBe("retry");
     },
   );
 

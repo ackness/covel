@@ -365,13 +365,19 @@ export async function resolveInputBindings(
     };
   }
 
-  const slots: Record<string, InputSlot> = {};
+  const slots: Record<string, InputSlot> = Object.create(null);
 
-  for (const [name, binding] of bindingEntries) {
+  bindings: for (const [name, binding] of bindingEntries) {
     const required = binding.required !== false;
-    const acceptsSchema = args.acceptsSchemas[name];
+    const acceptsSchema = Object.hasOwn(args.acceptsSchemas, name)
+      ? args.acceptsSchemas[name]
+      : undefined;
     const contractSchema =
-      "capability" in binding.from ? args.contractSchemas?.[name] : undefined;
+      "capability" in binding.from &&
+      args.contractSchemas &&
+      Object.hasOwn(args.contractSchemas, name)
+        ? args.contractSchemas[name]
+        : undefined;
     const { providers, cardinality } = providersFor(binding, activeRuntimes);
 
     // cardinality: one with multiple providers is a build-time ambiguity.
@@ -431,11 +437,12 @@ export async function resolveInputBindings(
           diagnostics.push(
             diag(
               "input-schema-incompatible",
-              "error",
+              required ? "error" : "warn",
               manifest.name,
               `binding "${name}" producer "${provider.name}" is provably incompatible with accepts`,
             ),
           );
+          if (!required) continue bindings;
           return {
             ok: false,
             skipReason: "input-schema-incompatible",
@@ -665,11 +672,13 @@ export async function resolveExportBindings(
   const diagnostics: SchedulingDiagnostic[] = [];
   if (entries.length === 0) return { ok: true, slots: {}, diagnostics };
 
-  const slots: Record<string, InputSlot> = {};
+  const slots: Record<string, InputSlot> = Object.create(null);
 
   for (const [name, eb] of entries) {
     const required = eb.required !== false;
-    const acceptsSchema = acceptsSchemas[name];
+    const acceptsSchema = Object.hasOwn(acceptsSchemas, name)
+      ? acceptsSchemas[name]
+      : undefined;
     const { providers, cardinality } = providersFor(
       { from: eb.from } as RuntimeBinding,
       activeRuntimes,

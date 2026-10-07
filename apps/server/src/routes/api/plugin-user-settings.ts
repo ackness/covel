@@ -14,6 +14,7 @@
  * hooks all read `input.userSettings`).
  */
 import type { TurnInput, WorldPluginSettings } from "@covel/shared";
+import type { DataStore, SessionRecord } from "@covel/store";
 import {
   PLUGIN_USER_SETTINGS_HEADER_MAX_BUCKETS,
   PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES,
@@ -23,6 +24,19 @@ import {
   utf8ByteLength,
 } from "@covel/shared/plugin-user-settings-header";
 import { decodeBase64Json } from "../../lib/base64-json.js";
+
+/** Resolve the world and request layers from the accepted session snapshot. */
+export async function loadSessionPluginUserSettings(
+  store: Pick<DataStore, "getWorld">,
+  session: Pick<SessionRecord, "worldId">,
+  playerSettings: TurnInput["userSettings"],
+): Promise<TurnInput["userSettings"]> {
+  const world = session.worldId ? await store.getWorld(session.worldId) : null;
+  return mergePluginUserSettings(
+    readWorldPluginSettings(world?.metadata),
+    playerSettings,
+  );
+}
 
 export type PluginUserSettingsHeaderDecodeResult =
   | {

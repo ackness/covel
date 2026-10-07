@@ -34,7 +34,7 @@ const REGISTRY: readonly StorageMigrationSummary[] = [
     id: "data:sqlite:schema",
     domain: "data",
     backend: "sqlite",
-    version: 3,
+    version: 4,
     status: "managed-by-backend",
     description:
       "SQLite creates the current data schema directly; development builds do not upgrade prior schemas.",
@@ -43,7 +43,7 @@ const REGISTRY: readonly StorageMigrationSummary[] = [
     id: "data:pg:schema",
     domain: "data",
     backend: "pg",
-    version: 3,
+    version: 4,
     status: "managed-by-backend",
     description:
       "PostgreSQL creates the current data schema directly; development builds do not upgrade prior schemas.",

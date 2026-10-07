@@ -15,6 +15,7 @@
   keys.env                   ← provider API key，KEY=VALUE 纯文本
   settings.json              ← 前端用户偏好（unified SettingsStore：locale / 外观 / slot 覆盖 / 每插件设置）
   app-update.json            ← 已忽略的桌面应用版本
+  window-state.json          ← 窗口尺寸、位置、最大化与全屏状态
   plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）
 
 <data_root>/                 ← 默认 ~/.covel/data；可改到任意路径
@@ -25,7 +26,7 @@
     server.log               ← Node sidecar 的 stdout/stderr（bootstrap 输出 + Hono 请求日志）
     desktop.log.1 … .N       ← 轮转副本，超过 max_files 丢弃最旧
     server.log.1 … .N
-  server.port                ← 最近一次启动的端口（诊断用）
+  server.port                ← 最近一次启动的端口（下次优先复用）
 ```
 
 **日志写入约定**：
@@ -118,8 +119,13 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 ## 前端入口
 
-安装插件或世界包后，按提示点击“立即重启”。主进程等待新服务就绪，再把窗口导航到新端口；
-不会刷新已经退出的旧端口。重启后会话数据保留，community 插件的进程内授权可能需要重新批准。
+窗口状态保存在配置根的 `window-state.json`。启动时校验尺寸、坐标和布尔状态，损坏或无效的记录使用默认窗口；已断开的显示器坐标会被忽略，合法的负坐标仍可恢复到副屏。
+
+应用启动时先取得单实例锁，重复打开会聚焦已有窗口。服务监听成功后通过私有 IPC 通知主进程，窗口立即加载。
+`server.port` 保存上次成功选择的端口，下次在可用时复用；端口被占用时选择其他空闲端口。渲染器使用 Electron 默认的持久化 session。
+
+安装插件或世界包后，按提示点击“立即重启”。主进程等待新服务就绪，再保留当前页面路径和查询参数导航；侧车崩溃、重启和恢复状态会在应用内提示。
+重启后会话数据保留，community 插件的进程内授权可能需要重新批准。系统菜单“导入插件 / 世界”打开“设置 → 插件 → 安装与管理”，通过统一安装器选择 ZIP、预览、授权和查看结果。
 框架版本来自应用包；页面、桌面桥接和服务端 health 不应各自维护硬编码版本号。
 
 **Settings → Desktop** tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。

@@ -83,7 +83,12 @@ export function AiWorldGenerator({
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const generationRef = useRef(0);
+  // The contracts the dialog has offered so far. The player's choice for
+  // these is kept when the dialog asks the server again.
+  const offeredRef = useRef<ReadonlySet<string>>(new Set());
 
+  // Runs only after a world is created. A closed dialog keeps the brief: a
+  // press of Esc or of the close control must not cost what the player wrote.
   const resetForm = useCallback(() => {
     setPrompt("");
     setExperienceMode("traditional-story");
@@ -103,7 +108,8 @@ export function AiWorldGenerator({
 
   // The offered plugin content depends on which plugins the server loaded, so
   // it is asked for each time the dialog opens. Without it the dialog still
-  // works with the kernel-owned content.
+  // works with the kernel-owned content. Only a contract offered for the
+  // first time takes its default; the others keep what the player chose.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -112,8 +118,21 @@ export function AiWorldGenerator({
       .catch(() => [] as api.GeneratableWorldContent[])
       .then((offered) => {
         if (cancelled) return;
+        const known = offeredRef.current;
+        offeredRef.current = new Set(offered.map((item) => item.contract));
         setPluginContent(offered);
-        setContracts(defaultContracts(offered));
+        setContracts(
+          (current) =>
+            new Set(
+              offered
+                .filter((item) =>
+                  known.has(item.contract)
+                    ? current.has(item.contract)
+                    : item.selectedByDefault,
+                )
+                .map((item) => item.contract),
+            ),
+        );
       });
     return () => {
       cancelled = true;
@@ -260,11 +279,12 @@ export function AiWorldGenerator({
       if (!nextOpen && isWorking) return;
       if (!nextOpen) {
         handleCancel();
-        resetForm();
+        // The brief has done its work only when its world exists.
+        if (phase === "done") resetForm();
       }
       onOpenChange(nextOpen);
     },
-    [handleCancel, isWorking, onOpenChange, resetForm],
+    [handleCancel, isWorking, onOpenChange, phase, resetForm],
   );
 
   const toggleContent = useCallback((kind: WorldPackageContentKind) => {
@@ -296,7 +316,13 @@ export function AiWorldGenerator({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[92dvh] w-[calc(100%-1rem)] overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent
+        className="max-h-[92dvh] w-[calc(100%-1rem)] overflow-hidden p-0 sm:max-w-5xl"
+        onPointerDownOutside={(event) => {
+          // A press beside the dialog is a slip, not a request to close it.
+          event.preventDefault();
+        }}
+      >
         <div className="flex items-center justify-between border-b border-border bg-muted/25 py-3 pr-14 pl-5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-primary/12 text-primary">

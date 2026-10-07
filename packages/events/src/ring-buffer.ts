@@ -24,13 +24,16 @@ export class RingBuffer<T> {
   }
 
   /** Append an item; when full, the oldest item is overwritten. O(1). */
-  push(item: T): void {
+  push(item: T): T | undefined {
+    const evicted =
+      this.count === this.capacity ? this.items[this.head] : undefined;
     this.items[(this.head + this.count) % this.capacity] = item;
     if (this.count < this.capacity) {
       this.count += 1;
     } else {
       this.head = (this.head + 1) % this.capacity;
     }
+    return evicted;
   }
 
   /** Snapshot of current contents, oldest → newest. */

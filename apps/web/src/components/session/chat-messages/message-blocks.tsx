@@ -236,7 +236,7 @@ export function MessageBlockRenderer({
   const handlers = useMemo(
     () => ({
       submitForm: async () => {
-        if (effectiveSubmitted) return;
+        if (effectiveSubmitted || executing) return;
         const { data, turnId, interactionId, submitBehavior } = readBlockMeta();
 
         // Extract form field values from json-render state tree (/form/<name>).
@@ -297,7 +297,7 @@ export function MessageBlockRenderer({
         }
       },
       selectChoice: async (params: Record<string, unknown>) => {
-        if (effectiveSubmitted) return;
+        if (effectiveSubmitted || executing) return;
         const { turnId, interactionId, submitBehavior } = readBlockMeta();
         const label = params.label as string;
         if (!label) return;
@@ -344,6 +344,7 @@ export function MessageBlockRenderer({
     [
       t,
       effectiveSubmitted,
+      executing,
       readBlockMeta,
       msg.id,
       msg.turnId,
@@ -367,9 +368,10 @@ export function MessageBlockRenderer({
   }
 
   return (
-    <div
+    <fieldset
       key={msg.id}
       className={effectiveSubmitted || executing ? "opacity-80" : undefined}
+      disabled={effectiveSubmitted || executing}
       aria-disabled={effectiveSubmitted || executing}
     >
       <JSONUIProvider
@@ -381,7 +383,7 @@ export function MessageBlockRenderer({
       >
         <Renderer spec={spec} registry={covelRegistry} />
       </JSONUIProvider>
-    </div>
+    </fieldset>
   );
 }
 

@@ -60,6 +60,40 @@ describe("characterSheetSegments", () => {
     );
   });
 
+  it("filters nested bookkeeping from player and NPC sheets while retaining semantic ids", () => {
+    const uuid = "06d6a521-f8a9-4a02-8fb9-81029b3113dd";
+    const bookkeeping = {
+      sessionId: "private-session",
+      turnId: uuid,
+      updatedAt: "2026-10-07T00:00:00Z",
+    };
+    const fields = {
+      hp: 8,
+      nested: {
+        ...bookkeeping,
+        id: "guild-scholar",
+        date: "1943-06-01T08:00:00Z",
+      },
+    };
+    const cast = [
+      character({ id: uuid, name: "Player", type: "player", fields }),
+      character({ id: "npc-guide", name: "Guide", type: "npc", fields }),
+    ];
+    const rendered = characterSheetSegments(cast, { profiles: true })[0]!
+      .content;
+    expect(rendered).not.toContain(uuid);
+    expect(rendered).not.toContain("private-session");
+    expect(rendered).not.toContain("updatedAt");
+    expect(rendered).toContain("guild-scholar");
+    expect(rendered).toContain("1943-06-01T08:00:00Z");
+    expect(fields.nested).toMatchObject(bookkeeping);
+    expect(
+      characterSheetSegments([
+        character({ ...player, id: "player-scholar" }),
+      ])[0]!.content,
+    ).toContain('"id": "player-scholar"');
+  });
+
   it("leaves the profiles out unless asked, and gives no segment without a character to show", () => {
     expect(characterSheetSegments([player, npc])[0]!.content).not.toContain(
       "<character-profiles>",

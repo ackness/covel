@@ -97,7 +97,7 @@ describe("loadRuntime output schema resolution", () => {
     );
   });
 
-  it("warns and does not crash when the declared file is missing", async () => {
+  it("rejects a missing declared schema with its path and field", async () => {
     const pluginDir = path.join(tmpDir, "test-plugin");
     await fs.mkdir(pluginDir, { recursive: true });
     await fs.writeFile(
@@ -105,20 +105,10 @@ describe("loadRuntime output schema resolution", () => {
       makeFrontmatter({ output: { schema: "./schemas/out.schema.json" } }),
     );
 
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const [discovery] = await discoverPlugins(tmpDir);
-      const loaded = await loadRuntime(discovery, "test-plugin");
-
-      expect(loaded.outputSchema).toBeUndefined();
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "[plugin-loader] declared output schema not found",
-        ),
-      );
-    } finally {
-      warn.mockRestore();
-    }
+    const [discovery] = await discoverPlugins(tmpDir);
+    await expect(loadRuntime(discovery, "test-plugin")).rejects.toThrow(
+      /schemas.*out.schema.json: io.output.schema: file not found/,
+    );
   });
 });
 

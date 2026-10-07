@@ -14,7 +14,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*"
+    "@covel/shared": "workspace:*",
+    "@covel/plugin-handlers-utils": "workspace:*"
   },
   "devDependencies": {
     "@covel/store": "workspace:*",

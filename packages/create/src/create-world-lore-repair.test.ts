@@ -240,8 +240,8 @@ describe("createWorld WORLD.md repair", () => {
     expect(messageText(llm.requests[3]!, 1)).toContain(
       "Write one part of the world package now: WORLD_MD.",
     );
-    expect(messageText(llm.requests[3]!, 2)).toContain("Write this part again");
-    expect(messageText(llm.requests[3]!, 2)).toContain(
+    expect(messageText(llm.requests[3]!, 3)).toContain("Write this part again");
+    expect(messageText(llm.requests[3]!, 3)).toContain(
       "WORLD.md contains explicit generation meta wording",
     );
   });
@@ -277,6 +277,6 @@ describe("createWorld WORLD.md repair", () => {
     expect(messageText(llm.requests[2]!, 1)).toContain(
       "Write one part of the world package now: WORLD_MD.",
     );
-    expect(messageText(llm.requests[2]!, 2)).toContain("Write this part again");
+    expect(messageText(llm.requests[2]!, 3)).toContain("Write this part again");
   });
 });

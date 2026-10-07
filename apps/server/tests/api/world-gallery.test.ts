@@ -76,14 +76,17 @@ describe("GET /api/worlds/:id/gallery", () => {
         "    kind: media",
         "    path: media/scenes",
         "    to: media",
+        "    indexTo: contract:image-index@1",
         "  portraits:",
         "    kind: media",
         "    path: media/portraits",
         "    to: media",
+        "    indexTo: contract:image-index@1",
         "  drafts:",
         "    kind: media",
         "    path: media/drafts",
         "    to: media",
+        "    indexTo: contract:image-index@1",
         "    enabled: false",
         "",
       ].join("\n"),
@@ -135,7 +138,7 @@ describe("GET /api/worlds/:id/gallery", () => {
   it("serves only files the listing contains", async () => {
     const dir = await writeWorld(
       "ash-harbor",
-      "schemaVersion: 1\nsources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n  drafts:\n    kind: media\n    path: media/drafts\n    to: media\n    enabled: false\n",
+      "schemaVersion: 1\nsources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n    indexTo: contract:image-index@1\n  drafts:\n    kind: media\n    path: media/drafts\n    to: media\n    indexTo: contract:image-index@1\n    enabled: false\n",
     );
     await mkdir(path.join(dir, "media/scenes"), { recursive: true });
     await mkdir(path.join(dir, "media/drafts"), { recursive: true });
@@ -239,7 +242,7 @@ describe("GET /api/worlds/:id/gallery", () => {
   it("lists the media sources when gallery.json cannot be read", async () => {
     const dir = await writeWorld(
       "ash-harbor",
-      "schemaVersion: 1\nsources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n",
+      "schemaVersion: 1\nsources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n    indexTo: contract:image-index@1\n",
     );
     await mkdir(path.join(dir, "media/scenes"), { recursive: true });
     await writeFile(path.join(dir, "media/scenes/quay.png"), pngHeader(4, 4));

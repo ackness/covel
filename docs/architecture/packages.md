@@ -36,6 +36,8 @@ Covel 是模块化单体，`packages/` 大多是工作区内部边界，并非�
 
 ## 宿主组合的关键边界
 
+桌面壳直接依赖 Zod 校验本地窗口状态；几何信息属于 Electron 宿主，不作为共享领域 schema 暴露。
+
 一次执行先通过 `executeTurn(...)` 或 `resumeSuspendedRuntime(...)` 得到 `{ result, commit }`。`result` 是可用于传输的业务结果，已剥离各层 runtime result 的 `pendingProposals`；`RuntimeResult.output` 也只有业务数据。缓冲命令保留在 `commit.results[].pendingProposals` 中，不再藏在 output 上。`commit` 是只交给宿主的计划，包含顶层和递归结果、journal、suspensions、hook scope、schema、setup 与时钟信息。宿主在会话锁内提交它，不再自己拼装这些内部数据：
 
 ```ts
@@ -67,3 +69,7 @@ memory 的后台队列属于 `MemorySystem` 实例，不是进程全局队列。
 本次调整按当前契约同步更新生产者与消费方，不保留旧版入口的别名或双写：作者应使用可打包 SDK；具体 store 后端应使用其子入口；context 调用须 `await buildContext`；宿主须保留并提交执行计划；工具效果须通过显式结果和 `pendingProposals` 传递。旧测试 fixture 与插件代码也须按同一规则更新。
 
 这些库仍处早期开发，当前没有跨版本持久化迁移承诺。受 store schema 或向量进度表变化影响的既有开发数据需要重新创建；不要把旧数据可读或旧入口可用当作本次改动的保证。`pnpm check:boundaries` 检查生产源码的工作区公开入口、依赖声明与包方向；需要新跨包依赖时，应连同此责任划分一起评审。
+
+The standalone plugin SDK owns locale resolution, token estimation and dimension validation/materialization. `@covel/shared` re-exports these definitions. Dimension providers import `@covel/plugin-handlers-utils/dimensions`; plugins do not reach into the shared package for these operations.
+
+UI tool factories and character-field validation also live in the SDK. Locale-aware file loading is isolated in its Node-only `/prompts` entry; the root remains browser-compatible. Host packages re-export the same implementations, including tool validation error classes.
