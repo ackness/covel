@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- World ZIP activation rejects worldData errors with 400 before creating a record and removes only the new directory, allowing a repaired same-ID retry; warnings and startup seed tolerance remain unchanged.
 - Character sync overlays only new batch proposals onto world snapshots, preserving same-batch deduplication and sequential updates. Missing-character updates fail as tools, preventing partial function-runtime commits and false agent completion. Function tool calls preserve the execution's frozen logicalTurn.
 - Plugin CLI/ZIP validation checks committed input schema files and same-package producers and rejects committed+select before installation writes; normal turn select and optional external contracts remain supported.
 - Theme application, import and save-as await persistence without clearing overrides or names or reporting false success on failure. Failed appearance edits, resets and ignored token submissions restore saved previews while protecting later edits and scheme switches.

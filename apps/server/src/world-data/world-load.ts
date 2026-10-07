@@ -188,6 +188,8 @@ export async function loadWorldDataSummary(options: {
   /** Locale of the package's main files. */
   defaultLocale?: string;
   covelHome?: string;
+  /** Package validation reads shipped data, not local overrides. */
+  includeOverrides?: boolean;
   metadata?: Record<string, unknown>;
   now?: string;
 }): Promise<{
@@ -205,9 +207,11 @@ export async function loadWorldDataSummary(options: {
     worldId: options.worldId,
     worldDataPath: options.worldDataPath,
     covelHome:
-      options.covelHome ??
-      process.env.COVEL_HOME ??
-      path.join(homedir(), ".covel"),
+      options.includeOverrides === false
+        ? undefined
+        : (options.covelHome ??
+          process.env.COVEL_HOME ??
+          path.join(homedir(), ".covel")),
   });
   const allDiagnostics: WorldDataDiagnostic[] = [...descriptor.diagnostics];
   const sources: Array<WorldDataMetadataSummary["sources"][number]> = [];

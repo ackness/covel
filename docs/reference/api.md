@@ -510,6 +510,8 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | POST | `/api/install/collection`            | multipart 字段 `file`：导入打包好的合集 ZIP，响应同 batch                                                                                                             |
 | GET  | `/api/install/plugins`               | 列出用户插件目录中的包及可用的来源记录，包含尚未重启加载的插件                                                                                                        |
 
+`/api/install/world` 在写入世界记录前检查 worldData diagnostics；error 返回 400，删除本次新建目录且不创建记录，修复后可用同一 ID 重试。warning 不阻止安装。校验复用现有 descriptor、source 与 schema 校验器，不使用本机 overrides，也不执行社区插件代码。
+
 > **canonical 插件身份**：插件的唯一身份是 manifest 根 `id`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `id: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID；`@covel/plugin-narrator` + `id: narrator` 会命中 reserved 并返回 409。启动 discovery 同样硬性校验目录名 == manifest 根 id，不一致的插件注册为 `hostState: "error"`、不加载任何 runtime/tool/hook/wire。
 
 ### 状态查询
@@ -3751,6 +3753,8 @@ be retried. Uploaded worlds carry `source: "generated-file"` and a binding to
 the user world directory, so DELETE works immediately. An existing world ID
 returns 409 without overwriting its record. Plugin installation still returns
 `restartRequired: true`.
+
+ZIP activation rejects worldData error diagnostics with 400 before creating a record, including missing descriptors or sources, malformed sources and failures against their own schemas. Warnings remain allowed. Validation checks the shipped package without local overrides or executing community code; startup seed tolerance is unchanged.
 
 Both ZIP install endpoints reject an existing target directory with
 `409 { error: "target already exists: <id>" }`, including Windows rename

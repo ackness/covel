@@ -276,6 +276,8 @@ seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后�
 
 世界包安装与 AI 生成的 `server-file` 目标写入用户世界目录，不回写内置资源。安装接口成功激活后返回 `restartRequired: false`，立即可从世界列表查询；激活失败只移除本次新建目录，允许重试。
 
+ZIP 安装在激活前复用 worldData 加载校验：声明的 descriptor/source 缺失、source 无法解析或不满足其自带 schema 等 `error` 诊断返回 400，不创建世界记录，并移除本次新建目录；修复后可用同一 ID 重试。`warning` 不阻止安装。校验只读取包内数据，不让本机 overrides 掩盖包错误，也不执行社区代码；启动 seed 的 worldData 错误容错策略不变。
+
 server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，包含 Linux。已有世界的 YAML / Markdown 文件变化会按物理目录延迟 500ms 合并后重读，读取后使用清单的 `id` 查询、更新世界并通知会话（目录名无需与 `id` 相同）；**仅维度发生变化时**更新存储，并向使用该世界的 session 发出 `world.dimensions.changed`。这是作者声明变化通知，不会将会话的演化值重置成新初值；已有会话需显式同步并检查冲突。它不是完整世界包或插件的热重载：直接放入一个新世界目录需重启 seed 或走安装入口，其他世界内容更新也应重启加载。
 
 若文件系统不支持监听，启动会记录 warning；维度也可通过 `POST /api/worlds/:id/dimensions/import` 导入。插件安装后仍需重启服务。实现见 `apps/server/src/world-file-watcher.ts`，安装响应见 [API 参考](./api.md#installed-resource-storage-and-vector-configuration)。
