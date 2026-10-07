@@ -353,6 +353,7 @@ export async function executeFunctionRuntime({
   const runtimeTools = createRuntimeTools({
     manifest,
     context: helperCtx,
+    ...(logicalTurn !== undefined ? { logicalTurn } : {}),
     locale: input.locale,
     messages,
     deps: { ...deps, hookPipeline },

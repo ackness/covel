@@ -547,15 +547,13 @@ describe("builtin character tools", () => {
       expect(char.description).toBe("药王谷谷主，已故");
     });
 
-    it("returns notFound when id does not exist", async () => {
-      const result = await loop.call("update-character", {
-        id: "nonexistent",
-        fields: { hp: 1 },
-      });
-      expect(getToolContent(result)).toMatchObject({
-        success: false,
-        notFound: true,
-      });
+    it("rejects when the character id does not exist", async () => {
+      await expect(
+        loop.call("update-character", {
+          id: "nonexistent",
+          fields: { hp: 1 },
+        }),
+      ).rejects.toThrow("Character nonexistent not found in session");
       expect(loop.pending).toHaveLength(0);
     });
   });
@@ -912,16 +910,13 @@ describe("builtin character tools", () => {
       expect(getToolContent(result)._text).toMatch(/status/);
     });
 
-    it("returns a not-found text when id does not exist", async () => {
-      const result = (await loop.call("update-character", {
-        id: "missing",
-        fields: { hp: 1 },
-      })) as { _text: string; success: boolean; notFound?: boolean };
-      expect(getToolContent(result).success).toBe(false);
-      expect(getToolContent(result).notFound).toBe(true);
-      expect(getToolContent(result)._text.toLowerCase()).toMatch(
-        /not found|未找到|不存在/,
-      );
+    it("reports the missing character id in its rejection", async () => {
+      await expect(
+        loop.call("update-character", {
+          id: "missing",
+          fields: { hp: 1 },
+        }),
+      ).rejects.toThrow("Character missing not found in session");
     });
   });
 

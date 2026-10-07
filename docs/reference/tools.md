@@ -251,6 +251,8 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 ### Function runtime 调用工具
 
+工具的 `context.logicalTurn` 原样继承本次执行冻结的值，与 handler 的 `ctx.logicalTurn` 相同；不会按工具调用次数、消息数或执行中重新读取的会话时钟计算。独立薄宿主未提供 logicalTurn 时，该字段仍可省略。
+
 `await ctx.tools.call(name, args)` 调用 manifest `tools.builtin` / `tools.plugin` 白名单中的工具，复用参数校验、工具审批、Pre/PostToolUse hook、审计和 proposal 提交流程。调用按顺序执行，后续工具可读到先前的待提交写入；任何失败调用使该 runtime 失败，即使 handler 捕获异常也不会提交部分写入。参数序列化失败（例如 BigInt、循环引用）也会使整个 runtime 失败。超时/结束后句柄吊销。只有成功的 runtime 将领域写入与 `ctx.pluginData` 一起交给执行事务。此接口只注入 function runtime，不注入 agent guard。
 
 PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后续的工具调用；handler 可正常返回当前结果。被拒绝的后续调用同样使 runtime 失败。
@@ -634,7 +636,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 | description | string                  |      | 新描述（未传则保留原值） |
 | fields      | Record<string, unknown> |      | 要合并的字段             |
 
-**输出 (parsedResult)**: `{ _text, success, characterId, version }` 或 `{ _text, success: false, notFound: true }`
+**成功输出 (parsedResult)**: `{ _text, success: true, characterId, version }`。角色不存在时抛出错误，例如 `Character missing not found in session. It may have been removed or the id is wrong.`；执行器将该次调用记录为失败，而不是正常返回业务 `success: false`。它不会满足 agent 的 `completeAfterTools`；function runtime 即使捕获该错误，也不会提交此前缓冲的写入。
 
 **LLM 看到的 `_text` 示例**：
 
@@ -658,6 +660,8 @@ Updated npc "苏婉" (char-abc123) → v2.
 两组可以同时为空：空批次是"本回合没有角色变化"的显式结算，成功返回且不产生 proposal。`creates[]` 与 `create-character` 参数相同，`updates[]` 与 `update-character` 参数相同。
 
 同 session 同 `(name, type)` 的重复 create 作为幂等命中返回 `unchanged`，包含已有角色 id；不覆盖已有 description/fields，也不阻断批次内其他合法操作。修改既有角色必须显式放入 `updates`。其他校验失败仍使整批失败，修正后需重新提交完整批次。
+
+同批次内较早的创建与更新对后续子调用可见。宿主提供 `context.world` 时，组合工具只把本批新增 proposal 叠加到该快照；不得再次重放快照已包含的外层 upstream/pending proposal，以免重复推进版本或覆盖较新的字段。
 
 **输出 (parsedResult)**: `{ _text, success: true, created, updated, unchanged }`
 

@@ -18,6 +18,8 @@ import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
 /** Deterministic handlers use the same governed tools as agent runtimes. */
 export function createRuntimeTools(options: {
   world?: import("@covel/shared").WorldModelView;
+  /** The execution's frozen logical turn, when supplied by the host. */
+  logicalTurn?: number;
   upstreamProposals?: readonly import("@covel/shared").Proposal[];
   manifest: RuntimeManifest;
   context: HandlerHelperContext;
@@ -78,6 +80,9 @@ export function createRuntimeTools(options: {
           { toolCallId: call.id, name: call.name, arguments: call.arguments },
           {
             ...context,
+            ...(options.logicalTurn !== undefined
+              ? { logicalTurn: options.logicalTurn }
+              : {}),
             locale: options.locale,
             messages: options.messages,
             signal,

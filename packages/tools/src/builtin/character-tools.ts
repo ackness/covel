@@ -268,12 +268,9 @@ function createUpdateCharacterTool(
       const all = await mergeCharacterViews(store, context);
       const existing = all.find((c) => c.id === params.id);
       if (!existing) {
-        return {
-          _text: `Character ${params.id} not found in session. It may have been removed or the id is wrong.`,
-          success: false,
-          notFound: true,
-          characterId: params.id,
-        };
+        throw new Error(
+          `Character ${params.id} not found in session. It may have been removed or the id is wrong.`,
+        );
       }
 
       const now = new Date().toISOString();
@@ -408,12 +405,29 @@ function createSyncCharactersTool(
       const created: Array<Record<string, unknown>> = [];
       const updated: Array<Record<string, unknown>> = [];
       const unchanged: Array<Record<string, unknown>> = [];
+      const batchContext = (): ToolExecutionContext => ({
+        ...context,
+        pendingProposals: [...(context.pendingProposals ?? []), ...proposals],
+        // The supplied world already represents the outer execution's writes.
+        // Only replay this composite call's new writes over that snapshot.
+        ...(context.world
+          ? {
+              world: {
+                ...context.world,
+                characters: [
+                  ...overlayCharacters(
+                    proposals,
+                    context.world.characters,
+                    context.sessionId,
+                  ).values(),
+                ],
+              },
+            }
+          : {}),
+      });
 
       for (const params of creates) {
-        const rawResult = await createCharacter.execute(params, {
-          ...context,
-          pendingProposals: [...(context.pendingProposals ?? []), ...proposals],
-        });
+        const rawResult = await createCharacter.execute(params, batchContext());
         const result = getToolContent(rawResult) as CharacterWriteOutput;
         if (result.success !== true) {
           throw new Error(
@@ -437,10 +451,7 @@ function createSyncCharactersTool(
       }
 
       for (const params of updates) {
-        const rawResult = await updateCharacter.execute(params, {
-          ...context,
-          pendingProposals: [...(context.pendingProposals ?? []), ...proposals],
-        });
+        const rawResult = await updateCharacter.execute(params, batchContext());
         const result = getToolContent(rawResult) as CharacterWriteOutput;
         if (result.success !== true) {
           throw new Error(

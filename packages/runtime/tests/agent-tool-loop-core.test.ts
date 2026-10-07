@@ -9,7 +9,8 @@
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { tool, withPendingProposals } from "@covel/tools";
+import { createCharacterTools, tool, withPendingProposals } from "@covel/tools";
+import { createMemoryStore } from "@covel/store/memory";
 import { z } from "zod";
 import { runAgentToolLoop } from "../src/agent-loop/turn-agent-tool-loop.js";
 import type { AgentToolLoopCompleted } from "../src/agent-loop/turn-agent-tool-loop.js";
@@ -337,6 +338,38 @@ describe("runAgentToolLoop core", () => {
       "mark",
     ]);
     expect(result.finalContent).toContain("single-shot");
+  });
+
+  it("does not complete after an update-character call fails to find its target", async () => {
+    const tools = createCharacterTools(createMemoryStore());
+    const llm = new ScriptedLLM([
+      toolCall("update-character", { id: "missing", fields: { hp: 1 } }),
+      prose("Recovered after the failed update"),
+    ]);
+    const result = await run({
+      llm,
+      manifest: manifest({
+        tools: { builtin: ["update-character"] },
+        completeAfterTools: ["update-character"],
+      }),
+      deps: {
+        toolExecutor: createToolExecutor({
+          findTool: (name) => tools.find((tool) => tool.name === name),
+          getToolSource: () => "builtin",
+        }),
+      },
+    });
+    expect(llm.calls).toBe(2);
+    expect(result.finalContent).toBe("Recovered after the failed update");
+    expect(result.pendingProposals).toEqual([]);
+    expect(llm.requests[1]?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "tool",
+          content: expect.stringContaining("not found"),
+        }),
+      ]),
+    );
   });
 
   it("runtime-done sentinel: early exit, sentinel stripped from business calls", async () => {
