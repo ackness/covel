@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Security vulnerability · 安全漏洞
+    url: https://github.com/ackness/covel/security/advisories/new
+    about: Report a vulnerability privately; do not open a public issue / 请私下报告安全漏洞，不要公开提 issue
   - name: Plugin directory · 插件目录
     url: https://github.com/covel-ai/covel-plugins
     about: Share a plugin, or report a problem in an official or community plugin / 分享插件，或反馈官方与社区插件的问题

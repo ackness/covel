@@ -5,6 +5,7 @@ where it is. Route-level auth contracts live in
 [`../reference/api.md`](../reference/api.md#鉴权session-owner-token); environment
 variables live in [`../guide/env-registry.md`](../guide/env-registry.md); desktop
 proxy settings live in [`../guide/desktop-config.md`](../guide/desktop-config.md).
+To report a vulnerability, see [`SECURITY.md`](../../SECURITY.md).
 
 ## Outbound requests (SSRF guard)
 
@@ -87,6 +88,58 @@ Failure mode this prevents: a request-scoped custom preset (`X-Slot-Config`
 overlay) that redirects a provider to another origin would otherwise receive the
 operator's key. Such a preset gets no environment key and no trusted default
 headers; it must supply its own key.
+
+At rest, the desktop app keeps the keys in `<covelHome>/keys.env` as plain
+`KEY=VALUE` lines with mode `0600`, set again on every write (a no-op on
+Windows); the web app keeps them in `localStorage` (`covel:keys`). They are not
+encrypted. The renderer needs the plain values to build `X-Provider-Keys`, so
+encryption at rest would leave the `covel:keys:load` IPC channel (trusted sender
+only) as it is, and on an unsigned build Electron `safeStorage` only added a
+macOS Keychain prompt. File mode and browser origin keep the keys from other OS users and other sites; they
+do not keep them from code running as the user, which includes an approved
+community plugin (next section).
+
+## Community plugin code
+
+Plugin server JavaScript (`entry`, handlers, guards, hooks, wires) runs inside
+the server process with the server's privileges. There is no process, VM, or
+module sandbox. What stands between a community package and those privileges is
+consent:
+
+- Before approval, a `community` package is data. Install, preview, listing and
+  validation parse its files and import none of them; the two-phase approval
+  (`covel:plugin-server-code`, then the action grant — see
+  [Hosted auth](#hosted-auth)) gates the first import.
+- After approval, the code can do what the server process can: read and write
+  the files of the server's OS user (`keys.env`, `llm.toml`, the SQLite file),
+  read `process.env`, open sockets, and start processes.
+- `permissions.http` is an allowlist on the plugin API: `ctx.utils.fetchWithRetry`,
+  `ctx.media.ingestUrl`, and the media bindings built on them
+  (`packages/runtime/src/function-runtime/http-permissions.ts`). It stops a
+  package from calling an origin it did not declare through that API. It does
+  not stop code that calls the global `fetch` or `node:https` itself.
+- The session-bound store view, per-plugin tool lookup, and the proposal
+  pipeline are authority boundaries of the plugin API, with the same limit.
+
+Approving a community package therefore means trusting its author with the
+account the server runs under, and the install and authorization dialogs say
+that the code runs without a process sandbox.
+
+Two cheaper measures were considered and are not used, because each would look
+like containment without being it:
+
+- A scan of the package's JavaScript for `node:` imports, `process.env`, or
+  `eval` is defeated by building the name from two strings, and a clean result
+  would read as an audit.
+- `worker_threads` with a module loader that filters `import` specifiers
+  contains nothing: a worker has the process's file and network access and
+  reaches the built-in modules without `import`, through
+  `process.getBuiltinModule`.
+
+Containment needs a separate OS process with restricted permissions, or an
+isolate, and a plugin API that crosses it by message. That is the change to make
+before community packages are distributed to players who cannot judge the
+author.
 
 ## Hosted auth
 
