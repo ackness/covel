@@ -37,6 +37,7 @@
     "check:i18n": "pnpm --filter @covel/web check:i18n && pnpm run check:plugins",
     "check:plugins": "node --import tsx ./scripts/check-plugin-i18n.mjs && node ./scripts/check-plugin-readmes.mjs",
     "test": "turbo test",
+    "test:docs": "pnpm --filter @covel/plugin-loader exec vitest run tests/authoring-guide-examples.test.ts && pnpm --filter @covel/server exec vitest run tests/lib/authoring-describe.test.ts",
     "test:pg": "node --env-file-if-exists=.env scripts/test-postgres.mjs",
     "test:plugin-lifecycle": "pnpm --filter @covel/server exec vitest run tests/api/third-party-plugin-lifecycle.test.ts tests/api/third-party-runtime-contracts.test.ts",
     "test:tabletop-plugin": "pnpm --filter @covel/server exec vitest run tests/api/third-party-tabletop.test.ts",
