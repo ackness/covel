@@ -3,7 +3,7 @@
  * events are emitted to the EventBus when one is provided.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import path from "node:path";
 import type {
   RuntimeManifest,

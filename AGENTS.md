@@ -87,7 +87,7 @@ pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
 pnpm dev:electron     # desktop shell in development
 pnpm stop             # kill stray dev/turbo processes
-pnpm check            # the CI static gate: peers, lint, package boundaries, deps:check,
+pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails), package boundaries, deps:check,
                       # plugin manifests, schema reference, prompt variants, i18n, script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
@@ -146,8 +146,9 @@ in `docs/`, a template, or a skill must be one that actually runs: when a root
 script, its arguments, or a scaffold's output changes, re-run the documented
 sequence and fix every page that shows it.
 
-Git hooks: pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint, and the
-full `pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs install,
+Git hooks: pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint (rules in
+`.oxlintrc.jsonc`, the same `--deny-warnings` as `pnpm check`), and the full
+`pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs install,
 `pnpm check`, `pnpm test`, and `pnpm e2e --list` in a clean checkout of each pushed
 tip (`pnpm check:push` runs the same check on HEAD). CI (`.github/workflows/ci.yml`)
 runs check/test/build, Web unit tests, PostgreSQL integration, and browser smoke in

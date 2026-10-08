@@ -8,7 +8,7 @@
  * - slotNames dead code removed from llm-loader.ts
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { z } from "zod";
 import { createAnthropicMessagesAdapter } from "../src/adapters/anthropic-messages.js";
 import { createOpenAiChatAdapter } from "../src/adapters/openai-chat.js";

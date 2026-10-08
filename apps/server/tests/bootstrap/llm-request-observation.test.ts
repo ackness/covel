@@ -120,7 +120,7 @@ function recorded(
   rows: Array<{ type: string; payload: unknown }>,
 ): LLMProviderRequest[] {
   const requests = (
-    rows.find((row) => row.type === "llm.calling")?.payload as {
+    rows.find((row) => row.type === "llm.calling")!.payload as {
       providerRequests: LLMProviderRequestTrace[];
     }
   ).providerRequests;

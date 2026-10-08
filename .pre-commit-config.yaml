@@ -39,7 +39,7 @@ repos:
       - id: oxlint
         name: oxlint
         entry: mise exec -- node scripts/run-with-project-node.mjs pnpm exec oxlint
-        args: [--fix]
+        args: [--fix, --deny-warnings]
         language: system
         types_or: [javascript, jsx, ts, tsx]
         exclude: ^apps/web/src/routeTree\.gen\.ts$

@@ -5,7 +5,6 @@ import {
   createProviderRegistry,
 } from "@covel/ai-provider";
 import { createPluginRuntimeGateway } from "@covel/runtime";
-import { createMemoryStore } from "@covel/store/memory";
 import { outboundFetch } from "../../../../packages/ai-provider/src/outbound-network.js";
 import extractMemory from "../../../../plugins/memory/server/extract.js";
 

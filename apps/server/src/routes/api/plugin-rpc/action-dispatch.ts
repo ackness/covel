@@ -326,10 +326,9 @@ export async function dispatchPluginAction(
           })
         : undefined;
       const dispatch = () => {
-        // Select by the actual registered entry, not a plugin's claimed trust.
-        // Framework defaults own transactions; plugin actions receive only the
-        // documented immediate-write RPC capability, including builtins.
-        const entry = executor.lookupEntry(pluginId, action);
+        // Every action handler, builtin or community, receives only the
+        // documented immediate-write RPC capability bound to this session and
+        // plugin.
         const rpcStore = createRpcHandlerStoreView(store, {
           sessionId,
           pluginId,

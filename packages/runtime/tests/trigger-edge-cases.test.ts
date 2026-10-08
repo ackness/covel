@@ -9,7 +9,7 @@
  *  - conditional emits exactly one console.warn per (sessionId, runtimeId)
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import type { TriggerContext } from "../src/types.js";
 import { shouldTrigger } from "../src/trigger/trigger.js";

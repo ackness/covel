@@ -280,7 +280,7 @@ test.describe("AI World Generation", () => {
       rules: expect.any(Number),
     });
     expect(
-      (metadata?.generatedPackageSummary as { characters: number }).characters,
+      (metadata!.generatedPackageSummary as { characters: number }).characters,
     ).toBeGreaterThanOrEqual(3);
     expect(Array.isArray(metadata?.characterBlueprints)).toBe(true);
     expect(Array.isArray(metadata?.embeddedLorebook)).toBe(true);
