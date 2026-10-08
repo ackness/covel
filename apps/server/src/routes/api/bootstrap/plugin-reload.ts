@@ -9,6 +9,7 @@ import {
   type PluginDiscoveryResult,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
+import { assertHostVersionInRange } from "../../../lib/app-version.js";
 
 /** Re-scan only the requested package; malformed siblings cannot break reload. */
 export async function preparePluginReload(
@@ -42,6 +43,10 @@ export async function preparePluginReload(
     pluginMdPaths: pluginMdPaths.sort(),
   };
   const definition = await loadPluginDefinition(discovery);
+  assertHostVersionInRange(
+    `Plugin ${discovery.id}`,
+    definition.packageManifest.plugin.covel,
+  );
   const summary = await loadPluginSummary(discovery, undefined, definition);
   const entry: PluginRegistryEntry = {
     id: discovery.id,

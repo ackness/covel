@@ -36,8 +36,9 @@ function buildTurnSummaries(events: readonly ApiTraceEvent[]) {
       const sorted = turnEvents.sort((a, b) =>
         a.timestamp.localeCompare(b.timestamp),
       );
-      const firstEvt = sorted[0];
-      const lastEvt = sorted[sorted.length - 1];
+      // A map entry is created with its first event, so `sorted` is never empty.
+      const firstEvt = sorted[0]!;
+      const lastEvt = sorted.at(-1)!;
       const payload = firstEvt.payload;
       const flowId = (payload?.flowId as string) ?? "";
       const traceId = firstEvt.traceId ?? "";

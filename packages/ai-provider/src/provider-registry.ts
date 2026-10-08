@@ -142,7 +142,7 @@ export function createProviderRegistry(options?: {
       /** Provenance of the target (overlay presets set this — see types.ts). */
       requestScoped?: boolean;
     },
-    opts: { mode: OperationMode } = { mode: "text" },
+    _opts: { mode: OperationMode } = { mode: "text" },
   ): ProviderResolution {
     // Request-scoped targets (browser custom presets) may name providers
     // that exist only in the request. Resolve them ephemerally instead of

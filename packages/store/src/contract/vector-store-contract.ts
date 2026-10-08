@@ -33,7 +33,7 @@ function l2Normalize(v: Float32Array): Float32Array {
   for (const f of v) norm += f * f;
   norm = Math.sqrt(norm) || 1;
   const out = new Float32Array(v.length);
-  for (let i = 0; i < v.length; i += 1) out[i] = v[i] / norm;
+  for (let i = 0; i < v.length; i += 1) out[i] = v[i]! / norm;
   return out;
 }
 
@@ -167,7 +167,7 @@ export function runVectorStoreContractTests(
         ["archive", "removed"],
         ["archive", "kept"],
         ["other", "removed"],
-      ]) {
+      ] as const) {
         await store.upsertVector({
           sessionId: "s1",
           pluginId: "owner",
@@ -437,7 +437,7 @@ export function runVectorStoreContractTests(
           expectedValue: "new",
           value: "old",
           deletes: [{ namespace: "chunks", key: "shared" }],
-          upserts: [{ ...upserts[0], key: "stale", payload: "old" }],
+          upserts: [{ ...upserts[0]!, key: "stale", payload: "old" }],
         }),
       ).rejects.toThrow("incarnation changed");
       expect(await store.getVectorIndexProgress(scope)).toBe("new");
@@ -468,10 +468,10 @@ export function runVectorStoreContractTests(
         topK: 5,
       });
       expect(results).toHaveLength(1);
-      expect(results[0].key).toBe("edge-1");
-      expect(results[0].pluginId).toBe("npc-graph");
-      expect(results[0].namespace).toBe("edges");
-      expect(results[0].payload).toBe("hello world");
+      expect(results[0]!.key).toBe("edge-1");
+      expect(results[0]!.pluginId).toBe("npc-graph");
+      expect(results[0]!.namespace).toBe("edges");
+      expect(results[0]!.payload).toBe("hello world");
     });
 
     it("respects topK", async () => {
@@ -492,7 +492,7 @@ export function runVectorStoreContractTests(
         topK: 3,
       });
       expect(results).toHaveLength(3);
-      expect(results[0].key).toBe("k0"); // exact match lands first
+      expect(results[0]!.key).toBe("k0"); // exact match lands first
     });
 
     it("returns no results when topK is zero or negative", async () => {
@@ -539,8 +539,8 @@ export function runVectorStoreContractTests(
       for (let i = 0; i < combos.length; i += 1) {
         await store.upsertVector({
           sessionId: "s1",
-          pluginId: combos[i].pluginId,
-          namespace: combos[i].namespace,
+          pluginId: combos[i]!.pluginId,
+          namespace: combos[i]!.namespace,
           key: `k${i}`,
           embedding: seededVector(dim, i),
         });
@@ -555,7 +555,7 @@ export function runVectorStoreContractTests(
         namespace: "edges",
       });
       expect(narrowed).toHaveLength(1);
-      expect(narrowed[0].key).toBe("k0");
+      expect(narrowed[0]!.key).toBe("k0");
 
       const pluginOnly = await store.searchVectors({
         sessionId: "s1",
@@ -593,7 +593,7 @@ export function runVectorStoreContractTests(
         topK: 10,
       });
       expect(fromA).toHaveLength(1);
-      expect(fromA[0].sessionId).toBe("session-A");
+      expect(fromA[0]!.sessionId).toBe("session-A");
     });
 
     it("treats upsertVector on existing quadruple as replace", async () => {
@@ -623,7 +623,7 @@ export function runVectorStoreContractTests(
         topK: 10,
       });
       expect(results).toHaveLength(1);
-      expect(results[0].payload).toBe("second");
+      expect(results[0]!.payload).toBe("second");
     });
 
     it("deletes by pluginId + namespace, keeps other rows", async () => {
@@ -849,9 +849,9 @@ export function runVectorStoreContractTests(
       });
 
       expect(fromA).toHaveLength(1);
-      expect(fromA[0].payload).toBe("from-A");
+      expect(fromA[0]!.payload).toBe("from-A");
       expect(fromB).toHaveLength(1);
-      expect(fromB[0].payload).toBe("from-B");
+      expect(fromB[0]!.payload).toBe("from-B");
     });
 
     it("reuses the original physical table when switching back to a previous model", async () => {
@@ -920,8 +920,8 @@ export function runVectorStoreContractTests(
         topK: 5,
       });
       expect(fromS1).toHaveLength(1);
-      expect(fromS1[0].key).toBe("old-key");
-      expect(fromS1[0].payload).toBe("preserved");
+      expect(fromS1[0]!.key).toBe("old-key");
+      expect(fromS1[0]!.payload).toBe("preserved");
 
       // s3 sees nothing (no writes yet) but shares the physical table.
       const fromS3Empty = await store.searchVectors({

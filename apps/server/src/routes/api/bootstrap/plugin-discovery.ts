@@ -1,4 +1,5 @@
 import { applyPendingPackageUpdates } from "../install/package-updates.js";
+import { assertHostVersionInRange } from "../../../lib/app-version.js";
 import { validateRuntimeManifestSemantics } from "@covel/shared";
 import path from "node:path";
 import type { EventBus } from "@covel/events";
@@ -56,6 +57,13 @@ export async function discoverAndRegisterPlugins(
   for (const discovery of discoveries) {
     try {
       const definition = await loadPluginDefinition(discovery);
+      // The installer refuses a package outside its declared host range. A
+      // package can still be on disk outside it: copied in by hand, or
+      // installed before the host was updated.
+      assertHostVersionInRange(
+        `Plugin ${discovery.id}`,
+        definition.packageManifest.plugin.covel,
+      );
       // The root's localized variants belong to the package. A variant that
       // does not parse fails this package here, like any other load error,
       // and not later at entry bootstrap, where it stopped the server.

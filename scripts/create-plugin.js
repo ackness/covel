@@ -129,8 +129,15 @@ if (existsSync(targetDir)) {
   process.exit(1);
 }
 
+// A standalone plugin names the host it was written on as the oldest host it
+// supports. A plugin under plugins/ ships with its host and declares no range.
+const hostVersion = JSON.parse(
+  readFileSync(resolve(ROOT, "package.json"), "utf-8"),
+).version;
+
 const placeholders = {
   "{{pluginName}}": pluginName,
+  "{{hostRange}}": `>=${hostVersion}`,
   // Manifests are English; the Chinese text goes to locales/zh.yaml and README.
   "{{pluginDescription}}": `${pluginName} plugin - replace with a short plugin description.`,
   "{{pluginDescriptionZh}}": `${pluginName} 插件 - 请在此填写插件描述。`,
@@ -334,7 +341,7 @@ function runCustomMultiRuntime(runtimes) {
     : "";
   writeFileSync(
     join(targetDir, "PLUGIN.md"),
-    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\n${optional}---\n`,
+    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\ncovel: "${placeholders["{{hostRange}}"]}"\n${optional}---\n`,
     "utf-8",
   );
   mkdirSync(join(targetDir, "locales"), { recursive: true });

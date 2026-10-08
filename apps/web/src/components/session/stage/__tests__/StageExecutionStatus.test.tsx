@@ -93,7 +93,7 @@ describe("StageExecutionStatus", () => {
         executionSteps={[
           ...source,
           {
-            ...source[1],
+            ...source[1]!,
             turnId: "attempt",
             sourceTurnId: "source",
             status: "failed",
@@ -134,7 +134,7 @@ describe("StageExecutionStatus", () => {
   it("keeps the remaining failed task available after another task commits its retry", () => {
     const retry = vi.fn();
     const retryStep: ExecutionStep = {
-      ...source[1],
+      ...source[1]!,
       turnId: "attempt",
       sourceTurnId: "source",
       status: "completed",
@@ -169,7 +169,7 @@ describe("StageExecutionStatus", () => {
 
   it("shows pending retry progress and provides no duplicate retry while executing", () => {
     const retryStep: ExecutionStep = {
-      ...source[1],
+      ...source[1]!,
       turnId: "attempt",
       sourceTurnId: "source",
       status: "completed",

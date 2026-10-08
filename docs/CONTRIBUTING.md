@@ -22,7 +22,7 @@ pnpm dev                       # 同时启动前端与后端
 
 每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26、pnpm 12.6 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
 
-提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier、类型检查一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。
+提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier、类型检查一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。Oxlint 的规则在根目录 `.oxlintrc.jsonc`，关闭的规则各有一行说明；hook 检查改动的文件，`pnpm check` 检查整个仓库，两处都带 `--deny-warnings`，所以警告也会让检查失败。
 
 新增文件默认上限为 3 MiB；世界画廊原图 `worlds/*/media/gallery/*.png` 单独允许 4 MiB，以保留 1536×1024 图片的无损质量。展示时优先使用配套 WebP。
 
@@ -82,7 +82,7 @@ pnpm e2e:smoke                             # CI 的确定性 Chromium 核心流�
 pnpm e2e                                   # Playwright 端到端
 ```
 
-`pnpm check` 包含 peer 依赖、类型、包边界、依赖声明、插件 manifest、schema 参考页、提示词变体、i18n、脚本回归和工作流检查。修改作者可见的 schema 字段后运行 `pnpm schemas:generate`，重新生成 `packages/shared/schemas/*.json` 与 `docs/reference/schema/*.md`；每个字段都必须带 `.describe()` 说明，缺失或生成物过期都会让检查失败。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
+`pnpm check` 包含 peer 依赖、类型、Oxlint、包边界、依赖声明、插件 manifest、schema 参考页、提示词变体、i18n、脚本回归和工作流检查。修改作者可见的 schema 字段后运行 `pnpm schemas:generate`，重新生成 `packages/shared/schemas/*.json` 与 `docs/reference/schema/*.md`；每个字段都必须带 `.describe()` 说明，缺失或生成物过期都会让检查失败。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
 
 安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile`、`pnpm check`、`VITEST_MAX_WORKERS=2 pnpm test --concurrency=2` 和 `pnpm e2e --list`；任何一步失败都会阻止推送。检查不复制工作区的 `.env`、`node_modules`、`test-results` 或 `.turbo`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。这会使每次推送增加数分钟；需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。该检查只收集 E2E 测试，不执行 PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
 
@@ -90,7 +90,7 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm test:pg` 从环境或根 `.env` 读取 `DATABASE_URL`，强制执行 Store 与 Server 的 PostgreSQL 测试；数据库缺失、不可达或缺少 pgvector 都会失败。Store 和 Server 的普通测试也接收显式传入的数据库环境变量，但由于数据库状态不属于源码输入，这两组测试不复用 Turbo 缓存。其余缓存会跟随公共 TypeScript 配置失效，读取框架 prompt 的测试也跟随 `prompts/**` 失效。
 
-`pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。覆盖率目标 ≥ 80% 当前为参考目标，CI（[`ci.yml`](../.github/workflows/ci.yml)）尚未设阈值强制拦截。
+`pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。CI（[`ci.yml`](../.github/workflows/ci.yml)）只对 `@covel/runtime` 强制覆盖率下限：`pnpm test:coverage:runtime` 带覆盖率运行它的测试，低于 `packages/runtime/vitest.config.ts` 里的 `thresholds` 即失败；下限比实测值低几个百分点，用来拦截下降，覆盖率上升后应随之调高。其余包的 ≥ 80% 仍是参考目标，未强制。
 
 PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试、PostgreSQL 与 Chromium smoke job。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
 

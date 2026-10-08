@@ -146,7 +146,7 @@ describe("SSE retry commit settlement", () => {
       sourceFailedRuntimeIds: ["remaining"],
     });
     h.send("runtime.completed", { ...inflight, status: "success" });
-    expect(h.getState().executionSteps[1].sourceFailedRuntimeIds).toEqual([
+    expect(h.getState().executionSteps[1]!.sourceFailedRuntimeIds).toEqual([
       "remaining",
     ]);
     expect(
@@ -166,7 +166,7 @@ describe("SSE retry commit settlement", () => {
     h.send("execution.completed", { committed: true });
     h.send("error.occurred", { message: "Trace write failed" });
     h.send("runtime.completed", { status: "success" });
-    expect(h.getState().executionSteps[1].attemptStatus).toBe("committed");
+    expect(h.getState().executionSteps[1]!.attemptStatus).toBe("committed");
     expect(
       projectExecutionTurns([], h.getState().executionSteps).latestTurn
         ?.sourceCommitted,
@@ -186,7 +186,7 @@ describe("SSE retry commit settlement", () => {
         turnId: "attempt",
         attemptStatus: committed ? "committed" : "failed",
       });
-      expect(h.getState().executionSteps[1].sourceTurnId).toBeUndefined();
+      expect(h.getState().executionSteps[1]!.sourceTurnId).toBeUndefined();
       expect(
         projectExecutionTurns([], h.getState().executionSteps).latestTurn
           ?.sourceCommitted,
@@ -200,7 +200,7 @@ describe("SSE retry commit settlement", () => {
       h.send("runtime.started", {});
       h.send("runtime.completed", { status: "success" });
       h.send("execution.completed", { committed });
-      expect(h.getState().executionSteps[1].attemptStatus).toBe("failed");
+      expect(h.getState().executionSteps[1]!.attemptStatus).toBe("failed");
       expect(h.getState().executionError).toBe("Execution commit failed");
     },
   );
@@ -221,8 +221,8 @@ describe("SSE retry commit settlement", () => {
       h.send("runtime.started", {});
       h.send("runtime.completed", { status: "success" });
       expect(
-        projectExecutionTurns([], h.getState().executionSteps).turns[0].steps[0]
-          .status,
+        projectExecutionTurns([], h.getState().executionSteps).turns[0]!
+          .steps[0]!.status,
       ).toBe("running");
       h.send("execution.completed", { committed });
       expect(h.getState().executionSteps).toHaveLength(2);
@@ -237,8 +237,8 @@ describe("SSE retry commit settlement", () => {
         attemptStatus: committed ? "committed" : "failed",
       });
       expect(
-        projectExecutionTurns([], h.getState().executionSteps).turns[0].steps[0]
-          .status,
+        projectExecutionTurns([], h.getState().executionSteps).turns[0]!
+          .steps[0]!.status,
       ).toBe(committed ? "completed" : "failed");
     },
   );
@@ -248,9 +248,9 @@ describe("SSE retry commit settlement", () => {
     h.send("runtime.started", {});
     h.send("runtime.completed", { status: "success" });
     h.send("error.occurred", { message: "Unable to save" });
-    expect(h.getState().executionSteps[1].attemptStatus).toBe("failed");
+    expect(h.getState().executionSteps[1]!.attemptStatus).toBe("failed");
     expect(
-      projectExecutionTurns([], h.getState().executionSteps).turns[0].steps[0]
+      projectExecutionTurns([], h.getState().executionSteps).turns[0]!.steps[0]!
         .status,
     ).toBe("failed");
   });

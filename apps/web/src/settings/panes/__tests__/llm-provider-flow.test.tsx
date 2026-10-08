@@ -82,7 +82,7 @@ beforeEach(async () => {
   });
   await store.init();
   mocks.store = store;
-  delete mocks.presets[0].capability;
+  delete mocks.presets[0]!.capability;
   mocks.lookup.mockReset().mockResolvedValue({
     found: false,
     source: "protocol-default",
@@ -184,7 +184,7 @@ describe("provider configuration flow", () => {
   });
 
   it("keeps explicit provider model limits when the catalog has no match", async () => {
-    mocks.presets[0].capability = {
+    mocks.presets[0]!.capability = {
       input: ["text"],
       output: ["text"],
       contextWindow: 65536,

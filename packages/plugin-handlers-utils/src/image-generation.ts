@@ -132,13 +132,19 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+type ImageBaseRecord = Record<string, JsonValue> & {
+  imageId: string;
+  prompt: string;
+  promptMode: string;
+};
+
 /**
  * Uniform failure path: gallery record + logger entry + handler return value,
  * so every error lands as a visible `failed` card instead of a missing entry.
  */
 async function failureRecord(
   ctx: ImageGenerationHandlerContext,
-  baseRecord: Record<string, JsonValue> & { imageId: string },
+  baseRecord: ImageBaseRecord,
   message: string,
 ): Promise<ImageGenerationResult> {
   const record = {
@@ -206,7 +212,7 @@ export async function runImageGeneration(
     : Math.random().toString(36).slice(2, 8);
   const imageId = `img-${Date.now().toString(36)}-${suffix}`;
   const startedAt = new Date().toISOString();
-  const baseRecord: Record<string, JsonValue> & { imageId: string } = {
+  const baseRecord: ImageBaseRecord = {
     imageId,
     prompt,
     promptMode,
@@ -297,7 +303,7 @@ export async function runImageGeneration(
       value: {
         imageId,
         status: "done",
-        ref: refs[0],
+        ref: refs[0]!,
         ...(refs.length > 1 ? { refs } : {}),
         ...(warnings.length > 0 ? { warnings } : {}),
         ...(cached ? { cached: true } : {}),

@@ -87,7 +87,8 @@ stateRoutes.get("/:id/state", async (c) => {
   // ── characters ────────────────────────────────────────────────────
   {
     const characters = await store.listCharacters(id);
-    if (characters.length > 0) {
+    const sample = characters[0];
+    if (sample) {
       const data: Record<string, unknown> = Object.create(null);
       for (const ch of characters) {
         data[ch.id] = ch;
@@ -96,11 +97,9 @@ stateRoutes.get("/:id/state", async (c) => {
         schema: {
           name: "characters",
           description: `${characters.length} character(s)`,
-          fields: Object.keys(characters[0]).map((name) => ({
+          fields: Object.keys(sample).map((name) => ({
             name,
-            type: typeOf(
-              (characters[0] as unknown as Record<string, unknown>)[name],
-            ),
+            type: typeOf((sample as unknown as Record<string, unknown>)[name]),
           })),
         },
         data,

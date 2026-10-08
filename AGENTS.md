@@ -87,11 +87,12 @@ pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
 pnpm dev:electron     # desktop shell in development
 pnpm stop             # kill stray dev/turbo processes
-pnpm check            # the CI static gate: peers, lint, package boundaries, deps:check,
+pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails), package boundaries, deps:check,
                       # plugin manifests, schema reference, prompt variants, i18n, script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
+pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under the floor in its vitest.config.ts (CI runs it)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
 pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
@@ -146,8 +147,9 @@ in `docs/`, a template, or a skill must be one that actually runs: when a root
 script, its arguments, or a scaffold's output changes, re-run the documented
 sequence and fix every page that shows it.
 
-Git hooks: pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint, and the
-full `pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs install,
+Git hooks: pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint (rules in
+`.oxlintrc.jsonc`, the same `--deny-warnings` as `pnpm check`), and the full
+`pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs install,
 `pnpm check`, `pnpm test`, and `pnpm e2e --list` in a clean checkout of each pushed
 tip (`pnpm check:push` runs the same check on HEAD). CI (`.github/workflows/ci.yml`)
 runs check/test/build, Web unit tests, PostgreSQL integration, and browser smoke in
@@ -257,6 +259,12 @@ functions, `PascalCase` types and React components, kebab-case module names. Avo
 bare `any`; validate external input with Zod. 400 and 800 lines are file-size
 review guidelines, not hard limits — split a file only when its responsibilities or
 maintenance cost justify it.
+
+`noImplicitOverride` and `noUncheckedIndexedAccess` are on in every tsconfig, so
+`items[i]` has the type `T | undefined`. Prefer a form that needs no assertion:
+`for (const [i, item] of items.entries())`, `const row = rows[0]; if (!row) …`,
+`items.at(-1)`, `text.charAt(0)`. Write `items[i]!` only where the line itself or
+the one above it shows that the index is in range.
 
 ## Architecture Essentials
 
@@ -549,7 +557,9 @@ arguments, and outputs stripped from traces and the live stream.
 - Vitest runs every package, the server, and web (`*.test.ts` / `*.test.tsx`);
   `apps/desktop` and `scripts/tests/` use `node --test`; Playwright specs are
   `*.spec.ts` under `tests/e2e/`. Add focused regression tests for features and
-  fixes. The ≥80% coverage goal (`pnpm test:coverage`) is not enforced in CI.
+  fixes. CI enforces a coverage floor for `@covel/runtime` only
+  (`pnpm test:coverage:runtime`); the ≥80% goal for the other packages
+  (`pnpm test:coverage`) is not enforced.
 - Every `DataStore` backend must pass the shared contract suite
   (`packages/store/src/contract/store-contract.ts` + `contract/suites/`).
 - Plugin tests use `@covel/plugin-test-utils` (`MockLLM`,

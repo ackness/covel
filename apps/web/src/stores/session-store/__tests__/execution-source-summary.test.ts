@@ -158,7 +158,7 @@ describe("execution source summaries outside the trace window", () => {
       ],
       { state: "completed", turnId: "attempt" },
     );
-    expect(raw[0].sourceFailedRuntimeIds).toEqual([]);
+    expect(raw[0]!.sourceFailedRuntimeIds).toEqual([]);
     expect(projectExecutionTurns([], raw).latestTurn?.steps).toEqual([]);
   });
 });

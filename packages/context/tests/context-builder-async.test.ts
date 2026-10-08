@@ -12,7 +12,7 @@
  *   - store errors propagate out of `buildContext`
  *   - `needsAsyncBuild` correctly detects plugin-data declarations
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { buildContext, type ContextBuildParams } from "@covel/context";
 import { buildContextSync, needsAsyncBuild } from "../src/context-builder.js";
 import {

@@ -22,7 +22,7 @@ describe("game-view interaction block detection", () => {
       }),
     ];
 
-    expect(isPendingInteractionMessage(messages[0], messages, new Set())).toBe(
+    expect(isPendingInteractionMessage(messages[0]!, messages, new Set())).toBe(
       true,
     );
   });
@@ -39,7 +39,7 @@ describe("game-view interaction block detection", () => {
       }),
     ];
 
-    expect(isPendingInteractionMessage(messages[0], messages, new Set())).toBe(
+    expect(isPendingInteractionMessage(messages[0]!, messages, new Set())).toBe(
       false,
     );
   });
@@ -61,7 +61,7 @@ describe("game-view interaction block detection", () => {
       }),
     ];
 
-    expect(isPendingInteractionMessage(messages[0], messages, new Set())).toBe(
+    expect(isPendingInteractionMessage(messages[0]!, messages, new Set())).toBe(
       true,
     );
   });
@@ -87,7 +87,7 @@ describe("game-view interaction block detection", () => {
       }),
     ];
 
-    expect(isPendingInteractionMessage(messages[0], messages, new Set())).toBe(
+    expect(isPendingInteractionMessage(messages[0]!, messages, new Set())).toBe(
       false,
     );
   });

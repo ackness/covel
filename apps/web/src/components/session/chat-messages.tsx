@@ -166,7 +166,7 @@ export function ChatMessages({
   // O(n) scan (which made block rendering O(n²) across the whole list).
   const lastUserMsgIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
-      if (messages[i].role === "user") return i;
+      if (messages[i]!.role === "user") return i;
     }
     return -1;
   }, [messages]);

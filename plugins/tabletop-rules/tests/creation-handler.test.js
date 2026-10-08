@@ -48,7 +48,6 @@ const rules = {
 function makeCtx({
   phase = "setup",
   sessionId = "session-1",
-  storeShape = "trusted",
   characters = [],
   playerInputs = [],
   inputs = {},
@@ -96,7 +95,7 @@ function makeCtx({
 }
 
 describe("creation handler", () => {
-  it("waits for the character creator while the session is opening (trusted full-store shape)", async () => {
+  it("waits for the character creator while the session is opening", async () => {
     const { ctx, calls, pluginData } = makeCtx({
       phase: "setup",
       characters: [],
@@ -114,17 +113,6 @@ describe("creation handler", () => {
     // (and the world-import flow without any creator) sees them from the
     // first turn.
     expect(pluginData.get("setup/rules")).toEqual(rules);
-  });
-
-  it("waits for the character creator while the session is opening (community session-bound shape)", async () => {
-    const { ctx, calls } = makeCtx({
-      phase: "setup",
-      characters: [],
-      storeShape: "community",
-    });
-    const result = await handler(ctx);
-    expect(result.completion).toBe("pending");
-    expect(calls.forms).toEqual([]);
   });
 
   it("derives rules from the same-turn world-data provider output without the schema read tool", async () => {

@@ -244,9 +244,9 @@ export function MessageBlockRenderer({
           ...initialFormState.form,
         };
         for (const [path, value] of Object.entries(formStateRef.current)) {
-          const match = path.match(/^\/form\/(.+)$/);
-          if (match && value != null) {
-            formValues[match[1]] = value;
+          const field = path.match(/^\/form\/(.+)$/)?.[1];
+          if (field && value != null) {
+            formValues[field] = value;
           }
         }
 

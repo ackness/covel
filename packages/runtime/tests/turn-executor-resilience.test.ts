@@ -7,7 +7,7 @@
  * - M1: onDelta error during streaming should not kill the runtime
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import path from "node:path";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";

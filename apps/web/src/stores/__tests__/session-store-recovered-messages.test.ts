@@ -49,7 +49,7 @@ describe("reconnect message recovery", () => {
       "reply",
     ]);
     expect(merge(next, recovered)).toEqual(next);
-    expect(current[1].id).toBe("echo-1");
+    expect(current[1]!.id).toBe("echo-1");
   });
   it("restores the missing story before an already hydrated guide", () => {
     const guide = {
@@ -62,7 +62,7 @@ describe("reconnect message recovery", () => {
       "committed-story",
       guide.id,
     ]);
-    expect(next[0].content).toBe("Full story committed-story");
+    expect(next[0]!.content).toBe("Full story committed-story");
   });
 
   it("retains older loaded history, fresh live messages and the pagination cursor", () => {

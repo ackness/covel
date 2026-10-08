@@ -164,7 +164,7 @@ describe("mergeTurnPages", () => {
     const merged = mergeTurnPages([current], [older]);
 
     expect(merged).toHaveLength(1);
-    const [turn] = merged;
+    const turn = merged[0]!;
     // 事件合并去重、按 seq 重排、eventCount 重算。
     expect(turn.eventCount).toBe(4);
     expect(turn.events.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
@@ -188,8 +188,8 @@ describe("mergeTurnPages", () => {
     const merged = mergeTurnPages([first], [refreshed]);
 
     expect(merged).toHaveLength(1);
-    expect(merged[0].eventCount).toBe(3);
-    expect(merged[0].events.map((e) => e.seq)).toEqual([1, 2, 3]);
+    expect(merged[0]!.eventCount).toBe(3);
+    expect(merged[0]!.events.map((e) => e.seq)).toEqual([1, 2, 3]);
   });
 
   it("preserves the existing reference when a refresh has no new data", () => {
@@ -240,8 +240,8 @@ describe("mergeTurnPages", () => {
       [pagedTurn("turn-stable", "10:00", "10:00", [second])],
     );
 
-    expect(merged[0].events).toHaveLength(2);
-    expect(merged[0].events.map((event) => event.id)).toEqual([
+    expect(merged[0]!.events).toHaveLength(2);
+    expect(merged[0]!.events.map((event) => event.id)).toEqual([
       "turn-stable-0",
       "turn-stable-second",
     ]);

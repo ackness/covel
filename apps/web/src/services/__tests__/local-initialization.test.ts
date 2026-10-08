@@ -67,7 +67,7 @@ it("imports the actual catalog with stable IDs and full package content into bro
   expect(academy).toEqual({
     ...catalog[0],
     metadata: {
-      ...catalog[0].metadata,
+      ...catalog[0]!.metadata,
       storage: { scope: "browser", backend: "indexeddb", durable: true },
     },
     updatedAt: undefined,

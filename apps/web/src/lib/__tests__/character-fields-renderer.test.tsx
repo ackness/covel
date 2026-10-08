@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 function renderCharacterFields(value: unknown) {
-  const CharacterFieldsView = covelRegistry.CharacterFieldsView;
+  const CharacterFieldsView = covelRegistry.CharacterFieldsView!;
   return render(
     <JSONUIProvider registry={covelRegistry}>
       <CharacterFieldsView

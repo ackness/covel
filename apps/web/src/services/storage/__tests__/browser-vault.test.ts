@@ -148,7 +148,7 @@ describe("BrowserVault session commits", () => {
       expect(rows).toHaveLength(10);
       expect(JSON.stringify(rows).length).toBeLessThan(10_000);
       expect(
-        (await vault.getLatestCheckpoint("session-a"))?.messages[0].content
+        (await vault.getLatestCheckpoint("session-a"))?.messages[0]!.content
           .length,
       ).toBe(100_000);
     } finally {

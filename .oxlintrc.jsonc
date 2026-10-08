@@ -1,0 +1,15 @@
+{
+  // `pnpm check` runs Oxlint with --deny-warnings, so every rule left on is a
+  // gate. The rules below are off because this codebase uses the flagged
+  // pattern on purpose.
+  "rules": {
+    // `for (const x of [...collection])` iterates a snapshot while the loop
+    // body adds to or removes from the collection.
+    "unicorn/no-useless-spread": "off",
+    // A generator that only throws implements a streaming interface that is
+    // not supported, or a failing stream in a test.
+    "require-yield": "off",
+    // Path and URL validation matches control characters to reject them.
+    "no-control-regex": "off",
+  },
+}

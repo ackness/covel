@@ -85,8 +85,8 @@ describe("explicit session auth on indirect routes", () => {
         resolveResponse,
       ),
     ).toEqual(result);
-    expect(fetchMock.mock.calls[0][1].body).toBe(
-      fetchMock.mock.calls[1][1].body,
+    expect(fetchMock.mock.calls[0]![1].body).toBe(
+      fetchMock.mock.calls[1]![1].body,
     );
     for (const index of [0, 1]) {
       expect(headersAt(fetchMock, index).get("Authorization")).toBe(

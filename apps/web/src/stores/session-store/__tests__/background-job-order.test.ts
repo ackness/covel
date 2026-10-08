@@ -62,7 +62,7 @@ describe("background job projection ordering", () => {
           },
         },
       });
-      return state.executionSteps[0];
+      return state.executionSteps[0]!;
     };
     expect(recover("queued")).toMatchObject({
       jobState: "running",
@@ -73,7 +73,7 @@ describe("background job projection ordering", () => {
       type: "UPSERT_EXECUTION_STEP",
       step: buildJobStatusExecutionStep(control("queued", 0), undefined)!,
     });
-    expect(state.executionSteps[0].jobState).toBe("running");
+    expect(state.executionSteps[0]!.jobState).toBe("running");
     expect(recover("committing")).toMatchObject({
       jobState: "committing",
       durableJobStatus: { sequence: 2 },
@@ -82,7 +82,7 @@ describe("background job projection ordering", () => {
       type: "UPSERT_EXECUTION_STEP",
       step: buildJobStatusExecutionStep(control("running", 3), undefined)!,
     });
-    expect(state.executionSteps[0].jobState).toBe("committing");
+    expect(state.executionSteps[0]!.jobState).toBe("committing");
     expect(recover("succeeded")).toMatchObject({
       status: "completed",
       durableJobStatus: { state: "succeeded", sequence: 2 },
@@ -188,12 +188,12 @@ describe("background job projection ordering", () => {
       control("queued", 0, "retry"),
       undefined,
     )!;
-    expect(reduceSteps(announced, retry)[0].startedAt).toBeUndefined();
+    expect(reduceSteps(announced, retry)[0]!.startedAt).toBeUndefined();
   });
 
   it("starts a different job without inheriting the previous terminal or sequence", () => {
     const completed = buildJobStatusExecutionStep(control(), undefined)!;
-    const next = reduceSteps(completed, handoff("retry"))[0];
+    const next = reduceSteps(completed, handoff("retry"))[0]!;
     expect(next).toMatchObject({
       jobId: "retry",
       status: "deferred",

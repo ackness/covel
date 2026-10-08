@@ -61,7 +61,7 @@ export function expectAssetGenerated(
   }
 
   if (options.modality === undefined) {
-    return validAssets[0].parsed;
+    return validAssets[0]!.parsed;
   }
 
   const matching = validAssets.find(

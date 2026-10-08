@@ -35,7 +35,7 @@ export async function executeParallel(
   );
 
   const entries: Array<[string, RuntimeResult]> = runtimes.map((rt, i) => {
-    const outcome = settled[i];
+    const outcome = settled[i]!;
     if (outcome.status === "fulfilled") {
       return [rt.name, outcome.value];
     }

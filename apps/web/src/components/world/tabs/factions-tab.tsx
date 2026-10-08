@@ -108,7 +108,9 @@ export function FactionsTab({ dimensions, onChange, t, problems }: TabProps) {
               >
                 {FACTION_TYPES.map((ft) => (
                   <option key={ft} value={ft}>
-                    {t(`world.factionType${ft[0].toUpperCase()}${ft.slice(1)}`)}
+                    {t(
+                      `world.factionType${ft.charAt(0).toUpperCase()}${ft.slice(1)}`,
+                    )}
                   </option>
                 ))}
               </select>
@@ -148,7 +150,9 @@ export function FactionsTab({ dimensions, onChange, t, problems }: TabProps) {
               >
                 {INFLUENCE_LEVELS.map((il) => (
                   <option key={il} value={il}>
-                    {t(`world.influence${il[0].toUpperCase()}${il.slice(1)}`)}
+                    {t(
+                      `world.influence${il.charAt(0).toUpperCase()}${il.slice(1)}`,
+                    )}
                   </option>
                 ))}
               </select>

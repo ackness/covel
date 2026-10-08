@@ -49,7 +49,8 @@ export function deriveStatuses(
   // Prefer an exact runtime-id override, then pluginDisplayName + "/" + suffix,
   // then the raw fallback.
   const runtimeLabel = (step: ExecutionStep): string => {
-    if (runtimeLabels[step.runtimeId]) return runtimeLabels[step.runtimeId];
+    const exact = runtimeLabels[step.runtimeId];
+    if (exact) return exact;
     const pluginLabel = runtimeLabels[step.pluginId] ?? step.pluginId;
     if (step.runtimeId && step.runtimeId !== step.pluginId) {
       const suffix = step.runtimeId.startsWith(`${step.pluginId}/`)

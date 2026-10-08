@@ -28,13 +28,12 @@ export function createMemoryBackgroundTasks() {
         const results = await Promise.allSettled(
           batch.map(([promise]) => promise),
         );
-        for (let i = 0; i < results.length; i += 1) {
-          const result = results[i];
+        for (const [i, result] of results.entries()) {
           if (result.status === "fulfilled") continue;
           rejected += 1;
           const error = result.reason;
           failures.push(
-            `${batch[i][1]}: ${error instanceof Error ? error.message : String(error)}`,
+            `${batch[i]![1]}: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       }

@@ -339,13 +339,12 @@ async function persistProposals(
   const events: SessionEvent[] = [];
   const failedProposals: FailedProposal[] = [];
 
-  for (let i = 0; i < commitResults.length; i++) {
-    const cr = commitResults[i];
+  for (const [i, cr] of commitResults.entries()) {
     if (cr.committed && cr.event) {
       events.push(cr.event);
     } else if (!cr.committed) {
       failedProposals.push({
-        proposal: proposals[i],
+        proposal: proposals[i]!,
         error: cr.error ?? "unknown commit failure",
       });
     }

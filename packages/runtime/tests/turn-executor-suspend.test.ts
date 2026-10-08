@@ -9,7 +9,7 @@
  * - resumeSuspendedRuntime: reconstructs messages, runs LLM loop, marks resolved, emits turn.resumed
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type {
   RuntimeManifest,
   TurnInput,
@@ -506,7 +506,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       { topic: "clue.found", data: { id: 1 } },
     ]);
     const savedToolMessages = (
-      saved?.pendingContinuation.messages as Array<Record<string, unknown>>
+      saved!.pendingContinuation.messages as Array<Record<string, unknown>>
     ).filter((message) => message.role === "tool");
     expect(savedToolMessages.map((message) => message.toolCallId)).toEqual([
       "tc-event",

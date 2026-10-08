@@ -90,7 +90,7 @@ describe("agent schema gate (golden)", () => {
 
     const r = result.runtimeResults[0];
     expect(r?.status).toBe("success");
-    expect((r?.output as Record<string, unknown>).prompt).toBe("a portrait");
+    expect((r!.output as Record<string, unknown>).prompt).toBe("a portrait");
   });
 
   it("fails with a schema-validation error when JSON has the wrong shape", async () => {
@@ -109,7 +109,7 @@ describe("agent schema gate (golden)", () => {
     expect(r?.error).toContain("output did not match output.schema");
     expect(r?.error).toContain("must have required property 'prompt'");
     // The non-conforming parsed object is preserved as the failed output.
-    expect((r?.output as Record<string, unknown>).wrong).toBe("shape");
+    expect((r!.output as Record<string, unknown>).wrong).toBe("shape");
     expect(onRuntimeComplete).toHaveBeenCalledOnce();
     expect(onRuntimeComplete).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -151,7 +151,7 @@ describe("agent schema gate (golden)", () => {
 
     const r = result.runtimeResults[0];
     expect(r?.status).toBe("success");
-    expect((r?.output as Record<string, unknown>).wrong).toBe("shape");
+    expect((r!.output as Record<string, unknown>).wrong).toBe("shape");
   });
 
   it("skips the gate for story runtimes even when a schema is declared", async () => {

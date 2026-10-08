@@ -6,13 +6,16 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import path from "node:path";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import { afterEach, describe, expect, it } from "vitest";
 import { createRuntimeProxyConfig } from "../../vite.config.js";
 
 let upstream: Server | undefined;
 let vite: ViteDevServer | undefined;
+let viteRoot: string | undefined;
 let requestController: AbortController | undefined;
 
 function portOf(server: Pick<Server, "address">): number {
@@ -32,9 +35,13 @@ async function startUpstream(handler: RequestListener) {
 }
 
 async function startProxy(upstreamPort: number): Promise<string> {
+  // Vite scans its root for entry files and close() waits for that scan. The
+  // temp directory itself can hold thousands of directories from other tests,
+  // so the server gets an empty directory of its own.
+  viteRoot = await mkdtemp(path.join(tmpdir(), "covel-vite-proxy-"));
   vite = await createViteServer({
     configFile: false,
-    root: tmpdir(),
+    root: viteRoot,
     appType: "custom",
     logLevel: "silent",
     server: {
@@ -73,7 +80,9 @@ afterEach(async () => {
   if (vite) await vite.close();
   if (upstream)
     await new Promise<void>((resolve) => upstream!.close(() => resolve()));
+  if (viteRoot) await rm(viteRoot, { recursive: true, force: true });
   vite = undefined;
+  viteRoot = undefined;
   upstream = undefined;
 });
 
