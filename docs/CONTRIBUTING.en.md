@@ -68,7 +68,7 @@ The default source search is `.assets/demo.dev1.mp4`, `.assets/demo.dev0.mp4`, t
 
 ### Testing
 
-New features and bug fixes should ship with tests. Each package uses vitest:
+New features and bug fixes should ship with tests. Each package uses vitest, and each run gets a temp directory of its own that is removed when the run ends (`useRunTempDir` in `vitest.base.ts`; a package's `vitest.config.ts` must import `vitest.base`):
 
 ```bash
 pnpm check                                 # CI static checks and script regressions

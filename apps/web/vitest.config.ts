@@ -1,5 +1,8 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { useRunTempDir } from "../../vitest.base.js";
+
+useRunTempDir();
 
 export default defineConfig({
   resolve: {
