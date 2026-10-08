@@ -19,7 +19,14 @@ export function createWorldMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async upsertWorld(record) {
-      state.worlds.set(record.id, normalizeWorldRecord(record));
+      // Like the SQL update: a world keeps its creation time.
+      const existing = state.worlds.get(record.id);
+      state.worlds.set(
+        record.id,
+        normalizeWorldRecord(
+          existing ? { ...record, createdAt: existing.createdAt } : record,
+        ),
+      );
     },
 
     async deleteWorld(id) {

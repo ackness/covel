@@ -451,6 +451,11 @@ its semantics do not apply to ordinary inserts. Browser checkpoint validation
 rejects repeated IDs within `checkpoint.messages` before opening the replacement
 transaction; IDs reused by a different record domain remain valid.
 
+An update changes what a row holds, not which row it is: updating an existing
+state entry keeps its ID, a world or lorebook entry keeps its creation time, and
+a re-saved suspension keeps its turn, runtime, plugin and creation time. Memory,
+SQLite and PostgreSQL agree on this; the shared contract suite checks it.
+
 SQLite's turn-result append-position query uses the covering index
 `(session_id, created_at, seq)`. The boot DDL derives that index from the Drizzle
 schema. This preserves existing sequence allocation and ordering; it does not

@@ -197,9 +197,16 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async upsertStateEntry(record) {
+      const key = stateEntryKey(
+        record.sessionId,
+        record.tableName,
+        record.fieldName,
+      );
+      // Like the SQL update: the row keeps the ID it was inserted with.
+      const existing = state.stateEntries.get(key);
       state.stateEntries.set(
-        stateEntryKey(record.sessionId, record.tableName, record.fieldName),
-        record,
+        key,
+        existing ? { ...record, id: existing.id } : record,
       );
     },
 
