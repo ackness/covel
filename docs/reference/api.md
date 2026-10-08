@@ -358,6 +358,10 @@ checkpoint 的 sessionId，world.id 必须匹配 session.worldId，违规返回 
 `400 session_record_scope_conflict`，整个 checkpoint 写入回滚。
 checkpoint 不允许携带 provider key、owner token 或其他凭据。
 
+`checkpoint.messages` 内重复的消息 ID 也属于 `400 invalid_checkpoint`：校验会指出
+重复项的 `messages[index].id`，并在替换事务、删除原会话或写入世界之前拒绝。
+这是 messages 表的身份规则，不要求不同记录域或快照中的历史引用使用不同 ID。
+
 客户端 `applySessionCommit` 拒绝同一 `actionId` 携带不同内容的提交，抛出 `ActionIdConflictError`。调用方通过错误类及其 `sessionId`、`actionId` 判断冲突；该本地错误不携带 `code` 字段。HTTP 响应中的错误码由端点定义。
 
 Web 私有模式按 vault 数据库和 session ID 取得跨标签页 Web Lock，在同一次持有期间完成：恢复前次 pending、持久化本次输入、上传 checkpoint、记录本次 pending、执行、下载 commit 并清理 pending。普通本地 checkpoint 修改和会话删除也使用同一锁；排队期间已失效的动作不会持久化新输入。其它会话仍可独立执行。页面关闭会释放锁，另一个页面可继续恢复，而不会把仍由活跃页面持有的操作提前导出为旧结果。服务端单次请求的会话锁和 revision 检查不能替代这项客户端完整操作协调。
@@ -653,6 +657,9 @@ Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit
 | GET  | `/api/sessions/:id/snapshots`             | 分页列出快照元数据（auto / manual / fork，不含 payload）                                              |
 | GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
 | POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
+
+同一会话内刷新已有自动快照时保留快照 ID，同时更新 payload 与采集时间 `createdAt`；
+单条读取及元数据分页使用更新后的采集时间，不再将已刷新的快照排序在旧时间位置。
 
 Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。快照绑定的维度 provider 是 community 插件时，child 无法在创建时启用它：快照里有该 provider 的维度数据或结算回执时，fork 以 `409 { "code": "dimension_provider_required" }` 拒绝，不创建子会话；没有维度数据时子会话不带该绑定，正常创建。进程重启后同样不恢复易失 grant；`GET /api/sessions/:id/plugins` 将缺少当前 grant 的 community 项显示为未激活，但保留会话中保存的插件选择，便于后续调用重新授权。
 

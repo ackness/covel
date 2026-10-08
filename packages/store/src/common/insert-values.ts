@@ -608,6 +608,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         kind: record.kind,
         parentId: record.parentId ?? null,
         payload: json.writeJson(record.payload),
+        createdAt: record.createdAt,
       };
     },
 

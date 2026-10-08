@@ -24,6 +24,174 @@ export function registerRuntimeRecordStoreSuites(
     store = getStore();
   });
 
+  describe("Message INSERT identity", () => {
+    beforeEach(async () => {
+      await store.createSession(makeSession({ id: "sess-1" }));
+      await store.createSession(makeSession({ id: "sess-2" }));
+    });
+
+    it.each(["sess-1", "sess-2"])(
+      "rejects a duplicate message ID in %s without replacing the original",
+      async (sessionId) => {
+        const original = makeMessage({
+          id: "occupied",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
+        await store.addMessage(original);
+        await expect(
+          store.addMessage({ ...original, sessionId, content: "replacement" }),
+        ).rejects.toThrow();
+        expect(await store.listMessages("sess-1")).toEqual([original]);
+        expect(await store.listMessages("sess-2")).toEqual([]);
+      },
+    );
+
+    it("rolls back preceding writes on a duplicate INSERT and accepts a fresh transaction", async () => {
+      const original = makeMessage({
+        id: "occupied",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const preceding = makeMessage({
+        id: "preceding",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      await store.addMessage(original);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.addMessage(preceding);
+          await tx.updateSession("sess-1", { status: "paused" });
+          await tx.addMessage({ ...original, sessionId: "sess-2" });
+        }),
+      ).rejects.toThrow();
+      expect(await store.listMessages("sess-1")).toEqual([original]);
+      expect(await store.listMessages("sess-2")).toEqual([]);
+      expect((await store.getSession("sess-1"))?.status).toBe("active");
+      await store.withTransaction((tx) => tx.addMessage(preceding));
+      expect(await store.listMessages("sess-1")).toEqual([original, preceding]);
+    });
+
+    it("restores message identity after savepoint rollback and session deletion", async () => {
+      const original = makeMessage({
+        id: "occupied",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const preceding = makeMessage({
+        id: "preceding",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      await store.addMessage(original);
+      await store.withTransaction(async (tx) => {
+        await expect(
+          tx.savepoint!(async (nested) => {
+            await nested.addMessage(preceding);
+            await nested.addMessage(original);
+          }),
+        ).rejects.toThrow();
+        await tx.addMessage(preceding);
+      });
+      expect(await store.listMessages("sess-1")).toEqual([original, preceding]);
+      await store.deleteSession("sess-1");
+      await store.addMessage({ ...original, sessionId: "sess-2" });
+      expect(await store.listMessages("sess-2")).toEqual([
+        { ...original, sessionId: "sess-2" },
+      ]);
+    });
+
+    it("keeps surviving message lookups correct after rolled-back and committed deletion", async () => {
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      const first = makeMessage({
+        id: "left-first",
+        sessionId: "sess-1",
+        role: "user",
+        createdAt,
+      });
+      const second = makeMessage({
+        id: "right-first",
+        sessionId: "sess-2",
+        role: "user",
+        createdAt,
+      });
+      const third = makeMessage({
+        id: "left-last",
+        sessionId: "sess-1",
+        role: "user",
+        createdAt,
+      });
+      const fourth = makeMessage({
+        id: "right-last",
+        sessionId: "sess-2",
+        role: "user",
+        createdAt,
+      });
+      for (const message of [first, second, third, fourth])
+        await store.addMessage(message);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.deleteSession("sess-1");
+          await tx.addMessage({ ...first, sessionId: "sess-2" });
+          throw new Error("rollback deletion");
+        }),
+      ).rejects.toThrow("rollback deletion");
+      await expect(store.addMessage(first)).rejects.toThrow();
+      expect(await store.listMessages("sess-1")).toEqual([first, third]);
+      await store.withTransaction(async (tx) => {
+        await expect(
+          tx.savepoint!(async (nested) => {
+            await nested.deleteSession("sess-1");
+            await nested.addMessage({ ...third, sessionId: "sess-2" });
+            throw new Error("rollback savepoint deletion");
+          }),
+        ).rejects.toThrow("rollback savepoint deletion");
+        await expect(
+          tx.savepoint!((nested) => nested.addMessage(third)),
+        ).rejects.toThrow();
+      });
+      await store.deleteSession("sess-1");
+      const adopted = { ...fourth, metadata: { turnId: "after-delete" } };
+      await store.commitPlayerInputMessage(adopted);
+      await store.addMessage({ ...first, sessionId: "sess-2" });
+      expect(await store.listMessages("sess-2")).toEqual([
+        second,
+        adopted,
+        { ...first, sessionId: "sess-2" },
+      ]);
+    });
+
+    it("admits only one concurrent INSERT and preserves same-time cursor order", async () => {
+      const first = makeMessage({
+        id: "z-first",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const second = makeMessage({
+        id: "a-second",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      const results = await Promise.allSettled([
+        store.addMessage(first),
+        store.addMessage({ ...first, sessionId: "sess-2" }),
+      ]);
+      expect(results.map((result) => result.status).sort()).toEqual([
+        "fulfilled",
+        "rejected",
+      ]);
+      // The concurrent winner may belong to either session.
+      const winner =
+        (await store.listMessages("sess-1"))[0] ??
+        (await store.listMessages("sess-2"))[0]!;
+      await store.addMessage({ ...second, sessionId: winner.sessionId });
+      const latest = await store.listMessagesPage(winner.sessionId, {
+        limit: 1,
+      });
+      expect(latest.map((row) => row.id)).toEqual([second.id]);
+      expect(
+        await store.listMessagesPage(winner.sessionId, {
+          limit: 1,
+          before: latest[0],
+        }),
+      ).toEqual([winner]);
+    });
+  });
+
   describe("Player input message commits", () => {
     beforeEach(async () => {
       await store.createSession(makeSession({ id: "sess-1" }));

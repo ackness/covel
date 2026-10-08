@@ -53,6 +53,16 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
    on the reserved connection), and MemoryStore keeps one lazy snapshot per open
    savepoint level.
 
+Ordinary `addMessage` inserts reject an occupied global message ID, including
+when another session owns it. Rejection never updates the original row. If the
+error escapes the transaction callback, earlier writes roll back; a failed
+savepoint rolls back only its own writes. The distinct `commitPlayerInputMessage`
+API retains its explicit idempotent adoption contract.
+
+A same-owner snapshot refresh updates its capture time and payload in the same
+write and follows the surrounding transaction's commit or rollback. It does not
+change the snapshot ID or weaken cross-session ownership rejection.
+
 Snapshot, suspension, and world-data import ledger IDs have one session owner.
 Upserting an existing ID for another session throws
 `SessionRecordScopeConflictError` on every backend without changing the original

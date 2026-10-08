@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BrowserSyncValidationError,
   validateBrowserCheckpoint,
@@ -105,6 +105,49 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
 ) as BrowserCheckpoint;
 
 describe("checkpoint record validation", () => {
+  it("rejects duplicate message IDs at their exact path before any replacement side effect", async () => {
+    const store = createMemoryStore();
+    await store.createSession(checkpoint.session);
+    const original = makeMessage({ sessionId });
+    await store.addMessage(original);
+    const transaction = vi.spyOn(store, "withTransaction");
+    const deletion = vi.spyOn(store, "deleteSession");
+    const creation = vi.spyOn(store, "createSession");
+    const worldWrite = vi.spyOn(store, "upsertWorld");
+    const afterRestore = vi.fn();
+    const duplicate = {
+      ...checkpoint,
+      messages: [original, { ...original, content: "replacement" }],
+    };
+    expect(() => validateBrowserCheckpoint(duplicate)).toThrow(
+      "messages[1].id must be unique within checkpoint.messages",
+    );
+    await expect(
+      replaceSessionFromCheckpoint(store, duplicate, {
+        writeWorld: true,
+        afterRestoreInTx: afterRestore,
+      }),
+    ).rejects.toThrow(BrowserSyncValidationError);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(deletion).not.toHaveBeenCalled();
+    expect(creation).not.toHaveBeenCalled();
+    expect(worldWrite).not.toHaveBeenCalled();
+    expect(afterRestore).not.toHaveBeenCalled();
+    expect(await store.getSession(sessionId)).toEqual(checkpoint.session);
+    expect(await store.listMessages(sessionId)).toEqual([original]);
+    await store.close();
+  });
+
+  it("allows the same message ID in a different domain", () => {
+    const message = checkpoint.messages[0]!;
+    expect(
+      validateBrowserCheckpoint({
+        ...checkpoint,
+        turnMessages: [{ ...checkpoint.turnMessages[0]!, id: message.id }],
+      }).messages,
+    ).toEqual(checkpoint.messages);
+  });
+
   it("ignores the retired runtimeResults domain in older checkpoints", () => {
     const validated = validateBrowserCheckpoint({
       ...checkpoint,

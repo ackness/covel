@@ -10,6 +10,7 @@ export function createMemoryState(): MemoryState {
     stateChanges: [],
     events: [],
     messages: [],
+    messagePositions: new Map(),
     characters: new Map(),
     characterSchemas: new Map(),
     pluginData: new Map(),

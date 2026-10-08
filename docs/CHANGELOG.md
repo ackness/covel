@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- Align Memory, SQLite and PostgreSQL store contracts: reject duplicate ordinary message inserts and repeated checkpoint message IDs before replacement; refresh snapshot capture timestamps; and index SQLite turn-result append positions by session, timestamp and sequence. MemoryStore checks message identity through a global index that follows rollback, savepoints and session deletion.
 - World ZIP activation rejects worldData errors with 400 before creating a record and removes only the new directory, allowing a repaired same-ID retry; warnings and startup seed tolerance remain unchanged.
 - Active EventBus subscriptions preserve replay epochs and sequences beyond the pinned-state eviction budget; released sessions remain eligible for normal LRU/TTL eviction.
 - Character sync overlays only new batch proposals onto world snapshots, preserving same-batch deduplication and sequential updates. Missing-character updates fail as tools, preventing partial function-runtime commits and false agent completion. Function tool calls preserve the execution's frozen logicalTurn.

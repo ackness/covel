@@ -53,6 +53,17 @@ export const checkpointDomainsSchema = z
   })
   .superRefine((checkpoint, context) => {
     const sessionId = checkpoint.session.id;
+    const messageIds = new Set<string>();
+    checkpoint.messages.forEach((message, index) => {
+      if (messageIds.has(message.id)) {
+        context.addIssue({
+          code: "custom",
+          path: ["messages", index, "id"],
+          message: "must be unique within checkpoint.messages",
+        });
+      }
+      messageIds.add(message.id);
+    });
     const validateOwnership = (
       records: readonly { readonly sessionId: string }[],
       path: (string | number)[],

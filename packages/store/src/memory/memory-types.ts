@@ -53,6 +53,8 @@ export interface MemoryState {
   readonly stateChanges: StateChangeRecord[];
   readonly events: EventRecord[];
   readonly messages: MessageRecord[];
+  /** Global message ID -> messages offset; deletion and rollback preserve alignment. */
+  readonly messagePositions: Map<string, number>;
   readonly characterSchemas: Map<string, CharacterSchemaRecord>;
   readonly characters: Map<string, CharacterRecord>;
   readonly pluginData: Map<string, PluginDataRecord>;

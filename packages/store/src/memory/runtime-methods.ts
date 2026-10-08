@@ -256,15 +256,19 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async addMessage(record) {
+      // Match the SQL messages table's global primary key: INSERT, not adopt.
+      if (state.messagePositions.has(record.id)) {
+        throw new Error(`Message already exists: ${record.id}`);
+      }
+      state.messagePositions.set(record.id, state.messages.length);
       state.messages.push(record);
     },
 
     async commitPlayerInputMessage(record) {
       assertCommittedPlayerInput(record);
-      const index = state.messages.findIndex(
-        (message) => message.id === record.id,
-      );
-      if (index === -1) {
+      const index = state.messagePositions.get(record.id);
+      if (index === undefined) {
+        state.messagePositions.set(record.id, state.messages.length);
         state.messages.push(record);
       } else {
         // Replace instead of mutating: transaction snapshots share row objects.

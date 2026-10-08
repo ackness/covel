@@ -31,6 +31,7 @@ export const MEMORY_SNAPSHOT_COLLECTIONS: ReadonlyArray<{
     kind: t.memoryKind,
   })),
   // Mutable collections without a session-table registry entry.
+  { key: "messagePositions", kind: "map" },
   { key: "worlds", kind: "map" },
   { key: "vectorRows", kind: "map" },
   { key: "sessionVectorTargets", kind: "map" },
@@ -76,8 +77,8 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   addStateChange: ["stateChanges"],
   saveEvent: ["events"],
   deleteEventsBefore: ["events"],
-  addMessage: ["messages"],
-  commitPlayerInputMessage: ["messages"],
+  addMessage: ["messages", "messagePositions"],
+  commitPlayerInputMessage: ["messages", "messagePositions"],
   upsertCharacter: ["characters"],
   upsertCharacterSchema: ["characterSchemas"],
   deleteCharacter: ["characters"],

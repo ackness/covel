@@ -34,6 +34,7 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async deleteSession(id) {
+      const previousMessageCount = state.messages.length;
       state.sessions.delete(id);
       // Cascade across every registered session-scoped collection.
       for (const { memoryKey, memoryKind } of SESSION_SCOPED_TABLES) {
@@ -43,6 +44,13 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
         } else {
           deleteArrayRowsBySession(collection as SessionRow[], id);
         }
+      }
+      // Removing rows shifts surviving offsets. Rebuild once, not per insertion.
+      if (state.messages.length !== previousMessageCount) {
+        state.messagePositions.clear();
+        state.messages.forEach((message, index) => {
+          state.messagePositions.set(message.id, index);
+        });
       }
       // Vector storage is MemoryStore-only (no SQL table); clean it explicitly.
       deleteMapRowsBySession(state.vectorRows, id);

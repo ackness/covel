@@ -81,6 +81,11 @@ export const turnResults = sqliteTable(
   (table) => [
     index("turn_results_session_id_idx").on(table.sessionId),
     index("turn_results_turn_id_idx").on(table.turnId),
+    index("turn_results_session_created_seq_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.seq,
+    ),
   ],
 );
 

@@ -360,6 +360,71 @@ export function registerPersistenceStoreSuites(
   });
 
   describe("Snapshots", () => {
+    it("refreshes an existing snapshot's capture time, payload and newest-page position", async () => {
+      const original = makeSnapshot({
+        id: "snapshot-a",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        kind: "auto",
+      });
+      const middle = makeSnapshot({
+        id: "snapshot-b",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      });
+      const refreshed = {
+        ...original,
+        createdAt: "2026-01-01T00:00:02.000Z",
+        turnId: "new-turn",
+        payload: makeSnapshotPayload({ messagesCursor: "new-message" }),
+      };
+      await store.saveSnapshot(original);
+      await store.saveSnapshot(middle);
+      await expect(store.saveSnapshot(refreshed)).resolves.toBeUndefined();
+      expect(await store.getSnapshot(original.id)).toEqual(refreshed);
+      expect(await store.listSnapshots(original.sessionId)).toEqual([
+        middle,
+        refreshed,
+      ]);
+      const newest = await store.listSnapshotsPage(original.sessionId, {
+        limit: 1,
+      });
+      expect(newest).toEqual([
+        expect.objectContaining({
+          id: original.id,
+          createdAt: refreshed.createdAt,
+        }),
+      ]);
+      expect(
+        (
+          await store.listSnapshotsPage(original.sessionId, {
+            limit: 1,
+            before: newest[0],
+          })
+        ).map((row) => row.id),
+      ).toEqual([middle.id]);
+    });
+
+    it("rolls back snapshot refresh time and payload with its transaction", async () => {
+      const original = makeSnapshot({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        kind: "auto",
+      });
+      await store.saveSnapshot(original);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.saveSnapshot({
+            ...original,
+            createdAt: "2026-01-01T00:00:02.000Z",
+            payload: makeSnapshotPayload({ messagesCursor: "rolled-back" }),
+          });
+          expect((await tx.getSnapshot(original.id))?.createdAt).toBe(
+            "2026-01-01T00:00:02.000Z",
+          );
+          throw new Error("rollback refresh");
+        }),
+      ).rejects.toThrow("rollback refresh");
+      expect(await store.getSnapshot(original.id)).toEqual(original);
+    });
+
     it("should save and retrieve a snapshot (roundtrip)", async () => {
       const snap = makeSnapshot({ sessionId: "sess-snap-1", kind: "manual" });
       await store.saveSnapshot(snap);
