@@ -75,7 +75,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("F-007: the production provider passes ownership and delta refs to terminal recovery", async () => {
+it("the production provider passes ownership and delta refs to terminal recovery", async () => {
   const frames = new Map<number, FrameRequestCallback>();
   let next = 0;
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {

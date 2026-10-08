@@ -178,7 +178,7 @@ describe("read-only execution recovery", () => {
   });
 });
 
-it("F-007: terminal recovery replaces a real delta placeholder and clears queued text", async () => {
+it("terminal recovery replaces a real delta placeholder and clears queued text", async () => {
   const frames = new Map<number, FrameRequestCallback>();
   let frameId = 0;
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
@@ -319,7 +319,7 @@ function ownedRecovery() {
 }
 
 it.each(["new action", "revisit"])(
-  "F-007: an old terminal read cannot clobber a healthy POST after %s",
+  "an old terminal read cannot clobber a healthy POST after %s",
   async (change) => {
     const pending = deferred<ReturnType<typeof snapshot>>();
     api.getSessionExecution.mockResolvedValue({
@@ -357,7 +357,7 @@ it.each(["new action", "revisit"])(
   },
 );
 
-it("F-007: recovery cleans only the adopted turn/runtime and preserves another scheduled flush", async () => {
+it("recovery cleans only the adopted turn/runtime and preserves another scheduled flush", async () => {
   api.getSessionExecution.mockResolvedValue({
     state: "completed",
     turnId: "t",
@@ -384,7 +384,7 @@ it("F-007: recovery cleans only the adopted turn/runtime and preserves another s
   ).toHaveLength(1);
 });
 
-it("F-008: terminal polling retries a failed bridge read without publishing a discontinuous window", async () => {
+it("terminal polling retries a failed bridge read without publishing a discontinuous window", async () => {
   vi.useFakeTimers();
   api.getSessionExecution.mockResolvedValue({
     state: "completed",

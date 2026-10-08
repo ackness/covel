@@ -86,7 +86,7 @@ try {
 }
 
 for (const fault of ["partial-write", "rename", "chmod"] as const) {
-  test(`F-001: ${fault} failure preserves every existing key`, (t) => {
+  test(`${fault} failure preserves every existing key`, (t) => {
     const directory = fs.mkdtempSync(
       path.join(os.tmpdir(), "covel-keys-fault-"),
     );
@@ -149,7 +149,7 @@ for (const fault of ["partial-write", "rename", "chmod"] as const) {
   });
 }
 
-test("F-001: successful replacement is private before publication", (t) => {
+test("successful replacement is private before publication", (t) => {
   const directory = fs.mkdtempSync(
     path.join(os.tmpdir(), "covel-keys-publish-"),
   );

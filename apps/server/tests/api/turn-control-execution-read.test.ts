@@ -89,7 +89,7 @@ describe("execution reads through the bootstrap response barrier", () => {
   });
 
   it.each([false, true])(
-    "F-002 rejects an authorized old read after deletion (recreated: %s)",
+    "rejects an authorized old read after deletion (recreated: %s)",
     async (recreate) => {
       const entered = gate();
       const resume = gate();

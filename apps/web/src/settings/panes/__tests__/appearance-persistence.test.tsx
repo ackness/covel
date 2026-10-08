@@ -168,7 +168,7 @@ afterEach(() => {
     .forEach((node) => node.remove());
 });
 
-describe("AppearancePane truthful persistence (F-026)", () => {
+describe("AppearancePane truthful persistence", () => {
   it("keeps selection, overrides and name when save-as stores the record but cannot apply it", async () => {
     const { store, adapter } = await setup();
     const view = render(<AppearancePane />);
@@ -285,7 +285,7 @@ describe("AppearancePane truthful persistence (F-026)", () => {
   });
 });
 
-describe("AppearancePane failed previews (F-027)", () => {
+describe("AppearancePane failed previews", () => {
   it.each([false, true])(
     "restores the saved length preview when an empty submission is ignored (versioned=%s)",
     async (versioned) => {

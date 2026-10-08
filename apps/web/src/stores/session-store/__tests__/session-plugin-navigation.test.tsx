@@ -492,7 +492,7 @@ const catalog = (name: string) => ({
   commands: [{ id: name, label: name, pluginId: plugin.id }],
 });
 
-it("F-009: ignores a plugin GET from an earlier visit to the same session", async () => {
+it("ignores a plugin GET from an earlier visit to the same session", async () => {
   const old = deferred<ReturnType<typeof catalog>>();
   api.listSessionPlugins
     .mockReturnValueOnce(old.promise)
@@ -515,7 +515,7 @@ it("F-009: ignores a plugin GET from an earlier visit to the same session", asyn
   expect(result.current.state.sessionCommands).toEqual(catalog("New").commands);
 });
 
-it("F-009: the latest plugin GET owns plugins and commands within one visit", async () => {
+it("the latest plugin GET owns plugins and commands within one visit", async () => {
   const old = deferred<ReturnType<typeof catalog>>();
   api.listSessionPlugins
     .mockReturnValueOnce(old.promise)
@@ -537,7 +537,7 @@ it("F-009: the latest plugin GET owns plugins and commands within one visit", as
 });
 
 it.each(["GET", "reconnect"])(
-  "F-009: the latest %s read owns the shared plugin resource",
+  "the latest %s read owns the shared plugin resource",
   async (latest) => {
     api.getSessionView.mockResolvedValue({
       session,

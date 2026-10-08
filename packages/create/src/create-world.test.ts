@@ -264,7 +264,7 @@ describe("createWorld", () => {
     });
   });
 
-  it("F-030 binds new manifest and export editions to the canonical request locale", async () => {
+  it("binds new manifest and export editions to the canonical request locale", async () => {
     const yaml = WORLD_YAML.replace(
       "defaultLocale: zh-CN",
       "defaultLocale: en-US",
@@ -304,7 +304,7 @@ describe("createWorld", () => {
     ["two players", "type: player", "at most one player"],
     ["non-object fields", "type: npc, fields: [broken]", "fields"],
   ])(
-    "F-005 retries then discards an invalid character set: %s",
+    "retries then discards an invalid character set: %s",
     async (_name, character, error) => {
       const yaml =
         WORLD_YAML +
@@ -344,7 +344,7 @@ describe("createWorld", () => {
     },
   );
 
-  it("F-005 accepts a repaired set and preserves blueprint data without copying it into fields", async () => {
+  it("accepts a repaired set and preserves blueprint data without copying it into fields", async () => {
     const yaml =
       WORLD_YAML +
       `characterSchema:\n  attributes:\n    - { id: persona, name: Persona, type: string, category: bio }\n`;
@@ -1081,7 +1081,7 @@ describe("createWorld revision", () => {
     }
   }
 
-  it("F-030 does not clamp existing revision editions to the request locale", async () => {
+  it("does not clamp existing revision editions to the request locale", async () => {
     const yaml =
       WORLD_YAML.replace(
         "supportedLocales: [zh-CN]",
@@ -1106,7 +1106,7 @@ describe("createWorld revision", () => {
     });
   });
 
-  it("F-005 rejects an invalid full revision roster rather than dropping existing characters", async () => {
+  it("rejects an invalid full revision roster rather than dropping existing characters", async () => {
     const yaml =
       WORLD_YAML +
       `characterSchema:\n  attributes:\n    - { id: affinity, name: Affinity, type: number, category: social, min: 0, max: 100 }\n`;
@@ -1128,7 +1128,7 @@ describe("createWorld revision", () => {
     expect(llm.requests[2]).toContain("could not be imported");
   });
 
-  it("F-005 retries a schema revision that invalidates an unchanged character", async () => {
+  it("retries a schema revision that invalidates an unchanged character", async () => {
     const yaml =
       WORLD_YAML +
       `characterSchema:\n  attributes:\n    - { id: affinity, name: Affinity, type: number, category: social, min: 0, max: 100 }\n`;

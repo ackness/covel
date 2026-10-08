@@ -626,7 +626,7 @@ function historyMessage(n: number) {
 const historyWindow = (start: number, end: number) =>
   Array.from({ length: end - start + 1 }, (_, i) => historyMessage(start + i));
 
-it("F-008: fills a nonoverlapping snapshot gap without dropping loaded history", async () => {
+it("fills a nonoverlapping snapshot gap without dropping loaded history", async () => {
   const { streams, options } = setup();
   options.stateRef.current.messages = historyWindow(1, 20).map((m) => ({
     ...m,
@@ -685,7 +685,7 @@ function setupHistoryGap() {
   return hook;
 }
 
-it("F-008: merges multiple bridge pages once in durable order and retains the oldest cursor", async () => {
+it("merges multiple bridge pages once in durable order and retains the oldest cursor", async () => {
   const { streams, options } = setupHistoryGap();
   options.stateRef.current.olderMessagesCursor = "oldest-cursor";
   api.listMessagesPage
@@ -710,7 +710,7 @@ it("F-008: merges multiple bridge pages once in durable order and retains the ol
 });
 
 it.each(["network", "repeated cursor", "duplicate page"])(
-  "F-008: keeps the old window on %s and retries reads after showing the error",
+  "keeps the old window on %s and retries reads after showing the error",
   async (failure) => {
     vi.useFakeTimers();
     const { streams, options, unmount } = setupHistoryGap();
@@ -753,7 +753,7 @@ it.each(["network", "repeated cursor", "duplicate page"])(
   },
 );
 
-it("F-008: keeps retrying when the snapshot fails after a failed bridge page", async () => {
+it("keeps retrying when the snapshot fails after a failed bridge page", async () => {
   vi.useFakeTimers();
   const { streams, options, unmount } = setupHistoryGap();
   options.stateRef.current.olderMessagesCursor = "oldest-cursor";
@@ -793,7 +793,7 @@ it("F-008: keeps retrying when the snapshot fails after a failed bridge page", a
   unmount();
 });
 
-it("F-008: completes history recovery even when the separate world read fails", async () => {
+it("completes history recovery even when the separate world read fails", async () => {
   vi.useFakeTimers();
   const { streams, options, unmount } = setupHistoryGap();
   api.listMessagesPage
@@ -821,7 +821,7 @@ it("F-008: completes history recovery even when the separate world read fails", 
 });
 
 it.each(["revisit", "unmount"])(
-  "F-008: abandons bridge pagination after %s",
+  "abandons bridge pagination after %s",
   async (leave) => {
     const pending = deferred<unknown>();
     const { streams, options, rerender, unmount } = setupHistoryGap();
@@ -846,7 +846,7 @@ it.each(["revisit", "unmount"])(
   },
 );
 
-it("F-008: a replaced recovery cannot continue pagination or publish its older window", async () => {
+it("a replaced recovery cannot continue pagination or publish its older window", async () => {
   const pending = deferred<unknown>();
   const { streams, options } = setupHistoryGap();
   api.listMessagesPage
@@ -867,7 +867,7 @@ it("F-008: a replaced recovery cannot continue pagination or publish its older w
   expect(options.dispatch).not.toHaveBeenCalled();
 });
 
-it("F-008: bridge publication preserves a newer healthy POST tail and queued delta", async () => {
+it("bridge publication preserves a newer healthy POST tail and queued delta", async () => {
   const frames = new Map<number, FrameRequestCallback>();
   let frameId = 0;
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
