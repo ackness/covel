@@ -60,6 +60,10 @@ it("keeps worlds when one source cannot be scanned, then reconciles a complete s
     sessionLock,
   );
   expect(await store.getWorld("removed")).not.toBeNull();
+  // A missing source is expected on a fresh install: one line, no stack.
+  expect(console.warn).toHaveBeenCalledWith(
+    `[world-seed] Worlds directory does not exist: ${path.join(root, "missing-root")}`,
+  );
   await seedAndReconcileWorlds(store, [root], sessionLock);
   expect(await store.getWorld("removed")).toBeNull();
   expect(await store.getWorld("healthy")).not.toBeNull();

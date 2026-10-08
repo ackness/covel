@@ -30,7 +30,13 @@ export async function seedAndReconcileWorlds(
     } catch (error) {
       complete = false;
       for (const id of existingIds) claimedWorldIds.add(id);
-      console.warn(`[world-seed] Could not seed worlds from ${dir}:`, error);
+      // A fresh install has no user worlds directory until the first install;
+      // it still counts as an unscanned source, but needs no stack trace.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        console.warn(`[world-seed] Worlds directory does not exist: ${dir}`);
+      } else {
+        console.warn(`[world-seed] Could not seed worlds from ${dir}:`, error);
+      }
     }
   }
   if (!complete || liveWorldIds.size === 0) {

@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - The schemas of `story-events` and `scene-stage` no longer make Ajv log `strict mode` warnings in the server log and in test output. They accept the same values as before.
 - **`pnpm install` no longer needs node-gyp.** better-sqlite3 13 loads the Node-API prebuild it ships, but the workspace allowed its install script, so pnpm ran the implicit `node-gyp rebuild` for its `binding.gyp`. That run compiles nothing when a prebuild exists, yet it failed the whole install on a machine without node-gyp on `PATH`. The workspace now denies the script, as the Docker image and desktop staging already did with `--ignore-scripts`.
 - **`pnpm e2e:verify` runs without `.env` and `.env.llm`.** It required both files although the harness reads no provider key (the server does), so it could not start where the keys are environment variables. It now loads each file only when present, like `pnpm i18n`. The plugin-testing guide's example passed `--plugins`, which the harness rejects; it now passes `--plugin`.
+- **A missing user worlds directory takes one line in the server log.** On a fresh install `$COVEL_HOME/worlds` does not exist until the first world is installed, and the seeder and the file watcher each printed an `ENOENT` stack trace for it. The directory still counts as an unscanned source, so stale worlds are still kept until a complete scan.
 
 ## [0.0.48] - 2026-10-07
 
