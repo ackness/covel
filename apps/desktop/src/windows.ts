@@ -22,6 +22,7 @@ import {
   appUrlOnPort,
   isSameStartupSplashDocument,
   isSameTrustedOrigin,
+  loopbackHttpOrigin,
 } from "./trusted-origin.js";
 
 let mainWindow: BrowserWindow | null = null;
@@ -229,9 +230,7 @@ function handleExternalLinkRequest(
   }
 
   if (protocol === "http:") {
-    const isLoopback =
-      host === "localhost" || host.startsWith("127.") || host === "[::1]";
-    if (isLoopback) {
+    if (loopbackHttpOrigin(linkUrl)) {
       writeLog("info", `[external-link] http loopback -> ${host}`);
       void shell.openExternal(linkUrl);
       return;
