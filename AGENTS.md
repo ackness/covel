@@ -566,6 +566,13 @@ arguments, and outputs stripped from traces and the live stream.
   `makeManualFunctionContext`, `makeTurnInput`, …); see `docs/guide/plugin-testing.md`.
   New plugin behaviour should cover normal output, invalid input, data ownership,
   and that a failed execution commits no partial proposals.
+- A Vitest run uses a temp directory of its own, removed when the process exits
+  (`useRunTempDir` in `vitest.base.ts`): a test may leave what it creates under
+  `os.tmpdir()`. Every package that runs Vitest has a `vitest.config.ts` that
+  imports `vitest.base`, bundled plugins included
+  (`scripts/tests/test-temp-dir.test.mjs` checks it). Run a package's tests from
+  the package (`pnpm --filter <pkg> test`); Vitest started at the repository root
+  skips that config.
 - Web tests default to jsdom. A test file that needs no DOM may opt into
   `// @vitest-environment node`, which is noticeably faster.
 - IndexedDB tests use `fake-indexeddb`; PostgreSQL tests need a real database

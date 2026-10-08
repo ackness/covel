@@ -68,7 +68,7 @@ node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
 
 ### 测试
 
-新功能与 bug 修复都应带测试。每个 package 自带 vitest：
+新功能与 bug 修复都应带测试。每个 package 自带 vitest，每次运行使用自己的临时目录并在结束时整个删除（`vitest.base.ts` 的 `useRunTempDir`；包的 `vitest.config.ts` 必须引入 `vitest.base`）：
 
 ```bash
 pnpm check                                 # CI 静态检查与脚本回归

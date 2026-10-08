@@ -22,7 +22,7 @@ Directory validation checks declared files, scheduling stages, builtin tool name
 每次修改都按由快到慢的顺序反馈：
 
 1. `pnpm validate:plugin <插件目录>`：先确认 loader 能解析，随后由 strict authoring schema 检查原始字段、触发器/`stage` 组合和 handler 约束。loader 警告并丢弃的非法 note 字段仍会被严格校验拒绝；没有跳过当前作者合同的模式。看到 `(loader parse)` 时修 frontmatter/YAML 或路径；看到 `(authoring schema)` 时按输出的字段路径修字段类型、枚举或必需组合。
-2. `pnpm vitest run plugins/<id>/tests`（或对应 workspace 的 `pnpm --filter ... test`）：反馈本地 tool、handler 和 schema 行为。
+2. `pnpm --filter @covel/plugin-<id> test`（仓库内的插件；仓库外的插件在其目录下跑 `vitest run`）：反馈本地 tool、handler 和 schema 行为。
 3. `pnpm test:runtime -- <plugin-id> --plugins-dir <dir> --pretty`：mock 执行 runtime case；多 runtime 可传 `<plugin-id>/<runtime-id>`，跨插件 `needs` 不满足时加 `--ignore-upstreams` 仅用于隔离调试。
 4. 最后再跑 `scripts/e2e-plugin-verify.ts` 验证 server、SSE、approval 和真实 session store。mock 通过不代表 provider/API 或审批链路已通过。
 
@@ -144,8 +144,9 @@ const result = await executeToolAndCommit(tool, params, ctx, store);
 ```bash
 pnpm --filter @covel/plugin-test-utils test
 pnpm --filter @covel/plugin-<id> test
-pnpm vitest run plugins/<id>/tests
 ```
+
+仓库内每个跑 Vitest 的包都有一个引入 `vitest.base` 的 `vitest.config.ts`（`pnpm create-plugin --with-tools` 会生成）：它让这次运行使用自己的临时目录，进程退出时整个删除，测试建了临时目录不清理也不会留在系统里。在仓库根用 `pnpm vitest run plugins/<id>/tests` 会绕过这个配置，所以用上面按包运行的写法。
 
 ## `@covel/test-runtime`
 
