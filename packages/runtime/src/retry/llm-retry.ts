@@ -507,6 +507,8 @@ export async function streamLLMWithRetry(
   });
 
   try {
+    // Text of a failed attempt that already went to `onDelta` is not sent again.
+    let deltasForwarded = false;
     for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
       throwIfTurnAborted(params.abortSignal);
       assertLlmRequestBudget(requestScope.budget, {
@@ -618,7 +620,7 @@ export async function streamLLMWithRetry(
           lastReason,
           params.locale,
         );
-        const forwardDeltas = attempt === 0; // avoid duplicate text on retry
+        const forwardDeltas = !deltasForwarded;
         const streamStart = Date.now();
         const trace = createAttemptTrace(
           params,
@@ -658,10 +660,14 @@ export async function streamLLMWithRetry(
               streamedContent += event.textDelta;
               if (event.textDelta.length > 0) {
                 await trace.ensureCalling();
-                if (forwardDeltas) await onDelta?.(event.textDelta);
+                if (forwardDeltas && onDelta) {
+                  deltasForwarded = true;
+                  await onDelta(event.textDelta);
+                }
               }
             } else if (event.type === "reasoning-delta") {
-              if (event.reasoningDelta.length > 0) noteOutput();
+              // Reasoning goes to no one: a stream that broke there retries.
+              if (event.reasoningDelta.length > 0) noteOutput(false);
               streamedReasoningContent += event.reasoningDelta;
             } else if (event.type === "tool-call") {
               noteOutput();

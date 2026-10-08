@@ -704,7 +704,7 @@ describe("streamLLMWithRetry", () => {
     );
   });
 
-  it("does not forward deltas on retry attempts (avoid duplicate UX)", async () => {
+  it("forwards the deltas of a retry when the failed attempt showed nothing", async () => {
     const llm = createScriptedStreamLLM([
       { events: [], throwAtEnd: new Error("rate limit") },
       {
@@ -730,9 +730,37 @@ describe("streamLLMWithRetry", () => {
       },
     });
 
-    // Nothing forwarded — first attempt threw with no content, retry does
-    // not re-emit deltas so the user never sees duplicate text.
-    expect(seen).toEqual([]);
+    expect(seen).toEqual(["only-on-retry"]);
+  });
+
+  it("does not forward a retry's deltas after a failed attempt forwarded text", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [{ type: "text-delta", textDelta: "first" }],
+        throwAtEnd: new Error("rate limit"),
+      },
+      {
+        events: [
+          { type: "text-delta", textDelta: "second" },
+          { type: "done", finishReason: "stop" },
+        ],
+      },
+    ]);
+    const seen: string[] = [];
+
+    const result = await streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 1 }),
+      deadline: Date.now() + 10_000,
+      deliversDeltas: false,
+      onDelta: (d) => {
+        seen.push(d);
+      },
+    });
+
+    expect(seen).toEqual(["first"]);
+    expect(result.response.content).toBe("second");
   });
 
   it("falls back to generate() when no stream method is exposed", async () => {
@@ -1615,7 +1643,6 @@ describe("provider failure terminals", () => {
       { type: "done", finishReason: "error" },
     ],
     [{ type: "text-delta", textDelta: "partial" }],
-    [{ type: "reasoning-delta", reasoningDelta: "partial reasoning" }],
   ] satisfies LLMStreamEvent[][])(
     "rejects incomplete or failed streams the player saw without retrying: %j",
     async (...events) => {
@@ -1672,6 +1699,34 @@ describe("provider failure terminals", () => {
       expect(llm.attempts).toBe(2);
     },
   );
+
+  it("retries a shown stream that broke while the model was still reasoning", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [{ type: "reasoning-delta", reasoningDelta: "partial" }],
+      },
+      {
+        events: [
+          { type: "text-delta", textDelta: "complete" },
+          { type: "done", finishReason: "stop" },
+        ],
+      },
+    ]);
+    const seen: string[] = [];
+    const result = await streamLLMWithRetry({
+      llm,
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      deliversDeltas: true,
+      onDelta: (delta) => {
+        seen.push(delta);
+      },
+    });
+    expect(llm.attempts).toBe(2);
+    expect(result.response.content).toBe("complete");
+    expect(seen).toEqual(["complete"]);
+  });
 
   it("retries an explicit stream error before any output and accepts the successful retry", async () => {
     const llm = createScriptedStreamLLM([
