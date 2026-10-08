@@ -560,7 +560,9 @@ arguments, and outputs stripped from traces and the live stream.
 
 - Vitest runs every package, the server, and web (`*.test.ts` / `*.test.tsx`);
   `apps/desktop` and `scripts/tests/` use `node --test`; Playwright specs are
-  `*.spec.ts` under `tests/e2e/`. Add focused regression tests for features and
+  `*.spec.ts` under `tests/e2e/`. They run against a production build of the
+  web app; a spec that imports the app's modules in the page (`import("/src/...")`)
+  runs on the Vite dev server instead (`chromium-dev`), which is much slower. Add focused regression tests for features and
   fixes. CI enforces a coverage floor for `@covel/runtime` only
   (`pnpm test:coverage:runtime`); the ≥80% goal for the other packages
   (`pnpm test:coverage`) is not enforced.
