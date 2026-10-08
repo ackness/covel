@@ -141,7 +141,7 @@ Returns assets owned by `sessionId` whose `meta` contains every key/value in `fi
 
 SQLite/local-file `put()` writes complete bytes to an exclusive temporary file in the target directory, atomically renames it to the content path, then registers metadata. A retry replaces an orphan final file without metadata rather than trusting its existence; failed writes remove their temporary file.
 
-`recordOwnership()` sets the first owner for an asset (first-writer-wins; a second call with a different `sessionId` does not overwrite it). `addRef()` grants another session read access for fork and snapshot flows; `removeRef()` idempotently removes one session's explicit ref (does not delete bytes or ownership metadata). `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row.
+`recordOwnership()` sets the first owner for an asset (first-writer-wins; a second call with a different `sessionId` does not overwrite it). `addRef()` grants another session read access for fork and snapshot flows; `removeRef()` idempotently removes one session's explicit ref (does not delete bytes or ownership metadata). `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row. `ctx.media.put()` and `ctx.media.ingestUrl()` record ownership and the session's reference after the bytes are stored; when the runtime or guard that called them was aborted or timed out meanwhile, the call rejects and records neither, and the unowned bytes are left to media cleanup.
 
 `GET /api/sessions/:id/media-token` requires the session owner credential on
 hosted tiers and in production with MemoryStore, including the `self`

@@ -177,6 +177,30 @@ describe("createRuntimeMediaContext", () => {
     ]);
   });
 
+  it("does not claim a write that finishes after its invocation was aborted", async () => {
+    const store = createStore();
+    const invocation = new AbortController();
+    const reason = new Error("runtime timed out");
+    const storePut = store.put.bind(store);
+    store.put = async (bytes, mime, meta) => {
+      const ref = await storePut(bytes, mime, meta);
+      // The deadline fires while the bytes are being written.
+      invocation.abort(reason);
+      return ref;
+    };
+    const media = createRuntimeMediaContext(store, undefined, {
+      ...TEST_OWNER,
+      signal: invocation.signal,
+    });
+
+    await expect(
+      media.put(new Uint8Array([1, 2, 3]), "application/octet-stream"),
+    ).rejects.toBe(reason);
+    expect(store.puts).toHaveLength(1);
+    expect(store.ownerships).toEqual([]);
+    expect(store.refs).toEqual([]);
+  });
+
   it("rejects get/resolveUrl for a session that neither owns nor references the asset", async () => {
     const store = createStore();
     const ownerMedia = createRuntimeMediaContext(store, undefined, TEST_OWNER);

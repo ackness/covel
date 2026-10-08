@@ -282,6 +282,7 @@ export async function executeAgentGuard({
               createRuntimeMediaContext(deps.mediaStore, guardUtils, {
                 sessionId: input.sessionId,
                 pluginId: manifest.pluginId,
+                signal: guardSignal,
               }),
             ),
           }

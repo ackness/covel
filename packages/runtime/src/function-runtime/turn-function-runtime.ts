@@ -252,6 +252,7 @@ export async function executeFunctionRuntime({
     ? createRuntimeMediaContext(deps.mediaStore, permissionedUtils, {
         sessionId: input.sessionId,
         pluginId: manifest.pluginId,
+        signal: handlerAbort.signal,
       })
     : undefined;
   // Trace function-runtime provider calls when a turn emitter is present. The
