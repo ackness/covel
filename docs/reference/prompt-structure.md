@@ -170,7 +170,7 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 
 ## 5. Token 预算与缓存
 
-有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。当前用户回合（含它前面的回合上下文、本回合正文及其结尾提示）和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
+有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。响应 schema 按两份计：桥接层把它写进 system prompt，Responses 与 Gemini 协议还会作为原生字段再发一次，而预算阶段不知道最终走哪种协议。当前用户回合（含它前面的回合上下文、本回合正文及其结尾提示）和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
 
 `serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；留在 system prompt 的 turn 扩展段（system 角色的 `pre-history`）放在最后一个缓存边界之后，不设置断点；`position: system` 的 turn 扩展段不在 system prompt 里，见[回合上下文](#回合上下文)。user/assistant 角色的 pre-history、post-history 和 depth 段保持各自消息位置，不承诺这些消息位于某个 system 缓存边界内。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
 

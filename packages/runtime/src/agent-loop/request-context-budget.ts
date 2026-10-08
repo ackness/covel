@@ -107,9 +107,13 @@ function budgetProviderRequest(
     params.tools && params.tools.length > 0
       ? `<tool_definitions>${JSON.stringify(params.tools)}</tool_definitions>`
       : "";
-  const responseFormatText = params.responseFormat
+  // The bridge writes the schema into the system prompt after this budget,
+  // and the Responses and Gemini wires send it again as a native field. The
+  // wire is not known here, so both copies are counted on every protocol.
+  const responseFormatCopy = params.responseFormat
     ? `<response_format>${JSON.stringify(params.responseFormat)}</response_format>`
     : "";
+  const responseFormatText = responseFormatCopy + responseFormatCopy;
   // The longest hint a retry can append, so a retried call still fits.
   const retryText =
     params.retryPolicy.maxRetries > 0
