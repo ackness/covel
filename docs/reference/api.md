@@ -551,6 +551,8 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | GET  | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` 重建该次调用时的消息历史（best-effort，不含 system prompt 与注入段）                               |
 | GET  | `/api/sessions/:id/interaction-records`                   | 列出该 session 的外部输入记录，支持 `?type=` / `?source=` / `?targetPluginId=` / `?limit=` 过滤                       |
 
+声明 `io.concealed` 的 runtime 在前两个端点返回的记录里 `results` 为空数组，`metaData.toolCallList` 各项的 `input` / `output` 为 `null`。
+
 **`RuntimeOutput` 结构**：
 
 ```ts
@@ -2556,7 +2558,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `GET /api/sessions/:id/plugin-data/:pluginId/_index`
 
-列出某 session 下某插件已经存在的 plugin-data namespace 和 key，不返回 `value`。这个端点用于调试、AI Agent 自动发现当前 session 数据形态、或 UI 构建轻量索引。
+列出某 session 下某插件已经存在的 plugin-data namespace 和 key，不返回 `value`。隐藏的世界数据（`_hidden.*`）和内核记账数据不在列表中，与其他 plugin-data 读取端点一致。这个端点用于调试、AI Agent 自动发现当前 session 数据形态、或 UI 构建轻量索引。
 
 **响应:**
 

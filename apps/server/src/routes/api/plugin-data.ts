@@ -86,7 +86,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
   return c.json({
     sessionId,
     pluginId,
-    namespaces: buildPluginDataIndex(records),
+    namespaces: buildPluginDataIndex(records.filter(isPublicPluginDataRecord)),
   });
 });
 

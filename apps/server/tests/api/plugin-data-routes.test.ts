@@ -243,6 +243,16 @@ describe("Plugin Data REST API routes", () => {
       createdAt: now,
       updatedAt: now,
     });
+    await store.setPluginData({
+      id: "pd-index-4",
+      sessionId,
+      pluginId,
+      namespace: "_hidden.secrets",
+      key: "traitor-name",
+      value: "x",
+      createdAt: now,
+      updatedAt: now,
+    });
 
     const res = await app.request(
       `/api/sessions/${sessionId}/plugin-data/${pluginId}/_index`,
@@ -286,6 +296,7 @@ describe("Plugin Data REST API routes", () => {
     ]);
     expect(JSON.stringify(body)).not.toContain("Alpha");
     expect(JSON.stringify(body)).not.toContain("hidden");
+    expect(JSON.stringify(body)).not.toContain("traitor-name");
   });
 });
 

@@ -10,7 +10,7 @@ import {
   type RuntimeResult,
 } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import type { TurnResultRecord } from "@covel/store";
+import type { RuntimeOutputRecord, TurnResultRecord } from "@covel/store";
 
 /** Every registered concealed runtime, including ones no longer active. */
 export function registeredConcealedRuntimeIds(
@@ -57,5 +57,34 @@ export function concealTurnResultRecord(
     ...(record.auditResult === undefined
       ? {}
       : { auditResult: conceal(record.auditResult) }),
+  };
+}
+
+/** Strip a concealed runtime's output text and tool payloads from its row. */
+export function concealRuntimeOutputRecord(
+  record: RuntimeOutputRecord,
+  concealed: ReadonlySet<string>,
+): RuntimeOutputRecord {
+  if (!concealed.has(record.runtimeId)) return record;
+  const metaData =
+    record.metaData && typeof record.metaData === "object"
+      ? (record.metaData as Record<string, unknown>)
+      : {};
+  const toolCallList = metaData["toolCallList"];
+  return {
+    ...record,
+    results: [],
+    metaData: {
+      ...metaData,
+      ...(Array.isArray(toolCallList)
+        ? {
+            toolCallList: toolCallList.map((call: unknown) => ({
+              ...(call as Record<string, unknown>),
+              input: null,
+              output: null,
+            })),
+          }
+        : {}),
+    },
   };
 }
