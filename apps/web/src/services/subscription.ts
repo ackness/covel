@@ -222,12 +222,17 @@ export function createSessionSubscription(
           // Event ids are `${epoch}:${seq}` opaque strings — stored and sent
           // back verbatim (no numeric parsing here). On `system.reset` the
           // server signalled a replay gap or epoch change: our cursor is
-          // stale, so clear it and the current/next connection re-subscribes
-          // from the authoritative head instead of requesting an unservable
-          // replay. The event still dispatches so consumers can re-hydrate
-          // authoritative state.
+          // stale, so replace it with the head the frame names. The event
+          // still dispatches so consumers can re-hydrate authoritative state.
+          // `system.connected` names the head too: without it a stream that
+          // delivered no event leaves no cursor, and the next connection
+          // (after an action, for one) gets no replay of what it missed.
+          const headCursor =
+            typeof parsed.cursor === "string" ? parsed.cursor : "";
           if (eventType === "system.reset") {
-            lastEventId = "";
+            lastEventId = headCursor;
+          } else if (eventType === "system.connected") {
+            if (!lastEventId) lastEventId = headCursor;
           } else if (message.id) {
             lastEventId = message.id;
           }
