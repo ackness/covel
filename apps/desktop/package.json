@@ -1,6 +1,6 @@
 {
   "name": "@covel/desktop",
-  "version": "0.0.48",
+  "version": "0.0.49",
   "private": true,
   "type": "module",
   "main": "dist/main.mjs",
