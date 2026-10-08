@@ -22,7 +22,7 @@ import {
  * sequence of named steps rather than a 170-line branch.
  */
 
-import type { RuntimeManifest } from "@covel/shared";
+import type { LLMRequestDefaults, RuntimeManifest } from "@covel/shared";
 import type { LLMMessage, LLMResponse } from "../llm/llm-adapter.js";
 import {
   callLLMWithRetry,
@@ -71,6 +71,27 @@ export interface RequestLLMResponseOptions {
   readonly onStreamDelta: (textDelta: string) => Promise<void>;
   /** Whether `onStreamDelta` shows text to the player (story runtimes). */
   readonly deliversDeltas: boolean;
+  /**
+   * A correction just asked the model to call a tool, so this request
+   * requires one (`toolChoice: "required"`, as in the AI SDK) instead of
+   * leaving the choice to a model that already answered in prose.
+   */
+  readonly requireToolCall?: boolean;
+}
+
+/**
+ * The runtime's request defaults, with a tool call required when a
+ * correction asked for one. A tool the manifest names stays the choice, and
+ * the adapters still drop a required choice for a model that is thinking.
+ */
+function requestDefaults(
+  manifest: RuntimeManifest,
+  requireToolCall: boolean | undefined,
+  toolDefs: readonly LLMToolDefinition[] | undefined,
+): LLMRequestDefaults | undefined {
+  if (!requireToolCall || !toolDefs?.length || manifest.llm?.toolChoice)
+    return manifest.llm;
+  return { ...manifest.llm, toolChoice: "required" };
 }
 
 /**
@@ -124,7 +145,7 @@ export async function requestLLMResponse(
     tools: toolDefs,
     responseFormat,
     ...(opts.locale ? { locale: opts.locale } : {}),
-    defaults: manifest.llm,
+    defaults: requestDefaults(manifest, opts.requireToolCall, toolDefs),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     // The player has read a story as it streamed. Cut at the output limit,
     // it is kept and marked `length`; any other output must be whole.
@@ -275,6 +296,7 @@ async function requestNonStreaming(
       provider: callParams.provider,
       onTargetAttempt: callParams.onTargetAttempt,
       requestBudget: callParams.requestBudget!,
+      defaults: callParams.defaults,
     });
   }
 }
@@ -293,6 +315,7 @@ async function malformedToolArgsFallback(args: {
   provider: string | undefined;
   onTargetAttempt?: (target: LLMTargetIdentity) => void;
   requestBudget: LLMRequestBudget;
+  defaults: LLMRequestDefaults | undefined;
 }): Promise<LLMResponse> {
   const {
     manifest,
@@ -324,7 +347,7 @@ async function malformedToolArgsFallback(args: {
       messages,
       tools: toolDefs,
       responseFormat,
-      defaults: manifest.llm,
+      defaults: args.defaults,
       maxOutputTokens,
       providerRequests,
       attempt: 0,
@@ -356,7 +379,7 @@ async function malformedToolArgsFallback(args: {
         messages,
         tools: toolDefs,
         responseFormat,
-        defaults: manifest.llm,
+        defaults: args.defaults,
         requestBudget: args.requestBudget,
         ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
         ...(deps.emitter

@@ -293,6 +293,8 @@ async function runAgentToolLoopWithinBudget(
   let currentTurnUserMessages = initialTurnUserMessages;
   // One correction for a bare finish that violates the tool-use contract.
   let noToolCallCorrections = 0;
+  // The correction asked for a tool call; the next request requires one.
+  let toolCallRequested = false;
   // Prose captured from steps that were extended by late steering (see the
   // late-steering drain below). Joined into finalContent at the final break
   // so the persisted narrative keeps both pre- and post-interjection text.
@@ -384,6 +386,7 @@ async function runAgentToolLoopWithinBudget(
         onStreamDelta:
           manifest.outputKind === "story" ? delta.forward : async () => {},
         deliversDeltas: manifest.outputKind === "story",
+        requireToolCall: toolCallRequested,
       });
     } finally {
       budget.resumeAfterModel();
@@ -404,6 +407,7 @@ async function runAgentToolLoopWithinBudget(
     }
 
     if (response.toolCalls.length > 0) {
+      toolCallRequested = false;
       // Preparation text before tool calls is not the final narrative.
       await delta.reset();
       // LLM requested tool calls — execute them and feed results back.
@@ -758,6 +762,7 @@ async function runAgentToolLoopWithinBudget(
           !hasBusinessWork(executedToolCalls, seededBusinessWork)
         ) {
           noToolCallCorrections++;
+          toolCallRequested = true;
           finalContent = null;
           messages.push({
             role: "system",
@@ -862,6 +867,7 @@ async function runAgentToolLoopWithinBudget(
     });
     if (completion.correction) {
       noToolCallCorrections++;
+      toolCallRequested = true;
       await delta.reset();
       messages.push({ role: "system", content: completion.correction });
       continue;
