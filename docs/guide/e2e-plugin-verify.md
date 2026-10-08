@@ -17,7 +17,7 @@
 
 1. **API server 已启动**（`pnpm dev:pg` 或 `pnpm dev:server`），默认监听 `http://localhost:3001`
 2. **llm.toml 配置可用**。脚本默认不覆盖模型：每个 runtime 按服务端配置路由（与玩家实际游玩一致），Phase 6 列出各 runtime 实际调用的 slot / provider / model。需要时用 `--slot` 只覆盖故事 runtime
-3. **`.env.llm`** 含对应 provider 的 API key
+3. **server 拿得到对应 provider 的 API key**：写在 `.env.llm`，或直接设为 server 进程的环境变量（`{PROVIDER}_API_KEY`）。脚本本身不读 key；`.env` / `.env.llm` 不存在时照常运行
 
 最小可执行流程如下（脚本本身不会启动 server，也不会自动创建 `llm.toml`）：
 
@@ -27,7 +27,7 @@ cp llm.toml.example llm.toml
 cp .env.llm.example .env.llm
 pnpm dev:server
 # 另开终端
-npx tsx --env-file=.env --env-file=.env.llm \
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
   scripts/e2e-plugin-verify.ts
 ```
 
@@ -38,7 +38,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 ## 基本调用
 
 ```bash
-npx tsx --env-file=.env --env-file=.env.llm \
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
   scripts/e2e-plugin-verify.ts [options]
 ```
 
@@ -46,19 +46,19 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 ```bash
 # 1. 默认 3 turn 全流程跑一遍（按配置路由模型）
-npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/e2e-plugin-verify.ts
 
 # 2. 故事 runtime 改用 utility slot，5 turn
-npx tsx --env-file=.env --env-file=.env.llm \
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
   scripts/e2e-plugin-verify.ts --slot utility --turns 5 --timeout 300
 
 # 3. 只聚焦 guide 这一个插件的表现
-npx tsx --env-file=.env --env-file=.env.llm \
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
   scripts/e2e-plugin-verify.ts --plugin guide --turns 2
 
 # 4. 长时间运行 / 8k 上下文验收：要求发生压缩、后续消费摘要、无失败 trace，
 #    并校验 provider 上报的每次输入不超过 8192 token
-npx tsx --env-file=.env --env-file=.env.llm \
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
   scripts/e2e-plugin-verify.ts --turns 20 \
   --enable-plugins memory \
   --require-compaction --require-summary-use \
