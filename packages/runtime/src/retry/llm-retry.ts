@@ -326,6 +326,8 @@ export async function callLLMWithRetry(
           false,
           slot.waitedMs,
         );
+        // Tokens the provider reported, kept when the response is rejected.
+        let responseUsage: LLMResponse["usage"] | undefined;
         try {
           throwIfTurnAborted(params.abortSignal);
           const response = await awaitLlmRequest(
@@ -348,6 +350,7 @@ export async function callLLMWithRetry(
             }),
             signal,
           );
+          responseUsage = response.usage;
           throwIfTurnAborted(params.abortSignal);
           requireCompleteOutput(response.finishReason, {
             allowed: params.allowTruncatedText,
@@ -369,6 +372,7 @@ export async function callLLMWithRetry(
             runtimeId: params.runtimeId,
             pluginId: params.pluginId,
             error: err,
+            usage: responseUsage,
             durationMs: Date.now() - callStart,
             attempt,
           });
@@ -574,10 +578,14 @@ export async function streamLLMWithRetry(
         };
 
         let firstTokenSeen = false;
+        // Output handed to the caller. Argument activity keeps the timers
+        // alive without being output, so a stream that broke there retries.
+        let outputDelivered = false;
         let firstOutputAt: number | undefined;
         let lastOutputAt: number | undefined;
         let idleHandle: ReturnType<typeof setTimeout> | undefined;
-        const noteOutput = (): void => {
+        const noteOutput = (delivered = true): void => {
+          if (delivered) outputDelivered = true;
           if (!firstTokenSeen) {
             firstTokenSeen = true;
             firstOutputAt = Date.now();
@@ -601,7 +609,7 @@ export async function streamLLMWithRetry(
         let streamedReasoningContent = "";
         let providerContinuation: LLMProviderContinuation | undefined;
         let diagnostics: LLMResponse["diagnostics"];
-        let streamedUsage = { inputTokens: 0, outputTokens: 0 };
+        let streamedUsage: LLMResponse["usage"] | undefined;
         let streamFinishReason:
           "stop" | "tool_calls" | "length" | "error" | undefined;
         const attemptMessages = perturbMessages(
@@ -642,7 +650,10 @@ export async function streamLLMWithRetry(
             }),
             callAborter.signal,
           )) {
-            if (event.type === "text-delta") {
+            if (event.type === "tool-argument-delta") {
+              // The model is writing a tool call: not silence, and not output.
+              noteOutput(false);
+            } else if (event.type === "text-delta") {
               if (event.textDelta.length > 0) noteOutput();
               streamedContent += event.textDelta;
               if (event.textDelta.length > 0) {
@@ -662,6 +673,8 @@ export async function streamLLMWithRetry(
               });
             } else if (event.type === "done") {
               await trace.ensureCalling();
+              // Before the completeness check: a rejected response was billed too.
+              if (event.usage) streamedUsage = event.usage;
               streamFinishReason = requireCompleteOutput(event.finishReason, {
                 allowed: params.allowTruncatedText,
                 text: streamedContent,
@@ -669,7 +682,6 @@ export async function streamLLMWithRetry(
               });
               if (event.reasoningContent)
                 streamedReasoningContent = event.reasoningContent;
-              if (event.usage) streamedUsage = event.usage;
               if (event.providerContinuation)
                 providerContinuation = event.providerContinuation;
               if (event.diagnostics) diagnostics = event.diagnostics;
@@ -697,7 +709,7 @@ export async function streamLLMWithRetry(
             content: streamedContent || null,
             toolCalls: streamedToolCalls,
             finishReason: streamFinishReason,
-            usage: streamedUsage,
+            usage: streamedUsage ?? { inputTokens: 0, outputTokens: 0 },
             ...(diagnostics ? { diagnostics } : {}),
             ...(providerContinuation ? { providerContinuation } : {}),
             ...(streamedReasoningContent
@@ -738,6 +750,7 @@ export async function streamLLMWithRetry(
             runtimeId: params.runtimeId,
             pluginId: params.pluginId,
             error: err,
+            usage: streamedUsage,
             durationMs: Date.now() - streamStart,
             attempt,
             streaming: true,
@@ -749,7 +762,7 @@ export async function streamLLMWithRetry(
           throwIfTurnAborted(params.abortSignal);
           requestScope.signal.throwIfAborted();
           if (isTerminalLlmRequestError(err)) throw err;
-          if (firstTokenSeen && deliversDeltas) {
+          if (outputDelivered && deliversDeltas) {
             throw new LLMRetryError({
               reason: lastReason,
               attempts: attempt + 1,

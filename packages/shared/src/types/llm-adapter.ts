@@ -104,6 +104,8 @@ export interface LLMResponseFormat {
 }
 
 export type LLMStreamEvent =
+  /** A fragment of a tool call's arguments arrived; it carries no call. */
+  | { readonly type: "tool-argument-delta" }
   | { readonly type: "reasoning-delta"; readonly reasoningDelta: string }
   | { readonly type: "text-delta"; readonly textDelta: string }
   | {

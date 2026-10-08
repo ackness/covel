@@ -385,6 +385,7 @@ export function createGateway(deps: GatewayDependencies) {
         // Output keeps the request alive; only silence reaches the deadline.
         if (
           event.type === "tool-call" ||
+          event.type === "tool-argument-delta" ||
           (event.type === "text-delta" && event.textDelta.length > 0) ||
           (event.type === "reasoning-delta" && event.reasoningDelta.length > 0)
         )

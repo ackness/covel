@@ -870,6 +870,8 @@ describe("Gemini native SSE", () => {
     expect(events.map((event) => event.type)).toEqual([
       "reasoning-delta",
       "text-delta",
+      // The call part arrived; the calls themselves wait for the finish.
+      "tool-argument-delta",
       "tool-call",
       "tool-call",
       "done",
@@ -878,11 +880,11 @@ describe("Gemini native SSE", () => {
       type: "reasoning-delta",
       reasoningDelta: "分析",
     });
-    expect(events[2]).toMatchObject({
+    expect(events[3]).toMatchObject({
       name: "lookup",
       arguments: '{"city":"上海"}',
     });
-    expect(events[4]).toMatchObject({
+    expect(events[5]).toMatchObject({
       finishReason: "tool_calls",
       reasoningContent: "分析",
       usage: { inputTokens: 8, outputTokens: 6 },

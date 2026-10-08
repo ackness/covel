@@ -609,7 +609,9 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
             delta?.type === "input_json_delta"
           ) {
             const pending = pendingToolBlocks.get(Number(payload.index ?? 0));
-            if (pending) pending.json += String(delta.partial_json ?? "");
+            const fragment = String(delta.partial_json ?? "");
+            if (pending) pending.json += fragment;
+            if (pending && fragment) yield { type: "tool-argument-delta" };
           }
 
           if (payload.type === "content_block_stop") {

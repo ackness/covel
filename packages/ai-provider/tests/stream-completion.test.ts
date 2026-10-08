@@ -124,5 +124,6 @@ it("does not release chat tool arguments from a truncated generation", async () 
       output.push(event);
   };
   await expect(run()).rejects.toThrow("terminal event");
-  expect(output).toEqual([]);
+  // Argument activity is reported; the call itself is never released.
+  expect(output).toEqual([{ type: "tool-argument-delta" }]);
 });
