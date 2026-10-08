@@ -1,3 +1,8 @@
+import {
+  createBoundedSerialQueue,
+  closeSseDelivery,
+  SSE_WRITE_QUEUE_MAX,
+} from "./sse-delivery.js";
 import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import { listRuntimeJobs } from "./plugin-rpc/jobs.js";
@@ -277,22 +282,28 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       };
     }
 
-    // Single serial write queue for the SSE connection. The envelope (and its
-    // seq) is assigned synchronously at enqueue time and chunks are flushed in
-    // that order, so a fire-and-forget event-bus forward can never interleave
-    // with — or overtake — an awaited write. The returned promise carries the
-    // individual write's outcome (awaiting callers still observe a closed
-    // stream as an error); the chain itself swallows failures so one broken
-    // write does not wedge every later one.
-    let writeChain: Promise<void> = Promise.resolve();
+    // Envelope identity/order is captured inside ownership, but observation
+    // never waits inside the business lock or propagates into runtime retry.
+    const writes = createBoundedSerialQueue({
+      capacity: SSE_WRITE_QUEUE_MAX,
+      onOverflow: () => stream.abort(),
+      onError: () => stream.abort(),
+    });
+    stream.onAbort(() => writes.close());
+    if (stream.aborted) writes.close();
     const writeEvent = (
       eventType: string,
       eventPayload: Record<string, unknown>,
     ): Promise<void> => {
-      const data = JSON.stringify(makeEnvelope(eventType, eventPayload));
-      const next = writeChain.then(() => stream.writeSSE({ data }));
-      writeChain = next.catch(() => {});
-      return next;
+      try {
+        // Snapshot payloads as well as identity before later business mutations.
+        const data = JSON.stringify(makeEnvelope(eventType, eventPayload));
+        writes.enqueue(() => stream.writeSSE({ data }));
+      } catch {
+        writes.close();
+        stream.abort();
+      }
+      return Promise.resolve();
     };
 
     // Subscribe to out-of-band eventBus events (e.g. plugin-data.changed from
@@ -1017,7 +1028,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         // A transient read failure must not leak the turn lock. Handoffs have a TTL.
         console.warn("[actions] credential handoff cleanup failed", error);
       }
-      await writeChain;
+      await writes.drain();
+      writes.close();
+      await closeSseDelivery(stream);
     }
   });
 });

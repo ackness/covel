@@ -417,6 +417,8 @@ server transaction API in the browser.
   `commitExecution`
   进入这个边界，再由同一宿主入口协调通知、快照和记忆调度。
 
+`/api/actions` 的 `onFinalized` 仅依据durable outcome结算宿主标记并入观察队列，不等待SSE消费；自动snapshot仍在同一session lock内执行。写入错误、队列溢出、观察截止与锁外drain失败不能把committed artifact改成failed，不能开放同turn恢复重放，也不能重试模型。恢复以durable artifact和只读execution/session端点为准，而不是是否收到最后一帧。
+
 > **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
 > `recursiveCall` 结果）聚合进单一事务：
 >

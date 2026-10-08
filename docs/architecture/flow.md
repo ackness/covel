@@ -91,6 +91,8 @@ stateDiagram-v2
 - **Playing**：`status === 'active' && phase === 'playing'`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，按 `pre-turn → narrative → post-turn → audit` 四个 stage 依次运行（stage 间严格屏障）。`completedPlayerTurns` 只统计已提交的玩家回合——manual plugin-rpc、后台 follower、嵌套 `recursiveCall` 等非玩家执行各自落 `turn_results` 行，`origin` 为 `player` / `continuation` / `manual` / `background` / `recursive` / `resume` 之一，且不计数；多个执行共享一个 logical turn 时只计一次。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
 
+Action的观察投递不拥有业务完成责任：`onFinalized`确认已有durable outcome并将事件入有界队列，runtime delta/lifecycle同样只入队；这些回调不等待SSE网络写入。proposal/journal/时钟事务和自动snapshot仍在原session lock内完成，信封身份及seq在该执行的所有权内捕获。最终观察drain移到锁外；慢连接截止或断开不改变已提交artifact、不重跑模型，也不令只读恢复把成功执行当作可重试失败。
+
 `phase` 翻转不推送独立 SSE 事件，也没有对应的 proposal 类型——客户端从会话响应或快照读出当前的 `phase`、`completedPlayerTurns` 与 `setupRuntimes`。
 
 ### 2.2 单轮 Turn Pipeline

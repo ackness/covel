@@ -380,7 +380,11 @@ data: {
 
 `DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权。`self`（默认）通常不强制，但 `NODE_ENV=production` 且实际注入的存储后端为 MemoryStore 时同样强制，不只依据 `STORE_BACKEND` 环境值。内置 Web 使用 fetch-based SSE 并提交 `X-Session-Token`；原生 `EventSource` 客户端可用 `?session_token=<ownerToken>`。缺失或错误返回 `401 { code: "session_owner_required" }`。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
 
-Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。服务端对 SSE write 使用单一有界串行队列（256），连接预算为每 session 8、进程总计 512；超限返回 429，慢客户端溢出时主动断开。
+Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。
+
+`/api/actions` 与 `/api/events/stream` 每条连接共用一条有界串行写队列，运行中加等待项最多256，只有一个实际写者；单次写入、收尾总drain和close分别最多等待2秒。溢出、写入错误或截止后停止接收新帧、丢弃未开始的写入并abort连接，不在挂起写入后启动替身。订阅的connected、replay、reset和heartbeat也受同一限制；listener、pin、heartbeat与连接预算在清理时释放。订阅预算仍为每session 8、进程总计512，超限429。
+
+Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队列顺序写出；业务锁内的执行/提交回调只入队，不等待客户端消费。最终drain位于业务所有权之外。SSE关闭/丢失不是业务执行失败，不撤销已提交artifact、重复模型调用或开放恢复重放；客户端应通过只读execution/session状态恢复。
 
 断流恢复只在访问代次与执行所有权仍匹配时，用同一 `turnId/runtimeId` 的持久化终态叙事替换流式占位，并移除该占位的外部文本与待刷新 delta；新的健康 POST 流仍拥有其现场输出。恢复快照的最近窗口若与已加载历史不重叠，客户端先通过既有消息分页接口只读补齐至旧锚点，再合并发布，不删除旧窗口，也不重新发送动作。
 

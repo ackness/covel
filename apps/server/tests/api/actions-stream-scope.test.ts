@@ -14,7 +14,8 @@
  * stream — while an event emitted during the locked section still does.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { SSEStreamingApi } from "hono/streaming";
 import { Hono } from "hono";
 import { type StoreTransaction } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
@@ -25,6 +26,10 @@ import {
   type PluginSummary,
   type LoadedRuntime,
 } from "@covel/plugin-loader";
+import {
+  assertRecoverableTurn,
+  getSessionExecutionStatus,
+} from "../../src/routes/api/actions/execution-recovery.js";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
@@ -71,8 +76,14 @@ function emitForwardedEvent(eventBus: EventBus, marker: string): void {
 /** Drain the actions SSE stream, returning the parsed envelopes. */
 async function drainActionStream(
   res: Response,
-): Promise<Array<{ type: string; payload?: { marker?: string } }>> {
-  const envelopes: Array<{ type: string; payload?: { marker?: string } }> = [];
+): Promise<
+  Array<{ type: string; seq: number; payload?: { marker?: string } }>
+> {
+  const envelopes: Array<{
+    type: string;
+    seq: number;
+    payload?: { marker?: string };
+  }> = [];
   if (!res.body) return envelopes;
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -204,6 +215,9 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
     const envelopes = await drained;
 
     expect(envelopes.map((e) => e.type)).toContain("execution.completed");
+    expect(envelopes.map((e) => e.seq)).toEqual(
+      envelopes.map((_, index) => index),
+    );
     const markers = envelopes
       .filter((e) => e.type === "plugin-data.changed")
       .map((e) => e.payload?.marker);
@@ -213,4 +227,134 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
     // never to this stream's envelope.
     expect(markers).not.toContain("post-lock");
   });
+});
+
+describe("action observation cannot own business finalization", () => {
+  it.each(["hang", "reject"] as const)(
+    "keeps real committed artifacts and frees the lock when onFinalized SSE writes %s",
+    async (mode) => {
+      const store = createMemoryStore();
+      const registry = createPluginRegistry();
+      const loaded = makeFakeLoadedRuntime({ name: RUNTIME_ID });
+      registry.register(makeEntry(loaded));
+      await store.createSession({
+        id: SESSION_ID,
+        worldId: null,
+        status: "active",
+        phase: "playing",
+        locale: "en",
+        metadata: {
+          sessionIncarnationNonce: crypto.randomUUID(),
+          approvalScopeNonce: crypto.randomUUID(),
+        },
+        setupRuntimes: {},
+        activePlugins: [RUNTIME_ID],
+        completedPlayerTurns: 1,
+        createdAt: new Date().toISOString(),
+      });
+      const { llm } = makeFakeLLM("Committed exactly once.");
+      const calls = vi.spyOn(llm, "generate");
+      // Exercise the real snapshot path, not the default every-five-turn cadence.
+      vi.stubEnv("COVEL_SNAPSHOT_INTERVAL_TURNS", "1");
+      const status = vi.spyOn(store, "setTurnResultCommitStatus");
+      const eventBus = createEventBus(store);
+      const lock = createInProcessSessionLock();
+      let release!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let reached!: () => void;
+      const reachedWrite = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const original = SSEStreamingApi.prototype.writeSSE;
+      const writes = vi
+        .spyOn(SSEStreamingApi.prototype, "writeSSE")
+        .mockImplementation(function (frame) {
+          if (JSON.parse(String(frame.data)).type === "narrative.completed") {
+            reached();
+            return mode === "hang"
+              ? blocked
+              : Promise.reject(new Error("observer lost"));
+          }
+          return original.call(this, frame);
+        });
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        c.set("store", store);
+        c.set("pluginRegistry", registry);
+        c.set("llmAdapter", llm);
+        c.set("loadRuntimeFn", async () => loaded);
+        c.set("resolveModel", () => undefined);
+        c.set("eventBus", eventBus);
+        c.set("sessionLock", lock);
+        await next();
+      });
+      app.route("/api/actions", actionRoutes);
+      let drained: Promise<unknown> | undefined;
+      try {
+        const res = await app.request("/api/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId: "bounded",
+            type: "send_message",
+            sessionId: SESSION_ID,
+            payload: { content: "hello" },
+          }),
+        });
+        drained = drainActionStream(res);
+        await reachedWrite;
+        // Real commitExecution/onFinalized, not a stub: an unrelated mutation
+        // must acquire ownership BEFORE the 2s observation deadline.
+        await vi.waitFor(async () => {
+          expect(
+            (
+              await lock.tryWithLock(SESSION_ID, async () => {
+                await store.updateSession(SESSION_ID, {
+                  metadata: {
+                    ...(await store.getSession(SESSION_ID))?.metadata,
+                    unrelated: true,
+                  },
+                });
+              })
+            ).acquired,
+          ).toBe(true);
+        });
+        const results = await store.listTurnResults(SESSION_ID);
+        expect(results).toHaveLength(1);
+        expect(results[0]?.commitStatus).toBe("committed");
+        expect(status.mock.calls.filter((c) => c[2] === "failed")).toHaveLength(
+          0,
+        );
+        expect(calls).toHaveBeenCalledOnce();
+        await drained;
+        const traces = await store.listTraceEvents(SESSION_ID);
+        expect(traces.filter((e) => e.type === "turn.failed")).toHaveLength(0);
+        expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(
+          2,
+        );
+        expect(await store.listSnapshots(SESSION_ID)).toHaveLength(1);
+        const recovered = await getSessionExecutionStatus(
+          store,
+          SESSION_ID,
+          lock,
+        );
+        expect(recovered.state).toBe("completed");
+        expect(recovered.retry).toBeUndefined();
+        await expect(
+          lock.withLock(SESSION_ID, () =>
+            assertRecoverableTurn(store, SESSION_ID, results[0]!.turnId),
+          ),
+        ).rejects.toThrow("no longer available for recovery");
+        expect(calls).toHaveBeenCalledOnce();
+      } finally {
+        release();
+        await drained;
+        writes.mockRestore();
+        await eventBus.close();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });

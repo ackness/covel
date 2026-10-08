@@ -70,3 +70,36 @@ describe("SSE resource bounds", () => {
     expect(queue.pending()).toBe(0);
   });
 });
+
+it("stops a hung write, drops retained successors and bounds drain without restarting work", async () => {
+  vi.useFakeTimers();
+  try {
+    const failed = vi.fn();
+    const queue = createBoundedSerialQueue({
+      capacity: 256,
+      onOverflow: failed,
+      onError: failed,
+    });
+    const hanging = vi.fn(() => new Promise<void>(() => {}));
+    const successor = vi.fn(async () => {});
+    queue.enqueue(hanging);
+    await Promise.resolve();
+    for (let i = 0; i < 255; i++) queue.enqueue(successor);
+    let drained = false;
+    void queue.drain().then(() => {
+      drained = true;
+    });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(drained).toBe(true);
+    expect(queue.pending()).toBeLessThanOrEqual(1);
+    for (let i = 0; i < 1000; i++) expect(queue.enqueue(successor)).toBe(false);
+    expect(hanging).toHaveBeenCalledOnce();
+    expect(successor).not.toHaveBeenCalled();
+    expect(failed).toHaveBeenCalledOnce();
+    queue.close();
+    queue.close();
+    await queue.drain();
+  } finally {
+    vi.useRealTimers();
+  }
+});
