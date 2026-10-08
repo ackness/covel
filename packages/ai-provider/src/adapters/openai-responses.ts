@@ -2,6 +2,11 @@ import {
   captureContinuation,
   continuationItems,
 } from "./provider-continuation.js";
+import {
+  createThinkTagSplitter,
+  joinReasoning,
+  splitThinkTags,
+} from "./think-tags.js";
 import type { ProviderConfig } from "../types.js";
 import {
   readResponsesReasoning,
@@ -321,12 +326,16 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         "openai-responses",
       );
 
+      const reply = splitThinkTags(readResponsesOutputText(payload));
       return {
         ...(diagnostics ? { diagnostics } : {}),
-        text: readResponsesOutputText(payload),
+        text: reply.text,
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
-        reasoningContent: readResponsesReasoning(payload),
+        reasoningContent: joinReasoning(
+          readResponsesReasoning(payload),
+          reply.reasoning,
+        ),
         providerContinuation: captureContinuation(
           "openai-responses-v1",
           params.model,
@@ -367,9 +376,10 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         "openai-responses",
       );
 
+      const reply = splitThinkTags(readResponsesOutputText(payload));
       let rawObject: unknown;
       try {
-        rawObject = JSON.parse(readResponsesOutputText(payload));
+        rawObject = JSON.parse(reply.text);
       } catch {
         throw createStructuredOutputError("openai-responses");
       }
@@ -383,7 +393,10 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         object: validation.data,
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
-        reasoningContent: readResponsesReasoning(payload),
+        reasoningContent: joinReasoning(
+          readResponsesReasoning(payload),
+          reply.reasoning,
+        ),
         providerContinuation: captureContinuation(
           "openai-responses-v1",
           params.model,
@@ -430,6 +443,23 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       let streamFinishReason = "stop";
       let completed = false;
       const reasoning = new ResponsesReasoningAccumulator();
+      const thinkSplitter = createThinkTagSplitter();
+      let thinkReasoning = "";
+      const replyParts = function* (
+        parts: ReturnType<typeof thinkSplitter.push>,
+      ) {
+        for (const part of parts) {
+          if (part.type === "reasoning") {
+            thinkReasoning += part.text;
+            yield {
+              type: "reasoning-delta" as const,
+              reasoningDelta: part.text,
+            };
+          } else {
+            yield { type: "text-delta" as const, textDelta: part.text };
+          }
+        }
+      };
       const diagnostics = new ResponseDiagnostics("responses");
       const outputItems = new Map<number, unknown>();
       let completedOutput: unknown;
@@ -454,7 +484,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
             payload.type === "response.output_text.delta" &&
             typeof payload.delta === "string"
           ) {
-            yield { type: "text-delta", textDelta: payload.delta as string };
+            yield* replyParts(thinkSplitter.push(payload.delta as string));
           }
 
           const added = readResponsesStreamFunctionCallAdded(payload);
@@ -514,6 +544,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       }
       diagnostics.assertNotRefused("openai-responses");
       assertStreamCompleted(completed, "openai-responses");
+      yield* replyParts(thinkSplitter.flush());
 
       // Emit accumulated tool calls before done. The Responses API references
       // tool results by `call_id`, so that is the canonical id we surface;
@@ -535,7 +566,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           : {}),
         finishReason: streamFinishReason,
         usage,
-        reasoningContent: reasoning.text(),
+        reasoningContent: joinReasoning(reasoning.text(), thinkReasoning),
         providerContinuation: captureContinuation(
           "openai-responses-v1",
           params.model,
