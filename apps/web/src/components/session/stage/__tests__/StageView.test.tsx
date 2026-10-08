@@ -162,6 +162,45 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-thinking")).toBeNull();
   });
 
+  it("shows the decision when the restored history arrives after Stage mounts", () => {
+    const props = fixture();
+    const { rerender } = render(<StageView {...props} messages={[]} />);
+    expect(screen.queryByTestId("stage-choices")).toBeNull();
+
+    rerender(<StageView {...props} />);
+    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.getByTestId("stage-choices")).toBeDefined();
+  });
+
+  it("treats a story that arrives while the restore is still checking as history", () => {
+    const props = { ...fixture(), executing: true, restoring: true };
+    const { rerender } = render(<StageView {...props} messages={[]} />);
+    rerender(<StageView {...props} />);
+    rerender(<StageView {...props} executing={false} restoring={false} />);
+    expect(screen.queryByTestId("stage-dialog")).toBeNull();
+    expect(screen.getByTestId("stage-choices")).toBeDefined();
+  });
+
+  it("plays the first story of a turn running in this view", () => {
+    const props = { ...fixture(), messages: [], executing: true };
+    const { rerender } = render(<StageView {...props} />);
+    rerender(
+      <StageView
+        {...props}
+        messages={[{ ...previousStory, id: "opening", turnId: "opening" }]}
+      />,
+    );
+    rerender(
+      <StageView
+        {...props}
+        executing={false}
+        messages={[{ ...previousStory, id: "opening", turnId: "opening" }]}
+      />,
+    );
+    expect(screen.getByTestId("stage-dialog")).toBeDefined();
+    expect(screen.queryByTestId("stage-choices")).toBeNull();
+  });
+
   it("restores the previous decision when an attempt ends without a new story", () => {
     const props = fixture();
     const { rerender } = render(<StageView {...props} />);
