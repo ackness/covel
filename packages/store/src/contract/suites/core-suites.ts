@@ -329,8 +329,8 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       await store.saveTurnResult(tr3);
       const list = await store.listTurnResults("sess-1");
       expect(list).toHaveLength(2);
-      expect(list[0].id).toBe(tr1.id);
-      expect(list[1].id).toBe(tr2.id);
+      expect(list[0]!.id).toBe(tr1.id);
+      expect(list[1]!.id).toBe(tr2.id);
     });
 
     it("queries a root execution and preserves its retry ledger after trace cleanup", async () => {
@@ -450,7 +450,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       await store.saveToolCall(tc2);
       const list = await store.listToolCalls("sess-1", "turn-1");
       expect(list).toHaveLength(1);
-      expect(list[0].turnId).toBe("turn-1");
+      expect(list[0]!.turnId).toBe("turn-1");
     });
   });
 
@@ -579,7 +579,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         "hp",
       );
       expect(list).toHaveLength(1);
-      expect(list[0].value).toBeNull();
+      expect(list[0]!.value).toBeNull();
     });
 
     it("should return changes ordered by createdAt", async () => {
@@ -599,8 +599,8 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       await store.addStateChange(c2);
       const list = await store.listStateChanges("sess-1", "stats", "hp");
       expect(list).toHaveLength(2);
-      expect(list[0].id).toBe(c1.id);
-      expect(list[1].id).toBe(c2.id);
+      expect(list[0]!.id).toBe(c1.id);
+      expect(list[1]!.id).toBe(c2.id);
     });
   });
 
@@ -637,7 +637,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       await store.saveEvent(e2);
       const list = await store.listEvents("sess-1", { topic: "combat" });
       expect(list).toHaveLength(1);
-      expect(list[0].topic).toBe("combat");
+      expect(list[0]!.topic).toBe("combat");
     });
 
     it("should fetch a single event by id scoped to its session", async () => {
@@ -666,8 +666,8 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       await store.addMessage(m2);
       const list = await store.listMessages("sess-1");
       expect(list).toHaveLength(2);
-      expect(list[0].id).toBe(m1.id);
-      expect(list[1].id).toBe(m2.id);
+      expect(list[0]!.id).toBe(m1.id);
+      expect(list[1]!.id).toBe(m2.id);
     });
 
     it("listMessagesPage returns the newest window then pages older by cursor", async () => {
@@ -689,7 +689,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       // Page older than the oldest of the previous window.
       const older = await store.listMessagesPage("sess-mp", {
         limit: 2,
-        before: { createdAt: newest[0].createdAt, id: newest[0].id },
+        before: { createdAt: newest[0]!.createdAt, id: newest[0]!.id },
       });
       expect(older.map((m) => m.id)).toEqual([m1.id, m2.id]);
 
@@ -732,7 +732,7 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
 
       const page2 = await store.listMessagesPage("sess-tie", {
         limit: 2,
-        before: { createdAt: page1[0].createdAt, id: page1[0].id },
+        before: { createdAt: page1[0]!.createdAt, id: page1[0]!.id },
       });
       expect(page2.map((m) => m.id)).toEqual(["id-b"]);
     });
@@ -829,8 +829,8 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
 
       const list = await store.listCharacters("sess-1");
       expect(list).toHaveLength(1);
-      expect(list[0].name).toBe("Dark Hero");
-      expect(list[0].version).toBe(2);
+      expect(list[0]!.name).toBe("Dark Hero");
+      expect(list[0]!.version).toBe(2);
     });
 
     it("replaces a complete character snapshot including creation time and omitted attributes", async () => {

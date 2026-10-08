@@ -251,7 +251,7 @@ schedule: {trigger: {type: manual}}
         locale: "zh-CN",
       });
       expect(bundle.target.userSettings?.[0]?.default).toBe("brief");
-      expect(bundle.target.dataSchemas?.notes.schema).toBe(
+      expect(bundle.target.dataSchemas?.notes?.schema).toBe(
         "./schemas/notes.json",
       );
       expect(

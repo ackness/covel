@@ -156,13 +156,12 @@ export function createPgVectorCapability(
        WHERE model_id = ${identity.modelId} AND dim = ${identity.dim}
     `;
 
-      if (rows.length === 0) {
+      const row = rows[0];
+      if (!row) {
         throw new Error(
           `pg-vector: failed to find or create vector_models entry for ${identity.modelId}`,
         );
       }
-
-      const row = rows[0];
 
       const target: VectorTarget = {
         modelRegistryId: row.id,
@@ -204,13 +203,14 @@ export function createPgVectorCapability(
         FROM sessions
        WHERE id = ${sessionId}
     `;
-    if (rows.length === 0) {
+    const current = rows[0];
+    if (!current) {
       throw new Error(
         `pg-vector lockSessionEmbeddingModel: session ${sessionId} not found`,
       );
     }
     throw new Error(
-      `pg-vector lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${rows[0].embedding_model_id}`,
+      `pg-vector lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${current.embedding_model_id}`,
     );
   }
 
@@ -223,15 +223,14 @@ export function createPgVectorCapability(
       SELECT embedding_model_id FROM sessions WHERE id = ${sessionId}
     `;
 
-    if (sessionRows.length === 0 || sessionRows[0].embedding_model_id == null) {
+    const modelId = sessionRows[0]?.embedding_model_id;
+    if (modelId == null) {
       // An unlocked session can be locked by another server instance at any
       // time. Caching null would make this process permanently miss that
       // immutable transition because only the winning instance can invalidate
       // its local cache.
       return null;
     }
-
-    const modelId = sessionRows[0].embedding_model_id;
 
     // Try in-memory model cache first.
     const cached = modelCache.get(modelId);
@@ -254,13 +253,12 @@ export function createPgVectorCapability(
        WHERE id = ${modelId}
     `;
 
-    if (modelRows.length === 0) {
+    const row = modelRows[0];
+    if (!row) {
       throw new Error(
         `pg-vector: session ${sessionId} references unknown vector_models.id ${modelId}`,
       );
     }
-
-    const row = modelRows[0];
     const target: VectorTarget = {
       modelRegistryId: row.id,
       modelId: row.model_id,
@@ -341,12 +339,12 @@ export function createPgVectorCapability(
          WHERE id = ${input.sessionId}
          FOR KEY SHARE
       `;
-    if (sessionRows.length === 0) {
+    const session = sessionRows[0];
+    if (!session) {
       throw new Error(
         `pg-vector upsertVector: session ${input.sessionId} not found`,
       );
     }
-    const session = sessionRows[0];
     if (
       input.expectedSessionCreatedAt !== undefined &&
       session.created_at !== input.expectedSessionCreatedAt
@@ -373,12 +371,12 @@ export function createPgVectorCapability(
           FROM vector_models
          WHERE id = ${session.embedding_model_id}
       `;
-    if (modelRows.length === 0) {
+    const model = modelRows[0];
+    if (!model) {
       throw new Error(
         `pg-vector: session ${input.sessionId} references unknown vector_models.id ${session.embedding_model_id}`,
       );
     }
-    const model = modelRows[0];
     const tname = physicalTableName(model.id);
     if (model.table_name !== tname) {
       throw new Error(

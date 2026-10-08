@@ -129,9 +129,10 @@ export function evaluateExpectations(
     });
   }
   for (const expected of expect.pluginData ?? []) {
-    const rows = Object.hasOwn(result.pluginData, expected.namespace)
-      ? result.pluginData[expected.namespace]
-      : [];
+    const rows =
+      (Object.hasOwn(result.pluginData, expected.namespace)
+        ? result.pluginData[expected.namespace]
+        : undefined) ?? [];
     const matched = rows.some((row) => {
       if (expected.key && row.key !== expected.key) return false;
       const value = row.value;
@@ -225,9 +226,10 @@ export async function saveImageArtifacts(args: {
   if (!saveImages) return [];
   const namespace = saveImages.namespace ?? "images";
   const field = saveImages.field ?? "ref";
-  const rows = Object.hasOwn(args.result.pluginData, namespace)
-    ? args.result.pluginData[namespace]
-    : [];
+  const rows =
+    (Object.hasOwn(args.result.pluginData, namespace)
+      ? args.result.pluginData[namespace]
+      : undefined) ?? [];
   const outDir = path.resolve(args.pluginRoot, saveImages.dir ?? "tests/tmp");
   fs.mkdirSync(outDir, { recursive: true });
 

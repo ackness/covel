@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 function renderBranchReply(value: Record<string, unknown>) {
-  const CandidateList = covelRegistry.CandidateList;
+  const CandidateList = covelRegistry.CandidateList!;
   return render(
     <JSONUIProvider registry={covelRegistry}>
       <CandidateList
@@ -203,7 +203,7 @@ describe("CandidateList", () => {
   it("keeps draft and send on the local session path", () => {
     renderBranchReply(candidateSet);
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Draft" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Draft" })[0]!);
     expect(sessionMock.current.upsertInteractionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         turnId: "turn-42",
@@ -215,7 +215,7 @@ describe("CandidateList", () => {
       }),
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Send" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Send" })[1]!);
     expect(sessionMock.current.sendMessage).toHaveBeenCalledWith(
       "Wait and watch the guard.",
     );

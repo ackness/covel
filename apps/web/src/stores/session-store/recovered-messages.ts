@@ -13,8 +13,7 @@ export function mergeRecoveredMessages(
   const messages = [...current];
   const recoveredIds = new Set(recovered.map((message) => message.id));
   let previous = -1;
-  for (let index = 0; index < recovered.length; index += 1) {
-    const message = recovered[index];
+  for (const [index, message] of recovered.entries()) {
     const existing = messages.findIndex((row) => row.id === message.id);
     if (existing >= 0) {
       // A later live completion may have arrived while the snapshot was read.
@@ -72,7 +71,7 @@ export function mergeRecoveredMessages(
       );
       if (sameTurn >= 0) {
         insertion = sameTurn;
-        if (message.role !== "user" && messages[sameTurn].role === "user")
+        if (message.role !== "user" && messages[sameTurn]?.role === "user")
           insertion += 1;
       }
     }

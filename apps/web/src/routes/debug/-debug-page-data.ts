@@ -100,11 +100,12 @@ export function useDebugPageData(
       }
       allSessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setSessions(allSessions);
-      if (!currentSession.current && allSessions.length > 0) {
+      const newest = allSessions[0];
+      if (!currentSession.current && newest) {
         const target =
           sid && allSessions.some((session) => session.id === sid)
             ? sid
-            : allSessions[0].id;
+            : newest.id;
         selectSession(target);
       }
     } catch {
@@ -114,8 +115,9 @@ export function useDebugPageData(
 
   // 展开最新（正序数组的最后一个）turn，便于用户直接看到最近一轮。
   const expandLatestTurn = useCallback((loaded: api.TurnTrace[]) => {
-    if (loaded.length === 0) return;
-    const latestId = loaded[loaded.length - 1].turnId;
+    const latest = loaded.at(-1);
+    if (!latest) return;
+    const latestId = latest.turnId;
     setExpandedTurns((prev) => {
       const next = new Set(prev);
       next.add(latestId);

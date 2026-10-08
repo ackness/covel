@@ -127,7 +127,7 @@ beforeEach(async () => {
 
 it("edits saved parameters for a default-only server configuration", async () => {
   mocks.plugins = [];
-  mocks.llm = { ...mocks.llm, slots: { default: mocks.llm.slots.story } };
+  mocks.llm = { ...mocks.llm, slots: { default: mocks.llm.slots.story! } };
   await mocks.store.set("llm.paramOverrides", {
     default: { temperature: 0.4 },
   });

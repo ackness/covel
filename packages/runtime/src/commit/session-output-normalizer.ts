@@ -216,7 +216,7 @@ export function normalizeOutput(
       }));
     if (items.length === 1) {
       proposals.push(
-        makeProposal("plugin.data", source, turnId, sessionId, items[0]),
+        makeProposal("plugin.data", source, turnId, sessionId, items[0]!),
       );
     } else if (items.length > 1) {
       proposals.push(

@@ -16,10 +16,7 @@ function hasLaterUserMessage(
 ): boolean {
   const idx = allMessages.findIndex((m) => m.id === msg.id);
   if (idx < 0) return false;
-  for (let i = idx + 1; i < allMessages.length; i += 1) {
-    if (allMessages[i].role === "user") return true;
-  }
-  return false;
+  return allMessages.slice(idx + 1).some((m) => m.role === "user");
 }
 
 function isInteractiveBlock(block: Record<string, unknown>): boolean {

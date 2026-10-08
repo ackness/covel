@@ -47,7 +47,7 @@ describe("provider request inspection", () => {
       fireEvent.click(
         screen.getAllByRole("button", {
           name: i18n.t("debugger.copyProviderBody"),
-        })[1],
+        })[1]!,
       );
       expect(writeText).toHaveBeenCalledWith(JSON.stringify(body, null, 2));
     } finally {
@@ -65,7 +65,7 @@ describe("provider request inspection", () => {
       event("llm.calling", 7, { runtimeId: "other" }),
     ];
     expect(
-      llmAttempts(events[0], events).map(({ call, attempt, status }) => ({
+      llmAttempts(events[0]!, events).map(({ call, attempt, status }) => ({
         call,
         attempt,
         status,
@@ -82,7 +82,7 @@ describe("provider request inspection", () => {
       error: "Budget exhausted",
     });
     expect(getTraceError(failed)?.message).toBe("Budget exhausted");
-    expect(deriveRuntimesFromTurn([failed])[0].status).toBe("failed");
+    expect(deriveRuntimesFromTurn([failed])[0]!.status).toBe("failed");
   });
   it("shows the actual serialized body separately from logical messages", () => {
     render(
@@ -108,7 +108,7 @@ describe("provider request inspection", () => {
     );
     expect(screen.getByText(/Synthetic provider body/)).toBeTruthy();
     expect(screen.queryByText("Logical prompt")).toBeNull();
-    fireEvent.click(screen.getAllByRole("tab")[1]);
+    fireEvent.click(screen.getAllByRole("tab")[1]!);
     expect(screen.getByText("Logical prompt")).toBeTruthy();
     expect(screen.queryByText(/Synthetic provider body/)).toBeNull();
   });

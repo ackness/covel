@@ -115,7 +115,7 @@ describe("computeSpriteSlots", () => {
     const presence = { lin: { characterId: "lin", sprite: ref("lin-sprite") } };
     const slots = computeSpriteSlots([{ id: "lin", name: "林月" }], presence);
     expect(slots).toHaveLength(1);
-    expect(slots[0].ref).toEqual(ref("lin-sprite"));
+    expect(slots[0]!.ref).toEqual(ref("lin-sprite"));
   });
 
   it("2 speakers split left/right", () => {
@@ -331,17 +331,17 @@ describe("computeSpriteLanes", () => {
 
   it("speaker focus does not change lane geometry", () => {
     const lanes = computeSpriteLanes(["left", "center", "right"]);
-    expect(lanes[0].widthPct).toBeCloseTo(100 / 3, 6);
-    expect(lanes[1].widthPct).toBeCloseTo(100 / 3, 6);
-    expect(lanes[2].widthPct).toBeCloseTo(100 / 3, 6);
+    expect(lanes[0]!.widthPct).toBeCloseTo(100 / 3, 6);
+    expect(lanes[1]!.widthPct).toBeCloseTo(100 / 3, 6);
+    expect(lanes[2]!.widthPct).toBeCloseTo(100 / 3, 6);
     // Contiguous, no overlap: each lane starts where the previous ends.
-    expect(lanes[0].leftPct).toBeCloseTo(0, 6);
-    expect(lanes[1].leftPct).toBeCloseTo(lanes[0].widthPct, 6);
-    expect(lanes[2].leftPct).toBeCloseTo(
-      lanes[1].leftPct + lanes[1].widthPct,
+    expect(lanes[0]!.leftPct).toBeCloseTo(0, 6);
+    expect(lanes[1]!.leftPct).toBeCloseTo(lanes[0]!.widthPct, 6);
+    expect(lanes[2]!.leftPct).toBeCloseTo(
+      lanes[1]!.leftPct + lanes[1]!.widthPct,
       6,
     );
-    expect(lanes[2].leftPct + lanes[2].widthPct).toBeCloseTo(100, 6);
+    expect(lanes[2]!.leftPct + lanes[2]!.widthPct).toBeCloseTo(100, 6);
   });
 
   it("a solo speaker keeps the capped centered lane", () => {

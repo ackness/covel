@@ -45,7 +45,7 @@ export function registerPersistenceStoreSuites(
 
       const listB = await store.listSuspensions("sess-susp-B");
       expect(listB).toHaveLength(1);
-      expect(listB[0].id).toBe(s3.id);
+      expect(listB[0]!.id).toBe(s3.id);
     });
 
     it("parity: listSuspensions returns entries sorted by createdAt", async () => {
@@ -250,10 +250,10 @@ export function registerPersistenceStoreSuites(
 
       const list = await store.listSessionLorebookEntries("sess-lore-1");
       expect(list.map((r) => r.id)).toEqual(["lore-b", "lore-a", "lore-c"]);
-      expect(list[0].keys).toEqual(["ancient", "temple"]);
-      expect(list[0].strategy).toBe("selective");
-      expect(list[2].enabled).toBe(false);
-      expect(list[2].extra).toEqual({
+      expect(list[0]!.keys).toEqual(["ancient", "temple"]);
+      expect(list[0]!.strategy).toBe("selective");
+      expect(list[2]!.enabled).toBe(false);
+      expect(list[2]!.extra).toEqual({
         atDepth: 4,
         note: "kept disabled for now",
       });
@@ -278,8 +278,8 @@ export function registerPersistenceStoreSuites(
 
       const list = await store.listSessionLorebookEntries("sess-lore-2");
       expect(list).toHaveLength(1);
-      expect(list[0].content).toBe("updated");
-      expect(list[0].insertionOrder).toBe(50);
+      expect(list[0]!.content).toBe("updated");
+      expect(list[0]!.insertionOrder).toBe(50);
     });
 
     it("isolates identical ids across owners for reads, updates, and deletes", async () => {
@@ -306,17 +306,17 @@ export function registerPersistenceStoreSuites(
       }
       const own = await store.getLorebookEntry(
         "owner-test",
-        owners[2],
+        owners[2]!,
         "shared-id",
       );
       await store.upsertLorebookEntries([{ ...own!, content: "updated" }]);
       expect(
-        (await store.getLorebookEntry("owner-test", owners[3], "shared-id"))
+        (await store.getLorebookEntry("owner-test", owners[3]!, "shared-id"))
           ?.content,
       ).toBe("owner-3");
-      await store.deleteLorebookEntry("owner-test", owners[2], "shared-id");
+      await store.deleteLorebookEntry("owner-test", owners[2]!, "shared-id");
       expect(
-        await store.getLorebookEntry("owner-test", owners[2], "shared-id"),
+        await store.getLorebookEntry("owner-test", owners[2]!, "shared-id"),
       ).toBeNull();
       expect(await store.listSessionLorebookEntries("owner-test")).toHaveLength(
         3,
@@ -389,12 +389,12 @@ export function registerPersistenceStoreSuites(
 
       const listA = await store.listSnapshots("sess-snap-A");
       expect(listA).toHaveLength(2);
-      expect(listA[0].id).toBe(s1.id);
-      expect(listA[1].id).toBe(s2.id);
+      expect(listA[0]!.id).toBe(s1.id);
+      expect(listA[1]!.id).toBe(s2.id);
 
       const listB = await store.listSnapshots("sess-snap-B");
       expect(listB).toHaveLength(1);
-      expect(listB[0].id).toBe(s3.id);
+      expect(listB[0]!.id).toBe(s3.id);
     });
 
     it("should persist all payload slices verbatim", async () => {
@@ -447,9 +447,9 @@ export function registerPersistenceStoreSuites(
       const result = await store.getSnapshot(snap.id);
       expect(result).not.toBeNull();
       expect(result!.payload.characters).toHaveLength(1);
-      expect(result!.payload.characters[0].name).toBe("Hero");
-      expect(result!.payload.stateEntries[0].value).toBe(100);
-      expect(result!.payload.pluginData[0].value).toEqual({ a: 1 });
+      expect(result!.payload.characters[0]!.name).toBe("Hero");
+      expect(result!.payload.stateEntries[0]!.value).toBe(100);
+      expect(result!.payload.pluginData[0]!.value).toEqual({ a: 1 });
       expect(result!.payload.sessionSummaries).toEqual([
         expect.objectContaining({ id: "summary-1" }),
       ]);
@@ -547,14 +547,14 @@ export function registerPersistenceStoreSuites(
       // Oldest-first within the page (mirrors listMessagesPage).
       expect(page.map((m) => m.id)).toEqual(["snap-small", "snap-large"]);
 
-      const largeMeta = page[1];
+      const largeMeta = page[1]!;
       expect(largeMeta.turnId).toBe("turn-b");
       expect(largeMeta.kind).toBe("auto");
       // Payload is projected away; only its serialized length survives.
       expect(largeMeta).not.toHaveProperty("payload");
       expect(largeMeta.size).toBeGreaterThan(0);
       // A heavier payload yields a larger recorded size.
-      expect(largeMeta.size).toBeGreaterThan(page[0].size);
+      expect(largeMeta.size).toBeGreaterThan(page[0]!.size);
     });
 
     it("keyset-paginates newest-first via the `before` cursor", async () => {
@@ -575,7 +575,7 @@ export function registerPersistenceStoreSuites(
       expect(first.map((m) => m.id)).toEqual(["snap-3", "snap-4"]);
 
       // Cursor = oldest row of the page just returned; next page is older.
-      const oldest = first[0];
+      const oldest = first[0]!;
       const second = await store.listSnapshotsPage(sessionId, {
         limit: 2,
         before: { createdAt: oldest.createdAt, id: oldest.id },
@@ -584,7 +584,7 @@ export function registerPersistenceStoreSuites(
 
       const third = await store.listSnapshotsPage(sessionId, {
         limit: 2,
-        before: { createdAt: second[0].createdAt, id: second[0].id },
+        before: { createdAt: second[0]!.createdAt, id: second[0]!.id },
       });
       expect(third.map((m) => m.id)).toEqual(["snap-0"]);
     });

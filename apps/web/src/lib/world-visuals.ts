@@ -12,7 +12,7 @@ const DEFAULT_VISUAL: WorldVisual = {
   label: "Covel Studio",
 };
 
-const VISUALS_BY_ID: Record<string, WorldVisual> = {
+const BUNDLED_VISUALS = {
   "lantern-barrow": {
     image: "/visuals/worlds/lantern-barrow.webp",
     accent: "oklch(72% 0.12 75)",
@@ -43,21 +43,23 @@ const VISUALS_BY_ID: Record<string, WorldVisual> = {
     accent: "oklch(72% 0.16 220)",
     label: "Neon Ridge",
   },
-};
+} satisfies Record<string, WorldVisual>;
+
+const VISUALS_BY_ID: Record<string, WorldVisual> = BUNDLED_VISUALS;
 
 const VISUALS_BY_TAG: Record<string, WorldVisual> = {
-  adventure: VISUALS_BY_ID.cloudmere,
-  cyberpunk: VISUALS_BY_ID.neonridge,
-  "dark-fantasy": VISUALS_BY_ID.mistport,
-  exploration: VISUALS_BY_ID.mistport,
-  hacker: VISUALS_BY_ID.neonridge,
-  mystery: VISUALS_BY_ID.mistport,
-  noir: VISUALS_BY_ID.neonridge,
-  romance: VISUALS_BY_ID["haruka-academy"],
-  school: VISUALS_BY_ID["haruka-academy"],
-  "slice-of-life": VISUALS_BY_ID["haruka-academy"],
-  thriller: VISUALS_BY_ID.neonridge,
-  xianxia: VISUALS_BY_ID.cloudmere,
+  adventure: BUNDLED_VISUALS.cloudmere,
+  cyberpunk: BUNDLED_VISUALS.neonridge,
+  "dark-fantasy": BUNDLED_VISUALS.mistport,
+  exploration: BUNDLED_VISUALS.mistport,
+  hacker: BUNDLED_VISUALS.neonridge,
+  mystery: BUNDLED_VISUALS.mistport,
+  noir: BUNDLED_VISUALS.neonridge,
+  romance: BUNDLED_VISUALS["haruka-academy"],
+  school: BUNDLED_VISUALS["haruka-academy"],
+  "slice-of-life": BUNDLED_VISUALS["haruka-academy"],
+  thriller: BUNDLED_VISUALS.neonridge,
+  xianxia: BUNDLED_VISUALS.cloudmere,
 };
 
 export function worldVisualForId(id: string | undefined): WorldVisual | null {

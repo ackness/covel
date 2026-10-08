@@ -94,7 +94,7 @@ it("uses captured credentials and preserves replacements during delayed verifica
   vi.stubGlobal("fetch", fetchMock);
   await deleteWorld("world");
   expect(
-    new Headers(fetchMock.mock.calls[1][1].headers).get("X-Session-Token"),
+    new Headers(fetchMock.mock.calls[1]![1].headers).get("X-Session-Token"),
   ).toBe("synthetic-old");
   expect(await getSessionToken("same-id")).toBe("synthetic-new");
 });

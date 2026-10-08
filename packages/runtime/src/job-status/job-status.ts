@@ -194,9 +194,9 @@ export async function finalizeJobStatuses(
     const own = events.filter(
       (e) => e.pluginId === deps.pluginId && e.runtimeId === deps.runtimeId,
     );
-    if (own.length === 0) continue;
     // Ordered by sequence ascending, so the tail is the latest.
-    const latest = own[own.length - 1];
+    const latest = own.at(-1);
+    if (!latest) continue;
     // A handler can report success before its writes reach commit. When they
     // did not land, the final state follows the save result, not the claim.
     const claimedSuccessLost =

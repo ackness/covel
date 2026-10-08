@@ -99,7 +99,8 @@ function findLatestStory(
   messages: readonly StreamMessage[],
 ): StreamMessage | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].kind === "story") return messages[i];
+    const message = messages[i]!;
+    if (message.kind === "story") return message;
   }
   return undefined;
 }

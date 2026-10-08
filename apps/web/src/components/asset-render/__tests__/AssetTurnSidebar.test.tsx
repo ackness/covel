@@ -140,7 +140,7 @@ describe("<AssetTurnSidebar>", () => {
     expect(container.firstChild).not.toBeNull();
     const stubs = screen.getAllByTestId("media-stub");
     expect(stubs).toHaveLength(1);
-    expect(stubs[0].getAttribute("data-as")).toBe("image");
+    expect(stubs[0]!.getAttribute("data-as")).toBe("image");
   });
 
   it("renders one card per asset and preserves arrival order", () => {
@@ -168,9 +168,9 @@ describe("<AssetTurnSidebar>", () => {
     expect(stubs).toHaveLength(3);
     // Image first, audio second, generic-link third — the generic-link path
     // mounts Media with as="auto", the others with as="image"/"audio".
-    expect(stubs[0].getAttribute("data-as")).toBe("image");
-    expect(stubs[1].getAttribute("data-as")).toBe("audio");
-    expect(stubs[2].getAttribute("data-as")).toBe("auto");
+    expect(stubs[0]!.getAttribute("data-as")).toBe("image");
+    expect(stubs[1]!.getAttribute("data-as")).toBe("audio");
+    expect(stubs[2]!.getAttribute("data-as")).toBe("auto");
   });
 
   it("isolates assets across turn ids", () => {

@@ -101,10 +101,9 @@ function buildPluginUserSettingsHeader(): Record<string, string> {
   for (const entry of store.listEntries()) {
     if (!entry.key.startsWith("plugin.")) continue;
     if (!store.has(entry.key)) continue; // explicit player overrides only
-    const parts = entry.key.split(".");
-    if (parts.length < 3) continue;
-    const pluginId = parts[1];
-    const settingKey = parts.slice(2).join(".");
+    const [, pluginId, ...rest] = entry.key.split(".");
+    if (pluginId === undefined || rest.length === 0) continue;
+    const settingKey = rest.join(".");
     const value = store.get<unknown>(entry.key);
     (buckets[pluginId] ??= {})[settingKey] = value;
   }

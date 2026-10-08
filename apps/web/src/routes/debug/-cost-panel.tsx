@@ -463,7 +463,8 @@ export function CostPanel({
     let unpricedTokens = 0;
     for (const agg of model.byModel) {
       const priceKey = `${agg.provider ?? ""}\u0000${agg.model}`;
-      const price = agg.model === UNKNOWN_MODEL ? null : prices[priceKey];
+      const price =
+        agg.model === UNKNOWN_MODEL ? null : (prices[priceKey] ?? null);
       const estimate = estimateModelCost(
         agg,
         price,
@@ -570,7 +571,8 @@ export function CostPanel({
           <div className="border border-(--rule-color) divide-y divide-(--rule-color)">
             {model.byModel.map((m) => {
               const priceKey = `${m.provider ?? ""}\u0000${m.model}`;
-              const price = m.model === UNKNOWN_MODEL ? null : prices[priceKey];
+              const price =
+                m.model === UNKNOWN_MODEL ? null : (prices[priceKey] ?? null);
               const multiplier = getProviderPriceMultiplier(m.provider);
               const estimate = estimateModelCost(m, price, multiplier);
               return (

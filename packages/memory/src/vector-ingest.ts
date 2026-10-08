@@ -361,8 +361,7 @@ async function ingestArchival(
 
   const nextHashes: ArchivalHashes = { ...hashes };
   const upserts: VectorIndexUpsert[] = [];
-  for (let i = 0; i < batch.length; i += 1) {
-    const it = batch[i];
+  for (const [i, it] of batch.entries()) {
     const embedding = vectors[i];
     if (embedding === null) {
       nextHashes[it.vecKey] = contentHash(it.text);

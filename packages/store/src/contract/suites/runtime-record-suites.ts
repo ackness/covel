@@ -357,7 +357,7 @@ export function registerRuntimeRecordStoreSuites(
 
       const older = await store.listTraceEventsPage("sess-tep", {
         limit: 5,
-        before: { createdAt: newest[0].createdAt, id: newest[0].id },
+        before: { createdAt: newest[0]!.createdAt, id: newest[0]!.id },
       });
       expect(older.map((e) => e.id)).toEqual([e1.id]);
     });
@@ -382,7 +382,7 @@ export function registerRuntimeRecordStoreSuites(
       expect(page1.map((e) => e.id)).toEqual(["te-a"]);
       const page2 = await store.listTraceEventsPage("sess-tep-tie", {
         limit: 1,
-        before: { createdAt: page1[0].createdAt, id: page1[0].id },
+        before: { createdAt: page1[0]!.createdAt, id: page1[0]!.id },
       });
       expect(page2.map((e) => e.id)).toEqual(["te-b"]);
     });
@@ -606,8 +606,8 @@ export function registerRuntimeRecordStoreSuites(
       await store.appendTurnMessage(m2);
       const list = await store.listTurnMessages("sess-1");
       expect(list).toHaveLength(2);
-      expect(list[0].id).toBe(m1.id);
-      expect(list[1].id).toBe(m2.id);
+      expect(list[0]!.id).toBe(m1.id);
+      expect(list[1]!.id).toBe(m2.id);
     });
 
     it("should filter by sessionId", async () => {
@@ -617,7 +617,7 @@ export function registerRuntimeRecordStoreSuites(
       await store.appendTurnMessage(m2);
       const list = await store.listTurnMessages("sess-1");
       expect(list).toHaveLength(1);
-      expect(list[0].id).toBe(m1.id);
+      expect(list[0]!.id).toBe(m1.id);
     });
 
     it("should return messages sorted by createdAt", async () => {
@@ -641,9 +641,9 @@ export function registerRuntimeRecordStoreSuites(
       await store.appendTurnMessage(m3);
       const list = await store.listTurnMessages("sess-1");
       expect(list).toHaveLength(3);
-      expect(list[0].id).toBe(m2.id);
-      expect(list[1].id).toBe(m3.id);
-      expect(list[2].id).toBe(m1.id);
+      expect(list[0]!.id).toBe(m2.id);
+      expect(list[1]!.id).toBe(m3.id);
+      expect(list[2]!.id).toBe(m1.id);
     });
 
     it("parity: appendTurnMessage persists a non-null compactedAtTurnId", async () => {
@@ -659,7 +659,7 @@ export function registerRuntimeRecordStoreSuites(
       await store.appendTurnMessage(m);
       const list = await store.listTurnMessages("sess-compacted");
       expect(list).toHaveLength(1);
-      expect(list[0].compactedAtTurnId).toBe("summary-preexisting");
+      expect(list[0]!.compactedAtTurnId).toBe("summary-preexisting");
     });
 
     it("listUncompactedTurnMessages returns only the raw suffix, oldest-first", async () => {
@@ -849,8 +849,8 @@ export function registerRuntimeRecordStoreSuites(
       // limit only
       const first2 = await store.listTurnMessages("sess-pg", { limit: 2 });
       expect(first2).toHaveLength(2);
-      expect(first2[0].id).toBe(m1.id);
-      expect(first2[1].id).toBe(m2.id);
+      expect(first2[0]!.id).toBe(m1.id);
+      expect(first2[1]!.id).toBe(m2.id);
 
       // limit + offset
       const page2 = await store.listTurnMessages("sess-pg", {
@@ -858,8 +858,8 @@ export function registerRuntimeRecordStoreSuites(
         offset: 2,
       });
       expect(page2).toHaveLength(2);
-      expect(page2[0].id).toBe(m3.id);
-      expect(page2[1].id).toBe(m4.id);
+      expect(page2[0]!.id).toBe(m3.id);
+      expect(page2[1]!.id).toBe(m4.id);
 
       // offset beyond end
       const empty = await store.listTurnMessages("sess-pg", {
@@ -911,7 +911,7 @@ export function registerRuntimeRecordStoreSuites(
       );
       const a = await store.listRecentTurnMessages("sess-tail-a", 10);
       expect(a).toHaveLength(1);
-      expect(a[0].sessionId).toBe("sess-tail-a");
+      expect(a[0]!.sessionId).toBe("sess-tail-a");
     });
   });
 
@@ -982,9 +982,9 @@ export function registerRuntimeRecordStoreSuites(
 
       const list = await store.listWorldDataImportLedger("ledger-batch");
       expect(list.map((r) => r.id)).toEqual(["ledger-a", "ledger-b"]);
-      expect(list[0].derivedFrom).toEqual(["source-root"]);
-      expect(list[1].pluginId).toBeUndefined();
-      expect(list[1].managed).toBe(false);
+      expect(list[0]!.derivedFrom).toEqual(["source-root"]);
+      expect(list[1]!.pluginId).toBeUndefined();
+      expect(list[1]!.managed).toBe(false);
     });
 
     it("isolates rows by sessionId", async () => {
@@ -1063,7 +1063,7 @@ export function registerRuntimeRecordStoreSuites(
       await store.saveSessionSummary(s2);
       const list1 = await store.listSessionSummaries("sess-sum-filter-1");
       expect(list1).toHaveLength(1);
-      expect(list1[0].id).toBe(s1.id);
+      expect(list1[0]!.id).toBe(s1.id);
     });
 
     it("lists summaries chronologically with id as the tie-break", async () => {
@@ -1153,7 +1153,7 @@ export function registerRuntimeRecordStoreSuites(
       );
       const messages = await store.listTurnMessages("sess-tag-empty");
       expect(messages).toHaveLength(1);
-      expect(messages[0].compactedAtTurnId).toBeUndefined();
+      expect(messages[0]!.compactedAtTurnId).toBeUndefined();
     });
 
     it("retagCompactedTurnMessages only repoints already-compacted rows in the session", async () => {
@@ -1251,7 +1251,7 @@ export function registerRuntimeRecordStoreSuites(
       );
 
       const bMessages = await store.listTurnMessages("sess-tag-b");
-      expect(bMessages[0].compactedAtTurnId).toBeUndefined();
+      expect(bMessages[0]!.compactedAtTurnId).toBeUndefined();
     });
   });
 }

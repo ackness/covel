@@ -304,7 +304,7 @@ export function ExecutionTimeline({
                   onClick={() =>
                     onRetryRuntime?.(
                       retryBatch.length === 1
-                        ? retryBatch[0].runtimeId
+                        ? retryBatch[0]!.runtimeId
                         : retryBatch.map((rt) => rt.runtimeId),
                       group.turnId,
                     )

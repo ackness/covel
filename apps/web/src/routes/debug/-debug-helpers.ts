@@ -267,7 +267,7 @@ export function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
   let i = 0;
 
   while (i < events.length) {
-    const event = events[i];
+    const event = events[i]!;
     const innerType = getDisplayType(event);
 
     if (innerType !== "message.delta") {
@@ -282,7 +282,7 @@ export function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
     let j = i + 1;
 
     while (j < events.length) {
-      const next = events[j];
+      const next = events[j]!;
       const nextType = getDisplayType(next);
       if (
         nextType !== "message.delta" ||

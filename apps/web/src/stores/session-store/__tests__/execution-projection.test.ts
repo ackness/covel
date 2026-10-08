@@ -83,13 +83,13 @@ describe("source turn execution projection", () => {
         }),
         skipped,
       ],
-    ).turns[0].steps;
+    ).turns[0]!.steps;
     expect(rows.find((step) => step.runtimeId === "world")).toMatchObject({
       status: "failed",
       detail: "world error",
     });
     expect(
-      projectExecutionTurns([], [skipped]).turns[0].steps[0],
+      projectExecutionTurns([], [skipped]).turns[0]!.steps[0],
     ).toMatchObject({ status: "failed" });
     expect(skipped.status).toBe(status);
   });
@@ -99,36 +99,36 @@ describe("source turn execution projection", () => {
       attemptStatus: "committed",
     });
     expect(
-      projectExecutionTurns([message], [...source, suspended]).turns[0].steps[1]
-        .status,
+      projectExecutionTurns([message], [...source, suspended]).turns[0]!
+        .steps[1]!.status,
     ).toBe("suspended");
     expect(
       projectExecutionTurns(
         [message],
         [...source, { ...suspended, attemptStatus: "failed" }],
-      ).turns[0].steps[1].status,
+      ).turns[0]!.steps[1]!.status,
     ).toBe("failed");
   });
   it("updates only the retried task, keeps story and other failures, and requires commit evidence", () => {
     const pending = attempt();
     const { turns } = projectExecutionTurns([message], [...source, pending]);
     expect(turns).toHaveLength(1);
-    expect(turns[0].messages[0].message).toBe(message);
-    expect(turns[0].steps.map((step) => [step.runtimeId, step.status])).toEqual(
-      [
-        ["story", "completed"],
-        ["tracker", "running"],
-        ["world", "failed"],
-      ],
-    );
-    expect(turns[0].steps[1].detail).toContain("reasonAwaitingCommit");
+    expect(turns[0]!.messages[0]!.message).toBe(message);
+    expect(
+      turns[0]!.steps.map((step) => [step.runtimeId, step.status]),
+    ).toEqual([
+      ["story", "completed"],
+      ["tracker", "running"],
+      ["world", "failed"],
+    ]);
+    expect(turns[0]!.steps[1]!.detail).toContain("reasonAwaitingCommit");
     expect(pending).toMatchObject({ turnId: "retry-1", status: "completed" });
-    expect(source[1].status).toBe("failed");
+    expect(source[1]!.status).toBe("failed");
     expect(
       projectExecutionTurns(
         [message],
         [...source, attempt({ attemptStatus: "committed" })],
-      ).turns[0].steps[1].status,
+      ).turns[0]!.steps[1]!.status,
     ).toBe("completed");
   });
 
@@ -162,7 +162,7 @@ describe("source turn execution projection", () => {
     );
     expect(turns).toHaveLength(1);
     expect(
-      turns[0].steps.find((step) => step.runtimeId === "tracker"),
+      turns[0]!.steps.find((step) => step.runtimeId === "tracker"),
     ).toMatchObject({
       turnId: "source",
       status: "failed",
@@ -185,7 +185,7 @@ describe("source turn execution projection", () => {
       const row = projectExecutionTurns(
         [message],
         [...source, attempt({ attemptStatus })],
-      ).turns[0].steps[1];
+      ).turns[0]!.steps[1]!;
       expect(row.status).toBe("failed");
       expect(row.detail).toContain(
         attemptStatus === "failed" ? "reasonCommitFailed" : "reasonInterrupted",
@@ -210,7 +210,7 @@ describe("retry attempt snapshot evidence", () => {
         state: committed ? "completed" : "failed",
         turnId: "source",
       });
-      expect(steps[0].attemptStatus).toBe(committed ? "committed" : "failed");
+      expect(steps[0]!.attemptStatus).toBe(committed ? "committed" : "failed");
       expect(projectExecutionTurns([], steps).latestTurn?.sourceCommitted).toBe(
         committed,
       );
@@ -260,7 +260,7 @@ describe("retry attempt snapshot evidence", () => {
       attemptStatus: "pending",
     });
     expect(
-      projectExecutionTurns([message], steps).turns[0].steps[1].status,
+      projectExecutionTurns([message], steps).turns[0]!.steps[1]!.status,
     ).toBe("running");
   });
 
@@ -272,7 +272,7 @@ describe("retry attempt snapshot evidence", () => {
     );
     expect(retriedTracker(steps)?.attemptStatus).toBe("committed");
     expect(
-      projectExecutionTurns([message], steps).turns[0].steps[1].status,
+      projectExecutionTurns([message], steps).turns[0]!.steps[1]!.status,
     ).toBe("completed");
   });
 
@@ -299,7 +299,7 @@ describe("retry attempt snapshot evidence", () => {
       attemptStatus: "pending",
     });
     expect(
-      projectExecutionTurns([message], steps).turns[0].steps[1].status,
+      projectExecutionTurns([message], steps).turns[0]!.steps[1]!.status,
     ).toBe("running");
   });
 
@@ -313,7 +313,7 @@ describe("retry attempt snapshot evidence", () => {
       attemptStatus: "interrupted",
     });
     expect(
-      projectExecutionTurns([message], steps).turns[0].steps[1].status,
+      projectExecutionTurns([message], steps).turns[0]!.steps[1]!.status,
     ).toBe("failed");
   });
 
@@ -378,7 +378,7 @@ describe("retry attempt snapshot evidence", () => {
     ).toEqual(["tracker", "world"]);
     expect(
       projectExecutionTurns([message], steps)
-        .turns[0].steps.slice(1)
+        .turns[0]!.steps.slice(1)
         .map((step) => step.status),
     ).toEqual(["running", "running"]);
   });

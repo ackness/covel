@@ -44,9 +44,10 @@ export function buildNodes(
         labels: Array.isArray(labels)
           ? labels.filter((label): label is string => typeof label === "string")
           : [],
-        color: Object.hasOwn(fields.colors, kind)
-          ? fields.colors[kind]
-          : fields.defaultColor,
+        color:
+          (Object.hasOwn(fields.colors, kind)
+            ? fields.colors[kind]
+            : undefined) ?? fields.defaultColor,
         radius: nodeRadius(name),
       },
     ];

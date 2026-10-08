@@ -14,7 +14,7 @@ import i18n from "../../i18n/index.js";
 afterEach(cleanup);
 
 function renderEntryCard(props: Record<string, unknown>) {
-  const EntryCard = covelRegistry.EntryCard;
+  const EntryCard = covelRegistry.EntryCard!;
   return render(
     <JSONUIProvider registry={covelRegistry}>
       <EntryCard

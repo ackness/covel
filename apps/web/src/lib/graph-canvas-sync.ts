@@ -88,8 +88,9 @@ function syncNodes(
   }
 
   for (let i = currentNodes.length - 1; i >= 0; i -= 1) {
-    if (!liveNodeIds.has(currentNodes[i].id)) {
-      pool.delete(currentNodes[i].id);
+    const node = currentNodes[i]!;
+    if (!liveNodeIds.has(node.id)) {
+      pool.delete(node.id);
       currentNodes.splice(i, 1);
       changed = true;
     }
@@ -139,8 +140,9 @@ function syncLinks(
   }
 
   for (let i = currentLinks.length - 1; i >= 0; i -= 1) {
-    if (!liveLinkIds.has(currentLinks[i].edgeId)) {
-      linkPool.delete(currentLinks[i].edgeId);
+    const link = currentLinks[i]!;
+    if (!liveLinkIds.has(link.edgeId)) {
+      linkPool.delete(link.edgeId);
       currentLinks.splice(i, 1);
       changed = true;
     }

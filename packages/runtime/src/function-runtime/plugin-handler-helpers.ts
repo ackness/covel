@@ -447,12 +447,12 @@ export function createPluginLogger(
       if (rows.length > MAX_LOG_ENTRIES) {
         const sorted = [...rows].sort((a, b) => a.key.localeCompare(b.key));
         const excess = sorted.length - MAX_LOG_ENTRIES;
-        for (let i = 0; i < excess; i += 1) {
+        for (const row of sorted.slice(0, excess)) {
           await store.deletePluginData(
             ctx.sessionId,
             ctx.pluginId,
             LOGS_NAMESPACE,
-            sorted[i].key,
+            row.key,
           );
         }
       }

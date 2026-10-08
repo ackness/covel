@@ -438,7 +438,7 @@ function lorebookWorldEntriesMap(
   if (relevant.length === 0) return undefined;
   const map: Record<string, unknown> = {};
   for (const entry of relevant) {
-    const key = entry.keys && entry.keys.length > 0 ? entry.keys[0] : entry.id;
+    const key = entry.keys?.[0] ?? entry.id;
     map[key] = entry.content;
   }
   return map;

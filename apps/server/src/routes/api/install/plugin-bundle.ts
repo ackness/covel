@@ -43,8 +43,7 @@ function readPackageId(entries: readonly ExtractedEntry[]): string | null {
     if (typeof json.name !== "string" || !json.name.trim()) return null;
     // `@covel/plugin-foo` → `plugin-foo`; `narrator` stays.
     const name = json.name.trim();
-    const after = name.includes("/") ? name.split("/").slice(-1)[0] : name;
-    return after;
+    return name.split("/").at(-1) ?? name;
   } catch {
     return null;
   }

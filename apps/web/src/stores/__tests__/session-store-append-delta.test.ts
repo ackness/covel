@@ -50,7 +50,7 @@ describe("APPEND_DELTA", () => {
     const after = appendDelta(before, "turn-2", "narrator", "First token");
 
     expect(after.messages).toHaveLength(2);
-    const created = after.messages[1];
+    const created = after.messages[1]!;
     expect(created.id).toBe("stream_turn-2_narrator");
     // Live text lives in the external store — placeholder content stays empty.
     expect(created.content).toBe("");
@@ -111,8 +111,8 @@ describe("APPEND_DELTA", () => {
     expect(completed.messages).toHaveLength(1);
     // Completion adopts the persisted server id so export/history reconciliation
     // cannot append the same narrative twice under two different ids.
-    expect(completed.messages[0].id).toBe("final-id");
-    expect(completed.messages[0].content).toBe(
+    expect(completed.messages[0]!.id).toBe("final-id");
+    expect(completed.messages[0]!.content).toBe(
       "the full authoritative narrative",
     );
     expect(
@@ -132,7 +132,7 @@ describe("APPEND_DELTA", () => {
         type: "COMPLETE_MESSAGE",
         turnId: "turn-1",
         runtimeId: "narrator",
-        message: completed.messages[0],
+        message: completed.messages[0]!,
       }).messages,
     ).toHaveLength(1);
   });

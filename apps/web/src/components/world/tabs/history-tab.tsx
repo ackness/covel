@@ -115,7 +115,9 @@ export function HistoryTab({ dimensions, onChange, t, problems }: TabProps) {
               >
                 {SIGNIFICANCE_LEVELS.map((s) => (
                   <option key={s} value={s}>
-                    {t(`world.significance${s[0].toUpperCase()}${s.slice(1)}`)}
+                    {t(
+                      `world.significance${s.charAt(0).toUpperCase()}${s.slice(1)}`,
+                    )}
                   </option>
                 ))}
               </select>

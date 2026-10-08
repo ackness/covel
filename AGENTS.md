@@ -259,6 +259,12 @@ bare `any`; validate external input with Zod. 400 and 800 lines are file-size
 review guidelines, not hard limits — split a file only when its responsibilities or
 maintenance cost justify it.
 
+`noImplicitOverride` and `noUncheckedIndexedAccess` are on in every tsconfig, so
+`items[i]` has the type `T | undefined`. Prefer a form that needs no assertion:
+`for (const [i, item] of items.entries())`, `const row = rows[0]; if (!row) …`,
+`items.at(-1)`, `text.charAt(0)`. Write `items[i]!` only where the line itself or
+the one above it shows that the index is in range.
+
 ## Architecture Essentials
 
 First-class execution primitives are **Runtime, Tool, Hook, Context, Proposal**; a

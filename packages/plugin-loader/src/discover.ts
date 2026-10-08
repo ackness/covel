@@ -137,8 +137,7 @@ export async function discoverPluginsMulti(
   onCollision?: (id: string, kept: string, skipped: string) => void,
 ): Promise<readonly PluginDiscoveryResult[]> {
   const seen = new Map<string, PluginDiscoveryResult>();
-  for (let i = 0; i < pluginsDirs.length; i += 1) {
-    const dir = pluginsDirs[i];
+  for (const [i, dir] of pluginsDirs.entries()) {
     if (!(await isDirectory(dir))) continue;
     const results = await discoverPlugins(dir);
     for (const result of results) {
