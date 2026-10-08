@@ -78,6 +78,22 @@ export function createSuspensionMethods(
       }
       return deleted;
     },
+
+    async releaseStaleSuspensionClaims(olderThanIso) {
+      let released = 0;
+      for (const [id, record] of state.suspensions.entries()) {
+        const claim = record.resolvedAt;
+        if (
+          claim?.startsWith("claimed:") &&
+          claim < `claimed:${olderThanIso}`
+        ) {
+          const { resolvedAt: _claim, ...unclaimed } = record;
+          state.suspensions.set(id, unclaimed);
+          released += 1;
+        }
+      }
+      return released;
+    },
   };
 }
 

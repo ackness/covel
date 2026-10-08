@@ -65,6 +65,25 @@ describe("OperatorAccessPane", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
+  it("reports a refused write and does not reload", () => {
+    const reload = vi.fn();
+    const setItem = vi
+      .spyOn(localStorageMock, "setItem")
+      .mockImplementation(() => {
+        throw new Error("quota");
+      });
+    render(<OperatorAccessPane onCredentialChange={reload} />);
+
+    fireEvent.change(screen.getByLabelText("Operator token"), {
+      target: { value: "operator-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save and reload" }));
+    setItem.mockRestore();
+
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   it("keeps save disabled until a non-whitespace token is entered", () => {
     render(<OperatorAccessPane onCredentialChange={vi.fn()} />);
     const save = screen.getByRole("button", { name: "Save and reload" });

@@ -163,6 +163,27 @@ export function registerPersistenceStoreSuites(
         expect(await store.getSuspension(old.id)).not.toBeNull();
       });
 
+      it("releases a claim older than the cutoff and leaves the rest", async () => {
+        const pause = () => new Promise((resolve) => setTimeout(resolve, 5));
+        const stale = makeSuspension({ sessionId: "sess-ttl" });
+        const live = makeSuspension({ sessionId: "sess-ttl" });
+        const resolved = makeSuspension({ sessionId: "sess-ttl" });
+        for (const record of [stale, live, resolved])
+          await store.saveSuspension(record);
+        await store.claimSuspension(stale.id);
+        await pause();
+        const between = new Date().toISOString();
+        await pause();
+        await store.claimSuspension(live.id);
+        await store.markSuspensionResolved(resolved.id);
+
+        expect(await store.releaseStaleSuspensionClaims(between)).toBe(1);
+
+        expect(await store.claimSuspension(stale.id)).toBe(true);
+        expect(await store.claimSuspension(live.id)).toBe(false);
+        expect(await store.claimSuspension(resolved.id)).toBe(false);
+      });
+
       it("never deletes successfully-resolved suspensions even when old", async () => {
         const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
         await store.saveSuspension(old);

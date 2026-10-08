@@ -894,6 +894,8 @@ async function assembleApi(
   // non-blocking for readiness, but belong to the host's drain boundary.
   const startupMaintenance = maybeSweepExpiredSuspensions(store, {
     force: true,
+    // Only PostgreSQL can have another server process with a live claim.
+    ...(config.storeBackend === "pg" ? {} : { claimMaxAgeMs: 0 }),
   })
     .catch(() => {
       console.warn("[suspension-sweep] startup sweep failed");

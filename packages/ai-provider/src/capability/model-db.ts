@@ -304,19 +304,19 @@ export async function fetchLiteLlmModels(
 ): Promise<ModelDbFile> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
-  let res: Response;
+  let raw: Record<string, Record<string, unknown>>;
   try {
-    res = await outboundFetch(url, { signal: controller.signal });
+    const res = await outboundFetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(
+        `Failed to fetch LiteLLM models: ${res.status} ${res.statusText}`,
+      );
+    }
+    // The deadline covers the body: headers can arrive long before it ends.
+    raw = (await res.json()) as Record<string, Record<string, unknown>>;
   } finally {
     clearTimeout(timeout);
   }
-  if (!res.ok) {
-    throw new Error(
-      `Failed to fetch LiteLLM models: ${res.status} ${res.statusText}`,
-    );
-  }
-
-  const raw = (await res.json()) as Record<string, Record<string, unknown>>;
   const models: Record<string, ModelDbEntry> = {};
 
   for (const [key, entry] of Object.entries(raw)) {

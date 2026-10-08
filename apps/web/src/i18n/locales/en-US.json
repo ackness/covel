@@ -861,6 +861,7 @@
     "operatorTokenLabel": "Operator token",
     "operatorTokenPlaceholder": "Paste the server operator token",
     "operatorTokenStorageHint": "Stored only in this browser and sent to same-origin operator-gated API requests. Saving or clearing reloads the app so hosted data is fetched with the current credential.",
+    "operatorTokenStorageFailed": "The browser refused to change the stored token. Nothing was changed.",
     "operatorTokenSave": "Save and reload",
     "operatorTokenClear": "Clear and reload",
     "llmSlots": "Model Roles",

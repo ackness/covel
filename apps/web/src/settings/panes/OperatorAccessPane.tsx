@@ -35,17 +35,18 @@ export function OperatorAccessPane({
     () => getOperatorToken() !== undefined,
   );
   const [visible, setVisible] = useState(false);
+  const [storageFailed, setStorageFailed] = useState(false);
   const normalizedToken = token.trim();
 
   function save(): void {
     if (!normalizedToken) return;
-    storeOperatorToken(normalizedToken);
+    if (!storeOperatorToken(normalizedToken)) return setStorageFailed(true);
     setConfigured(true);
     onCredentialChange();
   }
 
   function clear(): void {
-    clearOperatorToken();
+    if (!clearOperatorToken()) return setStorageFailed(true);
     setToken("");
     setConfigured(false);
     onCredentialChange();
@@ -109,6 +110,11 @@ export function OperatorAccessPane({
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           {t("settings.operatorTokenStorageHint")}
         </p>
+        {storageFailed && (
+          <p role="alert" className="text-[11px] text-destructive">
+            {t("settings.operatorTokenStorageFailed")}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

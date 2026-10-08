@@ -2630,7 +2630,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 ### Suspend / Resume
 
-> **过期清理**：suspension 恢复请求与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次时间门控、best-effort 的全局过期清理。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
+> **过期清理**：suspension 恢复请求与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次时间门控、best-effort 的全局过期清理。恢复途中进程退出留下的 claim 也在这次清理和服务启动时释放，此后该挂起项可以再次恢复或放弃；已经发出的外部调用不会撤销，与恢复失败后重试相同。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
 
 #### `POST /api/sessions/:id/suspensions/:suspensionId/resume`
 

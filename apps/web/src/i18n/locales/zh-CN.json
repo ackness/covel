@@ -861,6 +861,7 @@
     "operatorTokenLabel": "运维令牌",
     "operatorTokenPlaceholder": "粘贴服务端配置的运维令牌",
     "operatorTokenStorageHint": "仅保存在当前浏览器中，并只发送给同源且需要运维权限的 API。保存或清除后会重新加载应用，并使用当前凭据重新获取托管数据。",
+    "operatorTokenStorageFailed": "浏览器拒绝修改已保存的令牌，未做任何更改。",
     "operatorTokenSave": "保存并重新加载",
     "operatorTokenClear": "清除并重新加载",
     "llmSlots": "用途分配",

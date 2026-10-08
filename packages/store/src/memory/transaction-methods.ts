@@ -109,6 +109,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   markSuspensionResolved: ["suspensions"],
   deleteSuspension: ["suspensions"],
   deleteExpiredSuspensions: ["suspensions"],
+  releaseStaleSuspensionClaims: ["suspensions"],
   saveSnapshot: ["snapshots"],
   pruneAutoSnapshots: ["snapshots"],
   // scheduling-redesign lifecycle records

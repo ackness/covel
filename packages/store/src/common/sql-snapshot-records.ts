@@ -15,7 +15,7 @@
  * `changes`).
  */
 
-import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
@@ -94,6 +94,7 @@ export type SqlSnapshotRecords = Pick<
   | "listSuspensions"
   | "deleteSuspension"
   | "deleteExpiredSuspensions"
+  | "releaseStaleSuspensionClaims"
 >;
 
 export function createSqlSnapshotRecords(
@@ -268,6 +269,18 @@ export function createSqlSnapshotRecords(
       if (rows.length === 0) return 0;
       await runner.delete(suspensions, where);
       return rows.length;
+    },
+
+    async releaseStaleSuspensionClaims(olderThanIso: string): Promise<number> {
+      // A resolved record holds a bare ISO time, which sorts below "claimed:".
+      return runner.updateReturningCount(
+        suspensions,
+        { resolvedAt: null },
+        and(
+          gte(suspensions.resolvedAt, "claimed:"),
+          lt(suspensions.resolvedAt, `claimed:${olderThanIso}`),
+        ),
+      );
     },
   };
 }

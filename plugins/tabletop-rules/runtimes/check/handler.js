@@ -80,6 +80,12 @@ export default async function (ctx) {
  * narrative prompts name in both languages; the rest is an instruction.
  */
 function settled(receipt, locale) {
+  // The model reads the check, not the rows it is stored under.
+  const {
+    submissionId: _submission,
+    resolvedTurnId: _turn,
+    ...check
+  } = receipt ?? {};
   return {
     outcome: "success",
     value: {
@@ -87,8 +93,8 @@ function settled(receipt, locale) {
       checkContext: receipt
         ? pickLocaleText(
             locale,
-            `Settled tabletop check（不要重掷，也不要改动结果）：${JSON.stringify(receipt)}`,
-            `Settled tabletop check (do not reroll or change the result): ${JSON.stringify(receipt)}`,
+            `Settled tabletop check（不要重掷，也不要改动结果）：${JSON.stringify(check)}`,
+            `Settled tabletop check (do not reroll or change the result): ${JSON.stringify(check)}`,
           )
         : pickLocaleText(
             locale,

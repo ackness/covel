@@ -1283,14 +1283,15 @@ describe("Resume Routes", () => {
       await createSuspension(store, {
         id: "susp-claimed",
         createdAt: OLD,
-        resolvedAt: `claimed:${OLD}`,
+        resolvedAt: `claimed:${new Date().toISOString()}`,
       });
       const app = createTestApp(makeDefaultDeps(store));
 
       await app.request("/api/sessions/sess-1/suspensions");
       await flush();
 
-      // Claimed records (a resume in flight) must survive the sweep.
+      // Claimed records (a resume in flight) must survive the sweep. A claim
+      // older than an hour is released and then expires like any other.
       expect(await store.getSuspension("susp-claimed")).not.toBeNull();
     });
 

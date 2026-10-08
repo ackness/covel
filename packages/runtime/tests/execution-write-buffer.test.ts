@@ -14,7 +14,11 @@ import {
   createTrustedHandlerStore,
 } from "../src/function-runtime/plugin-handler-helpers.js";
 import { createExecutionWriteBuffer } from "../src/function-runtime/execution-write-buffer.js";
-import { processRuntimeResult } from "../src/session/session-runtime-result.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
+import {
+  prepareRuntimeProposals,
+  processRuntimeResult,
+} from "../src/session/session-runtime-result.js";
 
 const CTX = {
   sessionId: "sess-1",
@@ -447,5 +451,53 @@ describe("processRuntimeResult and non-success results", () => {
         "character-attributes",
       ),
     ).toBeNull();
+  });
+});
+
+describe("prepareRuntimeProposals with a proposal guard", () => {
+  it("checks the payload a PreStateCommit hook put in place", async () => {
+    const hookPipeline = createHookPipeline();
+    hookPipeline.register<{ proposal: Proposal }>({
+      id: "move",
+      event: "PreStateCommit",
+      async handler(_ctx, payload) {
+        return {
+          action: "continue",
+          replace: {
+            proposal: {
+              ...payload.proposal,
+              payload: { ...payload.proposal.payload, namespace: "other" },
+            } as Proposal,
+          },
+        };
+      },
+    });
+
+    const prepared = await prepareRuntimeProposals(
+      {
+        pluginId: CTX.pluginId,
+        runtimeId: CTX.runtimeId,
+        turnId: CTX.turnId,
+        status: "success",
+        output: {},
+        pendingProposals: [pluginDataProposal()],
+      },
+      createMemoryStore(),
+      CTX.sessionId,
+      "system",
+      {
+        hookPipeline,
+        proposalGuard: (proposal) =>
+          proposal.type === "plugin.data" &&
+          proposal.payload.namespace !== "schema"
+            ? "undeclared namespace"
+            : undefined,
+      },
+    );
+
+    expect(prepared.proposals).toEqual([]);
+    expect(prepared.failedProposals.map((failed) => failed.error)).toEqual([
+      "undeclared namespace",
+    ]);
   });
 });
