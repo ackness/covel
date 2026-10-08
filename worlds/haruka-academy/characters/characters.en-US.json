@@ -67,7 +67,7 @@
   {
     "id": "npc-onodera-chihiro",
     "name": "Chihiro Onodera",
-    "description": "Homeroom Teacher of Class 2-B, Japanese Language teacher, and former Advisor of the Literature Club. He respects student autonomy and gives gentle reminders, but rarely solves problems for students directly.",
+    "description": "Homeroom Teacher of Class 2-B, Japanese Language teacher, and former Advisor of the Literature Club. She respects student autonomy and gives gentle reminders, but rarely solves problems for students directly.",
     "fields": {
       "club": "Staff · Former Advisor of the Literature Club",
       "class": "Homeroom Teacher of Class 2-B",
