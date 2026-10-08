@@ -13,12 +13,13 @@ function makeStore(overrides = {}) {
     async getSession() {
       return { worldId: "w1" };
     },
-    async getWorld() {
-      return { name: "雾港", description: "被海雾环绕的港口城市" };
-    },
     ...overrides,
   };
 }
+
+const world = {
+  worldRecord: { name: "雾港", description: "被海雾环绕的港口城市" },
+};
 
 // Deliberate change: handler returns the canonical HandlerResult. Business value (narrative
 // / initialized) is under `result.value`, notifications under `result.effects`,
@@ -30,6 +31,7 @@ describe("pregame handler", () => {
       locale: "zh-CN",
       messages,
       store: makeStore(),
+      world,
     });
 
     expect(result.completion).toBe("done");
@@ -50,6 +52,7 @@ describe("pregame handler", () => {
           return { worldId: "w1", phase: "playing" };
         },
       }),
+      world,
     });
 
     expect(result.completion).toBe("done");
@@ -87,7 +90,7 @@ describe("pregame handler", () => {
     expect(result.value.narrativeOutput).toContain("未知世界");
   });
 
-  it("treats a session without worldId as an unknown world", async () => {
+  it("treats a session without a world record as an unknown world", async () => {
     const result = await handler({
       sessionId: "sess-1",
       locale: "en-US",

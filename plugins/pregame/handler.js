@@ -28,16 +28,14 @@ export default async function pregameHandler(ctx) {
           completion: "done",
         };
       }
-      if (session?.worldId) {
-        const world = await s.getWorld();
-        if (world) {
-          worldName = world.name ?? worldName;
-          worldSummary = world.description ?? world.summary ?? "";
-        }
-      }
     } catch {
-      // Store may lack world data (e.g. MemoryStore without seed)
+      // The phase is unknown; treat the run as the opening.
     }
+  }
+  const world = ctx.world?.worldRecord;
+  if (world) {
+    worldName = world.name || worldName;
+    worldSummary = world.description ?? "";
   }
 
   const welcomeTitle = translate(ctx, "🌍 Welcome to {world}", {

@@ -1,4 +1,4 @@
-import { pickLocaleText } from "@covel/plugin-handlers-utils";
+import { pickLocaleText, resolveI18nText } from "@covel/plugin-handlers-utils";
 import { DIFFICULTY_DCS, MODIFIER_LIMIT } from "../../lib/check-rules.js";
 import { rememberPool } from "../../lib/turn-pool.js";
 
@@ -61,10 +61,7 @@ function signed(value) {
 
 /** Attribute names may be I18nText; the schema carries no per-locale files. */
 function nameOf(name, locale) {
-  if (typeof name === "string") return name;
-  if (name && typeof name === "object")
-    return name[locale] ?? name.en ?? Object.values(name)[0] ?? "";
-  return "";
+  return (name ? resolveI18nText(name, locale) : undefined) ?? "";
 }
 
 /**
@@ -89,7 +86,13 @@ function playerModifiers(world, locale) {
       ((Math.min(Math.max(value, min), attr.max) - min) / (attr.max - min)) *
         MODIFIER_LIMIT,
     );
-    lines.push({ name: nameOf(attr.name, locale), value, min, max: attr.max, modifier });
+    lines.push({
+      name: nameOf(attr.name, locale),
+      value,
+      min,
+      max: attr.max,
+      modifier,
+    });
   }
   return lines;
 }
