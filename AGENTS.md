@@ -92,6 +92,7 @@ pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
+pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under the floor in its vitest.config.ts (CI runs it)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
 pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
@@ -556,7 +557,9 @@ arguments, and outputs stripped from traces and the live stream.
 - Vitest runs every package, the server, and web (`*.test.ts` / `*.test.tsx`);
   `apps/desktop` and `scripts/tests/` use `node --test`; Playwright specs are
   `*.spec.ts` under `tests/e2e/`. Add focused regression tests for features and
-  fixes. The ≥80% coverage goal (`pnpm test:coverage`) is not enforced in CI.
+  fixes. CI enforces a coverage floor for `@covel/runtime` only
+  (`pnpm test:coverage:runtime`); the ≥80% goal for the other packages
+  (`pnpm test:coverage`) is not enforced.
 - Every `DataStore` backend must pass the shared contract suite
   (`packages/store/src/contract/store-contract.ts` + `contract/suites/`).
 - Plugin tests use `@covel/plugin-test-utils` (`MockLLM`,

@@ -110,6 +110,13 @@ jobs:
           VITEST_MAX_WORKERS: "2"
         run: pnpm test --concurrency=2 --filter=!@covel/web
 
+      # The kernel's coverage must not fall under the floor in
+      # packages/runtime/vitest.config.ts.
+      - name: Runtime coverage floor
+        env:
+          VITEST_MAX_WORKERS: "2"
+        run: pnpm test:coverage:runtime
+
       # The release matrix builds desktop and its web/server dependencies.
       # Build outputs (the desktop staging tree is ~90 MB per entry) are read
       # from the Turbo cache but never written back, which keeps the saved
