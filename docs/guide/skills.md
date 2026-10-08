@@ -10,6 +10,10 @@ Covel 仓库 `.claude/skills/` 目录下的每个子目录都是一个**独立�
 
 ```
 .claude/skills/
+├── covel-readonly-audit/
+│   ├── SKILL.md
+│   ├── agents/openai.yaml
+│   └── references/        # 专项清单、跨层热路径、证据与报告约定
 ├── covel-static-turn-audit/
 │   ├── SKILL.md
 │   ├── agents/openai.yaml # 外部代理的展示元信息
@@ -73,11 +77,13 @@ description: 一句话描述这个 skill 做什么、何时触发（代理通过
 
 ## 当前实际目录与调用方式
 
-当前仓库实际维护三个项目级 skill：
+当前仓库实际维护四个项目级 skill：
 
 - `.claude/skills/create-plugin/SKILL.md`：生成插件骨架、运行时声明与作者参考；细节在其 `references/`。
 - `.claude/skills/create-world/SKILL.md`：生成世界包。它不携带字段表和插件清单，而是先运行 `pnpm describe:authoring` 向当前版本查询可写内容，写完用 `pnpm validate:world worlds/<id>` 校验；`references/` 只留维度写法和发布前检查。
 - `.claude/skills/covel-static-turn-audit/SKILL.md`：不启动应用、不调用模型，以读代码为主对 runtime 调度做逻辑推断式审计；读代码难以判定的复杂逻辑，用小脚本做输入输出验证，脚本和日志留在 `debugs/audits/` 作为辅助资料。它把每次 LLM 调用当作未知量，枚举一次 runtime 执行可能的全部结局，从外围插件、插件之间、内核调度到提交与后台作业逐层推演，每条发现都是一条有代码行支撑的反例轨迹。它不携带回合管线的副本和插件清单：框架的承诺读 `docs/architecture/flow.md`，runtime 从当前基线的 `PLUGIN.md` / `RUNTIME.md` 推导；报告写入 gitignored 的 `devs/audits/`。用户要求时另外输出一页 HTML 框图（`assets/audit-map.html`，ECharts 绘制，从 CDN 加载；加载不到时以文字列出同样内容），用方块说明每部分代码做什么、彼此什么关系。
+
+- `.claude/skills/covel-readonly-audit/SKILL.md`：只靠阅读对全仓做静态审计，不改项目文件、不运行任何程序、不调用 Git 和项目的模型。先按专项逐块通读（前端、服务端、存储、模型网关、插件、世界包、内核、桌面端、媒体、挂起恢复与后台作业、安装与信任边界），再沿跨层热路径检查层与层之间的连接。默认只给出审计计划，用户明确说开始后才读源码。每个专项和每条热路径边读边写各自的记录文件，最后整理成 gitignored 的 `devs/docs/audits/<日期>-readonly-audit/README.md`。`references/` 只定义审什么和报告怎么写，契约仍以 `docs/` 为准。它和上一个 skill 的区别：这个覆盖全仓、完全不运行任何东西；上一个只审 runtime 调度，可以用小脚本验证逻辑。
 
 它们不是 npm/pnpm 命令，也不会被 Covel server 自动发现。使用支持 Agent Skills 的代理时，
 将对应的 `SKILL.md` 作为 skill 输入，或直接在仓库根目录读取它：
@@ -86,6 +92,7 @@ description: 一句话描述这个 skill 做什么、何时触发（代理通过
 cat .claude/skills/create-plugin/SKILL.md
 cat .claude/skills/create-world/SKILL.md
 cat .claude/skills/covel-static-turn-audit/SKILL.md
+cat .claude/skills/covel-readonly-audit/SKILL.md
 ```
 
 需要 schema 或示例时，再按 SKILL.md 的说明读取同目录 `references/`；不要把
@@ -133,4 +140,5 @@ workspace context 还是工具资源，由该代理的上下文机制决定。
 - [`.claude/skills/create-plugin/SKILL.md`](../../.claude/skills/create-plugin/SKILL.md) — 创建插件
 - [`.claude/skills/create-world/SKILL.md`](../../.claude/skills/create-world/SKILL.md) — 创建世界包
 - [`.claude/skills/covel-static-turn-audit/SKILL.md`](../../.claude/skills/covel-static-turn-audit/SKILL.md) — 静态 turn flow 审计
+- [`.claude/skills/covel-readonly-audit/SKILL.md`](../../.claude/skills/covel-readonly-audit/SKILL.md) — 全仓只读审计
 - [docs/guide/plugin-authoring.md](./plugin-authoring.md) — 如果你要的是 framework 级能力而不是 skill
