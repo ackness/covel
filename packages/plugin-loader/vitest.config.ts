@@ -1,4 +1,7 @@
 import { defineConfig } from "vitest/config";
+import { useRunTempDir } from "../../vitest.base.js";
+
+useRunTempDir();
 
 export default defineConfig({
   test: {

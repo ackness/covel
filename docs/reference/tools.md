@@ -196,8 +196,8 @@ handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明�
   `tools.plugin` 名称；plugin 工具还必须确认 entry 成功加载且未发生插件内重名或占用框架保留名。
 - `UNAUTHORIZED`：最终工具名不在该 runtime 的授权集合，或 hook 替换后的名称
   越界；先查 runtime manifest 与 trace 中的最终 tool name。
-- `VALIDATION_ERROR`：查看错误响应/工具结果的 `details`，其中包含字段路径和
-  Zod 消息；不要盲目重试同一组参数。
+- `VALIDATION_ERROR`：错误行和 `details` 都写明字段路径和 Zod 消息；不要盲目
+  重试同一组参数。
 - RPC 返回 `401/403`：检查 session owner/operator token。社区插件首次执行通常返回
   `202 approval-required`，批准后应重试原请求；`404` 通常表示 session/action/runtime
   不存在，`409` 常见于 session 非 active、锁竞争或审批 scope 已变化。

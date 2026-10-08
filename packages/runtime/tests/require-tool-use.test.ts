@@ -82,13 +82,16 @@ function toolExecutor(store: DataStore) {
 class ScriptedLLM implements LLMAdapter {
   step = 0;
   seenMessages: { role: string; content: unknown }[][] = [];
+  seenToolChoices: unknown[] = [];
   constructor(private readonly toolStep: number | null) {}
 
   async generate(params: {
     messages: readonly { role: string; content: unknown }[];
+    defaults?: { toolChoice?: unknown };
   }): Promise<LLMResponse> {
     this.step++;
     this.seenMessages.push([...params.messages]);
+    this.seenToolChoices.push(params.defaults?.toolChoice);
     if (this.toolStep !== null && this.step === this.toolStep) {
       return {
         content: null,
@@ -167,6 +170,9 @@ describe("requireToolUse gate", () => {
     // Exactly one corrective retry: step 1 (prose) → correction → step 2
     // (tool call) → step 3 (finish). One call more than the ideal 2-call path.
     expect(llm.step).toBe(3);
+    // The corrected request requires a tool call; once the model called one,
+    // the choice is the model's again.
+    expect(llm.seenToolChoices).toEqual([undefined, "required", undefined]);
     // The correction system message reached the second call.
     const secondCallSystems = llm.seenMessages[1]!.filter(
       (m) => m.role === "system",

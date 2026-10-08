@@ -34,17 +34,24 @@ export class SessionRecordScopeConflictError extends Error {
   }
 }
 
+/** SQLite extended result codes for a primary-key and a unique violation. */
+const SQLITE_UNIQUE_VIOLATIONS = new Set([1555, 2067]);
+
 /** Normalize the unique-constraint codes emitted by bundled SQL drivers. */
 export function isUniqueConstraintError(error: unknown): boolean {
   const seen = new Set<object>();
   let current = error;
   while (current && typeof current === "object" && !seen.has(current)) {
     seen.add(current);
-    const candidate = current as { code?: unknown; cause?: unknown };
-    const code = candidate.code;
+    const candidate = current as {
+      code?: unknown;
+      errcode?: unknown;
+      cause?: unknown;
+    };
     if (
-      code === "23505" ||
-      (typeof code === "string" && code.startsWith("SQLITE_CONSTRAINT"))
+      candidate.code === "23505" ||
+      (candidate.code === "ERR_SQLITE_ERROR" &&
+        SQLITE_UNIQUE_VIOLATIONS.has(candidate.errcode as number))
     ) {
       return true;
     }

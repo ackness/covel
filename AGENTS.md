@@ -91,11 +91,13 @@ pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails
                       # plugin manifests, schema reference, prompt variants, i18n, script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
+pnpm test:docs        # the tests that read documentation; all a documentation-only change needs after pnpm check
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
 pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under the floor in its vitest.config.ts (CI runs it)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
-pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
+pnpm e2e:verify       # API-driven real-LLM plugin harness against a running server (its keys come from .env.llm
+                      # or the environment); uses the configured models, --slot overrides the story slot
 pnpm e2e:replay       # replay the scripted sessions recorded under tests/llm-replay/ without a model, each on a
                       # test server of its own; --record --upstream <origin> [session] records them again after
                       # a world, plugin, prompt or model change (docs/guide/e2e-plugin-verify.md)
@@ -154,9 +156,21 @@ Git hooks: pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint (rules i
 `.oxlintrc.jsonc`, the same `--deny-warnings` as `pnpm check`), and the full
 `pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs install,
 `pnpm check`, `pnpm test`, and `pnpm e2e --list` in a clean checkout of each pushed
-tip (`pnpm check:push` runs the same check on HEAD). CI (`.github/workflows/ci.yml`)
-runs check/test/build, Web unit tests, PostgreSQL integration, and browser smoke in
-parallel jobs; see `docs/CONTRIBUTING.md`.
+tip (`pnpm check:push` runs the same check on HEAD). The checkout uses the Turbo
+cache the worktrees share, so a task already run on the same tracked inputs
+replays. CI (`.github/workflows/ci.yml`) runs check/test/build, Web unit tests,
+server tests with the runtime coverage floor, PostgreSQL integration, and browser
+smoke in parallel jobs; see `docs/CONTRIBUTING.md`.
+
+A change that touches only documentation takes a short path in both places: the
+hook and `.github/workflows/docs.yml` run `pnpm check` and `pnpm test:docs`, and
+`ci.yml` does not run. Documentation is `docs/**`, a root-level `*.md`, any
+`README.md` / `README.*.md`, a nested `AGENTS.md` / `CLAUDE.md`,
+`.claude/skills/**`, `.assets/**`, `LICENSE`, and the issue and pull request
+templates (`scripts/lib/change-scope.mjs`). Markdown that a loader reads
+(`PLUGIN.md`, `RUNTIME.md`, `WORLD.md`, the files under `prompts/`) is source. A
+test that reads documentation must be named in the root `test:docs` script;
+`scripts/tests/change-scope.test.mjs` fails otherwise.
 
 Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`.
 Keep `tailwind-lint` read-only: v0.12.1 can treat ordinary TypeScript identifiers
@@ -572,6 +586,13 @@ arguments, and outputs stripped from traces and the live stream.
   `makeManualFunctionContext`, `makeTurnInput`, …); see `docs/guide/plugin-testing.md`.
   New plugin behaviour should cover normal output, invalid input, data ownership,
   and that a failed execution commits no partial proposals.
+- A Vitest run uses a temp directory of its own, removed when the process exits
+  (`useRunTempDir` in `vitest.base.ts`): a test may leave what it creates under
+  `os.tmpdir()`. Every package that runs Vitest has a `vitest.config.ts` that
+  imports `vitest.base`, bundled plugins included
+  (`scripts/tests/test-temp-dir.test.mjs` checks it). Run a package's tests from
+  the package (`pnpm --filter <pkg> test`); Vitest started at the repository root
+  skips that config.
 - Web tests default to jsdom. A test file that needs no DOM may opt into
   `// @vitest-environment node`, which is noticeably faster.
 - IndexedDB tests use `fake-indexeddb`; PostgreSQL tests need a real database

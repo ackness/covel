@@ -215,8 +215,8 @@ discards the shadow.
 
 ### SqliteStore
 
-Direct SQL: `sqlite.exec('BEGIN')` / `'COMMIT'` / `'ROLLBACK'`. better-sqlite3 is
-a single synchronous connection, so `withTransaction` **serializes** concurrent
+Direct SQL: `sqlite.exec('BEGIN')` / `'COMMIT'` / `'ROLLBACK'`. The store is one
+synchronous `node:sqlite` connection, so `withTransaction` **serializes** concurrent
 calls through a promise chain — each runs its full BEGIN…COMMIT before the next
 starts, so neither loses writes.
 
@@ -258,7 +258,7 @@ nested-call rejection) but differ in concurrency and isolation:
 > mistaken for a nested one.
 >
 > **The gate is per-connection, not per-store.** Everything that mutates
-> through one better-sqlite3 handle shares a single gate, resolved via
+> through one `node:sqlite` handle shares a single gate, resolved via
 > `getConnectionWriteGate(db)` in `sqlite/shared-connection.ts`: the `DataStore`
 > methods, the optional sqlite-vec capability (`VECTOR_WRITE_METHODS`), and the
 > mirror MediaStore that deliberately reuses the same connection
@@ -266,7 +266,7 @@ nested-call rejection) but differ in concurrency and isolation:
 > so a vector or media write issued from another session still joined an open
 > transaction and disappeared on its rollback.
 >
-> Statements were already serialized — better-sqlite3 is synchronous — but the
+> Statements were already serialized — `node:sqlite` is synchronous — but the
 > gate is held for a transaction's whole callback, including its awaits. Keep
 > transaction bodies to store work: the execution finalizer runs plugin
 > `PreStateCommit` hooks before opening its transaction for this reason. **Per-transaction connections (as PgStore has) remain

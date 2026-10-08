@@ -32,14 +32,13 @@ RUN --mount=type=cache,id=covel-pnpm-store,target=/root/.local/share/pnpm/store,
 
 # ── Stage 2b: Production dependencies for the runtime image ────────
 FROM workspace-manifests AS prod-deps
-# better-sqlite3 13 ships Node-API binaries, including linuxmusl. pnpm's
-# implicit binding.gyp lifecycle path would rebuild it from source even though
-# the prebuild is present. tsx resolves esbuild's platform package directly.
-# Disable package scripts, then verify both native paths explicitly.
+# SQLite is `node:sqlite`, built into Node, and tsx resolves esbuild's
+# platform package directly, so no package script needs to run. Disable them,
+# then verify both runtime paths explicitly.
 RUN --mount=type=cache,id=covel-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm exec node scripts/require-pnpm.mjs \
     && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && pnpm --filter @covel/store exec node -e "const Database=require('better-sqlite3');const db=new Database(':memory:');db.prepare('select 1').get();db.close()" \
+    && pnpm --filter @covel/store exec node -e "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(':memory:');db.prepare('select 1').get();db.close()" \
     && pnpm --filter @covel/server exec tsx --eval "const value: number = 1; if (value !== 1) process.exit(1)"
 
 # ── Stage 3: Build web frontend (static assets) ─────────────────────

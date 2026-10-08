@@ -1,7 +1,7 @@
 import fs, { rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
 
@@ -20,7 +20,7 @@ describe.each(["delete", "cleanup"])(
       const store = createSqliteMediaStore(dbPath, {
         mediaRoot: path.join(dir, "media"),
       });
-      const competitor = new Database(dbPath, { timeout: 0 });
+      const competitor = new DatabaseSync(dbPath, { timeout: 0 });
       try {
         const ref = await store.put(new Uint8Array([1, 2, 3]), "image/png");
         let observed = false;

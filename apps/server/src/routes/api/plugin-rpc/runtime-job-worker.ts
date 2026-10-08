@@ -153,6 +153,12 @@ export interface RuntimeJobExecutionControl {
   assertCurrent(): Promise<void>;
   /** Cooperative deadline signal threaded into the runtime execution. */
   readonly signal: AbortSignal;
+  /**
+   * Called once the runtime has returned, before waiting for the session
+   * commit lock: ends the execution deadline. The lease keeps renewing, and
+   * the commit barrier still refuses a job that is no longer `running`.
+   */
+  executionFinished(): void;
   /** Called under the session commit lock immediately before domain commit. */
   beforeCommit(args: {
     readonly backgroundTurnId: string;
@@ -549,6 +555,7 @@ export function createRuntimeJobWorker(args: {
           once: true,
         });
       });
+      // Runs from `running` until executionFinished(), not through the commit.
       if (current.maxExecutionMs !== undefined) {
         timeoutTimer = setTimeout(() => {
           deadlineTask = (async () => {
@@ -575,6 +582,11 @@ export function createRuntimeJobWorker(args: {
 
       const execution = execute(current, {
         signal: executionAbort.signal,
+        // A foreground turn may hold the session lock for minutes; that wait
+        // is not execution. A deadline that already fired keeps its outcome.
+        executionFinished: () => {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
+        },
         assertCurrent: async () => {
           executionAbort.signal.throwIfAborted();
           const live = await getRuntimeJob(args.store, current);
@@ -653,6 +665,13 @@ export function createRuntimeJobWorker(args: {
       await appendRuntimeJobStatus(args.store, args.eventBus, settled);
     } catch (error) {
       if (timeoutTimer) clearTimeout(timeoutTimer);
+      // A fired deadline has already settled the job as timed_out; it aborts
+      // the execution only after that transition commits.
+      await deadlineTask;
+      if (
+        executionAbort.signal.reason instanceof RuntimeJobExecutionTimedOutError
+      )
+        return;
       await stopLeaseRenewal();
       const stale =
         error instanceof RuntimeJobNoLongerCurrentError ||

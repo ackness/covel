@@ -68,7 +68,7 @@ node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
 
 ### 测试
 
-新功能与 bug 修复都应带测试。每个 package 自带 vitest：
+新功能与 bug 修复都应带测试。每个 package 自带 vitest，每次运行使用自己的临时目录并在结束时整个删除（`vitest.base.ts` 的 `useRunTempDir`；包的 `vitest.config.ts` 必须引入 `vitest.base`）：
 
 ```bash
 pnpm check                                 # CI 静态检查与脚本回归
@@ -84,7 +84,7 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm check` 包含 peer 依赖、类型、Oxlint、包边界、依赖声明、插件 manifest、schema 参考页、提示词变体、i18n、脚本回归和工作流检查。修改作者可见的 schema 字段后运行 `pnpm schemas:generate`，重新生成 `packages/shared/schemas/*.json` 与 `docs/reference/schema/*.md`；每个字段都必须带 `.describe()` 说明，缺失或生成物过期都会让检查失败。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
 
-安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile`、`pnpm check`、`VITEST_MAX_WORKERS=2 pnpm test --concurrency=2` 和 `pnpm e2e --list`；任何一步失败都会阻止推送。检查不复制工作区的 `.env`、`node_modules`、`test-results` 或 `.turbo`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。这会使每次推送增加数分钟；需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。该检查只收集 E2E 测试，不执行 PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
+安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile`、`pnpm check`、`VITEST_MAX_WORKERS=2 pnpm test --concurrency=2` 和 `pnpm e2e --list`；任何一步失败都会阻止推送。检查不复制工作区的 `.env`、`node_modules` 或 `test-results`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。Turbo 读写的是仓库所有 worktree 共用的缓存（主 worktree 的 `.turbo/cache`）：被推送的提交与某次已通过的运行有相同的已跟踪输入时，任务直接回放；回放看不出的是依赖了 Git 忽略文件的结果，这一类由 CI 兜底。提交已在 worktree 里测过时，检查约一分半钟，大部分是从不缓存的 store 和 server 套件；没测过时为数分钟。一次推送新增的内容全是文档时，hook 只跑静态检查和读取文档的测试（`pnpm test:docs`），约半分钟；新分支以远端的 main 分支为基准。文档指 `docs/**`、根目录的 `*.md`、任意位置的 `README.md` / `README.*.md`、嵌套的 `AGENTS.md` / `CLAUDE.md`、`.claude/skills/**`、`.assets/**`、`LICENSE` 以及 issue 与 PR 模板，清单在 `scripts/lib/change-scope.mjs`。由加载器读取的 Markdown（`PLUGIN.md`、`RUNTIME.md`、`WORLD.md`、`prompts/` 下的文件）是源码，走完整流程。需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。该检查只收集 E2E 测试，不执行 PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
 
 [Fallow](https://github.com/fallow-rs/fallow) 作为根开发依赖安装，替代 Knip。`deps:check` 会阻断未使用依赖、未声明依赖与无法解析的导入；`analyze` 提供完整报告，供人工核实后清理，不作为全量阻断项。`.fallowrc.jsonc` 声明文件路由、插件动态入口和手动运行的脚本；增加这类入口时同步维护配置，避免误报。工具版本遵循工作区的 7 天发布等待期。
 
@@ -92,7 +92,7 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。CI（[`ci.yml`](../.github/workflows/ci.yml)）只对 `@covel/runtime` 强制覆盖率下限：`pnpm test:coverage:runtime` 带覆盖率运行它的测试，低于 `packages/runtime/vitest.config.ts` 里的 `thresholds` 即失败；下限比实测值低几个百分点，用来拦截下降，覆盖率上升后应随之调高。其余包的 ≥ 80% 仍是参考目标，未强制。
 
-PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试、PostgreSQL 与 Chromium smoke job。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
+PR、main 和发布复用同一份 CI 检查：静态检查连同可缓存的测试与构建，以及独立的 Web 单元测试、server 测试、PostgreSQL 与 Chromium smoke job。server 套件最长且从不缓存，所以独占一个 runner；同一个 job 还执行 runtime 的覆盖率下限。只改文档的变更不运行 `ci.yml`，改由 `docs.yml` 跑静态检查和 `pnpm test:docs`。文件清单就是 pre-push hook 用的那份；`scripts/tests/change-scope.test.mjs` 保证两个工作流与它一致，并在某个读取文档的测试没有列进 `test:docs` 时失败。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
 
 ### 框架/插件隔离（重要）
 

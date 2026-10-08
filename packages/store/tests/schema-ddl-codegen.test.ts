@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { is } from "drizzle-orm";
 import {
   SQLiteTable,
@@ -96,7 +96,7 @@ describe("DDL codegen ↔ Drizzle parity", () => {
 
   it("SQLite generated DDL yields exactly the Drizzle column shape", () => {
     const expected = sqliteExpected();
-    const db = new Database(":memory:");
+    const db = new DatabaseSync(":memory:");
     try {
       createTables(db);
       const problems: string[] = [];

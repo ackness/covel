@@ -34,7 +34,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 
 import { createTables } from "../src/sqlite/sqlite-schema-ddl.js";
 import { CREATE_TABLES_SQL } from "../src/postgres/pg-schema-ddl.js";
@@ -187,7 +187,7 @@ function drizzlePgIndexes(): TableIndexes {
 // ── Actual-DDL extractors ───────────────────────────────────────
 
 function sqliteActualIndexes(): TableIndexes {
-  const db = new Database(":memory:");
+  const db = new DatabaseSync(":memory:");
   try {
     createTables(db);
     const tables = db

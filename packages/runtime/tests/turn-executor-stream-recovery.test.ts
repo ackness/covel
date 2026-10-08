@@ -106,6 +106,36 @@ class BothFailLLM implements LLMAdapter {
   }
 }
 
+/**
+ * Streams scripted per call: each call takes the next script; a script ends
+ * either with a finish reason or by throwing. `generate` counts rescues.
+ */
+class ScriptedStreamLLM implements LLMAdapter {
+  streams = 0;
+  generate = vi.fn<LLMAdapter["generate"]>(async (): Promise<LLMResponse> => ({
+    content: "NON_STREAM_RESCUE",
+    toolCalls: [],
+    finishReason: "stop",
+    usage: { inputTokens: 1, outputTokens: 1 },
+  }));
+
+  constructor(
+    private readonly scripts: readonly {
+      readonly text: string;
+      readonly end: "stop" | "length" | Error;
+    }[],
+  ) {}
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async *stream(): AsyncGenerator<LLMStreamEvent> {
+    const script = this.scripts[this.streams++];
+    if (!script) throw new Error("stream script queue empty");
+    yield { type: "text-delta" as const, textDelta: script.text };
+    if (script.end instanceof Error) throw script.end;
+    yield { type: "done" as const, finishReason: script.end };
+  }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe("TurnExecutor stream recovery", () => {
@@ -225,5 +255,61 @@ describe("TurnExecutor stream recovery", () => {
     expect(typeof rr.error).toBe("string");
     // The outer catch surfaces the fallback's error message.
     expect(rr.error).toContain("fallback generate also failed");
+  });
+
+  // A system runtime streams only as a transport: its partial output reached
+  // nobody, so it is dropped and the call retried.
+  it("a system runtime's stream that throws after output is retried", async () => {
+    const llm = new ScriptedStreamLLM([
+      { text: "half", end: new Error("socket hang up") },
+      { text: "WHOLE", end: "stop" },
+    ]);
+    const deltas: string[] = [];
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => narratorLoaded,
+      llm,
+      store: await createMainLoopStore("sess-1"),
+      onDelta: async (delta) => {
+        deltas.push(delta.textDelta);
+      },
+    };
+
+    const result = await executeTurn(
+      makeTurnInput(),
+      [{ ...noToolManifest, outputKind: "system" }],
+      deps,
+    );
+
+    const rr = result.runtimeResults[0]!;
+    expect(rr.status).toBe("success");
+    expect(JSON.stringify(rr.output)).toContain("WHOLE");
+    expect(JSON.stringify(rr.output)).not.toContain("half");
+    expect(llm.streams).toBe(2);
+    expect(llm.generate).not.toHaveBeenCalled();
+    expect(deltas).toEqual([]);
+  });
+
+  it("a system runtime's truncated stream is retried once and not rescued by generate()", async () => {
+    const llm = new ScriptedStreamLLM([
+      { text: "cut", end: "length" },
+      { text: "cut again", end: "length" },
+    ]);
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => narratorLoaded,
+      llm,
+      store: await createMainLoopStore("sess-1"),
+    };
+
+    const result = await executeTurn(
+      makeTurnInput(),
+      [{ ...noToolManifest, outputKind: "system" }],
+      deps,
+    );
+
+    const rr = result.runtimeResults[0]!;
+    expect(rr.status).toBe("failed");
+    expect(rr.error).toMatch(/output limit/i);
+    expect(llm.streams).toBe(2);
+    expect(llm.generate).not.toHaveBeenCalled();
   });
 });

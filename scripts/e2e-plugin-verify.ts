@@ -35,7 +35,7 @@
  *      history and final session snapshot. Disable with `--no-log`.
  *
  * Usage:
- *   npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts [options]
+ *   npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/e2e-plugin-verify.ts [options]
  *
  * Options:
  *   --server <url>         API base (default: http://localhost:3001/api)
@@ -250,7 +250,7 @@ function printHelp(): void {
 Covel E2E Plugin Verification
 
 Usage:
-  npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts [options]
+  npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/e2e-plugin-verify.ts [options]
 
 Options:
   --server <url>          API base (default: http://localhost:3001/api)

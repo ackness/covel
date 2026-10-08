@@ -1551,7 +1551,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 只接受 `failed/timed_out/cancelled/stale/orphaned`，并要求 session 仍为 active。显式重试保留冻结的原始输入和稳定设置，刷新当前 session incarnation、插件 approval scope、locale 与 runtime model overrides，创建**新的** `jobId` 和 queued status（手动/事件激活同时换用新的执行 turnId）；原终态不变。成功以 `202` 直接返回新 job 资源，不可重试返回 `409`、`code: "runtime_job_not_retryable"`。未 claim 的普通 queued 作业可在重启后继续执行，但框架不会自动 replay 失败类终态，以免重复调用已经计费但未成功落库的 provider 工作。
 
-作业由 CAS claim + renewable lease 驱动，默认 worker 并发为 4，同一 `(session, plugin, runtime)` 串行。`maxQueueMs` 约束排队时间，`maxExecutionMs` 约束 claim 后控制面执行时间；重启后会继续 claim 合法 queued 作业，过期排队项置为 `timed_out`、过期在途 lease 置为 `orphaned`。提交前再次检查 session active/incarnation、插件 approval scope/version 和实际 proposal effects；执行前校验或提交屏障处的 session/plugin 身份检查失败落 `stale`（执行前被拒记 `reason: pre-execution-rejected`，到达提交屏障后被拒记 `reason: commit-barrier-rejected`），effect 或领域提交失败落 `failed`，两者都不会写入领域状态。
+作业由 CAS claim + renewable lease 驱动，默认 worker 并发为 4，同一 `(session, plugin, runtime)` 串行。`maxQueueMs` 约束排队时间，`maxExecutionMs` 约束从 running 到 runtime 执行返回的时间，之后等待 session lock 提交的时间不计入；重启后会继续 claim 合法 queued 作业，过期排队项置为 `timed_out`、过期在途 lease 置为 `orphaned`。提交前再次检查 session active/incarnation、插件 approval scope/version 和实际 proposal effects；执行前校验或提交屏障处的 session/plugin 身份检查失败落 `stale`（执行前被拒记 `reason: pre-execution-rejected`，到达提交屏障后被拒记 `reason: commit-barrier-rejected`），effect 或领域提交失败落 `failed`，两者都不会写入领域状态。
 
 ---
 

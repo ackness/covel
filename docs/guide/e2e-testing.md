@@ -157,18 +157,18 @@ HTTP 适配器都是真实的，只有 provider 是假的。
 插件级端到端验证使用 HTTP API 驱动完整 runtime 流水线：
 
 ```bash
-npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/e2e-plugin-verify.ts
 ```
 
 常用参数：
 
 ```bash
 # 指定 llm.toml 中的 slot
-npx tsx --env-file=.env --env-file=.env.llm \
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
   scripts/e2e-plugin-verify.ts --slot e2e_local --turns 5
 
 # 聚焦单个插件
-npx tsx --env-file=.env --env-file=.env.llm \
+npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
   scripts/e2e-plugin-verify.ts --plugin guide --turns 2
 ```
 

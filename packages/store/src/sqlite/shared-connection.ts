@@ -1,5 +1,5 @@
 /**
- * Process-shared better-sqlite3 connections, keyed by resolved file path.
+ * Process-shared SQLite connections, keyed by resolved file path.
  *
  * The main DataStore and the "mirror" media store both target the same
  * `covel.db` when `STORE_BACKEND=sqlite` + `MEDIA_BACKEND=mirror`. Opening two
@@ -17,14 +17,14 @@
  * callers that want an isolated in-memory db must keep getting their own.
  */
 
-import Database from "better-sqlite3";
 import { resolve } from "node:path";
 import {
   createSerializedWriteGate,
   type SerializedWriteGate,
 } from "../serialized-write-gate.js";
+import { openSqliteConnection, type SqliteConnection } from "./node-sqlite.js";
 
-const gates = new WeakMap<Database.Database, SerializedWriteGate>();
+const gates = new WeakMap<SqliteConnection, SerializedWriteGate>();
 
 /**
  * The write-serialization gate for a connection. Everything that mutates
@@ -34,7 +34,7 @@ const gates = new WeakMap<Database.Database, SerializedWriteGate>();
  * Keyed on the handle so `:memory:` connections (never pooled) work too.
  */
 export function getConnectionWriteGate(
-  db: Database.Database,
+  db: SqliteConnection,
 ): SerializedWriteGate {
   const existing = gates.get(db);
   if (existing) return existing;
@@ -44,28 +44,19 @@ export function getConnectionWriteGate(
 }
 
 interface PoolEntry {
-  db: Database.Database;
+  db: SqliteConnection;
   refs: number;
 }
 
 const pool = new Map<string, PoolEntry>();
-
-function configure(db: Database.Database): void {
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-}
 
 /**
  * Acquire a shared connection for `dbPath`. Increments the ref count for an
  * already-open file. Call {@link releaseSqliteConnection} with the returned
  * handle exactly once per acquire to release it.
  */
-export function acquireSqliteConnection(dbPath: string): Database.Database {
-  if (dbPath === ":memory:") {
-    const db = new Database(dbPath);
-    configure(db);
-    return db;
-  }
+export function acquireSqliteConnection(dbPath: string): SqliteConnection {
+  if (dbPath === ":memory:") return openSqliteConnection(dbPath);
 
   const key = resolve(dbPath);
   const existing = pool.get(key);
@@ -74,8 +65,7 @@ export function acquireSqliteConnection(dbPath: string): Database.Database {
     return existing.db;
   }
 
-  const db = new Database(key);
-  configure(db);
+  const db = openSqliteConnection(key);
   pool.set(key, { db, refs: 1 });
   return db;
 }
@@ -85,7 +75,7 @@ export function acquireSqliteConnection(dbPath: string): Database.Database {
  * underlying handle is closed only when the last holder releases it. A handle
  * that isn't pooled (e.g. a `:memory:` connection) is closed directly.
  */
-export function releaseSqliteConnection(db: Database.Database): void {
+export function releaseSqliteConnection(db: SqliteConnection): void {
   for (const [key, entry] of pool) {
     if (entry.db === db) {
       entry.refs -= 1;
