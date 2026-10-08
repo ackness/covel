@@ -11,19 +11,29 @@
  * Only UNRESOLVED records older than the TTL are swept; claimed (in-flight)
  * and successfully-resolved suspensions are never touched — the predicate
  * lives in `store.deleteExpiredSuspensions`.
+ *
+ * The same pass releases a claim whose process ended before it settled the
+ * resume, so the player can resume or abandon the suspension again. Like a
+ * resume that failed, this does not undo an external call the run had made.
  */
 
 import { readEnvInt } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 
 /** Minimal store surface the sweep needs. */
-type SuspensionSweepStore = Pick<DataStore, "deleteExpiredSuspensions">;
+type SuspensionSweepStore = Pick<
+  DataStore,
+  "deleteExpiredSuspensions" | "releaseStaleSuspensionClaims"
+>;
 
 /** Default TTL: 7 days. */
 const DEFAULT_TTL_MS = 604_800_000;
 
 /** How often the opportunistic (non-forced) sweep may run. */
 const SWEEP_INTERVAL_MS = 60 * 60_000; // 1 hour
+
+/** A claim older than this has no live resume behind it. */
+const CLAIM_MAX_AGE_MS = 60 * 60_000;
 
 let lastSweepAt = 0;
 
@@ -37,6 +47,11 @@ export interface SweepOptions {
   readonly force?: boolean;
   /** Injectable clock for deterministic tests. */
   readonly now?: number;
+  /**
+   * Age after which a claim is released. Pass 0 at the start of the only
+   * process that uses the store: no claim it finds can be live.
+   */
+  readonly claimMaxAgeMs?: number;
 }
 
 /**
@@ -51,13 +66,21 @@ export async function maybeSweepExpiredSuspensions(
   opts: SweepOptions = {},
 ): Promise<number> {
   const ttlMs = resolveSuspensionTtlMs();
-  if (ttlMs <= 0) return 0; // disabled escape hatch
 
   const now = opts.now ?? Date.now();
   if (!opts.force && now - lastSweepAt < SWEEP_INTERVAL_MS) return 0;
   lastSweepAt = now;
 
   try {
+    const released = await store.releaseStaleSuspensionClaims(
+      new Date(now - (opts.claimMaxAgeMs ?? CLAIM_MAX_AGE_MS)).toISOString(),
+    );
+    if (released > 0) {
+      console.warn(
+        `[suspension-sweep] released ${released} claim(s) left by an ended resume`,
+      );
+    }
+    if (ttlMs <= 0) return 0; // expiry is off; a dead claim is still released
     const cutoff = new Date(now - ttlMs).toISOString();
     const deleted = await store.deleteExpiredSuspensions(cutoff);
     if (deleted > 0) {

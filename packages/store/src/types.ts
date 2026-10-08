@@ -658,6 +658,13 @@ export interface SuspensionStore {
    * as non-fatal. See `apps/server/src/routes/api/suspension-sweep.ts`.
    */
   deleteExpiredSuspensions(olderThanIso: string): Promise<number>;
+  /**
+   * Make suspensions claimable again when their claim (`"claimed:<iso>"`) is
+   * strictly older than `olderThanIso`: the process that claimed them ended
+   * before it released or resolved the claim. Resolved records and newer
+   * claims are not touched. Not session-scoped. Returns the number released.
+   */
+  releaseStaleSuspensionClaims(olderThanIso: string): Promise<number>;
 }
 
 /**

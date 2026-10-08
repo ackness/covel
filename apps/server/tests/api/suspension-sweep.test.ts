@@ -9,7 +9,10 @@ const TTL_ENV = "COVEL_SUSPENSION_TTL_MS";
 const DEFAULT_TTL = 604_800_000;
 
 function makeStore(deleted = 0) {
-  return { deleteExpiredSuspensions: vi.fn(async () => deleted) };
+  return {
+    deleteExpiredSuspensions: vi.fn(async () => deleted),
+    releaseStaleSuspensionClaims: vi.fn(async () => 0),
+  };
 }
 
 describe("suspension-sweep helper", () => {
@@ -43,6 +46,23 @@ describe("suspension-sweep helper", () => {
     expect(store.deleteExpiredSuspensions).toHaveBeenCalledWith(
       new Date(now - 1000).toISOString(),
     );
+  });
+
+  it("releases claims older than an hour, or every claim when the caller owns the store", async () => {
+    const store = makeStore();
+    const now = 10_000_000;
+
+    await maybeSweepExpiredSuspensions(store, { now, force: true });
+    await maybeSweepExpiredSuspensions(store, {
+      now,
+      force: true,
+      claimMaxAgeMs: 0,
+    });
+
+    expect(store.releaseStaleSuspensionClaims.mock.calls).toEqual([
+      [new Date(now - 3_600_000).toISOString()],
+      [new Date(now).toISOString()],
+    ]);
   });
 
   it("returns 0 and never touches the store when TTL <= 0 (disabled escape hatch)", async () => {
@@ -88,6 +108,7 @@ describe("suspension-sweep helper", () => {
       deleteExpiredSuspensions: vi.fn(async () => {
         throw new Error("boom");
       }),
+      releaseStaleSuspensionClaims: vi.fn(async () => 0),
     };
 
     const n = await maybeSweepExpiredSuspensions(store, {
