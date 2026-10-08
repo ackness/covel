@@ -797,7 +797,7 @@ describe("streamLLMWithRetry silence limits", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("ends a stream that goes silent after it started to write, without a retry", async () => {
+  it("ends a stream the player saw that goes silent after it started to write, without a retry", async () => {
     const llm = createScriptedStreamLLM([
       {
         events: [
@@ -820,6 +820,7 @@ describe("streamLLMWithRetry silence limits", () => {
       policy,
       deadline: Date.now() + 240_000,
       onStreamTime,
+      deliversDeltas: true,
     });
     const rejected = expect(pending).rejects.toMatchObject({
       name: "LLMRetryError",
@@ -834,6 +835,47 @@ describe("streamLLMWithRetry silence limits", () => {
     expect(llm.attempts).toBe(1);
     expect(onStreamTime).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retries a stream nobody saw that goes silent after it started to write, crediting its writing time", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "text-delta", textDelta: "partial" },
+          { delay: 10_000 },
+          { type: "text-delta", textDelta: "more" },
+          { delay: 600_000 },
+        ],
+      },
+      steadyStream(1, 0),
+    ]);
+    const policy = buildRetryPolicy({
+      runtimeTimeoutMs: 60_000,
+      idleTimeoutMs: 45_000,
+      maxRetries: 1,
+    });
+    const onStreamTime = vi.fn();
+    const onRetry = vi.fn();
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy,
+      deadline: Date.now() + 50_000,
+      onStreamTime,
+      onRetry,
+    });
+    await vi.advanceTimersByTimeAsync(55_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const result = await pending;
+
+    expect(llm.attempts).toBe(2);
+    expect(result.response.content).not.toContain("partial");
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 1, reason: "idle-timeout" }),
+    );
+    // 10 s of writing, then 45 s of silence: only the writing is credited,
+    // and it is what leaves the retry time before the 50 s deadline.
+    expect(onStreamTime).toHaveBeenNthCalledWith(1, 10_000);
   });
 
   it("restarts the idle wait with reasoning and tool-call output", async () => {
@@ -1260,44 +1302,67 @@ describe("thinking stream activity", () => {
 describe("provider failure terminals", () => {
   const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 1 });
 
-  it("rejects a truncated response without retrying or releasing tool calls", async () => {
-    const llm = createScriptedLLM([
-      {
-        kind: "ok",
-        response: {
-          ...okResponse("unfinished"),
-          finishReason: "length",
-          toolCalls: [{ id: "call", name: "write", arguments: '{"value":' }],
-        },
-      },
-    ]);
+  const truncated = (): MockGenerateOutcome => ({
+    kind: "ok",
+    response: {
+      ...okResponse("unfinished"),
+      finishReason: "length",
+      toolCalls: [{ id: "call", name: "write", arguments: '{"value":' }],
+    },
+  });
+
+  it("retries a truncated response once, then rejects it without releasing tool calls", async () => {
+    const llm = createScriptedLLM([truncated(), truncated(), truncated()]);
     await expect(
       callLLMWithRetry({
         llm,
         messages: [],
-        policy,
+        // More retries than the one a truncation gets.
+        policy: buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 3 }),
         deadline: Date.now() + 10_000,
       }),
-    ).rejects.toThrow(/output limit/i);
-    expect(llm.calls).toHaveLength(1);
+    ).rejects.toMatchObject({
+      name: "LLMRetryError",
+      reason: "output-truncated",
+      message: expect.stringMatching(/output limit/i),
+    });
+    expect(llm.calls).toHaveLength(2);
+    expect(llm.calls[1]!.at(-1)).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("output limit"),
+    });
+  });
+
+  it("accepts a complete response after one truncated attempt", async () => {
+    const llm = createScriptedLLM([
+      truncated(),
+      { kind: "ok", response: okResponse("whole") },
+    ]);
+    const response = await callLLMWithRetry({
+      llm,
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+    });
+    expect(response.content).toBe("whole");
+    expect(llm.calls).toHaveLength(2);
   });
 
   it.each(["length", "max_tokens", "MAX_TOKENS"])(
-    "rejects truncated streams (%s) without a non-streaming fallback",
+    "retries a truncated stream (%s) once, then rejects it without a non-streaming fallback",
     async (finishReason) => {
-      const llm = createScriptedStreamLLM([
-        {
-          events: [
-            {
-              type: "tool-call",
-              id: "call",
-              name: "write",
-              arguments: '{"value":',
-            },
-            { type: "done", finishReason },
-          ],
-        },
-      ]);
+      const cut = {
+        events: [
+          {
+            type: "tool-call" as const,
+            id: "call",
+            name: "write",
+            arguments: '{"value":',
+          },
+          { type: "done" as const, finishReason },
+        ],
+      };
+      const llm = createScriptedStreamLLM([cut, cut]);
       const generate = vi.spyOn(llm, "generate");
       await expect(
         streamLLMWithRetry({
@@ -1307,7 +1372,7 @@ describe("provider failure terminals", () => {
           deadline: Date.now() + 10_000,
         }),
       ).rejects.toThrow(/output limit/i);
-      expect(llm.attempts).toBe(1);
+      expect(llm.attempts).toBe(2);
       expect(generate).not.toHaveBeenCalled();
     },
   );
@@ -1356,20 +1421,19 @@ describe("provider failure terminals", () => {
   ])(
     "rejects a truncated response with $name even when prose may be kept",
     async ({ content, toolCalls }) => {
-      const llm = createScriptedLLM([
-        {
-          kind: "ok",
-          response: {
-            ...okResponse(content),
-            finishReason: "length",
-            toolCalls: Array.from({ length: toolCalls }, () => ({
-              id: "call",
-              name: "write",
-              arguments: '{"value":',
-            })),
-          },
+      const cut: MockGenerateOutcome = {
+        kind: "ok",
+        response: {
+          ...okResponse(content),
+          finishReason: "length",
+          toolCalls: Array.from({ length: toolCalls }, () => ({
+            id: "call",
+            name: "write",
+            arguments: '{"value":',
+          })),
         },
-      ]);
+      };
+      const llm = createScriptedLLM([cut, cut]);
       await expect(
         callLLMWithRetry({
           llm,
@@ -1422,7 +1486,7 @@ describe("provider failure terminals", () => {
     [{ type: "text-delta", textDelta: "partial" }],
     [{ type: "reasoning-delta", reasoningDelta: "partial reasoning" }],
   ] satisfies LLMStreamEvent[][])(
-    "rejects incomplete or failed streams without retrying: %j",
+    "rejects incomplete or failed streams the player saw without retrying: %j",
     async (...events) => {
       const llm = createScriptedStreamLLM([{ events }]);
       const emitter = makeEmitterSpy();
@@ -1433,6 +1497,7 @@ describe("provider failure terminals", () => {
           policy,
           deadline: Date.now() + 10_000,
           emitter,
+          deliversDeltas: true,
         }),
       ).rejects.toThrow("PROVIDER_ERROR");
       expect(llm.attempts).toBe(1);
@@ -1440,6 +1505,40 @@ describe("provider failure terminals", () => {
         emitter.events.filter((e) => e.type === "llm.responded"),
       ).toHaveLength(1);
       expect(emitter.events.at(-1)?.payload.finishReason).toBe("error");
+    },
+  );
+
+  it.each([
+    [
+      { type: "text-delta", textDelta: "partial" },
+      { type: "done", finishReason: "error" },
+    ],
+    [
+      { type: "tool-call", id: "call", name: "write", arguments: "{}" },
+      { type: "done", finishReason: "error" },
+    ],
+    [{ type: "text-delta", textDelta: "partial" }],
+  ] satisfies LLMStreamEvent[][])(
+    "drops output nobody saw and retries incomplete or failed streams: %j",
+    async (...events) => {
+      const llm = createScriptedStreamLLM([
+        { events },
+        {
+          events: [
+            { type: "text-delta", textDelta: "complete" },
+            { type: "done", finishReason: "stop" },
+          ],
+        },
+      ]);
+      const result = await streamLLMWithRetry({
+        llm,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+      });
+      expect(result.response.content).toBe("complete");
+      expect(result.response.toolCalls).toEqual([]);
+      expect(llm.attempts).toBe(2);
     },
   );
 

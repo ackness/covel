@@ -258,7 +258,7 @@ includeThoughts = true
 
 ## Provider 流式响应
 
-所有 agent runtime 在 adapter 提供流式接口时都使用它；只有故事 runtime 将文本增量转发到玩家界面。`length` / `max_tokens` 截断结果不能作为成功结果提交，必须调整输出额度后重试。HTTP 200 内的 provider 错误保留消息、code/type，确定性拒绝不会变成空的可重试错误。
+所有 agent runtime 在 adapter 提供流式接口时都使用它；只有故事 runtime 将文本增量转发到玩家界面。因此流在已有输出之后中断时，只有故事 runtime 不重试；其他 runtime 丢弃半截输出，按 `maxRetries` 重试。`length` / `max_tokens` 截断结果不能作为成功结果提交：调用重试一次，再次截断才以"调大输出额度"的错误失败，也不再改用非流式调用重来。HTTP 200 内的 provider 错误保留消息、code/type，确定性拒绝不会变成空的可重试错误。
 
 备用模型在调用前重新检查实际消息、工具、结构化输出 schema 和输出预留所需的窗口。装不下的目标不会收到该请求。能力解析优先选择模型数据库的精确匹配，再考虑精选表的前缀匹配，避免把语音子型号识别为文本模型。
 

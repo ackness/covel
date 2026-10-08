@@ -69,6 +69,8 @@ export interface RequestLLMResponseOptions {
   readonly onStreamTime?: (streamedMs: number) => void;
   /** Called once per forwarded text delta; the DeltaForwarder owns the count. */
   readonly onStreamDelta: (textDelta: string) => Promise<void>;
+  /** Whether `onStreamDelta` shows text to the player (story runtimes). */
+  readonly deliversDeltas: boolean;
 }
 
 /**
@@ -174,12 +176,14 @@ async function requestStreaming(
 
   // Streaming path: helper enforces the first-token (TTFB) and idle guards,
   // retries on transient failures, and forwards text deltas to
-  // the caller on the first attempt. If streaming exhausts its retries with a
-  // failure before producing output, fall back to a non-stream call.
+  // the caller on the first attempt. If streaming exhausts its retries
+  // without output the player saw, fall back to a non-stream call — except
+  // after a cut at the output limit, which a non-stream call would repeat.
   try {
     const streamed = await streamLLMWithRetry({
       ...callParams,
       onDelta: onStreamDelta,
+      deliversDeltas: opts.deliversDeltas,
       onStreamTime: opts.onStreamTime,
     });
     response = streamed.response;
@@ -187,6 +191,7 @@ async function requestStreaming(
     if (
       streamError instanceof LLMRetryError &&
       !streamError.hasPartialOutput &&
+      streamError.reason !== "output-truncated" &&
       Date.now() < deadline
     ) {
       console.warn(

@@ -383,6 +383,7 @@ async function runAgentToolLoopWithinBudget(
         reportRetry,
         onStreamDelta:
           manifest.outputKind === "story" ? delta.forward : async () => {},
+        deliversDeltas: manifest.outputKind === "story",
       });
     } finally {
       budget.resumeAfterModel();
