@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.49] - 2026-10-09
+
+This release fixes session recovery, background-task status, streaming retries, plugin and storage boundaries, and desktop layout issues. SQLite now uses Node's built-in driver while retaining the existing database format. macOS Apple Silicon and Windows x64 binaries are unsigned; the macOS build is not notarized. Read the [upgrade notes](#upgrade-notes-for-v0049) before installing.
+
 ### Added
 
 - **Recorded scripted sessions replay in one command, on any machine.** `pnpm e2e:replay` plays each session under `tests/llm-replay/` against its recording: it starts the replay proxy, a test server with a new database, its own home directory, the session's random seed and UTC, then `scripts/e2e-plugin-verify.ts`, and stops them. The server reads nothing from `.env`, `~/.covel` or the shell's `COVEL_*` variables, so another checkout sends the same requests; any request missing from the recording fails the run. Recordings are committed, one answer per request named after its digest. `--record --upstream <origin>` records a session again: answers already recorded are reused, only new requests reach the model, and answers the session no longer asks for are removed. `pnpm llm:replay` stays for ad-hoc recordings under `debugs/`. The `lantern-barrow` session is defined but not recorded yet: record it with `pnpm e2e:replay --record --upstream https://api.deepseek.com lantern-barrow`. Verified with a fake model on a session that stopped at character creation (8 requests, all answered in a copy of the repository at another path, with another `HOME`, time zone and `LANG`); not yet verified on a recorded three-turn session. See `docs/guide/e2e-plugin-verify.md`.
@@ -21,9 +25,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 ### Fixed
 
 - **A filled opening form no longer repeats a full stop supplied by both the field and its template.** Narrative interpolation omits a template `.` or `。` immediately after a value already ending with that character. Stored player input and punctuation within the value remain unchanged.
-
 - **Completed background tasks no longer accumulate as failed turns below the story.** Restoring a worker's model reasoning created a separate foreground task that was then marked interrupted, even when its durable job had committed successfully. The timeline now joins worker traces to the job's source turn using `backgroundTurnId`, preserves the durable outcome, and deduplicates reasoning across refreshes and either hydration order. Actual job failures remain visible under their source task.
-
 - **A suspension can be resumed again after the server stopped in the middle of resuming it.** The claim a resume takes was never released when the process ended first, so every later resume answered 409 and the player could only abandon it. The claim is now released at the next server start (SQLite) or after one hour (PostgreSQL). `DataStore` gains `releaseStaleSuspensionClaims`.
 - **A settled tabletop check reaches the narrative without row IDs.** The check text the narrators read carried the form submission ID and the turn ID of the stored receipt. It now carries the check only: action, attribute, modifier, die, difficulty, total and outcome.
 - **A media download drops a redirect's body unread.** `ctx.media.ingestUrl` read the whole body of each 3xx response, which `maxBytes` did not limit.
@@ -79,6 +81,13 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **The memory extraction of a turn is no longer lost when the player answers quickly.** A background job's `maxExecutionMs` also counted the time its finished result waited for the session lock to commit. When a job outlasted `maxSettleWaitMs`, the next player turn went ahead and held that lock for its whole run, so a `memory/extract` that finished in 90 seconds was timed out at 120 and not retried. The limit now ends when the runtime returns; a job that was cancelled or timed out is still refused at commit. The log no longer warns `completion follow-up failed` for a job that timed out.
 - **`pnpm e2e:verify` runs without `.env` and `.env.llm`.** It required both files although the harness reads no provider key (the server does), so it could not start where the keys are environment variables. It now loads each file only when present, like `pnpm i18n`. The plugin-testing guide's example passed `--plugins`, which the harness rejects; it now passes `--plugin`.
 - **A missing user worlds directory takes one line in the server log.** On a fresh install `$COVEL_HOME/worlds` does not exist until the first world is installed, and the seeder and the file watcher each printed an `ENOENT` stack trace for it. The directory still counts as an unscanned source, so stale worlds are still kept until a complete scan.
+
+### Upgrade notes for v0.0.49
+
+- **Upgrading from v0.0.48 does not require deleting SQLite data.** Existing `covel.db` files remain readable after the switch to `node:sqlite`; this release adds no data migration. Keep a backup before upgrading. Upgrades from versions before v0.0.48 still need the [v0.0.48 breaking-change notes](#breaking-changes-and-upgrade-notes-for-v0048), and versions before v0.0.42 also need the [v0.0.42 guide](./guide/upgrade-0.0.42.en.md).
+- **Custom storage backends must implement `DataStore.releaseStaleSuspensionClaims(olderThanIso): Promise<number>`.** Built-in backends already release abandoned resume claims according to their startup and expiry policy.
+- **Plugin host ranges are enforced at startup and reload.** A plugin whose declared `covel` range excludes `0.0.49` will not run; authors should test the package and update its range when supported. Plugins without a range keep their existing behavior.
+- **Desktop downloads are unsigned.** macOS builds are also not notarized, so the operating system may require first-launch confirmation. There is no signing or notarization claim for these artifacts.
 
 ## [0.0.48] - 2026-10-07
 
