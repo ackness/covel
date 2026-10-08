@@ -19,6 +19,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import { worldEditionLocales } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import * as worldCreation from "@covel/create";
@@ -1373,6 +1374,37 @@ describe("ai world generation route", () => {
         "version: 0.1.0",
       );
     });
+
+    it.each(["server-file", "server-store"] as const)(
+      "keeps a revised %s world in its own language when the answer declares another edition",
+      async (target) => {
+        // A revision writes no locale files, whatever the manifest claims.
+        const declared = `===WORLD_YAML===\n${WORLD_YAML.replace(
+          "supportedLocales: [zh-CN]",
+          "supportedLocales: [zh-CN, en-US]",
+        )}\n===WORLD_MD===\nUNCHANGED\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===`;
+        await generate(target, new SequenceLlm([...CREATED, declared]));
+
+        const revised = await worldOf(
+          await post("revise-world", {
+            worldId: "generated-world",
+            instruction: "加一个英文版",
+          }),
+        );
+
+        expect(worldEditionLocales(revised)).toEqual(["zh-CN"]);
+        expect(
+          worldEditionLocales((await store.getWorld("generated-world"))!),
+        ).toEqual(["zh-CN"]);
+        if (target === "server-file")
+          expect(
+            await readFile(
+              path.join(worldsDir, "generated-world", "world.yaml"),
+              "utf8",
+            ),
+          ).not.toContain("en-US");
+      },
+    );
 
     it("revises a world that lives in the store without writing files", async () => {
       await generate("server-store", new SequenceLlm([...CREATED, REVISED]));

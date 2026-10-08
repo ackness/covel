@@ -44,7 +44,10 @@ import { checkWorldWriteAccess } from "./worlds/world-write-guard.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
 import { isWorldDeleting } from "../../world-lifecycle.js";
-import { worldSectionsOf } from "../../world-data/world-sections.js";
+import {
+  ownEditionManifest,
+  worldSectionsOf,
+} from "../../world-data/world-sections.js";
 import { parseIdleTimeoutMs } from "../../world-data/authoring-timeout.js";
 import { orderedSend } from "../../lib/ordered-send.js";
 
@@ -624,11 +627,12 @@ aiRoutes.post(
         const signal = shutdownSignal
           ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
           : c.req.raw.signal;
-        const result = await createWorld({
+        const ownLocale = normalizeLocale(existing.locale, DEFAULT_LOCALE);
+        const generated = await createWorld({
           llm,
           concept: existing.description || existing.name,
           model: typeof body.model === "string" ? body.model : undefined,
-          locale: normalizeLocale(existing.locale, DEFAULT_LOCALE),
+          locale: ownLocale,
           dataContracts,
           revision: {
             current: await worldSectionsOf(
@@ -649,17 +653,21 @@ aiRoutes.post(
           },
         });
         await progress.settled();
-        if (!result.success) {
-          console.error("[ai/revise-world] revision failed:", result.errors);
+        if (!generated.success) {
+          console.error("[ai/revise-world] revision failed:", generated.errors);
           await send({
             type: "error",
-            message: result.errors?.join("\n") ?? "World revision failed",
-            ...(result.idleTimeout
+            message: generated.errors?.join("\n") ?? "World revision failed",
+            ...(generated.idleTimeout
               ? { code: "model_idle_timeout" as const }
               : {}),
           });
           return;
         }
+        const result = {
+          ...generated,
+          manifest: ownEditionManifest(generated.manifest, ownLocale),
+        };
 
         await send({ type: "progress", phase: "validating" });
         const metadata = {
