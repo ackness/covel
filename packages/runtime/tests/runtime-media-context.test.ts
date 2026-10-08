@@ -365,6 +365,37 @@ describe("createRuntimeMediaContext", () => {
     ]);
   });
 
+  it("drops a redirect body without reading it", async () => {
+    const store = createStore();
+    let pulled = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const utils = createUtils({
+      "https://ok.example.test/start": new Response(body, {
+        status: 302,
+        headers: { location: "https://ok.example.test/image.png" },
+      }),
+      "https://ok.example.test/image.png": new Response(pngBytes(8), {
+        headers: { "content-type": "image/png" },
+      }),
+    });
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
+
+    await media.ingestUrl("https://ok.example.test/start", { maxBytes: 64 });
+
+    expect(cancelled).toBe(true);
+    // The stream fills its one-chunk queue and nothing reads further.
+    expect(pulled).toBeLessThanOrEqual(1);
+  });
+
   it("uses a separate guarded fetch for every redirect hop", async () => {
     const store = createStore();
     let hop = 0;

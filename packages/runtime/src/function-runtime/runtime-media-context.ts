@@ -269,7 +269,8 @@ async function fetchWithValidatedRedirects(
       return { response, finalUrl: currentUrl };
 
     const location = response.headers.get("location");
-    await response.arrayBuffer().catch(() => undefined);
+    // A redirect body is not media: drop it unread, outside `maxBytes`.
+    await response.body?.cancel().catch(() => undefined);
     if (!location) {
       throw new Error(
         `media ingest redirect ${response.status} is missing Location`,
