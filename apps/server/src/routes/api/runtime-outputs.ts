@@ -17,12 +17,18 @@
 
 import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { errorBody } from "../../api-error.js";
+import {
+  concealRuntimeOutputRecord,
+  registeredConcealedRuntimeIds,
+} from "./concealed-runtimes.js";
 
 type Env = {
   Variables: {
     store: DataStore;
+    pluginRegistry: PluginRegistry;
   };
 };
 
@@ -57,7 +63,10 @@ runtimeOutputRoutes.get("/:id/runtime-outputs", async (c) => {
     sinceTimestamp,
     limit,
   });
-  return c.json({ items });
+  const concealed = registeredConcealedRuntimeIds(c.get("pluginRegistry"));
+  return c.json({
+    items: items.map((item) => concealRuntimeOutputRecord(item, concealed)),
+  });
 });
 
 // GET /:id/runtime-outputs/:outputId
@@ -72,7 +81,12 @@ runtimeOutputRoutes.get("/:id/runtime-outputs/:outputId", async (c) => {
   if (!record) {
     return c.json(errorBody(`Runtime output not found: ${outputId}`), 404);
   }
-  return c.json(record);
+  return c.json(
+    concealRuntimeOutputRecord(
+      record,
+      registeredConcealedRuntimeIds(c.get("pluginRegistry")),
+    ),
+  );
 });
 
 // GET /:id/runtime-outputs/:outputId/full-prompt

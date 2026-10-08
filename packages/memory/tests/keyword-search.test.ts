@@ -47,6 +47,29 @@ it("finds reordered Chinese phrases and returns the matching passage beyond the 
   );
 });
 
+it.each(["Alice", "alice", "灯塔"])(
+  "finds a message where a Latin name touches Chinese text: %s",
+  async (query) => {
+    const message = (id: string, content: string) => ({
+      id,
+      sessionId: "session",
+      turnId: "turn",
+      role: "assistant" as const,
+      content,
+      createdAt: "2026-10-06T00:00:00Z",
+    });
+    const recall = createKeywordRecallSearcher({
+      listRecentTurnMessages: async () => [
+        message("target", "Alice去了北方的灯塔"),
+        message("other", "守门人收下了你的承诺"),
+      ],
+    });
+    const hits = await recall.search("session", query);
+    expect(hits.map((hit) => hit.content)).toEqual(["Alice去了北方的灯塔"]);
+    expect(hits[0]?.score).toBeGreaterThan(0.1);
+  },
+);
+
 it("excludes disabled lorebook through true→false→true without muting other owners or characters", async () => {
   const store = createMemoryStore();
   const now = "2026-01-01T00:00:00.000Z";

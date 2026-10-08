@@ -76,6 +76,38 @@ describe("R-01 SSE reconnect + replay/live race", () => {
     }
   });
 
+  it("names the head in the connected frame, and a reconnect from it replays what was missed", async () => {
+    for (let n = 1; n <= 3; n++) emitSeq(eventBus, SESSION_ID, "state", n);
+    const epoch = eventBus.getEventsAfter(SESSION_ID, 3).epoch!;
+    const open = async (query: string) => {
+      const ac = new AbortController();
+      const res = await app.request(
+        `/api/events/stream?sessionId=${SESSION_ID}&topics=state${query}`,
+        { signal: ac.signal },
+      );
+      const reader = res.body!.getReader();
+      const frames = await drain(reader, { deadlineMs: 400 });
+      await reader.cancel().catch(() => {});
+      ac.abort();
+      return frames;
+    };
+
+    // A first connection has no cursor and receives no event.
+    const first = await open("");
+    expect(first.filter((f) => !isSystemFrame(f))).toHaveLength(0);
+    const connected = first.find((f) => f.event === "system.connected")!;
+    const cursor = (JSON.parse(connected.data) as { cursor?: string }).cursor;
+    expect(cursor).toBe(`${epoch}:3`);
+
+    // An event emitted while the client is away is replayed from that cursor.
+    emitSeq(eventBus, SESSION_ID, "state", 4);
+    const second = await open(`&lastEventId=${encodeURIComponent(cursor!)}`);
+    expect(second.filter((f) => !isSystemFrame(f)).map((f) => f.id)).toEqual([
+      `${epoch}:4`,
+    ]);
+    expect(second.some((f) => f.event === "system.reset")).toBe(false);
+  });
+
   it("Bug A: an event emitted during replay is delivered exactly once", async () => {
     // Seed enough missed events that the replay loop blocks on consumer
     // backpressure — this suspends the producer mid-replay, which is exactly

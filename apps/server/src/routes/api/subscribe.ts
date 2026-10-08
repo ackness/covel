@@ -246,12 +246,24 @@ subscribeRoutes.get(
           });
         };
 
+        // The newest event id at this moment. A client that holds it asks for
+        // a replay on its next connection even when no event reached it here.
+        const headCursor = (): string | undefined => {
+          const head = eventBus.getEventsAfter(sessionId, 0);
+          return head.epoch === undefined
+            ? undefined
+            : `${head.epoch}:${head.latestSeq}`;
+        };
+
         const resetPayload = (reason: string): string => {
           const replay = eventBus.getEventsAfter(sessionId, 0);
           return JSON.stringify({
             sessionId,
             reason,
             epoch: replay.epoch,
+            ...(replay.epoch === undefined
+              ? {}
+              : { cursor: `${replay.epoch}:${replay.latestSeq}` }),
             oldestSeq: replay.oldestSeq,
             latestSeq: replay.latestSeq,
             timestamp: new Date().toISOString(),
@@ -310,6 +322,7 @@ subscribeRoutes.get(
           // R-01 Bug B (cursor reset): the connected frame carries NO id, so the
           // frontend never clobbers its lastEventId back to "0" on reconnect
           // (mirrors the id-less heartbeat frame below).
+          const connectedCursor = headCursor();
           await writes.write(async () => {
             if (!(await stillOwnsIncarnation())) return;
             await stream.writeSSE({
@@ -317,6 +330,7 @@ subscribeRoutes.get(
               data: JSON.stringify({
                 sessionId,
                 topics: topics ? [...topics] : "all",
+                cursor: connectedCursor,
                 timestamp: new Date().toISOString(),
               }),
             });
@@ -341,6 +355,7 @@ subscribeRoutes.get(
                     sessionId,
                     reason: epochChanged ? "epoch-change" : "gap",
                     epoch,
+                    cursor: `${epoch}:${replay.latestSeq}`,
                     oldestSeq: replay.oldestSeq,
                     latestSeq: replay.latestSeq,
                     timestamp: new Date().toISOString(),

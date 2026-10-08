@@ -133,6 +133,33 @@ describe("subscription visibility", () => {
       releaseSecond();
     }
   });
+  it("resumes after an action from the head a stream without events named", async () => {
+    visibility();
+    const fetch = vi.fn(
+      async (_url: string) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  'event: system.connected\ndata: {"sessionId":"session","cursor":"epoch:7"}\n\n',
+                ),
+              );
+            },
+          }),
+        ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const event = vi.fn();
+    subscription = createSessionSubscription("session");
+    subscription.on("system", event);
+    await vi.waitFor(() => expect(event).toHaveBeenCalledOnce());
+    const release = pauseSessionSubscriptions();
+    release();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(fetch.mock.calls[1]![0]).toContain("lastEventId=epoch%3A7");
+  });
+
   it("releases a hidden tab's stream and resumes from its cursor", async () => {
     const setVisibility = visibility();
     const cancel = vi.fn();

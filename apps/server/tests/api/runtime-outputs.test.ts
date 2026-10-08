@@ -18,12 +18,26 @@ import {
 import { createMemoryStore } from "@covel/store/memory";
 import { runtimeOutputRoutes } from "../../src/routes/api/runtime-outputs.js";
 
-type Env = { Variables: { store: DataStore } };
+type Env = { Variables: { store: DataStore; pluginRegistry: unknown } };
+
+// One registered runtime declares `io.concealed`.
+const pluginRegistry = {
+  getAll: () =>
+    new Map([
+      [
+        "planner",
+        {
+          manifests: [{ manifest: { name: "planner/plot", concealed: true } }],
+        },
+      ],
+    ]),
+};
 
 function setupApp(store: DataStore): Hono {
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("pluginRegistry", pluginRegistry);
     await next();
   });
   app.route("/api/sessions", runtimeOutputRoutes);
@@ -122,6 +136,35 @@ describe("runtime-outputs API", () => {
       expect(body.items[0]!.results).toEqual([
         { text: "hello", structured: { narrative: "hello" } },
       ]);
+    });
+
+    it("strips the content of a concealed runtime's rows", async () => {
+      const ro = makeRuntimeOutput({
+        pluginId: "planner",
+        runtimeId: "planner/plot",
+        results: [{ text: "spoiler", structured: { plan: "spoiler" } }],
+        metaData: {
+          turn: 3,
+          toolCallList: [
+            { tool: "plan", input: { a: "spoiler" }, output: "spoiler" },
+          ],
+        },
+      });
+      await store.saveRuntimeOutput(ro);
+
+      const list = await app.request("/api/sessions/sess-1/runtime-outputs");
+      const one = await app.request(
+        `/api/sessions/sess-1/runtime-outputs/${ro.id}`,
+      );
+      for (const res of [list, one]) {
+        expect(res.status).toBe(200);
+        expect(await res.clone().text()).not.toContain("spoiler");
+      }
+      const body = (await one.json()) as RuntimeOutputRecord;
+      expect(body.metaData).toMatchObject({
+        turn: 3,
+        toolCallList: [{ tool: "plan", input: null, output: null }],
+      });
     });
 
     it("filters by runtimeId", async () => {

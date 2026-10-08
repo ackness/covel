@@ -341,6 +341,8 @@ Provider 图片输入矩阵：
 
 `/api/events/stream` 在连接建立时先发一条 `system.connected`，每 30s 发 `system.heartbeat`；带 `lastEventId` 时会先回放 EventBus 缓存中 `seq > lastEventId` 的事件再切到实时。
 
+`system.connected` 的 data 带 `cursor`：此刻该 session 已发出的最新事件 id（`${epoch}:${seq}`，未发过事件时 seq 为 0）。还没有游标的客户端把它记为 `lastEventId`，这样即使这条连接上没有收到任何事件，下次连接（例如一次 action 结束后恢复订阅）也能回放期间错过的事件。已有游标的客户端忽略它。
+
 `@covel/events` 的 `createEventBus(store?, options?)` 只要求可选的 `EventStore`，包含 `saveEvent(record)` 和按 session 隔离的 `getEventById(sessionId, id)` 两个异步方法。记录类型 `EventStoreRecord` 随包导出；现有 DataStore 可直接传入，独立宿主无需实现其他数据库方法。持久化仍是有界、尽力而为的审计队列，`flush()` 等待队列排空但不保证 transport 已送达。超大 transport 帧仍在保存成功后发送引用，由接收方通过相同存储读取；此接口收窄不改变回放、顺序或失败处理语义。
 
 #### 事件 id 形态：`${epoch}:${seq}`（H-05/H-06）
@@ -356,7 +358,7 @@ EventBus 的 `MAX_TRACKED_SESSIONS`（当前 256）是可驱逐回放状态的�
 
 #### `system.reset` 控制帧（H-05）
 
-带 `lastEventId` 重连时，若游标无法被桥接，服务端**不做部分回放**，而是发一条**无 `id:` 头**的 `system.reset` 命名事件，客户端应据此**清空本地游标（lastEventId）+ 重新拉取权威状态**，再继续消费实时事件：
+带 `lastEventId` 重连时，若游标无法被桥接，服务端**不做部分回放**，而是发一条**无 `id:` 头**的 `system.reset` 命名事件，客户端应据此**把本地游标（lastEventId）换成帧里的 `cursor` + 重新拉取权威状态**，再继续消费实时事件：
 
 ```
 event: system.reset
@@ -366,6 +368,7 @@ data: {
   "epoch": "<current server epoch>",
   "oldestSeq": <number>,   // 缓存中最旧保留的 seq（无保留时为 0）
   "latestSeq": <number>,   // 本 epoch 已发出的最新 seq（未发过为 0）
+  "cursor": "<epoch>:<latestSeq>",  // 客户端重置后采用的新游标
   "timestamp": "<ISO8601>"
 }
 ```

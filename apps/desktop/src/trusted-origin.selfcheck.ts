@@ -22,6 +22,8 @@ assert.equal(
 assert.equal(loopbackHttpOrigin("http://[::1]:80/"), "http://[::1]");
 assert.equal(loopbackHttpOrigin("https://127.0.0.1:3001/"), null); // https not loopback-http
 assert.equal(loopbackHttpOrigin("http://evil.com/"), null);
+assert.equal(loopbackHttpOrigin("http://127.0.0.1.evil.example/"), null); // a name, not the address
+assert.equal(loopbackHttpOrigin("http://127.evil.example/"), null);
 assert.equal(loopbackHttpOrigin("http://169.254.169.254/"), null); // link-local metadata
 assert.equal(loopbackHttpOrigin("data:text/html,x"), null);
 assert.equal(loopbackHttpOrigin("file:///etc/passwd"), null);
