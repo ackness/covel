@@ -32,7 +32,7 @@ const TURN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
  *   - MANUAL (plugin-rpc, `manualPayload` present): the existing
  *     createCandidates / acceptCandidate actions from the block UI.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {import("@covel/plugin-handlers-utils").PluginFunctionContext & { gateway?: import("@covel/plugin-handlers-utils").PluginServiceGateway }} ctx
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function handler(ctx) {

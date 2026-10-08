@@ -21,9 +21,9 @@ export default async function handler(ctx) {
   const playerMessage = String(ctx.playerMessage ?? "");
   const maxSpeakers = resolveMaxSpeakers(ctx.userSettings?.activeSpeakerCount);
 
-  const [characters, messages, previousCast] = await Promise.all([
-    listCharacters(ctx.store, ctx.sessionId),
-    listRecentTextMessages(ctx.store, ctx.sessionId, RECENT_MESSAGE_COUNT),
+  const characters = normalizeCharacters(ctx.world?.characters);
+  const [messages, previousCast] = await Promise.all([
+    listRecentTextMessages(ctx.store, RECENT_MESSAGE_COUNT),
     readPreviousCast(ctx),
   ]);
 
@@ -288,24 +288,13 @@ function formatActiveCastContext(activeCast, locale) {
   return lines.join("\n");
 }
 
-async function listCharacters(store, sessionId) {
-  if (!store || typeof store !== "object") return [];
-  const s = /** @type {any} */ (store);
-  if (typeof s.listCharacters === "function") {
-    const rows = await s.listCharacters(sessionId);
-    return normalizeCharacters(rows);
-  }
-  return [];
-}
-
 /**
  * Most recent messages that carry text. Each turn also records one empty row
  * per structured runtime, so read a wider tail and keep the text ones.
  */
-async function listRecentTextMessages(store, sessionId, count) {
+async function listRecentTextMessages(store, count) {
   const rows = await listTurnMessages(
     store,
-    sessionId,
     count * RECENT_MESSAGE_SCAN_FACTOR,
   );
   return rows
@@ -313,21 +302,10 @@ async function listRecentTextMessages(store, sessionId, count) {
     .slice(-count);
 }
 
-async function listTurnMessages(store, sessionId, limit) {
-  if (!store || typeof store !== "object") return [];
-  const s = /** @type {any} */ (store);
-  // "Recent context" read. Full DataStore exposes listRecentTurnMessages;
-  // the community FunctionStoreView folds the same semantics into
-  // listTurnMessages(limit). Capability check, not arity sniffing — the old
-  // full-store call (listTurnMessages(sessionId, { limit })) returned the
-  // OLDEST N messages, which was the wrong end of the timeline.
-  if (typeof s.listRecentTurnMessages === "function") {
-    return await s.listRecentTurnMessages(sessionId, limit);
-  }
-  if (typeof s.listTurnMessages === "function") {
-    return await s.listTurnMessages(limit);
-  }
-  return [];
+/** The store view's `listTurnMessages(limit)` returns the most recent rows. */
+async function listTurnMessages(store, limit) {
+  if (!store || typeof store.listTurnMessages !== "function") return [];
+  return await store.listTurnMessages(limit);
 }
 
 function normalizeCharacters(rows) {
