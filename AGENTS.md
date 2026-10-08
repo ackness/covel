@@ -579,9 +579,9 @@ worlds version independently; pushing the tag triggers
 ## Agent Skills
 
 Project skills live in `.claude/skills/` (`create-plugin`, `create-world`,
-`covel-static-turn-audit` — the last only on explicit request); see
-`docs/guide/skills.md`. Skill references link to `docs/reference/` instead of
-copying contract tables.
+`covel-static-turn-audit`, `covel-readonly-audit` — the two audit skills only on
+explicit request); see `docs/guide/skills.md`. Skill references link to
+`docs/reference/` instead of copying contract tables.
 
 Directory-specific rules live in nested `AGENTS.md` files (e.g.
 `docs/v2/AGENTS.md`). Claude Code does not read `AGENTS.md` on its own, so every

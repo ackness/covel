@@ -1,0 +1,4 @@
+interface:
+  display_name: "Covel Read-only Audit"
+  short_description: "Plan a read-only audit by area and cross-layer path"
+  default_prompt: "Use $covel-readonly-audit to plan Covel's read-only audit: the audit areas and the cross-layer hot paths. Do not read project source, start any auditor, or write any file until I explicitly tell you to begin."
