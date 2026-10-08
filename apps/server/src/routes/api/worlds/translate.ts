@@ -205,19 +205,12 @@ worldTranslateRoutes.post(
         await progress.settled();
         signal.throwIfAborted();
         if (result.translated === 0) {
-          const reason = result.failed[0]?.reason;
-          // Only fixed validation messages are public. Other reasons can
-          // contain model text (for example, rejected placeholders).
-          if (
-            reason &&
-            reason !== "no translation" &&
-            reason !== "the reply was not a JSON object"
-          ) {
-            throw new Error(reason);
-          }
+          // Why a text was refused (a changed placeholder, a reply that is
+          // not JSON) is what the player needs to try again.
           await send({
             type: "error",
-            message: reason ?? "The model returned no translation",
+            message:
+              result.failed[0]?.reason ?? "The model returned no translation",
           });
           return;
         }

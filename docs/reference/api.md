@@ -1222,7 +1222,7 @@ SSE 事件：
 | 409    | `world_already_translated` | 这种语言已经没有缺的文字                           |
 | 409    | `world_deleting`           | 世界正在删除                                       |
 
-SSE 已打开后 HTTP 状态保持 200，失败使用既有 `{ type: "error", message }`。未知存储、provider 或含动态诊断的翻译验证错误在生产环境使用 `Internal server error`；开发态保留原诊断。锁超时消息为 `Session is busy, please retry`。固定的无翻译/非 JSON 业务提示及世界已删除或替换提示保留；内部原因记服务端日志。此错误消息投影不改变文件发布的事务性保证。
+SSE 已打开后 HTTP 状态保持 200，失败使用既有 `{ type: "error", message }`。未知存储或 provider 错误在生产环境使用 `Internal server error`；开发态保留原诊断。锁超时消息为 `Session is busy, please retry`。全部文本都被拒收时，`message` 是第一条被拒的原因（无翻译、回复不是 JSON、占位符被改动），世界已删除或替换的提示同样保留；内部原因记服务端日志。此错误消息投影不改变文件发布的事务性保证。
 
 #### `GET /api/worlds/:id/gallery`
 
@@ -2656,15 +2656,15 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 **错误码:**
 
-| 状态  | 触发条件                                                                         |
-| ----- | -------------------------------------------------------------------------------- |
-| `400` | JSON body/结构错误或 data schema 校验失败                                        |
-| `404` | session、suspension 不存在，或 runtime manifest 找不到                           |
-| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                              |
-| `500` | runtime 执行、提交或其他未知错误；生产正文为 `Internal server error`             |
-| `503` | 会话锁获取超时，`code: "session_busy"`，固定消息 `Session is busy, please retry` |
+| 状态  | 触发条件                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------ |
+| `400` | JSON body/结构错误或 data schema 校验失败                                                        |
+| `404` | session、suspension 不存在，或 runtime manifest 找不到                                           |
+| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                                              |
+| `500` | runtime 执行失败或提交失败（`error` 说明原因），或未知异常（生产正文为 `Internal server error`） |
+| `503` | 会话锁获取超时，`code: "session_busy"`，固定消息 `Session is busy, please retry`                 |
 
-失败响应只使用通用错误信封，不返回内部 runtime result 或提案诊断；成功响应仍为 `{ result, events }`。失败时释放本次已取得的 suspension claim（仍须满足同一会话 incarnation 的生命周期检查），以便重试；内部原因记录在服务端日志。
+失败响应只使用通用错误信封，不返回 runtime result；成功响应仍为 `{ result, events }`。runtime 自身执行失败时 `error` 为 `Resume failed: <原因>`，与回合事件流里 `runtime.failed` 给玩家的文字相同；提交失败时为 `Resume commit failed: <原因>. The suspension remains unresolved and can be retried.`。其余异常按标准分类器处理。失败时释放本次已取得的 suspension claim（仍须满足同一会话 incarnation 的生命周期检查），以便重试；内部原因记录在服务端日志。
 
 #### `GET /api/sessions/:id/suspensions`
 
@@ -3303,7 +3303,7 @@ data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; th
 
 只有带生成标记的世界可以修改：`metadata.generated === true`。生成器写出的世界包里有一个 `.covel-generated.json` 文件，世界记录据此带上这个标记；手写的或安装的世界包没有它，因为这类包里可能有立绘、额外的数据源和语言文件，整包重写会丢掉它们。
 
-世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，发布失败时恢复旧目录；若恢复也失败，旧包保留在 `.covel-replaced-*/package`，错误会报告恢复路径，不删除它）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
+世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，发布失败时恢复旧目录；若恢复也失败，旧包保留在 `.covel-replaced-*/package`，错误会报告恢复路径，不删除它）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。修订结果的清单只声明世界自己的语言：模型的回答或修订要求（例如“加一个英文版”）在清单里多写的语言版本会被收回，因为修订不写任何语言文件。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
 
 SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修订是一次模型请求，`parts` 里只有一个 `revision`。模型运行期间不持有世界操作锁；发布时在锁内复核原记录以及文件包身份。期间的编辑、删除或替换会使旧修订失败，既有编辑和新包保留，玩家重新加载后可再发起修订。
 

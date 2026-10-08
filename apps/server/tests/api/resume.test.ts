@@ -767,7 +767,13 @@ describe("Resume Routes", () => {
 
       const failed = await resume();
       expect(failed.status).toBe(500);
-      expect(await failed.json()).toEqual({ error: "Internal server error" });
+      // The runtime's failure is named, as a turn names it to the player;
+      // the runtime result itself is not returned.
+      const failure = (await failed.json()) as Record<string, unknown>;
+      expect(Object.keys(failure)).toEqual(["error"]);
+      expect(failure.error).toMatch(
+        /^Resume failed: .*synthetic provider failure/,
+      );
       expect(log.mock.calls.flat().join(" ")).toContain(
         "synthetic provider failure",
       );
@@ -934,7 +940,10 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(500);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body).toEqual({ error: "Internal server error" });
+      expect(Object.keys(body)).toEqual(["error"]);
+      expect(body.error).toMatch(
+        /^Resume commit failed: .*forced finalize failure.*can be retried\.$/,
+      );
       expect(log.mock.calls.flat().join(" ")).toContain(
         "forced finalize failure",
       );

@@ -139,7 +139,7 @@ describe("POST /api/worlds/:id/translate", () => {
     await rm(home, { recursive: true, force: true });
   });
 
-  it.each(["store", "model", "validation"])(
+  it.each(["store", "model"])(
     "redacts %s failures on the already-open SSE stream",
     async (seam) => {
       vi.stubEnv("NODE_ENV", "production");
@@ -148,25 +148,6 @@ describe("POST /api/worlds/:id/translate", () => {
       const marker = "INTERNAL_TRANSLATION_DIAGNOSTIC";
       if (seam === "store")
         vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(new Error(marker));
-      else if (seam === "validation")
-        vi.spyOn(llm, "generate").mockImplementation(async (request) => {
-          const content = String(request.messages[0]!.content);
-          const start = content.indexOf("Texts:\n");
-          const texts =
-            start < 0
-              ? {}
-              : JSON.parse(content.slice(start + "Texts:\n".length));
-          return {
-            content: JSON.stringify(
-              Object.fromEntries(
-                Object.keys(texts).map((id) => [id, `{${marker}}`]),
-              ),
-            ),
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 0, outputTokens: 0 },
-          };
-        });
       else
         vi.spyOn(llm, "generate").mockImplementation(async (request) => {
           // Glossary succeeds; provider failures reach the stream catch.
@@ -190,6 +171,33 @@ describe("POST /api/worlds/:id/translate", () => {
       expect(log.mock.calls.flat().join(" ")).toContain(marker);
     },
   );
+
+  it("says why every text was refused, also in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    await writeWorld(userWorlds, "refused-translation");
+    // Every translation adds a placeholder its source text does not have.
+    vi.spyOn(llm, "generate").mockImplementation(async (request) => {
+      const content = String(request.messages[0]!.content);
+      const start = content.indexOf("Texts:\n");
+      const texts =
+        start < 0 ? {} : JSON.parse(content.slice(start + "Texts:\n".length));
+      return {
+        content: JSON.stringify(
+          Object.fromEntries(Object.keys(texts).map((id) => [id, "{extra}"])),
+        ),
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      };
+    });
+    const events = await readSse(
+      await translate("refused-translation", { locale: "ja-JP" }),
+    );
+    const errors = events.filter((event) => event.type === "error");
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0]!.message)).toMatch(/^placeholders changed: /);
+    expect(events.some((event) => event.type === "done")).toBe(false);
+  });
 
   it.each(["production", "development"])(
     "keeps the known no-translation message in %s",
