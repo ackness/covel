@@ -94,6 +94,7 @@
         "tests/**",
         "vitest.config.ts",
         "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/docs/guide/**",
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",

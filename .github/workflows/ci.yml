@@ -6,11 +6,39 @@ name: CI
 # two runs of the same commit otherwise — the PR ref and the branch ref hash
 # to different concurrency groups, so neither cancels the other. The PR run
 # covers dev branches; this push trigger is the post-merge guard on main.
+#
+# A change that touches only documentation does not run this workflow: it
+# cannot alter what these jobs execute. docs.yml runs for it instead. The list
+# is scripts/lib/change-scope.mjs, which the pre-push hook uses too.
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "**/README.md"
+      - "**/README.*.md"
+      - "**/AGENTS.md"
+      - "**/CLAUDE.md"
+      - ".claude/skills/**"
+      - ".assets/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
   push:
     branches:
       - main
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "**/README.md"
+      - "**/README.*.md"
+      - "**/AGENTS.md"
+      - "**/CLAUDE.md"
+      - ".claude/skills/**"
+      - ".assets/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
   workflow_call:
     inputs:
       commit:
@@ -102,20 +130,13 @@ jobs:
       - name: Check
         run: pnpm check
 
-      # Web unit tests run in the parallel `web` job; they were this step's
-      # critical path.
+      # The web and server suites run in the parallel `web` and `server` jobs;
+      # each was this step's critical path in turn.
       - name: Test
         # Bound both workspace tasks and their worker pools on shared runners.
         env:
           VITEST_MAX_WORKERS: "2"
-        run: pnpm test --concurrency=2 --filter=!@covel/web
-
-      # The kernel's coverage must not fall under the floor in
-      # packages/runtime/vitest.config.ts.
-      - name: Runtime coverage floor
-        env:
-          VITEST_MAX_WORKERS: "2"
-        run: pnpm test:coverage:runtime
+        run: pnpm test --concurrency=2 --filter=!@covel/web --filter=!@covel/server
 
       # The release matrix builds desktop and its web/server dependencies.
       # Build outputs (the desktop staging tree is ~90 MB per entry) are read
@@ -179,6 +200,45 @@ jobs:
         env:
           VITEST_MAX_WORKERS: "4"
         run: pnpm test --filter=@covel/web
+
+  server:
+    name: Server tests, runtime coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The server suite is never replayed from the Turbo cache and is the
+      # longest in the workspace. Alone on a runner it gets every core.
+      - name: Test server
+        env:
+          VITEST_MAX_WORKERS: "4"
+        run: pnpm test --filter=@covel/server
+
+      # The kernel's coverage must not fall under the floor in
+      # packages/runtime/vitest.config.ts. It runs the runtime suite again, so
+      # it sits in this job, which finishes before `verify` does.
+      - name: Runtime coverage floor
+        env:
+          VITEST_MAX_WORKERS: "4"
+        run: pnpm test:coverage:runtime
 
   postgres:
     name: PostgreSQL integration

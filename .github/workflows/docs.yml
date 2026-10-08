@@ -1,0 +1,95 @@
+name: Docs
+
+# A change that touches only documentation skips ci.yml (see paths-ignore
+# there) and is checked here: the static gate, which holds the documentation
+# checks, and the tests that read documentation. A change that also touches
+# code runs both workflows. The list is scripts/lib/change-scope.mjs; Markdown
+# that a loader reads (PLUGIN.md, RUNTIME.md, WORLD.md, prompts) is not on it.
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "*.md"
+      - "**/README.md"
+      - "**/README.*.md"
+      - "**/AGENTS.md"
+      - "**/CLAUDE.md"
+      - ".claude/skills/**"
+      - ".assets/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "*.md"
+      - "**/README.md"
+      - "**/README.*.md"
+      - "**/AGENTS.md"
+      - "**/CLAUDE.md"
+      - ".claude/skills/**"
+      - ".assets/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  docs:
+    name: Static gate, documentation tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Keep the version in sync with mise.toml and ci.yml.
+      - name: Install actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint_1.7.12_linux_amd64.tar.gz"
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$archive"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Read the cache ci.yml's `verify` job saves, so the type check replays.
+      # Nothing is written back: this job must not replace that cache.
+      - name: Restore turbo cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
+      - name: Check
+        run: pnpm check
+
+      - name: Test documentation examples
+        run: pnpm test:docs

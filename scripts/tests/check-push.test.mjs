@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -31,11 +33,25 @@ function fixture(t) {
   git(repo, "config", "user.name", "Test User");
   git(repo, "config", "user.email", "test@example.invalid");
   writeFileSync(path.join(repo, ".gitignore"), "ignored.txt\n");
+  writeFileSync(
+    path.join(repo, "package.json"),
+    JSON.stringify({ scripts: { "test:docs": "run the documentation tests" } }),
+  );
 
   function commit(value) {
     writeFileSync(path.join(repo, "value.txt"), `${value}\n`);
-    git(repo, "add", ".gitignore", "value.txt");
+    git(repo, "add", ".gitignore", "package.json", "value.txt");
     git(repo, "commit", "--quiet", "-m", value);
+    return git(repo, "rev-parse", "HEAD");
+  }
+
+  function commitFiles(files, message) {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
+      writeFileSync(path.join(repo, file), content);
+    }
+    git(repo, "add", ...Object.keys(files));
+    git(repo, "commit", "--quiet", "-m", message);
     return git(repo, "rev-parse", "HEAD");
   }
 
@@ -59,6 +75,7 @@ fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({
   databaseUrl: process.env.DATABASE_URL,
   requirePg: process.env.COVEL_REQUIRE_PG_TESTS,
   gitDir: process.env.GIT_DIR,
+  turboCacheDir: process.env.TURBO_CACHE_DIR,
 }) + "\\n");
 if (process.env.FAIL_ON === process.argv.slice(2).join(" ")) process.exit(7);
 `,
@@ -74,6 +91,7 @@ if (process.env.FAIL_ON === process.argv.slice(2).join(" ")) process.exit(7);
   return {
     repo,
     commit,
+    commitFiles,
     run(args = [], input = "", options = {}) {
       const env = {
         ...process.env,
@@ -107,6 +125,12 @@ const expectedCommands = [
   ["e2e", "--list"],
 ];
 
+const docsCommands = [
+  ["install", "--frozen-lockfile"],
+  ["check"],
+  ["test:docs"],
+];
+
 test("manual check validates committed HEAD in a clean temporary checkout", (t) => {
   const probe = fixture(t);
   probe.commit("committed");
@@ -134,6 +158,11 @@ test("manual check validates committed HEAD in a clean temporary checkout", (t) 
     assert.equal(call.databaseUrl, undefined);
     assert.equal(call.requirePg, undefined);
     assert.equal(call.gitDir, undefined);
+    // Task results come from the cache the repository's worktrees share.
+    assert.equal(
+      call.turboCacheDir,
+      path.join(realpathSync(probe.repo), ".turbo", "cache"),
+    );
     assert.equal(
       existsSync(call.cwd),
       false,
@@ -229,6 +258,108 @@ test("pre-push dereferences annotated tags", (t) => {
   assert.deepEqual(
     probe.calls().map(({ value }) => value),
     Array(4).fill("tagged"),
+  );
+});
+
+test("a push that adds only documentation skips the test suites that cannot change", (t) => {
+  const probe = fixture(t);
+  const code = probe.commit("code");
+  const docs = probe.commitFiles(
+    {
+      "docs/guide/page.md": "text\n",
+      "README.md": "text\n",
+      "plugins/a/README.md": "text\n",
+      ".claude/skills/a/SKILL.md": "text\n",
+    },
+    "docs",
+  );
+  const result = probe.run(
+    ["--pre-push", "origin", "url"],
+    `refs/heads/topic ${docs} refs/heads/topic ${code}\n`,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    docsCommands,
+  );
+});
+
+test("a push that adds documentation and code runs every check", (t) => {
+  const probe = fixture(t);
+  const base = probe.commit("base");
+  probe.commitFiles({ "docs/guide/page.md": "text\n" }, "docs");
+  // Markdown that a loader reads is source.
+  const mixed = probe.commitFiles(
+    { "plugins/a/PLUGIN.md": "---\nid: a\n---\n" },
+    "manifest",
+  );
+  const result = probe.run(
+    ["--pre-push", "origin", "url"],
+    `refs/heads/topic ${mixed} refs/heads/topic ${base}\n`,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    expectedCommands,
+  );
+});
+
+test("a new branch is measured from the remote's main branch", (t) => {
+  const probe = fixture(t);
+  const main = probe.commit("main");
+  const docs = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+  const zeros = "0".repeat(docs.length);
+  const input = `refs/heads/topic ${docs} refs/heads/topic ${zeros}\n`;
+
+  // Without the remote's main branch there is nothing to measure from.
+  const unknown = probe.run(["--pre-push", "origin", "url"], input);
+  assert.equal(unknown.status, 0, unknown.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    expectedCommands,
+  );
+
+  git(probe.repo, "update-ref", "refs/remotes/origin/main", main);
+  const known = probe.run(["--pre-push", "origin", "url"], input);
+  assert.equal(known.status, 0, known.stderr);
+  assert.deepEqual(
+    probe
+      .calls()
+      .slice(expectedCommands.length)
+      .map(({ args }) => args),
+    docsCommands,
+  );
+});
+
+test("a commit that adds code to one of its refs runs every check", (t) => {
+  const probe = fixture(t);
+  const base = probe.commit("base");
+  const code = probe.commit("code");
+  const docs = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+  const result = probe.run(
+    ["--pre-push", "origin", "url"],
+    `refs/heads/one ${docs} refs/heads/one ${code}\nrefs/heads/two ${docs} refs/heads/two ${base}\n`,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    expectedCommands,
+  );
+});
+
+test("a pushed commit from before the documentation tests existed runs every check", (t) => {
+  const probe = fixture(t);
+  probe.commit("code");
+  const old = probe.commitFiles({ "package.json": "{}" }, "no test:docs");
+  const docs = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+  const result = probe.run(
+    ["--pre-push", "origin", "url"],
+    `refs/heads/topic ${docs} refs/heads/topic ${old}\n`,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    expectedCommands,
   );
 });
 
