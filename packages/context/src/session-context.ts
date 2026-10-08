@@ -248,6 +248,9 @@ function compileLorebookContributions(
     });
 }
 
+const LATIN_WORD_EDGE =
+  "(?:[^\\p{L}\\p{N}_]|[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}])";
+
 function isLorebookEntryActive(
   record: LorebookEntryRecord,
   playerMessage: string,
@@ -277,8 +280,10 @@ function isLorebookEntryActive(
     // The word may carry a plural or possessive ending: an author who writes
     // `lantern` means `lanterns` and `lantern's` too.
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Chinese, Japanese and Korean text puts no space around a Latin name, so
+    // a character of those scripts ends a word too.
     return new RegExp(
-      `(?:^|[^\\p{L}\\p{N}_])${escaped}(?:e?s|['’]s)?(?=$|[^\\p{L}\\p{N}_])`,
+      `(?:^|${LATIN_WORD_EDGE})${escaped}(?:e?s|['’]s)?(?=$|${LATIN_WORD_EDGE})`,
       "u",
     ).test(haystack);
   });

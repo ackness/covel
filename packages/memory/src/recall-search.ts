@@ -64,11 +64,12 @@ export function createKeywordRecallSearcher(
 
         // Count how many query terms appear in the message
         const msgTermSet = new Set(msgTerms);
+        const lowerContent = content.toLowerCase();
         let matchCount = 0;
         for (const qt of queryTerms) {
           if (msgTermSet.has(qt)) matchCount++;
           // Also check substring match for CJK (Chinese characters don't split on spaces)
-          else if (content.includes(qt)) matchCount += 0.5;
+          else if (lowerContent.includes(qt)) matchCount += 0.5;
         }
 
         if (matchCount === 0) continue;

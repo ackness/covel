@@ -523,6 +523,8 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
     { message: "She lit the Lantern.", found: true },
     { message: "A lanternfish swims past.", found: false },
     { message: "The unlantern is dark.", found: false },
+    { message: "我把lantern挂在门口。", found: true },
+    { message: "ランタンlanternを灯す", found: true },
   ])(
     "matches a Latin key with its plural and possessive forms: $message",
     async ({ message, found }) => {
