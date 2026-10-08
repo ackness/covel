@@ -16,9 +16,10 @@ for (const width of [1280, 390]) {
       runtimeId: string,
       seq: number,
       reasoningContent?: string,
+      turnId = sourceTurnId,
     ): SnapshotTraceEvent => ({
       type,
-      turnId: sourceTurnId,
+      turnId,
       timestamp: "2026-01-01T00:00:02Z",
       payload: {
         runtimeId,
@@ -37,16 +38,56 @@ for (const width of [1280, 390]) {
         trace("llm.responded", "narrator/main", 1, thought),
         trace("llm.responded", "narrator/main", 1, thought),
         trace("runtime.completed", "narrator/main", 2),
-        trace("gateway.responded", "codex/extract", 3, pluginThought),
-        trace("runtime.completed", "codex/extract", 4),
+        trace(
+          "gateway.responded",
+          "codex/extract",
+          3,
+          pluginThought,
+          "background-turn",
+        ),
       ],
     });
     try {
+      await page.route(
+        `**/api/sessions/${fixture.id}/plugin-data/codex`,
+        async (route) => {
+          const response = await route.fetch();
+          const data = await response.json();
+          await route.fulfill({
+            response,
+            json: {
+              ...data,
+              items: [
+                ...data.items,
+                {
+                  namespace: "_runtime_jobs",
+                  key: "background-job",
+                  updatedAt: "2026-01-01T00:00:03Z",
+                  value: {
+                    runtimeId: "codex/extract",
+                    pluginId: "codex",
+                    status: "succeeded",
+                    origin: { sourceTurnId },
+                    backgroundTurnId: "background-turn",
+                  },
+                },
+              ],
+            },
+          });
+        },
+      );
       await page.goto(`/session?sid=${fixture.id}`);
       const disclosure = page.getByTestId("reasoning-disclosure");
       await expect(disclosure).toHaveCount(1);
       await expect(disclosure).not.toHaveAttribute("open");
       await expect(disclosure.locator("summary")).toContainText("思考内容 · 2");
+      await expect(page.locator('[data-row-kind="execution"]')).toHaveCount(1);
+      await expect(
+        page.locator('[data-turn-id="background-turn"]'),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText("本轮失败，未提交", { exact: true }),
+      ).toHaveCount(0);
       await expect(page.locator(".ui-narrative")).toContainText(recoveredStory);
       await expect(page.locator(".ui-narrative")).not.toContainText(thought);
       await disclosure.locator("summary").click();
@@ -67,6 +108,10 @@ for (const width of [1280, 390]) {
       await page.reload();
       await expect(disclosure).not.toHaveAttribute("open");
       await expect(disclosure.locator("summary")).toContainText("思考内容 · 2");
+      await expect(page.locator('[data-row-kind="execution"]')).toHaveCount(1);
+      await expect(
+        page.locator('[data-turn-id="background-turn"]'),
+      ).toHaveCount(0);
       await page.getByRole("button", { name: "舞台视图", exact: true }).click();
       await page.getByRole("button", { name: "履历", exact: true }).click();
       const history = page.getByRole("dialog", { name: "对话履历" });

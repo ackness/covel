@@ -213,6 +213,10 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
       typeof raw.turnStartedAt === "string" ? raw.turnStartedAt : undefined,
     startedAt: raw.startedAt as string | undefined,
     jobId: raw.jobId as string | undefined,
+    backgroundTurnId:
+      typeof raw.backgroundTurnId === "string"
+        ? raw.backgroundTurnId
+        : undefined,
     detached: raw.detached === true,
     jobState: raw.jobState as string | undefined,
     durableJobStatus,

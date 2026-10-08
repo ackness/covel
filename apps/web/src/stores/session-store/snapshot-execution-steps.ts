@@ -2,6 +2,7 @@ import { appendReasoningStep, reasoningAction } from "./reasoning.js";
 import type { SessionExecutionStatus, SnapshotTraceEvent } from "@covel/shared";
 import {
   mergeExecutionStep,
+  foldBackgroundExecutionSteps,
   toExecutionStepStatus,
 } from "./execution-steps.js";
 import {
@@ -138,27 +139,29 @@ export function reconcileExecutionSteps(
         : {}),
     });
   }
-  return reconcileExecutionAttempts([...steps.values()], events, execution).map(
-    (step) => {
-      if (
-        !execution ||
-        step.detached ||
-        !["running", "llm", "tool"].includes(step.status)
-      )
-        return step;
-      if (
-        execution.state === "running" &&
-        (!execution.turnId || step.turnId === execution.turnId)
-      )
-        return step;
-      return {
-        ...step,
-        status: "failed",
-        detail:
-          step.sourceTurnId && step.attemptStatus === "committed"
-            ? "__i18n:session.reasonRetryNotCompleted__"
-            : "__i18n:session.reasonInterrupted__",
-      };
-    },
-  );
+  return reconcileExecutionAttempts(
+    foldBackgroundExecutionSteps([...steps.values()]),
+    events,
+    execution,
+  ).map((step) => {
+    if (
+      !execution ||
+      step.detached ||
+      !["running", "llm", "tool"].includes(step.status)
+    )
+      return step;
+    if (
+      execution.state === "running" &&
+      (!execution.turnId || step.turnId === execution.turnId)
+    )
+      return step;
+    return {
+      ...step,
+      status: "failed",
+      detail:
+        step.sourceTurnId && step.attemptStatus === "committed"
+          ? "__i18n:session.reasonRetryNotCompleted__"
+          : "__i18n:session.reasonInterrupted__",
+    };
+  });
 }

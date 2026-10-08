@@ -1068,6 +1068,8 @@ execute: async (params) => ({
 
 **`narrativeTemplate` 由插件作者编写**，决定了交互结果如何翻译为叙事文本。框架只负责替换占位符。提交后**只有填充后的叙事文本会作为玩家消息追加到对话历史**，框架不再生成任何合成的 assistant-role 镜像消息。
 
+When a placeholder is immediately followed by `.` or `。` and its filled value already ends with that same character, the rendered narrative omits the template's duplicate full stop. Stored form values and punctuation inside the value remain unchanged, including ellipses.
+
 ### 提交 API
 
 ```

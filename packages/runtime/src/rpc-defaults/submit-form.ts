@@ -429,10 +429,18 @@ function fillTemplate(
   if (!template) return fallbackNarrative(sub, labels, located.interaction);
 
   const replacements = buildReplacements(sub, labels);
-  return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, key: string) => {
-    const value = replacements[key.trim()];
-    return value !== undefined && value !== null ? String(value) : "";
-  });
+  return template.replace(
+    /\{\{\s*([^}]+?)\s*\}\}([。.]?)/g,
+    (_match, key: string, fullStop: string) => {
+      const value = replacements[key.trim()];
+      const rendered =
+        value !== undefined && value !== null ? String(value) : "";
+      // Preserve the submitted text; omit only a duplicate template full stop.
+      return fullStop && rendered.endsWith(fullStop)
+        ? rendered
+        : rendered + fullStop;
+    },
+  );
 }
 
 export class RpcValidationError extends Error {
