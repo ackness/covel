@@ -20,6 +20,15 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- **A suspension can be resumed again after the server stopped in the middle of resuming it.** The claim a resume takes was never released when the process ended first, so every later resume answered 409 and the player could only abandon it. The claim is now released at the next server start (SQLite) or after one hour (PostgreSQL). `DataStore` gains `releaseStaleSuspensionClaims`.
+- **A settled tabletop check reaches the narrative without row IDs.** The check text the narrators read carried the form submission ID and the turn ID of the stored receipt. It now carries the check only: action, attribute, modifier, die, difficulty, total and outcome.
+- **A media download drops a redirect's body unread.** `ctx.media.ingestUrl` read the whole body of each 3xx response, which `maxBytes` did not limit.
+- **The model database refresh times out while the body downloads.** The 30-second limit ended when the response headers arrived, so a stalled body kept the refresh running.
+- **A detached runtime's proposal is checked again after a `PreStateCommit` hook replaces its payload.** The declared-effects check ran only before the hook, so a hook could move the write to a namespace the runtime did not declare.
+- **Operator Access says when the browser refused to save or clear the token.** The pane showed the change as done and reloaded the app.
+- **The dice-check roller resolves a translated attribute name like the rest of the app.** An attribute name with no entry for the session locale fell back to the first entry instead of the same language or English.
+- **`pregame` reads the world through `ctx.world`.** It called a store method that only bundled plugins receive.
+- **World text.** Emberback's Chinese opening no longer has an untranslated word with a wrong gloss; Chihiro Onodera's English character card uses "she" throughout.
 - **A concealed runtime's output is no longer readable through the runtime-outputs endpoints.** `GET /api/sessions/:id/runtime-outputs` and `/runtime-outputs/:outputId` returned the stored row of a runtime that declares `io.concealed`, with its output text and tool arguments and results, while `/turns`, traces and the live stream hid them. Both endpoints now return such a row with empty `results` and with `input` / `output` of each tool call set to `null`.
 - **The plugin-data `_index` endpoint no longer lists hidden world data.** It returned the namespace names and keys of `_hidden.*` data and of kernel bookkeeping, which every other plugin-data read leaves out.
 - **Desktop: a plain-HTTP link to a host whose name starts with `127.` asks for confirmation.** `http://127.0.0.1.example.com/` was treated as a loopback address and opened in the system browser without the plain-HTTP dialog. Only `127.0.0.1`, `localhost` and `[::1]` open directly now.
