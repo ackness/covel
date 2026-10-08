@@ -61,6 +61,8 @@ export interface StageViewProps {
   readonly world: WorldRecord | null;
   readonly messages: StreamMessage[];
   readonly executing: boolean;
+  /** The session is being restored: a story that arrives now is history. */
+  readonly restoring?: boolean;
   readonly executionError: string | null;
   readonly executionSteps: ExecutionStep[];
   readonly plugins: PluginSummary[];
@@ -111,6 +113,7 @@ export function StageView(props: StageViewProps): ReactElement {
     world,
     messages,
     executing,
+    restoring = false,
     sessionPlugins,
     submittedBlockIds,
     submittedBlockValues,
@@ -184,10 +187,20 @@ export function StageView(props: StageViewProps): ReactElement {
   // A story already present when Stage mounts has been read in another view or
   // before a restore. Mark it read instead of replaying old text from scratch.
   // New story keys naturally fall back to the narrative dialog until it calls
-  // `onAllRead`; no reset effect (and no first-render race) is required.
+  // `onAllRead`.
   const [readStoryKey, setReadStoryKey] = useState<string | undefined>(() =>
     initialStageReadStoryKey(storyMsg),
   );
+  // Stage can also mount before a restore delivers the history. The first
+  // story it then receives has been read as well, unless a turn running in
+  // this view is writing it. A restore counts as executing until it has
+  // checked the session's execution, so `restoring` tells the two apart.
+  const [awaitingHistory, setAwaitingHistory] = useState(!storyMsg);
+  if (awaitingHistory && storyMsg) {
+    setAwaitingHistory(false);
+    if (!executing || restoring)
+      setReadStoryKey(initialStageReadStoryKey(storyMsg));
+  }
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(
     () => new Set(),

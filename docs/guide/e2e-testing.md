@@ -52,10 +52,23 @@ LIVE_LLM_ENABLED=1 pnpm e2e
 ```
 
 `pnpm e2e` 使用 Playwright。未设置 `E2E_BASE_URL` 时，Playwright 会启动一套隔离的
-测试服务：Vite 使用 `http://127.0.0.1:5181`，runtime server 使用
-`http://127.0.0.1:3101`，并强制使用临时 MemoryStore。测试不会复用 `pnpm dev` 的
-5173/3001 进程，结束后会回收两棵进程树，因此旧 Vite 缓存和本地 SQLite 数据都不会
-污染结果。`/api/*` 由测试 Vite 代理到 3101。
+测试服务：runtime server 使用 `http://127.0.0.1:3101`，并强制使用临时 MemoryStore；
+前端有两份，打包后的页面（`apps/web/scripts/e2e-serve.mjs` 先构建到 `dist/web-e2e`
+再用 `vite preview` 提供）在 `http://127.0.0.1:5183`，Vite 开发服务器在
+`http://127.0.0.1:5181`。两份都把 `/api/*` 代理到 3101。测试不会复用 `pnpm dev` 的
+5173/3001 进程，结束后会回收三棵进程树，因此旧 Vite 缓存和本地 SQLite 数据都不会
+污染结果。每次运行都会重新构建，前端改动直接生效，不需要手动构建。
+
+spec 分在两个 project：
+
+| project        | 前端                    | 哪些 spec                                                                       |
+| -------------- | ----------------------- | ------------------------------------------------------------------------------- |
+| `chromium`     | 打包后的页面（5183）    | 其余全部                                                                        |
+| `chromium-dev` | Vite 开发服务器（5181） | 在页面里加载应用源码模块的 spec（`import("/src/...")`），配置按文件内容自动归类 |
+
+打包后的页面是玩家实际运行的版本，加载也快得多：开发服务器要为每个新的浏览器上下文
+单独提供几百个模块，又只有一个进程，worker 再多也会排队等它。同一台机器上，整套从
+6 分钟左右降到 4 分半左右；worker 越多，差距越大。
 
 默认测试服务使用独立的临时 `COVEL_HOME`、用户世界和插件目录，进程结束后清理，避免读取或改写玩家的 `~/.covel`。显式设置 `E2E_BASE_URL` 时仍由调用方管理服务和数据目录。
 
@@ -66,10 +79,12 @@ pnpm dev
 E2E_BASE_URL=http://localhost:5173 pnpm e2e
 ```
 
-显式设置 `E2E_BASE_URL` 后，Playwright 不再启动或回收任何服务。运行完整套件时，目标
-server 必须使用 `STORE_BACKEND=memory`；只有不含 browser-checkpoint 用例的子集才可以
-指向 SQLite/PostgreSQL。跑 **served-static 构建**（设了 `SERVE_STATIC` 的生产 / Docker
-栈，SPA 由 server 自己托管）时，base URL 可以直接指向 server。
+显式设置 `E2E_BASE_URL` 后，Playwright 不再启动或回收任何服务，两个 project 都打开
+这个地址。运行完整套件时，目标 server 必须使用 `STORE_BACKEND=memory`；只有不含
+browser-checkpoint 用例的子集才可以指向 SQLite/PostgreSQL。跑 **served-static 构建**
+（设了 `SERVE_STATIC` 的生产 / Docker 栈，SPA 由 server 自己托管）时，base URL 可以直接
+指向 server，但这时 `chromium-dev` 的 spec 加载不到源码模块，用 `--project=chromium`
+只跑另一组。
 
 需要交互式调试时使用：
 
@@ -79,12 +94,15 @@ pnpm e2e:ui
 
 `pnpm e2e:ui` 会打开 Playwright UI；也可以用
 `pnpm exec playwright test --debug tests/e2e/game-session.spec.ts` 逐步跑单个
-spec。Playwright 只配置了 `chromium` project。
+spec。只跑一个 project 时用 `--project=chromium` 或 `--project=chromium-dev`。
 
 ## 编写 spec：共享辅助函数
 
 `tests/e2e/helpers/player.ts` 提供会话类 spec 的公共动作与断言，新 spec 应直接复用，
 不要再各自复制一份。
+
+新 spec 默认在打包后的页面上跑。只有确实要在页面里调用应用内部模块时才写
+`import("/src/...")`：这个 spec 会自动归到 `chromium-dev`，在开发服务器上跑，慢得多。
 
 | 辅助函数                     | 用途                                                          |
 | ---------------------------- | ------------------------------------------------------------- |
@@ -156,6 +174,15 @@ npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
 
 详细参数和输出格式见 [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)。
 
+`tests/llm-replay/` 下录好的脚本会话不调用模型，几秒跑完一局，换机器也不需要密钥：
+
+```bash
+pnpm e2e:replay
+```
+
+改了世界、插件、提示词或模型之后用 `--record --upstream <origin>` 重录，见
+[录制与回放](./e2e-plugin-verify.md#录制与回放)。
+
 ## 环境变量
 
 | 变量                    | 默认值                  | 说明                                                      |
@@ -195,8 +222,8 @@ pnpm docker:down
 
 ## 失败排查
 
-- **端口已占用或页面打不开**：默认测试 Vite 是 `5181`、API 是 `3101`，且启用
-  `strictPort`，不会静默漂移到错误服务。停止占用端口的进程后重试；若要使用自己启动的
+- **端口已占用或页面打不开**：默认测试 Vite 是 `5181`、打包后的页面是 `5183`、API
+  是 `3101`，且启用 `strictPort`，不会静默漂移到错误服务。停止占用端口的进程后重试；若要使用自己启动的
   SPA，设置 `E2E_BASE_URL`，并自行保证后端类型符合目标 spec。
 - **API health 等待超时**：默认运行检查 `http://127.0.0.1:3101/api/health`；外部环境则
   检查其实际 runtime 地址。PostgreSQL 流程先运行 `pnpm db:up` 和 `pnpm dev:pg`，再以

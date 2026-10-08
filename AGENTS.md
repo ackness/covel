@@ -98,6 +98,9 @@ pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e f
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
 pnpm e2e:verify       # API-driven real-LLM plugin harness against a running server (its keys come from .env.llm
                       # or the environment); uses the configured models, --slot overrides the story slot
+pnpm e2e:replay       # replay the scripted sessions recorded under tests/llm-replay/ without a model, each on a
+                      # test server of its own; --record --upstream <origin> [session] records them again after
+                      # a world, plugin, prompt or model change (docs/guide/e2e-plugin-verify.md)
 pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, for repeating a scripted
                       # session without model calls: pnpm llm:replay --mode record --upstream <origin>
                       # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff
@@ -235,7 +238,8 @@ bundled `worlds/` and `plugins/`.
   `@covel/plugin-<name>` with `pnpm lint` / `pnpm test`).
   `packages/test-runtime/src/scaffold.test.ts` generates and runs every mode.
 - `tests/e2e/` — Playwright specs; `tests/third-party/` — installable probe
-  plugins used as community-package fixtures.
+  plugins used as community-package fixtures; `tests/llm-replay/` — scripted
+  sessions with their recorded model answers, played by `pnpm e2e:replay`.
 - `scripts/` — dev, check, and release tooling. `scripts/tests/*.test.mjs` run
   under `node --test` through `pnpm check`.
 
@@ -570,7 +574,9 @@ arguments, and outputs stripped from traces and the live stream.
 
 - Vitest runs every package, the server, and web (`*.test.ts` / `*.test.tsx`);
   `apps/desktop` and `scripts/tests/` use `node --test`; Playwright specs are
-  `*.spec.ts` under `tests/e2e/`. Add focused regression tests for features and
+  `*.spec.ts` under `tests/e2e/`. They run against a production build of the
+  web app; a spec that imports the app's modules in the page (`import("/src/...")`)
+  runs on the Vite dev server instead (`chromium-dev`), which is much slower. Add focused regression tests for features and
   fixes. CI enforces a coverage floor for `@covel/runtime` only
   (`pnpm test:coverage:runtime`); the ≥80% goal for the other packages
   (`pnpm test:coverage`) is not enforced.

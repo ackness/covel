@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "pnpm generate:routes && tsc -b && node ./scripts/build.mjs",
     "preview": "vite preview",
+    "e2e:serve": "node ./scripts/e2e-serve.mjs",
     "generate:routes": "tsr generate",
     "lint": "tsc --noEmit && node ./scripts/check-tailwind-canonical.mjs",
     "lint:tailwind": "node ./scripts/check-tailwind-canonical.mjs",
