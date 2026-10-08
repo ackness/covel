@@ -100,7 +100,9 @@ export function PowerSystemTab({
           >
             {POWER_TYPES.map((pt) => (
               <option key={pt} value={pt}>
-                {t(`world.powerType${pt[0].toUpperCase()}${pt.slice(1)}`)}
+                {t(
+                  `world.powerType${pt.charAt(0).toUpperCase()}${pt.slice(1)}`,
+                )}
               </option>
             ))}
           </select>

@@ -9,7 +9,7 @@
  * error → rollback (auto-restore).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { Proposal } from "@covel/shared";
 import {
   createCommitPipeline,

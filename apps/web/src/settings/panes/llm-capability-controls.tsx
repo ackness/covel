@@ -87,13 +87,15 @@ export function CapabilityTags({
   capability: ModelCapabilityInfo;
 }) {
   const { t } = useTranslation();
+  const labelFor = (key: string, fallback: string) => {
+    const labelKey = MODALITY_LABEL_KEYS[key];
+    return labelKey ? t(labelKey) : fallback;
+  };
   const inputTags = cap.input
     .filter((m) => m !== "text")
     .map((m) => ({
       key: `in:${m}`,
-      label: MODALITY_LABEL_KEYS[`in:${m}`]
-        ? t(MODALITY_LABEL_KEYS[`in:${m}`])
-        : m,
+      label: labelFor(`in:${m}`, m),
       color: MODALITY_COLORS[`in:${m}`],
     }))
     .filter((tag) => tag.color);
@@ -101,9 +103,7 @@ export function CapabilityTags({
     .filter((m) => m !== "text")
     .map((m) => ({
       key: `out:${m}`,
-      label: MODALITY_LABEL_KEYS[`out:${m}`]
-        ? t(MODALITY_LABEL_KEYS[`out:${m}`])
-        : m,
+      label: labelFor(`out:${m}`, m),
       color: MODALITY_COLORS[`out:${m}`],
     }))
     .filter((tag) => tag.color);

@@ -1,8 +1,4 @@
-import {
-  getToolContent,
-  getPendingProposals,
-  shortIdBatch,
-} from "@covel/plugin-handlers-utils";
+import { getToolContent, shortIdBatch } from "@covel/plugin-handlers-utils";
 import {
   bindToolStore,
   createPluginTestStore,

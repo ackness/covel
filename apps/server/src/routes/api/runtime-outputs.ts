@@ -107,7 +107,7 @@ runtimeOutputRoutes.get(
     const targetTurnId = record.turnId;
     let cutoffIndex = -1;
     for (let i = turnMessages.length - 1; i >= 0; i--) {
-      if (turnMessages[i].turnId === targetTurnId) {
+      if (turnMessages[i]!.turnId === targetTurnId) {
         cutoffIndex = i;
         break;
       }

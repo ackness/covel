@@ -262,10 +262,9 @@ export class HookPipeline {
       handlers.map((reg) => this.invokeHandler(event, ctx, payload, reg, opts)),
     );
 
-    for (let i = 0; i < settled.length; i++) {
-      const item = settled[i];
+    for (const [i, item] of settled.entries()) {
       if (item.status === "rejected") {
-        const reg = handlers[i];
+        const reg = handlers[i]!;
         const reason =
           item.reason instanceof Error
             ? item.reason.message

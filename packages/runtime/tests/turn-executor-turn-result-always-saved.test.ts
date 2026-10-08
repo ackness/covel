@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";

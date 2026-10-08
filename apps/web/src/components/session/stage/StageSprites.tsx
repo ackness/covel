@@ -86,8 +86,8 @@ export function StageSprites({
           data-phase={slot.exiting ? "exit" : "present"}
           aria-hidden={slot.exiting || undefined}
           style={{
-            left: `${lanes[index].leftPct}%`,
-            width: `${lanes[index].widthPct}%`,
+            left: `${lanes[index]!.leftPct}%`,
+            width: `${lanes[index]!.widthPct}%`,
             zIndex: slot.active ? 2 : 1,
           }}
         >

@@ -427,7 +427,7 @@ async function startServer(
     await waitForServerProcess(child, port, (elapsed) => {
       if (quitting || manualStop)
         throw new Error("Application is shutting down");
-      let currentLabel = PROGRESS_STEPS[0].label;
+      let currentLabel = PROGRESS_STEPS[0]!.label;
       for (const step of PROGRESS_STEPS) {
         if (elapsed >= step.threshold) currentLabel = step.label;
       }

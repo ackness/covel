@@ -25,11 +25,13 @@
 ## Verification / 验证方式
 
 <!-- Tick what actually ran and note what was skipped and why. The pre-push hook covers
-     `pnpm check`, `pnpm test`, and `pnpm e2e --list` in a clean checkout.
+     `pnpm check`, `pnpm test`, and `pnpm e2e --list` in a clean checkout
+     (for a documentation-only push: `pnpm check` and `pnpm test:docs`).
      只勾选真正跑过的项，没跑的写明原因。pre-push hook 会在干净检出里跑
-     `pnpm check`、`pnpm test` 和 `pnpm e2e --list`。 -->
+     `pnpm check`、`pnpm test` 和 `pnpm e2e --list`
+     （只改文档的推送：`pnpm check` 和 `pnpm test:docs`）。 -->
 
-- [ ] `pnpm check` <!-- static gate: types, package boundaries, deps, manifests, i18n, workflows -->
+- [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, workflows -->
 - [ ] `pnpm test`
 - [ ] `pnpm test:pg` <!-- store or database changes / 改动存储或数据库时 -->
 - [ ] `pnpm e2e:smoke` / `pnpm e2e` <!-- UI or end-to-end flow changes / 改动界面或端到端流程时 -->

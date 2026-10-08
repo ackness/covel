@@ -22,7 +22,7 @@ const draftClick = {
 };
 
 function renderChoice(props: Record<string, unknown>, emit = vi.fn()) {
-  const Choice = covelRegistry.Choice;
+  const Choice = covelRegistry.Choice!;
   render(
     <JSONUIProvider registry={covelRegistry}>
       <Choice

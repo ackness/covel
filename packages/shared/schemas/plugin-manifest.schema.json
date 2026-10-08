@@ -23,7 +23,7 @@
     "covel": {
       "type": "string",
       "maxLength": 200,
-      "description": "Host version range this package supports. The installer enforces it.",
+      "description": "Host version range this package supports. A host outside it does not install or load the package.",
       "examples": [">=0.0.45"]
     },
     "displayName": {

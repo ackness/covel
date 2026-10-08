@@ -3,7 +3,7 @@
  * events are emitted to the EventBus when one is provided.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type { PluginType, SubscriptionEvent } from "@covel/shared";
 import type { PluginRegistryEntry, PluginSummary } from "../src/types.js";
 import { createPluginRegistry, type PluginRegistry } from "../src/registry.js";

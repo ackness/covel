@@ -102,7 +102,7 @@ export function resolveProviderOptions(
     if (!Object.hasOwn(options, namespace)) continue;
     const value = options[namespace];
     const parsed = settingsSchema.safeParse(value);
-    if (!parsed.success) throw invalidOptions(provider);
+    if (!parsed.success || value === undefined) throw invalidOptions(provider);
     const settings = parsed.data;
     for (const key of Object.keys(value)) {
       if (!Object.hasOwn(settingsSchema.shape, key)) {

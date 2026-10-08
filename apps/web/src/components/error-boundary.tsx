@@ -40,13 +40,13 @@ abstract class BaseBoundary extends React.Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { hasError: false, error: undefined };
+  override state: ErrorBoundaryState = { hasError: false, error: undefined };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+  override componentDidCatch(error: Error, info: React.ErrorInfo): void {
     // eslint-disable-next-line no-console
     console.error("[ErrorBoundary]", error, info.componentStack);
   }
@@ -87,7 +87,7 @@ abstract class BaseBoundary extends React.Component<
  * change would re-throw in a loop for a persistently bad spec.
  */
 export class PluginSurfaceBoundary extends BaseBoundary {
-  render() {
+  override render() {
     if (!this.state.hasError) return this.props.children;
     const label = this.props.surfaceLabel;
     return (
@@ -126,7 +126,7 @@ export class PluginSurfaceBoundary extends BaseBoundary {
  * from whiting out the entire app.
  */
 export class AppErrorBoundary extends BaseBoundary {
-  render() {
+  override render() {
     if (this.state.hasError) {
       const err = this.state.error;
       return (

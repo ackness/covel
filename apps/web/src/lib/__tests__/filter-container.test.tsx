@@ -251,7 +251,7 @@ const ITEM_PROP_MAP = {
 };
 
 function renderFilterContainer(overrides: Record<string, unknown> = {}) {
-  const FilterContainer = covelRegistry.FilterContainer;
+  const FilterContainer = covelRegistry.FilterContainer!;
   return render(
     <JSONUIProvider registry={covelRegistry}>
       <FilterContainer
@@ -449,7 +449,7 @@ describe("FilterContainer component", () => {
 
 describe("Tabs standalone", () => {
   it("renders tabs and reflects the active value", () => {
-    const Tabs = covelRegistry.Tabs;
+    const Tabs = covelRegistry.Tabs!;
     render(
       <JSONUIProvider registry={covelRegistry}>
         <Tabs

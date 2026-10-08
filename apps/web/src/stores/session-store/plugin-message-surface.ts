@@ -79,7 +79,7 @@ export function applyPluginMessageSurface(
     if (existingIdx >= 0) {
       const next = [...messages];
       next[existingIdx] = {
-        ...next[existingIdx],
+        ...next[existingIdx]!,
         block,
         timestamp,
       };
@@ -100,7 +100,7 @@ export function applyPluginMessageSurface(
 
     let anchorIndex = -1;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const m = messages[i];
+      const m = messages[i]!;
       if (
         m.turnId === turnId &&
         (m.kind === "story" || m.kind === "plugin-message")

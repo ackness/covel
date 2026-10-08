@@ -199,11 +199,8 @@ export function createWorldFileWatcher(
             if (!filename) return;
 
             // The first segment locates the package, not its logical world id.
-            const segments = filename.split(path.sep);
-            if (segments.length < 1) return;
-
-            const directoryName = segments[0];
-            if (directoryName.startsWith(".")) return;
+            const directoryName = filename.split(path.sep)[0];
+            if (!directoryName || directoryName.startsWith(".")) return;
             // Ignore dotfiles and non-yaml/md files
             const ext = path.extname(filename).toLowerCase();
             if (ext !== ".yaml" && ext !== ".yml" && ext !== ".md") return;

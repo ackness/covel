@@ -41,6 +41,7 @@ export function GeographyTab({ dimensions, onChange, t, problems }: TabProps) {
 
   function addLandmark(regionIndex: number) {
     const region = geo.regions[regionIndex];
+    if (!region) return;
     const landmarks: WorldLandmark[] = [
       ...(region.landmarks ?? []),
       { name: "" },
@@ -50,6 +51,7 @@ export function GeographyTab({ dimensions, onChange, t, problems }: TabProps) {
 
   function removeLandmark(regionIndex: number, lmIndex: number) {
     const region = geo.regions[regionIndex];
+    if (!region) return;
     const landmarks = (region.landmarks ?? []).filter((_, i) => i !== lmIndex);
     updateRegion(regionIndex, { landmarks });
   }
@@ -60,6 +62,7 @@ export function GeographyTab({ dimensions, onChange, t, problems }: TabProps) {
     patch: Partial<WorldLandmark>,
   ) {
     const region = geo.regions[regionIndex];
+    if (!region) return;
     const landmarks = (region.landmarks ?? []).map((lm, i) =>
       i === lmIndex ? { ...lm, ...patch } : lm,
     );

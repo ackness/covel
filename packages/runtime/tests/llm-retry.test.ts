@@ -1129,8 +1129,6 @@ describe("streamLLMWithRetry trace emissions", () => {
       },
       async *stream() {
         throw new Error("fetch failed");
-        // Unreachable, but required to satisfy the generator type.
-        yield { type: "done", finishReason: "error" };
       },
     };
 

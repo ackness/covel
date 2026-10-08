@@ -59,7 +59,7 @@ GitHub 源码归档带的一层外目录会被移除，再提取指定插件目�
 
 `/github/preview` 的每个 item 在单包预览字段之外带 `kind: "plugin" | "world"`，其 `token` 与单包接口签发的相同，可用于单包安装或 batch。`collection` 在目录含清单时为 `{ id, name, version }`，否则为 `null`。`problems` 为 `{ level: "error" | "warning", message, packageId? }[]`。batch 接受 1–20 个 token：先下载并逐个核对摘要与身份，全部通过且目标均不存在后才开始写入；任一目标已存在返回 409 且不做任何修改，写入阶段失败则回滚本次已写入的包。`/collection` 接受 `pnpm pack:collection` 生成的 ZIP（清单在顶层、包含全部成员），没有预览步骤，完整性检查的错误直接返回 400。
 
-插件根清单可声明 `covel` 版本范围（如 `">=0.0.45 <0.1.0"`）。宿主版本不在范围内时，预览、安装、更新和 ZIP 导入都会拒绝该包并给出两个版本号。语法见[合集指南](../guide/collections.md#版本范围)。
+插件根清单可声明 `covel` 版本范围（如 `">=0.0.45 <0.1.0"`）。宿主版本不在范围内时，预览、安装、更新和 ZIP 导入都会拒绝该包并给出两个版本号。已经在磁盘上的包按同一范围检查：服务端启动或重载时宿主版本不在范围内（手动拷入的包，或安装之后宿主版本变了），该包登记为加载失败并显示同一条信息，它的代码不会执行；换成适配的版本后恢复。语法见[合集指南](../guide/collections.md#版本范围)。
 
 预览包含 ID、包版本、描述、作者名（`author`，清单没有声明时为 `null`）、代码存在提示、来源、签名 token 和 `expiresAt`。来源为 `{ repository, commit, path, digest, tracking }`。`tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支，tree 链接先解析明确的分支；其余 tag/commit 保持锁定。`hasServerCode` 是保守的文件和清单扫描提示，不是完整代码审计；测试或构建源码也可能触发代码提示。适配版本仍由作者在目录与 README 声明，当前仅验证清单格式，不自动判断所有运行时兼容性。
 

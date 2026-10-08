@@ -319,10 +319,9 @@ export function createGatewaySlotResolution(
     // Image roles are explicit choices; another image slot is not a substitute.
     if (fallbackTag === "image") return presetId;
 
-    const candidates = deps.slotRegistry.listSlotsByTag(fallbackTag);
-    if (candidates.length === 0) return presetId;
+    const fallback = deps.slotRegistry.listSlotsByTag(fallbackTag)[0];
+    if (!fallback) return presetId;
 
-    const fallback = candidates[0];
     const key = `${presetId}→${fallback.slotId}`;
     if (!warnedFallbacks.has(key)) {
       warnedFallbacks.add(key);

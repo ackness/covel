@@ -216,6 +216,10 @@ describe("plugin scaffolding", () => {
           path.join(root, "templates"),
           { recursive: true },
         );
+        await cp(
+          path.join(repoRoot, "package.json"),
+          path.join(root, "package.json"),
+        );
         const pluginId = `fixture-${mode}`;
         const created = await runNode(
           ["scripts/create-plugin.js", pluginId, ...args],
@@ -240,6 +244,17 @@ describe("plugin scaffolding", () => {
           )
           .sort();
         expect(manifests).toContain("PLUGIN.md");
+        // A standalone plugin names the host it was written on; a bundled
+        // one ships with its host.
+        const rootManifest = await readFile(
+          path.join(pluginRoot, "PLUGIN.md"),
+          "utf8",
+        );
+        const { version: hostVersion } = JSON.parse(
+          await readFile(path.join(repoRoot, "package.json"), "utf8"),
+        ) as { version: string };
+        if (mode === "with-tools") expect(rootManifest).not.toMatch(/^covel:/m);
+        else expect(rootManifest).toContain(`covel: ">=${hostVersion}"`);
         for (const file of manifests) {
           expect(path.basename(file), file).toMatch(/^(PLUGIN|RUNTIME)\.md$/);
           expect(

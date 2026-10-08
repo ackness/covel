@@ -1,6 +1,7 @@
 ---
 id: "{{pluginName}}"
 kind: plugin
+covel: "{{hostRange}}"
 description: "{{pluginDescription}}"
 optional: [narrative-engine@1]
 contributes:

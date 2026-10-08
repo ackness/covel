@@ -13,7 +13,7 @@
  * explicit `commit()` that mimics the commit handler.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type { Proposal } from "@covel/shared";
 import { getPendingProposals, getToolContent } from "../src/result.js";
 import { createCharacterTools } from "../src/builtin/character-tools.js";

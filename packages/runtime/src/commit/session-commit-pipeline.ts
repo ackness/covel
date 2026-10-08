@@ -260,8 +260,8 @@ export function createCommitPipeline(
         : [
             {
               index: idx,
-              type: proposals[idx].type,
-              id: proposals[idx].id,
+              type: proposals[idx]?.type,
+              id: proposals[idx]?.id,
               error: r.error,
             },
           ],

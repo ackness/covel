@@ -166,10 +166,8 @@ export async function buildSessionSnapshot(
   // Aggregate state entries by table → { table: { field: value } }
   const gameState: Record<string, Record<string, unknown>> = {};
   for (const entry of stateEntries) {
-    if (!gameState[entry.tableName]) {
-      gameState[entry.tableName] = {};
-    }
-    gameState[entry.tableName][entry.fieldName] = entry.value;
+    const table = (gameState[entry.tableName] ??= {});
+    table[entry.fieldName] = entry.value;
   }
 
   // Map trace events

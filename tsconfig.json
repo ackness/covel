@@ -5,6 +5,8 @@
     "moduleResolution": "nodenext",
     "esModuleInterop": true,
     "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,

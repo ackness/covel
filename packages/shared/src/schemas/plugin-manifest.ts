@@ -148,11 +148,11 @@ export const pluginManifestSchema = z.strictObject({
       "Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.",
     )
     .optional(),
-  // Host versions this package was written for; the installer enforces it.
+  // Host versions this package was written for; install and load enforce it.
   covel: hostVersionRangeSchema
     .meta({
       description:
-        "Host version range this package supports. The installer enforces it.",
+        "Host version range this package supports. A host outside it does not install or load the package.",
       examples: [">=0.0.45"],
     })
     .optional(),

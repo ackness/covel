@@ -32,7 +32,7 @@ export class SessionWorkspaceSyncError extends Error {
     readonly stage: "input" | "hydrate" | "checkpoint",
     readonly sessionId: string,
     readonly actionId: string | undefined,
-    readonly cause: unknown,
+    override readonly cause: unknown,
   ) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     super(`Session workspace ${stage} failed: ${detail}`);

@@ -106,7 +106,7 @@ export type RetryReason =
 
 /** Internal marker so turn-executor can tell "retry exhausted" apart. */
 export class LLMRetryError extends Error {
-  readonly cause: unknown;
+  override readonly cause: unknown;
   readonly reason: RetryReason;
   readonly attempts: number;
   /** A failed stream produced output; retry/fallback must not replace it. */
@@ -187,7 +187,7 @@ export function isTransientError(err: unknown): boolean {
   // 5xx upstream.
   const statusMatch = msg.match(/\bhttp (\d{3})\b/);
   if (statusMatch) {
-    const code = Number.parseInt(statusMatch[1], 10);
+    const code = Number.parseInt(statusMatch[1]!, 10);
     if (code >= 500 && code < 600) return true;
   }
   return false;

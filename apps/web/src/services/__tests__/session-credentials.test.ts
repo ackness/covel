@@ -64,7 +64,7 @@ describe("credential ownership across HTTP responses", () => {
     await pending;
     expect(await getSessionToken("same-id")).toBe("new-owner");
     expect(
-      new Headers(fetchMock.mock.calls[0][1].headers).get("X-Session-Token"),
+      new Headers(fetchMock.mock.calls[0]![1].headers).get("X-Session-Token"),
     ).toBe("old-owner");
   });
 
@@ -123,7 +123,7 @@ describe("credential ownership across HTTP responses", () => {
       vi.stubGlobal("fetch", fetchMock);
       await deleteSession("same-id");
       expect(
-        new Headers(fetchMock.mock.calls[0][1].headers).get("X-Session-Token"),
+        new Headers(fetchMock.mock.calls[0]![1].headers).get("X-Session-Token"),
       ).toBe(captured ?? "");
       expect(await getSessionToken("same-id")).toBe("new-owner");
     },

@@ -11,7 +11,7 @@ export function orderStoryBeforePluginMessages(
 ): StreamMessage[] {
   let ordered = messages;
   for (let index = 0; index < ordered.length; index += 1) {
-    const story = ordered[index];
+    const story = ordered[index]!;
     if (story.kind !== "story" || !story.turnId) continue;
     const early = ordered
       .slice(0, index)

@@ -33,14 +33,14 @@ describe("PingButton cache invalidation", () => {
       </>,
     );
     const buttons = screen.getAllByRole("button", { name: "Ping" });
-    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[0]!);
     await waitFor(() =>
       expect(apiMocks.pingPreset).toHaveBeenCalledWith({
         presetId: "slot-plugin",
       }),
     );
     await screen.findByText("10ms");
-    fireEvent.click(buttons[1]);
+    fireEvent.click(buttons[1]!);
     await waitFor(() =>
       expect(apiMocks.pingPreset).toHaveBeenCalledWith({ slot: "plugin" }),
     );
@@ -133,10 +133,10 @@ describe("PingButton cache invalidation", () => {
     );
     const first = render(renderButtons());
     const buttons = screen.getAllByRole("button", { name: "Ping" });
-    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[0]!);
     await screen.findByText("13ms");
     expect(screen.queryByText("29ms")).toBeNull();
-    fireEvent.click(buttons[1]);
+    fireEvent.click(buttons[1]!);
     await screen.findByText("29ms");
     expect(apiMocks.pingPreset.mock.calls.map(([target]) => target)).toEqual([
       { modelRef: "same-id" },

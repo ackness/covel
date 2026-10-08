@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { satisfiesHostVersionRange } from "@covel/shared";
 
 /**
  * Running server version. Sourced from the @covel/server package.json so it
@@ -18,3 +19,17 @@ export const APP_VERSION: string =
       return "0.0.0";
     }
   })();
+
+/**
+ * Throws when `range` (a package's `covel` field) excludes this host. A host
+ * version that cannot be parsed is not a mismatch.
+ */
+export function assertHostVersionInRange(
+  subject: string,
+  range: string | undefined,
+): void {
+  if (range && satisfiesHostVersionRange(APP_VERSION, range) === false)
+    throw new Error(
+      `${subject} needs Covel ${range}; this host runs ${APP_VERSION}`,
+    );
+}

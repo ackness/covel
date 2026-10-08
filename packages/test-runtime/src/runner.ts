@@ -351,8 +351,11 @@ export async function runRuntimeDebug(
     } catch (error) {
       collectError(error);
     }
+    // A cleanup failure replaces the pending result on purpose: the error
+    // thrown here carries the primary error and every close error.
     if (errors.length > 0) {
       if (failed) {
+        // oxlint-disable-next-line no-unsafe-finally
         throw new AggregateError(
           [primaryError, ...errors],
           primaryError instanceof Error
@@ -361,6 +364,7 @@ export async function runRuntimeDebug(
           { cause: primaryError },
         );
       }
+      // oxlint-disable-next-line no-unsafe-finally
       throw new AggregateError(
         errors,
         "Failed to close runtime debug resources",

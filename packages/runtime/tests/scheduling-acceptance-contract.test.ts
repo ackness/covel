@@ -23,18 +23,14 @@
  * own release step instead of forcing both mechanisms to ship together.
  */
 
-import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   authoringTriggerConfigSchema,
-  getRuntimeSpec,
   isSetupSatisfied,
   mirrorSetupDone,
-  normalizeRuntimeManifest,
   retrySetup,
-  STAGE_ORDER,
   triggerConfigSchema,
   waiveSetup,
   type ExecutionContext,
@@ -49,7 +45,6 @@ import { buildContext } from "@covel/context";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { processRuntimeResult } from "../src/session/session-kernel.js";
 import { buildSnapshotPayload } from "../src/snapshot/snapshot-payload-builder.js";

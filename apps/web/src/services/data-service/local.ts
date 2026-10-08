@@ -657,9 +657,10 @@ export class LocalDataService implements DataService {
     const rows = eligible.slice(-limit);
     const items = rows.map(toFrontendMessage);
     // 按契约：拿满一页（可能还有更旧）时游标指向最旧一条，否则到历史开头 → null。
+    const oldest = items[0];
     const nextCursor =
-      items.length >= limit && items.length > 0
-        ? encodePageCursor({ createdAt: items[0].createdAt, id: items[0].id })
+      items.length >= limit && oldest
+        ? encodePageCursor({ createdAt: oldest.createdAt, id: oldest.id })
         : null;
     return { items, nextCursor };
   }

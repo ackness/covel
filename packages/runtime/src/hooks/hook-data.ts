@@ -59,7 +59,8 @@ export function cloneHookData<T>(value: T): T {
       );
     }
     const copied: object = Array.isArray(current)
-      ? new Array(current.length)
+      ? // oxlint-disable-next-line unicorn/no-new-array -- sized copy that keeps holes
+        new Array(current.length)
       : current instanceof Map
         ? new Map()
         : current instanceof Set

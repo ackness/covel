@@ -185,7 +185,7 @@ describe("relationship graph", () => {
       renderGraph({ ...graphProps, nodes: sourceNodes, edges: { ab: edge } }),
     );
     fireEvent.click(
-      (await screen.findAllByRole("button", { name: "Mira" }))[0],
+      (await screen.findAllByRole("button", { name: "Mira" }))[0]!,
     );
     const simulationData = canvas.graphData;
     await act(async () => {
@@ -236,7 +236,7 @@ describe("relationship graph", () => {
       ab: edge,
       bc: { ...edge, id: "bc", source: "b", target: "c" },
     });
-    links[0] = { ...links[0], source: nodes[0], target: nodes[1] };
+    links[0] = { ...links[0]!, source: nodes[0]!, target: nodes[1]! };
     expect([...connectedNodeIds(links, "a")].sort()).toEqual(["a", "b"]);
     expect([...connectedNodeIds(links, "isolated")]).toEqual(["isolated"]);
     expect(connectedNodeIds(links, undefined).size).toBe(0);
@@ -254,7 +254,7 @@ describe("relationship graph", () => {
     expect(
       pools.graphData.nodes.reduce((sum, node) => sum + (node.y ?? 0), 0),
     ).toBeCloseTo(0);
-    const pinned = pools.graphData.nodes[0];
+    const pinned = pools.graphData.nodes[0]!;
     pinned.x = pinned.fx = 17;
     pinned.y = pinned.fy = -40;
     syncGraphData(
@@ -286,7 +286,7 @@ describe("relationship graph", () => {
     render(
       <GraphRelationships
         nodes={nodes}
-        links={[{ ...links[0], source: nodes[0], target: nodes[1] }]}
+        links={[{ ...links[0]!, source: nodes[0]!, target: nodes[1]! }]}
         selectedId="a"
         onSelect={onSelect}
       />,
@@ -307,18 +307,18 @@ describe("relationship graph", () => {
       const pinned = pools.nodePool.get("a")!;
       pinned.fx = pinned.x = 17;
       pinned.fy = pinned.y = -40;
-      const pooled = pools.graphData.links[0];
+      const pooled = pools.graphData.links[0]!;
       if (resolved) {
         pooled.source = pinned;
         pooled.target = pools.nodePool.get("b")!;
       }
-      expect(original[0].source).toBe("a");
-      expect(original[0].target).toBe("b");
+      expect(original[0]!.source).toBe("a");
+      expect(original[0]!.target).toBe("b");
       expect(syncGraphData(pools, { nodes, links: original }, geom)).toBe(
         false,
       );
       const reversed: ForceLink = {
-        ...original[0],
+        ...original[0]!,
         source: "b",
         target: "a",
       };

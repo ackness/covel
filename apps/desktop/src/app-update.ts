@@ -16,9 +16,9 @@ function parseVersion(value: string): ParsedVersion | null {
     return null;
   }
   return {
-    major: match[1],
-    minor: match[2],
-    patch: match[3],
+    major: match[1]!,
+    minor: match[2]!,
+    patch: match[3]!,
     prerelease,
   };
 }

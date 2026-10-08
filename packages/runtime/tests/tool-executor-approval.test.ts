@@ -13,7 +13,6 @@ import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type {
   ToolCall,
   ToolCallContext,
-  ToolExecutor,
 } from "../src/agent-loop/tool-executor.js";
 import { createApprovalPipeline } from "@covel/approval";
 import type { PermissionRule } from "@covel/approval";

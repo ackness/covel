@@ -103,6 +103,7 @@ export function detectToolLoop(
   if (calls.length < threshold) return false;
   const tail = calls.slice(-threshold);
   const first = tail[0];
+  if (!first) return false;
   return tail.every(
     (c) => c.name === first.name && c.arguments === first.arguments,
   );

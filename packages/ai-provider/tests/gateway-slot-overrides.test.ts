@@ -644,13 +644,8 @@ describe("gateway + slotOverrides", () => {
             async *streamText() {
               throw new Error("boom stream");
             },
-            async generateObject<TObject>() {
+            async generateObject() {
               throw new Error("boom obj");
-              return {
-                object: {} as TObject,
-                finishReason: "stop",
-                usage: { inputTokens: 0, outputTokens: 0 },
-              };
             },
             async embed() {
               throw new Error("boom embed");

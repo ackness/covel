@@ -398,10 +398,10 @@ export function assemblePromptVariables(
     // Multi-runtime:  name = "world-init/schema-gen" → pluginId = "world-init", runtimeId = "schema-gen"
     const pluginId = slashIdx >= 0 ? key.slice(0, slashIdx) : key;
     const runtimeId = slashIdx >= 0 ? key.slice(slashIdx + 1) : key;
-    if (!inputsMap[pluginId]) {
-      inputsMap[pluginId] = Object.create(null);
-    }
-    inputsMap[pluginId][runtimeId] = result.output;
+    const byRuntime: Record<string, Record<string, unknown>> = (inputsMap[
+      pluginId
+    ] ??= Object.create(null));
+    byRuntime[runtimeId] = result.output;
   }
 
   const playerChar =

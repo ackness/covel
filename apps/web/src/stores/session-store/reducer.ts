@@ -42,13 +42,13 @@ function upsertExecutionStep(
     steps.some(
       (row) => row.turnId === step.turnId && row.attemptStatus === "committed",
     );
+  const existing = idx >= 0 ? next[idx] : undefined;
   const updated = {
-    ...mergeExecutionStep(idx >= 0 ? next[idx] : undefined, step),
+    ...mergeExecutionStep(existing, step),
     ...(committed ? { attemptStatus: "committed" as const } : {}),
-    ...(idx >= 0 &&
-    next[idx].attemptStatus === "committed" &&
+    ...(existing?.attemptStatus === "committed" &&
     step.attemptStatus === "pending"
-      ? { sourceFailedRuntimeIds: next[idx].sourceFailedRuntimeIds }
+      ? { sourceFailedRuntimeIds: existing.sourceFailedRuntimeIds }
       : {}),
   };
   if (idx >= 0) next[idx] = updated;
@@ -584,7 +584,8 @@ export function reducer(
       const msgs = state.messages;
       let targetIdx = -1;
       for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].role === "user" && !msgs[i].turnId) {
+        const message = msgs[i]!;
+        if (message.role === "user" && !message.turnId) {
           targetIdx = i;
           break;
         }
