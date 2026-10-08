@@ -41,9 +41,14 @@ import { CREATE_TABLES_SQL } from "../src/postgres/pg-schema-ddl.js";
 import * as sqliteSchema from "../src/sqlite/schema.js";
 import * as pgSchema from "../src/postgres/schema.js";
 
-import { is } from "drizzle-orm";
+import { is, sql } from "drizzle-orm";
+import { drizzleNodeSqlite } from "../src/sqlite/drizzle-node-sqlite.js";
+import { nextWriteOrderSeq } from "../src/common/cursor.js";
+import { createSqliteRuntimeRecords } from "../src/sqlite/sqlite-runtime-records.js";
+import { makeTurnResult } from "../src/contract/test-fixtures.js";
 import {
   SQLiteTable,
+  SQLiteSyncDialect,
   getTableConfig as getSqliteTableConfig,
 } from "drizzle-orm/sqlite-core";
 import {
@@ -273,6 +278,79 @@ function pgActualIndexes(sql: string): TableIndexes {
 // ── Tests ───────────────────────────────────────────────────────
 
 describe("schema/DDL index consistency", () => {
+  it("locates turn-result append positions with a session/time covering index after synthetic appends", async () => {
+    const sqlite = new DatabaseSync(":memory:");
+    try {
+      createTables(sqlite);
+      const records = createSqliteRuntimeRecords(
+        drizzleNodeSqlite(sqlite, sqliteSchema),
+      );
+      const start = performance.now();
+      for (let index = 0; index < 1024; index++) {
+        for (const sessionId of ["history", "other"]) {
+          await records.saveTurnResult(
+            makeTurnResult({
+              id: `${sessionId}-${index}`,
+              sessionId,
+              createdAt: new Date(index).toISOString(),
+            }),
+          );
+        }
+      }
+      const tiedAt = new Date(2048).toISOString();
+      for (let index = 0; index < 8; index++) {
+        await records.saveTurnResult(
+          makeTurnResult({
+            id: `tied-${index}`,
+            sessionId: "history",
+            createdAt: tiedAt,
+          }),
+        );
+      }
+      const query = new SQLiteSyncDialect().sqlToQuery(
+        sql`select ${nextWriteOrderSeq(sqliteSchema.turnResults, {
+          sessionId: "history",
+          createdAt: tiedAt,
+        })} as next_seq`,
+      );
+      const plan = sqlite
+        .prepare(`EXPLAIN QUERY PLAN ${query.sql}`)
+        .all(...(query.params as string[])) as Array<{ detail: string }>;
+      console.info(
+        "synthetic turn-result append evidence",
+        JSON.stringify({
+          rows: 2056,
+          sessions: 2,
+          distinctHistoryTimes: 1025,
+          sameTimeRows: 8,
+          elapsedMs: performance.now() - start,
+          sql: query.sql,
+          plan,
+        }),
+      );
+      expect(
+        sqlite.prepare("select count(*) as total from turn_results").get(),
+      ).toEqual({ total: 2056 });
+      expect(
+        sqlite.prepare(query.sql).get(...(query.params as string[])),
+      ).toEqual({
+        next_seq: 8,
+      });
+      expect(
+        sqlite
+          .prepare(
+            "select seq from turn_results where session_id = ? and created_at = ? order by seq",
+          )
+          .all("history", tiedAt),
+      ).toEqual(Array.from({ length: 8 }, (_, seq) => ({ seq })));
+      expect(plan.map((row) => row.detail).join("\n")).toMatch(
+        /USING COVERING INDEX .*\(session_id=\? AND created_at=\?\)/,
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("SQLite DDL index set matches the Drizzle schema", () => {
     const problems = diffIndexSpecs(
       drizzleSqliteIndexes(),

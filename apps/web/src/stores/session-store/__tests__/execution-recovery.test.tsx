@@ -1,13 +1,21 @@
 import { useReducer, useRef } from "react";
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionState } from "../types.js";
 import { initialState, reducer } from "../reducer.js";
+import { useSessionRuntimeRefs } from "../runtime-refs.js";
+import { createSseEventHandler } from "../sse-handler.js";
+import {
+  getStreamingText,
+  clearAllStreamingText,
+} from "@/stores/streaming-text-store.js";
+import type { DataService } from "@/services/data-service.js";
 
 const api = vi.hoisted(() => ({
   getSessionExecution: vi.fn(),
   getSessionView: vi.fn(),
   getSession: vi.fn(),
+  listMessagesPage: vi.fn(),
 }));
 vi.mock("@/services/api.js", () => api);
 const { useExecutionRecovery } = await import("../execution-recovery.js");
@@ -25,8 +33,8 @@ const session = {
   activePlugins: [],
   setupRuntimes: {},
   locale: "en-US",
-  createdAt: "now",
-  updatedAt: "now",
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
 };
 function snapshot(state: "running" | "completed") {
   return {
@@ -41,7 +49,8 @@ function snapshot(state: "running" | "completed") {
               content: "Recovered prose",
               turnId: "t",
               kind: "story",
-              createdAt: "now",
+              runtimeId: "story/main",
+              createdAt: "2026-01-01T00:00:00Z",
             },
           ]
         : [],
@@ -49,7 +58,7 @@ function snapshot(state: "running" | "completed") {
       {
         type: state === "completed" ? "runtime.completed" : "runtime.started",
         turnId: "t",
-        timestamp: "now",
+        timestamp: "2026-01-01T00:00:00Z",
         payload: {
           runtimeId: "story",
           pluginId: "story",
@@ -83,6 +92,9 @@ function setup(overrides: Partial<SessionState> = {}) {
       dispatch,
       stateRef,
       sessionIdRef,
+      sessionGenerationRef: useRef(0),
+      deltaBufferRef: useRef(new Map()),
+      deltaRafRef: useRef<number | null>(null),
       workspace,
     });
     return state;
@@ -96,6 +108,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  clearAllStreamingText();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -162,4 +176,262 @@ describe("read-only execution recovery", () => {
     expect(api.getSessionView).not.toHaveBeenCalled();
     expect(workspace.run).not.toHaveBeenCalled();
   });
+});
+
+it("terminal recovery replaces a real delta placeholder and clears queued text", async () => {
+  const frames = new Map<number, FrameRequestCallback>();
+  let frameId = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+    frames.set(++frameId, cb);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    frames.delete(id);
+  });
+  const hook = renderHook(() => {
+    const [state, dispatch] = useReducer(reducer, {
+      ...initialState,
+      session,
+      executing: true,
+    });
+    const refs = useSessionRuntimeRefs(state);
+    refs.runtimeKindRef.current.set("story/main", "story");
+    const stream = createSseEventHandler({
+      ...refs,
+      dispatch,
+      ds: {} as DataService,
+    });
+    useExecutionRecovery({ state, dispatch, ...refs, workspace });
+    return { state, dispatch, stream, refs };
+  });
+  const delta = {
+    type: "narrative.delta",
+    sessionId: "s",
+    turnId: "t",
+    requestId: "request",
+    traceId: "trace",
+    flowId: "flow",
+    seq: 1,
+    timestamp: "2026-01-01T00:00:00Z",
+    payload: { runtimeId: "story/main", pluginId: "story", delta: "partial" },
+  } as const;
+  act(() => {
+    hook.result.current.stream(delta);
+    for (const cb of [...frames.values()]) cb(0);
+  });
+  expect(hook.result.current.state.messages[0]?.id).toBe("stream_t_story/main");
+  expect(getStreamingText("stream_t_story/main")).toBe("partial");
+  api.getSessionExecution.mockResolvedValue({
+    state: "completed",
+    turnId: "t",
+  });
+  api.getSessionView.mockResolvedValue(snapshot("completed"));
+  act(() => {
+    hook.result.current.stream({
+      ...delta,
+      seq: 2,
+      payload: { ...delta.payload, delta: " queued" },
+    });
+    hook.result.current.dispatch({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: "s",
+        status: null,
+        checking: true,
+        hydrating: false,
+      },
+    });
+  });
+  await waitFor(() =>
+    expect(hook.result.current.state.messages[0]?.content).toBe(
+      "Recovered prose",
+    ),
+  );
+  expect(getStreamingText("stream_t_story/main")).toBeUndefined();
+  expect(hook.result.current.refs.deltaBufferRef.current.size).toBe(0);
+  act(() => {
+    for (const cb of [...frames.values()]) cb(1);
+  });
+  expect(hook.result.current.state.messages).toHaveLength(1);
+  expect(workspace.run).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+function ownedRecovery() {
+  const frames = new Map<number, FrameRequestCallback>();
+  let frameId = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+    frames.set(++frameId, cb);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    frames.delete(id);
+  });
+  const hook = renderHook(() => {
+    const [state, dispatch] = useReducer(reducer, {
+      ...initialState,
+      session,
+      executing: true,
+    });
+    const refs = useSessionRuntimeRefs(state);
+    refs.runtimeKindRef.current.set("story/main", "story");
+    const stream = createSseEventHandler({
+      ...refs,
+      dispatch,
+      ds: {} as DataService,
+    });
+    useExecutionRecovery({ state, dispatch, ...refs, workspace });
+    return { state, dispatch, refs, stream };
+  });
+  const delta = (turnId: string, text: string) =>
+    hook.result.current.stream({
+      type: "narrative.delta",
+      sessionId: "s",
+      turnId,
+      requestId: "request",
+      traceId: "trace",
+      flowId: "flow",
+      seq: 1,
+      timestamp: session.createdAt,
+      payload: { runtimeId: "story/main", pluginId: "story", delta: text },
+    });
+  const flush = () => {
+    for (const cb of [...frames.values()]) cb(0);
+  };
+  const recover = () =>
+    hook.result.current.dispatch({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: "s",
+        status: null,
+        checking: true,
+        hydrating: false,
+      },
+    });
+  return { ...hook, delta, flush, recover, frames };
+}
+
+it.each(["new action", "revisit"])(
+  "an old terminal read cannot clobber a healthy POST after %s",
+  async (change) => {
+    const pending = deferred<ReturnType<typeof snapshot>>();
+    api.getSessionExecution.mockResolvedValue({
+      state: "completed",
+      turnId: "t",
+    });
+    api.getSessionView.mockReturnValueOnce(pending.promise);
+    const { result, delta, flush, recover } = ownedRecovery();
+    act(() => {
+      delta("t", "old partial");
+      flush();
+      recover();
+    });
+    await waitFor(() => expect(api.getSessionView).toHaveBeenCalledOnce());
+    act(() => {
+      if (change === "revisit")
+        result.current.refs.sessionGenerationRef.current += 2;
+      result.current.dispatch({
+        type: "SET_EXECUTION_RECOVERY",
+        recovery: null,
+      });
+      result.current.dispatch({ type: "SET_EXECUTING", value: true });
+      delta("new", "healthy");
+      flush();
+      delta("new", " queued");
+    });
+    await act(async () => {
+      pending.resolve(snapshot("completed"));
+    });
+    expect(result.current.state.executing).toBe(true);
+    expect(result.current.state.executionRecovery).toBeNull();
+    expect(result.current.state.messages.some((m) => m.id === "m")).toBe(false);
+    expect(getStreamingText("stream_new_story/main")).toBe("healthy");
+    expect(result.current.refs.deltaBufferRef.current.size).toBe(1);
+  },
+);
+
+it("recovery cleans only the adopted turn/runtime and preserves another scheduled flush", async () => {
+  api.getSessionExecution.mockResolvedValue({
+    state: "completed",
+    turnId: "t",
+  });
+  api.getSessionView.mockResolvedValue(snapshot("completed"));
+  const { result, delta, flush, recover, frames } = ownedRecovery();
+  act(() => {
+    delta("t", "old partial");
+    flush();
+    delta("t", " queued");
+    delta("other", "unrelated");
+    recover();
+  });
+  await waitFor(() =>
+    expect(result.current.state.messages[0]?.content).toBe("Recovered prose"),
+  );
+  expect(getStreamingText("stream_t_story/main")).toBeUndefined();
+  expect(result.current.refs.deltaBufferRef.current.size).toBe(1);
+  expect(frames.size).toBe(1);
+  act(flush);
+  expect(getStreamingText("stream_other_story/main")).toBe("unrelated");
+  expect(
+    result.current.state.messages.filter((m) => m.turnId === "t"),
+  ).toHaveLength(1);
+});
+
+it("terminal polling retries a failed bridge read without publishing a discontinuous window", async () => {
+  vi.useFakeTimers();
+  api.getSessionExecution.mockResolvedValue({
+    state: "completed",
+    turnId: "t",
+  });
+  api.getSessionView.mockResolvedValue({
+    ...snapshot("completed"),
+    messagesCursor: "opaque-m",
+  });
+  api.listMessagesPage.mockRejectedValue(new Error("offline"));
+  const { result, unmount } = setup({
+    messages: [
+      {
+        id: "old",
+        role: "assistant",
+        content: "Old history",
+        kind: "story",
+        turnId: "old-turn",
+        runtimeId: "story/main",
+        timestamp: session.createdAt,
+      },
+    ],
+  });
+  await act(async () => {});
+  expect(result.current.messages.map((m) => m.id)).toEqual(["old"]);
+  expect(result.current.executionRecovery?.checking).toBe(true);
+  expect(result.current.executionRecovery?.error).toMatch(/offline/);
+  api.listMessagesPage.mockResolvedValue({
+    items: [
+      {
+        id: "old",
+        role: "assistant",
+        content: "Old history",
+        kind: "story",
+        turnId: "old-turn",
+        runtimeId: "story/main",
+        createdAt: session.createdAt,
+      },
+    ],
+    nextCursor: null,
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(result.current.messages.map((m) => m.id)).toEqual(["old", "m"]);
+  expect(result.current.executing).toBe(false);
+  expect(result.current.executionRecovery?.error).toBeUndefined();
+  expect(workspace.run).not.toHaveBeenCalled();
+  unmount();
 });

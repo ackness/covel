@@ -692,7 +692,7 @@
     "configuredDesc": "llm.toml configured. Manage API keys and advanced parameters.",
     "unconfiguredDesc": "Configure model slots, API keys, and advanced parameters. All data is stored locally in your browser.",
     "configuredByToml": "TOML defines base roles and fallback policy. Local selections override the model; reloading TOML keeps your selections.",
-    "slotPingMovedHint": "To test connectivity, use Ping in the API Keys pane (or the active-model list).",
+    "slotPingMovedHint": "Model connectivity tests are available on the Providers & Models page.",
     "language": "Interface Language",
     "langZh": "简体中文",
     "langEn": "English",

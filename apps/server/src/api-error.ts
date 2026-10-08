@@ -182,6 +182,24 @@ export function logRequestError(
 export const SESSION_BUSY_MESSAGE = "Session is busy, please retry";
 export const SESSION_BUSY_CODE = "session_busy";
 
+/** Safe error content shared by JSON responses and already-open streams. */
+export function classifyApiError(
+  err: unknown,
+  isDev: boolean,
+): { body: ApiErrorResponse; status: 500 | 503 } {
+  if (err instanceof SessionLockTimeoutError) {
+    return {
+      body: errorBody(SESSION_BUSY_MESSAGE, { code: SESSION_BUSY_CODE }),
+      status: 503,
+    };
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    body: errorBody(isDev ? message : "Internal server error"),
+    status: 500,
+  };
+}
+
 /**
  * Global `app.onError` handler factory. Logs every unhandled error WITH request
  * context (method + full URL, sensitive query params redacted) under
@@ -209,13 +227,10 @@ export function makeErrorHandler(
       console.warn(
         `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
       );
-      return c.json(
-        errorBody(SESSION_BUSY_MESSAGE, { code: SESSION_BUSY_CODE }),
-        503,
-      );
+    } else {
+      logRequestError(c, logPrefix, err);
     }
-
-    logRequestError(c, logPrefix, err);
-    return c.json(errorBody(isDev ? message : "Internal server error"), 500);
+    const { body, status } = classifyApiError(err, isDev);
+    return c.json(body, status);
   };
 }

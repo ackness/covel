@@ -304,7 +304,7 @@
               },
               "select": {
                 "type": "string",
-                "description": "JSON Pointer applied to the upstream value. Not supported with `scope: committed`.",
+                "description": "JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export.",
                 "examples": ["/narrativeOutput"]
               },
               "required": {

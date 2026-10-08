@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -88,11 +89,21 @@ export function saveKeysEnv(
       .join("\n") +
     "\n";
   fs.mkdirSync(path.dirname(keysFile), { recursive: true });
-  // mode in writeFileSync only applies when creating a new file. Re-assert
-  // 0600 after the write so an existing looser-permission file gets tightened
-  // (audit M1). chmod is a no-op on Windows but does not throw.
-  fs.writeFileSync(keysFile, body, { mode: 0o600 });
-  fs.chmodSync(keysFile, 0o600);
+  const temporaryFile = `${keysFile}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryFile, body, { mode: 0o600, flag: "wx" });
+    // Set permissions before publishing: a failed write or chmod must leave
+    // the existing keys intact, and rename is the last required operation.
+    fs.chmodSync(temporaryFile, 0o600);
+    fs.renameSync(temporaryFile, keysFile);
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporaryFile);
+    } catch {
+      // Preserve the original filesystem error.
+    }
+    throw error;
+  }
 }
 
 function parseEnvFileInto(

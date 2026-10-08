@@ -193,7 +193,26 @@ export function isTransientError(err: unknown): boolean {
   return false;
 }
 
-/** These logical outcomes must never enter a fresh retry or recovery budget. */
+/**
+ * Whether a stream that failed without output may be repeated as a non-stream
+ * call. An error with no structure still may (an endpoint whose streaming is
+ * broken can answer a plain call); a provider error that says the request
+ * itself is refused (401, 400, a config or schema error) would fail the same
+ * way again, wherever it sits in the cause chain.
+ */
+export function isStreamRecoveryAllowed(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let cause = error;
+  while (cause instanceof Error && !seen.has(cause)) {
+    seen.add(cause);
+    if (isTerminalLlmRequestError(cause)) return false;
+    if (cause instanceof AiProviderError && !isTransientError(cause))
+      return false;
+    cause = cause.cause;
+  }
+  return true;
+}
+
 /** The model ran past its output limit before the response was usable. */
 export function isOutputTruncated(err: unknown): boolean {
   return (
@@ -201,6 +220,7 @@ export function isOutputTruncated(err: unknown): boolean {
   );
 }
 
+/** These logical outcomes must never enter a fresh retry or recovery budget. */
 export function isTerminalLlmRequestError(error: unknown): boolean {
   return (
     error instanceof LLMRequestBudgetError ||

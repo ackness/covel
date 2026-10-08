@@ -11,6 +11,7 @@ import {
   setWorldOverlay,
   saveExecutionSteps,
 } from "../app-kv-store.js";
+import { EXECUTION_HISTORY_MAX_ROWS } from "../execution-history.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -84,6 +85,30 @@ it("does not acknowledge deletion whose transaction aborts after request success
   });
   await expect(removeWorldOverlay(worldId)).rejects.toThrow();
   expect(await getWorldOverlay(worldId)).toEqual(before);
+});
+
+it("keeps the newest rows of a timeline that outgrew its limit", async () => {
+  const sessionId = `history-${crypto.randomUUID()}`;
+  const step = (index: number) => ({
+    turnId: `turn-${index}`,
+    runtimeId: "story",
+    status: "completed",
+  });
+  await saveExecutionSteps(
+    sessionId,
+    Array.from({ length: EXECUTION_HISTORY_MAX_ROWS }, (_, index) =>
+      step(index),
+    ),
+  );
+  // An update keeps a row's place, so the oldest row still leaves first.
+  await saveExecutionSteps(sessionId, [
+    { ...step(0), status: "running" },
+    step(EXECUTION_HISTORY_MAX_ROWS),
+  ]);
+  const kept = await getExecutionSteps(sessionId);
+  expect(kept).toHaveLength(EXECUTION_HISTORY_MAX_ROWS);
+  expect(kept[0]).toEqual(step(1));
+  expect(kept.at(-1)).toEqual(step(EXECUTION_HISTORY_MAX_ROWS));
 });
 
 it("merges independent timeline windows atomically and preserves absent history", async () => {

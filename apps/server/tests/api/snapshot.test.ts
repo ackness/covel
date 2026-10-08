@@ -6,12 +6,13 @@
  * POST   /api/sessions/:id/fork       — create new session from snapshot
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
 import { type DataStore, type MediaStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import { decodePageCursor, type SubscriptionEvent } from "@covel/shared";
+import { makeErrorHandler } from "../../src/api-error.js";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
   createInProcessSessionLock,
@@ -39,6 +40,7 @@ function createTestApp(
       mediaStore?: MediaStore;
     };
   }>();
+  app.onError(makeErrorHandler("[snapshot test]", false));
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("sessionLock", sessionLock);
@@ -149,6 +151,10 @@ async function seedSessionData(store: DataStore, sessionId: string) {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe("Snapshot routes", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
   let store: DataStore;
 
   beforeEach(async () => {
@@ -156,6 +162,40 @@ describe("Snapshot routes", () => {
     await createSession(store);
     await seedSessionData(store, "sess-1");
   });
+
+  it.each(["snapshot", "fork"])(
+    "redacts unexpected %s failures and logs the cause",
+    async (seam) => {
+      vi.stubEnv("NODE_ENV", "production");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      const app = createTestApp(store);
+      const snap = (await (
+        await app.request("/api/sessions/sess-1/snapshots", { method: "POST" })
+      ).json()) as { id: string };
+      const marker = "INTERNAL_SNAPSHOT_DIAGNOSTIC";
+      if (seam === "snapshot")
+        vi.spyOn(store, "listCharacters").mockRejectedValueOnce(
+          new Error(marker),
+        );
+      else
+        vi.spyOn(store, "withTransaction").mockRejectedValueOnce(
+          new Error(marker),
+        );
+      const response = await app.request(
+        `/api/sessions/sess-1/${seam === "snapshot" ? "snapshots" : "fork"}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromSnapshotId: snap.id }),
+        },
+      );
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "Internal server error" });
+      expect(log.mock.calls.flat().join(" ")).toContain(marker);
+      expect(await store.listSessions()).toHaveLength(1);
+      expect(await store.listSnapshots("sess-1")).toHaveLength(1);
+    },
+  );
 
   // ── POST /snapshots ─────────────────────────────────────────
 
@@ -823,27 +863,41 @@ describe("Snapshot routes", () => {
     });
 
     it("rolls back the fork when MediaStore.addRef fails", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
       const baseMediaStore = createMemoryMediaStore();
       const ref = await baseMediaStore.put(
         new Uint8Array([1, 2, 3]),
         "image/png",
       );
       await baseMediaStore.recordOwnership(ref.id, "sess-1", "test-plugin");
+      const secondRef = await baseMediaStore.put(
+        new Uint8Array([4, 5, 6]),
+        "image/png",
+      );
+      await baseMediaStore.recordOwnership(
+        secondRef.id,
+        "sess-1",
+        "test-plugin",
+      );
+      const removeRef = vi.spyOn(baseMediaStore, "removeRef");
       await store.setPluginData({
         id: "sess-1-pd-media-failure",
         sessionId: "sess-1",
         pluginId: "test-plugin",
         namespace: "images",
         key: "img-failure",
-        value: { ref },
+        value: { ref, secondRef },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
       const failingMediaStore = new Proxy(baseMediaStore, {
         get(target, property, receiver) {
           if (property === "addRef") {
-            return async () => {
-              throw new Error("injected addRef failure");
+            return async (mediaId: string, sessionId: string) => {
+              if (mediaId === secondRef.id)
+                throw new Error("injected addRef failure");
+              await target.addRef(mediaId, sessionId);
             };
           }
           return Reflect.get(target, property, receiver);
@@ -860,10 +914,26 @@ describe("Snapshot routes", () => {
       });
 
       expect(res.status).toBe(500);
-      await expect(res.json()).resolves.toMatchObject({
+      await expect(res.json()).resolves.toEqual({
+        error: "Failed to reference media for fork",
         code: "fork_media_reference_failed",
       });
+      expect(log.mock.calls.flat().join(" ")).toContain(
+        "injected addRef failure",
+      );
       expect(await store.listSessions()).toHaveLength(before);
+      expect(removeRef).toHaveBeenCalledTimes(1);
+      const childId = removeRef.mock.calls[0]![1];
+      expect(removeRef).toHaveBeenCalledWith(ref.id, childId);
+      expect(await baseMediaStore.isReferencedBy(ref.id, childId)).toBe(false);
+      expect(await baseMediaStore.isReferencedBy(ref.id, "sess-1")).toBe(true);
+      const retryApp = createTestApp(store, undefined, baseMediaStore);
+      const retried = await retryApp.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(retried.status).toBe(201);
     });
 
     it("references media embedded in a copied export atomically on fork (docs 02 §2.1.5)", async () => {

@@ -21,6 +21,7 @@ export async function collectArchivalItems(
   // every plugin's namespaced data).
   const entries = await store.listSessionLorebookEntries(sessionId);
   for (const entry of entries) {
+    if (!entry.enabled) continue;
     const content = String(entry.content ?? "").trim();
     if (!content) continue;
     items.push({

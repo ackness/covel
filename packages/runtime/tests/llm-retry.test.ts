@@ -910,6 +910,63 @@ describe("streamLLMWithRetry silence limits", () => {
     expect(result.response.reasoningContent).toBe("thinkmore");
   });
 
+  it("counts streamed tool arguments as progress before the call is whole", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "tool-argument-delta" },
+          { delay: 40_000 },
+          { type: "tool-argument-delta" },
+          { delay: 40_000 },
+          { type: "tool-call", id: "c1", name: "lookup", arguments: "{}" },
+          { type: "done", finishReason: "tool_calls" },
+        ],
+      },
+    ]);
+    const policy = buildRetryPolicy({
+      runtimeTimeoutMs: 60_000,
+      idleTimeoutMs: 45_000,
+      maxRetries: 0,
+    });
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy,
+      deadline: Date.now() + 60_000,
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+    const result = await pending;
+
+    expect(result.response.toolCalls).toHaveLength(1);
+  });
+
+  it("retries a shown stream that broke while only tool arguments had arrived", async () => {
+    const llm = createScriptedStreamLLM([
+      {
+        events: [{ type: "tool-argument-delta" }],
+        throwAtEnd: new Error("fetch failed"),
+      },
+      {
+        events: [
+          { type: "text-delta", textDelta: "ok" },
+          { type: "done", finishReason: "stop" },
+        ],
+      },
+    ]);
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy({ runtimeTimeoutMs: 60_000, maxRetries: 1 }),
+      deadline: Date.now() + 60_000,
+      onDelta: () => {},
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    const result = await pending;
+
+    expect(llm.attempts).toBe(2);
+    expect(result.response.content).toBe("ok");
+  });
+
   it("still bounds the wait for the first output by the runtime deadline", async () => {
     const llm = createScriptedStreamLLM([
       { events: [{ delay: 600_000 }, { type: "done", finishReason: "stop" }] },
@@ -1019,6 +1076,42 @@ describe("callLLMWithRetry trace emissions", () => {
       "llm.responded",
     ]);
     expect(emitter.events[1].payload).toMatchObject({ finishReason: "error" });
+  });
+
+  it("keeps the reported usage in the trace of a response cut at the output limit", async () => {
+    const emitter = makeEmitterSpy();
+    const llm: LLMAdapter = {
+      async generate() {
+        return {
+          content: "cut off mid",
+          toolCalls: [],
+          finishReason: "length",
+          usage: { inputTokens: 42, outputTokens: 7 },
+        };
+      },
+    };
+
+    await expect(
+      callLLMWithRetry({
+        llm,
+        model: "default",
+        messages: [],
+        policy: {
+          maxRetries: 0,
+          callTimeoutMs: 1_000,
+          firstTokenTimeoutMs: 1_000,
+          idleTimeoutMs: 30_000,
+          loopDetectionThreshold: 3,
+        },
+        deadline: Date.now() + 5_000,
+        emitter,
+      }),
+    ).rejects.toThrow();
+
+    expect(emitter.events[1]?.payload).toMatchObject({
+      finishReason: "error",
+      usage: { inputTokens: 42, outputTokens: 7 },
+    });
   });
 
   it("records the final provider attempted inside a gateway fallback", async () => {
@@ -1159,6 +1252,46 @@ describe("streamLLMWithRetry trace emissions", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     expect(typeof emitter.events[1].payload.error).toBe("string");
+  });
+
+  it("keeps the reported usage in the trace of a stream cut at the output limit", async () => {
+    const emitter = makeEmitterSpy();
+    const llm: LLMAdapter = {
+      async generate(): Promise<LLMResponse> {
+        throw new Error("non-stream call is not expected");
+      },
+      async *stream() {
+        yield { type: "text-delta" as const, textDelta: "cut off mid" };
+        yield {
+          type: "done" as const,
+          finishReason: "length" as const,
+          usage: { inputTokens: 42, outputTokens: 7 },
+        };
+      },
+    };
+
+    await expect(
+      streamLLMWithRetry({
+        llm,
+        model: "default",
+        messages: [],
+        policy: {
+          maxRetries: 0,
+          callTimeoutMs: 1_000,
+          firstTokenTimeoutMs: 1_000,
+          idleTimeoutMs: 30_000,
+          loopDetectionThreshold: 3,
+        },
+        deadline: Date.now() + 5_000,
+        emitter,
+      }),
+    ).rejects.toThrow();
+
+    expect(emitter.events.at(-1)?.payload).toMatchObject({
+      finishReason: "error",
+      streaming: true,
+      usage: { inputTokens: 42, outputTokens: 7 },
+    });
   });
 
   it("records a gateway backup selected before the first stream event", async () => {

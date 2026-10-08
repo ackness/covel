@@ -7,7 +7,11 @@ import {
   publishSessionGameState,
 } from "./game-state.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
-import { toStreamMessages } from "./restore-session.js";
+import {
+  publishRecoveredMessages,
+  readRecoveredSnapshot,
+} from "./recovered-snapshot.js";
+import type { DeltaBufferRef, DeltaRafRef } from "./sse-handler.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import type { MutableRef } from "./runtime-refs.js";
 import type { SessionDispatch, SessionState } from "./types.js";
@@ -16,6 +20,9 @@ interface RecoveryOptions {
   state: SessionState;
   stateRef: MutableRef<SessionState>;
   sessionIdRef: MutableRef<string | null>;
+  sessionGenerationRef: MutableRef<number>;
+  deltaBufferRef: DeltaBufferRef;
+  deltaRafRef: DeltaRafRef;
   dispatch: SessionDispatch;
   workspace: SessionWorkspace;
 }
@@ -24,7 +31,10 @@ interface RecoveryOptions {
 async function refreshRecoveredExecution(
   sessionId: string,
   status: SessionExecutionStatus,
-  options: Pick<RecoveryOptions, "stateRef" | "dispatch" | "workspace">,
+  options: Pick<
+    RecoveryOptions,
+    "stateRef" | "dispatch" | "workspace" | "deltaBufferRef" | "deltaRafRef"
+  >,
   isCurrent: () => boolean,
 ): Promise<SessionExecutionStatus> {
   if (status.state !== "running") await options.workspace.hydrate(sessionId);
@@ -35,15 +45,27 @@ async function refreshRecoveredExecution(
     ["game-state", sessionId, "execution-recovery"],
     {
       isCurrent,
-      read: () =>
-        Promise.all([api.getSessionView(sessionId), api.getSession(sessionId)]),
+      read: (ownsRead) =>
+        Promise.all([
+          readRecoveredSnapshot(
+            sessionId,
+            options.stateRef.current.messages,
+            ownsRead,
+          ),
+          api.getSession(sessionId),
+        ]),
       apply: ([snapshot, session]) => {
         authoritative = snapshot.execution ?? status;
         options.dispatch({ type: "SET_SESSION", session });
-        options.dispatch({
-          type: "MERGE_RECOVERED_MESSAGES",
-          messages: toStreamMessages(snapshot.messages),
-        });
+        publishRecoveredMessages(
+          options.dispatch,
+          options.stateRef.current,
+          snapshot,
+          authoritative,
+          true,
+          options.deltaBufferRef,
+          options.deltaRafRef,
+        );
         publishSessionGameState(
           options.dispatch,
           sessionId,
@@ -64,7 +86,18 @@ async function refreshRecoveredExecution(
 }
 
 export function useExecutionRecovery(options: RecoveryOptions): void {
-  const { state, stateRef, sessionIdRef, dispatch, workspace } = options;
+  const {
+    state,
+    stateRef,
+    sessionIdRef,
+    sessionGenerationRef,
+    deltaBufferRef,
+    deltaRafRef,
+    dispatch,
+    workspace,
+  } = options;
+  const sessionGeneration = sessionGenerationRef.current;
+  const actionGeneration = state.actionGeneration ?? 0;
   const recovery = state.executionRecovery;
   const sessionId = recovery?.sessionId;
   const hydrating = recovery?.hydrating ?? false;
@@ -79,6 +112,8 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
     const isCurrent = () =>
       !cancelled &&
       sessionIdRef.current === sessionId &&
+      sessionGenerationRef.current === sessionGeneration &&
+      (stateRef.current.actionGeneration ?? 0) === actionGeneration &&
       stateRef.current.executionRecovery?.sessionId === sessionId;
     const poll = async () => {
       try {
@@ -92,6 +127,8 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
               dispatch,
               stateRef,
               workspace,
+              deltaBufferRef,
+              deltaRafRef,
             },
             isCurrent,
           );
@@ -139,5 +176,10 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
     sessionIdRef,
     stateRef,
     workspace,
+    sessionGenerationRef,
+    sessionGeneration,
+    actionGeneration,
+    deltaBufferRef,
+    deltaRafRef,
   ]);
 }

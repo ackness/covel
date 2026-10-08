@@ -14,7 +14,21 @@ export function createSuspensionMethods(
         record,
         state.suspensions.get(record.id)?.sessionId,
       );
-      state.suspensions.set(record.id, record);
+      // Like the SQL update: only the reason, resume schema, continuation
+      // and resolution of an existing suspension change.
+      const existing = state.suspensions.get(record.id);
+      state.suspensions.set(
+        record.id,
+        existing
+          ? {
+              ...record,
+              turnId: existing.turnId,
+              runtimeId: existing.runtimeId,
+              pluginId: existing.pluginId,
+              createdAt: existing.createdAt,
+            }
+          : record,
+      );
     },
 
     async getSuspension(id) {

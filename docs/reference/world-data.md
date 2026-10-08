@@ -200,6 +200,8 @@ dimensionSources:
 
 ### AI 生成结果与文件导出
 
+新建生成只创作一个内容语言版本：manifest 的 `defaultLocale` 和唯一的 `supportedLocales` 项均使用规范化后的请求 `locale`（缺省 `zh-CN`），不会采信模型声称但未生成的译本。`characterSchema` 与其他合法元数据保留。角色补充接受前按该 schema 校验整个角色集合；三次都不合法时沿用补充失败策略，返回 warning 并舍弃这部分。修订校验合并后的完整角色集合，不合法时重试整包，最终失败而不是悄悄删除现有角色。新建的单语言规范化不应用到修订的 `supportedLocales`。
+
 `@covel/create` 的 `createWorld({ llm, concept, ... })` 生成并验证内容，成功时返回 `id`、`manifest`、`lore`、`locale`、`packageContent` 与 `warnings`（数量低于简报目标的内容、被丢弃的无效维度）；失败时返回 `success: false` 和 `errors`。返回的 manifest 是 schema 校验后的规范值，包含 locale 的规范形式和 `characterSchema.types` 等默认值；三种保存目标消费同一份规范值。生成过程不写世界包，也不接收 `outputDir`。生成 manifest 必须包含内联数据，不能引用尚未生成的 `worldData` 或 `dimensionSources` 文件。 简报生成的 `memoryDefinitions` 在规范化时转换成 `packageContent.contractData` 中的 `memory.blocks@1/world` 记录；文件与非文件模式消费同一份合同数据，同一目标重复声明会被拒绝。
 
 需要文件包时显式调用 `await writeWorldPackage(outputDir, result, { dataContracts })`。导出返回相对文件路径，在独立副本中把内联数据转换为文件引用，保留原生成结果；已有同名包会被拒绝，并发发布只允许一个完整包成功。
@@ -273,6 +275,8 @@ seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后�
 ### 文件更新与安装
 
 世界包安装与 AI 生成的 `server-file` 目标写入用户世界目录，不回写内置资源。安装接口成功激活后返回 `restartRequired: false`，立即可从世界列表查询；激活失败只移除本次新建目录，允许重试。
+
+ZIP 安装在激活前复用 worldData 加载校验：声明的 descriptor/source 缺失、source 无法解析或不满足其自带 schema 等 `error` 诊断返回 400，不创建世界记录，并移除本次新建目录；修复后可用同一 ID 重试。`warning` 不阻止安装。校验只读取包内数据，不让本机 overrides 掩盖包错误，也不执行社区代码；启动 seed 的 worldData 错误容错策略不变。
 
 server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，包含 Linux。已有世界的 YAML / Markdown 文件变化会按物理目录延迟 500ms 合并后重读，读取后使用清单的 `id` 查询、更新世界并通知会话（目录名无需与 `id` 相同）；**仅维度发生变化时**更新存储，并向使用该世界的 session 发出 `world.dimensions.changed`。这是作者声明变化通知，不会将会话的演化值重置成新初值；已有会话需显式同步并检查冲突。它不是完整世界包或插件的热重载：直接放入一个新世界目录需重启 seed 或走安装入口，其他世界内容更新也应重启加载。
 

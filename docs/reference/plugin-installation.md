@@ -39,7 +39,11 @@ GitHub API 解析和归档下载统一使用现有 outbound 网络层，实时�
 
 只下载公开 GitHub 源码归档，不使用用户 GitHub 凭证。首期不自动下载 Release 附件，不接受任意 URL、私有仓库或 GitHub Enterprise。已构建的 Release ZIP 可手动下载后导入。
 
-插件包目录必须同时有 `package.json` 和根 `PLUGIN.md`。根声明使用 `{ id, kind, contributes, runtime? }`；多运行时包把执行声明放在 `runtimes/<sub>/RUNTIME.md`，子声明使用 `{ type, schedule, io, agent/function }`，不再重复插件身份。根 `runtime` 与子目录运行时不能同时声明，旧平铺字段、缺根声明或子目录 `PLUGIN.md` 均拒绝安装；桌面端从文件夹导入同样拒绝这种布局。插件目录中已存在这样的包时，启动只把它登记为该包自己的加载错误（`status: error`），其余插件照常加载。使用规范插件 ID，不能覆盖内置 ID。清单及语言变体只接受普通 YAML frontmatter，拒绝可执行语言标记。安装器不会执行脚本、包管理器、编译器或插件模块；GitHub 安装要求运行文件自包含，package.json 不声明 dependencies、optionalDependencies、peerDependencies，开发依赖不受此限制。需要构建时，作者应在独立发布目录提供已构建、自包含的文件。
+插件包目录必须同时有 `package.json` 和根 `PLUGIN.md`。根声明使用 `{ id, kind, contributes, runtime? }`；多运行时包把执行声明放在 `runtimes/<sub>/RUNTIME.md`，子声明使用 `{ type, schedule, io, agent/function }`，不再重复插件身份。根 `runtime` 与子目录运行时不能同时声明，旧平铺字段、缺根声明或子目录 `PLUGIN.md` 均拒绝安装；桌面端从文件夹导入同样拒绝这种布局。插件目录中已存在这样的包时，启动只把它登记为该包自己的加载错误（`status: error`），其余插件照常加载。
+
+开发模式下，补齐缺失的根 `PLUGIN.md` 或把子运行时清单改为 `RUNTIME.md` 后，可以通过单插件重载重新校验；本次扫描不沿用启动时的布局错误。尚未发布活动能力的失败社区包只恢复静态声明，执行 entry、handler 与 guard 仍须正常授权。使用规范插件 ID，不能覆盖内置 ID。清单及语言变体只接受普通 YAML frontmatter，拒绝可执行语言标记。安装器不会执行脚本、包管理器、编译器或插件模块；GitHub 安装要求运行文件自包含，package.json 不声明 dependencies、optionalDependencies、peerDependencies，开发依赖不受此限制。需要构建时，作者应在独立发布目录提供已构建、自包含的文件。
+
+安装前，inline 和子 runtime 的两种输入 scope 都检查本地 `accepts` 文件及包内 producer 存在性；缺文件、非法 JSON、不存在的包内 producer 或 committed+select 返回 400，不写入插件包。此检查不加载 entry、guard 或 handler，也不因可选外部契约尚无 provider 而拒绝包。
 
 GitHub 源码归档带的一层外目录会被移除，再提取指定插件目录。普通上传 ZIP 仍要求包文件位于 ZIP 顶层。归档限制复用安装器：压缩文件 20 MiB、最多 2000 条目、解压 200 MiB、膨胀比最多 100。这些限制应用于整个 GitHub 归档；大型 monorepo 应使用精简发布仓库或本地 ZIP。拒绝符号链接、路径逃逸和大小写冲突的重复文件路径。
 

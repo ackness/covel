@@ -63,9 +63,12 @@ export function createLorebookMethods(state: MemoryState): MemoryStoreMethods {
       records: readonly LorebookEntryRecord[],
     ): Promise<void> {
       for (const record of records) {
+        const key = lorebookEntryKey(record.sessionId, record.owner, record.id);
+        // Like the SQL update: an entry keeps its creation time.
+        const existing = state.lorebookEntries.get(key);
         state.lorebookEntries.set(
-          lorebookEntryKey(record.sessionId, record.owner, record.id),
-          record,
+          key,
+          existing ? { ...record, createdAt: existing.createdAt } : record,
         );
       }
     },

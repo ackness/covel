@@ -41,6 +41,12 @@ pnpm exec playwright test tests/e2e/game-session.spec.ts --grep "restore"
 pnpm exec playwright test --project=chromium tests/e2e/i18n.spec.ts
 ```
 
+```bash
+pnpm e2e tests/e2e/catalog-accessibility.spec.ts
+```
+
+该用例仅在 Vite 中直接服务合成 fixture，通过真实 catalog 与 PluginPanel 验证原生键盘、label 焦点、重复 ID 及 inert 锁；不调用模型或 API。它不适用于 served-static 生产 SPA，也未被当前 CI smoke 的匹配条件包含；UI 可访问性变更需额外定向执行。
+
 默认套件不访问真实模型。AI 世界生成的界面流程由 `world-generation-progress.spec.ts`
 用测试进程内的假 provider 覆盖（见下文“不访问真实模型的模型输出”），几秒跑完。需要用
 真实模型验证会产生 provider 请求和费用的 AI 世界生成、三回合游戏流程时显式启用：

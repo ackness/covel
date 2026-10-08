@@ -100,6 +100,67 @@ describe("session state eviction (audit R-03)", () => {
 });
 
 describe("session pinning", () => {
+  it("keeps every session pinned beyond the global cap until release", () => {
+    const bus = createEventBus();
+    const sessionIds = Array.from(
+      { length: MAX_TRACKED_SESSIONS + 1 },
+      (_, i) => `pinned-${i}`,
+    );
+    const pins = sessionIds.map((sessionId) => bus.pin(sessionId));
+    const lastSessionId = sessionIds.at(-1)!;
+    const lastPin = pins.at(-1)!;
+
+    bus.emit(makeMessage({ sessionId: lastSessionId }));
+    bus.emit(makeMessage({ sessionId: lastSessionId }));
+    const replay = bus.getEventsAfter(lastSessionId, 0);
+    expect(replay.gap).toBe(false);
+    expect(replay.epoch).toBe(lastPin.epoch);
+    expect(replay.latestSeq).toBe(2);
+    expect(replay.events.map((event) => event.id)).toEqual([
+      `${lastPin.epoch}:1`,
+      `${lastPin.epoch}:2`,
+    ]);
+    for (const [i, sessionId] of sessionIds.entries()) {
+      expect(bus.getEventsAfter(sessionId, 0).epoch).toBe(pins[i]!.epoch);
+    }
+
+    lastPin.release();
+    lastPin.release();
+    bus.emit(makeMessage({ sessionId: "pressure-after-release" }));
+    const evicted = bus.getEventsAfter(lastSessionId, 0);
+    expect(evicted.gap).toBe(true);
+    expect(evicted.epoch).toBeUndefined();
+    expect(evicted.events).toEqual([]);
+    expect(bus.getEventsAfter(sessionIds[0]!, 0).epoch).toBe(pins[0]!.epoch);
+    for (const pin of pins) pin.release();
+  });
+
+  it("releasing one pin twice does not release another subscriber beyond the cap", () => {
+    const bus = createEventBus();
+    const pins = Array.from({ length: MAX_TRACKED_SESSIONS }, (_, i) =>
+      bus.pin(`pinned-${i}`),
+    );
+    const first = bus.pin("pinned-shared");
+    const second = bus.pin("pinned-shared");
+
+    first.release();
+    first.release();
+    bus.emit(makeMessage({ sessionId: "pressure-with-second-pin" }));
+    bus.emit(makeMessage({ sessionId: "pinned-shared" }));
+    const replay = bus.getEventsAfter("pinned-shared", 0);
+    expect(replay.epoch).toBe(first.epoch);
+    expect(replay.epoch).toBe(second.epoch);
+    expect(replay.events.map((event) => event.id)).toEqual([
+      `${second.epoch}:1`,
+    ]);
+
+    second.release();
+    second.release();
+    bus.emit(makeMessage({ sessionId: "pressure-after-both-released" }));
+    expect(bus.getEventsAfter("pinned-shared", 0).gap).toBe(true);
+    for (const pin of pins) pin.release();
+  });
+
   it("a pinned session survives LRU pressure; unpinned it becomes evictable", () => {
     const bus = createEventBus();
 

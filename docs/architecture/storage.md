@@ -272,7 +272,20 @@ snapshot publication schedules one subsequent recovery. These signals are not
 buffered for replay. Terminal background-job notifications trigger their browser
 checkpoint immediately after session/visit validation, before any UI recovery
 buffering; restarting a display refresh cannot discard the required persistence.
-Initial history merges retain current messages with the same ID. Cached state patches fill initial state only before any authoritative snapshot
+Initial history merges retain current messages with the same ID.
+
+Reconnect and execution-recovery observations retain the loaded history and its
+older-message cursor. If the recent snapshot does not overlap loaded durable
+messages, they page backward through the existing message API until the windows
+connect or the start of history is reached, checking visit and read ownership
+between pages. A failed or non-advancing bridge is not published: the existing
+continuous window remains visible, an error is shown, and read-only recovery
+retries. Terminal narrative takeover clears only the matching turn/runtime
+streaming buffers; a newer healthy POST stream remains authoritative. Explicit
+plugin catalogue reloads share the same provider resource ownership and
+visit-generation checks as restore and reconnect reads.
+
+Cached state patches fill initial state only before any authoritative snapshot
 has arrived; an empty authoritative snapshot still prevents deleted fields from
 being restored from the cache. Character increments update reducer state directly.
 
@@ -431,6 +444,23 @@ metadata must not supply an override the snapshot did not capture. See [snapshot
 
 ## Record Identity
 
+`addMessage` is an ordinary INSERT: message IDs are unique across all sessions
+in one DataStore, and a duplicate ID rejects without replacing the original
+row. `commitPlayerInputMessage` is the separate idempotent input-adoption path;
+its semantics do not apply to ordinary inserts. Browser checkpoint validation
+rejects repeated IDs within `checkpoint.messages` before opening the replacement
+transaction; IDs reused by a different record domain remain valid.
+
+An update changes what a row holds, not which row it is: updating an existing
+state entry keeps its ID, a world or lorebook entry keeps its creation time, and
+a re-saved suspension keeps its turn, runtime, plugin and creation time. Memory,
+SQLite and PostgreSQL agree on this; the shared contract suite checks it.
+
+SQLite's turn-result append-position query uses the covering index
+`(session_id, created_at, seq)`. The boot DDL derives that index from the Drizzle
+schema. This preserves existing sequence allocation and ordering; it does not
+bound execution-artifact retention or establish a production latency guarantee.
+
 Text and JSON content lose U+0000 before persistence on every backend, including nested values. Record identifiers containing U+0000 are rejected; cleaning JSON keys that would collide is also rejected. Fractional lorebook insertion order is preserved. Text tie-breakers use byte order, and same-timestamp conversation rows retain insertion order.
 
 PostgreSQL allocates message, trace and turn-artifact positions with per-table
@@ -460,6 +490,12 @@ supply model selection. Embedding model identity and lock time persist on create
 as well as update across MemoryStore, SQLite and PostgreSQL.
 
 ## Current Snapshot Contract
+
+Saving the same snapshot ID for its existing session replaces the capture time
+(`createdAt`) together with the payload and other refreshed fields. Full reads,
+chronological lists and newest-first metadata pages use that refreshed time on
+Memory, SQLite and PostgreSQL. Snapshot IDs and session ownership stay unchanged;
+a transaction rollback restores both the previous payload and capture time.
 
 Snapshot payload schema v3 requires `characterSchema` (object or null), `stateSchemas`, `runtimeExports`,
 `sessionSummaries`, `compactedMessageSummaryIds` and `displayMessagesBoundary`.
@@ -570,5 +606,12 @@ rely on `_` namespaces for their own data or assume they can write to kernel-res
 names.
 
 Execution reads use `queryTurnResults` (root artifacts only) and `queryTraceEvents` to filter before decoding payloads. Turn artifacts persist `retryScope` independently of trace retention and preserve insertion order for timestamp ties. `queryPluginData` supports indexed namespace reads across sessions and optional top-level string filtering; the dimension barrier requests only pending receipts, and worker maintenance shares one queue snapshot. Wakes received while that snapshot is read or maintained remain queued for the next pass, and reconciliation advances only through the snapshot's read-start time. `deleteEventsBefore` provides explicit event-log retention. This changes the development database schema (`turn_results.retry_scope`, log positions, and PostgreSQL fractional lore order); recreate affected development databases. No old-schema migration is provided.
+
+MemoryStore keeps a global message-ID-to-offset map alongside its message array.
+Ordinary inserts reject occupied IDs; player-input adoption keeps its separate
+idempotency contract. Append/adoption identity lookups do not scan the accumulated
+conversation. Transactions and savepoints snapshot both structures, and session
+deletion rebuilds surviving offsets once. This does not bound whole checkpoint
+imports, collection snapshots or history reads independently of stored data size.
 
 Prompt reads are bounded at the storage boundary. `getLatestPlayerInput(sessionId)` selects one form submission ordered by descending `createdAt` and byte-ordered ID, so execution admission does not load the input log. `getPluginDataPromptWindow(sessionId, pluginId, namespace, maxEntries)` returns `{ entries, total }`: below the cap it returns creation order; above the cap it selects the oldest half plus the most recently updated remainder, excluding duplicate anchors. SQL backends count rows without loading JSON and apply limits before record decoding. MemoryStore implements the same selection and ownership contract.

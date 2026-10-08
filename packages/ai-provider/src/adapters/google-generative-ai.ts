@@ -295,6 +295,12 @@ export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
       const accumulator = new GoogleResponse();
       for await (const payload of iterateSsePayloads(response)) {
         for (const part of accumulator.push(payload)) {
+          // Gemini sends a call whole, but several can arrive over time.
+          if (
+            part.functionCall?.args &&
+            Object.keys(part.functionCall.args).length
+          )
+            yield { type: "tool-argument-delta" };
           if (part.text)
             yield part.thought
               ? { type: "reasoning-delta", reasoningDelta: part.text }

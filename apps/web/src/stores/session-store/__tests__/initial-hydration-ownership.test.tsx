@@ -514,6 +514,8 @@ it.each(["restore", "reconnect"])(
       {
         stateRef,
         activeTurnIdRef: { current: null },
+        deltaBufferRef: { current: new Map() },
+        deltaRafRef: { current: null },
       },
     );
     await act(async () => {

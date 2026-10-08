@@ -394,6 +394,8 @@ export interface ObjectGenerationResult<TObject = unknown> {
 // ── Streaming ──────────────────────────────────────────────────────
 
 export type StreamEvent =
+  /** A fragment of a tool call's arguments arrived; it carries no call. */
+  | { type: "tool-argument-delta" }
   | { type: "text-delta"; textDelta: string }
   | { type: "reasoning-delta"; reasoningDelta: string }
   | { type: "tool-call"; id: string; name: string; arguments: string }

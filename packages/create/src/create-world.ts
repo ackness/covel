@@ -51,6 +51,7 @@ import {
   briefOfPackage,
   normalizeGeneratedPackage,
   selectedDataContracts,
+  validateGeneratedCharacters,
 } from "./package-processor.js";
 import { mergeRevision, revisionRequest } from "./revision.js";
 
@@ -452,6 +453,13 @@ function listPart(kind: "characters" | "lorebook" | "rules"): PartPlan {
         { content: [kind] },
       );
       if (result.errors.length > 0) return result.errors;
+      if (kind === "characters") {
+        const errors = validateGeneratedCharacters(
+          result.content.characters,
+          draft.manifest!,
+        );
+        if (errors.length > 0) return errors;
+      }
       draft.warnings.push(...result.warnings);
       if (kind === "characters") draft.characters = result.content.characters;
       else if (kind === "lorebook") draft.lorebook = result.content.lorebook;
@@ -519,7 +527,24 @@ function planParts(
       body: "the complete world.yaml",
       required: true,
       accept(section, draft) {
-        const checked = checkManifest(section, options);
+        // A new generation writes one edition. Do not apply this to revisions.
+        let singleEdition: string;
+        try {
+          const manifest = parseYaml(section);
+          singleEdition = isRecord(manifest)
+            ? stringifyYaml(
+                {
+                  ...manifest,
+                  defaultLocale: locale,
+                  supportedLocales: [locale],
+                },
+                { lineWidth: 0 },
+              )
+            : section;
+        } catch {
+          singleEdition = section;
+        }
+        const checked = checkManifest(singleEdition, options);
         if ("errors" in checked) return checked.errors;
         draft.yamlData = checked.yamlData;
         draft.manifest = checked.manifest;
@@ -723,6 +748,11 @@ async function reviseWorld(
         { amounts: false },
       );
       if (generatedPackage.errors.length > 0) return generatedPackage.errors;
+      const characterErrors = validateGeneratedCharacters(
+        generatedPackage.content.characters,
+        checked.manifest,
+      );
+      if (characterErrors.length > 0) return characterErrors;
 
       const lore = await checkLore(
         parsed.lore,

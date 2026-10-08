@@ -154,6 +154,8 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 `code` 是可选的稳定错误码（如 `"session_busy"`），客户端可据此做 i18n/重试语义；无 `code` 时按 `message` 展示。
 
+世界翻译端点使用独立的 `{ type: "error", message }` SSE 事件，不新增 `code` 字段。流已打开后不再改变 HTTP 状态；未知生产错误与 JSON 分类器采用相同的 `Internal server error` 消息，锁超时采用固定安全忙碌提示，原始诊断只进服务端日志。此处不改变 action 的 `error.occurred` 结构或传输队列。
+
 ### 世界事件
 
 | 事件类型                   | 方向 | 描述                       | 负载                         |
@@ -350,6 +352,8 @@ Provider 图片输入矩阵：
 
 解析用 `@covel/shared` 的 `parseSubscriptionEventId(id) → { epoch, seq } | undefined`（旧的纯数字 id 解析为 `undefined`，服务端一律以 `system.reset` 应答）。活跃 SSE 订阅期间该 session 的回放状态被 `pin` 住，不会被驱逐/换 epoch（H-06）。
 
+EventBus 的 `MAX_TRACKED_SESSIONS`（当前 256）是可驱逐回放状态的容量目标，不是活跃订阅的硬上限。pin 在容量清理之前登记；当所有状态都有活跃 pin 时，允许临时超过该目标，包括第 257 个不同会话。最后一个 pin 释放后，该状态重新具备 LRU/TTL 驱逐资格，后续触碰/容量压力触发清理；release 本身不立即驱逐。连接数量仍由 SSE 层现有预算限制，跨实例 transport-gap 的显式 reset 规则不变。
+
 #### `system.reset` 控制帧（H-05）
 
 带 `lastEventId` 重连时，若游标无法被桥接，服务端**不做部分回放**，而是发一条**无 `id:` 头**的 `system.reset` 命名事件，客户端应据此**清空本地游标（lastEventId）+ 重新拉取权威状态**，再继续消费实时事件：
@@ -376,7 +380,13 @@ data: {
 
 `DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权。`self`（默认）通常不强制，但 `NODE_ENV=production` 且实际注入的存储后端为 MemoryStore 时同样强制，不只依据 `STORE_BACKEND` 环境值。内置 Web 使用 fetch-based SSE 并提交 `X-Session-Token`；原生 `EventSource` 客户端可用 `?session_token=<ownerToken>`。缺失或错误返回 `401 { code: "session_owner_required" }`。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
 
-Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。服务端对 SSE write 使用单一有界串行队列（256），连接预算为每 session 8、进程总计 512；超限返回 429，慢客户端溢出时主动断开。
+Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。
+
+`/api/actions` 与 `/api/events/stream` 每条连接共用一条有界串行写队列，运行中加等待项最多256，只有一个实际写者；单次写入、收尾总drain和close分别最多等待2秒。溢出、写入错误或截止后停止接收新帧、丢弃未开始的写入并abort连接，不在挂起写入后启动替身。订阅的connected、replay、reset和heartbeat也受同一限制；listener、pin、heartbeat与连接预算在清理时释放。订阅预算仍为每session 8、进程总计512，超限429。
+
+Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队列顺序写出；业务锁内的执行/提交回调只入队，不等待客户端消费。最终drain位于业务所有权之外。SSE关闭/丢失不是业务执行失败，不撤销已提交artifact、重复模型调用或开放恢复重放；客户端应通过只读execution/session状态恢复。
+
+断流恢复只在访问代次与执行所有权仍匹配时，用同一 `turnId/runtimeId` 的持久化终态叙事替换流式占位，并移除该占位的外部文本与待刷新 delta；新的健康 POST 流仍拥有其现场输出。恢复快照的最近窗口若与已加载历史不重叠，客户端先通过既有消息分页接口只读补齐至旧锚点，再合并发布，不删除旧窗口，也不重新发送动作。
 
 `apps/web/src/services/subscription.ts` 的通用缺省订阅 topic 为 `runtime / state / game / plugin / session / system`（不含 `store`）；session store 为恢复后台任务另外显式订阅 `job`。客户端按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks / job`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic，`job` 承载 `job-status.updated`。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 
@@ -429,6 +439,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `runtimes.retry` | POST | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent 流 |
 
 `retry_turn` 的普通请求 payload 为空，以空玩家输入和当前已提交上下文启动新的主循环回合，成功提交后增加玩家回合数；它不恢复或重新生成历史回合。恢复未完成回合时，六种动作都可附加 `payload.recoverFromTurnId`，并且必须匹配服务端返回的原 action 描述。客户端从 `GET /api/sessions/:id/execution` 获取只读状态，刷新不重新提交动作；明确点击恢复重试后才发送新的 requestId。服务端在会话锁内校验源回合，开场恢复保留 continuation 来源，不增加玩家回合数。`retry_runtime` 必须提供 `payload.runtimeId`，显式 `retryFromTurnId` 必须指向已提交且仍是当前故事的原回合，目标须仍失败；不带来源时保留旧 manual 调用语义。
+
+执行状态查询在发送响应前复核通过鉴权的会话 incarnation；查询期间删除或同 ID 重建会返回 `409 session_incarnation_changed`，而不是新会话的 `retry` 输入。这项只读屏障不等待正在运行的长回合，也不自动重新提交动作。
 
 `send_message` 和 `execute_command` 可提供 `payload.inputMessageId`。浏览器先持久化玩家输入，再将其 ID 随动作发送；服务端在最终提交事务内接管同一 ID 的同会话、同内容、未提交 user 记录，保留原时间戳并写入 `metadata.turnId`。同一回合的相同输入重复提交保留原记录；已关联其他回合、内容不符或其他会话占用的 ID 会使提交失败。没有本地记录时按该 ID 插入，没有提供 ID 时由服务端生成。不同 ID 的相同文本仍是两条独立输入。失败恢复保留原 `inputMessageId`，不会重新生成输入副本。此字段不适用于 steering 请求。已有开发数据中的重复记录不自动合并，需重新创建受影响会话。
 

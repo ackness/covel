@@ -53,6 +53,16 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
    on the reserved connection), and MemoryStore keeps one lazy snapshot per open
    savepoint level.
 
+Ordinary `addMessage` inserts reject an occupied global message ID, including
+when another session owns it. Rejection never updates the original row. If the
+error escapes the transaction callback, earlier writes roll back; a failed
+savepoint rolls back only its own writes. The distinct `commitPlayerInputMessage`
+API retains its explicit idempotent adoption contract.
+
+A same-owner snapshot refresh updates its capture time and payload in the same
+write and follows the surrounding transaction's commit or rollback. It does not
+change the snapshot ID or weaken cross-session ownership rejection.
+
 Snapshot, suspension, and world-data import ledger IDs have one session owner.
 Upserting an existing ID for another session throws
 `SessionRecordScopeConflictError` on every backend without changing the original
@@ -406,6 +416,8 @@ server transaction API in the browser.
   手工组装这些字段。缺失已声明导出的 schema 使整次事务失败。
   `commitExecution`
   进入这个边界，再由同一宿主入口协调通知、快照和记忆调度。
+
+`/api/actions` 的 `onFinalized` 仅依据durable outcome结算宿主标记并入观察队列，不等待SSE消费；自动snapshot仍在同一session lock内执行。写入错误、队列溢出、观察截止与锁外drain失败不能把committed artifact改成failed，不能开放同turn恢复重放，也不能重试模型。恢复以durable artifact和只读execution/session端点为准，而不是是否收到最后一帧。
 
 > **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
 > `recursiveCall` 结果）聚合进单一事务：

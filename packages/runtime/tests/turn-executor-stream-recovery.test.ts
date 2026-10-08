@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import path from "node:path";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import { AiProviderError } from "@covel/ai-provider";
 import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
@@ -85,9 +86,11 @@ class EmptyStreamThrowLLM implements LLMAdapter {
     usage: { inputTokens: 2, outputTokens: 2 },
   }));
 
+  constructor(private readonly error = new Error("connection refused")) {}
+
   // eslint-disable-next-line @typescript-eslint/require-await, require-yield
   async *stream(): AsyncGenerator<LLMStreamEvent> {
-    throw new Error("connection refused");
+    throw this.error;
   }
 }
 
@@ -226,6 +229,33 @@ describe("TurnExecutor stream recovery", () => {
 
     // Exactly one fallback call.
     expect(llm.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("a provider error that refuses the request is not repeated through generate()", async () => {
+    const llm = new EmptyStreamThrowLLM(
+      new AiProviderError({
+        code: "PROVIDER_ERROR",
+        message: "[probe] HTTP 401 — invalid api key",
+        provider: "probe",
+        retriable: false,
+        statusCode: 401,
+      }),
+    );
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => narratorLoaded,
+      llm,
+      store: await createMainLoopStore("sess-1"),
+      onDelta: async () => {
+        /* no deltas expected */
+      },
+    };
+
+    const result = await executeTurn(makeTurnInput(), [noToolManifest], deps);
+
+    const rr = result.runtimeResults[0]!;
+    expect(rr.status).toBe("failed");
+    expect(rr.error).toContain("HTTP 401");
+    expect(llm.generate).not.toHaveBeenCalled();
   });
 
   it("stream throws AND fallback generate() also throws: runtime returns failed result", async () => {

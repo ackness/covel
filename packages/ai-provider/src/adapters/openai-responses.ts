@@ -506,6 +506,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
             };
             existing.arguments += argsDelta.delta;
             toolCallAcc.set(argsDelta.itemId, existing);
+            if (argsDelta.delta) yield { type: "tool-argument-delta" };
           }
 
           const argsDone = readResponsesStreamFunctionCallArgsDone(payload);

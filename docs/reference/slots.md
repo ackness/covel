@@ -258,7 +258,7 @@ includeThoughts = true
 
 ## Provider 流式响应
 
-所有 agent runtime 在 adapter 提供流式接口时都使用它；只有故事 runtime 将文本增量转发到玩家界面。因此流在已有输出之后中断时，只有故事 runtime 不重试；其他 runtime 丢弃半截输出，按 `maxRetries` 重试。`length` / `max_tokens` 截断结果不能作为成功结果提交：调用重试一次，再次截断才以"调大输出额度"的错误失败，也不再改用非流式调用重来。HTTP 200 内的 provider 错误保留消息、code/type，确定性拒绝不会变成空的可重试错误。
+所有 agent runtime 在 adapter 提供流式接口时都使用它；只有故事 runtime 将文本增量转发到玩家界面。因此流在已有输出之后中断时，只有故事 runtime 不重试；其他 runtime 丢弃半截输出，按 `maxRetries` 重试。`length` / `max_tokens` 截断结果不能作为成功结果提交：调用重试一次，再次截断才以"调大输出额度"的错误失败，也不再改用非流式调用重来。流在没有任何输出时失败且重试用尽，会改用一次非流式调用；provider 明确拒绝请求本身时（401、400、配置或 schema 错误）不改用，因为同一请求会原样失败。HTTP 200 内的 provider 错误保留消息、code/type，确定性拒绝不会变成空的可重试错误。
 
 备用模型在调用前重新检查实际消息、工具、结构化输出 schema 和输出预留所需的窗口。装不下的目标不会收到该请求。能力解析优先选择模型数据库的精确匹配，再考虑精选表的前缀匹配，避免把语音子型号识别为文本模型。
 
@@ -298,7 +298,7 @@ Provider and plugin HTTP helpers cancel rejected response bodies before retrying
 
 连接被拒绝或在应答前断开（`ECONNREFUSED` / `ECONNRESET` / `EPIPE` / `UND_ERR_SOCKET`）与 429 / 5xx 一样重试：同一套退避、同一个重试上限（两类合计 3 次）、同一份请求预算。重启中的端点（本地代理最常见）片刻后就恢复，不该让一次 runtime 调用直接失败。超时不在其列，流式调用已经输出内容后也不重试。
 
-默认预算按无输出时间限时。流每产出一段正文、推理或一次工具调用，时限就顺延到此刻之后 120 秒，最晚不超过预算创建后 30 分钟。所以上文的 120 秒约束的是首次输出之前的等待（含重试、退避和排队）以及两次输出之间的静默，不是持续输出的流的总时长；非流式调用没有进度信号，仍受 120 秒总时限约束。显式传入 `timeoutMs` 或 `deadline` 的预算保持固定，`deadline` 是任何输出都不会推后的绝对时限；要让显式预算也按无输出时间计算，另传 `idleTimeoutMs`，并可用 `ceilingMs` 设定顺延的上限。Agent runtime 的一次模型调用以 `max(120 秒, runtime 剩余时间)` 为预算并传入 `agent.loop.idleTimeoutMs`，因此 runtime 声明的重试次数都有时间执行：流式调用在首次输出前受 `firstTokenTimeoutMs` 和 runtime 时限约束，之后只受 `idleTimeoutMs` 约束，输出所用的时间不计入 runtime 的 `timeoutMs`；`callTimeoutMs` 只约束非流式调用。
+默认预算按无输出时间限时。流每产出一段正文、推理、一次工具调用或工具调用参数的一个分片，时限就顺延到此刻之后 120 秒，最晚不超过预算创建后 30 分钟。所以上文的 120 秒约束的是首次输出之前的等待（含重试、退避和排队）以及两次输出之间的静默，不是持续输出的流的总时长；非流式调用没有进度信号，仍受 120 秒总时限约束。显式传入 `timeoutMs` 或 `deadline` 的预算保持固定，`deadline` 是任何输出都不会推后的绝对时限；要让显式预算也按无输出时间计算，另传 `idleTimeoutMs`，并可用 `ceilingMs` 设定顺延的上限。Agent runtime 的一次模型调用以 `max(120 秒, runtime 剩余时间)` 为预算并传入 `agent.loop.idleTimeoutMs`，因此 runtime 声明的重试次数都有时间执行：流式调用在首次输出前受 `firstTokenTimeoutMs` 和 runtime 时限约束，之后只受 `idleTimeoutMs` 约束，输出所用的时间不计入 runtime 的 `timeoutMs`；`callTimeoutMs` 只约束非流式调用。
 
 生命周期 hook 的每个通知阶段合计最多等待 1 秒。普通 hook 异常或超时记录 warning 后继续；请求取消或逻辑 deadline 会立即停止等待，不触发额外重试。预算到期时，gateway 也会停止等待不响应 signal 的自定义 adapter；自定义实现仍应使用 signal 取消其底层 I/O。
 

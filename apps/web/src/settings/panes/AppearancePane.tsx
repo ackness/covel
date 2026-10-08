@@ -43,7 +43,7 @@ export function AppearancePane() {
   const [error, setError] = useState<string | null>(null);
 
   const [rawOverrides] = useSetting<unknown>(APPEARANCE_TOKENS_KEY);
-  const [appearance, setAppearance] = useSetting<string>("ui.appearance");
+  const [appearance] = useSetting<string>("ui.appearance");
   const [scheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
 
   const overrides = useMemo<AppearanceOverrides>(
@@ -107,7 +107,7 @@ export function AppearancePane() {
         groupLabel: sourceTheme?.groupLabel ?? sourceTheme?.label,
         cssText: snapshot.cssText,
       });
-      await setAppearance(id);
+      await store.set("ui.appearance", id);
       await clearOverrides(store);
       setThemeName("");
     } catch (nextError) {
@@ -118,6 +118,19 @@ export function AppearancePane() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  function reportSaveError(): void {
+    setError(t("settings.saveFailed"));
+  }
+
+  async function resetOverrides(tokenNames?: readonly string[]): Promise<void> {
+    setError(null);
+    try {
+      await clearOverrides(store, tokenNames);
+    } catch {
+      reportSaveError();
     }
   }
 
@@ -208,7 +221,7 @@ export function AppearancePane() {
               size="sm"
               variant="outline"
               disabled={customCount === 0}
-              onClick={() => void clearOverrides(store)}
+              onClick={() => void resetOverrides()}
             >
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
               {t("appearance.resetAll")}
@@ -274,7 +287,7 @@ export function AppearancePane() {
       <div className="space-y-2">
         {localizedTokenGroups.map((group, index) => (
           <TokenGroupSection
-            key={group.id}
+            key={`${appearance}:${group.id}`}
             group={group}
             defaultOpen={index === 0}
             locale={i18n.language}
@@ -282,14 +295,15 @@ export function AppearancePane() {
             scheme={activeScheme}
             defaults={defaults}
             onCommit={(name, value) =>
-              void setTokenOverride(store, name, value, activeScheme)
+              setTokenOverride(store, name, value, activeScheme)
             }
-            onReset={(name) => void clearTokenOverride(store, name)}
+            onReset={(name) => clearTokenOverride(store, name)}
+            onError={reportSaveError}
+            readOverride={(name) =>
+              getTokenOverride(loadOverrides(store), name, activeScheme)
+            }
             onResetGroup={() =>
-              void clearOverrides(
-                store,
-                group.tokens.map((token) => token.name),
-              )
+              void resetOverrides(group.tokens.map((token) => token.name))
             }
           />
         ))}
@@ -305,8 +319,10 @@ interface TokenGroupSectionProps {
   readonly overrides: AppearanceOverrides;
   readonly scheme: ThemeScheme;
   readonly defaults: Record<string, string>;
-  readonly onCommit: (name: string, value: string) => void;
-  readonly onReset: (name: string) => void;
+  readonly onCommit: (name: string, value: string) => Promise<void>;
+  readonly onReset: (name: string) => Promise<void>;
+  readonly onError: () => void;
+  readonly readOverride: (name: string) => string | null;
   readonly onResetGroup: () => void;
 }
 
@@ -319,6 +335,8 @@ function TokenGroupSection({
   defaults,
   onCommit,
   onReset,
+  onError,
+  readOverride,
   onResetGroup,
 }: TokenGroupSectionProps) {
   const { t } = useTranslation();
@@ -362,8 +380,11 @@ function TokenGroupSection({
             scheme={scheme}
             themeDefault={defaults[spec.name] ?? ""}
             override={getTokenOverride(overrides, spec.name, scheme)}
+            overrideSnapshot={overrides}
             onCommit={(value) => onCommit(spec.name, value)}
             onReset={() => onReset(spec.name)}
+            onError={onError}
+            readOverride={() => readOverride(spec.name)}
           />
         ))}
         {touched > 0 && (

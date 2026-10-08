@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createMemoryStore } from "@covel/store/memory";
+import { createEventBus } from "@covel/events";
 import { ToolRegistry } from "@covel/tools";
 import {
   createPluginRegistry,
@@ -24,10 +25,13 @@ import {
 import { createRuntimeLoader } from "../../src/routes/api/bootstrap/runtime-loader.js";
 import type { RpcApprovalGate } from "@covel/approval";
 import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
+import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
 const roots: string[] = [];
 const managers: BootstrapPluginEntries[] = [];
+const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   await Promise.all(managers.splice(0).map((manager) => manager.close()));
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   await Promise.all(
     roots
       .splice(0)
@@ -172,6 +176,185 @@ async function fixture(withRuntime = false, activateEntry = true) {
     },
   };
 }
+describe("plugin layout reload recovery", () => {
+  it.each(["missing-root", "legacy-runtime"] as const)(
+    "rescans a repaired %s layout without executing unapproved community modules",
+    async (layout) => {
+      const parent = await fs.mkdtemp(
+        path.join(os.tmpdir(), "covel-layout-reload-"),
+      );
+      roots.push(parent);
+      const bundled = path.join(parent, "bundled");
+      const community = path.join(parent, "community");
+      const id = `layout-${crypto.randomUUID()}`;
+      const root = path.join(community, id);
+      const runtimeDir = path.join(root, "runtimes", "value");
+      await fs.mkdir(bundled);
+      await fs.mkdir(runtimeDir, { recursive: true });
+      const rootManifest = path.join(root, "PLUGIN.md");
+      const validRoot = `---\nid: ${id}\nkind: plugin\ndescription: Layout recovery probe\nentry: ./entry.mjs\ncontributes:\n  tools: [value]\n---\n`;
+      const runtimeManifest = path.join(runtimeDir, "RUNTIME.md");
+      const legacyManifest = path.join(runtimeDir, "PLUGIN.md");
+      await fs.writeFile(
+        layout === "legacy-runtime" ? legacyManifest : runtimeManifest,
+        "---\ntype: function\nschedule:\n  trigger:\n    type: manual\nfunction:\n  handler: ./handler.mjs\nguard: ./guard.mjs\n---\n",
+      );
+      if (layout === "legacy-runtime")
+        await fs.writeFile(rootManifest, validRoot);
+      const state = {
+        entryImports: 0,
+        activations: 0,
+        handlerImports: 0,
+        guardImports: 0,
+      };
+      const globals = globalThis as unknown as Record<string, unknown>;
+      globals[id] = state;
+      cleanups.push(async () => {
+        delete globals[id];
+      });
+      await fs.writeFile(
+        path.join(root, "entry.mjs"),
+        `globalThis[${JSON.stringify(id)}].entryImports += 1;
+         export default function(api) {
+           globalThis[${JSON.stringify(id)}].activations += 1;
+           api.registerTool(api.toolkit.tool({name: 'value', description: 'value', parameters: api.toolkit.z.object({}), execute: async () => 42}));
+         }`,
+      );
+      for (const module of ["handler", "guard"])
+        await fs.writeFile(
+          path.join(runtimeDir, `${module}.mjs`),
+          `globalThis[${JSON.stringify(id)}].${module}Imports += 1; export default function() { return 42; }`,
+        );
+      const store = createMemoryStore();
+      const eventBus = createEventBus(store);
+      cleanups.push(() => eventBus.close());
+      const discovered = await discoverAndRegisterPlugins({
+        pluginsDir: bundled,
+        pluginsDirs: [bundled, community],
+        eventBus,
+      });
+      const previous = discovered.failedDiscoveryMap.get(id)!;
+      const layoutMessage =
+        layout === "missing-root"
+          ? "a plugin root PLUGIN.md is required"
+          : "runtime manifests must be named RUNTIME.md";
+      expect(previous.layoutError).toContain(layoutMessage);
+      expect(previous).toMatchObject({
+        id,
+        rootPath: root,
+        source: "community",
+      });
+      const failedEntry = discovered.registry.get(id)!;
+      expect(failedEntry.status).toBe("error");
+      const tools = new ToolRegistry();
+      let approved = false;
+      const onReload = vi.fn(async () => {});
+      const manager = await createBootstrapPluginEntries({
+        ...discovered,
+        pluginRegistry: discovered.registry,
+        store,
+        tools,
+        hookPipeline: createHookPipeline(),
+        rpcRegistry: createPluginRpcRegistry(),
+        development: true,
+        onReload,
+        isCommunityServerCodeApproved: () => approved,
+      });
+      managers.push(manager);
+      const expectQuarantined = () => {
+        expect(discovered.registry.get(id)).toBe(failedEntry);
+        expect(discovered.failedDiscoveryMap.get(id)).toBe(previous);
+        expect(discovered.discoveryMap.has(id)).toBe(false);
+        expect(discovered.manifestCache.has(id)).toBe(false);
+        expect(onReload).not.toHaveBeenCalled();
+      };
+      await expect(manager.reload(id)).rejects.toThrow(
+        layout === "missing-root" ? "PLUGIN.md" : "RUNTIME.md",
+      );
+      expectQuarantined();
+      if (layout === "missing-root")
+        await fs.writeFile(rootManifest, validRoot);
+      else await fs.rename(legacyManifest, runtimeManifest);
+      const publication = await manager.reload(id);
+      expect(publication).toMatchObject({
+        pluginId: id,
+        generation: expect.any(String),
+      });
+      const discovery = discovered.discoveryMap.get(id)!;
+      expect(discovery).toEqual({
+        id,
+        rootPath: root,
+        source: "community",
+        isMultiRuntime: true,
+        pluginMdPaths: [runtimeManifest],
+      });
+      expect(previous.layoutError).toContain(layoutMessage);
+      expect(discovered.failedDiscoveryMap.has(id)).toBe(false);
+      const entry = discovered.registry.get(id)!;
+      expect(entry).toMatchObject({
+        id,
+        rootPath: root,
+        source: "community",
+        status: "registered",
+      });
+      expect(entry).not.toHaveProperty("error");
+      expect(entry.manifests?.map((parsed) => parsed.manifest.name)).toEqual([
+        `${id}/value`,
+      ]);
+      expect(entry.runtimeManifestPaths).toEqual({
+        [`${id}/value`]: runtimeManifest,
+      });
+      expect(discovered.manifestCache.get(id)).toBe(entry.manifests);
+      expect(manager.hasPendingEntry(id)).toBe(true);
+      expect(onReload).toHaveBeenCalledExactlyOnceWith(id);
+      await expect(manager.ensurePluginEntry(id, "session")).rejects.toThrow(
+        "requires explicit approval",
+      );
+      await expect(manager.reload(id)).rejects.toThrow(
+        "requires a live server-code approval",
+      );
+      expect(state).toEqual({
+        entryImports: 0,
+        activations: 0,
+        handlerImports: 0,
+        guardImports: 0,
+      });
+      expect(tools.find("value", id)).toBeUndefined();
+
+      // A later invalid scan must report the new error and retain the published declarations.
+      approved = true;
+      await fs.writeFile(
+        rootManifest,
+        validRoot.replace(`id: ${id}`, "id: forged-identity"),
+      );
+      await expect(manager.reload(id, "session")).rejects.toThrow(
+        "id must match plugin directory",
+      );
+      expect(discovered.registry.get(id)).toBe(entry);
+      expect(discovered.discoveryMap.get(id)).toBe(discovery);
+      expect(discovered.manifestCache.get(id)).toBe(entry.manifests);
+      expect(discovered.failedDiscoveryMap.has(id)).toBe(false);
+      expect(onReload).toHaveBeenCalledTimes(1);
+      expect(state).toEqual({
+        entryImports: 0,
+        activations: 0,
+        handlerImports: 0,
+        guardImports: 0,
+      });
+      await fs.writeFile(rootManifest, validRoot);
+      const nextPublication = await manager.reload(id, "session");
+      expect(nextPublication.generation).not.toBe(publication.generation);
+      expect(state).toEqual({
+        entryImports: 1,
+        activations: 1,
+        handlerImports: 0,
+        guardImports: 0,
+      });
+      expect(tools.find("value", id)).toBeDefined();
+    },
+  );
+});
+
 describe("plugin generation reload", () => {
   it("reports trusted declaration error metadata and clears it after a successful publication", async () => {
     const f = await fixture(false, false);

@@ -4,6 +4,11 @@
  * GET /stream?sessionId=xxx&topics=runtime,state&lastEventId=xxx
  */
 
+import {
+  createBoundedSerialQueue,
+  closeSseDelivery,
+  SSE_WRITE_QUEUE_MAX,
+} from "./sse-delivery.js";
 import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
 import type { EventBus } from "@covel/events";
@@ -37,7 +42,7 @@ export const subscribeRoutes = new Hono<Env>();
  */
 const MAX_CONNECTIONS_PER_SESSION = 8;
 const MAX_TOTAL_CONNECTIONS = 512;
-const SSE_WRITE_QUEUE_MAX = 256;
+export { createBoundedSerialQueue } from "./sse-delivery.js";
 
 export interface ConnectionBudgetOptions {
   readonly maxTotal: number;
@@ -81,64 +86,6 @@ export function createConnectionBudget(options: ConnectionBudgetOptions): {
     },
     active(): number {
       return total;
-    },
-  };
-}
-
-export interface BoundedSerialQueueOptions {
-  readonly capacity: number;
-  readonly onOverflow: () => void;
-  readonly onError?: (error: unknown) => void;
-}
-
-/**
- * Serializes asynchronous writes and caps accepted running/queued work.
- * Overflow closes the queue; work that has not started is discarded.
- */
-export function createBoundedSerialQueue(options: BoundedSerialQueueOptions): {
-  enqueue(task: () => Promise<void>): boolean;
-  close(): void;
-  drain(): Promise<void>;
-  pending(): number;
-} {
-  let tail = Promise.resolve();
-  let pending = 0;
-  let closed = false;
-  let overflowed = false;
-  return {
-    enqueue(task: () => Promise<void>): boolean {
-      if (closed) return false;
-      if (pending >= options.capacity) {
-        closed = true;
-        if (!overflowed) {
-          overflowed = true;
-          options.onOverflow();
-        }
-        return false;
-      }
-      pending += 1;
-      const run = tail
-        .then(async () => {
-          if (!closed) await task();
-        })
-        .catch((error: unknown) => {
-          closed = true;
-          options.onError?.(error);
-        })
-        .finally(() => {
-          pending -= 1;
-        });
-      tail = run;
-      return true;
-    },
-    close(): void {
-      closed = true;
-    },
-    drain(): Promise<void> {
-      return tail;
-    },
-    pending(): number {
-      return pending;
     },
   };
 }
@@ -256,6 +203,7 @@ subscribeRoutes.get(
         const closeStream = (): void => {
           if (closing) return;
           closing = true;
+          writes.close();
           stream.abort();
           resolveDone();
         };
@@ -264,6 +212,7 @@ subscribeRoutes.get(
           try {
             const live = await store.getSession(sessionId);
             if (
+              !closing &&
               live &&
               sessionIncarnationIdentity(live) === expectedIncarnation
             ) {
@@ -352,6 +301,7 @@ subscribeRoutes.get(
           // state and are surfaced through onReset above.
           pinned = eventBus.pin(sessionId);
           stream.onAbort(() => {
+            writes.close();
             closing = true;
             resolveDone();
           });
@@ -360,14 +310,16 @@ subscribeRoutes.get(
           // R-01 Bug B (cursor reset): the connected frame carries NO id, so the
           // frontend never clobbers its lastEventId back to "0" on reconnect
           // (mirrors the id-less heartbeat frame below).
-          if (!(await stillOwnsIncarnation())) return;
-          await stream.writeSSE({
-            event: "system.connected",
-            data: JSON.stringify({
-              sessionId,
-              topics: topics ? [...topics] : "all",
-              timestamp: new Date().toISOString(),
-            }),
+          await writes.write(async () => {
+            if (!(await stillOwnsIncarnation())) return;
+            await stream.writeSSE({
+              event: "system.connected",
+              data: JSON.stringify({
+                sessionId,
+                topics: topics ? [...topics] : "all",
+                timestamp: new Date().toISOString(),
+              }),
+            });
           });
           if (closing) return;
 
@@ -381,22 +333,25 @@ subscribeRoutes.get(
             const epoch = replay.epoch ?? pinned.epoch;
             const epochChanged = !cursor || cursor.epoch !== epoch;
             if (epochChanged || replay.gap) {
-              if (!(await stillOwnsIncarnation())) return;
-              await stream.writeSSE({
-                event: "system.reset",
-                data: JSON.stringify({
-                  sessionId,
-                  reason: epochChanged ? "epoch-change" : "gap",
-                  epoch,
-                  oldestSeq: replay.oldestSeq,
-                  latestSeq: replay.latestSeq,
-                  timestamp: new Date().toISOString(),
-                }),
+              await writes.write(async () => {
+                if (!(await stillOwnsIncarnation())) return;
+                await stream.writeSSE({
+                  event: "system.reset",
+                  data: JSON.stringify({
+                    sessionId,
+                    reason: epochChanged ? "epoch-change" : "gap",
+                    epoch,
+                    oldestSeq: replay.oldestSeq,
+                    latestSeq: replay.latestSeq,
+                    timestamp: new Date().toISOString(),
+                  }),
+                });
               });
+              if (closing) return;
             } else {
               for (const event of replay.events) {
                 if (!topics || topics.has(event.topic)) {
-                  await writeEvent(event);
+                  await writes.write(() => writeEvent(event));
                   if (closing) return;
                 }
               }
@@ -410,7 +365,7 @@ subscribeRoutes.get(
             const batch = liveBuffer.splice(0);
             for (const event of batch) {
               if (sentIds.has(event.id)) continue;
-              await writeEvent(event);
+              await writes.write(() => writeEvent(event, false));
               if (closing) return;
             }
           }
@@ -437,12 +392,15 @@ subscribeRoutes.get(
           );
         } finally {
           writes.close();
+          liveBuffer.length = 0;
+          sentIds.clear();
           unsubscribe();
           unsubscribeReset?.();
           pinned?.release();
           if (heartbeatInterval) clearInterval(heartbeatInterval);
           try {
             await writes.drain();
+            await closeSseDelivery(stream);
           } finally {
             connectionLease.release();
           }

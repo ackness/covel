@@ -33,7 +33,7 @@ function labelToString(
 export function ThemeManagerWidget() {
   const { t, i18n } = useTranslation();
   const store = useSettingsStore();
-  const [appearance, setAppearance] = useSetting<string>("ui.appearance");
+  const [appearance] = useSetting<string>("ui.appearance");
   const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -59,12 +59,13 @@ export function ThemeManagerWidget() {
 
     setBusy(true);
     setError(null);
+    setNotice(null);
 
     try {
       const text = await file.text();
       const payload = parseImportedThemeFile(text, file.name);
       await saveCustomTheme(store, payload.theme, payload.fileName);
-      await setAppearance(payload.theme.id);
+      await store.set("ui.appearance", payload.theme.id);
       flash(
         t("settings.themeImported", {
           name: labelToString(payload.theme.label, i18n.language),
@@ -79,6 +80,19 @@ export function ThemeManagerWidget() {
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function handleApply(themeId: string): Promise<void> {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await store.set("ui.appearance", themeId);
+    } catch {
+      setError(t("settings.saveFailed"));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -222,7 +236,7 @@ html[data-theme="my-theme"].dark {
                     size="sm"
                     variant="outline"
                     disabled={busy}
-                    onClick={() => void setAppearance(theme.id)}
+                    onClick={() => void handleApply(theme.id)}
                   >
                     {t("settings.themeApply")}
                   </Button>

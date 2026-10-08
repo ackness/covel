@@ -312,7 +312,7 @@ export function createEventBus(
   // Receiver: per-(origin, session) seq ordering + serialized delivery.
   const receiveStates = new Map<string, ReceiveState>();
 
-  function touchSession(sessionId: string): SessionState {
+  function touchSession(sessionId: string, pin = false): SessionState {
     const now = Date.now();
     // Lazy TTL sweep: expired entries cluster at the front of the LRU-ordered
     // map, so this stops at the first fresh entry — O(evicted + pinned) per
@@ -337,6 +337,8 @@ export function createEventBus(
       };
     }
     state.lastTouchedMs = now;
+    // Acquire the pin before eviction so a new subscriber cannot evict itself.
+    if (pin) state.pinCount += 1;
     sessions.set(sessionId, state);
     // Global budget on tracked sessions: evict least-recently-touched,
     // skipping pinned states (the pin count is bounded by the SSE connection
@@ -757,8 +759,7 @@ export function createEventBus(
     },
 
     pin(sessionId: string): SessionPin {
-      const state = touchSession(sessionId);
-      state.pinCount += 1;
+      const state = touchSession(sessionId, true);
       let released = false;
       return {
         epoch: state.epoch,

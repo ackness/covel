@@ -1,10 +1,12 @@
 import type { ComponentRenderer } from "@json-render/react";
+import { useId } from "react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
 import { asOptionArray, resolveIcon, useI18nResolver } from "./helpers.js";
 import { inputBase } from "./interactive-input-renderers.js";
 
 export const Select: ComponentRenderer = ({ element, bindings }) => {
+  const id = useId();
   const resolve = useI18nResolver();
   const label = resolve(element.props?.label);
   const value = (element.props?.value as string) ?? "";
@@ -18,11 +20,15 @@ export const Select: ComponentRenderer = ({ element, bindings }) => {
   return (
     <div className="space-y-1">
       {label && (
-        <label className="ui-eyebrow text-xs text-muted-foreground">
+        <label
+          htmlFor={id}
+          className="ui-eyebrow text-xs text-muted-foreground"
+        >
           {label}
         </label>
       )}
       <select
+        id={id}
         value={value}
         onChange={(e) => bindPath && set(bindPath, e.target.value)}
         className={inputBase}
@@ -38,6 +44,7 @@ export const Select: ComponentRenderer = ({ element, bindings }) => {
 };
 
 export const Switch: ComponentRenderer = ({ element, bindings }) => {
+  const id = useId();
   const resolve = useI18nResolver();
   const label = resolve(element.props?.label);
   const checked = (element.props?.checked as boolean) ?? false;
@@ -45,8 +52,10 @@ export const Switch: ComponentRenderer = ({ element, bindings }) => {
   const bindPath = bindings?.checked;
 
   return (
-    <label className="flex items-center gap-2 cursor-pointer">
-      <div
+    <label htmlFor={id} className="flex items-center gap-2 cursor-pointer">
+      <button
+        id={id}
+        type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => bindPath && set(bindPath, !checked)}
@@ -61,7 +70,7 @@ export const Switch: ComponentRenderer = ({ element, bindings }) => {
             checked ? "translate-x-4" : "translate-x-0.5",
           )}
         />
-      </div>
+      </button>
       <span className="text-xs text-foreground">{label}</span>
     </label>
   );

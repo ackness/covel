@@ -21,7 +21,7 @@ function makeCtx(cues, previous = null) {
     sessionId: "sess",
     turnId: "turn-1",
     triggerEvent: { topic: "stage.direction", data: { cues } },
-    store: { listCharacters: vi.fn(async () => CHARACTERS) },
+    world: { characters: CHARACTERS },
     pluginData: {
       get: vi.fn(async () => previous),
       set: vi.fn(),
@@ -205,10 +205,10 @@ describe("scene-stage direction handler", () => {
   it("keeps attribution keyed by turn and supports the player as a speaker", async () => {
     const ctx = makeCtx([]);
     ctx.turnId = "turn-2";
-    ctx.store.listCharacters = vi.fn(async () => [
+    ctx.world.characters = [
       ...CHARACTERS,
       { id: "player-1", name: "Alex", type: "player" },
-    ]);
+    ];
     ctx.triggerEvent.data.dialogue = { paragraphSpeakers: ["player-1"] };
     const result = await handler(ctx);
     expect(getPendingProposals(result)[0].payload).toMatchObject({

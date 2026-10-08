@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
+import { makeErrorHandler } from "../../src/api-error.js";
 import { exportSessionCheckpoint, type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -14,10 +15,14 @@ import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guar
 
 const CHECKPOINT_PATH = "/api/sessions/body-limit-session/browser-checkpoint";
 
-function createApp() {
+function createApp(dispatched = vi.fn()) {
   const app = new Hono();
+  app.onError(makeErrorHandler("[body-limit test]", false));
   app.use("*", createRequestBodyLimitMiddleware());
-  app.all("*", (c) => c.body(null, 204));
+  app.all("*", (c) => {
+    dispatched();
+    return c.body(null, 204);
+  });
   return app;
 }
 
@@ -38,6 +43,38 @@ function sizedStream(byteLength: number): ReadableStream<Uint8Array> {
 }
 
 describe("request body limits", () => {
+  it.each([
+    ["POST", "/api/sessions/test/actions", DEFAULT_BODY_LIMIT_BYTES],
+    ["POST", "/api/install", INSTALL_BODY_LIMIT_BYTES],
+    ["POST", "/api/media", INSTALL_BODY_LIMIT_BYTES],
+    ["PUT", CHECKPOINT_PATH, BROWSER_CHECKPOINT_BODY_LIMIT_BYTES],
+  ] as const)(
+    "uses the project error envelope for %s %s at both boundaries",
+    async (method, path, limit) => {
+      for (const streamed of [false, true]) {
+        for (const over of [false, true]) {
+          const dispatched = vi.fn();
+          const size = limit + Number(over);
+          const request = new Request(`http://localhost${path}`, {
+            method,
+            ...(streamed
+              ? {}
+              : { headers: { "content-length": String(size) } }),
+            body: streamed ? sizedStream(size) : "x",
+            duplex: "half",
+          } as RequestInit);
+          const response = await createApp(dispatched).request(request);
+          expect(response.status).toBe(over ? 413 : 204);
+          expect(dispatched).toHaveBeenCalledTimes(over ? 0 : 1);
+          if (over)
+            expect(await response.json()).toEqual({
+              error: "Payload Too Large",
+            });
+        }
+      }
+    },
+  );
+
   it.each([
     [BROWSER_CHECKPOINT_BODY_LIMIT_BYTES, 204],
     [BROWSER_CHECKPOINT_BODY_LIMIT_BYTES + 1, 413],
@@ -155,6 +192,7 @@ describe("request body limits", () => {
     expect(Buffer.byteLength(body)).toBeGreaterThan(DEFAULT_BODY_LIMIT_BYTES);
 
     const app = new Hono();
+    app.onError(makeErrorHandler("[body-limit test]", false));
     app.use("*", createRequestBodyLimitMiddleware());
     const sessionLock = createInProcessSessionLock();
     app.use("*", async (c, next) => {

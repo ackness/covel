@@ -590,6 +590,126 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     );
   });
 
+  it("hides existing disabled vectors immediately, restores on enable, and purges only that owner's index on ingestion", async () => {
+    const entry = (await store.listSessionLorebookEntries(sessionId))[0]!;
+    await store.upsertLorebookEntries([
+      {
+        ...entry,
+        owner: { kind: "plugin", pluginId: "other-owner" },
+        keys: ["other-forge"],
+        content: "blacksmith forge knowledge",
+      },
+      { ...entry, sessionId: "other-session", keys: ["foreign-forge"] },
+    ]);
+    const { fn, calls } = spyEmbed();
+    const system = createMemorySystem({ store, embed: fn });
+    const searchVectors = vi.spyOn(store, "searchVectors");
+    const readVectors = () =>
+      store.searchVectors!({
+        sessionId,
+        query: embedText("forge"),
+        topK: 10,
+        pluginId: MEMORY_VECTOR_PLUGIN_ID,
+        namespace: ARCHIVAL_NAMESPACE,
+      });
+    const readHashes = async () =>
+      JSON.parse(
+        (await store.getVectorIndexProgress({
+          sessionId,
+          pluginId: MEMORY_VECTOR_PLUGIN_ID,
+          namespace: "archival-ingest",
+        }))!,
+      ) as Record<string, string>;
+    const mutedKey = `lorebook:${JSON.stringify(entry.owner)}:${entry.id}`;
+    const otherKey = `lorebook:${JSON.stringify({ kind: "plugin", pluginId: "other-owner" })}:${entry.id}`;
+
+    expect((await system.ingest(sessionId)).archival).toBe(4);
+    // No source contains this query: only the real vector path can return hits.
+    const semanticHits = await system.archival.search(sessionId, "seaport", 10);
+    expect(semanticHits).toHaveLength(4);
+    expect(semanticHits.find((hit) => hit.key === "forge")?.pluginId).toBe(
+      "lore-plugin",
+    );
+    expect(searchVectors).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: ARCHIVAL_NAMESPACE }),
+    );
+    expect(semanticHits.some((hit) => hit.key === "foreign-forge")).toBe(false);
+
+    await store.upsertLorebookEntries([{ ...entry, enabled: false }]);
+    expect(await readVectors()).toHaveLength(4); // Ingestion has not run yet.
+    expect(await system.archival.search(sessionId, "seaport", 10)).toEqual([]);
+    const current = await system.archival.search(
+      sessionId,
+      "blacksmith forge",
+      10,
+    );
+    expect(current.map((hit) => hit.key).sort()).toEqual([
+      "Aldric",
+      "other-forge",
+    ]);
+    expect(current.find((hit) => hit.key === "other-forge")?.pluginId).toBe(
+      "other-owner",
+    );
+
+    // Re-enable before ingestion: the unchanged existing vector is usable again.
+    await store.upsertLorebookEntries([{ ...entry, enabled: true }]);
+    expect(await system.archival.search(sessionId, "seaport", 10)).toEqual(
+      semanticHits,
+    );
+
+    await store.upsertLorebookEntries([{ ...entry, enabled: false }]);
+    calls.length = 0;
+    expect((await system.ingest(sessionId)).archival).toBe(0);
+    expect(calls).toEqual([]); // Unchanged survivors are not re-embedded.
+    const remaining = await readVectors();
+    expect(remaining).toHaveLength(3);
+    expect(remaining.map((row) => row.key)).not.toContain(mutedKey);
+    expect(remaining.map((row) => row.key)).toContain(otherKey);
+    const hashes = await readHashes();
+    expect(hashes).not.toHaveProperty(mutedKey);
+    expect(Object.keys(hashes).sort()).toEqual(
+      remaining.map((row) => row.key).sort(),
+    );
+    const disabledHits = await system.archival.search(sessionId, "seaport", 10);
+    expect(disabledHits.map((hit) => hit.key).sort()).toEqual([
+      "Aldric",
+      "Mira",
+      "other-forge",
+    ]);
+
+    await store.upsertLorebookEntries([{ ...entry, enabled: true }]);
+    calls.length = 0;
+    expect((await system.ingest(sessionId)).archival).toBe(1);
+    expect(calls).toEqual([[entry.content]]);
+    expect(await readVectors()).toHaveLength(4);
+    expect(await system.archival.search(sessionId, "seaport", 10)).toEqual(
+      semanticHits,
+    );
+  });
+
+  it("never embeds initially disabled lorebook and keeps unrelated block data intact", async () => {
+    const entry = (await store.listSessionLorebookEntries(sessionId))[0]!;
+    await store.upsertLorebookEntries([{ ...entry, enabled: false }]);
+    await store.setPluginData({
+      id: "block-record",
+      sessionId,
+      pluginId: "block-owner",
+      namespace: "blocks",
+      key: "plot",
+      value: { content: "private forge memory" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const blocks = await store.listPluginDataSessionScope(sessionId);
+    const { fn, calls } = spyEmbed();
+    const system = createMemorySystem({ store, embed: fn });
+    expect((await system.ingest(sessionId)).archival).toBe(2);
+    expect(calls.flat()).not.toContain(entry.content);
+    const hits = await system.archival.search(sessionId, "seaport", 10);
+    expect(hits.map((hit) => hit.source)).toEqual(["character", "character"]);
+    expect(await store.listPluginDataSessionScope(sessionId)).toEqual(blocks);
+  });
+
   it("finds the most relevant archival record by semantics", async () => {
     const system = createMemorySystem({ store, embed });
     const ingest = await system.ingest(sessionId);

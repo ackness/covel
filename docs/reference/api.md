@@ -59,6 +59,8 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
 }
 ```
 
+- 请求体超限统一返回 `413 { "error": "Payload Too Large" }`，不会进入业务 handler。普通 API 上限为 1 MiB，`/api/install` 及其子路径、`/api/media` 为 20 MiB，`PUT /api/sessions/:id/browser-checkpoint` 为 64 MiB；Content-Length 与无该头的流式请求采用相同额度。
+
 - `error` 字段始终存在。需要前端按错误码分流的端点（如 `plugin-rpc`、`media`）会同时给出 `code`。
 - **会话锁竞争统一为 503**：任何路由等待该 session 的执行锁超时（PG 部署下默认 30s）都返回
   `503 { "error": "Session is busy, please retry", "code": "session_busy" }`，由全局
@@ -326,7 +328,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 会话列表、创建、详情与 PATCH 响应包含 `incarnation`：同一条持久化会话的稳定、不透明身份标记。它不随普通字段修改变化；删除后用相同 ID 重建会生成新标记，即使创建时间恰好相同。客户端只比较相等性，不从中推导业务含义；它不授予权限，也不替代 owner token。服务端从内部身份派生此值，不接受客户端设置，内部 nonce 和凭据哈希仍不公开。
 
-远程模式的表单提交标记与历史执行时间线保存在独立的浏览器缓存中。缓存调用携带界面当时的会话身份，读取和首次建立或更换归属时向服务端核对；已核验归属的显示更新直接在浏览器保存，避免每段流式输出都请求服务端。所有操作在 IndexedDB 事务中检查会话和世界的删除时序，以及缓存是否已绑定另一条同 ID 会话。表单增量在事务内合并，时间线仍保存显示快照。网络或鉴权错误不作为“会话不存在”处理，也不会用旧缓存替代服务端权威。
+远程模式的表单提交标记与历史执行时间线保存在独立的浏览器缓存中。缓存调用携带界面当时的会话身份，读取和首次建立或更换归属时向服务端核对；已核验归属的显示更新直接在浏览器保存，避免每段流式输出都请求服务端。所有操作在 IndexedDB 事务中检查会话和世界的删除时序，以及缓存是否已绑定另一条同 ID 会话。表单增量在事务内合并，时间线仍保存显示快照；远程与本地模式下，每个会话的时间线缓存最多保留最近 1000 条执行记录，更早的按首次写入顺序移出缓存。网络或鉴权错误不作为“会话不存在”处理，也不会用旧缓存替代服务端权威。
 
 远程删除在服务端请求前后使相关缓存操作失效，随后核对已缓存会话，清理已消失或被替换的记录；部分世界删除失败也清理已确认删除的部分，并保留失败响应与仍有效的缓存。缓存故障不撤销服务端删除，后续删除或缓存读取可重试清理。此协调使用 IndexedDB，不要求 Web Locks。其他设备直接删除后，本浏览器在下次核对时清理，不承诺离线浏览器即时物理清除。
 
@@ -355,6 +357,10 @@ checkpoint 的 sessionId，world.id 必须匹配 session.worldId，违规返回 
 快照、挂起记录及世界导入账本的全局记录 ID 已属于其他会话时，返回
 `400 session_record_scope_conflict`，整个 checkpoint 写入回滚。
 checkpoint 不允许携带 provider key、owner token 或其他凭据。
+
+`checkpoint.messages` 内重复的消息 ID 也属于 `400 invalid_checkpoint`：校验会指出
+重复项的 `messages[index].id`，并在替换事务、删除原会话或写入世界之前拒绝。
+这是 messages 表的身份规则，不要求不同记录域或快照中的历史引用使用不同 ID。
 
 客户端 `applySessionCommit` 拒绝同一 `actionId` 携带不同内容的提交，抛出 `ActionIdConflictError`。调用方通过错误类及其 `sessionId`、`actionId` 判断冲突；该本地错误不携带 `code` 字段。HTTP 响应中的错误码由端点定义。
 
@@ -413,9 +419,13 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
+恢复已有会话时，最近窗口与已加载消息不重叠则用同一 `/messages/page` 接口向旧锚点补读，再合并连续窗口；不把中间页当作全局最旧页，不覆盖旧历史或它的分页游标。补读失败保留旧窗口并提示、重试只读恢复。该补偿不新增 API，也不触发回合重发。
+
 ### 刷新与未完成回合恢复
 
 `GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，遵循相同的会话归属校验；`GET /api/sessions/:id/view` 的可选 `execution` 字段提供同一状态。`state` 为 `idle`、`running`、`completed`、`failed` 或 `interrupted`，可带 `turnId`、`requestId`、`startedAt`、`origin`、`abortReason` 和显式重试用的 `retry: { type, payload }`。此接口不会等待长回合锁；PG 使用非阻塞 advisory lock 探测，另一进程仍持锁或暂时无法取得连接时保守返回 `running`，可能没有回合标识。
+
+`/execution` 将通过 owner 校验的会话 incarnation 绑定到响应侧读取屏障。如果查询期间会话消失，或同 ID 被删除后重建，返回 `409 { "error": "Session was replaced while the request was reading", "code": "session_incarnation_changed" }`，不返回新会话的重试输入。该复核不等待长回合结束；请求开始时会话不存在仍返回原有 404，owner 校验失败仍返回 401。
 
 玩家停止但未提交的回合仍使用可重试的 `state: "failed"`，并携带 `abortReason: "aborted-by-player"`；界面应显示主动停止，而不是通用错误。停止原因从持久化的 `turn.completed` 读取，刷新不会丢失，也不会自动重试。
 
@@ -505,6 +515,8 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | POST | `/api/install/github/batch`          | `{ tokens, acceptRisk: true }`：把已预览的包作为一个整体安装，失败时回滚本次写入，返回 `201 { ok, installed, restartRequired }`                                       |
 | POST | `/api/install/collection`            | multipart 字段 `file`：导入打包好的合集 ZIP，响应同 batch                                                                                                             |
 | GET  | `/api/install/plugins`               | 列出用户插件目录中的包及可用的来源记录，包含尚未重启加载的插件                                                                                                        |
+
+`/api/install/world` 在写入世界记录前检查 worldData diagnostics；error 返回 400，删除本次新建目录且不创建记录，修复后可用同一 ID 重试。warning 不阻止安装。校验复用现有 descriptor、source 与 schema 校验器，不使用本机 overrides，也不执行社区插件代码。
 
 > **canonical 插件身份**：插件的唯一身份是 manifest 根 `id`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `id: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID；`@covel/plugin-narrator` + `id: narrator` 会命中 reserved 并返回 409。启动 discovery 同样硬性校验目录名 == manifest 根 id，不一致的插件注册为 `hostState: "error"`、不加载任何 runtime/tool/hook/wire。
 
@@ -606,6 +618,8 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### Lorebook
 
+`enabled: false` 全面禁用目标词条：自动注入、archival 关键词和向量检索均排除它，不必等待后台 ingestion 清理旧向量。重新启用恢复可检索性；如索引已清理，语义检索在后续 ingestion 重建后恢复，关键词检索不依赖索引。管理列表仍包含禁用词条，禁用不会删除记录或改变 `(sessionId, owner, entryId)` 的归属。
+
 Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表；这些管理端点提供玩家 UI 与程序化读写入口，**不走提案系统**。身份键是 `(sessionId, owner, entryId)`。`owner` 为 `{kind:"world"}`、`{kind:"player"}` 或 `{kind:"plugin",pluginId}`，不同所有者可使用相同 ID。列表包含所有所有者；此管理 API 的创建、更新和删除固定作用于 `player` 所有者，不能覆盖世界导入或插件词条。插件 `lorebook.upsert` 的所有者由提案来源绑定。
 
 | 方法   | 路径                                  | 描述                                                            |
@@ -643,6 +657,9 @@ Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit
 | GET  | `/api/sessions/:id/snapshots`             | 分页列出快照元数据（auto / manual / fork，不含 payload）                                              |
 | GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
 | POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
+
+同一会话内刷新已有自动快照时保留快照 ID，同时更新 payload 与采集时间 `createdAt`；
+单条读取及元数据分页使用更新后的采集时间，不再将已刷新的快照排序在旧时间位置。
 
 Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。快照绑定的维度 provider 是 community 插件时，child 无法在创建时启用它：快照里有该 provider 的维度数据或结算回执时，fork 以 `409 { "code": "dimension_provider_required" }` 拒绝，不创建子会话；没有维度数据时子会话不带该绑定，正常创建。进程重启后同样不恢复易失 grant；`GET /api/sessions/:id/plugins` 将缺少当前 grant 的 community 项显示为未激活，但保留会话中保存的插件选择，便于后续调用重新授权。
 
@@ -1205,6 +1222,8 @@ SSE 事件：
 | 409    | `world_already_translated` | 这种语言已经没有缺的文字                           |
 | 409    | `world_deleting`           | 世界正在删除                                       |
 
+SSE 已打开后 HTTP 状态保持 200，失败使用既有 `{ type: "error", message }`。未知存储或 provider 错误在生产环境使用 `Internal server error`；开发态保留原诊断。锁超时消息为 `Session is busy, please retry`。全部文本都被拒收时，`message` 是第一条被拒的原因（无翻译、回复不是 JSON、占位符被改动），世界已删除或替换的提示同样保留；内部原因记服务端日志。此错误消息投影不改变文件发布的事务性保证。
+
 #### `GET /api/worlds/:id/gallery`
 
 列出世界包自带的图片。会话创建时才把世界包的 `kind: media` 来源导入媒体库，世界列表和世界详情还没有会话，所以从世界包直接读文件。
@@ -1330,7 +1349,7 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 - `metadata.pluginPolicy`：准备页组合策略，字段为 `presetId/preferredTags/avoidedTags/requested/recommended/requires/packs`。解析器结合包级 contract 依赖与授权状态求解激活集；顶层 metadata 不再合并旧选择字段，也不强制锁定 core 插件。
 - `pluginPolicy.requires`：世界必需的契约 ID。创建时世界作为一个依赖方参与解析，唯一提供者被自动加入；需求随会话保存在 `metadata.pluginSelection.requiredContracts`，后续启停与重载沿用，不再读取世界。没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。玩家显式停用提供者，或提供者是尚待授权的社区插件时，会话照常创建。
 - `metadata.packageInfo`：世界包的 `version` 和[作者信息](./plugins.md#作者信息)（`author`、`license`、`homepage`），只用于世界卡片展示，不进入提示词。
-- `metadata.characterSchema`：创建会话时写入领域角色 schema，包含 `types/attributes`，版本由内核管理。
+- `metadata.characterSchema`：创建会话时写入领域角色 schema，包含 `types/attributes`，版本由内核管理。Web 私有模式创建本地会话时写入同样的 schema；预设不合法时会话不创建。
 - `metadata.embeddedCharacters`：没有文件型 worldData 时，将通用 `{id,name,type,description?,fields?}` 记录导入会话 `characters`。它不是插件角色卡，不产生插件数据镜像。
 - `metadata.embeddedLorebook`：没有文件型 worldData 时导入 world owner 的 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
 
@@ -2637,12 +2656,15 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 **错误码:**
 
-| 状态  | 触发条件                                               |
-| ----- | ------------------------------------------------------ |
-| `400` | JSON body/结构错误或 data schema 校验失败              |
-| `404` | session、suspension 不存在，或 runtime manifest 找不到 |
-| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）    |
-| `500` | `resumeSuspendedRuntime()` 抛出错误                    |
+| 状态  | 触发条件                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------ |
+| `400` | JSON body/结构错误或 data schema 校验失败                                                        |
+| `404` | session、suspension 不存在，或 runtime manifest 找不到                                           |
+| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                                              |
+| `500` | runtime 执行失败或提交失败（`error` 说明原因），或未知异常（生产正文为 `Internal server error`） |
+| `503` | 会话锁获取超时，`code: "session_busy"`，固定消息 `Session is busy, please retry`                 |
+
+失败响应只使用通用错误信封，不返回 runtime result；成功响应仍为 `{ result, events }`。runtime 自身执行失败时 `error` 为 `Resume failed: <原因>`，与回合事件流里 `runtime.failed` 给玩家的文字相同；提交失败时为 `Resume commit failed: <原因>. The suspension remains unresolved and can be retried.`。其余异常按标准分类器处理。失败时释放本次已取得的 suspension claim（仍须满足同一会话 incarnation 的生命周期检查），以便重试；内部原因记录在服务端日志。
 
 #### `GET /api/sessions/:id/suspensions`
 
@@ -2693,6 +2715,8 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取 `auto`、`manual`、`fork` 三种；手动快照通过 snapshots 集合创建。
 
 #### `POST /api/sessions/:id/snapshots`
+
+快照构建及 fork 的未知错误进入标准分类器，生产环境返回通用 500，不再使用 `build_failed` / `fork_failed` 携带内部诊断。已识别的业务冲突维持原 code/status。媒体引用写入失败保持 `500 fork_media_reference_failed`，正文固定为 `Failed to reference media for fork`，底层原因只进日志；事务回滚和已添加引用的补偿仍先于错误响应。
 
 当前快照 v3 合同要求 `stateSchemas`、`runtimeExports`、`sessionSummaries`、`compactedMessageSummaryIds` 和 `displayMessagesBoundary` 全部存在。空数组、空映射及 `null` 聊天边界有明确含义；缺失字段的旧开发快照必须重建，不迁移、不使用父会话当前状态补全。存储写入、SQL 读取和 browser checkpoint 共用 payload schema 校验；摘要映射必须指向快照中实际捕获的摘要，非法引用会被拒绝。
 
@@ -3129,6 +3153,8 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 
 新世界按**部分**逐个生成，每个部分是一次模型请求：先是世界清单（`manifest`），再是 `WORLD.md`（`lore`），然后是简报里要求的每一类补充内容（`characters`、`lorebook`、`rules`），最后是每个插件数据契约（`contract:<契约 ID>`）。后面的部分会拿到已经写好的部分作为上下文。
 
+新建结果的 `defaultLocale` 与唯一的 `supportedLocales` 项固定为规范化后的请求 `locale`（缺省 `zh-CN`），各保存目标与文件导出消费同一声明。角色补充按生成 manifest 的角色 schema 校验整个集合，包括声明类型、字段约束和 player 单例；失败沿用下述补充重试与舍弃策略。
+
 每个部分到达后立即执行确定性的结构校验，不合法时只重新请求这一个部分（最多 3 次），已经通过的部分不会重写。`WORLD.md` 命中明确的测试、提示词或模型输出等生成过程泄漏时，服务端先请求一次仅包含 lore 的定向修复，修复仍不合法才重新请求 lore。
 
 - `manifest` 或 `lore` 三次都失败时，整个生成失败。
@@ -3258,6 +3284,8 @@ data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; th
 
 因此“加一个角色”不会改动其他角色，也不会丢掉模型没有重复写出的设定条目。合并后的结果与新生成的世界走同一套校验，世界的 `id` 不变。
 
+角色校验覆盖合并后的完整集合，也包括未改动角色；非法整包会重试，最终返回失败，不通过舍弃现有角色使修订成功。新建的单语言声明规范化不应用于修订。
+
 ```json
 {
   "worldId": "frozen-continent",
@@ -3275,7 +3303,7 @@ data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; th
 
 只有带生成标记的世界可以修改：`metadata.generated === true`。生成器写出的世界包里有一个 `.covel-generated.json` 文件，世界记录据此带上这个标记；手写的或安装的世界包没有它，因为这类包里可能有立绘、额外的数据源和语言文件，整包重写会丢掉它们。
 
-世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，发布失败时恢复旧目录；若恢复也失败，旧包保留在 `.covel-replaced-*/package`，错误会报告恢复路径，不删除它）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
+世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，发布失败时恢复旧目录；若恢复也失败，旧包保留在 `.covel-replaced-*/package`，错误会报告恢复路径，不删除它）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。修订结果的清单只声明世界自己的语言：模型的回答或修订要求（例如“加一个英文版”）在清单里多写的语言版本会被收回，因为修订不写任何语言文件。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
 
 SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修订是一次模型请求，`parts` 里只有一个 `revision`。模型运行期间不持有世界操作锁；发布时在锁内复核原记录以及文件包身份。期间的编辑、删除或替换会使旧修订失败，既有编辑和新包保留，玩家重新加载后可再发起修订。
 
@@ -3741,6 +3769,8 @@ be retried. Uploaded worlds carry `source: "generated-file"` and a binding to
 the user world directory, so DELETE works immediately. An existing world ID
 returns 409 without overwriting its record. Plugin installation still returns
 `restartRequired: true`.
+
+ZIP activation rejects worldData error diagnostics with 400 before creating a record, including missing descriptors or sources, malformed sources and failures against their own schemas. Warnings remain allowed. Validation checks the shipped package without local overrides or executing community code; startup seed tolerance is unchanged.
 
 Both ZIP install endpoints reject an existing target directory with
 `409 { error: "target already exists: <id>" }`, including Windows rename

@@ -45,14 +45,15 @@ function invalidateOverlappingReads(
  * Read and publish for one provider resource. Replaced requests and obsolete
  * visits stop. A still-current read observes a committed mutation by re-reading
  * that resource, preserving fields absent from the live event. Network errors
- * propagate without retry. apply is synchronous to close the publication gap.
+ * propagate without retry. read receives the ownership guard for multipart
+ * observations; apply is synchronous to close the publication gap.
  */
 export async function refreshSessionResource<T>(
   owner: SessionDispatch,
   resource: readonly string[],
   options: {
     isCurrent: () => boolean;
-    read: () => Promise<T>;
+    read: (isCurrent: () => boolean) => Promise<T>;
     apply: (value: T) => void;
   },
 ): Promise<void> {
@@ -66,7 +67,7 @@ export async function refreshSessionResource<T>(
   try {
     while (isCurrent()) {
       pending.changed = false;
-      const value = await options.read();
+      const value = await options.read(isCurrent);
       if (!isCurrent()) return;
       if (pending.changed) continue;
       // An overlapping snapshot may have started before this observation.

@@ -341,6 +341,8 @@ messages:
 
 按钮的选中态和调用中状态随 action 动态参数读取的最新状态更新。面板交互锁定时，JSON 渲染区域不可通过鼠标或键盘操作，action handler 也会检查锁定状态，避免已保留的回调绕过界面锁定。
 
+面板交互锁在祖先容器设置 `inert` 与 `aria-disabled`，同时保留动作 handler 的锁定检查；锁定期间浏览器跳过内部控件的键盘焦点并禁止用户输入。Catalog 的 Input/Textarea/Select 使用唯一 ID 关联本地化标签，Switch 使用原生非提交按钮，支持 Tab、Space 与 Enter。控件的可访问性不绕过面板锁，也不新增通用 disabled spec 字段。
+
 ### 标准 directives
 
 所有框架持有的 json-render Provider（右侧插件面板、插件消息面和 turn-bound 消息块）共享同一组 directives。directive 可以写在组件 props 的任意动态值位置，也可以写在 `on.<event>.params` 中；因此按钮与输入框触发的 action 会得到和显示内容一致的解析结果。

@@ -10,12 +10,14 @@ import path from "node:path";
 import { Hono } from "hono";
 import {
   WORLD_EDITIONS_KEY,
+  readRuntimeEnv,
   canonicalizeLocale,
   isKnownLocale,
 } from "@covel/shared";
 import type { LLMAdapter } from "@covel/runtime";
 import type { WorldRecord } from "@covel/store";
 import {
+  classifyApiError,
   errorBody,
   logRequestError,
   readJsonBody,
@@ -203,6 +205,8 @@ worldTranslateRoutes.post(
         await progress.settled();
         signal.throwIfAborted();
         if (result.translated === 0) {
+          // Why a text was refused (a changed placeholder, a reply that is
+          // not JSON) is what the player needs to try again.
           await send({
             type: "error",
             message:
@@ -278,9 +282,12 @@ worldTranslateRoutes.post(
           failed: result.failed.length,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
         logRequestError(c, "[worlds/translate] unexpected error", err);
-        await send({ type: "error", message });
+        const { body } = classifyApiError(
+          err,
+          readRuntimeEnv().nodeEnv !== "production",
+        );
+        await send({ type: "error", message: body.error });
       }
     });
   },

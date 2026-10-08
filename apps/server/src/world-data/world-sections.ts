@@ -169,6 +169,24 @@ async function manifestOfPackage(
   };
 }
 
+/**
+ * The manifest of a revised world, in the world's own language only. The
+ * model is given one edition, but its answer (or a request such as "add an
+ * English edition") can declare more, and a revision writes no locale files.
+ */
+export function ownEditionManifest<T extends Record<string, unknown>>(
+  manifest: T,
+  locale: string,
+): T {
+  return {
+    ...manifest,
+    defaultLocale: locale,
+    ...(manifest.supportedLocales === undefined
+      ? {}
+      : { supportedLocales: [locale] }),
+  };
+}
+
 export async function worldSectionsOf(
   record: WorldRecord,
   /** The package directory, for a world that has one. */

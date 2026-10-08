@@ -4,6 +4,7 @@ import { RotateCcw } from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
 import { toSwatchHex, isValidCssColor } from "@/theme-system/color.js";
 import type { ThemeScheme } from "@/theme-system/types.js";
+import type { AppearanceOverrides } from "@/theme-system/overrides.js";
 import {
   formatLength,
   parseLength,
@@ -21,8 +22,13 @@ interface TokenControlProps {
   readonly themeDefault: string;
   /** Player override, or null when the theme value is in effect. */
   readonly override: string | null;
-  readonly onCommit: (value: string) => void;
-  readonly onReset: () => void;
+  readonly onCommit: (value: string) => void | Promise<void>;
+  readonly onReset: () => void | Promise<void>;
+  readonly onError?: () => void;
+  /** Read after a commit settles, before React has necessarily rendered it. */
+  readonly readOverride?: () => string | null;
+  /** A store refresh can repaint even when this token's scalar is unchanged. */
+  readonly overrideSnapshot?: AppearanceOverrides;
 }
 
 /**
@@ -37,9 +43,22 @@ function useLiveValue(
   spec: TokenSpec,
   scheme: ThemeScheme,
   committed: string,
-  onCommit: (value: string) => void,
+  override: string | null,
+  onCommit: (value: string) => void | Promise<void>,
+  onReset: () => void | Promise<void>,
+  onError?: () => void,
+  readOverride?: () => string | null,
+  overrideSnapshot?: AppearanceOverrides,
 ) {
   const [draft, setDraft] = useState<string | null>(null);
+  const live = useRef<{
+    edit: number;
+    draft: string | null;
+    saving: boolean;
+    active: boolean;
+  }>({ edit: 0, draft: null, saving: false, active: false });
+  const saved = useRef({ override, readOverride });
+  saved.current = { override, readOverride };
   const pending = useRef<{
     timer: ReturnType<typeof setTimeout>;
     commit: () => void;
@@ -54,32 +73,93 @@ function useLiveValue(
     commit?.();
   }, [cancel]);
 
-  // Save the last edit in its original scheme before switching or closing.
-  useEffect(() => flush, [scheme, flush]);
-
-  // A scheme or theme switch changes `committed` underneath us; drop the stale
-  // draft so the control shows what is actually on screen.
+  // Each scheme/mount owns its callbacks. Cleanup still saves a pending edit
+  // in its original scheme, but its eventual rejection cannot paint a new one.
   useEffect(() => {
+    const scope = { edit: 0, draft: null, saving: false, active: true };
+    live.current = scope;
+    setDraft(null);
+    return () => {
+      scope.active = false;
+      flush();
+    };
+  }, [scheme, flush]);
+
+  useEffect(() => {
+    // An earlier save/rollback may change committed while a newer preview is
+    // still pending. Only that preview's own terminal callback may discard it.
+    if (live.current.draft !== null) {
+      document.documentElement.style.setProperty(spec.name, live.current.draft);
+      return;
+    }
+    if (live.current.saving) return;
     cancel();
     setDraft(null);
-  }, [committed, scheme, cancel]);
+  }, [committed, overrideSnapshot, spec.name, cancel]);
+
+  function paint(value: string | null): void {
+    if (value === null)
+      document.documentElement.style.removeProperty(spec.name);
+    else document.documentElement.style.setProperty(spec.name, value);
+  }
+
+  function persist(operation: () => void | Promise<void>, edit: number): void {
+    const scope = live.current;
+    scope.saving = true;
+    let result: void | Promise<void>;
+    try {
+      result = operation();
+    } catch (error) {
+      result = Promise.reject(error);
+    }
+    void Promise.resolve(result).then(
+      () => {
+        if (!scope.active || scope.edit !== edit) return;
+        scope.saving = false;
+        scope.draft = null;
+        setDraft(null);
+        // A fulfilled helper can ignore or normalize the draft without a
+        // store notification. Paint the confirmed value, not the preview.
+        const latest = saved.current;
+        paint(latest.readOverride ? latest.readOverride() : latest.override);
+      },
+      () => {
+        if (!scope.active) return;
+        onError?.();
+        if (scope.edit !== edit) {
+          // Store rollback subscribers may have repainted the confirmed value.
+          // Restore the newer preview, never the failed edit's old baseline.
+          if (scope.draft !== null || scope.saving) paint(scope.draft);
+          return;
+        }
+        scope.saving = false;
+        scope.draft = null;
+        setDraft(null);
+        const latest = saved.current;
+        paint(latest.readOverride ? latest.readOverride() : latest.override);
+      },
+    );
+  }
 
   function preview(next: string): void {
+    const edit = ++live.current.edit;
+    live.current.draft = next;
     setDraft(next);
-    if (typeof document !== "undefined") {
-      document.documentElement.style.setProperty(spec.name, next);
-    }
+    paint(next);
     cancel();
     pending.current = {
       timer: setTimeout(flush, COMMIT_DELAY_MS),
-      commit: () => onCommit(next),
+      commit: () => persist(() => onCommit(next), edit),
     };
   }
 
   function reset(): void {
     cancel();
+    const edit = ++live.current.edit;
+    live.current.draft = null;
     setDraft(null);
-    document.documentElement.style.removeProperty(spec.name);
+    paint(null);
+    persist(onReset, edit);
   }
 
   return { value: draft ?? committed, preview, flush, reset };
@@ -92,6 +172,9 @@ export function TokenControl({
   override,
   onCommit,
   onReset,
+  onError,
+  readOverride,
+  overrideSnapshot,
 }: TokenControlProps) {
   const { t, i18n } = useTranslation();
   const committed = override ?? themeDefault;
@@ -99,12 +182,14 @@ export function TokenControl({
     spec,
     scheme,
     committed,
+    override,
     onCommit,
+    onReset,
+    onError,
+    readOverride,
+    overrideSnapshot,
   );
-  const resetToken = () => {
-    reset();
-    onReset();
-  };
+  const resetToken = reset;
   const label = resolveI18nText(spec.label, i18n.language) ?? spec.name;
   const labelId = useId();
   const hint = spec.hint ? resolveI18nText(spec.hint, i18n.language) : null;

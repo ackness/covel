@@ -6,7 +6,7 @@
  * GET    /api/sessions/:id/suspensions
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
 import type { BudgetOptions } from "@covel/context";
 import { type DataStore } from "@covel/store";
@@ -18,8 +18,10 @@ import {
 } from "@covel/plugin-loader";
 import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
+import { makeErrorHandler } from "../../src/api-error.js";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
 import {
+  SessionLockTimeoutError,
   createInProcessSessionLock,
   type SessionLock,
 } from "../../src/lib/session-lock.js";
@@ -57,6 +59,9 @@ function createTestApp(
     };
   }>();
 
+  app.onError(
+    makeErrorHandler("[resume test]", process.env.NODE_ENV !== "production"),
+  );
   app.use("*", async (c, next) => {
     if (deps.contextBudget) c.set("turnContextBudget", deps.contextBudget);
     c.set("store", deps.store);
@@ -262,6 +267,10 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
 // ── Tests ─────────────────────────────────────────────────────────────
 
 describe("Resume Routes", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
   let store: DataStore;
 
   beforeEach(async () => {
@@ -270,6 +279,51 @@ describe("Resume Routes", () => {
   });
 
   describe("POST /api/sessions/:id/suspensions/:suspensionId/resume", () => {
+    it.each(["acquire", "claimed", "unknown"])(
+      "classifies %s failures without losing retryability",
+      async (seam) => {
+        vi.stubEnv("NODE_ENV", "production");
+        const log = vi
+          .spyOn(console, seam === "unknown" ? "error" : "warn")
+          .mockImplementation(() => {});
+        const marker = "INTERNAL_RESUME_DIAGNOSTIC";
+        const failure =
+          seam === "unknown"
+            ? new Error(marker)
+            : new SessionLockTimeoutError(marker);
+        await createSuspension(store);
+        const lock = createInProcessSessionLock();
+        const claim = vi.spyOn(store, "claimSuspension");
+        const prepare = vi.fn(async () => {});
+        if (seam === "acquire")
+          vi.spyOn(lock, "withLock").mockRejectedValueOnce(failure);
+        else prepare.mockRejectedValueOnce(failure);
+        const app = createTestApp(
+          makeDefaultDeps(store, { prepareToolsForSession: prepare }),
+          lock,
+        );
+        const resume = () =>
+          app.request("/api/sessions/sess-1/suspensions/susp-1/resume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: { name: "Alice" } }),
+          });
+        const response = await resume();
+        expect(response.status).toBe(seam === "unknown" ? 500 : 503);
+        expect(await response.json()).toEqual(
+          seam === "unknown"
+            ? { error: "Internal server error" }
+            : { error: "Session is busy, please retry", code: "session_busy" },
+        );
+        expect(log.mock.calls.flat().join(" ")).toContain(marker);
+        expect(claim).toHaveBeenCalledTimes(seam === "acquire" ? 0 : 1);
+        expect(
+          (await store.getSuspension("susp-1"))?.resolvedAt,
+        ).toBeUndefined();
+        expect((await resume()).status).toBe(200);
+      },
+    );
+
     it("uses the server-configured adapter when X-Provider-Keys is missing", async () => {
       const app = createTestApp(makeDefaultDeps(store));
       await createSuspension(store);
@@ -689,6 +743,8 @@ describe("Resume Routes", () => {
     });
 
     it("releases a failed execution claim and retries the same suspension", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
       await createSuspension(store);
       const hookPipeline = createHookPipeline();
       const postRuntime = vi.fn(async () => ({ action: "continue" as const }));
@@ -711,13 +767,16 @@ describe("Resume Routes", () => {
 
       const failed = await resume();
       expect(failed.status).toBe(500);
-      expect(await failed.json()).toMatchObject({
-        result: {
-          status: "failed",
-          output: null,
-          error: expect.stringContaining("synthetic provider failure"),
-        },
-      });
+      // The runtime's failure is named, as a turn names it to the player;
+      // the runtime result itself is not returned.
+      const failure = (await failed.json()) as Record<string, unknown>;
+      expect(Object.keys(failure)).toEqual(["error"]);
+      expect(failure.error).toMatch(
+        /^Resume failed: .*synthetic provider failure/,
+      );
+      expect(log.mock.calls.flat().join(" ")).toContain(
+        "synthetic provider failure",
+      );
       expect(postRuntime).toHaveBeenCalledTimes(1);
       expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeUndefined();
 
@@ -826,6 +885,8 @@ describe("Resume Routes", () => {
     });
 
     it("buffers post-commit fan-out until the finalize transaction commits: a rollback leaves hooks unobserved", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
       // Proposals commit through the tx-bound store view inside the route's
       // finalize transaction. If a LATER write in that transaction throws
       // (here: markSuspensionResolved), the whole transaction rolls back —
@@ -879,13 +940,32 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(500);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/Resume commit failed/);
+      expect(Object.keys(body)).toEqual(["error"]);
+      expect(body.error).toMatch(
+        /^Resume commit failed: .*forced finalize failure.*can be retried\.$/,
+      );
+      expect(log.mock.calls.flat().join(" ")).toContain(
+        "forced finalize failure",
+      );
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeUndefined();
 
       // The rollback undid the narrative write…
       const messages = await store.listMessages("sess-1");
       expect(messages.map((m) => m.content)).not.toContain("Resume complete.");
       // …and no hook ever observed a "committed" state for it.
       expect(postStateCommit).not.toHaveBeenCalled();
+      const retryApp = createTestApp(makeDefaultDeps(store, { hookPipeline }));
+      const retry = await retryApp.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Alice" } }),
+        },
+      );
+      expect(retry.status).toBe(200);
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeDefined();
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
     });
 
     it("does not restore a claimed suspension into a recreated session after failure", async () => {

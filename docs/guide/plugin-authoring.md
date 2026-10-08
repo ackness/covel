@@ -93,6 +93,7 @@ Agent 正文放在相应 `PLUGIN.md` 或 `RUNTIME.md`。静态附加段用根 `c
 ## 验证与发现
 
 - `pnpm validate:plugin <目录 | PLUGIN.md | RUNTIME.md>` 验证整个包，包括其他子 runtime。
+  校验器覆盖 turn 和 committed 输入的本地 schema 文件与包内 producer 引用。committed 输入读取完整 export，不能声明 `select`；要投影同轮输出时使用默认 turn scope。静态错误报告清单源路径和 `io.inputs.<binding>` 字段，不执行 entry、guard 或 handler。
 - `GET /api/plugins/:id` 返回包的契约、设置、runtime、工具、UI 和数据声明。
 - `GET /api/framework/capabilities` 返回框架原语和发现入口。
 - `GET /api/worlds/:id/plugin-plan` 返回世界策略和显式默认请求。

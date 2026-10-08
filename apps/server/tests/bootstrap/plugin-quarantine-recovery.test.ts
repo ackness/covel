@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -101,8 +103,22 @@ describe("startup quarantine recovery", () => {
     expect(f.discoveryMap.has(f.id)).toBe(false);
     expect(f.manifestCache.has(f.id)).toBe(false);
     expect(f.failedDiscoveryMap.has(f.id)).toBe(true);
+    // The OS decides when a recursive watcher reports a change, and may not
+    // report one made right after it starts. The change is delivered here as
+    // the watcher would deliver it; the debounce and the reload are real.
+    const reports: ((event: string, filename: string) => void)[] = [];
+    vi.spyOn(fsSync, "watch").mockImplementation(((
+      _root: string,
+      _options: unknown,
+      report: (event: string, filename: string) => void,
+    ) => {
+      reports.push(report);
+      return Object.assign(new EventEmitter(), { close() {} });
+    }) as never);
     f.manager.watch();
+    expect(reports).toHaveLength(1);
     await fs.writeFile(f.manifest, f.valid);
+    reports[0]!("change", "PLUGIN.md");
     await vi.waitFor(
       () => expect(f.registry.get(f.id)?.status).toBe("registered"),
       { timeout: 3000 },

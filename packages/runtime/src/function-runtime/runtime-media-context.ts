@@ -50,6 +50,11 @@ interface CreateRuntimeMediaContextOptions {
    * itself may write through the same context without a plugin scope.
    */
   readonly pluginId?: string;
+  /**
+   * The invocation's abort signal. A write that finishes after it fired is
+   * not claimed for the session: its bytes stay unowned for media cleanup.
+   */
+  readonly signal?: AbortSignal;
   readonly maxRedirects?: number;
   readonly defaultMaxBytes?: number;
   readonly defaultTimeoutMs?: number;
@@ -72,10 +77,11 @@ export function createRuntimeMediaContext(
   utils: PluginRuntimeUtils | undefined,
   options: CreateRuntimeMediaContextOptions,
 ): MediaContext {
-  const { sessionId, pluginId } = options;
+  const { sessionId, pluginId, signal } = options;
   return {
     async put(blob, mime, meta) {
       const ref = await mediaStore.put(blob, mime, meta);
+      signal?.throwIfAborted();
       // First-writer-wins inside MediaStore.recordOwnership: a duplicate
       // (same SHA-256) put from a second session reuses the existing row
       // without overwriting the original owner. We always pair it with a
@@ -114,6 +120,7 @@ export function createRuntimeMediaContext(
         opts,
         options,
       );
+      signal?.throwIfAborted();
       await mediaStore.recordOwnership(ref.id, sessionId, pluginId);
       await mediaStore.addRef(ref.id, sessionId, pluginId);
       return ref;

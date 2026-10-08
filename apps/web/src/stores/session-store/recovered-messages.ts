@@ -8,6 +8,7 @@ export function mergeRecoveredMessages(
   current: StreamMessage[],
   recovered: StreamMessage[],
   executing: boolean,
+  terminalTurnId?: string,
 ): StreamMessage[] {
   if (recovered.length === 0) return current;
   const messages = [...current];
@@ -49,7 +50,8 @@ export function mergeRecoveredMessages(
         : -1;
     if (stream >= 0) {
       // Keep an active attempt intact; a closed attempt can recover its full text.
-      if (!executing) messages[stream] = message;
+      if (!executing || message.turnId === terminalTurnId)
+        messages[stream] = message;
       previous = stream;
       continue;
     }

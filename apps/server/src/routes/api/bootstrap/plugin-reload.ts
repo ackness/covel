@@ -37,8 +37,11 @@ export async function preparePluginReload(
         pluginMdPaths.push(manifest);
     }
   } else pluginMdPaths.push(path.join(previous.rootPath, "PLUGIN.md"));
-  const discovery = {
-    ...previous,
+  // Carry package identity forward, not diagnostics from the previous scan.
+  const discovery: PluginDiscoveryResult = {
+    id: previous.id,
+    rootPath: previous.rootPath,
+    ...(previous.source ? { source: previous.source } : {}),
     isMultiRuntime: runtimeDirs !== undefined,
     pluginMdPaths: pluginMdPaths.sort(),
   };

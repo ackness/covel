@@ -16,7 +16,7 @@ import {
  * world scene registry uses its art; any other location has no backdrop and
  * the stage falls back to the world image.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   const evt = ctx.triggerEvent;

@@ -418,7 +418,12 @@ export function createGatewayAdapter(
             : {}),
         },
       )) {
-        if (event.type === "text-delta" && event.textDelta !== undefined) {
+        if (event.type === "tool-argument-delta") {
+          yield { type: "tool-argument-delta" as const };
+        } else if (
+          event.type === "text-delta" &&
+          event.textDelta !== undefined
+        ) {
           yield { type: "text-delta" as const, textDelta: event.textDelta };
         } else if (
           event.type === "reasoning-delta" &&

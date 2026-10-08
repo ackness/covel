@@ -38,6 +38,7 @@ import {
   readWorldManifestSource,
 } from "./world-data/locale-overlays.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
+import type { WorldDataDiagnostic } from "./world-data/types.js";
 import {
   fileExists,
   readWorldManifest,
@@ -186,6 +187,11 @@ export async function loadSingleWorld(
   options?: {
     source?: string;
     covelHome?: string;
+    includeWorldDataOverrides?: boolean;
+    /** Installers may reject errors; seed loading remains tolerant by default. */
+    onWorldDataDiagnostics?: (
+      diagnostics: readonly WorldDataDiagnostic[],
+    ) => void;
     storage?: Record<string, unknown>;
   },
 ): Promise<WorldRecord | null> {
@@ -279,6 +285,7 @@ export async function loadSingleWorld(
   const worldData = await loadWorldDataSummary({
     worldRoot: worldDir,
     covelHome: options?.covelHome,
+    includeOverrides: options?.includeWorldDataOverrides,
     worldId,
     worldDataPath,
     defaultLocale,
@@ -300,6 +307,7 @@ export async function loadSingleWorld(
     }
   }
 
+  options?.onWorldDataDiagnostics?.(worldData.diagnostics);
   return { ...baseRecord, metadata: worldData.metadata };
 }
 

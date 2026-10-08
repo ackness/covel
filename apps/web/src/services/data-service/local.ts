@@ -1,5 +1,6 @@
 import {
   DEFAULT_LOCALE,
+  characterSchemaSchema,
   worldDimensionsSchema,
   worldWireRecordSchema,
   decodePageCursor,
@@ -200,6 +201,20 @@ function initialCheckpoint(
 ): BrowserCheckpoint {
   const committedAt = new Date().toISOString();
   const portableContent = portableWorldContent(session, world, committedAt);
+  // The same seed as POST /api/sessions: the world's preset becomes the
+  // session's schema, at the kernel's first version.
+  const preset = world?.metadata?.characterSchema;
+  const characterSchema = preset
+    ? {
+        ...characterSchemaSchema.parse({
+          ...(preset as Record<string, unknown>),
+          version: 1,
+        }),
+        sessionId: session.id,
+        createdAt: committedAt,
+        updatedAt: committedAt,
+      }
+    : null;
   return jsonCheckpoint({
     schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
     sessionId: session.id,
@@ -215,7 +230,7 @@ function initialCheckpoint(
     events: [],
     traceEvents: [],
     characters: portableContent.characters,
-    characterSchema: null,
+    characterSchema,
     pluginData: [],
     lorebookEntries: portableContent.lorebookEntries,
     sessionSummaries: [],

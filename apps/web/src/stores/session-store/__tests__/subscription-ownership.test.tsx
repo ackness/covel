@@ -1,5 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  clearAllStreamingText,
+  getStreamingText,
+} from "@/stores/streaming-text-store.js";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import type {
   ConnectionState,
@@ -17,6 +21,7 @@ const api = vi.hoisted(() => ({
   listPluginData: vi.fn(),
   getWorld: vi.fn(),
   getSessionView: vi.fn(),
+  listMessagesPage: vi.fn(),
   listSuspensions: vi.fn(),
 }));
 const subscription = vi.hoisted(() => ({ createSessionSubscription: vi.fn() }));
@@ -93,14 +98,16 @@ function setup() {
     sessionIdRef: { current: session.id as string | null },
     sessionGenerationRef: { current: 1 },
     stateRef: { current: { ...initialState, session } as SessionState },
-    activeTurnIdRef: { current: null },
+    activeTurnIdRef: { current: null as string | null },
+    deltaBufferRef: { current: new Map() },
+    deltaRafRef: { current: null },
     workspace: {
       hydrate: vi
         .fn<SessionWorkspace["hydrate"]>()
         .mockResolvedValue(undefined),
-      run: async () => {
+      run: vi.fn(async () => {
         throw new Error("Unexpected workspace mutation");
-      },
+      }),
       checkpoint: vi
         .fn<SessionWorkspace["checkpoint"]>()
         .mockResolvedValue(undefined),
@@ -121,6 +128,12 @@ function event(type: string): SubscriptionEvent {
     payload: { worldId: "world" },
   };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  clearAllStreamingText();
+});
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -597,4 +610,327 @@ it("only hydrates the currently owned local session after a subscription 404", a
   await callback();
   expect(options.workspace.hydrate).toHaveBeenCalledOnce();
   unmount();
+});
+
+function historyMessage(n: number) {
+  return {
+    id: `m${n}`,
+    role: "assistant" as const,
+    content: `Message ${n}`,
+    turnId: `t${n}`,
+    runtimeId: "story/main",
+    kind: "story" as const,
+    createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, n)).toISOString(),
+  };
+}
+const historyWindow = (start: number, end: number) =>
+  Array.from({ length: end - start + 1 }, (_, i) => historyMessage(start + i));
+
+it("fills a nonoverlapping snapshot gap without dropping loaded history", async () => {
+  const { streams, options } = setup();
+  options.stateRef.current.messages = historyWindow(1, 20).map((m) => ({
+    ...m,
+    timestamp: m.createdAt,
+  }));
+  options.dispatch.mockImplementation((action) => {
+    options.stateRef.current = reducer(options.stateRef.current, action);
+  });
+  api.getSessionView.mockResolvedValue({
+    session,
+    messages: historyWindow(41, 120),
+    messagesCursor: "opaque-41",
+    executionSteps: [],
+    execution: { state: "idle" },
+    characters: [],
+    gameState: {},
+  });
+  api.listMessagesPage.mockResolvedValue({
+    items: historyWindow(1, 40),
+    nextCursor: null,
+  });
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
+    historyWindow(1, 120).map((m) => m.id),
+  );
+  expect(api.listMessagesPage).toHaveBeenCalledExactlyOnceWith(session.id, {
+    cursor: "opaque-41",
+    limit: 40,
+  });
+  expect(options.stateRef.current.olderMessagesCursor).toBeNull();
+});
+
+function setupHistoryGap() {
+  const hook = setup();
+  hook.options.stateRef.current.messages = historyWindow(1, 20).map((m) => ({
+    ...m,
+    timestamp: m.createdAt,
+  }));
+  hook.options.dispatch.mockImplementation((action) => {
+    hook.options.stateRef.current = reducer(
+      hook.options.stateRef.current,
+      action,
+    );
+  });
+  api.getSessionView.mockResolvedValue({
+    session,
+    messages: historyWindow(81, 160),
+    messagesCursor: "opaque-81",
+    executionSteps: [],
+    execution: { state: "completed", turnId: "old" },
+    characters: [],
+    gameState: {},
+  });
+  return hook;
+}
+
+it("merges multiple bridge pages once in durable order and retains the oldest cursor", async () => {
+  const { streams, options } = setupHistoryGap();
+  options.stateRef.current.olderMessagesCursor = "oldest-cursor";
+  api.listMessagesPage
+    .mockResolvedValueOnce({
+      items: historyWindow(41, 80),
+      nextCursor: "opaque-41",
+    })
+    .mockResolvedValueOnce({
+      items: [...historyWindow(1, 40), historyMessage(40)],
+      nextCursor: null,
+    });
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
+    historyWindow(1, 160).map((m) => m.id),
+  );
+  expect(
+    api.listMessagesPage.mock.calls.map(([, opts]) => opts.cursor),
+  ).toEqual(["opaque-81", "opaque-41"]);
+  expect(options.stateRef.current.olderMessagesCursor).toBe("oldest-cursor");
+});
+
+it.each(["network", "repeated cursor", "duplicate page"])(
+  "keeps the old window on %s and retries reads after showing the error",
+  async (failure) => {
+    vi.useFakeTimers();
+    const { streams, options, unmount } = setupHistoryGap();
+    if (failure === "network")
+      api.listMessagesPage.mockRejectedValue(new Error("offline"));
+    else if (failure === "repeated cursor")
+      api.listMessagesPage.mockResolvedValue({
+        items: historyWindow(41, 80),
+        nextCursor: "opaque-81",
+      });
+    else
+      api.listMessagesPage.mockResolvedValue({
+        items: historyWindow(81, 120),
+        nextCursor: "opaque-41",
+      });
+    await act(async () => {
+      streams[0]!.emit(event("system.reset"));
+    });
+    expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
+      historyWindow(1, 20).map((m) => m.id),
+    );
+    expect(options.stateRef.current.executionError).toMatch(
+      /Unable to restore message history/,
+    );
+    expect(api.listMessagesPage).toHaveBeenCalledOnce();
+    api.listMessagesPage.mockResolvedValue({
+      items: historyWindow(1, 80),
+      nextCursor: null,
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
+      historyWindow(1, 160).map((m) => m.id),
+    );
+    expect(options.stateRef.current.executionError).toBeNull();
+    expect(options.workspace.run).not.toHaveBeenCalled();
+    unmount();
+    vi.useRealTimers();
+  },
+);
+
+it("keeps retrying when the snapshot fails after a failed bridge page", async () => {
+  vi.useFakeTimers();
+  const { streams, options, unmount } = setupHistoryGap();
+  options.stateRef.current.olderMessagesCursor = "oldest-cursor";
+  api.listMessagesPage.mockRejectedValueOnce(new Error("page offline"));
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(options.stateRef.current.executionError).toContain("page offline");
+  expect(api.getSessionView).toHaveBeenCalledOnce();
+
+  api.getSessionView.mockRejectedValueOnce(new Error("snapshot offline"));
+  api.listMessagesPage.mockResolvedValue({
+    items: historyWindow(1, 80),
+    nextCursor: null,
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(2);
+  expect(options.stateRef.current.executionError).toContain("snapshot offline");
+  expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
+    historyWindow(1, 20).map((m) => m.id),
+  );
+  expect(options.stateRef.current.olderMessagesCursor).toBe("oldest-cursor");
+  expect(api.listMessagesPage).toHaveBeenCalledOnce();
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(3);
+  expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
+    historyWindow(1, 160).map((m) => m.id),
+  );
+  expect(options.stateRef.current.olderMessagesCursor).toBe("oldest-cursor");
+  expect(options.stateRef.current.executionError).toBeNull();
+  expect(options.workspace.run).not.toHaveBeenCalled();
+  unmount();
+});
+
+it("completes history recovery even when the separate world read fails", async () => {
+  vi.useFakeTimers();
+  const { streams, options, unmount } = setupHistoryGap();
+  api.listMessagesPage
+    .mockRejectedValueOnce(new Error("page offline"))
+    .mockResolvedValue({ items: historyWindow(1, 80), nextCursor: null });
+  api.getWorld.mockRejectedValue(new Error("world offline"));
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(options.stateRef.current.executionError).toContain("page offline");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
+    historyWindow(1, 160).map((m) => m.id),
+  );
+  expect(options.stateRef.current.executionError).toBeNull();
+  expect(api.getWorld).toHaveBeenCalledOnce();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(2);
+  expect(options.workspace.run).not.toHaveBeenCalled();
+  unmount();
+});
+
+it.each(["revisit", "unmount"])(
+  "abandons bridge pagination after %s",
+  async (leave) => {
+    const pending = deferred<unknown>();
+    const { streams, options, rerender, unmount } = setupHistoryGap();
+    api.listMessagesPage.mockReturnValueOnce(pending.promise);
+    await act(async () => {
+      streams[0]!.emit(event("system.reset"));
+    });
+    if (leave === "unmount") unmount();
+    else {
+      options.sessionGenerationRef.current += 2;
+      rerender();
+    }
+    options.dispatch.mockClear();
+    await act(async () => {
+      pending.resolve({
+        items: historyWindow(41, 80),
+        nextCursor: "opaque-41",
+      });
+    });
+    expect(api.listMessagesPage).toHaveBeenCalledOnce();
+    expect(options.dispatch).not.toHaveBeenCalled();
+  },
+);
+
+it("a replaced recovery cannot continue pagination or publish its older window", async () => {
+  const pending = deferred<unknown>();
+  const { streams, options } = setupHistoryGap();
+  api.listMessagesPage
+    .mockReturnValueOnce(pending.promise)
+    .mockResolvedValue({ items: historyWindow(1, 80), nextCursor: null });
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(options.stateRef.current.messages).toHaveLength(160);
+  options.dispatch.mockClear();
+  await act(async () => {
+    pending.resolve({ items: historyWindow(41, 80), nextCursor: "opaque-41" });
+  });
+  expect(api.listMessagesPage).toHaveBeenCalledTimes(2);
+  expect(options.dispatch).not.toHaveBeenCalled();
+});
+
+it("bridge publication preserves a newer healthy POST tail and queued delta", async () => {
+  const frames = new Map<number, FrameRequestCallback>();
+  let frameId = 0;
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+    frames.set(++frameId, cb);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+    frames.delete(id);
+  });
+  const pending = deferred<unknown>();
+  const { streams, options } = setupHistoryGap();
+  api.listMessagesPage
+    .mockReturnValueOnce(pending.promise)
+    .mockResolvedValue({ items: historyWindow(1, 80), nextCursor: null });
+  await act(async () => {
+    streams[0]!.emit(event("system.reset"));
+  });
+  options.dispatch({ type: "SET_EXECUTING", value: true });
+  options.activeTurnIdRef.current = "new";
+  const stream = createSseEventHandler({
+    ...options,
+    ds: {} as DataService,
+    runtimeKindRef: { current: new Map([["story/main", "story"]]) },
+    lastBackfilledTurnIdRef: { current: null },
+  });
+  stream({
+    type: "narrative.delta",
+    sessionId: session.id,
+    turnId: "new",
+    requestId: "new",
+    traceId: "trace",
+    flowId: "flow",
+    seq: 1,
+    timestamp: session.createdAt,
+    payload: { runtimeId: "story/main", pluginId: "story", delta: "healthy" },
+  });
+  for (const cb of [...frames.values()]) cb(0);
+  expect(getStreamingText("stream_new_story/main")).toBe("healthy");
+  stream({
+    type: "narrative.delta",
+    sessionId: session.id,
+    turnId: "new",
+    requestId: "new",
+    traceId: "trace",
+    flowId: "flow",
+    seq: 2,
+    timestamp: session.createdAt,
+    payload: { runtimeId: "story/main", pluginId: "story", delta: " queued" },
+  });
+  await act(async () => {
+    pending.resolve({ items: historyWindow(1, 80), nextCursor: null });
+  });
+  expect(options.stateRef.current.messages.at(-1)?.id).toBe(
+    "stream_new_story/main",
+  );
+  expect(getStreamingText("stream_new_story/main")).toBe("healthy");
+  expect(options.stateRef.current.executing).toBe(true);
+  expect(options.stateRef.current.executionRecovery).toBeNull();
+  expect(
+    options.stateRef.current.messages.filter((m) => m.id.startsWith("m")),
+  ).toHaveLength(160);
+  expect(options.deltaBufferRef.current.size).toBe(1);
+  // Prevent this test's scheduled flush from escaping the fixture.
+  const { clearNarrativeDeltaBuffer } = await import("../sse-handler.js");
+  clearNarrativeDeltaBuffer(options.deltaBufferRef, options.deltaRafRef);
 });

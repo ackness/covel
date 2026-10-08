@@ -54,6 +54,7 @@ export function createKeywordArchivalSearcher(
         try {
           const entries = await store.listSessionLorebookEntries(sessionId);
           for (const entry of entries) {
+            if (!entry.enabled) continue;
             const content = String(entry.content ?? "");
             const score = scoreText(content, queryLower, queryTerms);
             if (score > 0) {

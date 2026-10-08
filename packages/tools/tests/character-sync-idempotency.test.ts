@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Proposal, WorldModelView } from "@covel/shared";
 import {
   createCharacterTools,
   type CharacterStore,
@@ -35,7 +36,53 @@ function fixture() {
   return { store, sync };
 }
 
+function world(characters: WorldModelView["characters"]): WorldModelView {
+  return { characters, characterSchema: null, dimensions: {} };
+}
+
 describe("character batch idempotency", () => {
+  it("overlays only this batch onto the supplied world, without replaying outer writes", async () => {
+    const { sync } = fixture();
+    const outer = (version: number): Proposal => ({
+      id: `outer-${version}`,
+      type: "character.upsert",
+      source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+      timestamp: existing.updatedAt,
+      payload: {
+        id: existing.id,
+        name: existing.name,
+        type: existing.type,
+        expectedVersion: version - 1,
+        version,
+        fields: { hp: version },
+      },
+    });
+    const snapshot = world([{ ...existing, version: 3, fields: { hp: 3 } }]);
+    const original = structuredClone(snapshot);
+    const result = await sync.execute(
+      {
+        updates: [
+          { id: existing.id, fields: { hp: 4 } },
+          { id: existing.id, description: "New profile" },
+        ],
+      },
+      {
+        ...context,
+        world: snapshot,
+        upstreamProposals: [outer(2)],
+        pendingProposals: [outer(3)],
+      },
+    );
+    expect(
+      getPendingProposals(result).map((proposal) => proposal.payload),
+    ).toMatchObject([
+      { expectedVersion: 3, version: 4, fields: { hp: 4 } },
+      { expectedVersion: 4, version: 5, description: "New profile" },
+    ]);
+    expect(snapshot).toEqual(original);
+  });
   it("keeps duplicate creates unchanged while retaining other writes", async () => {
     const { store, sync } = fixture();
     const result = await sync.execute(
@@ -69,23 +116,26 @@ describe("character batch idempotency", () => {
     expect(store.upsertCharacter).not.toHaveBeenCalled();
   });
 
-  it("deduplicates characters created earlier in the same batch", async () => {
-    const { sync } = fixture();
-    const result = await sync.execute(
-      {
-        creates: [
-          { name: "New NPC", type: "npc" },
-          { name: "New NPC", type: "npc" },
-        ],
-      },
-      context,
-    );
-    expect(getPendingProposals(result)).toHaveLength(1);
-    expect(getToolContent(result)).toMatchObject({
-      created: [{ name: "New NPC" }],
-      unchanged: [{ name: "New NPC" }],
-    });
-  });
+  it.each([false, true])(
+    "deduplicates characters created earlier in the same batch (world: %s)",
+    async (withWorld) => {
+      const { sync } = fixture();
+      const result = await sync.execute(
+        {
+          creates: [
+            { name: "New NPC", type: "npc" },
+            { name: "New NPC", type: "npc" },
+          ],
+        },
+        { ...context, ...(withWorld ? { world: world([existing]) } : {}) },
+      );
+      expect(getPendingProposals(result)).toHaveLength(1);
+      expect(getToolContent(result)).toMatchObject({
+        created: [{ name: "New NPC" }],
+        unchanged: [{ name: "New NPC" }],
+      });
+    },
+  );
 
   it("does not write a partial batch after a duplicate followed by an invalid update", async () => {
     const { sync, store } = fixture();

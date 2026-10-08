@@ -34,10 +34,9 @@ export default async function handler(ctx) {
     };
   }
 
-  const [previous, characters] = await Promise.all([
-    ctx.pluginData?.get(DIRECTION_NS, DIRECTION_KEY) ?? null,
-    listCharacters(ctx.store, ctx.sessionId),
-  ]);
+  const previous =
+    (await ctx.pluginData?.get(DIRECTION_NS, DIRECTION_KEY)) ?? null;
+  const characters = listCharacters(ctx.world);
   const hadDirectionState = previous !== null && previous !== undefined;
   let actors = normalizeActors(previous?.actors);
   const diagnostics = [];
@@ -257,9 +256,8 @@ function resolveActor(value, actors, characters) {
   return unique.size === 1 ? [...unique.values()][0] : null;
 }
 
-async function listCharacters(store, sessionId) {
-  if (!store || typeof store.listCharacters !== "function") return [];
-  const rows = await store.listCharacters(sessionId);
+function listCharacters(world) {
+  const rows = world?.characters;
   if (!Array.isArray(rows)) return [];
   return rows
     .filter(

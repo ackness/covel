@@ -37,7 +37,10 @@ import {
   emitLlmRespondedSuccess,
 } from "../llm/llm-telemetry.js";
 import { shouldRetryMalformedToolArguments } from "../turn-executor/turn-output-helpers.js";
-import { isTerminalLlmRequestError } from "../retry/retry-common.js";
+import {
+  isStreamRecoveryAllowed,
+  isTerminalLlmRequestError,
+} from "../retry/retry-common.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import type {
   LLMToolDefinition,
@@ -199,7 +202,8 @@ async function requestStreaming(
   // retries on transient failures, and forwards text deltas to
   // the caller on the first attempt. If streaming exhausts its retries
   // without output the player saw, fall back to a non-stream call — except
-  // after a cut at the output limit, which a non-stream call would repeat.
+  // after a cut at the output limit or a provider error that refuses the
+  // request itself (401, 400), which a non-stream call would repeat.
   try {
     const streamed = await streamLLMWithRetry({
       ...callParams,
@@ -213,6 +217,7 @@ async function requestStreaming(
       streamError instanceof LLMRetryError &&
       !streamError.hasPartialOutput &&
       streamError.reason !== "output-truncated" &&
+      isStreamRecoveryAllowed(streamError) &&
       Date.now() < deadline
     ) {
       console.warn(

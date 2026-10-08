@@ -2,9 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import type { FunctionHandler } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
-import { createCharacterTools, getPendingProposals, tool } from "@covel/tools";
+import {
+  createCharacterTools,
+  getPendingProposals,
+  tool,
+  type ToolModule,
+} from "@covel/tools";
 import { z } from "zod";
-import type { RuntimeManifest } from "@covel/shared";
+import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -27,22 +32,39 @@ const input = {
   playerMessage: "Begin",
 };
 
-async function fixture(handler: FunctionHandler) {
+async function fixture(
+  handler: FunctionHandler,
+  options: {
+    runtime?: RuntimeManifest;
+    phase?: "setup" | "playing";
+    completedPlayerTurns?: number;
+    origin?: TurnInput["origin"];
+    extraTools?: ToolModule[];
+  } = {},
+) {
+  const runtime = options.runtime ?? manifest;
   const store = createMemoryStore();
   await store.createSession({
     id: input.sessionId,
     worldId: null,
     status: "active",
-    phase: "setup",
-    completedPlayerTurns: 0,
+    phase: options.phase ?? "setup",
+    completedPlayerTurns: options.completedPlayerTurns ?? 0,
     setupRuntimes: {},
     activePlugins: ["community"],
     createdAt: new Date().toISOString(),
   });
-  const tools = createCharacterTools(store, {});
+  const tools = [
+    ...createCharacterTools(store, {}),
+    ...(options.extraTools ?? []),
+  ];
   const deps = {
     store,
-    loadRuntime: async () => ({ manifest, promptTemplate: "", handler }),
+    loadRuntime: async () => ({
+      manifest: runtime,
+      promptTemplate: "",
+      handler,
+    }),
     llm: {
       generate: vi.fn(async () => {
         throw new Error("No LLM expected");
@@ -54,10 +76,14 @@ async function fixture(handler: FunctionHandler) {
       getToolSource: () => "builtin",
     }),
   };
-  const result = await executeTurn(input, [manifest], deps);
+  const result = await executeTurn(
+    { ...input, origin: options.origin ?? input.origin },
+    [runtime],
+    deps,
+  );
   expect(deps.llm.generate).not.toHaveBeenCalled();
   expect(await store.listCharacters(input.sessionId)).toHaveLength(0);
-  return { store, result };
+  return { store, result, runtime };
 }
 
 async function commit(
@@ -68,7 +94,7 @@ async function commit(
     turnIds: [input.turnId],
     store: f.store,
     sessionId: input.sessionId,
-    runtimes: [manifest],
+    runtimes: [f.runtime],
     results: f.result.runtimeResults,
     executionContext: {
       executionId: "execution",
@@ -86,6 +112,165 @@ async function commit(
 }
 
 describe("governed function tools", () => {
+  it("deduplicates a sync batch through the real executor with a world snapshot", async () => {
+    let output: unknown;
+    const f = await fixture(
+      async (ctx) => {
+        expect(ctx.world).toBeDefined();
+        output = await ctx.tools!.call("sync-characters", {
+          creates: [
+            { name: "New NPC", type: "npc" },
+            { name: "New NPC", type: "npc" },
+          ],
+        });
+        return { outcome: "success", value: {} };
+      },
+      { runtime: { ...manifest, tools: { builtin: ["sync-characters"] } } },
+    );
+    expect(f.result.runtimeResults[0]?.status).toBe("success");
+    expect(output).toMatchObject({
+      created: [{ name: "New NPC" }],
+      unchanged: [{ name: "New NPC" }],
+    });
+    expect(f.result.runtimeResults[0]?.pendingProposals).toHaveLength(1);
+    await commit(f);
+    expect(await f.store.listCharacters(input.sessionId)).toHaveLength(1);
+  });
+
+  it("fails and commits no buffered effects when a missing-character update is caught", async () => {
+    let caught: unknown;
+    const f = await fixture(
+      async (ctx) => {
+        await ctx.pluginData!.set("audit", "created", true);
+        await ctx.tools!.call("create-character", {
+          name: "Ada",
+          type: "player",
+        });
+        await ctx
+          .tools!.call("update-character", { id: "missing", fields: { hp: 1 } })
+          .catch((error: unknown) => {
+            caught = error;
+          });
+        return { outcome: "success", value: {} };
+      },
+      {
+        runtime: {
+          ...manifest,
+          tools: { builtin: ["create-character", "update-character"] },
+        },
+      },
+    );
+    expect(f.result.runtimeResults[0]?.status).toBe("failed");
+    expect(caught).toBeInstanceOf(Error);
+    expect(f.result.runtimeResults[0]?.error).toContain("not found");
+    expect(f.result.runtimeResults[0]?.pendingProposals ?? []).toEqual([]);
+    await commit(f);
+    expect(await f.store.listCharacters(input.sessionId)).toEqual([]);
+    expect(
+      await f.store.getPluginData(
+        input.sessionId,
+        "community",
+        "audit",
+        "created",
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    {
+      name: "normal",
+      phase: "playing" as const,
+      stage: "narrative" as const,
+      completedPlayerTurns: 7,
+      origin: "player" as const,
+      expected: 8,
+    },
+    {
+      name: "setup",
+      phase: "setup" as const,
+      stage: "setup" as const,
+      completedPlayerTurns: 0,
+      origin: "player" as const,
+      expected: 1,
+    },
+    {
+      name: "opening",
+      phase: "playing" as const,
+      stage: "narrative" as const,
+      completedPlayerTurns: 0,
+      origin: "continuation" as const,
+      expected: 1,
+    },
+  ])(
+    "forwards the frozen logicalTurn to function tools ($name)",
+    async ({ phase, stage, completedPlayerTurns, origin, expected }) => {
+      let handlerTurn: number | undefined;
+      let toolTurn: number | undefined;
+      const probe = tool({
+        name: "turn-probe",
+        description: "Inspect frozen turn",
+        parameters: z.object({}),
+        async execute(_args, context) {
+          toolTurn = context.logicalTurn;
+          return {};
+        },
+      });
+      const f = await fixture(
+        async (ctx) => {
+          handlerTurn = ctx.logicalTurn;
+          await ctx.tools!.call("turn-probe", {});
+          return { outcome: "success", value: {} };
+        },
+        {
+          phase,
+          completedPlayerTurns,
+          origin,
+          runtime: { ...manifest, stage, tools: { builtin: ["turn-probe"] } },
+          extraTools: [probe],
+        },
+      );
+      expect(f.result.runtimeResults[0]?.status).toBe("success");
+      expect(handlerTurn).toBe(expected);
+      expect(toolTurn).toBe(handlerTurn);
+    },
+  );
+
+  it("keeps logicalTurn absent for a thin host that does not supply a clock", async () => {
+    const observed = vi.fn();
+    const command = tool({
+      name: "list-characters",
+      description: "Probe",
+      parameters: z.object({}),
+      async execute(_args, context) {
+        observed(context);
+        return {};
+      },
+    });
+    const bound = createRuntimeTools({
+      manifest,
+      context: {
+        ...input,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+      },
+      buffer: [],
+      signal: new AbortController().signal,
+      assertLive() {},
+      deps: {
+        loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+        llm: {
+          generate: async () => {
+            throw new Error("unused");
+          },
+        },
+        toolExecutor: createToolExecutor({ findTool: () => command }),
+      },
+    });
+    await bound.tools.call("list-characters", {});
+    await bound.drain();
+    expect(observed).toHaveBeenCalledOnce();
+    expect(observed.mock.calls[0]![0]).not.toHaveProperty("logicalTurn");
+  });
   it("passes handler cancellation into tools and drops late buffered writes", async () => {
     const controller = new AbortController();
     const buffer = [];

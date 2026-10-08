@@ -29,6 +29,12 @@ import {
   refreshSessionResource,
 } from "./session-resource-reads.js";
 import { toStreamMessages } from "./restore-session.js";
+import {
+  RecoveredMessageWindowError,
+  publishRecoveredMessages,
+  readRecoveredSnapshot,
+} from "./recovered-snapshot.js";
+import type { DeltaBufferRef, DeltaRafRef } from "./sse-handler.js";
 import { addBlockMessageFromSse } from "./sse-handler.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import {
@@ -51,12 +57,16 @@ interface UseSessionSubscriptionOptions {
   sessionGenerationRef: MutableRef<number>;
   stateRef: MutableRef<SessionState>;
   activeTurnIdRef: MutableRef<string | null>;
+  deltaBufferRef: DeltaBufferRef;
+  deltaRafRef: DeltaRafRef;
 }
 
 interface ExecutionObservation {
   onSnapshotApplied?: () => void;
   stateRef: MutableRef<SessionState>;
   activeTurnIdRef: MutableRef<string | null>;
+  deltaBufferRef: DeltaBufferRef;
+  deltaRafRef: DeltaRafRef;
 }
 
 function executionOwner(observation: ExecutionObservation): string {
@@ -301,31 +311,51 @@ export async function rehydrateSessionSideState(
       ["game-state", sessionId, "reconnect"],
       {
         isCurrent,
-        read: () => api.getSessionView(sessionId),
+        read: (ownsRead) =>
+          readRecoveredSnapshot(
+            sessionId,
+            executionObservation?.stateRef.current.messages ?? [],
+            ownsRead,
+          ),
         apply: (snapshot) => {
-          dispatch({
-            type: "MERGE_RECOVERED_MESSAGES",
-            messages: toStreamMessages(snapshot.messages),
-          });
+          const state = executionObservation?.stateRef.current;
+          const sameOwner =
+            !!executionObservation &&
+            initialExecutionOwner === executionOwner(executionObservation);
+          const ownsStream = !!state?.executing && !state.executionRecovery;
+          const execution = snapshot.execution;
+          const interruptedCurrentStream =
+            execution?.state === "interrupted" &&
+            !!execution.turnId &&
+            execution.turnId === executionObservation?.activeTurnIdRef.current;
+          if (state && executionObservation) {
+            publishRecoveredMessages(
+              dispatch,
+              state,
+              snapshot,
+              execution,
+              sameOwner && (!ownsStream || interruptedCurrentStream),
+              executionObservation.deltaBufferRef,
+              executionObservation.deltaRafRef,
+            );
+          } else {
+            dispatch({
+              type: "MERGE_RECOVERED_MESSAGES",
+              messages: toStreamMessages(snapshot.messages),
+            });
+          }
           publishSessionGameState(
             dispatch,
             sessionId,
             enrichGameStateFromSnapshot(snapshot),
           );
           executionObservation?.onSnapshotApplied?.();
-          const execution = snapshot.execution;
-          const state = executionObservation?.stateRef.current;
           if (
             execution &&
             executionObservation &&
             state?.session?.id === sessionId &&
             initialExecutionOwner === executionOwner(executionObservation)
           ) {
-            const ownsStream = state.executing && !state.executionRecovery;
-            const interruptedCurrentStream =
-              execution.state === "interrupted" &&
-              !!execution.turnId &&
-              execution.turnId === executionObservation.activeTurnIdRef.current;
             // A healthy POST stream remains authoritative for its live steps.
             // Only confirmed interruption of that exact turn transfers ownership;
             // disconnected/refresh sessions can adopt every server state.
@@ -364,7 +394,10 @@ export async function rehydrateSessionSideState(
       read: () => api.getWorld(targetWorldId),
       apply: (world) => dispatch({ type: "UPDATE_WORLD", world }),
     });
-  })().catch(ignoreError("refresh session snapshot and world after reconnect"));
+  })().catch((error: unknown) => {
+    if (error instanceof RecoveredMessageWindowError) throw error;
+    ignoreError("refresh session snapshot and world after reconnect")(error);
+  });
 
   const suspensionsTask = refreshSessionResource(
     dispatch,
@@ -389,6 +422,8 @@ export function useSessionSubscription({
   sessionGenerationRef,
   stateRef,
   activeTurnIdRef,
+  deltaBufferRef,
+  deltaRafRef,
 }: UseSessionSubscriptionOptions): void {
   const sessionGeneration = sessionGenerationRef.current;
   const subscriptionRef = useRef<SessionSubscription | null>(null);
@@ -417,6 +452,8 @@ export function useSessionSubscription({
     let stateRefreshPending = false;
     let bufferedEvents: SubscriptionEvent[] = [];
     let hasConnected = false;
+    let historyRetry: ReturnType<typeof setTimeout> | undefined;
+    let historyError: string | undefined;
     // A reconnect starts recovery as soon as the stream opens. After a server
     // restart the stream then opens with a stale-cursor `system.reset`, which
     // asks for that same recovery; it is skipped while only control frames
@@ -435,6 +472,7 @@ export function useSessionSubscription({
 
     startRecovery = (): void => {
       if (!isCurrent()) return;
+      clearTimeout(historyRetry);
       const generation = ++recoveryGeneration;
       recovering = true;
       stateRefreshPending = false;
@@ -443,6 +481,8 @@ export function useSessionSubscription({
       const observation = {
         stateRef,
         activeTurnIdRef,
+        deltaBufferRef,
+        deltaRafRef,
         onSnapshotApplied: () => {
           snapshotPublished = true;
           stateRefreshPending = false;
@@ -455,24 +495,38 @@ export function useSessionSubscription({
         dispatch,
         () => isCurrent() && generation === recoveryGeneration,
         observation,
-      ).then(() => {
-        if (generation !== recoveryGeneration || !isCurrent()) {
-          return;
-        }
-        // If a POST started/ended or moved to its opening continuation during
-        // the read, obtain a fresh snapshot before transferring ownership.
-        if (
-          owner !== executionOwner(observation) ||
-          (snapshotPublished && stateRefreshPending)
-        ) {
-          startRecovery();
-          return;
-        }
-        recovering = false;
-        const replay = bufferedEvents;
-        bufferedEvents = [];
-        for (const event of replay) applySubscriptionEvent(event);
-      });
+      )
+        .then(() => {
+          if (generation !== recoveryGeneration || !isCurrent()) {
+            return;
+          }
+          // If a POST started/ended or moved to its opening continuation during
+          // the read, obtain a fresh snapshot before transferring ownership.
+          if (
+            owner !== executionOwner(observation) ||
+            (snapshotPublished && stateRefreshPending)
+          ) {
+            startRecovery();
+            return;
+          }
+          recovering = false;
+          if (historyError && stateRef.current.executionError === historyError)
+            dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+          historyError = undefined;
+          const replay = bufferedEvents;
+          bufferedEvents = [];
+          for (const event of replay) applySubscriptionEvent(event);
+        })
+        .catch((error: unknown) => {
+          if (generation !== recoveryGeneration || !isCurrent()) return;
+          if (owner === executionOwner(observation)) {
+            historyError =
+              error instanceof Error ? error.message : String(error);
+            dispatch({ type: "SET_EXECUTION_ERROR", error: historyError });
+          }
+          // Keep the old continuous window; retry the read, never the action.
+          historyRetry = setTimeout(startRecovery, 3000);
+        });
     };
 
     const handleSubscriptionEvent = (event: SubscriptionEvent): void => {
@@ -567,6 +621,7 @@ export function useSessionSubscription({
 
     return () => {
       closed = true;
+      clearTimeout(historyRetry);
       unregisterRetry();
       sub.close();
       recoveryGeneration += 1;
@@ -584,5 +639,7 @@ export function useSessionSubscription({
     sessionIdRef,
     stateRef,
     activeTurnIdRef,
+    deltaBufferRef,
+    deltaRafRef,
   ]);
 }

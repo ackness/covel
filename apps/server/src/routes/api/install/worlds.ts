@@ -128,6 +128,20 @@ export async function activateWorldPackage(
     await materializeEntries(finalDir, entries);
     try {
       const record = await loadSingleWorld(finalDir, {
+        includeWorldDataOverrides: false,
+        onWorldDataDiagnostics(diagnostics) {
+          const errors = diagnostics.filter((item) => item.level === "error");
+          if (errors.length > 0)
+            throw httpError(
+              400,
+              `Invalid worldData:\n${errors
+                .map(
+                  (item) =>
+                    `${item.sourceId ? `${item.sourceId}: ` : ""}${item.message}`,
+                )
+                .join("\n")}`,
+            );
+        },
         source: "generated-file",
         storage: {
           scope: "server",

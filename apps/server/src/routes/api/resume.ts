@@ -55,7 +55,13 @@ import {
   type SuspensionSummary,
 } from "@covel/shared";
 import type { EventBus } from "@covel/events";
-import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
+import {
+  errorBody,
+  listBody,
+  logRequestError,
+  okBody,
+  parseJsonBody,
+} from "../../api-error.js";
 import {
   resolveSessionParam,
   SESSION_DELETION_PENDING_KEY,
@@ -296,15 +302,11 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 
         if (result.status !== "success" || !result.output) {
           await releaseClaim();
-          return c.json(
-            {
-              ...errorBody(
-                `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
-              ),
-              result,
-            },
-            500,
-          );
+          // The runtime's own failure, the text a turn reports to the player
+          // in `runtime.failed`. An exception below stays a generic 500.
+          const message = `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`;
+          logRequestError(c, "[resume] runtime failed", new Error(message));
+          return c.json(errorBody(message), 500);
         }
 
         // The resume that completes a suspended turn queues the detached
@@ -372,12 +374,9 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             outcome.failedProposals
               .map((fp) => `${fp.proposal.type}: ${fp.error}`)
               .join("; ");
-          return c.json(
-            errorBody(
-              `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`,
-            ),
-            500,
-          );
+          const message = `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`;
+          logRequestError(c, "[resume] commit failed", new Error(message));
+          return c.json(errorBody(message), 500);
         }
         const events = outcome.events;
         await announceDeferredRuntimeJobs(c, queuedRuntimeJobs);
@@ -391,8 +390,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     // `unresolved` and appears in subsequent `listSuspensions`.
     await releaseClaim();
 
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json(errorBody(`Resume failed: ${message}`), 500);
+    throw err;
   }
 });
 

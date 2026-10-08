@@ -139,6 +139,8 @@ describe("browser checkpoint security", () => {
         worldData: { sources: [{ importedAt: "2026-09-01T00:00:00.000Z" }] },
       },
     };
+    // A restarted server seeds the world again; an update keeps createdAt.
+    await store.deleteWorld(WORLD_ID);
     await store.upsertWorld(reseeded);
     expect((await upload()).status).toBe(200);
     expect(await store.getWorld(WORLD_ID)).toEqual(reseeded);

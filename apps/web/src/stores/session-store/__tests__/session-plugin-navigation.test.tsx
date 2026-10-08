@@ -10,8 +10,13 @@ import {
 import { useBuildSessionActions } from "../actions.js";
 import { initialState, reducer } from "../reducer.js";
 import { useSessionRuntimeRefs } from "../runtime-refs.js";
+import { rehydrateSessionSideState } from "../subscription.js";
 
 const api = vi.hoisted(() => ({
+  listSessionPlugins: vi.fn(),
+  listPluginData: vi.fn(),
+  getSessionView: vi.fn(),
+  listSuspensions: vi.fn(),
   enableSessionPlugin: vi.fn(),
   disableSessionPlugin: vi.fn(),
   resolveApproval: vi.fn(),
@@ -481,3 +486,97 @@ describe("authorizing several paused plugins on entry", () => {
     expect(result.current.state.sessionPlugins[0]?.active).toBe(false);
   });
 });
+
+const catalog = (name: string) => ({
+  items: [{ ...plugin, displayName: name }],
+  commands: [{ id: name, label: name, pluginId: plugin.id }],
+});
+
+it("ignores a plugin GET from an earlier visit to the same session", async () => {
+  const old = deferred<ReturnType<typeof catalog>>();
+  api.listSessionPlugins
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValue(catalog("New"));
+  const { result, visit } = setup();
+  let loading!: Promise<void>;
+  act(() => {
+    loading = result.current.actions.loadSessionPlugins();
+  });
+  visit("session-b");
+  visit("session-a");
+  await act(async () => {
+    await result.current.actions.loadSessionPlugins();
+  });
+  await act(async () => {
+    old.resolve(catalog("Old"));
+    await loading;
+  });
+  expect(result.current.state.sessionPlugins[0]?.displayName).toBe("New");
+  expect(result.current.state.sessionCommands).toEqual(catalog("New").commands);
+});
+
+it("the latest plugin GET owns plugins and commands within one visit", async () => {
+  const old = deferred<ReturnType<typeof catalog>>();
+  api.listSessionPlugins
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValue(catalog("New"));
+  const { result } = setup();
+  let loading!: Promise<void>;
+  act(() => {
+    loading = result.current.actions.loadSessionPlugins();
+  });
+  await act(async () => {
+    await result.current.actions.loadSessionPlugins();
+  });
+  await act(async () => {
+    old.resolve(catalog("Old"));
+    await loading;
+  });
+  expect(result.current.state.sessionPlugins[0]?.displayName).toBe("New");
+  expect(result.current.state.sessionCommands).toEqual(catalog("New").commands);
+});
+
+it.each(["GET", "reconnect"])(
+  "the latest %s read owns the shared plugin resource",
+  async (latest) => {
+    api.getSessionView.mockResolvedValue({
+      session,
+      messages: [],
+      characters: [],
+      gameState: {},
+      executionSteps: [],
+    });
+    api.listSuspensions.mockResolvedValue([]);
+    const old = deferred<ReturnType<typeof catalog>>();
+    api.listSessionPlugins
+      .mockReturnValueOnce(old.promise)
+      .mockResolvedValue(catalog("New"));
+    const { result } = setup();
+    const reconnect = () =>
+      rehydrateSessionSideState(
+        session.id,
+        { current: session.id },
+        result.current.dispatch,
+      );
+    let loading!: Promise<void>;
+    act(() => {
+      loading =
+        latest === "GET"
+          ? reconnect()
+          : result.current.actions.loadSessionPlugins();
+    });
+    await act(async () => {
+      await (latest === "GET"
+        ? result.current.actions.loadSessionPlugins()
+        : reconnect());
+    });
+    await act(async () => {
+      old.resolve(catalog("Old"));
+      await loading;
+    });
+    expect(result.current.state.sessionPlugins[0]?.displayName).toBe("New");
+    expect(result.current.state.sessionCommands).toEqual(
+      catalog("New").commands,
+    );
+  },
+);

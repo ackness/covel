@@ -172,7 +172,10 @@ export function validatePluginFiles(
     file(parsed.sourcePath, "guard", runtime.guard);
     file(parsed.sourcePath, "io.output.schema", runtime.output?.schema, true);
     file(parsed.sourcePath, "io.payloadSchema", runtime.input?.schema, true);
-    for (const [name, input] of Object.entries(runtime.inputs ?? {}))
+    // Committed bindings compile into input.inject, not runtime.inputs.
+    // Validate both scopes from the authored declarations to retain field paths.
+    const inputs = parsed.runtime?.io?.inputs ?? {};
+    for (const [name, input] of Object.entries(inputs))
       file(parsed.sourcePath, `io.inputs.${name}.accepts`, input.accepts, true);
     for (const tool of runtime.tools?.builtin ?? []) {
       if (!(FRAMEWORK_TOOL_NAMES as readonly string[]).includes(tool))
@@ -180,7 +183,7 @@ export function validatePluginFiles(
           `${parsed.sourcePath}: tools.builtin: unknown tool ${tool}; use a documented framework tool name`,
         );
     }
-    for (const [binding, input] of Object.entries(runtime.inputs ?? {})) {
+    for (const [binding, input] of Object.entries(inputs)) {
       const runtimeId =
         "runtime" in input.from ? input.from.runtime : undefined;
       if (

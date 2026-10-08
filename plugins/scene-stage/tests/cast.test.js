@@ -124,37 +124,31 @@ describe("scene cast manifests", () => {
 // stay on the envelope (result).
 describe("scene-stage cast handler", () => {
   it("selects mentioned NPCs and writes active cast plugin data", async () => {
-    const store = {
-      async listCharacters(sessionId) {
-        expect(sessionId).toBe("sess-chat");
-        return [
-          {
-            id: "player-1",
-            name: "Player",
-            type: "player",
-            description: "The player character",
-          },
-          {
-            id: "npc-1",
-            name: "Mira",
-            type: "npc",
-            description: "A wary smuggler with a soft voice",
-            fields: { mood: "guarded" },
-          },
-          {
-            id: "npc-2",
-            name: "Sol",
-            type: "npc",
-            description: "A temple archivist",
-          },
-        ];
+    const characters = [
+      {
+        id: "player-1",
+        name: "Player",
+        type: "player",
+        description: "The player character",
       },
-      // Full-DataStore surface: the handler asks for the most recent N
-      // messages via listRecentTurnMessages (the old listTurnMessages(sessionId,
-      // {limit}) call returned the OLDEST N — wrong end of the timeline). It
-      // reads a wider tail because structured runtimes leave empty rows.
-      async listRecentTurnMessages(sessionId, limit) {
-        expect(sessionId).toBe("sess-chat");
+      {
+        id: "npc-1",
+        name: "Mira",
+        type: "npc",
+        description: "A wary smuggler with a soft voice",
+        fields: { mood: "guarded" },
+      },
+      {
+        id: "npc-2",
+        name: "Sol",
+        type: "npc",
+        description: "A temple archivist",
+      },
+    ];
+    const store = {
+      // The handler reads a wider tail of recent messages than it uses,
+      // because structured runtimes leave empty rows.
+      async listTurnMessages(limit) {
         expect(limit).toBe(48);
         return [
           {
@@ -173,6 +167,7 @@ describe("scene-stage cast handler", () => {
       runtimeId: "scene-stage/cast",
       playerMessage: "Mira, what do you see?",
       store,
+      world: { characters },
       completedResults: new Map(),
       config: {},
       recursiveCall: async () => {
@@ -234,25 +229,23 @@ describe("scene-stage cast handler", () => {
   });
 
   it("keeps active cast empty when NPCs only have profile data", async () => {
-    const store = {
-      async listCharacters() {
-        return [
-          { id: "player-1", name: "Player", type: "player" },
-          {
-            id: "npc-1",
-            name: "Ari",
-            type: "npc",
-            description: "A quiet medic",
-            fields: { mood: "calm" },
-          },
-          {
-            id: "npc-2",
-            name: "Bex",
-            type: "npc",
-            description: "A bright scout",
-          },
-        ];
+    const characters = [
+      { id: "player-1", name: "Player", type: "player" },
+      {
+        id: "npc-1",
+        name: "Ari",
+        type: "npc",
+        description: "A quiet medic",
+        fields: { mood: "calm" },
       },
+      {
+        id: "npc-2",
+        name: "Bex",
+        type: "npc",
+        description: "A bright scout",
+      },
+    ];
+    const store = {
       async listTurnMessages() {
         return [{ content: "The empty corridor hums under pale light." }];
       },
@@ -268,6 +261,7 @@ describe("scene-stage cast handler", () => {
       runtimeId: "scene-stage/cast",
       playerMessage: "I listen at the door.",
       store,
+      world: { characters },
       completedResults: new Map(),
       config: {},
       recursiveCall: async () => {

@@ -14,8 +14,10 @@ import {
   makeStateChange,
   makeStateEntry,
   makeStateSchema,
+  makeSuspension,
   makeToolCall,
   makeTurnResult,
+  makeWorld,
   ts,
 } from "../test-fixtures.js";
 
@@ -24,6 +26,75 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
 
   beforeEach(() => {
     store = getStore();
+  });
+
+  // An update changes what a row holds, not which row it is or when it began.
+  describe("Update keeps identity and creation time", () => {
+    it("keeps a state entry's ID", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      const first = makeStateEntry({ sessionId: session.id, value: 1 });
+      await store.upsertStateEntry(first);
+      await store.upsertStateEntry({ ...first, id: id(), value: 2 });
+      expect(
+        await store.getStateEntry(session.id, first.tableName, first.fieldName),
+      ).toMatchObject({ id: first.id, value: 2 });
+    });
+
+    it("keeps a world's creation time", async () => {
+      const world = makeWorld({ createdAt: "2026-01-01T00:00:00.000Z" });
+      await store.upsertWorld(world);
+      await store.upsertWorld({
+        ...world,
+        name: "Renamed",
+        createdAt: "2026-02-02T00:00:00.000Z",
+      });
+      expect(await store.getWorld(world.id)).toMatchObject({
+        name: "Renamed",
+        createdAt: world.createdAt,
+      });
+    });
+
+    it("keeps a lorebook entry's creation time", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      const entry = makeLorebookEntry({
+        sessionId: session.id,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      await store.upsertLorebookEntries([entry]);
+      await store.upsertLorebookEntries([
+        { ...entry, content: "revised", createdAt: "2026-02-02T00:00:00.000Z" },
+      ]);
+      expect(
+        await store.getLorebookEntry(session.id, entry.owner, entry.id),
+      ).toMatchObject({ content: "revised", createdAt: entry.createdAt });
+    });
+
+    it("keeps the turn, runtime and creation time of a suspension", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      const suspension = makeSuspension({
+        sessionId: session.id,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+      await store.saveSuspension(suspension);
+      await store.saveSuspension({
+        ...suspension,
+        turnId: "another-turn",
+        runtimeId: "another-runtime",
+        pluginId: "another-plugin",
+        reason: "Asked again",
+        createdAt: "2026-02-02T00:00:00.000Z",
+      });
+      expect(await store.getSuspension(suspension.id)).toMatchObject({
+        turnId: suspension.turnId,
+        runtimeId: suspension.runtimeId,
+        pluginId: suspension.pluginId,
+        reason: "Asked again",
+        createdAt: suspension.createdAt,
+      });
+    });
   });
 
   describe("Text persistence", () => {
