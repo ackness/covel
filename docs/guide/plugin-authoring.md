@@ -96,7 +96,7 @@ Agent 正文放在相应 `PLUGIN.md` 或 `RUNTIME.md`。静态附加段用根 `c
 - `GET /api/plugins/:id` 返回包的契约、设置、runtime、工具、UI 和数据声明。
 - `GET /api/framework/capabilities` 返回框架原语和发现入口。
 - `GET /api/worlds/:id/plugin-plan` 返回世界策略和显式默认请求。
-- 根清单可用 `covel: ">=0.0.45"` 声明适配的宿主版本范围，安装器会拒绝范围之外的宿主；语法见[合集指南](./collections.md#版本范围)。把插件和世界一起发布见同一页。
+- 根清单可用 `covel: ">=0.0.45"` 声明适配的宿主版本范围，`pnpm create-plugin` 生成的独立插件已把创建时的宿主版本写成下限；范围之外的宿主拒绝安装，也不加载已安装的包；语法见[合集指南](./collections.md#版本范围)。把插件和世界一起发布见同一页。
 
 测试应验证用户可观察的结果、非法输入、数据归属，以及失败时不发生部分提交。CI 前运行项目的 `pnpm lint` 和 `pnpm test`；涉及玩家 UI 流程时补相应浏览器验收。
 

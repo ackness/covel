@@ -9,9 +9,8 @@ import {
   multiRuntimeRootDiagnostics,
   type ParsedRuntimeMd,
 } from "@covel/plugin-loader";
-import { satisfiesHostVersionRange } from "@covel/shared";
 import { z } from "zod";
-import { APP_VERSION } from "../../../lib/app-version.js";
+import { assertHostVersionInRange } from "../../../lib/app-version.js";
 import { httpError, type ExtractedEntry } from "./shared.js";
 
 /** Installation parses data only; gray-matter also supports executable JS engines. */
@@ -142,12 +141,7 @@ export function validatePluginBundle(
         `plugin id mismatch: package.json resolves to "${canonicalId}" but PLUGIN.md declares "${root.plugin!.id}"`,
       );
     // Refuse a package written for another host before any file is written.
-    // An unparseable host version is not a mismatch.
-    const range = root.plugin!.covel;
-    if (range && satisfiesHostVersionRange(APP_VERSION, range) === false)
-      throw new Error(
-        `Plugin ${canonicalId} needs Covel ${range}; this host runs ${APP_VERSION}`,
-      );
+    assertHostVersionInRange(`Plugin ${canonicalId}`, root.plugin!.covel);
     if (entries.some((entry) => entry.relativePath.startsWith("runtimes/"))) {
       const diagnostics = multiRuntimeRootDiagnostics(root.rawFrontmatter);
       if (diagnostics.length)
