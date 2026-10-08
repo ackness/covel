@@ -40,11 +40,6 @@ verifyDepsBeforeRun: false
 # Native packages allowed to run install build scripts. pnpm 11 replaces
 # `onlyBuiltDependencies` with this explicit allow/deny map.
 allowBuilds:
-  # better-sqlite3 13 ships Node-API prebuilds for every supported platform and
-  # loads them at runtime. Its only "build" is pnpm's implicit node-gyp run on
-  # binding.gyp, a no-op that still fails when node-gyp is not on PATH. Docker
-  # and desktop staging already skip it with --ignore-scripts.
-  better-sqlite3: false
   electron: true
   # Squirrel installer helper pulled in by electron-builder; its download
   # script never ran under pnpm 10 (`onlyBuiltDependencies`) and Windows

@@ -38,7 +38,7 @@ describe("SqliteMediaStore transaction boundaries", () => {
     const sqlite = acquireSqliteConnection(dbPath);
     let deleteObservedInTransaction = false;
     sqlite.function("covel_observe_media_delete_tx", () => {
-      deleteObservedInTransaction = sqlite.inTransaction;
+      deleteObservedInTransaction = sqlite.isTransaction;
       return null;
     });
     sqlite.exec(`

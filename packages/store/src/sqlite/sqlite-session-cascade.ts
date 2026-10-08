@@ -1,5 +1,4 @@
-import type Database from "better-sqlite3";
-
+import { runSqliteTransaction, type SqliteConnection } from "./node-sqlite.js";
 import { SESSION_SCOPED_TABLES, SESSIONS_TABLE } from "../table-registry.js";
 
 /**
@@ -12,10 +11,10 @@ import { SESSION_SCOPED_TABLES, SESSIONS_TABLE } from "../table-registry.js";
  * parameter.
  */
 export function deleteSqliteSessionCascade(
-  sqlite: Database.Database,
+  sqlite: SqliteConnection,
   sessionId: string,
 ): void {
-  sqlite.transaction(() => {
+  runSqliteTransaction(sqlite, () => {
     const vectorModels = sqlite
       .prepare("SELECT id, table_name FROM vector_models")
       .all() as Array<{ id: number; table_name: string }>;
@@ -36,5 +35,5 @@ export function deleteSqliteSessionCascade(
         .run(sessionId);
     }
     sqlite.prepare(`DELETE FROM ${SESSIONS_TABLE} WHERE id = ?`).run(sessionId);
-  })();
+  });
 }

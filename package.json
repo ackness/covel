@@ -75,10 +75,8 @@
   "devDependencies": {
     "@copilotkit/aimock": "1.43.0",
     "@playwright/test": "^1.63.0",
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.2",
     "@vitest/coverage-v8": "^5.0.1",
-    "better-sqlite3": "^13.0.3",
     "cross-spawn": "^7.0.6",
     "fallow": "3.28.0",
     "oxlint": "1.86.0",

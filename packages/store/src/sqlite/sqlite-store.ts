@@ -1,15 +1,15 @@
 /**
- * SQLite-backed DataStore implementation using Drizzle ORM + better-sqlite3.
+ * SQLite-backed DataStore implementation using Drizzle ORM + `node:sqlite`.
  *
- * All operations are synchronous under the hood (better-sqlite3 is sync),
+ * All operations are synchronous under the hood (`node:sqlite` is sync),
  * but wrapped in Promises to satisfy the async DataStore interface.
  */
 
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { applyPluginDataBatchCas } from "../common/plugin-data-batch-cas.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { drizzleNodeSqlite } from "./drizzle-node-sqlite.js";
 import {
   acquireSqliteConnection,
   getConnectionWriteGate,
@@ -46,14 +46,14 @@ export function createSqliteStore(
 ): DataStore & Partial<VectorStoreCapability & VectorModelOps> {
   // Ensure the parent directory exists. Without this, a fresh checkout that
   // points STORE_BACKEND=sqlite at the default `./data/covel.db` path will
-  // crash on boot because better-sqlite3 refuses to open a file in a
+  // crash on boot because SQLite refuses to open a file in a
   // non-existent directory. This is cheap and idempotent.
   const dir = dirname(dbPath);
   if (dir && dir !== "." && dir !== ":memory:") {
     try {
       mkdirSync(dir, { recursive: true });
     } catch {
-      // Fall through — better-sqlite3 will produce a clearer error if the
+      // Fall through — opening the database gives a clearer error if the
       // path is truly invalid.
     }
   }
@@ -63,7 +63,7 @@ export function createSqliteStore(
   // write lock (see shared-connection.ts).
   const sqlite = acquireSqliteConnection(dbPath);
 
-  const db = drizzle(sqlite, { schema });
+  const db = drizzleNodeSqlite(sqlite, schema);
 
   createTables(sqlite);
 
@@ -88,7 +88,7 @@ export function createSqliteStore(
   const data: StoreTransaction = {
     ...records,
     async compareAndSetPluginDataBatch(sessionId, pluginId, entries) {
-      const ownTransaction = !sqlite.inTransaction;
+      const ownTransaction = !sqlite.isTransaction;
       if (ownTransaction) sqlite.exec("BEGIN IMMEDIATE");
       try {
         const applied = await applyPluginDataBatchCas(

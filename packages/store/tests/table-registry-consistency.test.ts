@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { getTableName, is } from "drizzle-orm";
 import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { PgTable } from "drizzle-orm/pg-core";
@@ -41,7 +41,7 @@ const NON_CASCADE_SESSION_TABLES = new Set<string>([
 
 /** Tables (and their columns) created by the real SQLite DDL. */
 function ddlTablesWithColumns(): Map<string, Set<string>> {
-  const db = new Database(":memory:");
+  const db = new DatabaseSync(":memory:");
   try {
     createTables(db);
     const tables = db

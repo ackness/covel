@@ -115,8 +115,9 @@ if (!noLlmToml) {
 const electronBinary = electronNode ? resolveElectronBinaryPath() : null;
 const useElectronNode = Boolean(electronBinary);
 // A missing Electron binary must fail the build by default: the whole point
-// of the --electron-node smoke is to load better-sqlite3's staged Node-API
-// binary in the exact runtime used by the packaged sidecar. A silent host-Node
+// of the --electron-node smoke is to open the SQLite store (`node:sqlite` and
+// the staged sqlite-vec extension) in the exact runtime used by the packaged
+// sidecar. A silent host-Node
 // + memory-backend downgrade would skip that compatibility check. Machines
 // that genuinely cannot download the Electron binary can opt into the weaker
 // smoke explicitly.

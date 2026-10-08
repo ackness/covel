@@ -105,10 +105,10 @@ dmg:
 # ── Windows ───────────────────────────────────────────────────────
 win:
   icon: resources/icon.ico
-  # The published Windows release remains x64-only. better-sqlite3 13 ships
-  # Node-API prebuilds for supported platforms, so adding arm64 later no longer
-  # requires an Electron ABI rebuild, but still needs a native Windows arm64
-  # packaging and smoke-test job before it can be released safely.
+  # The published Windows release remains x64-only. SQLite is `node:sqlite`,
+  # built into Electron's Node, so adding arm64 later requires no native
+  # rebuild, but still needs a native Windows arm64 packaging and smoke-test
+  # job before it can be released safely.
   target:
     - target: nsis
       arch: [x64]
