@@ -8,6 +8,7 @@ import {
 import { initialState, reducer } from "../reducer.js";
 import { reconcileExecutionSteps } from "../snapshot-execution-steps.js";
 import type { ExecutionStep } from "../types.js";
+import { projectExecutionTurns } from "../execution-projection.js";
 
 function control(state = "succeeded", sequence = 4, jobId = "job") {
   return {
@@ -43,6 +44,75 @@ function reduceSteps(...steps: ExecutionStep[]) {
 }
 
 describe("background job projection ordering", () => {
+  it.each(["succeeded", "failed"])(
+    "attaches recovered background reasoning to its %s source job in either arrival order",
+    (status) => {
+      const events = [
+        {
+          type: "gateway.responded",
+          turnId: "background",
+          timestamp: "2026-10-08T00:00:02Z",
+          payload: {
+            runtimeId: "plugin/worker",
+            pluginId: "plugin",
+            reasoningContent: "Extract the new clue.",
+            seq: 1,
+          },
+        },
+      ];
+      const recovery = {
+        type: "REPLACE_PLUGIN_DATA_FOR_PLUGIN" as const,
+        pluginId: "plugin",
+        namespaces: {
+          _runtime_jobs: {
+            job: {
+              runtimeId: "plugin/worker",
+              status,
+              origin: { sourceTurnId: "source" },
+              backgroundTurnId: "background",
+              ...(status === "failed"
+                ? { error: "Runtime job execution failed." }
+                : {}),
+            },
+          },
+        },
+      };
+      for (const jobsFirst of [true, false]) {
+        let state = jobsFirst ? reducer(initialState, recovery) : initialState;
+        state = reducer(state, {
+          type: "LOAD_EXECUTION_STEPS",
+          steps: reconcileExecutionSteps(state.executionSteps, events, {
+            state: "idle",
+          }),
+        });
+        if (!jobsFirst) state = reducer(state, recovery);
+        // Repeated snapshot recovery must not recreate the orphan or duplicate reasoning.
+        state = reducer(state, {
+          type: "LOAD_EXECUTION_STEPS",
+          steps: reconcileExecutionSteps(state.executionSteps, events, {
+            state: "idle",
+          }),
+        });
+        expect(state.executionSteps).toHaveLength(1);
+        expect(state.executionSteps[0]).toMatchObject({
+          turnId: "source",
+          status: status === "succeeded" ? "completed" : "failed",
+          detached: true,
+          reasoning: [
+            expect.objectContaining({ content: "Extract the new clue." }),
+          ],
+        });
+        expect(state.executionSteps[0]?.detail).toBe(
+          status === "failed" ? "Runtime job execution failed." : undefined,
+        );
+        expect(
+          projectExecutionTurns([], state.executionSteps).turns.map(
+            (turn) => turn.turnId,
+          ),
+        ).toEqual(["source"]);
+      }
+    },
+  );
   it("merges stale and advancing durable recovery without losing the live sequence", () => {
     let state = reducer(initialState, {
       type: "UPSERT_EXECUTION_STEP",

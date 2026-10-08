@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- **Completed background tasks no longer accumulate as failed turns below the story.** Restoring a worker's model reasoning created a separate foreground task that was then marked interrupted, even when its durable job had committed successfully. The timeline now joins worker traces to the job's source turn using `backgroundTurnId`, preserves the durable outcome, and deduplicates reasoning across refreshes and either hydration order. Actual job failures remain visible under their source task.
+
 - **A suspension can be resumed again after the server stopped in the middle of resuming it.** The claim a resume takes was never released when the process ended first, so every later resume answered 409 and the player could only abandon it. The claim is now released at the next server start (SQLite) or after one hour (PostgreSQL). `DataStore` gains `releaseStaleSuspensionClaims`.
 - **A settled tabletop check reaches the narrative without row IDs.** The check text the narrators read carried the form submission ID and the turn ID of the stored receipt. It now carries the check only: action, attribute, modifier, die, difficulty, total and outcome.
 - **A media download drops a redirect's body unread.** `ctx.media.ingestUrl` read the whole body of each 3xx response, which `maxBytes` did not limit.

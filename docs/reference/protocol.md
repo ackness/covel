@@ -199,6 +199,8 @@ Web 在 reducer 中对同一 durable job 的控制事件比较 `sequence`，重�
 
 恢复读取的 durable 行没有控制序号，合并时保留已观察到的序号；同一作业的 `queued → claimed → running → committing` 阶段不能回退，恢复读取可以推进阶段或补齐终态。这些规则也用于恢复期间新收到控制事件后的最终 reducer 合并。
 
+Web uses a durable job's `backgroundTurnId` to attach recovered worker reasoning to its source-turn task. The worker's separate trace ID must not create another player-facing turn or an interrupted-task notice. Trace and job hydration can arrive in either order; the durable job remains authoritative for status and failure details, and repeated recovery deduplicates reasoning.
+
 > 本通道与框架保留 namespace `_runtime_jobs` 并存：manual/event `execution: background` 与 staged `turnCompletion: detached` 都记录在其中。`job-status.updated` 是它的实时/恢复投影，不替代领域结果事务。
 
 ### 媒体资产事件

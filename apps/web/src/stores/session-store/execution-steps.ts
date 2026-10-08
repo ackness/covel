@@ -81,6 +81,7 @@ export function mergeExecutionStep(
     ...(newJob
       ? {
           durableJobStatus: undefined,
+          backgroundTurnId: undefined,
           jobState: undefined,
           progress: undefined,
           detail: undefined,
@@ -334,6 +335,9 @@ export function buildDurableRuntimeJobExecutionStep(
     status,
     detached: true,
     jobId,
+    ...(typeof row.backgroundTurnId === "string"
+      ? { backgroundTurnId: row.backgroundTurnId }
+      : {}),
     jobState: state,
     durableJobStatus: { state },
     turnId:
@@ -348,6 +352,37 @@ export function buildDurableRuntimeJobExecutionStep(
           : undefined,
     ...(failed && typeof row.error === "string" ? { detail: row.error } : {}),
   };
+}
+
+/** Worker traces carry a separate turn ID, but the durable job owns their UI row. */
+export function foldBackgroundExecutionSteps(
+  steps: readonly ExecutionStep[],
+): ExecutionStep[] {
+  const key = (turnId: string | undefined, step: ExecutionStep) =>
+    JSON.stringify([turnId, step.pluginId, step.runtimeId]);
+  const parents = new Map<string, number>();
+  for (const [index, step] of steps.entries()) {
+    if (step.detached && step.backgroundTurnId)
+      parents.set(key(step.backgroundTurnId, step), index);
+  }
+  const folded = [...steps];
+  const removed = new Set<number>();
+  for (const [index, step] of steps.entries()) {
+    const parentIndex = parents.get(key(step.turnId, step));
+    if (parentIndex === undefined || parentIndex === index) continue;
+    const parent = folded[parentIndex];
+    if (!parent) continue;
+    // Reasoning is diagnostic, not commit evidence. Keep the job's status and
+    // failure detail even if the worker's model call or function succeeded.
+    folded[parentIndex] = {
+      ...parent,
+      ...(step.reasoning
+        ? { reasoning: mergeReasoning(parent.reasoning, step.reasoning) }
+        : {}),
+    };
+    removed.add(index);
+  }
+  return folded.filter((_, index) => !removed.has(index));
 }
 
 export function buildResumedExecutionStep(

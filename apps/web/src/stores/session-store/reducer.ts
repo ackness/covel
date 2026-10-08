@@ -9,6 +9,7 @@ import {
 } from "./game-state.js";
 import {
   buildDurableRuntimeJobExecutionStep,
+  foldBackgroundExecutionSteps,
   mergeExecutionStep,
 } from "./execution-steps.js";
 import {
@@ -53,9 +54,10 @@ function upsertExecutionStep(
   };
   if (idx >= 0) next[idx] = updated;
   else next.push(updated);
-  return next.length > EXEC_STEPS_MAX
-    ? next.slice(next.length - EXEC_STEPS_MAX)
-    : next;
+  const folded = foldBackgroundExecutionSteps(next);
+  return folded.length > EXEC_STEPS_MAX
+    ? folded.slice(folded.length - EXEC_STEPS_MAX)
+    : folded;
 }
 
 /** Streaming-placeholder id convention shared with the renderer. */
@@ -496,7 +498,10 @@ export function reducer(
       });
       return refreshPluginMessageSurfaces({
         ...state,
-        executionSteps: [...recovered, ...observedJobs.values()],
+        executionSteps: foldBackgroundExecutionSteps([
+          ...recovered,
+          ...observedJobs.values(),
+        ]),
       });
     }
     case "SET_TURN_ATTEMPT_STATUS":

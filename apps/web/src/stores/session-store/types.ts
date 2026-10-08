@@ -79,6 +79,8 @@ export interface ExecutionStep {
   startedAt?: string;
   /** Background job identity when this runtime no longer blocks its source turn. */
   jobId?: string;
+  /** Worker execution whose diagnostics belong to this source-turn job. */
+  backgroundTurnId?: string;
   /** True for a detached runtime, including after it reaches a terminal state. */
   detached?: boolean;
   /** Latest kernel/legacy job state used for accessible progress text. */
