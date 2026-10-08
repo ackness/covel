@@ -11,6 +11,8 @@ node_modules/
 dist/
 output/
 debugs/
+# Model answers written by `pnpm e2e:replay --record`.
+tests/llm-replay/*/recording/
 
 apps/desktop/staging/
 apps/web/src/routeTree.gen.ts

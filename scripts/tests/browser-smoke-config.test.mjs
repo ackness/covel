@@ -34,8 +34,9 @@ test("browser smoke starts each owned server once and respects external stacks",
     if (baseURL) {
       assert.deepEqual(servers, []);
     } else {
-      assert.equal(servers.length, 2);
-      assert.equal(new Set(servers.map((server) => server.url)).size, 2);
+      // The API server, the Vite dev server and the production build.
+      assert.equal(servers.length, 3);
+      assert.equal(new Set(servers.map((server) => server.url)).size, 3);
       assert.ok(servers.every((server) => server.cwd === repoRoot));
       // The owned server runs in a home of its own, never the developer's:
       // a spec must not read installed plugins or keys, or leave a generated

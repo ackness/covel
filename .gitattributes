@@ -1,0 +1,3 @@
+# Model answers written by `pnpm e2e:replay --record`: generated, so pull
+# requests collapse their diff.
+tests/llm-replay/*/recording/** linguist-generated=true

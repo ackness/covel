@@ -171,6 +171,17 @@ const SESSION_RESET: Partial<SessionState> = {
   assetProgressByTurn: new Map<string, readonly AssetProgressEvent[]>(),
 };
 
+// A session restored before the world catalog has loaded finds no world in
+// it. Whichever of the two arrives second supplies the session's world.
+function sessionWorld(
+  world: SessionState["world"],
+  session: SessionState["session"],
+  worlds: SessionState["worlds"],
+): SessionState["world"] {
+  if (!session || world?.id === session.worldId) return world;
+  return worlds.find((item) => item.id === session.worldId) ?? world;
+}
+
 export function reducer(
   state: SessionState,
   action: SessionAction,
@@ -198,6 +209,7 @@ export function reducer(
         plugins: action.plugins,
         pluginLoadErrors: action.pluginLoadErrors,
         worlds: action.worlds,
+        world: sessionWorld(state.world, state.session, action.worlds),
         llmConfig: action.llmConfig,
       };
     case "BOOT_ERROR":
@@ -236,6 +248,7 @@ export function reducer(
       return {
         ...state,
         session: action.session,
+        world: sessionWorld(state.world, action.session, state.worlds),
         assetsByTurn: sameSession
           ? state.assetsByTurn
           : new Map<string, readonly AssetGenerateView[]>(),

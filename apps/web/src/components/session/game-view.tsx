@@ -40,6 +40,7 @@ import {
 import { MessageComposer } from "./game-view/message-composer.js";
 import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
 import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
+import { useGameViewMode } from "./game-view/use-game-view-mode.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { emitNavEvent, type SessionPanel } from "@/lib/nav-events.js";
@@ -111,9 +112,7 @@ export function GameView({
     llmConfig,
   );
 
-  const [viewMode, setViewMode] = useState<GameViewMode>(() =>
-    world?.metadata?.defaultViewMode === "stage" ? "stage" : "parsed",
-  );
+  const [viewMode, setViewMode] = useGameViewMode(world);
   // Full-screen stage: collapse both studio rails + hide the session header so
   // the stage fills the viewport. Session-memory only (no persistence).
   const [immersive, setImmersive] = useState(false);
@@ -532,6 +531,10 @@ export function GameView({
               world={world}
               messages={messages}
               executing={executing}
+              restoring={Boolean(
+                state.executionRecovery?.hydrating ||
+                state.executionRecovery?.checking,
+              )}
               executionError={executionError}
               executionSteps={executionSteps}
               plugins={plugins}
