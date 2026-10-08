@@ -1,0 +1,16 @@
+# The models this session was recorded with. `pnpm e2e:replay` replaces every
+# baseUrl with its proxy; the provider names the key used when recording
+# (DEEPSEEK_API_KEY). Changing a model here changes every request: record the
+# session again afterwards.
+
+[covel.story]
+provider = "deepseek"
+model    = "deepseek-flash"
+baseUrl  = "https://api.deepseek.com"
+protocol = "openai-chat-v1"
+
+[covel.plugin]
+provider = "deepseek"
+model    = "deepseek-flash"
+baseUrl  = "https://api.deepseek.com"
+protocol = "openai-chat-v1"

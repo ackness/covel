@@ -66,6 +66,8 @@ tests/e2e/report/
 # ── LLM Configuration (user-specific) ─────────────────────────
 llm.toml
 !llm.toml.example
+# The models a recorded session was recorded with (no keys).
+!tests/llm-replay/*/llm.toml
 
 # ── Generated files ─────────────────────────────────────────────
 apps/web/src/routeTree.gen.ts
