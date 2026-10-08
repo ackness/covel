@@ -59,7 +59,9 @@ describe("catalog interactive accessibility through the real registry and state 
   it("names native switch buttons, preserves independent checked bindings, and does not submit forms", async () => {
     await i18n.changeLanguage("en-US");
     const { changed } = renderControls("Switch", "checked");
-    const [first, second] = screen.getAllByRole("switch", { name: "Control" });
+    const switches = screen.getAllByRole("switch", { name: "Control" });
+    const first = switches[0]!;
+    const second = switches[1]!;
     expect(first.tagName).toBe("BUTTON");
     expect(first.getAttribute("type")).toBe("button");
     expect(first.getAttribute("aria-checked")).toBe("false");
@@ -69,7 +71,7 @@ describe("catalog interactive accessibility through the real registry and state 
     expect(first.getAttribute("aria-checked")).toBe("true");
     expect(second.getAttribute("aria-checked")).toBe("false");
     expect(changed).toHaveBeenLastCalledWith([{ path: "/first", value: true }]);
-    fireEvent.click(screen.getAllByText("Control")[1]);
+    fireEvent.click(screen.getAllByText("Control")[1]!);
     expect(second.getAttribute("aria-checked")).toBe("true");
     expect(changed).toHaveBeenLastCalledWith([
       { path: "/second", value: true },
@@ -81,9 +83,11 @@ describe("catalog interactive accessibility through the real registry and state 
     async (type) => {
       await i18n.changeLanguage("en-US");
       const { container, changed } = renderControls(type);
-      const [first, second] = screen.getAllByLabelText("Control") as Array<
+      const controls = screen.getAllByLabelText("Control") as Array<
         HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
       >;
+      const first = controls[0]!;
+      const second = controls[1]!;
       expect(first.id).not.toBe("");
       expect(first.id).not.toBe(second.id);
       const ids = [first.id, second.id];
