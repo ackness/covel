@@ -138,6 +138,40 @@ describe("submitFormHandler (Epic A)", () => {
     ).toBe("home / quiet");
   });
 
+  it.each([
+    ["{{origin}}。", "你是验潮师学徒。", "你是验潮师学徒。"],
+    ["{{origin}}。", "你是验潮师学徒", "你是验潮师学徒。"],
+    ["{{origin}}.", "I wait...", "I wait..."],
+    ["{{origin}}", "I wait...", "I wait..."],
+  ])(
+    "does not duplicate a full stop at the interpolation boundary (%s)",
+    async (template, origin, expected) => {
+      await seedInteraction(store, {
+        interactionId: "punctuation",
+        type: "form",
+        fields: [
+          {
+            type: "text",
+            name: "origin",
+            label: "Origin",
+            defaultValue: origin,
+          },
+        ],
+        narrativeTemplate: template,
+      });
+      expect(
+        await submitOne(store, {
+          interactionId: "punctuation",
+          type: "form",
+          values: {},
+        }),
+      ).toBe(expected);
+      expect((await store.listPlayerInputs(SESSION))[0]?.values).toEqual({
+        origin,
+      });
+    },
+  );
+
   it("fills a choice template using selectedLabel, falling back to selectedId", async () => {
     await seedInteraction(store, {
       interactionId: "ch-1",
