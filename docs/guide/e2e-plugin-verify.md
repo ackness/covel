@@ -285,7 +285,7 @@ pnpm e2e:replay lantern-barrow   # 只回放一局
 pnpm e2e:replay --record --upstream https://api.deepseek.com lantern-barrow
 ```
 
-`--upstream` 是 `llm.toml` 里那家服务商的 origin，不带 `/v1`。密钥按 `llm.toml` 的 provider 取名（`deepseek` → `DEEPSEEK_API_KEY`），从环境变量或仓库根目录的 `.env.llm` 读取。录制里已有的请求直接应答，只有新请求转给上游，所以只改了一个插件的提示词时，重录只调用受影响的那部分。会话跑完（脚本以 `0` 或 `1` 退出）后，这次没有用到的旧应答从 `recording/` 删除；中途出错的会话不删。确认结果后把 `recording/` 的变动一起提交。录制文件里是模型应答原文，不含密钥。
+`--upstream` 是 `llm.toml` 里那家服务商的 origin，不带 `/v1`。密钥按 `llm.toml` 的 provider 取名（`deepseek` → `DEEPSEEK_API_KEY`），从环境变量或仓库根目录的 `.env.llm` 读取。录制里已有的请求直接应答，只有新请求转给上游，所以只改了一个插件的提示词时，重录只调用受影响的那部分。会话跑完（脚本以 `0` 或 `1` 退出）后，这次没有用到的旧应答从 `recording/` 删除；中途出错的会话不删。确认结果后把 `recording/` 的变动一起提交。录制文件里是模型应答原文，不含密钥，也不含提示词和流式时序，体积用 `du -sh tests/llm-replay/<会话>/recording` 查看；`.gitattributes` 把它们标为生成文件，PR 里默认折叠。提示词在 `debugs/` 下的 `*.requests` 里，每条请求都是完整的上下文，比应答大得多，不进版本库。
 
 新增一局会话：复制一个目录，改 `scenario.json`，删掉 `recording/`，再录制一遍。
 
