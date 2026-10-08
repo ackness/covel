@@ -103,13 +103,18 @@ export async function clearSessionToken(
   });
 }
 
-/** Persist the operator credential used for hosted administrative calls. */
-export function storeOperatorToken(token: string): void {
-  if (!token) return;
+/**
+ * Persist the operator credential used for hosted administrative calls.
+ * Returns false when the browser refused the write.
+ */
+export function storeOperatorToken(token: string): boolean {
+  if (!token) return false;
   try {
     localStorage.setItem(OPERATOR_STORAGE_KEY, token);
+    return true;
   } catch {
     // Storage can be unavailable in hardened/private browser contexts.
+    return false;
   }
 }
 
@@ -121,11 +126,13 @@ export function getOperatorToken(): string | undefined {
   }
 }
 
-export function clearOperatorToken(): void {
+/** Returns false when the browser refused to remove the credential. */
+export function clearOperatorToken(): boolean {
   try {
     localStorage.removeItem(OPERATOR_STORAGE_KEY);
+    return true;
   } catch {
-    // No persisted credential to clear.
+    return false;
   }
 }
 
