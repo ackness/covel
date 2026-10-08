@@ -290,9 +290,14 @@ export async function prepareRuntimeProposals(
       ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
       ...(opts.emitter ? { emitter: opts.emitter } : {}),
     });
-    if ("error" in hooked)
+    if ("error" in hooked) {
       failedProposals.push({ proposal, error: hooked.error });
-    else proposals.push(hooked.proposal);
+      continue;
+    }
+    // A hook may replace the payload, so the guard reads the final proposal.
+    const error = opts.proposalGuard?.(hooked.proposal);
+    if (error) return { proposals: [], failedProposals: [{ proposal, error }] };
+    proposals.push(hooked.proposal);
   }
   return { proposals, failedProposals };
 }
