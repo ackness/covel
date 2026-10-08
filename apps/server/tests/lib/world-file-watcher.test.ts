@@ -161,3 +161,27 @@ dimensionSources:
   },
   60_000,
 );
+
+it("reports a missing worlds directory in one line", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "covel-world-watch-"));
+  const missing = path.join(root, "not-created-yet");
+  const store = createMemoryStore();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const watcher = createWorldFileWatcher(
+    missing,
+    store,
+    createEventBus(store),
+    createInProcessSessionLock(),
+  );
+  try {
+    watcher.start();
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      `[world-watcher] Not watching ${missing}: directory does not exist`,
+    );
+  } finally {
+    await watcher.stop();
+    warn.mockRestore();
+    await store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -211,7 +211,13 @@ export function createWorldFileWatcher(
 
         console.log(`[world-watcher] Watching ${worldsDir} for changes`);
       } catch (err) {
-        console.warn(`[world-watcher] Failed to start file watcher:`, err);
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          console.warn(
+            `[world-watcher] Not watching ${worldsDir}: directory does not exist`,
+          );
+        } else {
+          console.warn(`[world-watcher] Failed to start file watcher:`, err);
+        }
       }
     },
 

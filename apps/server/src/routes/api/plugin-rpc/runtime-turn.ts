@@ -87,6 +87,8 @@ export interface PluginRpcRuntimeTurnContext {
 export interface QueuedRunControl {
   readonly expectedSessionIncarnation?: string;
   readonly beforeExecute?: () => Promise<void>;
+  /** The runtime returned; the wait for the session commit lock follows. */
+  readonly executionFinished?: () => void;
   readonly beforeCommit?: (args: {
     readonly backgroundTurnId: string;
     readonly backgroundExecutionId: string;
@@ -157,6 +159,7 @@ export interface RunDetachedStageArgs {
     result: import("@covel/shared").TurnResult,
   ) => Promise<void>;
   readonly beforeExecute?: () => Promise<void>;
+  readonly executionFinished?: () => void;
   readonly executionSignal?: AbortSignal;
 }
 
@@ -182,6 +185,9 @@ function queuedRunOptions(control: QueuedRunControl): QueuedRunControl {
       ? { expectedSessionIncarnation: control.expectedSessionIncarnation }
       : {}),
     ...(control.beforeExecute ? { beforeExecute: control.beforeExecute } : {}),
+    ...(control.executionFinished
+      ? { executionFinished: control.executionFinished }
+      : {}),
     ...(control.beforeCommit ? { beforeCommit: control.beforeCommit } : {}),
   };
 }
@@ -399,6 +405,7 @@ export function createPluginRpcRuntimeTurnRunner(
         readonly backgroundExecutionId: string;
       }) => Promise<void>;
       readonly beforeExecute?: () => Promise<void>;
+      readonly executionFinished?: () => void;
       readonly executionSignal?: AbortSignal;
       readonly rejectSuspension?: boolean;
       readonly proposalGuard?: Parameters<
@@ -499,6 +506,9 @@ export function createPluginRpcRuntimeTurnRunner(
                   turnControl,
                 },
               );
+              // A player turn may hold the session lock for minutes; the
+              // queued job's execution deadline does not cover that wait.
+              opts.executionFinished?.();
               const { result } = execution;
               if (
                 opts.rejectSuspension === true &&
@@ -774,6 +784,9 @@ export function createPluginRpcRuntimeTurnRunner(
       beforeCommit: args.beforeCommit,
       completeInTx: args.completeInTx,
       ...(args.beforeExecute ? { beforeExecute: args.beforeExecute } : {}),
+      ...(args.executionFinished
+        ? { executionFinished: args.executionFinished }
+        : {}),
       ...(args.executionSignal
         ? { executionSignal: args.executionSignal }
         : {}),

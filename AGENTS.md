@@ -96,7 +96,8 @@ pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from
 pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under the floor in its vitest.config.ts (CI runs it)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
-pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
+pnpm e2e:verify       # API-driven real-LLM plugin harness against a running server (its keys come from .env.llm
+                      # or the environment); uses the configured models, --slot overrides the story slot
 pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, for repeating a scripted
                       # session without model calls: pnpm llm:replay --mode record --upstream <origin>
                       # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff

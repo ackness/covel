@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { createSqliteStore } from "../src/sqlite/sqlite-store.js";
 
 const dirs: string[] = [];
@@ -16,14 +16,14 @@ describe("retired tables", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "covel-retired-"));
     dirs.push(dir);
     const dbPath = path.join(dir, "covel.db");
-    const legacy = new Database(dbPath);
+    const legacy = new DatabaseSync(dbPath);
     legacy.exec("CREATE TABLE runtime_results (id TEXT PRIMARY KEY)");
     legacy.close();
 
     const store = createSqliteStore(dbPath);
     await store.close();
 
-    const reopened = new Database(dbPath);
+    const reopened = new DatabaseSync(dbPath);
     const tables = reopened
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
       .all() as { name: string }[];

@@ -1,11 +1,11 @@
 /**
  * Dialect-agnostic async execution facade over a Drizzle query builder.
  *
- * Both SQL backends (PostgreSQL + postgres.js, SQLite + better-sqlite3) build
+ * Both SQL backends (PostgreSQL + postgres.js, SQLite + `node:sqlite`) build
  * structurally identical Drizzle queries for the record CRUD modules. The ONLY
  * differences are:
  *
- *  1. better-sqlite3 terminates queries synchronously (`.all()/.get()/.run()`)
+ *  1. `node:sqlite` terminates queries synchronously (`.all()/.get()/.run()`)
  *     while postgres.js returns an awaitable query; and
  *  2. the concrete table/driver types differ (`PgTable` vs `SQLiteTable`).
  *
@@ -100,7 +100,7 @@ export interface SqlRunner {
    * rows actually inserted (`1` on insert, `0` when the conflict target already
    * held a row). This is the atomic "insert-if-absent, tell me which happened"
    * primitive behind the idempotent lifecycle ledgers — PG reports the count via
-   * `RETURNING`, better-sqlite3 via the `changes` field. `target` scopes the
+   * `RETURNING`, SQLite via the `changes` field. `target` scopes the
    * conflict to a specific unique index/constraint (omit to catch any).
    */
   insertIgnoreReturningCount(
@@ -128,7 +128,7 @@ export interface SqlRunner {
    * suspension): applies `set` to rows matching `where` and returns the number
    * of rows actually affected. This is the one place the two backends report a
    * mutation count through different driver surfaces — PG via `RETURNING`,
-   * better-sqlite3 via the `changes` field of the run result — and the adapters
+   * SQLite via the `changes` field of the run result — and the adapters
    * normalise both to a plain count. The single serialized write per dialect
    * keeps the swap atomic, so two concurrent claims cannot both observe `1`.
    */

@@ -173,7 +173,7 @@ flowchart LR
     Terminal --> Status
 ```
 
-`maxQueueMs` 从 `enqueuedAt` 限制 claim 等待，`maxExecutionMs` 从 running 限制后台控制面期限；它们不代替 runtime 的 `timeoutMs`。worker 默认最多并行 4 个不同 runtime，以 session round-robin 取队列，同一 `(session, plugin, runtime)` 只允许一个 active job。入队、retry、resume、等待屏障和任务结束都按会话唤醒 worker，平时只认领被唤醒会话的队列；启动、不带会话的唤醒和 30 秒维护轮扫描全部会话，其他进程排入的作业也由此接走。重启后，未过排队期限且从未 claim 的 `queued` 作业可以继续执行；排队超时会变为 `timed_out`，lease 已过期的在途作业会变为 `orphaned`，后两者不会自动 replay。玩家明确 retry 时创建新 jobId。
+`maxQueueMs` 从 `enqueuedAt` 限制 claim 等待，`maxExecutionMs` 从 running 限制到 runtime 执行返回为止；之后等待 session lock 提交的时间不计入（settle 超时后放行的玩家回合可能持锁数分钟），等锁期间 lease 照常续期，已被取消或超时的作业仍过不了 running → committing CAS。它们不代替 runtime 的 `timeoutMs`。worker 默认最多并行 4 个不同 runtime，以 session round-robin 取队列，同一 `(session, plugin, runtime)` 只允许一个 active job。入队、retry、resume、等待屏障和任务结束都按会话唤醒 worker，平时只认领被唤醒会话的队列；启动、不带会话的唤醒和 30 秒维护轮扫描全部会话，其他进程排入的作业也由此接走。重启后，未过排队期限且从未 claim 的 `queued` 作业可以继续执行；排队超时会变为 `timed_out`，lease 已过期的在途作业会变为 `orphaned`，后两者不会自动 replay。玩家明确 retry 时创建新 jobId。
 
 worker 进入提交屏障前排空自身续租；`extraInTx` 在领域提交事务内完成 job 的成功 CAS。业务失败、完成 CAS 失败和事务末尾失败均回滚领域写入及 job 成功。成功事件在事务外发布；事件丢失可从已持久化终态补齐，不重跑任务。worker 首次唤醒及后续 30 秒维护间隔扫描过期租约，扫描失败 1 秒后重试；维护不受执行槽满影响。`committing` 任务须先非阻塞取得同一提交锁，锁忙时留待下一轮。关闭会停止后续调度并等待在途扫描及锁回调。
 
@@ -183,7 +183,7 @@ detached runtime 必须声明 effects；框架允许隔离的 assets/media、本
 
 需要让下一轮读到结果的 post-turn/audit function 可声明 `schedule.completion.settle: before-next-execution` 和 `maxSettleWaitMs`。这类任务可读取自身 plugin-data，由 worker 按来源任务顺序串行处理；输入中的 `turn-digest@1` 是内核冻结的来源回合摘要，不需要绑定某个叙事插件。`memory/extract` 使用这一机制更新自己的记忆块。
 
-玩家动作、RPC、resume 和会话变更入口先查询 durable pending jobs，在主 session lock 外唤醒 worker 并等待。取得锁后再次查询，避免检查与入锁间新任务被漏过；worker 提交始终使用原始 session lock，不进入自己的等待屏障。到达最早等待期限仍未结束时记录 `execution.settle-timeout`，随后允许新执行继续，超时不代表后台任务已成功或被取消。
+玩家动作、RPC、resume 和会话变更入口先查询 durable pending jobs，在主 session lock 外唤醒 worker 并等待。取得锁后再次查询，避免检查与入锁间新任务被漏过；worker 提交始终使用原始 session lock，不进入自己的等待屏障。到达最早等待期限仍未结束时记录 `execution.settle-timeout`，随后允许新执行继续，超时不代表后台任务已成功或被取消：新执行持有 session lock 期间，已执行完的后台任务排在它之后提交，这段等待不计入 `maxExecutionMs`。
 
 通过屏障后才捕获 registry、工具、服务、hook 与扩展注册的执行版本。热重载发布新版本不改变已经开始的执行；授权撤销仍以 live 状态检查。嵌套调用沿用已准入的执行，不在持锁时重复等待。
 

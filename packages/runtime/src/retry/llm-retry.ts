@@ -10,7 +10,7 @@ import type { LLMProviderRequest } from "@covel/shared";
  * perturbation to the messages on each attempt so that any provider-side KV
  * cache cannot trivially reproduce the same hang.
  *
- * Four retry triggers:
+ * Five retry triggers:
  *   - first-token-timeout: streaming call produced no text/tool event before
  *     `firstTokenTimeoutMs` (default 30s) — provider socket alive but model
  *     stuck.
@@ -22,6 +22,10 @@ import type { LLMProviderRequest } from "@covel/shared";
  *     identical `name + arguments`. Detection lives outside this module (the
  *     tool-call loop in turn-executor owns it), but a perturbation on retry
  *     is what actually breaks the loop.
+ *   - output-truncated: the response reached the output limit before it was
+ *     usable. Retried once: a model that looped or echoed its tool call
+ *     usually finishes on a fresh attempt, while a second cut means the limit
+ *     is too small, which the error then says.
  *
  * All retry errors surface as {@link LLMRetryError} so the caller can
  * distinguish "exhausted" from an unrecoverable client error.
@@ -61,6 +65,7 @@ import {
   computeDeadlineBudget,
   exhaustedError,
   extractMessage,
+  isOutputTruncated,
   isTransientError,
   isTerminalLlmRequestError,
   perturbMessages,
@@ -105,6 +110,9 @@ export function detectToolLoop(
 }
 
 // ── Non-streaming retry ─────────────────────────────────────────────
+
+/** Retries granted to a response cut at the output limit. */
+const TRUNCATION_RETRIES = 1;
 
 /**
  * The finish reason of a response that may be used, in the kernel's terms.
@@ -264,6 +272,7 @@ export async function callLLMWithRetry(
   let effectiveDeadline = deadline;
   let lastError: unknown = new Error("retry loop did not execute");
   let lastReason: RetryReason = "unknown";
+  let truncations = 0;
   throwIfTurnAborted(params.abortSignal);
   assertDeadlineNotReached(effectiveDeadline, 0, lastError);
   const requestScope = createLlmRequestScope({
@@ -367,12 +376,20 @@ export async function callLLMWithRetry(
           requestScope.signal.throwIfAborted();
           if (isTerminalLlmRequestError(err)) throw err;
           lastError = err;
-          lastReason = isCallTimeout(err, timeoutSignal)
-            ? "call-timeout"
-            : isTransientError(err)
-              ? "transient-error"
-              : "unknown";
-          if (attempt >= policy.maxRetries || lastReason === "unknown") {
+          const truncated = isOutputTruncated(err);
+          if (truncated) truncations++;
+          lastReason = truncated
+            ? "output-truncated"
+            : isCallTimeout(err, timeoutSignal)
+              ? "call-timeout"
+              : isTransientError(err)
+                ? "transient-error"
+                : "unknown";
+          if (
+            attempt >= policy.maxRetries ||
+            lastReason === "unknown" ||
+            truncations > TRUNCATION_RETRIES
+          ) {
             throw new LLMRetryError({
               reason: lastReason,
               attempts: attempt + 1,
@@ -428,6 +445,13 @@ export interface StreamLLMWithRetryParams extends CallLLMWithRetryParams {
   /** Optional sink for text deltas so streaming can keep its UX. */
   readonly onDelta?: (delta: string) => void | Promise<void>;
   /**
+   * Whether `onDelta` puts text in front of the player. Then a stream that
+   * failed after its first output is not retried: the player already read
+   * it. When nothing reached anyone, the partial output is dropped and the
+   * call retried like any other failure. Defaults to `onDelta` being set.
+   */
+  readonly deliversDeltas?: boolean;
+  /**
    * Called with the time (ms) a completed stream spent delivering output. The
    * loop extends its OWN deadline by it, and a caller holding an enclosing
    * deadline (the agent tool loop) extends its deadline too: a model that
@@ -459,6 +483,7 @@ export async function streamLLMWithRetry(
 ): Promise<StreamLLMResult> {
   const { llm, model, messages, tools, policy, deadline, onDelta, onRetry } =
     params;
+  const deliversDeltas = params.deliversDeltas ?? onDelta !== undefined;
   let effectiveDeadline = deadline;
   if (!llm.stream) {
     // No streaming support — fall back to non-streaming retry so callers can
@@ -469,6 +494,7 @@ export async function streamLLMWithRetry(
 
   let lastError: unknown = new Error("stream retry loop did not execute");
   let lastReason: RetryReason = "unknown";
+  let truncations = 0;
   throwIfTurnAborted(params.abortSignal);
   assertDeadlineNotReached(effectiveDeadline, 0, lastError);
   const requestScope = createLlmRequestScope({
@@ -549,6 +575,7 @@ export async function streamLLMWithRetry(
 
         let firstTokenSeen = false;
         let firstOutputAt: number | undefined;
+        let lastOutputAt: number | undefined;
         let idleHandle: ReturnType<typeof setTimeout> | undefined;
         const noteOutput = (): void => {
           if (!firstTokenSeen) {
@@ -557,6 +584,7 @@ export async function streamLLMWithRetry(
             clearTimeout(callTimeoutHandle);
             clearTimeout(ttfbHandle);
           }
+          lastOutputAt = Date.now();
           noteLlmRequestProgress(requestScope.budget);
           clearTimeout(idleHandle);
           idleHandle = setTimeout(() => {
@@ -694,11 +722,11 @@ export async function streamLLMWithRetry(
           clearTimeout(idleHandle);
           requestScope.signal.removeEventListener("abort", onExternalAbort);
           lastError = err;
-          lastReason = classifyStreamError(
-            err,
-            callAborter.signal,
-            firstTokenSeen,
-          );
+          const truncated = isOutputTruncated(err);
+          if (truncated) truncations++;
+          lastReason = truncated
+            ? "output-truncated"
+            : classifyStreamError(err, callAborter.signal, firstTokenSeen);
 
           // Pair every `llm.calling` with an `llm.responded` on the error path.
           // Without this, a streamed turn that fails mid-flight leaves a dangling
@@ -716,11 +744,12 @@ export async function streamLLMWithRetry(
           });
 
           // Partial output must never become a successful response or be spliced
-          // into a retry. Empty transient failures retain the normal retry policy.
+          // into a retry. Output the player has read ends the call; output
+          // nobody saw is dropped and the call retried under the policy.
           throwIfTurnAborted(params.abortSignal);
           requestScope.signal.throwIfAborted();
           if (isTerminalLlmRequestError(err)) throw err;
-          if (firstTokenSeen) {
+          if (firstTokenSeen && deliversDeltas) {
             throw new LLMRetryError({
               reason: lastReason,
               attempts: attempt + 1,
@@ -739,12 +768,20 @@ export async function streamLLMWithRetry(
           // Retry on transient failures; surface "unknown" errors immediately —
           // an unclassified error usually means a bug in our code, not something
           // a retry can fix.
-          if (lastReason === "unknown") {
+          if (lastReason === "unknown" || truncations > TRUNCATION_RETRIES) {
             throw new LLMRetryError({
               reason: lastReason,
               attempts: attempt + 1,
               cause: err,
             });
+          }
+          // Writing is not the runtime's time, in a failed stream too: without
+          // this, a stream that wrote until it was cut leaves the retry no
+          // time. The silence before the failure still counts.
+          if (firstOutputAt !== undefined && lastOutputAt !== undefined) {
+            const streamedMs = lastOutputAt - firstOutputAt;
+            effectiveDeadline += streamedMs;
+            if (streamedMs > 0) params.onStreamTime?.(streamedMs);
           }
           assertLlmRequestBudget(requestScope.budget, {
             signal: requestScope.signal,

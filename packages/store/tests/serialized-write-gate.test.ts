@@ -168,7 +168,7 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
 
 describe("SqliteStore shared-connection gate covers media writes", () => {
   it("a media write survives a concurrent DataStore transaction's rollback", async () => {
-    // The mirror media store reuses the DataStore's better-sqlite3
+    // The mirror media store reuses the DataStore's SQLite
     // connection, so an ungated `put` issued while a transaction is open joins
     // that transaction and disappears when it rolls back.
     const dir = mkdtempSync(path.join(tmpdir(), "covel-write-gate-media-"));

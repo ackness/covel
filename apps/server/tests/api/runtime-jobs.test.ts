@@ -604,6 +604,53 @@ describe.each([
     worker.close();
   });
 
+  it("settles a timed-out job without reporting a failed follow-up", async () => {
+    const key = {
+      sessionId: "session-a",
+      pluginId: "mimo-tts",
+      jobId: "cancelled-by-deadline",
+    };
+    await createRuntimeJob(
+      store,
+      job(key.sessionId, key.jobId, { maxExecutionMs: 10 }),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const eventBus = createEventBus(store);
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      // A runtime that honours cancellation rejects with the abort reason.
+      execute: (_runtimeJob, control) =>
+        new Promise<void>((_resolve, reject) => {
+          control.signal.addEventListener(
+            "abort",
+            () => reject(control.signal.reason),
+            { once: true },
+          );
+        }),
+    });
+    try {
+      worker.wake();
+      await vi.waitFor(async () => {
+        await expect(getRuntimeJob(store, key)).resolves.toMatchObject({
+          status: "timed_out",
+          reason: "execution-deadline-exceeded",
+        });
+      });
+      await vi.waitFor(() => expect(worker.activeCount).toBe(0));
+      expect(
+        warn.mock.calls
+          .map(([message]) => String(message))
+          .filter((message) => message.includes("completion follow-up failed")),
+      ).toEqual([]);
+    } finally {
+      warn.mockRestore();
+      await worker.close();
+      await eventBus.close();
+    }
+  });
+
   it("cancels uncommitted work on close and waits for the runner to release resources", async () => {
     await createRuntimeJob(store, job());
     await createRuntimeJob(store, job("session-a", "queued-after-close"));

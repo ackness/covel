@@ -182,7 +182,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
-  "packages/runtime/src/retry/retry-common.ts": 2,
+  "packages/runtime/src/retry/retry-common.ts": 3,
   "packages/plugin-handlers-utils/src/dimension-query.ts": 1,
   // A Chinese variant of a context-truncation marker.
   "packages/context/src/budget.ts": 1,

@@ -19,7 +19,7 @@ export function createSqliteSavepoint(
   getScope: () => StoreTransaction,
 ): NonNullable<StoreTransaction["savepoint"]> {
   return async <T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> => {
-    if (!sqlite.inTransaction) {
+    if (!sqlite.isTransaction) {
       throw new Error("SqliteStore savepoint requires an open transaction");
     }
     const name = `covel_sp_${++savepointSequence}`;
@@ -41,7 +41,7 @@ export function createSqliteSavepoint(
 }
 
 /**
- * better-sqlite3 is a single synchronous connection, so it cannot hold two
+ * The store is one synchronous `node:sqlite` connection, so it cannot hold two
  * concurrent transactions. `withTransaction` therefore *serializes* concurrent
  * calls through a promise chain — each runs its full BEGIN…COMMIT before the
  * next starts, so neither loses writes. The tx scope is the same data-method

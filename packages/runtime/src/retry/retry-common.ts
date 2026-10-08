@@ -101,6 +101,7 @@ export type RetryReason =
   | "call-timeout"
   | "transient-error"
   | "tool-loop-detected"
+  | "output-truncated"
   | "unknown";
 
 /** Internal marker so turn-executor can tell "retry exhausted" apart. */
@@ -193,6 +194,13 @@ export function isTransientError(err: unknown): boolean {
 }
 
 /** These logical outcomes must never enter a fresh retry or recovery budget. */
+/** The model ran past its output limit before the response was usable. */
+export function isOutputTruncated(err: unknown): boolean {
+  return (
+    err instanceof AiProviderError && err.details?.finishReason === "length"
+  );
+}
+
 export function isTerminalLlmRequestError(error: unknown): boolean {
   return (
     error instanceof LLMRequestBudgetError ||
@@ -248,6 +256,10 @@ export function retryHint(
     return zh
       ? `[retry ${attempt}] 上一次尝试反复调用了同一个工具。换一种做法，或按指令的要求结束。${padding}`
       : `[retry ${attempt}] The previous attempt called the same tool repeatedly. Vary your approach, or finish as the instructions say.${padding}`;
+  if (reason === "output-truncated")
+    return zh
+      ? `[retry ${attempt}] 上一次尝试写到输出上限也没有完成。只写任务需要的内容，然后按指令的要求结束。${padding}`
+      : `[retry ${attempt}] The previous attempt reached the output limit before it finished. Write only what the task needs, then finish as the instructions say.${padding}`;
   return zh
     ? `[retry ${attempt}] 上一次尝试没有完成。重新完成任务，并按指令的要求结束。${padding}`
     : `[retry ${attempt}] The previous attempt did not complete. Do the task again and finish as the instructions say.${padding}`;

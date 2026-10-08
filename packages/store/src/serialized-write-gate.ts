@@ -26,7 +26,7 @@
  * genuinely concurrent caller that starts while a transaction is suspended at
  * an await is not mistaken for a nested one.
  *
- * Cost is structural, not throughput: better-sqlite3 is synchronous, so its
+ * Cost is structural, not throughput: `node:sqlite` is synchronous, so its
  * statements were already serialized; what changes is that a write now waits
  * for an in-flight transaction instead of joining it. PgStore needs none of
  * this — it runs each transaction on its own pooled connection.

@@ -5,6 +5,7 @@ import {
   getConnectionWriteGate,
   releaseSqliteConnection,
 } from "../sqlite/shared-connection.js";
+import { runSqliteTransaction } from "../sqlite/node-sqlite.js";
 import { MEDIA_WRITE_METHODS } from "../store-write-methods.js";
 import {
   createReadStream,
@@ -96,24 +97,34 @@ function initializeSqliteMediaStore(
   const removeRefs = sqlite.prepare(
     "DELETE FROM media_refs WHERE media_id = ?",
   );
-  const deleteAsset = sqlite.transaction((id: string) => {
-    const row = select.get(id) as { path: string } | undefined;
-    removeRefs.run(id);
-    remove.run(id);
-    if (row?.path) rmSync(row.path, { force: true });
-  });
+  const deleteAsset = (id: string) =>
+    runSqliteTransaction(
+      sqlite,
+      () => {
+        const row = select.get(id) as { path: string } | undefined;
+        removeRefs.run(id);
+        remove.run(id);
+        if (row?.path) rmSync(row.path, { force: true });
+      },
+      "immediate",
+    );
   const selectAnyRef = sqlite.prepare(
     "SELECT 1 AS one FROM media_refs WHERE media_id = ? LIMIT 1",
   );
-  const deleteUnreferencedAsset = sqlite.transaction((id: string) => {
-    const row = select.get(id) as
-      { path: string; ownerSessionId: string | null } | undefined;
-    if (!row || row.ownerSessionId !== null) return null;
-    if (selectAnyRef.get(id)) return null;
-    remove.run(id);
-    rmSync(row.path, { force: true });
-    return row.path;
-  });
+  const deleteUnreferencedAsset = (id: string) =>
+    runSqliteTransaction(
+      sqlite,
+      () => {
+        const row = select.get(id) as
+          { path: string; ownerSessionId: string | null } | undefined;
+        if (!row || row.ownerSessionId !== null) return null;
+        if (selectAnyRef.get(id)) return null;
+        remove.run(id);
+        rmSync(row.path, { force: true });
+        return row.path;
+      },
+      "immediate",
+    );
 
   // First-writer wins guard: only set owner when row has no owner yet, or
   // when the caller already owns it (idempotent re-record). Prevents a
@@ -154,8 +165,9 @@ function initializeSqliteMediaStore(
       meta = toMeta(meta);
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
-      return sqlite
-        .transaction(() => {
+      return runSqliteTransaction(
+        sqlite,
+        () => {
           const claim = () => {
             if (initialRef)
               insertRef.run({
@@ -211,8 +223,9 @@ function initializeSqliteMediaStore(
           });
           claim();
           return ref;
-        })
-        .immediate();
+        },
+        "immediate",
+      );
     },
 
     async get(ref) {
@@ -234,7 +247,7 @@ function initializeSqliteMediaStore(
     },
 
     async delete(id) {
-      if (sqlite.inTransaction)
+      if (sqlite.isTransaction)
         throw new Error(
           "SQLite media deletion must run outside an existing SQL transaction",
         );
@@ -242,7 +255,7 @@ function initializeSqliteMediaStore(
       // even though the schema has no explicit FK between the two tables. The
       // transaction also excludes a writer in another OS process from adding a
       // ref between the two statements and leaving it dangling.
-      deleteAsset.immediate(id);
+      deleteAsset(id);
     },
 
     async lookup(id) {
@@ -290,10 +303,10 @@ function initializeSqliteMediaStore(
     },
 
     async releaseSession(sessionId) {
-      sqlite.transaction(() => {
+      runSqliteTransaction(sqlite, () => {
         removeSessionRefs.run(sessionId);
         clearSessionOwnership.run(sessionId);
-      })();
+      });
     },
 
     async isReferencedBy(id, sessionId) {
@@ -328,7 +341,7 @@ function initializeSqliteMediaStore(
     },
 
     async listRefs() {
-      return selectAllRefs.all() as MediaRefRecord[];
+      return selectAllRefs.all() as unknown as MediaRefRecord[];
     },
 
     async listByMetadata(sessionId, filter) {
@@ -336,7 +349,7 @@ function initializeSqliteMediaStore(
     },
 
     async cleanup(protectedIds, policy) {
-      if (!policy?.dryRun && sqlite.inTransaction)
+      if (!policy?.dryRun && sqlite.isTransaction)
         throw new Error(
           "SQLite media cleanup must run outside an existing SQL transaction",
         );
@@ -351,7 +364,7 @@ function initializeSqliteMediaStore(
         for (const id of idsToDelete) {
           // BEGIN IMMEDIATE excludes another process's addRef/ownership write
           // across the final check and asset deletion.
-          const path = deleteUnreferencedAsset.immediate(id);
+          const path = deleteUnreferencedAsset(id);
           if (path === null) continue;
           deletedIds.push(id);
         }

@@ -35,14 +35,14 @@ describe("sqlite shared connection", () => {
       expect(() => createSqliteMediaStore(dbPath, { mediaRoot })).toThrow(
         expect.objectContaining({ code: "EEXIST" }),
       );
-      expect(observed.open).toBe(true);
+      expect(observed.isOpen).toBe(true);
       expect(await store.listSessions()).toEqual([]);
       await store.close();
       ownerClosed = true;
-      expect(observed.open).toBe(false);
+      expect(observed.isOpen).toBe(false);
     } finally {
       if (!ownerClosed) await store.close();
-      if (observed.open) releaseSqliteConnection(observed);
+      if (observed.isOpen) releaseSqliteConnection(observed);
     }
   });
 
@@ -62,7 +62,7 @@ describe("sqlite shared connection", () => {
         expect.objectContaining({ code: "EEXIST" }),
       );
       expect(observed).toBeDefined();
-      expect(observed?.open).toBe(false);
+      expect(observed?.isOpen).toBe(false);
       spy.mockRestore();
 
       const media = createSqliteMediaStore(dbPath, {
@@ -76,7 +76,7 @@ describe("sqlite shared connection", () => {
       }
     } finally {
       spy.mockRestore();
-      if (observed?.open) releaseSqliteConnection(observed);
+      if (observed?.isOpen) releaseSqliteConnection(observed);
     }
   });
 
@@ -99,11 +99,11 @@ describe("sqlite shared connection", () => {
       expect(observed.prepare("SELECT 1 AS value").get()).toEqual({ value: 1 });
       releaseSqliteConnection(observed);
       ownerReleased = true;
-      expect(observed.open).toBe(false);
+      expect(observed.isOpen).toBe(false);
     } finally {
       prepare.mockRestore();
       if (!ownerReleased) releaseSqliteConnection(observed);
-      if (observed.open) releaseSqliteConnection(observed);
+      if (observed.isOpen) releaseSqliteConnection(observed);
     }
   });
 
@@ -149,10 +149,10 @@ describe("sqlite shared connection", () => {
     expect(b).toBe(a); // same handle, refcount now 2
 
     releaseSqliteConnection(a); // 2 -> 1, still open
-    expect(a.open).toBe(true);
+    expect(a.isOpen).toBe(true);
 
     releaseSqliteConnection(b); // 1 -> 0, closed
-    expect(a.open).toBe(false);
+    expect(a.isOpen).toBe(false);
   });
 
   it.each(["delete", "cleanup"] as const)(

@@ -1,8 +1,8 @@
 /**
- * SQLite {@link SqlRunner} adapter (better-sqlite3 + Drizzle).
+ * SQLite {@link SqlRunner} adapter (`node:sqlite` + Drizzle).
  *
  * The ONLY place in the SQLite backend that bridges the dialect-agnostic shared
- * query layer to the concrete `better-sqlite3` driver. better-sqlite3 is fully
+ * query layer to the concrete `node:sqlite` driver. `node:sqlite` is fully
  * synchronous, so each terminal (`.all()/.get()/.run()`) is wrapped in
  * `Promise.resolve(...)` to satisfy the async {@link SqlRunner} contract — a
  * zero-cost wrap, identical in behaviour to the legacy inline calls. The loose
@@ -10,8 +10,8 @@
  * dialect-bridging gateway (analogous to `sqliteJsonReader`/`sqliteJsonWriter`)
  * and are sound — the shared modules only ever pass real SQLite schema tables.
  *
- * Batch upserts use a synchronous `db.transaction(...)` body (better-sqlite3
- * cannot await inside a transaction), preserving the legacy atomic batch loops.
+ * Batch upserts use a synchronous `db.transaction(...)` body (a synchronous
+ * connection cannot await inside a transaction), preserving the atomic batch loops.
  */
 
 import { sql, type SQL, type Table } from "drizzle-orm";
@@ -119,8 +119,8 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
 
     insertManyAtomic(table: Table, rows: readonly UpsertRow[]): Promise<void> {
       if (rows.length === 0) return Promise.resolve();
-      // better-sqlite3 transactions are synchronous and run on the single
-      // connection; the callback executes immediately (no trailing call).
+      // Transactions are synchronous and run on the single connection; the
+      // callback executes immediately, as a savepoint inside an open one.
       db.transaction((tx) => {
         for (const row of rows) {
           const stmt = tx.insert(table as SQLiteTable).values(row.values);

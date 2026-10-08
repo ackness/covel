@@ -40,7 +40,6 @@
  * no vector methods. Callers must branch via `supportsVector()`.
  */
 
-import type Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 
 import type {
@@ -57,6 +56,11 @@ import type {
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
 import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
+import {
+  loadSqliteExtension,
+  runSqliteTransaction,
+  type SqliteConnection,
+} from "./node-sqlite.js";
 
 // ── Safety helpers ───────────────────────────────────────────────
 
@@ -117,10 +121,10 @@ interface UpsertSessionRow {
  * as unavailable and fall back to structured retrieval.
  */
 export function createSqliteVectorCapability(
-  sqlite: Database.Database,
+  sqlite: SqliteConnection,
 ): (VectorStoreCapability & VectorModelOps) | null {
   try {
-    sqliteVec.load(sqlite);
+    loadSqliteExtension(sqlite, sqliteVec.load);
   } catch (err) {
     // Loading can fail on unsupported platforms or if the optional
     // dependency is pruned. Downgrade to null rather than crashing.
@@ -165,8 +169,9 @@ export function createSqliteVectorCapability(
   async function ensureVectorModel(
     identity: EmbeddingModelIdentity,
   ): Promise<VectorTarget> {
-    return sqlite
-      .transaction(() => {
+    return runSqliteTransaction(
+      sqlite,
+      () => {
         const now = Date.now();
 
         // INSERT OR IGNORE — table_name is left to its DEFAULT '' so the
@@ -208,8 +213,9 @@ export function createSqliteVectorCapability(
         ensurePhysicalTable(target);
 
         return target;
-      })
-      .immediate();
+      },
+      "immediate",
+    );
   }
 
   async function lockSessionEmbeddingModel(
@@ -300,7 +306,7 @@ export function createSqliteVectorCapability(
            FROM vector_models
           ORDER BY id`,
       )
-      .all() as VectorModelRow[];
+      .all() as unknown as VectorModelRow[];
 
     return rows.map((r) => ({
       id: r.id,
@@ -317,7 +323,11 @@ export function createSqliteVectorCapability(
   // ── VectorStoreCapability ────────────────────────────────────────
 
   async function upsertVector(input: UpsertVectorInput): Promise<void> {
-    sqlite.transaction(() => upsertVectorInTransaction(input)).immediate();
+    runSqliteTransaction(
+      sqlite,
+      () => upsertVectorInTransaction(input),
+      "immediate",
+    );
   }
 
   function upsertVectorInTransaction(input: UpsertVectorInput): void {
@@ -462,8 +472,9 @@ export function createSqliteVectorCapability(
   async function commitVectorIndexBatch(
     input: CommitVectorIndexBatchInput,
   ): Promise<boolean> {
-    return sqlite
-      .transaction(() => {
+    return runSqliteTransaction(
+      sqlite,
+      () => {
         const session = sqlite
           .prepare("SELECT created_at FROM sessions WHERE id = ?")
           .get(input.sessionId) as { created_at: string } | undefined;
@@ -520,8 +531,9 @@ export function createSqliteVectorCapability(
           });
         }
         return true;
-      })
-      .immediate();
+      },
+      "immediate",
+    );
   }
 
   async function deleteVectors(input: DeleteVectorsInput): Promise<void> {
@@ -543,8 +555,9 @@ export function createSqliteVectorCapability(
       conditions.push("data_key = ?");
       values.push(input.key);
     }
-    sqlite
-      .transaction(() => {
+    runSqliteTransaction(
+      sqlite,
+      () => {
         const session = sqlite
           .prepare(
             "SELECT created_at, embedding_model_id FROM sessions WHERE id = ?",
@@ -562,8 +575,9 @@ export function createSqliteVectorCapability(
         sqlite
           .prepare(`DELETE FROM ${tname} WHERE ${conditions.join(" AND ")}`)
           .run(...values);
-      })
-      .immediate();
+      },
+      "immediate",
+    );
   }
 
   return {

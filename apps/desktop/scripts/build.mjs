@@ -247,11 +247,6 @@ function ensurePluginWorkspaceDeps() {
 }
 
 function verifyStagedServerRuntime() {
-  const betterSqliteDir = path.join(
-    serverStaging,
-    "node_modules/better-sqlite3",
-  );
-  const betterSqlitePkgPath = path.join(betterSqliteDir, "package.json");
   const checks = [
     path.join(serverStaging, "src/index.js"),
     path.join(serverStaging, "node_modules/tsx/dist/loader.mjs"),
@@ -260,7 +255,6 @@ function verifyStagedServerRuntime() {
       serverStaging,
       "node_modules/@covel/ai-provider/data/model-db.json",
     ),
-    betterSqlitePkgPath,
   ];
   const missing = checks.filter((target) => !fs.existsSync(target));
   if (missing.length > 0) {
@@ -301,37 +295,6 @@ function verifyStagedServerRuntime() {
       `Desktop server staging is missing @esbuild platform packages in ${esbuildScopeDir}`,
     );
   }
-
-  const betterSqlitePkg = JSON.parse(
-    fs.readFileSync(betterSqlitePkgPath, "utf-8"),
-  );
-  const betterSqliteMajor = Number.parseInt(
-    String(betterSqlitePkg.version).split(".")[0],
-    10,
-  );
-  if (betterSqliteMajor < 13 || betterSqlitePkg.gypfile !== false) {
-    throw new Error(
-      `Desktop staging requires better-sqlite3 13+ Node-API prebuilds; found ${betterSqlitePkg.version ?? "unknown"}`,
-    );
-  }
-
-  // These are the architectures emitted by electron-builder.yml. v13 carries
-  // all of them in one package, so staging must preserve the complete prebuild
-  // set even when a runner packages a non-host architecture.
-  const requiredNativePrebuilds = [
-    "darwin-arm64.node",
-    "win32-x64.node",
-    "linux-x64.node",
-    "linux-arm64.node",
-  ].map((filename) => path.join(betterSqliteDir, "prebuilds", filename));
-  const missingNativePrebuilds = requiredNativePrebuilds.filter(
-    (target) => !fs.existsSync(target),
-  );
-  if (missingNativePrebuilds.length > 0) {
-    throw new Error(
-      `Desktop staging is missing better-sqlite3 Node-API prebuilds:\n${missingNativePrebuilds.map((p) => `- ${p}`).join("\n")}`,
-    );
-  }
 }
 
 // Copy web dist
@@ -348,11 +311,10 @@ console.log("  ✓ web-dist copied");
 // - --prod 剔除 devDeps
 // - --config.inject-workspace-packages=true 选择 pnpm 12 的非 legacy deploy：
 //   它按共享 lockfile 安装并把 workspace 包（如 @covel/store）及其传递依赖
-//   （better-sqlite3）真实复制进来。pnpm 12 下 `--legacy` + hoisted 只打印
-//   安装列表、node_modules 却是空的，导致桌面打包缺 better-sqlite3。
-// - --ignore-scripts 阻止 deploy 因 binding.gyp 隐式调用 node-gyp；
-//   better-sqlite3 13 已随包携带 Node-API prebuild，下面会逐架构校验，
-//   esbuild 的平台包也由 ensureRuntimePackages + 完整性检查显式保证。
+//   （如 sqlite-vec）真实复制进来。pnpm 12 下 `--legacy` + hoisted 只打印
+//   安装列表、node_modules 却是空的，导致桌面打包缺这些依赖。
+// - --ignore-scripts 不在 deploy 时运行依赖的安装脚本；esbuild 的平台包
+//   由 ensureRuntimePackages + 完整性检查显式保证。
 // - --config.node-linker=hoisted 让 node_modules 里全是真实文件夹而非
 //   .pnpm/ 软链（默认 isolated 模式下 node_modules/tsx → .pnpm/tsx@X.Y/...
 //   这种软链 macOS 可用，Windows 上 electron-builder 复制 extraResources
@@ -439,9 +401,9 @@ console.log("  ✓ server resources staged");
 // Step 3b: smoke-test the staged server so electron-builder never wraps a
 // known-broken sidecar. Run it under Electron's Node mode because the packaged
 // app launches the sidecar with process.execPath + ELECTRON_RUN_AS_NODE.
-// better-sqlite3 13 uses Node-API and ships its platform binaries in the
-// package, so forcing an Electron ABI rebuild is unnecessary. This real
-// Electron + SQLite boot remains the fail-closed compatibility gate.
+// SQLite is `node:sqlite`, built into Electron's Node, so there is no native
+// module to rebuild for Electron's ABI. This real Electron + SQLite boot
+// remains the fail-closed compatibility gate.
 // The runtime binary must be materialised first — electron@42+ no longer
 // downloads it on install (see ensure-electron.mjs).
 ensureElectronBinary();

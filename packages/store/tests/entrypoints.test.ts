@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 
-vi.mock("better-sqlite3", () => {
+vi.mock("node:sqlite", () => {
   throw new Error("SQLite driver was eagerly loaded");
 });
 vi.mock("postgres", () => {

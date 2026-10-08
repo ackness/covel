@@ -29,11 +29,11 @@ checkpoint contracts; `apps/web` owns the browser persistence mechanism.
 
 `STORE_BACKEND` selects only the server `DataStore`:
 
-| Value    | Use                                               | Notes                                                                      |
-| -------- | ------------------------------------------------- | -------------------------------------------------------------------------- |
-| `memory` | tests and browser-private execution               | Process-local and lost on restart. Health reports `frontendMode: "local"`. |
-| `sqlite` | desktop, local development, single-node self-host | Uses `SQLITE_PATH`; default `./data/covel.db`.                             |
-| `pg`     | hosted and multi-process deployment               | Requires `DATABASE_URL`; session locks use PostgreSQL advisory locks.      |
+| Value    | Use                                               | Notes                                                                                 |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `memory` | tests and browser-private execution               | Process-local and lost on restart. Health reports `frontendMode: "local"`.            |
+| `sqlite` | desktop, local development, single-node self-host | Uses `SQLITE_PATH`; default `./data/covel.db`. Driver: Node's built-in `node:sqlite`. |
+| `pg`     | hosted and multi-process deployment               | Requires `DATABASE_URL`; session locks use PostgreSQL advisory locks.                 |
 
 `STORE_BACKEND=idb` and `createStore({ backend: "idb" })` do not exist.
 

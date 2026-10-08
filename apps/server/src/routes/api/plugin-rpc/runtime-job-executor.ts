@@ -159,6 +159,7 @@ export function createRuntimeJobExecutor(deps: {
       executionSignal: control.signal,
       expectedSessionIncarnation: payload.expectedSessionIncarnation,
       beforeExecute: control.assertCurrent,
+      executionFinished: control.executionFinished,
       beforeCommit: control.beforeCommit,
       completeInTx,
       ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
@@ -297,6 +298,7 @@ export function createRuntimeJobExecutor(deps: {
         },
         beforeCommit: control.beforeCommit,
         beforeExecute: control.assertCurrent,
+        executionFinished: control.executionFinished,
         executionSignal: control.signal,
       });
       if (!outcome.commit.committed) {

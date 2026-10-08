@@ -31,6 +31,11 @@ import {
   captureContinuation,
   continuationItems,
 } from "./provider-continuation.js";
+import {
+  createThinkTagSplitter,
+  joinReasoning,
+  splitThinkTags,
+} from "./think-tags.js";
 import type { OpenAiChatReasoningField } from "./http/openai-readers.js";
 import { extractReasoningRequestFields } from "../reasoning-effort.js";
 import {
@@ -185,12 +190,18 @@ const PROTOCOL = "openai-chat-v1";
  * Remember a non-default reasoning field so a follow-up sent to the same
  * target echoes the trace under the field it arrived in.
  */
+/**
+ * Where a reply's reasoning came from: a wire field, or `think` for reasoning
+ * the model wrote inline as `<think>…</think>`.
+ */
+type ReasoningSource = OpenAiChatReasoningField | "think";
+
 function reasoningContinuation(
-  field: OpenAiChatReasoningField | undefined,
+  field: ReasoningSource | undefined,
   model: string,
   config: ProviderConfig,
 ) {
-  return field === "reasoning"
+  return field === "reasoning" || field === "think"
     ? captureContinuation(PROTOCOL, model, config, [
         { type: "reasoning", field },
       ])
@@ -227,9 +238,15 @@ function serializeMessages(
 ): Record<string, unknown>[] {
   const field = endpointReasoningField(messages, model, config);
   return messages.map((msg) => {
-    const reasoning = msg.reasoningContent
-      ? { [field]: msg.reasoningContent }
-      : {};
+    // Reasoning a model wrote inline is not sent back: models that think in
+    // `<think>` blocks expect history to carry only their final replies.
+    const inlineThink = continuationItems(msg, PROTOCOL, model, config)?.some(
+      (item) => item.type === "reasoning" && item.field === "think",
+    );
+    const reasoning =
+      msg.reasoningContent && !inlineThink
+        ? { [field]: msg.reasoningContent }
+        : {};
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
       return {
         role: "assistant",
@@ -313,18 +330,20 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
       const toolCalls = readOpenAiChatToolCalls(payload);
       const reasoning = readOpenAiChatReasoningContent(payload);
+      const reply = splitThinkTags(readOpenAiChatText(payload));
+      const reasoningContent = joinReasoning(reasoning?.text, reply.reasoning);
       const providerContinuation = reasoningContinuation(
-        reasoning?.field,
+        reasoning?.field ?? (reply.sawThink ? "think" : undefined),
         params.model,
         config,
       );
       return {
         ...(diagnostics ? { diagnostics } : {}),
-        text: readOpenAiChatText(payload),
+        text: reply.text,
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
         ...(toolCalls ? { toolCalls } : {}),
-        ...(reasoning ? { reasoningContent: reasoning.text } : {}),
+        ...(reasoningContent ? { reasoningContent } : {}),
         ...(providerContinuation ? { providerContinuation } : {}),
       };
     },
@@ -361,9 +380,10 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         "openai-chat",
       );
 
+      const reply = splitThinkTags(readOpenAiChatText(payload));
       let rawObject: unknown;
       try {
-        rawObject = JSON.parse(readOpenAiChatText(payload));
+        rawObject = JSON.parse(reply.text);
       } catch {
         throw createStructuredOutputError("openai-chat");
       }
@@ -375,7 +395,10 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       return {
         ...(diagnostics ? { diagnostics } : {}),
         object: validation.data,
-        reasoningContent: readOpenAiChatReasoningContent(payload)?.text,
+        reasoningContent: joinReasoning(
+          readOpenAiChatReasoningContent(payload)?.text,
+          reply.reasoning,
+        ),
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
       };
@@ -426,6 +449,22 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       let completed = false;
       let reasoningAcc = "";
       let reasoningWireField: OpenAiChatReasoningField | undefined;
+      const thinkSplitter = createThinkTagSplitter();
+      const replyParts = function* (
+        parts: ReturnType<typeof thinkSplitter.push>,
+      ) {
+        for (const part of parts) {
+          if (part.type === "reasoning") {
+            reasoningAcc += part.text;
+            yield {
+              type: "reasoning-delta" as const,
+              reasoningDelta: part.text,
+            };
+          } else {
+            yield { type: "text-delta" as const, textDelta: part.text };
+          }
+        }
+      };
       const diagnostics = new ResponseDiagnostics("chat");
       // Accumulate tool_call deltas by index across chunks.
       const toolCallAcc = new Map<
@@ -446,9 +485,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           }
 
           const delta = readOpenAiChatStreamDelta(payload);
-          if (delta) {
-            yield { type: "text-delta", textDelta: delta };
-          }
+          if (delta) yield* replyParts(thinkSplitter.push(delta));
 
           const toolCallDeltas = readOpenAiChatStreamToolCallDeltas(payload);
           if (toolCallDeltas) {
@@ -481,6 +518,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       }
       diagnostics.assertNotRefused("openai-chat");
       assertStreamCompleted(completed, "openai-chat");
+      yield* replyParts(thinkSplitter.flush());
 
       // Emit accumulated tool calls before done.
       if (toolCallAcc.size > 0) {
@@ -497,7 +535,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       }
 
       const providerContinuation = reasoningContinuation(
-        reasoningWireField,
+        reasoningWireField ?? (thinkSplitter.sawThink ? "think" : undefined),
         params.model,
         config,
       );

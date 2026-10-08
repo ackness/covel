@@ -240,10 +240,10 @@ Live 模式适合发布前人工验证，CI 默认使用 mock。
 当你要验证 API、SSE、approval policy 或真实 session store 行为时，使用 `scripts/e2e-plugin-verify.ts`：
 
 ```bash
-pnpm exec tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts \
+pnpm exec tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/e2e-plugin-verify.ts \
   --slot e2e_local \
   --turns 3 \
-  --plugins my-plugin
+  --plugin my-plugin
 ```
 
 详细参数见 [e2e-plugin-verify.md](./e2e-plugin-verify.md)。Artifacts 写入 `debugs/e2e-logs/<run-id>/`。

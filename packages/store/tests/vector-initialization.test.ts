@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import Database from "better-sqlite3";
 import type { Sql } from "postgres";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -7,6 +6,7 @@ import { createTables } from "../src/sqlite/sqlite-store-mappers.js";
 import { createSqliteVectorCapability } from "../src/sqlite/sqlite-vector.js";
 import { createPgVectorCapability } from "../src/postgres/pg-vector.js";
 import { deletePgSessionCascade } from "../src/postgres/pg-session-cascade.js";
+import { openSqliteConnection } from "../src/sqlite/node-sqlite.js";
 
 const identity = {
   provider: "test",
@@ -17,7 +17,7 @@ const identity = {
 
 describe("vector model initialization", () => {
   it("rolls back SQLite registry and DDL together and can retry after outer rollback", async () => {
-    const db = new Database(":memory:");
+    const db = openSqliteConnection(":memory:");
     createTables(db);
     const vectors = createSqliteVectorCapability(db)!;
     expect(vectors).not.toBeNull();
