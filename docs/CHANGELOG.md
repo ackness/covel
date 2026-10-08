@@ -35,7 +35,6 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - Plugin catalog switches have accessible names and native keyboard activation without submitting forms; inputs, textareas and selects associate localized labels with stable unique IDs while retaining the panel interaction lock.
 - English and Russian model-role connectivity hints direct players to the current Providers & Models page instead of the retired API Keys pane.
 - Disabled Lorebook entries are excluded from archival keyword/vector retrieval as well as automatic prompt injection, including existing vectors before ingestion runs. Re-enabling restores search; ingestion removes disabled indexes and rebuilds them when enabled again without affecting other owners or characters.
-
 - Desktop key saving while the sidecar is unavailable now writes a private temporary file and atomically replaces the saved keys; write, permission-setting and rename failures preserve the existing keys.
 - Execution status reads reject a session deleted or recreated during an authorized lookup, rather than returning the replacement session’s retry input; polling remains non-blocking.
 - Newly generated worlds declare only the requested content-language edition. Generation and revision validate the complete character roster against the world’s character schema before accepting it, preserving supplemental retry/discard and whole-revision failure behavior. Existing revision language declarations are not clamped.

@@ -42,7 +42,7 @@ import * as sqliteSchema from "../src/sqlite/schema.js";
 import * as pgSchema from "../src/postgres/schema.js";
 
 import { is, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { drizzleNodeSqlite } from "../src/sqlite/drizzle-node-sqlite.js";
 import { nextWriteOrderSeq } from "../src/common/cursor.js";
 import { createSqliteRuntimeRecords } from "../src/sqlite/sqlite-runtime-records.js";
 import { makeTurnResult } from "../src/contract/test-fixtures.js";
@@ -279,11 +279,11 @@ function pgActualIndexes(sql: string): TableIndexes {
 
 describe("schema/DDL index consistency", () => {
   it("locates turn-result append positions with a session/time covering index after synthetic appends", async () => {
-    const sqlite = new Database(":memory:");
+    const sqlite = new DatabaseSync(":memory:");
     try {
       createTables(sqlite);
       const records = createSqliteRuntimeRecords(
-        drizzle(sqlite, { schema: sqliteSchema }),
+        drizzleNodeSqlite(sqlite, sqliteSchema),
       );
       const start = performance.now();
       for (let index = 0; index < 1024; index++) {
@@ -315,7 +315,7 @@ describe("schema/DDL index consistency", () => {
       );
       const plan = sqlite
         .prepare(`EXPLAIN QUERY PLAN ${query.sql}`)
-        .all(...query.params) as Array<{ detail: string }>;
+        .all(...(query.params as string[])) as Array<{ detail: string }>;
       console.info(
         "synthetic turn-result append evidence",
         JSON.stringify({
@@ -331,7 +331,9 @@ describe("schema/DDL index consistency", () => {
       expect(
         sqlite.prepare("select count(*) as total from turn_results").get(),
       ).toEqual({ total: 2056 });
-      expect(sqlite.prepare(query.sql).get(...query.params)).toEqual({
+      expect(
+        sqlite.prepare(query.sql).get(...(query.params as string[])),
+      ).toEqual({
         next_seq: 8,
       });
       expect(
