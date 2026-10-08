@@ -281,6 +281,10 @@ describe("ToolExecutor trace emissions", () => {
     expect(Array.isArray(failPayload.details)).toBe(true);
     // Dedup means only 2 unique paths survive (name + age), not 3 raw issues.
     expect((failPayload.details as string[]).length).toBe(2);
+    // The model reads which fields to fix in the headline as well.
+    const sent = JSON.parse(res.result) as { error: string };
+    for (const detail of failPayload.details as string[])
+      expect(sent.error).toContain(detail);
   });
 
   it("does not emit anything when emitter is absent", async () => {

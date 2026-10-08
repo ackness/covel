@@ -541,7 +541,10 @@ export function createToolExecutor(
             dedupedDetails.push(detail);
           }
           details = dedupedDetails.map((d) => `${d.path}: ${d.message}`);
-          message = dedupedDetails.map((d) => d.message).join("; ");
+          // Name each field in the headline too: "expected array, received
+          // undefined" alone does not say which one, and a model sent the
+          // same incomplete call again.
+          message = details.join("; ");
           code = "VALIDATION_ERROR";
           errorResult = toolError(
             code,
