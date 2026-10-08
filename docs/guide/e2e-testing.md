@@ -156,6 +156,15 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 详细参数和输出格式见 [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)。
 
+`tests/llm-replay/` 下录好的脚本会话不调用模型，几秒跑完一局，换机器也不需要密钥：
+
+```bash
+pnpm e2e:replay
+```
+
+改了世界、插件、提示词或模型之后用 `--record --upstream <origin>` 重录，见
+[录制与回放](./e2e-plugin-verify.md#录制与回放)。
+
 ## 环境变量
 
 | 变量                    | 默认值                  | 说明                                                      |

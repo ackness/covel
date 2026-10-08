@@ -1,0 +1,9 @@
+{
+  "description": "Three turns of lantern-barrow with its preset plugin pack, in Simplified Chinese.",
+  "world": "lantern-barrow",
+  "turns": 3,
+  "locale": "zh-CN",
+  "sessionId": "lantern-barrow-replay",
+  "seed": "20261006",
+  "args": []
+}

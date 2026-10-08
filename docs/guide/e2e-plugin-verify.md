@@ -260,9 +260,38 @@ A: `--plugin guide --turns 2`。其它 runtime 依然会运行保证依赖链完
 3. **每遍开始时这个会话 ID 不存在**：同一个 ID 不能建两次。最简单的做法是每遍用一个新的数据库文件。脚本通过后会删除会话，所以也可以在同一个服务端上接着跑下一遍；失败或带 `--keep` 时会话保留，要先删除。
 4. **世界、插件、提示词、语言和模型配置都没有变**。改了其中任何一项，受影响的请求就是新请求，这正是需要重新录制的时候。
 
-### 步骤
+### 录进仓库：`pnpm e2e:replay`
 
-准备一份把会用到的 slot 都指到代理的模型配置，例如 `debugs/llm-replay/llm.toml`（`debugs/` 不进版本库）。下面以一个监听 `127.0.0.1:3425` 的 OpenAI 兼容端点为例，provider 名和模型换成自己的：
+`tests/llm-replay/` 下每个目录是一局录好的会话，录制随仓库提交，换一台机器检出后不需要模型、密钥和网络就能回放：
+
+```bash
+pnpm e2e:replay                  # 回放全部
+pnpm e2e:replay lantern-barrow   # 只回放一局
+```
+
+一个目录里有三样东西：
+
+| 文件            | 内容                                                                                                     |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| `scenario.json` | 脚本会话：`world`、`turns`、`locale`（默认 `zh-CN`）、`sessionId`、`seed`，以及传给脚本的其余参数 `args` |
+| `llm.toml`      | 录制时用的模型。每个 `[covel.<slot>]` 都要写 `provider` 和 `baseUrl`；`baseUrl` 运行时换成代理地址       |
+| `recording/`    | 每条请求一个应答文件，文件名是请求摘要的前 16 位                                                         |
+
+每局会话命令依次启动代理、一个专用服务端和脚本会话，结束后全部停掉。专用服务端用临时目录里的新 SQLite 数据库和自己的 `COVEL_HOME`，设置会话的 `COVEL_RANDOM_SEED` 和 `TZ=UTC`；不读 `.env`、`~/.covel`，也不继承 shell 里的 `COVEL_*`、`E2E_*`、`STORE_BACKEND` 等变量和各家密钥，所以两台机器上的会话发出同样的请求。回放时每条请求都要在录制里，有一条不在就判失败；脚本断言失败同样判失败。脚本日志、服务端日志和用来匹配的请求写在 `debugs/llm-replay/<会话>/`。`--verbose` 实时打印脚本输出。
+
+**录制或重录**。改了世界、插件、提示词或 `llm.toml` 之后：
+
+```bash
+pnpm e2e:replay --record --upstream https://api.deepseek.com lantern-barrow
+```
+
+`--upstream` 是 `llm.toml` 里那家服务商的 origin，不带 `/v1`。密钥按 `llm.toml` 的 provider 取名（`deepseek` → `DEEPSEEK_API_KEY`），从环境变量或仓库根目录的 `.env.llm` 读取。录制里已有的请求直接应答，只有新请求转给上游，所以只改了一个插件的提示词时，重录只调用受影响的那部分。会话跑完（脚本以 `0` 或 `1` 退出）后，这次没有用到的旧应答从 `recording/` 删除；中途出错的会话不删。确认结果后把 `recording/` 的变动一起提交。录制文件里是模型应答原文，不含密钥。
+
+新增一局会话：复制一个目录，改 `scenario.json`，删掉 `recording/`，再录制一遍。
+
+### 手动录制与回放
+
+不放进仓库、只在本机反复跑一局会话时，可以分别启动代理、服务端和脚本。准备一份把会用到的 slot 都指到代理的模型配置，例如 `debugs/llm-replay/llm.toml`（`debugs/` 不进版本库）。下面以一个监听 `127.0.0.1:3425` 的 OpenAI 兼容端点为例，provider 名和模型换成自己的：
 
 ```toml
 [covel.story]
@@ -330,6 +359,8 @@ pnpm llm:replay:diff debugs/llm-replay/demo.record.requests debugs/llm-replay/de
 
 它列出第二遍里第一遍没有的请求，以及每条请求从哪里开始与第一遍最接近的请求不同。先看序号最小的那条：后面的多半是它引起的。要让没命中的请求也有应答可看，第二遍也用 `--mode record`（同样带 `--upstream`）并加 `--tag <名字>`，没录过的请求会转给上游并补录。
 
+`pnpm e2e:replay` 的两遍请求在 `debugs/llm-replay/<会话>/record.requests` 和 `replay.requests`。录制那一遍若是在另一台机器上做的，本机没有 `record.requests`：先在本机录一遍，再回放比较。
+
 ### 代理怎样匹配请求
 
 - 匹配键是整条请求的摘要。aimock 自带的键只看最后一条用户消息、模型名、assistant 消息数和有没有工具结果；Covel 里叙事之后的各个 agent 最后一条用户消息相同，用它会互相串。
@@ -341,5 +372,6 @@ pnpm llm:replay:diff debugs/llm-replay/demo.record.requests debugs/llm-replay/de
 ### 已知范围
 
 - 只在 `lantern-barrow` 三回合会话上验证过整局回放。更长的会话、别的世界可能还有没处理的差异来源，用 `pnpm llm:replay:diff` 定位。
+- 换机器带来的差异（仓库路径、`HOME`、时区、`LANG`、shell 里的 `COVEL_*` 和 `E2E_MODEL_SLOT`）只在一局停在创角的会话上验证过：用假模型录制 8 条请求，在另一个路径的仓库副本里回放全部命中。
 - 回放时模型应答从几秒变成几毫秒。提示词如果依赖后台作业与下一回合的先后，两遍可能不同；上面的会话里没有出现。
-- 仓库的 CI 不运行这个脚本。回放模式不调用模型，以退出码 `0` 作为通过条件即可放进 CI；录制文件需要随提示词的改动重新生成。
+- 仓库的 CI 不运行 `pnpm e2e:replay`。它不需要密钥和网络，可以作为一个 job 放进 CI；代价是改了提示词、插件或世界的提交要带上重录的 `recording/`，否则这个 job 失败。

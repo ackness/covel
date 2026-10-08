@@ -96,6 +96,9 @@ pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under th
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
 pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
+pnpm e2e:replay       # replay the scripted sessions recorded under tests/llm-replay/ without a model, each on a
+                      # test server of its own; --record --upstream <origin> [session] records them again after
+                      # a world, plugin, prompt or model change (docs/guide/e2e-plugin-verify.md)
 pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, for repeating a scripted
                       # session without model calls: pnpm llm:replay --mode record --upstream <origin>
                       # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff
@@ -221,7 +224,8 @@ bundled `worlds/` and `plugins/`.
   `@covel/plugin-<name>` with `pnpm lint` / `pnpm test`).
   `packages/test-runtime/src/scaffold.test.ts` generates and runs every mode.
 - `tests/e2e/` — Playwright specs; `tests/third-party/` — installable probe
-  plugins used as community-package fixtures.
+  plugins used as community-package fixtures; `tests/llm-replay/` — scripted
+  sessions with their recorded model answers, played by `pnpm e2e:replay`.
 - `scripts/` — dev, check, and release tooling. `scripts/tests/*.test.mjs` run
   under `node --test` through `pnpm check`.
 

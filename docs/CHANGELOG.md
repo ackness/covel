@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Recorded scripted sessions replay in one command, on any machine.** `pnpm e2e:replay` plays each session under `tests/llm-replay/` against its recording: it starts the replay proxy, a test server with a new database, its own home directory, the session's random seed and UTC, then `scripts/e2e-plugin-verify.ts`, and stops them. The server reads nothing from `.env`, `~/.covel` or the shell's `COVEL_*` variables, so another checkout sends the same requests; any request missing from the recording fails the run. Recordings are committed, one answer per request named after its digest. `--record --upstream <origin>` records a session again: answers already recorded are reused, only new requests reach the model, and answers the session no longer asks for are removed. `pnpm llm:replay` stays for ad-hoc recordings under `debugs/`. The `lantern-barrow` session is defined but not recorded yet: record it with `pnpm e2e:replay --record --upstream https://api.deepseek.com lantern-barrow`. Verified with a fake model on a session that stopped at character creation (8 requests, all answered in a copy of the repository at another path, with another `HOME`, time zone and `LANG`); not yet verified on a recorded three-turn session. See `docs/guide/e2e-plugin-verify.md`.
+
 ### Changed
 
 - **A plugin outside the host range it declares is no longer loaded.** `covel: ">=0.0.45 <0.1.0"` in `PLUGIN.md` was checked only when a package was installed, so a package copied into the plugin directory, or installed before the app was updated, still ran on a host it does not support. Startup and reload now apply the same check: the package is listed as failed with both version numbers, and none of its code runs. A package without `covel` loads as before.
