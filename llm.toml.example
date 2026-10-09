@@ -22,7 +22,7 @@
 #              openai-chat-v1, openai-responses-v1, anthropic-messages-v1,
 #              google-generative-ai-v1,
 #              typesafe-systemone-v1, openrouter-decisions-v1,
-#              vercel-evaluation-v4
+#              vercel-evaluation-v4, openai-decisions-v1
 #   fallback - optional target slot name; enable the target and its key
 #   tag      - text, image, evaluation, or an explicit custom tag
 #
@@ -148,6 +148,14 @@ fallback = "story"
 # protocol = "openrouter-decisions-v1"
 # tag      = "evaluation"
 # output   = ["evaluation"]
+
+# -- Optional: OpenAI Decisions (evaluation) ----------------------
+# https://developers.openai.com/api/docs/guides/decisions
+#
+# [covel.evaluation]
+# provider = "openai"
+# model    = "gpt-6-luna"
+# protocol = "openai-decisions-v1"
 
 # -- Optional: Vercel AI Gateway chat + Jev on one connection ------
 # Put the AI Gateway key in VERCEL_API_KEY for provider = "vercel".

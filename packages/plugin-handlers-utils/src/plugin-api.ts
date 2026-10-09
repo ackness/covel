@@ -620,7 +620,8 @@ export type PluginProviderProtocol =
   | "google-generative-ai-v1"
   | "typesafe-systemone-v1"
   | "openrouter-decisions-v1"
-  | "vercel-evaluation-v4";
+  | "vercel-evaluation-v4"
+  | "openai-decisions-v1";
 export interface PluginModelCapability {
   input: ("text" | "image" | "audio" | "video" | "file")[];
   output: ("text" | "image" | "audio" | "video" | "embedding" | "evaluation")[];

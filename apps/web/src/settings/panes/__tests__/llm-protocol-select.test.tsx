@@ -26,6 +26,7 @@ describe("evaluation protocol selection", () => {
     ["typesafe", "typesafe-systemone-v1"],
     ["openrouter", "openrouter-decisions-v1"],
     ["vercel", "vercel-evaluation-v4"],
+    ["openai", "openai-decisions-v1"],
   ])(
     "suggests the %s wire through one Evaluation choice",
     (provider, protocol) => {

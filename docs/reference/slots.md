@@ -50,6 +50,7 @@ Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途�
 | `typesafe-systemone-v1`   | TypeSafe System One  | 评估 |
 | `openrouter-decisions-v1` | OpenRouter Decisions | 评估 |
 | `vercel-evaluation-v4`    | Vercel AI Gateway    | 评估 |
+| `openai-decisions-v1`     | OpenAI Decisions     | 评估 |
 
 内置服务商有官方端点和默认协议，`llm.toml` 里只写 `provider` 和 `model` 即可，设置页里可以直接从列表选：
 

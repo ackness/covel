@@ -38,6 +38,11 @@ export const PROVIDER_PROTOCOL_DESCRIPTORS = [
     label: "Vercel AI Gateway",
     output: "evaluation",
   },
+  {
+    id: "openai-decisions-v1",
+    label: "OpenAI Decisions",
+    output: "evaluation",
+  },
 ] as const satisfies readonly ProviderProtocolDescriptor[];
 
 export type BuiltinProviderProtocol =

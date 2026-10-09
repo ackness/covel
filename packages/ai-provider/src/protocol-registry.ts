@@ -176,6 +176,15 @@ const BUILTIN_PROTOCOLS: Record<BuiltinProviderProtocol, ProtocolDefinition> = {
       features: [],
     },
   },
+  "openai-decisions-v1": {
+    createAdapter: () => createEvaluationAdapter("openai-decisions-v1"),
+    cacheStrategy: "auto-prefix",
+    capabilityDefaults: {
+      input: ["text"],
+      output: protocolOutputModalities("openai-decisions-v1"),
+      features: [],
+    },
+  },
   "openai-chat-v1": {
     createAdapter: createOpenAiChatAdapter,
     // OpenAI / DeepSeek / Qwen transparently cache repeated prefixes.

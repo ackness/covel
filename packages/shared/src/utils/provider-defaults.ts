@@ -51,6 +51,7 @@ export const BUILTIN_PROVIDER_CONNECTIONS = {
     label: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
     protocol: "openai-chat-v1",
+    evaluationProtocol: "openai-decisions-v1",
   },
   anthropic: {
     label: "Anthropic",
