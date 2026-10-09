@@ -1,5 +1,5 @@
 import type { PluginLlmModelTarget } from "./model-resolver.js";
-import { instructionLocaleFor } from "@covel/shared";
+import { instructionLocaleFor, unifyFinishReason } from "@covel/shared";
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
@@ -51,14 +51,8 @@ export interface SlotOverridesInput {
     provider: string;
     baseUrl?: string;
     model: string;
-    protocol?:
-      | "openai-chat-v1"
-      | "openai-responses-v1"
-      | "anthropic-messages-v1"
-      | "google-generative-ai-v1"
-      | "typesafe-systemone-v1"
-      | "openrouter-decisions-v1"
-      | "vercel-evaluation-v4";
+    /** A built-in protocol or a plugin's `<pluginId>/<wireId>`. */
+    protocol?: string;
   }>;
   capabilityOverrides?: Record<
     string,
@@ -347,12 +341,7 @@ export function createGatewayAdapter(
           name: tc.name,
           arguments: tc.arguments,
         })),
-        finishReason:
-          result.finishReason === "tool_calls"
-            ? "tool_calls"
-            : result.finishReason === "length"
-              ? "length"
-              : "stop",
+        finishReason: completedFinishReason(result.finishReason),
         usage: result.usage,
         ...(result.providerContinuation
           ? { providerContinuation: result.providerContinuation }
@@ -561,4 +550,12 @@ function toGatewayTool(tool: LLMToolDefinition) {
       parameters: tool.parameters,
     },
   };
+}
+
+/** A gateway of another origin may still answer in a provider's own word. */
+function completedFinishReason(
+  reason: string,
+): "stop" | "tool_calls" | "length" {
+  const unified = unifyFinishReason(reason);
+  return unified === "tool_calls" || unified === "length" ? unified : "stop";
 }

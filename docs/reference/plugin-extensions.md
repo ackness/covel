@@ -155,11 +155,57 @@ const value = await ctx.services.call(
 - 新供应商使用既有 wire：只配置 provider、base URL、模型和用途，无须改插件或框架。
 - 新 wire 或新的返回形式：服务内部用 `ctx.gateway.resolveSlot` 取得本次请求的模型配置，再用 `ctx.utils.validateBaseUrl` / `fetchWithRetry` 实现协议，定义自己的输入输出 schema。结果通过服务契约提供给其他插件。密钥只留在服务端，不写入结果、日志或 UI。
 - 图片、语音、转写和音乐需要复用统一媒体管线时，继续使用 `covel.registerWires`。媒体落库仍通过现有媒体接口。
+- 新的文本协议（内置四种之外的请求和响应格式，例如某家云的原生接口）也用 `covel.registerWires` 注册，见下文[文本协议 wire](#文本协议-wire)。注册后它和内置协议一样可以被任何文本用途选用，主叙事也可以。
 - 音乐生成：`ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, presetId?, metadata?, signal? })` 返回 `{ refs, warnings, cached }`，与 `ctx.speech.generate` 同一套去重和落库约定；`ctx.music.isAvailable(presetId?)` 只检查有没有配置音乐用途，不请求服务商。内核不带音乐 wire：提供音乐模型接入的插件用 `covel.registerWires({ music: [{ id, compose }] })` 注册，`compose(config, params, context)` 返回 `{ audio: { mimeType, data }, usage, warnings }`，需要轮询的服务商在 `compose` 里轮询完再返回。一首曲子要生成几十秒到几分钟，只应在 detached 或后台 runtime 里调用，不要放进回合。
 
 服务中的 gateway 和 HTTP 工具继承调用 runtime 的请求配置、权限、追踪、取消和撤销边界，不会因为跨插件调用获得更大权限。尤其社区调用方的自管 HTTP 仍受其 `permissions.http` 限制。已提供标准 gateway 方法的能力优先走 gateway。
 
-“无须修改框架”指插件能以自己的契约实现功能。若希望框架的通用模型设置、调度器或媒体系统直接理解一种全新能力类型，仍属于宿主公共契约的演进；服务扩展不会自动给中心能力枚举添加新成员。
+“无须修改框架”指插件能以自己的契约实现功能。若希望框架的通用模型设置、调度器或媒体系统直接理解一种全新能力类型（文本、图像、语音、转写、音乐、评估之外的），仍属于宿主公共契约的演进；服务扩展不会自动给中心能力枚举添加新成员。
+
+### 文本协议 wire
+
+```js
+export default function register(covel) {
+  covel.registerWires({
+    text: [
+      {
+        id: "converse",
+        label: "Acme Converse",
+        async generateText(config, params, context) {
+          const response = await covel.http.fetchWithRetry(
+            `${config.baseUrl}/converse`,
+            {
+              method: "POST",
+              headers: { authorization: `Bearer ${config.apiKey}` },
+              body: JSON.stringify(toAcmeRequest(params)),
+              signal: config.signal,
+            },
+          );
+          const body = await response.json();
+          return {
+            text: body.output,
+            finishReason: body.stopReason,
+            usage: { inputTokens: body.in, outputTokens: body.out },
+          };
+        },
+        async *streamText(config, params, context) {
+          // yield { type: "text-delta", textDelta } … then one final
+          // { type: "done", finishReason, usage }
+        },
+      },
+    ],
+  });
+}
+```
+
+- 注册名是 `<pluginId>/<wireId>`（上例为 `acme/converse`）。模型的 `protocol` 写这个名字即可，`llm.toml` 和设置页都认；设置页的协议下拉通过 `GET /api/ai/protocols` 列出已加载插件注册的协议，名称取 `label`。
+- 必须实现 `generateText` 和 `streamText`。`params` 带 `model`、`messages`（含工具调用与工具结果）、`tools`、`responseFormat` 和 `providerRequestMetadata`；流的最后一个事件必须是 `done`。类型见 `@covel/plugin-handlers-utils` 的 `PluginTextWire`。
+- `finishReason` 可以直接返回服务商自己的词，网关统一成 `stop` / `length` / `tool_calls` 等（见 [slots.md](slots.md#连接测试与失败原因) 上文的结束原因说明）。
+- 结构化输出不用单独实现：网关把 JSON Schema 放进 `responseFormat` 并作为指令加入消息，调用 `generateText`，再解析和校验结果。embedding 不走文本 wire。
+- 可选的 `listModels(config, signal)` 返回端点提供的模型 ID，设置页的“从服务读取模型列表”会用它。
+- wire 自己发 HTTP，所以这些请求不出现在 provider 请求追踪里，框架的传输重试和请求预算也不作用于它；`config.signal` 在调用被取消或超时时触发，应传给请求。
+- `config` 里有该用途解析出的地址和密钥。它们只能用于向该地址发请求，不得写入结果、日志或 UI。模型的 `protocol` 指向的插件没有加载时，调用以配置错误失败，不会改用别的协议。
+- 信任边界与媒体 wire 相同：社区插件的服务端代码要玩家授权后才运行，`permissions.http` 声明的来源照常强制。不同的是，文本 wire 会经手选用它的那个用途的全部提示词和回答。
 
 ## 自定义组件与挂载
 

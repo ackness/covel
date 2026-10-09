@@ -89,6 +89,22 @@ overlay) that redirects a provider to another origin would otherwise receive the
 operator's key. Such a preset gets no environment key and no trusted default
 headers; it must supply its own key.
 
+The built-in providers (`BUILTIN_PROVIDER_CONNECTIONS` in `@covel/shared`) are
+registered provider defaults: an environment key named for one of them attaches
+to that provider's official origin and to no other. The model list request
+(`POST /api/ai/models`) resolves its target as request-scoped, so the same rule
+holds there.
+
+A model on a loopback address (`localhost`, `127.0.0.1`, `::1`) is ready
+without a key: local services such as Ollama take none. This changes only the
+readiness check; a key that is configured is still sent.
+
+A text wire a plugin registers (`covel.registerWires({ text })`) receives the
+resolved endpoint and key of each slot whose `protocol` names it, and the
+prompts and answers of that slot's calls. A slot that does not name the wire
+gives it nothing. The wire is plugin server code, so the rules of
+[Community plugin code](#community-plugin-code) decide whether it runs.
+
 At rest, the desktop app keeps the keys in `<covelHome>/keys.env` as plain
 `KEY=VALUE` lines with mode `0600`, set again on every write (a no-op on
 Windows); the web app keeps them in `localStorage` (`covel:keys`). They are not

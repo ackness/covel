@@ -35,7 +35,11 @@ import type {
   UsageSummary,
 } from "../types.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
-import { extractReasoningRequestFields } from "../reasoning-effort.js";
+import { fetchModelIds } from "./model-list.js";
+import {
+  anthropicReasoningFields,
+  reasoningRequestFields,
+} from "../reasoning-effort.js";
 import { anthropicModelTraits } from "../anthropic-model-traits.js";
 import {
   createMetadataSanitizer,
@@ -158,7 +162,8 @@ function extractAnthropicParameterOverrides(
 ): Record<string, unknown> {
   const fields: Record<string, unknown> = {
     ...extractParameterOverrides(meta, ANTHROPIC_PARAMETER_FIELD_MAP),
-    ...extractReasoningRequestFields(
+    ...reasoningRequestFields(
+      anthropicReasoningFields,
       meta,
       context,
       "anthropic-messages-v1",
@@ -689,4 +694,17 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       throw createUnsupportedModeError("anthropic", "embed");
     },
   };
+}
+
+export function listAnthropicModels(
+  config: ProviderConfig,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  return fetchModelIds(
+    { ...config, apiKey: undefined },
+    "/models?limit=1000",
+    "anthropic",
+    signal,
+    anthropicHeaders(config.apiKey),
+  );
 }

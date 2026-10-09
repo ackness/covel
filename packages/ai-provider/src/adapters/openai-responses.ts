@@ -37,7 +37,10 @@ import {
   readResponsesStreamFunctionCallArgsDone,
 } from "./http.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
-import { extractReasoningRequestFields } from "../reasoning-effort.js";
+import {
+  openAiResponsesReasoningFields,
+  reasoningRequestFields,
+} from "../reasoning-effort.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 import { objectResponseFormat } from "./structured-output.js";
 import {
@@ -104,7 +107,8 @@ function extractResponsesParameterOverrides(
 ): Record<string, unknown> {
   const fields = {
     ...extractParameterOverrides(meta, RESPONSES_PARAMETER_FIELD_MAP),
-    ...extractReasoningRequestFields(
+    ...reasoningRequestFields(
+      openAiResponsesReasoningFields,
       meta,
       context,
       "openai-responses-v1",

@@ -566,3 +566,245 @@ describe("evaluation protocols on shared provider connections", () => {
     },
   );
 });
+
+describe("OpenAI Decisions protocol", () => {
+  const adapter = createEvaluationAdapter("openai-decisions-v1");
+  const openAiParams = { ...params, model: "gpt-6-luna" };
+  function decision(overrides: Record<string, unknown> = {}) {
+    return {
+      model: "gpt-6-luna",
+      answers: [
+        { type: "predicate", name: "coherent", probability: 0.92 },
+        {
+          type: "choice",
+          name: "intent",
+          choice: "talk",
+          confidence: 0.7,
+          probabilities: [
+            { value: "talk", probability: 0.8 },
+            { value: "fight", probability: 0.1 },
+            { value: "other", probability: 0.1 },
+          ],
+        },
+        {
+          type: "score",
+          name: "severity",
+          score: 0.4,
+          confidence: 0.6,
+          probabilities: [
+            { label: "0", value: 0, probability: 0.7 },
+            { label: "1", value: 1, probability: 0.2 },
+            { label: "2", value: 2, probability: 0.1 },
+          ],
+        },
+      ],
+      usage: {
+        input_tokens: 42,
+        input_tokens_details: { cached_tokens: 30, cache_write_tokens: 0 },
+        output_tokens: 0,
+        output_tokens_details: { reasoning_tokens: 0 },
+        total_tokens: 42,
+      },
+      ...overrides,
+    };
+  }
+
+  it.each([
+    "https://api.openai.com/v1",
+    "https://api.openai.com",
+    "https://api.openai.com/v1/decisions/",
+    "https://proxy.example/openai/v1",
+  ])(
+    "posts named questions to the decisions endpoint of %s",
+    async (baseUrl) => {
+      const fetchMock = mockResponse(decision());
+      await adapter.evaluate!({ ...config, baseUrl }, openAiParams);
+
+      const [url, init] = fetchMock.mock.calls[0]!;
+      expect(url).toBe(
+        baseUrl.startsWith("https://proxy")
+          ? "https://proxy.example/openai/v1/decisions"
+          : "https://api.openai.com/v1/decisions",
+      );
+      expect(new Headers(init!.headers).get("authorization")).toBe(
+        "Bearer synthetic-key",
+      );
+      expect(JSON.parse(init!.body as string)).toEqual({
+        model: "gpt-6-luna",
+        input: '{"action":"Talk to the guard"}',
+        questions: [
+          {
+            type: "choice",
+            name: "intent",
+            instructions: "Classify the action",
+            choices: [
+              { value: "talk", description: '{"action":"conversation"}' },
+              { value: "fight" },
+              { value: "other", description: '["unknown"]' },
+            ],
+          },
+          {
+            type: "score",
+            name: "severity",
+            instructions: "Rate the risk",
+            levels: [
+              { label: "0", description: "low" },
+              { label: "1", description: "medium" },
+              { label: "2", description: "high" },
+            ],
+          },
+          {
+            type: "predicate",
+            name: "coherent",
+            instructions:
+              "Is the action consistent?\n\nCriteria for true:\nconsistent\n\nCriteria for false:\ncontradiction",
+          },
+        ],
+      });
+    },
+  );
+
+  it("returns the public answers, keyed by question, with cache usage and confidence", async () => {
+    mockResponse(decision());
+    const result = await adapter.evaluate!(config, openAiParams);
+
+    expect(result.answers).toEqual({
+      intent: {
+        type: "choice",
+        choice: "talk",
+        probabilities: { talk: 0.8, fight: 0.1, other: 0.1 },
+      },
+      severity: {
+        type: "score",
+        score: 0.4,
+        probabilities: { "0": 0.7, "1": 0.2, "2": 0.1 },
+      },
+      coherent: { type: "boolean", probability: 0.92 },
+    });
+    expect(result.model).toBe("gpt-6-luna");
+    expect(result.usage).toEqual({
+      inputTokens: 42,
+      outputTokens: 0,
+      cachedInputTokens: 30,
+      cacheWriteInputTokens: 0,
+    });
+    expect(result.providerMetadata).toEqual({
+      openai: {
+        confidence: { intent: 0.7, severity: 0.6 },
+        probabilityDecimals: 2,
+        scoreDecimals: 2,
+      },
+    });
+  });
+
+  it("sends a plain-text state as it is", async () => {
+    const fetchMock = mockResponse(
+      decision({
+        answers: [{ type: "predicate", name: "damaged", probability: 0.95 }],
+      }),
+    );
+    await adapter.evaluate!(config, {
+      model: "gpt-6-luna",
+      state: "The package arrived with a broken screen.",
+      questions: {
+        damaged: {
+          type: "boolean",
+          instructions: "Does the customer report a damaged item?",
+        },
+      },
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
+      model: "gpt-6-luna",
+      input: "The package arrived with a broken screen.",
+      questions: [
+        {
+          type: "predicate",
+          name: "damaged",
+          instructions: "Does the customer report a damaged item?",
+        },
+      ],
+    });
+  });
+
+  it("fails the call as a refusal when the model declines a question", async () => {
+    const body = decision();
+    body.answers[1] = { type: "refusal", name: "intent" } as never;
+    mockResponse(body);
+    await expect(adapter.evaluate!(config, openAiParams)).rejects.toMatchObject(
+      {
+        code: "REFUSAL",
+        retriable: false,
+        details: { question: "intent" },
+      },
+    );
+  });
+
+  it.each([
+    [
+      "an answer is missing",
+      (body: ReturnType<typeof decision>) => body.answers.pop(),
+    ],
+    [
+      "a name comes twice",
+      (body: ReturnType<typeof decision>) => {
+        body.answers[2] = { ...body.answers[0]! };
+      },
+    ],
+    [
+      "a choice is not one of the options",
+      (body: ReturnType<typeof decision>) => {
+        (body.answers[1] as { choice: string }).choice = "flee";
+      },
+    ],
+    [
+      "a distribution does not add up to 1",
+      (body: ReturnType<typeof decision>) => {
+        (
+          body.answers[1] as { probabilities: { probability: number }[] }
+        ).probabilities[0]!.probability = 0.2;
+      },
+    ],
+    [
+      "a score is outside the levels",
+      (body: ReturnType<typeof decision>) => {
+        (body.answers[2] as { score: number }).score = 2.5;
+      },
+    ],
+  ])("rejects a response in which %s", async (_name, corrupt) => {
+    const body = decision();
+    corrupt(body);
+    mockResponse(body);
+    await expect(adapter.evaluate!(config, openAiParams)).rejects.toMatchObject(
+      { code: "SCHEMA_VALIDATION_FAILED" },
+    );
+  });
+
+  it("refuses a one-option choice before sending, as the API takes 2-255", async () => {
+    const fetchMock = mockResponse(decision());
+    await expect(
+      adapter.evaluate!(config, {
+        model: "gpt-6-luna",
+        state: "x",
+        questions: {
+          only: { type: "choice", instructions: "Pick", criteria: { a: "A" } },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("is the evaluation protocol an `openai` slot gets from llm.toml", () => {
+    const { aiConfig } = parseLlmConfig(`
+[covel.evaluation]
+provider = "openai"
+model = "gpt-6-luna"
+protocol = "openai-decisions-v1"
+`);
+    expect(aiConfig.presets[0]).toMatchObject({
+      baseUrl: "https://api.openai.com/v1",
+      protocol: "openai-decisions-v1",
+      tag: "evaluation",
+      supportedModes: ["evaluate"],
+    });
+  });
+});

@@ -11,6 +11,7 @@ import {
   postJson,
   sleepWithAbort,
 } from "../src/adapters/http.js";
+import { parseRetryDelayMs } from "../src/adapters/http/retry.js";
 import { createLlmRequestBudget } from "@covel/shared";
 import type { ProviderConfig } from "../src/types.js";
 
@@ -280,24 +281,97 @@ describe("postJson retry wrapper", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("stops Retry-After waits at the logical deadline", async () => {
+  it("returns the answer at once when the wait asked for outlasts the call", async () => {
     const fetchMock = vi.fn(async () =>
-      makeMockResponse({ status: 429, retryAfter: "120" }),
+      makeMockResponse({ status: 429, retryAfter: "120", body: "slow down" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    // Over the budget's deadline, and over the longest wait of any call.
+    for (const config of [
+      { ...CONFIG, requestBudget: createLlmRequestBudget({ timeoutMs: 50 }) },
+      CONFIG,
+    ]) {
+      const response = await postJson(config, "/chat/completions", {});
+      expect(response.status).toBe(429);
+      // The body is still there for the adapter to read the provider's reason.
+      expect(await response.text()).toBe("slow down");
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("waits out a Retry-After that fits the budget and stops at its deadline", async () => {
+    const fetchMock = vi.fn(async () =>
+      makeMockResponse({ status: 429, retryAfter: "1" }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const pending = postJson(
-      { ...CONFIG, requestBudget: createLlmRequestBudget({ timeoutMs: 50 }) },
+      {
+        ...CONFIG,
+        requestBudget: createLlmRequestBudget({ timeoutMs: 1500 }),
+      },
       "/chat/completions",
       {},
     );
-    const rejected = expect(pending).rejects.toMatchObject({
-      code: "REQUEST_BUDGET_EXCEEDED",
-      retriable: false,
-    });
-    await vi.advanceTimersByTimeAsync(50);
-    await rejected;
-    expect(fetchMock).toHaveBeenCalledOnce();
+    const settled = pending.then(
+      (response) => response.status,
+      (error: { code?: string }) => error.code,
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    // One wait fits; the second would pass the deadline, so the 429 returns.
+    expect(await settled).toBe(429);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("reads retry-after-ms before retry-after", async () => {
+    const headers = new Headers({
+      "retry-after-ms": "250",
+      "retry-after": "9",
+    });
+    expect(parseRetryDelayMs(headers)).toBe(250);
+    expect(parseRetryDelayMs(new Headers({ "retry-after": "9" }))).toBe(9000);
+    expect(
+      parseRetryDelayMs(new Headers({ "retry-after-ms": "soon" })),
+    ).toBeNull();
+    expect(parseRetryDelayMs(new Headers())).toBeNull();
+  });
+
+  it.each([
+    [408, undefined, 2],
+    [409, undefined, 2],
+    [400, undefined, 1],
+    [400, "true", 2],
+    [503, "false", 1],
+  ])(
+    "sends a %i with x-should-retry %s %i time(s)",
+    async (status, instruction, calls) => {
+      const failure = new Response("", {
+        status,
+        headers: instruction ? { "x-should-retry": instruction } : {},
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(failure)
+        .mockResolvedValue(makeMockResponse({ status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      const pending = postJson(CONFIG, "/chat/completions", {});
+      await vi.runAllTimersAsync();
+      await pending;
+      expect(fetchMock).toHaveBeenCalledTimes(calls);
+    },
+  );
+
+  it("sends a request once when the caller turns transport retries off", async () => {
+    const fetchMock = vi.fn(async () => makeMockResponse({ status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await postJson(
+      { ...CONFIG, transportRetry: false },
+      "/chat/completions",
+      {},
+    );
+    expect(response.status).toBe(503);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("aborts mid-backoff when signal is aborted", async () => {

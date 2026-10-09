@@ -6,6 +6,7 @@ import {
   iterateLlmRequest,
   noteLlmRequestProgress,
   estimateTokens,
+  getProviderProtocolDescriptor,
   resolveLlmTokenLimits,
   type LLMResponseFormat,
   type LLMRequestDefaults,
@@ -21,18 +22,22 @@ import type {
 } from "./evaluation/types.js";
 
 import { AiProviderError } from "./errors.js";
+import { readReasoningEffort } from "./reasoning-effort.js";
 import {
   extractReasoningRequestFields,
-  readReasoningEffort,
-} from "./reasoning-effort.js";
+  getProtocolDefinition,
+} from "./protocol-registry.js";
+import { withProviderWarnings } from "./provider-warnings.js";
 import { projectCapabilityForBuiltinAdapter } from "./capability/adapter-support.js";
 import {
   resolveProviderOptions,
   validateParameterMetadata,
-  withProviderWarnings,
   type ProviderOptions,
 } from "./provider-options.js";
-import { assertSuccessfulFinishReason } from "./adapters/generation-completion.js";
+import {
+  assertSuccessfulFinishReason,
+  withUnifiedFinishReason,
+} from "./adapters/generation-completion.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
 import {
@@ -83,19 +88,19 @@ import type {
   MusicCompositionResult,
 } from "./types.js";
 
-function assertExplicitGoogleMediaWire(
+function assertExplicitMediaWire(
   protocol: ProviderProtocol,
   wire: unknown,
   mode: "image" | "speech" | "transcription",
   provider: string,
 ): void {
   if (
-    protocol === "google-generative-ai-v1" &&
+    getProtocolDefinition(protocol)?.mediaWire === "explicit" &&
     !(typeof wire === "string" && wire)
   ) {
     throw new AiProviderError({
       code: "CONFIG_ERROR",
-      message: `Google native ${mode} generation requires an explicitly configured ${mode}Wire; the built-in Gemini adapter supports text generation only.`,
+      message: `${getProviderProtocolDescriptor(protocol)?.label ?? protocol} ${mode} generation requires an explicitly configured ${mode}Wire; the built-in adapter for this protocol supports text generation only.`,
       provider,
       retriable: false,
     });
@@ -287,7 +292,10 @@ export function createGateway(deps: GatewayDependencies) {
             targetProvider(target),
           );
           return {
-            ...withProviderWarnings(result, request.warnings),
+            ...withProviderWarnings(
+              withUnifiedFinishReason(result),
+              request.warnings,
+            ),
             model: targetModel(target),
             provider: targetProvider(target),
           };
@@ -347,7 +355,10 @@ export function createGateway(deps: GatewayDependencies) {
             targetProvider(target),
           );
           return {
-            ...withProviderWarnings(result, request.warnings),
+            ...withProviderWarnings(
+              withUnifiedFinishReason(result),
+              request.warnings,
+            ),
             model: targetModel(target),
             provider: targetProvider(target),
           };
@@ -496,7 +507,10 @@ export function createGateway(deps: GatewayDependencies) {
           }
           if (event.type === "done") {
             assertSuccessfulFinishReason(event.finishReason, provider);
-            completion = withProviderWarnings(event, request.warnings);
+            completion = withProviderWarnings(
+              withUnifiedFinishReason(event),
+              request.warnings,
+            );
             continue;
           }
           yield event;
@@ -682,7 +696,7 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
-          assertExplicitGoogleMediaWire(
+          assertExplicitMediaWire(
             resolved.protocol,
             slotMeta?.speechWire,
             "speech",
@@ -820,7 +834,7 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
-          assertExplicitGoogleMediaWire(
+          assertExplicitMediaWire(
             resolved.protocol,
             slotMeta?.transcriptionWire,
             "transcription",
@@ -898,7 +912,7 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
-          assertExplicitGoogleMediaWire(
+          assertExplicitMediaWire(
             resolved.protocol,
             slotMeta?.imageWire,
             "image",
@@ -1165,6 +1179,7 @@ export function createGateway(deps: GatewayDependencies) {
           }
         : {}),
       requestBudget: options?.requestBudget ?? config.requestBudget,
+      ...(options?.transportRetry === false ? { transportRetry: false } : {}),
       ...(requestTarget && options?.onProviderRequest
         ? {
             requestObservation: {

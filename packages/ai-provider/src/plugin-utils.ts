@@ -23,6 +23,7 @@ import { fetchWithDispatcher } from "./outbound-network.js";
 import type { ImageWire } from "./image/types.js";
 import type { MusicWire } from "./music/types.js";
 import type { SpeechWire, TranscriptionWire } from "./speech/types.js";
+import type { TextWire } from "./text/types.js";
 
 /**
  * Shape of a plugin's media-wire registrations — what a wires module
@@ -35,6 +36,7 @@ export interface WireModuleShape {
   readonly speech?: readonly SpeechWire[];
   readonly transcription?: readonly TranscriptionWire[];
   readonly music?: readonly MusicWire[];
+  readonly text?: readonly TextWire[];
 }
 
 export interface BaseUrlValidationResult {

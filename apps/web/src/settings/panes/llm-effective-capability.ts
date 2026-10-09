@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PROVIDER_PROTOCOL,
   getBuiltinProviderConnection,
   projectModelCapabilityForBuiltinAdapter,
 } from "@covel/shared";
@@ -42,7 +43,7 @@ export function resolveEffectiveModelTarget(
     protocol:
       target?.protocol ??
       getBuiltinProviderConnection(provider)?.protocol ??
-      "openai-chat-v1",
+      DEFAULT_PROVIDER_PROTOCOL,
     // A role override changes the request target. The previous slot's limits
     // cannot establish the capabilities of the newly selected model.
     baseCapability: target?.capability,

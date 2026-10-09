@@ -5,6 +5,10 @@ import {
   buildSlotConfigHeaderInternal,
 } from "./model-settings.js";
 import { ApiError, request, requestResponse } from "./request.js";
+import {
+  PROVIDER_PROTOCOL_DESCRIPTORS,
+  type ProviderProtocolDescriptor,
+} from "@covel/shared";
 
 // -- LLM Config -------------------------------------------------
 
@@ -303,6 +307,8 @@ export interface PingResult {
   text?: string;
   usage?: { inputTokens: number; outputTokens: number };
   error?: string;
+  /** Why the call failed, as `ProviderFailureKind` of `@covel/ai-provider`. */
+  errorKind?: string;
   /** Echoes the exact preset/baseUrl/model that was probed. Always present for resolved pings. */
   testedTarget?: PingTestedTarget;
 }
@@ -350,4 +356,75 @@ export async function pingPreset(
     return { ok: false, latencyMs: 0, error: detail };
   }
   return body as PingResult;
+}
+
+export interface ProviderModelList {
+  ok: boolean;
+  models: string[];
+  error?: string;
+  errorKind?: string;
+}
+
+/** Ask a provider endpoint for the model IDs it offers. */
+export async function listProviderModels(target: {
+  provider: string;
+  baseUrl?: string;
+  protocol?: string;
+}): Promise<ProviderModelList> {
+  try {
+    const res = await requestResponse("/api/ai/models", {
+      method: "POST",
+      headers: buildProviderKeysHeader(),
+      body: JSON.stringify({
+        provider: target.provider,
+        ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
+        ...(target.protocol ? { protocol: target.protocol } : {}),
+      }),
+      operatorAuth: true,
+      silentErrors: true,
+    });
+    const body: unknown = await res.json().catch(() => null);
+    if (
+      body &&
+      typeof body === "object" &&
+      Array.isArray((body as ProviderModelList).models)
+    )
+      return body as ProviderModelList;
+    return { ok: false, models: [], error: `HTTP ${res.status}` };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return {
+        ok: false,
+        models: [],
+        error: error.response?.error ?? `HTTP ${error.status}`,
+      };
+    }
+    throw error;
+  }
+}
+
+let providerProtocols: Promise<ProviderProtocolDescriptor[]> | undefined;
+
+/**
+ * The protocols a model can be configured with: the built-in ones and the
+ * text protocols of loaded plugins. Asked once; the built-in list stands in
+ * when the server cannot answer.
+ */
+export function fetchProviderProtocols(): Promise<
+  ProviderProtocolDescriptor[]
+> {
+  providerProtocols ??= request<{ protocols: ProviderProtocolDescriptor[] }>(
+    "/api/ai/protocols",
+    { silentErrors: true },
+  ).then(
+    (body) =>
+      Array.isArray(body?.protocols)
+        ? body.protocols
+        : [...PROVIDER_PROTOCOL_DESCRIPTORS],
+    () => {
+      providerProtocols = undefined;
+      return [...PROVIDER_PROTOCOL_DESCRIPTORS];
+    },
+  );
+  return providerProtocols;
 }

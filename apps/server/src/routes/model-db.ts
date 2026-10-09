@@ -8,7 +8,7 @@ import { resolve, dirname } from "node:path";
 import { readRuntimeEnv } from "@covel/shared";
 import {
   type ProviderProtocol,
-  PROVIDER_PROTOCOLS,
+  getProtocolDefinition,
   createModelDatabase,
   fetchLiteLlmModels,
   projectCapabilityForBuiltinAdapter,
@@ -72,7 +72,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
     const usesBuiltinAdapter =
       role &&
       protocol &&
-      PROVIDER_PROTOCOLS.includes(protocol) &&
+      getProtocolDefinition(protocol) !== undefined &&
       provider &&
       ai.providerRegistry
         ? ai.providerRegistry.resolve({

@@ -694,6 +694,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | 方法 | 路径                     | 描述                                                   |
 | ---- | ------------------------ | ------------------------------------------------------ |
 | POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                                  |
+| POST | `/api/ai/models`         | 读取服务商端点提供的模型 ID；hosted 需 operator token  |
+| GET  | `/api/ai/protocols`      | 可配置的协议：内置协议和已加载插件注册的文本协议       |
 | POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token                |
 | POST | `/api/ai/revise-world`   | 按一句话修改应用内创建的世界；hosted 需 operator token |
 
@@ -3148,6 +3150,55 @@ interface SseEnvelope {
 
 `resolvedVia` 为 `direct`、`slot`、`tag-fallback` 或 `any`；目录接口不公开其他请求
 临时注册的模型配置，连接测试也不会从这些配置中隐式选择目标。
+
+文本模型用流式请求测首字延迟，评估模型发一次评估请求，embedding 模型发一次向量请求
+（后两者没有 `ttfbMs`）。测试只发一个 HTTP 请求，不做传输重试。失败时除 `error` 外返回
+`errorKind`，取值见 [连接测试与失败原因](slots.md#连接测试与失败原因)：
+
+```json
+{
+  "ok": false,
+  "latencyMs": 12,
+  "error": "connect ECONNREFUSED 127.0.0.1:11434",
+  "errorKind": "unreachable",
+  "testedTarget": { "presetId": "…", "provider": "ollama", "model": "…" }
+}
+```
+
+#### `POST /api/ai/models`
+
+读取一个服务商端点提供的模型 ID，供设置页在添加服务商或模型时勾选。
+
+请求体：`{ "provider": "ollama", "baseUrl": "http://localhost:11434/v1", "protocol": "openai-chat-v1" }`。
+`baseUrl` 和 `protocol` 可省略，省略时用内置服务商或已注册服务商的值。密钥取自
+`X-Provider-Keys`；目标按请求级处理，服务端环境里的密钥只发往该服务商的可信同源地址。
+未知字段、未知协议返回 400。
+
+```json
+{
+  "ok": true,
+  "models": ["codex/gpt-6-luna", "qwen3:8b"],
+  "baseUrl": "http://localhost:11434/v1",
+  "protocol": "openai-chat-v1"
+}
+```
+
+失败时状态码仍为 200：`{ "ok": false, "models": [], "error": "…", "errorKind": "auth" }`。
+评估协议没有模型列表（`errorKind: "config"`）。请求 15 秒超时，最多返回 2000 个 ID。
+
+#### `GET /api/ai/protocols`
+
+返回模型可以配置的全部协议，设置页的协议下拉用它。内置协议在前，其后是已加载插件
+用 `covel.registerWires({ text })` 注册的文本协议（`id` 为 `<pluginId>/<wireId>`）。
+
+```json
+{
+  "protocols": [
+    { "id": "openai-chat-v1", "label": "OpenAI Chat", "output": "text" },
+    { "id": "acme/converse", "label": "Acme Converse", "output": "text" }
+  ]
+}
+```
 
 #### `POST /api/ai/generate-world`
 

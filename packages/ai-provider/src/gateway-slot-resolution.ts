@@ -136,6 +136,8 @@ export interface GatewayOptions {
   signal?: AbortSignal;
   /** Allow configured text/object/stream/evaluate fallback targets; defaults to true. */
   allowFallback?: boolean;
+  /** False sends each provider request once; see `ProviderConfig.transportRetry`. */
+  transportRetry?: false;
   /** Synchronously observes every concrete provider/model attempt. */
   onTargetAttempt?: (target: { provider: string; model: string }) => void;
   /**

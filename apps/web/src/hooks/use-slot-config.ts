@@ -1,3 +1,4 @@
+import { isLoopbackBaseUrl } from "@covel/shared";
 import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
 import { useModelCapabilities } from "./use-model-capabilities.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
@@ -279,6 +280,9 @@ export function useSlotConfig(
           : undefined;
         if (localKey?.trim()) return true;
         const server = llmConfig?.slots[slot.slotId];
+        // A service on this machine (Ollama, a local gateway) takes no key.
+        if (isLoopbackBaseUrl(slot.preset?.baseUrl ?? server?.baseUrl))
+          return true;
         return (
           !!server?.serverKeyConfigured &&
           server.provider === provider &&

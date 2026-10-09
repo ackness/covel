@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAI Decisions is an evaluation protocol.** A model with `protocol = "openai-decisions-v1"` (today `gpt-6-luna`) answers `gateway.evaluate()` and `ctx.gateway.evaluate()` through `POST /v1/decisions`. The settings page offers it under Evaluation and preselects it for the `openai` provider. The public question and answer types do not change: a boolean is sent as a `predicate`, choices and score levels as lists, and the answers come back keyed by question. A question the model declines fails the call as a refusal. See `docs/reference/evaluation.md`.
+- **Nine more providers can be picked by name.** xAI, Mistral AI, Groq, Together AI, Fireworks AI, Moonshot AI, Zhipu AI, SiliconFlow and Volcengine Ark join the built-in providers. Settings → Providers & Models → Add provider has a provider list that fills in the ID and the official endpoint; "Custom provider" keeps the manual fields. The endpoints are in `docs/reference/slots.md`.
+- **A plugin can provide a text protocol.** `covel.registerWires({ text: [{ id, generateText, streamText }] })` registers a request and response format beside the four built-in ones. A model whose `protocol` is `<pluginId>/<wireId>` uses it for every text call, the story model included; `llm.toml` and the settings page accept the ID, and the protocol list of the settings page shows it (`GET /api/ai/protocols`). Object calls work through `generateText`, and an optional `listModels` feeds the model list. See `docs/reference/plugin-extensions.md`.
+- **`ctx.gateway.generateText` is typed for `providerOptions`.** The runtime already passed it on; the plugin SDK type did not have the field.
+- **Services on this machine can be picked by name and need no key.** Ollama, LM Studio, llama.cpp server, vLLM and LiteLLM Proxy are in the provider list at their default ports; a local gateway on another port, or one that serves several protocols, is a custom provider at `http://127.0.0.1:<port>/v1`. A model on a loopback address counts as ready without an API key, so it can start a session, run background tasks and be tested. Before, such a model was shown as not configured until a placeholder key was entered.
+- **The settings page reads a service's own model list.** "Read the model list from the service" in the add-provider and add-model dialogs asks the endpoint for its model IDs (`POST /api/ai/models`); a tick adds one, a filter narrows the list, and IDs typed by hand stay.
+- **A failed connection test says what kind of failure it was.** `POST /api/ai/ping` and the model list return `errorKind` (`unreachable`, `timeout`, `auth`, `quota`, `rate_limited`, `not_found`, `bad_request`, `overloaded`, `server`, `refused`, `config`) and the settings page shows what to do about it. A refused connection names the host and port instead of `fetch failed`.
+- **An `llm.toml` slot of a built-in provider needs only `provider` and `model`.** `baseUrl` and `protocol` come from the provider when the slot omits them. For any other provider `protocol` defaults to `openai-chat-v1` and `baseUrl` stays required.
+
+### Changed
+
+- **`finishReason` has one vocabulary for every protocol.** The model gateway returns `stop`, `length`, `tool_calls`, `content_filter`, `error` or `other`, and keeps the provider's own word in `rawFinishReason`, as the AI SDK does with `unified` and `raw`. A plugin that compared `ctx.gateway` results with a provider's word (`end_turn`, `max_tokens`, `tool_use`) must compare with the unified value. The runtime and world generation read the same table (`unifyFinishReason` in `@covel/shared`) in place of three separate ones.
+- **Transport retries follow the providers' SDKs.** HTTP 408 and 409 are sent again like 429 and 5xx, `x-should-retry` decides when the provider sets it, and `retry-after-ms` is read before `Retry-After`. When the provider asks for a wait of more than 60 seconds, or more than the call has left, the call does not wait: it ends as rate limited and can use a backup model. Before, it waited until its time ran out and ended without a backup.
+- **A connection test is one request.** It no longer retries, so its result and latency are those of the request it sent. An embedding model is tested with a vector request; before, it was sent a text request and reported as failed.
+- **A protocol is declared in two places instead of thirteen files.** The protocol IDs, their names in the settings UI and whether they produce text or evaluations come from one table in `@covel/shared`; a protocol's reasoning fields, provider options, optional parameters and media-wire rule are fields of its `ProtocolDefinition`. `docs/reference/slots.md` has the steps for adding a provider or a protocol.
+
+### Fixed
+
+- **An Anthropic answer cut at the output limit is an error on a call that is not streamed.** The provider's `max_tokens` was read as a normal end there, so a cut answer or cut JSON was kept as complete. Streamed calls already rejected it.
+- **The plugin SDK's protocol type names Gemini.** `PluginProviderConfig.protocol` did not list `google-generative-ai-v1`.
+
 ## [0.0.49] - 2026-10-09
 
 This release fixes session recovery, background-task status, streaming retries, plugin and storage boundaries, and desktop layout issues. SQLite now uses Node's built-in driver while retaining the existing database format. macOS Apple Silicon and Windows x64 binaries are unsigned; the macOS build is not notarized. Read the [upgrade notes](#upgrade-notes-for-v0049) before installing.

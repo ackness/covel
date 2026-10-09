@@ -53,7 +53,74 @@ const requestSchema = z.object({
 });
 
 export type EvaluationProtocol =
-  "typesafe-systemone-v1" | "openrouter-decisions-v1" | "vercel-evaluation-v4";
+  | "typesafe-systemone-v1"
+  | "openrouter-decisions-v1"
+  | "vercel-evaluation-v4"
+  | "openai-decisions-v1";
+
+type EvaluationRequest = z.infer<typeof requestSchema>;
+
+/** The Decisions API takes text; state and rubrics that are JSON go as JSON. */
+function decisionText(input: z.infer<typeof value>): string {
+  return typeof input === "string" ? input : JSON.stringify(input);
+}
+
+/**
+ * OpenAI Decisions (`POST /v1/decisions`): questions are a list that carries
+ * each name, a boolean is a `predicate`, choices and score levels are lists.
+ */
+function openAiDecisionsBody(request: EvaluationRequest) {
+  return {
+    model: request.model,
+    input: decisionText(request.state),
+    questions: Object.entries(request.questions).map(([name, question]) => {
+      const instructions = decisionText(question.instructions ?? "");
+      if (question.type === "boolean") {
+        // A predicate has one text field, so the two rubrics join it.
+        const rubric = (["true", "false"] as const).flatMap((side) =>
+          question.criteria?.[side] == null
+            ? []
+            : [
+                `Criteria for ${side}:\n${decisionText(question.criteria[side])}`,
+              ],
+        );
+        return {
+          type: "predicate",
+          name,
+          instructions: [instructions, ...rubric]
+            .filter((part) => part !== "")
+            .join("\n\n"),
+        };
+      }
+      if (question.type === "choice")
+        return {
+          type: "choice",
+          name,
+          instructions,
+          choices: Object.entries(question.criteria).map(
+            ([choice, description]) => ({
+              value: choice,
+              ...(description == null
+                ? {}
+                : { description: decisionText(description) }),
+            }),
+          ),
+        };
+      return {
+        type: "score",
+        name,
+        instructions,
+        // A level has no name of its own here; its index identifies it.
+        levels: question.criteria.map((description, index) => ({
+          label: String(index),
+          ...(description == null
+            ? {}
+            : { description: decisionText(description) }),
+        })),
+      };
+    }),
+  };
+}
 
 /** Wire selection depends on configuration, never on provider or model IDs. */
 export function createEvaluationAdapter(
@@ -79,21 +146,50 @@ export function createEvaluationAdapter(
     }
     const request = parsed.data;
     const vercel = protocol === "vercel-evaluation-v4";
-    const body = {
-      ...(!vercel ? { model: request.model } : {}),
-      state: request.state,
-      questions: Object.fromEntries(
-        Object.entries(request.questions).map(([id, question]) => [
-          id,
-          !vercel && question.type === "boolean"
-            ? { ...question, type: "noul" }
-            : question,
-        ]),
-      ),
-    };
+    const openai = protocol === "openai-decisions-v1";
+    if (
+      openai &&
+      Object.values(request.questions).some(
+        (question) =>
+          question.type === "choice" &&
+          Object.keys(question.criteria).length < 2,
+      )
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: "OpenAI Decisions requires 2-255 options for a choice.",
+        provider,
+        model: params.model,
+        retriable: false,
+      });
+    }
+    const body = openai
+      ? openAiDecisionsBody(request)
+      : {
+          ...(!vercel ? { model: request.model } : {}),
+          state: request.state,
+          questions: Object.fromEntries(
+            Object.entries(request.questions).map(([id, question]) => [
+              id,
+              !vercel && question.type === "boolean"
+                ? { ...question, type: "noul" }
+                : question,
+            ]),
+          ),
+        };
     let baseUrl = config.baseUrl;
     let path: string | { append: string } = "/v1/systemone";
-    if (baseUrl && protocol === "typesafe-systemone-v1") {
+    if (openai) {
+      // The base is the chat base (`…/v1`) or the endpoint itself.
+      path = "/decisions";
+      if (baseUrl) {
+        const url = new URL(baseUrl);
+        url.pathname = url.pathname
+          .replace(/\/+$/, "")
+          .replace(/\/decisions$/, "");
+        baseUrl = url.toString();
+      }
+    } else if (baseUrl && protocol === "typesafe-systemone-v1") {
       // A base that already includes the endpoint stays idempotent — without
       // this strip, buildProviderUrl would append `/v1/systemone` again.
       const url = new URL(baseUrl);

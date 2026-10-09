@@ -116,7 +116,7 @@ them.
   none, so an unset one is a configuration error. An unknown id throws at generation
   time rather than silently falling back. See [slots.md](./slots.md).
 - Plugins register additional wires from their `entry` module via
-  `covel.registerWires({ image?, speech?, transcription?, music? })` (ids auto-namespaced
+  `covel.registerWires({ image?, speech?, transcription?, music?, text? })` (ids auto-namespaced
   `<pluginId>/<wireId>`; trust-gated loading) — see
   [plugin-extensions.md § 模型与新协议](plugin-extensions.md#模型与新协议).
   Bundled code can also call `registerImageWire` / `registerSpeechWire` /

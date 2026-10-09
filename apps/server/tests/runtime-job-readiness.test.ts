@@ -24,6 +24,18 @@ describe("server detached runtime credential readiness", () => {
     });
   });
 
+  it("treats a keyless model on this machine as ready, and no other keyless model", () => {
+    const ready = (baseUrl: string) =>
+      hasServerRuntimeJobCredentials(
+        { resolveSlot: () => ({ ...slot, apiKey: undefined, baseUrl }) },
+        "background",
+        {},
+      );
+    expect(ready("http://localhost:11434/v1")).toBe(true);
+    expect(ready("http://127.0.0.1:3425/v1")).toBe(true);
+    expect(ready("https://localhost.example.com/v1")).toBe(false);
+  });
+
   it.each([
     null,
     slot,
