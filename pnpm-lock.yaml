@@ -571,6 +571,9 @@ importers:
 
   packages/memory:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../plugin-handlers-utils
       '@covel/store':
         specifier: workspace:*
         version: link:../store

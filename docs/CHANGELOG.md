@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Memory search no longer depends on an embedding model for good results.** Without an embedding slot, `memory-search` ranks with BM25 instead of counting shared words: a name or an item outweighs a word that every passage holds, and a long passage is not put last for being long. On a synthetic 60-message Chinese session with paragraph-length narration, the first result was the right one for 11 of 12 questions, against 6 before. An embedding slot stays optional and is used when present.
+- **`memory-search` reads the history summaries.** Recall covers the summaries that history compaction wrote as well as the latest 500 messages, so a turn that is older than those messages can still be found. A summary result has the role `summary`.
+- **A plugin can make a data namespace searchable.** `contributes.data.<namespace>.search: { text: <field> }` puts the records of the namespace into `memory-search` (source `archival:plugin_data`) while the plugin is active in the session, and into the vector index when an embedding model is configured. A namespace without the declaration is not read.
+- **The plugin SDK exports the ranking the kernel uses.** `rankTexts`, `searchTerms` and `searchExcerpt` from `@covel/plugin-handlers-utils` rank a plugin's own texts against a query with the same BM25 implementation, with no model call.
+- **The story remembers what happened, not only how things are now.** The `memory` plugin adds up to three facts of each turn to a `facts` namespace that is never rewritten. `memory-search` finds them, and each story prompt brings back the earlier facts that the player's message is about.
+
+### Changed
+
+- **A memory block over its limit is shortened by the model.** The `memory` plugin asks for a shorter version of the block and cuts at the end of a sentence only when that fails. Before, the text after the limit was cut off.
+
 ## [0.0.49] - 2026-10-09
 
 This release fixes session recovery, background-task status, streaming retries, plugin and storage boundaries, and desktop layout issues. SQLite now uses Node's built-in driver while retaining the existing database format. macOS Apple Silicon and Windows x64 binaries are unsigned; the macOS build is not notarized. Read the [upgrade notes](#upgrade-notes-for-v0049) before installing.

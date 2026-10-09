@@ -1,4 +1,5 @@
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./blocks.js";
+import { NEW_FACTS_KEY } from "./extraction.js";
 
 export const DEFINITIONS_CONTRACT = "memory.block-definitions@1";
 
@@ -20,6 +21,7 @@ function validateDefinitions(value) {
       !block ||
       typeof block.label !== "string" ||
       !/^[a-z][a-z0-9_]*$/.test(block.label) ||
+      block.label === NEW_FACTS_KEY ||
       !validI18n(block.displayName) ||
       !validI18n(block.extractionHint) ||
       (block.maxChars !== undefined &&

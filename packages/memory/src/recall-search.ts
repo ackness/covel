@@ -1,34 +1,26 @@
-import { keywordTerms, keywordExcerpt } from "./keyword-terms.js";
 /**
- * Recall Memory — Searchable conversation history (keyword search).
+ * Recall Memory — search of the conversation, with no embedding model.
  *
- * Like Letta's `conversation_search` tool, but **keyword-only**: term-overlap
- * scoring over recent turn messages (TF-IDF-lite, with a CJK substring path).
- * The `score` field is a lexical-overlap score, not vector similarity.
+ * Ranks the recent turn messages and the history summaries with BM25
+ * (`rankTexts`). The summaries cover the turns that are older than the scanned
+ * messages, so a long session still answers a question about its start.
  *
- * This keyword searcher is now the **fallback** under the semantic (vector)
- * path: `createMemorySystem` wraps it with `createVectorRecallSearcher` when an
- * `embed` function is injected and the store supports vectors (see
- * vector-recall-search.ts / vector-ingest.ts). The vector searcher falls back
- * here per-session whenever a session has no embedding model locked, its vector
- * index is empty, or embedding fails — so this path keeps every deployment
- * without embeddings working exactly as before. Both implement the
- * {@link RecallSearcher} swap seam, so
- * callers are agnostic to which is wired. See memory-system.ts.
+ * `createMemorySystem` puts the vector searcher in front of this one when an
+ * embedding function and vector storage are present; the vector searcher falls
+ * back here when a session has no embedding model locked, its index is empty,
+ * or embedding fails. Both implement {@link RecallSearcher}.
  */
 
+import { rankTexts, searchExcerpt } from "@covel/plugin-handlers-utils";
 import type { RecallStore } from "./store-contracts.js";
-
 import type { RecallSearchResult, RecallSearcher } from "./types.js";
 
-/** Max messages to scan for keyword search. */
+/** Most recent messages to rank. Older turns are reached through their summaries. */
 const MAX_SCAN_MESSAGES = 500;
 
-/**
- * Create a keyword-based recall searcher (no embeddings needed).
- * Scores by term overlap: split query into terms, count matches in each
- * message, normalize by message length.
- */
+/** Role of a result that is a history summary, not one message. */
+export const SUMMARY_ROLE = "summary";
+
 export function createKeywordRecallSearcher(
   store: RecallStore,
 ): RecallSearcher {
@@ -38,61 +30,42 @@ export function createKeywordRecallSearcher(
       query,
       limit = 10,
     ): Promise<readonly RecallSearchResult[]> {
-      // Only the most-recent N messages are scanned. Pull exactly that tail
-      // from the store (single descending-limited query) instead of loading the
-      // whole session history and slicing — trace_events/turn_messages is the
-      // fastest-growing table on long runs.
-      const candidates = await store.listRecentTurnMessages(
-        sessionId,
-        MAX_SCAN_MESSAGES,
-      );
-      if (candidates.length === 0) return [];
+      const [messages, summaries] = await Promise.all([
+        store.listRecentTurnMessages(sessionId, MAX_SCAN_MESSAGES),
+        store.listSessionSummaries(sessionId),
+      ]);
+      // Newest first: of two equal scores the later one is returned first.
+      const candidates = [
+        ...messages
+          .map((message) => ({
+            turnId: message.turnId ?? "",
+            role: message.role,
+            content: String(message.content ?? ""),
+            timestamp: message.createdAt,
+          }))
+          .reverse(),
+        ...summaries
+          .map((summary) => ({
+            turnId: summary.turnRangeEnd,
+            role: SUMMARY_ROLE,
+            content: summary.content,
+            timestamp: summary.createdAt,
+          }))
+          .reverse(),
+      ].filter((candidate) => candidate.content.trim());
 
-      // Tokenize query into terms (split on whitespace and punctuation)
-      const queryTerms = keywordTerms(query);
-      if (queryTerms.length === 0) return [];
-
-      // Score each message
-      const scored: { msg: (typeof candidates)[number]; score: number }[] = [];
-
-      for (const msg of candidates) {
-        const content = String(msg.content ?? "");
-        if (!content.trim()) continue;
-
-        const msgTerms = keywordTerms(content);
-        if (msgTerms.length === 0) continue;
-
-        // Count how many query terms appear in the message
-        const msgTermSet = new Set(msgTerms);
-        const lowerContent = content.toLowerCase();
-        let matchCount = 0;
-        for (const qt of queryTerms) {
-          if (msgTermSet.has(qt)) matchCount++;
-          // Also check substring match for CJK (Chinese characters don't split on spaces)
-          else if (lowerContent.includes(qt)) matchCount += 0.5;
-        }
-
-        if (matchCount === 0) continue;
-
-        // Normalize: match ratio * inverse length penalty (prefer concise matches)
-        const score =
-          (matchCount / queryTerms.length) * Math.min(1, 200 / msgTerms.length);
-        scored.push({ msg, score });
-      }
-
-      // Sort by score descending, then by recency
-      scored.sort(
-        (a, b) =>
-          b.score - a.score || b.msg.createdAt.localeCompare(a.msg.createdAt),
-      );
-
-      return scored.slice(0, limit).map(({ msg, score }) => ({
-        turnId: msg.turnId ?? "",
-        role: msg.role,
-        content: keywordExcerpt(String(msg.content ?? ""), queryTerms),
-        score,
-        timestamp: msg.createdAt,
-      }));
+      return rankTexts(
+        query,
+        candidates.map((candidate) => candidate.content),
+        { limit },
+      ).map(({ index, score }) => {
+        const candidate = candidates[index]!;
+        return {
+          ...candidate,
+          content: searchExcerpt(candidate.content, query),
+          score,
+        };
+      });
     },
   };
 }

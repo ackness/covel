@@ -218,6 +218,105 @@ describe("memory plugin extraction", () => {
   });
 });
 
+describe("memory facts", () => {
+  it("adds the new facts of the turn under keys that sort by turn, and never fails the blocks over them", async () => {
+    const { ctx, writes } = fixture(
+      '{"scene":"At the harbour","new_facts":["Mira hid the silver key under the bell tower."," ",42,"Second.","Third.","Fourth."]}',
+    );
+    Object.assign(ctx, { logicalTurn: 12 });
+    const result = await extract(ctx);
+    expect(result).toMatchObject({
+      value: { blocksChanged: ["scene"], factsAdded: 3 },
+    });
+    expect(writes.filter((write) => write.namespace === "facts")).toEqual([
+      {
+        namespace: "facts",
+        key: "t00012-1",
+        value: {
+          turn: 12,
+          text: "Turn 12: Mira hid the silver key under the bell tower.",
+        },
+      },
+      expect.objectContaining({ key: "t00012-2" }),
+      expect.objectContaining({ key: "t00012-3" }),
+    ]);
+  });
+
+  it("accepts a turn that has facts and no block change", async () => {
+    const { ctx, writes } = fixture('{"new_facts":["The gate closed."]}');
+    await expect(extract(ctx)).resolves.toMatchObject({
+      value: { blocksChanged: [], factsAdded: 1 },
+    });
+    expect(writes).toHaveLength(1);
+  });
+
+  it("asks the model to shorten a block over its limit, and cuts at a sentence only when that fails", async () => {
+    const long = `${"The road is long. ".repeat(200)}`;
+    const { ctx, writes, gateway } = fixture(JSON.stringify({ scene: long }));
+    gateway.generateText
+      .mockResolvedValueOnce({ text: JSON.stringify({ scene: long }) })
+      .mockResolvedValueOnce({ text: "A long road." });
+    await extract(ctx);
+    expect(gateway.generateText).toHaveBeenCalledTimes(2);
+    expect(gateway.generateText.mock.calls[1]?.[0].system).toContain("2000");
+    expect(writes[0]?.value).toMatchObject({ content: "A long road." });
+
+    const failing = fixture(JSON.stringify({ scene: long }));
+    failing.gateway.generateText
+      .mockResolvedValueOnce({ text: JSON.stringify({ scene: long }) })
+      .mockResolvedValueOnce({ text: "" });
+    await extract(failing.ctx);
+    const content = (failing.writes[0]!.value as { content: string }).content;
+    expect(content.length).toBeLessThanOrEqual(2000);
+    expect(content.endsWith("long.")).toBe(true);
+  });
+
+  it("brings back the older facts that the player's message is about, in story order", async () => {
+    let handler;
+    register({
+      toolkit: { z },
+      registerService: vi.fn(),
+      provideExtension: (_point, _id, definition) => {
+        handler = definition.handler;
+      },
+    });
+    const fact = (turn: number, text: string) => ({
+      key: `t${turn}`,
+      value: { turn, text: `第${turn}回合：${text}` },
+    });
+    const facts = [
+      fact(2, "林遥把银钥匙藏在钟楼的第三级台阶下。"),
+      fact(3, "酒馆老板娘说北门每晚子时关闭。"),
+      fact(5, "你答应守门人在黎明前带回银钥匙。"),
+      fact(8, "你在集市买了一袋面粉。"),
+      fact(20, "林遥刚刚在码头向你挥手。"),
+    ];
+    const segments = await handler(
+      { turnId: "turn", playerMessage: "我去钟楼找林遥藏的银钥匙" },
+      {
+        locale: "zh-CN",
+        pluginData: {
+          list: async (namespace: string) =>
+            namespace === "facts" ? facts : [],
+        },
+      },
+    );
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toMatchObject({
+      id: "recalled-facts",
+      audience: "story",
+      volatility: "turn",
+    });
+    const lines = segments[0].content
+      .split("\n")
+      .filter((line: string) => line.startsWith("- "));
+    expect(lines).toEqual([
+      "- 第2回合：林遥把银钥匙藏在钟楼的第三级台阶下。",
+      "- 第5回合：你答应守门人在黎明前带回银钥匙。",
+    ]);
+  });
+});
+
 describe("memory extraction prompts", () => {
   const prompts = async (locale: string, narrativeText: string) => {
     const { ctx, rows, gateway } = fixture();

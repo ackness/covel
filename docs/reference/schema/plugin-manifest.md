@@ -151,13 +151,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*`
 
-| Field         | Type           | Required | Description                                                                                        |
-| ------------- | -------------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `schema`      | string         | yes      | Package-relative path of the JSON Schema that validates each record.                               |
-| `description` | string         | no       | What the namespace stores. Read by world authors and tools.                                        |
-| `version`     | integer        | yes      | Schema version of the namespace.                                                                   |
-| `accepts`     | list of string | no       | Data contracts whose world data this namespace accepts.                                            |
-| `authoring`   | object         | no       | What a world author needs to supply this content. Authoring tools and the world generator read it. |
+| Field         | Type           | Required | Description                                                                                                            |
+| ------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `schema`      | string         | yes      | Package-relative path of the JSON Schema that validates each record.                                                   |
+| `description` | string         | no       | What the namespace stores. Read by world authors and tools.                                                            |
+| `version`     | integer        | yes      | Schema version of the namespace.                                                                                       |
+| `accepts`     | list of string | no       | Data contracts whose world data this namespace accepts.                                                                |
+| `authoring`   | object         | no       | What a world author needs to supply this content. Authoring tools and the world generator read it.                     |
+| `search`      | object         | no       | Makes the records of this namespace part of memory search (`memory-search`) while the plugin is active in the session. |
 
 ## `contributes.data.*.authoring`
 
@@ -180,6 +181,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `localeArrayKeys` | list of string                    | no       | Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered. |
 | `visibility`      | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.                                                                    |
 | `lorebook`        | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                                                                                   |
+
+## `contributes.data.*.search`
+
+| Field  | Type   | Required | Description                                                                                               |
+| ------ | ------ | -------- | --------------------------------------------------------------------------------------------------------- |
+| `text` | string | yes      | Field of a record's value that holds the text to search. A record without a string there is not searched. |
 
 ## `contributes.ui`
 

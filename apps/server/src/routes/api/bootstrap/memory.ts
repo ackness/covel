@@ -2,6 +2,7 @@ import {
   createMemorySystem,
   type EmbedFn,
   type MemorySystem,
+  type SearchablePluginDataResolver,
 } from "@covel/memory";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
@@ -9,6 +10,7 @@ import { createMemoryTools, type ToolModule } from "@covel/tools";
 export interface CreateBootstrapMemorySystemParams {
   readonly store: DataStore;
   readonly embed?: EmbedFn;
+  readonly searchablePluginData?: SearchablePluginDataResolver;
   readonly runIngestExclusive?: <T>(
     sessionId: string,
     task: () => Promise<T>,

@@ -173,11 +173,18 @@ export function normalizePackageManifest(
       c?.data &&
       Object.fromEntries(
         Object.entries(c.data).map(
-          // `authoring` is for world authors and tools; the runtime data
-          // schema declaration does not carry it.
+          // `authoring` is for world authors and tools, and `search` is read
+          // by the host's memory search from the package manifest; the
+          // runtime data schema declaration carries neither.
           ([
             namespace,
-            { version, accepts, authoring: _authoring, ...decl },
+            {
+              version,
+              accepts,
+              authoring: _authoring,
+              search: _search,
+              ...decl
+            },
           ]) => [
             namespace,
             {

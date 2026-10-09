@@ -787,6 +787,19 @@
                 "required": ["title"],
                 "additionalProperties": false,
                 "description": "What a world author needs to supply this content. Authoring tools and the world generator read it."
+              },
+              "search": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Field of a record's value that holds the text to search. A record without a string there is not searched."
+                  }
+                },
+                "required": ["text"],
+                "additionalProperties": false,
+                "description": "Makes the records of this namespace part of memory search (`memory-search`) while the plugin is active in the session."
               }
             },
             "required": ["schema", "version"],

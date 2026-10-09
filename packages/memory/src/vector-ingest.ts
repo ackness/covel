@@ -18,7 +18,10 @@
  * so a process restart does not re-embed everything.
  */
 
-import { collectArchivalItems } from "./archival-items.js";
+import {
+  collectArchivalItems,
+  type SearchablePluginDataResolver,
+} from "./archival-items.js";
 import type { VectorIngestStore } from "./store-contracts.js";
 
 import type {
@@ -92,8 +95,9 @@ export function createVectorIngestor(deps: {
   readonly embeddingBatchSize?: number;
   readonly maxEmbeddingCharacters?: number;
   readonly runIngestExclusive?: RunIngestExclusive;
+  readonly pluginData?: SearchablePluginDataResolver;
 }): VectorIngestor {
-  const { store, embed, runIngestExclusive } = deps;
+  const { store, embed, runIngestExclusive, pluginData } = deps;
   interface PendingIngest {
     dirty: boolean;
     promise: Promise<IngestResult>;
@@ -152,6 +156,7 @@ export function createVectorIngestor(deps: {
           batchSize: deps.embeddingBatchSize,
           maxCharacters: deps.maxEmbeddingCharacters,
         },
+        pluginData,
       );
       archival = result.written;
       more ||= result.more;
@@ -309,8 +314,9 @@ async function ingestArchival(
   sessionId: string,
   expectedSessionCreatedAt: string,
   limits: EmbeddingLimits,
+  pluginData: SearchablePluginDataResolver | undefined,
 ): Promise<{ written: number; more: boolean }> {
-  const items = await collectArchivalItems(store, sessionId);
+  const items = await collectArchivalItems(store, sessionId, pluginData);
 
   const progress = await readProgress<ArchivalHashes>(
     store,
@@ -378,6 +384,7 @@ async function ingestArchival(
         key: it.displayKey,
         content: it.text,
         ...(it.pluginId ? { pluginId: it.pluginId } : {}),
+        ...(it.namespace ? { namespace: it.namespace } : {}),
       }),
     });
     nextHashes[it.vecKey] = contentHash(it.text);

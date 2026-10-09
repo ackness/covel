@@ -10,6 +10,10 @@ export type {
   MemorySearchResult,
 } from "./types.js";
 export type { EmbedFn } from "./vector-common.js";
+export type {
+  SearchablePluginData,
+  SearchablePluginDataResolver,
+} from "./archival-items.js";
 export type { MemoryBackgroundDrainResult } from "./background-tasks.js";
 export { createMemorySystem } from "./memory-system.js";
 export type {

@@ -12,7 +12,7 @@ const layers = {
   context: ["shared", "plugin-handlers-utils"],
   create: ["context", "shared"],
   events: ["shared"],
-  memory: ["shared", "store"],
+  memory: ["shared", "store", "plugin-handlers-utils"],
   "plugin-handlers-utils": [],
   "plugin-loader": ["events", "shared"],
   // Tool fixtures use runtime's scoped-read implementation and store/tool types.

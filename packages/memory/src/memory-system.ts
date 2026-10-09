@@ -28,7 +28,10 @@ export function createMemorySystem(deps: MemorySystemDeps): MemorySystem {
   // halves of semantic memory — embed-on-write ingestion (below) and
   // vector-backed read — are now both present.
   const keywordRecall = createKeywordRecallSearcher(store);
-  const keywordArchival = createKeywordArchivalSearcher(store);
+  const keywordArchival = createKeywordArchivalSearcher(
+    store,
+    deps.searchablePluginData,
+  );
 
   const vectorEnabled = Boolean(deps.embed) && supportsVector(store);
 
@@ -46,6 +49,9 @@ export function createMemorySystem(deps: MemorySystemDeps): MemorySystem {
         store,
         embed,
         fallback: keywordArchival,
+        ...(deps.searchablePluginData
+          ? { pluginData: deps.searchablePluginData }
+          : {}),
       }),
     };
   };
@@ -55,6 +61,9 @@ export function createMemorySystem(deps: MemorySystemDeps): MemorySystem {
       ? createVectorIngestor({
           store,
           embed: deps.embed,
+          ...(deps.searchablePluginData
+            ? { pluginData: deps.searchablePluginData }
+            : {}),
           ...(deps.runIngestExclusive
             ? { runIngestExclusive: deps.runIngestExclusive }
             : {}),

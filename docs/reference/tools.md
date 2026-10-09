@@ -8,44 +8,44 @@
 
 ## 概览
 
-| 工具名                                | 来源    | 所属插件            | 审批策略   | 描述                                                                                |
-| ------------------------------------- | ------- | ------------------- | ---------- | ----------------------------------------------------------------------------------- |
-| create-form                           | builtin | —                   | auto-allow | 创建玩家表单                                                                        |
-| create-choices                        | builtin | —                   | auto-allow | 创建选项列表                                                                        |
-| create-notification                   | builtin | —                   | auto-allow | 显示通知消息                                                                        |
-| render-ui                             | builtin | —                   | auto-allow | 渲染带独立 part 状态的 UI 块                                                        |
-| plugin-data-set                       | builtin | —                   | auto-allow | 写入插件持久化数据（单条）                                                          |
-| plugin-data-set-batch                 | builtin | —                   | auto-allow | 批量写入插件持久化数据                                                              |
-| plugin-data-get                       | builtin | —                   | auto-allow | 读取当前插件持久化数据                                                              |
-| plugin-data-list                      | builtin | —                   | auto-allow | 列出当前插件持久化数据                                                              |
-| **create-character**                  | builtin | —                   | auto-allow | 创建世界模型角色，类型按 schema 校验，写入 characters                               |
-| **update-character**                  | builtin | —                   | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                            |
-| **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                  |
-| **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                               |
-| **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                          |
-| **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                   |
-| **world-dimension-get**               | builtin | —                   | auto-allow | 按 ID/path 分页读取回合冻结的当前维度值                                             |
-| **world-dimension-list**              | builtin | —                   | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则                                   |
-| **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema    |
-| **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
-| **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
-| **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
-| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 lorebook/角色)                 |
-| initialize-world                      | local   | world-init          | auto-allow | 组合角色属性 schema 与维度声明初始化                                                |
-| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的内部 schema 写入原语                                           |
-| set-world-dimensions                  | local   | world-init          | auto-allow | 采纳维度声明，不重置会话进度                                                        |
-| dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                   |
-| update-dimensions                     | local   | world-init          | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化                                         |
-| submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1`                        |
-| sync-codex-entries                    | local   | codex               | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目                                          |
-| generate-guide                        | local   | guide               | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
-| upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
-| list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                 |
-| plan-story-events                     | local   | story-events        | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划）                             |
-| submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                       |
-| submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                     |
-| submit-openai-image-text-prompt       | local   | openai-image-gen    | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件                               |
-| submit-openai-image-structured-prompt | local   | openai-image-gen    | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件                             |
+| 工具名                                | 来源    | 所属插件            | 审批策略   | 描述                                                                                               |
+| ------------------------------------- | ------- | ------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| create-form                           | builtin | —                   | auto-allow | 创建玩家表单                                                                                       |
+| create-choices                        | builtin | —                   | auto-allow | 创建选项列表                                                                                       |
+| create-notification                   | builtin | —                   | auto-allow | 显示通知消息                                                                                       |
+| render-ui                             | builtin | —                   | auto-allow | 渲染带独立 part 状态的 UI 块                                                                       |
+| plugin-data-set                       | builtin | —                   | auto-allow | 写入插件持久化数据（单条）                                                                         |
+| plugin-data-set-batch                 | builtin | —                   | auto-allow | 批量写入插件持久化数据                                                                             |
+| plugin-data-get                       | builtin | —                   | auto-allow | 读取当前插件持久化数据                                                                             |
+| plugin-data-list                      | builtin | —                   | auto-allow | 列出当前插件持久化数据                                                                             |
+| **create-character**                  | builtin | —                   | auto-allow | 创建世界模型角色，类型按 schema 校验，写入 characters                                              |
+| **update-character**                  | builtin | —                   | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                                           |
+| **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                                 |
+| **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                              |
+| **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                                         |
+| **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                                  |
+| **world-dimension-get**               | builtin | —                   | auto-allow | 按 ID/path 分页读取回合冻结的当前维度值                                                            |
+| **world-dimension-list**              | builtin | —                   | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则                                                  |
+| **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema                   |
+| **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                         |
+| **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                                   |
+| **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具                |
+| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) |
+| initialize-world                      | local   | world-init          | auto-allow | 组合角色属性 schema 与维度声明初始化                                                               |
+| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的内部 schema 写入原语                                                          |
+| set-world-dimensions                  | local   | world-init          | auto-allow | 采纳维度声明，不重置会话进度                                                                       |
+| dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                                  |
+| update-dimensions                     | local   | world-init          | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化                                                        |
+| submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1`                                       |
+| sync-codex-entries                    | local   | codex               | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目                                                         |
+| generate-guide                        | local   | guide               | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                                       |
+| upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                                 |
+| list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                                |
+| plan-story-events                     | local   | story-events        | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划）                                            |
+| submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                                      |
+| submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                                    |
+| submit-openai-image-text-prompt       | local   | openai-image-gen    | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件                                              |
+| submit-openai-image-structured-prompt | local   | openai-image-gen    | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件                                            |
 
 ---
 
@@ -435,13 +435,17 @@ interface UIRenderPart {
 
 ### 插件记忆与向量搜索
 
-archival 的关键词和向量路径均排除 `enabled: false` 的 Lorebook 词条。异步索引尚未清理时，向量结果会与当前源校验，禁用、删除或内容改变的旧项不会发布；必要时回退到已过滤的关键词检索。重新启用恢复关键词检索，语义索引可复用或由后续 ingestion 重建。角色检索不受 Lorebook 开关影响；框架不扫描或修改其他插件的记忆块数据。
+archival 的关键词和向量路径均排除 `enabled: false` 的 Lorebook 词条。异步索引尚未清理时，向量结果会与当前源校验，禁用、删除或内容改变的旧项不会发布；必要时回退到已过滤的关键词检索。重新启用恢复关键词检索，语义索引可复用或由后续 ingestion 重建。角色检索不受 Lorebook 开关影响。插件数据只有在插件用 `contributes.data.<namespace>.search` 声明后才进入 archival，且只在该插件于当前会话启用时读取；未声明的 namespace 框架不读。
+
+**不需要 embedding 模型。** 没有配置 embedding slot 时，recall 和 archival 用 BM25 排序（`@covel/plugin-handlers-utils` 的 `rankTexts`）：查询和文本切成词，中日韩文按相邻两字切，英文按单词并归并复数和所有格；少数文本才有的词（人名、物品名）权重高，几乎每段都有的词权重接近零，长文本不会因为长而吃亏。它只认字面，不认同义改写，所以工具说明要求调用方在查询里写上涉及的名字，并可同时给出几种说法。配置了 embedding slot 且存储支持向量时改走向量检索，失败回退到 BM25。
+
+recall 的范围是最近 500 条消息加全部历史摘要（`history.compact@2` 写入的摘要段，结果的 `role` 为 `summary`），所以更早的回合仍能通过摘要查到。
 
 `memory-search` 通过 `MemorySystem.search(sessionId, query, { scope, limit })` 查询，工具层仅处理参数和展示格式。同次 `scope: "all"` 查询并发搜索两个来源，共享一次同模型的 query embedding；缓存只活到该次查询结束。embedding 失败仍分别回退到关键词搜索。
 
 混合结果按两个来源各自的名次交替排列，同名次先 recall，某一来源不足时由另一来源补满。返回的 `score` 只表示来源内部的分数，不能跨来源比较或重新排序；这也适用于一侧向量检索、另一侧关键词回退的情况。指定单一 scope 时保留该来源原有顺序。
 
-`memory-search` 是框架的 recall/archival 搜索工具。核心记忆块由 `memory` 插件的 `blocks` namespace 持久化，后台提取通过普通 `plugin.data` proposals 提交，并由 `prompt.segment@1` 提供提示词段。框架工具不直接读写其他插件的块数据。
+`memory-search` 是框架的 recall/archival 搜索工具。核心记忆块由 `memory` 插件的 `blocks` namespace 持久化，后台提取通过普通 `plugin.data` proposals 提交，并由 `prompt.segment@1` 提供提示词段。框架工具不直接读写其他插件的块数据；该插件的 `facts` namespace 声明了 `search`，因此它记下的事实由 archival 检索。
 
 其他插件可以提供 `memory.block-definitions@1` 只读服务以贡献块定义。世界包通过 `contract:memory.blocks@1` 导入 `{id:"world",blocks:[...]}`，接收插件在 `contributes.data` 声明 accepts；标签采用小写 snake_case，内容长度与提取策略由记忆插件管理。
 

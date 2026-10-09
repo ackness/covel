@@ -6,7 +6,8 @@
 
 - `PLUGIN.md` 注册 `memory.block-definitions@1` 服务、`prompt.segment@1` 扩展和面板。
 - `runtimes/extract/RUNTIME.md` 在 `post-turn` 消费冻结的 `turn-digest@1`，以脱离回合的 function runtime 提取记忆。
-- `server/extract.js` 使用当前请求的 gateway 和 `plugin` 模型槽，写入自己的 `blocks` 命名空间。
+- `server/extract.js` 使用当前请求的 gateway 和 `plugin` 模型槽，写入自己的 `blocks` 和 `facts` 命名空间。
+- `server/facts.js` 决定事实记录的 key、文字，以及每回合召回哪几条。
 
 ## 数据与行为
 
@@ -15,6 +16,17 @@
 下一次执行等待已入队的提取任务提交，然后捕获新的插件数据快照。等待超时不取消任务；禁用插件后不再等待它，也不注入其记忆。失败或取消的提取不会提交部分记忆。
 
 `player_profile` 的确定性身份行来自权威 World Model，动态状态由模型维护。插件可以通过 `memory.block-definitions@1` 提供额外标签。世界数据使用 `memory.blocks@1` 契约，记录形状为 `{id: "world", blocks: [...]}`，写入本插件 `definitions/world`。默认标签不可被外部定义替换。
+
+### 记忆块与事实记录
+
+记忆块每回合整块重写，保存的是“现在的状态”，旧内容会被新内容挤掉。同一次提取另外输出本回合最多 3 条新事实（回复里的 `new_facts` 数组，所以块标签不能叫 `new_facts`），写进 `facts` 命名空间。事实只增不改，key 为 `t<回合号>-<序号>`，文字以回合号开头。
+
+事实记录有两条出路，都由框架的检索能力完成，不需要 embedding 模型：
+
+- `facts` 在 `PLUGIN.md` 里声明了 `search`，框架的 `memory-search` 会检索它。
+- 提示词片段用 SDK 的 `rankTexts` 从较早的事实里挑出与玩家本次输入有关的几条（最多 5 条，最近 3 回合的不挑，因为历史里还在），放进 `<recalled-facts>` 片段。
+
+记忆块超过上限（`maxChars`，默认 2000 字符）时，插件再请模型把这一块压缩到上限以内；压缩失败才在最后一个完整句子处截断，不再从中间切掉尾部。
 
 提示词内容经过 XML 转义，作为 `audience: story`、`volatility: turn` 的片段放在缓存边界之后。最多展示 60 个块，正文共享 8192 字符预算。
 
