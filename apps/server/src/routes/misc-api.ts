@@ -10,6 +10,10 @@ import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
+  classifyProviderFailure,
+  listProtocolModels,
+  listProviderProtocols,
+  providerProtocolSchema,
   publicPresetId,
   resolveModelBinding,
 } from "@covel/ai-provider";
@@ -30,6 +34,9 @@ import {
   parseProviderKeys,
   parseSlotOverrides,
 } from "../middleware/per-request-llm.js";
+
+const MODEL_LIST_TIMEOUT_MS = 15_000;
+const MODEL_LIST_LIMIT = 2000;
 
 export function createMiscApiRoutes(
   ai: AiStack,
@@ -220,6 +227,71 @@ export function createMiscApiRoutes(
     return c.json({ providers });
   });
 
+  // GET /api/ai/protocols — every protocol a model can be configured with:
+  // the built-in ones and the text protocols that loaded plugins register.
+  app.get("/api/ai/protocols", (c) =>
+    c.json({ protocols: listProviderProtocols() }),
+  );
+
+  // POST /api/ai/models — the model IDs a provider endpoint lists.
+  //
+  // The settings UI offers them when a player adds a provider or models, so a
+  // local gateway with dozens of models needs no typed IDs. The target is
+  // request-scoped: a server key attaches only to the provider's own trusted
+  // origin, as it does for a model call.
+  app.post("/api/ai/models", async (c) => {
+    const denied = checkHostedOperator(c);
+    if (denied) return denied;
+    const parsedBody = z
+      .strictObject({
+        provider: z.string().trim().min(1).max(100),
+        baseUrl: z.string().trim().url().max(500).optional(),
+        protocol: providerProtocolSchema.optional(),
+      })
+      .safeParse(await c.req.json().catch(() => undefined));
+    if (!parsedBody.success) {
+      return c.json(errorBody("Invalid model list request body"), 400);
+    }
+    const { provider, baseUrl, protocol } = parsedBody.data;
+    try {
+      const resolution = ai.providerRegistry.withApiKeys(
+        ai.providerRegistry.resolve({
+          provider,
+          ...(baseUrl ? { baseUrl } : {}),
+          ...(protocol ? { protocol } : {}),
+          requestScoped: true,
+        }),
+        parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {},
+        provider,
+        providerApiKeysFromEnv(),
+      );
+      const models = await listProtocolModels(
+        resolution.protocol,
+        resolution.config,
+        provider,
+        AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
+      );
+      return c.json({
+        ok: true,
+        models: models.slice(0, MODEL_LIST_LIMIT),
+        baseUrl: resolution.config.baseUrl,
+        protocol: resolution.protocol,
+      });
+    } catch (error) {
+      console.warn(
+        `[misc-api] POST /api/ai/models failed for provider "${provider}":`,
+        error,
+      );
+      const failure = classifyProviderFailure(error, provider);
+      return c.json({
+        ok: false,
+        models: [],
+        error: failure.message,
+        errorKind: failure.kind,
+      });
+    }
+  });
+
   // POST /api/ai/ping — real provider latency probe.
   //
   // Streams a minimal "hi" completion and records time-to-first-token
@@ -374,6 +446,9 @@ export function createMiscApiRoutes(
       apiKeys,
       signal: abort.signal,
       allowFallback: false,
+      // One request: a retried probe would report a later answer and the
+      // time of the waits as the model's own.
+      transportRetry: false,
       envApiKeys: providerApiKeysFromEnv(),
       slotOverrides: requestedSlot
         ? {
@@ -412,6 +487,24 @@ export function createMiscApiRoutes(
           testedTarget,
         });
       }
+      // An embedding model has no text stream: it answers one vector call.
+      if (
+        preset.supportedModes.includes("embed") &&
+        !preset.supportedModes.includes("stream")
+      ) {
+        const result = await ai.gateway.embed(
+          { presetId: requestedSlot ?? preset.id, values: ["hi"] },
+          gatewayOptions,
+        );
+        clearTimeout(timeout);
+        cleanupTransient();
+        return c.json({
+          ok: true,
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          testedTarget,
+        });
+      }
       for await (const event of ai.gateway.streamText(
         {
           presetId: requestedSlot ?? preset.id,
@@ -438,14 +531,15 @@ export function createMiscApiRoutes(
       }
     } catch (err) {
       if (!aborted) {
-        const message = err instanceof Error ? err.message : String(err);
+        const failure = classifyProviderFailure(err, preset.provider);
         clearTimeout(timeout);
         cleanupTransient();
         return c.json({
           ok: false,
           latencyMs: Date.now() - startedAt,
           ...(ttfbMs !== null ? { ttfbMs } : {}),
-          error: message,
+          error: failure.message,
+          errorKind: failure.kind,
           testedTarget,
         });
       }
@@ -462,6 +556,7 @@ export function createMiscApiRoutes(
         error: timedOut
           ? "Provider did not return any content within 30s"
           : "Provider returned no content",
+        errorKind: timedOut ? "timeout" : "unknown",
         testedTarget,
       });
     }

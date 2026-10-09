@@ -335,6 +335,45 @@ describe("gateway", () => {
     );
   });
 
+  it.each([
+    ["max_tokens", "length"],
+    ["tool_use", "tool_calls"],
+    ["end_turn", "stop"],
+  ])(
+    "returns an adapter's %s as %s and keeps the provider's word",
+    async (raw, unified) => {
+      const { gateway } = setup({
+        async generateText() {
+          return {
+            text: "cut",
+            finishReason: raw,
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
+        async *streamText() {
+          yield {
+            type: "done" as const,
+            finishReason: raw,
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
+      });
+      const request = { messages: [{ role: "user", content: "hi" }] };
+
+      expect(await gateway.generateText(request)).toMatchObject({
+        finishReason: unified,
+        rawFinishReason: raw,
+      });
+      const events: StreamEvent[] = [];
+      for await (const event of gateway.streamText(request)) events.push(event);
+      expect(events.at(-1)).toMatchObject({
+        type: "done",
+        finishReason: unified,
+        rawFinishReason: raw,
+      });
+    },
+  );
+
   it("streamText yields events", async () => {
     const { gateway } = setup();
     const events: StreamEvent[] = [];

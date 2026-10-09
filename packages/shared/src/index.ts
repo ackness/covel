@@ -18,6 +18,8 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
+export { unifyFinishReason } from "./llm-finish-reason.js";
+export type { LLMFinishReason } from "./llm-finish-reason.js";
 export type {
   EvaluationJson,
   EvaluationValue,
@@ -36,6 +38,20 @@ export {
   supportsModelRole,
 } from "./model-capabilities.js";
 export { projectModelCapabilityForBuiltinAdapter } from "./model-capability-support.js";
+export {
+  BUILTIN_PROVIDER_PROTOCOLS,
+  DEFAULT_PROVIDER_PROTOCOL,
+  PROVIDER_PROTOCOL_DESCRIPTORS,
+  getProviderProtocolDescriptor,
+  isBuiltinProviderProtocol,
+  isBuiltinTextProtocol,
+  isProviderProtocolId,
+} from "./provider-protocols.js";
+export type {
+  BuiltinProviderProtocol,
+  ProviderProtocolDescriptor,
+  ProviderProtocolOutput,
+} from "./provider-protocols.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
 export {
@@ -172,11 +188,10 @@ export {
 export {
   BUILTIN_PROVIDER_CONNECTIONS,
   getBuiltinProviderConnection,
+  isLoopbackBaseUrl,
+  listBuiltinProviderConnections,
 } from "./utils/provider-defaults.js";
-export type {
-  BuiltinProviderConnection,
-  BuiltinProviderProtocol,
-} from "./utils/provider-defaults.js";
+export type { BuiltinProviderConnection } from "./utils/provider-defaults.js";
 
 // ── Environment Registry ──────────────────────────────────────────
 export * from "./env/index.js";

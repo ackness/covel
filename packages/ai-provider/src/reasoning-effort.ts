@@ -323,15 +323,35 @@ export function resolveReasoningEffortProfile(
   };
 }
 
-/** Translate a unified UI selection into the current wire protocol. */
-export function extractReasoningRequestFields(
+/** What a wire needs to place a reasoning selection in its request. */
+export interface ReasoningWireRequest {
+  /** A level the model accepts; `provider-default` never reaches a wire. */
+  selection: ReasoningEffort;
+  family: ReasoningProviderFamily;
+  model: string;
+  provider?: string;
+  protocol: ProviderProtocol;
+  metadata: Record<string, unknown> | undefined;
+}
+
+/** One protocol's request fields for a reasoning selection. */
+export type ReasoningWire = (
+  request: ReasoningWireRequest,
+) => Record<string, unknown>;
+
+/**
+ * Translate a unified UI selection through one protocol's wire. A selection
+ * the model does not offer sends nothing, so the provider default applies.
+ */
+export function reasoningRequestFields(
+  wire: ReasoningWire | undefined,
   metadata: Record<string, unknown> | undefined,
   context: ModelRequestContext | undefined,
   protocol: ProviderProtocol,
   requestModel: string,
 ): Record<string, unknown> {
   const selection = readReasoningEffort(metadata);
-  if (!selection || selection === "provider-default") return {};
+  if (!wire || !selection || selection === "provider-default") return {};
 
   const provider = context?.preset?.provider ?? context?.profile?.provider;
   const model =
@@ -351,58 +371,81 @@ export function extractReasoningRequestFields(
         : {};
     }
   }
+  return wire({ selection, family, model, provider, protocol, metadata });
+}
 
-  if (protocol === "anthropic-messages-v1") {
-    if (selection === "disabled") {
-      return { thinking: { type: "disabled" } };
-    }
-    if (selection === "automatic") return {};
-    const adaptive =
-      family === "anthropic" &&
-      /claude-(?:(?:fable|mythos|opus|sonnet)-5|opus-4-[678]|sonnet-4-6)/.test(
-        model,
-      );
-    return {
-      ...(family === "deepseek" ? { thinking: { type: "enabled" } } : {}),
-      ...(adaptive
-        ? {
-            thinking: {
-              type: "adaptive",
-              display: asRecord(metadata?.thinking).display ?? "summarized",
-            },
-          }
-        : {}),
-      output_config: {
-        ...asRecord(metadata?.output_config),
-        effort: selection,
-      },
-    };
+export function anthropicReasoningFields({
+  selection,
+  family,
+  model,
+  metadata,
+}: ReasoningWireRequest): Record<string, unknown> {
+  if (selection === "disabled") {
+    return { thinking: { type: "disabled" } };
   }
-
-  if (protocol === "google-generative-ai-v1") {
-    if (family !== "google") return {};
-    const option = resolveGeminiReasoningProfile(model, protocol)?.options.find(
-      (entry) => entry.value === selection,
+  if (selection === "automatic") return {};
+  const adaptive =
+    family === "anthropic" &&
+    /claude-(?:(?:fable|mythos|opus|sonnet)-5|opus-4-[678]|sonnet-4-6)/.test(
+      model,
     );
-    if (!option) return {};
-    return {
-      thinkingConfig:
-        option.thinkingBudgetTokens !== undefined
-          ? { thinkingBudget: option.thinkingBudgetTokens }
-          : { thinkingLevel: selection },
-    };
-  }
+  return {
+    ...(family === "deepseek" ? { thinking: { type: "enabled" } } : {}),
+    ...(adaptive
+      ? {
+          thinking: {
+            type: "adaptive",
+            display: asRecord(metadata?.thinking).display ?? "summarized",
+          },
+        }
+      : {}),
+    output_config: {
+      ...asRecord(metadata?.output_config),
+      effort: selection,
+    },
+  };
+}
 
-  if (protocol === "openai-responses-v1") {
-    if (selection === "automatic") return {};
-    return {
-      reasoning: {
-        ...asRecord(metadata?.reasoning),
-        effort: selection === "disabled" ? "none" : selection,
-      },
-    };
-  }
+export function googleReasoningFields({
+  selection,
+  family,
+  model,
+  protocol,
+}: ReasoningWireRequest): Record<string, unknown> {
+  if (family !== "google") return {};
+  const option = resolveGeminiReasoningProfile(model, protocol)?.options.find(
+    (entry) => entry.value === selection,
+  );
+  if (!option) return {};
+  return {
+    thinkingConfig:
+      option.thinkingBudgetTokens !== undefined
+        ? { thinkingBudget: option.thinkingBudgetTokens }
+        : { thinkingLevel: selection },
+  };
+}
 
+export function openAiResponsesReasoningFields({
+  selection,
+  metadata,
+}: ReasoningWireRequest): Record<string, unknown> {
+  if (selection === "automatic") return {};
+  return {
+    reasoning: {
+      ...asRecord(metadata?.reasoning),
+      effort: selection === "disabled" ? "none" : selection,
+    },
+  };
+}
+
+/** OpenAI Chat, with the fields DeepSeek and Qwen use on the same wire. */
+export function openAiChatReasoningFields({
+  selection,
+  family,
+  model,
+  provider,
+  protocol,
+}: ReasoningWireRequest): Record<string, unknown> {
   if (family === "deepseek") {
     if (selection === "disabled") {
       return { thinking: { type: "disabled" } };

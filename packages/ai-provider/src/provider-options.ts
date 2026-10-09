@@ -1,11 +1,11 @@
 import { z } from "zod";
 import {
   REASONING_EFFORT_VALUES,
-  type LLMDiagnostics,
   type LLMProviderWarning,
   type ReasoningEffort,
 } from "@covel/shared";
 import { AiProviderError } from "./errors.js";
+import { getProtocolDefinition } from "./protocol-registry.js";
 import type { ProviderProtocol } from "./types.js";
 
 /** Validated options selected by protocol ID, then overridden by provider ID. */
@@ -31,6 +31,20 @@ export interface ProviderOptionSettings {
 
 /** Protocol defaults are overridden by the active provider's namespace. */
 export type ProviderOptions = Record<string, ProviderOptionSettings>;
+
+/**
+ * One protocol's wire fields for the settings it accepts: it writes them to
+ * `fields` and returns the setting names it knows. A setting it does not
+ * return is reported as unsupported.
+ */
+export type ProviderOptionWire = (
+  settings: ProviderOptionSettings,
+  fields: Record<string, unknown>,
+) => readonly (keyof ProviderOptionSettings)[];
+
+/** Portable generation parameters that only some wires have a field for. */
+export type OptionalWireParameter =
+  "topK" | "frequencyPenalty" | "presencePenalty";
 
 const FRAMEWORK_BODY_FIELDS = new Set([
   "model",
@@ -98,6 +112,7 @@ export function resolveProviderOptions(
   const warnings: LLMProviderWarning[] = [];
   if (options === undefined) return { metadata, warnings };
   if (!isRecord(options)) throw invalidOptions(provider);
+  const definition = getProtocolDefinition(protocol);
   for (const namespace of new Set([protocol, provider])) {
     if (!Object.hasOwn(options, namespace)) continue;
     const value = options[namespace];
@@ -118,42 +133,11 @@ export function resolveProviderOptions(
         );
       }
     }
-    const supported = new Set<string>(["extraBody", "reasoningEffort"]);
-    if (protocol === "openai-chat-v1" || protocol === "openai-responses-v1") {
-      for (const [key, wire] of [
-        ["parallelToolCalls", "parallel_tool_calls"],
-        ["store", "store"],
-        ["user", "user"],
-      ] as const) {
-        supported.add(key);
-        if (settings[key] !== undefined) fields[wire] = settings[key];
-      }
-      if (protocol === "openai-chat-v1") {
-        supported.add("seed");
-        if (settings.seed !== undefined) fields.seed = settings.seed;
-      } else {
-        supported.add("reasoningSummary");
-        if (settings.reasoningSummary !== undefined) {
-          fields.reasoning = {
-            ...(isRecord(fields.reasoning) ? fields.reasoning : {}),
-            summary: settings.reasoningSummary,
-          };
-        }
-      }
-    } else if (protocol === "anthropic-messages-v1") {
-      supported.add("thinking");
-      if (settings.thinking !== undefined) {
-        fields.thinking =
-          settings.thinking.type === "enabled"
-            ? { type: "enabled", budget_tokens: settings.thinking.budgetTokens }
-            : { type: settings.thinking.type };
-      }
-    } else if (protocol === "google-generative-ai-v1") {
-      for (const key of ["thinkingConfig", "cachedContent", "seed"] as const) {
-        supported.add(key);
-        if (settings[key] !== undefined) fields[key] = settings[key];
-      }
-    }
+    const supported = new Set<string>([
+      "extraBody",
+      "reasoningEffort",
+      ...(definition?.providerOptionFields?.(settings, fields) ?? []),
+    ]);
     if (settings.reasoningEffort !== undefined)
       fields.reasoning_effort = settings.reasoningEffort;
     for (const key of Object.keys(settings)) {
@@ -164,6 +148,12 @@ export function resolveProviderOptions(
   }
   return { metadata, warnings };
 }
+
+const OPTIONAL_WIRE_PARAMETERS: readonly string[] = [
+  "topK",
+  "frequencyPenalty",
+  "presencePenalty",
+] satisfies OptionalWireParameter[];
 
 const parameterSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
@@ -192,35 +182,19 @@ export function validateParameterMetadata(
     });
   }
   const warnings: LLMProviderWarning[] = [];
+  const wireParameters: readonly string[] =
+    getProtocolDefinition(protocol)?.parameters ?? [];
   for (const key of Object.keys(
     metadata.parameterOverrides as Record<string, unknown>,
   )) {
     if (
       !Object.hasOwn(parameterSchema.shape, key) ||
-      (key === "topK" &&
-        protocol !== "anthropic-messages-v1" &&
-        protocol !== "google-generative-ai-v1") ||
-      (["frequencyPenalty", "presencePenalty"].includes(key) &&
-        protocol !== "openai-chat-v1" &&
-        protocol !== "google-generative-ai-v1")
+      (OPTIONAL_WIRE_PARAMETERS.includes(key) && !wireParameters.includes(key))
     ) {
       warnings.push(unsupported(`parameterOverrides.${key}`));
     }
   }
   return warnings;
-}
-
-export function withProviderWarnings<
-  T extends { diagnostics?: LLMDiagnostics },
->(result: T, warnings: readonly LLMProviderWarning[]): T {
-  if (!warnings.length) return result;
-  return {
-    ...result,
-    diagnostics: {
-      ...result.diagnostics,
-      warnings: [...warnings, ...(result.diagnostics?.warnings ?? [])],
-    },
-  };
 }
 
 function unsupported(feature: string): LLMProviderWarning {

@@ -1,3 +1,4 @@
+import { isLoopbackBaseUrl } from "@covel/shared";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FolderOpen, Info } from "lucide-react";
@@ -220,16 +221,21 @@ export function LlmKeysPane({
                 return save(() => setProviderPriceMultipliers(next));
               }}
             />
-            {showPresetTests && hasKey && providerPresets.length > 0 && (
-              <div className="space-y-2 pt-1">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
-                  {t("settings.pingTest")}
-                </span>
-                {providerPresets.map((preset) => (
-                  <PresetPingRow key={preset.id} preset={preset} />
-                ))}
-              </div>
-            )}
+            {showPresetTests &&
+              (hasKey ||
+                providerPresets.some((preset) =>
+                  isLoopbackBaseUrl(preset.baseUrl),
+                )) &&
+              providerPresets.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                    {t("settings.pingTest")}
+                  </span>
+                  {providerPresets.map((preset) => (
+                    <PresetPingRow key={preset.id} preset={preset} />
+                  ))}
+                </div>
+              )}
           </div>
         );
       })}

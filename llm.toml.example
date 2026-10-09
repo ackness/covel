@@ -11,12 +11,18 @@
 # Fields:
 #   provider - connection identifier; maps to {PROVIDER}_API_KEY
 #   model    - opaque model ID, including any namespace, sent unchanged
-#   baseUrl  - provider or compatible proxy URL; configurable per slot
-#   protocol - wire format, independent of provider name and model ID:
+#   baseUrl  - provider or compatible proxy URL; configurable per slot.
+#              Optional for a built-in provider: openai, anthropic, google,
+#              deepseek, dashscope, xai, mistral, groq, together, fireworks,
+#              moonshot, zhipu, siliconflow, volcengine, openrouter, vercel,
+#              typesafe (endpoints in docs/reference/slots.md)
+#   protocol - wire format, independent of provider name and model ID.
+#              Optional: a built-in provider has its own, any other
+#              provider defaults to openai-chat-v1. Values:
 #              openai-chat-v1, openai-responses-v1, anthropic-messages-v1,
 #              google-generative-ai-v1,
 #              typesafe-systemone-v1, openrouter-decisions-v1,
-#              vercel-evaluation-v4
+#              vercel-evaluation-v4, openai-decisions-v1
 #   fallback - optional target slot name; enable the target and its key
 #   tag      - text, image, evaluation, or an explicit custom tag
 #
@@ -142,6 +148,14 @@ fallback = "story"
 # protocol = "openrouter-decisions-v1"
 # tag      = "evaluation"
 # output   = ["evaluation"]
+
+# -- Optional: OpenAI Decisions (evaluation) ----------------------
+# https://developers.openai.com/api/docs/guides/decisions
+#
+# [covel.evaluation]
+# provider = "openai"
+# model    = "gpt-6-luna"
+# protocol = "openai-decisions-v1"
 
 # -- Optional: Vercel AI Gateway chat + Jev on one connection ------
 # Put the AI Gateway key in VERCEL_API_KEY for provider = "vercel".

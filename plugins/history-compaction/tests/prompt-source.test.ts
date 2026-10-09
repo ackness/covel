@@ -125,7 +125,7 @@ it("preserves history when the injected template source fails", async () => {
   }
 });
 
-it.each(["length", "max_tokens"])(
+it.each(["length"])(
   "keeps raw history when the gateway summary ends with %s",
   async (finishReason) => {
     const { default: register } = await import("../server/index.js");

@@ -37,7 +37,10 @@ import {
   splitThinkTags,
 } from "./think-tags.js";
 import type { OpenAiChatReasoningField } from "./http/openai-readers.js";
-import { extractReasoningRequestFields } from "../reasoning-effort.js";
+import {
+  openAiChatReasoningFields,
+  reasoningRequestFields,
+} from "../reasoning-effort.js";
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
@@ -103,7 +106,13 @@ function extractOpenAiParameterOverrides(
         ? "max_completion_tokens"
         : "max_tokens",
     }),
-    ...extractReasoningRequestFields(meta, context, "openai-chat-v1", model),
+    ...reasoningRequestFields(
+      openAiChatReasoningFields,
+      meta,
+      context,
+      "openai-chat-v1",
+      model,
+    ),
   };
 }
 

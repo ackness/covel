@@ -2,7 +2,9 @@ import {
   registerImageWire,
   registerMusicWire,
   registerSpeechWire,
+  registerTextWire,
   registerTranscriptionWire,
+  type TextWire,
   type WireModuleShape,
 } from "@covel/ai-provider";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
@@ -41,6 +43,42 @@ export function registerNamespaced(
     { wires: mod.music, method: "compose", register: registerMusicWire },
   ];
 
+  const register = (id: string, registration: () => () => void): void => {
+    try {
+      onRegistered(registration());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/already registered/.test(message)) {
+        throw new PluginRegistrationError(
+          "registerWires",
+          `wire "${id}" is already registered`,
+        );
+      }
+      throw err;
+    }
+  };
+
+  if (mod.text !== undefined && !Array.isArray(mod.text)) {
+    throw new PluginRegistrationError(
+      "registerWires",
+      "text wires must be an array",
+    );
+  }
+  for (const wire of mod.text ?? []) {
+    const candidate: unknown = wire;
+    if (
+      !hasWireShape(candidate, "generateText") ||
+      typeof Reflect.get(candidate, "streamText") !== "function"
+    ) {
+      throw new PluginRegistrationError(
+        "registerWires",
+        "expected { id: string, generateText: function, streamText: function }",
+      );
+    }
+    const id = `${pluginId}/${wire.id}`;
+    register(id, () => registerTextWire(namespacedTextWire(id, wire, invoke)));
+  }
+
   for (const group of groups) {
     if (group.wires !== undefined && !Array.isArray(group.wires)) {
       throw new PluginRegistrationError(
@@ -64,18 +102,36 @@ export function registerNamespaced(
         [group.method]: (...args: unknown[]) =>
           invoke(() => Reflect.apply(method, wire, args) as unknown),
       };
-      try {
-        onRegistered(group.register(namespaced as never));
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (/already registered/.test(message)) {
-          throw new PluginRegistrationError(
-            "registerWires",
-            `wire "${namespaced.id}" is already registered`,
-          );
-        }
-        throw err;
-      }
+      register(namespaced.id, () => group.register(namespaced as never));
     }
   }
+}
+
+/** Every call into the plugin goes through `invoke`, a stream's start too. */
+function namespacedTextWire(
+  id: string,
+  wire: TextWire,
+  invoke: <T>(fn: () => T | Promise<T>) => Promise<T>,
+): TextWire {
+  const { generateObject, listModels } = wire;
+  return {
+    ...wire,
+    id,
+    generateText: (...args) => invoke(() => wire.generateText(...args)),
+    async *streamText(...args) {
+      yield* await invoke(() => wire.streamText(...args));
+    },
+    ...(typeof generateObject === "function"
+      ? {
+          generateObject: (...args) =>
+            invoke(() => Reflect.apply(generateObject, wire, args)),
+        }
+      : {}),
+    ...(typeof listModels === "function"
+      ? {
+          listModels: (...args) =>
+            invoke(() => Reflect.apply(listModels, wire, args)),
+        }
+      : {}),
+  };
 }

@@ -7,8 +7,9 @@ import type {
 } from "../types.js";
 import { AiProviderError } from "../errors.js";
 import {
-  extractReasoningRequestFields,
+  googleReasoningFields,
   readReasoningEffort,
+  reasoningRequestFields,
 } from "../reasoning-effort.js";
 import { extractParameterOverrides } from "./common.js";
 import {
@@ -18,11 +19,12 @@ import {
   iterateSsePayloads,
   createUnsupportedModeError,
 } from "./http.js";
+import { fetchModelIds } from "./model-list.js";
 import { withTextRequestDefaults } from "./request-defaults.js";
 import { objectResponseFormat } from "./structured-output.js";
 import { googleMessages } from "./google-messages.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
-import { withProviderWarnings } from "../provider-options.js";
+import { withProviderWarnings } from "../provider-warnings.js";
 import {
   GOOGLE_PROTOCOL,
   GOOGLE_PROVIDER,
@@ -144,7 +146,8 @@ function requestBody(
   Object.assign(
     thinkingConfig,
     record(
-      extractReasoningRequestFields(
+      reasoningRequestFields(
+        googleReasoningFields,
         meta,
         context,
         GOOGLE_PROTOCOL,
@@ -321,4 +324,17 @@ export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
     },
   };
   return adapter;
+}
+
+export function listGoogleModels(
+  config: ProviderConfig,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  return fetchModelIds(
+    { ...config, apiKey: undefined },
+    "/models?pageSize=1000",
+    GOOGLE_PROVIDER,
+    signal,
+    config.apiKey ? { "x-goog-api-key": config.apiKey } : undefined,
+  );
 }

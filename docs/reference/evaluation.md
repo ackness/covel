@@ -1,6 +1,6 @@
 # 模型评估（Evaluation）
 
-Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批量返回分类、评分和布尔概率。它使用现有 provider、preset、slot、密钥绑定、请求记录与生命周期钩子。原生支持 TypeSafe System One、OpenRouter Decisions 和 Vercel AI Gateway Evaluation，不依赖任何供应商 SDK 或 AI SDK。协议由配置选择，不通过服务商名称或模型 ID 判断。
+Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批量返回分类、评分和布尔概率。它使用现有 provider、preset、slot、密钥绑定、请求记录与生命周期钩子。原生支持 TypeSafe System One、OpenRouter Decisions、Vercel AI Gateway Evaluation 和 OpenAI Decisions，不依赖任何供应商 SDK 或 AI SDK。协议由配置选择，不通过服务商名称或模型 ID 判断。
 
 `evaluation` 表示模型能力类型，不限定用途名称。可定义 `[covel.intent]`、`[covel.risk-check]` 等用途并绑定同一个评估模型；调用时通过 `presetId` 选择用途。设置中的文本用途会过滤评估模型，服务端也拒绝不兼容的显式绑定。
 
@@ -8,7 +8,7 @@ Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批�
 
 设置 → 服务商与模型：像其他模型一样填写 Provider、Base URL、API Key 和模型 ID。Provider 的协议作为默认值；添加模型时或模型行内可单独选择协议，同一连接可同时包含聊天模型与评估模型。模型级协议覆盖会随保存、复制、导入导出和请求 overlay 保留。删除覆盖（选择“使用服务商协议”）后恢复继承。评估模型作为首个模型添加时，不自动绑定剧情或插件文本用途。
 
-设置页将三种评估接口统一收在 **Evaluation（评估）** 下，选中后显示“评估接口”。TypeSafe、OpenRouter 和 Vercel 内置连接预选各自的接口；自定义连接可手动选择所兼容的接口，代理地址不影响协议选择。模型已有明确协议时按已保存配置显示，选择“使用服务商协议”则继续继承连接配置。
+设置页将四种评估接口统一收在 **Evaluation（评估）** 下，选中后显示“评估接口”。TypeSafe、OpenRouter、Vercel 和 OpenAI 内置连接预选各自的接口；自定义连接可手动选择所兼容的接口，代理地址不影响协议选择。模型已有明确协议时按已保存配置显示，选择“使用服务商协议”则继续继承连接配置。
 
 这遵循 AI SDK 的分层方式：[EvaluationModelV4](https://github.com/vercel/ai/blob/main/packages/provider/src/evaluation-model/v4/evaluation-model-v4.ts) 统一评估模型契约，各服务商适配自己的 HTTP 格式。`Evaluation` 是界面分类；TOML、保存数据和请求 overlay 仍使用下表的明确 wire 协议，不新增通过模型名称、地址或连接名称猜测协议的运行时逻辑。
 
@@ -17,10 +17,11 @@ Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批�
 | `typesafe`    | `https://api.typesafe.ai/v1`      | `jev-latest`        | `typesafe-systemone-v1`   |
 | `openrouter`  | `https://openrouter.ai/api/v1`    | `typesafe/jev-1.13` | `openrouter-decisions-v1` |
 | `vercel`      | `https://ai-gateway.vercel.sh/v1` | `typesafe-ai/jev`   | `vercel-evaluation-v4`    |
+| `openai`      | `https://api.openai.com/v1`       | `gpt-6-luna`        | `openai-decisions-v1`     |
 
-`openrouter`、`vercel` 内置连接默认使用 OpenAI Chat，Jev 模型选择 Evaluation 即预选表中的评估接口，仍可手动调整。表格只是当前服务商示例；Provider 名称、Base URL 和模型 ID 均可自定义，兼容相同 wire 的代理或其他模型可以直接使用。
+`openrouter`、`vercel`、`openai` 内置连接默认使用 OpenAI Chat，评估模型选择 Evaluation 即预选表中的评估接口，仍可手动调整。表格只是当前服务商示例；Provider 名称、Base URL 和模型 ID 均可自定义，兼容相同 wire 的代理或其他模型可以直接使用。
 
-OpenRouter 请求路径为 `/api/alpha/decisions`，接受根地址、`/api/v1`、`/api/alpha` 或评估端点本身作为 base。Vercel 请求路径为 `/v4/ai/evaluation-model`，接受根地址、`/v1`、`/v4/ai` 或评估端点本身作为 base；TypeSafe 同理接受 `/v1/systemone`。适配器仅替换这些已知末尾路径，保留主机和自定义代理前缀，例如 `https://proxy.example/router/api/v1` 对应 `https://proxy.example/router/api/alpha/decisions`。Vercel 用 `ai-model-id` header 传模型 ID，并发送其原生协议版本和 API Key 认证头；其请求 body 中 Boolean 类型保持 `boolean`。
+OpenRouter 请求路径为 `/api/alpha/decisions`，接受根地址、`/api/v1`、`/api/alpha` 或评估端点本身作为 base。Vercel 请求路径为 `/v4/ai/evaluation-model`，接受根地址、`/v1`、`/v4/ai` 或评估端点本身作为 base；TypeSafe 同理接受 `/v1/systemone`。适配器仅替换这些已知末尾路径，保留主机和自定义代理前缀，例如 `https://proxy.example/router/api/v1` 对应 `https://proxy.example/router/api/alpha/decisions`。Vercel 用 `ai-model-id` header 传模型 ID，并发送其原生协议版本和 API Key 认证头；其请求 body 中 Boolean 类型保持 `boolean`。OpenAI 请求路径为 `/v1/decisions`，接受根地址、`/v1` 或评估端点本身作为 base，代理前缀同样保留。
 
 服务端 TOML 示例：
 
@@ -90,6 +91,19 @@ const risk = result.answers.risk.score;
 
 当前三个评估协议使用的 Jev 请求限制在适配器内校验：Choice 为 1–255 个选项，Score 为 2–10 个等级。TypeSafe / OpenRouter 的公共 `boolean` 在 wire 上映射为 `noul`，响应转换为 `probability`。适配器校验问题/答案对应关系、选项集合、概率范围及总和、评分范围和 token 计数。TypeSafe 的概率保留两位小数，校验总和时允许逐项舍入误差，不重新归一化。`providerMetadata.typesafe.confidence` 或 `providerMetadata.openrouter.confidence` 保留供应商的独立置信度统计，不能当作跨供应商通用概率。Vercel 返回的 `providerMetadata` 会保留，舍入说明与警告存入 `providerMetadata.vercel`；概率总和按其声明精度校验。OpenRouter / Vercel 允许省略概率分布，公共 `probabilities` 因此为可选字段，未提供时不合成分布。
 
+OpenAI Decisions（`openai-decisions-v1`，2026-10 公测，当前只有 `gpt-6-luna`）的 wire 形状与另外三种不同，适配器在边界上转换，公共契约不变：
+
+| 公共契约                         | OpenAI wire                                                                                        |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `state`                          | `input`：文本原样发送，JSON 值序列化成文本                                                         |
+| `questions` 是以问题名为键的 map | `questions` 是数组，问题名放在每项的 `name`；应答的 `answers` 也是数组，按 `name` 对回             |
+| `boolean`                        | `predicate`；`criteria.true` / `criteria.false` 以“Criteria for true/false”段落并入 `instructions` |
+| `choice` 的 `criteria`           | `choices: [{ value, description }]`，要求 2–255 项（只有 1 项时在发送前报配置错误）                |
+| `score` 的 `criteria`            | `levels: [{ label, description }]`，`label` 取等级下标                                             |
+| `probabilities` map              | `[{ value, probability }]` 数组，转换成 map 后按同一套规则校验                                     |
+
+模型拒答某个问题时（`answers` 里的 `refusal`），整次调用以不可重试的 `REFUSAL` 失败，`error.details.question` 是被拒的问题名；公共契约要求每个问题都有答案，不返回部分结果。`usage` 带回 `cachedInputTokens` / `cacheWriteInputTokens`；各题的 `confidence` 存入 `providerMetadata.openai.confidence`。请求只发送 `model`、`input`、`questions`，不发送 `safety_identifier`，也不发送图片（公共契约的 `state` 没有图片类型）。
+
 评估请求只发送 `state / questions` 和模型标识（TypeSafe / OpenRouter 的 body `model`，Vercel 的 `ai-model-id` header），不会混入文本生成的 temperature、工具、思考参数或 slot 的自由 metadata。`onProviderRequest` 可记录这些实际 wire 字段；记录与普通 LLM prompt 一样可能包含私有内容，不包含认证 header。服务商连通测试对评估模型发送最小 Boolean 问题，返回总耗时，不伪造流式 TTFB。
 
 评估模型不支持 `generateText / generateObject / streamText / embed`，错误在发送请求前抛出。通用对象生成与封闭答案空间的评估是两个独立能力。
@@ -113,6 +127,6 @@ function runtime 已公开 `ctx.gateway.evaluate({ presetId, state, questions, s
 
 中文是 Covel 的主要工作负载，而官方说明 Jev 当前英语准确率最佳。应测量中文样本上的错误率、概率阈值、端到端延迟和失败率，再判断是否值得进入主流程。不要把供应商宣传的性能数字当作本项目实测结果。按校准结果固定模型版本，记录响应的实际版本；`jev-latest` 会随发布移动。
 
-截至 2026-09-19，官方文档列出 `jev-1.13.0`、64k 总请求 token 上限、state 加最长问题 32k 上限、输入 $0.042 / 百万 token、输出免费。目录记录总请求上限；第二个限制没有本地 tokenizer 估算，由服务端校验。`maxOutputTokens = 0` 表示不提供文本生成预算，并不表示 wire 的 output token 用量恒为零。价格和别名可能变化。尚未用真实 key 验证线上延迟、中文表现或费用。
+截至 2026-09-19，官方文档列出 `jev-1.13.0`、64k 总请求 token 上限、state 加最长问题 32k 上限、输入 $0.042 / 百万 token、输出免费。目录记录总请求上限；第二个限制没有本地 tokenizer 估算，由服务端校验。`maxOutputTokens = 0` 表示不提供文本生成预算，并不表示 wire 的 output token 用量恒为零。价格和别名可能变化。尚未用真实 key 验证线上延迟、中文表现或费用。OpenAI Decisions 同样只按官方参考文档和模拟应答实现，没有用真实 key 调用过。
 
-参考：[OpenRouter Decisions](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-questions-and-answers-request)、[Vercel 原生评估 wire](https://github.com/vercel/ai/blob/main/packages/gateway/src/gateway-evaluation-model.ts)、[Vercel 模型目录](https://ai-gateway.vercel.sh/v1/models)、[TypeSafe API](https://docs.typesafe.ai/api)、[模型限制](https://docs.typesafe.ai/models)、[AI SDK 的评估适配器](https://github.com/vercel/ai/blob/main/packages/typesafe-ai/src/typesafe-ai-evaluation-model.ts)、[用户提供的用例合集](https://github.com/Anil-matcha/awesome-jev-by-typesafe)。
+参考：[OpenAI Decisions 指南](https://developers.openai.com/api/docs/guides/decisions)、[OpenAI Decisions 接口参考](https://developers.openai.com/api/reference/resources/decisions/methods/create)、[AI SDK 的 OpenAI Decisions 适配器](https://github.com/vercel/ai/blob/main/packages/openai/src/openai-decision-model.ts)、[OpenRouter Decisions](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-questions-and-answers-request)、[Vercel 原生评估 wire](https://github.com/vercel/ai/blob/main/packages/gateway/src/gateway-evaluation-model.ts)、[Vercel 模型目录](https://ai-gateway.vercel.sh/v1/models)、[TypeSafe API](https://docs.typesafe.ai/api)、[模型限制](https://docs.typesafe.ai/models)、[AI SDK 的评估适配器](https://github.com/vercel/ai/blob/main/packages/typesafe-ai/src/typesafe-ai-evaluation-model.ts)、[用户提供的用例合集](https://github.com/Anil-matcha/awesome-jev-by-typesafe)。

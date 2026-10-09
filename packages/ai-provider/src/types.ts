@@ -1,3 +1,7 @@
+import {
+  BUILTIN_PROVIDER_PROTOCOLS,
+  type BuiltinProviderProtocol,
+} from "@covel/shared";
 import type {
   LLMDiagnostics,
   LLMRequestBudget,
@@ -14,32 +18,22 @@ import type { ReasoningEffort } from "./reasoning-effort.js";
 // ── Provider Protocol ──────────────────────────────────────────────
 
 /**
- * All wire protocols the framework knows how to speak.
- *
- * Declared as a `const` tuple (not a bare union) so the set is also
- * available at runtime: the protocol registry iterates it to register
- * built-ins and to assert completeness at startup, and tests iterate it
- * to prove every member resolves to an adapter / cacheStrategy /
- * capabilityDefaults. `ProviderProtocol` is derived from it, so the type
- * and the runtime list can never drift apart.
+ * All wire protocols the framework knows how to speak, from the descriptor
+ * table in `@covel/shared` (`PROVIDER_PROTOCOL_DESCRIPTORS`).
  *
  * OpenAI-compatible providers (DeepSeek, Qwen/DashScope, Groq, …) are not
  * separate protocols — they speak `openai-chat-v1` and register with zero
  * code via `llm.toml` `[covel.<slot>]`. Only a genuinely new *wire* shape
- * (e.g. Bedrock SigV4, Cohere) warrants a new member here,
- * and adding one is a single entry in `BUILTIN_PROTOCOLS`.
+ * (e.g. Bedrock SigV4, Cohere) warrants a new protocol: a descriptor there
+ * and a `ProtocolDefinition` in `BUILTIN_PROTOCOLS`.
  */
-export const PROVIDER_PROTOCOLS = [
-  "openai-chat-v1",
-  "openai-responses-v1",
-  "anthropic-messages-v1",
-  "google-generative-ai-v1",
-  "typesafe-systemone-v1",
-  "openrouter-decisions-v1",
-  "vercel-evaluation-v4",
-] as const;
+export const PROVIDER_PROTOCOLS = BUILTIN_PROVIDER_PROTOCOLS;
 
-export type ProviderProtocol = (typeof PROVIDER_PROTOCOLS)[number];
+/**
+ * A built-in protocol, or the ID of a text protocol a plugin registered
+ * (`<pluginId>/<wireId>`, see `TextWire`).
+ */
+export type ProviderProtocol = BuiltinProviderProtocol | (string & {});
 
 // ── Operation Mode ─────────────────────────────────────────────────
 
@@ -168,6 +162,11 @@ export interface ProviderConfig {
   signal?: AbortSignal;
   /** Shared finite budget across transport, gateway fallback, and runtime retries. */
   requestBudget?: LLMRequestBudget;
+  /**
+   * False sends each request once. A connection test sets it, so the answer
+   * and the time it reports are those of one request.
+   */
+  transportRetry?: false;
   /**
    * Prompt cache strategy for this provider.
    *
@@ -365,7 +364,12 @@ export type UsageSummary = LLMUsageSummary;
 export interface TextGenerationResult {
   diagnostics?: LLMDiagnostics;
   text: string;
+  /**
+   * An adapter may return the provider's own word. The gateway returns the
+   * unified `LLMFinishReason` and moves the word to `rawFinishReason`.
+   */
   finishReason: string;
+  rawFinishReason?: string;
   usage: UsageSummary;
   /** Tool calls requested by the model (present when finishReason involves tool use). */
   toolCalls?: ToolCallPart[];
@@ -387,7 +391,9 @@ export interface ObjectGenerationResult<TObject = unknown> {
   object: TObject;
   reasoningContent?: string;
   providerContinuation?: LLMProviderContinuation;
+  /** Unified by the gateway; see `TextGenerationResult.finishReason`. */
   finishReason: string;
+  rawFinishReason?: string;
   usage: UsageSummary;
 }
 
@@ -402,7 +408,9 @@ export type StreamEvent =
   | {
       type: "done";
       diagnostics?: LLMDiagnostics;
+      /** Unified by the gateway; see `TextGenerationResult.finishReason`. */
       finishReason: string;
+      rawFinishReason?: string;
       usage: UsageSummary;
       /**
        * Full provider-exposed reasoning text or summary. Preserve it together

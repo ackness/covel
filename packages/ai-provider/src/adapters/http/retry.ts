@@ -7,8 +7,44 @@ const JITTER_MAX = 1.25;
 
 export const MAX_RETRIES = 3;
 
+/**
+ * The statuses the OpenAI and Anthropic SDKs and the AI SDK send again: a
+ * request timeout, a lock conflict, a rate limit and a server fault.
+ */
 export function isRetriableStatus(status: number): boolean {
-  return status === 429 || status >= 500;
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
+/**
+ * Whether a response is sent again. `x-should-retry` is the provider's own
+ * answer (OpenAI and Anthropic set it) and wins over the status.
+ */
+export function shouldRetryResponse(response: Response): boolean {
+  if (response.ok) return false;
+  const instruction = response.headers.get("x-should-retry");
+  if (instruction === "true") return true;
+  if (instruction === "false") return false;
+  return isRetriableStatus(response.status);
+}
+
+/**
+ * A wait longer than this is not a retry of one call. The response goes back
+ * to the caller, which can turn to a backup model.
+ */
+export const MAX_RETRY_AFTER_MS = 60_000;
+
+/**
+ * The wait a response asks for: `retry-after-ms` (OpenAI, Azure) is the more
+ * precise of the two headers, then `retry-after` in seconds or as a date.
+ */
+export function parseRetryDelayMs(
+  headers: Headers,
+  now = Date.now(),
+): number | null {
+  const precise = headers.get("retry-after-ms")?.trim();
+  if (precise && /^\d+(?:\.\d+)?$/.test(precise))
+    return Math.ceil(Number(precise));
+  return parseRetryAfterMs(headers.get("retry-after"), now);
 }
 
 // What Node and Undici report when the endpoint refused the connection or

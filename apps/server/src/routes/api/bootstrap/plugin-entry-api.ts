@@ -224,7 +224,7 @@ export function buildEntryApi(
         if (!wires || typeof wires !== "object" || Array.isArray(wires)) {
           throw new PluginRegistrationError(
             "registerWires",
-            "expected { image?, speech?, transcription?, music? }",
+            "expected { image?, speech?, transcription?, music?, text? }",
           );
         }
         registerNamespaced(

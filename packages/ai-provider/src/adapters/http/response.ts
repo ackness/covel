@@ -1,5 +1,6 @@
 import type { FormData as UndiciFormData } from "undici";
 import { ERROR_PREVIEW_MAX_CHARS } from "./constants.js";
+import { isRetriableStatus } from "./retry.js";
 
 export async function parseJson(
   response: Response,
@@ -108,7 +109,7 @@ export function assertSuccess(
       name: "AiProviderError",
       code: isRateLimit ? "RATE_LIMITED" : "PROVIDER_ERROR",
       provider,
-      retriable: isRateLimit || response.status >= 500,
+      retriable: isRateLimit || isRetriableStatus(response.status),
       statusCode: response.status,
       details: {
         ...errorObj,
