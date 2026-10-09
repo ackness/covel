@@ -294,6 +294,19 @@ export const pluginManifestSchema = z.strictObject({
                 )
                 .optional(),
               authoring: dataAuthoringSchema.optional(),
+              search: z
+                .strictObject({
+                  text: z
+                    .string()
+                    .min(1)
+                    .describe(
+                      "Field of a record's value that holds the text to search. A record without a string there is not searched.",
+                    ),
+                })
+                .describe(
+                  "Makes the records of this namespace part of memory search (`memory-search`) while the plugin is active in the session.",
+                )
+                .optional(),
             })
             .refine(
               (declaration) =>

@@ -32,7 +32,9 @@ effects:
     - "plugin-data:self:definitions"
   writes:
     - "plugin-data:self:blocks"
+    - "plugin-data:self:facts"
 ---
 
-The runtime consumes a frozen source-turn digest, updates its own blocks, and
+The runtime consumes a frozen source-turn digest, updates its own blocks, adds
+the new facts of the turn, and
 commits through the normal detached execution transaction.

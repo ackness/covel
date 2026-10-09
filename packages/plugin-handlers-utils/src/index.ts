@@ -410,6 +410,8 @@ export {
 } from "./proposal-overlay.js";
 
 export { estimateTokens } from "./token-estimation.js";
+export { rankTexts, searchExcerpt, searchTerms } from "./text-search.js";
+export type { RankedText, RankTextsOptions } from "./text-search.js";
 
 export { FRAMEWORK_TOOL_NAMES } from "./framework-tool-names.js";
 

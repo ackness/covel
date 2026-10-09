@@ -1,7 +1,7 @@
 ---
 id: memory
 kind: core
-version: 0.0.35
+version: 0.0.36
 displayName: Story Memory
 description: >-
   Shows what the story remembers, including plot, scene, relationships, and hero
@@ -49,9 +49,16 @@ contributes:
     blocks:
       version: 1
       schema: ./schemas/blocks.schema.json
+    facts:
+      version: 1
+      schema: ./schemas/facts.schema.json
+      search:
+        text: text
 ---
 
-Memory extraction runs as a detached post-turn function with a before-next-execution barrier. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.
+Memory extraction runs as a detached post-turn function with a before-next-execution barrier. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary.
+
+The same extraction adds up to three facts of the turn to the `facts` namespace. A block is rewritten every turn and holds the present state; facts are only added and keep what happened. The namespace is declared searchable, so the kernel's `memory-search` reads it, and the prompt segment brings back the facts that the player's message is about. Both use the kernel's lexical ranking and need no embedding model. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.
 
 ## Quality Characteristics
 

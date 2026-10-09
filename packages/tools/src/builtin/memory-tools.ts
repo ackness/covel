@@ -32,14 +32,19 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
     tool({
       name: "memory-search",
       description:
-        "Search conversation memory and the long-term knowledge base.",
+        "Search conversation memory and the long-term knowledge base. The search matches words, not meaning: put the names involved in the query, and add other words the story may have used for the same thing.",
       parameters: z.object({
-        query: z.string().min(1).describe("Query text"),
+        query: z
+          .string()
+          .min(1)
+          .describe(
+            "Names and key words to find; several wordings may be given together",
+          ),
         scope: z
           .enum(["recall", "archival", "all"])
           .optional()
           .describe(
-            "recall = conversation, archival = knowledge base, all = both (default)",
+            "recall = conversation and its summaries, archival = lore, characters and recorded facts, all = both (default)",
           ),
         limit: z
           .number()

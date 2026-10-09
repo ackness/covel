@@ -331,6 +331,7 @@ describe("world data session importer", () => {
       "living-world-rules/rules",
       "memory/blocks",
       "memory/definitions",
+      "memory/facts",
       "scene-stage/assets",
       "scene-stage/scenes",
       "soundtrack/assets",

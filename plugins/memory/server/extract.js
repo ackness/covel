@@ -4,12 +4,16 @@ import {
   buildSystemPrompt,
   buildUserPrompt,
   applyUpdatesToBlockSnapshot,
+  buildShortenPrompt,
+  cutAtSentence,
   enforceAuthoritativePlayerProfile,
-  parseBlockUpdates,
+  parseMemoryUpdate,
 } from "./extraction.js";
+import { factKey, factText, recentFacts, withoutRepeats } from "./facts.js";
 import { retryTransientProviderCall } from "./provider-retry.js";
 
 const MAX_REPLY_ATTEMPTS = 2;
+const DEFAULT_BLOCK_CHARS = 2000;
 
 /** One scheduler-owned attempt; proposals commit with the detached job receipt. */
 export default async function extractMemory(ctx) {
@@ -49,9 +53,11 @@ export default async function extractMemory(ctx) {
     lang,
   });
   const effective = applyUpdatesToBlockSnapshot(currentBlocks, updates);
+  const factRows = await ctx.pluginData.list("facts");
   const prompt = buildUserPrompt(
     {
       blocks: effective,
+      recordedFacts: recentFacts(factRows),
       facts,
       narrative: digest.narrativeText,
       toolSummaries: digest.toolCallSummaries,
@@ -76,12 +82,24 @@ export default async function extractMemory(ctx) {
     });
     ctx.signal.throwIfAborted();
     try {
-      extracted = parseBlockUpdates(response.text, labels);
+      extracted = parseMemoryUpdate(response.text, labels);
     } catch (error) {
       if (attempt >= MAX_REPLY_ATTEMPTS) throw error;
     }
   }
-  for (const [label, content] of extracted) updates.set(label, content);
+  const limitOf = (label) =>
+    definitions.find((block) => block.label === label)?.maxChars ??
+    DEFAULT_BLOCK_CHARS;
+  for (const [label, content] of extracted.blocks) {
+    // A block over its limit is shortened by the model, which knows what to
+    // keep. Cutting it would drop whatever happened to be written last.
+    updates.set(
+      label,
+      content.length > limitOf(label)
+        ? await shortenBlock(ctx, content, limitOf(label), lang, locale)
+        : content,
+    );
+  }
   enforceAuthoritativePlayerProfile({
     updates,
     currentBlocks: effective,
@@ -92,7 +110,7 @@ export default async function extractMemory(ctx) {
   for (const [label, value] of updates) {
     ctx.signal.throwIfAborted();
     const definition = definitions.find((block) => block.label === label);
-    const content = value.slice(0, definition?.maxChars ?? 2000);
+    const content = cutAtSentence(value, limitOf(label));
     await ctx.pluginData.set("blocks", label, {
       label,
       content,
@@ -102,5 +120,44 @@ export default async function extractMemory(ctx) {
       updatedAt: now,
     });
   }
-  return { outcome: "success", value: { blocksChanged: [...updates.keys()] } };
+  // Facts are only added. A block is rewritten every turn and forgets; the
+  // facts keep what happened, and memory search reads them.
+  const turn = ctx.logicalTurn ?? 0;
+  const newFacts = withoutRepeats(extracted.facts, factRows);
+  for (const [index, fact] of newFacts.entries()) {
+    ctx.signal.throwIfAborted();
+    await ctx.pluginData.set("facts", factKey(turn, index), {
+      turn,
+      text: factText(turn, fact, lang),
+    });
+  }
+  return {
+    outcome: "success",
+    value: {
+      blocksChanged: [...updates.keys()],
+      factsAdded: newFacts.length,
+    },
+  };
+}
+
+async function shortenBlock(ctx, content, limit, lang, locale) {
+  try {
+    const response = await retryTransientProviderCall(() => {
+      ctx.signal.throwIfAborted();
+      return ctx.gateway.generateText({
+        presetId: "memory",
+        defaults: { reasoningEffort: "disabled" },
+        ...buildShortenPrompt(content, limit, lang, locale),
+        signal: ctx.signal,
+      });
+    });
+    const shortened = response.text.trim();
+    if (shortened) return cutAtSentence(shortened, limit);
+  } catch (error) {
+    ctx.signal.throwIfAborted();
+    ctx.logger?.warn?.(
+      `memory block not shortened: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return cutAtSentence(content, limit);
 }

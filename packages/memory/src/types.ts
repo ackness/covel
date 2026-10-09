@@ -7,8 +7,8 @@ export interface RecallSearchResult {
   readonly role: string;
   readonly content: string;
   /**
-   * Relevance score (higher = more relevant). Keyword search uses lexical
-   * term overlap; vector search converts distance via distanceToScore.
+   * Relevance score (higher = more relevant). Keyword search returns a BM25
+   * score; vector search converts distance via distanceToScore.
    * Scores are implementation-specific, not calibrated probabilities.
    */
   readonly score: number;
@@ -16,8 +16,10 @@ export interface RecallSearchResult {
 }
 
 /**
- * Conversation-history search. `createMemorySystem` selects vector search
- * when embeddings and vector storage are available, with keyword fallback.
+ * Conversation-history search. Without an embedding model it ranks recent
+ * messages and history summaries with BM25; a summary result has the role
+ * `summary`. `createMemorySystem` selects vector search when embeddings and
+ * vector storage are available, with the BM25 searcher as fallback.
  * The vector ingestor indexes conversation history after turns.
  */
 export interface RecallSearcher {
@@ -36,9 +38,8 @@ export interface ArchivalSearchResult {
   /** Relevance score (higher = more relevant); see {@link RecallSearchResult.score}. */
   readonly score: number;
   /**
-   * Origin of the matched record. Built-in keyword and vector searchers
-   * index lorebook and character records. `"plugin_data"` remains reserved
-   * for searchers that index plugin-owned knowledge.
+   * Origin of the matched record: a lorebook entry, a character record, or a
+   * record of a plugin data namespace that its plugin declared searchable.
    */
   readonly source: "plugin_data" | "lorebook" | "character";
   readonly pluginId?: string;
@@ -96,6 +97,13 @@ export interface MemorySystemDeps {
    * also coalesces concurrent requests for the same session.
    */
   readonly runIngestExclusive?: import("./vector-ingest.js").RunIngestExclusive;
+  /**
+   * The plugin data namespaces a session may search: those that its active
+   * plugins declared with `contributes.data.<namespace>.search`. The host
+   * supplies it, so this package names no plugin. Without it archival search
+   * covers lorebook and character records only.
+   */
+  readonly searchablePluginData?: import("./archival-items.js").SearchablePluginDataResolver;
 }
 
 /**

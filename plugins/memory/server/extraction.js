@@ -5,6 +5,11 @@ import {
   modelFacingJson,
   resolveI18nText,
 } from "@covel/plugin-handlers-utils";
+/** Key of the reply that carries the turn's new facts. A block cannot take this label. */
+const NEW_FACTS_KEY = "new_facts";
+const MAX_FACTS_PER_TURN = 3;
+const MAX_FACT_CHARS = 200;
+
 function buildSystemPrompt(blocks, lang, locale) {
   const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
   const languageName = localeDisplayName(canonicalLocale);
@@ -28,12 +33,15 @@ ${descriptions}
 只输出有变化的块。如果本轮没有值得更新的信息，输出 \`{}\`。
 
 每个块内容控制在 300-500 字以内，使用简洁的事实陈述，不要用文学化的描写。
+块写满时，删去已经了结、不再影响后续的旧内容，保留人名、数字、承诺和未解决的悬念。
+
+另外可以加一个 \`${NEW_FACTS_KEY}\` 键，值是字符串数组：列出本回合新发生、以后可能被问起的事实，最多 ${MAX_FACTS_PER_TURN} 条。每条一句话，写明涉及的人名、地名、物品名和具体数字，脱离上下文也能读懂。只写“本回合叙事”里新发生或第一次透露的事，第一次透露的往事也算。玩家角色开局就有的背景、世界设定、对已知事情的回忆或复述、任何人的推测和打算都不算，“已记录的事实”里有的不要再写。没有就省略这个键。
 如果用户消息中的“会话事实（权威）”与叙事、推断或旧记忆冲突，必须以会话事实为准。
 
 示例输出（用实际的块标签替换）：
 
 \`\`\`json
-{ "<块标签>": "<该块的完整新内容>" }
+{ "<块标签>": "<该块的完整新内容>", "${NEW_FACTS_KEY}": ["<本回合的一条新事实>"] }
 \`\`\`
 
 ${languageInstruction}`;
@@ -58,12 +66,15 @@ Output a single JSON object where keys are block labels that need updating and v
 Only output blocks that changed. If nothing worth updating happened, output \`{}\`.
 
 Keep each block under 300-500 words. Use concise factual statements, not literary descriptions.
+When a block is full, drop old content that is settled and no longer matters, and keep names, numbers, promises and unresolved threads.
+
+You may add a \`${NEW_FACTS_KEY}\` key whose value is an array of strings: the facts that are new in this turn and that someone may ask about later, at most ${MAX_FACTS_PER_TURN}. Write each fact as one sentence that names the people, places, items and numbers involved and that reads on its own. Give only what newly happens or is told for the first time in "Current turn narrative"; a past event that is told for the first time counts. The background the player character started with, world lore, a known event that is remembered or retold, and anyone's guess or plan are not facts of this turn, and a fact under "Recorded facts" is not written again. Omit the key when there is nothing.
 If "Authoritative Session Facts" conflict with the narrative, an inference, or an older memory block, the authoritative facts always win.
 
 Example output (replace with actual block labels):
 
 \`\`\`json
-{ "<block_label>": "<complete new content for that block>" }
+{ "<block_label>": "<complete new content for that block>", "${NEW_FACTS_KEY}": ["<one new fact of this turn>"] }
 \`\`\`
 
 ${languageInstruction}`;
@@ -76,6 +87,7 @@ ${languageInstruction}`;
  */
 function buildUserPrompt(args, lang) {
   const { blocks, facts, narrative, toolSummaries, submittedForm } = args;
+  const recordedFacts = args.recordedFacts ?? [];
   const zh = lang === "zh";
   const current = blocks
     .filter((block) => block.content.trim())
@@ -83,6 +95,11 @@ function buildUserPrompt(args, lang) {
     .join("\n\n");
   return [
     `${zh ? "## 当前记忆块" : "## Current memory blocks"}\n${current || (zh ? "（空）" : "(empty)")}${buildAuthoritativeFactsSection(facts, lang)}`,
+    ...(recordedFacts.length > 0
+      ? [
+          `${zh ? "## 已记录的事实（不要重复）" : "## Recorded facts (do not repeat)"}\n${recordedFacts.map((fact) => `- ${fact}`).join("\n")}`,
+        ]
+      : []),
     `${zh ? "## 本回合叙事" : "## Current turn narrative"}\n${narrative}`,
     `${zh ? "## 工具调用摘要" : "## Tool summaries"}\n${toolSummaries.join("\n")}`,
     ...(submittedForm
@@ -264,6 +281,11 @@ function buildAuthoritativeFactsSection(facts, lang) {
  * Only labels present in {@link validLabels} are accepted.
  */
 function parseBlockUpdates(raw, validLabels) {
+  return parseMemoryUpdate(raw, validLabels).blocks;
+}
+
+/** Block updates and new facts of one reply. Facts that cannot be read are left out; they never fail the blocks. */
+function parseMemoryUpdate(raw, validLabels) {
   const result = new Map();
 
   // Strip markdown code fences if present
@@ -310,12 +332,46 @@ function parseBlockUpdates(raw, validLabels) {
     result.set(key, value.trim());
   }
 
-  if (Object.keys(obj).length > 0 && result.size === 0)
+  const rawFacts = obj[NEW_FACTS_KEY];
+  const facts = (Array.isArray(rawFacts) ? rawFacts : [])
+    .filter((fact) => typeof fact === "string" && fact.trim())
+    .slice(0, MAX_FACTS_PER_TURN)
+    .map((fact) => cutAtSentence(fact.trim(), MAX_FACT_CHARS));
+
+  if (Object.keys(obj).length > 0 && result.size === 0 && facts.length === 0)
     throw new Error(
       "Memory update contained no recognized blocks; use {} only when nothing changed.",
     );
 
-  return result;
+  return { blocks: result, facts };
+}
+
+/** The text up to its last complete sentence that fits, so nothing ends in half a sentence. */
+function cutAtSentence(text, limit) {
+  if (text.length <= limit) return text;
+  const head = text.slice(0, limit);
+  const end = Math.max(
+    ...["。", "！", "？", "；", ". ", "! ", "? ", "; ", "\n"].map((mark) =>
+      head.lastIndexOf(mark),
+    ),
+  );
+  // A cut that would drop more than half the limit keeps the words instead.
+  return end >= limit / 2 ? head.slice(0, end + 1).trimEnd() : head;
+}
+
+/** The request that shortens one block that came back over its limit. */
+function buildShortenPrompt(content, limit, lang, locale) {
+  const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
+  const languageName = localeDisplayName(canonicalLocale);
+  return lang === "zh"
+    ? {
+        system: `你是一个记忆管理器。把下面的记忆块压缩到 ${limit} 个字符以内。保留人名、数字、承诺和未解决的悬念；删去已经了结的旧内容和描写。只输出压缩后的正文，不要解释。\n[LANGUAGE] 用${languageName}（${canonicalLocale}）书写。`,
+        prompt: content,
+      }
+    : {
+        system: `You are a memory manager. Shorten the memory block below to at most ${limit} characters. Keep names, numbers, promises and unresolved threads; drop settled old content and description. Output only the shortened text, with no explanation.\n[LANGUAGE] Write in ${languageName} (${canonicalLocale}).`,
+        prompt: content,
+      };
 }
 
 export {
@@ -324,5 +380,9 @@ export {
   applyUpdatesToBlockSnapshot,
   enforceAuthoritativePlayerProfile,
   buildAuthoritativeFactsSection,
+  buildShortenPrompt,
+  cutAtSentence,
   parseBlockUpdates,
+  parseMemoryUpdate,
+  NEW_FACTS_KEY,
 };

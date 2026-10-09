@@ -138,21 +138,21 @@ homepage: https://example.com/tidefall
 
 外部插件作者应跟踪框架的 CHANGELOG，在契约变更后同步升级并更新声明的契约版本。
 
-| `contributes` 字段 | 对应注册或资源                                   |
-| ------------------ | ------------------------------------------------ |
-| `tools`            | `registerTool` 的工具名                          |
-| `actions`          | `registerRpc` 的 action 名                       |
-| `commands`         | 玩家命令元数据；`action` 必须列入 `actions`      |
-| `services`         | `registerService` 的契约 ID                      |
-| `extensions`       | `provideExtension` 的 `{point, id}`              |
-| `hooks`            | hook 的 `{event, enforce}` 声明                  |
-| `wires`, `forms`   | 对应注册 ID                                      |
-| `events`           | 插件事件契约                                     |
-| `settings`         | 玩家配置项，运行时通过 `ctx.userSettings` 读取   |
-| `data`             | 本插件数据 namespace 的 schema、version、accepts |
-| `ui`               | 包根相对的 `right/message/left` UI spec 路径     |
-| `worldProjections` | 世界数据投影声明                                 |
-| `prompt`           | 静态提示词段                                     |
+| `contributes` 字段 | 对应注册或资源                                           |
+| ------------------ | -------------------------------------------------------- |
+| `tools`            | `registerTool` 的工具名                                  |
+| `actions`          | `registerRpc` 的 action 名                               |
+| `commands`         | 玩家命令元数据；`action` 必须列入 `actions`              |
+| `services`         | `registerService` 的契约 ID                              |
+| `extensions`       | `provideExtension` 的 `{point, id}`                      |
+| `hooks`            | hook 的 `{event, enforce}` 声明                          |
+| `wires`, `forms`   | 对应注册 ID                                              |
+| `events`           | 插件事件契约                                             |
+| `settings`         | 玩家配置项，运行时通过 `ctx.userSettings` 读取           |
+| `data`             | 本插件数据 namespace 的 schema、version、accepts、search |
+| `ui`               | 包根相对的 `right/message/left` UI spec 路径             |
+| `worldProjections` | 世界数据投影声明                                         |
+| `prompt`           | 静态提示词段                                             |
 
 entry 注册与清单双向校验，未声明的注册和未实现的声明都会失败。包级贡献只有根文件拥有，不合并子 runtime 字段。
 
@@ -300,6 +300,22 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样，�
 接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`generate`），说明世界作者该如何提供这份内容，以及应用内生成器能否生成它；只有列出 `accepts` 的 namespace 才能声明它。`pnpm describe:authoring` 汇总所有已扫描插件的声明，`--check` 按 namespace 的 schema 校验每份 `example`。字段见 [Plugin manifest 字段表](schema/plugin-manifest.md)。
 
 World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时就是目标契约的 schema）。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
+
+### 可检索的数据
+
+```yaml
+contributes:
+  data:
+    facts:
+      version: 1
+      schema: ./schemas/facts.schema.json
+      search:
+        text: text
+```
+
+namespace 声明 `search` 后，它的记录进入框架的记忆检索（[`memory-search`](tools.md) 的 archival 范围），结果的 `source` 是 `archival:plugin_data`，并带 `pluginId`、`namespace` 和记录的 key。`search.text` 是记录值里存放待检索文字的字段名；该字段不是非空字符串的记录不参与检索。只有插件在当前会话启用时才读取，没有声明的 namespace 框架不读。配置了 embedding 模型时，这些记录和 lorebook、角色记录一起写入向量索引，插件不需要另做处理。
+
+检索由框架完成，插件只决定记什么。插件要在自己的代码里给一批文字排序（例如在 `prompt.segment@1` 里挑出与玩家输入有关的记录），用 SDK 的 `rankTexts(query, texts, { limit, minCoverage })`：它和框架检索是同一份 BM25 实现，不调用模型。返回的 `coverage`（0 到 1）表示文本回答了查询的多少，可用来丢掉只沾到常见词的结果；`matched` 是文本含有的查询词个数，除以 `searchTerms(query).length` 就是查询有多大比例落在这条文本上，一句长查询只和文本共有一个日常用词时这个比例很小；`searchTerms` 和 `searchExcerpt` 是配套的切词与摘录函数。
 
 世界包把 source 声明为 `visibility: hidden` 时，同一份数据会导入到接收插件的 `_hidden.<namespace>`（例如 `_hidden.facts`）。插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取；扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。揭示应通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](world-data.md#隐藏数据visibility-hidden)。
 

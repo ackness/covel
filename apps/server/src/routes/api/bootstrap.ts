@@ -125,6 +125,7 @@ import { createRuntimeLoader } from "./bootstrap/runtime-loader.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { requestLlmServices } from "./bootstrap/request-llm-services.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
+import { createSearchablePluginDataResolver } from "./bootstrap/searchable-plugin-data.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
@@ -603,6 +604,10 @@ async function assembleApi(
   // 8. Create memory system (Letta-style three-tier memory)
   const bootstrapMemory = createBootstrapMemorySystem({
     store,
+    searchablePluginData: createSearchablePluginDataResolver({
+      store,
+      registry,
+    }),
     ...(config.vectorBackend !== "none" && config.memoryEmbed
       ? { embed: config.memoryEmbed }
       : {}),

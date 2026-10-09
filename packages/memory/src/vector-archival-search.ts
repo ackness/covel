@@ -2,14 +2,18 @@
  * Archival Memory — semantic (vector) cross-plugin knowledge search.
  *
  * Vector counterpart to {@link createKeywordArchivalSearcher}. Embeds the query
- * and runs KNN over the memory-owned archival vectors (lorebook + character
- * records, populated by {@link createVectorIngestor}). Returns the same
+ * and runs KNN over the memory-owned archival vectors (lorebook, character
+ * and searchable plugin data records, populated by {@link createVectorIngestor}). Returns the same
  * {@link ArchivalSearchResult} shape, with the same per-session graceful
  * degradation to the injected keyword searcher (no vector capability, no locked
  * embedding model, embed failure, or empty index).
  */
 
-import { collectArchivalItems } from "./archival-items.js";
+import {
+  collectArchivalItems,
+  type SearchablePluginDataResolver,
+} from "./archival-items.js";
+import { archivalResult } from "./archival-search.js";
 import type { ArchivalStore } from "./store-contracts.js";
 import { supportsVector } from "@covel/store/vector";
 import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
@@ -24,8 +28,9 @@ export function createVectorArchivalSearcher(deps: {
   readonly store: ArchivalStore;
   readonly embed: EmbedFn;
   readonly fallback: ArchivalSearcher;
+  readonly pluginData?: SearchablePluginDataResolver;
 }): ArchivalSearcher {
-  const { store, embed, fallback } = deps;
+  const { store, embed, fallback, pluginData } = deps;
 
   return {
     async search(
@@ -58,10 +63,9 @@ export function createVectorArchivalSearcher(deps: {
           namespace: ARCHIVAL_NAMESPACE,
         });
         items = new Map(
-          (await collectArchivalItems(store, sessionId)).map((item) => [
-            item.vecKey,
-            item,
-          ]),
+          (await collectArchivalItems(store, sessionId, pluginData)).map(
+            (item) => [item.vecKey, item],
+          ),
         );
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -86,16 +90,13 @@ export function createVectorArchivalSearcher(deps: {
       ) {
         return fallback.search(sessionId, query, limit);
       }
-      return results.map((row) => {
-        const item = items.get(row.key)!;
-        return {
-          key: item.displayKey,
-          content: item.text,
-          score: distanceToScore(row.distance),
-          source: item.source,
-          ...(item.pluginId ? { pluginId: item.pluginId } : {}),
-        };
-      });
+      return results.map((row) =>
+        archivalResult(
+          items.get(row.key)!,
+          undefined,
+          distanceToScore(row.distance),
+        ),
+      );
     },
   };
 }

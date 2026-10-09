@@ -4,8 +4,9 @@ import { createKeywordArchivalSearcher } from "../src/archival-search.js";
 import { createVectorRecallSearcher } from "../src/vector-recall-search.js";
 
 describe("memory tier storage adapters", () => {
-  it("searches recall with only the recent-message reader", async () => {
+  it("searches recall with only the recent-message and summary readers", async () => {
     const searcher = createKeywordRecallSearcher({
+      listSessionSummaries: async () => [],
       listRecentTurnMessages: async () => [
         {
           id: "message",
