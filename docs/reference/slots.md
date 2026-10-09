@@ -98,6 +98,8 @@ model    = "glm-5"
 - **新增一种协议**：在 `packages/shared/src/provider-protocols.ts` 的 `PROVIDER_PROTOCOL_DESCRIPTORS` 加一条描述（ID、名称、产出文本还是评估），再在 `packages/ai-provider/src/protocol-registry.ts` 的 `BUILTIN_PROTOCOLS` 加一条 `ProtocolDefinition`。配置校验、请求头校验、设置页下拉和类型都从描述表派生；漏写定义时 `tsc` 报错。
 - 一条 `ProtocolDefinition` 写明这个协议的全部差异：适配器（`createAdapter`）、缓存策略、默认能力、`reasoningEffort` 档位到请求字段的转换（`reasoningFields`）、它接受的 `providerOptions` 字段（`providerOptionFields`）、它支持的可选生成参数（`parameters`），以及图像和语音是否必须显式指定 wire（`mediaWire`）。网关和注册表只查这张表，不比较协议 ID。
 - 请求追踪只记录白名单里的请求体字段（`packages/ai-provider/src/adapters/http/request-observation.ts` 的 `MODEL_FIELDS`）。新协议若使用新的顶层字段名，要在那里加上，否则 trace 里看不到。
+- 插件 SDK 不能依赖 `@covel/shared`，自己保留一份内置协议 ID 类型（`PluginProviderProtocol`）；两份不一致时 `packages/shared/src/provider-protocols.ts` 编译失败。
+- **由插件提供一种协议**：不改框架，插件用 `covel.registerWires({ text: [...] })` 注册，模型的 `protocol` 写 `<pluginId>/<wireId>`。见 [plugin-extensions.md § 文本协议 wire](plugin-extensions.md#文本协议-wire)。
 
 ## Slot 字段（`[covel.<slot>]`）
 
@@ -283,7 +285,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 - 路由键在进入 wire 前被剥离，不会泄漏到厂商请求体。
 - 未注册的 wire id 在生成时抛 `CONFIG_ERROR`（报错信息含修复指引），不会静默回落。
-- 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription?, music? })` 注册自定义 wire（frontmatter 的 `wires` 字段仍被接受但已弃用）—— 见 [plugin-extensions.md § 模型与新协议](plugin-extensions.md#模型与新协议)；wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music)。
+- 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })` 注册自定义 wire（frontmatter 的 `wires` 字段仍被接受但已弃用）—— 见 [plugin-extensions.md § 模型与新协议](plugin-extensions.md#模型与新协议)；wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music)。
 
 ## 供应商参数
 

@@ -45,6 +45,7 @@ export {
   getProviderProtocolDescriptor,
   isBuiltinProviderProtocol,
   isBuiltinTextProtocol,
+  isProviderProtocolId,
 } from "./provider-protocols.js";
 export type {
   BuiltinProviderProtocol,

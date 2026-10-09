@@ -9,10 +9,11 @@ import { z } from "zod";
 import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
-  PROVIDER_PROTOCOLS,
   applySlotOverlay,
   classifyProviderFailure,
   listProtocolModels,
+  listProviderProtocols,
+  providerProtocolSchema,
   publicPresetId,
   resolveModelBinding,
 } from "@covel/ai-provider";
@@ -226,6 +227,12 @@ export function createMiscApiRoutes(
     return c.json({ providers });
   });
 
+  // GET /api/ai/protocols — every protocol a model can be configured with:
+  // the built-in ones and the text protocols that loaded plugins register.
+  app.get("/api/ai/protocols", (c) =>
+    c.json({ protocols: listProviderProtocols() }),
+  );
+
   // POST /api/ai/models — the model IDs a provider endpoint lists.
   //
   // The settings UI offers them when a player adds a provider or models, so a
@@ -239,7 +246,7 @@ export function createMiscApiRoutes(
       .strictObject({
         provider: z.string().trim().min(1).max(100),
         baseUrl: z.string().trim().url().max(500).optional(),
-        protocol: z.enum(PROVIDER_PROTOCOLS).optional(),
+        protocol: providerProtocolSchema.optional(),
       })
       .safeParse(await c.req.json().catch(() => undefined));
     if (!parsedBody.success) {

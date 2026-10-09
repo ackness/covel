@@ -360,6 +360,14 @@ export interface PluginServiceGateway {
     /** Output ceiling for this call; never raises the slot's configured budget. */
     readonly maxOutputTokens?: number;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
+    /**
+     * Typed settings by provider ID or protocol ID, for example
+     * `{ "anthropic-messages-v1": { thinking: { type: "disabled" } } }`. The
+     * gateway checks them and applies those of the target the call reaches.
+     */
+    readonly providerOptions?: Readonly<
+      Record<string, Readonly<Record<string, unknown>>>
+    >;
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly text: string;
@@ -638,7 +646,8 @@ export interface PluginModelCapability {
   };
 }
 export interface PluginProviderConfig {
-  protocol?: PluginProviderProtocol;
+  /** A built-in protocol, or a text wire's `<pluginId>/<wireId>`. */
+  protocol?: PluginProviderProtocol | (string & {});
   requestObservation?: {
     provider: string;
     protocol: string;
@@ -677,7 +686,7 @@ export interface PluginModelRequestContext {
     id: string;
     name: string;
     provider: string;
-    protocol?: PluginProviderProtocol;
+    protocol?: PluginProviderProtocol | (string & {});
     model: string;
     tier: "small" | "medium" | "large";
     baseUrl?: string;
@@ -778,11 +787,94 @@ export interface PluginMusicWire {
     warnings: string[];
   }>;
 }
+export interface PluginTextMessage {
+  role: string;
+  content:
+    | string
+    | null
+    | readonly (
+        | { type: "text"; text: string }
+        | { type: "image"; image: { url?: string; mimeType?: string } }
+      )[];
+  /** Calls the assistant made; the tool's answers follow as `tool` messages. */
+  toolCalls?: { id: string; name: string; arguments: string }[];
+  toolCallId?: string;
+  /** Reasoning of an earlier assistant turn, for providers that want it back. */
+  reasoningContent?: string;
+}
+export interface PluginTextParams {
+  model: string;
+  messages: PluginTextMessage[];
+  tools?: {
+    type: "function";
+    function: {
+      name: string;
+      description?: string;
+      parameters?: Record<string, unknown>;
+    };
+  }[];
+  /** `toolChoice` the runtime asks for when the slot sets none. */
+  defaults?: {
+    reasoningEffort?: "disabled";
+    toolChoice?: "required" | { name: string };
+  };
+  responseFormat?: { type: "json_schema"; schema: Record<string, unknown> };
+  /** The slot's and the call's native fields, `parameterOverrides` included. */
+  providerRequestMetadata?: Record<string, unknown>;
+}
+export interface PluginTextResult {
+  text: string;
+  /** The provider's own word is accepted; the gateway unifies it. */
+  finishReason: string;
+  usage: PluginUsageSummary;
+  toolCalls?: { id: string; name: string; arguments: string }[];
+  reasoningContent?: string;
+}
+export type PluginTextStreamEvent =
+  | { type: "text-delta"; textDelta: string }
+  | { type: "reasoning-delta"; reasoningDelta: string }
+  /** A fragment of a tool call's arguments arrived; it carries no call. */
+  | { type: "tool-argument-delta" }
+  | { type: "tool-call"; id: string; name: string; arguments: string }
+  /** Last event of every stream. */
+  | {
+      type: "done";
+      finishReason: string;
+      usage: PluginUsageSummary;
+      reasoningContent?: string;
+    };
+/**
+ * A text protocol this plugin provides. A model slot whose `protocol` is
+ * `<pluginId>/<id>` sends its text, object and stream calls through it. The
+ * wire owns the HTTP (`covel.http.fetchWithRetry`): `config` carries the
+ * slot's endpoint and key, which must not reach a result, a log or the UI.
+ */
+export interface PluginTextWire {
+  readonly id: string;
+  /** Name in the settings UI. Default: the ID. */
+  readonly label?: string;
+  generateText(
+    config: PluginProviderConfig,
+    params: PluginTextParams,
+    context?: PluginModelRequestContext,
+  ): Promise<PluginTextResult>;
+  streamText(
+    config: PluginProviderConfig,
+    params: PluginTextParams,
+    context?: PluginModelRequestContext,
+  ): AsyncIterable<PluginTextStreamEvent>;
+  /** Model IDs the endpoint offers, for the settings UI. */
+  listModels?(
+    config: PluginProviderConfig,
+    signal?: AbortSignal,
+  ): Promise<string[]>;
+}
 export interface PluginWireModule {
   readonly image?: readonly PluginImageWire[];
   readonly speech?: readonly PluginSpeechWire[];
   readonly transcription?: readonly PluginTranscriptionWire[];
   readonly music?: readonly PluginMusicWire[];
+  readonly text?: readonly PluginTextWire[];
 }
 
 /** Registrations are valid only while the entry factory is running. */

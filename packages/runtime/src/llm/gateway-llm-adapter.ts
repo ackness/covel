@@ -51,14 +51,8 @@ export interface SlotOverridesInput {
     provider: string;
     baseUrl?: string;
     model: string;
-    protocol?:
-      | "openai-chat-v1"
-      | "openai-responses-v1"
-      | "anthropic-messages-v1"
-      | "google-generative-ai-v1"
-      | "typesafe-systemone-v1"
-      | "openrouter-decisions-v1"
-      | "vercel-evaluation-v4";
+    /** A built-in protocol or a plugin's `<pluginId>/<wireId>`. */
+    protocol?: string;
   }>;
   capabilityOverrides?: Record<
     string,

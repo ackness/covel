@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
-import { listProviderModels, type ReasoningEffort } from "@/services/api.js";
+import {
+  fetchProviderProtocols,
+  listProviderModels,
+  type ReasoningEffort,
+} from "@/services/api.js";
 import {
   PROVIDER_PROTOCOL_DESCRIPTORS,
   getBuiltinProviderConnection,
   listBuiltinProviderConnections,
   protocolOutputModalities,
+  type ProviderProtocolDescriptor,
   type ProviderProtocolOutput,
 } from "@covel/shared";
 import { ImportedModelReasoning } from "./model-reasoning-settings.js";
@@ -406,14 +411,34 @@ function modelListTarget(
   };
 }
 
-function protocolOptions(output: ProviderProtocolOutput) {
-  return PROVIDER_PROTOCOL_DESCRIPTORS.filter(
-    (descriptor) => descriptor.output === output,
-  ).map((descriptor) => (
-    <option key={descriptor.id} value={descriptor.id}>
-      {descriptor.label}
-    </option>
-  ));
+/** The built-in protocols, then those of loaded plugins once the server answers. */
+function useProviderProtocols(): readonly ProviderProtocolDescriptor[] {
+  const [protocols, setProtocols] = useState<
+    readonly ProviderProtocolDescriptor[]
+  >(PROVIDER_PROTOCOL_DESCRIPTORS);
+  useEffect(() => {
+    let current = true;
+    void fetchProviderProtocols().then((list) => {
+      if (current) setProtocols(list);
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
+  return protocols;
+}
+
+function protocolOptions(
+  protocols: readonly ProviderProtocolDescriptor[],
+  output: ProviderProtocolOutput,
+) {
+  return protocols
+    .filter((descriptor) => descriptor.output === output)
+    .map((descriptor) => (
+      <option key={descriptor.id} value={descriptor.id}>
+        {descriptor.label}
+      </option>
+    ));
 }
 
 export function ProtocolSelect({
@@ -432,6 +457,7 @@ export function ProtocolSelect({
   inheritedProtocol?: string;
 }) {
   const { t } = useTranslation();
+  const protocols = useProviderProtocols();
   const evaluation = protocolOutputModalities(value).includes("evaluation");
   const selectEvaluation = () =>
     inheritedProtocol &&
@@ -458,7 +484,7 @@ export function ProtocolSelect({
           className={selectClassName}
         >
           {inheritLabel && <option value="">{inheritLabel}</option>}
-          {protocolOptions("text")}
+          {protocolOptions(protocols, "text")}
           <option value="evaluation">{t("settings.evaluationProtocol")}</option>
         </select>
       </label>
@@ -472,7 +498,7 @@ export function ProtocolSelect({
               onChange={(event) => onChange(event.target.value)}
               className={selectClassName}
             >
-              {protocolOptions("evaluation")}
+              {protocolOptions(protocols, "evaluation")}
             </select>
           </label>
           <p className="text-[10px] text-muted-foreground">

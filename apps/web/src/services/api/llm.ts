@@ -5,6 +5,10 @@ import {
   buildSlotConfigHeaderInternal,
 } from "./model-settings.js";
 import { ApiError, request, requestResponse } from "./request.js";
+import {
+  PROVIDER_PROTOCOL_DESCRIPTORS,
+  type ProviderProtocolDescriptor,
+} from "@covel/shared";
 
 // -- LLM Config -------------------------------------------------
 
@@ -397,4 +401,30 @@ export async function listProviderModels(target: {
     }
     throw error;
   }
+}
+
+let providerProtocols: Promise<ProviderProtocolDescriptor[]> | undefined;
+
+/**
+ * The protocols a model can be configured with: the built-in ones and the
+ * text protocols of loaded plugins. Asked once; the built-in list stands in
+ * when the server cannot answer.
+ */
+export function fetchProviderProtocols(): Promise<
+  ProviderProtocolDescriptor[]
+> {
+  providerProtocols ??= request<{ protocols: ProviderProtocolDescriptor[] }>(
+    "/api/ai/protocols",
+    { silentErrors: true },
+  ).then(
+    (body) =>
+      Array.isArray(body?.protocols)
+        ? body.protocols
+        : [...PROVIDER_PROTOCOL_DESCRIPTORS],
+    () => {
+      providerProtocols = undefined;
+      return [...PROVIDER_PROTOCOL_DESCRIPTORS];
+    },
+  );
+  return providerProtocols;
 }

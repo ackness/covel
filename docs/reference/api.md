@@ -695,6 +695,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | ---- | ------------------------ | ------------------------------------------------------ |
 | POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                                  |
 | POST | `/api/ai/models`         | 读取服务商端点提供的模型 ID；hosted 需 operator token  |
+| GET  | `/api/ai/protocols`      | 可配置的协议：内置协议和已加载插件注册的文本协议       |
 | POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token                |
 | POST | `/api/ai/revise-world`   | 按一句话修改应用内创建的世界；hosted 需 operator token |
 
@@ -3184,6 +3185,20 @@ interface SseEnvelope {
 
 失败时状态码仍为 200：`{ "ok": false, "models": [], "error": "…", "errorKind": "auth" }`。
 评估协议没有模型列表（`errorKind: "config"`）。请求 15 秒超时，最多返回 2000 个 ID。
+
+#### `GET /api/ai/protocols`
+
+返回模型可以配置的全部协议，设置页的协议下拉用它。内置协议在前，其后是已加载插件
+用 `covel.registerWires({ text })` 注册的文本协议（`id` 为 `<pluginId>/<wireId>`）。
+
+```json
+{
+  "protocols": [
+    { "id": "openai-chat-v1", "label": "OpenAI Chat", "output": "text" },
+    { "id": "acme/converse", "label": "Acme Converse", "output": "text" }
+  ]
+}
+```
 
 #### `POST /api/ai/generate-world`
 

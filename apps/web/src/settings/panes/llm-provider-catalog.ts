@@ -9,7 +9,7 @@ import {
   DEFAULT_PROVIDER_PROTOCOL,
   providerKeyToId,
   getBuiltinProviderConnection,
-  isBuiltinProviderProtocol,
+  isProviderProtocolId,
   isReasoningEffort,
   type ReasoningEffort,
 } from "@covel/shared";
@@ -221,7 +221,7 @@ export function sanitizeImportedProfile(
           modelId,
           ...(name ? { name } : {}),
           ...(typeof model.protocol === "string" &&
-          isBuiltinProviderProtocol(model.protocol)
+          isProviderProtocolId(model.protocol)
             ? { protocol: model.protocol }
             : {}),
           ...(isReasoningEffort(model.reasoningEffort)
@@ -256,7 +256,7 @@ export function sanitizeImportedProfile(
   }
   const protocol =
     typeof profile.protocol === "string" &&
-    isBuiltinProviderProtocol(profile.protocol)
+    isProviderProtocolId(profile.protocol)
       ? profile.protocol
       : undefined;
 

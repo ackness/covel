@@ -39,7 +39,7 @@ import {
 import type { AiStack } from "../ai-setup.js";
 import type { SlotOverridesInput } from "@covel/ai-provider";
 import {
-  PROVIDER_PROTOCOLS,
+  providerProtocolSchema,
   REASONING_EFFORT_VALUES,
 } from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
@@ -205,7 +205,7 @@ const slotOverrideEnvelopeSchema = z.strictObject({
         provider: z.string().min(1),
         model: z.string().min(1),
         baseUrl: z.string().optional(),
-        protocol: z.enum(PROVIDER_PROTOCOLS).optional(),
+        protocol: providerProtocolSchema.optional(),
         reasoningEffort: z
           .enum(REASONING_EFFORT_VALUES)
           .optional()

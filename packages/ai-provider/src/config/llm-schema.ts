@@ -2,11 +2,19 @@ import { z } from "zod";
 import {
   DEFAULT_PROVIDER_PROTOCOL,
   getBuiltinProviderConnection,
+  isProviderProtocolId,
 } from "@covel/shared";
-import { PROVIDER_PROTOCOLS } from "../types.js";
 import { REASONING_EFFORT_VALUES } from "../reasoning-effort.js";
 
-const providerProtocolSchema = z.enum(PROVIDER_PROTOCOLS);
+/**
+ * A built-in protocol, or `<pluginId>/<wireId>` for a text protocol a plugin
+ * registers. The plugin loads after this file, so an ID of that form is
+ * checked when a call resolves it.
+ */
+export const providerProtocolSchema = z.string().refine(isProviderProtocolId, {
+  error:
+    "Unknown protocol: use a built-in protocol ID, or <pluginId>/<wireId> for a plugin's text protocol",
+});
 
 const inputModalitySchema = z.enum(["text", "image", "audio", "video", "file"]);
 const outputModalitySchema = z.enum([

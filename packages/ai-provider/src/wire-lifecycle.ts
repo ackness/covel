@@ -45,3 +45,8 @@ export function getWire<T>(kind: string, id: string): T | null {
       T | undefined) ?? null
   );
 }
+export function listWires<T>(kind: string): T[] {
+  return [...(snapshots.getStore() ?? live)]
+    .filter(([key]) => key.startsWith(`${kind}:`))
+    .map(([, entry]) => entry.wire as T);
+}

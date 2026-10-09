@@ -79,6 +79,7 @@ export { BUNDLED_MODEL_DB_PATH } from "./bundled-resources.js";
 // Config
 export { loadLlmConfig, parseLlmConfig } from "./config/llm-loader.js";
 export {
+  providerProtocolSchema,
   llmConfigSchema,
   type LlmConfig,
   type SlotDefinition,
@@ -128,6 +129,7 @@ export {
   extractReasoningRequestFields,
   getProtocolDefinition,
   listProtocolModels,
+  listProviderProtocols,
   BASE_CAPABILITY_DEFAULTS,
   type ProtocolDefinition,
 } from "./protocol-registry.js";
@@ -161,6 +163,8 @@ export type { SpeechWire, TranscriptionWire } from "./speech/types.js";
 
 // Text protocols a plugin provides (pluggable wires; the built-in protocols
 // are in the protocol registry)
+export { registerTextWire, getTextWire } from "./text/wire-registry.js";
+export type { TextWire } from "./text/types.js";
 
 // Music generation (pluggable wires; no built-in wire, no default)
 export { registerMusicWire, getMusicWire } from "./music/wire-registry.js";

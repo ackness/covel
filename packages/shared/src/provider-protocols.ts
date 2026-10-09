@@ -1,4 +1,4 @@
-import type { PluginProviderConfig } from "@covel/plugin-handlers-utils";
+import type { PluginProviderProtocol } from "@covel/plugin-handlers-utils";
 
 /** What a model on a protocol produces when nothing more is known of it. */
 export type ProviderProtocolOutput = "text" | "evaluation";
@@ -50,10 +50,8 @@ export const BUILTIN_PROVIDER_PROTOCOLS = PROVIDER_PROTOCOL_DESCRIPTORS.map(
 // The plugin SDK cannot import this package and keeps a copy of the list:
 // `tsc` fails on the line below when the copy differs.
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
-const sdkListInStep: Same<
-  NonNullable<PluginProviderConfig["protocol"]>,
-  BuiltinProviderProtocol
-> = true;
+const sdkListInStep: Same<PluginProviderProtocol, BuiltinProviderProtocol> =
+  true;
 void sdkListInStep;
 
 /** The protocol of a provider that states none and is not built in. */
@@ -77,4 +75,18 @@ export function isBuiltinProviderProtocol(
 /** True for a protocol whose built-in adapter generates text. */
 export function isBuiltinTextProtocol(protocol: string | undefined): boolean {
   return getProviderProtocolDescriptor(protocol)?.output === "text";
+}
+
+/** `<pluginId>/<wireId>`: a text protocol a plugin registers. */
+const PLUGIN_PROTOCOL_ID = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/i;
+
+/**
+ * True for a built-in protocol and for the ID form of a plugin's text
+ * protocol. Whether that plugin is loaded is known only when a call resolves.
+ */
+export function isProviderProtocolId(protocol: string | undefined): boolean {
+  return (
+    isBuiltinProviderProtocol(protocol) ||
+    (protocol !== undefined && PLUGIN_PROTOCOL_ID.test(protocol))
+  );
 }

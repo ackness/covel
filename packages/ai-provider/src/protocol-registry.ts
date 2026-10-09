@@ -13,8 +13,11 @@
  */
 
 import {
+  PROVIDER_PROTOCOL_DESCRIPTORS,
+  isBuiltinProviderProtocol,
   protocolOutputModalities,
   type BuiltinProviderProtocol,
+  type ProviderProtocolDescriptor,
 } from "@covel/shared";
 import { createEvaluationAdapter } from "./adapters/evaluation.js";
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
@@ -30,6 +33,11 @@ import {
 } from "./adapters/google-generative-ai.js";
 import { fetchModelIds } from "./adapters/model-list.js";
 import { AiProviderError } from "./errors.js";
+import {
+  getTextWire,
+  listTextWires,
+  textWireAdapter,
+} from "./text/wire-registry.js";
 import type {
   OptionalWireParameter,
   ProviderOptionWire,
@@ -236,11 +244,40 @@ const BUILTIN_PROTOCOLS: Record<BuiltinProviderProtocol, ProtocolDefinition> = {
   },
 };
 
-/** Look up a protocol's bundled definition, or `undefined` if unknown. */
+/**
+ * Look up a protocol's definition: a built-in one, or the text wire a plugin
+ * registered under that ID. `undefined` when neither exists.
+ */
 export function getProtocolDefinition(
   protocol: ProviderProtocol,
 ): ProtocolDefinition | undefined {
-  return BUILTIN_PROTOCOLS[protocol];
+  if (isBuiltinProviderProtocol(protocol)) return BUILTIN_PROTOCOLS[protocol];
+  const wire = getTextWire(protocol);
+  if (!wire) return undefined;
+  return {
+    createAdapter: () => textWireAdapter(wire),
+    cacheStrategy: wire.cacheStrategy ?? "none",
+    capabilityDefaults: wire.capabilityDefaults ?? {
+      ...BASE_CAPABILITY_DEFAULTS,
+      features: ["function_calling", "structured_output", "streaming"],
+    },
+    reasoningFields: wire.reasoningFields,
+    providerOptionFields: wire.providerOptionFields,
+    parameters: wire.parameters,
+    listModels: wire.listModels,
+  };
+}
+
+/** Every protocol a model can be configured with, for the settings UI. */
+export function listProviderProtocols(): ProviderProtocolDescriptor[] {
+  return [
+    ...PROVIDER_PROTOCOL_DESCRIPTORS,
+    ...listTextWires().map((wire) => ({
+      id: wire.id,
+      label: wire.label ?? wire.id,
+      output: "text" as const,
+    })),
+  ];
 }
 
 /** Translate a unified reasoning selection into the given protocol's fields. */

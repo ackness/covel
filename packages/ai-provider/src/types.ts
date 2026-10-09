@@ -29,7 +29,11 @@ import type { ReasoningEffort } from "./reasoning-effort.js";
  */
 export const PROVIDER_PROTOCOLS = BUILTIN_PROVIDER_PROTOCOLS;
 
-export type ProviderProtocol = BuiltinProviderProtocol;
+/**
+ * A built-in protocol, or the ID of a text protocol a plugin registered
+ * (`<pluginId>/<wireId>`, see `TextWire`).
+ */
+export type ProviderProtocol = BuiltinProviderProtocol | (string & {});
 
 // ── Operation Mode ─────────────────────────────────────────────────
 
