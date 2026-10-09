@@ -10,7 +10,11 @@ import {
   type ProviderModelEntry,
   type ReasoningEffort,
 } from "@/services/api.js";
-import { getBuiltinProviderConnection } from "@covel/shared";
+import {
+  DEFAULT_PROVIDER_PROTOCOL,
+  getBuiltinProviderConnection,
+  protocolOutputModalities,
+} from "@covel/shared";
 import { sameSettingValue } from "@covel/settings";
 import { SettingsRevisionConflictError } from "@covel/settings";
 import { useSettingsWritable } from "../use-settings-save.js";
@@ -179,7 +183,9 @@ export function LlmPresetsPane() {
     const baseUrl =
       providerDraft.baseUrl.trim() || knownConnection?.baseUrl || "";
     const protocol =
-      providerDraft.protocol || knownConnection?.protocol || "openai-chat-v1";
+      providerDraft.protocol ||
+      knownConnection?.protocol ||
+      DEFAULT_PROVIDER_PROTOCOL;
     const prepared = prepareModels(
       {
         id: providerId,
@@ -194,12 +200,7 @@ export function LlmPresetsPane() {
     const nextSlots = bindFirstProviderModel(
       currentSlots,
       profiles,
-      [
-        "openai-chat-v1",
-        "openai-responses-v1",
-        "anthropic-messages-v1",
-        "google-generative-ai-v1",
-      ].includes(protocol)
+      protocolOutputModalities(protocol).includes("text")
         ? prepared.firstModelRef
         : undefined,
       state.presets,
@@ -464,6 +465,7 @@ export function LlmPresetsPane() {
           error={saveError}
           providerId={selectedProvider.id}
           provider={selectedProvider.provider}
+          baseUrl={selectedProvider.baseUrl}
           protocol={selectedProvider.protocol}
           modelProtocol={modelProtocolDraft}
           onProtocolChange={setModelProtocolDraft}

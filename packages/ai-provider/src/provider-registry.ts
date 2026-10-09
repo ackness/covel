@@ -1,5 +1,8 @@
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
-import { getBuiltinProviderConnection } from "@covel/shared";
+import {
+  DEFAULT_PROVIDER_PROTOCOL,
+  getBuiltinProviderConnection,
+} from "@covel/shared";
 import { getProtocolDefinition } from "./protocol-registry.js";
 import { ModelConfigurationError } from "./errors.js";
 import type {
@@ -10,22 +13,6 @@ import type {
   ProviderLifecycleHook,
   ProviderProtocol,
 } from "./types.js";
-
-/**
- * Provider-name → default protocol when the target doesn't pin one.
- *
- * Data table replacing the old `if (provider === "anthropic")` special
- * case in `resolveProtocol`. OpenAI-compatible providers need no entry —
- * they fall through to {@link FALLBACK_PROTOCOL}. A genuinely new
- * native-wire provider adds one line here.
- */
-const PROVIDER_PROTOCOL_DEFAULTS: Record<string, ProviderProtocol> = {
-  anthropic: "anthropic-messages-v1",
-  google: "google-generative-ai-v1",
-};
-
-/** Protocol assumed for any provider without a {@link PROVIDER_PROTOCOL_DEFAULTS} entry. */
-const FALLBACK_PROTOCOL: ProviderProtocol = "openai-chat-v1";
 
 /**
  * Resolve the default prompt-cache strategy for a given provider protocol.
@@ -162,13 +149,12 @@ export function createProviderRegistry(options?: {
         ? { defaults: builtinDefaults }
         : { requestScoped: true });
 
-    const protocol = resolveProtocol({
-      ...target,
-      protocol:
-        target.protocol ??
-        registered.defaults?.protocol ??
-        builtinDefaults?.protocol,
-    });
+    // A built-in provider names its own protocol; any other speaks OpenAI Chat.
+    const protocol =
+      target.protocol ??
+      registered.defaults?.protocol ??
+      builtinDefaults?.protocol ??
+      DEFAULT_PROVIDER_PROTOCOL;
     const protocolRoute = registered.protocols?.[protocol];
     const adapter =
       protocolRoute?.adapter ?? registered.adapter ?? builtinAdapter(protocol);
@@ -304,14 +290,6 @@ function hasSameOrigin(url: string, trustedUrl: string | undefined): boolean {
   } catch {
     return false;
   }
-}
-
-function resolveProtocol(target: {
-  provider: string;
-  protocol?: ProviderProtocol;
-}): ProviderProtocol {
-  if (target.protocol) return target.protocol;
-  return PROVIDER_PROTOCOL_DEFAULTS[target.provider] ?? FALLBACK_PROTOCOL;
 }
 
 function builtinAdapter(

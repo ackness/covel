@@ -1,8 +1,21 @@
 import { useState } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
-import { ProtocolSelect } from "../llm-provider-dialogs.js";
+import { listProviderModels } from "@/services/api.js";
+import { ProtocolSelect, ProviderDialog } from "../llm-provider-dialogs.js";
+import { EMPTY_PROVIDER_DRAFT } from "../llm-provider-catalog.js";
+
+vi.mock("@/services/api.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/api.js")>()),
+  listProviderModels: vi.fn(),
+}));
 
 beforeEach(async () => {
   await i18n.changeLanguage("en-US");
@@ -104,5 +117,132 @@ describe("evaluation protocol selection", () => {
     expect(
       screen.queryByRole("combobox", { name: "Evaluation API" }),
     ).toBeNull();
+  });
+});
+
+describe("provider picker", () => {
+  function renderDialog(draft = EMPTY_PROVIDER_DRAFT) {
+    const onDraftChange = vi.fn();
+    render(
+      <ProviderDialog
+        open
+        busy={false}
+        error={null}
+        draft={draft}
+        onOpenChange={() => {}}
+        onDraftChange={onDraftChange}
+        onSubmit={() => {}}
+      />,
+    );
+    return {
+      onDraftChange,
+      picker: screen.getByRole("combobox", {
+        name: "Provider",
+      }) as HTMLSelectElement,
+    };
+  }
+
+  it("fills the ID and endpoint of a built-in provider", () => {
+    const { onDraftChange, picker } = renderDialog();
+    expect(picker.value).toBe("");
+    fireEvent.change(picker, { target: { value: "zhipu" } });
+    expect(onDraftChange).toHaveBeenCalledWith({
+      ...EMPTY_PROVIDER_DRAFT,
+      providerId: "zhipu",
+      baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    });
+  });
+
+  it("shows a typed built-in ID as that provider and any other as custom", () => {
+    expect(
+      renderDialog({ ...EMPTY_PROVIDER_DRAFT, providerId: " Groq " }).picker
+        .value,
+    ).toBe("groq");
+  });
+
+  it("clears the endpoint when the player goes back to a custom provider", () => {
+    const { onDraftChange, picker } = renderDialog({
+      ...EMPTY_PROVIDER_DRAFT,
+      providerId: "groq",
+      baseUrl: "https://api.groq.com/openai/v1",
+      modelIds: "some-model",
+    });
+    fireEvent.change(picker, { target: { value: "" } });
+    expect(onDraftChange).toHaveBeenCalledWith({
+      ...EMPTY_PROVIDER_DRAFT,
+      modelIds: "some-model",
+    });
+  });
+});
+
+describe("model list picker", () => {
+  function Fixture() {
+    const [draft, setDraft] = useState({
+      ...EMPTY_PROVIDER_DRAFT,
+      providerId: "ollama",
+      baseUrl: "http://localhost:11434/v1",
+      modelIds: "typed-by-hand",
+    });
+    return (
+      <ProviderDialog
+        open
+        busy={false}
+        error={null}
+        draft={draft}
+        onOpenChange={() => {}}
+        onDraftChange={setDraft}
+        onSubmit={() => {}}
+      />
+    );
+  }
+
+  it("adds and removes a listed model beside the IDs typed by hand", async () => {
+    vi.mocked(listProviderModels).mockResolvedValue({
+      ok: true,
+      models: ["codex/gpt-6-luna", "qwen3:8b"],
+    });
+    render(<Fixture />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Read the model list from the service",
+      }),
+    );
+    const listed = await screen.findByRole("checkbox", { name: "qwen3:8b" });
+    expect(listProviderModels).toHaveBeenCalledWith({
+      provider: "ollama",
+      baseUrl: "http://localhost:11434/v1",
+    });
+    const ids = screen.getByRole("textbox", {
+      name: /Model IDs/,
+    }) as HTMLTextAreaElement;
+
+    fireEvent.click(listed);
+    expect(ids.value).toBe("typed-by-hand\nqwen3:8b");
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter models" }), {
+      target: { value: "LUNA" },
+    });
+    expect(screen.queryByRole("checkbox", { name: "qwen3:8b" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "codex/gpt-6-luna" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "codex/gpt-6-luna" }));
+    expect(ids.value).toBe("typed-by-hand\nqwen3:8b");
+  });
+
+  it("shows why the service gave no list", async () => {
+    vi.mocked(listProviderModels).mockResolvedValue({
+      ok: false,
+      models: [],
+      error: "connect ECONNREFUSED 127.0.0.1:11434",
+    });
+    render(<Fixture />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Read the model list from the service",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe(
+        "connect ECONNREFUSED 127.0.0.1:11434",
+      ),
+    );
   });
 });

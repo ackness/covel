@@ -6,8 +6,10 @@ import type {
 import { z } from "zod";
 import { providerModelProfilesSchema } from "../registry/llm.js";
 import {
+  DEFAULT_PROVIDER_PROTOCOL,
   providerKeyToId,
   getBuiltinProviderConnection,
+  isBuiltinProviderProtocol,
   isReasoningEffort,
   type ReasoningEffort,
 } from "@covel/shared";
@@ -131,7 +133,7 @@ export function buildProviderCatalog(
       protocol:
         preset.protocol ??
         getBuiltinProviderConnection(providerId)?.protocol ??
-        "openai-chat-v1",
+        DEFAULT_PROVIDER_PROTOCOL,
       serverModels: [],
     };
     entry.serverModels.push(preset);
@@ -147,7 +149,7 @@ export function buildProviderCatalog(
         profile.protocol ??
         getBuiltinProviderConnection(profile.provider ?? profile.id)
           ?.protocol ??
-        "openai-chat-v1",
+        DEFAULT_PROVIDER_PROTOCOL,
       serverModels: [],
     };
     entry.localProfile = profile;
@@ -175,15 +177,6 @@ export function parseModelIds(value: string): string[] {
 const MAX_PROVIDER_ID_LENGTH = 100;
 const MAX_MODEL_ID_LENGTH = 200;
 const MAX_BASE_URL_LENGTH = 500;
-const SUPPORTED_PROVIDER_PROTOCOLS = new Set([
-  "openai-chat-v1",
-  "openai-responses-v1",
-  "anthropic-messages-v1",
-  "google-generative-ai-v1",
-  "typesafe-systemone-v1",
-  "openrouter-decisions-v1",
-  "vercel-evaluation-v4",
-]);
 
 /**
  * Clamp an imported profile from an untrusted export file: only http(s)
@@ -228,7 +221,7 @@ export function sanitizeImportedProfile(
           modelId,
           ...(name ? { name } : {}),
           ...(typeof model.protocol === "string" &&
-          SUPPORTED_PROVIDER_PROTOCOLS.has(model.protocol)
+          isBuiltinProviderProtocol(model.protocol)
             ? { protocol: model.protocol }
             : {}),
           ...(isReasoningEffort(model.reasoningEffort)
@@ -263,7 +256,7 @@ export function sanitizeImportedProfile(
   }
   const protocol =
     typeof profile.protocol === "string" &&
-    SUPPORTED_PROVIDER_PROTOCOLS.has(profile.protocol)
+    isBuiltinProviderProtocol(profile.protocol)
       ? profile.protocol
       : undefined;
 

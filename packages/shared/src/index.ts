@@ -38,6 +38,19 @@ export {
   supportsModelRole,
 } from "./model-capabilities.js";
 export { projectModelCapabilityForBuiltinAdapter } from "./model-capability-support.js";
+export {
+  BUILTIN_PROVIDER_PROTOCOLS,
+  DEFAULT_PROVIDER_PROTOCOL,
+  PROVIDER_PROTOCOL_DESCRIPTORS,
+  getProviderProtocolDescriptor,
+  isBuiltinProviderProtocol,
+  isBuiltinTextProtocol,
+} from "./provider-protocols.js";
+export type {
+  BuiltinProviderProtocol,
+  ProviderProtocolDescriptor,
+  ProviderProtocolOutput,
+} from "./provider-protocols.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
 export {
@@ -174,11 +187,10 @@ export {
 export {
   BUILTIN_PROVIDER_CONNECTIONS,
   getBuiltinProviderConnection,
+  isLoopbackBaseUrl,
+  listBuiltinProviderConnections,
 } from "./utils/provider-defaults.js";
-export type {
-  BuiltinProviderConnection,
-  BuiltinProviderProtocol,
-} from "./utils/provider-defaults.js";
+export type { BuiltinProviderConnection } from "./utils/provider-defaults.js";
 
 // ── Environment Registry ──────────────────────────────────────────
 export * from "./env/index.js";

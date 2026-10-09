@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  DEFAULT_PROVIDER_PROTOCOL,
+  getBuiltinProviderConnection,
+} from "@covel/shared";
 import { PROVIDER_PROTOCOLS } from "../types.js";
 import { REASONING_EFFORT_VALUES } from "../reasoning-effort.js";
 
@@ -49,6 +53,9 @@ const pricingSchema = z
  * protocol = "openai-chat-v1"
  * fallback = "fast"
  *
+ * # A built-in provider (`BUILTIN_PROVIDER_CONNECTIONS`) may omit `baseUrl`
+ * # and `protocol`; any provider may omit `protocol` for OpenAI Chat.
+ *
  * # Optional capability overrides (auto-inferred if omitted):
  * input    = ["text"]
  * output   = ["text"]
@@ -61,15 +68,15 @@ const pricingSchema = z
  * outputPerMToken = 1.1
  * ```
  */
-const slotDefinitionSchema = z.object({
+const slotFieldsSchema = z.object({
   /** Provider identifier — maps to {PROVIDER}_API_KEY in .env.llm */
   provider: z.string().min(1),
   /** Model ID passed to the provider API */
   model: z.string().min(1),
-  /** API endpoint URL */
-  baseUrl: z.string().url(),
-  /** Wire protocol */
-  protocol: providerProtocolSchema,
+  /** API endpoint URL. Optional for a built-in provider. */
+  baseUrl: z.string().url().optional(),
+  /** Wire protocol. Default: the built-in provider's, else OpenAI Chat. */
+  protocol: providerProtocolSchema.optional(),
   /** Optional: slot name to fall back to on failure */
   fallback: z.string().optional(),
   /** Capability tag. Auto-inferred from output modalities if omitted. */
@@ -141,6 +148,25 @@ const slotDefinitionSchema = z.object({
   providerOptions: z
     .record(z.string(), z.record(z.string(), z.unknown()))
     .optional(),
+});
+
+/** Every parsed slot states its endpoint and protocol. */
+const slotDefinitionSchema = slotFieldsSchema.transform((def, ctx) => {
+  const known = getBuiltinProviderConnection(def.provider);
+  const baseUrl = def.baseUrl ?? known?.baseUrl;
+  if (!baseUrl) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["baseUrl"],
+      message: `baseUrl is required: "${def.provider}" is not a built-in provider`,
+    });
+    return z.NEVER;
+  }
+  return {
+    ...def,
+    baseUrl,
+    protocol: def.protocol ?? known?.protocol ?? DEFAULT_PROVIDER_PROTOCOL,
+  };
 });
 
 export type SlotDefinition = z.infer<typeof slotDefinitionSchema>;

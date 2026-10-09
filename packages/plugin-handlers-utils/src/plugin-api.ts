@@ -364,6 +364,10 @@ export interface PluginServiceGateway {
   }): Promise<{
     readonly text: string;
     readonly reasoningContent?: string;
+    /**
+     * `stop`, `length` (cut at a limit), `tool_calls`, `content_filter`,
+     * `error` or `other`: the same words for every provider.
+     */
     readonly finishReason: string;
     readonly usage: PluginUsageSummary;
     readonly model?: string;
@@ -605,6 +609,7 @@ export type PluginProviderProtocol =
   | "openai-chat-v1"
   | "openai-responses-v1"
   | "anthropic-messages-v1"
+  | "google-generative-ai-v1"
   | "typesafe-systemone-v1"
   | "openrouter-decisions-v1"
   | "vercel-evaluation-v4";

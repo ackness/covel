@@ -1,15 +1,13 @@
+import {
+  getProviderProtocolDescriptor,
+  type ProviderProtocolOutput,
+} from "./provider-protocols.js";
+
 /** Default outputs for an unknown model on a supported wire protocol. */
 export function protocolOutputModalities(
   protocol?: string,
-): Array<"text" | "evaluation"> {
-  switch (protocol) {
-    case "typesafe-systemone-v1":
-    case "openrouter-decisions-v1":
-    case "vercel-evaluation-v4":
-      return ["evaluation"];
-    default:
-      return ["text"];
-  }
+): ProviderProtocolOutput[] {
+  return [getProviderProtocolDescriptor(protocol)?.output ?? "text"];
 }
 
 export function modelOutputTag(output: readonly string[]): string {

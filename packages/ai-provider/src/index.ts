@@ -3,7 +3,6 @@ export { PROVIDER_PROTOCOLS } from "./types.js";
 export {
   REASONING_EFFORT_VALUES,
   resolveReasoningEffortProfile,
-  extractReasoningRequestFields,
 } from "./reasoning-effort.js";
 export type {
   ProviderProtocol,
@@ -56,12 +55,16 @@ export type {
   ReasoningProviderFamily,
   ReasoningEffortOption,
   ReasoningEffortProfile,
+  ReasoningWire,
+  ReasoningWireRequest,
 } from "./reasoning-effort.js";
 
 // Errors
 export type {
+  OptionalWireParameter,
   ProviderOptions,
   ProviderOptionSettings,
+  ProviderOptionWire,
 } from "./provider-options.js";
 export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
 export {
@@ -122,7 +125,9 @@ export { createSlotRegistry, type SlotRegistry } from "./slot-registry.js";
 
 // Protocol registry (protocol-scoped adapter / cache / capability lookup)
 export {
+  extractReasoningRequestFields,
   getProtocolDefinition,
+  listProtocolModels,
   BASE_CAPABILITY_DEFAULTS,
   type ProtocolDefinition,
 } from "./protocol-registry.js";
@@ -153,6 +158,9 @@ export {
   DEFAULT_TRANSCRIPTION_WIRE,
 } from "./speech/wire-registry.js";
 export type { SpeechWire, TranscriptionWire } from "./speech/types.js";
+
+// Text protocols a plugin provides (pluggable wires; the built-in protocols
+// are in the protocol registry)
 
 // Music generation (pluggable wires; no built-in wire, no default)
 export { registerMusicWire, getMusicWire } from "./music/wire-registry.js";

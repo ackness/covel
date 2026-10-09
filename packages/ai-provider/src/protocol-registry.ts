@@ -1,27 +1,52 @@
 /**
- * Protocol Registry — single source of truth for everything that varies
- * per wire protocol.
+ * Protocol Registry — everything that varies per wire protocol.
  *
- * Every protocol bundles its three protocol-scoped concerns —
- * `createAdapter`, `cacheStrategy`, `capabilityDefaults` — in one entry.
- * The provider registry and the capability resolver both query this table
- * instead of hand-rolling their own switch.
+ * A protocol states its adapter, cache strategy, capability defaults and its
+ * translations of portable settings in one {@link ProtocolDefinition}. The
+ * gateway, the provider registry and the capability resolver query this
+ * table; none of them compares a protocol ID.
  *
- * Adding a protocol is a single entry in {@link BUILTIN_PROTOCOLS}, which
- * is typed `Record<ProviderProtocol, ProtocolDefinition>` — so omitting an
- * entry for a new `ProviderProtocol` member is a *compile error*.
+ * Adding a protocol is a descriptor in `PROVIDER_PROTOCOL_DESCRIPTORS`
+ * (`@covel/shared`) and an entry in {@link BUILTIN_PROTOCOLS}, which is typed
+ * `Record<ProviderProtocol, ProtocolDefinition>` — so a descriptor without an
+ * entry is a *compile error*.
  */
 
-import { protocolOutputModalities } from "@covel/shared";
+import {
+  protocolOutputModalities,
+  type BuiltinProviderProtocol,
+} from "@covel/shared";
 import { createEvaluationAdapter } from "./adapters/evaluation.js";
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
 import { createOpenAiChatAdapter } from "./adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "./adapters/openai-responses.js";
-import { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js";
-import { createGoogleGenerativeAiAdapter } from "./adapters/google-generative-ai.js";
+import {
+  createAnthropicMessagesAdapter,
+  listAnthropicModels,
+} from "./adapters/anthropic-messages.js";
+import {
+  createGoogleGenerativeAiAdapter,
+  listGoogleModels,
+} from "./adapters/google-generative-ai.js";
+import { fetchModelIds } from "./adapters/model-list.js";
+import { AiProviderError } from "./errors.js";
+import type {
+  OptionalWireParameter,
+  ProviderOptionWire,
+} from "./provider-options.js";
+import {
+  anthropicReasoningFields,
+  googleReasoningFields,
+  openAiChatReasoningFields,
+  openAiResponsesReasoningFields,
+  reasoningRequestFields,
+  type ReasoningWire,
+} from "./reasoning-effort.js";
 import type {
   CacheStrategy,
   ModelCapability,
+  ModelRequestContext,
+  ProviderConfig,
   ProviderProtocol,
 } from "./types.js";
 
@@ -33,11 +58,27 @@ import type {
  * - `cacheStrategy` — default prompt-cache ergonomics for this protocol.
  * - `capabilityDefaults` — fallback {@link ModelCapability} used when no
  *   curated/DB entry matches a model on this protocol.
+ * - `reasoningFields` — the request fields for a `reasoningEffort` level.
+ *   Absent: the setting sends nothing on this protocol.
+ * - `providerOptionFields` — the `providerOptions` settings this protocol
+ *   accepts. Absent: only `reasoningEffort` and `extraBody` apply.
+ * - `parameters` — the optional generation parameters it has a field for.
+ * - `mediaWire: "explicit"` — the endpoint has no OpenAI-style media routes,
+ *   so an image or speech slot on it must name its wire.
+ * - `listModels` — the model IDs the endpoint offers, for the settings UI.
  */
 export interface ProtocolDefinition {
   readonly createAdapter: () => ModelProviderAdapter;
   readonly cacheStrategy: CacheStrategy;
   readonly capabilityDefaults: ModelCapability;
+  readonly reasoningFields?: ReasoningWire;
+  readonly providerOptionFields?: ProviderOptionWire;
+  readonly parameters?: readonly OptionalWireParameter[];
+  readonly mediaWire?: "explicit";
+  readonly listModels?: (
+    config: ProviderConfig,
+    signal?: AbortSignal,
+  ) => Promise<string[]>;
 }
 
 // ── Capability defaults ────────────────────────────────────────────
@@ -53,6 +94,22 @@ export const BASE_CAPABILITY_DEFAULTS: ModelCapability = {
   features: ["streaming"],
 };
 
+const listOpenAiModels: ProtocolDefinition["listModels"] = (config, signal) =>
+  fetchModelIds(config, "/models", "openai", signal);
+
+/** Settings the two OpenAI wires share. */
+const openAiOptionFields: ProviderOptionWire = (settings, fields) => {
+  const wireFields = [
+    ["parallelToolCalls", "parallel_tool_calls"],
+    ["store", "store"],
+    ["user", "user"],
+  ] as const;
+  for (const [key, wire] of wireFields) {
+    if (settings[key] !== undefined) fields[wire] = settings[key];
+  }
+  return wireFields.map(([key]) => key);
+};
+
 // ── Built-in protocol table (exhaustive) ───────────────────────────
 
 /**
@@ -63,7 +120,7 @@ export const BASE_CAPABILITY_DEFAULTS: ModelCapability = {
  * matching entry fails `tsc`. This is the compile-time "no silent miss"
  * guarantee.
  */
-const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
+const BUILTIN_PROTOCOLS: Record<BuiltinProviderProtocol, ProtocolDefinition> = {
   "google-generative-ai-v1": {
     createAdapter: createGoogleGenerativeAiAdapter,
     cacheStrategy: "auto-prefix",
@@ -72,6 +129,17 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
       output: ["text"],
       features: ["function_calling", "structured_output", "streaming"],
     },
+    reasoningFields: googleReasoningFields,
+    providerOptionFields(settings, fields) {
+      const keys = ["thinkingConfig", "cachedContent", "seed"] as const;
+      for (const key of keys) {
+        if (settings[key] !== undefined) fields[key] = settings[key];
+      }
+      return keys;
+    },
+    parameters: ["topK", "frequencyPenalty", "presencePenalty"],
+    mediaWire: "explicit",
+    listModels: listGoogleModels,
   },
   "typesafe-systemone-v1": {
     createAdapter: () => createEvaluationAdapter("typesafe-systemone-v1"),
@@ -108,6 +176,13 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
       ...BASE_CAPABILITY_DEFAULTS,
       features: ["function_calling", "structured_output", "streaming"],
     },
+    reasoningFields: openAiChatReasoningFields,
+    providerOptionFields(settings, fields) {
+      if (settings.seed !== undefined) fields.seed = settings.seed;
+      return [...openAiOptionFields(settings, fields), "seed"];
+    },
+    parameters: ["frequencyPenalty", "presencePenalty"],
+    listModels: listOpenAiModels,
   },
   "openai-responses-v1": {
     createAdapter: createOpenAiResponsesAdapter,
@@ -116,6 +191,22 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
       ...BASE_CAPABILITY_DEFAULTS,
       features: ["function_calling", "structured_output", "streaming"],
     },
+    reasoningFields: openAiResponsesReasoningFields,
+    providerOptionFields(settings, fields) {
+      if (settings.reasoningSummary !== undefined) {
+        const reasoning = fields.reasoning;
+        fields.reasoning = {
+          ...(reasoning !== null &&
+          typeof reasoning === "object" &&
+          !Array.isArray(reasoning)
+            ? reasoning
+            : {}),
+          summary: settings.reasoningSummary,
+        };
+      }
+      return [...openAiOptionFields(settings, fields), "reasoningSummary"];
+    },
+    listModels: listOpenAiModels,
   },
   "anthropic-messages-v1": {
     createAdapter: createAnthropicMessagesAdapter,
@@ -130,6 +221,18 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
         "prompt_caching",
       ],
     },
+    reasoningFields: anthropicReasoningFields,
+    providerOptionFields(settings, fields) {
+      if (settings.thinking !== undefined) {
+        fields.thinking =
+          settings.thinking.type === "enabled"
+            ? { type: "enabled", budget_tokens: settings.thinking.budgetTokens }
+            : { type: settings.thinking.type };
+      }
+      return ["thinking"];
+    },
+    parameters: ["topK"],
+    listModels: listAnthropicModels,
   },
 };
 
@@ -138,4 +241,39 @@ export function getProtocolDefinition(
   protocol: ProviderProtocol,
 ): ProtocolDefinition | undefined {
   return BUILTIN_PROTOCOLS[protocol];
+}
+
+/** Translate a unified reasoning selection into the given protocol's fields. */
+export function extractReasoningRequestFields(
+  metadata: Record<string, unknown> | undefined,
+  context: ModelRequestContext | undefined,
+  protocol: ProviderProtocol,
+  requestModel: string,
+): Record<string, unknown> {
+  return reasoningRequestFields(
+    getProtocolDefinition(protocol)?.reasoningFields,
+    metadata,
+    context,
+    protocol,
+    requestModel,
+  );
+}
+
+/** The model IDs an endpoint offers on a protocol that can list them. */
+export async function listProtocolModels(
+  protocol: ProviderProtocol,
+  config: ProviderConfig,
+  provider: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const listModels = getProtocolDefinition(protocol)?.listModels;
+  if (!listModels) {
+    throw new AiProviderError({
+      code: "CONFIG_ERROR",
+      message: `Protocol "${protocol}" has no model list; enter the model IDs by hand.`,
+      provider,
+      retriable: false,
+    });
+  }
+  return listModels(config, signal);
 }

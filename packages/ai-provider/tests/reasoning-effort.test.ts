@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  extractReasoningRequestFields,
-  resolveReasoningEffortProfile,
-} from "../src/reasoning-effort.js";
+import { extractReasoningRequestFields } from "../src/protocol-registry.js";
+import { resolveReasoningEffortProfile } from "../src/reasoning-effort.js";
 
 describe("reasoning effort profiles", () => {
   it("recognizes deepseek-flash without a model-database entry", () => {

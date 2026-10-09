@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createProviderRegistry } from "../src/provider-registry.js";
+import { isBuiltinTextProtocol } from "@covel/shared";
 import { PROVIDER_PROTOCOLS } from "../src/types.js";
 import { getProtocolDefinition } from "../src/protocol-registry.js";
 
@@ -400,6 +401,15 @@ describe("provider-registry", () => {
         expect(def?.cacheStrategy).toBeTruthy();
         expect(def?.capabilityDefaults.input.length).toBeGreaterThan(0);
         expect(def?.capabilityDefaults.output.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("translates a reasoning level on every text protocol and on no other", () => {
+      for (const protocol of PROVIDER_PROTOCOLS) {
+        const def = getProtocolDefinition(protocol);
+        expect(Boolean(def?.reasoningFields), protocol).toBe(
+          isBuiltinTextProtocol(protocol),
+        );
       }
     });
 

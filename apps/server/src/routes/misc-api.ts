@@ -9,8 +9,10 @@ import { z } from "zod";
 import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
+  PROVIDER_PROTOCOLS,
   applySlotOverlay,
   classifyProviderFailure,
+  listProtocolModels,
   publicPresetId,
   resolveModelBinding,
 } from "@covel/ai-provider";
@@ -31,6 +33,9 @@ import {
   parseProviderKeys,
   parseSlotOverrides,
 } from "../middleware/per-request-llm.js";
+
+const MODEL_LIST_TIMEOUT_MS = 15_000;
+const MODEL_LIST_LIMIT = 2000;
 
 export function createMiscApiRoutes(
   ai: AiStack,
@@ -219,6 +224,65 @@ export function createMiscApiRoutes(
       if (value.trim()) providers[provider] = { configured: true };
     }
     return c.json({ providers });
+  });
+
+  // POST /api/ai/models — the model IDs a provider endpoint lists.
+  //
+  // The settings UI offers them when a player adds a provider or models, so a
+  // local gateway with dozens of models needs no typed IDs. The target is
+  // request-scoped: a server key attaches only to the provider's own trusted
+  // origin, as it does for a model call.
+  app.post("/api/ai/models", async (c) => {
+    const denied = checkHostedOperator(c);
+    if (denied) return denied;
+    const parsedBody = z
+      .strictObject({
+        provider: z.string().trim().min(1).max(100),
+        baseUrl: z.string().trim().url().max(500).optional(),
+        protocol: z.enum(PROVIDER_PROTOCOLS).optional(),
+      })
+      .safeParse(await c.req.json().catch(() => undefined));
+    if (!parsedBody.success) {
+      return c.json(errorBody("Invalid model list request body"), 400);
+    }
+    const { provider, baseUrl, protocol } = parsedBody.data;
+    try {
+      const resolution = ai.providerRegistry.withApiKeys(
+        ai.providerRegistry.resolve({
+          provider,
+          ...(baseUrl ? { baseUrl } : {}),
+          ...(protocol ? { protocol } : {}),
+          requestScoped: true,
+        }),
+        parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {},
+        provider,
+        providerApiKeysFromEnv(),
+      );
+      const models = await listProtocolModels(
+        resolution.protocol,
+        resolution.config,
+        provider,
+        AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
+      );
+      return c.json({
+        ok: true,
+        models: models.slice(0, MODEL_LIST_LIMIT),
+        baseUrl: resolution.config.baseUrl,
+        protocol: resolution.protocol,
+      });
+    } catch (error) {
+      console.warn(
+        `[misc-api] POST /api/ai/models failed for provider "${provider}":`,
+        error,
+      );
+      const failure = classifyProviderFailure(error, provider);
+      return c.json({
+        ok: false,
+        models: [],
+        error: failure.message,
+        errorKind: failure.kind,
+      });
+    }
   });
 
   // POST /api/ai/ping — real provider latency probe.
@@ -467,6 +531,7 @@ export function createMiscApiRoutes(
           ok: false,
           latencyMs: Date.now() - startedAt,
           ...(ttfbMs !== null ? { ttfbMs } : {}),
+          error: failure.message,
           errorKind: failure.kind,
           testedTarget,
         });

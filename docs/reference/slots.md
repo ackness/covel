@@ -37,26 +37,88 @@ Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途�
 
 `fallback` 属于 TOML 用途。前端为 `utility` 换模型后，原来的 `utility -> story` 备用关系仍然生效，`story` 也使用本次请求选择的模型。不会借用新选模型所属其它用途的备用关系。重复目标去重，基础备用链的循环防护保持有效；`allowFallback: false` 仍只调用主目标。此规则适用于原本支持备用链的文本、结构化输出、流式输出和评估调用，不为图片、语音、embedding 新增重试机制。
 
+## 内置服务商与协议
+
+服务商和协议是两件事：协议是请求和响应的格式，服务商是说某种协议的一个端点。
+
+| 协议 ID                   | 设置页名称           | 产出 |
+| ------------------------- | -------------------- | ---- |
+| `openai-chat-v1`          | OpenAI Chat          | 文本 |
+| `openai-responses-v1`     | OpenAI Responses     | 文本 |
+| `anthropic-messages-v1`   | Anthropic Messages   | 文本 |
+| `google-generative-ai-v1` | Google Gemini        | 文本 |
+| `typesafe-systemone-v1`   | TypeSafe System One  | 评估 |
+| `openrouter-decisions-v1` | OpenRouter Decisions | 评估 |
+| `vercel-evaluation-v4`    | Vercel AI Gateway    | 评估 |
+
+内置服务商有官方端点和默认协议，`llm.toml` 里只写 `provider` 和 `model` 即可，设置页里可以直接从列表选：
+
+| `provider`    | 名称                     | 端点                                                | 协议                      |
+| ------------- | ------------------------ | --------------------------------------------------- | ------------------------- |
+| `openai`      | OpenAI                   | `https://api.openai.com/v1`                         | `openai-chat-v1`          |
+| `anthropic`   | Anthropic                | `https://api.anthropic.com`                         | `anthropic-messages-v1`   |
+| `google`      | Google Gemini            | `https://generativelanguage.googleapis.com/v1beta`  | `google-generative-ai-v1` |
+| `deepseek`    | DeepSeek                 | `https://api.deepseek.com`                          | `openai-chat-v1`          |
+| `dashscope`   | Alibaba DashScope (Qwen) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `openai-chat-v1`          |
+| `xai`         | xAI                      | `https://api.x.ai/v1`                               | `openai-chat-v1`          |
+| `mistral`     | Mistral AI               | `https://api.mistral.ai/v1`                         | `openai-chat-v1`          |
+| `groq`        | Groq                     | `https://api.groq.com/openai/v1`                    | `openai-chat-v1`          |
+| `together`    | Together AI              | `https://api.together.xyz/v1`                       | `openai-chat-v1`          |
+| `fireworks`   | Fireworks AI             | `https://api.fireworks.ai/inference/v1`             | `openai-chat-v1`          |
+| `moonshot`    | Moonshot AI (Kimi)       | `https://api.moonshot.cn/v1`                        | `openai-chat-v1`          |
+| `zhipu`       | Zhipu AI (GLM)           | `https://open.bigmodel.cn/api/paas/v4`              | `openai-chat-v1`          |
+| `siliconflow` | SiliconFlow              | `https://api.siliconflow.cn/v1`                     | `openai-chat-v1`          |
+| `volcengine`  | Volcengine Ark (Doubao)  | `https://ark.cn-beijing.volces.com/api/v3`          | `openai-chat-v1`          |
+| `openrouter`  | OpenRouter               | `https://openrouter.ai/api/v1`                      | `openai-chat-v1`          |
+| `vercel`      | Vercel AI Gateway        | `https://ai-gateway.vercel.sh/v1`                   | `openai-chat-v1`          |
+| `typesafe`    | TypeSafe                 | `https://api.typesafe.ai/v1`                        | `typesafe-systemone-v1`   |
+| `ollama`      | Ollama（本机）           | `http://localhost:11434/v1`                         | `openai-chat-v1`          |
+| `lmstudio`    | LM Studio（本机）        | `http://localhost:1234/v1`                          | `openai-chat-v1`          |
+| `llamacpp`    | llama.cpp server（本机） | `http://localhost:8080/v1`                          | `openai-chat-v1`          |
+| `vllm`        | vLLM（本机）             | `http://localhost:8000/v1`                          | `openai-chat-v1`          |
+| `litellm`     | LiteLLM Proxy（本机）    | `http://localhost:4000/v1`                          | `openai-chat-v1`          |
+
+```toml
+[covel.story]
+provider = "zhipu"
+model    = "glm-5"
+```
+
+其他服务商照常填写 `baseUrl`；它只要兼容 OpenAI Chat，`protocol` 也可以不写。
+
+**本机服务。** 标“本机”的条目指运行 Covel 服务端的那台机器上的服务，端口是各自的默认值。别的端口，或者一个端口上同时提供多种协议的本机统一网关，按自定义服务商添加：地址填 `http://127.0.0.1:<端口>/v1`，协议选它那一路用的协议，需要几种协议就添加几个服务商。本机地址（`localhost`、`127.0.0.1`、`::1`）上的模型不需要 API Key：没有密钥也算已就绪，可以开始游戏、运行后台任务和做连接测试；服务自己要求密钥时照常填写。
+
+**读取模型列表。** 添加服务商或模型时，“从服务读取模型列表”向该服务请求它提供的模型 ID（`POST /api/ai/models`），勾选即加入，可按名称筛选；手动输入的 ID 保留。OpenAI Chat / Responses 读 `/models`，Anthropic 读 `/v1/models`，Gemini 读 `/models` 并去掉 `models/` 前缀；评估协议没有列表。
+
+服务端环境里的 `{PROVIDER}_API_KEY` 只会发往上表的官方端点同源地址（见 [安全边界](../architecture/security.md)）。
+
+### 新增服务商或协议
+
+- **新增一个说现有协议的服务商**：在 `packages/shared/src/utils/provider-defaults.ts` 的 `BUILTIN_PROVIDER_CONNECTIONS` 加一条（名称、端点、协议）。设置页列表、`llm.toml` 的缺省值和密钥的可信来源都从这张表读取。
+- **新增一种协议**：在 `packages/shared/src/provider-protocols.ts` 的 `PROVIDER_PROTOCOL_DESCRIPTORS` 加一条描述（ID、名称、产出文本还是评估），再在 `packages/ai-provider/src/protocol-registry.ts` 的 `BUILTIN_PROTOCOLS` 加一条 `ProtocolDefinition`。配置校验、请求头校验、设置页下拉和类型都从描述表派生；漏写定义时 `tsc` 报错。
+- 一条 `ProtocolDefinition` 写明这个协议的全部差异：适配器（`createAdapter`）、缓存策略、默认能力、`reasoningEffort` 档位到请求字段的转换（`reasoningFields`）、它接受的 `providerOptions` 字段（`providerOptionFields`）、它支持的可选生成参数（`parameters`），以及图像和语音是否必须显式指定 wire（`mediaWire`）。网关和注册表只查这张表，不比较协议 ID。
+- 请求追踪只记录白名单里的请求体字段（`packages/ai-provider/src/adapters/http/request-observation.ts` 的 `MODEL_FIELDS`）。新协议若使用新的顶层字段名，要在那里加上，否则 trace 里看不到。
+
 ## Slot 字段（`[covel.<slot>]`）
 
 Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
-| 字段                                | 必填 | 说明                                                                                                                                                                          |
-| ----------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                                                                                                            |
-| `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                                                  |
-| `baseUrl`                           | ✅   | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）                                                                                                              |
-| `protocol`                          | ✅   | `openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1` / `google-generative-ai-v1` / `typesafe-systemone-v1` / `openrouter-decisions-v1` / `vercel-evaluation-v4` |
-| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`。缺省从 output 模态推断（`audio` 推断为 `speech`，音乐用途须显式写 `music`）   |
-| `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                                                          |
-| `input` / `output`                  | —    | 模态覆盖（缺省自动检测，见下）。`output` 支持 `text` / `image` / `audio` / `video` / `embedding` / `evaluation`                                                               |
-| `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                                                                                                        |
-| `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                                                                                                |
-| `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                                                                                              |
-| `reasoningEffort`                   | —    | 可移植的思考档位（如 `disabled` 关闭思考），作为模型默认按目标协议转换，见[思考强度](#思考强度)                                                                               |
-| `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                                                                                              |
-| `providerRequestMetadata`           | —    | 生成请求的自由 KV（per-call 优先）；评估请求不使用。媒体 wire 路由键也放这里，见下                                                                                            |
-| `providerOptions`                   | —    | 文本 / 对象 / 流式调用的供应商或协议命名空间参数，只解析当前目标的设置，见下                                                                                                  |
+| 字段                                | 必填 | 说明                                                                                                                                                                        |
+| ----------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                                                                                                          |
+| `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                                                |
+| `baseUrl`                           | —    | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）。[内置服务商](#内置服务商与协议)可省略，其他服务商必填                                                     |
+| `protocol`                          | —    | 接口协议，取值见[内置服务商与协议](#内置服务商与协议)。缺省用内置服务商自己的协议，其他服务商为 `openai-chat-v1`                                                            |
+| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`。缺省从 output 模态推断（`audio` 推断为 `speech`，音乐用途须显式写 `music`） |
+| `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                                                        |
+| `input` / `output`                  | —    | 模态覆盖（缺省自动检测，见下）。`output` 支持 `text` / `image` / `audio` / `video` / `embedding` / `evaluation`                                                             |
+| `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                                                                                                      |
+| `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                                                                                              |
+| `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                                                                                            |
+| `reasoningEffort`                   | —    | 可移植的思考档位（如 `disabled` 关闭思考），作为模型默认按目标协议转换，见[思考强度](#思考强度)                                                                             |
+| `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                                                                                            |
+| `providerRequestMetadata`           | —    | 生成请求的自由 KV（per-call 优先）；评估请求不使用。媒体 wire 路由键也放这里，见下                                                                                          |
+| `providerOptions`                   | —    | 文本 / 对象 / 流式调用的供应商或协议命名空间参数，只解析当前目标的设置，见下                                                                                                |
 
 ## Slot 解析链
 
@@ -134,7 +196,7 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 服务商与模型页面支持复制配置、编辑名称、自动保存思考设置；用途分配、插件绑定和会话摘要显示配置名及思考设置。主叙事、代理插件、函数插件和记忆任务通过同一请求配置链路继承所选模型默认值，无需逐用途重复设置。显式用途覆盖仍优先于模型默认。当前 `automatic` 档位用于 Qwen，界面显示“开启思考”，发送 `enable_thinking: true`，并非按任务自动选择开关。
 
-首次手动创建服务商与模型时，若 `story` / `plugin` 尚未显式分配，设置页会把这两个用途同时绑定到该模型，保证叙事与插件任务都能立即运行。DeepSeek、OpenAI、Anthropic、Google、DashScope 即使首次配置未填写 `baseUrl`，也会使用框架内置的官方端点与协议；用户填写的地址始终优先。`google` 缺省使用 `google-generative-ai-v1` 和 `https://generativelanguage.googleapis.com/v1beta`，密钥名为 `GOOGLE_API_KEY`。设置页的协议选择显示为“Google Gemini”。若使用 Google 的 OpenAI 兼容端点，需显式选择 `openai-chat-v1` 并设地址为 `https://generativelanguage.googleapis.com/v1beta/openai`。
+首次手动创建服务商与模型时，若 `story` / `plugin` 尚未显式分配，设置页会把这两个用途同时绑定到该模型，保证叙事与插件任务都能立即运行。添加服务商时可以从列表里选一个[内置服务商](#内置服务商与协议)，对话框会填入它的 ID 和官方端点，协议用它自己的；选“自定义服务商”则手动填写。内置服务商即使未填写 `baseUrl`，也会使用框架内置的官方端点与协议；用户填写的地址始终优先。`google` 缺省使用 `google-generative-ai-v1` 和 `https://generativelanguage.googleapis.com/v1beta`，密钥名为 `GOOGLE_API_KEY`。设置页的协议选择显示为“Google Gemini”。若使用 Google 的 OpenAI 兼容端点，需显式选择 `openai-chat-v1` 并设地址为 `https://generativelanguage.googleapis.com/v1beta/openai`。
 
 模型 ID 是不透明字符串，发送请求时不会被裁剪或改写。例如服务商 `openai` 下的 `openai/gpt-5.6-sol` 和 `deepseek/deepseek-v4-flash` 会保持原样。能力查询按以下候选顺序匹配，匹配结果只用于显示能力和价格：
 
@@ -267,6 +329,8 @@ runtime 默认关闭思考时，已知型号使用支持的关闭值，否则使
 内置图片和语音生成提交不做 HTTP 层自动重发；超时或连接断开时，客户端不能据此判断上游是否已生成。文本调用的重试策略不受此规则改变。
 
 ### 连接测试与失败原因
+
+模型接口的失败方式比普通 URL 多：密钥、余额、模型名、服务商负载各有各的处理办法。连接测试（`POST /api/ai/ping`）和读取模型列表在失败时除了服务商的原话，还给出一个类别 `errorKind`，界面按类别显示该怎么办：
 
 | `errorKind`    | 含义                                     | 依据                                                                                             |
 | -------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------ |

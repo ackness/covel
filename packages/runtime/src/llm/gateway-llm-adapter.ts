@@ -557,6 +557,7 @@ function toGatewayTool(tool: LLMToolDefinition) {
     },
   };
 }
+
 /** A gateway of another origin may still answer in a provider's own word. */
 function completedFinishReason(
   reason: string,

@@ -11,8 +11,14 @@
 # Fields:
 #   provider - connection identifier; maps to {PROVIDER}_API_KEY
 #   model    - opaque model ID, including any namespace, sent unchanged
-#   baseUrl  - provider or compatible proxy URL; configurable per slot
-#   protocol - wire format, independent of provider name and model ID:
+#   baseUrl  - provider or compatible proxy URL; configurable per slot.
+#              Optional for a built-in provider: openai, anthropic, google,
+#              deepseek, dashscope, xai, mistral, groq, together, fireworks,
+#              moonshot, zhipu, siliconflow, volcengine, openrouter, vercel,
+#              typesafe (endpoints in docs/reference/slots.md)
+#   protocol - wire format, independent of provider name and model ID.
+#              Optional: a built-in provider has its own, any other
+#              provider defaults to openai-chat-v1. Values:
 #              openai-chat-v1, openai-responses-v1, anthropic-messages-v1,
 #              google-generative-ai-v1,
 #              typesafe-systemone-v1, openrouter-decisions-v1,

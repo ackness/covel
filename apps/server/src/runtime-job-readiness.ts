@@ -3,6 +3,7 @@ import type {
   GatewayOptions,
   ResolvedSlotConfig,
 } from "@covel/ai-provider";
+import { isLoopbackBaseUrl } from "@covel/shared";
 import {
   resolveGatewayModelSelection,
   type PluginLlmModelTarget,
@@ -50,10 +51,15 @@ export function hasRuntimeJobCredentials(
 }
 
 function hasResolvedRuntimeJobCredentials(
-  slot: Pick<ResolvedSlotConfig, "apiKey" | "headers"> | null | undefined,
+  slot:
+    | Pick<ResolvedSlotConfig, "apiKey" | "headers" | "baseUrl">
+    | null
+    | undefined,
 ): boolean {
   if (!slot) return false;
   if (slot.apiKey?.trim()) return true;
+  // A service on this machine (Ollama, a local gateway) takes no key.
+  if (isLoopbackBaseUrl(slot.baseUrl)) return true;
   return Object.entries(slot.headers ?? {}).some(
     ([name, value]) =>
       /^(authorization|api-key|x-api-key)$/i.test(name) &&

@@ -502,3 +502,171 @@ it.each([
     expect(requests).toEqual([]);
   },
 );
+
+describe("POST /api/ai/models", () => {
+  const post = (
+    app: ReturnType<typeof setup>["app"],
+    body: unknown,
+    keys?: Record<string, string>,
+  ) =>
+    app.request("/api/ai/models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(keys
+          ? {
+              "X-Provider-Keys": Buffer.from(JSON.stringify(keys)).toString(
+                "base64",
+              ),
+            }
+          : {}),
+      },
+      body: JSON.stringify(body),
+    });
+
+  it("lists a keyless local service's models without a key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        data: [{ id: "qwen3:8b" }, { id: "codex/gpt-6-luna" }],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await post(setup().app, { provider: "ollama" });
+    expect(await response.json()).toEqual({
+      ok: true,
+      models: ["codex/gpt-6-luna", "qwen3:8b"],
+      baseUrl: "http://localhost:11434/v1",
+      protocol: "openai-chat-v1",
+    });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("http://localhost:11434/v1/models");
+    expect(new Headers(init.headers).has("authorization")).toBe(false);
+  });
+
+  it("sends the request's own key and never a server key to a redirected built-in provider", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "server-secret");
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => Response.json({ data: [{ id: "m" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { app } = setup();
+    const target = { provider: "openai", baseUrl: "https://proxy.example/v1" };
+
+    await post(app, target);
+    await post(app, target, { openai: "request-key" });
+
+    const authorization = fetchMock.mock.calls.map(([, init]) =>
+      new Headers(init.headers).get("authorization"),
+    );
+    expect(authorization).toEqual([null, "Bearer request-key"]);
+  });
+
+  it("reports the provider's refusal and an evaluation protocol as a failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ error: { message: "bad key" } }, { status: 401 }),
+        ),
+    );
+    const { app } = setup();
+    expect(await (await post(app, { provider: "groq" })).json()).toMatchObject({
+      ok: false,
+      models: [],
+    });
+    expect(
+      await (
+        await post(app, {
+          provider: "typesafe",
+          protocol: "typesafe-systemone-v1",
+        })
+      ).json(),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("has no model list"),
+    });
+  });
+
+  it("rejects a body with an unknown field or protocol", async () => {
+    const { app } = setup();
+    expect((await post(app, { provider: "x", extra: 1 })).status).toBe(400);
+    expect(
+      (await post(app, { provider: "x", protocol: "made-up-v1" })).status,
+    ).toBe(400);
+  });
+});
+
+describe("connection test by model kind and failure", () => {
+  const ping = (app: ReturnType<typeof setup>["app"], body: unknown) =>
+    app.request("/api/ai/ping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("tests an embedding model with one vector call", async () => {
+    const { app, presetRegistry, requests } = setup();
+    presetRegistry.addPreset({
+      id: "slot-embed",
+      name: "Embed",
+      provider: "ollama",
+      model: "nomic-embed-text",
+      tier: "medium",
+      enabled: true,
+      supportedModes: ["embed"],
+      capability: { input: ["text"], output: ["embedding"] },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        data: [{ embedding: [0.1, 0.2] }],
+        usage: { prompt_tokens: 1 },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await ping(app, { presetId: "slot-embed" });
+
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      usage: { inputTokens: 1 },
+      testedTarget: { model: "nomic-embed-text" },
+    });
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "http://localhost:11434/v1/embeddings",
+    );
+    expect(requests).toEqual([]);
+  });
+
+  it("sends one request and names the kind of a provider's refusal", async () => {
+    const { app, presetRegistry } = setup();
+    presetRegistry.addPreset({
+      ...presetRegistry.resolvePreset("slot-story")!,
+      id: "slot-groq",
+      provider: "groq",
+      model: "some-model",
+      capability: {
+        input: ["text"],
+        output: ["text"],
+        contextWindow: 65_536,
+        maxOutputTokens: 4096,
+      },
+    });
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        { error: { message: "Service overloaded" } },
+        { status: 503 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await ping(app, { presetId: "slot-groq" });
+
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      errorKind: "overloaded",
+      error: expect.stringContaining("Service overloaded"),
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});

@@ -353,3 +353,48 @@ export async function pingPreset(
   }
   return body as PingResult;
 }
+
+export interface ProviderModelList {
+  ok: boolean;
+  models: string[];
+  error?: string;
+  errorKind?: string;
+}
+
+/** Ask a provider endpoint for the model IDs it offers. */
+export async function listProviderModels(target: {
+  provider: string;
+  baseUrl?: string;
+  protocol?: string;
+}): Promise<ProviderModelList> {
+  try {
+    const res = await requestResponse("/api/ai/models", {
+      method: "POST",
+      headers: buildProviderKeysHeader(),
+      body: JSON.stringify({
+        provider: target.provider,
+        ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
+        ...(target.protocol ? { protocol: target.protocol } : {}),
+      }),
+      operatorAuth: true,
+      silentErrors: true,
+    });
+    const body: unknown = await res.json().catch(() => null);
+    if (
+      body &&
+      typeof body === "object" &&
+      Array.isArray((body as ProviderModelList).models)
+    )
+      return body as ProviderModelList;
+    return { ok: false, models: [], error: `HTTP ${res.status}` };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return {
+        ok: false,
+        models: [],
+        error: error.response?.error ?? `HTTP ${error.status}`,
+      };
+    }
+    throw error;
+  }
+}
