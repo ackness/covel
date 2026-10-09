@@ -315,7 +315,7 @@ contributes:
 
 namespace 声明 `search` 后，它的记录进入框架的记忆检索（[`memory-search`](tools.md) 的 archival 范围），结果的 `source` 是 `archival:plugin_data`，并带 `pluginId`、`namespace` 和记录的 key。`search.text` 是记录值里存放待检索文字的字段名；该字段不是非空字符串的记录不参与检索。只有插件在当前会话启用时才读取，没有声明的 namespace 框架不读。配置了 embedding 模型时，这些记录和 lorebook、角色记录一起写入向量索引，插件不需要另做处理。
 
-检索由框架完成，插件只决定记什么。插件要在自己的代码里给一批文字排序（例如在 `prompt.segment@1` 里挑出与玩家输入有关的记录），用 SDK 的 `rankTexts(query, texts, { limit, minCoverage })`：它和框架检索是同一份 BM25 实现，不调用模型。返回的 `coverage`（0 到 1）表示文本回答了查询的多少，可用来丢掉只沾到常见词的结果；`searchTerms` 和 `searchExcerpt` 是配套的切词与摘录函数。
+检索由框架完成，插件只决定记什么。插件要在自己的代码里给一批文字排序（例如在 `prompt.segment@1` 里挑出与玩家输入有关的记录），用 SDK 的 `rankTexts(query, texts, { limit, minCoverage })`：它和框架检索是同一份 BM25 实现，不调用模型。返回的 `coverage`（0 到 1）表示文本回答了查询的多少，可用来丢掉只沾到常见词的结果；`matched` 是文本含有的查询词个数，除以 `searchTerms(query).length` 就是查询有多大比例落在这条文本上，一句长查询只和文本共有一个日常用词时这个比例很小；`searchTerms` 和 `searchExcerpt` 是配套的切词与摘录函数。
 
 世界包把 source 声明为 `visibility: hidden` 时，同一份数据会导入到接收插件的 `_hidden.<namespace>`（例如 `_hidden.facts`）。插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取；扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。揭示应通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](world-data.md#隐藏数据visibility-hidden)。
 

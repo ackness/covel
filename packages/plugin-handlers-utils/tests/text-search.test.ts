@@ -31,7 +31,7 @@ describe("rankTexts", () => {
 
   it("reports how much of the query a text answers, so a caller can leave out weak matches", () => {
     const [best] = rankTexts("silver key", texts);
-    expect(best).toMatchObject({ index: 1, coverage: 1 });
+    expect(best).toMatchObject({ index: 1, coverage: 1, matched: 2 });
     // "the" is the only query word the first text holds, and it is common.
     expect(
       rankTexts("the silver key", texts, { minCoverage: 0.5 }).map(

@@ -3,6 +3,7 @@ import { z } from "zod";
 import extract from "../server/extract.js";
 import register from "../server/index.js";
 import { loadDefinitions } from "../server/definitions.js";
+import { recallFacts, withoutRepeats } from "../server/facts.js";
 
 function fixture(response = '{"scene":"At the harbour"}') {
   const controller = new AbortController();
@@ -313,6 +314,81 @@ describe("memory facts", () => {
     expect(lines).toEqual([
       "- 第2回合：林遥把银钥匙藏在钟楼的第三级台阶下。",
       "- 第5回合：你答应守门人在黎明前带回银钥匙。",
+    ]);
+  });
+});
+
+describe("memory fact recall and repeats", () => {
+  const fact = (turn: number, text: string) => ({
+    key: `t${turn}`,
+    value: { turn, text: `第${turn}回合：${text}` },
+  });
+  const rows = [
+    fact(2, "梅瑞尔说，外乡学者科尔文曾在赏金告示张贴前询问古灯。"),
+    fact(3, "雷恩计划去守灯人小屋查伊索德的日志，以寻找古灯熄灭的原因。"),
+    fact(4, "门边出现晃动的湿斗篷，布兰诺克注意到了门口动静。"),
+    fact(9, "众人离开酒馆。"),
+  ];
+  const names = ["布兰诺克・黑尔", "梅瑞尔・沃斯", "科尔文・艾什"];
+
+  it("does not recall a fact that shares one everyday word with a long message", () => {
+    expect(
+      recallFacts(rows, "探索周围环境，寻找任何可以利用的线索。", names),
+    ).toEqual([]);
+  });
+
+  it("recalls the facts of a character that a long message names in part", () => {
+    expect(
+      recallFacts(
+        rows,
+        "走到门口的时候我一直在想，布兰诺克白天说的那些话到底是什么意思，他是不是知道些什么却不肯告诉我们",
+        names,
+      ),
+    ).toEqual(["第4回合：门边出现晃动的湿斗篷，布兰诺克注意到了门口动静。"]);
+  });
+
+  it("leaves out a new fact that says what a recorded fact or an earlier new fact says", () => {
+    const recorded = [
+      fact(6, "梅瑞尔在歪角鹿酒馆取出一盏小提灯，供众人雨夜走山脚路时照明。"),
+    ];
+    expect(
+      withoutRepeats(
+        [
+          "梅瑞尔在歪角鹿酒馆提供了一盏小提灯，供众人雨夜走山脚路时照明，并提醒不要离得太散。",
+          "雷恩在守灯人小屋找到了伊索德的日志。",
+          "雷恩在守灯人小屋里找到了伊索德的日志。",
+        ],
+        recorded,
+      ),
+    ).toEqual(["雷恩在守灯人小屋找到了伊索德的日志。"]);
+  });
+
+  it("shows the model the recorded facts and does not write one of them again", async () => {
+    const {
+      ctx,
+      rows: stored,
+      writes,
+      gateway,
+    } = fixture(
+      '{"new_facts":["Mira hid the silver key under the bell tower.","The gate closed at midnight."]}',
+    );
+    stored.set("facts/t00003-1", {
+      turn: 3,
+      text: "Turn 3: Mira hid the silver key under the bell tower.",
+    });
+    Object.assign(ctx, { logicalTurn: 4 });
+    await expect(extract(ctx)).resolves.toMatchObject({
+      value: { factsAdded: 1 },
+    });
+    expect(gateway.generateText.mock.calls[0]?.[0].prompt).toContain(
+      "## Recorded facts (do not repeat)\n- Turn 3: Mira hid the silver key",
+    );
+    expect(writes).toEqual([
+      {
+        namespace: "facts",
+        key: "t00004-1",
+        value: { turn: 4, text: "Turn 4: The gate closed at midnight." },
+      },
     ]);
   });
 });

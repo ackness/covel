@@ -54,6 +54,10 @@ export default function register(covel) {
       const recalled = recallFacts(
         await ctx.pluginData.list("facts"),
         input.playerMessage,
+        // The player's own name is in most facts and says nothing about which one is meant.
+        (ctx.world?.characters ?? [])
+          .filter((character) => character.type !== "player")
+          .map((character) => character.name),
       );
       if (recalled.length > 0) {
         const heading = isDefaultLocale(ctx.locale)

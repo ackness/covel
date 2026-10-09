@@ -9,7 +9,7 @@ import {
   enforceAuthoritativePlayerProfile,
   parseMemoryUpdate,
 } from "./extraction.js";
-import { factKey, factText } from "./facts.js";
+import { factKey, factText, recentFacts, withoutRepeats } from "./facts.js";
 import { retryTransientProviderCall } from "./provider-retry.js";
 
 const MAX_REPLY_ATTEMPTS = 2;
@@ -53,9 +53,11 @@ export default async function extractMemory(ctx) {
     lang,
   });
   const effective = applyUpdatesToBlockSnapshot(currentBlocks, updates);
+  const factRows = await ctx.pluginData.list("facts");
   const prompt = buildUserPrompt(
     {
       blocks: effective,
+      recordedFacts: recentFacts(factRows),
       facts,
       narrative: digest.narrativeText,
       toolSummaries: digest.toolCallSummaries,
@@ -121,7 +123,8 @@ export default async function extractMemory(ctx) {
   // Facts are only added. A block is rewritten every turn and forgets; the
   // facts keep what happened, and memory search reads them.
   const turn = ctx.logicalTurn ?? 0;
-  for (const [index, fact] of extracted.facts.entries()) {
+  const newFacts = withoutRepeats(extracted.facts, factRows);
+  for (const [index, fact] of newFacts.entries()) {
     ctx.signal.throwIfAborted();
     await ctx.pluginData.set("facts", factKey(turn, index), {
       turn,
@@ -132,7 +135,7 @@ export default async function extractMemory(ctx) {
     outcome: "success",
     value: {
       blocksChanged: [...updates.keys()],
-      factsAdded: extracted.facts.length,
+      factsAdded: newFacts.length,
     },
   };
 }

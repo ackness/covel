@@ -89,6 +89,12 @@ export interface RankedText {
    * text holds is not counted: it tells nothing about which text is closer.
    */
   readonly coverage: number;
+  /**
+   * How many of the query's terms the text holds. Over the number of
+   * `searchTerms(query)` it says how much of the query is about this text; a
+   * long query that shares one everyday word with a text gives a small part.
+   */
+  readonly matched: number;
 }
 
 export interface RankTextsOptions {
@@ -131,11 +137,13 @@ export function rankTexts(
   const ranked: RankedText[] = [];
   for (const [index, document] of documents.entries()) {
     let score = 0;
+    let matched = 0;
     let matchedWeight = 0;
     for (const term of queryTerms) {
       const count = document.counts.get(term);
       if (!count) continue;
       const weight = weights.get(term)!;
+      matched++;
       matchedWeight += weight;
       score +=
         (weight * count * (K1 + 1)) /
@@ -144,7 +152,7 @@ export function rankTexts(
     if (score <= 0) continue;
     const coverage = totalWeight > 0 ? matchedWeight / totalWeight : 0;
     if (coverage < (options.minCoverage ?? 0)) continue;
-    ranked.push({ index, score, coverage });
+    ranked.push({ index, score, coverage, matched });
   }
   ranked.sort((a, b) => b.score - a.score || a.index - b.index);
   return options.limit === undefined ? ranked : ranked.slice(0, options.limit);

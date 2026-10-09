@@ -35,7 +35,7 @@ ${descriptions}
 每个块内容控制在 300-500 字以内，使用简洁的事实陈述，不要用文学化的描写。
 块写满时，删去已经了结、不再影响后续的旧内容，保留人名、数字、承诺和未解决的悬念。
 
-另外可以加一个 \`${NEW_FACTS_KEY}\` 键，值是字符串数组：列出本回合新发生、以后可能被问起的事实，最多 ${MAX_FACTS_PER_TURN} 条。每条一句话，写明涉及的人名、地名、物品名和具体数字，脱离上下文也能读懂。只写本回合新发生的事；没有就省略这个键。
+另外可以加一个 \`${NEW_FACTS_KEY}\` 键，值是字符串数组：列出本回合新发生、以后可能被问起的事实，最多 ${MAX_FACTS_PER_TURN} 条。每条一句话，写明涉及的人名、地名、物品名和具体数字，脱离上下文也能读懂。只写“本回合叙事”里新发生或第一次透露的事，第一次透露的往事也算。玩家角色开局就有的背景、世界设定、对已知事情的回忆或复述、任何人的推测和打算都不算，“已记录的事实”里有的不要再写。没有就省略这个键。
 如果用户消息中的“会话事实（权威）”与叙事、推断或旧记忆冲突，必须以会话事实为准。
 
 示例输出（用实际的块标签替换）：
@@ -68,7 +68,7 @@ Only output blocks that changed. If nothing worth updating happened, output \`{}
 Keep each block under 300-500 words. Use concise factual statements, not literary descriptions.
 When a block is full, drop old content that is settled and no longer matters, and keep names, numbers, promises and unresolved threads.
 
-You may add a \`${NEW_FACTS_KEY}\` key whose value is an array of strings: the facts that are new in this turn and that someone may ask about later, at most ${MAX_FACTS_PER_TURN}. Write each fact as one sentence that names the people, places, items and numbers involved and that reads on its own. Give only what is new in this turn; omit the key when there is nothing.
+You may add a \`${NEW_FACTS_KEY}\` key whose value is an array of strings: the facts that are new in this turn and that someone may ask about later, at most ${MAX_FACTS_PER_TURN}. Write each fact as one sentence that names the people, places, items and numbers involved and that reads on its own. Give only what newly happens or is told for the first time in "Current turn narrative"; a past event that is told for the first time counts. The background the player character started with, world lore, a known event that is remembered or retold, and anyone's guess or plan are not facts of this turn, and a fact under "Recorded facts" is not written again. Omit the key when there is nothing.
 If "Authoritative Session Facts" conflict with the narrative, an inference, or an older memory block, the authoritative facts always win.
 
 Example output (replace with actual block labels):
@@ -87,6 +87,7 @@ ${languageInstruction}`;
  */
 function buildUserPrompt(args, lang) {
   const { blocks, facts, narrative, toolSummaries, submittedForm } = args;
+  const recordedFacts = args.recordedFacts ?? [];
   const zh = lang === "zh";
   const current = blocks
     .filter((block) => block.content.trim())
@@ -94,6 +95,11 @@ function buildUserPrompt(args, lang) {
     .join("\n\n");
   return [
     `${zh ? "## 当前记忆块" : "## Current memory blocks"}\n${current || (zh ? "（空）" : "(empty)")}${buildAuthoritativeFactsSection(facts, lang)}`,
+    ...(recordedFacts.length > 0
+      ? [
+          `${zh ? "## 已记录的事实（不要重复）" : "## Recorded facts (do not repeat)"}\n${recordedFacts.map((fact) => `- ${fact}`).join("\n")}`,
+        ]
+      : []),
     `${zh ? "## 本回合叙事" : "## Current turn narrative"}\n${narrative}`,
     `${zh ? "## 工具调用摘要" : "## Tool summaries"}\n${toolSummaries.join("\n")}`,
     ...(submittedForm
