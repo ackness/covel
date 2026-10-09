@@ -1,5 +1,5 @@
 import type { PluginLlmModelTarget } from "./model-resolver.js";
-import { instructionLocaleFor } from "@covel/shared";
+import { instructionLocaleFor, unifyFinishReason } from "@covel/shared";
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
@@ -347,12 +347,7 @@ export function createGatewayAdapter(
           name: tc.name,
           arguments: tc.arguments,
         })),
-        finishReason:
-          result.finishReason === "tool_calls"
-            ? "tool_calls"
-            : result.finishReason === "length"
-              ? "length"
-              : "stop",
+        finishReason: completedFinishReason(result.finishReason),
         usage: result.usage,
         ...(result.providerContinuation
           ? { providerContinuation: result.providerContinuation }
@@ -561,4 +556,11 @@ function toGatewayTool(tool: LLMToolDefinition) {
       parameters: tool.parameters,
     },
   };
+}
+/** A gateway of another origin may still answer in a provider's own word. */
+function completedFinishReason(
+  reason: string,
+): "stop" | "tool_calls" | "length" {
+  const unified = unifyFinishReason(reason);
+  return unified === "tool_calls" || unified === "length" ? unified : "stop";
 }

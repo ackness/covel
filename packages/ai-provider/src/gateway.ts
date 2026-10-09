@@ -32,7 +32,10 @@ import {
   withProviderWarnings,
   type ProviderOptions,
 } from "./provider-options.js";
-import { assertSuccessfulFinishReason } from "./adapters/generation-completion.js";
+import {
+  assertSuccessfulFinishReason,
+  withUnifiedFinishReason,
+} from "./adapters/generation-completion.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
 import {
@@ -287,7 +290,10 @@ export function createGateway(deps: GatewayDependencies) {
             targetProvider(target),
           );
           return {
-            ...withProviderWarnings(result, request.warnings),
+            ...withProviderWarnings(
+              withUnifiedFinishReason(result),
+              request.warnings,
+            ),
             model: targetModel(target),
             provider: targetProvider(target),
           };
@@ -347,7 +353,10 @@ export function createGateway(deps: GatewayDependencies) {
             targetProvider(target),
           );
           return {
-            ...withProviderWarnings(result, request.warnings),
+            ...withProviderWarnings(
+              withUnifiedFinishReason(result),
+              request.warnings,
+            ),
             model: targetModel(target),
             provider: targetProvider(target),
           };
@@ -496,7 +505,10 @@ export function createGateway(deps: GatewayDependencies) {
           }
           if (event.type === "done") {
             assertSuccessfulFinishReason(event.finishReason, provider);
-            completion = withProviderWarnings(event, request.warnings);
+            completion = withProviderWarnings(
+              withUnifiedFinishReason(event),
+              request.warnings,
+            );
             continue;
           }
           yield event;

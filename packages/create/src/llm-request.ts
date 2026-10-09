@@ -3,6 +3,7 @@ import {
   createLlmRequestBudget,
   DEFAULT_LLM_REQUEST_CEILING_MS,
   iterateLlmRequest,
+  unifyFinishReason,
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
 } from "@covel/shared";
 import type { LLMAdapter, LLMMessage, LLMResponse } from "@covel/shared";
@@ -26,8 +27,9 @@ export class LlmIncompleteOutputError extends Error {
 }
 
 function requireComplete(reason: string | undefined): void {
-  if (reason === "length" || reason === "max_tokens" || reason === "error")
-    throw new LlmIncompleteOutputError(reason);
+  const unified = unifyFinishReason(reason);
+  if (unified === "length" || unified === "error")
+    throw new LlmIncompleteOutputError(reason ?? unified);
 }
 
 interface LlmRequestOptions {
@@ -108,10 +110,8 @@ export async function requestLlmResponse(
         requireComplete(event.finishReason);
         completed = true;
         finishReason =
-          event.finishReason === "tool_calls" ||
-          event.finishReason === "length" ||
-          event.finishReason === "error"
-            ? event.finishReason
+          unifyFinishReason(event.finishReason) === "tool_calls"
+            ? "tool_calls"
             : "stop";
         reasoningContent = event.reasoningContent ?? "";
       }

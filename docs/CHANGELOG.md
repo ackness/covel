@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **`finishReason` has one vocabulary for every protocol.** The model gateway returns `stop`, `length`, `tool_calls`, `content_filter`, `error` or `other`, and keeps the provider's own word in `rawFinishReason`, as the AI SDK does with `unified` and `raw`. A plugin that compared `ctx.gateway` results with a provider's word (`end_turn`, `max_tokens`, `tool_use`) must compare with the unified value. The runtime and world generation read the same table (`unifyFinishReason` in `@covel/shared`) in place of three separate ones.
+
+### Fixed
+
+- **An Anthropic answer cut at the output limit is an error on a call that is not streamed.** The provider's `max_tokens` was read as a normal end there, so a cut answer or cut JSON was kept as complete. Streamed calls already rejected it.
+
 ## [0.0.49] - 2026-10-09
 
 This release fixes session recovery, background-task status, streaming retries, plugin and storage boundaries, and desktop layout issues. SQLite now uses Node's built-in driver while retaining the existing database format. macOS Apple Silicon and Windows x64 binaries are unsigned; the macOS build is not notarized. Read the [upgrade notes](#upgrade-notes-for-v0049) before installing.

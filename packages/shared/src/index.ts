@@ -18,6 +18,8 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
+export { unifyFinishReason } from "./llm-finish-reason.js";
+export type { LLMFinishReason } from "./llm-finish-reason.js";
 export type {
   EvaluationJson,
   EvaluationValue,

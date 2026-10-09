@@ -1,3 +1,4 @@
+import { unifyFinishReason } from "@covel/shared";
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 /**
@@ -131,8 +132,8 @@ function requireCompleteOutput(
     readonly toolCalls: number;
   },
 ): LLMResponse["finishReason"] {
-  const normalized = reason.toLowerCase();
-  if (normalized === "length" || normalized === "max_tokens") {
+  const unified = unifyFinishReason(reason);
+  if (unified === "length") {
     if (keptText?.allowed && keptText.toolCalls === 0 && keptText.text?.trim())
       return "length";
     throw new AiProviderError({
@@ -144,12 +145,10 @@ function requireCompleteOutput(
       details: { finishReason: "length" },
     });
   }
-  if (normalized === "error") {
+  if (unified === "error") {
     throw new Error("PROVIDER_ERROR: model generation ended with an error");
   }
-  return normalized === "tool_calls" || normalized === "tool_use"
-    ? "tool_calls"
-    : "stop";
+  return unified === "tool_calls" ? "tool_calls" : "stop";
 }
 
 export interface CallLLMWithRetryParams {

@@ -270,6 +270,8 @@ runtime 默认关闭思考时，已知型号使用支持的关闭值，否则使
 
 Chat、Responses、Anthropic 的文本流必须包含各自协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表这些协议的模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。Gemini 原生流依据 `streamGenerateContent` 的候选结束原因判定完成，不依赖 OpenAI 的 `[DONE]` 标记。
 
+`generateText`、`generateObject` 的返回值和 stream 的 `done` 里，`finishReason` 是统一后的结束原因，取值与协议无关：`stop`（正常结束）、`length`（被输出或上下文上限截断）、`tool_calls`（请求调用工具）、`content_filter`（服务商拦截或拒答）、`error`、`other`。服务商自己的用词（如 Anthropic 的 `end_turn` / `max_tokens` / `tool_use`）保留在 `rawFinishReason`。对照表只有一份，在 `@covel/shared` 的 `unifyFinishReason`，网关在出口处应用，runtime 和世界生成读同一张表；做法与 AI SDK 的 `unified` / `raw` 相同。插件通过 `ctx.gateway` 拿到的也是统一后的值。
+
 四种内置文本协议的 text/object 返回值和 stream 的 `done` 可携带 `diagnostics`，包含供应商及请求 warning、URL/文档来源和引用位置；runtime bridge 和 LLM trace 保留这些信息。`citations.location` 区分回答文本位置与来源文本位置，不能把 Anthropic 文档页码或原文字符偏移当作回答偏移。来源只记录已收到的协议数据，不代表已支持主动调用 web search 或文件工具。
 
 function 插件的 `PluginRuntimeGateway` 同样透传 `providerOptions` 与完整返回诊断。该路径的 `gateway.responded` / `gateway.failed` trace 保持原有隐私约定，只记录 `diagnosticsSummary` 中的 warning 类型、来源/引用数量及拒绝原因，不记录引用原文、来源 URL、标题或拒绝全文。

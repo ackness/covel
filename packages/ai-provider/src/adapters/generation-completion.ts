@@ -1,3 +1,4 @@
+import { unifyFinishReason, type LLMFinishReason } from "@covel/shared";
 import { AiProviderError } from "../errors.js";
 
 /** HTTP 200 does not imply that a generation completed successfully. */
@@ -75,11 +76,8 @@ export function assertSuccessfulFinishReason(
   finishReason: string,
   provider: string,
 ): void {
-  if (
-    finishReason === "refusal" ||
-    finishReason === "content_filter" ||
-    finishReason === "content-filter"
-  ) {
+  const unified = unifyFinishReason(finishReason);
+  if (unified === "content_filter") {
     throw new AiProviderError({
       code: "REFUSAL",
       message: `${provider} refused the generation`,
@@ -94,7 +92,7 @@ export function assertSuccessfulFinishReason(
       },
     });
   }
-  if (finishReason === "error") {
+  if (unified === "error") {
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
       message: `${provider} reported an error finish reason`,
@@ -102,4 +100,18 @@ export function assertSuccessfulFinishReason(
       retriable: true,
     });
   }
+}
+
+/**
+ * Give a result one finish-reason vocabulary whatever its adapter returned.
+ * The provider's own word stays in `rawFinishReason`.
+ */
+export function withUnifiedFinishReason<T extends { finishReason: string }>(
+  result: T,
+): T & { finishReason: LLMFinishReason; rawFinishReason: string } {
+  return {
+    ...result,
+    finishReason: unifyFinishReason(result.finishReason),
+    rawFinishReason: result.finishReason,
+  };
 }

@@ -12,10 +12,7 @@ export default function register(api) {
               messages: request.messages,
               signal: ctx.signal,
             });
-            if (
-              result.finishReason === "length" ||
-              result.finishReason === "max_tokens"
-            )
+            if (result.finishReason === "length")
               throw new Error("History summary generation was truncated");
             return { content: result.text };
           },

@@ -365,7 +365,12 @@ export type UsageSummary = LLMUsageSummary;
 export interface TextGenerationResult {
   diagnostics?: LLMDiagnostics;
   text: string;
+  /**
+   * An adapter may return the provider's own word. The gateway returns the
+   * unified `LLMFinishReason` and moves the word to `rawFinishReason`.
+   */
   finishReason: string;
+  rawFinishReason?: string;
   usage: UsageSummary;
   /** Tool calls requested by the model (present when finishReason involves tool use). */
   toolCalls?: ToolCallPart[];
@@ -387,7 +392,9 @@ export interface ObjectGenerationResult<TObject = unknown> {
   object: TObject;
   reasoningContent?: string;
   providerContinuation?: LLMProviderContinuation;
+  /** Unified by the gateway; see `TextGenerationResult.finishReason`. */
   finishReason: string;
+  rawFinishReason?: string;
   usage: UsageSummary;
 }
 
@@ -402,7 +409,9 @@ export type StreamEvent =
   | {
       type: "done";
       diagnostics?: LLMDiagnostics;
+      /** Unified by the gateway; see `TextGenerationResult.finishReason`. */
       finishReason: string;
+      rawFinishReason?: string;
       usage: UsageSummary;
       /**
        * Full provider-exposed reasoning text or summary. Preserve it together
