@@ -3149,6 +3149,11 @@ interface SseEnvelope {
 `resolvedVia` 为 `direct`、`slot`、`tag-fallback` 或 `any`；目录接口不公开其他请求
 临时注册的模型配置，连接测试也不会从这些配置中隐式选择目标。
 
+`errorKind`，取值见 [连接测试与失败原因](slots.md#连接测试与失败原因)：
+
+失败时状态码仍为 200：`{ "ok": false, "models": [], "error": "…", "errorKind": "auth" }`。
+评估协议没有模型列表（`errorKind: "config"`）。请求 15 秒超时，最多返回 2000 个 ID。
+
 #### `POST /api/ai/generate-world`
 
 AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tags、dimensions、lore，并可同时创作主要角色、资料库、世界规则、题材记忆与开局配置。服务器把文本内容写成按约定路径布局的世界包：`WORLD.md`、`data/dimensions.yaml`、`characters/characters.json`、`data/lorebook.yaml`，以及每个插件数据契约在接收插件声明路径上的文件（如 `data/memory-blocks.json`）。文件都在约定路径上时没有 descriptor，详见 [World Data](world-data.md)。

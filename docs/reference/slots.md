@@ -266,6 +266,26 @@ runtime 默认关闭思考时，已知型号使用支持的关闭值，否则使
 
 内置图片和语音生成提交不做 HTTP 层自动重发；超时或连接断开时，客户端不能据此判断上游是否已生成。文本调用的重试策略不受此规则改变。
 
+### 连接测试与失败原因
+
+| `errorKind`    | 含义                                     | 依据                                                                                             |
+| -------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `unreachable`  | 连不上：服务没启动、地址端口错、DNS、TLS | 无 HTTP 状态；连接错误码（`ECONNREFUSED`、`ENOTFOUND` 等）或证书错误                             |
+| `timeout`      | 连上了但没有按时应答                     | 超时错误码、请求预算耗尽、408、504                                                               |
+| `auth`         | 密钥无效或无权使用该模型                 | 401、403                                                                                         |
+| `quota`        | 余额或额度不足                           | 402；或服务商的错误码 / 文字说明额度不足（OpenAI 用 429 `insufficient_quota`，Anthropic 用 400） |
+| `rate_limited` | 请求过于频繁                             | 429                                                                                              |
+| `not_found`    | 地址路径或模型 ID 不存在                 | 404                                                                                              |
+| `bad_request`  | 服务商拒绝了请求本身                     | 其余 4xx，多半是协议或参数不匹配                                                                 |
+| `overloaded`   | 服务商当前过载                           | 503、529（Anthropic）                                                                            |
+| `server`       | 服务商内部错误                           | 其余 5xx                                                                                         |
+| `refused`      | 服务商拒绝回答                           | refusal / content filter                                                                         |
+| `config`       | 模型配置无法发起这次调用                 | 配置错误、地址被出站规则拒绝                                                                     |
+
+连接失败时 `error` 取底层原因（如 `connect ECONNREFUSED 127.0.0.1:11434`），不是笼统的 `fetch failed`。分类在 `@covel/ai-provider` 的 `classifyProviderFailure`。
+
+连接测试按模型类型选择探测方式：文本模型发一次最小的流式请求，以收到第一段正文或思考内容的时间为首字延迟；评估模型发一次评估请求；embedding 模型发一次向量请求。测试只发一个 HTTP 请求，不做传输重试也不切换备用模型，因此报告的就是这一次请求的结果和耗时。
+
 四种内置文本协议共用的 SSE 帧解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。Gemini 原生协议使用 `streamGenerateContent` 的响应格式，不能用 `[DONE]` 判定其终态。
 
 Chat、Responses、Anthropic 的文本流必须包含各自协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表这些协议的模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。Gemini 原生流依据 `streamGenerateContent` 的候选结束原因判定完成，不依赖 OpenAI 的 `[DONE]` 标记。
@@ -293,6 +313,8 @@ Key 永远不进 `llm.toml`：dev 放 `.env.llm`，桌面端放 `~/.covel/keys.e
 ## HTTP retry cleanup
 
 Provider and plugin HTTP helpers cancel rejected response bodies before retrying instead of buffering the entire error stream. Redirect responses are also cancelled when rejected. `Retry-After` waits remain abortable; long finite delays are split into timer-safe intervals, and non-finite delays fail explicitly instead of overflowing into immediate retries.
+
+重试哪些应答与 OpenAI、Anthropic 官方 SDK 和 AI SDK 一致：408、409、429 和 5xx；服务商在 `x-should-retry` 头里给出的 `true` / `false` 优先于状态码。等待时间先读更精确的 `retry-after-ms`（OpenAI、Azure），再读 `Retry-After`。服务商要求的等待超过 60 秒，或超过本次调用剩余的时限时，不等待：这次应答直接返回给调用方，按限流处理，可以改用备用模型（此前会一直等到时限耗尽，然后以不可回退的预算错误结束）。
 
 `Retry-After` 同时接受整数秒和 HTTP-date；过去的日期立即重试，无效值退回退避策略。文本 / 对象 / 流式 / 评估的 gateway 调用默认共享最多 8 次实际 HTTP 请求和 120 秒总时限。runtime 的一次逻辑调用只创建一次预算，HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`；runtime 执行预算继续按原策略计算，并发排队保留原有的额度补偿；每次实际调用同时受执行预算、逻辑总时限和取消信号约束。排队和退避也计入逻辑总时间，已经输出内容的流仍禁止重试。耗尽返回不可重试的 `REQUEST_BUDGET_EXCEEDED`。调用方可通过 `createLlmRequestBudget` 显式设置更紧或更宽的策略，并在 `GatewayOptions.requestBudget` / `LLMAdapter` 参数中传递。AI 世界创作（生成、修订、翻译）就是这样做的：回答长、有的模型输出慢，所以它按“无响应时间”限时，每次请求传入 30 分钟的显式预算，不受默认 120 秒限制（见 `docs/reference/api.md` 的 `POST /api/ai/generate-world`）。
 

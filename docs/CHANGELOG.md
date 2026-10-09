@@ -4,9 +4,15 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **A failed connection test says what kind of failure it was.** `POST /api/ai/ping` and the model list return `errorKind` (`unreachable`, `timeout`, `auth`, `quota`, `rate_limited`, `not_found`, `bad_request`, `overloaded`, `server`, `refused`, `config`) and the settings page shows what to do about it. A refused connection names the host and port instead of `fetch failed`.
+
 ### Changed
 
 - **`finishReason` has one vocabulary for every protocol.** The model gateway returns `stop`, `length`, `tool_calls`, `content_filter`, `error` or `other`, and keeps the provider's own word in `rawFinishReason`, as the AI SDK does with `unified` and `raw`. A plugin that compared `ctx.gateway` results with a provider's word (`end_turn`, `max_tokens`, `tool_use`) must compare with the unified value. The runtime and world generation read the same table (`unifyFinishReason` in `@covel/shared`) in place of three separate ones.
+- **Transport retries follow the providers' SDKs.** HTTP 408 and 409 are sent again like 429 and 5xx, `x-should-retry` decides when the provider sets it, and `retry-after-ms` is read before `Retry-After`. When the provider asks for a wait of more than 60 seconds, or more than the call has left, the call does not wait: it ends as rate limited and can use a backup model. Before, it waited until its time ran out and ended without a backup.
+- **A connection test is one request.** It no longer retries, so its result and latency are those of the request it sent. An embedding model is tested with a vector request; before, it was sent a text request and reported as failed.
 
 ### Fixed
 

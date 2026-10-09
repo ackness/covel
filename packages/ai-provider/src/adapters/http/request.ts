@@ -10,10 +10,11 @@ import { outboundFetch } from "../../outbound-network.js";
 import {
   computeBackoffMs,
   isConnectionError,
-  isRetriableStatus,
   isRetryDisabled,
   MAX_RETRIES,
-  parseRetryAfterMs,
+  MAX_RETRY_AFTER_MS,
+  parseRetryDelayMs,
+  shouldRetryResponse,
   sleepWithAbort,
 } from "./retry.js";
 import { buildProviderUrl, validateBaseUrl } from "./url-safety.js";
@@ -151,13 +152,27 @@ export async function postJson(
   };
 
   try {
-    if (options?.retry === false || isRetryDisabled()) {
+    if (
+      options?.retry === false ||
+      config.transportRetry === false ||
+      isRetryDisabled()
+    ) {
       return await doFetch();
     }
 
     let response = await fetchThroughDrops();
 
-    while (retries < MAX_RETRIES && isRetriableStatus(response.status)) {
+    while (retries < MAX_RETRIES && shouldRetryResponse(response)) {
+      const retryAfterMs = parseRetryDelayMs(response.headers);
+      // A wait the call cannot sit out is not waited for: the caller gets the
+      // provider's answer while there is still time to use a backup model.
+      if (
+        retryAfterMs !== null &&
+        (retryAfterMs > MAX_RETRY_AFTER_MS ||
+          (scope !== undefined &&
+            Date.now() + retryAfterMs > scope.budget.deadline))
+      )
+        return response;
       // Discard rejected bodies without buffering an unbounded error stream.
       if (response.body) {
         await awaitLlmRequest(
@@ -171,9 +186,6 @@ export async function postJson(
           requireAttempt: true,
         });
 
-      const retryAfterMs = parseRetryAfterMs(
-        response.headers.get("retry-after"),
-      );
       const delay = retryAfterMs ?? computeBackoffMs(retries);
       await sleepWithAbort(delay, effectiveSignal);
 

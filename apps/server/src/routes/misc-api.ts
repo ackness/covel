@@ -10,6 +10,7 @@ import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
+  classifyProviderFailure,
   publicPresetId,
   resolveModelBinding,
 } from "@covel/ai-provider";
@@ -374,6 +375,9 @@ export function createMiscApiRoutes(
       apiKeys,
       signal: abort.signal,
       allowFallback: false,
+      // One request: a retried probe would report a later answer and the
+      // time of the waits as the model's own.
+      transportRetry: false,
       envApiKeys: providerApiKeysFromEnv(),
       slotOverrides: requestedSlot
         ? {
@@ -412,6 +416,24 @@ export function createMiscApiRoutes(
           testedTarget,
         });
       }
+      // An embedding model has no text stream: it answers one vector call.
+      if (
+        preset.supportedModes.includes("embed") &&
+        !preset.supportedModes.includes("stream")
+      ) {
+        const result = await ai.gateway.embed(
+          { presetId: requestedSlot ?? preset.id, values: ["hi"] },
+          gatewayOptions,
+        );
+        clearTimeout(timeout);
+        cleanupTransient();
+        return c.json({
+          ok: true,
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          testedTarget,
+        });
+      }
       for await (const event of ai.gateway.streamText(
         {
           presetId: requestedSlot ?? preset.id,
@@ -438,14 +460,14 @@ export function createMiscApiRoutes(
       }
     } catch (err) {
       if (!aborted) {
-        const message = err instanceof Error ? err.message : String(err);
+        const failure = classifyProviderFailure(err, preset.provider);
         clearTimeout(timeout);
         cleanupTransient();
         return c.json({
           ok: false,
           latencyMs: Date.now() - startedAt,
           ...(ttfbMs !== null ? { ttfbMs } : {}),
-          error: message,
+          errorKind: failure.kind,
           testedTarget,
         });
       }
@@ -462,6 +484,7 @@ export function createMiscApiRoutes(
         error: timedOut
           ? "Provider did not return any content within 30s"
           : "Provider returned no content",
+        errorKind: timedOut ? "timeout" : "unknown",
         testedTarget,
       });
     }

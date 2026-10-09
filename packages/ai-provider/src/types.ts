@@ -169,6 +169,11 @@ export interface ProviderConfig {
   /** Shared finite budget across transport, gateway fallback, and runtime retries. */
   requestBudget?: LLMRequestBudget;
   /**
+   * False sends each request once. A connection test sets it, so the answer
+   * and the time it reports are those of one request.
+   */
+  transportRetry?: false;
+  /**
    * Prompt cache strategy for this provider.
    *
    * Filled in by the provider registry based on the resolved protocol;

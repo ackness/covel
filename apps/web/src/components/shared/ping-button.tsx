@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { CheckCircle2, Loader2, XCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 import { pingPreset, type PingResult } from "@/services/api.js";
 
 /**
@@ -174,6 +175,11 @@ export function PingButton({
   const latencyDisplay = result?.ok
     ? (result.ttfbMs ?? result.latencyMs)
     : null;
+  const failureText = describeProviderFailure(
+    t,
+    result?.errorKind,
+    result?.error,
+  );
   const resolvedVia = result?.testedTarget?.resolvedVia;
   const fellThrough = resolvedVia === "tag-fallback" || resolvedVia === "any";
 
@@ -195,10 +201,10 @@ export function PingButton({
         defaultValue: "{{ms}}ms TTFB",
       }),
     );
-  } else if (result && !result.ok && result.error) {
+  } else if (result && !result.ok && failureText) {
     tooltipLines.push(
       t("settings.pingErrorTooltip", {
-        error: result.error,
+        error: failureText,
         defaultValue: "Error: {{error}}",
       }),
     );
@@ -270,7 +276,7 @@ export function PingButton({
             <>
               <XCircle className="h-3 w-3 shrink-0 text-destructive" />
               <ActionableErrorNotice
-                error={result.error ?? t("settings.pingFailed", "Failed")}
+                error={failureText ?? t("settings.pingFailed", "Failed")}
               />
             </>
           )}

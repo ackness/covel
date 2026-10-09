@@ -303,6 +303,8 @@ export interface PingResult {
   text?: string;
   usage?: { inputTokens: number; outputTokens: number };
   error?: string;
+  /** Why the call failed, as `ProviderFailureKind` of `@covel/ai-provider`. */
+  errorKind?: string;
   /** Echoes the exact preset/baseUrl/model that was probed. Always present for resolved pings. */
   testedTarget?: PingTestedTarget;
 }

@@ -64,6 +64,11 @@ export type {
   ProviderOptionSettings,
 } from "./provider-options.js";
 export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
+export {
+  classifyProviderFailure,
+  type ProviderFailure,
+  type ProviderFailureKind,
+} from "./provider-failure.js";
 
 // Bundled resources
 export { BUNDLED_MODEL_DB_PATH } from "./bundled-resources.js";
