@@ -125,7 +125,8 @@ A checkpoint travels whole in both directions at every action, so it holds only
 what does not grow with each turn played, plus the conversation itself. All game
 state, messages and the prompt history are complete. Of the execution journals
 it carries the turn results and runtime outputs of the latest 40 executions (a
-retry names a recent turn as its source) and the `turn.started` /
+retry names a recent turn as its source), the newest revision of each runtime
+export, and the `turn.started` /
 `turn.completed` / `turn.failed` trace rows that the execution status is read
 from. The tool-call log, the event trail and every other trace row have no
 reader outside the debug page and stay in the server workspace that produced
