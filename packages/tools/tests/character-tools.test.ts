@@ -372,17 +372,17 @@ describe("builtin character tools", () => {
       // DELIBERATE CHANGE: nothing written during execution.
       expect(store.characters).toHaveLength(0);
       expect(loop.pending).toHaveLength(1);
-      expect(loop.pending[0].type).toBe("character.upsert");
+      expect(loop.pending[0]!.type).toBe("character.upsert");
 
       loop.commit();
       expect(store.characters).toHaveLength(1);
       const char = store.characters[0];
-      expect(char.sessionId).toBe("sess-1");
-      expect(char.name).toBe("柳无痕");
-      expect(char.type).toBe("player");
-      expect(char.description).toBe("外门弟子，灵识敏锐");
-      expect(char.fields).toEqual({ hp: 100, level: 1, lingGen: "水灵根" });
-      expect(char.version).toBe(1);
+      expect(char!.sessionId).toBe("sess-1");
+      expect(char!.name).toBe("柳无痕");
+      expect(char!.type).toBe("player");
+      expect(char!.description).toBe("外门弟子，灵识敏锐");
+      expect(char!.fields).toEqual({ hp: 100, level: 1, lingGen: "水灵根" });
+      expect(char!.version).toBe(1);
     });
 
     it("validates type field and rejects invalid values", async () => {
@@ -971,7 +971,7 @@ describe("builtin character tools", () => {
     it("rollback (never commit) leaves the store with zero changes", async () => {
       await loop.call("create-character", { name: "Ghost", type: "npc" });
       await loop.call("update-character", {
-        id: (loop.pending[0].payload as { id: string }).id,
+        id: (loop.pending[0]!.payload as { id: string }).id,
         fields: { hp: 1 },
       });
       // Execution rolls back → commit() is never called.

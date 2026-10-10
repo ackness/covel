@@ -92,6 +92,7 @@ const baseArgs = (over: {
 
 describe("deriveActivation", () => {
   const input = (extra: Partial<TurnInput> = {}): TurnInput => ({
+    origin: "player",
     sessionId: "s",
     turnId: "t",
     playerMessage: "go",
@@ -379,9 +380,9 @@ describe("resolveInputBindings — cardinality & providers", () => {
       }),
     );
     expect(res.ok).toBe(true);
-    if (res.ok && res.slots.data.cardinality === "all") {
-      expect(res.slots.data.items.map((i) => i.value)).toEqual(["A", "B"]);
-      expect(res.slots.data.items.map((i) => i.source.runtimeId)).toEqual([
+    if (res.ok && res.slots.data!.cardinality === "all") {
+      expect(res.slots.data!.items.map((i) => i.value)).toEqual(["A", "B"]);
+      expect(res.slots.data!.items.map((i) => i.source.runtimeId)).toEqual([
         "p/a",
         "p/b",
       ]);
@@ -500,7 +501,7 @@ describe("resolveInputBindings — select & required/optional", () => {
     );
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.slots.data).toMatchObject({ value: { events: [] } });
-    if (res.ok) expect(res.slots.data?.value).not.toHaveProperty("skip");
+    if (res.ok) expect(res.slots.data).not.toHaveProperty("value.skip");
   });
 });
 
@@ -937,7 +938,9 @@ describe("prototype-named input bindings", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(Object.hasOwn(result.slots, name)).toBe(true);
-        expect(result.slots[name]?.value).toEqual({ value: "business" });
+        expect(result.slots[name]).toMatchObject({
+          value: { value: "business" },
+        });
       }
     },
   );

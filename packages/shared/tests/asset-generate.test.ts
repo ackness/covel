@@ -5,7 +5,7 @@ import {
   isAssetGeneratePayload,
   isAssetGenerateView,
 } from "../src/index.js";
-import type { Proposal } from "../src/index.js";
+import type { AssetGeneratePayload, Proposal } from "../src/index.js";
 
 const REF = {
   id: "a".repeat(64),
@@ -21,7 +21,8 @@ function makeProposal(payload: Record<string, unknown>): Proposal {
     source: { pluginId: "image-plugin", runtimeId: "generate" },
     turnId: "turn-1",
     sessionId: "sess-1",
-    payload,
+    // Cases also pass malformed payloads on purpose.
+    payload: payload as unknown as AssetGeneratePayload,
     timestamp: "2026-04-26T00:00:00.000Z",
   };
 }

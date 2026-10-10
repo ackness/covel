@@ -259,7 +259,7 @@ describe("Snapshot routes", () => {
       await app.request("/api/sessions/sess-1/snapshots", { method: "POST" });
       const list = await store.listSnapshots("sess-1");
       expect(list).toHaveLength(1);
-      expect(list[0].kind).toBe("manual");
+      expect(list[0]!.kind).toBe("manual");
     });
 
     it("refuses a manual snapshot while session deletion is pending", async () => {

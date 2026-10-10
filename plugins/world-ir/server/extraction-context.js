@@ -33,15 +33,18 @@ export default async function extractionContext(ctx, payload) {
       messages: [
         {
           role: "user",
+          // The roster and the vocabulary change on few turns and the
+          // narrative on every turn, so they come first: a provider's prompt
+          // cache serves a request only as far as it repeats the last one.
           content: JSON.stringify({
+            characters,
+            ...(vocabulary.length ? { vocabulary } : {}),
             // Only the text: the result id, plugin id and runtime id are
             // bookkeeping the model has no use for.
             narrative: {
               cardinality: narrative.cardinality,
               value: narrative.value,
             },
-            characters,
-            ...(vocabulary.length ? { vocabulary } : {}),
           }),
         },
       ],

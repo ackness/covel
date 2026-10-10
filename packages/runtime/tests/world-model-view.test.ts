@@ -280,7 +280,7 @@ describe("execution World Model", () => {
     }));
     const seen: unknown[] = [];
     const result = await executeTurn(
-      { sessionId, turnId: "turn", playerMessage: "go" },
+      { origin: "player", sessionId, turnId: "turn", playerMessage: "go" },
       manifests,
       {
         store,

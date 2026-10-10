@@ -101,7 +101,7 @@ describe("SSE Events", () => {
       });
 
       expect(received).toHaveLength(1);
-      expect(received[0].payload).toEqual({ data: "hello" });
+      expect(received[0]!.payload).toEqual({ data: "hello" });
     });
 
     it("should require topic and sessionId", async () => {

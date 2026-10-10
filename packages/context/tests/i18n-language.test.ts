@@ -13,6 +13,7 @@ import {
   resolveLocaleLanguageName,
 } from "../src/prompt-internals.js";
 import type { ContextBuildParams } from "../src/types.js";
+import { createMemoryStore } from "@covel/store/memory";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -275,8 +276,10 @@ describe("fixed text of the prompt assembly", () => {
         createdAt: `2026-04-21T00:00:0${index}.000Z`,
         updatedAt: `2026-04-21T00:00:0${index}.000Z`,
       }));
-    const block = async (locale: string, count: number) =>
-      (
+    const block = async (locale: string, count: number) => {
+      const store = createMemoryStore();
+      await store.setPluginDataBatch(records(count));
+      return (
         await buildSegmentedContextAsync(
           params(locale, {
             manifest: {
@@ -293,15 +296,11 @@ describe("fixed text of the prompt assembly", () => {
                 ],
               },
             },
-            store: {
-              getPluginDataPromptWindow: async () => ({
-                entries: records(Math.min(count, 4)),
-                total: count,
-              }),
-            },
+            store,
           }),
         )
       ).turnContext;
+    };
 
     expect(await block("zh-CN", 0)).toContain(
       "<existing-entries>（无）</existing-entries>",

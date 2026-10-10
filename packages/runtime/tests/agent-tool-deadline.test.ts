@@ -37,7 +37,12 @@ function options(
       tools: { plugin: ["probe"] },
       completeAfterTools: ["probe"],
     },
-    input: { sessionId: "session", turnId: "turn", playerMessage: "probe" },
+    input: {
+      origin: "player",
+      sessionId: "session",
+      turnId: "turn",
+      playerMessage: "probe",
+    },
     loaded: { promptTemplate: "probe" } as RunAgentToolLoopOptions["loaded"],
     deps,
     maxSteps: 2,

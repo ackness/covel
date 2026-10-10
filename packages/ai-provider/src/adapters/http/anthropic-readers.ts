@@ -105,10 +105,16 @@ export function toAnthropicMessages(
     .join("\n\n");
 
   const out: Array<{ role: string; content: string | readonly unknown[] }> = [];
+  // The last message ahead of the first instruction placed inside the
+  // conversation: the committed history ends there.
+  let historyEnd: (typeof out)[number] | undefined;
+  let sawInstruction = false;
   for (const msg of messages.slice(leadingCount)) {
     // The wire has no system role inside messages. Keep late kernel instructions
     // in their original position so changing turn context preserves history.
     if (msg.role === "system") {
+      if (!sawInstruction) historyEnd = out.at(-1);
+      sawInstruction = true;
       out.push({
         role: "user",
         content: `<system-instruction>\n${stripPromptCacheMarkers(anthropicSystemText(msg.content))}\n</system-instruction>`,
@@ -191,33 +197,47 @@ export function toAnthropicMessages(
     // One moving breakpoint covers conversation history and prior tool rounds.
     // Thinking blocks cannot carry explicit cache_control; cache the latest
     // text, image or tool block without mutating a provider continuation.
-    for (let index = out.length - 1; index >= 0; index--) {
-      const message = out[index]!;
-      const blocks =
-        typeof message.content === "string"
-          ? message.content
-            ? [{ type: "text", text: message.content }]
-            : []
-          : [...message.content];
-      let cacheIndex = blocks.length - 1;
-      while (
-        cacheIndex >= 0 &&
-        !["text", "image", "tool_use", "tool_result"].includes(
-          String((blocks[cacheIndex] as Record<string, unknown>).type),
-        )
-      )
-        cacheIndex--;
-
-      if (cacheIndex < 0) continue;
-      blocks[cacheIndex] = {
-        ...(blocks[cacheIndex] as Record<string, unknown>),
-        cache_control: { type: "ephemeral" },
-      };
-      message.content = blocks;
-      break;
+    let last: (typeof out)[number] | undefined;
+    for (let index = out.length - 1; index >= 0 && !last; index--) {
+      if (markCacheBreakpoint(out[index]!)) last = out[index];
     }
+    // That breakpoint follows this turn's data, which sits after the history
+    // (the turn context), so what it writes is read again only by the later
+    // calls of this turn. The next turn's request repeats this one up to the
+    // end of the history and no further: a second breakpoint there is the
+    // entry the next turn reads. With the two system breakpoints this is the
+    // request's fourth, the most the API takes.
+    if (historyEnd && historyEnd !== last) markCacheBreakpoint(historyEnd);
   }
   return { system, messages: out };
+}
+
+/** Puts a cache breakpoint on the message's last block that can carry one. */
+function markCacheBreakpoint(message: {
+  content: string | readonly unknown[];
+}): boolean {
+  const blocks =
+    typeof message.content === "string"
+      ? message.content
+        ? [{ type: "text", text: message.content }]
+        : []
+      : [...message.content];
+  let cacheIndex = blocks.length - 1;
+  while (
+    cacheIndex >= 0 &&
+    !["text", "image", "tool_use", "tool_result"].includes(
+      String((blocks[cacheIndex] as Record<string, unknown>).type),
+    )
+  )
+    cacheIndex--;
+
+  if (cacheIndex < 0) return false;
+  blocks[cacheIndex] = {
+    ...(blocks[cacheIndex] as Record<string, unknown>),
+    cache_control: { type: "ephemeral" },
+  };
+  message.content = blocks;
+  return true;
 }
 
 function anthropicSystemText(content: TextMessageContent): string {

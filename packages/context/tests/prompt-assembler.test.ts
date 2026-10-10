@@ -18,6 +18,7 @@ import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
     name: "test-rt",
+    pluginId: "test-plugin",
     description: "test",
     stage: "narrative",
     ...overrides,
@@ -511,6 +512,46 @@ describe("prompt-assembler — turn context", () => {
     { role: "user", content: "earlier action" },
     { role: "assistant", content: "earlier story" },
   ];
+
+  it("names the story message instead of repeating this turn's story text in an input", () => {
+    const build = (executionStory: MessageHistoryRecord[]) =>
+      buildSegmentedContext(
+        baselineParams({
+          manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
+          turnInput: makeTurnInput({ locale: "en-US" }),
+          inputSlots: {
+            ...narrative("this turn's story"),
+            facts: {
+              cardinality: "one" as const,
+              value: { summary: "this turn's story" },
+              source: { pluginId: "facts", runtimeId: "facts", resultId: "f" },
+            },
+          },
+          executionStory,
+        }),
+      );
+
+    const projected = build([
+      { role: "assistant", content: "this turn's story", name: "narrator" },
+    ]);
+    expect(projected.turnContext).toContain(
+      '"narrative":{"cardinality":"one","value":"(this turn\'s story text: the last story reply in the conversation below; not repeated here)"',
+    );
+    // Only a slot whose whole value is the text; a value that contains it stays.
+    expect(projected.turnContext).toContain(
+      '"value":{"summary":"this turn\'s story"}',
+    );
+    expect(
+      projected.messages.filter(
+        (message) => message.content === "this turn's story",
+      ),
+    ).toHaveLength(1);
+
+    // A retry after the commit: the text is in the history, not projected.
+    expect(build([]).turnContext).toContain(
+      '"narrative":{"cardinality":"one","value":"this turn\'s story"',
+    );
+  });
 
   // The reason for the layout: a provider serves a request from its cache
   // only as far as it matches an earlier one from the first byte.

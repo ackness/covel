@@ -50,9 +50,6 @@ contributes:
 
 `<player-character>` 块是玩家角色当前的角色卡。
 
-<!-- `runtime-inputs.active-cast.value` 与 `runtime-inputs.npc-relationships.value` 由 input.inject（frontmatter）在 segment 5
-     自动追加，正文不再重复内联，避免每回合双份注入。下方写作规则直接引用这两个标签。 -->
-
 ## 用户设置
 
 - 对话占比：{{ userSettings.dialogueRatio }}%

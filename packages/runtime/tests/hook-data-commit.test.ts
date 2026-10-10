@@ -150,6 +150,7 @@ describe("Hook data at the commit boundary", () => {
         },
         runtimes: [
           {
+            description: "test",
             name: "probe/main",
             pluginId: "probe",
             outputKind: "plugin",

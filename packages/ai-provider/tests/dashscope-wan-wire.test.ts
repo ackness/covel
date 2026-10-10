@@ -29,6 +29,7 @@ function stubFetchSequence(
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe("dashscope-wan wire", () => {
@@ -469,18 +470,21 @@ describe("dashscope-wan wire", () => {
       { json: { output: { task_id: "t1" } } },
       { json: { output: { task_status: "RUNNING" } } },
     ]);
+    vi.useFakeTimers();
     const controller = new AbortController();
-    const start = Date.now();
     const promise = dashscopeWanWire.generate(
       { baseUrl: "https://d.test", apiKey: "k", signal: controller.signal },
       { model: "m", prompt: "p" },
       undefined,
       { pollIntervalMs: 5_000, timeoutMs: 60_000 },
     );
-    // Submit + first poll resolve on microtasks (no real delay); abort well
-    // before the 5s sleep before the second poll would otherwise elapse.
-    setTimeout(() => controller.abort(), 30);
-    await expect(promise).rejects.toThrow(/abort/i);
-    expect(Date.now() - start).toBeLessThan(2_000);
+    // Submit + first poll resolve on microtasks; abort while the wire sleeps
+    // before the second poll. The fake clock never reaches the 5s interval, so
+    // a wire that ignored the signal would hang here instead of rejecting.
+    const assertion = expect(promise).rejects.toThrow(/abort/i);
+    await vi.advanceTimersByTimeAsync(30);
+    controller.abort();
+    await assertion;
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

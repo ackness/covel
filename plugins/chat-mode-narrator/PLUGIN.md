@@ -208,10 +208,6 @@ Use the opening situation described in `<world-lore>` and `<world-dimensions>`.
 
 The `<player-character>` block holds the player character's current sheet.
 
-<!-- runtime-inputs.active-cast.value and runtime-inputs.npc-relationships.value are appended automatically in segment 5
-     by input.inject (frontmatter); the body does not re-interpolate them, to avoid
-     double injection each turn. The writing rules below reference both tags. -->
-
 ## User Settings
 
 - Dialogue ratio: {{ userSettings.dialogueRatio }}%

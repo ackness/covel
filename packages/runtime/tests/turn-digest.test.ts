@@ -20,7 +20,13 @@ describe("kernel turn digest", () => {
   it("freezes only successful source-turn story and accepted tool summaries", () => {
     const live = result();
     const digest = buildTurnDigest(
-      { sessionId: "s", turnId: "current", playerMessage: "Go", locale: "en" },
+      {
+        origin: "player",
+        sessionId: "s",
+        turnId: "current",
+        playerMessage: "Go",
+        locale: "en",
+      },
       [
         live,
         result({ turnId: "previous" }),
@@ -54,7 +60,12 @@ describe("kernel turn digest", () => {
 
   it("keeps explicit empty story output so the plugin can skip without querying later state", () => {
     const digest = buildTurnDigest(
-      { sessionId: "s", turnId: "current", playerMessage: "Only a form" },
+      {
+        origin: "player",
+        sessionId: "s",
+        turnId: "current",
+        playerMessage: "Only a form",
+      },
       [result({ runtimeId: "form" })],
       [story],
     );

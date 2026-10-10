@@ -29,13 +29,13 @@ it("captures JSON-serialized plugin state without changing the live record", asy
   const snapshot = makeSnapshot({ payload });
   await store.saveSnapshot(snapshot);
   expect(
-    (await store.getSnapshot(snapshot.id))?.payload.pluginData[0].value,
+    (await store.getSnapshot(snapshot.id))?.payload.pluginData[0]!.value,
   ).toStrictEqual({
     text: "",
     nullable: null,
     nested: { kept: 1 },
   });
   expect(
-    (await store.listPluginDataSessionScope("sess-1"))[0].value,
+    (await store.listPluginDataSessionScope("sess-1"))[0]!.value,
   ).toStrictEqual(value);
 });

@@ -53,3 +53,49 @@ test("browser smoke starts each owned server once and respects external stacks",
     }
   }
 });
+
+test("every browser smoke title pattern still selects a test", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      `import config from ${JSON.stringify(configUrl.href)};
+       console.log(JSON.stringify({
+         testMatch: config.testMatch,
+         grep: config.grep.source,
+       }));`,
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const { testMatch, grep } = JSON.parse(result.stdout);
+
+  // The `test("title", ...)` and `test.describe("title", ...)` declarations of
+  // the spec files the smoke run lists. A pattern that matches none of them is a test that was renamed (or
+  // removed) and has silently dropped out of the smoke set.
+  const titles = [];
+  for (const pattern of testMatch) {
+    const file = path.join(repoRoot, "tests/e2e", path.basename(pattern));
+    const source = fs.readFileSync(file, "utf8");
+    for (const match of source.matchAll(
+      /\btest(?:\.describe)?\(\s*(["'`])((?:\\.|(?!\1).)*)\1/g,
+    )) {
+      titles.push(match[2]);
+    }
+  }
+  assert.ok(titles.length > 0, "found no test titles in the smoke spec files");
+
+  for (const alternative of grep.split("|")) {
+    const matching = titles.filter((title) =>
+      new RegExp(alternative).test(title),
+    );
+    assert.equal(
+      matching.length,
+      1,
+      `smoke pattern /${alternative}/ selects ${matching.length} tests`,
+    );
+  }
+});

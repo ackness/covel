@@ -104,7 +104,7 @@ describe("createPluginLogger", () => {
 
     const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_logs");
     expect(rows).toHaveLength(1);
-    const entry = rows[0].value as {
+    const entry = rows[0]!.value as {
       level: string;
       message: string;
       meta: Record<string, unknown>;
@@ -136,7 +136,7 @@ describe("createPluginLogger", () => {
     const logger = createPluginLogger(store, ctx);
     await logger.info("no-meta");
     const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_logs");
-    expect(rows[0].value).not.toHaveProperty("meta");
+    expect(rows[0]!.value).not.toHaveProperty("meta");
   });
 
   it("records only levels at or above the configured threshold", async () => {

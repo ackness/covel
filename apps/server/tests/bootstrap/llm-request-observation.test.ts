@@ -155,10 +155,10 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
       complete: true,
       statusCode: 200,
     });
-    expect(requests[0].body).toEqual(calls[0]);
-    expect(calls[0].max_tokens).toBe(32);
-    expect(calls[0].temperature).toBe(0.2);
-    expect(JSON.stringify(calls[0].messages)).toContain("response-format");
+    expect(requests[0]!.body).toEqual(calls[0]);
+    expect(calls[0]!.max_tokens).toBe(32);
+    expect(calls[0]!.temperature).toBe(0.2);
+    expect(JSON.stringify(calls[0]!.messages)).toContain("response-format");
     expect(JSON.stringify(rows)).not.toContain("synthetic-primary-key");
   });
 
@@ -231,9 +231,9 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
         ],
       });
       expect(recorded(rows)[0]).toMatchObject({ protocol, complete: true });
-      expect(recorded(rows)[0].body).toEqual(calls[0]);
-      expect(JSON.stringify(recorded(rows)[0].body)).toContain("recall-1");
-      expect(JSON.stringify(recorded(rows)[0].body)).toContain(
+      expect(recorded(rows)[0]!.body).toEqual(calls[0]);
+      expect(JSON.stringify(recorded(rows)[0]!.body)).toContain("recall-1");
+      expect(JSON.stringify(recorded(rows)[0]!.body)).toContain(
         "https://media.example.com/book.png",
       );
     },
@@ -292,11 +292,11 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
       );
     });
     const delta = vi.fn(() => {
-      expect(recorded(rows)[0].body).toEqual(calls[0]);
+      expect(recorded(rows)[0]!.body).toEqual(calls[0]);
     });
     await streamLLMWithRetry({ ...params, onDelta: delta });
     expect(delta).toHaveBeenCalledWith("hello");
-    expect(recorded(rows)[0].body.stream).toBe(true);
+    expect(recorded(rows)[0]!.body.stream).toBe(true);
   });
 
   it("does not pretend redacted resources and unknown metadata can be reconstructed", async () => {
@@ -316,8 +316,8 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
       },
       { onProviderRequest: (r) => records.push(r) },
     );
-    expect(records[0].complete).toBe(false);
-    expect(records[0].omittedFieldCount).toBe(1);
+    expect(records[0]!.complete).toBe(false);
+    expect(records[0]!.omittedFieldCount).toBe(1);
     expect(JSON.stringify(records)).not.toContain("synthetic-secret");
     expect(JSON.stringify(records)).not.toContain("synthetic-metadata-secret");
   });

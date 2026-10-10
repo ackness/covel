@@ -58,7 +58,7 @@ function createRecordingStore(): RecordingStore {
   function maybeFail(
     method: "addMessage" | "addStateChange" | "saveEvent",
   ): void {
-    counters[method]++;
+    counters[method]!++;
     if (
       store.failOn &&
       store.failOn.method === method &&
@@ -151,7 +151,7 @@ function makeProposal(
     sessionId: SESSION_ID,
     payload,
     timestamp: new Date().toISOString(),
-  };
+  } as Proposal;
 }
 
 describe("session-kernel commitAll atomicity", () => {
@@ -232,10 +232,10 @@ describe("session-kernel commitAll atomicity", () => {
       ];
 
       const results = await pipeline.commitAll(proposals);
-      expect(results[0].committed).toBe(true);
-      expect(results[1].committed).toBe(false);
-      expect(results[1].error).toMatch(/table must be a non-empty string/);
-      expect(results[2].committed).toBe(true);
+      expect(results[0]!.committed).toBe(true);
+      expect(results[1]!.committed).toBe(false);
+      expect(results[1]!.error).toMatch(/table must be a non-empty string/);
+      expect(results[2]!.committed).toBe(true);
 
       // Siblings stay committed; the transaction commits (no rollback).
       expect(store.messages).toHaveLength(1);
@@ -266,10 +266,10 @@ describe("session-kernel commitAll atomicity", () => {
       makeProposal("event.emit", { data: { x: 1 } }, "b"),
     ]);
 
-    expect(results[0].committed).toBe(false);
-    expect(results[0].error).toMatch(/table must be a non-empty string/);
-    expect(results[1].committed).toBe(false);
-    expect(results[1].error).toMatch(/topic must be a non-empty string/);
+    expect(results[0]!.committed).toBe(false);
+    expect(results[0]!.error).toMatch(/table must be a non-empty string/);
+    expect(results[1]!.committed).toBe(false);
+    expect(results[1]!.error).toMatch(/topic must be a non-empty string/);
     expect(store.stateChanges).toHaveLength(0);
     expect(store.events).toHaveLength(0);
   });
@@ -342,7 +342,7 @@ describe("session-kernel commitAll atomicity", () => {
       ),
     ]);
 
-    expect(results[0].committed).toBe(true);
+    expect(results[0]!.committed).toBe(true);
     expect(emitted.map((e) => e.type)).toContain("block.emitted");
     // Every fan-out event was observed AFTER the transaction committed.
     expect(emitted.every((e) => e.commitCount === 1)).toBe(true);
@@ -371,8 +371,8 @@ describe("session-kernel commitAll atomicity", () => {
       (t) => t.type === "proposal.committed",
     );
     expect(committedRows).toHaveLength(1);
-    expect(committedRows[0].traceId).toBe("sse-trace-id");
-    expect(committedRows[0].turnId).toBe(TURN_ID);
+    expect(committedRows[0]!.traceId).toBe("sse-trace-id");
+    expect(committedRows[0]!.turnId).toBe(TURN_ID);
   });
 
   it("writes through an already transaction-bound store view", async () => {
@@ -396,7 +396,7 @@ describe("session-kernel commitAll atomicity", () => {
 
     const results = await pipeline.commitAll(proposals);
     expect(results).toHaveLength(1);
-    expect(results[0].committed).toBe(true);
+    expect(results[0]!.committed).toBe(true);
     expect(store.addMessage).toHaveBeenCalledOnce();
   });
 });

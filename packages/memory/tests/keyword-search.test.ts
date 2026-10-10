@@ -16,8 +16,10 @@ it("finds reordered Chinese phrases and returns the matching passage beyond the 
         id: "message",
         sessionId: "session",
         turnId: "turn",
+        sourceType: "runtime",
         role: "assistant",
         content,
+        order: 0,
         createdAt: "2026-10-06T00:00:00Z",
       },
     ],
@@ -57,8 +59,10 @@ it.each(["Alice", "alice", "灯塔"])(
       id,
       sessionId: "session",
       turnId: "turn",
+      sourceType: "runtime",
       role: "assistant" as const,
       content,
+      order: 0,
       createdAt: "2026-10-06T00:00:00Z",
     });
     const recall = createKeywordRecallSearcher({

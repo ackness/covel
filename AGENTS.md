@@ -90,7 +90,7 @@ pnpm dev:electron     # desktop shell in development
 pnpm stop             # kill stray dev/turbo processes
 pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails), package boundaries, deps:check,
                       # plugin manifests, schema reference, prompt variants, i18n, script regressions, actionlint
-pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
+pnpm lint             # tsc --noEmit for the FULL workspace (not one package), test code included
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:docs        # the tests that read documentation; all a documentation-only change needs after pnpm check
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
@@ -106,6 +106,10 @@ pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, fo
                       # session without model calls: pnpm llm:replay --mode record --upstream <origin>
                       # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff
                       # <a.requests> <b.requests> shows where two runs differ (docs/guide/e2e-plugin-verify.md)
+pnpm prompt:prefix    # per runtime of a recorded session: the size of each turn's first model request, how
+                      # much of it repeats the previous turn's from the start (the part a provider's prompt
+                      # cache can serve), and where the two first differ: pnpm prompt:prefix <covel.db>
+                      # [--session <id>] [--show <runtimeId>] [--json] (docs/reference/prompt-structure.md)
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
 pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]
                       # default target is the user plugin dir; --with-tools scaffolds into plugins/
@@ -582,7 +586,11 @@ arguments, and outputs stripped from traces and the live stream.
   `*.spec.ts` under `tests/e2e/`. They run against a production build of the
   web app; a spec that imports the app's modules in the page (`import("/src/...")`)
   runs on the Vite dev server instead (`chromium-dev`), which is much slower. Add focused regression tests for features and
-  fixes. CI enforces a coverage floor for `@covel/runtime` only
+  fixes. Test code is type-checked by `pnpm lint`: a package's `tests/`
+  directory through its `tsconfig.test.json` (web tests sit under `src/`). A file
+  in that config's `exclude` still has type errors against the current
+  contracts; fix its fixtures (import the real types rather than copying
+  shapes) and never grow the list. CI enforces a coverage floor for `@covel/runtime` only
   (`pnpm test:coverage:runtime`); the ≥80% goal for the other packages
   (`pnpm test:coverage`) is not enforced.
 - Every `DataStore` backend must pass the shared contract suite

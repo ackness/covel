@@ -28,7 +28,7 @@ io:
 agent:
   model: plugin
   history:
-    maxTurns: 2
+    maxTurns: 0
   llm:
     reasoningEffort: disabled
     toolChoice: required

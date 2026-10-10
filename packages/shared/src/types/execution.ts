@@ -158,7 +158,7 @@ export interface TurnInput {
    *
    * `triggerEvent` is an optional event payload forwarded to the targeted
    * runtime via `FunctionHandlerContext.triggerEvent` — used by the
-   * background follower path (audit P1) so a deferred follower runtime
+   * background follower path so a deferred follower runtime
    * receives the same `triggerEvent` shape it would have seen during the
    * synchronous event-chain fan-out. Independent of `payload`, which is
    * the manual click payload from the UI.

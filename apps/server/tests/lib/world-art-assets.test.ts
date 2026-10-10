@@ -110,7 +110,7 @@ describe.each(worlds)("shipped art: %s", (world) => {
             ...(character.variants ?? []),
           ];
           if (record.visuals || character.variants?.length) {
-            expect(record.visuals?.defaultVariant, label).toBe(variants[0].id);
+            expect(record.visuals?.defaultVariant, label).toBe(variants[0]!.id);
             expect(
               record.visuals?.variants.map((variant) => variant.id).sort(),
               label,

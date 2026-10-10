@@ -118,7 +118,7 @@ describe("plugin-owned evaluation integration", () => {
       {
         sessionId: "demo-test",
         turnId: "turn-1",
-        turnNumber: 1,
+        origin: "player",
         playerMessage: "Show me the classroom",
       },
       [
@@ -161,7 +161,6 @@ describe("plugin-owned evaluation integration", () => {
         runtimeId: r.runtimeId,
         status: r.status,
         error: r.error,
-        skipReason: r.skipReason,
       })),
     ).toEqual(
       expect.arrayContaining([

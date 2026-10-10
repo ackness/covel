@@ -66,12 +66,12 @@ function embedText(text: string): Float32Array {
   const v = new Float32Array(DIM);
   for (const ch of text.toLowerCase()) {
     if (/\s/.test(ch)) continue;
-    v[ch.charCodeAt(0) % DIM] += 1;
+    v[ch.charCodeAt(0) % DIM]! += 1;
   }
   let norm = 0;
-  for (let i = 0; i < DIM; i += 1) norm += v[i] * v[i];
+  for (let i = 0; i < DIM; i += 1) norm += v[i]! * v[i]!;
   norm = Math.sqrt(norm) || 1;
-  for (let i = 0; i < DIM; i += 1) v[i] /= norm;
+  for (let i = 0; i < DIM; i += 1) v[i]! /= norm;
   return v;
 }
 const embed = async (texts: readonly string[]): Promise<Float32Array[]> =>
@@ -145,10 +145,10 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
 
     const hits = await system.recall.search(sessionId, "dragon fire", 3);
     expect(hits.length).toBeGreaterThan(0);
-    expect(hits[0].content).toContain("dragon");
+    expect(hits[0]!.content).toContain("dragon");
     // distance → score is monotonic, so scores are non-increasing.
     for (let i = 1; i < hits.length; i += 1) {
-      expect(hits[i - 1].score).toBeGreaterThanOrEqual(hits[i].score);
+      expect(hits[i - 1]!.score).toBeGreaterThanOrEqual(hits[i]!.score);
     }
   });
 

@@ -11,7 +11,12 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 const mockEstimator: TokenEstimator = (text) => Math.ceil(text.length / 4);
 
 function makeManifest(): RuntimeManifest {
-  return { name: "test-rt", description: "test", stage: "narrative" };
+  return {
+    name: "test-rt",
+    pluginId: "test-plugin",
+    description: "test",
+    stage: "narrative",
+  };
 }
 
 function makeTurnInput(): TurnInput {

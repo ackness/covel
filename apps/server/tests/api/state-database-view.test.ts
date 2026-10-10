@@ -71,14 +71,14 @@ describe("GET /api/sessions/:id/state — database view", () => {
 
     const sess = body.tables.session;
     expect(sess).toBeDefined();
-    expect(sess.data.id).toBe(sessionId);
-    expect(sess.data.worldId).toBe("cloudmere");
-    expect(sess.data.phase).toBe("playing");
-    expect(sess.data.completedPlayerTurns).toBe(2);
-    expect(sess.data.setupRuntimes).toEqual({});
-    expect(sess.data.activePlugins).toEqual(["narrator", "codex"]);
+    expect(sess!.data.id).toBe(sessionId);
+    expect(sess!.data.worldId).toBe("cloudmere");
+    expect(sess!.data.phase).toBe("playing");
+    expect(sess!.data.completedPlayerTurns).toBe(2);
+    expect(sess!.data.setupRuntimes).toEqual({});
+    expect(sess!.data.activePlugins).toEqual(["narrator", "codex"]);
     // Auto-generated schema lists every session field.
-    expect(sess.schema.fields.map((f) => f.name)).toEqual(
+    expect(sess!.schema.fields.map((f) => f.name)).toEqual(
       expect.arrayContaining([
         "id",
         "worldId",
@@ -175,14 +175,14 @@ describe("GET /api/sessions/:id/state — database view", () => {
 
     const codex = body.tables["plugin_data/codex:entries"];
     expect(codex).toBeDefined();
-    expect(Object.keys(codex.data).sort()).toEqual(["codex-1", "codex-2"]);
-    expect((codex.data["codex-1"] as Record<string, unknown>).title).toBe(
+    expect(Object.keys(codex!.data).sort()).toEqual(["codex-1", "codex-2"]);
+    expect((codex.data["codex-1"]! as Record<string, unknown>).title).toBe(
       "百灵沼泽",
     );
 
     const guide = body.tables["plugin_data/guide:message"];
     expect(guide).toBeDefined();
-    expect(guide.data.topic).toBe("子时出发");
+    expect(guide!.data.topic).toBe("子时出发");
   });
 
   it("exposes characters when any exist", async () => {
@@ -204,7 +204,9 @@ describe("GET /api/sessions/:id/state — database view", () => {
 
     const chars = body.tables.characters;
     expect(chars).toBeDefined();
-    expect((chars.data["char-1"] as Record<string, unknown>).name).toBe("张三");
+    expect((chars.data["char-1"]! as Record<string, unknown>).name).toBe(
+      "张三",
+    );
   });
 
   it("omits characters table when session has no characters", async () => {

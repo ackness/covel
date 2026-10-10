@@ -67,8 +67,14 @@ async function commit(
     executionContext: context,
     turnIds: [],
     runtimes: [
-      { ...source, name: source.runtimeId, outputKind: "plugin" },
       {
+        description: "test",
+        ...source,
+        name: source.runtimeId,
+        outputKind: "plugin",
+      },
+      {
+        description: "test",
         pluginId: "external-story",
         name: "external-story",
         outputKind: "story",

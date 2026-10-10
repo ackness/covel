@@ -60,7 +60,7 @@ async function dropDatabaseWithRetry(
     } catch (err) {
       lastError = err;
       if (attempt < CLEANUP_ATTEMPTS - 1) {
-        await sleep(CLEANUP_BACKOFF_MS[attempt]);
+        await sleep(CLEANUP_BACKOFF_MS[attempt]!);
       }
     } finally {
       await cleanupAdmin.end().catch(() => {});

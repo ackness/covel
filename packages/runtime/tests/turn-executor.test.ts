@@ -34,9 +34,9 @@ class MockLLM implements LLMAdapter {
     usage: { inputTokens: 100, outputTokens: 50 },
   };
 
-  async generate(params: {
-    messages: readonly { role: string; content: string }[];
-  }): Promise<LLMResponse> {
+  async generate(
+    params: Parameters<LLMAdapter["generate"]>[0],
+  ): Promise<LLMResponse> {
     this.calls.push({ messages: params.messages });
     return this.response;
   }
@@ -51,6 +51,7 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
     sessionId: "sess-1",
     turnId: "turn-1",
     playerMessage: "我走进森林",
+    origin: "player",
     ...overrides,
   };
 }
@@ -94,10 +95,10 @@ describe("TurnExecutor E2E", () => {
     const manifests = await loadPluginManifest(narratorDiscovery!);
     expect(manifests.length).toBe(1);
 
-    narratorManifest = manifests[0].manifest;
+    narratorManifest = manifests[0]!.manifest;
     narratorLoaded = {
       manifest: narratorManifest,
-      promptTemplate: manifests[0].promptTemplate,
+      promptTemplate: manifests[0]!.promptTemplate,
     };
   });
 
@@ -121,11 +122,11 @@ describe("TurnExecutor E2E", () => {
     expect(result.runtimeResults).toHaveLength(1);
 
     const narratorResult = result.runtimeResults[0];
-    expect(narratorResult.status).toBe("success");
-    expect(narratorResult.pluginId).toBe("narrator");
-    expect(narratorResult.output).toBeDefined();
+    expect(narratorResult!.status).toBe("success");
+    expect(narratorResult!.pluginId).toBe("narrator");
+    expect(narratorResult!.output).toBeDefined();
     expect(
-      (narratorResult.output as Record<string, unknown>).narrativeOutput,
+      (narratorResult!.output as Record<string, unknown>).narrativeOutput,
     ).toContain("黑暗的森林");
   });
 
@@ -203,14 +204,14 @@ describe("TurnExecutor E2E", () => {
 
     // Player input must never be interpolated into the system prompt — it
     // rides the user role exclusively (prompt-injection guardrail).
-    const systemMsg = mockLLM.calls[0].messages.find(
+    const systemMsg = mockLLM.calls[0]!.messages.find(
       (m) => m.role === "system",
     );
     expect(systemMsg).toBeDefined();
     expect(systemMsg!.content).not.toContain("我攻击巨龙");
 
     // Current turn's user message should be the last user message.
-    const userMessages = mockLLM.calls[0].messages.filter(
+    const userMessages = mockLLM.calls[0]!.messages.filter(
       (m) => m.role === "user",
     );
     expect(userMessages.length).toBeGreaterThan(0);
@@ -219,6 +220,7 @@ describe("TurnExecutor E2E", () => {
 
   it("should handle multiple runtimes in priority order", async () => {
     const preNarrator: RuntimeManifest = {
+      pluginId: "test-plugin",
       name: "pre-process",
       description: "Pre-turn processing",
       stage: "pre-turn",
@@ -422,12 +424,13 @@ describe("TurnExecutor E2E", () => {
 
     // Turn should still complete, but narrator result should be failed
     expect(result.runtimeResults).toHaveLength(1);
-    expect(result.runtimeResults[0].status).toBe("failed");
-    expect(result.runtimeResults[0].error).toContain("rate limited");
+    expect(result.runtimeResults[0]!.status).toBe("failed");
+    expect(result.runtimeResults[0]!.error).toContain("rate limited");
   });
 
   it("should skip runtimes that do not trigger", async () => {
     const manualRuntime: RuntimeManifest = {
+      pluginId: "test-plugin",
       name: "manual-only",
       description: "Only runs when manually triggered",
       stage: "post-turn",
@@ -448,7 +451,7 @@ describe("TurnExecutor E2E", () => {
 
     // Only narrator should run (manual-only skipped because isManualTrigger is false)
     expect(result.runtimeResults).toHaveLength(1);
-    expect(result.runtimeResults[0].pluginId).toBe("narrator");
+    expect(result.runtimeResults[0]!.pluginId).toBe("narrator");
   });
 
   it("should stage player and runtime messages until the commit barrier", async () => {
@@ -862,7 +865,7 @@ describe("TurnExecutor E2E", () => {
 
     // Verify LLM received history messages before current user message
     expect(mockLLM.calls).toHaveLength(1);
-    const llmMessages = mockLLM.calls[0].messages;
+    const llmMessages = mockLLM.calls[0]!.messages;
 
     // Should have: system + history(user) + history(assistant) + current user
     expect(llmMessages.length).toBeGreaterThanOrEqual(4);
@@ -981,11 +984,11 @@ describe("TurnExecutor _interaction protocol", () => {
     expect(result.pendingInputs!.length).toBeGreaterThanOrEqual(1);
 
     const pi = result.pendingInputs![0];
-    expect(pi.interaction).toBeDefined();
-    expect(pi.interaction.type).toBe("form");
-    expect(pi.interaction.interactionId).toBe("char-creation");
-    expect(pi.form).toBeDefined();
-    expect((pi.form as Record<string, unknown>).interactionId).toBe(
+    expect(pi!.interaction).toBeDefined();
+    expect(pi!.interaction.type).toBe("form");
+    expect(pi!.interaction.interactionId).toBe("char-creation");
+    expect(pi!.form).toBeDefined();
+    expect((pi!.form as Record<string, unknown>).interactionId).toBe(
       "char-creation",
     );
   });

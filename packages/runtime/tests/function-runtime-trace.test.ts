@@ -44,6 +44,7 @@ function makeFunctionManifest(
 
 function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-fn",
     turnId: "turn-fn",
     playerMessage: "hi",

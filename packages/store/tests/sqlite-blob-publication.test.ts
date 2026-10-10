@@ -5,6 +5,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
+import { toUint8Array } from "../src/contract/media-store-contract.js";
 import { mediaPath } from "../src/media-store/utils.js";
 
 describe("SQLite blob publication", () => {
@@ -20,7 +21,9 @@ describe("SQLite blob publication", () => {
       expect(await store.exists(ref.id)).toBe(false);
       await store.put(bytes, "image/png");
       expect(await store.exists(ref.id)).toBe(true);
-      expect(Array.from(await store.get(ref))).toEqual(Array.from(bytes));
+      expect(Array.from(await toUint8Array(await store.get(ref)))).toEqual(
+        Array.from(bytes),
+      );
     } finally {
       await store.close?.();
       fs.rmSync(root, { recursive: true, force: true });
@@ -63,7 +66,7 @@ describe("SQLite blob publication", () => {
         // Recover an orphan final file whose old write never published metadata.
         write(finalPath, bytes.subarray(0, 4));
         const ref = await store.put(bytes, "image/png");
-        const actual = await store.get(ref);
+        const actual = await toUint8Array(await store.get(ref));
         expect(actual.byteLength).toBe(ref.size);
         expect(createHash("sha256").update(actual).digest("hex")).toBe(ref.id);
         expect(fs.readdirSync(path.dirname(finalPath))).toEqual([

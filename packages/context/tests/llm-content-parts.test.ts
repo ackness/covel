@@ -27,6 +27,7 @@ import type {
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
     name: "test-rt",
+    pluginId: "test-plugin",
     description: "test",
     stage: "narrative",
     ...overrides,

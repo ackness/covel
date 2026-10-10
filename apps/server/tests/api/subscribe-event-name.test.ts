@@ -58,14 +58,14 @@ describe("deriveSseEventName", () => {
     expect(received).toHaveLength(1);
     const ev = received[0];
     // EventBus moved _subType onto event.type and stripped it from payload.
-    expect(ev.type).toBe("plugin-data.changed");
-    expect(ev.payload._subType).toBeUndefined();
+    expect(ev!.type).toBe("plugin-data.changed");
+    expect(ev!.payload._subType).toBeUndefined();
 
     // The SSE formatter must emit the full subType on the `event:` line,
     // not a topic-derived approximation. The frontend matches on the exact
     // string `plugin-data.changed` in its switch, so any loss here silently
     // drops every plugin panel refresh.
-    expect(deriveSseEventName(ev)).toBe("plugin-data.changed");
+    expect(deriveSseEventName(ev!)).toBe("plugin-data.changed");
   });
 
   it("preserves full subType for world.dimensions.changed", () => {
@@ -94,7 +94,7 @@ describe("deriveSseEventName", () => {
     });
 
     expect(received).toHaveLength(1);
-    expect(deriveSseEventName(received[0])).toBe("world.dimensions.changed");
+    expect(deriveSseEventName(received[0]!)).toBe("world.dimensions.changed");
   });
 
   it("preserves simple runtime.started emitted via emitSubEvent", () => {
@@ -126,7 +126,7 @@ describe("deriveSseEventName", () => {
       },
     });
 
-    expect(deriveSseEventName(received[0])).toBe("runtime.started");
+    expect(deriveSseEventName(received[0]!)).toBe("runtime.started");
   });
 
   it("falls back to topic when event has no _subType", () => {
@@ -153,6 +153,6 @@ describe("deriveSseEventName", () => {
       payload: { value: 1 },
     });
 
-    expect(deriveSseEventName(received[0])).toBe("state");
+    expect(deriveSseEventName(received[0]!)).toBe("state");
   });
 });

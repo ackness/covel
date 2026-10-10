@@ -10,6 +10,7 @@ import {
   DIMENSION_SETTLEMENT_NAMESPACE,
   dimensionSnapshotFromRecords,
   type DimensionRecord,
+  type HandlerResult,
   type Proposal,
   type RuntimeManifest,
 } from "@covel/shared";
@@ -43,7 +44,7 @@ const open: DataStore[] = [];
 afterEach(async () => {
   await Promise.all(open.splice(0).map((store) => store.close()));
 });
-async function setup(create = createMemoryStore) {
+async function setup(create: () => DataStore = createMemoryStore) {
   const store = create();
   open.push(store);
   await store.createSession({
@@ -142,9 +143,10 @@ async function finalize(
             {
               name: "facts",
               pluginId: "facts",
+              description: "facts",
               outputKind: "system",
               outputContract: "world-ir-provider@1",
-            },
+            } as RuntimeManifest,
           ]
         : []),
     ],
@@ -669,6 +671,7 @@ describe("story gate on the dimension provider", () => {
     const seen: unknown[] = [];
     const result = await executeTurn(
       {
+        origin: "player",
         sessionId: "s",
         turnId: "t",
         playerMessage: "go",
@@ -692,7 +695,7 @@ describe("story gate on the dimension provider", () => {
         loadRuntime: async (manifest) => ({
           manifest,
           promptTemplate: "",
-          handler: async (ctx) => {
+          handler: async (ctx): Promise<HandlerResult> => {
             if (manifest.outputContract === DIMENSION_CONTRACT) {
               if (providerFails) throw new Error("provider down");
               return { outcome: "success", value: ctx.world!.dimensions };

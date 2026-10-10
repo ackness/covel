@@ -207,8 +207,8 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
       ]),
     ]);
 
-    expect(resA[0].committed).toBe(true);
-    expect(resB[0].committed).toBe(true);
+    expect(resA[0]!.committed).toBe(true);
+    expect(resB[0]!.committed).toBe(true);
     expect(await store.listMessages(sessionA)).toHaveLength(1);
     expect(await store.listMessages(sessionB)).toHaveLength(1);
   });
