@@ -167,7 +167,7 @@ pnpm --filter @covel/plugin-<id> test
 - `<pluginId>`：读取插件根目录下的 `tests/runtime-cases.json` 或 `covel.test.json`，执行声明的 cases。
 - `<pluginId>/<runtimeId>`：直接手动触发某个 runtime，适合临时调试。
 
-harness 会执行选定插件的 `entry` 模块并注册它导出的工具和服务，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。回合 Hook（包括提交前后 Hook）使用选定插件的完整作用域和冻结设置执行，注册时与生产共用 `validatePluginHookRegistration`。工具和服务回调由 `PluginEntryScope` 保活，关闭先通知取消、等待回调退出，再清理资源；需要 HTTP、UI 或会话生命周期的能力则明确报告为不支持。
+harness 会执行选定插件的 `entry` 模块并注册它导出的工具和服务，所以用 `contributes.tools` 声明的工具在 case 里可以被 mock LLM 直接调用。回合 Hook（包括提交前后 Hook）使用选定插件的完整作用域和冻结设置执行，注册时与生产共用 `validatePluginHookRegistration`。工具和服务回调由 `PluginEntryScope` 保活，关闭先通知取消、等待回调退出，再清理资源；需要 HTTP、UI 或会话生命周期的能力则明确报告为不支持。
 
 harness 默认只加载被测插件。使用可重复的 `--with-plugin <id>` 显式加入协作插件；API `runRuntimeDebug` 和 case 均使用 `withPlugins: string[]`，case 的列表覆盖 CLI 列表。它们从同一个 `--plugins-dir` 查找，重复 ID 去重，缺失包在 entry 执行前报错。选定包均加入测试会话，工具按所属插件隔离，服务仅允许选定且当前会话仍活跃的插件调用。角色工具读取会话 World Model 的领域 schema；测试通过 character.schema.set 或初始 characterSchema 提供约束，不查询插件私有 namespace。退出及初始化失败时逆序清理入口资源；正常退出同时启动入口清理和工具停机，等待工具回调结束后才关闭 store，避免超时工具阻塞停止它所等待的入口资源。CLI 会执行这些包的服务端代码，应只选择信任的本地包，生产审批仍需通过 HTTP 测试验证。
 

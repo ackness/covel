@@ -1411,6 +1411,8 @@ A follow-up to the cleanup release, from watching real sessions run. Three fixes
 
 - **Runtimes no longer receive tools their prompts forbid.** Five declarations were paid for twice — once in the tool schema on every LLM call, once in the prompt text spent forbidding them. `character-tracker` dropped `list-characters` (its roster is injected as `<existing-characters>`), both image `prompt-generator` runtimes dropped `plugin-data-list` (they inject the `prompts` namespace), and `world-init/schema-gen` dropped `plugin-data-get` / `plugin-data-list` (it writes during setup and never reads back). `get-character` and `list-npc-graph` stay: unlike the others they are the documented escape hatch for a truncated snapshot, and a live session confirmed `get-character` being used exactly that way. `extractor`'s guidance, which said "**无需**调用" in bold and then described when to call it eight lines later, is now one instruction.
 
+## [0.0.19] - 2026-07-25
+
 The cleanup release, following a full audit of the core framework. Nothing here adds capability; it removes surface that was declared but never honoured, and closes the security gaps that hid behind it.
 
 > **Breaking — six PLUGIN.md fields no longer parse.** A manifest declaring any of them fails to load, so check yours before upgrading. None of them did anything at runtime, so removing them changes no behaviour except that the declaration is now an error instead of a silent no-op.
@@ -2200,6 +2202,10 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 [0.0.38]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.38
 [0.0.37]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.37
 [0.0.36]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.36
+[0.0.35]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.35
+[0.0.34]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.34
+[0.0.33]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.33
+[0.0.32]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.32
 [0.0.31]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.31
 [0.0.30]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.30
 [0.0.29]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.29
@@ -2212,6 +2218,7 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 [0.0.22]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.22
 [0.0.21]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.21
 [0.0.20]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.20
+[0.0.19]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.19
 [0.0.18]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.18
 [0.0.17]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.17
 [0.0.16]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.16
