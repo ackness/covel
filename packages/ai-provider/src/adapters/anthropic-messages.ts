@@ -481,11 +481,17 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       try {
         rawObject = JSON.parse(readAnthropicText(payload));
       } catch {
-        throw createStructuredOutputError("anthropic");
+        throw createStructuredOutputError(
+          "anthropic",
+          readAnthropicUsage(payload),
+        );
       }
       const validation = params.schema.safeParse(rawObject);
       if (!validation.success) {
-        throw createStructuredOutputError("anthropic");
+        throw createStructuredOutputError(
+          "anthropic",
+          readAnthropicUsage(payload),
+        );
       }
 
       return {

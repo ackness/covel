@@ -8,6 +8,10 @@ import type {
 } from "../evaluation/types.js";
 import { AiProviderError } from "../errors.js";
 import { postJson } from "./http/request.js";
+import {
+  ProviderResponseTooLargeError,
+  readResponseJson,
+} from "./http/response.js";
 import { normalizeTokenUsage } from "./usage.js";
 import { parseEvaluationResponse } from "./evaluation-response.js";
 
@@ -244,9 +248,10 @@ export function createEvaluationAdapter(
     }
     let raw: unknown;
     try {
-      raw = await response.json();
+      raw = await readResponseJson(response);
     } catch (cause) {
       config.signal?.throwIfAborted();
+      if (cause instanceof ProviderResponseTooLargeError) throw cause;
       throw new AiProviderError({
         code: "SCHEMA_VALIDATION_FAILED",
         message: `${protocol} returned invalid JSON.`,

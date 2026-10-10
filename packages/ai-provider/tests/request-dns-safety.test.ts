@@ -64,16 +64,37 @@ describe("core request DNS SSRF safety", () => {
     ).rejects.toThrow(/disallowed address 169\.254\.169\.254/);
   });
 
-  it("rejects localhost when it does not actually resolve to loopback (hosted tier)", async () => {
-    vi.stubEnv("DEPLOYMENT_TIER", "demo");
-    lookupMock.mockResolvedValue([
-      { address: "192.168.1.50", family: 4 },
-    ] as never);
+  it.each(["demo", "commercial"])(
+    "rejects loopback targets on the %s tier, on provider and plugin paths",
+    async (tier) => {
+      vi.stubEnv("DEPLOYMENT_TIER", tier);
+      lookupMock.mockResolvedValue([
+        { address: "127.0.0.1", family: 4 },
+      ] as never);
 
-    await expect(
-      postJson({ baseUrl: "http://localhost:11434" }, "/chat/completions", {}),
-    ).rejects.toThrow(/disallowed address 192\.168\.1\.50/);
-  });
+      // String check: the request never reaches DNS or a socket.
+      for (const baseUrl of [
+        "http://localhost:11434",
+        "http://127.0.0.1:11434",
+        "http://[::1]:11434",
+        "https://127.0.0.1:11434",
+      ]) {
+        await expect(
+          postJson({ baseUrl }, "/chat/completions", {}),
+        ).rejects.toThrow(/is not allowed/);
+      }
+      expect(lookupMock).not.toHaveBeenCalled();
+
+      // Connect-time check, for a loopback name that passed the string check.
+      for (const trusted of [false, true]) {
+        for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
+          await expect(
+            createPinnedDispatcher(new URL(`https://${host}`), trusted),
+          ).rejects.toThrow(/disallowed address/);
+        }
+      }
+    },
+  );
 
   it("self tier accepts private resolver answers on the trusted provider path", async () => {
     // self tier (default) = single-user local play: a TUN proxy fake-IP

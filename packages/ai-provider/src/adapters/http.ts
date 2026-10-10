@@ -13,7 +13,11 @@ export {
   createUnsupportedModeError,
   iterateSsePayloads,
   parseJson,
+  ProviderResponseTooLargeError,
+  readResponseBytes,
+  readResponseJson,
 } from "./http/response.js";
+export { MAX_BINARY_RESPONSE_BYTES } from "./http/constants.js";
 export {
   readOpenAiChatFinishReason,
   readOpenAiChatReasoningContent,

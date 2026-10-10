@@ -394,11 +394,17 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       try {
         rawObject = JSON.parse(reply.text);
       } catch {
-        throw createStructuredOutputError("openai-chat");
+        throw createStructuredOutputError(
+          "openai-chat",
+          readOpenAiChatUsage(payload),
+        );
       }
       const validation = params.schema.safeParse(rawObject);
       if (!validation.success) {
-        throw createStructuredOutputError("openai-chat");
+        throw createStructuredOutputError(
+          "openai-chat",
+          readOpenAiChatUsage(payload),
+        );
       }
 
       return {

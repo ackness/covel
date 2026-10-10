@@ -19,6 +19,7 @@ import {
   type ModelMatchKind,
 } from "./model-identity.js";
 import { outboundFetch } from "../outbound-network.js";
+import { readResponseJson } from "../adapters/http/response.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -313,7 +314,10 @@ export async function fetchLiteLlmModels(
       );
     }
     // The deadline covers the body: headers can arrive long before it ends.
-    raw = (await res.json()) as Record<string, Record<string, unknown>>;
+    raw = (await readResponseJson(res)) as Record<
+      string,
+      Record<string, unknown>
+    >;
   } finally {
     clearTimeout(timeout);
   }

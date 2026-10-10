@@ -7,11 +7,20 @@ import {
   createStructuredOutputError,
   createUnsupportedModeError,
 } from "../adapters/http.js";
-import { getWire, listWires, registerWire } from "../wire-lifecycle.js";
+import {
+  getWire,
+  listWires,
+  registerWire,
+  type WireOwner,
+} from "../wire-lifecycle.js";
 import type { TextWire } from "./types.js";
 
-export function registerTextWire(wire: TextWire): () => void {
-  return registerWire("text", wire);
+/** With `owner`, the wire serves only sessions in which that plugin is active. */
+export function registerTextWire(
+  wire: TextWire,
+  owner?: WireOwner,
+): () => void {
+  return registerWire("text", wire, owner);
 }
 export function getTextWire(id: string): TextWire | null {
   return getWire("text", id);
@@ -48,10 +57,11 @@ export function textWireAdapter(wire: TextWire): ModelProviderAdapter {
       try {
         raw = JSON.parse(result.text);
       } catch {
-        throw createStructuredOutputError(wire.id);
+        throw createStructuredOutputError(wire.id, result.usage);
       }
       const validation = schema.safeParse(raw);
-      if (!validation.success) throw createStructuredOutputError(wire.id);
+      if (!validation.success)
+        throw createStructuredOutputError(wire.id, result.usage);
       return {
         ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
         object: validation.data,
