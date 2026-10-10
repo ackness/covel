@@ -50,6 +50,26 @@ describe("world records", () => {
     await waitFor(() => expect(result.current.world?.lore).toBe("two"));
   });
 
+  it("reads again when the record is invalidated while its first fetch is in flight", async () => {
+    let releaseFirst!: (value: ReturnType<typeof record>) => void;
+    getWorld.mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseFirst = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useWorldRecord("w"));
+    expect(result.current.status).toBe("loading");
+
+    getWorld.mockResolvedValueOnce(record("two"));
+    act(() => invalidateWorldRecord("w"));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.world?.lore).toBe("two");
+    // The first fetch finishing late does not replace the newer record.
+    await act(async () => releaseFirst(record("one")));
+    expect(result.current.world?.lore).toBe("two");
+    expect(getWorld).toHaveBeenCalledTimes(2);
+  });
+
   it("reports a failed fetch and fetches again on retry", async () => {
     getWorld.mockRejectedValueOnce(new Error("offline"));
     const { result } = renderHook(() => useWorldRecord("w"));
