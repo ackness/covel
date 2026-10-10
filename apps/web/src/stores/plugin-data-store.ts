@@ -3,7 +3,8 @@
  *
  * pluginData structure: { [pluginId]: { [namespace]: { [key]: value } } }
  *
- * Scoped by sessionId so switching sessions auto-isolates state. Callers
+ * Scoped by sessionId so switching sessions auto-isolates state; only the
+ * active session's data is kept in memory. Callers
  * must invoke `setActiveSession(sessionId | null)` as the active session
  * changes — on restoreSession, resumeSessionById, createSession, and null
  * on backToWorldSelect. Without this the module-level map would leak
@@ -67,6 +68,8 @@ function getSnapshot(): PluginData {
  */
 export function setActiveSession(sessionId: string | null): void {
   if (activeSessionId === sessionId) return;
+  // Only the active session keeps a slot; returning to a session refetches.
+  if (activeSessionId) sessionStores.delete(activeSessionId);
   activeSessionId = sessionId;
   if (sessionId && !sessionStores.has(sessionId)) {
     sessionStores.set(sessionId, {});
@@ -138,13 +141,18 @@ export function loadPluginData(
   loadPluginDataForSession(activeSessionId, pluginId, namespace, items);
 }
 
-/** Bulk-load data into one session without depending on the active UI slot. */
+/**
+ * Bulk-load data into a session. A load for a session that is no longer
+ * active (a fetch that finished after the player left) is dropped, so it
+ * cannot repopulate an evicted slot.
+ */
 export function loadPluginDataForSession(
   sessionId: string,
   pluginId: string,
   namespace: string,
   items: readonly { key: string; value: unknown }[],
 ): void {
+  if (activeSessionId !== sessionId) return;
   const prev = sessionStores.get(sessionId) ?? {};
   const pluginNs = {
     ...prev[pluginId],

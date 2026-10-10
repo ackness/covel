@@ -21,6 +21,7 @@ import {
   getPluginNamespaceSnapshot,
   loadPluginData,
   resetPluginData,
+  loadPluginDataForSession,
   replacePluginDataForSession,
   setActiveSession,
   usePluginData,
@@ -55,11 +56,9 @@ describe("plugin-data-store — sessionId-scoped isolation", () => {
       "key-B": "from B",
     });
 
-    // Switching back to A restores A's slot.
+    // A's slot was evicted on leaving; returning starts empty until refetched.
     setActiveSession("session-a");
-    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({
-      "key-A": "from A",
-    });
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({});
   });
 
   it("loadPluginData respects the active session binding", () => {
@@ -92,11 +91,9 @@ describe("plugin-data-store — sessionId-scoped isolation", () => {
     resetPluginData();
     expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({});
 
-    // A's slot must still be intact.
+    // A was evicted when B became active.
     setActiveSession("session-a");
-    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({
-      "key-A": "A",
-    });
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({});
   });
 
   it("drops a deleted session while preserving the newly active session", () => {
@@ -234,7 +231,7 @@ describe("plugin-data-store — React hook integration", () => {
     act(() => {
       setActiveSession("session-a");
     });
-    expect(result.current).toEqual({ x: "from A" });
+    expect(result.current).toEqual({});
   });
 });
 
@@ -268,9 +265,17 @@ it("rejects a late plugin replacement or deletion for another active session", (
     value: "b",
   });
   setActiveSession("session-a");
-  expect(getPluginNamespaceSnapshot("provider", "message")).toEqual({
-    value: "a",
-  });
+  expect(getPluginNamespaceSnapshot("provider", "message")).toEqual({});
+});
+
+it("ignores a late load for a session that was left, so it cannot repopulate the cache", () => {
+  setActiveSession("session-a");
+  setActiveSession("session-b");
+  loadPluginDataForSession("session-a", "provider", "message", [
+    { key: "late", value: 1 },
+  ]);
+  setActiveSession("session-a");
+  expect(getPluginNamespaceSnapshot("provider", "message")).toEqual({});
 });
 
 it("treats inherited plugin and namespace names as missing until explicitly loaded", () => {

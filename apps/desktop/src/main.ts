@@ -30,6 +30,7 @@ import {
 } from "./paths.js";
 import { loadChildEnvironment } from "./env-files.js";
 import {
+  fetchJsonWithTimeout,
   fetchWithTimeout,
   findPreferredPort,
   parseStoredPort,
@@ -110,6 +111,9 @@ export class SidecarHttpError extends Error {
   }
 }
 
+/** Deadline for one settings/keys request to the sidecar, body included. */
+const SIDECAR_REQUEST_TIMEOUT_MS = 15_000;
+
 async function requestSidecarConfig<T>(
   pathName: string,
   init?: RequestInit,
@@ -119,22 +123,26 @@ async function requestSidecarConfig<T>(
   // writes, so the files of this home are read and written directly.
   if (isDev) throw new SidecarUnavailableError("no sidecar in dev mode");
   if (serverPort <= 0) throw new SidecarUnavailableError("sidecar not ready");
-  let res: Response;
+  let res: { ok: boolean; status: number; body: unknown };
   try {
-    res = await fetch(`http://127.0.0.1:${serverPort}${pathName}`, {
-      ...init,
-      headers: {
-        ...init?.headers,
-        Authorization: `Bearer ${desktopRestToken}`,
+    res = await fetchJsonWithTimeout(
+      `http://127.0.0.1:${serverPort}${pathName}`,
+      {
+        ...init,
+        headers: {
+          ...init?.headers,
+          Authorization: `Bearer ${desktopRestToken}`,
+        },
       },
-    });
+      SIDECAR_REQUEST_TIMEOUT_MS,
+    );
   } catch (error) {
     throw new SidecarUnavailableError("sidecar request failed", {
       cause: error,
     });
   }
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as {
+    const body = res.body as {
       code?: unknown;
       details?: { revision?: unknown };
     } | null;
@@ -147,7 +155,7 @@ async function requestSidecarConfig<T>(
         : undefined,
     );
   }
-  return (await res.json()) as T;
+  return res.body as T;
 }
 
 async function getSettingsViaSidecar(): Promise<SettingsPersistenceBundle> {

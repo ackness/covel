@@ -104,6 +104,41 @@ beforeEach(async () => {
   vi.mocked(api.removeWorldOverlay).mockResolvedValue(undefined);
 });
 
+describe("session prep narrator-only lore", () => {
+  const marked =
+    "A village.\n\n<!-- narrator-only -->\n\nThe keeper put the lamp out.\n\n<!-- /narrator-only -->\n\nRain.";
+
+  it("shows the player-visible lore and starts with the whole text", async () => {
+    const onStart = vi.fn();
+    render(
+      <SessionPrepScreen
+        {...props({ world: { ...world, lore: marked }, onStart })}
+      />,
+    );
+    const input = openLore() as HTMLTextAreaElement;
+    await waitFor(() => expect(input.value).toBe("A village.\n\nRain."));
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    expect(onStart.mock.calls[0]![1]).toBe(marked);
+  });
+
+  it("keeps the narrator-only blocks in the draft of an edited lore", async () => {
+    render(
+      <SessionPrepScreen {...props({ world: { ...world, lore: marked } })} />,
+    );
+    const input = openLore() as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "A town." } });
+    expect(input.value).toBe("A town.");
+    const saved = vi.mocked(api.setWorldOverlay).mock.calls.at(-1)![1].lore;
+    expect(saved).toContain("A town.");
+    expect(saved).toContain("The keeper put the lamp out.");
+    expect(saved).toContain("<!-- narrator-only -->");
+    // Typing the visible lore back is the original again, not a draft.
+    fireEvent.change(input, { target: { value: "A village.\n\nRain." } });
+    expect(api.removeWorldOverlay).toHaveBeenCalledWith("world-a");
+  });
+});
+
 describe("session prep lore ownership", () => {
   it("keeps a reset when the original read completes later", async () => {
     const read = deferred<api.WorldOverlay | null>();

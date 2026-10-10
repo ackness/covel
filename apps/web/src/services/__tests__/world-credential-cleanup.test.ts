@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { clearSessionCredentialFixtures } from "../../test/session-credentials.js";
+import { serializeLogged } from "../../test/serialize-logged.js";
 import { deleteWorld } from "../api/worlds.js";
 import { createSession } from "../api/sessions.js";
 import * as credentials from "../session-credentials.js";
@@ -65,10 +66,9 @@ it.each([
     expect(await getSessionToken("session")).toBe("synthetic-owner");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledOnce();
-    expect(String(warn.mock.calls[0])).not.toContain(
-      "synthetic-private-response",
-    );
-    expect(String(warn.mock.calls[0])).not.toContain("synthetic-owner");
+    const logged = serializeLogged(warn.mock.calls[0]);
+    expect(logged).not.toContain("synthetic-private-response");
+    expect(logged).not.toContain("synthetic-owner");
   },
 );
 
@@ -273,12 +273,14 @@ it.each([
     expect(await getSessionToken("session")).toBe("synthetic-owner");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledOnce();
-    expect(String(warn.mock.calls[0])).not.toContain("synthetic-private");
+    expect(serializeLogged(warn.mock.calls[0])).not.toContain(
+      "synthetic-private",
+    );
   },
 );
 
 it("reports obsolete creation even when credential cleanup fails", async () => {
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubGlobal(
     "fetch",
     vi
@@ -304,6 +306,9 @@ it("reports obsolete creation even when credential cleanup fails", async () => {
     "Created session is no longer current",
   );
   expect(await getSessionToken("session")).toBe("synthetic-owner");
+  const logged = warn.mock.calls.flat();
+  expect(logged.some((arg) => arg instanceof Error)).toBe(true);
+  expect(serializeLogged(logged)).not.toContain("synthetic-owner");
 });
 
 it("requires the current creation incarnation before saving credentials", async () => {

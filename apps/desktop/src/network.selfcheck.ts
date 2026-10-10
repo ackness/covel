@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import {
+  fetchJsonWithTimeout,
   fetchWithTimeout,
   findPreferredPort,
   MAX_POLL_INTERVAL_MS,
@@ -23,6 +24,35 @@ await assert.rejects(
     error instanceof DOMException && error.name === "AbortError",
 );
 assert.ok(Date.now() - started < 1_000);
+
+// The deadline also covers a body that never finishes after the headers.
+const stalledBody = (async (_url: string, init?: RequestInit) => {
+  const body = new ReadableStream({
+    start(controller) {
+      init?.signal?.addEventListener("abort", () => {
+        controller.error(new DOMException("aborted", "AbortError"));
+      });
+    },
+  });
+  return new Response(body, { status: 200 });
+}) as typeof fetch;
+await assert.rejects(
+  fetchJsonWithTimeout("http://127.0.0.1/stalled", {}, 20, stalledBody),
+  (error: unknown) =>
+    error instanceof DOMException && error.name === "AbortError",
+);
+await assert.rejects(
+  fetchJsonWithTimeout("http://127.0.0.1/hung", {}, 20, neverResponds),
+  (error: unknown) =>
+    error instanceof DOMException && error.name === "AbortError",
+);
+const answered = await fetchJsonWithTimeout(
+  "http://127.0.0.1/ok",
+  {},
+  1_000,
+  (async () => new Response('{"a":1}', { status: 409 })) as typeof fetch,
+);
+assert.deepEqual(answered, { ok: false, status: 409, body: { a: 1 } });
 
 // server.port holds one port; anything else names no port to prefer.
 assert.equal(parseStoredPort("53211"), 53211);

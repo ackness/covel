@@ -1,4 +1,4 @@
-import { localizedWorldText } from "@covel/shared";
+import { localizedWorldText, playerVisibleLore } from "@covel/shared";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
@@ -57,6 +57,7 @@ export function WorldDetailView({
     playLocale,
   );
   const visual = worldVisual(world);
+  const lore = playerVisibleLore(text(world.lore)).trim();
   const hasThemeMusic = useWorldThemeMusic(world);
 
   const hasDimensions =
@@ -213,9 +214,9 @@ export function WorldDetailView({
         ) : (
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>{t("world.noStructuredData")}</p>
-            {world.lore && (
+            {lore && (
               <div className="whitespace-pre-wrap rounded border border-border p-3 text-xs">
-                {text(world.lore)}
+                {lore}
               </div>
             )}
           </div>

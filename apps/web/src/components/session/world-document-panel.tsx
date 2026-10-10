@@ -1,9 +1,10 @@
 /**
  * WorldDocumentPanel — renders the current world's WORLD.md (lore field) as
- * Markdown in the right-panel "World" tab. Falls back to description when
- * lore is empty.
+ * Markdown in the right-panel "World" tab, without its narrator-only blocks.
+ * Falls back to description when nothing of the lore is left.
  */
 
+import { playerVisibleLore } from "@covel/shared";
 import { useTranslation } from "react-i18next";
 import type { WorldRecord } from "@/services/api.js";
 import { Markdown } from "@/components/ui/markdown.js";
@@ -24,7 +25,7 @@ export function WorldDocumentPanel({ world }: WorldDocumentPanelProps) {
     );
   }
 
-  const lore = resolveText(world.lore);
+  const lore = playerVisibleLore(resolveText(world.lore)).trim();
   const description = resolveText(world.description);
   const body = lore || description;
 
