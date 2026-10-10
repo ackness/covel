@@ -252,16 +252,11 @@ export type CovelEvent =
       readonly type: "interaction.requested";
       readonly payload: InteractionRequestedPayload;
     }
-  | {
-      readonly type: "interaction.completed";
-      readonly payload: CovelEventPayload;
-    }
   // UI render parts
   | { readonly type: "ui.rendered"; readonly payload: UiRenderedPayload }
   | { readonly type: "ui.part.update"; readonly payload: CovelEventPayload }
   // State
   | { readonly type: "state.changed"; readonly payload: StateChangedPayload }
-  | { readonly type: "state.snapshot"; readonly payload: CovelEventPayload }
   | {
       readonly type: "state.patch.applied";
       readonly payload: CovelEventPayload;
@@ -299,7 +294,6 @@ export type CovelEvent =
       readonly payload: AssetGeneratedPayload;
     }
   // Records / events
-  | { readonly type: "record.updated"; readonly payload: CovelEventPayload }
   | { readonly type: "event.emitted"; readonly payload: EventEmittedPayload }
   | {
       readonly type: "domain-event.previewed";
@@ -358,10 +352,6 @@ export type CovelEvent =
     }
   // System
   | { readonly type: "error.occurred"; readonly payload: ErrorOccurredPayload }
-  | {
-      readonly type: "connection.restored";
-      readonly payload: CovelEventPayload;
-    }
   // Suspend / Resume
   | { readonly type: "turn.suspended"; readonly payload: TurnSuspendedPayload }
   | { readonly type: "turn.resumed"; readonly payload: TurnResumedPayload }
@@ -378,7 +368,6 @@ export type CovelEvent =
   | { readonly type: "tool.completed"; readonly payload: CovelEventPayload }
   | { readonly type: "tool.failed"; readonly payload: CovelEventPayload }
   | { readonly type: "llm.calling"; readonly payload: CovelEventPayload }
-  | { readonly type: "memory.updated"; readonly payload: CovelEventPayload }
   | { readonly type: "llm.responded"; readonly payload: CovelEventPayload }
   | { readonly type: "message.completed"; readonly payload: CovelEventPayload }
   | { readonly type: "block.emitted"; readonly payload: CovelEventPayload }
@@ -480,11 +469,9 @@ export const COVEL_EVENT_META = {
   "narrative.delta": { forwardToActionStream: false },
   "narrative.completed": { forwardToActionStream: false },
   "interaction.requested": { forwardToActionStream: false },
-  "interaction.completed": { forwardToActionStream: false },
   "ui.rendered": { forwardToActionStream: true },
   "ui.part.update": { forwardToActionStream: false },
   "state.changed": { forwardToActionStream: false },
-  "state.snapshot": { forwardToActionStream: false },
   "state.patch.applied": { forwardToActionStream: true },
   "execution.started": { forwardToActionStream: false },
   "runtime.started": { forwardToActionStream: false },
@@ -497,7 +484,6 @@ export const COVEL_EVENT_META = {
   "execution.completed": { forwardToActionStream: false },
   "asset.progress": { forwardToActionStream: true },
   "asset.generated": { forwardToActionStream: false },
-  "record.updated": { forwardToActionStream: false },
   "event.emitted": { forwardToActionStream: false },
   "domain-event.previewed": { forwardToActionStream: true },
   "world.dimensions.changed": { forwardToActionStream: true },
@@ -516,7 +502,6 @@ export const COVEL_EVENT_META = {
   // the flag only governs eventBus forwarding.
   "proposal.failed": { forwardToActionStream: false },
   "error.occurred": { forwardToActionStream: false },
-  "connection.restored": { forwardToActionStream: false },
   "turn.suspended": { forwardToActionStream: true },
   "turn.resumed": { forwardToActionStream: true },
   "state.snapshot.created": { forwardToActionStream: false },
@@ -525,7 +510,6 @@ export const COVEL_EVENT_META = {
   "tool.completed": { forwardToActionStream: true },
   "tool.failed": { forwardToActionStream: true },
   "llm.calling": { forwardToActionStream: true },
-  "memory.updated": { forwardToActionStream: false },
   "llm.responded": { forwardToActionStream: true },
   "message.completed": { forwardToActionStream: true },
   "block.emitted": { forwardToActionStream: true },

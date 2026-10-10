@@ -3768,11 +3768,9 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | `narrative.delta`               | 叙事         | 叙事文本增量（逐 token 流式）                                                                  |
 | `narrative.completed`           | 叙事         | 叙事文本完成                                                                                   |
 | `interaction.requested`         | 交互         | 请求玩家输入（表单/选择/确认）                                                                 |
-| `interaction.completed`         | 交互         | 玩家交互完成                                                                                   |
 | `ui.rendered`                   | UI           | `ui.render` proposal commit 后发出                                                             |
 | `ui.part.update`                | UI           | UI part 状态更新（每个 part 一条）                                                             |
 | `state.changed`                 | 状态         | 游戏状态变更                                                                                   |
-| `state.snapshot`                | 状态         | 状态快照                                                                                       |
 | `state.snapshot.created`        | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出                                                        |
 | `session.forked`                | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                                            |
 | `execution.started`             | 执行生命周期 | Turn 执行开始                                                                                  |
@@ -3781,7 +3779,6 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | `runtime.completed`             | 执行生命周期 | 单个 Runtime 执行完成                                                                          |
 | `runtime.failed`                | 执行生命周期 | Runtime 执行失败                                                                               |
 | `execution.completed`           | 执行生命周期 | Turn 执行完成                                                                                  |
-| `record.updated`                | 会话生命周期 | 记录更新（角色、任务等）                                                                       |
 | `event.emitted`                 | 会话生命周期 | 事件发射                                                                                       |
 | `asset.progress`                | 资产         | 多模态生成进度（`0..100`）                                                                     |
 | `asset.generated`               | 资产         | `asset.generate` proposal commit 后发出                                                        |
@@ -3797,7 +3794,6 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | `context.compaction.failed`     | 系统         | 历史压缩尝试失败及原因；仅 trace（`/debug` 用）                                                |
 | `commit.fanout.failed`          | 系统         | 回合已提交但部分提交后事件未能发布；仅 trace，订阅流同时收到 `system.reset`                    |
 | `error.occurred`                | 系统         | 执行错误                                                                                       |
-| `connection.restored`           | 系统         | 连接恢复                                                                                       |
 
 ### 转发的运行时内部事件（已纳入 `CovelEventType`）
 
@@ -3806,7 +3802,7 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | 事件                                                                   | 来源                              | 转发到 `/api/actions` | 说明                                                                    |
 | ---------------------------------------------------------------------- | --------------------------------- | :-------------------: | ----------------------------------------------------------------------- |
 | `runtime.skipped`                                                      | `actions.ts`                      |          否           | runtime 因 cooldown / startTurn / maxTriggerCount 跳过                  |
-| `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal commit 后发出（与 `record.updated` 平行）   |
+| `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal commit 后发出                               |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（debug timeline 用）                                     |
 | `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                          |
 | `block.emitted` / `state.patch.applied`                                | TurnEmitter                       |          是           | 块发出 / state patch 应用 trace                                         |
