@@ -337,6 +337,12 @@ export interface TextGenerationParams {
   /** Structured response contract requested by an agent runtime. */
   responseFormat?: LLMResponseFormat;
   providerRequestMetadata?: Record<string, unknown>;
+  /**
+   * Opaque key shared by the requests expected to repeat a prompt prefix.
+   * Only a wire with a cache-routing field reads it (the OpenAI wires send
+   * `prompt_cache_key`); see `openAiPromptCacheKeyField`.
+   */
+  promptCacheKey?: string;
 }
 
 export interface TextMessage {

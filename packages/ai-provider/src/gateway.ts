@@ -250,6 +250,7 @@ export function createGateway(deps: GatewayDependencies) {
       responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
       providerOptions?: ProviderOptions;
+      promptCacheKey?: string;
     },
     options?: GatewayOptions,
   ) {
@@ -284,6 +285,7 @@ export function createGateway(deps: GatewayDependencies) {
               defaults: input.defaults,
               responseFormat: input.responseFormat,
               providerRequestMetadata: request.metadata,
+              promptCacheKey: input.promptCacheKey,
             },
             textContext(target, resolved, "text"),
           );
@@ -378,6 +380,7 @@ export function createGateway(deps: GatewayDependencies) {
       responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
       providerOptions?: ProviderOptions;
+      promptCacheKey?: string;
     },
     options?: GatewayOptions,
   ): AsyncIterable<StreamEvent> {
@@ -418,6 +421,7 @@ export function createGateway(deps: GatewayDependencies) {
       responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
       providerOptions?: ProviderOptions;
+      promptCacheKey?: string;
     },
     options: GatewayOptions & {
       signal: AbortSignal;
@@ -492,6 +496,7 @@ export function createGateway(deps: GatewayDependencies) {
               defaults: input.defaults,
               responseFormat: input.responseFormat,
               providerRequestMetadata: request.metadata,
+              promptCacheKey: input.promptCacheKey,
             },
             textContext(target, resolved, "stream"),
           ),
@@ -1033,6 +1038,7 @@ export function createGateway(deps: GatewayDependencies) {
       responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
       providerOptions?: ProviderOptions;
+      promptCacheKey?: string;
     },
     options: GatewayOptions | undefined,
     metadataTarget: string,

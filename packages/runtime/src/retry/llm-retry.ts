@@ -161,6 +161,8 @@ export interface CallLLMWithRetryParams {
   readonly locale?: string;
   /** Hard per-attempt provider generation limit. */
   readonly maxOutputTokens?: number;
+  /** Cache-routing key of the runtime's requests; see `promptCacheKeyFor`. */
+  readonly promptCacheKey?: string;
   readonly defaults?: import("@covel/shared").LLMRequestDefaults;
   /**
    * Keep text that was cut at the output limit instead of failing the call.
@@ -339,6 +341,9 @@ export async function callLLMWithRetry(
               ...(params.defaults ? { defaults: params.defaults } : {}),
               ...(params.maxOutputTokens !== undefined
                 ? { maxOutputTokens: params.maxOutputTokens }
+                : {}),
+              ...(params.promptCacheKey
+                ? { promptCacheKey: params.promptCacheKey }
                 : {}),
               signal,
               requestBudget: requestScope.budget,
@@ -650,6 +655,9 @@ export async function streamLLMWithRetry(
               ...(params.defaults ? { defaults: params.defaults } : {}),
               ...(params.maxOutputTokens !== undefined
                 ? { maxOutputTokens: params.maxOutputTokens }
+                : {}),
+              ...(params.promptCacheKey
+                ? { promptCacheKey: params.promptCacheKey }
                 : {}),
               signal: callAborter.signal,
               requestBudget: requestScope.budget,

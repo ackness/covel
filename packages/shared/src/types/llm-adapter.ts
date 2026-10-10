@@ -191,6 +191,13 @@ export interface LLMAdapter {
     readonly locale?: string;
     /** Hard per-request generation limit forwarded to the provider wire. */
     readonly maxOutputTokens?: number;
+    /**
+     * Opaque key that is equal for the requests expected to share a prompt
+     * prefix. A provider with a cache-routing field receives it (OpenAI
+     * `prompt_cache_key`); every other provider ignores it. It must carry no
+     * session ID or player text in the clear.
+     */
+    readonly promptCacheKey?: string;
     /** Synchronously reports each concrete provider attempt made by a gateway. */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /** Optional sanitized protocol request observation; does not change call semantics. */
@@ -218,6 +225,8 @@ export interface LLMAdapter {
     readonly locale?: string;
     /** @see generate.maxOutputTokens */
     readonly maxOutputTokens?: number;
+    /** @see generate.promptCacheKey */
+    readonly promptCacheKey?: string;
     /** @see generate.onTargetAttempt */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /** Optional sanitized protocol request observation; does not change call semantics. */

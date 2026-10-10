@@ -43,6 +43,7 @@ import {
 } from "../reasoning-effort.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 import { objectResponseFormat } from "./structured-output.js";
+import { openAiPromptCacheKeyField } from "./prompt-cache-key.js";
 import {
   readResponseDiagnostics,
   ResponseDiagnostics,
@@ -67,6 +68,7 @@ const RESPONSES_PROTECTED_KEYS = new Set([
   "text",
   "tools",
   "tool_choice",
+  "promptCacheKey",
   "parameterOverrides",
   "reasoning_effort",
   "reasoningEffort",
@@ -301,6 +303,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         ...(params.responseFormat
           ? { text: { format: toResponsesJsonSchema(params.responseFormat) } }
           : {}),
+        ...openAiPromptCacheKeyField(config, params),
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(
           params.providerRequestMetadata,
@@ -426,6 +429,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         ...(params.responseFormat
           ? { text: { format: toResponsesJsonSchema(params.responseFormat) } }
           : {}),
+        ...openAiPromptCacheKeyField(config, params),
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(
           params.providerRequestMetadata,

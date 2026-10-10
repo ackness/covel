@@ -131,6 +131,7 @@ export interface GatewayLike {
       responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
       defaults?: LLMRequestDefaults;
+      promptCacheKey?: string;
     },
     options?: {
       apiKeys?: Record<string, string>;
@@ -177,6 +178,7 @@ export interface GatewayLike {
       providerRequestMetadata?: Record<string, unknown>;
       defaults?: LLMRequestDefaults;
       responseFormat?: LLMResponseFormat;
+      promptCacheKey?: string;
     },
     options?: {
       apiKeys?: Record<string, string>;
@@ -302,6 +304,9 @@ export function createGatewayAdapter(
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
           responseFormat: params.responseFormat,
+          ...(params.promptCacheKey
+            ? { promptCacheKey: params.promptCacheKey }
+            : {}),
         },
         {
           apiKeys: config?.apiKeys,
@@ -377,6 +382,9 @@ export function createGatewayAdapter(
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
           responseFormat: params.responseFormat,
+          ...(params.promptCacheKey
+            ? { promptCacheKey: params.promptCacheKey }
+            : {}),
         },
         {
           apiKeys: config?.apiKeys,

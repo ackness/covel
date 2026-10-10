@@ -42,6 +42,7 @@ const MODEL_FIELDS = new Set([
   "verbosity",
   "service_tier",
   "store",
+  "prompt_cache_key",
 ]);
 
 /** Detached from the request body: an observer cannot change the sent JSON. */
