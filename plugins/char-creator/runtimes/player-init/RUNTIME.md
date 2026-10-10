@@ -69,7 +69,7 @@ Form rules:
 - When the schema has no `string` or `enum` attribute, the form has one field: `characterName`. Write the other details as fixed text in `narrativeTemplate`.
 - Map `enum` to `select` with option values copied exactly from the schema options. Prefer `text` for `string`; `textarea` or `select` with string-valued suggestions also works.
 - When options need explanations, use `{ value, label }` and keep `value` short enough for narrative interpolation. Any optional field referenced by `narrativeTemplate` needs a natural `defaultValue`; a select default must equal one option value.
-- Pass `formId: "char-creation"` and `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`, plus a fitting title, submit label, fields, and `narrativeTemplate` with field placeholders.
+- Pass `formId: "char-creation"` and `submitBehavior: { "echoFilledNarrative": true }`, plus a fitting title, submit label, fields, and `narrativeTemplate` with field placeholders.
 - Use at most 4 fields total. Call `create-character-form` exactly once; do not call `runtime-done`.
 
 Runtime workflow:
