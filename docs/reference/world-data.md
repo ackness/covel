@@ -44,6 +44,8 @@ worlds/my-world/
     └── scenes.registry.json         # 可选：scene-stage 场景注册表
 ```
 
+`media/portraits.json` 和 `media/scenes.json` 是生图清单，只有 `scripts/generate-portraits.mjs`、`scripts/emit-presence.mjs`、`scripts/generate-scenes.mjs`、`scripts/emit-scenes.mjs` 读取；服务端不导入它们，游玩时不需要，没有重新生图计划的世界可以不带。游玩时被读取的是 `presence.json`、`scenes.registry.json` 和图片目录。
+
 `world.yaml`：
 
 ```yaml
