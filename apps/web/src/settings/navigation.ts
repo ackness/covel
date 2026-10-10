@@ -43,6 +43,7 @@ const APPEARANCE_KEYS = new Set([
 ]);
 const OPERATOR_ACCESS_NODE_ID = "operator-access";
 const RAW_CONFIG_NODE_ID = "raw-config";
+const MEDIA_LIBRARY_NODE_ID = "media-library";
 function navigationLabels(locale: string) {
   const t = i18n.getFixedT(locale);
   return {
@@ -66,6 +67,7 @@ function navigationLabels(locale: string) {
     ],
     appearance: t("settings.appearanceNavLabel", "Appearance"),
     rawConfig: t("settings.rawConfigNavLabel", "Configuration files"),
+    mediaLibrary: t("settings.mediaLibraryNavLabel", "Stored media"),
     operatorAccess: t("settings.operatorAccessNavLabel", "Operator Access"),
     packages: t("settings.packages.navLabel", "Install & manage"),
   };
@@ -75,6 +77,8 @@ interface BuildNavOptions {
   readonly includeDesktop?: boolean;
   /** False where the server does not check an operator token. Defaults to true. */
   readonly includeOperatorAccess?: boolean;
+  /** False on a hosted server, which offers no media library. Defaults to true. */
+  readonly includeMediaLibrary?: boolean;
   readonly locale?: string;
   readonly pluginDisplayNames?: Readonly<Record<string, I18nText | undefined>>;
 }
@@ -181,6 +185,14 @@ export function buildNavTree(
         kind: "group",
         children: entries,
       });
+      if (opts.includeMediaLibrary !== false) {
+        nodes.push({
+          id: MEDIA_LIBRARY_NODE_ID,
+          label: labels.mediaLibrary,
+          kind: "group",
+          children: [],
+        });
+      }
       nodes.push({
         id: RAW_CONFIG_NODE_ID,
         label: labels.rawConfig,
@@ -232,6 +244,7 @@ export function buildNavTree(
 
 export {
   APPEARANCE_NODE_ID,
+  MEDIA_LIBRARY_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
   RAW_CONFIG_NODE_ID,

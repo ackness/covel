@@ -4,6 +4,7 @@ import {
   Database,
   FileCode,
   Gauge,
+  Images,
   Monitor,
   PackagePlus,
   Palette,
@@ -31,6 +32,7 @@ import {
   filterNav,
   resolveSettingsNode,
   APPEARANCE_NODE_ID,
+  MEDIA_LIBRARY_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
   RAW_CONFIG_NODE_ID,
@@ -50,6 +52,7 @@ import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
 import { PluginSettingsPane } from "./panes/PluginSettingsPane.js";
 import { RawConfigPane } from "./panes/RawConfigPane.js";
+import { MediaLibraryPane } from "./panes/MediaLibraryPane.js";
 import type { PluginSummary } from "@/services/api.js";
 
 interface SettingsDialogProps {
@@ -101,6 +104,9 @@ export function SettingsDialog({
         includeOperatorAccess:
           isOperatorTokenRequired() !== false ||
           getOperatorToken() !== undefined,
+        // A server that checks the operator token is hosted, and a hosted
+        // server has no media library.
+        includeMediaLibrary: isOperatorTokenRequired() !== true,
         locale: i18n.language,
         pluginDisplayNames,
       }),
@@ -286,6 +292,7 @@ const NAV_ICONS: Readonly<Record<string, LucideIcon>> = {
   desktop: Monitor,
   data: Database,
   [RAW_CONFIG_NODE_ID]: FileCode,
+  [MEDIA_LIBRARY_NODE_ID]: Images,
   [OPERATOR_ACCESS_NODE_ID]: ShieldCheck,
 };
 
@@ -332,6 +339,16 @@ function renderPane(
           description={t("settings.paneRawConfigDescription")}
         />
         <RawConfigPane />
+      </>
+    );
+  if (node.id === MEDIA_LIBRARY_NODE_ID)
+    return (
+      <>
+        <SettingsPaneHeader
+          title={node.label}
+          description={t("mediaLibrary.description")}
+        />
+        <MediaLibraryPane />
       </>
     );
   if (node.id === "desktop") return <DesktopPane />;

@@ -63,6 +63,21 @@ describe("operator access settings navigation", () => {
     );
   });
 
+  it("lists stored media next to the data pane, except on a hosted server", () => {
+    const ids = (includeMediaLibrary?: boolean) =>
+      buildNavTree(emptyStore, { locale: "en-US", includeMediaLibrary }).map(
+        (node) => node.id,
+      );
+
+    expect(ids().indexOf("media-library")).toBe(ids().indexOf("data") + 1);
+    expect(
+      buildNavTree(emptyStore, { locale: "en-US" }).find(
+        (node) => node.id === "media-library",
+      )?.label,
+    ).toBe("Stored media");
+    expect(ids(false)).not.toContain("media-library");
+  });
+
   it("uses localized plugin names while keeping plugin ids stable", () => {
     const pluginStore = {
       listEntries: () => [

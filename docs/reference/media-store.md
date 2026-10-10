@@ -247,7 +247,75 @@ Cleanup policy fields:
 | `maxBytes`        | Deletes oldest unprotected assets until total stored bytes fit the cap        |
 | `keepRecentBytes` | Keeps the newest unprotected byte budget and selects older unprotected assets |
 
+`onlyIds` (store contract only; the cleanup endpoint does not accept it) limits a
+policy to the listed assets: every other asset is kept whatever the other fields
+say. The media library deletes with `{ maxBytes: 0, onlyIds }`, so a deletion can
+reach only the assets it names, and each of them still passes the owner and
+reference check above.
+
 An empty policy returns an inventory-style dry run with zero selected deletions. Desktop and web media reads use the same authoritative store metadata, with browser cache entries validated against the `MediaRef` before serving.
+
+## Media library
+
+A player sees and deletes stored media in Settings → Stored media, served by
+`GET /api/media/library` and `POST /api/media/library/delete`
+([api.md](./api.md)). Nothing is deleted without a confirmed action there, and
+`POST /api/media/cleanup` stays the operator's tool.
+
+**What counts as used.** One scan
+(`apps/server/src/routes/api/media-reference-scan.ts`, shared with the cleanup
+endpoint) builds, for every media ID, the set of current sessions that use it. A
+session uses an asset when at least one of these holds:
+
+- it is the asset's owner (`recordOwnership`);
+- it holds an explicit reference (`addRef`, a `media_refs` row);
+- the ID appears as a `MediaRef` anywhere in the session's `messages`,
+  `plugin_data`, `runtime_outputs`, `trace_events`, `snapshots` or
+  `turn_results` rows.
+
+An asset is **unused** only when a complete scan finds no such session and
+nothing else claims it. An asset whose owner or reference is not a current
+session is **held**: the temporary `world-data-import:<uuid>` reference of an
+import in progress, or a claim that outlived its session. A scan is incomplete
+when one session has more rows than the ceiling (200,000 for the library; the
+`scanLimit` parameter changes it); then an asset without a known user is
+**unknown**, nothing is unused, and deletion of unused media is refused with
+`409 scan_incomplete`. A session that could not be read is never treated as a
+session without references.
+
+**World media.** Files in a world package (`worlds/<id>/media`, covers,
+portraits) are not in the MediaStore; the library neither lists nor deletes
+them. World data with `to: media` copies bytes into the MediaStore when a session
+is created, and every session of that world claims the same content-addressed
+asset: the first as owner and by reference, each later one by reference.
+Deleting a session releases that session's claims only, so the asset stays used
+until the last session of the world that holds it is gone. A world with no
+session needs no copy: the next session imports the file from the package again.
+
+**Cost.** A listing scans every row of every session once, then answers page,
+filter and total requests from that result for 30 seconds (`refresh=1` scans
+again). Each deletion request scans again and drops the cached result. The
+listing carries no bytes: each item has a signed URL, valid for one hour, whose
+token names the scope `media-library:` instead of a session (the colon is outside
+the session-ID alphabet), and `GET /api/media/:id` accepts that scope only where
+the library is available. The server has no thumbnails, so a picture's URL
+returns the original; the page shows 48 items at a time, lazy-loads pictures and
+loads audio and video only when the player starts them.
+
+**Deleting.** Unused media goes through `MediaStore.cleanup()` with `onlyIds`,
+so every backend checks the asset's owner and references again in the critical
+section that deletes it; an asset a session claimed after the scan is kept and
+reported as skipped. An asset that is used, held or unknown is deleted only by a
+request with `force` that names exactly one ID; `delete()` then removes it with
+every reference to it. The sessions that used it keep their rows: where the
+picture or sound was, the interface shows a "media unavailable" placeholder, and
+a plugin that asks for the same generation again gets a new asset.
+
+**Access.** The library exists only where one player owns everything the server
+stores: `DEPLOYMENT_TIER=self` and the desktop app. On `demo` and `commercial`,
+and on the browser-private profile (a production server on MemoryStore), the
+MediaStore holds media of several owners and has no per-owner index, so both
+routes answer `503 unavailable`, with or without the operator token.
 
 ## Tests
 

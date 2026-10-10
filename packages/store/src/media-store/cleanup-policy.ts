@@ -14,6 +14,9 @@ export function cleanupCandidates(
 } {
   const nowMs = policy.now?.getTime() ?? Date.now();
   const protectedSet = new Set(protectedIds);
+  const onlyIds = policy.onlyIds ? new Set(policy.onlyIds) : undefined;
+  const kept = (id: string): boolean =>
+    protectedSet.has(id) || (onlyIds !== undefined && !onlyIds.has(id));
   const sorted = [...assets].sort((a, b) => {
     const byCreated = a.createdAt.localeCompare(b.createdAt);
     return byCreated === 0 ? a.id.localeCompare(b.id) : byCreated;
@@ -24,7 +27,7 @@ export function cleanupCandidates(
   if (typeof policy.maxAgeMs === "number" && policy.maxAgeMs >= 0) {
     const cutoff = nowMs - policy.maxAgeMs;
     for (const asset of sorted) {
-      if (protectedSet.has(asset.id)) continue;
+      if (kept(asset.id)) continue;
       const created = Date.parse(asset.createdAt);
       if (Number.isFinite(created) && created <= cutoff) {
         idsToDelete.add(asset.id);
@@ -39,7 +42,7 @@ export function cleanupCandidates(
   ) {
     let recentBytes = 0;
     for (const asset of [...sorted].reverse()) {
-      if (protectedSet.has(asset.id) || idsToDelete.has(asset.id)) continue;
+      if (kept(asset.id) || idsToDelete.has(asset.id)) continue;
       recentBytes += asset.size;
       if (recentBytes > policy.keepRecentBytes) {
         idsToDelete.add(asset.id);
@@ -51,7 +54,7 @@ export function cleanupCandidates(
   if (typeof policy.maxBytes === "number" && policy.maxBytes >= 0) {
     for (const asset of sorted) {
       if (currentBytes <= policy.maxBytes) break;
-      if (protectedSet.has(asset.id) || idsToDelete.has(asset.id)) continue;
+      if (kept(asset.id) || idsToDelete.has(asset.id)) continue;
       idsToDelete.add(asset.id);
       currentBytes -= asset.size;
     }
