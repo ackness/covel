@@ -306,13 +306,20 @@ describe("normalize golden (bundled plugin set)", () => {
     });
   });
 
-  it("keeps event runtimes stage-less", async () => {
+  it("keeps event and manual runtimes stage-less", async () => {
     const manifests = await loadAllManifests();
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
     const resolver = requireSpec(specs, "scene-stage/resolver");
     expect(resolver.stage).toBeUndefined();
     expect(resolver.declaredTrigger.type).toBe("event");
+
+    // Manual runtimes (real plugin-rpc actions): no stage, trigger untouched.
+    for (const id of ["character-blueprint/presence"]) {
+      const spec = requireSpec(specs, id);
+      expect(spec.stage).toBeUndefined();
+      expect(spec.declaredTrigger.type).toBe("manual");
+    }
   });
 
   it("treats hook-only / UI-only plugins as contribution-only (never staged)", async () => {

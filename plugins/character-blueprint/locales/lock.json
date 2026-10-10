@@ -6,7 +6,8 @@
       "PLUGIN.md#contributes.data.blueprints.authoring.title": "bcb872a86069e0d6",
       "PLUGIN.md#contributes.data.presence.authoring.title": "de3105db0ea5a4f1",
       "PLUGIN.md#description": "cebb7975ccacb6e1",
-      "PLUGIN.md#displayName": "1f455ad9b829e278"
+      "PLUGIN.md#displayName": "1f455ad9b829e278",
+      "runtimes/presence/RUNTIME.md#description": "61c693ae3aaa3065"
     }
   }
 }

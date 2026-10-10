@@ -59,11 +59,11 @@ Reference for the json-render components available to plugin UI specs. This page
 | `AudioPlayer`     | Theme-aware self-drawn audio player. Replaces native `<audio controls>` chrome with a flat playlist row using `--color-primary` / `--color-muted` / `--color-border` / `--radius-card`. Includes play/pause, scrubbable progress bar (pointer + keyboard), `M:SS / M:SS` time, speed selector (0.75× / 1× / 1.25× / 1.5× / 2×), and download button. Falls back to an "audio unavailable" tile when ref is missing or resolution fails. | `ref` _(MediaRef)_, `src` _(MediaRef accepted)_, `alt` (string, also used as default download filename stem), `downloadName` (override filename), `className`                                                                                                                      |
 | `MediaGallery`    | Declarative media rows with preview, download, and optional rerun.                                                                                                                                                                                                                                                                                                                                                                      | `items`, `idField`, `refField`, optional `titleField`, `statusField`, `durationField`, `errorField`, `fields`, `rerunAction`                                                                                                                                                       |
 | `JobList`         | Declarative job rows with expandable details, copy, status/error and optional rerun.                                                                                                                                                                                                                                                                                                                                                    | `items`, optional `idField`, `statusField`, `messageField`, `errorField`, `durationField`, `fields`, `rerunAction`                                                                                                                                                                 |
-| `PortraitGallery` | Character imagery from `character.visual@1`, with preview. Read-only.                                                                                                                                                                                                                                                                                                                                                                   | none                                                                                                                                                                                                                                                                               |
+| `PortraitGallery` | Character imagery from `character.visual@1`, with preview and optional upload.                                                                                                                                                                                                                                                                                                                                                          | optional `replaceAction`                                                                                                                                                                                                                                                           |
 | `CandidateList`   | Alternative versions of a text as options: choosing one runs `acceptAction`; drafting or sending its text are secondary actions under it. Optional regenerate action.                                                                                                                                                                                                                                                                   | `candidates`, optional `idField`, `contentField`, `acceptedId`, `turnId`, `hiddenWhen`, `detailFields`, `acceptAction`, `regenerateAction`, labels                                                                                                                                 |
 
-`PortraitGallery` only shows the portraits a world and its plugins supply; a
-player cannot replace one during play.
+`PortraitGallery` restores the session workspace before uploading replacement
+media, then invokes the declared runtime through the shared plugin approval flow.
 Approval retries reuse the uploaded media reference. Runtime failures remain
 visible to the player, including failed results returned in an HTTP-success response.
 
@@ -193,7 +193,8 @@ use session actions; optional accept/regenerate actions invoke the supplied RPC.
 A catalog action is `{ pluginId, runtimeId, payload, label? }`. Each plugin ID
 must be the spec's literal owner ID. Payload values are literal unless a value
 is exactly `{ "from": "path" }`; these selectors read `item` (current row),
-or `props` (component props). For example:
+`props` (component props), or `upload` (the uploaded MediaRef for a portrait
+replacement). For example:
 
 ```json
 {
@@ -201,13 +202,15 @@ or `props` (component props). For example:
   "runtimeId": "my-plugin/save",
   "payload": {
     "id": { "from": "item.id" },
-    "title": { "from": "props.title" }
+    "ref": { "from": "upload" }
   }
 }
 ```
 
-RPC actions use the shared workspace hydration and approval flow. The owning
-plugin validates the payload and implements the business rules. Old plugin-specific component
+RPC actions use the shared workspace hydration and approval flow. Uploads are
+prepared only after hydration and reused across approval retries. The owning
+plugin validates the payload and implements business rules such as replacing a
+default portrait while retaining other variants. Old plugin-specific component
 names and cross-plugin avatar bindings are removed; development UI specs must
 be updated to this contract.
 

@@ -9,7 +9,7 @@ import {
   JobListPanel,
 } from "@/components/session/image-plugin-panels.js";
 import { PortraitGalleryPanel } from "@/components/session/portrait-gallery-panel.js";
-import type { MediaRef } from "@covel/shared";
+import { catalogActionSchema, type MediaRef } from "@covel/shared";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { useActiveSessionId } from "./session-context.js";
 
@@ -239,9 +239,14 @@ export const JobList: ComponentRenderer = ({ element }) => (
   <JobListPanel props={element.props ?? {}} />
 );
 
-export const PortraitGallery: ComponentRenderer = () => (
-  <PortraitGalleryPanel />
-);
+export const PortraitGallery: ComponentRenderer = ({ element }) => {
+  const action = catalogActionSchema.safeParse(element.props?.replaceAction);
+  return (
+    <PortraitGalleryPanel
+      replaceAction={action.success ? action.data : undefined}
+    />
+  );
+};
 
 export const Source: ComponentRenderer = ({ element }) => {
   const label = (element.props?.label as string) ?? "";

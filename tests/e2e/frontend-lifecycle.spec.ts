@@ -205,3 +205,95 @@ test("browser world edits and cascading deletion survive reload without a server
     }),
   ).toBeNull();
 });
+
+test("portrait replacement reaches the runtime and survives a browser checkpoint reload", async ({
+  page,
+}) => {
+  await seedAppSettings(page);
+  await page.goto("/session");
+  await expect(page.locator("article").first()).toBeVisible();
+  const seeded = await page.evaluate(async () => {
+    const dataPath = "/src/services/data-service.ts";
+    const apiPath = "/src/services/api.ts";
+    const { getDataService, getSessionWorkspace } = await import(dataPath);
+    const { postPluginRpc } = await import(apiPath);
+    const ds = getDataService();
+    await ds.saveGeneratedWorld({
+      id: "review-portrait-world",
+      name: "Portrait review",
+      description: "Synthetic media test",
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+    await ds.createSession("review-portrait-world", "review-portrait-session", [
+      "character-blueprint",
+    ]);
+    return getSessionWorkspace().run(
+      "review-portrait-session",
+      "seed-presence",
+      () =>
+        postPluginRpc("review-portrait-session", {
+          kind: "runtime",
+          pluginId: "character-blueprint",
+          runtimeId: "character-blueprint/presence",
+          payload: {
+            presence: {
+              schemaVersion: 1,
+              characterId: "review-hero",
+              displayName: "Review hero",
+            },
+          },
+        }),
+    );
+  });
+  expect(seeded.status).toBe("ok");
+  await page.goto("/session?sid=review-portrait-session");
+  const portraits = page.getByRole("tab", { name: "角色立绘", exact: true });
+  await portraits.click();
+  await expect(page.getByText("Review hero", { exact: true })).toBeVisible();
+  const rpc = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/plugin-rpc") &&
+      response.request().method() === "POST",
+  );
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "review-portrait.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  expect((await (await rpc).json()).status).toBe("ok");
+  await expect(
+    page.getByRole("img", { name: "Review hero", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const dataPath = "/src/services/storage/browser-vault.ts";
+        const { BrowserVault } = await import(dataPath);
+        const vault = new BrowserVault();
+        try {
+          const checkpoint = await vault.getCheckpoint(
+            "review-portrait-session",
+          );
+          return !!checkpoint?.pluginData.find(
+            (row: { key: string; value?: { avatar?: unknown } }) =>
+              row.key === "review-hero",
+          )?.value?.avatar;
+        } finally {
+          vault.close();
+        }
+      }),
+    )
+    .toBe(true);
+  await page.reload();
+  await portraits.click();
+  const portrait = page.getByRole("img", { name: "Review hero", exact: true });
+  await expect(portrait).toBeVisible();
+  await expect
+    .poll(() =>
+      portrait.evaluate((node) => (node as HTMLImageElement).naturalWidth),
+    )
+    .toBe(1);
+});

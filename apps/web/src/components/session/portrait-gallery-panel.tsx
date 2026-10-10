@@ -1,11 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ImageIcon } from "lucide-react";
-import type { MediaRef, CharacterVisualModel } from "@covel/shared";
+import { ImageIcon, Loader2, Upload } from "lucide-react";
+import type {
+  MediaRef,
+  CharacterVisualModel,
+  CatalogAction,
+} from "@covel/shared";
 import { Media } from "@/components/Media.js";
 import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { useUiSlots } from "@/stores/ui-slot-store.js";
+import { invokeCatalogAction } from "@/lib/catalog/catalog-actions.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
+import { uploadSessionMedia } from "@/services/api.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { resolveCharacterVisual } from "@/lib/character-visuals.js";
 
 interface PresenceEntry {
@@ -13,12 +20,18 @@ interface PresenceEntry {
   readonly value: CharacterVisualModel;
 }
 
-/** Read-only gallery of the portraits that `character.visual@1` projects. */
-export function PortraitGalleryPanel() {
+/** The gallery consumes projected imagery; upload actions are declared by its owner. */
+export function PortraitGalleryPanel({
+  replaceAction,
+}: {
+  replaceAction?: CatalogAction;
+}) {
   const { t } = useTranslation();
   const sessionId = useActiveSessionId();
   const slots = useUiSlots(sessionId ?? "", "character.visual@1");
   const [preview, setPreview] = useState<MediaRef | null>(null);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const uploading = useRef(false);
 
   const entries = useMemo<PresenceEntry[]>(
     () =>
@@ -29,6 +42,30 @@ export function PortraitGalleryPanel() {
       ),
     [slots],
   );
+
+  async function replacePortrait(entry: PresenceEntry, file: File) {
+    const characterId = entry.value.characterId;
+    if (!sessionId || !characterId || !replaceAction || uploading.current)
+      return;
+    uploading.current = true;
+    setUploadingKey(entry.key);
+    try {
+      await invokeCatalogAction({
+        sessionId,
+        action: replaceAction,
+        scope: { item: entry.value },
+        t,
+        prepare: async () => ({
+          upload: await uploadSessionMedia(sessionId, file),
+        }),
+      });
+    } catch (err) {
+      emitToast("error", err instanceof Error ? err.message : String(err));
+    } finally {
+      uploading.current = false;
+      setUploadingKey(null);
+    }
+  }
 
   if (entries.length === 0) {
     return (
@@ -44,7 +81,10 @@ export function PortraitGalleryPanel() {
   return (
     <div className="space-y-2">
       <p className="text-[11px] text-muted-foreground">
-        {t("characterPresence.hint", "Click a portrait to enlarge it.")}
+        {t(
+          "characterPresence.hint",
+          "Click a portrait to enlarge, or hover and pick an image to replace it.",
+        )}
       </p>
       <div className="grid grid-cols-3 gap-2">
         {entries.map((entry) => {
@@ -52,6 +92,7 @@ export function PortraitGalleryPanel() {
           // else fall back to the avatar — so the panel's "立绘" name is truthful
           // and the sprite field a world may provide is actually rendered.
           const ref = resolveCharacterVisual(entry.value)?.ref ?? null;
+          const busy = uploadingKey === entry.key;
           return (
             <div key={entry.key} className="space-y-1">
               <div className="group relative overflow-hidden rounded-(--radius-card) border border-border bg-card/60 transition-colors hover:border-primary/40">
@@ -80,6 +121,29 @@ export function PortraitGalleryPanel() {
                     </div>
                   )}
                 </button>
+                {replaceAction && (
+                  <label className="absolute inset-x-0 bottom-0 flex cursor-pointer items-center justify-center gap-1 bg-black/60 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    {busy ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Upload className="h-3 w-3" />
+                    )}
+                    {busy
+                      ? t("characterPresence.uploading", "Uploading…")
+                      : t("characterPresence.replace", "Replace")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingKey !== null || !sessionId}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) void replacePortrait(entry, file);
+                      }}
+                    />
+                  </label>
+                )}
               </div>
               <span className="block truncate text-xs text-muted-foreground">
                 {entry.value.displayName}

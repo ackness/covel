@@ -299,6 +299,17 @@ describe("core plugin manifest contract", () => {
     ).toEqual(["plugin", "plugin", "plugin", "plugin", "plugin"]);
   });
 
+  it("keeps manual Chat Mode utilities outside automatic scheduling", async () => {
+    const manifests = await loadRuntimeManifests();
+    const manualUtilityIds = ["character-blueprint/presence"];
+
+    for (const runtimeId of manualUtilityIds) {
+      const manifest = requireRuntime(manifests, runtimeId);
+      expect(manifest.trigger).toMatchObject({ type: "manual" });
+      expect(manifest.stage).toBeUndefined();
+    }
+  });
+
   it("never inlines player input or upstream runtime output into PLUGIN bodies", async () => {
     const parsed = await loadParsedPlugins();
 

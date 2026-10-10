@@ -1,7 +1,7 @@
 ---
 id: character-blueprint
 kind: plugin
-version: 0.0.36
+version: 0.0.35
 displayName: Character Profiles
 description: >-
   Saves the world's preset character profiles along with their portraits,
@@ -19,6 +19,7 @@ author:
 license: MIT
 provides:
   - character-blueprint@1
+  - character-presence@1
 entry: ./server/index.js
 contributes:
   extensions:
@@ -97,9 +98,9 @@ contributes:
 
 Character Profiles holds the world's preset cast. World packages fill the
 `blueprints`, `presence` and `assets` namespaces through world data; the cards
-and portraits are read-only during play. The `presence` records hold a
-character's portrait, sprite, voice, and visual variants, which the
-`character.visual@1` slot projects onto the stage and the portrait panel. A
-`prompt.segment@1` provider gives story runtimes the roleplay notes of each
-card whose character is in the session (`<character-notes>`). This package has
-no runtime: it only holds world data and the two providers.
+are read-only during play. The manual `presence` runtime stores a character's
+portrait, sprite, voice, and visual variants, which the `character.visual@1`
+slot projects onto the stage: the portrait panel calls it when the player
+uploads a replacement portrait. A `prompt.segment@1` provider gives story runtimes the roleplay
+notes of each card whose character is in the session (`<character-notes>`). This root `PLUGIN.md` is metadata only — executable runtimes live
+under `runtimes/`.
