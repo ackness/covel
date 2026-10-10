@@ -18,27 +18,24 @@ describe("catalog actions", () => {
       ),
     ).toEqual({ prompt: "a lighthouse", count: 3, action: "generate" });
   });
-  it("uses shared approval flow and lazily prepares upload only once", async () => {
-    const prepare = vi.fn(async () => ({ upload: "media" }));
+  it("posts the resolved payload through the shared approval flow", async () => {
     await invokeCatalogAction({
       sessionId: "s",
       action: {
         pluginId: "owner",
         runtimeId: "owner/generate",
-        payload: { ref: { from: "upload" } },
+        payload: { prompt: { from: "item.prompt" } },
       },
-      scope: {},
-      prepare,
+      scope: { item: { prompt: "a lighthouse" } },
       t: (key) => key,
     });
     const args = vi.mocked(postPluginRpcWithApproval).mock.calls.at(-1)![0];
-    expect(prepare).not.toHaveBeenCalled();
     const request = args.request as () => Promise<unknown>;
-    expect(await request()).toMatchObject({
+    expect(await request()).toEqual({
+      kind: "runtime",
       pluginId: "owner",
-      payload: { ref: "media" },
+      runtimeId: "owner/generate",
+      payload: { prompt: "a lighthouse" },
     });
-    await request();
-    expect(prepare).toHaveBeenCalledOnce();
   });
 });

@@ -11,21 +11,6 @@
   },
   "alwaysRender": true,
   "view": {
-    "component": "PortraitGallery",
-    "props": {
-      "replaceAction": {
-        "pluginId": "character-blueprint",
-        "runtimeId": "character-blueprint/presence",
-        "payload": {
-          "action": "replacePortrait",
-          "characterId": {
-            "from": "item.characterId"
-          },
-          "ref": {
-            "from": "upload"
-          }
-        }
-      }
-    }
+    "component": "PortraitGallery"
   }
 }

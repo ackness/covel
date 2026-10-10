@@ -1916,10 +1916,8 @@
     }
   },
   "characterPresence": {
-    "hint": "点击立绘可放大，鼠标悬停可替换成你自己的图片。",
+    "hint": "点击立绘可放大。",
     "empty": "本世界暂未提供角色立绘。",
-    "replace": "替换",
-    "uploading": "上传中…",
     "enlarge": "放大立绘"
   },
   "sceneCast": {

@@ -4,7 +4,6 @@ import {
   discoverPlugins,
   loadPluginManifest,
   loadPluginUi,
-  loadRuntime,
 } from "@covel/plugin-loader";
 
 const pluginDir = path.resolve(import.meta.dirname, "..");
@@ -20,33 +19,10 @@ async function discover() {
 }
 
 describe("character-blueprint manifest and UI loading", () => {
-  it("loads the presence runtime as its one manual function", async () => {
+  it("has no runtime: the cast and portraits come from the world package", async () => {
     const discovery = await discover();
-    const manifests = (await loadPluginManifest(discovery)).map(
-      (entry) => entry.manifest,
-    );
-
-    // Cards come from the world package; nothing writes them during play.
-    expect(manifests.map((manifest) => manifest.name)).toEqual([
-      "character-blueprint/presence",
-    ]);
-    for (const manifest of manifests) {
-      expect(manifest).toMatchObject({
-        pluginId: "character-blueprint",
-        runtimeType: "function",
-        handler: "./handler.js",
-        trigger: { type: "manual" },
-      });
-      const loaded = await loadRuntime(discovery, manifest.name);
-      expect(loaded.handler).toBeTypeOf("function");
-    }
-    expect(
-      Object.fromEntries(
-        manifests.map((manifest) => [manifest.name, manifest.outputContract]),
-      ),
-    ).toEqual({
-      "character-blueprint/presence": "character-presence@1",
-    });
+    // Cards and portraits come from the world package; nothing writes them during play.
+    expect(await loadPluginManifest(discovery)).toEqual([]);
   });
 
   it("loads the preset and portrait panels", async () => {
@@ -66,14 +42,8 @@ describe("character-blueprint manifest and UI loading", () => {
       group: "character-art",
       dataSource: { namespace: "presence" },
       alwaysRender: true,
-      view: {
-        props: {
-          replaceAction: {
-            pluginId: "character-blueprint",
-            runtimeId: "character-blueprint/presence",
-          },
-        },
-      },
     });
+    // Read-only: the gallery declares no action that writes a portrait.
+    expect(JSON.stringify(portraits?.view)).not.toContain("Action");
   });
 });

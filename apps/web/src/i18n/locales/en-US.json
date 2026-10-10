@@ -1916,10 +1916,8 @@
     }
   },
   "characterPresence": {
-    "hint": "Click a portrait to enlarge, or hover and pick an image to replace it.",
+    "hint": "Click a portrait to enlarge it.",
     "empty": "This world ships no character portraits yet.",
-    "replace": "Replace",
-    "uploading": "Uploading…",
     "enlarge": "Enlarge portrait"
   },
   "sceneCast": {

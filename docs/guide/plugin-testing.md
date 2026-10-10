@@ -86,7 +86,7 @@ agent/function/background runtime、entry、工具、RPC、Hook、设置、UI、
 | `loadPluginMessages(pluginRoot, locale)`                     | 读取插件 `locales/` 里的译文，得到宿主会传入的 `ctx.messages`；断言中文输出的 handler / 工具测试把它放进上下文 |
 | `expectAssetGenerated`                                       | 断言 RuntimeResult 的 `effects.assetGenerations[]` 中有合法 MediaRef                                           |
 
-function handler 单元测试（真实范例：[`plugins/character-blueprint/tests/presence.test.js`](../../plugins/character-blueprint/tests/presence.test.js)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
+function handler 单元测试（真实范例：[`packages/plugin-test-utils/tests/plugin-test-utils.test.ts`](../../packages/plugin-test-utils/tests/plugin-test-utils.test.ts)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
 
 ```js
 import { describe, expect, it } from "vitest";

@@ -29,27 +29,22 @@ export async function invokeCatalogAction(args: {
   action: CatalogAction;
   scope: Record<string, unknown>;
   t: (key: string, options?: Record<string, unknown>) => string;
-  prepare?: () => Promise<Record<string, unknown>>;
 }): Promise<void> {
-  let prepared: Record<string, unknown> | undefined;
   const response = await postPluginRpcWithApproval({
     sessionId: args.sessionId,
     pluginId: args.action.pluginId,
     actionLabel: args.action.runtimeId,
     confirm: requestConfirm,
     t: args.t,
-    request: async () => {
-      prepared ??= args.prepare ? await args.prepare() : {};
-      return {
-        kind: "runtime",
-        pluginId: args.action.pluginId,
-        runtimeId: args.action.runtimeId,
-        payload: resolveCatalogPayload(args.action.payload, {
-          ...args.scope,
-          ...prepared,
-        }) as Record<string, unknown>,
-      };
-    },
+    request: async () => ({
+      kind: "runtime",
+      pluginId: args.action.pluginId,
+      runtimeId: args.action.runtimeId,
+      payload: resolveCatalogPayload(args.action.payload, args.scope) as Record<
+        string,
+        unknown
+      >,
+    }),
   });
   if (response)
     emitPluginRpcRuntimeResponse({

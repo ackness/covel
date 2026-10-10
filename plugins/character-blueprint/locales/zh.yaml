@@ -15,8 +15,6 @@ PLUGIN.md:
       assets:
         authoring:
           title: 角色立绘图片
-runtimes/presence/RUNTIME.md:
-  description: 保存角色头像、立绘和声音。
 messages:
   Characters: 角色
   Preset Characters: 预设角色
