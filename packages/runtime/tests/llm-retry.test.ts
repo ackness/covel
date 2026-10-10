@@ -25,6 +25,8 @@ import {
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
 } from "../src/retry/llm-retry.js";
 import { computeAttemptBudget } from "../src/retry/retry-common.js";
+import { shouldRetryMalformedToolArguments } from "../src/turn-executor/turn-output-helpers.js";
+import { AiProviderError, MALFORMED_TOOL_ARGUMENTS } from "@covel/ai-provider";
 import type {
   LLMAdapter,
   LLMMessage,
@@ -204,6 +206,60 @@ describe("isTransientError", () => {
     expect(isTransientError(new Error("HTTP 400 Bad Request"))).toBe(false);
     expect(isTransientError(new Error("invalid tool arguments"))).toBe(false);
     expect(isTransientError(new Error("random failure"))).toBe(false);
+  });
+
+  it("reads an error's fields before its words", () => {
+    // The AI SDK's and the official SDKs' shapes.
+    const sdkError = (fields: Record<string, unknown>, message: string) =>
+      Object.assign(new Error(message), fields);
+    expect(
+      isTransientError(sdkError({ isRetryable: false }, "network timeout")),
+    ).toBe(false);
+    expect(isTransientError(sdkError({ statusCode: 400 }, "rate limit"))).toBe(
+      false,
+    );
+    expect(isTransientError(sdkError({ status: 529 }, "overloaded"))).toBe(
+      true,
+    );
+    expect(isTransientError(sdkError({ code: "ECONNRESET" }, "read"))).toBe(
+      true,
+    );
+    expect(isTransientError(new DOMException("stopped", "TimeoutError"))).toBe(
+      true,
+    );
+  });
+});
+
+describe("shouldRetryMalformedToolArguments", () => {
+  const gatewayError = (details?: Record<string, unknown>) =>
+    new AiProviderError({
+      code: "PROVIDER_ERROR",
+      provider: "openai-chat",
+      retriable: false,
+      statusCode: 400,
+      message:
+        '[openai-chat] HTTP 400 — The "function.arguments" parameter must be in JSON format.',
+      details,
+    });
+
+  it("follows the gateway's mark, not the message, for a gateway error", () => {
+    expect(
+      shouldRetryMalformedToolArguments(
+        gatewayError({ requestFault: MALFORMED_TOOL_ARGUMENTS }),
+      ),
+    ).toBe(true);
+    expect(shouldRetryMalformedToolArguments(gatewayError())).toBe(false);
+  });
+
+  it("falls back to the text for an error with no type", () => {
+    expect(
+      shouldRetryMalformedToolArguments(
+        new Error('"function.arguments" must be in JSON format'),
+      ),
+    ).toBe(true);
+    expect(shouldRetryMalformedToolArguments(new Error("HTTP 400"))).toBe(
+      false,
+    );
   });
 });
 

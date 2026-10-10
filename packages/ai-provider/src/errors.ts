@@ -40,3 +40,47 @@ export class AiProviderError extends Error {
     this.details = options.details;
   }
 }
+
+/** A model endpoint has no base URL, or one the outbound policy does not allow. */
+export class ProviderBaseUrlError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderBaseUrlError";
+  }
+}
+
+/** The outbound guard refused a host: its DNS answer is empty or not allowed. */
+export class SsrfPolicyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SsrfPolicyError";
+  }
+}
+
+/**
+ * The platform `fetch` got no response: the connection could not be made or
+ * was lost. `code` is the transport's own code (`ECONNREFUSED`, …) when the
+ * cause chain names one.
+ */
+export class OutboundFetchError extends Error {
+  readonly code?: string;
+
+  constructor(message: string, options: { cause: unknown; code?: string }) {
+    super(message, { cause: options.cause });
+    this.name = "OutboundFetchError";
+    if (options.code) this.code = options.code;
+  }
+}
+
+/** A wire ID of this kind is taken. */
+export class WireAlreadyRegisteredError extends Error {
+  readonly kind: string;
+  readonly wireId: string;
+
+  constructor(kind: string, wireId: string) {
+    super(`${kind} wire "${wireId}" already registered`);
+    this.name = "WireAlreadyRegisteredError";
+    this.kind = kind;
+    this.wireId = wireId;
+  }
+}

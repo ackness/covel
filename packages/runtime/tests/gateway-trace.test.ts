@@ -200,6 +200,38 @@ describe("withGatewayTrace", () => {
     expect(typeof responded.durationMs).toBe("number");
   });
 
+  it("generateImage records the model and the tokens a provider reported", async () => {
+    const { emitter, events } = captureEmitter();
+    const gateway = makeGateway({
+      generateImage: async () => ({
+        target: {
+          provider: "openai",
+          model: "gpt-image-1",
+          protocol: "openai-chat-v1",
+          metadata: {},
+        },
+        images: [
+          { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+        ],
+        usage: { inputTokens: 50, outputTokens: 4160 },
+        model: "gpt-image-1",
+        provider: "openai",
+        warnings: [],
+      }),
+    });
+
+    await withGatewayTrace(gateway, emitter, ctx).generateImage!({
+      prompt: "a cat",
+    });
+
+    expect(events[1]!.payload).toMatchObject({
+      method: "generateImage",
+      usage: { inputTokens: 50, outputTokens: 4160 },
+      model: "gpt-image-1",
+      provider: "openai",
+    });
+  });
+
   it("generateImage is absent from the traced facade when the source gateway has none", async () => {
     const { emitter } = captureEmitter();
     const traced = withGatewayTrace(makeGateway(), emitter, ctx);

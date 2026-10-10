@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LLMRequestBudgetError } from "@covel/shared";
 
-import { AiProviderError } from "../src/errors.js";
+import { AiProviderError, ProviderBaseUrlError } from "../src/errors.js";
 import { classifyProviderFailure } from "../src/provider-failure.js";
 
 /** The shape `assertSuccess` throws for a non-2xx provider answer. */
@@ -9,16 +9,14 @@ function httpFailure(
   statusCode: number,
   details: Record<string, unknown> = {},
 ) {
-  return new Error(
-    JSON.stringify({
-      name: "AiProviderError",
-      code: statusCode === 429 ? "RATE_LIMITED" : "PROVIDER_ERROR",
-      provider: "openai-chat",
-      retriable: false,
-      statusCode,
-      details,
-    }),
-  );
+  return new AiProviderError({
+    message: "provider failure",
+    code: statusCode === 429 ? "RATE_LIMITED" : "PROVIDER_ERROR",
+    provider: "openai-chat",
+    retriable: false,
+    statusCode,
+    details,
+  });
 }
 
 function fetchFailed(code: string, message: string) {
@@ -94,9 +92,15 @@ describe("classifyProviderFailure", () => {
     ).toBe("refused");
     expect(
       classifyProviderFailure(
-        new Error('Provider error: baseUrl "http://10.0.0.1" is not allowed.'),
+        new ProviderBaseUrlError(
+          'Provider error: baseUrl "http://10.0.0.1" is not allowed.',
+        ),
       ).kind,
     ).toBe("config");
+    // The class decides, not the wording.
+    expect(
+      classifyProviderFailure(new Error("baseUrl is not allowed")).kind,
+    ).toBe("unknown");
     expect(classifyProviderFailure(new Error("something else")).kind).toBe(
       "unknown",
     );

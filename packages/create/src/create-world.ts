@@ -203,6 +203,7 @@ async function checkLore(
       errors: loreMetaErrors,
       signal,
       idleTimeoutMs: options.idleTimeoutMs,
+      onUsage: options.onUsage,
     });
     if (!repair.success) {
       const repairError = `WORLD.md targeted repair failed: ${repair.error}`;
@@ -307,6 +308,7 @@ async function askUntilAccepted(args: {
         model: options.model,
         signal,
         idleTimeoutMs: options.idleTimeoutMs,
+        onUsage: options.onUsage,
         messages: [
           { role: "system", content: args.prompt },
           { role: "user", content: args.request },

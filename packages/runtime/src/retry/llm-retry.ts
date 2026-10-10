@@ -438,6 +438,8 @@ function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
   // Provider classifications remain authoritative when our own deadline did
   // not fire; e.g. a 400 mentioning an invalid timeout option is not a timeout.
   if (err instanceof AiProviderError) return false;
+  if (err instanceof Error && err.name === "TimeoutError") return true;
+  // Fallback for an adapter outside the gateway, whose error has only text.
   const text = extractMessage(err).toLowerCase();
   return text.includes("timeout") || text.includes("timed out");
 }
@@ -550,13 +552,18 @@ export async function streamLLMWithRetry(
           once: true,
         });
         const callTimeoutHandle = setTimeout(() => {
-          callAborter.abort(new DOMException("call timeout", "TimeoutError"));
+          callAborter.abort(
+            new StreamAttemptTimeoutError("call", "call timeout"),
+          );
         }, budget);
         const armFirstTokenGuard = () =>
           setTimeout(() => {
             if (!firstTokenSeen) {
               callAborter.abort(
-                new DOMException("first-token timeout", "TimeoutError"),
+                new StreamAttemptTimeoutError(
+                  "first-token",
+                  "first-token timeout",
+                ),
               );
             }
           }, policy.firstTokenTimeoutMs);
@@ -598,9 +605,9 @@ export async function streamLLMWithRetry(
           clearTimeout(idleHandle);
           idleHandle = setTimeout(() => {
             callAborter.abort(
-              new DOMException(
+              new StreamAttemptTimeoutError(
+                "idle",
                 `idle timeout: no model output for ${Math.round(policy.idleTimeoutMs / 1000)}s`,
-                "TimeoutError",
               ),
             );
           }, policy.idleTimeoutMs);
@@ -818,6 +825,22 @@ export async function streamLLMWithRetry(
   }
 }
 
+/**
+ * The abort reason of a streamed attempt that one of this module's guards cut
+ * off. The name is the platform's own for a timeout, so a reader that knows
+ * only `TimeoutError` still classifies it.
+ */
+class StreamAttemptTimeoutError extends Error {
+  override readonly name = "TimeoutError";
+
+  constructor(
+    readonly guard: "call" | "first-token" | "idle",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 function classifyStreamError(
   err: unknown,
   signal: AbortSignal,
@@ -825,12 +848,11 @@ function classifyStreamError(
 ): RetryReason {
   if (signal.aborted) {
     const reason = (signal as AbortSignal & { reason?: unknown }).reason;
-    const msg = reason instanceof Error ? reason.message : String(reason ?? "");
-    const lower = msg.toLowerCase();
-    if (lower.includes("first-token")) return "first-token-timeout";
-    if (lower.includes("idle timeout")) return "idle-timeout";
-    if (lower.includes("timeout"))
+    if (reason instanceof StreamAttemptTimeoutError) {
+      if (reason.guard === "first-token") return "first-token-timeout";
+      if (reason.guard === "idle") return "idle-timeout";
       return !firstTokenSeen ? "first-token-timeout" : "call-timeout";
+    }
   }
   if (isTransientError(err)) return "transient-error";
   return "unknown";

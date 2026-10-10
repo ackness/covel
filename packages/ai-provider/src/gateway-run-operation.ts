@@ -128,10 +128,13 @@ export function createRunOperation(
     options: GatewayOptions | undefined,
   ): Promise<TResult> {
     // Media backends own longer task/polling deadlines; only an explicit
-    // budget opts them into this transport ceiling.
+    // budget opts them into this transport ceiling. An embedding is one
+    // short request like a text call, and it runs in background sweeps and
+    // in a search on the turn path, where an endpoint that never answers
+    // would otherwise hold the caller with no limit.
     const scope =
       options?.requestBudget ||
-      ["text", "object", "evaluate"].includes(spec.mode)
+      ["text", "object", "evaluate", "embed"].includes(spec.mode)
         ? createLlmRequestScope({
             budget: options?.requestBudget,
             signal: options?.signal,

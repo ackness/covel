@@ -144,6 +144,10 @@ export interface FullGatewayLike {
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
       | { kind: "url"; url: string; mime: string }
     >;
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 
@@ -158,6 +162,10 @@ export interface FullGatewayLike {
     options?: FullGatewayOptions,
   ): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 
@@ -174,6 +182,10 @@ export interface FullGatewayLike {
     options?: FullGatewayOptions,
   ): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 
@@ -413,6 +425,7 @@ export function createPluginRuntimeGateway(
       return {
         target: result.target,
         images: result.images,
+        ...billing(result),
         warnings: result.warnings,
       };
     };
@@ -433,7 +446,11 @@ export function createPluginRuntimeGateway(
           ...(input.signal ? { signal: input.signal } : {}),
         },
       );
-      return { audio: result.audio, warnings: result.warnings };
+      return {
+        audio: result.audio,
+        ...billing(result),
+        warnings: result.warnings,
+      };
     };
   }
 
@@ -454,7 +471,11 @@ export function createPluginRuntimeGateway(
           ...(input.signal ? { signal: input.signal } : {}),
         },
       );
-      return { audio: result.audio, warnings: result.warnings };
+      return {
+        audio: result.audio,
+        ...billing(result),
+        warnings: result.warnings,
+      };
     };
   }
 
@@ -482,6 +503,19 @@ export function createPluginRuntimeGateway(
   }
 
   return facade;
+}
+
+/** What a media call's trace needs to show which model ran and what it used. */
+function billing(result: {
+  usage?: LLMUsageSummary | null;
+  model?: string;
+  provider?: string;
+}): { usage?: LLMUsageSummary; model?: string; provider?: string } {
+  return {
+    ...(result.usage ? { usage: result.usage } : {}),
+    ...(result.model ? { model: result.model } : {}),
+    ...(result.provider ? { provider: result.provider } : {}),
+  };
 }
 
 /**

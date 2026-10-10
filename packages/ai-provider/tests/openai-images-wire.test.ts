@@ -171,6 +171,52 @@ describe("openai-images wire", () => {
     expect(body).not.toHaveProperty("imageWire");
   });
 
+  it("lets a role's metadata fix the size but not the model, the prompt or the count", async () => {
+    const fn = mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
+    await openAiImagesWire.generate(
+      { baseUrl: "https://x.test" },
+      {
+        model: "gpt-image-1",
+        prompt: "a lighthouse",
+        n: 2,
+        size: "1024*1024",
+        providerRequestMetadata: {
+          size: "1536x1024",
+          model: "another-model",
+          prompt: "something else",
+          n: 9,
+        },
+      },
+    );
+    expect(
+      JSON.parse((fn.mock.calls[0]![1] as RequestInit).body as string),
+    ).toEqual({
+      model: "gpt-image-1",
+      prompt: "a lighthouse",
+      n: 2,
+      size: "1536x1024",
+    });
+  });
+
+  it("returns the token usage of a model billed by token, and none otherwise", async () => {
+    mockFetchOnce(200, {
+      data: [{ b64_json: PNG_B64 }],
+      usage: { input_tokens: 50, output_tokens: 4160, total_tokens: 4210 },
+    });
+    const billed = await openAiImagesWire.generate(
+      { baseUrl: "https://x.test" },
+      { model: "gpt-image-1", prompt: "p" },
+    );
+    expect(billed.usage).toEqual({ inputTokens: 50, outputTokens: 4160 });
+
+    mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
+    const perImage = await openAiImagesWire.generate(
+      { baseUrl: "https://x.test" },
+      { model: "dall-e-3", prompt: "p" },
+    );
+    expect(perImage.usage).toBeNull();
+  });
+
   it("records a warning when negativePrompt is provided (unsupported field)", async () => {
     mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
     const result = await openAiImagesWire.generate(

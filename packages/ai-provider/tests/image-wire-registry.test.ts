@@ -4,6 +4,7 @@ import {
   getImageWire,
   DEFAULT_IMAGE_WIRE,
 } from "../src/image/wire-registry.js";
+import { WireAlreadyRegisteredError } from "../src/errors.js";
 import type { ImageWire } from "../src/image/types.js";
 
 describe("image wire registry", () => {
@@ -24,6 +25,6 @@ describe("image wire registry", () => {
     };
     registerImageWire(wire);
     expect(getImageWire("test-wire")).toBe(wire);
-    expect(() => registerImageWire(wire)).toThrow(/already registered/);
+    expect(() => registerImageWire(wire)).toThrow(WireAlreadyRegisteredError);
   });
 });

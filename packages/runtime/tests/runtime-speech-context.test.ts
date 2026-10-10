@@ -52,8 +52,19 @@ function makeMediaStub() {
   return { assets, media, mediaStore: { listByMetadata } };
 }
 
+const speechTarget = {
+  presetId: "speech",
+  provider: "openai",
+  protocol: "openai-chat-v1",
+  baseUrl: "https://api.openai.com/v1",
+  model: "tts-1",
+  tag: "speech",
+  metadata: {} as Record<string, unknown>,
+};
+
 function makeGatewayStub(warnings: readonly string[] = []) {
   return {
+    resolveSlot: vi.fn((): typeof speechTarget | null => speechTarget),
     synthesizeSpeech: vi.fn(async () => ({
       audio: { mimeType: "audio/mpeg", data: new Uint8Array([1, 2, 3]) },
       warnings,
@@ -158,6 +169,55 @@ describe("createRuntimeSpeechContext — generate", () => {
     });
     expect(formatChange.cached).toBe(false);
     expect(gateway.synthesizeSpeech).toHaveBeenCalledTimes(1);
+  });
+
+  it("synthesizes again when the speech role is bound to another model", async () => {
+    const { mediaStore, media } = makeMediaStub();
+    const gateway = makeGatewayStub();
+    const ctx = createRuntimeSpeechContext(gateway, mediaStore, media, {
+      sessionId: "sess-1",
+      pluginId: "tts-plugin",
+    });
+
+    const first = await ctx.generate({ text: "same line" });
+    expect(gateway.resolveSlot).toHaveBeenCalledWith({
+      presetId: "speech",
+      fallbackTag: "speech",
+    });
+
+    for (const changed of [
+      { model: "tts-1-hd" },
+      { provider: "other" },
+      { baseUrl: "https://tts.example/v1" },
+      { metadata: { speechWire: "acme/voice" } },
+    ]) {
+      gateway.resolveSlot.mockReturnValue({ ...speechTarget, ...changed });
+      gateway.synthesizeSpeech.mockClear();
+      expect((await ctx.generate({ text: "same line" })).cached).toBe(false);
+      expect(gateway.synthesizeSpeech).toHaveBeenCalledTimes(1);
+    }
+
+    // Back on the first model, its stored line answers.
+    gateway.resolveSlot.mockReturnValue(speechTarget);
+    const again = await ctx.generate({ text: "same line" });
+    expect(again.cached).toBe(true);
+    expect(again.refs[0]!.id).toBe(first.refs[0]!.id);
+  });
+
+  it("leaves the error to the synthesis call when the role does not resolve", async () => {
+    const { mediaStore, media } = makeMediaStub();
+    const gateway = makeGatewayStub();
+    gateway.resolveSlot.mockImplementation(() => {
+      throw new Error("no such role");
+    });
+    gateway.synthesizeSpeech.mockRejectedValue(new Error("speech role unset"));
+    const ctx = createRuntimeSpeechContext(gateway, mediaStore, media, {
+      sessionId: "sess-1",
+      pluginId: "tts-plugin",
+    });
+    await expect(ctx.generate({ text: "line" })).rejects.toThrow(
+      "speech role unset",
+    );
   });
 
   it("forwards the abort signal without affecting promptHash", async () => {

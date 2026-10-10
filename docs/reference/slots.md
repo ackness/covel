@@ -233,7 +233,7 @@ reasoningEffort = "disabled"
 统一的 `reasoningEffort` 设置会按接口协议转换：
 
 - OpenAI Chat 和兼容接口：`reasoning_effort`；DeepSeek 同时发送 `thinking.type`，Qwen 开关使用 `enable_thinking`；Qwen3.8 Chat 的原生 `low/medium/xhigh` 使用 `reasoning_effort`，已确认的 Qwen3.5–3.7 Max/Plus/Flash 使用 `thinking_budget` 预算预设（2048/8192/16384），界面明确标注 token 数值。预算预设不是服务商原生档位，实际消耗可以少于预算。显式档位会清理继承的预算，避免 Qwen3.8 同时发送两种参数。
-- OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。`store: false` 时请求加密 reasoning，用于工具续调。
+- OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。`store: false` 时请求加密 reasoning，用于工具续调。Covel 只在用途配置了 `store` 时发送这个字段；不配置时由服务商决定是否保存请求和应答（OpenAI 的 Responses 接口默认保存一段时间）。不想让服务商保存时，在该用途的 `providerOptions` 里写 `store = false`（见[供应商参数](#供应商参数)）。
 - Anthropic Messages：`output_config: { effort }`；已识别的自适应思考模型选择档位时启用 `thinking.type: "adaptive"`，默认请求可见摘要 `display: "summarized"`；不可关闭思考的模型不显示关闭选项。Claude 请求会移除与思考冲突的采样参数，关闭思考时清理继承的 effort，避免组合产生 400 错误。DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
 - Gemini 原生 `generateContent`：Gemini 3 使用 `generationConfig.thinkingConfig.thinkingLevel`；Gemini 2.5 使用 `thinkingBudget`。3 Pro 仅有 low/high，3.1 Pro 为 low/medium/high，3 Flash、3.5/3.6 Flash 及 3.1/3.5 Flash-Lite 为 minimal/low/medium/high，3.7/3.8 Flash 为 low/medium/high。2.5 Pro 不提供关闭；2.5 Flash/Flash-Lite 的 `none` 转为预算 0。2.5 的 low/medium/high 分别是应用预算预设 1024/8192/24576 token，不是 Google 原生档位。未知 Gemini 型号不推测档位。Google OpenAI 兼容接口仍发送 `reasoning_effort`，其中 `minimal` 在 3.1 Pro 映射为 low、在 2.5 映射为 1024 token；这不代表原生协议支持这些型号的 `minimal` 档位。
 
@@ -383,9 +383,9 @@ Provider and plugin HTTP helpers cancel rejected response bodies before retrying
 
 重试哪些应答与 OpenAI、Anthropic 官方 SDK 和 AI SDK 一致：408、409、429 和 5xx；服务商在 `x-should-retry` 头里给出的 `true` / `false` 优先于状态码。等待时间先读更精确的 `retry-after-ms`（OpenAI、Azure），再读 `Retry-After`。服务商要求的等待超过 60 秒，或超过本次调用剩余的时限时，不等待：这次应答直接返回给调用方，按限流处理，可以改用备用模型（此前会一直等到时限耗尽，然后以不可回退的预算错误结束）。
 
-`Retry-After` 同时接受整数秒和 HTTP-date；过去的日期立即重试，无效值退回退避策略。文本 / 对象 / 流式 / 评估的 gateway 调用默认共享最多 8 次实际 HTTP 请求和 120 秒总时限。runtime 的一次逻辑调用只创建一次预算，HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`；runtime 执行预算继续按原策略计算，并发排队保留原有的额度补偿；每次实际调用同时受执行预算、逻辑总时限和取消信号约束。排队和退避也计入逻辑总时间，已经输出内容的流仍禁止重试。耗尽返回不可重试的 `REQUEST_BUDGET_EXCEEDED`。调用方可通过 `createLlmRequestBudget` 显式设置更紧或更宽的策略，并在 `GatewayOptions.requestBudget` / `LLMAdapter` 参数中传递。AI 世界创作（生成、修订、翻译）就是这样做的：回答长、有的模型输出慢，所以它按“无响应时间”限时，每次请求传入 30 分钟的显式预算，不受默认 120 秒限制（见 `docs/reference/api.md` 的 `POST /api/ai/generate-world`）。
+`Retry-After` 同时接受整数秒和 HTTP-date；过去的日期立即重试，无效值退回退避策略。文本 / 对象 / 流式 / 评估 / embedding 的 gateway 调用默认共享最多 8 次实际 HTTP 请求和 120 秒总时限。runtime 的一次逻辑调用只创建一次预算，HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`；runtime 执行预算继续按原策略计算，并发排队保留原有的额度补偿；每次实际调用同时受执行预算、逻辑总时限和取消信号约束。排队和退避也计入逻辑总时间，已经输出内容的流仍禁止重试。耗尽返回不可重试的 `REQUEST_BUDGET_EXCEEDED`。调用方可通过 `createLlmRequestBudget` 显式设置更紧或更宽的策略，并在 `GatewayOptions.requestBudget` / `LLMAdapter` 参数中传递。AI 世界创作（生成、修订、翻译）就是这样做的：回答长、有的模型输出慢，所以它按“无响应时间”限时，每次请求传入 30 分钟的显式预算，不受默认 120 秒限制（见 `docs/reference/api.md` 的 `POST /api/ai/generate-world`）。
 
-媒体和 embedding 不自动套用文本预算，保留独立 wire 的时限及轮询策略；例如 DashScope WAN 仍可每 2 秒轮询、最多 300 秒。它们可以显式传入预算，此时所有 HTTP 请求（含轮询）都计数。底层 HTTP helper 只消耗传入的预算。观测数据在原 `transportAttempt` 之外提供可选 `logicalAttempt` 和 `transportRetryReason`（`http-429` / `http-4xx` / `http-5xx` / `connection`；408、409 和由 `x-should-retry` 触发的其他 4xx 记为 `http-4xx`）。
+媒体（图像、语音、音乐、转写）不自动套用这份预算，保留独立 wire 的时限及轮询策略；例如 DashScope WAN 仍可每 2 秒轮询、最多 300 秒。embedding 是一次短请求，后台的向量写入和回合内的检索都会调用它，所以与文本调用用同一份默认预算：端点不应答时调用在 120 秒后以 `REQUEST_BUDGET_EXCEEDED` 结束，记忆层不再另外重试。媒体可以显式传入预算，此时所有 HTTP 请求（含轮询）都计数。底层 HTTP helper 只消耗传入的预算。观测数据在原 `transportAttempt` 之外提供可选 `logicalAttempt` 和 `transportRetryReason`（`http-429` / `http-4xx` / `http-5xx` / `connection`；408、409 和由 `x-should-retry` 触发的其他 4xx 记为 `http-4xx`）。
 
 连接被拒绝或在应答前断开（`ECONNREFUSED` / `ECONNRESET` / `EPIPE` / `UND_ERR_SOCKET`）与 429 / 5xx 一样重试：同一套退避、同一个重试上限（两类合计 3 次）、同一份请求预算。重启中的端点（本地代理最常见）片刻后就恢复，不该让一次 runtime 调用直接失败。超时不在其列，流式调用已经输出内容后也不重试。
 

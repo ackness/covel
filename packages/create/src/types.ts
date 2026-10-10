@@ -4,6 +4,7 @@
 
 import type {
   LLMAdapter,
+  LLMUsageSummary,
   WorldCreationBrief,
   WorldGenerationPart,
 } from "@covel/shared";
@@ -43,6 +44,11 @@ export interface CreateWorldOptions {
    * asked for again, or ends.
    */
   readonly onProgress?: (parts: readonly WorldGenerationPart[]) => void;
+  /**
+   * Receives the tokens of each model answer of the generation: every part,
+   * every repeated request and the lore repair. The caller adds them up.
+   */
+  readonly onUsage?: (usage: LLMUsageSummary) => void;
   /** Optional logger for recording generation progress. */
   readonly logger?: CreateWorldLogger;
   /** Template source shared by generation and repair for this invocation. */

@@ -4,6 +4,7 @@ import {
   registerSpeechWire,
   registerTextWire,
   registerTranscriptionWire,
+  WireAlreadyRegisteredError,
   type TextWire,
   type WireModuleShape,
 } from "@covel/ai-provider";
@@ -48,8 +49,7 @@ export function registerNamespaced(
     try {
       onRegistered(registration());
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/already registered/.test(message)) {
+      if (err instanceof WireAlreadyRegisteredError) {
         throw new PluginRegistrationError(
           "registerWires",
           `wire "${id}" is already registered`,

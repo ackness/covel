@@ -22,6 +22,8 @@ import type {
   ImageGenerationTarget,
 } from "@covel/shared/plugin-runtime";
 
+import { targetIdentity } from "./media-cache-key.js";
+
 const INGEST_ALLOWED_MIMES = ["image/png", "image/jpeg", "image/webp"];
 
 /** Deterministic key over generation params — identical calls dedupe. */
@@ -30,13 +32,7 @@ function promptHashOf(
   target: ImageGenerationTarget,
 ): string {
   const canonical = JSON.stringify([
-    // Model bindings can change while the role name and prompt stay the same.
-    // Credentials are deliberately excluded from both the key and media metadata.
-    target.provider,
-    target.model,
-    target.protocol,
-    target.baseUrl ?? "",
-    canonicalMetadata(target.metadata),
+    ...targetIdentity(target),
     input.prompt,
     input.negativePrompt ?? "",
     input.size ?? "",
@@ -45,17 +41,6 @@ function promptHashOf(
     input.background ?? "",
   ]);
   return createHash("sha256").update(canonical).digest("hex");
-}
-
-function canonicalMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalMetadata);
-  if (value && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([key, item]) => [key, canonicalMetadata(item)]),
-    );
-  return value;
 }
 
 interface CreateRuntimeImagesContextOptions {

@@ -4,7 +4,8 @@ import type {
   ImageGenerationResult,
   ImageWire,
 } from "./types.js";
-import type { ProviderConfig } from "../types.js";
+import type { ProviderConfig, UsageSummary } from "../types.js";
+import { readTokenCount } from "../adapters/usage.js";
 import { assertSuccess, parseJson, postJson } from "../adapters/http.js";
 
 /** DashScope-style "1024*1024" → OpenAI "1024x1024". */
@@ -96,14 +97,17 @@ async function generate(
     ...extra
   } = params.providerRequestMetadata ?? {};
 
+  // A role's metadata may fix what its model accepts (`size`, `quality`,
+  // `response_format`), so it is spread over the call's options. The model,
+  // the prompt and the count belong to the call and come last.
   const body: Record<string, unknown> = {
-    model: params.model,
-    prompt: params.prompt,
-    n: params.n ?? 1,
     ...(params.size ? { size: normalizeSize(params.size) } : {}),
     ...(params.quality ? { quality: params.quality } : {}),
     ...(params.background ? { background: params.background } : {}),
     ...extra,
+    model: params.model,
+    prompt: params.prompt,
+    n: params.n ?? 1,
   };
   const warnings: string[] = [];
   if (params.negativePrompt) {
@@ -127,7 +131,22 @@ async function generate(
   if (images.length === 0) {
     throw new Error("openai-images wire: response contained no images");
   }
-  return { images, usage: null, warnings };
+  return { images, usage: readUsage(payload.usage), warnings };
+}
+
+/**
+ * Token usage as the Images API reports it for the models billed by token
+ * (`gpt-image-1`); the models billed per image report none.
+ */
+function readUsage(value: unknown): UsageSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const usage = value as Record<string, unknown>;
+  if (usage.input_tokens === undefined && usage.output_tokens === undefined)
+    return null;
+  return {
+    inputTokens: readTokenCount(usage.input_tokens),
+    outputTokens: readTokenCount(usage.output_tokens),
+  };
 }
 
 export const openAiImagesWire: ImageWire = { id: "openai-images", generate };

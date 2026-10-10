@@ -317,6 +317,10 @@ describe("ai world generation route", () => {
     expect(JSON.stringify(done?.warnings)).toContain(
       "check model configuration or server logs",
     );
+    // The two answers that arrived are counted; the failed requests have none.
+    expect(done).toMatchObject({
+      usage: { inputTokens: 2, outputTokens: 2, requests: 2 },
+    });
     expect(JSON.stringify(events)).not.toContain("/private/");
   });
 

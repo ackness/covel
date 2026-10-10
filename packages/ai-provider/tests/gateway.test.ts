@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
+import { AiProviderError } from "../src/errors.js";
+import { assertSuccess } from "../src/adapters/http/response.js";
 import { createGateway } from "../src/gateway.js";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import { createProviderRegistry } from "../src/provider-registry.js";
@@ -249,15 +251,14 @@ describe("gateway", () => {
     "identifies the actual failed fallback model in %s errors",
     async (mode) => {
       const fail = () => {
-        throw new Error(
-          JSON.stringify({
-            code: "PROVIDER_ERROR",
-            provider: "openai-chat",
-            statusCode: 500,
-            retriable: true,
-            details: { message: "Upstream failed" },
-          }),
-        );
+        throw new AiProviderError({
+          message: "provider failure",
+          code: "PROVIDER_ERROR",
+          provider: "openai-chat",
+          statusCode: 500,
+          retriable: true,
+          details: { message: "Upstream failed" },
+        });
       };
       const { gateway } = setup({
         generateText: async () => fail(),
@@ -287,14 +288,12 @@ describe("gateway", () => {
   it("retains the actual primary model and original 400 details without fallback", async () => {
     const { gateway } = setup({
       async generateText() {
-        throw new Error(
-          JSON.stringify({
-            code: "PROVIDER_ERROR",
-            provider: "openai-chat",
-            statusCode: 400,
-            details: { message: "Range of max_tokens should be [1, 131072]" },
-          }),
+        assertSuccess(
+          new Response("", { status: 400 }),
+          { error: { message: "Range of max_tokens should be [1, 131072]" } },
+          "openai-chat",
         );
+        throw new Error("unreachable");
       },
     });
     await expect(gateway.generateText({ messages: [] })).rejects.toMatchObject({
@@ -446,14 +445,13 @@ describe("gateway", () => {
           name: "lookup",
           arguments: "{}",
         };
-        throw new Error(
-          JSON.stringify({
-            code: "PROVIDER_ERROR",
-            provider: "test",
-            retriable: true,
-            statusCode: 500,
-          }),
-        );
+        throw new AiProviderError({
+          message: "provider failure",
+          code: "PROVIDER_ERROR",
+          provider: "test",
+          retriable: true,
+          statusCode: 500,
+        });
       },
     });
     const events: StreamEvent[] = [];
@@ -478,15 +476,13 @@ describe("gateway", () => {
       async generateText() {
         callCount++;
         if (callCount === 1) {
-          throw new Error(
-            JSON.stringify({
-              name: "AiProviderError",
-              code: "PROVIDER_ERROR",
-              provider: "test",
-              retriable: true,
-              statusCode: 500,
-            }),
-          );
+          throw new AiProviderError({
+            message: "provider failure",
+            code: "PROVIDER_ERROR",
+            provider: "test",
+            retriable: true,
+            statusCode: 500,
+          });
         }
         return {
           text: "backup response",
@@ -512,14 +508,13 @@ describe("gateway", () => {
       async generateText() {
         callCount++;
         if (callCount === 1) {
-          throw new Error(
-            JSON.stringify({
-              code: "PROVIDER_ERROR",
-              provider: "test",
-              retriable: true,
-              statusCode: 500,
-            }),
-          );
+          throw new AiProviderError({
+            message: "provider failure",
+            code: "PROVIDER_ERROR",
+            provider: "test",
+            retriable: true,
+            statusCode: 500,
+          });
         }
         return {
           text: "backup response",
@@ -560,14 +555,12 @@ describe("gateway", () => {
     const { gateway } = setup({
       async generateText() {
         callCount++;
-        throw new Error(
-          JSON.stringify({
-            name: "AiProviderError",
-            code: "CONFIG_ERROR",
-            provider: "test",
-            retriable: false,
-          }),
-        );
+        throw new AiProviderError({
+          message: "provider failure",
+          code: "CONFIG_ERROR",
+          provider: "test",
+          retriable: false,
+        });
       },
     });
 

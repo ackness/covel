@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readRuntimeEnv } from "@covel/shared";
+import { WireAlreadyRegisteredError } from "./errors.js";
 
 /** The plugin that provides a wire, when the wire is limited to sessions that run it. */
 export interface WireOwner {
@@ -91,8 +92,7 @@ export function registerWire<T extends { id: string }>(
   owner?: WireOwner,
 ): () => void {
   const key = `${kind}:${wire.id}`;
-  if (live.has(key))
-    throw new Error(`${kind} wire "${wire.id}" already registered`);
+  if (live.has(key)) throw new WireAlreadyRegisteredError(kind, wire.id);
   const entry: WireEntry = owner ? { wire, owner } : { wire };
   live.set(key, entry);
   return () => {
