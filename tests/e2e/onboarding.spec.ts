@@ -128,7 +128,12 @@ test("canonical provider configuration returns to the guide, keeps assignments, 
     .click();
   const add = page.getByRole("dialog", { name: "Add provider", exact: true });
   await add.locator("input").nth(0).fill("onboarding-fixture");
-  await add.locator("input").nth(1).fill("http://127.0.0.1:9/v1");
+  // A remote endpoint: a service on this machine takes no key and counts as
+  // ready, which would skip the missing-credentials state this test covers.
+  await add
+    .locator("input")
+    .nth(1)
+    .fill("https://models.onboarding-fixture.test/v1");
   await add.getByRole("textbox", { name: "Model IDs" }).fill("fixture-text");
   await add.getByRole("button", { name: "Add provider", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
