@@ -122,6 +122,26 @@ describe("ToolExecutor text-result convention", () => {
     expect(result.parsedResult).toEqual({ doubled: 10 });
   });
 
+  it("leaves the ui blocks out of the JSON the model reads, not out of the result", async () => {
+    const block = { type: "ui-spec", spec: { root: "card" } };
+    const cardTool = tool({
+      name: "show-card",
+      description: "Returns a count and a card for the player",
+      parameters: z.object({}),
+      execute: async () => ({ created: 1, ui: [block] }),
+    });
+    const executor = createToolExecutor({
+      findTool: (name) => (name === "show-card" ? cardTool : undefined),
+      store,
+    });
+
+    const result = await executor.execute(makeCall("show-card", {}), ctx);
+
+    expect(result.result).toBe('{"created":1}');
+    // The kernel still renders the blocks from the full result.
+    expect(result.parsedResult).toEqual({ created: 1, ui: [block] });
+  });
+
   it("leaves a record's bookkeeping out of the JSON the model reads, not out of the result", async () => {
     const rowTool = tool({
       name: "read-row",
