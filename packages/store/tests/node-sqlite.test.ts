@@ -1,9 +1,14 @@
 // @vitest-environment node
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as sqliteVec from "sqlite-vec";
 import {
   loadSqliteExtension,
   openSqliteConnection,
+  reclaimSqliteFreePages,
   runSqliteTransaction,
   type SqliteConnection,
 } from "../src/sqlite/node-sqlite.js";
@@ -61,6 +66,40 @@ describe("runSqliteTransaction", () => {
     ).toThrow(/must not be async/);
     expect(names()).toEqual([]);
     expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("reclaimSqliteFreePages", () => {
+  const pages = (conn: SqliteConnection) =>
+    (conn.prepare("PRAGMA page_count").get() as { page_count: number })
+      .page_count;
+  const fillAndEmpty = (conn: SqliteConnection) => {
+    conn.exec("CREATE TABLE big (v TEXT)");
+    const insert = conn.prepare("INSERT INTO big VALUES (?)");
+    for (let i = 0; i < 300; i++) insert.run("x".repeat(4000));
+    const full = pages(conn);
+    conn.exec("DELETE FROM big");
+    return full;
+  };
+
+  it("gives pages back in a new file and leaves an older file alone", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "covel-vacuum-"));
+    try {
+      const fresh = openSqliteConnection(path.join(dir, "fresh.db"));
+      const full = fillAndEmpty(fresh);
+      reclaimSqliteFreePages(fresh);
+      expect(pages(fresh)).toBeLessThan(full / 2);
+      fresh.close();
+
+      // A file made before incremental auto-vacuum keeps its size.
+      const legacy = new DatabaseSync(path.join(dir, "legacy.db"));
+      const legacyFull = fillAndEmpty(legacy);
+      reclaimSqliteFreePages(legacy);
+      expect(pages(legacy)).toBe(legacyFull);
+      legacy.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

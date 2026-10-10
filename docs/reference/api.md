@@ -136,7 +136,8 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 On `demo` / `commercial`, the public `GET /api/llm-config` retains the model
 catalog used at client startup but omits `source` and load `error`; only the
 operator token unlocks those diagnostics. Public `GET /api/config/info` returns
-`isDesktop: false`, `requiresAuth: true`, and null path fields on those tiers.
+`isDesktop: false`, `requiresAuth: true`, null path fields and a read-only
+`traceRetention` (`settable: false`) on those tiers.
 An operator request receives the complete deployment paths. Local `self` and
 desktop discovery retain their existing response.
 
@@ -741,7 +742,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                                                                                          |
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                            |
 | GET  | `/api/provider-keys`           | 只返回 `{ providers: { [provider]: { configured: true } } }`：动态扫描所有 `*_API_KEY` 得到的配置状态，不含原始或掩码的密钥内容，桌面客户端也一样。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单属运维信息） |
-| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                                                                                     |
+| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等，以及 `traceRetention: { days, source: env\|setting\|default, settable }`，即生效的 trace 保留天数、来源，以及玩家的设置在此服务器上能否生效）                        |
 | GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）                                                                                                                                                              |
 | PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                                                                                 |
 | GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                                                                               |
