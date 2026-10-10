@@ -283,7 +283,7 @@ function buildAnthropicSystemField(
   const segmentCount = nonEmpty.length + (suffixBecomesTail ? 1 : 0);
   const cacheableCount = hasOpenTail ? segmentCount - 1 : segmentCount;
   // Keep the first stable segment and the full stable prefix. Reserve room
-  // for the moving message breakpoint and future tool-definition caching.
+  // for the two message breakpoints (end of history, end of request).
   const systemBreakpointBudget = Math.min(2, MAX_CACHE_BREAKPOINTS - 1);
 
   const blocks: AnthropicSystemBlock[] = [];
