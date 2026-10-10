@@ -584,7 +584,8 @@ export function SessionPrepScreen({
                 onToggle={() => setLoreExpanded(!loreExpanded)}
                 loreValue={visibleLore}
                 originalLore={visibleOriginalLore}
-                isModified={lore.value !== originalLore}
+                isModified={recordReady && lore.value !== originalLore}
+                locked={!recordReady}
                 onLoreChange={changeVisibleLore}
                 onResetLore={lore.reset}
                 draftStatus={loreStatus}
