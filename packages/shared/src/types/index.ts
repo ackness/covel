@@ -322,6 +322,7 @@ export type {
 export type {
   I18nText,
   World,
+  WorldSummary,
   WorldWireRecord,
   WorldLandmark,
   WorldRegion,

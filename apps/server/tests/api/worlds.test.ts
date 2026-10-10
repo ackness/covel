@@ -162,6 +162,46 @@ describe("world routes", () => {
     app = createTestApp(store, pluginRegistry);
   });
 
+  it("GET /api/worlds lists summaries and GET /api/worlds/:id returns the full record", async () => {
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "world-full",
+      name: "Full",
+      description: "Summary text",
+      lore: "The long lore.",
+      dimensions: makeDimensions("Reach", "Guild"),
+      metadata: {
+        source: "file",
+        accentColor: "#336699",
+        embeddedCharacters: [{ id: "c1", name: "C" }],
+        localizedText: { name: { en: "Full" }, lore: { en: "Lore" } },
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const listed = (await (await app.request("/api/worlds")).json()) as {
+      items: Record<string, unknown>[];
+    };
+    const item = listed.items.find((world) => world.id === "world-full")!;
+    expect(item).not.toHaveProperty("lore");
+    expect(item).not.toHaveProperty("dimensions");
+    expect(item.metadata).toEqual({
+      source: "file",
+      accentColor: "#336699",
+      localizedText: { name: { en: "Full" } },
+    });
+
+    const full = (await (
+      await app.request("/api/worlds/world-full")
+    ).json()) as {
+      lore: string;
+      metadata: Record<string, unknown>;
+    };
+    expect(full.lore).toBe("The long lore.");
+    expect(full.metadata.embeddedCharacters).toEqual([{ id: "c1", name: "C" }]);
+  });
+
   it("POST /api/worlds mints an id when omitted", async () => {
     const res = await app.request("/api/worlds", {
       method: "POST",

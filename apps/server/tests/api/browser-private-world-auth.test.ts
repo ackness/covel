@@ -6,6 +6,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
+import { summarizeWorld } from "@covel/shared";
 import type { LLMAdapter } from "@covel/runtime";
 import { type DataStore, type WorldRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
@@ -198,7 +199,9 @@ describe("browser-private shared world authorization", () => {
     const world = await store.getWorld(WORLD_ID);
     const listed = await app.request("/api/worlds");
     expect(listed.status).toBe(200);
-    expect(await listed.json()).toEqual({ items: [world] });
+    expect(await listed.json()).toEqual({
+      items: [summarizeWorld(world!)],
+    });
     const detail = await app.request(`/api/worlds/${WORLD_ID}`);
     expect(detail.status).toBe(200);
     expect(await detail.json()).toEqual(world);

@@ -5,6 +5,7 @@
 import { worldOperationLockId } from "../../../world-lifecycle.js";
 import { Hono } from "hono";
 import {
+  summarizeWorld,
   worldCreateRequestSchema,
   worldPatchRequestSchema,
 } from "@covel/shared";
@@ -21,11 +22,13 @@ import {
 
 export const worldCrudRoutes = new Hono<WorldEnv>();
 
-// GET /worlds
+// GET /worlds — summaries; GET /worlds/:id returns the full record. The store
+// reads whole rows (lore and metadata share them with the list fields), so the
+// saving is the response, not the query.
 worldCrudRoutes.get("/", async (c) => {
   const store = c.get("store");
   const worlds = await store.listWorlds();
-  return c.json({ items: worlds });
+  return c.json({ items: worlds.map(summarizeWorld) });
 });
 
 // GET /worlds/:id
