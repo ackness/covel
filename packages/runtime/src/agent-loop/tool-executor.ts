@@ -11,6 +11,7 @@
  */
 
 import {
+  ToolRefusal,
   ToolValidationError,
   getEmittedEvents,
   getPendingProposals,
@@ -113,6 +114,11 @@ export interface ToolCallResult {
   /** Domain events emitted via the `emit-event` builtin tool (see @covel/tools result.ts). */
   readonly emittedEvents?: readonly EmittedEvent[];
   readonly success: boolean;
+  /**
+   * A failed call that the tool refused with `ToolRefusal`: the model had
+   * nothing to correct, so the call is not a failure of the runtime.
+   */
+  readonly refused?: true;
   readonly approvalStatus?: ApprovalStatus;
 }
 
@@ -593,6 +599,9 @@ export function createToolExecutor(
           result: errorResult,
           parsedResult: null,
           success: false,
+          ...(code === "EXECUTION_ERROR" && error instanceof ToolRefusal
+            ? { refused: true as const }
+            : {}),
           approvalStatus,
         };
       } finally {

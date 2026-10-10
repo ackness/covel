@@ -95,8 +95,8 @@ Covel 框架承担的是 **Agent 编排层**。
 
 Covel 当前的工具层分成两类：
 
-- `tools.builtin`：框架提供的通用 building blocks
-- `tools.plugin`：插件在 `entry` 模块里注册、自己维护、自己测试的本地工具
+- `agent.tools.builtin`：框架提供的通用 building blocks
+- `contributes.tools`：插件在 `entry` 模块里注册、自己维护、自己测试的本地工具
 
 推荐选择顺序：
 
@@ -122,7 +122,7 @@ Covel 当前的工具层分成两类：
 
 声明方式：
 
-- 在 `entry` 模块里 `covel.registerTool()` 注册，并在 `PLUGIN.md` 的 `tools.plugin` 列出名字
+- 在 `entry` 模块里 `covel.registerTool()` 注册，并在 `PLUGIN.md` 的 `contributes.tools` 列出名字
 - 路径解析以插件根目录为基准
 
 当前框架会校验路径边界，确保工具文件位于插件包目录内。

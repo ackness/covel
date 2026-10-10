@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 import { tool } from "../tool.js";
-import { withEmittedEvents } from "../result.js";
+import { ToolRefusal, withEmittedEvents } from "../result.js";
 import type { ToolModule } from "../types.js";
 
 /** Structural dep — implemented by the server's session event directory. */
@@ -47,8 +47,10 @@ export function createEmitEventTool(deps: {
       const known = await deps.directory.listTopics(context.sessionId);
       if (!known.includes(topic)) {
         // Thrown, so the call counts as failed: a refused emit must not
-        // satisfy `requireToolUse` or a finishing-tool rule.
-        throw new Error(
+        // satisfy `requireToolUse` or a finishing-tool rule. A refusal and
+        // not an error: the model can correct nothing here, and a runtime
+        // that goes on to finish has not failed.
+        throw new ToolRefusal(
           `unknown topic "${topic}"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: ${known.join(", ") || "(none — no consumer plugin active)"}`,
         );
       }

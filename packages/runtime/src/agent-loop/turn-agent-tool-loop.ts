@@ -588,7 +588,7 @@ async function runAgentToolLoopWithinBudget(
             );
           budget.assertLive();
 
-          if (!toolResult.success) {
+          if (!toolResult.success && !toolResult.refused) {
             failedToolCalls.push({
               toolName: effectiveTc.name,
               message: extractToolFailureMessage(toolResult.result),
@@ -684,6 +684,7 @@ async function runAgentToolLoopWithinBudget(
             arguments: effectiveTc.arguments,
             result: toolResult.parsedResult,
             success: toolResult.success,
+            ...(toolResult.refused ? { refused: true as const } : {}),
           });
 
           if (!isRuntimeDoneSentinel(toolResult.parsedResult)) {
@@ -696,7 +697,7 @@ async function runAgentToolLoopWithinBudget(
                   };
                 }
               }
-            } else failedBusinessToolsInResponse++;
+            } else if (!toolResult.refused) failedBusinessToolsInResponse++;
           }
 
           // Build ToolCallRecord for RuntimeResult.toolCalls

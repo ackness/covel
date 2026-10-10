@@ -31,7 +31,6 @@ pluginPolicy:
       description: 全屏舞台、立绘与日夜场景，多条回复可选，好感度与心之路线、约定、传闻和学园祭筹备随对话实时变化。
       tags:
         - mode:dialogue
-        - role:character
       reason: 二十一天的学园祭倒计时里，每一次赴约、失约和传闻都会留在面板上，五条心之路线只靠真实发生的事件推进。
       requested:
         - pregame
@@ -50,8 +49,6 @@ pluginPolicy:
   presetId: haruka-galgame
   preferredTags:
     - mode:dialogue
-    - role:character
-    - role:world-rules
   avoidedTags:
     - mode:traditional-story
   requested:

@@ -25,7 +25,6 @@ pluginPolicy:
       description: 以传统叙事推进齐老失踪案，并启用线索记忆、关系图谱、世界规则、预设角色与立绘。
       tags:
         - mode:traditional-story
-        - role:world-rules
         - data:characters
       reason: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
       requested:
@@ -44,9 +43,6 @@ pluginPolicy:
   presetId: mistport-investigation
   preferredTags:
     - mode:traditional-story
-    - role:codex
-    - role:retrieval
-    - role:world-rules
   avoidedTags:
     - mode:dialogue
   requested:

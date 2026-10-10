@@ -39,6 +39,7 @@ import {
   buildInjectBlocks,
   buildInjectBlocksAsync,
   escapeXmlContent,
+  keepInsideBlock,
   interpolateTemplate,
   resolveFrameworkCompletion,
 } from "./prompt-internals.js";
@@ -377,7 +378,7 @@ function buildPromptSegmentsCommon(
       ? params.sessionContext?.world.lore
       : undefined;
   const worldLore = lore?.trim()
-    ? `<world-lore>\n${fitWorldLore(lore).text}\n</world-lore>`
+    ? `<world-lore>\n${keepInsideBlock(fitWorldLore(lore).text, "world-lore")}\n</world-lore>`
     : "";
   return {
     stableExtensions: [

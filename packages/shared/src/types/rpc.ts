@@ -47,7 +47,8 @@ export interface RpcHandlerStore {
   // ── Sessions ─────
   getSession(): Promise<unknown>;
   // ── Turn messages ─────
-  listTurnMessages(): Promise<
+  /** The most recent committed messages: `limit` of them, at most 200 (also the default). */
+  listTurnMessages(limit?: number): Promise<
     ReadonlyArray<{
       readonly turnId: string;
       readonly content: string;
@@ -56,14 +57,6 @@ export interface RpcHandlerStore {
       readonly name?: string;
     }>
   >;
-  // ── Player input persistence ─────
-  savePlayerInput(input: {
-    readonly id: string;
-    readonly turnId: string;
-    readonly formId: string;
-    readonly values: Record<string, unknown>;
-    readonly createdAt: string;
-  }): Promise<void>;
   // ── Plugin data KV ─────
   setPluginData?(record: {
     readonly namespace: string;

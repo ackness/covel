@@ -1,5 +1,4 @@
 import type { MutableRef } from "./runtime-refs.js";
-import { pluginDataNamespaces } from "./plugin-data-records.js";
 import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
@@ -313,17 +312,18 @@ export async function rehydrateSessionSideState(
     const activePlugins = loaded.plugins.filter((plugin) => plugin.active);
     await refreshSessionResource(dispatch, ["plugin-data", sessionId], {
       isCurrent,
-      read: () =>
-        Promise.all(
-          activePlugins.map(async ({ id: pluginId }) => ({
-            pluginId,
-            rows: await api.listPluginData(sessionId, pluginId),
-          })),
-        ),
-      apply: (rowsByPlugin) => {
+      read: () => api.listSessionPluginData(sessionId),
+      apply: (rows) => {
         const pluginData: PluginData = Object.create(null);
-        for (const { pluginId, rows } of rowsByPlugin) {
-          pluginData[pluginId] = pluginDataNamespaces(rows);
+        for (const { id } of activePlugins)
+          pluginData[id] = Object.create(null);
+        for (const row of rows) {
+          // The server lists active plugins only; a row for another plugin
+          // would be a stale answer to an older plugin set.
+          const namespaces = pluginData[row.pluginId];
+          if (!namespaces) continue;
+          (namespaces[row.namespace] ??= Object.create(null))[row.key] =
+            row.value;
         }
         replaceSessionPluginData(sessionId, pluginData);
         dispatch({ type: "REPLACE_PLUGIN_DATA", pluginData });

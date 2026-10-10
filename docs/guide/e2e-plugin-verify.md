@@ -27,8 +27,7 @@ cp llm.toml.example llm.toml
 cp .env.llm.example .env.llm
 pnpm dev:server
 # 另开终端
-npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
-  scripts/e2e-plugin-verify.ts
+pnpm e2e:verify
 ```
 
 若使用 PostgreSQL，把 server 启动替换为 `pnpm db:up` 后的 `pnpm dev:pg`。
@@ -38,28 +37,24 @@ npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
 ## 基本调用
 
 ```bash
-npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
-  scripts/e2e-plugin-verify.ts [options]
+pnpm e2e:verify [options]
 ```
 
 **最常用的三个场景：**
 
 ```bash
 # 1. 默认 3 turn 全流程跑一遍（按配置路由模型）
-npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/e2e-plugin-verify.ts
+pnpm e2e:verify
 
 # 2. 故事 runtime 改用 utility slot，5 turn
-npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
-  scripts/e2e-plugin-verify.ts --slot utility --turns 5 --timeout 300
+pnpm e2e:verify --slot utility --turns 5 --timeout 300
 
 # 3. 只聚焦 guide 这一个插件的表现
-npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
-  scripts/e2e-plugin-verify.ts --plugin guide --turns 2
+pnpm e2e:verify --plugin guide --turns 2
 
 # 4. 长时间运行 / 8k 上下文验收：要求发生压缩、后续消费摘要、无失败 trace，
 #    并校验 provider 上报的每次输入不超过 8192 token
-npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
-  scripts/e2e-plugin-verify.ts --turns 20 \
+pnpm e2e:verify --turns 20 \
   --enable-plugins memory \
   --require-compaction --require-summary-use \
   --require-tools memory-search --strict-traces \
@@ -246,7 +241,7 @@ A: `--plugin guide --turns 2`。其它 runtime 依然会运行保证依赖链完
 | `outputKind: story`                         | Runtime Timeline 的 output 列显示 `narrative(<字符数>c)`                    |
 | `outputKind: plugin`/`system`               | Runtime Timeline output 显示 `keys=[...]`                                   |
 | `maxSteps: N`                               | 工具循环耗尽时 failures.json 会看到 `exhausted the tool loop after N steps` |
-| `tools.builtin` / `tools.plugin`            | Tool Calls 表格里能观测实际调用次数和成功率                                 |
+| `tools.builtin` / `contributes.tools`       | Tool Calls 表格里能观测实际调用次数和成功率                                 |
 | `runtimeType: function`                     | Tool Calls 表为空（function runtime 不跑 LLM）                              |
 
 ## 录制与回放

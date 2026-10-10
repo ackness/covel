@@ -1,148 +1,77 @@
-- schemaVersion: 1
-  id: mistport-silence-protocol
+- id: mistport-silence-protocol
   title: Survival in the Fog
   content: Fog beasts hunt abrupt sound, light, and Tide-Force disturbances; they do not locate prey from nowhere. In thick fog, make cold fog-lamps, cloth-wrapped metal, hand signs, and evacuation marks concrete. If the player makes flame, impact, or a loud voice, first give perceptible signs of approach, then escalate the danger.
-  kind: constant
-  category: scene
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: sticky
   keys:
     - fog beast
     - sound
     - light
     - fog-lamp
     - evacuation
-  insertionOrder: 405
-- schemaVersion: 1
-  id: mistport-fog-truth
+- id: mistport-fog-truth
   title: Truth in the Fog
   content: In Mistport the clues often contradict one another. Every investigation should preserve verifiable details, witness bias, and the drift of evidence caused by the tides, letting the player advance the truth by questioning and cross-checking rather than being handed a conclusion.
-  kind: constant
-  category: world
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: sticky
   keys:
     - fog
     - clue
     - witness
     - tide
-  insertionOrder: 410
-- schemaVersion: 1
-  id: mistport-opening-leads
+- id: mistport-opening-leads
   title: The First Step After Three Bells
   content: Do not unload the whole conspiracy at the opening. Su Yao's torn letter, the missing Appraisal Report 74 in the Sealed Archive, and the newly exposed Echo Gallery beyond the Tide-Seal Gate are three cross-checkable beginnings; the Salt Fangs' hatch and a Council permit carry different costs. Give every scene at least one concrete lead to act on, and let Lin Yuanzhou, Iron Meg, Grey Falcon, or Frost push the investigation toward the next place through their own needs.
-  kind: triggered
-  category: scene
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: flexible
   keys:
     - triple strike
     - Qi's disappearance
     - torn letter
     - Report 74
     - Echo Gallery
-  insertionOrder: 415
-- schemaVersion: 1
-  id: mistport-tide-clock
+- id: mistport-tide-clock
   title: The Tide Clock
   content: Flood tide, ebb tide, the tolling of the bell tower, and the Tide-Seal Decree all change which places can be entered. Action choices should make the current tide-time explicit, letting time pressure shape the route of exploration; the deep-ebb warning (a triple strike) is a rare window of opportunity — and of danger.
-  kind: triggered
-  category: scene
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: sticky
   keys:
     - flood tide
     - ebb
     - bell tower
     - Tide-Seal
     - route
-  insertionOrder: 420
-- schemaVersion: 1
-  id: mistport-ruin-whisper
+- id: mistport-ruin-whisper
   title: Whispers of the Ruins
   content: Ancient relics bring knowledge, contamination, and trade value, with unpredictable effects. Handling a relic means weighing appraisal, the black market, the Congregation, the Council, and personal safety all at once; using an unappraised relic should carry real risk.
-  kind: triggered
-  category: world
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: flexible
   keys:
     - relic
     - appraisal
     - black market
     - Congregation
     - risk
-  insertionOrder: 430
-- schemaVersion: 1
-  id: mistport-fog-rot
+- id: mistport-fog-rot
   title: Tide-Force and Fog-Rot
   content: Channeling the tide-force or using an active relic always has a price. Gains in power should come with accumulating fog-rot, bodily mutation, or the erosion of the mind — never a costless boost; fog-rot is irreversible, and the deeper into the Undertow, the more the price shows itself.
-  kind: triggered
-  category: world
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: flexible
   keys:
     - tide-force
     - fog-rot
     - price
     - mutation
     - tide-warden
-  insertionOrder: 440
-- schemaVersion: 1
-  id: mistport-faction-pressure
+- id: mistport-faction-pressure
   title: The Four-Way Struggle
   content: The Council, the Tide-Reader Guild, the Salt Fangs, and the Congregation of the Mist each react to the player's relic dealings and moves in the Undertow, their standing rising and falling against one another. When advancing the plot, foreground the cost of taking sides — pleasing one faction usually offends another, and there is no neutrality that leaves no mark.
-  kind: triggered
-  category: relationship
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: flexible
   keys:
     - Council
     - Guild
     - Salt Fangs
     - Congregation
     - allegiance
-  insertionOrder: 450
-- schemaVersion: 1
-  id: mistport-deep-truth
+- id: mistport-deep-truth
   title: The Thing in the Deep
   content: The Riftide, the thickening fog, Old Qi's disappearance, and the fragments of the "Key" all point, in the end, to something awakening in the deepest reach of the Undertow. This main thread should accumulate slowly, layer by layer, hinted at through clues and strange phenomena — never cheaply revealed in the early or middle game; the closer to the truth, the more oppressive the world's mood and the heavier the cost.
-  kind: evolving
-  category: world
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: sticky
   keys:
     - Riftide
     - the deep
     - Key
     - cycle
     - truth
-  insertionOrder: 460
-- schemaVersion: 1
-  id: mistport-consequence-ledger
+- id: mistport-consequence-ledger
   title: Choices Leave Marks
   content: A costly action should keep changing state instead of resetting next scene. Keep updating tide-time, location, vitality, stress, fog-rot, and personal trust as usual. The Case Board (clue status), Faction Standing (attitudes plus permits, warrants, and favors), the Deep Withdrawal stage, and the Key Fragments are settled from the narrative after each turn — so make those changes explicit on the page (who saw it, how evidence was corroborated or tainted, which tide sign sounded) and never contradict their current values. Write only changes the narrative has clearly caused, and carry each consequence into later scenes.
-  kind: evolving
-  category: relationship
-  enabled: true
-  coordinate:
-    position: before_plugin
-  budgetClass: sticky
   keys:
     - trust
     - stress
@@ -150,4 +79,3 @@
     - warrant
     - corroborated
     - contaminated
-  insertionOrder: 470

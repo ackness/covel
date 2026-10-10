@@ -1874,7 +1874,8 @@
     "networkError": "网络异常 — 请检查网络连接",
     "bootFailed": "会话初始化失败",
     "sendMessageFailed": "消息发送失败",
-    "syncFailed": "无法将本局同步到服务器"
+    "syncFailed": "无法将本局同步到服务器",
+    "checkpointNearLimit": "这个会话已用到浏览器存档大小上限的 {{percent}}%。到达上限后将无法继续保存，请尽快在新会话里继续故事。"
   },
   "error": {
     "actionable": {

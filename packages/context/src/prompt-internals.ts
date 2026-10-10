@@ -64,20 +64,49 @@ function resolvePath(
 }
 
 /**
+ * Character ranges of the template that lie inside a tagged block: a line
+ * that opens with `<name>` up to the next `</name>`. A mention of a tag in
+ * prose (`` `<name>` ``) does not open a block.
+ */
+function taggedRanges(template: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const open = /^[ \t]*<([A-Za-z][\w-]*)>/gm;
+  let match: RegExpExecArray | null;
+  while ((match = open.exec(template)) !== null) {
+    const name = match[1] ?? "";
+    const start = match.index + match[0].length;
+    const end = template.indexOf(`</${name}>`, start);
+    if (end < 0) continue;
+    ranges.push([start, end]);
+    open.lastIndex = end;
+  }
+  return ranges;
+}
+
+/**
  * Replace `{{ path }}` template variables in a prompt string.
- * Unresolved variables are replaced with an empty string.
+ * Unresolved variables are replaced with an empty string. A value that lands
+ * inside a tagged block is XML-escaped, so a closing tag in world text or a
+ * character description cannot leave the block.
  */
 export function interpolateTemplate(
   template: string,
   variables: Readonly<Record<string, unknown>>,
 ): string {
-  return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, path: string) => {
-    const value = resolvePath(variables, path.trim());
-    if (value === undefined || value === null) {
-      return "";
-    }
-    return renderTemplateValue(value);
-  });
+  const ranges = taggedRanges(template);
+  return template.replace(
+    /\{\{\s*([^}]+?)\s*\}\}/g,
+    (_match, path: string, offset: number) => {
+      const value = resolvePath(variables, path.trim());
+      if (value === undefined || value === null) {
+        return "";
+      }
+      const text = renderTemplateValue(value);
+      return ranges.some(([from, to]) => offset >= from && offset < to)
+        ? escapeXmlContent(text)
+        : text;
+    },
+  );
 }
 
 function renderTemplateValue(value: unknown): string {
@@ -111,6 +140,16 @@ function validateTagName(name: string): string {
     );
   }
   return name;
+}
+
+/**
+ * Long authored text (world lore) keeps its Markdown: a quote line, a comment
+ * marker and an ampersand read as written. Only a closing tag of the block
+ * that holds the text is rewritten, so the text cannot leave the block.
+ */
+export function keepInsideBlock(value: string, tagName: string): string {
+  const closing = new RegExp(`<(\\s*/\\s*${tagName}\\s*>)`, "gi");
+  return value.replace(closing, "&lt;$1");
 }
 
 /**

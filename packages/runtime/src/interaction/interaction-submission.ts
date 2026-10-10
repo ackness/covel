@@ -685,9 +685,9 @@ export function createInteractionSubmitter(
       submissions.push(sub);
     }
 
-    const messages = (await store.listTurnMessages(
-      sessionId,
-    )) as readonly MessageLike[];
+    const messages = (await store.listTurnMessages(sessionId, {
+      turnId: body.turnId,
+    })) as readonly MessageLike[];
     const existingInputs = await store.listPlayerInputs(sessionId);
     const prepared: Array<{
       readonly submissionId: string;

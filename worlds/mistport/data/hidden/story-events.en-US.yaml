@@ -1,41 +1,9 @@
-# Hidden story events (visibility: hidden in world.data.yaml). Payloads are
-# briefs for the narrator, not finished prose, and must not resolve the deep
-# truth early.
 - id: frost-hears-it
   title: The Fog Is Speaking
-  when:
-    all:
-      - dimension: deepWithdrawal
-        path: stage
-        in: [full-exposure, return-bell]
-      - dimension: factionStanding
-        path: congregation.attitude
-        gte: 2
-  payload: >-
-    While the ruins lie fully exposed, Frost finds the hero away from the rest of the Congregation and leads them down a flight of steps beside the Echo Gallery that only a deep withdrawal reveals. She says the fog is murmuring with the same pauses Qi used when he spoke, shows the hero a tide-mark on her wrist like their own, and asks whether they can hear it too. She does not know what it means and is afraid the Congregation will treat her as proof. Play only this meeting and her fear; do not explain the truth of the Mist Lord or confirm where Qi is.
-  priority: 10
+  payload: While the ruins lie fully exposed, Frost finds the hero away from the rest of the Congregation and leads them down a flight of steps beside the Echo Gallery that only a deep withdrawal reveals. She says the fog is murmuring with the same pauses Qi used when he spoke, shows the hero a tide-mark on her wrist like their own, and asks whether they can hear it too. She does not know what it means and is afraid the Congregation will treat her as proof. Play only this meeting and her fear; do not explain the truth of the Mist Lord or confirm where Qi is.
 - id: meg-shows-the-fragment
   title: Meg's Fragment
-  when:
-    all:
-      - dimension: caseBoard
-        path: report-74.status
-        equals: corroborated
-      - dimension: factionStanding
-        path: saltFangs.attitude
-        gte: 2
-  payload: >-
-    Iron Meg arranges a private meeting in a Salt Fangs storehouse and brings out a hinged-tooth grey fragment — the very piece described on the missing page of Appraisal Report 74. She admits her people took it from the Guild's Sealed Archive because Chen's men were already hunting it. She will not say what the Key opens; she only demands that the hero choose between her and the Council. Play this confrontation and her terms; do not make the choice for the hero.
-  priority: 5
+  payload: Iron Meg arranges a private meeting in a Salt Fangs storehouse and brings out a hinged-tooth grey fragment — the very piece described on the missing page of Appraisal Report 74. She admits her people took it from the Guild's Sealed Archive because Chen's men were already hunting it. She will not say what the Key opens; she only demands that the hero choose between her and the Council. Play this confrontation and her terms; do not make the choice for the hero.
 - id: meg-calls-the-debt
   title: The Salt Fangs Collect
-  when:
-    all:
-      - revealed: meg-shows-the-fragment
-        turnsSinceGte: 3
-      - dimension: factionStanding
-        path: saltFangs.attitude
-        lte: 0
-  payload: >-
-    Iron Meg gave the hero a choice, and the hero did not side with the Salt Fangs. Now her people come to collect: two Salt Fangs enforcers stop the hero at the mouth of a damp alley and politely ask for the "price" of what Meg revealed — either a piece of Council intelligence or one lead from the case board handed over to the Salt Fangs. Meg herself does not appear. Play this threatening negotiation and let the player decide whether to pay, stall, or refuse; do not let it collapse into a fight to the death on the spot.
-  priority: 6
+  payload: 'Iron Meg gave the hero a choice, and the hero did not side with the Salt Fangs. Now her people come to collect: two Salt Fangs enforcers stop the hero at the mouth of a damp alley and politely ask for the "price" of what Meg revealed — either a piece of Council intelligence or one lead from the case board handed over to the Salt Fangs. Meg herself does not appear. Play this threatening negotiation and let the player decide whether to pay, stall, or refuse; do not let it collapse into a fight to the death on the spot.'

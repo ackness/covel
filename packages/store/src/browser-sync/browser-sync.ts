@@ -44,6 +44,12 @@ export const PERSISTENCE_PROFILES = [
 
 export type PersistenceProfile = (typeof PERSISTENCE_PROFILES)[number];
 
+/**
+ * The largest checkpoint upload the server accepts, as the size of the JSON
+ * request body. A checkpoint travels whole, so a session past it cannot go on.
+ */
+export const BROWSER_CHECKPOINT_MAX_BYTES = 64 * 1024 * 1024;
+
 /** Schema version of the browser checkpoint envelope. */
 export const BROWSER_CHECKPOINT_SCHEMA_VERSION = 2 as const;
 

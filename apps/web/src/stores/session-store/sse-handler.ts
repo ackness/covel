@@ -729,16 +729,11 @@ export function createSseEventHandler(
       // reserved lifecycle events handled elsewhere. Listed explicitly so the
       // `assertNeverEvent` exhaustiveness guard below stays green — adding a
       // new CovelEvent forces a conscious decision here (handle or ignore).
-      case "interaction.completed":
       case "ui.part.update":
-      case "state.snapshot":
       case "state.patch.applied":
-      case "record.updated":
       case "world.dimensions.changed":
-      case "connection.restored":
       case "state.snapshot.created":
       case "session.forked":
-      case "memory.updated":
       case "tool.calling":
       case "tool.completed":
       case "tool.failed":

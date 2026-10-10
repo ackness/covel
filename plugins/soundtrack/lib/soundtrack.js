@@ -8,7 +8,10 @@
  * reload or a resumed session lands on the same music.
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
+import {
+  makeProposal,
+  mentionedCharacterIds,
+} from "@covel/plugin-handlers-utils";
 
 export const TRACKS_NS = "tracks";
 export const REGISTRY_KEY = "music-registry";
@@ -56,8 +59,11 @@ function normalize(text) {
 }
 
 /**
- * Whether a track's scene names cover the current scene: the same name, or one
- * name inside the other ("The Crooked Stag" and "The Crooked Stag, taproom").
+ * Whether a track's scene names cover the current scene: the same name, or a
+ * track name written as a whole name inside it ("The Crooked Stag" covers "The
+ * Crooked Stag, taproom"). A name inside a longer word or inside a longer name
+ * of another of the track's scenes does not count: "Hall" is not "Great Hall",
+ * and "inn" is not in "Dunn".
  *
  * @param {unknown} scenes
  * @param {string | undefined} scene
@@ -65,12 +71,18 @@ function normalize(text) {
 export function matchesScene(scenes, scene) {
   const here = normalize(scene);
   if (!here || !Array.isArray(scenes)) return false;
-  return scenes
-    .map(normalize)
-    .filter(Boolean)
-    .some(
-      (name) => name === here || here.includes(name) || name.includes(here),
-    );
+  const names = scenes.filter((name) => typeof name === "string");
+  if (names.some((name) => normalize(name) === here)) return true;
+  const spaced = String(scene).trim().replace(/\s+/g, " ");
+  return (
+    mentionedCharacterIds(
+      spaced,
+      names.map((name, index) => ({
+        id: String(index),
+        name: name.trim().replace(/\s+/g, " "),
+      })),
+    ).size > 0
+  );
 }
 
 /**

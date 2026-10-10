@@ -517,7 +517,8 @@ export interface PluginServiceDefinition<Input, Output> {
 
 export interface PluginRpcStore {
   getSession(): Promise<unknown>;
-  listTurnMessages(): Promise<
+  /** The most recent committed messages: `limit` of them, at most 200 (also the default). */
+  listTurnMessages(limit?: number): Promise<
     ReadonlyArray<{
       readonly turnId: string;
       readonly content: string;
@@ -526,13 +527,6 @@ export interface PluginRpcStore {
       readonly name?: string;
     }>
   >;
-  savePlayerInput(input: {
-    readonly id: string;
-    readonly turnId: string;
-    readonly formId: string;
-    readonly values: Record<string, unknown>;
-    readonly createdAt: string;
-  }): Promise<void>;
   setPluginData?(record: {
     readonly namespace: string;
     readonly key: string;

@@ -28,7 +28,6 @@ export default async function handler(ctx) {
     };
 
   const dimensions = ctx.inputs?.dimensions?.value ?? ctx.world?.dimensions;
-  const session = await ctx.store.getSession();
   const { writes, accepted, retired, rejected } = applyPlans({
     plans,
     authored: await byKey(ctx, HIDDEN_EVENTS),
@@ -36,7 +35,7 @@ export default async function handler(ctx) {
     revealed: await byKey(ctx, REVEALED),
     dimensions: dimensions ? new Set(Object.keys(dimensions)) : null,
     timeFields: numericFields(ctx.inputs?.worldTime?.value),
-    turn: (session?.completedPlayerTurns ?? 0) + 1,
+    turn: ctx.logicalTurn ?? 1,
   });
   for (const write of writes)
     await ctx.pluginData.set(PLANNED, write.key, write.value);

@@ -6,6 +6,7 @@ import type {
 } from "@covel/shared";
 import { apiListResponseSchema, pluginSummarySchema } from "@covel/shared";
 import { request } from "./request.js";
+import { rememberServerPresetProviders } from "./model-settings.js";
 import type { PresetSummary, TurnCompletionSummary } from "./types.js";
 import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge.js";
 
@@ -13,6 +14,7 @@ export type FlowSegmentId = Stage | "event-manual";
 
 export async function listPresets(): Promise<PresetSummary[]> {
   const response = await request<{ items: PresetSummary[] }>("/api/presets");
+  rememberServerPresetProviders(response.items);
   return response.items;
 }
 

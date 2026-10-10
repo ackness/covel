@@ -130,7 +130,7 @@ flowchart TB
     end
 
     Group --> Commit["effects + story 输出 → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
-    Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted / record.updated"]
+    Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted"]
     SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
     PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
     PreGameTick -->|否| Keep["保持 phase 不变"]
@@ -725,7 +725,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
         Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
-        Kernel-->>Web: SSE: state.changed / record.updated / event.emitted
+        Kernel-->>Web: SSE: state.changed / event.emitted
         Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     end
@@ -746,114 +746,7 @@ sequenceDiagram
 
 ## 八、Package 职责与依赖
 
-### 8.1 包在执行流程中的参与
-
-```
-执行阶段                     参与的包                          职责
-──────────                  ──────                           ──────
-
-启动 → 插件发现              @covel/plugin-loader             扫描 plugins/ 目录
-                             ├── discoverPlugins()            发现所有插件
-                             ├── loadPluginDefinition()       解析包声明与显式 runtime 列表
-                             ├── loadPluginUi()               加载包级静态 UI
-                             ├── loadRuntime()                加载 runtime prompt / handler / schemas
-                             └── createPluginRegistry()       内存索引 + session 激活
-
-启动 → LLM 初始化            @covel/ai-provider               多供应商 LLM 抽象
-                             ├── presetRegistry               管理 LLM 预设 (llm.toml)
-                             ├── slotRegistry                 slot 路由 (default/fast/balance/image)
-                             ├── createGateway()              统一 generate() 接口
-                             └── model-db                     2967 模型能力数据库
-
-启动 → 依赖注入              @covel/tools                     工具系统
-                             ├── tool()                       工具定义 wrapper
-                             ├── builtinUITools               create-form/choice/notification
-                             ├── createPluginDataTools()      plugin-data 读取 + 写入提案（Kernel 提交及发事件）
-                             └── shortId/shortIdBatch()       LLM 友好的语义 ID 生成
-
-启动 → 状态管理              @covel/store                     DataStore 接口 + 3 个服务端后端实现
-                             ├── listStateSchemas()            动态表 schema
-                             ├── listStateEntries()            状态表数据
-                             └── listStateChanges()            变更追踪
-                             @covel/events                    EventBus pub/sub + SSE 基础
-                             @covel/approval                  工具审批管线
-
-Turn 执行                    @covel/runtime                   核心执行引擎
-                             ├── executeTurn()                完整 Turn 管线
-                             ├── shouldTrigger()              触发路由 (auto/scheduled/event)
-                             ├── selectTriggeredRuntimes()    触发选择 (manual 名字匹配 /
-                             │                                  setup 镜像 / shouldTrigger)
-                             ├── scheduleTriggeredRuntimes()  stage 分带 + scheduleByDag()
-                             │                                  同 stage 内 DAG 分层
-                             ├── executeOneRuntime()          单 runtime 执行
-                             ├── createToolExecutor()         工具执行器 + 访问控制
-                             └── normalizeOutput()            输出 → Proposal 标准化
-
-上下文组装                    @covel/context                   Prompt 组装
-                             ├── buildContext()               模板变量 + 注入块 + 消息历史
-                             ├── interpolateTemplate()        {{ }} 占位符替换
-                             ├── applyBudget()                硬裁剪兜底（窗口按叙事 slot 的
-                             │                                  模型 capability 动态解析）
-                             └── Compactor                    长对话压缩（同一窗口来源，
-                                                                COVEL_COMPACTOR_CONTEXT_WINDOW
-                                                                可选覆盖）
-
-类型共享                      @covel/shared                   跨包类型定义
-                             ├── types/plugin.ts              RuntimeManifest, UISpec, etc.
-                             ├── types/protocol.ts            CovelEventType, SessionCommand
-                             ├── types/execution.ts           TurnResult, RuntimeResult
-                             ├── schemas/plugin.ts            Zod 校验 (runtimeManifestSchema)
-                             └── schemas/world.ts             世界包校验
-
-测试支持                      @covel/plugin-test-utils         插件作者测试工具
-                             ├── MockLLM                      模拟 LLM 响应
-                             ├── makeManualFunctionContext()  function handler 测试 context
-                             ├── expectAssetGenerated()       断言 asset.generate proposal
-                             └── factory functions             makeTurnInput, etc.
-```
-
-### 8.2 包依赖关系
-
-```
-  @covel/shared  (纯类型，零运行时依赖)
-       │
-       ├──► @covel/context         (模板插值，prompt 组装)
-       │         │
-       ├──► @covel/ai-provider     (LLM 适配器，模型路由)
-       │         │
-       ├──► @covel/plugin-loader   (插件发现，PLUGIN.md 解析)
-       │         │
-       ├──► @covel/store           (DataStore 接口 + 实现)
-       │         │
-       ├──► @covel/events          (事件总线 + SSE 订阅)
-       │         │
-       ├──► @covel/tools           (工具定义 + 内置工具)
-       │         │
-       ├──► @covel/approval        (审批管线)
-       │         │
-       └──► @covel/runtime         (组装以上所有包，执行 Turn)
-                 │
-                 ▼
-            @covel/server          (Hono HTTP 层，SSE 流，路由)
-                 │
-                 ▼
-            @covel/web             (前端：json-render + pluginData)
-```
-
-### 8.3 各包核心接口
-
-| 包                    | 核心导出                                                                                                                                                                                | 调用方                    |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| **shared**            | `RuntimeManifest`, `UISpec`, `CovelEventType`, Zod schemas                                                                                                                              | 所有包                    |
-| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`                                                                                                                                  | server bootstrap          |
-| **ai-provider**       | `createGateway()`, `createPresetRegistry()`, `createSlotRegistry()`                                                                                                                     | server bootstrap, runtime |
-| **context**           | `buildContext()`, `interpolateTemplate()`                                                                                                                                               | runtime (per-runtime)     |
-| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`                                                                                                                              | server actions route      |
-| **store**             | `DataStore`, `createStore()`, `createStoreFromEnv()`, `createMemoryStore()`, `createSqliteStore()`, `createPgStore()`, `listStateSchemas()`, `listStateEntries()`, `listStateChanges()` | server, tools, runtime    |
-| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`                                                                                                                              | server, plugin-data-tools |
-| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`                                                                                                                                   | bootstrap, plugin tools   |
-| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`                                                                                                                                  | tool executor             |
-| **plugin-test-utils** | `MockLLM`, `makeManualFunctionContext()`, `expectAssetGenerated()`                                                                                                                      | plugin tests only         |
+每个包的职责、依赖方向、宿主组合的关键边界见 [packages.md](packages.md)。这里只保留本页相关的一点：一轮 Turn 里，`@covel/plugin-loader` 在启动时发现插件，`@covel/runtime` 执行 Turn（触发、DAG 调度、工具循环、提交），`@covel/context` 组装提示词，`@covel/store` 持久化提交结果，`@covel/events` 把提交后的事件推给 SSE。
 
 ## 九、设计约束与原则
 

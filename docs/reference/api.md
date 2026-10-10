@@ -444,7 +444,8 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 `PUT /api/sessions/:id/browser-checkpoint` 的完整 JSON 请求体上限为 **64 MiB**，
 包含全部消息、轨迹与快照；超过上限返回 `413`。此专用额度仅适用于该路径的
 `PUT` 请求，`browser-commit` 等普通 API 仍使用 **1 MiB** 上限。当前协议不支持
-分块上传，因此完整 checkpoint 必须保持在该额度内。
+分块上传，因此完整 checkpoint 必须保持在该额度内。Web 客户端在请求体达到额度的
+80% 时提示玩家一次（每个会话、每次页面载入）。
 
 浏览器准备或恢复已有世界时，自动世界同步若收到准确的
 `401 operator_token_required`，会保留服务端共享世界并继续同步会话；其他鉴权、
@@ -460,7 +461,7 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 > 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 >
-> 视图的 `submittedInteractions` 列出玩家已经回答过的交互 `{ turnId, interactionId, values }[]`，`values` 是服务端落库的值（会话内全部记录，不受消息窗口限制）。答案与它的后续回合在同一个 `submit_interaction` 请求里落库和开始，所以列在这里的交互一定已经有回合跟上：客户端把对应消息里的表单标成已提交并回填，不再发送。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。提交的响应丢失时，客户端从这里得知答案已经落库，并通过 `execution` 状态观察那个回合。
+> 视图的 `submittedInteractions` 列出玩家已经回答过的交互 `{ turnId, interactionId, values }[]`，`values` 是服务端落库的值。只返回 `messages` 窗口内消息所在回合的回答（消息的 `turnId`，或表单块自己的 `meta.turnId`）：回答的用途是标记窗口里的表单块，更早的表单随历史分页载入，按位置视为已回答。答案与它的后续回合在同一个 `submit_interaction` 请求里落库和开始，所以列在这里的交互一定已经有回合跟上：客户端把对应消息里的表单标成已提交并回填，不再发送。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。提交的响应丢失时，客户端从这里得知答案已经落库，并通过 `execution` 状态观察那个回合。
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
@@ -650,12 +651,16 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 > **接入状态（2026-04-27）**：内置 Web UI 目前使用 GET/list 读取 plugin-data（右侧面板、message UI specs、plugin data store）。PUT/DELETE 是管理/API 写入口，当前内置 Web UI 暂未直接调用；插件 runtime 推荐通过 plugin-data tools、plugin RPC 或 proposal 写入。PUT/DELETE 保持兼容，但若未来收窄攻击面，应先标记 deprecated 或加 admin/debug gate，而不是静默删除。
 
-| 方法   | 路径                                                      | 描述                      |
-| ------ | --------------------------------------------------------- | ------------------------- |
-| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace`      | 列出某 namespace 下的数据 |
-| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据              |
-| PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据             |
-| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                  |
+| 方法   | 路径                                                      | 描述                                                                            |
+| ------ | --------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| GET    | `/api/sessions/:id/plugin-data`                           | 一次列出会话内所有激活插件的可读数据，`items[]` 带 `pluginId`（Web 完整恢复用） |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId`                 | 列出某插件的全部数据                                                            |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace`      | 列出某 namespace 下的数据                                                       |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据                                                                    |
+| PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据                                                                   |
+| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                                                                        |
+
+会话级列表与按插件、按 namespace 的读取使用同一套可见性规则（`_hidden.*`、内核所有者的行不返回；维度行只返回公开形状）和同样的会话访问校验（托管形态下的 owner token）；它只包含会话已激活且已注册的插件，未激活插件的数据仍可通过按插件的路径读取。
 
 所有 `_` 前缀 namespace 保留给内核领域路径；PUT/DELETE 和通用 plugin-data 工具不能修改 `_dimensions` / `_dimension-settlements`。`_hidden.<namespace>`（`visibility: hidden` 世界数据）不出现在列表、`/state` 与 discovery 中，单条读取返回 404。玩家维度修改走[manual runtime RPC](#维度编辑与待结算恢复)，公共读取使用 session view，不扫描提供者私有规则。
 
@@ -1781,6 +1786,8 @@ Submission 里的其他键被丢弃：来源插件、字段定义和模板只从
 4. **Event 级**: `{ kind: "event", pluginId, topic, payload }` — 插件自己的界面发出一个该插件声明的领域事件（JSON-RENDER 或 `webview` 的 `emitEvent`）。`topic` 必须在这个插件的 `contributes.events` 里，`advertise: false` 的内部 topic 也可以；别的插件声明的 topic 一律返回 `404 event_not_declared`。`payload` 按该 topic 的 schema 校验，不合格返回 `400 event_payload_invalid`。校验和审批通过后，会话里所有订阅该 topic 的 runtime（`trigger: { type: event, topic }`，可以属于任何已启用的插件）在同一事务内排成事件任务（`_runtime_jobs`，`origin.activation: "event"`，`origin.sourceTurnId` 为本次发射的 `eventId`），由 runtime job worker 带着 `ctx.triggerEvent` 执行并各自提交。请求本身不执行 runtime：返回 `200 { status: "ok", eventId, topic, deferredJobs: [{ jobId, runtimeId }] }`，没有订阅者时 `deferredJobs` 为空。与手动触发 runtime 一样，点击就是触发决定，订阅者的 `startTurn` / `maxTriggerCount` / `cooldownTurns` 不参与判断。社区插件按 `event:<topic>` 走审批；订阅者里的社区 runtime 还各需要与手动触发相同的两项授权（服务端代码、`runtime:<name>`），否则 runtime 加载器会拒绝执行。请求每次返回缺少的第一项（`202 approval-required`），客户端批准后重试，直到全部具备才排入任务。后台任务只在会话有可用模型凭据时执行（与其他后台任务相同），否则保持 `queued`。
 
 **写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#输入和输出)。
+
+**Action 的 `context.store`**：绑定到当前会话和插件，只提供 `getSession()`、`listTurnMessages(limit?)` 和本插件的 `getPluginData` / `setPluginData` / `listPluginData`。`listTurnMessages` 只返回最近的已提交消息，最多 200 条（省略 `limit` 时也是 200）；没有 `savePlayerInput`——玩家提交只由表单提交通道写入并经表单校验，action 不能伪造。
 
 插件 action 必须属于会话当前启用的插件。服务端在审批前及取得会话锁后分别检查；禁用插件返回 `404 plugin_not_active`，不会执行 handler 或新增审批。`pluginId: "framework"` 的框架默认 action 不属于插件启用集，仍按各自准入条件执行。旧面板发出的迟到请求同样受此检查约束。
 
@@ -3768,11 +3775,9 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | `narrative.delta`               | 叙事         | 叙事文本增量（逐 token 流式）                                                                  |
 | `narrative.completed`           | 叙事         | 叙事文本完成                                                                                   |
 | `interaction.requested`         | 交互         | 请求玩家输入（表单/选择/确认）                                                                 |
-| `interaction.completed`         | 交互         | 玩家交互完成                                                                                   |
 | `ui.rendered`                   | UI           | `ui.render` proposal commit 后发出                                                             |
 | `ui.part.update`                | UI           | UI part 状态更新（每个 part 一条）                                                             |
 | `state.changed`                 | 状态         | 游戏状态变更                                                                                   |
-| `state.snapshot`                | 状态         | 状态快照                                                                                       |
 | `state.snapshot.created`        | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出                                                        |
 | `session.forked`                | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                                            |
 | `execution.started`             | 执行生命周期 | Turn 执行开始                                                                                  |
@@ -3781,7 +3786,6 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | `runtime.completed`             | 执行生命周期 | 单个 Runtime 执行完成                                                                          |
 | `runtime.failed`                | 执行生命周期 | Runtime 执行失败                                                                               |
 | `execution.completed`           | 执行生命周期 | Turn 执行完成                                                                                  |
-| `record.updated`                | 会话生命周期 | 记录更新（角色、任务等）                                                                       |
 | `event.emitted`                 | 会话生命周期 | 事件发射                                                                                       |
 | `asset.progress`                | 资产         | 多模态生成进度（`0..100`）                                                                     |
 | `asset.generated`               | 资产         | `asset.generate` proposal commit 后发出                                                        |
@@ -3797,7 +3801,6 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | `context.compaction.failed`     | 系统         | 历史压缩尝试失败及原因；仅 trace（`/debug` 用）                                                |
 | `commit.fanout.failed`          | 系统         | 回合已提交但部分提交后事件未能发布；仅 trace，订阅流同时收到 `system.reset`                    |
 | `error.occurred`                | 系统         | 执行错误                                                                                       |
-| `connection.restored`           | 系统         | 连接恢复                                                                                       |
 
 ### 转发的运行时内部事件（已纳入 `CovelEventType`）
 
@@ -3806,7 +3809,7 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | 事件                                                                   | 来源                              | 转发到 `/api/actions` | 说明                                                                    |
 | ---------------------------------------------------------------------- | --------------------------------- | :-------------------: | ----------------------------------------------------------------------- |
 | `runtime.skipped`                                                      | `actions.ts`                      |          否           | runtime 因 cooldown / startTurn / maxTriggerCount 跳过                  |
-| `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal commit 后发出（与 `record.updated` 平行）   |
+| `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal commit 后发出                               |
 | `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（debug timeline 用）                                     |
 | `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                          |
 | `block.emitted` / `state.patch.applied`                                | TurnEmitter                       |          是           | 块发出 / state patch 应用 trace                                         |

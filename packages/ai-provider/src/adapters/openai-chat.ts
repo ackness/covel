@@ -346,7 +346,10 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         "openai-chat",
       );
 
-      const toolCalls = readOpenAiChatToolCalls(payload);
+      const toolCalls = readOpenAiChatToolCalls(
+        payload,
+        fallbackToolCallIds(body),
+      );
       const reasoning = readOpenAiChatReasoningContent(payload);
       const reply = splitThinkTags(readOpenAiChatText(payload));
       const reasoningContent = joinReasoning(reasoning?.text, reply.reasoning);

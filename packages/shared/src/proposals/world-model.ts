@@ -56,25 +56,79 @@ export const characterUpsertPayloadSchema = z
   })
   .strict();
 
+type NameKey = (text: string) => string;
+
+/** `characterNameKey` that folds each spelling once per validation. */
+function memoizedNameKey(): NameKey {
+  const keys = new Map<string, string>();
+  return (text) => {
+    let key = keys.get(text);
+    if (key === undefined) {
+      key = characterNameKey(text);
+      keys.set(text, key);
+    }
+    return key;
+  };
+}
+
+/** For each name key, the IDs of who has it as a name and as an alias. */
+type NameOwners = ReadonlyMap<
+  string,
+  { readonly names: string[]; readonly aliases: string[] }
+>;
+
+function characterNameOwners(
+  characters: readonly CharacterRecord[],
+  keyOf: NameKey,
+): NameOwners {
+  const owners = new Map<string, { names: string[]; aliases: string[] }>();
+  const entry = (text: string) => {
+    const key = keyOf(text);
+    let hit = owners.get(key);
+    if (!hit) owners.set(key, (hit = { names: [], aliases: [] }));
+    return hit;
+  };
+  for (const character of characters) {
+    entry(character.name).names.push(character.id);
+    for (const alias of character.aliases ?? [])
+      entry(alias).aliases.push(character.id);
+  }
+  return owners;
+}
+
 /**
  * One name means one person: no alias of `character` is a name or an alias
- * of another character, and its name is no alias of another. The message
+ * of another character, and its name is no alias of another. `owners` answers
+ * that by lookup; only a conflict walks the characters, for a message that
  * names the other character, so a model can write there instead.
  */
 function assertCharacterNamesFree(
   characters: readonly CharacterRecord[],
+  owners: NameOwners,
   character: CharacterRecord,
+  keyOf: NameKey,
 ): void {
+  const other = (ids: readonly string[] | undefined) =>
+    ids?.some((id) => id !== character.id) ?? false;
+  const nameOwners = owners.get(keyOf(character.name));
+  if (
+    !other(nameOwners?.aliases) &&
+    !(character.aliases ?? []).some((alias) => {
+      const hit = owners.get(keyOf(alias));
+      return other(hit?.names) || other(hit?.aliases);
+    })
+  )
+    return;
   const conflict = findCharacterAliasConflict(characters, character);
   if (conflict)
     throw new Error(
       `Alias "${conflict.alias}" of ${character.name} [${character.id}] is already a name of ${characterLabel(conflict.owner)} [${conflict.owner.id}]. If they are one person, write to ${conflict.owner.id}. If the alias is wrong for ${conflict.owner.name}, remove it there first (removeAliases). Otherwise use a different alias.`,
     );
-  const key = characterNameKey(character.name);
+  const key = keyOf(character.name);
   const owner = characters.find(
-    (other) =>
-      other.id !== character.id &&
-      (other.aliases ?? []).some((alias) => characterNameKey(alias) === key),
+    (candidate) =>
+      candidate.id !== character.id &&
+      (candidate.aliases ?? []).some((alias) => keyOf(alias) === key),
   );
   if (owner)
     throw new Error(
@@ -83,6 +137,10 @@ function assertCharacterNamesFree(
 }
 
 export function validateWorldModel(view: WorldModelView): void {
+  validateWithNameKeys(view, memoizedNameKey());
+}
+
+function validateWithNameKeys(view: WorldModelView, keyOf: NameKey): void {
   const allowedTypes = new Set([
     "player",
     ...(view.characterSchema?.types ?? ["npc", "companion"]),
@@ -90,6 +148,7 @@ export function validateWorldModel(view: WorldModelView): void {
   const fields = view.characterSchema
     ? buildFieldsZodFromSchema(view.characterSchema)
     : null;
+  const owners = characterNameOwners(view.characters, keyOf);
   let players = 0;
   for (const character of view.characters) {
     if (!allowedTypes.has(character.type))
@@ -97,7 +156,7 @@ export function validateWorldModel(view: WorldModelView): void {
     if (character.type === "player" && ++players > 1)
       throw new Error("A session may have at most one player character");
     if (fields) fields.parse(character.fields ?? {});
-    assertCharacterNamesFree(view.characters, character);
+    assertCharacterNamesFree(view.characters, owners, character, keyOf);
   }
 }
 
@@ -115,6 +174,7 @@ export function materializeWorldModel(
     ...structuredClone(base),
     dimensions: structuredClone(base.dimensions ?? {}),
   };
+  const keyOf = memoizedNameKey();
   for (const proposal of proposals) {
     if (proposal.sessionId !== sessionId) continue;
     if (proposal.type === "character.schema.set") {
@@ -151,7 +211,12 @@ export function materializeWorldModel(
       );
       // Checked for the written record first, so the message is about it and
       // not about the stored character it collides with.
-      assertCharacterNamesFree(state.characters, record);
+      assertCharacterNamesFree(
+        state.characters,
+        characterNameOwners(state.characters, keyOf),
+        record,
+        keyOf,
+      );
       state = {
         ...state,
         characters: [
@@ -201,7 +266,7 @@ export function materializeWorldModel(
         ),
       };
     } else continue;
-    validateWorldModel(state);
+    validateWithNameKeys(state, keyOf);
   }
   return state;
 }

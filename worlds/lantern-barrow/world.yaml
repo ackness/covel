@@ -27,7 +27,6 @@ pluginPolicy:
       description: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
       tags:
         - mode:traditional-story
-        - role:world-rules
       reason: 跑团的乐趣在于规则可见：属性是你分的，骰子是真掷的，每个房间、每次惊动墓穴的响动都会记在面板上。
       requested:
         - pregame
@@ -50,8 +49,6 @@ pluginPolicy:
   presetId: classic-tabletop
   preferredTags:
     - mode:traditional-story
-    - role:codex
-    - role:world-rules
   avoidedTags:
     - mode:dialogue
   requires:

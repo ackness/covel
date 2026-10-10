@@ -38,6 +38,13 @@ describe("buildSessionSnapshot", () => {
       ]),
       listPlayerInputs: vi.fn().mockResolvedValue([
         {
+          id: "i0",
+          turnId: "t-before-window",
+          formId: "name-form",
+          values: { name: "Old" },
+          createdAt: "2025-12-31T00:00:05.000Z",
+        },
+        {
           id: "i1",
           turnId: "t1",
           formId: "name-form",
@@ -115,7 +122,8 @@ describe("buildSessionSnapshot", () => {
       player: { hp: 100 },
     });
 
-    // What the player already answered, with the stored values
+    // What the player answered in the turns of the returned messages, with
+    // the stored values; the answer to an older turn is left out
     expect(snapshot!.submittedInteractions).toEqual([
       {
         turnId: "t1",

@@ -204,6 +204,43 @@ describe("[P2] rate limiter proxy trust", () => {
   });
 });
 
+describe("rate limiter keys and table size", () => {
+  const env = { incoming: { socket: { remoteAddress: "203.0.113.10" } } };
+
+  it("keeps a budget per path and a larger one per route", async () => {
+    const app = new Hono();
+    app.get("/items/:id", rateLimiter({ max: 2 }), (c) => c.text("ok"));
+    const get = async (id: string) =>
+      (await app.request(`/items/${id}`, undefined, env)).status;
+    // One path has its own budget ...
+    expect([await get("a"), await get("a"), await get("a")]).toEqual([
+      200, 200, 429,
+    ]);
+    // ... and a client that walks the parameter stops at eight budgets.
+    const statuses: number[] = [];
+    for (let i = 0; i < 15; i++) statuses.push(await get(`walk-${i}`));
+    expect(statuses.slice(0, 14).every((status) => status === 200)).toBe(true);
+    expect(statuses[14]).toBe(429);
+  });
+
+  it("evicts the oldest counter when the table is full", async () => {
+    const app = new Hono();
+    app.use("/open/*", rateLimiter({ max: 1, maxEntries: 4 }));
+    app.get("/open/:name", (c) => c.text("ok"));
+    // Each client holds two counters (its path and the route), so two fill the table.
+    const from = (ip: string) =>
+      app.request("/open/x", undefined, {
+        incoming: { socket: { remoteAddress: ip } },
+      });
+    expect((await from("198.51.100.1")).status).toBe(200);
+    expect((await from("198.51.100.2")).status).toBe(200);
+    expect((await from("198.51.100.1")).status).toBe(429);
+    // A third client pushes the first one's counter out ...
+    expect((await from("198.51.100.3")).status).toBe(200);
+    expect((await from("198.51.100.1")).status).toBe(200);
+  });
+});
+
 describe("[P2] provider keys raw exposure", () => {
   let savedEnv: Record<string, string | undefined>;
 
