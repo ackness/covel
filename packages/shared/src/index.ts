@@ -348,7 +348,6 @@ export {
   validateDimensionValue,
   dimensionSnapshotFromRecords,
   resolveDimensionDefinitionLocale,
-  resolveDimensionRecordLocale,
   resolveWorldDimensionsLocale,
 } from "./schemas/dimensions.js";
 

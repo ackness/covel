@@ -139,7 +139,7 @@ Returns assets owned by `sessionId` whose `meta` contains every key/value in `fi
 
 ## Ownership
 
-SQLite/local-file `put()` writes complete bytes to an exclusive temporary file in the target directory, atomically renames it to the content path, then registers metadata. A retry replaces an orphan final file without metadata rather than trusting its existence; failed writes remove their temporary file.
+SQLite/local-file `put()` writes complete bytes to an exclusive temporary file in the target directory, atomically renames it to the content path, then registers metadata. A retry replaces an orphan final file without metadata rather than trusting its existence; failed writes remove their temporary file. The file write and the read in `get()` are asynchronous, so a large picture does not hold up other sessions; only the metadata row waits for the database write queue, and that step writes the file itself if a deletion removed it in between.
 
 `recordOwnership()` sets the first owner for an asset (first-writer-wins; a second call with a different `sessionId` does not overwrite it). `addRef()` grants another session read access for fork and snapshot flows; `removeRef()` idempotently removes one session's explicit ref (does not delete bytes or ownership metadata). `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row. `ctx.media.put()` and `ctx.media.ingestUrl()` record ownership and the session's reference after the bytes are stored; when the runtime or guard that called them was aborted or timed out meanwhile, the call rejects and records neither, and the unowned bytes are left to media cleanup.
 

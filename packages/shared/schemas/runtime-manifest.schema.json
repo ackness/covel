@@ -26,7 +26,7 @@
           }
         }
       ],
-      "description": "What the runtime does. Plain string or a locale map."
+      "description": "What the runtime does. Plain string; translations go in locale files."
     },
     "schedule": {
       "type": "object",

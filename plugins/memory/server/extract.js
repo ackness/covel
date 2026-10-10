@@ -19,7 +19,6 @@ import {
   recentFacts,
   withoutRepeats,
 } from "./facts.js";
-import { retryTransientProviderCall } from "./provider-retry.js";
 
 const MAX_REPLY_ATTEMPTS = 2;
 const DEFAULT_BLOCK_CHARS = 2000;
@@ -79,15 +78,15 @@ export default async function extractMemory(ctx) {
   // its own turn, so a job that fails loses that turn's facts for good.
   let extracted;
   for (let attempt = 1; extracted === undefined; attempt += 1) {
-    const response = await retryTransientProviderCall(() => {
-      ctx.signal.throwIfAborted();
-      return ctx.gateway.generateText({
-        presetId: "memory",
-        defaults: { reasoningEffort: "disabled" },
-        system: buildSystemPrompt(definitions, lang, locale),
-        prompt,
-        signal: ctx.signal,
-      });
+    // The gateway already sends a failed request again and turns to the
+    // slot's fallback models; a retry here would multiply those attempts.
+    ctx.signal.throwIfAborted();
+    const response = await ctx.gateway.generateText({
+      presetId: "memory",
+      defaults: { reasoningEffort: "disabled" },
+      system: buildSystemPrompt(definitions, lang, locale),
+      prompt,
+      signal: ctx.signal,
     });
     ctx.signal.throwIfAborted();
     try {
@@ -152,14 +151,12 @@ export default async function extractMemory(ctx) {
 
 async function shortenBlock(ctx, content, limit, lang, locale) {
   try {
-    const response = await retryTransientProviderCall(() => {
-      ctx.signal.throwIfAborted();
-      return ctx.gateway.generateText({
-        presetId: "memory",
-        defaults: { reasoningEffort: "disabled" },
-        ...buildShortenPrompt(content, limit, lang, locale),
-        signal: ctx.signal,
-      });
+    ctx.signal.throwIfAborted();
+    const response = await ctx.gateway.generateText({
+      presetId: "memory",
+      defaults: { reasoningEffort: "disabled" },
+      ...buildShortenPrompt(content, limit, lang, locale),
+      signal: ctx.signal,
     });
     const shortened = response.text.trim();
     if (shortened) return cutAtSentence(shortened, limit);

@@ -898,6 +898,48 @@ export function registerRuntimeRecordStoreSuites(
       expect(list.map((m) => m.id)).toEqual([m2.id]);
     });
 
+    it("listCompactedTurnMessageTags pairs each compacted message with its summary, oldest-first", async () => {
+      const later = makeTurnMessage({
+        sessionId: "sess-tags",
+        createdAt: ts(20),
+        compactedAtTurnId: "summary-2",
+      });
+      const earlier = makeTurnMessage({
+        sessionId: "sess-tags",
+        createdAt: ts(10),
+        compactedAtTurnId: "summary-1",
+      });
+      const raw = makeTurnMessage({
+        sessionId: "sess-tags",
+        createdAt: ts(30),
+      });
+      const tagged = makeTurnMessage({
+        sessionId: "sess-tags",
+        createdAt: ts(25),
+      });
+      const otherSession = makeTurnMessage({
+        sessionId: "sess-tags-other",
+        createdAt: ts(5),
+        compactedAtTurnId: "summary-9",
+      });
+      for (const message of [later, earlier, raw, tagged, otherSession])
+        await store.appendTurnMessage(message);
+      await store.tagTurnMessagesCompacted(
+        "sess-tags",
+        [tagged.id],
+        "summary-3",
+      );
+
+      expect(await store.listCompactedTurnMessageTags("sess-tags")).toEqual([
+        { id: earlier.id, summaryId: "summary-1" },
+        { id: later.id, summaryId: "summary-2" },
+        { id: tagged.id, summaryId: "summary-3" },
+      ]);
+      expect(
+        await store.listCompactedTurnMessageTags("sess-tags-none"),
+      ).toEqual([]);
+    });
+
     it("getTurnMessageStats counts player messages over the full log", async () => {
       await store.appendTurnMessage(
         makeTurnMessage({

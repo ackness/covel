@@ -57,6 +57,7 @@ import type {
 import type { TraceEventRow } from "./mappers/plugin-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type {
+  CompactedTurnMessageTag,
   CursorPageOpts,
   DataStore,
   PaginationOpts,
@@ -130,6 +131,7 @@ export type SqlSessionJournalRecords = Pick<
   | "listTurnMessagesAfter"
   | "getTurnMessageStats"
   | "listRecentTurnMessages"
+  | "listCompactedTurnMessageTags"
   | "tagTurnMessagesCompacted"
   | "retagCompactedTurnMessages"
   | "savePlayerInput"
@@ -322,6 +324,22 @@ export function createSqlSessionJournalRecords(
         limit,
       });
       return rows.reverse().map((row) => toTurnMessageRecord(row, json));
+    },
+
+    async listCompactedTurnMessageTags(
+      sessionId: string,
+    ): Promise<CompactedTurnMessageTag[]> {
+      return runner.select<CompactedTurnMessageTag>(turnMessages, {
+        columns: {
+          id: turnMessages.id,
+          summaryId: turnMessages.compactedAtTurnId,
+        },
+        where: and(
+          eq(turnMessages.sessionId, sessionId),
+          isNotNull(turnMessages.compactedAtTurnId),
+        ),
+        orderBy: turnMessageOrder,
+      });
     },
 
     async tagTurnMessagesCompacted(

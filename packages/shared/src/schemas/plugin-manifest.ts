@@ -28,13 +28,13 @@ const dataAuthoringSchema = z
   .strictObject({
     title: z.union([z.string().min(1), z.record(z.string(), z.string())]).meta({
       description:
-        "Author-facing name of this content. Plain string or a locale map.",
+        "Author-facing name of this content. Plain string; translations go in locale files.",
       examples: ["Starting quests"],
     }),
     summary: z
       .union([z.string().min(1), z.record(z.string(), z.string())])
       .describe(
-        "One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string or a locale map.",
+        "One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string; translations go in locale files.",
       )
       .optional(),
     hint: z

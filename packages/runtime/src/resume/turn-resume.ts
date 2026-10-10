@@ -129,6 +129,9 @@ async function executeResumedRuntime(
       lastTarget,
       deltaCount,
       outputContractSchema: loaded?.outputContractSchema,
+      ...(loaded?.outputSchema
+        ? { agentOutputSchema: loaded.outputSchema }
+        : {}),
     });
 
   const preRuntime = await runRuntimePreHook(

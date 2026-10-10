@@ -41,7 +41,7 @@
           }
         }
       ],
-      "description": "Player-facing name. Plain string or a locale map."
+      "description": "Player-facing name. Plain string; translations go in locale files."
     },
     "description": {
       "anyOf": [
@@ -60,7 +60,7 @@
           }
         }
       ],
-      "description": "What the package does. Plain string or a locale map with at least one entry."
+      "description": "What the package does. Plain string; translations go in locale files."
     },
     "tags": {
       "type": "array",
@@ -704,7 +704,7 @@
                         }
                       }
                     ],
-                    "description": "Author-facing name of this content. Plain string or a locale map.",
+                    "description": "Author-facing name of this content. Plain string; translations go in locale files.",
                     "examples": ["Starting quests"]
                   },
                   "summary": {
@@ -723,7 +723,7 @@
                         }
                       }
                     ],
-                    "description": "One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string or a locale map."
+                    "description": "One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string; translations go in locale files."
                   },
                   "hint": {
                     "type": "string",
@@ -973,7 +973,7 @@
               }
             }
           ],
-          "description": "What the runtime does. Plain string or a locale map."
+          "description": "What the runtime does. Plain string; translations go in locale files."
         },
         "schedule": {
           "type": "object",

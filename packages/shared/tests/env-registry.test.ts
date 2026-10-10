@@ -212,20 +212,14 @@ describe("env registry", () => {
     });
   });
 
-  it("falls back for invalid runtime enum and integer values", () => {
+  it("falls back for invalid integer and NODE_ENV values", () => {
     const env = readRuntimeEnv({
-      STORE_BACKEND: "postgres",
-      MEDIA_BACKEND: "blobstore",
-      VECTOR_BACKEND: "qdrant",
       NODE_ENV: "staging",
       SERVER_PORT: "abc",
       RATE_LIMIT_RPM: "rpm",
       COVEL_COMPACTOR_CONTEXT_WINDOW: "wide",
     });
 
-    expect(env.storeBackend).toBe("sqlite");
-    expect(env.mediaBackend).toBe("mirror");
-    expect(env.vectorBackend).toBe("embedded");
     expect(env.nodeEnv).toBe("development");
     expect(env.serverPort).toBe(3001);
     expect(env.rateLimitRpm).toBe(60);
@@ -267,15 +261,29 @@ describe("env registry", () => {
   it("keeps invalid enum values on fallback", () => {
     expect(
       readEnvChoice(
-        "STORE_BACKEND",
-        ["memory", "sqlite", "pg"] as const,
-        "sqlite",
+        "NODE_ENV",
+        ["development", "production"] as const,
+        "development",
         {
-          STORE_BACKEND: "postgres",
+          NODE_ENV: "staging",
         },
       ),
-    ).toBe("sqlite");
+    ).toBe("development");
   });
+
+  it.each([
+    ["STORE_BACKEND", "postgres", "memory, sqlite, pg"],
+    ["MEDIA_BACKEND", "blobstore", "mirror, memory, sqlite, pg, none"],
+    ["VECTOR_BACKEND", "qdrant", "embedded, none, external"],
+  ])(
+    "rejects an unknown %s instead of picking the default",
+    (name, value, accepted) => {
+      expect(() => readRuntimeEnv({ [name]: value })).toThrow(
+        `Unknown ${name} "${value}". Accepted values: ${accepted}.`,
+      );
+      expect(() => readRuntimeEnv({ [name]: "" })).not.toThrow();
+    },
+  );
 
   it("collects dynamic provider API keys", () => {
     expect(

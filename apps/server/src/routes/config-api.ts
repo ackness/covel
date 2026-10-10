@@ -65,6 +65,7 @@ import {
   writeStoredProxyConfig,
 } from "../lib/proxy-config.js";
 import { getDesktopSystemProxyResolver } from "../lib/desktop-system-proxy.js";
+import { captureBootKeySources } from "../lib/env-key-overrides.js";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -75,6 +76,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   const app = new Hono();
   const requireToken = makeDesktopRestTokenGuard();
   const initialCovelHome = resolveCovelHome();
+  captureBootKeySources(initialCovelHome);
   const systemProxyUrl = readRuntimeEnv().systemProxyUrl;
   const resolveSystemProxy = getDesktopSystemProxyResolver();
   try {
@@ -594,7 +596,7 @@ function resolveDataRoot(): string | null {
  * (docker image bundling, admin home dir) therefore CAN'T reach these
  * endpoints, which prevents a remote client from editing server config.
  */
-function resolveCovelHome(): string | null {
+export function resolveCovelHome(): string | null {
   const env = readRuntimeEnv();
   if (!env.desktopRest) return null;
   if (env.covelHome) return env.covelHome;

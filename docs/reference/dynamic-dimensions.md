@@ -23,8 +23,6 @@ dimensions:
 
 **翻译在导入时解析，会话里只存一种语言。** 创建会话（或同步世界数据）时，`initialValue` 里的 `x-i18n` 节点和 `updateRule` 按会话的内容语言解析成普通字符串再写入；缺少该语言时按[统一解析规则](./i18n.md#统一解析规则)回退。插件在游玩中通过 `dimension.initialize` 声明定义时（例如开局时把世界包的声明再提交一次），框架在物化记录前做同样的解析，所以无论走哪条路径，会话里的记录都只有一种语言，重复声明也不会和已导入的记录冲突。会话状态里的维度值、存下的 `initialValue` 和 `updateRule` 都是普通字符串，提交 locale map 会被校验拒绝；模型和玩家修改时也只写一份文本。`name`、`description`、schema 的 `title` 与 `x-enumLabels` 是面板标签，继续保留 locale map，按玩家当前的界面语言显示。此前创建的开发会话若存有 locale map 形式的维度值，需要重新创建。
 
-在这条规则之前创建的会话，维度记录里存的是世界包的 locale map，每次读取都通不过校验，会话打不开。服务端在解析到这样的会话时（每个进程每个会话一次）把这些记录改写成会话语言的文本，原记录保存在同一插件的 `_legacy.dimension-locale-maps` 命名空间下，键不变；因其他原因无效的记录不改动。
-
 `world.yaml` inline、`dimensionSources` 单项文件、`covel://world/dimensions → world:metadata.dimensions` 使用同一 definition map。外部同名定义优先于 inline；descriptor 替换最终 map。单项文件内容是完整 definition，不是旧 raw value。
 
 ## 会话权威与同步
