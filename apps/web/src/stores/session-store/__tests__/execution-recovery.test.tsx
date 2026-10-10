@@ -40,6 +40,7 @@ function snapshot(state: "running" | "completed") {
   return {
     session,
     execution: { state, turnId: "t" },
+    submittedInteractions: [],
     messages:
       state === "completed"
         ? [

@@ -54,6 +54,7 @@ import {
   PluginExtensionHost,
   createHookPipeline,
   createModelResolver,
+  maybeSweepOldTraces,
 } from "@covel/runtime";
 import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
@@ -95,6 +96,9 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
+import { installTraceRetentionSource } from "../../lib/trace-retention-source.js";
+import { createServerSettings } from "../../lib/server-settings.js";
+import { createServerSettingsRoutes } from "./server-settings.js";
 import {
   createRuntimeJobWorker,
   parseActivatedRuntimeJobPayload,
@@ -895,6 +899,16 @@ async function assembleApi(
   app.route("/api/sessions", pluginDiagnostics.routes);
   app.route("/api/media", mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
+  // The settings the server acts on. Loaded before the first sweep or commit
+  // reads one, so a stored choice is in force from the start.
+  const serverSettings = createServerSettings(store);
+  await serverSettings.load();
+  installTraceRetentionSource(serverSettings);
+  app.route(
+    "/api/config/server-settings",
+    createServerSettingsRoutes(serverSettings),
+  );
+
   // Start maintenance only after assembly succeeds. These scans remain
   // non-blocking for readiness, but belong to the host's drain boundary.
   const startupMaintenance = maybeSweepExpiredSuspensions(store, {
@@ -905,6 +919,7 @@ async function assembleApi(
     .catch(() => {
       console.warn("[suspension-sweep] startup sweep failed");
     })
+    .then(() => maybeSweepOldTraces(store, { force: true }))
     .then(() => undefined);
   runtimeJobWorker.wake();
 

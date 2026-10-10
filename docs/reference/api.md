@@ -136,9 +136,51 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 On `demo` / `commercial`, the public `GET /api/llm-config` retains the model
 catalog used at client startup but omits `source` and load `error`; only the
 operator token unlocks those diagnostics. Public `GET /api/config/info` returns
-`isDesktop: false`, `requiresAuth: true`, and null path fields on those tiers.
+`isDesktop: false`, `requiresAuth: true` and null path fields on those tiers.
 An operator request receives the complete deployment paths. Local `self` and
 desktop discovery retain their existing response.
+
+### Server settings
+
+`GET /api/config/server-settings` answers on every tier, without a token. It
+holds no secret: for each setting the server itself acts on (a registry entry
+with `scope: "server"`, see [`settings-store.md`](./settings-store.md)) it
+returns the value in force, where it comes from and whether a write would
+count.
+
+```json
+{
+  "settings": {
+    "diagnostics.traceRetention": {
+      "value": "30",
+      "source": "default",
+      "settable": true
+    }
+  }
+}
+```
+
+`source` is `env` (the operator's environment variable), `setting` (a stored
+value) or `default`. `settable` is false when the environment fixes the key and
+on every key of a `demo` / `commercial` deployment. `value` under `env` may be
+one the setting does not offer to players (`"14"` for
+`COVEL_TRACE_RETENTION_DAYS=14`).
+
+`PUT /api/config/server-settings` takes `{ "entries": { "<key>": <value> | null } }`,
+stores each value (`null` drops the stored one) and returns the same body as the
+`GET`. It is accepted on `DEPLOYMENT_TIER=self` only, and needs the desktop
+bearer token when the shell set one (`401 desktop_rest_token_invalid`).
+
+| Status | `code`                          | When                                                      |
+| ------ | ------------------------------- | --------------------------------------------------------- |
+| 403    | `server_settings_operator_only` | `demo` / `commercial`, whatever token the caller presents |
+| 400    | `invalid_server_settings_body`  | The body is not `{ entries: object }`                     |
+| 400    | `unknown_server_setting`        | A key is not a server setting (`details.key`)             |
+| 400    | `invalid_server_setting_value`  | A value fails the setting's schema (`details.key`)        |
+| 409    | `server_setting_fixed`          | The environment fixes the key (`details.key`)             |
+
+A request with one refused entry writes nothing. A stored value applies to the
+next commit or sweep; no restart is needed.
 
 Configuration filesystem and file-manager startup failures use the global
 logged error handler: production responses are generic 500 errors. Invalid
@@ -305,6 +347,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST   | `/api/worlds/:id/sync-data`             | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
 | POST   | `/api/worlds/:id/translate`             | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）                                                                                                                             |
 | GET    | `/api/worlds/:id/gallery`               | 列出世界包自带的图片（场景、立绘），供世界列表和世界详情在没有会话时展示                                                                                                                |
+| GET    | `/api/media/library`                    | 玩家的媒体库：分页列出已存储的媒体、使用它的会话和可释放的空间（仅 `self` / 桌面端）                                                                                                    |
+| POST   | `/api/media/library/delete`             | 删除玩家选中的媒体，或所有没有会话使用的媒体                                                                                                                                            |
 | GET    | `/api/worlds/:id/gallery/:source/:file` | 读取上一条列表里的一张图片                                                                                                                                                              |
 
 服务端删除世界先在短世界锁内记录删除状态，释放世界锁后逐个执行完整的会话删除流程，包括等待执行写入、生命周期钩子、媒体引用与进程内状态清理，最后删除世界记录和对应文件包。底层 `DataStore.deleteWorld` 仍只删除世界记录；需要级联清理的调用必须经过 API 生命周期流程。
@@ -415,6 +459,8 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 | GET  | `/api/sessions/:id/turns` | 持久化 turn_results 执行工件列表，返回 `{ items }`（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。声明 `io.concealed` 的 runtime 结果清空 `output` 与工具参数 / 结果。为 e2e-plugin-verify harness 恢复的薄路由 |
 
 > 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
+>
+> 视图的 `submittedInteractions` 列出玩家已经通过 `submit-form` 回答过的交互 `{ turnId, interactionId, values, followedUp }[]`，`values` 是服务端落库的值（会话内全部记录，不受消息窗口限制），`followedUp` 表示答案落库之后是否有回合开始（由 trace 里的 `turn.started` 推出，不另存字段）。`followedUp` 为 true 时客户端把对应消息里的表单标成已提交并回填；为 false（后续请求丢失）时表单保持打开并填入已存的值，玩家点一次提交即可让后续回合运行。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
@@ -742,6 +788,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                            |
 | GET  | `/api/provider-keys`           | 只返回 `{ providers: { [provider]: { configured: true } } }`：动态扫描所有 `*_API_KEY` 得到的配置状态，不含原始或掩码的密钥内容，桌面客户端也一样。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单属运维信息） |
 | GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                                                                                     |
+| GET  | `/api/config/server-settings`  | 所有层级：返回服务端执行的设置（`scope: "server"`）的生效值、来源和能否设置，见上文 Server settings                                                                                                                             |
+| PUT  | `/api/config/server-settings`  | 仅 `self` 层级：保存这些设置；body `{ entries: { [key]: value \| null } }`，按注册表校验                                                                                                                                        |
 | GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）                                                                                                                                                              |
 | PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                                                                                 |
 | GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                                                                               |
@@ -1696,13 +1744,13 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 { "error": "Session not found: <id>", "code": "session_not_found" }  // 404
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。`interaction_already_submitted` 同为写给玩家的文字，不带 `details`。没有 `code` 的 400 是客户端不该发出的请求。
 
 **使用说明:**
 
 - handler 只接受当前 session 对话日志中已经提交的 assistant interaction；`turnId` / `interactionId` / `type` 必须与原交互一致，客户端无法凭空构造表单或改写交互类型
 - `form` 会校验 required、字段集合和字段类型；`choice.selectedId` 必须来自原 options，`selectedLabel` 由服务端按原 option 规范化；`confirmation.confirmed` 必须是 boolean
-- 同一 `(turnId, interactionId)` 重复提交相同值会返回原 `submissionId`；不同值返回 400。批量提交会先全部校验，再在事务内统一写入
+- 同一 `(turnId, interactionId)` 只能回答一次，后续回合也只跑一次。答案落库之后只要有回合（成功的，或失败后由现有重试再跑的）在它之后开始，再次提交（无论值是否相同）都返回 400 和 `code: "interaction_already_submitted"`，`error` 是按会话 locale 写给玩家的文字，不写入任何内容。这样第二个标签页里还开着的旧表单不会让回合再跑一遍。答案已落库但还没有回合跟上（响应丢失、或浏览器在两个请求之间关闭）时，相同的值会再次被接受并返回已存的 `submissionId` 与 `filledNarrative`，客户端据此发出后续 action；不同的值同样返回 `interaction_already_submitted`。已存的回答和 `followedUp` 从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 读取。同一批次内对同一交互重复给出相同值仍合并为一条。批量提交会先全部校验，再在事务内统一写入
 - `filledNarrative` 是将玩家输入填入模板后的**纯自然语言**文本，不含 JSON 结构
 - handler 本身不写 `turn_messages`；Web 把该文本作为下一次 action 的玩家消息，供叙事者参考
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
@@ -3585,7 +3633,115 @@ COVEL_MEDIA_CLEANUP_ENABLED=true \
        -d '{"dryRun": false, "maxBytes": 0}'
 ```
 
-> 大型部署（>100 sessions）会自动按 50 个一批迭代并通过 `console.info` 输出 `[cleanup] scanned X/Y sessions` 进度。
+> 大型部署（>100 sessions）会自动按 50 个一批迭代并通过 `console.info` 输出 `[media-scan] scanned X/Y sessions` 进度。
+
+#### `GET /api/media/library`
+
+玩家的媒体库：列出 MediaStore 里保存的图片、音频、视频和其他文件，以及每一项被哪些会话使用。设置里的“已存储的媒体”页面读这个接口。只读，不删除任何内容。
+
+**可用范围：** 只在一个玩家拥有全部数据的部署里可用（`DEPLOYMENT_TIER=self`、桌面端）。`demo` / `commercial`，以及生产环境的浏览器私有档（MemoryStore），媒体在多个所有者之间共享且没有按所有者的索引，一律返回 503 `{ "code": "unavailable" }`，带 operator token 也一样。
+
+**查询参数：**
+
+| 参数        | 说明                                                                                                  |
+| ----------- | ----------------------------------------------------------------------------------------------------- |
+| `kind`      | `image` / `audio` / `video` / `other`，按 MIME 类型过滤；省略为全部                                   |
+| `usage`     | `unused`（没有任何会话使用）或 `in-use`（其余全部）；省略为全部                                       |
+| `limit`     | 每页条数，默认 60，上限 200                                                                           |
+| `offset`    | 起始位置，默认 0；按创建时间从新到旧                                                                  |
+| `refresh`   | `1` 时重新扫描会话，否则复用 30 秒内的上一次扫描                                                      |
+| `scanLimit` | 单个会话的扫描行数上限，默认 200000。超过时扫描不完整（见下），不会把读不完的会话当作“没有引用”来处理 |
+
+**响应（200）：**
+
+```json
+{
+  "items": [
+    {
+      "id": "<sha256>",
+      "mime": "image/png",
+      "kind": "image",
+      "size": 482113,
+      "createdAt": "2026-10-01T10:00:00.000Z",
+      "name": "gate.png",
+      "usage": "used",
+      "usedBy": ["lantern-barrow-1a2b3c4d"],
+      "url": "/api/media/<sha256>?token=<signed>"
+    }
+  ],
+  "total": 132,
+  "offset": 0,
+  "limit": 60,
+  "sessions": [
+    {
+      "id": "lantern-barrow-1a2b3c4d",
+      "worldId": "lantern-barrow",
+      "status": "active",
+      "completedPlayerTurns": 12,
+      "createdAt": "2026-09-30T08:00:00.000Z",
+      "updatedAt": "2026-10-01T10:00:00.000Z"
+    }
+  ],
+  "totals": {
+    "count": 132,
+    "bytes": 91234567,
+    "unusedCount": 40,
+    "unusedBytes": 30123456,
+    "byKind": {
+      "image": { "count": 120, "bytes": 0, "unusedCount": 38, "unusedBytes": 0 }
+    }
+  },
+  "scan": { "complete": true, "scannedAt": "2026-10-10T09:00:00.000Z" }
+}
+```
+
+- `usage`：`used`（至少一个现存会话使用，`usedBy` 列出它们）、`unused`（完整扫描后没有任何使用者）、`held`（没有现存会话使用，但仍被不是现存会话的持有者占用：进行中的世界数据导入，或会话已不存在的遗留引用）、`unknown`（扫描不完整且没找到使用者）。只有 `unused` 计入 `totals.unusedCount` / `unusedBytes`。
+- 什么算“被会话使用”：会话是该资产的所有者、持有显式引用（`media_refs`），或者它的 `messages` / `plugin_data` / `runtime_outputs` / `trace_events` / `snapshots` / `turn_results` 任意一行里出现这个 mediaId。
+- `scan.complete: false` 时带 `incompleteSessionId`：这个会话的行数超过了 `scanLimit`。此时没有任何一项是 `unused`。
+- `totals` 统计整个媒体库，不受 `kind` / `usage` 过滤影响；`sessions` 只含本页条目提到的会话。
+- `url` 是一小时内有效的签名地址，直接用于 `<img>` / `<audio>` / `<video>`。服务器没有缩略图，地址返回的是原文件。
+- 世界包目录里的文件（`worlds/<id>/media`、封面、立绘）不是 MediaStore 内容，不会出现在这里。
+
+#### `POST /api/media/library/delete`
+
+按玩家的选择删除媒体。可用范围同上（其他部署返回 503）。每次请求都重新扫描会话，不使用列表的缓存。
+
+**请求体（三种之一）：**
+
+```json
+{ "ids": ["<sha256>", "<sha256>"] }
+```
+
+```json
+{ "unused": true }
+```
+
+```json
+{ "ids": ["<sha256>"], "force": true }
+```
+
+- `ids`（1 到 1000 个）：只删除其中当前为 `unused` 的；其余原样保留并在 `skipped` 里说明。
+- `unused: true`：删除所有当前为 `unused` 的。
+- `force: true`：只接受恰好一个 id，不管它是否仍被使用都删除，连同所有会话对它的引用。使用它的会话之后在原位置显示“媒体不可用”占位。
+- `scanLimit`（可选）：同列表接口。
+
+**响应（200）：**
+
+```json
+{
+  "deletedIds": ["<sha256>"],
+  "bytesDeleted": 482113,
+  "skipped": [{ "id": "<sha256>", "reason": "in_use" }]
+}
+```
+
+`skipped[].reason`：`in_use`（有会话使用，包括扫描之后才被引用的）、`held`、`not_found`。
+
+| 条件                                  | 行为                                                |
+| ------------------------------------- | --------------------------------------------------- |
+| 部署不提供媒体库                      | 503 `{ "code": "unavailable" }`                     |
+| 请求体不是上面三种之一                | 400 `{ "code": "invalid_request" }`                 |
+| 非 `force` 请求时有会话的行数超过上限 | 409 `{ "code": "scan_incomplete" }`，不删除任何内容 |
 
 ---
 

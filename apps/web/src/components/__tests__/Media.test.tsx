@@ -155,9 +155,38 @@ describe("<Media>", () => {
     setFetchAlwaysFails();
     render(<Media src={ref} sessionId="s1" alt="oops" />);
     await waitFor(() => {
-      expect(screen.getByRole("img", { name: "oops" })).toBeTruthy();
+      expect(screen.getByRole("img", { name: /^oops \(.+\)$/ })).toBeTruthy();
       expect(screen.queryByAltText("oops")).toBeNull();
     });
+  });
+
+  it("shows a placeholder that says the media is gone after it was deleted", async () => {
+    const ref = await makeRef("image/png");
+    // A deleted asset: the session can no longer get a URL for it.
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ error: "Media not found", code: "media_not_found" }),
+          { status: 404, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    const { container } = render(
+      <Media src={ref} sessionId="s1" alt="The harbour at dusk" />,
+    );
+
+    const placeholder = await screen.findByRole("img", {
+      name: /^The harbour at dusk \(.+\)$/,
+    });
+    const [status, caption] = [...placeholder.querySelectorAll("span")].map(
+      (node) => node.textContent,
+    );
+    expect(status).toBeTruthy();
+    expect(status).not.toBe("The harbour at dusk");
+    expect(caption).toBe("The harbour at dusk");
+    expect(container.querySelector("img")).toBeNull();
+    // Only the URL request: no retry storm against a missing asset.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("revokes blob URL on unmount", async () => {

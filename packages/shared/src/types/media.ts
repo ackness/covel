@@ -64,6 +64,11 @@ export interface MediaLifecyclePolicy {
   readonly keepRecentBytes?: number;
   readonly dryRun?: boolean;
   readonly now?: Date;
+  /**
+   * When present, the policy selects among these assets only; every other
+   * asset is kept whatever the other fields say.
+   */
+  readonly onlyIds?: readonly string[];
 }
 
 export interface MediaCleanupResult {

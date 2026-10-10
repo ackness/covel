@@ -9,8 +9,11 @@ import {
   type SettingsPersistenceErrorListener,
   type SettingsRepair,
   type SettingsRepairListener,
+  type ServerSettingState,
+  type ServerSettingsChannel,
   type SettingsStoreApi,
 } from "./types.js";
+import { ServerScopedSettings } from "./server-scoped.js";
 import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 import {
   VersionedSettingsPersistence,
@@ -26,6 +29,8 @@ import {
  *   and notifies subscribers.
  * - Secrets (backend: 'keys') are routed to a separate channel (`saveSecrets`)
  *   so desktop builds can keep them in `keys.env` with mode 600.
+ * - Settings with `scope: "server"` are read from and written to the server
+ *   through the optional `serverSettings` channel, never the adapter.
  */
 export class SettingsStore implements SettingsStoreApi {
   private readonly registry = new Map<SettingKey, SettingEntry>();
@@ -69,16 +74,46 @@ export class SettingsStore implements SettingsStoreApi {
   /** Set when `init()` could not read existing state. See {@link assertHydrated}. */
   private hydrationError: Error | null = null;
   private versionedPersistence: VersionedSettingsPersistence | null = null;
+  private readonly serverScoped: ServerScopedSettings;
 
-  constructor(private readonly adapter: SettingsBackendAdapter) {
+  constructor(
+    private readonly adapter: SettingsBackendAdapter,
+    options: { readonly serverSettings?: ServerSettingsChannel } = {},
+  ) {
     this.loaded = new Promise<void>((resolve) => {
       this.loadResolve = resolve;
     });
+    this.serverScoped = new ServerScopedSettings(
+      options.serverSettings,
+      (key) => this.registry.get(key)?.default,
+      () =>
+        [...this.registry.values()]
+          .filter((entry) => entry.scope === "server")
+          .map((entry) => entry.key),
+      (key) => this.notify(key, this.get(key)),
+    );
   }
 
   init(): Promise<void> {
-    if (!this.initPromise) this.initPromise = this.hydrate();
+    if (!this.initPromise) {
+      this.initPromise = this.hydrate();
+      // The device's settings do not wait for the server, and a server that
+      // does not answer leaves its settings locked on their defaults.
+      void this.serverScoped.refresh().catch(() => undefined);
+    }
     return this.initPromise;
+  }
+
+  serverSetting(key: SettingKey): ServerSettingState | undefined {
+    return this.isServerKey(key) ? this.serverScoped.state(key) : undefined;
+  }
+
+  refreshServerSettings(): Promise<void> {
+    return this.serverScoped.refresh();
+  }
+
+  private isServerKey(key: SettingKey): boolean {
+    return this.registry.get(key)?.scope === "server";
   }
 
   private async hydrate(): Promise<void> {
@@ -542,6 +577,7 @@ export class SettingsStore implements SettingsStoreApi {
       if (val !== undefined) return val as T;
       return (entry?.default ?? "") as T;
     }
+    if (this.isServerKey(key)) return this.serverScoped.state(key).value as T;
     if (this.invalidHydratedKeys.has(key) && entry) return entry.default as T;
     if (this.values.has(key)) return this.values.get(key) as T;
     if (entry) return entry.default as T;
@@ -551,6 +587,9 @@ export class SettingsStore implements SettingsStoreApi {
   has(key: SettingKey): boolean {
     if (this.isSecretKey(key)) {
       return this.secrets.has(this.stripKeysPrefix(key));
+    }
+    if (this.isServerKey(key)) {
+      return this.serverScoped.state(key).source === "setting";
     }
     if (this.invalidHydratedKeys.has(key)) return false;
     return this.values.has(key);
@@ -569,6 +608,11 @@ export class SettingsStore implements SettingsStoreApi {
           );
         }
         normalized = parsed.data;
+      }
+      if (this.isServerKey(key)) {
+        return this.observePersistence(
+          this.serverScoped.write(key, normalized),
+        );
       }
       const operation = this.isSecretKey(key)
         ? this.persist(
@@ -686,6 +730,9 @@ export class SettingsStore implements SettingsStoreApi {
     if (this.repairing) return this.afterRepair(() => this.clear(key));
     try {
       const entry = this.registry.get(key);
+      if (this.isServerKey(key)) {
+        return this.observePersistence(this.serverScoped.write(key, null));
+      }
       const operation = this.isSecretKey(key)
         ? this.persist(
             "secrets",
@@ -728,8 +775,12 @@ export class SettingsStore implements SettingsStoreApi {
             ...this.secrets.keys(),
           ]),
         ]).then(() => {
+          // A reset of this device leaves the server's settings as they are.
           for (const entry of this.registry.values()) {
-            this.notify(entry.key, entry.default);
+            this.notify(
+              entry.key,
+              this.isServerKey(entry.key) ? this.get(entry.key) : entry.default,
+            );
           }
         }),
       );

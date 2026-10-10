@@ -9,6 +9,7 @@ import {
   enrichGameStateFromSnapshot,
   publishSessionGameState,
 } from "./game-state.js";
+import { publishSubmittedInteractions } from "./restore-session.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type {
@@ -29,7 +30,6 @@ interface SubmissionDependencies {
   workspace: Pick<SessionWorkspace, "run">;
   sessionIdRef: MutableRef<string | null>;
   stateRef: MutableRef<SessionState>;
-  submitBlock: SessionActions["submitBlock"];
   runSingleAction: (
     content: string,
     options: { echoUserMessage: boolean; owner: SessionActionOwner },
@@ -124,7 +124,9 @@ export async function submitInteractionBlock(
         "The form was not accepted. Review the values and submit again.",
       );
     }
-    deps.submitBlock(blockId, values);
+    // The server now holds the answer and returns it with the session view,
+    // so the browser keeps it only in memory until the next restore.
+    dispatch({ type: "SUBMIT_BLOCK", blockId, values });
     const filled = result.results?.[0]?.filledNarrative ?? "";
     const echo = submitBehavior?.echoFilledNarrative !== false;
     started = true;
@@ -159,6 +161,22 @@ export async function submitInteractionBlock(
       // The server wrote this text for the player, in the session's language.
       // Nothing ran and nothing was stored: the form keeps what they typed.
       return { rejected: readFormIssues(error) };
+    } else if (
+      error instanceof ApiError &&
+      error.code === "interaction_already_submitted"
+    ) {
+      // Answered elsewhere (another tab or device). Say so and load the
+      // stored answer: the view marks the block answered when a turn followed
+      // it, and leaves it open with the stored values when none did.
+      dispatch({
+        type: "SET_EXECUTION_ERROR",
+        error: error.response?.error ?? error.message,
+      });
+      void refreshSessionResource(dispatch, ["game-state", sid, "answered"], {
+        isCurrent: owner.isCurrent,
+        read: () => api.getSessionView(sid),
+        apply: (snapshot) => publishSubmittedInteractions(dispatch, snapshot),
+      }).catch(() => {});
     } else if (!reportWorkspaceSyncError(error, dispatch)) {
       dispatch({
         type: "SET_EXECUTION_ERROR",

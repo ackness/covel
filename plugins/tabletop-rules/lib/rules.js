@@ -173,7 +173,8 @@ export function validateRules(rules) {
  * within its range and the budget must be spent exactly. The character name
  * belongs to the character-creation form, not to point allocation.
  *
- * The player reads the returned text. `ctx` (the form validator's third
+ * The player reads the returned text: a string for the form as a whole, or
+ * `{ field, message }` for a value that belongs under its attribute. `ctx` (the form validator's third
  * argument, or a runtime context) gives it in the session's language.
  */
 export function validateAllocation(values, rules, ctx) {
@@ -187,11 +188,15 @@ export function validateAllocation(values, rules, ctx) {
       value < attribute.base ||
       value > attribute.max
     )
-      return translate(
-        ctx,
-        "{label}: enter a whole number from {min} to {max}",
-        { label: attribute.label, min: attribute.base, max: attribute.max },
-      );
+      // Placed under the attribute's own field (field names are attribute IDs).
+      return {
+        field: attribute.id,
+        message: translate(
+          ctx,
+          "{label}: enter a whole number from {min} to {max}",
+          { label: attribute.label, min: attribute.base, max: attribute.max },
+        ),
+      };
     spent += value - attribute.base;
   }
   if (spent !== rules.budget)

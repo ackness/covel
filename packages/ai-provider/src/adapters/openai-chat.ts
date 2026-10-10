@@ -47,6 +47,7 @@ import {
   imagePartUrl,
 } from "./common.js";
 import { readTokenCount } from "./usage.js";
+import { openAiPromptCacheKeyField } from "./prompt-cache-key.js";
 import {
   readResponseDiagnostics,
   ResponseDiagnostics,
@@ -81,6 +82,8 @@ const OPENAI_PROTECTED_KEYS = new Set([
   "parameterOverrides",
   "reasoning_effort",
   "reasoningEffort",
+  // Whether to send `prompt_cache_key`; read by openAiPromptCacheKeyField.
+  "promptCacheKey",
 ]);
 
 /** camelCase override key → OpenAI Chat wire field. */
@@ -298,6 +301,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const body: Record<string, unknown> = {
         model: params.model,
         messages: serializeMessages(messages, params.model, config),
+        ...openAiPromptCacheKeyField(config, params),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
           params.providerRequestMetadata,
@@ -433,6 +437,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         ...(params.responseFormat
           ? { response_format: { type: "json_object" } }
           : {}),
+        ...openAiPromptCacheKeyField(config, params),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
           params.providerRequestMetadata,

@@ -36,6 +36,16 @@ describe("buildSessionSnapshot", () => {
           createdAt: "2026-01-01",
         },
       ]),
+      listPlayerInputs: vi.fn().mockResolvedValue([
+        {
+          id: "i1",
+          turnId: "t1",
+          formId: "name-form",
+          values: { name: "Aria" },
+          createdAt: "2026-01-01T00:00:05.000Z",
+        },
+      ]),
+      queryTraceEvents: vi.fn().mockResolvedValue([]),
       listCharacters: vi.fn().mockResolvedValue([
         {
           id: "c1",
@@ -106,9 +116,33 @@ describe("buildSessionSnapshot", () => {
       player: { hp: 100 },
     });
 
+    // What the player already answered, with the stored values
+    expect(snapshot!.submittedInteractions).toEqual([
+      {
+        turnId: "t1",
+        interactionId: "name-form",
+        values: { name: "Aria" },
+        followedUp: false,
+      },
+    ]);
+
     // Execution steps
     expect(snapshot!.executionSteps).toHaveLength(2);
     expect(snapshot!.executionSteps[0]!.type).toBe("runtime.started");
+  });
+
+  it("marks an answer as followed up once a turn started after it", async () => {
+    const store = createMockStore();
+    store.queryTraceEvents.mockResolvedValue([
+      { type: "turn.started", createdAt: "2026-01-01T00:00:09.000Z" },
+    ]);
+    const snapshot = await buildSessionSnapshot(store as any, "sess-1");
+    expect(snapshot!.submittedInteractions[0]?.followedUp).toBe(true);
+    store.queryTraceEvents.mockResolvedValue([
+      { type: "turn.started", createdAt: "2026-01-01T00:00:01.000Z" },
+    ]);
+    const before = await buildSessionSnapshot(store as any, "sess-1");
+    expect(before!.submittedInteractions[0]?.followedUp).toBe(false);
   });
 
   it("should return null if session not found", async () => {

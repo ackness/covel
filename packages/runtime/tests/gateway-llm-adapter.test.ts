@@ -173,6 +173,39 @@ describe("createGatewayAdapter target resolution", () => {
     expect(observed).toEqual([{ provider: "backup", model: "backup-model" }]);
   });
 
+  it("forwards the prompt cache key to generate and stream requests", async () => {
+    const keys: Array<string | undefined> = [];
+    const gateway: GatewayLike = {
+      resolveSlot() {
+        return { provider: "qwen", model: "qwen-test" };
+      },
+      async generateText(input) {
+        keys.push(input.promptCacheKey);
+        return {
+          text: "ok",
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+      async *streamText(input) {
+        keys.push(input.promptCacheKey);
+        yield { type: "done", finishReason: "stop" };
+      },
+    };
+    const adapter = createGatewayAdapter(gateway);
+    const params = {
+      messages: [{ role: "user", content: "hi" }],
+      promptCacheKey: "covel-abc",
+    };
+
+    await adapter.generate(params);
+    for await (const _ of adapter.stream!(params)) {
+      // drain
+    }
+
+    expect(keys).toEqual(["covel-abc", "covel-abc"]);
+  });
+
   it("forwards maxOutputTokens as a request-hard parameter override", async () => {
     const optionsSeen: Array<Parameters<GatewayLike["generateText"]>[1]> = [];
     const gateway: GatewayLike = {

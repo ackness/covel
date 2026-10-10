@@ -1,7 +1,10 @@
 import type { SessionExecutionStatus, SessionSnapshot } from "@covel/shared";
 import * as api from "@/services/api.js";
 import { clearStreamingText } from "@/stores/streaming-text-store.js";
-import { toStreamMessages } from "./restore-session.js";
+import {
+  publishSubmittedInteractions,
+  toStreamMessages,
+} from "./restore-session.js";
 import {
   clearNarrativeDeltaBuffer,
   type DeltaBufferRef,
@@ -96,6 +99,7 @@ export function publishRecoveredMessages(
     if (deltaBufferRef.current.size === 0)
       clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);
   }
+  publishSubmittedInteractions(dispatch, snapshot);
   dispatch({
     type: "MERGE_RECOVERED_MESSAGES",
     messages,

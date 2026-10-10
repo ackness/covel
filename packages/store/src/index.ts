@@ -89,6 +89,7 @@ export type {
   StoreBackend,
   StoreConfig,
   WorldRecord,
+  ServerSettingRecord,
   SessionRecord,
   TurnResultRecord,
   ToolCallRecordRow,

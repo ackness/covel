@@ -8,27 +8,28 @@ Terms are ordered alphabetically. Each entry includes a 1–2 sentence definitio
 
 One English term has one Chinese term. Chinese docs, UI copy and the Chinese prompt variants (`*.zh.md`) use the term in this table.
 
-| Term             | 中文         | Note                                                                                                          |
-| ---------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
-| Binding          | 绑定         |                                                                                                               |
-| Capability       | 能力标签     | A model route's `tag` (`text`, `image`, ...). Plugins are discovered by **Contract**, not by capability tags. |
-| Collection       | 合集         |                                                                                                               |
-| Contract         | 契约         | A versioned ID such as `narrative-engine@1`.                                                                  |
-| Credits          | 作者信息     | The `author`, `license` and `homepage` fields of a package.                                                   |
-| Kernel           | 内核         |                                                                                                               |
-| Pack             | 玩法包       |                                                                                                               |
-| PluginType       | 插件类型     |                                                                                                               |
-| Preset           | 预设         |                                                                                                               |
-| Proposal         | 提案         |                                                                                                               |
-| Provider         | 提供商       |                                                                                                               |
-| Runtime          | runtime      | Kept in English: it names a manifest unit, not "运行时" in general.                                           |
-| Runtime manifest | runtime 清单 |                                                                                                               |
-| Segment          | 提示词段     |                                                                                                               |
-| Session          | 会话         |                                                                                                               |
-| Slot             | 槽位         |                                                                                                               |
-| Trigger mode     | 触发模式     |                                                                                                               |
-| Turn             | 回合         | "This turn" is 本回合.                                                                                        |
-| World            | 世界         | A world package is 世界包.                                                                                    |
+| Term                  | 中文         | Note                                                                                                          |
+| --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Binding               | 绑定         |                                                                                                               |
+| Capability            | 能力标签     | A model route's `tag` (`text`, `image`, ...). Plugins are discovered by **Contract**, not by capability tags. |
+| Collection            | 合集         |                                                                                                               |
+| Contract              | 契约         | A versioned ID such as `narrative-engine@1`.                                                                  |
+| Credits               | 作者信息     | The `author`, `license` and `homepage` fields of a package.                                                   |
+| Kernel                | 内核         |                                                                                                               |
+| Pack                  | 玩法包       |                                                                                                               |
+| PluginType            | 插件类型     |                                                                                                               |
+| Preset                | 预设         |                                                                                                               |
+| Proposal              | 提案         |                                                                                                               |
+| Provider              | 提供商       |                                                                                                               |
+| Runtime               | runtime      | Kept in English: it names a manifest unit, not "运行时" in general.                                           |
+| Runtime manifest      | runtime 清单 |                                                                                                               |
+| Segment               | 提示词段     |                                                                                                               |
+| Server-scoped setting | 服务端设置   | A setting with `scope: "server"`; the others are 本设备设置.                                                  |
+| Session               | 会话         |                                                                                                               |
+| Slot                  | 槽位         |                                                                                                               |
+| Trigger mode          | 触发模式     |                                                                                                               |
+| Turn                  | 回合         | "This turn" is 本回合.                                                                                        |
+| World                 | 世界         | A world package is 世界包.                                                                                    |
 
 ## Prompt vocabulary
 
@@ -146,6 +147,12 @@ See: [docs/reference/plugins.md](./reference/plugins.md), [docs/guide/plugin-aut
 A narrative slice inside the assembled prompt (one of the 10 slices in the prompt-structure spec). Segments are cache-aware: stable segments (world lore, plugin prompt) get `cache_control` markers so provider-side prompt caching can reuse them across turns.
 
 See: [docs/reference/prompt-structure.md](./reference/prompt-structure.md).
+
+## Server-scoped setting
+
+A player setting that the server itself carries out, such as how long diagnostic traces are kept. The registry entry declares `scope: "server"`; the server stores the value in its database, one value for every browser of the install, and only a `self` deployment lets the player change it. Every other setting is client-scoped: a preference of one device.
+
+See: [docs/reference/settings-store.md](./reference/settings-store.md).
 
 ## Session
 
