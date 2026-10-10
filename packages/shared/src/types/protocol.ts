@@ -172,9 +172,18 @@ export interface WorldDimensionsChangedPayload {
   readonly worldId?: string;
 }
 
+/** One written or deleted row, as the client applies it to its own copy. */
+export interface PluginDataChangedEntry {
+  readonly namespace: string;
+  readonly key: string;
+  /** The row's public value; `null` for a delete. */
+  readonly value: unknown;
+  readonly operation: "set" | "delete";
+}
+
 export interface PluginDataChangedPayload {
   readonly pluginId: string;
-  readonly changes: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  readonly changes: readonly PluginDataChangedEntry[];
 }
 
 export interface CharacterUpsertedPayload {

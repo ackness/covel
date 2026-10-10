@@ -1403,6 +1403,43 @@ describe("segmented history persistence", () => {
     expect(raw.length).toBeLessThan(messages.length);
   });
 
+  it("caps the summary call's output and keeps a summary the model cut at the cap", async () => {
+    const input: Parameters<typeof compactHistory>[0] = {
+      locale: "en-US",
+      messages: makeSimpleHistory(20),
+      existingSummaries: [],
+      contextWindow: 100_000,
+      inputWindow: 100_000,
+      estimatedTokens: 0,
+      summaryBudget: {
+        maxTokens: 4_000,
+        maxSegmentTokens: 2_000,
+        maxSegments: 4,
+      },
+    };
+    const overlong = "Overlong summary. ".repeat(2_000);
+    const complete = vi.fn<CompactorLLMAdapter["complete"]>(async () => ({
+      content: overlong,
+      truncated: true,
+    }));
+    const deps = { fastSlotLlm: { complete }, estimator, loadPrompt };
+    const output = await compactHistory(input, deps);
+    const ceiling = complete.mock.calls[0]![0].maxOutputTokens!;
+    // Twice the segment budget at most, never the slot's whole output budget.
+    expect(ceiling).toBeGreaterThanOrEqual(1024);
+    expect(ceiling).toBeLessThanOrEqual(4_000);
+    const summary = output?.summaries.at(-1);
+    expect(summary?.truncated).toBe(true);
+    expect(estimator(summary!.content)).toBeLessThanOrEqual(2_000);
+
+    // Cut before the budget was filled: the raw history stays.
+    complete.mockResolvedValueOnce({
+      content: "A summary that",
+      truncated: true,
+    });
+    await expect(compactHistory(input, deps)).rejects.toThrow(/truncated/);
+  });
+
   it("leaves an individually oversized source message uncompacted", async () => {
     const store = createMemoryStore();
     const message = makeTurnMessage("huge", "user", "x".repeat(100_000));

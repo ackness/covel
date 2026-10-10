@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import {
   COVEL_EVENT_META,
   PROPOSAL_TYPES,
@@ -90,7 +91,7 @@ const WORLD_DATA_SCHEMA_URIS = [
 ] as const;
 
 function uniqueSorted(values: Iterable<string>): string[] {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+  return [...new Set(values)].sort((a, b) => compareText(a, b));
 }
 
 function enumValues<T extends string>(schema: { options: readonly T[] }): T[] {
@@ -209,9 +210,9 @@ export function buildPluginDataIndex(
       namespace,
       count: bucket.count,
       latestUpdatedAt: bucket.latestUpdatedAt,
-      keys: bucket.keys.sort((a, b) => a.key.localeCompare(b.key)),
+      keys: bucket.keys.sort((a, b) => compareText(a.key, b.key)),
     }))
-    .sort((a, b) => a.namespace.localeCompare(b.namespace));
+    .sort((a, b) => compareText(a.namespace, b.namespace));
 }
 
 export async function buildSessionDiscoverySnapshot(options: {

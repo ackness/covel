@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type { SearchablePluginDataResolver } from "@covel/memory";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
@@ -29,8 +30,8 @@ export function createSearchablePluginDataResolver(deps: {
     }
     return sources.sort(
       (a, b) =>
-        a.pluginId.localeCompare(b.pluginId) ||
-        a.namespace.localeCompare(b.namespace),
+        compareText(a.pluginId, b.pluginId) ||
+        compareText(a.namespace, b.namespace),
     );
   };
 }

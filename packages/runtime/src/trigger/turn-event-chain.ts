@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type {
   RuntimeManifest,
   RuntimeResult,
@@ -190,7 +191,7 @@ export async function runEventChain({
 
     // Keep background handoffs deterministic; synchronous ordering below comes
     // from the same dependency DAG used by staged runtimes.
-    const ordered = [...nextBatch].sort((a, b) => a.name.localeCompare(b.name));
+    const ordered = [...nextBatch].sort((a, b) => compareText(a.name, b.name));
 
     const currentDepthEvents = new Map(emittedEvents);
     const newEvents = new Map<string, Record<string, unknown>>();

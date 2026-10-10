@@ -1,5 +1,6 @@
 /** Captures committed world state and caller-resolved history summaries once per execution. */
 
+import { compareText } from "@covel/shared";
 import {
   instructionLocaleFor,
   localizedWorldText,
@@ -229,7 +230,7 @@ function compileLorebookContributions(
     )
     .slice()
     .sort(
-      (a, b) => a.insertionOrder - b.insertionOrder || a.id.localeCompare(b.id),
+      (a, b) => a.insertionOrder - b.insertionOrder || compareText(a.id, b.id),
     )
     .map((record) => {
       const extra = normalizeLorebookExtra(record.extra);

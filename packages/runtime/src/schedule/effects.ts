@@ -17,6 +17,7 @@
  * agent hazard against every other and drown the diagnostics).
  */
 
+import { compareText } from "@covel/shared";
 import type {
   EffectResource,
   RuntimeManifest,
@@ -231,7 +232,7 @@ export function applyHazardPolicy(
     }
 
     const sorted = [...group.runtimes].sort((x, y) =>
-      x.name.localeCompare(y.name),
+      compareText(x.name, y.name),
     );
     const effectsByName = new Map<string, RuntimeEffects>();
     for (const rt of sorted) effectsByName.set(rt.name, deriveEffects(rt));

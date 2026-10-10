@@ -11,11 +11,13 @@ export default function register(api) {
               presetId: "fast",
               system: request.systemPrompt,
               messages: request.messages,
+              maxOutputTokens: request.maxOutputTokens,
               signal: ctx.signal,
             });
-            if (result.finishReason === "length")
-              throw new Error("History summary generation was truncated");
-            return { content: result.text };
+            return {
+              content: result.text,
+              truncated: result.finishReason === "length",
+            };
           },
         },
       });

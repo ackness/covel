@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type { PackageManifest } from "@covel/plugin-loader";
 /**
  * Session event directory — aggregates the `events` contracts declared by
@@ -271,7 +272,7 @@ export function createEventDirectory(
     async catalogText(sessionId, locale) {
       const entries = [...collectSessionEvents(sessionId).values()]
         .filter((entry) => entry.decl.advertise)
-        .sort((a, b) => a.decl.topic.localeCompare(b.decl.topic));
+        .sort((a, b) => compareText(a.decl.topic, b.decl.topic));
       if (entries.length === 0) return "";
 
       const lines: string[] = [];

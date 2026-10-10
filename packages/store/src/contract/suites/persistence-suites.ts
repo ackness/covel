@@ -66,8 +66,22 @@ export function registerPersistenceStoreSuites(
       expect(list.map((s) => s.id)).toEqual([earlier.id, later.id]);
     });
 
-    it("should markSuspensionResolved — sets resolvedAt, leaves other fields intact", async () => {
-      const suspension = makeSuspension({ sessionId: "sess-susp-res" });
+    it("should markSuspensionResolved — sets resolvedAt and drops the consumed continuation", async () => {
+      const base = makeSuspension({ sessionId: "sess-susp-res" });
+      const suspension = {
+        ...base,
+        pendingContinuation: {
+          ...base.pendingContinuation,
+          messages: [{ role: "system", content: "x".repeat(20_000) }],
+          toolCallsSoFar: [{ name: "ask" }],
+          pendingProposals: [{ type: "state.patch" }],
+          partialContent: "Half a sentence",
+          suspendToolCallId: "call-1",
+          emittedEvents: [{ topic: "t" }],
+          locale: "en-US",
+          logicalTurn: 3,
+        },
+      };
       await store.saveSuspension(suspension);
       await store.markSuspensionResolved(suspension.id);
 
@@ -77,6 +91,23 @@ export function registerPersistenceStoreSuites(
       // Other fields unchanged
       expect(result!.reason).toBe(suspension.reason);
       expect(result!.runtimeId).toBe(suspension.runtimeId);
+      expect(result!.resumeSchema).toEqual(suspension.resumeSchema);
+      // The identity of the execution stays; what the resume consumed goes.
+      expect(result!.pendingContinuation).toEqual({
+        messages: [],
+        toolCallsSoFar: [],
+        pendingProposals: [],
+        executionContext: suspension.pendingContinuation.executionContext,
+        locale: "en-US",
+        logicalTurn: 3,
+      });
+      // A claim keeps everything: its resume has not committed yet.
+      const claimed = makeSuspension({ sessionId: "sess-susp-res" });
+      await store.saveSuspension(claimed);
+      await store.claimSuspension(claimed.id);
+      expect(
+        (await store.getSuspension(claimed.id))!.pendingContinuation,
+      ).toEqual(claimed.pendingContinuation);
     });
 
     it("should deleteSuspension — removes only the targeted record", async () => {

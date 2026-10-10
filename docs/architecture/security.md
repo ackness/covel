@@ -59,6 +59,12 @@ publicly routable, loopback hostnames must resolve to loopback (`self` tier only
 on a hosted tier they are rejected), and the socket is pinned to the validated
 answer.
 
+No environment variable turns the dispatcher off. A test run replaces global
+`fetch` to stand in for a provider, and the transport sends requests to that
+replacement only where the run's own setup code (`vitest.base.ts`) has set a mark
+on `globalThis` (`OUTBOUND_TEST_FETCH_HOOK` in `outbound-network.ts`). A server
+started with `NODE_ENV=test` has no such mark and keeps the pinned transport.
+
 ### Response size ceiling
 
 The endpoint that answers a provider request can be one a player named, so the

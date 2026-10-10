@@ -2,6 +2,7 @@
  * Unified server entry (PLUGIN.md `entry`) — puts the quest the player is on
  * into the session summary: its next open objective and how far along it is.
  */
+import { compareText } from "@covel/plugin-handlers-utils";
 import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 
 export default function (covel) {
@@ -17,7 +18,7 @@ export default function (covel) {
             (value.status ?? "active") === "active",
         )
         .sort((a, b) =>
-          String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")),
+          compareText(String(b.updatedAt ?? ""), String(a.updatedAt ?? "")),
         )[0];
       if (!quest) return appendSummaryEntries(previous, []);
       const objectives = (

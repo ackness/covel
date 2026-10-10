@@ -26,6 +26,7 @@
  * running it in an arbitrary order.
  */
 
+import { compareText } from "@covel/shared";
 import type { DependencyRef, RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec } from "@covel/shared";
 import type { ScheduledGroup } from "../types.js";
@@ -214,7 +215,7 @@ export function scheduleByDag(
         if (rt) ready.push(rt);
       }
     }
-    ready.sort((a, b) => a.name.localeCompare(b.name));
+    ready.sort((a, b) => compareText(a.name, b.name));
     return ready;
   };
 

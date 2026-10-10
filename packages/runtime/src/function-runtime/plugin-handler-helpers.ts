@@ -7,6 +7,7 @@
  * cannot use them to reach another plugin's data.
  */
 
+import { compareText } from "@covel/shared";
 import { worldForSession } from "./world-model-view.js";
 import type { DataStore, TurnMessageRecord } from "@covel/store";
 import type {
@@ -456,7 +457,7 @@ export function createPluginLogger(
         LOGS_NAMESPACE,
       );
       if (rows.length > MAX_LOG_ENTRIES) {
-        const sorted = [...rows].sort((a, b) => a.key.localeCompare(b.key));
+        const sorted = [...rows].sort((a, b) => compareText(a.key, b.key));
         const excess = sorted.length - MAX_LOG_ENTRIES;
         for (const row of sorted.slice(0, excess)) {
           await store.deletePluginData(

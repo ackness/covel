@@ -5,20 +5,29 @@ import { getJson } from "../src/adapters/http.js";
 import {
   configureOutboundProxy,
   normalizeOutboundProxyConfig,
+  OUTBOUND_TEST_FETCH_HOOK,
   outboundFetch,
   parseSystemProxyRoutes,
   resetOutboundProxyForTests,
 } from "../src/outbound-network.js";
 
+/** Run as a process outside a test run does: no use of global `fetch`. */
+function useProductionTransport(): void {
+  Reflect.set(globalThis, OUTBOUND_TEST_FETCH_HOOK, false);
+}
+
 afterEach(async () => {
+  Reflect.set(globalThis, OUTBOUND_TEST_FETCH_HOOK, true);
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   await resetOutboundProxyForTests();
 });
 
 describe("outbound network transport", () => {
-  it("pairs an npm Undici dispatcher with npm Undici fetch", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+  it("pairs an npm Undici dispatcher with npm Undici fetch, also under NODE_ENV=test", async () => {
+    // The environment alone must not move requests off the guarded transport.
+    vi.stubEnv("NODE_ENV", "test");
+    useProductionTransport();
     const incompatibleGlobalFetch = vi.fn().mockRejectedValue(
       new TypeError("fetch failed", {
         cause: new Error("invalid onRequestStart method"),
@@ -90,7 +99,6 @@ describe("outbound network transport", () => {
   });
 
   it("resolves system proxy rules for every concrete target URL", async () => {
-    vi.stubEnv("NODE_ENV", "test");
     const fetchMock = vi.fn().mockResolvedValue(new Response("ok"));
     vi.stubGlobal("fetch", fetchMock);
     const resolveSystemProxy = vi.fn(async (targetUrl: string) =>
@@ -129,7 +137,6 @@ describe("outbound network transport", () => {
   });
 
   it("falls back through system routes only after connection failures", async () => {
-    vi.stubEnv("NODE_ENV", "test");
     const connectionFailure = new TypeError("fetch failed", {
       cause: Object.assign(new Error("connect ECONNREFUSED proxy"), {
         code: "ECONNREFUSED",
@@ -161,7 +168,6 @@ describe("outbound network transport", () => {
   });
 
   it("falls back after a SOCKS5 destination connection failure", async () => {
-    vi.stubEnv("NODE_ENV", "test");
     const socksFailure = new TypeError("fetch failed", {
       cause: Object.assign(
         new Error("SOCKS5 connection failed: Connection refused"),
@@ -185,7 +191,7 @@ describe("outbound network transport", () => {
   });
 
   it("routes core provider requests through an HTTP proxy", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    useProductionTransport();
     let proxyConnections = 0;
     const target = createServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
@@ -244,7 +250,6 @@ describe("outbound network transport", () => {
   });
 
   it("surfaces the nested transport cause", async () => {
-    vi.stubEnv("NODE_ENV", "test");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockRejectedValue(

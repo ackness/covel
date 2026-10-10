@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import {
   applyCursorAfter,
   applyPagination,
@@ -59,7 +60,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     async listTurnResults(sessionId, limit?) {
       const filtered = state.turnResults
         .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        .sort((a, b) => compareText(a.createdAt, b.createdAt));
       return limit !== undefined ? filtered.slice(0, limit) : filtered;
     },
 
@@ -122,8 +123,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       // `id` tie-break mirrors the SQL backends so offset paging is stable.
       rows = [...rows].sort(
         (a, b) =>
-          b.timestamp.localeCompare(a.timestamp) ||
-          compareByteOrder(b.id, a.id),
+          compareText(b.timestamp, a.timestamp) || compareByteOrder(b.id, a.id),
       );
       const offset = filters?.offset ?? 0;
       if (offset > 0 || filters?.limit !== undefined) {
@@ -152,7 +152,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       if (filters?.targetPluginId) {
         rows = rows.filter((r) => r.targetPluginId === filters.targetPluginId);
       }
-      rows = [...rows].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      rows = [...rows].sort((a, b) => compareText(b.timestamp, a.timestamp));
       if (filters?.limit !== undefined) {
         rows = rows.slice(0, filters.limit);
       }
@@ -228,7 +228,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
             r.tableName === tableName &&
             r.fieldName === fieldName,
         )
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        .sort((a, b) => compareText(a.createdAt, b.createdAt));
     },
 
     async saveEvent(record) {

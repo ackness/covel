@@ -35,6 +35,14 @@ async function seed() {
         payload: {},
         createdAt: new Date(Date.now() - age * DAY).toISOString(),
       });
+      await store.saveEvent({
+        id: `${id}-event-${suffix}`,
+        sessionId: id,
+        type: "plugin-data.changed",
+        topic: "plugin",
+        payload: {},
+        createdAt: new Date(Date.now() - age * DAY).toISOString(),
+      });
     }
   }
   return store;
@@ -59,6 +67,10 @@ describe("maybeSweepOldTraces", () => {
     expect(await maybeSweepOldTraces(store, { force: true })).toBe(2);
     expect(await ids(store, "a")).toEqual(["a-new"]);
     expect(await ids(store, "b")).toEqual(["b-new"]);
+    // The event trail is the other diagnostic journal and has the same period.
+    expect((await store.listEvents("a")).map((event) => event.id)).toEqual([
+      "a-event-new",
+    ]);
   });
 
   it("runs at most once a day unless forced", async () => {
@@ -132,6 +144,7 @@ describe("maybeSweepOldTraces", () => {
     const flaky = {
       listSessions: () => store.listSessions(),
       queryTraceEvents: store.queryTraceEvents.bind(store),
+      deleteEventsBefore: store.deleteEventsBefore.bind(store),
       deleteTraceEventsBefore: async (id: string, before: string) => {
         if (id === "a") throw new Error("disk");
         await real(id, before);

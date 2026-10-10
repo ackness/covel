@@ -426,6 +426,7 @@ export {
   overlayPluginDataRows,
 } from "./proposal-overlay.js";
 
+export { compareText } from "./compare-text.js";
 export { estimateTokens } from "./token-estimation.js";
 export { rankTexts, searchExcerpt, searchTerms } from "./text-search.js";
 export type { RankedText, RankTextsOptions } from "./text-search.js";

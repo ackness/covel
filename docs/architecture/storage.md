@@ -478,6 +478,17 @@ state entry keeps its ID, a world or lorebook entry keeps its creation time, and
 a re-saved suspension keeps its turn, runtime, plugin and creation time. Memory,
 SQLite and PostgreSQL agree on this; the shared contract suite checks it.
 
+A pending suspension holds the whole request it continues: the messages up to
+the suspend point, the tool calls and proposals buffered so far, the frozen
+inputs. Resume sends that transcript on unchanged, so none of it can be rebuilt
+from the session's later state. When the resume commits,
+`markSuspensionResolved` keeps the row (a repeated resume request and the
+session's list of suspensions still find it) and drops what the resume consumed:
+a resolved row holds the execution identity, locale and turn number only
+(`settledSuspensionContinuation`). Snapshots copy pending suspensions only, so a
+resolved one never carries a prompt into a snapshot, a fork, an export or the
+browser checkpoint.
+
 SQLite's turn-result append-position query uses the covering index
 `(session_id, created_at, seq)`. The boot DDL derives that index from the Drizzle
 schema. This preserves existing sequence allocation and ordering; it does not
@@ -560,7 +571,8 @@ and how the Web app uses them: [`settings-store.md`](../reference/settings-store
 
 ## Retention Of Operational Records
 
-Execution bookkeeping grows with every turn, so each kind has an explicit bound:
+Execution bookkeeping grows with every turn. The kinds in this table have a
+bound; the ones below it are kept for as long as the session exists.
 
 | Record                                      | Bound                                                                                                                                                                                                                                                                                                          |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -569,6 +581,22 @@ Execution bookkeeping grows with every turn, so each kind has an explicit bound:
 | `_runtime_jobs` and their `job_status` rows | Unfinished jobs are kept; terminal jobs keep the newest 20 per session runtime.                                                                                                                                                                                                                                |
 | `_logs`                                     | Ring of 200 rows per plugin, trimmed on a logger's first write and every 20th after, so one execution can briefly exceed it.                                                                                                                                                                                   |
 | `trace_events`                              | 30 days by default (`COVEL_TRACE_RETENTION_DAYS`, `0` keeps all; the player's Settings choice, stored in `server_settings`, applies when the variable is unset). Pruned per session after a commit, and for every session at start and once a day. The newest turn's rows stay: execution recovery reads them. |     |
+| `events` (the event trail)                  | The same period as `trace_events`, in the same sweeps. The bus stores a copy of every event it publishes, the whole value of each changed plugin row included; no code reads a row after it is published, except another pod fetching an oversize event by its ID.                                             |
+
+Kept for the life of the session, and deleted with it: `turn_results`,
+`runtime_outputs`, `tool_calls`, `interactions`, `player_inputs`, state changes,
+the revisions of runtime exports, and the logical-turn and setup-attempt ledgers.
+Each is a row or a few rows per execution holding results, not prompts (the
+prompts are in `trace_events`), and each has a reader that can name an old row: a
+retry names a source turn, the media reference scan reads every turn result and
+runtime output, the debug API lists runtime outputs and interactions, a state
+entry's history is its change rows, and a background job reads exports as of the
+instant its source execution began. They are not copied whole into the browser
+checkpoint (see [Browser-Private Protocol](#browser-private-protocol)). Revisit
+when the database of a server-stored session is dominated by these tables
+rather than by messages, snapshots and traces: the first candidates are
+`tool_calls` (no reader in the server) and export revisions older than the
+earliest unfinished job.
 
 SQLite does not return the pages of deleted rows to the file system unless
 the file was created with `auto_vacuum = INCREMENTAL`. A database created by

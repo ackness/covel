@@ -1,3 +1,4 @@
+import { compareText } from "@covel/plugin-handlers-utils";
 import { evaluateCondition } from "./conditions.js";
 
 /** Whether an event may fire again given its previous reveal record. */
@@ -32,7 +33,7 @@ export function selectEvent({ events, revealed, state, turn }) {
     if (met) candidates.push(event);
   }
   candidates.sort(
-    (a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.id.localeCompare(b.id),
+    (a, b) => (b.priority ?? 0) - (a.priority ?? 0) || compareText(a.id, b.id),
   );
   return {
     event: candidates[0] ?? null,

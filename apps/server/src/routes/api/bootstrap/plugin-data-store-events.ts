@@ -59,10 +59,10 @@ function emitPluginDataChangedEvent(
     payload: {
       _subType: "plugin-data.changed",
       pluginId,
+      // The whole payload: the client writes each change into its copy of
+      // the plugin's data and reads nothing back, so a change carries the
+      // row's public value and no other field.
       changes,
-      // The proxy is the single emission layer for plugin-data.changed.
-      // Commit-chain writes and direct store writes both pass through here.
-      source: "store-proxy",
     },
     sessionId,
     timestamp: new Date().toISOString(),

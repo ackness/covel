@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { WorldDataDiagnostic } from "./types.js";
 import type { ParsedWorldDataTarget } from "./target-uri.js";
@@ -55,7 +56,7 @@ export function resolveWorldDataTargets(
     });
   return receivers.sort(
     (a, b) =>
-      a.pluginId.localeCompare(b.pluginId) ||
-      a.namespace.localeCompare(b.namespace),
+      compareText(a.pluginId, b.pluginId) ||
+      compareText(a.namespace, b.namespace),
   );
 }

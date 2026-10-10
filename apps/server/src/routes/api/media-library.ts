@@ -15,6 +15,7 @@
  * index, so they answer `503`.
  */
 
+import { compareText } from "@covel/shared";
 import type { Context, Hono } from "hono";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
 import { errorBody } from "../../api-error.js";
@@ -150,8 +151,8 @@ function buildSnapshot(
     };
   });
   entries.sort((a, b) => {
-    const byCreated = b.createdAt.localeCompare(a.createdAt);
-    return byCreated === 0 ? a.id.localeCompare(b.id) : byCreated;
+    const byCreated = compareText(b.createdAt, a.createdAt);
+    return byCreated === 0 ? compareText(a.id, b.id) : byCreated;
   });
   return {
     scannedAt: new Date().toISOString(),
