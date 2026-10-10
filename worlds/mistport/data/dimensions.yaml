@@ -408,7 +408,7 @@ factions:
           description: 依赖议会资金，提供遗物鉴定，保持名义独立
         - targetId: salt-fangs
           type: complicated
-          description: 公开敌对走私，私下铁姑曾是公会学徒，旧情难断
+          description: 公开敌对走私
     - id: salt-fangs
       name: 盐牙会
       description: 控制下潮区遗物黑市的走私帮派，势力深植底层；二当家铁姑守信，暗中搜集遗物碎片。
