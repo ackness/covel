@@ -110,8 +110,22 @@ describe("characterSheetSegments", () => {
       createdAt: "2026-10-06T00:00:00.000Z",
       updatedAt: "2026-10-06T00:00:00.000Z",
       attributes: [
-        { id: "might", name: "Might", type: "number", min: 0, max: 5, category: "abilities" },
-        { id: "hp", name: "HP", type: "number", min: 1, max: 20, category: "stats" },
+        {
+          id: "might",
+          name: "Might",
+          type: "number",
+          min: 0,
+          max: 5,
+          category: "abilities",
+        },
+        {
+          id: "hp",
+          name: "HP",
+          type: "number",
+          min: 1,
+          max: 20,
+          category: "stats",
+        },
         { id: "calling", name: "Calling", type: "string", category: "bio" },
       ],
     } as const;
