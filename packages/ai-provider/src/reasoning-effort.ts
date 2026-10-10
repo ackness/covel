@@ -366,7 +366,7 @@ export function reasoningRequestFields(
       (option) => option.value === selection,
     );
     if (!supportsSelection) {
-      return family === "qwen" && isQwenThinkingOnlyModel(model)
+      return family === "qwen" && isQwenThinkingOnlyModel(model.toLowerCase())
         ? { enable_thinking: true }
         : {};
     }
@@ -387,7 +387,7 @@ export function anthropicReasoningFields({
   const adaptive =
     family === "anthropic" &&
     /claude-(?:(?:fable|mythos|opus|sonnet)-5|opus-4-[678]|sonnet-4-6)/.test(
-      model,
+      model.toLowerCase(),
     );
   return {
     ...(family === "deepseek" ? { thinking: { type: "enabled" } } : {}),
@@ -413,9 +413,10 @@ export function googleReasoningFields({
   protocol,
 }: ReasoningWireRequest): Record<string, unknown> {
   if (family !== "google") return {};
-  const option = resolveGeminiReasoningProfile(model, protocol)?.options.find(
-    (entry) => entry.value === selection,
-  );
+  const option = resolveGeminiReasoningProfile(
+    model.toLowerCase(),
+    protocol,
+  )?.options.find((entry) => entry.value === selection);
   if (!option) return {};
   return {
     thinkingConfig:
@@ -471,7 +472,7 @@ export function openAiChatReasoningFields({
         thinking_budget: option.thinkingBudgetTokens,
       };
     }
-    if (/qwen3\.8-/.test(model) && selection !== "automatic") {
+    if (/qwen3\.8-/.test(model.toLowerCase()) && selection !== "automatic") {
       return {
         enable_thinking: selection !== "disabled",
         reasoning_effort: selection === "disabled" ? "none" : selection,
