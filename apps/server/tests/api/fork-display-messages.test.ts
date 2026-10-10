@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -33,7 +33,15 @@ const at = "2026-09-01T00:00:00.000Z";
 let store: DataStore;
 let mediaStore: MediaStore;
 let app: Pick<Hono, "request">;
+// The fork route's rate limiter outlives one test app. Every test starts at
+// least one window later, so the requests of earlier tests do not count.
+let testClock = Date.now();
+afterEach(() => {
+  vi.useRealTimers();
+});
 beforeEach(async () => {
+  testClock += 120_000;
+  vi.useFakeTimers({ toFake: ["Date"], now: testClock });
   store = createMemoryStore();
   mediaStore = createMemoryMediaStore();
   await store.createSession({

@@ -11,7 +11,7 @@
  * the single source of truth for the session-content surface.
  */
 
-import { and, asc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
 import {
@@ -98,6 +98,7 @@ export type SqlSessionContentRecords = Pick<
   | "commitPlayerInputMessage"
   | "listMessages"
   | "listMessagesPage"
+  | "listExistingMessageIds"
   | "getCharacterSchema"
   | "upsertCharacterSchema"
   | "upsertCharacter"
@@ -234,6 +235,26 @@ export function createSqlSessionContentRecords(
         limit: opts.limit,
       });
       return rows.reverse().map((row) => toMessageRecord(row, json));
+    },
+
+    async listExistingMessageIds(
+      sessionId: string,
+      ids: readonly string[],
+    ): Promise<string[]> {
+      const wanted = [...new Set(ids)];
+      const found: string[] = [];
+      // Chunked so a large request stays under the bound-parameter limit.
+      for (let start = 0; start < wanted.length; start += 500) {
+        const rows = await runner.select<{ id: string }>(messages, {
+          columns: { id: messages.id },
+          where: and(
+            eq(messages.sessionId, sessionId),
+            inArray(messages.id, wanted.slice(start, start + 500)),
+          ),
+        });
+        found.push(...rows.map((row) => row.id));
+      }
+      return found;
     },
 
     async getCharacterSchema(

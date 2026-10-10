@@ -16,6 +16,7 @@ export {
   ProviderResponseTooLargeError,
   readResponseBytes,
   readResponseJson,
+  readResponseText,
 } from "./http/response.js";
 export { MAX_BINARY_RESPONSE_BYTES } from "./http/constants.js";
 export {

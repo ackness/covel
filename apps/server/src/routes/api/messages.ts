@@ -61,7 +61,8 @@ function flattenMessage(m: {
 
 // GET /sessions/:id/messages — full history used by the snapshot-miss fallback
 // and bulk sync. Prefer /messages/page for windowed reads on long sessions.
-messageRoutes.get("/:id/messages", async (c) => {
+// Rate-limited like the page read: one call costs the whole history.
+messageRoutes.get("/:id/messages", rateLimiter({ max: 120 }), async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const guard = await resolveSessionParam(c);
@@ -118,8 +119,13 @@ messageRoutes.post(
       allowedStatuses: ["active"],
       mutate: async () => {
         await store.withTransaction(async (tx) => {
+          // Only an ID the request carries can already be stored, so only
+          // those are looked up; the session's history is not read.
           const existingIds = new Set(
-            (await tx.listMessages(sessionId)).map((message) => message.id),
+            await tx.listExistingMessageIds(
+              sessionId,
+              parsed.body.messages.flatMap((msg) => (msg.id ? [msg.id] : [])),
+            ),
           );
           for (const msg of parsed.body.messages) {
             if (msg.id && existingIds.has(msg.id)) continue;

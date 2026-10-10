@@ -20,6 +20,9 @@ import {
   sameSettingValue,
 } from "./versioned-persistence.js";
 
+/** Waits before each retry of a failed first read of the server's settings. */
+const SERVER_SETTINGS_RETRY_MS = [1_000, 3_000, 9_000] as const;
+
 /**
  * Core settings store. Tier-aware via the injected backend adapter.
  *
@@ -99,9 +102,25 @@ export class SettingsStore implements SettingsStoreApi {
       this.initPromise = this.hydrate();
       // The device's settings do not wait for the server, and a server that
       // does not answer leaves its settings locked on their defaults.
-      void this.serverScoped.refresh().catch(() => undefined);
+      this.loadServerSettings(0);
     }
     return this.initPromise;
+  }
+
+  /**
+   * Read the server's settings; after a failure try again a few times, so that
+   * a page opened before the server was up does not wait for a focus event.
+   */
+  private loadServerSettings(attempt: number): void {
+    this.serverScoped.refresh().catch(() => {
+      const delay = SERVER_SETTINGS_RETRY_MS[attempt];
+      if (delay === undefined) return;
+      const timer = setTimeout(() => {
+        if (!this.serverScoped.isReady) this.loadServerSettings(attempt + 1);
+      }, delay);
+      // A pending retry never keeps a Node process alive.
+      (timer as { unref?: () => void }).unref?.();
+    });
   }
 
   serverSetting(key: SettingKey): ServerSettingState | undefined {

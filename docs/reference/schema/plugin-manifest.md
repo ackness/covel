@@ -10,42 +10,42 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## Top-level fields
 
-| Field         | Type                        | Required | Description                                                                                                                                                                                                  |
-| ------------- | --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`          | string                      | yes      | Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. Example: `"dice-check"`.                                                                                 |
-| `kind`        | `"core"` or `"plugin"`      | yes      | Package kind. `core` marks a core plugin; other packages use `plugin`.                                                                                                                                       |
-| `version`     | string                      | no       | Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.                                                                                  |
-| `covel`       | string                      | no       | Host version range this package supports. A host outside it does not install or load the package. Example: `">=0.0.45"`.                                                                                     |
-| `displayName` | text (string or locale map) | no       | Player-facing name. Plain string or a locale map.                                                                                                                                                            |
-| `description` | text (string or locale map) | yes      | What the package does. Plain string or a locale map with at least one entry.                                                                                                                                 |
-| `tags`        | list of string              | no       | Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts.                                                                                                             |
-| `author`      | object                      | no       | Who made the package. Shown on the package's cards before play, never during play.                                                                                                                           |
-| `license`     | string                      | no       | License of the package: an SPDX identifier or a short name. Example: `"MIT"`, `"CC-BY-4.0"`.                                                                                                                 |
-| `homepage`    | string                      | no       | Page of the package itself, such as its repository or documentation. `https` only. Example: `"https://example.com/my-package"`.                                                                              |
-| `provides`    | list of string or object    | no       | Versioned contracts this package provides, such as `narrative-engine@1`.                                                                                                                                     |
-| `requires`    | list of string              | no       | Contracts that must have an active provider. The resolver adds one when the package is active.                                                                                                               |
-| `optional`    | list of string              | no       | Contracts this package uses when a provider is active. They do not activate a provider.                                                                                                                      |
-| `conflicts`   | list of string              | no       | Contracts whose other providers cannot be active together with this package. Plugin contracts only.                                                                                                          |
-| `contracts`   | map of object               | no       | Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. |
-| `entry`       | string                      | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.                                                                                               |
-| `contributes` | object                      | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                               |
-| `runtime`     | object                      | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                       |
+| Field         | Type                     | Required | Description                                                                                                                                                                                                  |
+| ------------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`          | string                   | yes      | Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. Example: `"dice-check"`.                                                                                 |
+| `kind`        | `"core"` or `"plugin"`   | yes      | Package kind. `core` marks a core plugin; other packages use `plugin`.                                                                                                                                       |
+| `version`     | string                   | no       | Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.                                                                                  |
+| `covel`       | string                   | no       | Host version range this package supports. A host outside it does not install or load the package. Example: `">=0.0.45"`.                                                                                     |
+| `displayName` | text                     | no       | Player-facing name. Plain string; translations go in locale files.                                                                                                                                           |
+| `description` | text                     | yes      | What the package does. Plain string; translations go in locale files.                                                                                                                                        |
+| `tags`        | list of string           | no       | Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts.                                                                                                             |
+| `author`      | object                   | no       | Who made the package. Shown on the package's cards before play, never during play.                                                                                                                           |
+| `license`     | string                   | no       | License of the package: an SPDX identifier or a short name. Example: `"MIT"`, `"CC-BY-4.0"`.                                                                                                                 |
+| `homepage`    | string                   | no       | Page of the package itself, such as its repository or documentation. `https` only. Example: `"https://example.com/my-package"`.                                                                              |
+| `provides`    | list of string or object | no       | Versioned contracts this package provides, such as `narrative-engine@1`.                                                                                                                                     |
+| `requires`    | list of string           | no       | Contracts that must have an active provider. The resolver adds one when the package is active.                                                                                                               |
+| `optional`    | list of string           | no       | Contracts this package uses when a provider is active. They do not activate a provider.                                                                                                                      |
+| `conflicts`   | list of string           | no       | Contracts whose other providers cannot be active together with this package. Plugin contracts only.                                                                                                          |
+| `contracts`   | map of object            | no       | Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. |
+| `entry`       | string                   | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.                                                                                               |
+| `contributes` | object                   | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                               |
+| `runtime`     | object                   | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                       |
 
 ## `author`
 
-| Field   | Type                        | Required | Description                                                                                                     |
-| ------- | --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
-| `name`  | string                      | yes      | Name of the person or team. Shown as written in every language. Example: `"Jane Doe"`.                          |
-| `url`   | string                      | no       | The author's own page. `https` only. Example: `"https://example.com"`.                                          |
-| `about` | text (string or locale map) | no       | A short message from the author to players: who they are, what else they make, how to support them. Plain text. |
-| `links` | list of object              | no       | Links the author wants players to see, such as a community, a support page or other work. At most 6.            |
+| Field   | Type           | Required | Description                                                                                                     |
+| ------- | -------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `name`  | string         | yes      | Name of the person or team. Shown as written in every language. Example: `"Jane Doe"`.                          |
+| `url`   | string         | no       | The author's own page. `https` only. Example: `"https://example.com"`.                                          |
+| `about` | text           | no       | A short message from the author to players: who they are, what else they make, how to support them. Plain text. |
+| `links` | list of object | no       | Links the author wants players to see, such as a community, a support page or other work. At most 6.            |
 
 ## `author.links[]`
 
-| Field   | Type                        | Required | Description                                                                                                                                   |
-| ------- | --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label` | text (string or locale map) | yes      | Text of the link. Example: `"Discord"`.                                                                                                       |
-| `url`   | string                      | yes      | Address of the link. `https` only. The player sees the full address and confirms before it opens. Example: `"https://example.com/community"`. |
+| Field   | Type   | Required | Description                                                                                                                                   |
+| ------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label` | text   | yes      | Text of the link. Example: `"Discord"`.                                                                                                       |
+| `url`   | string | yes      | Address of the link. `https` only. The player sees the full address and confirms before it opens. Example: `"https://example.com/community"`. |
 
 ## `provides[]`
 
@@ -85,7 +85,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | ------------- | -------------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
 | `name`        | string                                                   | yes      | Command name in lowercase kebab-case, without the leading slash.            |
 | `aliases`     | list of string                                           | no       | Other names that invoke the same command.                                   |
-| `description` | text (string or locale map)                              | yes      | What the command does. Shown to the player.                                 |
+| `description` | text                                                     | yes      | What the command does. Shown to the player.                                 |
 | `arguments`   | list of object                                           | no       | Positional arguments, in order. Names must be unique.                       |
 | `action`      | string                                                   | yes      | RPC action the command invokes. It must be listed in `contributes.actions`. |
 | `context`     | list of `"session"` or `"active-runtimes"` or `"models"` | no       | Host context scopes passed to the action.                                   |
@@ -96,7 +96,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | ------------- | ------------------------------------------------------ | -------- | ---------------------------------------------------------------------------- |
 | `name`        | string                                                 | yes      | Argument name in lowercase kebab-case.                                       |
 | `type`        | `"string"` or `"integer"` or `"number"` or `"boolean"` | no       | Value type of the argument. Defaults to string.                              |
-| `description` | text (string or locale map)                            | no       | What the argument means. Shown to the player.                                |
+| `description` | text                                                   | no       | What the argument means. Shown to the player.                                |
 | `required`    | boolean                                                | no       | `true` when the player must supply the argument.                             |
 | `variadic`    | boolean                                                | no       | `true` collects all remaining words. Only the last argument can be variadic. |
 | `choices`     | list of string                                         | no       | Allowed values of the argument.                                              |
@@ -121,12 +121,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.events[]`
 
-| Field         | Type                        | Required | Description                                                                                    |
-| ------------- | --------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
-| `topic`       | string                      | yes      | Event topic in dot-separated kebab-case. Example: `"scene.set"`.                               |
-| `schema`      | string                      | yes      | Package-relative path of the JSON Schema that validates the event payload.                     |
-| `description` | text (string or locale map) | yes      | What the event means. Given to runtimes that may emit it.                                      |
-| `advertise`   | boolean                     | no       | `true` advertises the event to runtimes that emit events. Defaults to `true`. Default: `true`. |
+| Field         | Type    | Required | Description                                                                                    |
+| ------------- | ------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `topic`       | string  | yes      | Event topic in dot-separated kebab-case. Example: `"scene.set"`.                               |
+| `schema`      | string  | yes      | Package-relative path of the JSON Schema that validates the event payload.                     |
+| `description` | text    | yes      | What the event means. Given to runtimes that may emit it.                                      |
+| `advertise`   | boolean | no       | `true` advertises the event to runtimes that emit events. Defaults to `true`. Default: `true`. |
 
 ## `contributes.settings[]`
 
@@ -135,8 +135,8 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `key`         | string                                                                                                      | yes      | Setting key. Runtimes read it from `ctx.userSettings`.                            |
 | `type`        | `"text"` or `"textarea"` or `"number"` or `"integer"` or `"toggle"` or `"select"` or `"slider"` or `"slot"` | yes      | Control type. `select` needs `options`; `slot` lets the player pick a model slot. |
 | `default`     | any                                                                                                         | no       | Value used when neither the player nor the world sets one.                        |
-| `label`       | text (string or locale map)                                                                                 | yes      | Label shown in the settings panel.                                                |
-| `description` | text (string or locale map)                                                                                 | no       | Help text shown with the control.                                                 |
+| `label`       | text                                                                                                        | yes      | Label shown in the settings panel.                                                |
+| `description` | text                                                                                                        | no       | Help text shown with the control.                                                 |
 | `min`         | number                                                                                                      | no       | Minimum for numeric controls.                                                     |
 | `max`         | number                                                                                                      | no       | Maximum for numeric controls.                                                     |
 | `step`        | number                                                                                                      | no       | Step for numeric controls.                                                        |
@@ -144,10 +144,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.settings[].options[]`
 
-| Field   | Type                        | Required | Description                 |
-| ------- | --------------------------- | -------- | --------------------------- |
-| `value` | string                      | yes      | Stored value of the option. |
-| `label` | text (string or locale map) | yes      | Label shown for the option. |
+| Field   | Type   | Required | Description                 |
+| ------- | ------ | -------- | --------------------------- |
+| `value` | string | yes      | Stored value of the option. |
+| `label` | text   | yes      | Label shown for the option. |
 
 ## `contributes.data.*`
 
@@ -162,14 +162,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*.authoring`
 
-| Field      | Type                        | Required | Description                                                                                                                                                                                                           |
-| ---------- | --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`    | text (string or locale map) | yes      | Author-facing name of this content. Plain string or a locale map. Example: `"Starting quests"`.                                                                                                                       |
-| `summary`  | text (string or locale map) | no       | One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string or a locale map.                                                                            |
-| `hint`     | string                      | no       | How to write good records: what to include, limits, and links to other content. Read by authors and by generators.                                                                                                    |
-| `example`  | string                      | no       | Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema.                                                                                          |
-| `source`   | object                      | no       | The world data source an author declares to supply this content.                                                                                                                                                      |
-| `generate` | `"offer"` or `"default"`    | no       | Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`. |
+| Field      | Type                     | Required | Description                                                                                                                                                                                                           |
+| ---------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`    | text                     | yes      | Author-facing name of this content. Plain string; translations go in locale files. Example: `"Starting quests"`.                                                                                                      |
+| `summary`  | text                     | no       | One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string; translations go in locale files.                                                           |
+| `hint`     | string                   | no       | How to write good records: what to include, limits, and links to other content. Read by authors and by generators.                                                                                                    |
+| `example`  | string                   | no       | Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema.                                                                                          |
+| `source`   | object                   | no       | The world data source an author declares to supply this content.                                                                                                                                                      |
+| `generate` | `"offer"` or `"default"` | no       | Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`. |
 
 ## `contributes.data.*.authoring.source`
 
@@ -228,17 +228,17 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime`
 
-| Field         | Type                        | Required | Description                                                                                 |
-| ------------- | --------------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `type`        | `"agent"` or `"function"`   | yes      | `agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler. |
-| `description` | text (string or locale map) | no       | What the runtime does. Plain string or a locale map.                                        |
-| `schedule`    | object                      | no       | When and in what order the runtime runs.                                                    |
-| `io`          | object                      | no       | What the runtime reads and produces.                                                        |
-| `agent`       | object                      | no       | Settings of an `agent` runtime. Not allowed on a `function` runtime.                        |
-| `function`    | object                      | no       | Settings of a `function` runtime. Required when `type` is `function`.                       |
-| `guard`       | string                      | no       | Path of the guard module. It runs before the runtime and can skip it.                       |
-| `effects`     | object                      | no       | Declared read and write sets, used to detect parallel hazards.                              |
-| `permissions` | object                      | no       | Declared permission upper bounds.                                                           |
+| Field         | Type                      | Required | Description                                                                                 |
+| ------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `type`        | `"agent"` or `"function"` | yes      | `agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler. |
+| `description` | text                      | no       | What the runtime does. Plain string; translations go in locale files.                       |
+| `schedule`    | object                    | no       | When and in what order the runtime runs.                                                    |
+| `io`          | object                    | no       | What the runtime reads and produces.                                                        |
+| `agent`       | object                    | no       | Settings of an `agent` runtime. Not allowed on a `function` runtime.                        |
+| `function`    | object                    | no       | Settings of a `function` runtime. Required when `type` is `function`.                       |
+| `guard`       | string                    | no       | Path of the guard module. It runs before the runtime and can skip it.                       |
+| `effects`     | object                    | no       | Declared read and write sets, used to detect parallel hazards.                              |
+| `permissions` | object                    | no       | Declared permission upper bounds.                                                           |
 
 ## `runtime.schedule`
 

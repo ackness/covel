@@ -11,6 +11,10 @@ import { setProviderPriceMultipliers } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { LlmKeysPane } from "../LlmKeysPane.js";
 
+const sessionMocks = vi.hoisted(() => ({
+  llmConfig: undefined as { envKeyOverrides?: string[] } | undefined,
+}));
+
 const storeMocks = vi.hoisted(() => {
   let key = "";
   const listeners = new Set<(value: unknown, settingKey: string) => void>();
@@ -58,7 +62,9 @@ vi.mock("@/services/api.js", () => ({
 }));
 
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({ state: { llmConfig: undefined, presets: [] } }),
+  useSession: () => ({
+    state: { llmConfig: sessionMocks.llmConfig, presets: [] },
+  }),
 }));
 
 vi.mock("../../widgets/index.js", () => ({ SettingWidget: () => null }));
@@ -74,6 +80,7 @@ vi.mock("@/lib/desktop-bridge.js", () => ({
 describe("LlmKeysPane", () => {
   beforeEach(async () => {
     storeMocks.reset();
+    sessionMocks.llmConfig = undefined;
     vi.mocked(setProviderPriceMultipliers).mockReset();
     vi.mocked(emitToast).mockReset();
     await i18n.changeLanguage("en-US");
@@ -87,6 +94,20 @@ describe("LlmKeysPane", () => {
 
     expect(screen.getByTestId("ping")).toBeDefined();
   });
+  it("tells the player when the environment overrides the saved key", async () => {
+    sessionMocks.llmConfig = { envKeyOverrides: ["proxy"] };
+    render(<LlmKeysPane providerId="proxy" showIntro={false} />);
+    expect(
+      screen.queryByText(i18n.t("settings.keyOverriddenByEnv")),
+    ).toBeNull();
+
+    await act(async () => storeMocks.setKey("fixture-personal-secret"));
+
+    expect(
+      screen.getByText(i18n.t("settings.keyOverriddenByEnv")),
+    ).toBeDefined();
+  });
+
   it("restores the confirmed price and reports a rejected save once", async () => {
     vi.mocked(setProviderPriceMultipliers).mockRejectedValueOnce(
       new Error("synthetic quota error"),

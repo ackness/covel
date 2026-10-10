@@ -336,9 +336,7 @@ factions:
       headquarters: Upper City — Guild Tower
       relations:
         - description: Funded by the Council, provides appraisal, keeps nominal independence
-        - description:
-            Publicly opposes the smugglers, yet Iron Meg was once a Guild
-            apprentice — old ties linger
+        - description: Publicly opposes the smugglers
     - id: salt-fangs
       name: Salt Fangs
       description:

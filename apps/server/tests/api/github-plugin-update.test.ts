@@ -404,6 +404,28 @@ it.each(["before-promotion", "after-promotion"])(
   },
 );
 
+it("skips a package whose recovery is ambiguous instead of aborting start", async () => {
+  await install();
+  head = second;
+  await queue();
+  const directory = pendingPackagePath(root, "example-note");
+  await rename(
+    path.join(root, "example-note"),
+    path.join(directory, "previous"),
+  );
+  await rename(
+    path.join(directory, "package"),
+    path.join(root, "example-note"),
+  );
+  await writeFile(path.join(root, "example-note/server.js"), "Local edit");
+  await expect(applyPendingPackageUpdates(root)).resolves.toBeUndefined();
+  // Both directories stay in place and the player sees the reason.
+  expect(await readdir(path.join(directory, "previous"))).not.toEqual([]);
+  expect(await readFile(path.join(directory, "error.txt"), "utf8")).toContain(
+    "modified locally",
+  );
+});
+
 it("uses the configured proxy for update resolution and both downloads", async () => {
   await install();
   head = second;

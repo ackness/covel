@@ -35,7 +35,17 @@ checkpoint contracts; `apps/web` owns the browser persistence mechanism.
 | `sqlite` | desktop, local development, single-node self-host | Uses `SQLITE_PATH`; default `./data/covel.db`. Driver: Node's built-in `node:sqlite`. |
 | `pg`     | hosted and multi-process deployment               | Requires `DATABASE_URL`; session locks use PostgreSQL advisory locks.                 |
 
-`STORE_BACKEND=idb` and `createStore({ backend: "idb" })` do not exist.
+`STORE_BACKEND=idb` and `createStore({ backend: "idb" })` do not exist. An unknown
+value (`postgres` for `pg`, say) stops the start with an error that lists the accepted
+values; the same holds for `MEDIA_BACKEND` and `VECTOR_BACKEND`.
+
+One server process owns a SQLite file. `createStoreFromEnv()` creates `<SQLITE_PATH>.lock`
+exclusively, holding the owner's pid and start time, and removes it when the store closes
+or the process exits. A second process (the desktop app and a dev server on the same
+Covel home, say) fails at start with a message naming the file and the owner's pid. A lock
+whose pid is not alive is stale and is taken over; a process that opens the same file twice
+is not a conflict. Code that opens a database file directly with `createStore()`, such as
+tests, tools and read-only scripts, takes no lock. The memory and `pg` backends take none.
 
 `MEDIA_BACKEND` remains independent. `mirror` follows the selected server data
 backend; explicit browser IDB is a media/cache implementation, not a business

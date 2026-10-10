@@ -94,7 +94,7 @@ function typeLabel(root, raw) {
       branches[0].type === "string" &&
       isLocaleMap(branches[1])
     )
-      return "text (string or locale map)";
+      return "text";
     return [...new Set(branches.map((branch) => typeLabel(root, branch)))].join(
       " or ",
     );

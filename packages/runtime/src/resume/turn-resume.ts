@@ -129,6 +129,9 @@ async function executeResumedRuntime(
       lastTarget,
       deltaCount,
       outputContractSchema: loaded?.outputContractSchema,
+      ...(loaded?.outputSchema
+        ? { agentOutputSchema: loaded.outputSchema }
+        : {}),
     });
 
   const preRuntime = await runRuntimePreHook(
@@ -230,11 +233,16 @@ async function executeResumedRuntime(
       content: JSON.stringify({ resumeData }),
       toolCallId: pendingContinuation.suspendToolCallId,
     };
-    const placeholderIndex = messages.findIndex(
-      (message) =>
-        message.role === "tool" &&
-        message.toolCallId === pendingContinuation.suspendToolCallId,
-    );
+    // The placeholder is the last result under this ID: an endpoint that
+    // repeats an ID across the steps of a loop must not get an earlier
+    // step's result rewritten.
+    const placeholderIndex = messages
+      .map(
+        (message) =>
+          message.role === "tool" &&
+          message.toolCallId === pendingContinuation.suspendToolCallId,
+      )
+      .lastIndexOf(true);
     if (placeholderIndex >= 0) {
       messages[placeholderIndex] = resumedToolResult;
     } else {

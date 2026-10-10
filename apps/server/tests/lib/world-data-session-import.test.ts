@@ -255,7 +255,7 @@ describe("world data session importer", () => {
     },
   );
 
-  it("leaves Emberback without an imported definition so the plugin uses its default", async () => {
+  it("imports Emberback's station time, which its storm countdown is counted against", async () => {
     const registry = await builtinPluginRegistry();
     const store = await makeStore(["world-init", "world-time"]);
     const result = await importWorldDataForSession({
@@ -270,8 +270,21 @@ describe("world data session importer", () => {
       [],
     );
     expect(
-      await store.getPluginData("sess-1", "world-time", "definitions", "world"),
-    ).toBeNull();
+      (
+        await store.getPluginData(
+          "sess-1",
+          "world-time",
+          "definitions",
+          "world",
+        )
+      )?.value,
+    ).toMatchObject({
+      id: "world",
+      definition: {
+        kind: "calendar",
+        initial: { year: 1, month: 1, day: 1, hour: 6, minute: 14 },
+      },
+    });
   });
 
   it("skips time data with a warning when its receiver is disabled", async () => {

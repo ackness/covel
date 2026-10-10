@@ -707,6 +707,7 @@
     "backupDownload": "下载",
     "backupUnreadable": "这份副本读不出来。",
     "serverKeyAvailable": "服务器默认模型已有实例 API Key。此处填写的个人 Key 保存在当前设备。",
+    "keyOverriddenByEnv": "环境变量（shell、.env 或 .env.llm）为该服务商设置了另一个 Key，优先于此处保存的 Key。取消该环境变量后才会使用保存的 Key。",
     "modelBindingMissing": "所选模型不可用，请重新选择模型或重置此用途。",
     "resetModelBinding": "重置模型绑定",
     "storageMode": "数据存储",

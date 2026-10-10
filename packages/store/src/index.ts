@@ -108,6 +108,7 @@ export type {
   InteractionRecordFilters,
   TurnMessageRecord,
   TurnMessageStats,
+  CompactedTurnMessageTag,
   PlayerInputRecord,
   WorldDataImportLedgerRecord,
   LorebookEntryRecord,

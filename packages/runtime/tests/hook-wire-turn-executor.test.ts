@@ -371,6 +371,53 @@ describe("Turn executor hook wire-in", () => {
       ).toMatchObject({ content: "rewritten by hook" });
     });
 
+    it("re-validates an agent's output against output.schema after PostRuntime rewrites it", async () => {
+      const schema = {
+        type: "object",
+        required: ["prompt"],
+        properties: { prompt: { type: "string" } },
+      };
+      const run = async (rewritten: Record<string, unknown>) => {
+        const llm = new SimpleMockLLM();
+        llm.nextResponse({
+          content: '{"prompt":"a portrait"}',
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 0, outputTokens: 0 },
+        });
+        const pipeline = createHookPipeline();
+        pipeline.register({
+          id: "test:PostRuntime:rewrite",
+          event: "PostRuntime",
+          handler: async (_ctx, payload: { result: object }) => ({
+            action: "continue",
+            replace: { result: { ...payload.result, output: rewritten } },
+          }),
+        });
+        const manifest = makeManifest({ outputKind: "plugin" });
+        const baseDeps = await makeDeps(llm, pipeline);
+        const deps: TurnExecutorDeps = {
+          ...baseDeps,
+          loadRuntime: async () => ({
+            manifest,
+            promptTemplate: "Return JSON.",
+            outputSchema: schema,
+          }),
+        };
+        const result = await executeTurn(makeTurnInput(), [manifest], deps);
+        return result.runtimeResults[0]!;
+      };
+
+      const valid = await run({ prompt: "rewritten" });
+      expect(valid.status).toBe("success");
+
+      const invalid = await run({ wrong: "shape" });
+      expect(invalid.status).toBe("failed");
+      expect(invalid.error).toContain("output-schema-invalid");
+      expect(invalid.output).toBeNull();
+      expect(invalid.pendingProposals ?? []).toEqual([]);
+    });
+
     it("refuses to let a replace rewrite execution identity", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();

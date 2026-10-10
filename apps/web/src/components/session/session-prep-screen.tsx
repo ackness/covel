@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
   isBlockingWorldRequirement,
+  localizedWorldText,
   playerVisibleLore,
   withNarratorOnlyLore,
 } from "@covel/shared";
@@ -47,6 +48,7 @@ import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
+import { worldPlayLocale } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { usePluginSelection } from "./session-prep/use-plugin-selection.js";
 import { useWorldDataPreflight } from "./session-prep/use-world-data-preflight.js";
@@ -199,7 +201,19 @@ export function SessionPrepScreen({
   // with a lore override built from an empty placeholder.
   const record = useWorldRecord(world.id);
   const recordReady = record.status === "ready";
-  const originalLore = text(record.world?.lore);
+  // The edition the session will play in: the same rule that picks the
+  // session's content locale. A session whose lore the player left alone
+  // carries no override, so the server reads this edition itself.
+  const playLocale = worldPlayLocale(world, i18n.language) ?? i18n.language;
+  const originalLore =
+    localizedWorldText(
+      {
+        lore: text(record.world?.lore),
+        locale: record.world?.locale ?? world.locale,
+        metadata: record.world?.metadata ?? world.metadata,
+      },
+      playLocale,
+    ).lore ?? "";
   const lore = useWorldLore(world.id, originalLore);
   // The card shows and edits the lore a player may read. The narrator-only
   // blocks of the world stay in the text that the session starts with.
@@ -302,7 +316,7 @@ export function SessionPrepScreen({
     try {
       await onStart(
         startPluginsPayload(requestedPluginIds),
-        lore.value,
+        lore.value === originalLore ? undefined : lore.value,
         excludedPluginIds,
       );
     } catch {
@@ -317,6 +331,7 @@ export function SessionPrepScreen({
     loreUnavailable,
     requirementBlocksStart,
     lore.value,
+    originalLore,
     selectedPluginIds,
     requestedPluginIds,
     excludedPluginIds,

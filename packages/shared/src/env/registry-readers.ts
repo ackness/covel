@@ -52,6 +52,25 @@ export function readEnvChoice<T extends string>(
   return choices.includes(raw as T) ? (raw as T) : fallback;
 }
 
+/**
+ * Like {@link readEnvChoice}, but a value outside `choices` throws. For a
+ * variable that decides where data is kept or what is exposed: a typo must stop
+ * the start, not quietly pick the default.
+ */
+export function readEnvChoiceStrict<T extends string>(
+  name: CovelEnvName | string,
+  choices: readonly T[],
+  fallback: T,
+  source: EnvSource = defaultSource(),
+): T {
+  const raw = readEnvString(name, undefined, source);
+  if (raw === undefined) return fallback;
+  if (choices.includes(raw as T)) return raw as T;
+  throw new Error(
+    `Unknown ${name} "${raw}". Accepted values: ${choices.join(", ")}.`,
+  );
+}
+
 export function readEnvCsv(
   name: CovelEnvName | string,
   source: EnvSource = defaultSource(),
@@ -136,7 +155,7 @@ function readSqlitePath(source: EnvSource): string {
 
 export function readRuntimeEnv(source: EnvSource = defaultSource()) {
   return {
-    storeBackend: readEnvChoice(
+    storeBackend: readEnvChoiceStrict(
       "STORE_BACKEND",
       ["memory", "sqlite", "pg"] as const,
       "sqlite",
@@ -144,7 +163,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     ),
     sqlitePath: readSqlitePath(source),
     databaseUrl: readEnvString("DATABASE_URL", undefined, source),
-    mediaBackend: readEnvChoice(
+    mediaBackend: readEnvChoiceStrict(
       "MEDIA_BACKEND",
       ["mirror", "memory", "sqlite", "pg", "none"] as const,
       "mirror",
@@ -156,7 +175,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
       undefined,
       source,
     ),
-    vectorBackend: readEnvChoice(
+    vectorBackend: readEnvChoiceStrict(
       "VECTOR_BACKEND",
       ["embedded", "none", "external"] as const,
       "embedded",

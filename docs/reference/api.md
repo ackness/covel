@@ -131,7 +131,7 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 
 ## Personal configuration API
 
-`GET /api/llm-config` returns active slots with `serverKeyConfigured` (boolean), plus `source: { kind: "file" | "builtin", path }` and an optional load `error`. `POST /api/llm-config/reload` applies valid TOML in place; invalid reloads return `ok: false` and retain the active configuration. UI settings remain request-scoped overlays and are not written into TOML.
+`GET /api/llm-config` returns active slots with `serverKeyConfigured` (boolean), plus `source: { kind: "file" | "builtin", path }`, an optional load `error`, and `envKeyOverrides` (provider ids whose key saved in Settings is shadowed by the server's environment on desktop; Settings shows a notice for them). `POST /api/llm-config/reload` applies valid TOML in place; invalid reloads return `ok: false` and retain the active configuration. UI settings remain request-scoped overlays and are not written into TOML.
 
 On `demo` / `commercial`, the public `GET /api/llm-config` retains the model
 catalog used at client startup but omits `source` and load `error`; only the
@@ -1734,11 +1734,11 @@ Submission 里的其他键被丢弃：来源插件、字段定义和模板只从
     "message": "Interaction not found: …", "code": "invalid_interaction_submission" } }
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`message` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`message` 是这些条目用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项、文本长度，或来源插件的表单校验器）。文本长度与 `send_message.content` 用同一个上限（100 000 个字符，`MAX_PLAYER_MESSAGE_CHARS`）：单个 `text` / `textarea` 字段超过时按字段拒绝，各字段填成的整段玩家消息超过时作为整张表单的错误拒绝，因为这段文字就是后续回合的玩家消息，回合失败后的重试也把它当作一条消息发送。`message` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`message` 是这些条目用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。
 
 `interaction_already_submitted` 同为写给玩家的文字，不带 `details`：这个 `(turnId, interactionId)` 已经有落库的回答，无论这次的值是否相同。回答它的那个请求同时开始了后续回合，所以客户端不重发，而是从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 取已存的值标记表单，并通过 `GET /api/sessions/:id/execution` 观察那个回合（运行中、已提交，或失败后可由现有重试再跑）。
 
-`invalid_interaction_submission` 是客户端不该发出的请求（交互不存在、类型不一致、值的形状不对）。
+`invalid_interaction_submission` 是客户端不该发出的请求（交互不存在、类型不一致、值的形状不对）。`form_validator_failed` 表示来源插件的表单校验器自己抛了错（不是正常返回拒绝原因）：`message` 是按会话 locale 写的固定文字，插件抛出的原文只进服务端日志（带请求方法、URL 和堆栈），开发环境下也不发给客户端；没有写入任何内容，同一张表单可以再次提交。
 
 流开始之前的 JSON 响应：
 
@@ -2455,6 +2455,8 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 
 获取会话的所有状态表及其数据。表名和数据键按原名保留，包括 `__proto__` 等合法 JSON 键。
 
+限流：同一客户端对同一路径每分钟最多 120 次，超出返回 `429`（`code: "rate_limit_exceeded"`，带 `Retry-After`）。
+
 **参数:**
 
 | 参数 | 位置 | 说明    |
@@ -2510,6 +2512,8 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 #### `GET /api/sessions/:id/messages`
 
 获取会话的**完整**消息列表（升序）。长会话优先用 `/page`；本端点保留给快照缺失兜底和批量同步。
+
+限流与 `/page` 相同：同一客户端对同一路径每分钟最多 120 次，超出返回 `429`（`code: "rate_limit_exceeded"`，带 `Retry-After`）。
 
 **参数:**
 
@@ -2887,6 +2891,8 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 ```
 
 返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；快照的维度数据属于子会话无法启用的 community provider 时返回 `409 { code: 'dimension_provider_required' }`；内部写入失败返回 `500`。
+
+同一个父 session 每分钟（同一客户端地址）最多接受 10 次 fork 请求，超过返回 `429 { code: 'rate_limit_exceeded' }` 和 `Retry-After`；限流在校验请求体之前计数，所有部署层级相同。
 
 整个 fork 在父 session 执行锁内读取来源数据，并在 `withTransaction` 下写入；中途任何失败都会 rollback，不会留下半成品子 session。与手动快照一样，PG 部署下锁获取超时返回 `503 { code: 'session_busy' }`。
 

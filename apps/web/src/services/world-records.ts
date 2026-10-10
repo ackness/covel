@@ -86,7 +86,9 @@ export interface WorldRecordState {
  * summary it already has and reads the large fields from here.
  */
 export function useWorldRecord(id: string | undefined): WorldRecordState {
-  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  // Counts notifications; an invalidation while a fetch is in flight changes
+  // nothing else the read effect depends on, yet it must read again.
+  const [version, rerender] = useReducer((n: number) => n + 1, 0);
   const [failed, setFailed] = useState<{ id: string; attempt: number } | null>(
     null,
   );
@@ -115,7 +117,7 @@ export function useWorldRecord(id: string | undefined): WorldRecordState {
     return () => {
       live = false;
     };
-  }, [id, cached, attempt]);
+  }, [id, cached, attempt, version]);
 
   if (cached) last.current = cached;
   else if (last.current?.id !== id) last.current = null;

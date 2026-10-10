@@ -8,8 +8,7 @@
  * when the player's message does not name a graph node.
  *
  */
-import { translate } from "@covel/plugin-handlers-utils";
-import { mentionedNodeIds } from "../../lib/mentions.js";
+import { mentionedCharacterIds, translate } from "@covel/plugin-handlers-utils";
 
 /**
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
@@ -53,7 +52,7 @@ export default async function handler(ctx) {
     }
 
     // ── 1. Name + alias matching against playerMessage ───────────
-    const seedNodeIds = mentionedNodeIds(playerMessage, nodes);
+    const seedNodeIds = mentionedCharacterIds(playerMessage, nodes);
 
     // Character ids and graph node ids belong to different namespaces. Only
     // unambiguous full names/aliases connect the current cast to graph nodes.

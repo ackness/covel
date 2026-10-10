@@ -10,7 +10,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import type { InteractionPayload, InteractionType } from "@covel/shared";
+import {
+  MAX_PLAYER_MESSAGE_CHARS,
+  type InteractionPayload,
+  type InteractionType,
+} from "@covel/shared";
 import {
   createInteractionSubmitter,
   FormRejectedError,
@@ -640,6 +644,42 @@ describe("submitFormHandler (Epic A)", () => {
         values: { name: "Aria", admin: true },
       }),
     ).rejects.toThrow(/unknown field.*admin/i);
+  });
+
+  it("refuses text longer than a player's message, by field and for the form as a whole", async () => {
+    await seedInteraction(store, {
+      interactionId: "story",
+      type: "form",
+      title: "Story",
+      submitLabel: "Continue",
+      fields: [
+        { type: "textarea", name: "past", label: "Past" },
+        { type: "textarea", name: "goal", label: "Goal" },
+      ],
+    });
+    const refusal = (values: Record<string, unknown>) =>
+      submitOne(store, { interactionId: "story", type: "form", values }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(
+      await refusal({ past: "a".repeat(MAX_PLAYER_MESSAGE_CHARS + 1) }),
+    ).toMatchObject({
+      code: "form_rejected",
+      issues: [{ field: "past", message: "“Past”不能超过 100000 个字符。" }],
+    });
+    // Each field fits; the message they make together does not.
+    const half = "a".repeat(MAX_PLAYER_MESSAGE_CHARS / 2);
+    const together = await refusal({ past: half, goal: half });
+    expect(together).toBeInstanceOf(FormRejectedError);
+    expect((together as FormRejectedError).issues).toEqual([
+      { message: "填写的内容合起来太长：最多 100000 个字符。" },
+    ]);
+    expect(await store.listPlayerInputs(SESSION)).toEqual([]);
+
+    expect(
+      await refusal({ past: "a".repeat(MAX_PLAYER_MESSAGE_CHARS - 1000) }),
+    ).toBeUndefined();
   });
 
   it("canonicalizes choice labels from the committed option", async () => {

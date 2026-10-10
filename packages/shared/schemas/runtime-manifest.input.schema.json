@@ -27,7 +27,7 @@
           }
         }
       ],
-      "description": "What the package does. Plain string or a locale map with at least one entry."
+      "description": "What the package does. Plain string; translations go in locale files."
     },
     "displayName": {
       "anyOf": [
@@ -44,7 +44,7 @@
           }
         }
       ],
-      "description": "Player-facing name. Plain string or a locale map."
+      "description": "Player-facing name. Plain string; translations go in locale files."
     },
     "version": {
       "type": "string"

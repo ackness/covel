@@ -1,4 +1,5 @@
 import { scheduleMemoryIngest } from "./commit-execution.js";
+import { rateLimiter } from "../../middleware/rate-limit.js";
 /**
  * Snapshot / Fork routes.
  *
@@ -293,7 +294,9 @@ snapshotRoutes.get("/:id/snapshots/:snapshotId", async (c) => {
 
 // ── POST /api/sessions/:id/fork — fork from snapshot ──────────────
 
-snapshotRoutes.post("/:id/fork", async (c) => {
+// A fork creates a whole session, so it is limited like the other routes that
+// start expensive work.
+snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
   const parentSessionId = c.req.param("id");
   const store = c.get("store");
   const sessionLock = c.get("sessionLock");
