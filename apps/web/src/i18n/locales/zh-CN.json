@@ -183,6 +183,10 @@
     "worldLore": "世界文档",
     "worldTab": "世界",
     "worldDocumentEmpty": "暂无世界文档",
+    "externalImageHeld": "来自 {{host}} 的图片尚未加载",
+    "externalImageLoad": "加载此图片",
+    "externalImageAlways": "在此世界中始终加载 {{host}} 的图片",
+    "externalImageBlocked": "图片未显示",
     "database": "数据库",
     "dbTables": "张表",
     "dbVolumes": "共 {{count}} 卷",
@@ -844,6 +848,9 @@
       },
       "llmCapabilityOverrides": {
         "label": "能力覆盖"
+      },
+      "mediaAllowedImageHosts": {
+        "label": "各世界允许的图片来源"
       },
       "llmPrepRuntimeBindings": {
         "label": "准备阶段 Runtime 绑定"

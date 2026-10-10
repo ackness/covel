@@ -130,6 +130,12 @@ function frameworkSettingText(
         "Capability overrides",
       ),
     },
+    "media.allowedImageHosts": {
+      label: t(
+        "settings.frameworkEntries.mediaAllowedImageHosts.label",
+        "Image hosts allowed per world",
+      ),
+    },
     "llm.prepRuntimeBindings": {
       label: t(
         "settings.frameworkEntries.llmPrepRuntimeBindings.label",

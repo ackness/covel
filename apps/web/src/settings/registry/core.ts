@@ -3,6 +3,7 @@ import type { SettingsStoreApi } from "@covel/settings";
 import { WORLD_AUTHORING_IDLE_TIMEOUT_MS } from "@covel/shared";
 import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
 import { resolveInitialLocale } from "@/i18n/locale-detector.js";
+import { ALLOWED_IMAGE_HOSTS_SETTING } from "@/lib/external-images.js";
 import { registerThemeSettings } from "@/theme-system/settings.js";
 
 export const WORLD_AUTHORING_IDLE_TIMEOUT_SETTING =
@@ -39,6 +40,17 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   });
 
   registerThemeSettings(store);
+
+  // Written by the "always load images from this host" choice on a held
+  // image; there is no editor for it.
+  store.register({
+    key: ALLOWED_IMAGE_HOSTS_SETTING,
+    schema: z.record(z.string(), z.array(z.string())),
+    default: {},
+    group: "general",
+    widget: "custom",
+    label: "Image hosts allowed per world",
+  });
 
   store.register({
     key: "ui.chatMessageWindow",
