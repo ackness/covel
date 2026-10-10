@@ -4,6 +4,7 @@ import {
   PLAYER_NAME_VALIDATOR,
   isNameTaken,
   nameTakenMessage,
+  takenNameDigests,
   takenNameKeys,
 } from "../lib/player-name.js";
 
@@ -137,7 +138,14 @@ export default function ({ tool }, createFormTool) {
       const form = {
         ...params,
         formId: CHARACTER_FORM_ID,
-        validation: { name: PLAYER_NAME_VALIDATOR, data: { taken } },
+        // The form reaches the player's client: digests, never the names.
+        validation: {
+          name: PLAYER_NAME_VALIDATOR,
+          data: takenNameDigests(
+            context.world.characters,
+            `${context.sessionId}:${context.turnId}`,
+          ),
+        },
       };
       const earlier = await earlierAnswers(context);
       if (!earlier) return createFormTool.execute(form, context);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFormTool, tool } from "@covel/tools";
 import makeCharacterForm from "../tools/create-character-form.js";
+import { validatePlayerName } from "../lib/player-name.js";
 
 const createCharacterForm = makeCharacterForm({ tool }, createFormTool);
 const context = {
@@ -55,7 +56,12 @@ describe("create-character-form schema boundary", () => {
           ...context.world,
           characters: [
             { id: "p", name: "Wren", type: "player" },
-            { id: "a", name: "Tomas Vale", aliases: ["Tomas"], type: "npc" },
+            {
+              id: "a",
+              name: "Tomas Vale",
+              aliases: ["Quillfeather"],
+              type: "npc",
+            },
           ],
         },
       },
@@ -63,8 +69,22 @@ describe("create-character-form schema boundary", () => {
     expect(result).toMatchObject({ created: true, fieldCount: 1 });
     expect(result.interaction.validation).toEqual({
       name: "player-name",
-      data: { taken: ["tomas vale", "tomas"] },
+      data: {
+        salt: "s:t",
+        taken: [expect.stringMatching(/^[0-9a-f]{24}$/), expect.any(String)],
+      },
     });
+    // The whole tool result is what the client and the stored message get.
+    expect(JSON.stringify(result).toLowerCase()).not.toMatch(
+      /quillfeather|tomas|vale/,
+    );
+    expect(
+      validatePlayerName(
+        { characterName: "quillfeather" },
+        result.interaction.validation.data,
+        { locale: "en" },
+      ),
+    ).toMatchObject({ field: "characterName" });
   });
 
   it("offers the form again without the taken name and says why", async () => {

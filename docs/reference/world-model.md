@@ -54,7 +54,7 @@ interface CharacterRecord {
 
 **玩家的名字不能是世界里已有角色的名字或别名**（按 `characterNameKey` 比较）。世界常把常见的名写成别名（`Tomas`、`June`），玩家起了这样的名字，世界模型会在提交时拒绝这个玩家；与某个 NPC 全名相同虽然不被拒绝，之后按这个名字的每次查找都是 `ambiguous`。所以建角的三处都执行同一条规则：
 
-- 建角表单带校验器 `player-name`（`char-creator` 用 `registerFormValidator` 注册，表单发出时把当时已有角色的名字键放进 `validation.data.taken`）。提交这样的名字得到 `form_rejected`，`issues` 指向 `characterName` 字段，文字用会话的内容语言；答案没有保存，玩家改名后再提交同一张表单。
+- 建角表单带校验器 `player-name`（`char-creator` 用 `registerFormValidator` 注册，表单发出时把当时已有角色的名字键做成按表单加盐的 SHA-256 摘要放进 `validation.data`：表单块会发给客户端并留在会话消息里，其中不出现任何角色的名字或别名；摘要只防直接读出名单，不防拿着已猜到的名字去验证）。提交这样的名字得到 `form_rejected`，`issues` 指向 `characterName` 字段，文字用会话的内容语言；答案没有保存，玩家改名后再提交同一张表单。
 - `player-init` 的 guard 再查一次（表单发出后世界角色变了，或表单是加校验器之前生成的）：名字仍冲突时不产生 `character.upsert`，而是让 runtime 重新发出表单，`notice` 说明这个名字已有角色使用，其余答案保留。setup 不会因此反复失败。
 - `create-character` 创建 `type: "player"` 时，名字是其他角色的名字或别名则报错并说明要向玩家另要一个名字，不再把那个 NPC 当作“已存在的角色”返回。
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { takenNameKeys, validatePlayerName } from "../lib/player-name.js";
+import { takenNameDigests, validatePlayerName } from "../lib/player-name.js";
 
 const characters = [
   {
@@ -16,7 +16,7 @@ const characters = [
   },
   { id: "char-old", name: "Wren", aliases: ["Birdie"], type: "player" },
 ];
-const data = { taken: takenNameKeys(characters) };
+const data = takenNameDigests(characters, "session:turn");
 const en = { locale: "en" };
 
 describe("player name validator", () => {
@@ -52,6 +52,17 @@ describe("player name validator", () => {
         messages: { translations: { [text]: "“{name}”已有人使用。" } },
       }),
     ).toEqual({ field: "characterName", message: "“Tomas”已有人使用。" });
+  });
+
+  it("holds no name or alias of the world, in any spelling", () => {
+    const sent = JSON.stringify(data).toLowerCase();
+    for (const word of ["tomas", "vale", "ferryman", "neil", "阿娜", "貝爾"])
+      expect(sent).not.toContain(word);
+    // 2 + 3 names; the player's own are not counted.
+    expect(data.taken).toHaveLength(5);
+    // Another form of the same world shares no digest with this one.
+    const other = takenNameDigests(characters, "session:turn-2");
+    expect(other.taken.filter((d) => data.taken.includes(d))).toEqual([]);
   });
 
   it("accepts the answer of a form that carries no name list", () => {
