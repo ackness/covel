@@ -13,6 +13,10 @@
 
 设置后端由当前设备确定：存在 Electron IPC 时使用个人文件，否则始终使用浏览器 localStorage。服务端 `/api/config/info` 只用于发现管理能力，`COVEL_HOME` 和 `isDesktop` 都不会把浏览器设置切换成服务端共享文件。管理探测失败不阻止本地设置初始化。
 
+## 服务端读取的设置
+
+少数设置要由服务端执行，而不是只在浏览器里生效。当前只有 `diagnostics.traceRetention`（设置 → 通用 →“保留诊断记录”，取值 `7` / `30` / `90` / `keep`，默认 `30`）：服务端在清理 trace 时读取 Covel home 下的 `settings.json`（与桌面壳写入的是同一个文件，按文件修改时间缓存）。只有桌面壳启动的服务端（`COVEL_DESKTOP_REST=1`）且 `DEPLOYMENT_TIER=self` 才读这个文件；浏览器的 localStorage 服务端读不到，所以纯 Web 部署只认环境变量 `COVEL_TRACE_RETENTION_DAYS` 和默认值 30 天，`demo` / `commercial` 层级始终只认运维的环境变量。设置了 `COVEL_TRACE_RETENTION_DAYS` 时它压过玩家的选择。设置页向 `GET /api/config/info` 的 `traceRetention` 查询生效值与来源（`env` / `setting` / `default`）及 `settable`，在不能由玩家修改时显示该值并禁用控件。优先级与清理规则见 [`env-registry.md`](../guide/env-registry.md)。
+
 ## Schema 归一化
 
 已注册的非密钥设置使用 schema 的解析结果作为可见值，包括加载、动态注册、`set()`、`setMany()`、导入、刷新和写入失败后的回滚。嵌套 `.default()` 和字符串修整会体现在 `get()`、导出及订阅通知中；显式写入会保存解析结果。未注册的键保留原始值。

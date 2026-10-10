@@ -535,7 +535,16 @@ Execution bookkeeping grows with every turn, so each kind has an explicit bound:
 | Snapshot payload and forks                  | Omit control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs`; a fork also drops them from snapshots taken before they were excluded. Rows of the retired `_jobs` namespace are deleted at boot.                          |
 | `_runtime_jobs` and their `job_status` rows | Unfinished jobs are kept; terminal jobs keep the newest 20 per session runtime.                                                                                                                                                               |
 | `_logs`                                     | Ring of 200 rows per plugin, trimmed on a logger's first write and every 20th after, so one execution can briefly exceed it.                                                                                                                  |
-| `trace_events`                              | Kept unless `COVEL_TRACE_RETENTION_DAYS` is set.                                                                                                                                                                                              |
+| `trace_events`                              | 30 days by default (`COVEL_TRACE_RETENTION_DAYS`, `0` keeps all; the player's Settings choice applies when the variable is unset). Pruned per session after a commit, and for every session at start and once a day.                          |     |
+
+SQLite does not return the pages of deleted rows to the file system unless
+the file was created with `auto_vacuum = INCREMENTAL`. A database created by
+this version is, and the trace delete is followed by a bounded
+`PRAGMA incremental_vacuum`, so the file shrinks after a sweep. A database file
+created earlier keeps its mode: its freed pages are reused by new rows, so it
+stops growing, but it does not get smaller. Converting it takes a full
+`VACUUM` with the server stopped (set `PRAGMA auto_vacuum = INCREMENTAL` on the
+same connection first); the server never runs one during play.
 
 `turn_results` is the authoritative execution artifact: retries rebuild their
 seeds from its full runtime results, including effects and canonical values,

@@ -13,6 +13,7 @@ import {
   resolveSettingOptionText,
 } from "../framework-i18n.js";
 import { useSetting, useSettingOverride } from "../use-settings.js";
+import { TRACE_RETENTION_SETTING_KEY } from "@covel/shared";
 
 /** Controls take their shape and colours from the active theme. */
 const CONTROL_CLASS =
@@ -54,6 +55,9 @@ function inferWidget(entry: SettingEntry): WidgetKind {
 }
 
 export function SettingWidget({ entry }: { entry: SettingEntry }) {
+  if (entry.key === TRACE_RETENTION_SETTING_KEY) {
+    return <TraceRetentionWidget entry={entry} />;
+  }
   const widget = inferWidget(entry);
   switch (widget) {
     case "toggle":
@@ -225,6 +229,93 @@ function settingControlId(key: string, suffix?: string): string {
 
 function settingLabelId(key: string): string {
   return `${settingControlId(key)}-label`;
+}
+
+interface TraceRetentionInfo {
+  readonly days: number;
+  readonly source: "env" | "setting" | "default";
+  readonly settable: boolean;
+}
+
+/** What the server keeps, from `/api/config/info`; null until known or on failure. */
+function useTraceRetentionInfo(): TraceRetentionInfo | null {
+  const [info, setInfo] = useState<TraceRetentionInfo | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/config/info")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: { traceRetention?: TraceRetentionInfo } | null) => {
+        if (!cancelled && body?.traceRetention) setInfo(body.traceRetention);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return info;
+}
+
+/**
+ * The server prunes traces, so the player's choice is only the server's value
+ * on a desktop install and when the operator set none. Otherwise the field
+ * shows what the server does and cannot be changed.
+ */
+function TraceRetentionWidget({ entry }: { entry: SettingEntry }) {
+  const { t } = useTranslation();
+  const [value, setValue] = useSetting<string>(entry.key);
+  const info = useTraceRetentionInfo();
+  const controlId = settingControlId(entry.key);
+  const labels: Record<string, string> = {
+    "7": t("settings.traceRetention.days7", "7 days"),
+    "30": t("settings.traceRetention.days30", "30 days"),
+    "90": t("settings.traceRetention.days90", "90 days"),
+    keep: t("settings.traceRetention.keep", "Keep everything"),
+  };
+  const fixed = info !== null && !info.settable;
+  const shown = fixed
+    ? info.days === 0
+      ? "keep"
+      : String(info.days)
+    : (value ?? "30");
+  const days = info?.days === 0 ? "keep" : String(info?.days);
+  const note = !fixed
+    ? null
+    : info.source === "env"
+      ? t(
+          "settings.traceRetention.fixedByDeployment",
+          "This deployment fixes the period at {{period}}.",
+          { period: labels[days] ?? days },
+        )
+      : t(
+          "settings.traceRetention.fixedHere",
+          "Only the desktop app can change this. This server keeps traces for {{period}}.",
+          { period: labels[days] ?? days },
+        );
+  const options = Object.keys(labels);
+  if (!options.includes(shown)) options.push(shown);
+  return (
+    <FieldShell entry={entry} controlId={controlId}>
+      <select
+        id={controlId}
+        value={shown}
+        disabled={fixed}
+        onChange={(e) => void setValue(e.target.value)}
+        className={`w-full px-3 py-2 sm:w-72 ${CONTROL_CLASS}`}
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {labels[option] ??
+              t("settings.traceRetention.otherDays", "{{count}} days", {
+                count: Number(option),
+              })}
+          </option>
+        ))}
+      </select>
+      {note && (
+        <p className="text-xs leading-relaxed text-muted-foreground">{note}</p>
+      )}
+    </FieldShell>
+  );
 }
 
 function TextWidget({ entry }: { entry: SettingEntry }) {

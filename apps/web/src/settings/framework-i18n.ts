@@ -73,6 +73,16 @@ function frameworkSettingText(
         "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator.",
       ),
     },
+    "diagnostics.traceRetention": {
+      label: t(
+        "settings.frameworkEntries.traceRetention.label",
+        "Keep diagnostic traces",
+      ),
+      description: t(
+        "settings.frameworkEntries.traceRetention.description",
+        "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show. Applies to the desktop app unless the deployment fixes it.",
+      ),
+    },
     "audio.musicEnabled": {
       label: t(
         "settings.frameworkEntries.musicEnabled.label",

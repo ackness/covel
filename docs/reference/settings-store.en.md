@@ -13,6 +13,10 @@ Ordinary persisted settings accept only `schemaVersion: 2` with `revision`, `sav
 
 Settings storage follows the current device: Electron IPC selects personal files; every browser selects localStorage. `/api/config/info` discovers server administration capabilities only. `COVEL_HOME` and `isDesktop` never select shared server settings for a browser, and failed discovery does not block local initialization.
 
+## Settings the server acts on
+
+A few settings must be carried out by the server, not just in the browser. For now that is `diagnostics.traceRetention` (Settings → General → "Keep diagnostic traces"; values `7` / `30` / `90` / `keep`, default `30`). When it prunes traces the server reads `settings.json` in the Covel home, the same file the desktop shell writes (cached by modification time). Only a server started by the desktop shell (`COVEL_DESKTOP_REST=1`) on `DEPLOYMENT_TIER=self` reads it. The server cannot read a browser's localStorage, so a plain web deployment follows only the `COVEL_TRACE_RETENTION_DAYS` variable and the 30-day default, and the `demo` / `commercial` tiers follow only the operator's variable. When `COVEL_TRACE_RETENTION_DAYS` is set it wins over the player's choice. The settings page asks `GET /api/config/info` for `traceRetention` (the value in force, its source `env` / `setting` / `default`, and `settable`) and, when the player cannot change it, shows that value with the control disabled. Precedence and the sweep: [`env-registry.md`](../guide/env-registry.md).
+
 ## Schema normalization
 
 Registered non-secret settings expose the schema's parsed result during hydration, dynamic registration, `set()`, `setMany()`, import, refresh, and rollback after a failed write. Nested `.default()` values and string trimming appear in `get()`, exports, and subscriber notifications; explicit writes persist the parsed result. Unregistered keys retain their original values.
