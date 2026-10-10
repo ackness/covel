@@ -148,10 +148,10 @@ Prompt.
 
     expect(loaded.uiSpecs).toBeDefined();
     expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0].id).toBe("test-panel");
-    expect(loaded.uiSpecs?.right?.[0].icon).toBe("layout");
+    expect(loaded.uiSpecs?.right?.[0]!.id).toBe("test-panel");
+    expect(loaded.uiSpecs?.right?.[0]!.icon).toBe("layout");
     expect(loaded.uiSpecs?.message).toHaveLength(1);
-    expect(loaded.uiSpecs?.message?.[0].id).toBe("test-block");
+    expect(loaded.uiSpecs?.message?.[0]!.id).toBe("test-block");
   });
 
   it("should handle plugin with no ui field", async () => {
@@ -175,7 +175,7 @@ Prompt.
 
     const loaded = await loadPluginUi(discovery);
 
-    expect(loaded.uiSpecs?.right?.[0].id).toBe("handler-panel");
+    expect(loaded.uiSpecs?.right?.[0]!.id).toBe("handler-panel");
     expect(loaded.manifest.name).toBe("ui-handler-plugin");
     // The handler module's import side effect must NOT have run.
     expect(

@@ -55,6 +55,7 @@ async function seedSetupSession(): Promise<DataStore> {
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: SESSION_ID,
     worldId: "w",
     status: "active",

@@ -621,7 +621,7 @@ describe("gateway slot tag fallback", () => {
 
     expect(result.text).toBe("stub response");
     expect(warn).toHaveBeenCalledTimes(1);
-    const msg = warn.mock.calls[0][0] as string;
+    const msg = warn.mock.calls[0]![0] as string;
     expect(msg).toContain('slot "plugin" not configured');
     expect(msg).toContain('falling back to "story"');
     warn.mockRestore();

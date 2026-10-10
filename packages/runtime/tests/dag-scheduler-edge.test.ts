@@ -64,7 +64,7 @@ describe("scheduleByDag — same-priority tiebreaker", () => {
     // Insert in non-alphabetical, non-priority order. Output must be stable.
     const a = [rt("charlie", 500), rt("alpha", 500), rt("bravo", 500)];
     const { groups } = scheduleByDag(a);
-    expect(groups[0].runtimes.map((r) => r.name)).toEqual([
+    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual([
       "alpha",
       "bravo",
       "charlie",
@@ -82,7 +82,7 @@ describe("scheduleByDag — same-priority tiebreaker", () => {
       rt("mmmm", 200),
     ];
     const { groups } = scheduleByDag(a);
-    expect(groups[0].runtimes.map((r) => r.name)).toEqual([
+    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual([
       "aaaa",
       "mmmm",
       "zzzz",
@@ -102,7 +102,7 @@ describe("scheduleByDag — malformed inject declarations", () => {
     expect(error).toBeUndefined();
     // Both runtimes can run on level 0 — `b` has no real dependency.
     expect(groups).toHaveLength(1);
-    expect(groups[0].runtimes.map((r) => r.name).sort()).toEqual(["a", "b"]);
+    expect(groups[0]!.runtimes.map((r) => r.name).sort()).toEqual(["a", "b"]);
   });
 
   it("silently drops empty-string entries from needs", () => {
@@ -111,8 +111,8 @@ describe("scheduleByDag — malformed inject declarations", () => {
     const { groups, error } = scheduleByDag([a, b]);
     expect(error).toBeUndefined();
     expect(groups).toHaveLength(2);
-    expect(groups[0].runtimes.map((r) => r.name)).toEqual(["a"]);
-    expect(groups[1].runtimes.map((r) => r.name)).toEqual(["b"]);
+    expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(["a"]);
+    expect(groups[1]!.runtimes.map((r) => r.name)).toEqual(["b"]);
   });
 });
 
@@ -129,7 +129,7 @@ describe("scheduleByDag — needs + inject merge", () => {
     const { groups, error } = scheduleByDag([a, b]);
     expect(error).toBeUndefined();
     expect(groups).toHaveLength(2);
-    expect(groups[1].runtimes.map((r) => r.name)).toEqual(["b"]);
+    expect(groups[1]!.runtimes.map((r) => r.name)).toEqual(["b"]);
   });
 
   it("needs adds an edge even when the same runtime is not injected", () => {
@@ -141,11 +141,11 @@ describe("scheduleByDag — needs + inject merge", () => {
       needs: ["sibling"],
     });
     const { groups } = scheduleByDag([root, sibling, child]);
-    expect(groups[0].runtimes.map((r) => r.name).sort()).toEqual([
+    expect(groups[0]!.runtimes.map((r) => r.name).sort()).toEqual([
       "root",
       "sibling",
     ]);
-    expect(groups[1].runtimes.map((r) => r.name)).toEqual(["child"]);
+    expect(groups[1]!.runtimes.map((r) => r.name)).toEqual(["child"]);
   });
 });
 
@@ -162,12 +162,12 @@ describe("scheduleByDag — multi-runtime plugin identity", () => {
 
     const { groups } = scheduleByDag([schema, data, sibling]);
     // Level 0 holds schema-gen + audit (both have no deps).
-    expect(groups[0].runtimes.map((r) => r.name).sort()).toEqual([
+    expect(groups[0]!.runtimes.map((r) => r.name).sort()).toEqual([
       "world-init/audit",
       "world-init/schema-gen",
     ]);
     // Level 1 holds only data-gen.
-    expect(groups[1].runtimes.map((r) => r.name)).toEqual([
+    expect(groups[1]!.runtimes.map((r) => r.name)).toEqual([
       "world-init/data-gen",
     ]);
   });

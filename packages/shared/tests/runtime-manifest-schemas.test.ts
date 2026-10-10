@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import Ajv from "ajv";
+import { Ajv } from "ajv";
 import type { ValidateFunction } from "ajv";
 import { describe, expect, it } from "vitest";
 import {
@@ -168,7 +168,6 @@ const compatNewPositive: Fixture = {
   name: "full new-shape manifest (compat superset)",
   manifest: {
     ...base,
-    stage: "post-turn",
     trigger: { type: "scheduled", interval: 1 },
     ...newShapeFields,
   },

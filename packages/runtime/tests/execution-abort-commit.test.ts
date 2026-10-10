@@ -88,6 +88,7 @@ describe("execution-level abort commit boundary", () => {
       const { store, eventBus, events } = await fixture();
       const controller = new AbortController();
       const first: RuntimeManifest = {
+        description: "test",
         name: "probe/first",
         pluginId: "probe",
         runtimeType: "function",

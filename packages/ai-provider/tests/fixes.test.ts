@@ -51,11 +51,11 @@ describe("Anthropic adapter uses x-api-key header", () => {
         model: "claude-3-haiku-20240307",
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const fetchCall = vi.mocked(fetch).mock.calls[0];
-    const requestInit = fetchCall[1] as RequestInit;
+    const requestInit = fetchCall![1]! as RequestInit;
     const headers = requestInit.headers as Record<string, string>;
 
     expect(headers["x-api-key"]).toBe("test-key-123");
@@ -90,14 +90,14 @@ describe("Anthropic adapter uses x-api-key header", () => {
         model: "claude-3-haiku-20240307",
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
       },
-      { profile: {} as never, preset: undefined, mode: "stream" },
+      { profile: {} as never, preset: null, mode: "stream" },
     );
     for await (const _ of gen) {
       // drain
     }
 
     const fetchCall = vi.mocked(fetch).mock.calls[0];
-    const requestInit = fetchCall[1] as RequestInit;
+    const requestInit = fetchCall![1]! as RequestInit;
     const headers = requestInit.headers as Record<string, string>;
 
     expect(headers["x-api-key"]).toBe("stream-key");
@@ -128,11 +128,11 @@ describe("Anthropic adapter uses x-api-key header", () => {
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
         schema: z.object({ result: z.boolean() }),
       },
-      { profile: {} as never, preset: undefined, mode: "object" },
+      { profile: {} as never, preset: null, mode: "object" },
     );
 
     const fetchCall = vi.mocked(fetch).mock.calls[0];
-    const requestInit = fetchCall[1] as RequestInit;
+    const requestInit = fetchCall![1]! as RequestInit;
     const headers = requestInit.headers as Record<string, string>;
 
     expect(headers["x-api-key"]).toBe("obj-key");
@@ -195,11 +195,11 @@ describe("providerRequestMetadata cannot override critical fields", () => {
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
         providerRequestMetadata: { model: "attacker-model" },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body["model"]).toBe("gpt-4o");
   });
@@ -219,14 +219,14 @@ describe("providerRequestMetadata cannot override critical fields", () => {
           messages: [{ role: "user", content: "injected" }],
         },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     const msgs = body["messages"] as Array<Record<string, unknown>>;
-    expect(msgs[0]["content"]).toBe("real message");
+    expect(msgs[0]!["content"]).toBe("real message");
   });
 
   it("openai-chat generateText: requests JSON mode for responseFormat", async () => {
@@ -243,11 +243,11 @@ describe("providerRequestMetadata cannot override critical fields", () => {
           schema: { type: "object", properties: { ok: { type: "boolean" } } },
         },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body["response_format"]).toEqual({ type: "json_object" });
   });
@@ -280,11 +280,11 @@ describe("providerRequestMetadata cannot override critical fields", () => {
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
         responseFormat: { type: "json_schema", schema },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body["text"]).toEqual({
       format: {
@@ -323,14 +323,14 @@ describe("providerRequestMetadata cannot override critical fields", () => {
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
         providerRequestMetadata: { stream: false },
       },
-      { profile: {} as never, preset: undefined, mode: "stream" },
+      { profile: {} as never, preset: null, mode: "stream" },
     );
     for await (const _ of gen) {
       // drain
     }
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body["stream"]).toBe(true);
   });
@@ -363,11 +363,11 @@ describe("providerRequestMetadata cannot override critical fields", () => {
         schema: z.object({ ok: z.boolean() }),
         providerRequestMetadata: { response_format: { type: "text" } },
       },
-      { profile: {} as never, preset: undefined, mode: "object" },
+      { profile: {} as never, preset: null, mode: "object" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     const rf = body["response_format"] as Record<string, unknown>;
     expect(rf["type"]).toBe("json_object");
@@ -384,11 +384,11 @@ describe("providerRequestMetadata cannot override critical fields", () => {
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
         providerRequestMetadata: { model: "attacker-model", max_tokens: 99999 },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body["model"]).toBe("claude-3-haiku-20240307");
     expect(body["max_tokens"]).toBe(16_384);
@@ -421,14 +421,14 @@ describe("providerRequestMetadata cannot override critical fields", () => {
           stream: true,
         },
       },
-      { profile: {} as never, preset: undefined, mode: "object" },
+      { profile: {} as never, preset: null, mode: "object" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     const msgs = body["messages"] as Array<Record<string, unknown>>;
-    expect(msgs[0]["content"]).toBe("real");
+    expect(msgs[0]!["content"]).toBe("real");
     // stream should not be present in generateObject request
     expect(body["stream"]).toBeUndefined();
   });
@@ -657,10 +657,10 @@ protocol = "openai-chat-v1"
 
     const result = parseLlmConfig(toml);
     expect(result.aiConfig.presets).toHaveLength(2);
-    expect(result.aiConfig.presets[0].defaultSlot).toBe("default");
-    expect(result.aiConfig.presets[1].defaultSlot).toBe("fast");
+    expect(result.aiConfig.presets[0]!.defaultSlot).toBe("default");
+    expect(result.aiConfig.presets[1]!.defaultSlot).toBe("fast");
     // First slot is the default
-    expect(result.aiConfig.presets[0].isDefault).toBe(true);
-    expect(result.aiConfig.presets[1].isDefault).toBe(false);
+    expect(result.aiConfig.presets[0]!.isDefault).toBe(true);
+    expect(result.aiConfig.presets[1]!.isDefault).toBe(false);
   });
 });

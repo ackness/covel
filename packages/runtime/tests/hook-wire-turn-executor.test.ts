@@ -55,6 +55,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
 
 function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-hook-wire",
     turnId: "turn-hook-wire",
     playerMessage: "hello",
@@ -111,7 +112,7 @@ describe("Turn executor hook wire-in", () => {
       const deps = await makeDeps(llm);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
       expect(result.runtimeResults).toHaveLength(1);
-      expect(result.runtimeResults[0].status).toBe("success");
+      expect(result.runtimeResults[0]!.status).toBe("success");
       expect(result.abortReason).toBeUndefined();
     });
   });
@@ -204,7 +205,7 @@ describe("Turn executor hook wire-in", () => {
 
       // Turn completed normally
       expect(result.runtimeResults).toHaveLength(1);
-      expect(result.runtimeResults[0].status).toBe("success");
+      expect(result.runtimeResults[0]!.status).toBe("success");
       // No abortReason propagated from post-hook
       expect(result.abortReason).toBeUndefined();
     });
@@ -316,7 +317,7 @@ describe("Turn executor hook wire-in", () => {
       expect(toolMsg!.content).toContain("tool blocked");
 
       // Turn still completes
-      expect(result.runtimeResults[0].status).toBe("success");
+      expect(result.runtimeResults[0]!.status).toBe("success");
     });
   });
 
@@ -361,7 +362,7 @@ describe("Turn executor hook wire-in", () => {
       };
       const result = await executeTurn(makeTurnInput(), [manifest], deps);
 
-      expect(result.runtimeResults[0].output).toMatchObject({
+      expect(result.runtimeResults[0]!.output).toMatchObject({
         narrativeOutput: "rewritten by hook",
         _hookModified: true,
       });
@@ -403,10 +404,10 @@ describe("Turn executor hook wire-in", () => {
 
       // Downstream commit rebinds proposals on these fields — they must stay
       // the framework-selected identity, not whatever the hook returned.
-      expect(result.runtimeResults[0].pluginId).toBe(manifest.pluginId);
-      expect(result.runtimeResults[0].runtimeId).toBe(manifest.name);
-      expect(result.runtimeResults[0].turnId).toBe(input.turnId);
-      expect(result.runtimeResults[0].runId).not.toBe("forged-run");
+      expect(result.runtimeResults[0]!.pluginId).toBe(manifest.pluginId);
+      expect(result.runtimeResults[0]!.runtimeId).toBe(manifest.name);
+      expect(result.runtimeResults[0]!.turnId).toBe(input.turnId);
+      expect(result.runtimeResults[0]!.runId).not.toBe("forged-run");
     });
   });
 
@@ -493,7 +494,7 @@ describe("Turn executor hook wire-in", () => {
 
       const result = await executeTurn(makeTurnInput(), [manifest], deps);
 
-      expect(result.runtimeResults[0].status).toBe("success");
+      expect(result.runtimeResults[0]!.status).toBe("success");
       // Tool was called exactly once (hook returned continue, not abort)
       expect(toolExecutor.execute).toHaveBeenCalledOnce();
       // Assert the executor received the REPLACED arguments, not the original
@@ -952,7 +953,7 @@ describe("Turn executor hook wire-in", () => {
       const deps = await makeDeps(llm, pipeline);
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
-      expect(result.runtimeResults[0].output).toMatchObject({
+      expect(result.runtimeResults[0]!.output).toMatchObject({
         narrativeOutput: "patched by hook",
       });
     });
@@ -1017,7 +1018,7 @@ describe("Turn executor hook wire-in", () => {
       // call happened, the second queued response was never consumed.
       expect(toolExecutor.execute).toHaveBeenCalledOnce();
       expect(llm.calls).toHaveLength(1);
-      expect(result.runtimeResults[0].status).toBe("success");
+      expect(result.runtimeResults[0]!.status).toBe("success");
     });
 
     it("still strips runtime-done from output when a hook terminates in the same response", async () => {
@@ -1085,7 +1086,7 @@ describe("Turn executor hook wire-in", () => {
       };
 
       const result = await executeTurn(makeTurnInput(), [manifest], deps);
-      const toolNames = result.runtimeResults[0].toolCalls.map(
+      const toolNames = result.runtimeResults[0]!.toolCalls.map(
         (t) => t.toolName,
       );
 

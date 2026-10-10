@@ -85,7 +85,7 @@ describe("proposal source invariants", () => {
     expect(ids).toHaveLength(2);
     expect(new Set(ids).size).toBe(2);
     // Both proposals fully identical except `id` and `timestamp`.
-    expect(proposals[0].payload).toEqual(proposals[1].payload);
+    expect(proposals[0]!.payload).toEqual(proposals[1]!.payload);
   });
 
   it("every proposal has a parsable ISO timestamp", () => {

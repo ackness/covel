@@ -66,6 +66,7 @@ async function runTurn(
   handlers: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>,
 ): Promise<Awaited<ReturnType<typeof executeTurn>>> {
   const input: TurnInput = {
+    origin: "player",
     sessionId: "sess-1",
     turnId: "turn-1",
     playerMessage: "x",
@@ -149,6 +150,7 @@ describe("executeTurn: manifest.needs", () => {
     });
     let downstreamRan = false;
     const input: TurnInput = {
+      origin: "player",
       sessionId: "sess-1",
       turnId: "turn-1",
       playerMessage: "x",

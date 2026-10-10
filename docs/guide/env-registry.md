@@ -141,6 +141,14 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 | `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` TCP 检查                        |
 | `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                            |
 | `VITE_ROUTER_DEVTOOLS`                                | `true`                          | 开启 Vite 路由开发工具                                 |
+| `POSTGRES_USER` / `POSTGRES_DB`                       | `covel` / `covel`               | Docker Compose 中 PostgreSQL 的用户名与库名            |
+| `COVEL_DATA_ROOT`                                     | —                               | 桌面端存放 SQLite、世界与日志的数据根目录              |
+| `COVEL_USER_CONFIG_DIR`                               | —                               | 桌面端模型数据库与设置所在的配置目录                   |
+| `COVEL_LOGS_DIR`                                      | —                               | 桌面端日志目录（设置页显示）                           |
+| `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES`       | `10` / `10`                     | 桌面端日志轮转的单文件上限与保留个数                   |
+| `COVEL_SERVER_LOG_FILE`                               | —                               | 覆盖 server 复制 stdout/stderr 的文件，空串关闭        |
+| `COVEL_MODEL_DB_PATH`                                 | —                               | 覆盖模型数据库 JSON 的路径                             |
+| `COVEL_PROMPTS_DIR`                                   | —                               | 覆盖提示词模板根目录                                   |
 
 `LIVE_LLM_ENABLED`、`BASE_URL`、`SESSION_ID` 属于测试或
 截图脚本专用变量；`CSC_LINK`、`CSC_KEY_PASSWORD`、`WIN_CSC_TIMESTAMP_SERVER`、

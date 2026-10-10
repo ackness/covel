@@ -26,6 +26,7 @@ import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 // ── Fixtures ──────────────────────────────────────────────────────
 
 const input: TurnInput = {
+  origin: "player",
   sessionId: "sess-loop",
   turnId: "turn-loop",
   playerMessage: "go",

@@ -162,7 +162,12 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     const events = (file: string) => ({
       contributes: {
         events: [
-          { topic: "scene.set", schema: `./schemas/${file}`, description: "" },
+          {
+            topic: "scene.set",
+            schema: `./schemas/${file}`,
+            description: "",
+            advertise: true,
+          },
         ],
       },
     });

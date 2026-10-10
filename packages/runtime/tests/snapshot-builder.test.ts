@@ -84,31 +84,31 @@ describe("buildSessionSnapshot", () => {
     const snapshot = await buildSessionSnapshot(store as any, "sess-1");
 
     // Session metadata
-    expect(snapshot.session.id).toBe("sess-1");
-    expect(snapshot.session.worldId).toBe("neonridge");
-    expect(snapshot.session.phase).toBe("playing");
-    expect(snapshot.session.completedPlayerTurns).toBe(3);
+    expect(snapshot!.session.id).toBe("sess-1");
+    expect(snapshot!.session.worldId).toBe("neonridge");
+    expect(snapshot!.session.phase).toBe("playing");
+    expect(snapshot!.session.completedPlayerTurns).toBe(3);
 
     // Messages flattened from metadata
-    expect(snapshot.messages).toHaveLength(2);
-    expect(snapshot.messages[0].role).toBe("user");
-    expect(snapshot.messages[0].turnId).toBe("t1");
-    expect(snapshot.messages[1].kind).toBe("story");
-    expect(snapshot.messages[1].runtimeId).toBe("narrator");
+    expect(snapshot!.messages).toHaveLength(2);
+    expect(snapshot!.messages[0]!.role).toBe("user");
+    expect(snapshot!.messages[0]!.turnId).toBe("t1");
+    expect(snapshot!.messages[1]!.kind).toBe("story");
+    expect(snapshot!.messages[1]!.runtimeId).toBe("narrator");
 
     // Characters
-    expect(snapshot.characters).toHaveLength(1);
-    expect(snapshot.characters[0].name).toBe("Hero");
+    expect(snapshot!.characters).toHaveLength(1);
+    expect(snapshot!.characters[0]!.name).toBe("Hero");
 
     // Game state aggregated from state entries
-    expect(snapshot.gameState).toEqual({
+    expect(snapshot!.gameState).toEqual({
       world: { weather: "rain", time: "night" },
       player: { hp: 100 },
     });
 
     // Execution steps
-    expect(snapshot.executionSteps).toHaveLength(2);
-    expect(snapshot.executionSteps[0].type).toBe("runtime.started");
+    expect(snapshot!.executionSteps).toHaveLength(2);
+    expect(snapshot!.executionSteps[0]!.type).toBe("runtime.started");
   });
 
   it("should return null if session not found", async () => {
@@ -156,7 +156,7 @@ describe("buildSessionSnapshot", () => {
 
     expect(snapshot!.messages).toHaveLength(80);
     expect(decodePageCursor(snapshot!.messagesCursor!)).toEqual({
-      createdAt: full[0].createdAt,
+      createdAt: full[0]!.createdAt,
       id: "m0",
     });
   });

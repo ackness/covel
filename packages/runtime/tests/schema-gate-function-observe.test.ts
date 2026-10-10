@@ -40,7 +40,12 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
 }
 
 function input(sessionId: string): TurnInput {
-  return { sessionId, turnId: `${sessionId}-turn`, playerMessage: "hi" };
+  return {
+    origin: "player",
+    sessionId,
+    turnId: `${sessionId}-turn`,
+    playerMessage: "hi",
+  };
 }
 
 function makeDeps(loaded: LoadedRuntime): TurnExecutorDeps {

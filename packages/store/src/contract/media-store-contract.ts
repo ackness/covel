@@ -5,7 +5,9 @@ import type { MediaStore } from "../media-store.js";
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const OTHER = new Uint8Array([1, 2, 3, 4]);
 
-async function toUint8Array(value: Uint8Array | Blob): Promise<Uint8Array> {
+export async function toUint8Array(
+  value: Uint8Array | Blob,
+): Promise<Uint8Array> {
   if (value instanceof Uint8Array) return value;
   return new Uint8Array(await value.arrayBuffer());
 }

@@ -33,6 +33,7 @@ const ledger = {
 } as RuntimeManifest;
 
 const input: TurnInput = {
+  origin: "player",
   sessionId: "sess-steer",
   turnId: "turn-steer",
   playerMessage: "open the door",

@@ -9,6 +9,7 @@ async function fixture(
   const store = createMemoryStore();
   const now = "2026-01-01T00:00:00.000Z";
   await store.createSession({
+    locale: "en-US",
     id: "session",
     status: "active",
     phase: "playing",
@@ -71,11 +72,11 @@ describe("memory ownership boundaries", () => {
         query: new Float32Array([0, 1]),
       });
       expect(rows).toHaveLength(1);
-      expect(rows[0].payload).toContain("new harbour");
+      expect(rows[0]!.payload).toContain("new harbour");
       // No source contains this word: a keyword fallback cannot hide a stale index.
       const hits = await newer.archival.search("session", "seaport");
       expect(hits).toHaveLength(1);
-      expect(hits[0].content).toContain("new harbour");
+      expect(hits[0]!.content).toContain("new harbour");
     } finally {
       release.resolve();
       await pending;
@@ -90,8 +91,8 @@ describe("memory ownership boundaries", () => {
     await store.upsertCharacter({ ...character, description: "new harbour" });
     const current = await memory.archival.search("session", "Alice");
     expect(current).toHaveLength(1);
-    expect(current[0].content).toContain("new harbour");
-    expect(current[0].content).not.toContain("old observatory");
+    expect(current[0]!.content).toContain("new harbour");
+    expect(current[0]!.content).not.toContain("old observatory");
     await store.deleteCharacter("session", "character");
     expect(await memory.archival.search("session", "Alice")).toEqual([]);
   });
@@ -128,7 +129,7 @@ describe("memory ownership boundaries", () => {
       expect((await memory.ingest("session")).archival).toBe(1);
       const rows = await search();
       expect(rows).toHaveLength(1);
-      expect(rows[0].payload).toContain("new harbour");
+      expect(rows[0]!.payload).toContain("new harbour");
     } finally {
       warn.mockRestore();
       await store.close();
@@ -152,7 +153,7 @@ describe("memory ownership boundaries", () => {
       topK: 10,
     });
     expect(rows).toHaveLength(1);
-    expect(rows[0].payload).toContain("Bob");
+    expect(rows[0]!.payload).toContain("Bob");
     expect(await store.listPluginDataSessionScope("session")).toEqual([]);
   });
 

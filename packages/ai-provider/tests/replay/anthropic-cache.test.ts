@@ -132,6 +132,62 @@ describe("Anthropic adapter — cache_control injection", () => {
       },
     ]);
     expect(JSON.stringify(messages)).not.toContain("cache_control");
+    // The history ends ahead of this turn's instructions. The next turn's
+    // request repeats this one up to there, so that boundary is cached too.
+    expect(turns[1]?.content).toEqual([
+      {
+        type: "text",
+        text: "previous story",
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
+  });
+
+  it("marks the end of the history once, and nothing when no history precedes the turn's instructions", async () => {
+    const cached = async (messages: TextMessage[]) => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeTextResponse()));
+      await createAnthropicMessagesAdapter().generateText(
+        { ...ANTHROPIC_CONFIG_BASE, cacheStrategy: "anthropic-explicit" },
+        { model: "claude-sonnet-4-6", messages },
+      );
+      const turns = readPostedBody().messages as Array<{ content: unknown }>;
+      return turns.map((turn) =>
+        JSON.stringify(turn).includes("cache_control"),
+      );
+    };
+    const system: TextMessage = {
+      role: "system",
+      content: `stable${PROMPT_CACHE_BREAKPOINT_MARKER}`,
+    };
+    // History, this turn's data, the player's message, a closing instruction.
+    expect(
+      await cached([
+        system,
+        { role: "user", content: "earlier action" },
+        { role: "assistant", content: "earlier story" },
+        { role: "system", content: "turn data" },
+        { role: "user", content: "action" },
+        { role: "system", content: "output rules" },
+      ]),
+    ).toEqual([false, true, false, false, true]);
+    // A runtime without history: the turn's data follows the system prompt
+    // and travels with it.
+    expect(
+      await cached([
+        system,
+        { role: "system", content: "turn data" },
+        { role: "user", content: "action" },
+      ]),
+    ).toEqual([true]);
+    // No instruction inside the conversation: the one moving breakpoint.
+    expect(
+      await cached([
+        system,
+        { role: "user", content: "earlier action" },
+        { role: "assistant", content: "earlier story" },
+        { role: "user", content: "action" },
+      ]),
+    ).toEqual([false, false, true]);
   });
 
   describe("cacheStrategy: 'anthropic-explicit' + sentinel present", () => {
@@ -145,7 +201,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -194,7 +250,7 @@ describe("Anthropic adapter — cache_control injection", () => {
             { role: "user", content: "go" },
           ],
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -221,7 +277,7 @@ describe("Anthropic adapter — cache_control injection", () => {
       await adapter.generateText(
         { ...ANTHROPIC_CONFIG_BASE, cacheStrategy: "anthropic-explicit" },
         { model: "claude-3-haiku-20240307", messages },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -245,7 +301,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithoutCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -263,7 +319,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -283,7 +339,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -301,7 +357,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithoutCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -346,7 +402,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           schema,
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "object" },
+        { profile: {} as never, preset: null, mode: "object" },
       );
 
       const body = readPostedBody();

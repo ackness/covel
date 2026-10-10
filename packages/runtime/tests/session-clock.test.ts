@@ -4,6 +4,8 @@ import { createMemoryStore } from "@covel/store/memory";
 import {
   mirrorSetupDone,
   type ExecutionContext,
+  type JsonValue,
+  type RuntimeManifest,
   type SetupRuntimeState,
 } from "@covel/shared";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -34,11 +36,20 @@ async function seedSession(
   });
 }
 
-function makeRuntime(name: string, outputKind = "plugin") {
-  return { name, pluginId: name, outputKind, outputContract: undefined };
+function makeRuntime(
+  name: string,
+  outputKind: RuntimeManifest["outputKind"] = "plugin",
+): RuntimeManifest {
+  return {
+    name,
+    pluginId: name,
+    description: name,
+    stage: "post-turn",
+    outputKind,
+  };
 }
 
-function statePatchResult(field: string, value: unknown) {
+function statePatchResult(field: string, value: JsonValue) {
   return {
     pluginId: "rt-a",
     runtimeId: "rt-a",

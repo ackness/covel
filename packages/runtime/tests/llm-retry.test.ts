@@ -750,14 +750,25 @@ describe("streamLLMWithRetry", () => {
         deadline: Date.now() + 10_000,
       });
 
-    await expect(run(streamAfterBackoff(0))).resolves.toMatchObject({
-      response: { content: "answered" },
-    });
-    // The guard restarts once an attempt is answered, so a real stall still
-    // times out.
-    await expect(run(streamAfterBackoff(150))).rejects.toThrow(
-      "first-token timeout",
-    );
+    // Fake clock: the 150 ms backoff outlasts the 50 ms guard without any
+    // dependence on how fast the machine runs the event loop.
+    vi.useFakeTimers();
+    try {
+      const answered = run(streamAfterBackoff(0));
+      await vi.advanceTimersByTimeAsync(400);
+      await expect(answered).resolves.toMatchObject({
+        response: { content: "answered" },
+      });
+      // The guard restarts once an attempt is answered, so a real stall still
+      // times out.
+      const stalled = expect(run(streamAfterBackoff(150))).rejects.toThrow(
+        "first-token timeout",
+      );
+      await vi.advanceTimersByTimeAsync(400);
+      await stalled;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("forwards the deltas of a retry when the failed attempt showed nothing", async () => {
@@ -1116,13 +1127,13 @@ describe("callLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[0].payload).toMatchObject({
+    expect(emitter.events[0]!.payload).toMatchObject({
       runtimeId: "narrator/main",
       pluginId: "narrator",
       slot: "default",
       attempt: 0,
     });
-    expect(emitter.events[1].payload).toMatchObject({
+    expect(emitter.events[1]!.payload).toMatchObject({
       text: "hi",
       finishReason: "stop",
       usage: { inputTokens: 10, outputTokens: 5 },
@@ -1159,7 +1170,7 @@ describe("callLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[1].payload).toMatchObject({ finishReason: "error" });
+    expect(emitter.events[1]!.payload).toMatchObject({ finishReason: "error" });
   });
 
   it("keeps the reported usage in the trace of a response cut at the output limit", async () => {
@@ -1281,11 +1292,11 @@ describe("streamLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[0].payload).toMatchObject({
+    expect(emitter.events[0]!.payload).toMatchObject({
       streaming: true,
       attempt: 0,
     });
-    expect(emitter.events[1].payload).toMatchObject({
+    expect(emitter.events[1]!.payload).toMatchObject({
       streaming: true,
       text: "hi",
       finishReason: "stop",
@@ -1330,12 +1341,12 @@ describe("streamLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[1].payload).toMatchObject({
+    expect(emitter.events[1]!.payload).toMatchObject({
       finishReason: "error",
       streaming: true,
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    expect(typeof emitter.events[1].payload.error).toBe("string");
+    expect(typeof emitter.events[1]!.payload.error).toBe("string");
   });
 
   it("keeps the reported usage in the trace of a stream cut at the output limit", async () => {

@@ -170,7 +170,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     const a = createEventBus(store, { transport: hub.connect() });
     const b = createEventBus(store, { transport: hub.connect() });
     const resets = vi.fn();
-    b.onReset(resets);
+    b.onReset?.(resets);
     const received: SubscriptionEvent[] = [];
     b.onEmit((event) => received.push(event));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

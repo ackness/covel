@@ -238,12 +238,12 @@ describe("gateway + slotOverrides", () => {
 
     expect(calls).toHaveLength(1);
     const call = calls[0];
-    expect(call.provider).toBe("vendorX");
-    expect(call.model).toBe("fast-7b");
+    expect(call!.provider).toBe("vendorX");
+    expect(call!.model).toBe("fast-7b");
     // The overlay-registered preset carries a `baseUrl`, so it must
     // reach the adapter config ahead of the provider's placeholder default.
-    expect(call.baseUrl).toBe("https://api.vendorx.example/v1");
-    expect(call.apiKey).toBe("sk-vendorX-TEST");
+    expect(call!.baseUrl).toBe("https://api.vendorx.example/v1");
+    expect(call!.apiKey).toBe("sk-vendorX-TEST");
     expect(result.text).toContain("vendorX/fast-7b");
 
     // Registry state restored after the call completes.
@@ -269,7 +269,7 @@ describe("gateway + slotOverrides", () => {
     );
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].providerRequestMetadata).toMatchObject({
+    expect(calls[0]!.providerRequestMetadata).toMatchObject({
       parameterOverrides: {
         temperature: 0.3,
         topP: 0.8,
@@ -516,7 +516,7 @@ describe("gateway + slotOverrides", () => {
     });
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].providerRequestMetadata).toEqual({
+    expect(calls[0]!.providerRequestMetadata).toEqual({
       reasoningEffort: "high",
       userFlag: true,
       parameterOverrides: {
@@ -723,8 +723,8 @@ describe("gateway + slotOverrides", () => {
     );
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].baseUrl).toBe("https://attacker.example");
-    expect(calls[0].apiKey).toBeUndefined();
+    expect(calls[0]!.baseUrl).toBe("https://attacker.example");
+    expect(calls[0]!.apiKey).toBeUndefined();
   });
 
   it("still applies env keys to trusted presets and custom presets without baseUrl", async () => {
@@ -754,9 +754,9 @@ describe("gateway + slotOverrides", () => {
     );
 
     expect(calls).toHaveLength(2);
-    expect(calls[0].apiKey).toBe("sk-env-SECRET");
-    expect(calls[1].apiKey).toBe("sk-env-SECRET");
-    expect(calls[1].model).toBe("deepseek-reasoner");
+    expect(calls[0]!.apiKey).toBe("sk-env-SECRET");
+    expect(calls[1]!.apiKey).toBe("sk-env-SECRET");
+    expect(calls[1]!.model).toBe("deepseek-reasoner");
   });
 
   it("strips env keys from resolveSlot for redirected custom presets", () => {
@@ -958,9 +958,9 @@ describe("gateway + slotOverrides", () => {
     );
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].provider).toBe("deepseek");
-    expect(calls[0].model).toBe("deepseek-chat");
-    expect(calls[0].apiKey).toBe("sk-deepseek-TEST");
+    expect(calls[0]!.provider).toBe("deepseek");
+    expect(calls[0]!.model).toBe("deepseek-chat");
+    expect(calls[0]!.apiKey).toBe("sk-deepseek-TEST");
   });
 });
 

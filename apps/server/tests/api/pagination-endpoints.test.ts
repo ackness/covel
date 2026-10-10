@@ -84,7 +84,7 @@ describe("GET /api/sessions/:id/messages/page", () => {
     };
     expect(body.items.map((m) => m.id)).toEqual(["m3", "m4"]);
     // Metadata is flattened to top-level.
-    expect(body.items[0].turnId).toBe("t3");
+    expect(body.items[0]!.turnId).toBe("t3");
     expect(decodePageCursor(body.nextCursor!)).toEqual({
       createdAt: ts(30),
       id: "m3",
@@ -152,13 +152,13 @@ describe("GET /api/traces/:sessionId/turns/page", () => {
     ];
     for (const e of [events[2], events[0], events[3], events[1]]) {
       await store.addTraceEvent({
-        id: e.id,
+        id: e!.id,
         sessionId,
         type: "llm_call",
         traceId: "trace-1",
-        turnId: e.turnId,
+        turnId: e!.turnId,
         payload: {},
-        createdAt: e.at,
+        createdAt: e!.at,
       });
     }
   });
@@ -174,7 +174,7 @@ describe("GET /api/traces/:sessionId/turns/page", () => {
     };
     // Newest 2 events belong to t2.
     expect(body.turns.map((t) => t.turnId)).toEqual(["t2"]);
-    expect(body.turns[0].eventCount).toBe(2);
+    expect(body.turns[0]!.eventCount).toBe(2);
     // Cursor is the oldest event of the window (an event, not a turn).
     expect(decodePageCursor(body.nextCursor!)).toEqual({
       createdAt: ts(30),

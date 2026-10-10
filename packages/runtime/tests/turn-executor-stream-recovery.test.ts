@@ -47,6 +47,7 @@ const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
 function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-1",
     turnId: "turn-1",
     playerMessage: "test",

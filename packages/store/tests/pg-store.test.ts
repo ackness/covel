@@ -104,7 +104,6 @@ if (pgAvailable) {
     try {
       await left.createSession({
         id: "cas-session",
-        worldId: null,
         phase: "playing",
         status: "active",
         setupRuntimes: {},

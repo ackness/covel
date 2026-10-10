@@ -89,12 +89,12 @@ describe("operation settings snapshot", () => {
     );
     expect(Object.isFrozen(defaults)).toBe(false);
     defaults.nested.value = "edited";
-    expect(snapshot.configured.config).toEqual({
+    expect(snapshot!.configured.config).toEqual({
       nested: { value: "original" },
     });
-    expect(Object.isFrozen(snapshot.configured.config)).toBe(true);
+    expect(Object.isFrozen(snapshot!.configured.config)).toBe(true);
     expect(
-      Object.isFrozen((snapshot.configured.config as typeof defaults).nested),
+      Object.isFrozen((snapshot!.configured.config as typeof defaults).nested),
     ).toBe(true);
   });
 
@@ -422,7 +422,12 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
     ];
     const seen: unknown[] = [];
     const result = await executeTurn(
-      { sessionId: "defaults", turnId: "defaults", playerMessage: "hello" },
+      {
+        origin: "player",
+        sessionId: "defaults",
+        turnId: "defaults",
+        playerMessage: "hello",
+      },
       manifests,
       {
         store: await createMainLoopStore("defaults"),
@@ -497,6 +502,7 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
     };
 
     const input: TurnInput = {
+      origin: "player",
       sessionId,
       turnId: "turn-cfg",
       playerMessage: "hello",

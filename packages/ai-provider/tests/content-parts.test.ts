@@ -66,7 +66,7 @@ describe("content part serialization", () => {
     await createOpenAiChatAdapter().generateText(
       { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
       { model: "gpt-4.1-mini", messages: [MULTIMODAL_MESSAGE] },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     expect(readRequestBody().messages).toEqual([
@@ -90,7 +90,7 @@ describe("content part serialization", () => {
     await createOpenAiResponsesAdapter().generateText(
       { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
       { model: "gpt-4.1-mini", messages: [MULTIMODAL_MESSAGE] },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     expect(readRequestBody().input).toEqual([
@@ -114,7 +114,7 @@ describe("content part serialization", () => {
     await createAnthropicMessagesAdapter().generateText(
       { baseUrl: "https://api.anthropic.com/v1", apiKey: "test" },
       { model: "claude-3-5-sonnet-latest", messages: [MULTIMODAL_MESSAGE] },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     expect(readRequestBody().messages).toEqual([
@@ -234,7 +234,7 @@ describe("content part serialization", () => {
           },
         ],
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = readRequestBody();
@@ -245,7 +245,7 @@ describe("content part serialization", () => {
     const unresolvedText = (
       body.messages as Array<{ content: Array<{ text: string }> }>
     )[1]?.content[0]?.text;
-    expect(JSON.parse(unresolvedText)).toMatchObject({
+    expect(JSON.parse(unresolvedText!)).toMatchObject({
       type: "image_ref",
       ref: IMAGE_REF_WITHOUT_URL,
     });

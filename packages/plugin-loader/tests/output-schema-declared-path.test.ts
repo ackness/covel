@@ -57,7 +57,7 @@ describe("loadRuntime output schema resolution", () => {
     );
 
     const [discovery] = await discoverPlugins(tmpDir);
-    const loaded = await loadRuntime(discovery, "test-plugin");
+    const loaded = await loadRuntime(discovery!, "test-plugin");
 
     expect(loaded.outputSchema).toEqual(SCHEMA);
   });
@@ -72,7 +72,7 @@ describe("loadRuntime output schema resolution", () => {
     );
 
     const [discovery] = await discoverPlugins(tmpDir);
-    const loaded = await loadRuntime(discovery, "test-plugin");
+    const loaded = await loadRuntime(discovery!, "test-plugin");
 
     expect(loaded.outputSchema).toEqual(SCHEMA);
   });
@@ -92,7 +92,7 @@ describe("loadRuntime output schema resolution", () => {
 
     const [discovery] = await discoverPlugins(tmpDir);
 
-    await expect(loadRuntime(discovery, "test-plugin")).rejects.toThrow(
+    await expect(loadRuntime(discovery!, "test-plugin")).rejects.toThrow(
       /path traversal rejected/,
     );
   });
@@ -106,7 +106,7 @@ describe("loadRuntime output schema resolution", () => {
     );
 
     const [discovery] = await discoverPlugins(tmpDir);
-    await expect(loadRuntime(discovery, "test-plugin")).rejects.toThrow(
+    await expect(loadRuntime(discovery!, "test-plugin")).rejects.toThrow(
       /schemas.*out.schema.json: io.output.schema: file not found/,
     );
   });
@@ -136,7 +136,7 @@ describe("loadRuntime binding accepts contracts", () => {
     );
     const [discovery] = await discoverPlugins(tmpDir);
     return loadRuntime(
-      discovery,
+      discovery!,
       "test-plugin",
       undefined,
       undefined,

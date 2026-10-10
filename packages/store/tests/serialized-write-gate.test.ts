@@ -37,8 +37,8 @@ async function seedSession(store: DataStore, id: string): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
     id,
-    worldId: null,
     status: "active",
+    locale: "en-US",
     activePlugins: [],
     phase: "setup",
     completedPlayerTurns: 0,

@@ -120,8 +120,8 @@ describe("preset-registry", () => {
   it("builds fallback chain", () => {
     const chain = registry.resolveTextTargetChain({});
     expect(chain).toHaveLength(2);
-    expect(chain[0].preset?.id).toBe("default");
-    expect(chain[1].preset?.id).toBe("fallback");
+    expect(chain[0]!.preset?.id).toBe("default");
+    expect(chain[1]!.preset?.id).toBe("fallback");
   });
 
   it("avoids circular fallback", () => {

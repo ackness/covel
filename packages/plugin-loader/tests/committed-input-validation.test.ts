@@ -91,7 +91,12 @@ for (const layout of ["inline", "child"] as const) {
     recordAs: "facts",
   };
   describe(`${layout} committed input static validation`, () => {
-    it.for([
+    it.for<{
+      name: string;
+      binding: object;
+      field: string;
+      files: Record<string, string>;
+    }>([
       {
         name: "missing accepts",
         binding: { ...committed, accepts: "./missing.json" },
@@ -201,7 +206,7 @@ for (const layout of ["inline", "child"] as const) {
       );
       expect(
         parse({ from: { runtime: runtimeId }, select: "/value" })?.manifest
-          .inputs?.prior.select,
+          .inputs?.prior!.select,
       ).toBe("/value");
     });
   });

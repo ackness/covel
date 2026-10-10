@@ -92,7 +92,7 @@ agent:
 
 `maxTurns` 按 `turnId` 计数，保留最近 N 个回合的可见消息，不再附带压缩摘要，也不参与本轮压缩屏障。当前玩家输入、本回合正文、`<runtime-inputs>`、selfData 与扩展段不受影响。需要长期回顾的 runtime 改用自有 plugin-data，或在 function runtime 中用 `ctx.store.readTurnMessages()` 分页读取完整原始记录。
 
-叙事之后运行的 agent（`post-turn` / `audit`）读到的对话以本回合的故事正文结尾：它以 assistant 消息接在当前玩家输入之后，再跟一条框架提示。正文里说「对话里最后一段故事正文是本回合的叙事」即可让模型从正文结尾的局面出发；需要结构化取值或来源信息时仍读 `runtime-inputs.<binding>.value`。细节见 [Prompt 结构](../reference/prompt-structure.md#本回合正文)。
+叙事之后运行的 agent（`post-turn` / `audit`）读到的对话以本回合的故事正文结尾：它以 assistant 消息接在当前玩家输入之后，再跟一条框架提示。正文里说「对话里最后一段故事正文是本回合的叙事」即可让模型从正文结尾的局面出发；需要结构化取值或来源信息时仍读 `runtime-inputs.<binding>.value`；整个值就是本回合正文的绑定在那里只留一句指向对话的话，正文不发第二遍。细节见 [Prompt 结构](../reference/prompt-structure.md#本回合正文)。
 
 正文里取值随剧情变化的模板变量（`{{ player.character }}`、`{{ characters.npcs }}`）会让 system prompt 每回合不同，服务商的前缀缓存就够不到历史。把这类内容改为回合级提示段的做法见 [Template 变量与数据边界](../reference/prompt-structure.md#4-template-变量与数据边界)。
 

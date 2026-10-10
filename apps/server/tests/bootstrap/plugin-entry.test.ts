@@ -1092,7 +1092,7 @@ export default async function (covel) {
         "wire-module",
         "wire-group",
         "wire-duplicate",
-      ].includes(name)
+      ].includes(name!)
         ? "declarations"
         : operation;
       const source = FULL_ENTRY_SRC.replace(

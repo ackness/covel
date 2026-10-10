@@ -44,6 +44,7 @@ async function testDeps(
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: "session",
     worldId: "world",
     status: "active",
@@ -206,7 +207,7 @@ describe("scheduler-driven detached turn completion", () => {
       },
     };
     // The source execution has committed, so the session clock moved on.
-    await deps.store.updateSession("session", { completedPlayerTurns: 1 });
+    await deps!.store.updateSession("session", { completedPlayerTurns: 1 });
 
     const result = await executeTurn(input, [narrative, detached], deps);
 

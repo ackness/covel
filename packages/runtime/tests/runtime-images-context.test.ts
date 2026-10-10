@@ -265,7 +265,7 @@ describe("createRuntimeImagesContext", () => {
       sceneId: "scene-1",
       pluginId: "img-plugin",
     });
-    expect(typeof meta.promptHash).toBe("string");
+    expect(typeof meta!.promptHash).toBe("string");
   });
 
   it("never lets plugin-supplied metadata override framework-injected keys", async () => {
@@ -284,8 +284,8 @@ describe("createRuntimeImagesContext", () => {
     });
 
     const [, , meta] = media.put.mock.calls[0]!;
-    expect(meta.pluginId).toBe("real-plugin");
-    expect(meta.promptHash).not.toBe("fake");
+    expect(meta!.pluginId).toBe("real-plugin");
+    expect(meta!.promptHash).not.toBe("fake");
   });
 
   it("returns a cached result and skips the gateway when promptHash already exists", async () => {
