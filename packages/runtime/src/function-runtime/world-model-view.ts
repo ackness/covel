@@ -192,23 +192,45 @@ export function overlayWorldModelView(
   // No proposal writes the world record, and it holds the whole setting text:
   // keep it out of the copy that every read of the other properties makes.
   const { worldRecord: _worldRecord, ...model } = snapshot;
+  // `pending` is the caller's live write buffer. The model with the first
+  // `applied.length` of its proposals is kept, so a read validates only what
+  // was buffered since the last one. A buffer that is no longer those
+  // proposals followed by new ones is read from the start.
+  let applied: readonly Proposal[] = [];
+  let state: WorldModelView | undefined;
   const current = () => {
     assertLive();
-    return materializeWorldModel(model, pending, sessionId, locale);
+    const grown =
+      state !== undefined &&
+      pending.length >= applied.length &&
+      applied.every((proposal, index) => pending[index] === proposal);
+    const next = [...pending];
+    state = grown
+      ? next.length === applied.length
+        ? state!
+        : materializeWorldModel(
+            state!,
+            next.slice(applied.length),
+            sessionId,
+            locale,
+          )
+      : materializeWorldModel(model, next, sessionId, locale);
+    applied = next;
+    return state;
   };
   return Object.freeze({
     get characters() {
-      return current().characters;
+      return structuredClone(current().characters);
     },
     get characterSchema() {
-      return current().characterSchema;
+      return structuredClone(current().characterSchema);
     },
     get worldRecord() {
       assertLive();
       return structuredClone(snapshot.worldRecord);
     },
     get dimensions() {
-      return current().dimensions;
+      return structuredClone(current().dimensions);
     },
     get dimensionProviderPluginId() {
       assertLive();
