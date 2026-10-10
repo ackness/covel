@@ -21,6 +21,8 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
+import { envOverriddenProviders } from "../lib/env-key-overrides.js";
+import { resolveCovelHome } from "./config-api.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
 import {
   checkHostedOperator,
@@ -192,6 +194,10 @@ export function createMiscApiRoutes(
         ...new Set(ai.presetRegistry.listPresets().map((p) => p.provider)),
       ],
       ...(canReadDiagnostics ? { source: ai.configSource } : {}),
+      // Providers whose saved key (Settings) is shadowed by the environment.
+      ...(canReadDiagnostics
+        ? { envKeyOverrides: envOverriddenProviders(resolveCovelHome()) }
+        : {}),
       // Reload failures preserve the last valid active configuration.
       ...(canReadDiagnostics && ai.lastLoadError
         ? { error: ai.lastLoadError }

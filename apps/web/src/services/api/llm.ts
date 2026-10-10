@@ -71,6 +71,8 @@ export interface LlmConfigResponse {
   slots: Record<string, LlmSlotInfo>;
   providers: string[];
   source?: { kind: "file" | "builtin"; path: string };
+  /** Providers whose saved key the server's environment overrides (desktop). */
+  envKeyOverrides?: string[];
   /** A failed load preserves the last valid active configuration. */
   error?: string;
 }

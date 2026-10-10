@@ -66,6 +66,7 @@ export function LlmKeysPane({
   const openLlmTomlFile = useOpenLlmToml();
 
   const isConfigured = state.llmConfig?.configured ?? false;
+  const envOverrides = state.llmConfig?.envKeyOverrides ?? [];
   const [priceMultipliers, setPriceMultipliersLocal] = useState<
     Record<string, number>
   >(() => getProviderPriceMultipliers());
@@ -207,6 +208,11 @@ export function LlmKeysPane({
               </span>
             </div>
             <SettingWidget entry={entry} />
+            {hasKey && envOverrides.includes(providerId) && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-500">
+                {t("settings.keyOverriddenByEnv")}
+              </p>
+            )}
             {serverKeyConfigured && (
               <p className="text-[10px] text-muted-foreground">
                 {t("settings.serverKeyAvailable")}

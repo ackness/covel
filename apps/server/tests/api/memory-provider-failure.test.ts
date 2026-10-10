@@ -84,5 +84,6 @@ it("does not write memory or report provider success from a failed non-stream re
   ).rejects.toMatchObject({ code: "PROVIDER_ERROR" });
   expect(write).not.toHaveBeenCalled();
   expect(success).not.toHaveBeenCalled();
-  expect(error).toHaveBeenCalledTimes(3);
+  // One call: the plugin leaves retrying to the gateway.
+  expect(error).toHaveBeenCalledTimes(1);
 });

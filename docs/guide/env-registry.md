@@ -5,7 +5,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - `readRuntimeEnv()`：读取 server / storage / desktop 常用配置。
 - `isEnvEnabled()`：读取严格 feature flag，只有字符串 `1` 表示开启。
 - `isEnvDefaultOn()`：读取默认开启的开关，`0` / `false` 表示关闭。
-- `readEnvString()` / `readEnvInt()` / `readEnvChoice()`：读取单个变量。
+- `readEnvString()` / `readEnvInt()` / `readEnvChoice()`：读取单个变量；`readEnvChoiceStrict()` 在值不合法时抛错。
 - `providerApiKeysFromEnv()`：扫描所有 `*_API_KEY` 并映射成 provider id。
 
 ## 分组
@@ -171,7 +171,7 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 
 ## Runtime Contract
 
-- `STORE_BACKEND` 的代码默认值为 `sqlite`。
+- `STORE_BACKEND` 的代码默认值为 `sqlite`。`STORE_BACKEND`、`MEDIA_BACKEND`、`VECTOR_BACKEND` 这三个决定数据落在哪里的变量读取时使用 `readEnvChoiceStrict()`：值不在可选范围内（例如把 `pg` 写成 `postgres`）会让服务启动失败，错误信息列出可接受的值，而不是悄悄退回默认值。`NODE_ENV` 等不影响数据去向的枚举仍用 `readEnvChoice()`，未知值回退到默认。
 - `DEPLOYMENT_TIER=self` 对应本地自部署；localhost 请求可以读取 server 注入的 provider key 元数据。`demo` / `commercial` 会硬性强制 session owner token 鉴权。即使为 `self`，当 `NODE_ENV=production` 且实际注入的存储后端为 MemoryStore 时，也强制会话 owner token，并对全局世界写入强制 operator token；该判断不只依赖 `STORE_BACKEND` 环境值。详见 [`docs/reference/api.md`](../reference/api.md) 鉴权章节。未知 tier 会被规范化并 fail-closed 到最严格的 `commercial`。
 - `COVEL_DESKTOP_REST_TOKEN` 是运维 master / operator 凭证：以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted（`demo` / `commercial`）层级创建/列出会话、世界写入与维度导入、AI 世界生成、模型探测/刷新以及 community server-code 激活的必需凭证。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动（fail-closed）。`self` 层级启动不要求该 token；但生产 MemoryStore 的全局世界创建、修改、删除、维度导入和服务端生成保存会校验它，未配置时这些写入保持关闭，公开读取和合法会话访问仍可使用。普通本地或桌面会话仍可无 token 访问；桌面配置接口另有其自身的 token 校验。这是当前单运维方信任模型，不提供多租户身份或代码沙箱（见 [`docs/reference/api.md`](../reference/api.md) 鉴权章节）。
 - Electron 桌面端选择 `system` 时，sidecar 会针对每个目标 URL 通过 IPC 调用 Chromium 系统代理解析，并按系统返回的代理列表顺序处理连接级 fallback。Electron 会注入内部 capability `COVEL_DESKTOP_SYSTEM_PROXY_IPC=1`，因此普通 Node IPC/cluster 进程不会误启用该协议。`COVEL_SYSTEM_PROXY_URL` 仅作为不支持动态 IPC 的旧 shell 兼容入口；该配置用于核心 provider、模型数据库以及 GitHub 插件解析与下载请求，不应用到第三方插件的 `fetchWithRetry`。
