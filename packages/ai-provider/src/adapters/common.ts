@@ -168,3 +168,16 @@ export function lateSystemMessagesAsUser(
     };
   });
 }
+
+/**
+ * Applies `lateSystemMessagesAsUser` when the slot's `lateSystemAsUser`
+ * provider option is on (metadata key `lateSystemAsUser`, default off).
+ */
+export function lateSystemOption(
+  messages: TextMessage[],
+  metadata: Record<string, unknown> | undefined,
+): TextMessage[] {
+  return metadata?.lateSystemAsUser === true
+    ? lateSystemMessagesAsUser(messages)
+    : messages;
+}

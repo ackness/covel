@@ -341,7 +341,12 @@ promptCacheKey = true
 
 想固定成自己的键时，在 `extraBody` 或 `providerRequestMetadata` 里写 `prompt_cache_key`，它覆盖框架生成的键。function runtime 通过 `ctx.gateway.generateText` 发的请求也带键：宿主按同一规则用会话 ID 和该 runtime 的 ID 生成，插件传入的 `promptCacheKey` 会被替换。要读到缓存，请求开头必须是不变的内容（指令、稳定数据），变化的部分放在后面，并且前缀不少于 1,024 个 token。`generateObject`、历史压缩、记忆向量检索、世界生成和翻译不带键：压缩的固定指令很短，两次调用相隔很久；向量检索没有提示词缓存；世界生成和翻译没有会话，只有重试会重复前缀。
 
-多数 OpenAI 兼容中转会把请求转换成别的协议，常把所有 system 消息移到最前面。为了不让每回合变化的内容排到历史前面，`openai-chat-v1` 和 `openai-responses-v1` 把第一条对话消息之后的 system 消息改作 `user` 消息发送，包在 `<system-instruction>` 标签里，位置不变（Anthropic 同样；见 [prompt-structure.md](./prompt-structure.md#回合上下文)）。
+`lateSystemAsUser`（`openai-chat-v1` 和 `openai-responses-v1` 的 `providerOptions`，默认 `false`）：打开后，第一条对话消息之后的 system 消息改作 `user` 消息发送，包在 `<system-instruction>` 标签里，位置和文字不变。框架把每回合变化的内容（数据块、本回合规则）放在历史之后的一条 system 消息里；有些中转把所有 system 消息移到最前面，或把请求转换成只有一个 system 位的协议，这段每回合都变的文字就排到了历史前面，历史全部落在缓存之外。实测（本机 Codex 式中转，叙事 runtime，8 回合）：每回合首个请求的缓存读取从 3,584 token（中转自带的固定指令）升到 8,704，占输入的 22% 升到 55%；叙事全部请求从 54% 升到 75%。这只是那一个中转上的测量；`api.openai.com` 和其他兼容服务没有测过，也没有证据表明它们会移动 system 消息。代价：模型看到的角色从 system 变成 user，回合规则和插件写的指令（如掷骰步骤）的权重可能略有不同，没有做过质量对比。Anthropic 协议始终这样处理，不受此选项影响。
+
+```toml
+[covel.story.providerOptions.myrelay]
+lateSystemAsUser = true
+```
 
 ## 结构化输出
 

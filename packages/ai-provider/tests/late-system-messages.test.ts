@@ -63,38 +63,78 @@ describe("lateSystemMessagesAsUser", () => {
   });
 });
 
-describe("turn context ahead of the cache on the OpenAI wires", () => {
-  it("Chat sends the same bytes up to the history end whatever the turn context says", async () => {
-    const send = async (turnContext: string) => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 200,
-          text: async () =>
-            JSON.stringify({
-              choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
-              usage: { prompt_tokens: 1, completion_tokens: 1 },
-            }),
-        }),
-      );
-      await createOpenAiChatAdapter().generateText(
-        { baseUrl: "https://relay.example.com/v1" },
-        {
-          model: "m",
-          messages: [
-            { role: "system", content: "stable rules" },
-            { role: "assistant", content: "history" },
-            { role: "system", content: turnContext },
-            { role: "user", content: "go" },
-          ],
-        },
-        context,
-      );
-      return sentBody().messages as Array<{ role: string; content: string }>;
-    };
-    const first = await send("turn 1 data");
-    const second = await send("turn 2 data");
+const RELAY = "https://relay.example.com/v1";
+
+function stubReply(payload: Record<string, unknown>): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(payload),
+    }),
+  );
+}
+
+const chatReply = {
+  choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+  usage: { prompt_tokens: 1, completion_tokens: 1 },
+};
+const responsesReply = {
+  status: "completed",
+  output: [{ type: "message", content: [{ type: "output_text", text: "ok" }] }],
+  usage: { input_tokens: 1, output_tokens: 1 },
+};
+
+async function sendChat(
+  turnContext: string,
+  lateSystemAsUser?: boolean,
+): Promise<Array<{ role: string; content: string }>> {
+  stubReply(chatReply);
+  await createOpenAiChatAdapter().generateText(
+    { baseUrl: RELAY },
+    {
+      model: "m",
+      messages: [
+        { role: "system", content: "stable rules" },
+        { role: "assistant", content: "history" },
+        { role: "system", content: turnContext },
+        { role: "user", content: "go" },
+      ],
+      ...(lateSystemAsUser === undefined
+        ? {}
+        : { providerRequestMetadata: { lateSystemAsUser } }),
+    },
+    context,
+  );
+  return sentBody().messages as Array<{ role: string; content: string }>;
+}
+
+describe("lateSystemAsUser option on the OpenAI wires", () => {
+  it("leaves every role untouched by default and when off", async () => {
+    for (const option of [undefined, false]) {
+      const body = await sendChat("turn data", option);
+      expect(body.map((m) => m.role)).toEqual([
+        "system",
+        "assistant",
+        "system",
+        "user",
+      ]);
+    }
+    stubReply(responsesReply);
+    await createOpenAiResponsesAdapter().generateText(
+      { baseUrl: RELAY },
+      { model: "m", messages },
+      context,
+    );
+    expect(
+      (sentBody().input as Array<{ role: string }>).map((i) => i.role),
+    ).toEqual(["system", "assistant", "system", "user", "system"]);
+  });
+
+  it("Chat with the option keeps the bytes up to the history end whatever the turn context says", async () => {
+    const first = await sendChat("turn 1 data", true);
+    const second = await sendChat("turn 2 data", true);
     expect(first.map((m) => m.role)).toEqual([
       "system",
       "assistant",
@@ -105,37 +145,25 @@ describe("turn context ahead of the cache on the OpenAI wires", () => {
     expect(first[2]!.content).not.toBe(second[2]!.content);
   });
 
-  it("Responses sends later system messages as user input items", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            status: "completed",
-            output: [
-              {
-                type: "message",
-                content: [{ type: "output_text", text: "ok" }],
-              },
-            ],
-            usage: { input_tokens: 1, output_tokens: 1 },
-          }),
-      }),
-    );
+  it("Responses with the option sends later system messages as user input items", async () => {
+    stubReply(responsesReply);
     await createOpenAiResponsesAdapter().generateText(
-      { baseUrl: "https://relay.example.com/v1" },
-      { model: "m", messages },
+      { baseUrl: RELAY },
+      {
+        model: "m",
+        messages,
+        providerRequestMetadata: { lateSystemAsUser: true },
+      },
       context,
     );
-    const input = sentBody().input as Array<{ role: string }>;
-    expect(input.map((item) => item.role)).toEqual([
+    const body = sentBody();
+    expect((body.input as Array<{ role: string }>).map((i) => i.role)).toEqual([
       "system",
       "assistant",
       "user",
       "user",
       "user",
     ]);
+    expect(body).not.toHaveProperty("lateSystemAsUser");
   });
 });

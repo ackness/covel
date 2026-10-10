@@ -53,7 +53,7 @@ import {
   extractParameterOverrides,
   IMAGE_PLACEHOLDER_TEXT,
   imagePartUrl,
-  lateSystemMessagesAsUser,
+  lateSystemOption,
 } from "./common.js";
 import type {
   ModelRequestContext,
@@ -71,6 +71,7 @@ const RESPONSES_PROTECTED_KEYS = new Set([
   "tools",
   "tool_choice",
   "promptCacheKey",
+  "lateSystemAsUser",
   "parameterOverrides",
   "reasoning_effort",
   "reasoningEffort",
@@ -208,7 +209,7 @@ function serializeResponsesInput(
   stateless: boolean,
 ): unknown[] {
   const items: unknown[] = [];
-  for (const msg of lateSystemMessagesAsUser(messages)) {
+  for (const msg of messages) {
     const native = continuationItems(msg, "openai-responses-v1", model, config);
     if (native) {
       items.push(...(stateless ? statelessReplayItems(native) : native));
@@ -322,7 +323,7 @@ function responsesRequestBody(
     ];
   }
   body.input = serializeResponsesInput(
-    messages,
+    lateSystemOption(messages, params.providerRequestMetadata),
     params.model,
     config,
     stateless,
