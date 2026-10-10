@@ -21,10 +21,6 @@ requires:
   - scene-cast@1
   - scene-stage@1
   - scene-prompts@1
-  - character-blueprint@1
-  - character-presence@1
-  - living-world-rules@1
-  - branch-reply@1
 conflicts:
   - narrative-engine@1
 optional:
