@@ -76,6 +76,7 @@ docs/
 ├── README.md                  # 文档总入口
 ├── DOCS_STRATEGY.md           # 文档组织、站点拆分和发布策略
 ├── CHANGELOG.md               # 版本发布记录
+├── changelog.d/               # 待发布的变更条目，一个改动一个文件（pnpm changelog:preview 预览）
 ├── CONTRIBUTING.md / .en.md   # 贡献指南
 ├── glossary.md                # 术语表
 ├── guide/                     # how-to 教程

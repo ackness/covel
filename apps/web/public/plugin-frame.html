@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta charset="utf-8" />
+    <title>Plugin frame</title>
+    <style>
+      html,
+      body,
+      iframe {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        border: 0;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      // Host of one plugin document. The app frames this file with
+      // sandbox="allow-scripts" and sends the plugin's HTML with a message
+      // port. The HTML goes into a second sandboxed frame, which inherits the
+      // policy above: this document owns `frame-src`, so the plugin's document
+      // cannot navigate itself to a network address, and it gets the port once.
+      (() => {
+        let frame;
+        addEventListener("message", (event) => {
+          const port = event.ports[0];
+          if (
+            event.source !== parent ||
+            event.data?.type !== "covel:connect" ||
+            !port
+          )
+            return;
+          if (frame || typeof event.data.document !== "string") {
+            port.close();
+            return;
+          }
+          frame = document.createElement("iframe");
+          frame.title = "Plugin content";
+          frame.setAttribute("sandbox", "allow-scripts");
+          frame.referrerPolicy = "no-referrer";
+          frame.srcdoc = event.data.document;
+          frame.addEventListener(
+            "load",
+            () =>
+              frame.contentWindow.postMessage({ type: "covel:connect" }, "*", [
+                port,
+              ]),
+            { once: true },
+          );
+          document.body.append(frame);
+        });
+      })();
+    </script>
+  </body>
+</html>

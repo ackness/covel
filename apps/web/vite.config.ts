@@ -132,6 +132,10 @@ export default defineConfig(({ mode }) => ({
         //                       message render)
         //   - `json-render-vendor` / `radix-vendor` / `forms-vendor`: see below
         manualChunks(id) {
+          // Zod's settings travel with Zod: a vendor chunk that builds
+          // schemas while it loads runs before the entry module's body, and
+          // would otherwise make Zod probe for `eval` first (lib/zod-config.ts).
+          if (id.endsWith("/src/lib/zod-config.ts")) return "forms-vendor";
           if (!id.includes("node_modules")) return undefined;
           // Match against the path AFTER node_modules/ to be resilient to
           // pnpm's `.pnpm/<pkg>@<ver>/node_modules/<pkg>/` layout.

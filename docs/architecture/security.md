@@ -298,15 +298,85 @@ The limits on it:
 
 The built main page carries a `Content-Security-Policy` meta tag
 (`apps/web/src/lib/page-csp.ts`, injected by the Vite build; the dev server
-does not get it because Vite needs inline scripts and a hot-reload socket). It
-allows scripts from the page's own origin plus inline scripts, `connect-src`
-to the own origin (plus `blob:` / `data:`), styles and fonts from `https:`, and
-no plugins (`object-src 'none'`), with `base-uri` and `form-action` pinned to
-the own origin. Inline scripts stay allowed because plugin webviews are
-`srcdoc` frames that inherit the page policy and run an inline bridge; remote
-scripts and `eval` are blocked. `style-src` / `font-src` allow `https:` because
-an imported theme's own CSS may load remote stylesheets and fonts. The policy
-sets no `img-src`.
+does not get it because Vite needs inline scripts and a hot-reload socket):
+
+```
+script-src 'self'; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; connect-src 'self' blob: data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+```
+
+Scripts are the app's own files only: no inline script, no inline event
+handler, no `eval`, no remote script. The built page has one external module
+script and nothing inline (Zod is configured not to probe for `eval`,
+`apps/web/src/lib/zod-config.ts`). Frames are limited to the own origin; the
+only frame the app creates is the plugin frame host described below.
+`connect-src` is the own origin (plus `blob:` / `data:`), there are no plugins
+(`object-src 'none'`), and `base-uri` and `form-action` are pinned to the own
+origin. `style-src` keeps `'unsafe-inline'`: React `style` props, the theme
+system's injected rules and imported theme CSS need it, and removing it is a
+separate step. `style-src` / `font-src` allow `https:` because an imported
+theme's own CSS may load remote stylesheets and fonts. The policy sets no
+`img-src`.
+
+`tests/e2e/page-policy.spec.ts` loads the built app's main screens and a
+session with plugin panels and fails on any `securitypolicyviolation` event.
+
+### Plugin HTML
+
+A plugin's `webview` HTML is code the player approved, and it must not reach
+the app's origin: the settings and provider keys in `localStorage`, cookies,
+or the API with the player's session tokens. It runs two frames down from the
+app's page.
+
+1. **The frame host** is `/plugin-frame.html`, a static file of the web build
+   (`apps/web/public/plugin-frame.html`), the same for every plugin and
+   session. The app frames it with `sandbox="allow-scripts"` (no
+   `allow-same-origin`), so it is an opaque origin. It is loaded by URL, not
+   as `srcdoc` or `blob:`: a `srcdoc`, `blob:` or `data:` frame inherits the
+   policy of the page that creates it, which would force the app's page to
+   allow inline script, while a document loaded from a URL has only the policy
+   of its own response. Its policy, in a `<meta>` of the file:
+
+   ```
+   default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'
+   ```
+
+   The Covel server sends the same policy as a response header with
+   `sandbox allow-scripts; frame-ancestors 'self'` added
+   (`apps/server/src/middleware/plugin-frame-headers.ts`), so the document is
+   an opaque origin even when its address is opened directly, and no other
+   site can frame it. A static host that serves the build without these
+   headers still gets the `<meta>` policy and the frame's `sandbox` attribute.
+
+2. **The plugin document** is a `srcdoc` frame that the frame host creates,
+   again with `sandbox="allow-scripts"`. It inherits the frame host's policy:
+   inline script and style run, nothing loads from the network, and
+   `frame-src 'none'` on the frame host stops the plugin document from
+   navigating itself to a network address (a document's own policy cannot
+   stop its own navigation; its parent's `frame-src` does).
+
+The plugin's HTML does not travel through a URL. The app already holds it
+(`GET /api/ui-specs`, with that route's session authorization) and sends it to
+the frame host with the bridge port, so `/plugin-frame.html` takes no plugin,
+session or file name and cannot be used to read another plugin's or another
+session's files. The file is part of the build, so the desktop app (served by
+its loopback sidecar), the browser-private profile and offline use need
+nothing else, and there is no second origin for a self-hoster to configure. A
+separate real origin (another port or subdomain) would add no isolation that
+the opaque origin lacks here, and would cost every self-hoster a second
+listener, DNS name or proxy rule.
+
+**The bridge** (`apps/web/src/components/session/plugin-bridge.ts`). The app
+listens on no window `message` event. For each frame element it creates one
+`MessageChannel` and transfers one end to that frame's `contentWindow`; the
+frame host passes it to the plugin document once, and a document that loads in
+either frame later gets no port. What arrives on the port is untrusted input,
+parsed with Zod: a request names one of the actions the host offers for that
+panel (bound to the owning plugin) and a plain parameter object; anything else
+is dropped or answered with a fixed failure text. A handler's error never
+crosses, so a server error or a credential in it stays in the app. The bridge
+carries the plugin's own data, the locale, the lock state, the panel context
+and the theme. It carries no session token and no provider key, and plugin
+HTML has no way to call the API except through an offered action.
 
 The app ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1) and makes
 no request to a font host at start.

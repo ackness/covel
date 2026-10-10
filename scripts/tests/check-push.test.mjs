@@ -1,135 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import os from "node:os";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
-
-const command = fileURLToPath(new URL("../check-push.mjs", import.meta.url));
-
-function git(cwd, ...args) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
-  return result.stdout.trim();
-}
-
-function fixture(t) {
-  const directory = mkdtempSync(
-    path.join(os.tmpdir(), "covel-check-push-test-"),
-  );
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const repo = path.join(directory, "repo");
-  const log = path.join(directory, "calls.jsonl");
-  git(directory, "init", "--quiet", repo);
-  git(repo, "config", "user.name", "Test User");
-  git(repo, "config", "user.email", "test@example.invalid");
-  writeFileSync(path.join(repo, ".gitignore"), "ignored.txt\n");
-  writeFileSync(
-    path.join(repo, "package.json"),
-    JSON.stringify({ scripts: { "test:docs": "run the documentation tests" } }),
-  );
-
-  function commit(value) {
-    writeFileSync(path.join(repo, "value.txt"), `${value}\n`);
-    git(repo, "add", ".gitignore", "package.json", "value.txt");
-    git(repo, "commit", "--quiet", "-m", value);
-    return git(repo, "rev-parse", "HEAD");
-  }
-
-  function commitFiles(files, message) {
-    for (const [file, content] of Object.entries(files)) {
-      mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
-      writeFileSync(path.join(repo, file), content);
-    }
-    git(repo, "add", ...Object.keys(files));
-    git(repo, "commit", "--quiet", "-m", message);
-    return git(repo, "rev-parse", "HEAD");
-  }
-
-  const shim = path.join(
-    directory,
-    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-  );
-  const fakePnpm = path.join(directory, "fake-pnpm.cjs");
-  writeFileSync(
-    fakePnpm,
-    `const fs = require("node:fs");
-const path = require("node:path");
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({
-  args: process.argv.slice(2),
-  cwd: process.cwd(),
-  value: fs.readFileSync("value.txt", "utf8").trim(),
-  dirty: fs.existsSync("dirty.txt"),
-  ignored: fs.existsSync("ignored.txt"),
-  ci: process.env.CI,
-  workers: process.env.VITEST_MAX_WORKERS,
-  databaseUrl: process.env.DATABASE_URL,
-  requirePg: process.env.COVEL_REQUIRE_PG_TESTS,
-  gitDir: process.env.GIT_DIR,
-  turboCacheDir: process.env.TURBO_CACHE_DIR,
-}) + "\\n");
-if (process.env.FAIL_ON === process.argv.slice(2).join(" ")) process.exit(7);
-`,
-  );
-  writeFileSync(
-    shim,
-    process.platform === "win32"
-      ? `@"${process.execPath}" "${fakePnpm}" %*\r\n`
-      : `#!/bin/sh\nexec "${process.execPath}" "${fakePnpm}" "$@"\n`,
-    { mode: 0o755 },
-  );
-
-  return {
-    repo,
-    commit,
-    commitFiles,
-    run(args = [], input = "", options = {}) {
-      const env = {
-        ...process.env,
-        PATH: `${directory}${path.delimiter}${process.env.PATH}`,
-        DATABASE_URL: "postgresql://fixture.invalid/do-not-use",
-        COVEL_REQUIRE_PG_TESTS: "1",
-        GIT_DIR: path.join(repo, ".git"),
-        FAIL_ON: options.failOn ?? "",
-      };
-      return spawnSync(process.execPath, [command, ...args], {
-        cwd: repo,
-        env,
-        input,
-        encoding: "utf8",
-      });
-    },
-    calls() {
-      if (!existsSync(log)) return [];
-      return readFileSync(log, "utf8")
-        .trim()
-        .split("\n")
-        .map((line) => JSON.parse(line));
-    },
-  };
-}
-
-const expectedCommands = [
-  ["install", "--frozen-lockfile"],
-  ["check"],
-  ["test", "--concurrency=2"],
-  ["e2e", "--list"],
-];
-
-const docsCommands = [
-  ["install", "--frozen-lockfile"],
-  ["check"],
-  ["test:docs"],
-];
+import {
+  docsCommands,
+  expectedCommands,
+  fixture,
+  git,
+} from "./helpers/check-push-fixture.mjs";
 
 test("manual check validates committed HEAD in a clean temporary checkout", (t) => {
   const probe = fixture(t);
@@ -311,24 +189,30 @@ test("a new branch is measured from the remote's main branch", (t) => {
   const zeros = "0".repeat(docs.length);
   const input = `refs/heads/topic ${docs} refs/heads/topic ${zeros}\n`;
 
-  // Without the remote's main branch there is nothing to measure from.
-  const unknown = probe.run(["--pre-push", "origin", "url"], input);
-  assert.equal(unknown.status, 0, unknown.stderr);
-  assert.deepEqual(
-    probe.calls().map(({ args }) => args),
-    expectedCommands,
-  );
-
   git(probe.repo, "update-ref", "refs/remotes/origin/main", main);
   const known = probe.run(["--pre-push", "origin", "url"], input);
   assert.equal(known.status, 0, known.stderr);
   assert.deepEqual(
-    probe
-      .calls()
-      .slice(expectedCommands.length)
-      .map(({ args }) => args),
+    probe.calls().map(({ args }) => args),
     docsCommands,
   );
+});
+
+test("a new branch runs every check when the remote's main branch is unknown", (t) => {
+  const probe = fixture(t);
+  probe.commit("main");
+  const docs = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+  // There is nothing to measure from, and no remote to fetch it from.
+  const result = probe.run(
+    ["--pre-push", "origin", "url"],
+    `refs/heads/topic ${docs} refs/heads/topic ${"0".repeat(docs.length)}\n`,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    expectedCommands,
+  );
+  assert.match(result.stdout, /Running every test suite: .*unknown/);
 });
 
 test("a commit that adds code to one of its refs runs every check", (t) => {
@@ -381,4 +265,16 @@ test("failed validation blocks remaining commands and pushed refs", (t) => {
   );
   assert.equal(existsSync(probe.calls()[0].cwd), false);
   assert.equal(git(probe.repo, "status", "--porcelain"), before);
+});
+
+test("a Turbo cache directory set by the caller is kept", (t) => {
+  const probe = fixture(t);
+  probe.commit("committed");
+  const cache = path.join(path.dirname(probe.repo), "cache");
+  const result = probe.run([], "", { env: { TURBO_CACHE_DIR: cache } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    new Set(probe.calls().map(({ turboCacheDir }) => turboCacheDir)),
+    new Set([cache]),
+  );
 });

@@ -145,7 +145,8 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/vitest.base.ts",
         "$TURBO_ROOT$/scripts/create-plugin.js",
-        "$TURBO_ROOT$/templates/**"
+        "$TURBO_ROOT$/templates/**",
+        "$TURBO_ROOT$/tests/third-party/**"
       ]
     },
     "lint": {
