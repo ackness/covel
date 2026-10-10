@@ -50,6 +50,7 @@ import { createAppUpdateRoutes } from "./routes/app-update.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
+import { pluginFrameHeaders } from "./middleware/plugin-frame-headers.js";
 import {
   errorBody,
   makeErrorHandler,
@@ -377,6 +378,7 @@ async function initializeServer(): Promise<void> {
     // ── Static file serving (production) ─────────────────────────────
     if (env.serveStatic) {
       const root = env.staticDir;
+      app.use("/*", pluginFrameHeaders());
       app.use("/*", serveStatic({ root }));
       app.get("*", serveStatic({ root, path: "/index.html" }));
     }

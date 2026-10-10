@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
+import { watchPolicyViolations } from "./helpers/page-policy.js";
 
 // Keep the host transport test independent of externally maintained demos.
 const html = `<!doctype html><html><body>
@@ -49,6 +50,9 @@ const html = `<!doctype html><html><body>
 test("package webview receives runtime outcomes and sanitized transport errors", async ({
   page,
 }) => {
+  // Inline script in plugin HTML runs under the frame host's policy, so it
+  // must not show up as a violation of the app's page policy.
+  const violations = await watchPolicyViolations(page);
   await page.setViewportSize({ width: 390, height: 844 });
   const fixture = await createRecoveryFixture(page, "completed");
   const pluginId = "webview-action-fixture";
@@ -216,6 +220,7 @@ test("package webview receives runtime outcomes and sanitized transport errors",
       .getByRole("tab", { name: "Webview Fixture", exact: true })
       .click();
     await expect(frame.getByRole("textbox", { name: "Draft" })).toHaveValue("");
+    expect(violations).toEqual([]);
   } finally {
     await fixture.dispose();
   }
