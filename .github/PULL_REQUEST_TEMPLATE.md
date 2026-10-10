@@ -34,7 +34,7 @@
 - [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, workflows -->
 - [ ] `pnpm test`
 - [ ] `pnpm test:pg` <!-- store or database changes / 改动存储或数据库时 -->
-- [ ] `pnpm e2e:smoke` / `pnpm e2e` <!-- UI or end-to-end flow changes / 改动界面或端到端流程时 -->
+- [ ] `pnpm e2e:smoke` / `pnpm e2e:extensions` / `pnpm e2e` <!-- UI or end-to-end flow changes / 改动界面或端到端流程时 -->
 - [ ] `pnpm validate:plugin` / `pnpm validate:world` <!-- plugin or world package changes / 改动插件或世界包时 -->
 - [ ] `pnpm e2e:verify` <!-- prompt, model-routing, or runtime behavior changes; needs .env.llm / 改动提示词、模型路由或 runtime 行为时 -->
 - [ ] Manual check / 手动验证: …

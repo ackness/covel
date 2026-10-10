@@ -55,7 +55,7 @@ test("a community map plugin draws itself, travels on a click, drafts a move and
     // Opening the panel with no map yet makes the widget emit `map.opened`;
     // the plugin's own runtime answers by writing the starting map.
     await authorize(page, /event:map\.opened/);
-    await authorize(page, /runtime:clickable-map\/chart/);
+    await authorize(page, /(task|任务) clickable-map\/chart/);
     const panel = page.getByRole("tabpanel", { name: "地图" });
     const map = panel.frameLocator("iframe").frameLocator("iframe");
     const place = (id: string) => map.locator(`[data-place="${id}"]`);
@@ -80,7 +80,7 @@ test("a community map plugin draws itself, travels on a click, drafts a move and
     // the plugin's `travel` runtime, and comes back as new data.
     await place("market").click();
     await authorize(page, /event:map\.location-selected/);
-    await authorize(page, /runtime:clickable-map\/travel/);
+    await authorize(page, /(task|任务) clickable-map\/travel/);
     await expect(place("market")).toHaveAttribute("data-current", "true", {
       timeout: 30_000,
     });
