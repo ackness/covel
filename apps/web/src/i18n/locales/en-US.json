@@ -838,6 +838,10 @@
         "label": "Chat window message limit",
         "description": "How many messages stay loaded in the chat. Older messages leave the window and load again when you scroll up."
       },
+      "traceRetention": {
+        "label": "Keep diagnostic traces",
+        "description": "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show."
+      },
       "developerView": {
         "label": "Developer view",
         "description": "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator."
@@ -1106,6 +1110,20 @@
     "defaultValue": "Default",
     "currentValue": "Effective",
     "useDefault": "Use default",
+    "traceRetention": {
+      "days7": "7 days",
+      "days30": "30 days",
+      "days90": "90 days",
+      "keep": "Keep everything",
+      "otherDays": "{{count}} days"
+    },
+    "serverSetting": {
+      "pending": "Asking the server for its value…",
+      "unavailable": "The server did not answer, so this cannot be changed now.",
+      "fixedByDeployment": "This deployment fixes the value.",
+      "operatorOnly": "The operator of this server sets this.",
+      "shared": "Saved on the server: every browser that uses it gets the same value."
+    },
     "valueRange": "Range: {{min}}–{{max}}.",
     "rawConfigNavLabel": "Configuration files",
     "mediaLibraryNavLabel": "Stored media",

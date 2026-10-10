@@ -149,6 +149,7 @@ beforeEach(() => {
     gameState: {},
     characters: [],
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   });
   api.listSuspensions.mockResolvedValue([]);
@@ -277,6 +278,7 @@ it("coalesces committed state notices during a snapshot read without replaying t
     characters: [{ id: "hero", name: "Current" }],
     gameState: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   };
   api.getSessionView
@@ -325,6 +327,7 @@ it("refreshes once when a state commit follows snapshot publication but other re
     characters: [],
     gameState: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   });
   streams[0]!.emit(event("state.changed"));
@@ -353,6 +356,7 @@ it("does not duplicate action-stream patch history when the subscription observe
     characters: [],
     gameState: { stats: { hp: 9, mp: 4 } },
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   };
   api.getSessionView
@@ -457,6 +461,7 @@ it("reads only the snapshot for committed state and shows what a turn changed", 
     dimensions: { mood: { hero: { value: 3 } } },
     gameState: { stats: { hp: 9 } },
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   };
   api.getSessionView.mockResolvedValue(committed);
@@ -499,6 +504,7 @@ it("refreshes the snapshot once for background jobs that end together", async ()
     characters: [],
     gameState: {},
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   };
   api.getSessionView
@@ -615,6 +621,7 @@ it("backs off failed recovery reads, stops, and reads again on the next commit",
     characters: [],
     gameState: { stats: { hp: 2 } },
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   });
   await act(async () => {
@@ -854,6 +861,7 @@ it("fills a nonoverlapping snapshot gap without dropping loaded history", async 
     messages: historyWindow(41, 120),
     messagesCursor: "opaque-41",
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
     characters: [],
     gameState: {},
@@ -892,6 +900,7 @@ function setupHistoryGap() {
     messages: historyWindow(81, 160),
     messagesCursor: "opaque-81",
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "completed", turnId: "old" },
     characters: [],
     gameState: {},

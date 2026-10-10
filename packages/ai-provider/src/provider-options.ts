@@ -16,6 +16,8 @@ export interface ProviderOptionSettings {
   store?: boolean;
   seed?: number;
   user?: string;
+  /** Send (or leave out) OpenAI's `prompt_cache_key`; default by endpoint. */
+  promptCacheKey?: boolean;
   thinking?:
     | { type: "enabled"; budgetTokens: number }
     | { type: "disabled" | "adaptive" };
@@ -76,6 +78,7 @@ const settingsSchema = z.object({
   store: z.boolean().optional(),
   seed: z.number().int().safe().optional(),
   user: z.string().optional(),
+  promptCacheKey: z.boolean().optional(),
   thinkingConfig: z
     .object({
       thinkingBudget: z.number().int().min(-1).optional(),

@@ -14,6 +14,7 @@ import i18n from "i18next";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { emitToast } from "@/lib/toast-channel";
 import { synchronizeSettings } from "./synchronize-settings.js";
+import { createServerSettingsChannel } from "./server-settings-channel.js";
 import { resolveSettingEntryText } from "./framework-i18n.js";
 
 let singleton: SettingsStore | null = null;
@@ -73,7 +74,10 @@ function createStore(): SettingsStore {
     ? createJsonFileBackend({ ipc })
     : createLocalStorageBackend();
   backend = adapter;
-  const store = new SettingsStore(adapter);
+  // Settings the server acts on are the server's, on desktop and web alike.
+  const store = new SettingsStore(adapter, {
+    serverSettings: createServerSettingsChannel(),
+  });
   registerCoreSettings(store);
   registerLlmSettings(store);
   // Store observes rejected persistence promises itself so existing `void

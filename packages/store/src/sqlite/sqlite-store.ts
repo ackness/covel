@@ -10,6 +10,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { drizzleNodeSqlite } from "./drizzle-node-sqlite.js";
+import { reclaimSqliteFreePages } from "./node-sqlite.js";
 import {
   acquireSqliteConnection,
   getConnectionWriteGate,
@@ -38,6 +39,7 @@ import {
 } from "./sqlite-transactions.js";
 import { createSqliteVectorCapability } from "./sqlite-vector.js";
 import { createSqliteWorlds } from "./sqlite-worlds.js";
+import { createSqliteServerSettings } from "./sqlite-server-settings.js";
 
 // ── Factory ─────────────────────────────────────────────────────
 
@@ -81,12 +83,18 @@ export function createSqliteStore(
     ...createSqliteSessionRecords(db),
     ...createSqliteDataCrud(db),
     ...createSqliteWorlds(db),
+    ...createSqliteServerSettings(db),
     ...createSqliteSnapshotRecords(db),
     ...createSqliteLifecycleRecords(db),
     ...createSqliteExportRecords(db),
   };
   const data: StoreTransaction = {
     ...records,
+    async deleteTraceEventsBefore(sessionId, before) {
+      await records.deleteTraceEventsBefore(sessionId, before);
+      // Traces are the bulk of a long-lived file; hand their pages back.
+      reclaimSqliteFreePages(sqlite);
+    },
     async compareAndSetPluginDataBatch(sessionId, pluginId, entries) {
       const ownTransaction = !sqlite.isTransaction;
       if (ownTransaction) sqlite.exec("BEGIN IMMEDIATE");

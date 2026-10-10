@@ -11,8 +11,13 @@ import { Label } from "@/components/ui/label.js";
 import {
   resolveSettingEntryText,
   resolveSettingOptionText,
+  resolveSettingValueText,
 } from "../framework-i18n.js";
-import { useSetting, useSettingOverride } from "../use-settings.js";
+import {
+  useServerSettingState,
+  useSetting,
+  useSettingOverride,
+} from "../use-settings.js";
 
 /** Controls take their shape and colours from the active theme. */
 const CONTROL_CLASS =
@@ -41,6 +46,61 @@ function useEffectiveSetting<T>(
   const [overridden] = useSettingOverride(entry.key);
   const inherited = useContext(InheritedSettingValues).get(entry.key);
   return [!overridden && inherited ? (inherited.value as T) : stored, setValue];
+}
+
+/**
+ * A setting the server holds (`scope: "server"`) can be changed only where
+ * the server says so, and not before it has answered: the control is locked
+ * until then, so it never offers a choice the server would refuse. `note`
+ * tells the player why, or that the value is shared.
+ */
+function useSettingLock(entry: SettingEntry): {
+  locked: boolean;
+  note: string | null;
+} {
+  const { t } = useTranslation();
+  const state = useServerSettingState(entry.key);
+  if (!state) return { locked: false, note: null };
+  if (state.status === "pending") {
+    return {
+      locked: true,
+      note: t(
+        "settings.serverSetting.pending",
+        "Asking the server for its value…",
+      ),
+    };
+  }
+  if (state.status === "unavailable") {
+    return {
+      locked: true,
+      note: t(
+        "settings.serverSetting.unavailable",
+        "The server did not answer, so this cannot be changed now.",
+      ),
+    };
+  }
+  if (!state.settable) {
+    return {
+      locked: true,
+      note:
+        state.source === "env"
+          ? t(
+              "settings.serverSetting.fixedByDeployment",
+              "This deployment fixes the value.",
+            )
+          : t(
+              "settings.serverSetting.operatorOnly",
+              "The operator of this server sets this.",
+            ),
+    };
+  }
+  return {
+    locked: false,
+    note: t(
+      "settings.serverSetting.shared",
+      "Saved on the server: every browser that uses it gets the same value.",
+    ),
+  };
 }
 
 function inferWidget(entry: SettingEntry): WidgetKind {
@@ -95,6 +155,7 @@ function FieldShell({
   const description = resolveSettingEntryText(entry, "description", locale);
   const inherited = useContext(InheritedSettingValues).get(entry.key);
   const [overridden] = useSettingOverride(entry.key);
+  const lock = useSettingLock(entry);
   const range =
     typeof entry.min === "number" && typeof entry.max === "number"
       ? t("settings.valueRange", {
@@ -112,7 +173,7 @@ function FieldShell({
         >
           {resolveSettingEntryText(entry, "label", locale)}
         </Label>
-        <UseDefaultButton entry={entry} />
+        {!lock.locked && <UseDefaultButton entry={entry} />}
       </div>
       {(description || range) && (
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -122,6 +183,11 @@ function FieldShell({
       {inherited && !overridden && (
         <p className="text-xs leading-relaxed text-(--accent-primary)">
           {t("settings.followsWorldDefault", { world: inherited.source })}
+        </p>
+      )}
+      {lock.note && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {lock.note}
         </p>
       )}
     </div>
@@ -233,11 +299,13 @@ function TextWidget({ entry }: { entry: SettingEntry }) {
   const draft = useDraft(value ?? "", (text) => {
     if (text !== value) void setValue(text);
   });
+  const { locked } = useSettingLock(entry);
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <input
         id={controlId}
         type="text"
+        disabled={locked}
         value={draft.text}
         onChange={(e) => draft.setDraft(e.target.value)}
         onBlur={draft.flush}
@@ -251,11 +319,13 @@ function TextWidget({ entry }: { entry: SettingEntry }) {
 function NumberWidget({ entry }: { entry: SettingEntry }) {
   const draft = useNumberDraft(entry);
   const controlId = settingControlId(entry.key);
+  const { locked } = useSettingLock(entry);
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <input
         id={controlId}
         type="number"
+        disabled={locked}
         min={entry.min}
         max={entry.max}
         step={entry.step}
@@ -272,12 +342,14 @@ function NumberWidget({ entry }: { entry: SettingEntry }) {
 function ToggleWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useEffectiveSetting<boolean>(entry);
   const controlId = settingControlId(entry.key);
+  const { locked } = useSettingLock(entry);
   return (
     <FieldShell entry={entry} controlId={controlId} inline>
       <button
         id={controlId}
         type="button"
         role="switch"
+        disabled={locked}
         aria-checked={value}
         onClick={() => void setValue(!value)}
         className={
@@ -304,19 +376,32 @@ function SelectWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useEffectiveSetting<string>(entry);
   const { i18n } = useTranslation();
   const controlId = settingControlId(entry.key);
+  const { locked } = useSettingLock(entry);
+  const options = entry.options ?? [];
+  // A server operator may fix a value the options do not offer.
+  const unlisted =
+    typeof value === "string" &&
+    value !== "" &&
+    !options.some((opt) => opt.value === value);
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <select
         id={controlId}
         value={value ?? ""}
+        disabled={locked}
         onChange={(e) => void setValue(e.target.value)}
         className={`w-full px-3 py-2 sm:w-72 ${CONTROL_CLASS}`}
       >
-        {(entry.options ?? []).map((opt) => (
+        {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {resolveSettingOptionText(entry, opt, i18n.language)}
           </option>
         ))}
+        {unlisted && (
+          <option value={value}>
+            {resolveSettingValueText(entry, value, i18n.language)}
+          </option>
+        )}
       </select>
     </FieldShell>
   );
@@ -330,12 +415,14 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
   const rangeId = settingControlId(entry.key);
   const numberId = settingControlId(entry.key, "number");
   const position = Number(draft.text);
+  const { locked } = useSettingLock(entry);
   return (
     <FieldShell entry={entry} controlId={rangeId}>
       <div className="flex items-center gap-2">
         <input
           id={rangeId}
           type="range"
+          disabled={locked}
           min={min}
           max={max}
           step={step}
@@ -350,6 +437,7 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
           id={numberId}
           aria-labelledby={settingLabelId(entry.key)}
           type="number"
+          disabled={locked}
           min={min}
           max={max}
           step={step}
@@ -429,10 +517,12 @@ function TextareaWidget({ entry }: { entry: SettingEntry }) {
   const draft = useDraft(value ?? "", (text) => {
     if (text !== value) void setValue(text);
   });
+  const { locked } = useSettingLock(entry);
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <textarea
         id={controlId}
+        disabled={locked}
         value={draft.text}
         onChange={(e) => draft.setDraft(e.target.value)}
         onBlur={draft.flush}

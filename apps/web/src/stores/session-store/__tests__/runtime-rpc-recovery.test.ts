@@ -177,7 +177,6 @@ describe("durable player input identity", () => {
             session: { id: "session-1", status: "active" } as SessionRecord,
           },
         },
-        submitBlock: vi.fn(),
         resyncSession: vi.fn(),
         inFlight: new Set(),
       },

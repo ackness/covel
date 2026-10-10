@@ -23,6 +23,7 @@ import {
   type EmittedEvent,
 } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
+import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
@@ -395,6 +396,7 @@ async function runAgentToolLoopWithinBudget(
         toolDefs: llmRequest.tools,
         responseFormat,
         locale: input.locale,
+        promptCacheKey: promptCacheKeyFor(input.sessionId, manifest.name),
         ...(budgetedRequest?.maxOutputTokens
           ? { maxOutputTokens: budgetedRequest.maxOutputTokens }
           : {}),

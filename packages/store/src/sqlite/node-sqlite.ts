@@ -19,7 +19,8 @@ const BUSY_TIMEOUT_MS = 5_000;
 let savepointSequence = 0;
 
 /**
- * Open a connection in WAL mode with foreign keys on. Extension loading stays
+ * Open a connection in WAL mode with foreign keys on. A new file is created
+ * with incremental auto-vacuum, so deleted rows can give pages back. Extension loading stays
  * off except inside {@link loadSqliteExtension}.
  */
 export function openSqliteConnection(path: string): SqliteConnection {
@@ -28,6 +29,9 @@ export function openSqliteConnection(path: string): SqliteConnection {
     allowExtension: true,
   });
   db.enableLoadExtension(false);
+  // Takes effect only on a file that has no tables yet, so it must come first.
+  // An existing file keeps its mode until a full VACUUM rewrites it.
+  db.exec("PRAGMA auto_vacuum = INCREMENTAL");
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
   return db;
@@ -90,4 +94,21 @@ export function runSqliteTransaction<T>(
     }
     throw err;
   }
+}
+
+/** Pages one incremental vacuum step returns to the file system at most. */
+const INCREMENTAL_VACUUM_PAGES = 2_000;
+
+/**
+ * Give free pages back to the file system after a bulk delete. Only a file
+ * created with `auto_vacuum = INCREMENTAL` can shrink this way; any other file
+ * (and a connection inside a transaction) is left alone. The step is bounded,
+ * so it never holds the write lock for long.
+ */
+export function reclaimSqliteFreePages(db: SqliteConnection): void {
+  if (db.isTransaction) return;
+  const mode = db.prepare("PRAGMA auto_vacuum").get() as
+    { auto_vacuum?: number } | undefined;
+  if (mode?.auto_vacuum !== 2) return;
+  db.exec(`PRAGMA incremental_vacuum(${INCREMENTAL_VACUUM_PAGES})`);
 }

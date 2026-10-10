@@ -99,6 +99,7 @@ beforeEach(() => {
     gameState: {},
     characterSchema: null,
     executionSteps: [],
+    submittedInteractions: [],
     execution: { state: "idle" },
   });
   api.getSession.mockImplementation(async (id: string) => ({ ...session, id }));

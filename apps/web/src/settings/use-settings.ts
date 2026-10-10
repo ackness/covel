@@ -2,6 +2,7 @@ import i18n from "i18next";
 import { useCallback, useSyncExternalStore } from "react";
 import {
   SettingsRevisionConflictError,
+  type ServerSettingState,
   type SettingKey,
   type SettingsStoreApi,
 } from "@covel/settings";
@@ -81,6 +82,23 @@ export function useSettingOverride(
     }
   }, [store, key]);
   return [overridden, restoreDefault];
+}
+
+/**
+ * What the server says about a `scope: "server"` setting: whether it has
+ * answered, and whether the player may change the value here. Undefined for a
+ * setting of this device.
+ */
+export function useServerSettingState(
+  key: SettingKey,
+): ServerSettingState | undefined {
+  const store = getSettings();
+  const subscribe = useCallback(
+    (notify: () => void) => store.subscribe(key, () => notify()),
+    [store, key],
+  );
+  const getSnapshot = useCallback(() => store.serverSetting(key), [store, key]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 /** Access the store imperatively (e.g. for import/export, bulk ops). */

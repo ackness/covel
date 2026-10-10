@@ -985,4 +985,85 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       ).toEqual(["char-keep"]);
     });
   });
+
+  describe("Server settings", () => {
+    const at = "2026-01-01T00:00:00.000Z";
+
+    it("starts with none and lists what was set in key order", async () => {
+      expect(await store.listServerSettings()).toEqual([]);
+      await store.setServerSetting({
+        key: "b.second",
+        value: 2,
+        updatedAt: at,
+      });
+      await store.setServerSetting({
+        key: "a.first",
+        value: "keep",
+        updatedAt: at,
+      });
+      expect(await store.listServerSettings()).toEqual([
+        { key: "a.first", value: "keep", updatedAt: at },
+        { key: "b.second", value: 2, updatedAt: at },
+      ]);
+    });
+
+    it("replaces the value of a key and keeps one row", async () => {
+      await store.setServerSetting({ key: "a.key", value: "7", updatedAt: at });
+      const later = "2026-02-02T00:00:00.000Z";
+      await store.setServerSetting({
+        key: "a.key",
+        value: { nested: [true, "x"] },
+        updatedAt: later,
+      });
+      expect(await store.listServerSettings()).toEqual([
+        { key: "a.key", value: { nested: [true, "x"] }, updatedAt: later },
+      ]);
+    });
+
+    it("keeps the type of a scalar value", async () => {
+      await store.setServerSetting({ key: "text", value: "30", updatedAt: at });
+      await store.setServerSetting({
+        key: "flag",
+        value: false,
+        updatedAt: at,
+      });
+      await store.setServerSetting({ key: "count", value: 30, updatedAt: at });
+      expect(
+        (await store.listServerSettings()).map((record) => record.value),
+      ).toEqual([30, false, "30"]);
+    });
+
+    it("deletes one key; deleting an absent key does nothing", async () => {
+      await store.setServerSetting({ key: "a.key", value: 1, updatedAt: at });
+      await store.setServerSetting({ key: "b.key", value: 2, updatedAt: at });
+      await store.deleteServerSetting("a.key");
+      await store.deleteServerSetting("never.set");
+      expect(
+        (await store.listServerSettings()).map((record) => record.key),
+      ).toEqual(["b.key"]);
+    });
+
+    it("does not belong to a session", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      await store.setServerSetting({ key: "a.key", value: 1, updatedAt: at });
+      await store.deleteSession(session.id);
+      expect(await store.listServerSettings()).toHaveLength(1);
+    });
+
+    it("rolls back with the transaction that wrote it", async () => {
+      await store.setServerSetting({ key: "a.key", value: 1, updatedAt: at });
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.setServerSetting({ key: "a.key", value: 2, updatedAt: at });
+          await tx.deleteServerSetting("a.key");
+          await tx.setServerSetting({ key: "b.key", value: 3, updatedAt: at });
+          throw new Error("server setting boom");
+        }),
+      ).rejects.toThrow("server setting boom");
+      expect(await store.listServerSettings()).toEqual([
+        { key: "a.key", value: 1, updatedAt: at },
+      ]);
+    });
+  });
 }

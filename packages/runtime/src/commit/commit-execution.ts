@@ -1,5 +1,6 @@
 import type { ExecutionCommitPlan, PreparedExecution } from "../execution.js";
-import { readEnvInt } from "@covel/shared";
+import { currentTraceRetention } from "@covel/shared";
+import { maybeSweepOldTraces } from "./trace-retention.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
@@ -127,7 +128,7 @@ export async function commitExecution(
 
   // Optional trace retention; traces are diagnostics, so a failed cleanup
   // never affects the committed outcome.
-  const traceRetentionDays = readEnvInt("COVEL_TRACE_RETENTION_DAYS", 0);
+  const traceRetentionDays = currentTraceRetention().days;
   if (traceRetentionDays > 0) {
     try {
       await store.deleteTraceEventsBefore(
@@ -140,6 +141,8 @@ export async function commitExecution(
         error,
       );
     }
+    // Sessions nobody plays again are only reached by the daily sweep.
+    void maybeSweepOldTraces(store);
   }
 
   if (!suspended && completion.kind !== "detached") {

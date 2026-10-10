@@ -153,6 +153,7 @@ export {
   createSubmitFormHandler,
   findCommittedInteraction,
   FormRejectedError,
+  InteractionAlreadySubmittedError,
   RpcValidationError,
 } from "./rpc-defaults/submit-form.js";
 
@@ -189,6 +190,7 @@ export type {
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
 export { commitExecution } from "./commit/commit-execution.js";
+export { maybeSweepOldTraces } from "./commit/trace-retention.js";
 export type {
   CommitExecutionArgs,
   CommitExecutionOutcome,

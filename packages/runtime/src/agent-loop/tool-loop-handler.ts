@@ -62,6 +62,8 @@ export interface RequestLLMResponseOptions {
   /** Session locale, for the instructions the retry layer and adapter add. */
   readonly locale?: string;
   readonly maxOutputTokens?: number;
+  /** Cache-routing key of this runtime's requests in this session. */
+  readonly promptCacheKey?: string;
   readonly retryPolicy: RetryPolicy;
   readonly deadline: number;
   readonly useStreaming: boolean;
@@ -150,6 +152,7 @@ export async function requestLLMResponse(
     ...(opts.locale ? { locale: opts.locale } : {}),
     defaults: requestDefaults(manifest, opts.requireToolCall, toolDefs),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(opts.promptCacheKey ? { promptCacheKey: opts.promptCacheKey } : {}),
     // The player has read a story as it streamed. Cut at the output limit,
     // it is kept and marked `length`; any other output must be whole.
     allowTruncatedText: manifest.outputKind === "story",
@@ -302,6 +305,7 @@ async function requestNonStreaming(
       onTargetAttempt: callParams.onTargetAttempt,
       requestBudget: callParams.requestBudget!,
       defaults: callParams.defaults,
+      promptCacheKey: callParams.promptCacheKey,
     });
   }
 }
@@ -321,6 +325,7 @@ async function malformedToolArgsFallback(args: {
   onTargetAttempt?: (target: LLMTargetIdentity) => void;
   requestBudget: LLMRequestBudget;
   defaults: LLMRequestDefaults | undefined;
+  promptCacheKey: string | undefined;
 }): Promise<LLMResponse> {
   const {
     manifest,
@@ -387,6 +392,7 @@ async function malformedToolArgsFallback(args: {
         defaults: args.defaults,
         requestBudget: args.requestBudget,
         ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+        ...(args.promptCacheKey ? { promptCacheKey: args.promptCacheKey } : {}),
         ...(deps.emitter
           ? {
               onProviderRequest: (request: LLMProviderRequest) => {

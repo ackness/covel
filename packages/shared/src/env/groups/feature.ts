@@ -53,9 +53,9 @@ export const FEATURE_ENV_VARS = [
     group: "feature",
     type: "integer",
     status: "active",
-    defaultValue: "0",
+    defaultValue: "30",
     description:
-      "Delete a session's runtime trace events older than N days after each committed execution. 0 keeps all traces.",
+      "Delete runtime trace events older than N days: a session's after each committed execution, every session's at server start and once a day. 0 keeps all traces. When set, it wins over the player's Settings choice; when unset, the player's choice applies (self tier only), then 30.",
   },
   {
     name: "COVEL_PLUGIN_LOG_LEVEL",

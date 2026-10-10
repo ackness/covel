@@ -17,8 +17,8 @@ import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
  *
  * Derived from {@link SESSION_SCOPED_TABLES} (so a newly-registered session
  * table is snapshottable automatically) plus the parent `sessions` map and the
- * memory-only vector collections and the non-session-scoped `worlds` map a
- * transaction may also touch. `tests/table-registry-consistency.test.ts` pins
+ * memory-only vector collections and the non-session-scoped `worlds` and
+ * `serverSettings` maps a transaction may also touch. `tests/table-registry-consistency.test.ts` pins
  * this list against the registry.
  */
 export const MEMORY_SNAPSHOT_COLLECTIONS: ReadonlyArray<{
@@ -33,6 +33,7 @@ export const MEMORY_SNAPSHOT_COLLECTIONS: ReadonlyArray<{
   // Mutable collections without a session-table registry entry.
   { key: "messagePositions", kind: "map" },
   { key: "worlds", kind: "map" },
+  { key: "serverSettings", kind: "map" },
   { key: "vectorRows", kind: "map" },
   { key: "sessionVectorTargets", kind: "map" },
 ];
@@ -124,6 +125,8 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   createWorld: ["worlds"],
   upsertWorld: ["worlds"],
   deleteWorld: ["worlds"],
+  setServerSetting: ["serverSettings"],
+  deleteServerSetting: ["serverSettings"],
   commitVectorIndexBatch: ["vectorRows", "vectorIndexProgress"],
   upsertVector: ["vectorRows"],
   deleteVectors: ["vectorRows"],

@@ -11,7 +11,26 @@ Ordinary persisted settings accept only `schemaVersion: 2` with `revision`, `sav
 - A copy never replaces an existing copy (a timestamp is added to the name, followed by a counter when the same millisecond collides). When the copy cannot be written, or the backend has no `backupBundle`, nothing is dropped and SettingsStore stays read-only.
 - The notice comes through `subscribeRepairs` and `SettingsBackendAdapter.takeArchivedBundle()`. The copies can be viewed and downloaded in Settings → Data (`listBackups` / `readBackup`; desktop IPC `covel:settings:backup`, `covel:settings:backups`, `covel:settings:read-backup`). The secret channel is not affected and a copy holds no API keys. The separate settings import/export `SettingsExportBundle.schemaVersion: 1` remains the current export contract.
 
-Settings storage follows the current device: Electron IPC selects personal files; every browser selects localStorage. `/api/config/info` discovers server administration capabilities only. `COVEL_HOME` and `isDesktop` never select shared server settings for a browser, and failed discovery does not block local initialization.
+Settings storage follows the current device: Electron IPC selects personal files; every browser selects localStorage. The one exception is a setting marked `scope: "server"`, which the server keeps (next section). `/api/config/info` discovers server administration capabilities only. `COVEL_HOME` and `isDesktop` never select shared server settings for a browser, and failed discovery does not block local initialization.
+
+## Settings the server acts on
+
+A setting has a scope. `client` (the default) is a preference of one device: theme, layout, language, the models and keys of that browser. `server` is a setting the server itself carries out, so the server keeps it and every browser of the install reads the same value. An entry declares it in the registry (`SettingEntry.scope: "server"`), and the same key has a definition in `SERVER_SETTINGS` (`packages/shared/src/env/server-settings.ts`: schema, default and the environment variable that overrides it). A test fails when the two lists differ. For now the only one is `diagnostics.traceRetention` (Settings → General → "Keep diagnostic traces"; values `7` / `30` / `90` / `keep`, default `30`).
+
+- **Where it is stored.** In the server's database, in the `server_settings` table of the DataStore (`listServerSettings` / `setServerSetting` / `deleteServerSetting`, covered by the store contract suite). It is the same on the desktop app and on a self-hosted web deployment, it survives a read-only or replaced home directory, and several server processes on one PostgreSQL database agree. It is never written to `settings.json` or localStorage. With `STORE_BACKEND=memory` it lasts as long as the process.
+- **Who may write.** `DEPLOYMENT_TIER=self` only: the one player owns the server. `PUT /api/config/server-settings` also requires the desktop token when the shell set one. On `demo` / `commercial` the settings are the operator's, set through the environment; a write is refused with `403` and the control is locked.
+- **Precedence.** The operator's environment variable, then the stored value, then the default. A key fixed by the environment is not settable and a write of it is refused with `409`.
+- **Validation.** A write names known keys only and each value must pass the definition's schema; one bad entry rejects the whole request and nothing is written.
+- **Effect.** The server reads the value from an in-memory copy, filled before the first sweep and replaced on every write, so a change applies to the next commit or sweep without a restart. Another server process on the same database follows within 30 seconds.
+
+In the Web app the SettingsStore routes these keys to the server (`ServerSettingsChannel`, `GET` / `PUT /api/config/server-settings`), on desktop and web alike:
+
+- `store.get(key)` returns the value in force as the server reports it (which may be an operator's value that the options do not offer), `store.has(key)` is true when a stored value is in force, `store.set` / `store.clear` write to the server. `store.serverSetting(key)` returns `{ status, value, source, settable }`; `status` is `pending` until the server has answered and `unavailable` when it could not be asked.
+- A control of such a setting is disabled while `pending` or `unavailable` and when `settable` is false, with a line that says why, so it never offers a choice the server then refuses. Every generic widget honours this; no widget is written per setting.
+- A write shows the new value at once. When the server refuses it or cannot be reached, the earlier value comes back and the "Could not save setting" toast shows the server's message.
+- The values are asked for again when the window regains focus. They do not block the load of the device's settings, are not part of the settings export, the raw JSON editor or "Reset", and a key of this scope found in the device's own storage is ignored.
+
+Precedence and the trace sweep: [`env-registry.md`](../guide/env-registry.md). The boundary: [`security.md`](../architecture/security.md#server-settings).
 
 ## Schema normalization
 

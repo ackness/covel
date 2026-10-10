@@ -136,9 +136,51 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 On `demo` / `commercial`, the public `GET /api/llm-config` retains the model
 catalog used at client startup but omits `source` and load `error`; only the
 operator token unlocks those diagnostics. Public `GET /api/config/info` returns
-`isDesktop: false`, `requiresAuth: true`, and null path fields on those tiers.
+`isDesktop: false`, `requiresAuth: true` and null path fields on those tiers.
 An operator request receives the complete deployment paths. Local `self` and
 desktop discovery retain their existing response.
+
+### Server settings
+
+`GET /api/config/server-settings` answers on every tier, without a token. It
+holds no secret: for each setting the server itself acts on (a registry entry
+with `scope: "server"`, see [`settings-store.md`](./settings-store.md)) it
+returns the value in force, where it comes from and whether a write would
+count.
+
+```json
+{
+  "settings": {
+    "diagnostics.traceRetention": {
+      "value": "30",
+      "source": "default",
+      "settable": true
+    }
+  }
+}
+```
+
+`source` is `env` (the operator's environment variable), `setting` (a stored
+value) or `default`. `settable` is false when the environment fixes the key and
+on every key of a `demo` / `commercial` deployment. `value` under `env` may be
+one the setting does not offer to players (`"14"` for
+`COVEL_TRACE_RETENTION_DAYS=14`).
+
+`PUT /api/config/server-settings` takes `{ "entries": { "<key>": <value> | null } }`,
+stores each value (`null` drops the stored one) and returns the same body as the
+`GET`. It is accepted on `DEPLOYMENT_TIER=self` only, and needs the desktop
+bearer token when the shell set one (`401 desktop_rest_token_invalid`).
+
+| Status | `code`                          | When                                                      |
+| ------ | ------------------------------- | --------------------------------------------------------- |
+| 403    | `server_settings_operator_only` | `demo` / `commercial`, whatever token the caller presents |
+| 400    | `invalid_server_settings_body`  | The body is not `{ entries: object }`                     |
+| 400    | `unknown_server_setting`        | A key is not a server setting (`details.key`)             |
+| 400    | `invalid_server_setting_value`  | A value fails the setting's schema (`details.key`)        |
+| 409    | `server_setting_fixed`          | The environment fixes the key (`details.key`)             |
+
+A request with one refused entry writes nothing. A stored value applies to the
+next commit or sweep; no restart is needed.
 
 Configuration filesystem and file-manager startup failures use the global
 logged error handler: production responses are generic 500 errors. Invalid
@@ -417,6 +459,8 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 | GET  | `/api/sessions/:id/turns` | 持久化 turn_results 执行工件列表，返回 `{ items }`（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。声明 `io.concealed` 的 runtime 结果清空 `output` 与工具参数 / 结果。为 e2e-plugin-verify harness 恢复的薄路由 |
 
 > 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
+>
+> 视图的 `submittedInteractions` 列出玩家已经通过 `submit-form` 回答过的交互 `{ turnId, interactionId, values, followedUp }[]`，`values` 是服务端落库的值（会话内全部记录，不受消息窗口限制），`followedUp` 表示答案落库之后是否有回合开始（由 trace 里的 `turn.started` 推出，不另存字段）。`followedUp` 为 true 时客户端把对应消息里的表单标成已提交并回填；为 false（后续请求丢失）时表单保持打开并填入已存的值，玩家点一次提交即可让后续回合运行。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
@@ -744,6 +788,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                            |
 | GET  | `/api/provider-keys`           | 只返回 `{ providers: { [provider]: { configured: true } } }`：动态扫描所有 `*_API_KEY` 得到的配置状态，不含原始或掩码的密钥内容，桌面客户端也一样。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单属运维信息） |
 | GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                                                                                     |
+| GET  | `/api/config/server-settings`  | 所有层级：返回服务端执行的设置（`scope: "server"`）的生效值、来源和能否设置，见上文 Server settings                                                                                                                             |
+| PUT  | `/api/config/server-settings`  | 仅 `self` 层级：保存这些设置；body `{ entries: { [key]: value \| null } }`，按注册表校验                                                                                                                                        |
 | GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）                                                                                                                                                              |
 | PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                                                                                 |
 | GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                                                                               |
@@ -1698,13 +1744,13 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 { "error": "Session not found: <id>", "code": "session_not_found" }  // 404
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。`interaction_already_submitted` 同为写给玩家的文字，不带 `details`。没有 `code` 的 400 是客户端不该发出的请求。
 
 **使用说明:**
 
 - handler 只接受当前 session 对话日志中已经提交的 assistant interaction；`turnId` / `interactionId` / `type` 必须与原交互一致，客户端无法凭空构造表单或改写交互类型
 - `form` 会校验 required、字段集合和字段类型；`choice.selectedId` 必须来自原 options，`selectedLabel` 由服务端按原 option 规范化；`confirmation.confirmed` 必须是 boolean
-- 同一 `(turnId, interactionId)` 重复提交相同值会返回原 `submissionId`；不同值返回 400。批量提交会先全部校验，再在事务内统一写入
+- 同一 `(turnId, interactionId)` 只能回答一次，后续回合也只跑一次。答案落库之后只要有回合（成功的，或失败后由现有重试再跑的）在它之后开始，再次提交（无论值是否相同）都返回 400 和 `code: "interaction_already_submitted"`，`error` 是按会话 locale 写给玩家的文字，不写入任何内容。这样第二个标签页里还开着的旧表单不会让回合再跑一遍。答案已落库但还没有回合跟上（响应丢失、或浏览器在两个请求之间关闭）时，相同的值会再次被接受并返回已存的 `submissionId` 与 `filledNarrative`，客户端据此发出后续 action；不同的值同样返回 `interaction_already_submitted`。已存的回答和 `followedUp` 从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 读取。同一批次内对同一交互重复给出相同值仍合并为一条。批量提交会先全部校验，再在事务内统一写入
 - `filledNarrative` 是将玩家输入填入模板后的**纯自然语言**文本，不含 JSON 结构
 - handler 本身不写 `turn_messages`；Web 把该文本作为下一次 action 的玩家消息，供叙事者参考
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
