@@ -79,6 +79,7 @@ messages
 原因是服务商的前缀缓存：一次请求只有从第一个字节起与之前的请求相同的部分才能命中。数据块在 system prompt 里时，system prompt 每回合都不同，排在它后面的整段历史就无法命中，会话越长浪费越多。现在 system prompt 逐回合保持不变，缓存可以一直覆盖到上一回合的历史。
 
 - 这段内容仍是 system 角色，其中由插件写给模型的指令（如掷骰步骤）权重不变。Anthropic 仅将开头的 system 消息放入顶层 system；历史之后的回合指令保留位置，以带 `<system-instruction>` 的 user 内容发送。
+- Gemini 原生协议（`google-generative-ai-v1`）同样处理，没有开关：只有开头的 system 消息进入 `systemInstruction`（它排在 `contents` 之前，每回合变化的文字放进去会让前缀缓存从头断开）；之后的 system 消息留在原位，作为 `contents` 里带 `<system-instruction>` 的 user 文本。`contents` 里没有 system 角色，这是保持位置的唯一办法。为满足 `contents` 的规则，相邻的同角色内容合并为一条（user 与 model 交替）；带函数调用的 model 轮不与后面的内容合并，夹在函数调用和函数响应之间的指令排到同一 user 轮的函数响应之后，所以函数响应始终紧跟函数调用。代价：这段文字在模型眼里从 system instruction 变成 user 文本，回合规则和插件指令的权重可能略有不同，没有做过质量对比。依据与未验证的部分：AI SDK 的 Google provider 不支持这种消息，遇到对话开始后的 system 消息直接抛错（`system messages are only supported at the beginning of the conversation`），既不前移也不改写，所以原位发送是 Covel 自己的规则；函数响应与文本同处一个 user 轮的形状在 AI SDK 的工具结果转换里也有。请求形状只在本机一个模拟 Gemini 接口的中转上跑通过工具循环（调用、函数响应、随后的指令），没有在 Google 的端点上验证过，Gemini 上的缓存命中也没有测量。`packages/ai-provider/tests/google-late-system.test.ts` 固定了前缀、交替合并和工具循环位置这三条规则。
 - 它不放在请求的最后。请求仍以本回合的消息和 post-history 段结尾：数据块紧挨着回复时，较小的模型会把数据块的写法带进工具参数（把参数包成输入块的形状、在字段后面补一个闭合标签）。
 - depth 插入按对话消息计数，回合上下文不占位置。
 - 预算裁剪把紧挨在受保护回合之前的 system 消息一并保留，所以它不会被丢掉。压缩阈值的估算把它和 system prompt 一起计入。`AssembledContext.turnContext` 是它的内容，没有时为空字符串。
