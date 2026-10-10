@@ -382,7 +382,7 @@ describe("Gemini thinking controls", () => {
   });
 
   it("drops unsupported or unknown Gemini selections", () => {
-    for (const [model, selection] of [
+    const cases: [string, string][] = [
       ["gemini-3-pro-preview", "medium"],
       ["gemini-3.8-flash", "minimal"],
       ["gemini-2.5-pro", "none"],
@@ -390,7 +390,8 @@ describe("Gemini thinking controls", () => {
       ["gemini-2.5-flash-image", "high"],
       ["gemini-3.1-flash-lite-image", "minimal"],
       ["gemini-4-pro", "high"],
-    ]) {
+    ];
+    for (const [model, selection] of cases) {
       expect(
         extractReasoningRequestFields(
           { parameterOverrides: { reasoningEffort: selection } },

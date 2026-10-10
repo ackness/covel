@@ -10,6 +10,7 @@ const overrides: SlotOverridesInput = {
   customPresets: [
     {
       id: "custom",
+      name: "Custom",
       provider: "deepseek",
       model: "deepseek-chat",
       protocol: "openai-chat-v1",

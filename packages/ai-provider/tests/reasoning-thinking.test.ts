@@ -473,7 +473,7 @@ reasoningEffort = "disabled"
           model,
           messages: [{ role: "user", content: "fixture" }],
           providerRequestMetadata: preset?.providerRequestMetadata,
-          defaults: { reasoningEffort: "automatic" },
+          defaults: { reasoningEffort: "disabled" },
         },
       );
       const body = captured[0]!.body as Record<string, unknown>;
@@ -525,10 +525,7 @@ describe("gateway — preset providerRequestMetadata fold-in", () => {
         };
       },
       async embed() {
-        return { embeddings: [], usage: null };
-      },
-      async generateImage() {
-        return { images: [], usage: null };
+        return { embeddings: [], usage: { inputTokens: 0, outputTokens: 0 } };
       },
     };
 
@@ -610,10 +607,7 @@ describe("gateway — preset providerRequestMetadata fold-in", () => {
         };
       },
       async embed() {
-        return { embeddings: [], usage: null };
-      },
-      async generateImage() {
-        return { images: [], usage: null };
+        return { embeddings: [], usage: { inputTokens: 0, outputTokens: 0 } };
       },
     };
 

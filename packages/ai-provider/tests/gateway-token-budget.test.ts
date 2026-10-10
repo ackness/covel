@@ -59,7 +59,12 @@ function setup(statusCode?: number) {
     tier: "medium",
     enabled: true,
     supportedModes: ["text", "object", "stream"],
-    capability: { contextWindow: 131_072, maxOutputTokens },
+    capability: {
+      input: ["text"],
+      output: ["text"],
+      contextWindow: 131_072,
+      maxOutputTokens,
+    },
     ...(id === "primary"
       ? { isDefault: true, fallbackPresetIds: ["backup"] }
       : {}),
@@ -159,7 +164,12 @@ describe("gateway target output budgets", () => {
       const { gateway, calls, presetRegistry } = setup(503);
       presetRegistry.addPreset({
         ...presetRegistry.resolvePreset("backup")!,
-        capability: { contextWindow: 1024, maxOutputTokens: 512 },
+        capability: {
+          input: ["text"],
+          output: ["text"],
+          contextWindow: 1024,
+          maxOutputTokens: 512,
+        },
       });
       const input = {
         messages: [

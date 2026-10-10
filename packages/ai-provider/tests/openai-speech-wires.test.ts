@@ -5,7 +5,6 @@ import { openAiTranscriptionWire } from "../src/speech/openai-transcription-wire
 import type { ProviderConfig } from "../src/types.js";
 
 const config: ProviderConfig = {
-  provider: "test",
   baseUrl: "https://x.test",
   apiKey: "k",
   protocol: "openai-chat-v1",
@@ -15,14 +14,14 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("openai-speech wire", () => {
   function mockSpeechFetch(status = 200) {
-    const fn = vi.fn(async () => ({
+    const fn = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({
       ok: status >= 200 && status < 300,
       status,
       statusText: status === 200 ? "OK" : "Bad Request",
       headers: new Headers({ "content-type": "audio/mpeg" }),
       arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
       text: async () => JSON.stringify({ error: { message: "boom" } }),
-    })) as unknown as typeof fetch;
+    }));
     vi.stubGlobal("fetch", fn);
     return fn;
   }
@@ -107,12 +106,12 @@ describe("openai-speech wire", () => {
 
 describe("openai-transcription wire", () => {
   function mockTranscriptionFetch(json: unknown) {
-    const fn = vi.fn(async () => ({
+    const fn = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({
       ok: true,
       status: 200,
       statusText: "OK",
       text: async () => JSON.stringify(json),
-    })) as unknown as typeof fetch;
+    }));
     vi.stubGlobal("fetch", fn);
     return fn;
   }

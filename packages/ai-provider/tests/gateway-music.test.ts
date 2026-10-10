@@ -34,8 +34,8 @@ function createStubAdapter(): ModelProviderAdapter {
 
 const profiles: ModelProfile[] = [
   {
-    id: "audio-tier",
-    tier: "audio-tier",
+    id: "medium",
+    tier: "medium",
     provider: "test",
     model: "test-music-model",
     contextWindow: 1,
@@ -65,7 +65,7 @@ const musicPreset = (overrides: Partial<PresetConfig> = {}): PresetConfig => ({
   name: "Music",
   provider: "test",
   model: "test-music-model",
-  tier: "audio-tier",
+  tier: "medium",
   supportedModes: ["music"],
   enabled: true,
   ...overrides,
@@ -168,7 +168,7 @@ describe("gateway.composeMusic", () => {
         name: "Story",
         provider: "test",
         model: "test-text-model",
-        tier: "audio-tier",
+        tier: "medium",
         supportedModes: ["text"],
         enabled: true,
         isDefault: true,
@@ -178,7 +178,7 @@ describe("gateway.composeMusic", () => {
         name: "Speech",
         provider: "test",
         model: "test-tts-model",
-        tier: "audio-tier",
+        tier: "medium",
         supportedModes: ["speech"],
         enabled: true,
         providerRequestMetadata: { musicWire: "studio/v1" },

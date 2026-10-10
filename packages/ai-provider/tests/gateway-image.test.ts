@@ -5,7 +5,11 @@ import { createProviderRegistry } from "../src/provider-registry.js";
 import { createSlotRegistry } from "../src/slot-registry.js";
 import { registerImageWire } from "../src/image/wire-registry.js";
 import type { ImageWire } from "../src/image/types.js";
-import type { ModelProfile, PresetConfig } from "../src/types.js";
+import type {
+  ModelProfile,
+  PresetConfig,
+  SlotOverridesInput,
+} from "../src/types.js";
 import type { ModelProviderAdapter } from "../src/adapters/adapter.js";
 
 // ── Stub adapter (unused by generateImage — the wire bypasses it — but
@@ -36,8 +40,8 @@ function createStubAdapter(): ModelProviderAdapter {
 
 const profiles: ModelProfile[] = [
   {
-    id: "image-tier",
-    tier: "image-tier",
+    id: "medium",
+    tier: "medium",
     provider: "test",
     model: "test-image-model",
     contextWindow: 4096,
@@ -62,7 +66,7 @@ function setup(presetOverrides: Partial<PresetConfig> = {}) {
       name: "Image Primary",
       provider: "test",
       model: "test-image-model",
-      tier: "image-tier",
+      tier: "medium",
       supportedModes: ["image"],
       enabled: true,
       ...presetOverrides,
@@ -79,12 +83,12 @@ function setup(presetOverrides: Partial<PresetConfig> = {}) {
 }
 
 function mockFetchOnce(status: number, json: unknown) {
-  const fn = vi.fn(async () => ({
+  const fn = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? "OK" : "Bad Request",
     text: async () => JSON.stringify(json),
-  })) as unknown as typeof fetch;
+  }));
   vi.stubGlobal("fetch", fn);
   return fn;
 }
@@ -309,7 +313,7 @@ describe("gateway.generateImage", () => {
   it("applies capability policy to request-scoped custom image models", async () => {
     const fn = mockFetchOnce(200, { data: [{ b64_json: PNG_B64 }] });
     const { gateway, presetRegistry } = setup();
-    const slotOverrides = {
+    const slotOverrides: SlotOverridesInput = {
       customPresets: [
         {
           id: "custom-image",
@@ -440,7 +444,7 @@ describe("gateway.generateImage", () => {
           name: "Story",
           provider: "test",
           model: "test-text-model",
-          tier: "image-tier",
+          tier: "medium",
           supportedModes: ["text"],
           enabled: true,
           isDefault: true,
@@ -450,7 +454,7 @@ describe("gateway.generateImage", () => {
           name: "Image Primary",
           provider: "test",
           model: "test-image-model",
-          tier: "image-tier",
+          tier: "medium",
           supportedModes: ["image"],
           enabled: true,
         },

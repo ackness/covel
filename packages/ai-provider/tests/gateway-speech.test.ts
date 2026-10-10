@@ -38,8 +38,8 @@ function createStubAdapter(): ModelProviderAdapter {
 
 const profiles: ModelProfile[] = [
   {
-    id: "speech-tier",
-    tier: "speech-tier",
+    id: "medium",
+    tier: "medium",
     provider: "test",
     model: "test-tts-model",
     contextWindow: 1,
@@ -64,7 +64,7 @@ function setup(presetOverrides: Partial<PresetConfig> = {}) {
       name: "TTS Primary",
       provider: "test",
       model: "test-tts-model",
-      tier: "speech-tier",
+      tier: "medium",
       supportedModes: ["speech", "transcription"],
       enabled: true,
       ...presetOverrides,
@@ -180,7 +180,7 @@ describe("gateway.synthesizeSpeech", () => {
           name: "Story",
           provider: "test",
           model: "test-text-model",
-          tier: "speech-tier",
+          tier: "medium",
           supportedModes: ["text"],
           enabled: true,
           isDefault: true,
@@ -190,7 +190,7 @@ describe("gateway.synthesizeSpeech", () => {
           name: "TTS Primary",
           provider: "test",
           model: "test-tts-model",
-          tier: "speech-tier",
+          tier: "medium",
           supportedModes: ["speech"],
           enabled: true,
         },

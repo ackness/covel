@@ -1,11 +1,13 @@
-import { lookup } from "node:dns/promises";
+import type { LookupAddress } from "node:dns";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isPublicIpAddress } from "../src/adapters/http/dns-safety.js";
 import { fetchWithRetry } from "../src/plugin-utils.js";
 
-vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+const lookupMock = vi.hoisted(() =>
+  vi.fn<(hostname: string, options: object) => Promise<LookupAddress[]>>(),
+);
 
-const lookupMock = vi.mocked(lookup);
+vi.mock("node:dns/promises", () => ({ lookup: lookupMock }));
 
 afterEach(() => {
   vi.restoreAllMocks();
