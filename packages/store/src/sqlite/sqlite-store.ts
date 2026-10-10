@@ -10,6 +10,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { drizzleNodeSqlite } from "./drizzle-node-sqlite.js";
+import { reclaimSqliteFreePages } from "./node-sqlite.js";
 import {
   acquireSqliteConnection,
   getConnectionWriteGate,
@@ -87,6 +88,11 @@ export function createSqliteStore(
   };
   const data: StoreTransaction = {
     ...records,
+    async deleteTraceEventsBefore(sessionId, before) {
+      await records.deleteTraceEventsBefore(sessionId, before);
+      // Traces are the bulk of a long-lived file; hand their pages back.
+      reclaimSqliteFreePages(sqlite);
+    },
     async compareAndSetPluginDataBatch(sessionId, pluginId, entries) {
       const ownTransaction = !sqlite.isTransaction;
       if (ownTransaction) sqlite.exec("BEGIN IMMEDIATE");

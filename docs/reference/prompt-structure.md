@@ -242,7 +242,7 @@ pnpm prompt:prefix data/covel.db --json
 
 `world-ir` 的 `PostContextAssembly` Hook 继续负责裁剪自身历史输出及相关记忆，而非追加一个提示词段；这类变换保留 Hook，新增内容使用 `prompt.segment@1`。
 
-Anthropic 保留至多两个稳定 system 缓存边界，并在消息里设置两个边界：一个在历史的最后一条消息上（对话里第一条回合指令之前），一个在请求最后一个可缓存的块上。后者写入的内容包含本回合的数据，只有同一回合工具循环的后续请求能读到；下一回合的请求与本回合相同的部分到历史结尾为止，读的是前者。四个边界是该 API 的上限。请求里没有历史时（`maxTurns: 0` 的 runtime，回合上下文并入顶层 system）只有最后那个边界。thinking 块不带缓存控制。其他协议在序列化时移除内部 `COVEL_CACHE_BREAK` 标记。硬裁剪为后续回合预留空间，裁剪标记不含变化的消息计数。压缩触发窗口取 story 与摘要调用槽位输入窗口的较小值，摘要请求仍使用摘要槽位。
+Anthropic 保留至多两个稳定 system 缓存边界，并在消息里设置两个边界：一个在历史的最后一条消息上（对话里第一条回合指令之前），一个在请求最后一个可缓存的块上。后者写入的内容包含本回合的数据，只有同一回合工具循环的后续请求能读到；下一回合的请求与本回合相同的部分到历史结尾为止，读的是前者。四个边界是该 API 的上限。启用缓存边界时，每条消息的文字都以 text 块数组发送，不用字符串简写：边界逐回合后移，带边界的消息必须是块数组，同一条消息在下一回合不带边界时保持同样的形式，前缀才逐字节相同。请求里没有历史时（`maxTurns: 0` 的 runtime，回合上下文并入顶层 system）只有最后那个边界。thinking 块不带缓存控制。其他协议在序列化时移除内部 `COVEL_CACHE_BREAK` 标记；OpenAI 的两个协议另外发送按会话和 runtime 生成的 `prompt_cache_key`，见 [slots.md § 提示词缓存键](./slots.md#提示词缓存键)。硬裁剪为后续回合预留空间，裁剪标记不含变化的消息计数。压缩触发窗口取 story 与摘要调用槽位输入窗口的较小值，摘要请求仍使用摘要槽位。
 
 The dimension provider separates definitions without an `updateRule` into session-stable prompt segments and tracked values into turn segments. The Emberback lore example uses keyword activation and omits character biographies already supplied by the character records. A lore entry may opt into `extra.scanDepth` prior committed messages (0–20); the current player message is always scanned.
 

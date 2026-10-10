@@ -15,6 +15,7 @@ import { z } from "zod";
 import { runAgentToolLoop } from "../src/agent-loop/turn-agent-tool-loop.js";
 import type { AgentToolLoopCompleted } from "../src/agent-loop/turn-agent-tool-loop.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { promptCacheKeyFor } from "../src/llm/prompt-cache-key.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 import type {
   LLMAdapter,
@@ -244,6 +245,24 @@ describe("runAgentToolLoop core", () => {
     ).rejects.toThrow(/Context budget exceeded before LLM call/);
     expect(llm.calls).toBe(1);
     expect(llm.requests[0]?.maxOutputTokens).toBe(100);
+  });
+
+  it("sends one cache key for every step of a runtime, and another for another runtime", async () => {
+    const llm = new ScriptedLLM([
+      toolCall("mark", { note: "a" }),
+      prose("done"),
+    ]);
+    await run({ llm });
+    const other = new ScriptedLLM([prose("done")]);
+    await run({ llm: other, manifest: manifest({ name: "plug/other" }) });
+
+    const key = llm.requests[0]?.promptCacheKey;
+    expect(key).toBe(promptCacheKeyFor(input.sessionId, "plug/loop"));
+    expect(llm.requests[1]?.promptCacheKey).toBe(key);
+    expect(other.requests[0]?.promptCacheKey).not.toBe(key);
+    // A hash within OpenAI's 64 characters, with no session ID in it.
+    expect(key).toMatch(/^covel-[0-9a-f]{32}$/);
+    expect(promptCacheKeyFor("other-session", "plug/loop")).not.toBe(key);
   });
 
   it("truncates oversized read-tool results while preserving tool-call pairing", async () => {

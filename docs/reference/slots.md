@@ -318,13 +318,28 @@ thinkingLevel = "medium"
 includeThoughts = true
 ```
 
-当前类型化字段包括 `reasoningEffort`、`reasoningSummary`、`parallelToolCalls`、`store`、`seed`、`user`、Anthropic `thinking`，以及仅供 Gemini 原生协议使用的 `thinkingConfig` 和 `cachedContent`。`seed` 适用于 Chat 和 Gemini 原生协议，`reasoningSummary` 只用于 Responses。Anthropic 启用 thinking 使用 `{ type: "enabled", budgetTokens: 2048 }`，转换为 wire 的 `budget_tokens`。Gemini `thinkingConfig` 可设置 `thinkingBudget` 或 `thinkingLevel`（二选一）及 `includeThoughts`；选具体值时仍须符合目标型号支持范围。非法已知字段在请求前抛不可重试 `CONFIG_ERROR`；不支持或未知字段被忽略并记录 `diagnostics.warnings`。生成参数也校验有限数值、采样范围和正整数输出额度。
+当前类型化字段包括 `reasoningEffort`、`reasoningSummary`、`parallelToolCalls`、`store`、`seed`、`user`、`promptCacheKey`（见下文[提示词缓存键](#提示词缓存键)）、Anthropic `thinking`，以及仅供 Gemini 原生协议使用的 `thinkingConfig` 和 `cachedContent`。`seed` 适用于 Chat 和 Gemini 原生协议，`reasoningSummary` 只用于 Responses。Anthropic 启用 thinking 使用 `{ type: "enabled", budgetTokens: 2048 }`，转换为 wire 的 `budget_tokens`。Gemini `thinkingConfig` 可设置 `thinkingBudget` 或 `thinkingLevel`（二选一）及 `includeThoughts`；选具体值时仍须符合目标型号支持范围。非法已知字段在请求前抛不可重试 `CONFIG_ERROR`；不支持或未知字段被忽略并记录 `diagnostics.warnings`。生成参数也校验有限数值、采样范围和正整数输出额度。
 
 合并顺序是 preset 的自由 metadata → preset 的命名空间设置 → 本次调用的自由 metadata → 本次调用的命名空间设置 → 用途和 runtime 的生成参数限制。`extraBody` 可传尚未类型化的原生字段；model、messages、tools、stream、响应格式、输出预算，以及 Gemini 的 `contents`、`systemInstruction`、`generationConfig` 等框架字段受保护，不能借此覆盖，省略时产生 warning。
 
 自由格式的 `providerRequestMetadata` 仍可使用。本次调用中的原生字段只随最初的 provider、协议和端点发送；fallback 改变其中任意一个时会省略这些字段并记录 warning。可移植的 `parameterOverrides` 仍保留，每个备用 preset 自己的配置仍然生效。需要跨供应商设置时应使用各自的 `providerOptions` 命名空间。媒体 wire 路由和插件的 `resolveSlot().metadata` 契约不变。
 
 此接口参考 [AI SDK 的 provider options](https://ai-sdk.dev/docs/foundations/provider-options) 与其命名空间校验方式，保留 Covel 的用途绑定和协议适配器。
+
+### 提示词缓存键
+
+OpenAI 按提示词开头的哈希把请求分到机器上，请求里的 `prompt_cache_key` 会并入这个哈希（[OpenAI 文档](https://developers.openai.com/api/docs/guides/prompt-caching)，AI SDK 的对应选项是 `promptCacheKey`）。没有它时，同一个 runtime 相邻两回合的请求可能落到不同机器，前缀相同也读不到缓存。
+
+agent runtime 的每次模型请求都带一个键：`covel-` 加上会话 ID 与 runtime ID 的 SHA-256 的前 32 位十六进制字符（`promptCacheKeyFor`，`packages/runtime/src/llm/prompt-cache-key.ts`）。同一会话里同一个 runtime 的请求键相同，它们共用一段前缀；不同 runtime、不同会话的键不同。键里没有会话 ID 原文，也没有玩家的文字，长度在 OpenAI 允许的 64 个字符以内。
+
+键只在 `openai-chat-v1` 和 `openai-responses-v1` 两个协议上发送，而且默认只发给 `api.openai.com`。这个字段是 OpenAI 自己的：兼容 OpenAI 的服务遇到不认识的字段可能直接返回 400，一次被拒的请求比一次没命中的缓存代价大，所以其他地址默认不发。中转到 OpenAI 的服务如果会转发这个字段，在该用途的 `providerOptions` 里打开；写 `false` 则对 `api.openai.com` 也不发：
+
+```toml
+[covel.story.providerOptions.myrelay]
+promptCacheKey = true
+```
+
+想固定成自己的键时，在 `extraBody` 或 `providerRequestMetadata` 里写 `prompt_cache_key`，它覆盖框架生成的键。function runtime 通过 `ctx.gateway` 发的请求、历史压缩和记忆摘要的请求不带键。
 
 ## 结构化输出
 

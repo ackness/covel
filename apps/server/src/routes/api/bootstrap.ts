@@ -54,6 +54,7 @@ import {
   PluginExtensionHost,
   createHookPipeline,
   createModelResolver,
+  maybeSweepOldTraces,
 } from "@covel/runtime";
 import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
@@ -95,6 +96,7 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
+import { installTraceRetentionSource } from "../../lib/trace-retention-source.js";
 import {
   createRuntimeJobWorker,
   parseActivatedRuntimeJobPayload,
@@ -897,6 +899,7 @@ async function assembleApi(
 
   // Start maintenance only after assembly succeeds. These scans remain
   // non-blocking for readiness, but belong to the host's drain boundary.
+  installTraceRetentionSource();
   const startupMaintenance = maybeSweepExpiredSuspensions(store, {
     force: true,
     // Only PostgreSQL can have another server process with a live claim.
@@ -905,6 +908,7 @@ async function assembleApi(
     .catch(() => {
       console.warn("[suspension-sweep] startup sweep failed");
     })
+    .then(() => maybeSweepOldTraces(store, { force: true }))
     .then(() => undefined);
   runtimeJobWorker.wake();
 

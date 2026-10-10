@@ -190,6 +190,7 @@ export type {
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
 export { commitExecution } from "./commit/commit-execution.js";
+export { maybeSweepOldTraces } from "./commit/trace-retention.js";
 export type {
   CommitExecutionArgs,
   CommitExecutionOutcome,
