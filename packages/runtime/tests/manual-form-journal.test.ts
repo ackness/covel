@@ -25,8 +25,8 @@ describe.each(["function", "agent"] as const)(
         const store = createMemoryStore();
         const now = new Date().toISOString();
         await store.createSession({
+          locale: "en-US",
           id: "s",
-          worldId: null,
           phase: "playing",
           status: "active",
           completedPlayerTurns: 1,

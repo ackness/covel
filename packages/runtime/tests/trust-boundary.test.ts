@@ -110,8 +110,9 @@ describe("tool-carried proposal rebinding", () => {
   it("rebinds sessionId/turnId/source of carried proposals to the executing runtime", async () => {
     const store = createMemoryStore();
     await store.createSession({
+      locale: "en-US",
+      updatedAt: "2026-01-01T00:00:00.000Z",
       id: "sess-1",
-      worldId: null,
       status: "active",
       activePlugins: ["p"],
       phase: "playing",
@@ -170,8 +171,9 @@ describe("PreStateCommit replacement is payload-only", () => {
   it("pins the envelope when a hook tries to redirect the proposal", async () => {
     const store = createMemoryStore();
     await store.createSession({
+      locale: "en-US",
+      updatedAt: "2026-01-01T00:00:00.000Z",
       id: "sess-1",
-      worldId: null,
       status: "active",
       activePlugins: ["p"],
       phase: "playing",

@@ -900,7 +900,14 @@ describe("TurnExecutor _interaction protocol", () => {
       sessionId: "sess-1",
       version: 1,
       types: ["npc", "companion"],
-      attributes: [{ id: "background", name: "Background", type: "string" }],
+      attributes: [
+        {
+          id: "background",
+          name: "Background",
+          type: "string",
+          category: "bio",
+        },
+      ],
       createdAt: "2024-01-01T00:00:00Z",
       updatedAt: "2024-01-01T00:00:00Z",
     });

@@ -50,6 +50,8 @@ async function run(
 ) {
   const store = createMemoryStore();
   await store.createSession({
+    locale: "en-US",
+    updatedAt: "2026-01-01T00:00:00.000Z",
     id: sessionId,
     status: "active",
     phase: "playing",

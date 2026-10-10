@@ -84,8 +84,8 @@ describe("runtime trigger ledger", () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      locale: "en-US",
       id: "s",
-      worldId: null,
       phase: "playing",
       status: "active",
       completedPlayerTurns: 0,
@@ -144,8 +144,8 @@ describe("runtime trigger ledger", () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      locale: "en-US",
       id: "s",
-      worldId: null,
       phase: "playing",
       status: "active",
       completedPlayerTurns: 0,

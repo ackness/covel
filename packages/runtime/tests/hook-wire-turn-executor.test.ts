@@ -222,9 +222,8 @@ describe("Turn executor hook wire-in", () => {
           .fn()
           .mockResolvedValue({ action: "abort", reason: "runtime blocked" }),
       });
-      const deps = await makeDeps(llm, pipeline);
       const onRuntimeComplete = vi.fn();
-      deps.onRuntimeComplete = onRuntimeComplete;
+      const deps = { ...(await makeDeps(llm, pipeline)), onRuntimeComplete };
 
       const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
 

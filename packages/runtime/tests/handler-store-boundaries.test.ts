@@ -39,8 +39,9 @@ const character = (sessionId = ctx.sessionId) => ({
 async function fixture() {
   const store = createMemoryStore();
   await store.createSession({
+    locale: "en-US",
+    updatedAt: "2026-01-01T00:00:00.000Z",
     id: ctx.sessionId,
-    worldId: null,
     status: "active",
     phase: "playing",
     completedPlayerTurns: 0,
@@ -105,7 +106,7 @@ describe("handler store ownership", () => {
     change((await scoped.getPluginData("items", "single"))!.value);
     change((await writer.list("items"))[0]!.value);
     change((await trusted.listPluginData())[0]!.value);
-    (await trusted.listCharacters())[0]!.fields!.hp = 42;
+    ((await trusted.listCharacters())[0]!.fields as { hp: number }).hp = 42;
     expect(await writer.get("items", "single")).toEqual({ count: 1 });
     expect(await writer.get("items", "batch")).toEqual({ count: 2 });
     expect((await trusted.listCharacters())[0]!.fields).toEqual({

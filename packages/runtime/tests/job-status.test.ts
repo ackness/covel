@@ -322,8 +322,8 @@ describe("job status after the execution commit", () => {
     const store = createMemoryStore();
     const now = "2026-10-02T00:00:00.000Z";
     await store.createSession({
+      locale: "en-US",
       id: SESSION,
-      worldId: null,
       status: "active",
       phase: "playing",
       completedPlayerTurns: 0,

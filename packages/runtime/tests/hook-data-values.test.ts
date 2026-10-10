@@ -10,7 +10,7 @@ import { createHookPipeline } from "../src/hooks/pipeline.js";
 
 describe("Hook snapshot data", () => {
   it("inspects the actual backing buffer when a view subclasses a native type", () => {
-    class View extends Uint8Array {
+    class View extends Uint8Array<ArrayBufferLike> {
       override get buffer(): ArrayBuffer {
         return new ArrayBuffer(1);
       }

@@ -76,7 +76,8 @@ describe("agent tool deadline", () => {
         entered.resolve();
         if (!expires) throw new Error("recoverable business error");
         await release.promise;
-        return {};
+        // One result that is valid for both a handler (outcome) and a guard (skip).
+        return { outcome: "success" as const, skip: false };
       };
       const hookPipeline = createHookPipeline();
       hookPipeline.register({

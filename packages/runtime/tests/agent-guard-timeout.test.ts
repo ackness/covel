@@ -17,6 +17,7 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { TrustedHandlerStore } from "../src/index.js";
 
 function makeAgentManifest(
   overrides?: Partial<RuntimeManifest>,
@@ -24,7 +25,7 @@ function makeAgentManifest(
   return {
     name: "guarded-agent",
     pluginId: "guarded-agent",
-    pluginType: "community",
+    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
@@ -69,7 +70,7 @@ describe("agent guard deadline (R-12)", () => {
       promptTemplate: "prompt",
       guard: async () => {
         await new Promise(() => {}); // never settles — simulates a hung guard
-        return {};
+        return { skip: false };
       },
     };
 
@@ -137,15 +138,11 @@ describe("agent guard deadline (R-12)", () => {
           // Probe revocation through ctx.store (the revocable trusted-store
           // write surface). ctx.pluginData was removed — it had no plugin
           // callers — so the trusted store is the guard's write capability now.
-          await ctx.store?.setPluginData({
-            id: "late",
-            sessionId: ctx.sessionId,
-            pluginId: ctx.pluginId,
+          // A builtin plugin's store is the trusted one, which can write.
+          await (ctx.store as TrustedHandlerStore | undefined)?.setPluginData({
             namespace: "ns",
             key: "late",
             value: { v: 1 },
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
           });
         } catch (err) {
           observed.writeError =
@@ -158,7 +155,7 @@ describe("agent guard deadline (R-12)", () => {
             err instanceof Error ? err.message : String(err);
         }
         guardDone();
-        return {};
+        return { skip: false };
       },
     };
 
