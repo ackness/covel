@@ -12,7 +12,7 @@
  * is not set).
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   createInProcessSessionLock,
   withBackgroundSessionLock,
@@ -214,6 +214,31 @@ describe("createInProcessSessionLock", () => {
     // Post-completion the entry should be GC'd — otherwise the map grows
     // unboundedly as sessions come and go on a long-running server.
     expect(lock._sizeForTests()).toBe(0);
+  });
+
+  it("logs a long wait once and still runs the waiter when the owner ends", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const lock = createInProcessSessionLock({ slowWaitMs: 1 });
+      let finishOwner: () => void = () => {};
+      const owner = lock.withLock(
+        "sess-slow",
+        () => new Promise<void>((resolve) => (finishOwner = resolve)),
+      );
+      const waiter = lock.withLock("sess-slow", async () => "ran");
+      // The owner ends only after the line is written, so the test does not
+      // depend on how fast the machine is.
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
+      expect(String(warn.mock.calls[0]![0])).toContain("sess-slow");
+      finishOwner();
+      await owner;
+      await expect(waiter).resolves.toBe("ran");
+      // An uncontended acquire starts no timer.
+      await lock.withLock("sess-slow", async () => undefined);
+      expect(warn).toHaveBeenCalledOnce();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("propagates fn return value to the caller", async () => {

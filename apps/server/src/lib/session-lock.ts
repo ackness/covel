@@ -40,7 +40,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * Thrown by lock implementations with a bounded acquire (PG advisory lock)
  * when the session stays busy past the acquire timeout. Routes translate it
  * into a coded 503 instead of a generic 500. The in-process lock never
- * throws this — it waits indefinitely.
+ * throws this: it waits, and logs a wait that passes the same 30 seconds.
  */
 export class SessionLockTimeoutError extends Error {}
 
@@ -115,7 +115,13 @@ type InProcessSessionLock = SessionLock & {
  * chain (their error is already delivered to their own caller) so one bad
  * turn cannot poison every subsequent turn on the session.
  */
-export function createInProcessSessionLock(): InProcessSessionLock {
+export function createInProcessSessionLock(
+  opts: {
+    /** A wait longer than this is logged once. Default 30_000ms. */
+    readonly slowWaitMs?: number;
+  } = {},
+): InProcessSessionLock {
+  const slowWaitMs = opts.slowWaitMs ?? 30_000;
   const locks = new Map<string, ChainTail>();
   const lockContext = new AsyncLocalStorage<
     ReadonlyMap<string, { active: boolean }>
@@ -148,15 +154,34 @@ export function createInProcessSessionLock(): InProcessSessionLock {
         () => slot,
         () => slot,
       );
+
+      // No acquire deadline here, unlike the PostgreSQL lock. The owner is in
+      // this process, so it cannot be lost with a dead pod, and legitimate
+      // owners hold a key for longer than 30 seconds: a turn holds its
+      // session for the whole model run, and world generation or translation
+      // holds a world for minutes. A request queued behind one (a manual
+      // runtime, an approval, deleting the session) must run when it ends
+      // rather than fail. A wait that long is still worth a line in the log:
+      // it is the first sign of an owner that never returns.
+      const waiting = locks.has(sessionId)
+        ? setTimeout(() => {
+            console.warn(
+              `[session-lock] still waiting for ${sessionId} after ${slowWaitMs}ms; the current owner has not finished`,
+            );
+          }, slowWaitMs)
+        : undefined;
+      waiting?.unref();
       locks.set(sessionId, chain);
       const owner = { active: true };
 
       try {
         // Wait for our predecessor to finish (swallow their errors — they
         // are already propagated to their own caller, we just need ordering).
-        await previousTail.catch(() => {
-          /* isolate */
-        });
+        await previousTail
+          .catch(() => {
+            /* isolate */
+          })
+          .finally(() => clearTimeout(waiting));
         return await lockContext.run(
           new Map([...(parentOwners ?? []), [sessionId, owner] as const]),
           fn,
