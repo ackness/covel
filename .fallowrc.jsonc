@@ -27,7 +27,15 @@
     "apps/web/src/routeTree.gen.ts",
   ],
   // Desktop depends on Web to order and stage its build, without a source import.
-  "ignoreDependencies": ["@covel/web"],
+  // The font packages are read through url() in apps/web/src/styles/fonts.css, which fallow does not follow.
+  "ignoreDependencies": [
+    "@covel/web",
+    "@fontsource-variable/fraunces",
+    "@fontsource-variable/geist",
+    "@fontsource-variable/geist-mono",
+    "@fontsource-variable/inter",
+    "@fontsource-variable/newsreader",
+  ],
   "rules": {
     "unused-dev-dependencies": "error",
     "unused-optional-dependencies": "error",

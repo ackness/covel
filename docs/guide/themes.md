@@ -325,6 +325,8 @@ html[data-theme="jade-paper"] {
 
 中文字体默认用系统自带的（如 `"PingFang SC"`、`"Microsoft YaHei"`、`"Songti SC"`）。应用不从字体服务加载中文网络字体：它们体积大，会在加载过程中让整页文字反复重排，字体服务不可达时还会拖慢首屏。
 
+随应用打包了拉丁字体 `"Inter"`、`"Fraunces"`、`"Newsreader"`、`"Geist"` 和 `"Geist Mono"`（SIL OFL 1.1，来自 `@fontsource-variable/*` 包；字体声明在 `apps/web/src/styles/fonts.css`）。只打包拉丁子集和内置主题用到的样式（Fraunces、Newsreader 含 400 斜体；字重为可变轴），首屏不向任何字体服务发请求，离线和桌面端表现一致。字体用 `font-display: block`：本地文件几毫秒即可就绪，不会出现先用后备字体、再换字体的整页重排。主题包可以直接在字体栈里写这些名字。
+
 随应用打包了一款标题字体 `"ZCOOL XiaoWei"`（站酷小薇，OFL 1.1；文件在 `apps/web/public/fonts/zcool-xiaowei/`，字体声明在 `apps/web/src/styles/fonts.css`）。它只有 400 一个字重，只在有主题用到这个字体族时才会被读取，`stage` 用它做标题。主题包可以直接在字体栈里写这个名字，但不要给它设粗体。
 
 主题包不能 `@import`，所以字体栈里其余的中文字体都应是系统字体，并以通用族名（`sans-serif` / `serif`）收尾。

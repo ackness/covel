@@ -86,7 +86,7 @@ JSON 结构：
 
 CSS 文件没有地方声明 `layout`，按 CSS 导入的主题使用 `classic` 布局。需要其他布局时使用 JSON 格式。
 
-> **信任边界**：导入的主题 CSS 按原样应用。导入校验会拒绝 `@import`，但不过滤 `url(...)`（背景图、`@font-face` 字体等），所以主题可以让客户端向任意外部地址发请求。只导入来源可信的主题包。
+> **信任边界**：导入的主题 CSS 按原样应用。导入校验会拒绝 `@import`，但不过滤 `url(...)`（背景图、`@font-face` 字体等），所以主题可以让客户端向任意外部地址发请求。只导入来源可信的主题包。这是主题作者的选择：内置字体不再从网络加载，但导入主题自带的远程 CSS 与字体仍会被加载（主页面的 Content-Security-Policy 为此放行 `https:` 的样式与字体来源）。
 
 ## 3. JSON 字段契约
 
@@ -291,6 +291,8 @@ apps/web/src/themes/builtins/
 ### 5.5 字体与排版 token
 
 中文字体默认用系统自带的（如 `"PingFang SC"`、`"Microsoft YaHei"`、`"Songti SC"`）。应用不从字体服务加载中文网络字体：它们体积大，会在加载过程中让整页文字反复重排，字体服务不可达时还会拖慢首屏。
+
+随应用打包了拉丁字体 `"Inter"`、`"Fraunces"`、`"Newsreader"`、`"Geist"` 和 `"Geist Mono"`（SIL OFL 1.1，来自 `@fontsource-variable/*` 包；字体声明在 `apps/web/src/styles/fonts.css`）。只打包拉丁子集和内置主题用到的样式（Fraunces、Newsreader 含 400 斜体；字重为可变轴），首屏不向任何字体服务发请求，离线和桌面端表现一致。字体用 `font-display: block`：本地文件几毫秒即可就绪，不会出现先用后备字体、再换字体的整页重排。主题包可以直接在字体栈里写这些名字。
 
 随应用打包了一款标题字体 `"ZCOOL XiaoWei"`（站酷小薇，OFL 1.1；文件在 `apps/web/public/fonts/zcool-xiaowei/`，字体声明在 `apps/web/src/styles/fonts.css`）。它只有 400 一个字重，只在有主题用到这个字体族时才会被读取，`stage` 用它做标题。主题包可以直接在字体栈里写这个名字，但不要给它设粗体。
 
