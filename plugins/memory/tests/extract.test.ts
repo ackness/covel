@@ -460,4 +460,15 @@ describe("memory extraction prompts", () => {
       );
     }
   });
+  it("follows a fixed instruction language set by the operator", async () => {
+    vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
+    try {
+      const { system } = await prompts("zh-CN", "港口出现了。");
+      expect(system).toMatch(
+        /\[LANGUAGE\] Write all natural-language memory content in .+\.$/,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

@@ -141,7 +141,10 @@ export default function ({ tool, z }) {
           value = {
             ...prior,
             categoryMeta: getCategoryMetadata(prior.category),
-            content: `${prior.content}\n\n${entry.content}`,
+            // A sentence the entry already holds is not appended again.
+            content: prior.content.includes(entry.content.trim())
+              ? prior.content
+              : `${prior.content}\n\n${entry.content}`,
             tags: mergeTags(prior.tags, entry.tags),
             rarity: higherRarity(prior.rarity ?? "common", entry.rarity),
             updatedAt: now,

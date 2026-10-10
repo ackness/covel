@@ -1,4 +1,7 @@
-import { isDefaultLocale, resolveI18nText } from "@covel/plugin-handlers-utils";
+import {
+  instructionLocaleFor,
+  resolveI18nText,
+} from "@covel/plugin-handlers-utils";
 import { loadDefinitions } from "./definitions.js";
 import {
   buildSystemPrompt,
@@ -36,7 +39,7 @@ export default async function extractMemory(ctx) {
     content: byLabel.get(block.label)?.content ?? "",
   }));
   const locale = ctx.locale ?? digest.locale ?? "zh-CN";
-  const lang = isDefaultLocale(locale) ? "zh" : "en";
+  const lang = instructionLocaleFor(locale);
   const player = ctx.world?.characters.find(
     (character) => character.type === "player",
   );

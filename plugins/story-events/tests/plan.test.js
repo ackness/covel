@@ -107,17 +107,10 @@ describe("applyPlans", () => {
   });
 
   it("never replaces authored or fired events and reports without payloads", () => {
-    const result = apply(
-      [
-        planned("first"),
-        planned("old-news"),
-        { ...planned("bad"), once: false },
-      ],
-      {
-        planned: { "old-news": planned("old-news") },
-        revealed: { "old-news": { lastTurn: 2 } },
-      },
-    );
+    const result = apply([planned("first"), planned("old-news")], {
+      planned: { "old-news": planned("old-news") },
+      revealed: { "old-news": { lastTurn: 2 } },
+    });
     expect(result.writes).toEqual([]);
     expect(result.rejected).toEqual([
       {
@@ -126,6 +119,8 @@ describe("applyPlans", () => {
         reason: "the world already defines this event",
       },
       { id: "old-news", origin: "planner/plot", reason: "already fired" },
+    ]);
+    expect(apply([{ ...planned("bad"), once: false }], {}).rejected).toEqual([
       {
         id: "bad",
         origin: "planner/plot",

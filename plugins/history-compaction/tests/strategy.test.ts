@@ -1019,6 +1019,10 @@ describe("segmented history persistence", () => {
     expect(complete.mock.calls[1]![0].messages[0]!.content).not.toContain(
       "Preserved event 2.",
     );
+    // A pure merge carries no new conversation, so it has no empty block for it.
+    expect(complete.mock.calls[1]![0].messages[0]!.content).not.toContain(
+      "new_conversation",
+    );
     const after = await store.listSessionSummaries("sess-1");
     expect(after).toHaveLength(8);
     expect(after[0]).toMatchObject({

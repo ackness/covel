@@ -345,6 +345,10 @@ async function generateVariants(ctx, baseText, requested) {
       presetId: FAST_TEXT_SLOT,
       system,
       prompt,
+      // A cancelled turn stops the call; the ceiling covers `wanted` passages
+      // of the stored length (about 1.5 tokens per character is generous).
+      maxOutputTokens: wanted * Math.ceil(MAX_TEXT_LENGTH * 1.5),
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     return parseVariantText(result?.text, baseText, wanted);
   } catch (err) {

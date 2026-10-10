@@ -668,20 +668,14 @@ describe("upsert-quests", () => {
     );
 
     // Assert
-    const turnId = await mockStore.getPluginData(
+    const row = await mockStore.getPluginData(
       "sess-1",
       "core-quest",
       "message",
-      "__turnId",
+      "turn-1",
     );
-    expect(turnId.value).toBe("turn-1");
-
-    const changes = await mockStore.getPluginData(
-      "sess-1",
-      "core-quest",
-      "message",
-      "changes",
-    );
+    expect(row.value.turnId).toBe("turn-1");
+    const changes = { value: row.value.changes };
     expect(changes.value).toHaveLength(1);
     expect(changes.value[0]).toMatchObject({
       name: "寻回断魂钩",

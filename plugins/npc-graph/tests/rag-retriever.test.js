@@ -284,6 +284,17 @@ describe("rag-retriever handler", () => {
     expect(result.value.edgeCount).toBe(0);
   });
 
+  it("reports a storage read error as a failed run, not an empty success", async () => {
+    const ctx = makeCtx(store, "Alice walked in.");
+    ctx.pluginData = {
+      async list() {
+        throw new Error("store offline");
+      },
+    };
+    const result = await handler(ctx);
+    expect(result).toEqual({ outcome: "failed", error: "store offline" });
+  });
+
   it("returns empty context when no node name matches the player message", async () => {
     await seedSmallChain(store);
     const result = await handler(

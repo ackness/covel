@@ -23,7 +23,7 @@ const MAX_DEPTH = 6;
 /** Planned events waiting to fire, across every planner. */
 export const MAX_PENDING_PLANNED = 8;
 /** Events one plan may add or update. */
-export const MAX_EVENTS_PER_PLAN = 3;
+export const MAX_EVENTS_PER_PLAN = 2;
 
 function isText(value) {
   if (typeof value === "string") return value.trim().length > 0;

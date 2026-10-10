@@ -38,7 +38,8 @@ export default async function handler(ctx) {
     )
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
-      return a.name.localeCompare(b.name);
+      // Byte order: the same cast on every machine, whatever its locale.
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
 
   const selected = candidates

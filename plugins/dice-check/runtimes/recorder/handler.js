@@ -102,7 +102,8 @@ export default async function handler(ctx) {
     };
   }
 
-  const firstSeq = await nextSequence(ctx);
+  // The turn's block already lists every earlier check, one per sequence number.
+  const firstSeq = previousChecks.length + 1;
   const entries = records.map((record, index) => {
     const presentation = OUTCOME_PRESENTATION[record.outcome];
     return {
@@ -168,22 +169,6 @@ function parseCheck(data, roll) {
     record.attribute = payload.attribute.trim();
   }
   return record;
-}
-
-/**
- * Next per-turn sequence number: count of existing `checks` keys with this
- * turn's prefix, plus one.
- *
- * @param {RecorderContext} ctx
- */
-async function nextSequence(ctx) {
-  if (!ctx.pluginData?.list) return 1;
-  const rows = await ctx.pluginData.list(CHECKS_NAMESPACE);
-  const prefix = `${ctx.turnId}-`;
-  const used = rows.filter(
-    (row) => typeof row?.key === "string" && row.key.startsWith(prefix),
-  ).length;
-  return used + 1;
 }
 
 /**

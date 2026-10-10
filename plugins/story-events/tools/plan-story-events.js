@@ -3,6 +3,8 @@
 // model gets a correctable error instead of a plan that intake will reject
 // or an event that can never fire.
 
+import { MAX_EVENTS_PER_PLAN } from "../lib/plan.js";
+
 const EVENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const OPERATORS = [
   "equals",
@@ -561,7 +563,7 @@ export default function ({ tool, z }) {
       normalizeArguments,
       z
         .object({
-          events: z.array(event).max(2),
+          events: z.array(event).max(MAX_EVENTS_PER_PLAN),
           retire: z
             .array(id)
             .max(4)

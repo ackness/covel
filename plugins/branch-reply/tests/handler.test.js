@@ -165,6 +165,28 @@ describe("branch-reply createCandidates (regenerate)", () => {
     }
   });
 
+  it("passes the run's cancel signal and an output ceiling to the model call", async () => {
+    const gateway = {
+      generateText: vi.fn().mockResolvedValue({ text: "One.\n---\nTwo." }),
+    };
+    const controller = new AbortController();
+    await handler({
+      ...ctx({
+        manualPayload: {
+          action: "createCandidates",
+          turnId: "turn-42",
+          baseText: "The original beat.",
+          count: 3,
+        },
+        gateway,
+      }),
+      signal: controller.signal,
+    });
+    const request = gateway.generateText.mock.calls[0][0];
+    expect(request.signal).toBe(controller.signal);
+    expect(request.maxOutputTokens).toBe(12_000);
+  });
+
   it("produces genuine LLM variants in addition to the original", async () => {
     const gateway = {
       generateText: vi.fn().mockResolvedValue({
