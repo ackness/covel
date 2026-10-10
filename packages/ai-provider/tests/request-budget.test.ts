@@ -344,6 +344,39 @@ describe("logical provider request budgets", () => {
     await rejected;
   });
 
+  it("ends an embedding call whose endpoint never answers, with no explicit budget", async () => {
+    const fetch = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetch);
+    const gateway = createGateway({
+      providerRegistry: createProviderRegistry({
+        providerDefaults: {
+          fixture: { baseUrl: "https://fixture.example/v1" },
+        },
+      }),
+      presetRegistry: createPresetRegistry({
+        profiles: [
+          {
+            id: "embed-default",
+            tier: "embed-default",
+            provider: "fixture",
+            model: "embedder",
+            contextWindow: 8192,
+            latencyClass: "medium",
+            costClass: "medium",
+            supportedModes: ["embed"],
+          },
+        ],
+        presets: [],
+      }),
+    });
+    const rejected = expect(
+      gateway.embed({ values: ["a line"] }),
+    ).rejects.toMatchObject({ code: "REQUEST_BUDGET_EXCEEDED" });
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await rejected;
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it("preserves the media backend's longer polling policy without an explicit budget", async () => {
     const start = Date.now();
     const fetch = vi.fn(
