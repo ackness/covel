@@ -16,6 +16,7 @@ import {
 } from "@/services/api.js";
 import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
 import { pluginPackageInfo } from "@/lib/package-info.js";
+import { useSessionActions } from "@/stores/session-store.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
@@ -33,6 +34,7 @@ interface ToastState {
  */
 export function PackagesPane() {
   const { t } = useTranslation();
+  const { boot } = useSessionActions();
   const [busy, setBusy] = useState<UploadKind | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
@@ -76,6 +78,10 @@ export function PackagesPane() {
     [],
   );
 
+  // Boot fetches the world list again and drops the cached full records, so
+  // the home screen and the prep screen show what was just installed.
+  const refreshWorlds = useCallback(() => void boot(), [boot]);
+
   /** The status line shows one package; prefer one that needs the restart. */
   function showBatch(result: GithubBatchInstallResult): InstallResult | null {
     const shown =
@@ -115,6 +121,7 @@ export function PackagesPane() {
         setLastResult(result);
       }
       await refreshInstalled();
+      if (kind !== "plugin") refreshWorlds();
       flash({
         message: result.restartRequired
           ? t("settings.packages.installedRestart", { id: result.id })
@@ -239,6 +246,7 @@ export function PackagesPane() {
         onInstalled={(result) => {
           showBatch(result);
           void refreshInstalled();
+          refreshWorlds();
         }}
       />
 
@@ -375,7 +383,10 @@ export function PackagesPane() {
                   installation={item}
                   disabled={!!busy || !!removing || githubBusy || updateBusy}
                   onBusyChange={setUpdateBusy}
-                  onUpdated={() => void refreshInstalled()}
+                  onUpdated={() => {
+                    void refreshInstalled();
+                    refreshWorlds();
+                  }}
                   onCancelled={() => void refreshInstalled()}
                 />
               </li>

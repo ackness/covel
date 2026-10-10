@@ -11,6 +11,11 @@ import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { PackagesPane } from "../PackagesPane.js";
 
+const boot = vi.hoisted(() => vi.fn());
+vi.mock("@/stores/session-store.js", () => ({
+  useSessionActions: () => ({ boot }),
+}));
+
 const brokenPlugin: PluginSummary = {
   requires: [],
   optional: [],
@@ -35,6 +40,7 @@ const brokenPlugin: PluginSummary = {
 
 describe("PackagesPane installed plugin management", () => {
   beforeEach(async () => {
+    boot.mockReset();
     await i18n.changeLanguage("en-US");
   });
 
@@ -101,5 +107,38 @@ describe("PackagesPane installed plugin management", () => {
         fetchMock.mock.calls.filter(([url]) => url === "/api/plugins"),
       ).toHaveLength(2),
     );
+  });
+
+  it("loads the world list again after a world package is installed", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url === "/api/install/worlds") return Response.json({ items: [] });
+        if (url === "/api/install/plugins") return Response.json({ items: [] });
+        if (url === "/api/plugins" && !init?.method)
+          return Response.json({ items: [] });
+        if (url === "/api/install/world" && init?.method === "POST")
+          return Response.json({
+            ok: true,
+            kind: "world",
+            id: "new-world",
+            restartRequired: false,
+          });
+        throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PackagesPane />);
+    const zone = (await screen.findByText("World package")).closest("label")!;
+    fireEvent.drop(zone, {
+      dataTransfer: {
+        files: [
+          new File(["zip"], "new-world.zip", { type: "application/zip" }),
+        ],
+      },
+    });
+
+    await waitFor(() => expect(boot).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Installed new-world")).toBeTruthy();
   });
 });
