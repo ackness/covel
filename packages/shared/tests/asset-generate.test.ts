@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  assetGenerateToLLM,
   assetGenerateToView,
   isAssetGeneratePayload,
   isAssetGenerateView,
+  pictureOf,
+  picturesShown,
 } from "../src/index.js";
 import type { AssetGeneratePayload, Proposal } from "../src/index.js";
 
@@ -67,17 +68,49 @@ describe("asset.generate helpers", () => {
     expect(isAssetGenerateView({ ...view, source: {} })).toBe(false);
   });
 
-  it("returns LLM content parts for generated image assets", () => {
-    const llm = assetGenerateToLLM(
-      makeProposal({ ref: REF, modality: "image" }),
-    );
+  it("describes a picture by its caption, else by the prompt that made it", () => {
+    const view = (meta?: Record<string, unknown>, modality = "image") =>
+      assetGenerateToView(
+        makeProposal({ ref: REF, modality, ...(meta ? { meta } : {}) }),
+      );
 
-    expect(llm).toEqual([
-      {
-        type: "text",
-        text: `Generated image asset id=${REF.id} mime=${REF.mime} size=${REF.size}`,
-      },
-      { type: "image", image: REF },
-    ]);
+    expect(pictureOf(view({ prompt: "a  lighthouse\nat dusk" }))).toEqual({
+      ref: REF,
+      caption: "a lighthouse at dusk",
+    });
+    expect(
+      pictureOf(view({ prompt: "p", caption: "Mira on the pier" }))?.caption,
+    ).toBe("Mira on the pier");
+    expect(pictureOf(view())).toEqual({ ref: REF });
+    // A long image prompt is cut, not carried whole into every prompt.
+    expect(pictureOf(view({ prompt: "x".repeat(2000) }))?.caption).toHaveLength(
+      601,
+    );
+    // Sound is no picture.
+    expect(
+      pictureOf(
+        assetGenerateToView(
+          makeProposal({
+            ref: { ...REF, mime: "audio/wav" },
+            modality: "audio",
+          }),
+        ),
+      ),
+    ).toBeNull();
+  });
+
+  it("finds the pictures among the blocks a conversation row showed", () => {
+    const view = assetGenerateToView(
+      makeProposal({ ref: REF, modality: "image", meta: { prompt: "a map" } }),
+    );
+    expect(
+      picturesShown([
+        { type: "ui.render", data: { parts: [] } },
+        { type: "asset.generate", data: view },
+        { type: "asset.generate", data: { ...view, ref: { id: "short" } } },
+        null,
+      ]),
+    ).toEqual([{ ref: REF, caption: "a map" }]);
+    expect(picturesShown(undefined)).toEqual([]);
   });
 });
