@@ -526,17 +526,31 @@ then use a new `SQLITE_PATH` or recreate the development database. Creating only
 new sessions in the old database is insufficient. See the
 [development migration steps](../guide/env-registry.md#plugin-extension-development-data).
 
+## Server Settings
+
+`server_settings` is a table that belongs to no session: one row per setting
+the server itself acts on (`key`, `value`, `updated_at`), written through
+`setServerSetting` / `deleteServerSetting` and read with `listServerSettings`.
+Deleting a session leaves it alone, and it is not part of a snapshot or a
+browser checkpoint. Every backend passes the same contract suite for it.
+
+The value is JSON text in a `text` column on SQLite and PostgreSQL alike, encoded
+by the shared query layer. It is deliberately not `jsonb`: the PostgreSQL driver
+layer parses every string it reads from a `jsonb` column, so the stored string
+`"30"` would come back as the number `30`. Which keys exist, who may write them
+and how the Web app uses them: [`settings-store.md`](../reference/settings-store.md).
+
 ## Retention Of Operational Records
 
 Execution bookkeeping grows with every turn, so each kind has an explicit bound:
 
-| Record                                      | Bound                                                                                                                                                                                                                                         |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind=auto` snapshots                       | One per `completedPlayerTurns` value (later commits at the same count refresh it); the newest `COVEL_AUTO_SNAPSHOT_RETENTION` (default 20) are kept, except snapshots a fork names as `parentId`. Manual and fork snapshots are never pruned. |
-| Snapshot payload and forks                  | Omit control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs`; a fork also drops them from snapshots taken before they were excluded. Rows of the retired `_jobs` namespace are deleted at boot.                          |
-| `_runtime_jobs` and their `job_status` rows | Unfinished jobs are kept; terminal jobs keep the newest 20 per session runtime.                                                                                                                                                               |
-| `_logs`                                     | Ring of 200 rows per plugin, trimmed on a logger's first write and every 20th after, so one execution can briefly exceed it.                                                                                                                  |
-| `trace_events`                              | 30 days by default (`COVEL_TRACE_RETENTION_DAYS`, `0` keeps all; the player's Settings choice applies when the variable is unset). Pruned per session after a commit, and for every session at start and once a day.                          |     |
+| Record                                      | Bound                                                                                                                                                                                                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind=auto` snapshots                       | One per `completedPlayerTurns` value (later commits at the same count refresh it); the newest `COVEL_AUTO_SNAPSHOT_RETENTION` (default 20) are kept, except snapshots a fork names as `parentId`. Manual and fork snapshots are never pruned.      |
+| Snapshot payload and forks                  | Omit control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs`; a fork also drops them from snapshots taken before they were excluded. Rows of the retired `_jobs` namespace are deleted at boot.                               |
+| `_runtime_jobs` and their `job_status` rows | Unfinished jobs are kept; terminal jobs keep the newest 20 per session runtime.                                                                                                                                                                    |
+| `_logs`                                     | Ring of 200 rows per plugin, trimmed on a logger's first write and every 20th after, so one execution can briefly exceed it.                                                                                                                       |
+| `trace_events`                              | 30 days by default (`COVEL_TRACE_RETENTION_DAYS`, `0` keeps all; the player's Settings choice, stored in `server_settings`, applies when the variable is unset). Pruned per session after a commit, and for every session at start and once a day. |     |
 
 SQLite does not return the pages of deleted rows to the file system unless
 the file was created with `auto_vacuum = INCREMENTAL`. A database created by

@@ -11,11 +11,26 @@
 - 副本从不覆盖已有的副本（重名时加时间戳，同毫秒仍冲突时追加序号）。副本写不进去、或后端没有 `backupBundle` 时，什么都不丢弃，SettingsStore 保持只读。
 - 提示经 `subscribeRepairs` 和 `SettingsBackendAdapter.takeArchivedBundle()` 给出；副本可在“设置 → 数据”查看和下载（`listBackups` / `readBackup`，桌面 IPC `covel:settings:backup`、`covel:settings:backups`、`covel:settings:read-backup`）。密钥通道不受影响，副本里没有 API 密钥。设置导入/导出的 `SettingsExportBundle.schemaVersion: 1` 是独立的当前合同，不受此限制影响。
 
-设置后端由当前设备确定：存在 Electron IPC 时使用个人文件，否则始终使用浏览器 localStorage。服务端 `/api/config/info` 只用于发现管理能力，`COVEL_HOME` 和 `isDesktop` 都不会把浏览器设置切换成服务端共享文件。管理探测失败不阻止本地设置初始化。
+设置后端由当前设备确定：存在 Electron IPC 时使用个人文件，否则始终使用浏览器 localStorage。唯一的例外是标记为 `scope: "server"` 的设置，由服务端保存（见下一节）。服务端 `/api/config/info` 只用于发现管理能力，`COVEL_HOME` 和 `isDesktop` 都不会把浏览器设置切换成服务端共享文件。管理探测失败不阻止本地设置初始化。
 
-## 服务端读取的设置
+## 服务端执行的设置
 
-少数设置要由服务端执行，而不是只在浏览器里生效。当前只有 `diagnostics.traceRetention`（设置 → 通用 →“保留诊断记录”，取值 `7` / `30` / `90` / `keep`，默认 `30`）：服务端在清理 trace 时读取 Covel home 下的 `settings.json`（与桌面壳写入的是同一个文件，按文件修改时间缓存）。只有桌面壳启动的服务端（`COVEL_DESKTOP_REST=1`）且 `DEPLOYMENT_TIER=self` 才读这个文件；浏览器的 localStorage 服务端读不到，所以纯 Web 部署只认环境变量 `COVEL_TRACE_RETENTION_DAYS` 和默认值 30 天，`demo` / `commercial` 层级始终只认运维的环境变量。设置了 `COVEL_TRACE_RETENTION_DAYS` 时它压过玩家的选择。设置页向 `GET /api/config/info` 的 `traceRetention` 查询生效值与来源（`env` / `setting` / `default`）及 `settable`，在不能由玩家修改时显示该值并禁用控件。优先级与清理规则见 [`env-registry.md`](../guide/env-registry.md)。
+每个设置有一个作用域。`client`（默认）是某一台设备的偏好：主题、布局、语言、这个浏览器的模型和密钥。`server` 是要由服务端自己执行的设置，所以由服务端保存，同一个安装的每个浏览器读到同一个值。条目在注册表里声明（`SettingEntry.scope: "server"`），同一个键在 `SERVER_SETTINGS`（`packages/shared/src/env/server-settings.ts`：schema、默认值和覆盖它的环境变量）里有定义；两边不一致时测试失败。当前只有 `diagnostics.traceRetention`（设置 → 通用 →“保留诊断记录”，取值 `7` / `30` / `90` / `keep`，默认 `30`）。
+
+- **存在哪里。** 服务端的数据库里，DataStore 的 `server_settings` 表（`listServerSettings` / `setServerSetting` / `deleteServerSetting`，由存储契约测试覆盖）。桌面应用和自托管 Web 部署是同一套机制；home 目录只读或被替换时仍然保留；同一个 PostgreSQL 数据库上的多个服务端进程读到同一个值。它不会写进 `settings.json` 或 localStorage。`STORE_BACKEND=memory` 时只保留到进程退出。
+- **谁可以写。** 只有 `DEPLOYMENT_TIER=self`：唯一的玩家就是服务器的所有者。桌面壳设置了 token 时，`PUT /api/config/server-settings` 还要求带上它。`demo` / `commercial` 层级的这些设置归运维方，通过环境变量设定；写入返回 `403`，控件显示为锁定。
+- **优先级。** 运维方的环境变量，其次是保存的值，最后是默认值。被环境变量固定的键不可设置，写入返回 `409`。
+- **校验。** 一次写入只能包含已知的键，每个值都要通过定义里的 schema；有一项不合法就整体拒绝，什么都不写。
+- **生效。** 服务端从内存中的副本读取，这份副本在第一次清理之前填好，每次写入后替换，所以修改在下一次提交或清理时生效，不需要重启。同一数据库上的其他服务端进程在 30 秒内跟上。
+
+在 Web 应用里，SettingsStore 把这些键交给服务端（`ServerSettingsChannel`，`GET` / `PUT /api/config/server-settings`），桌面和 Web 相同：
+
+- `store.get(key)` 返回服务端报告的生效值（可能是运维方设定、选项里没有的值）；`store.has(key)` 在生效的是保存值时为真；`store.set` / `store.clear` 写到服务端。`store.serverSetting(key)` 返回 `{ status, value, source, settable }`；服务端应答之前 `status` 是 `pending`，问不到时是 `unavailable`。
+- 这类设置的控件在 `pending`、`unavailable` 或 `settable` 为假时禁用，并用一行文字说明原因，所以不会先给出一个服务端随后拒绝的选择。所有通用控件都遵守这一点，不需要为某个设置单独写控件。
+- 写入后立即显示新值。服务端拒绝或连不上时恢复原值，并用“无法保存设置”的提示显示服务端给出的原因。
+- 窗口重新获得焦点时重新读取。它们不阻塞本设备设置的加载，不进入设置导出、原始 JSON 编辑器和“重置”；本设备存储里出现这个作用域的键时会被忽略。
+
+优先级与 trace 清理规则见 [`env-registry.md`](../guide/env-registry.md)；边界见 [`security.md`](../architecture/security.md#server-settings)。
 
 ## Schema 归一化
 
