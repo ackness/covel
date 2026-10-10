@@ -411,7 +411,7 @@ describe("validateWorldPackage", () => {
       }),
     ]);
 
-    await writeFile(path.join(worldDir, "WORLD.zh.md"), "世界观。");
+    await writeFile(path.join(worldDir, "WORLD.zh-CN.md"), "世界观。");
     expect(await lore()).toEqual([
       expect.objectContaining({
         level: "warning",

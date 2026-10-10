@@ -469,7 +469,7 @@ sources:
     ).toEqual([]);
   });
 
-  it("prefers an exact locale source variant before the short key", async () => {
+  it("reads the source variant named with the exact locale and ignores a bare-language one", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
@@ -611,10 +611,10 @@ sources:
       });
       if (link) {
         const outside = await mkdtemp(path.join(tmpdir(), "covel-outside-"));
-        await writeFile(path.join(outside, "facts.en.json"), link);
+        await writeFile(path.join(outside, "facts.en-US.json"), link);
         await symlink(
-          path.join(outside, "facts.en.json"),
-          path.join(worldRoot, "data/facts.en.json"),
+          path.join(outside, "facts.en-US.json"),
+          path.join(worldRoot, "data/facts.en-US.json"),
         );
       }
       const store = await makeStore(["world-notes"]);
@@ -635,7 +635,9 @@ sources:
     };
 
     // Control: a regular overlay in the same place is applied.
-    expect(await contentFor({ "data/facts.en.json": overlay })).toBe("overlay");
+    expect(await contentFor({ "data/facts.en-US.json": overlay })).toBe(
+      "overlay",
+    );
     // The same file reached through a link leaving the root is not.
     expect(await contentFor({}, overlay)).toBe("safe");
   });

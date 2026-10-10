@@ -3,7 +3,7 @@ import path from "node:path";
 import {
   DEFAULT_LOCALE,
   applyLocaleOverlay,
-  localeLookupCandidates,
+  canonicalizeLocale,
 } from "@covel/shared";
 import { parse as parseYaml } from "yaml";
 import {
@@ -19,8 +19,8 @@ const MAX_TEXT_BYTES = 1 * 1024 * 1024;
 
 /**
  * Resolve a prose or media source with locale awareness, mirroring WORLD.md:
- * try the exact canonical locale, then a compatible primary-language short
- * key, before the declared `<name>.<ext>`. Prose has no ids to merge on, so a
+ * try `<name>.<locale>.<ext>` named with the session's locale, then the
+ * declared `<name>.<ext>`. Prose has no ids to merge on, so a
  * locale variant replaces the whole file. Structured sources use overlays
  * instead (see `readWorldDataSource`).
  */
@@ -30,7 +30,8 @@ async function resolveSourcePath(
 ): Promise<string | null> {
   const root = source.pathOrigin.descriptorRoot;
   const declared = source.descriptor.path;
-  for (const candidateLocale of localeLookupCandidates(locale)) {
+  const candidateLocale = canonicalizeLocale(locale);
+  if (candidateLocale) {
     const parsed = path.parse(declared);
     const variant = path.join(
       parsed.dir,
@@ -72,11 +73,13 @@ export interface ReadWorldDataSourceOptions {
    * Default: the overlay of `locale` replaces the main text, giving one
    * language (what a session imports). `compile`: every overlay becomes
    * locale maps, with `baseLocale` naming the main file's language (what the
-   * world catalog shows).
+   * world catalog shows). `declared` is the world's locales: a locale file
+   * that names only the language of one of them is left out.
    */
   readonly overlays?: {
     readonly mode: "compile";
     readonly baseLocale?: string;
+    readonly declared?: readonly string[];
   };
 }
 
@@ -188,7 +191,11 @@ export async function readWorldDataSource(
     let value = parseSource(source, text);
     const overlayPaths: string[] = [];
     if (mainPath) {
-      const found = await findLocaleOverlays(root, source.descriptor.path);
+      const found = await findLocaleOverlays(
+        root,
+        source.descriptor.path,
+        options.overlays?.declared,
+      );
       const picked: readonly LocaleOverlayFile[] = options.overlays
         ? found
         : [pickLocaleOverlay(found, locale)].filter(
