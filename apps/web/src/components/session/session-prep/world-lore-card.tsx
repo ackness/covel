@@ -14,6 +14,8 @@ interface WorldLoreCardProps {
   onLoreChange: (value: string) => void;
   onResetLore: () => void;
   draftStatus: LoreDraftStatus;
+  /** The world's full record has not arrived: there is no text to edit yet. */
+  locked?: boolean;
   onRetry: () => void;
 }
 
@@ -26,6 +28,7 @@ export function WorldLoreCard({
   onLoreChange,
   onResetLore,
   draftStatus,
+  locked = false,
   onRetry,
 }: WorldLoreCardProps) {
   const { t } = useTranslation();
@@ -77,6 +80,7 @@ export function WorldLoreCard({
         >
           <textarea
             value={loreValue}
+            disabled={locked}
             onChange={(event) => onLoreChange(event.target.value)}
             className="w-full min-h-75 bg-background border border-border px-4 py-3 text-sm font-mono leading-relaxed outline-none focus:ring-1 focus:ring-primary resize-y"
             placeholder={t("session.lorePlaceholder")}

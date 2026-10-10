@@ -1,6 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { tool } from "../src/tool.js";
+import type { ToolExecutionContext } from "../src/types.js";
+
+/** A model sends raw JSON arguments, not the parsed type `execute` declares. */
+function modelCall(
+  mod: { execute(params: never, ctx: ToolExecutionContext): Promise<unknown> },
+  args: unknown,
+  ctx: ToolExecutionContext,
+): Promise<unknown> {
+  return (
+    mod.execute as (a: unknown, c: ToolExecutionContext) => Promise<unknown>
+  )(args, ctx);
+}
 
 describe("tool()", () => {
   const weatherTool = () =>
@@ -41,7 +53,7 @@ describe("tool()", () => {
       pluginId: "p1",
       runtimeId: "r1",
     };
-    const result = await mod.execute({ city: "Tokyo" }, ctx);
+    const result = await modelCall(mod, { city: "Tokyo" }, ctx);
     expect(result).toEqual({ temp: 22, city: "Tokyo" });
   });
 
@@ -54,7 +66,7 @@ describe("tool()", () => {
       runtimeId: "r1",
     };
     // Missing required field 'city'
-    await expect(mod.execute({}, ctx)).rejects.toMatchObject({
+    await expect(modelCall(mod, {}, ctx)).rejects.toMatchObject({
       name: "ToolValidationError",
       code: "VALIDATION_ERROR",
       details: [{ path: "city", message: expect.any(String) }],
@@ -74,16 +86,19 @@ describe("tool()", () => {
     const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
 
     expect(
-      await mod.execute(
+      await modelCall(
+        mod,
         { changes: '[{"name":"Mira"}]', meta: '{"turn":2}' },
         ctx,
       ),
     ).toEqual({ changes: [{ name: "Mira" }], meta: { turn: 2 } });
     // Parsed text is still validated, and other strings are not touched.
     await expect(
-      mod.execute({ changes: '[{"name":7}]' }, ctx),
+      modelCall(mod, { changes: '[{"name":7}]' }, ctx),
     ).rejects.toMatchObject({ details: [{ path: "changes.0.name" }] });
-    await expect(mod.execute({ changes: "Mira" }, ctx)).rejects.toMatchObject({
+    await expect(
+      modelCall(mod, { changes: "Mira" }, ctx),
+    ).rejects.toMatchObject({
       details: [{ path: "changes" }],
     });
   });
@@ -118,12 +133,14 @@ describe("tool()", () => {
     // The value is still checked.
     const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
     await expect(
-      mod.execute({ relation: "1st", people: [] }, ctx),
+      modelCall(mod, { relation: "1st", people: [] }, ctx),
     ).rejects.toMatchObject({ details: [{ path: "relation" }] });
-    expect(await mod.execute({ relation: "师徒", people: [] }, ctx)).toEqual({
-      relation: "师徒",
-      people: [],
-    });
+    expect(await modelCall(mod, { relation: "师徒", people: [] }, ctx)).toEqual(
+      {
+        relation: "师徒",
+        people: [],
+      },
+    );
   });
 
   it("settles the closing brackets of JSON text", async () => {
@@ -147,7 +164,7 @@ describe("tool()", () => {
       '[{"name":"Mira"}',
       '[{"name":"Mira"',
     ])
-      expect(await mod.execute({ changes: text }, ctx), text).toEqual({
+      expect(await modelCall(mod, { changes: text }, ctx), text).toEqual({
         changes: [{ name: "Mira" }],
       });
     // Brackets are all it settles: other text after the value is an error,
@@ -158,7 +175,7 @@ describe("tool()", () => {
       '[{"name":"Mi',
     ])
       await expect(
-        mod.execute({ changes: text }, ctx),
+        modelCall(mod, { changes: text }, ctx),
         text,
       ).rejects.toMatchObject({ details: [{ path: "changes" }] });
   });
@@ -176,7 +193,7 @@ describe("tool()", () => {
     // The model escaped the quotes of the JSON text, but not the quote marks
     // around a word inside it.
     expect(
-      await mod.execute({ changes: '[{"name":"the "Mira" boat"}]}' }, ctx),
+      await modelCall(mod, { changes: '[{"name":"the "Mira" boat"}]}' }, ctx),
     ).toEqual({ changes: [{ name: 'the "Mira" boat' }] });
   });
 
@@ -193,9 +210,11 @@ describe("tool()", () => {
     const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
     // A colon is missing. Told only "expected array, received string", a
     // model sends the same broken text again and again.
-    const broken = await mod
-      .execute({ changes: '[{"name" "Mira"}]' }, ctx)
-      .catch((error: unknown) => error);
+    const broken = await modelCall(
+      mod,
+      { changes: '[{"name" "Mira"}]' },
+      ctx,
+    ).catch((error: unknown) => error);
     expect(broken).toMatchObject({
       details: [
         {
@@ -207,7 +226,7 @@ describe("tool()", () => {
       ],
     });
     await expect(
-      mod.execute({ changes: [], meta: "[1]" }, ctx),
+      modelCall(mod, { changes: [], meta: "[1]" }, ctx),
     ).rejects.toMatchObject({
       details: [
         {
@@ -223,7 +242,7 @@ describe("tool()", () => {
       [7, "received number"],
       ["Mira joins the crew", "received string"],
     ] as const)
-      await expect(mod.execute({ changes }, ctx)).rejects.toMatchObject({
+      await expect(modelCall(mod, { changes }, ctx)).rejects.toMatchObject({
         details: [
           { path: "changes", message: expect.stringContaining(received) },
         ],
@@ -245,7 +264,8 @@ describe("tool()", () => {
       properties: { text: { type: "string" } },
     });
     expect(
-      await mod.execute(
+      await modelCall(
+        mod,
         { text: "abc" },
         { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" },
       ),

@@ -83,12 +83,7 @@ describe("runtime turnCompletion discovery", () => {
 
     const registry = createPluginRegistry();
     registry.register(makeEntry([awaited, detached]));
-    const [plugin] = buildAvailablePluginList(
-      ["media-tools"],
-      registry,
-    ) as Array<{
-      runtimes: Array<{ execution: string }>;
-    }>;
+    const [plugin] = buildAvailablePluginList(["media-tools"], registry);
     expect(plugin?.runtimes.map((runtime) => runtime.execution)).toEqual([
       "sync",
       "background",
@@ -104,12 +99,7 @@ describe("runtime turnCompletion discovery", () => {
       loadedRuntimes: new Map(),
     });
 
-    const [plugin] = buildAvailablePluginList(
-      ["media-tools"],
-      registry,
-    ) as Array<{
-      runtimes: Array<{ turnCompletion: Record<string, unknown> }>;
-    }>;
+    const [plugin] = buildAvailablePluginList(["media-tools"], registry);
 
     expect(plugin?.runtimes.map((runtime) => runtime.turnCompletion)).toEqual([
       { mode: "await" },

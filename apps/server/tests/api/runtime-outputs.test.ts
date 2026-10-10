@@ -33,7 +33,7 @@ const pluginRegistry = {
     ]),
 };
 
-function setupApp(store: DataStore): Hono {
+function setupApp(store: DataStore): Hono<Env> {
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -86,7 +86,7 @@ function makeInteractionRecord(
 
 describe("runtime-outputs API", () => {
   let store: DataStore;
-  let app: Hono;
+  let app: Hono<Env>;
 
   beforeEach(async () => {
     store = createMemoryStore();

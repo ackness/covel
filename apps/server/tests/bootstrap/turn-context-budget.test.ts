@@ -72,7 +72,11 @@ describe("createBootstrapCompactorRunner", () => {
     });
     const extensions = new PluginExtensionHost(services);
     registerCompaction({
-      provideExtension(point, id, implementation) {
+      provideExtension(
+        point: string,
+        id: string,
+        implementation: Parameters<PluginExtensionHost["register"]>[2],
+      ) {
         extensions.register(
           "history-compaction",
           { point, id },
@@ -154,6 +158,7 @@ describe("createBootstrapCompactorRunner", () => {
         content: "summary",
         toolCalls: [],
         finishReason: "stop",
+        usage: { inputTokens: 0, outputTokens: 0 },
       }));
       const llmAdapter: LLMAdapter = {
         generate,
@@ -199,7 +204,11 @@ describe("createBootstrapCompactorRunner", () => {
     });
     const extensions = new PluginExtensionHost(services);
     registerCompaction({
-      provideExtension(point, id, implementation) {
+      provideExtension(
+        point: string,
+        id: string,
+        implementation: Parameters<PluginExtensionHost["register"]>[2],
+      ) {
         extensions.register(
           "history-compaction",
           { point, id },

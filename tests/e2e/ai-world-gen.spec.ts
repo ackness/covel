@@ -243,17 +243,14 @@ test.describe("AI World Generation", () => {
     test.skip(!hasProviderKeys, "No provider keys configured for live LLM e2e");
     test.skip(!createdWorldId, "No world was created in previous test");
 
-    // Fetch all worlds and find the newly created one
-    const res = await request.get("/api/worlds");
+    // The list carries summaries; the dimensions are in the full record.
+    const res = await request.get(
+      `/api/worlds/${encodeURIComponent(createdWorldId!)}`,
+    );
     expect(res.ok()).toBeTruthy();
-    const data = await res.json();
-    const worlds = data.items as Record<string, unknown>[];
+    const created = (await res.json()) as Record<string, unknown>;
 
-    const created = worlds.find((w: Record<string, unknown>) => {
-      return w.id === createdWorldId;
-    });
-
-    expect(created).toBeTruthy();
+    expect(created.id).toBe(createdWorldId);
     console.log(`World ID: ${createdWorldId}`);
 
     // Verify dimensions exist and have content. The raw server API keeps

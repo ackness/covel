@@ -162,7 +162,7 @@ describe("[P2] rate limiter proxy trust", () => {
   it("ignores forged forwarded headers when the remote address is untrusted", async () => {
     delete process.env.TRUSTED_PROXY_IPS;
     const app = new Hono();
-    app.use("/limited", rateLimiter({ max: 1, windowMs: 60_000 }));
+    app.use("/limited", rateLimiter({ max: 1 }));
     app.get("/limited", (c) => c.text("ok"));
 
     const env = connEnv("203.0.113.10");
@@ -184,7 +184,7 @@ describe("[P2] rate limiter proxy trust", () => {
   it("uses forwarded headers when the remote address is explicitly trusted", async () => {
     process.env.TRUSTED_PROXY_IPS = "127.0.0.1";
     const app = new Hono();
-    app.use("/limited", rateLimiter({ max: 1, windowMs: 60_000 }));
+    app.use("/limited", rateLimiter({ max: 1 }));
     app.get("/limited", (c) => c.text("ok"));
 
     const env = connEnv("127.0.0.1");

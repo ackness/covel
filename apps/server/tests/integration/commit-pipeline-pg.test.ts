@@ -57,20 +57,25 @@ const SOURCE = {
   runtimeId: "pg-commit-test",
 } as const;
 
+/** The part of a proposal that varies; keeps `type` and `payload` correlated. */
+type ProposalBody = Proposal extends infer P
+  ? P extends Proposal
+    ? Pick<P, "type" | "payload">
+    : never
+  : never;
+
 function makeProposal(
-  type: Proposal["type"],
-  payload: Record<string, unknown>,
+  body: ProposalBody,
   id: string,
   sessionId: string,
 ): Proposal {
   return {
     id,
-    type,
     source: SOURCE,
     turnId: "turn-pg",
     sessionId,
-    payload,
     timestamp: new Date().toISOString(),
+    ...body,
   };
 }
 
@@ -114,20 +119,26 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
 
     const results = await pipeline.commitAll([
       makeProposal(
-        "narrative.append",
-        { content: "ok 1", kind: "story" },
+        {
+          type: "narrative.append",
+          payload: { content: "ok 1", kind: "story" },
+        },
         "pg-ok-msg-1",
         sessionId,
       ),
       makeProposal(
-        "state.patch",
-        { table: "stats", field: "hp", value: 80 },
+        {
+          type: "state.patch",
+          payload: { table: "stats", field: "hp", value: 80 },
+        },
         "pg-ok-state-1",
         sessionId,
       ),
       makeProposal(
-        "narrative.append",
-        { content: "ok 2", kind: "story" },
+        {
+          type: "narrative.append",
+          payload: { content: "ok 2", kind: "story" },
+        },
         "pg-ok-msg-2",
         sessionId,
       ),
@@ -154,20 +165,26 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     await expect(
       pipeline.commitAll([
         makeProposal(
-          "narrative.append",
-          { content: "doomed 1", kind: "story" },
+          {
+            type: "narrative.append",
+            payload: { content: "doomed 1", kind: "story" },
+          },
           "pg-dup-msg",
           sessionId,
         ),
         makeProposal(
-          "state.patch",
-          { table: "stats", field: "mp", value: 10 },
+          {
+            type: "state.patch",
+            payload: { table: "stats", field: "mp", value: 10 },
+          },
           "pg-dup-state",
           sessionId,
         ),
         makeProposal(
-          "narrative.append",
-          { content: "doomed 2", kind: "story" },
+          {
+            type: "narrative.append",
+            payload: { content: "doomed 2", kind: "story" },
+          },
           "pg-dup-msg", // duplicate id → unique violation
           sessionId,
         ),
@@ -191,16 +208,20 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
     const [resA, resB] = await Promise.all([
       pipeline.commitAll([
         makeProposal(
-          "narrative.append",
-          { content: "A", kind: "story" },
+          {
+            type: "narrative.append",
+            payload: { content: "A", kind: "story" },
+          },
           "pg-conc-a-1",
           sessionA,
         ),
       ]),
       pipeline.commitAll([
         makeProposal(
-          "narrative.append",
-          { content: "B", kind: "story" },
+          {
+            type: "narrative.append",
+            payload: { content: "B", kind: "story" },
+          },
           "pg-conc-b-1",
           sessionB,
         ),

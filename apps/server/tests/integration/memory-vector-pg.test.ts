@@ -15,10 +15,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
-import type { DataStore } from "@covel/store";
 import { createPgStore } from "@covel/store/postgres";
 import { createMemorySystem } from "@covel/memory";
-import type { MemoryLLMAdapter } from "@covel/memory";
 import { createPgAdvisorySessionLock } from "../../src/lib/pg-session-lock.js";
 import {
   createIsolatedPgDatabase,
@@ -76,12 +74,11 @@ function embedText(text: string): Float32Array {
 }
 const embed = async (texts: readonly string[]): Promise<Float32Array[]> =>
   texts.map(embedText);
-const llm: MemoryLLMAdapter = { complete: async () => ({ content: "{}" }) };
 
 const maybe = isolatedUrl ? describe : describe.skip;
 
 maybe("memory vector recall over real PgStore (pgvector)", () => {
-  let store: DataStore;
+  let store: Awaited<ReturnType<typeof createPgStore>>;
   const sessionId = "sess-pgvec-int";
 
   beforeAll(async () => {
@@ -104,13 +101,13 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const target = await store.ensureVectorModel!({
+    const target = await store.ensureVectorModel({
       provider: "test",
       modelName: "fake-embed",
       dim: DIM,
       modelId: "test/fake-embed",
     });
-    await store.lockSessionEmbeddingModel!(sessionId, target);
+    await store.lockSessionEmbeddingModel(sessionId, target);
     let order = 0;
     for (const content of [
       "the dragon breathed fire over the castle",
@@ -137,7 +134,7 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
   }, 90_000);
 
   it("ingests messages and ranks the semantically closest first", async () => {
-    const system = createMemorySystem({ store, llm, embed });
+    const system = createMemorySystem({ store, embed });
 
     const result = await system.ingest(sessionId);
     expect(result.skipped).toBe(false);
@@ -153,7 +150,7 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
   });
 
   it("is incremental: a second ingest with no new messages embeds nothing", async () => {
-    const system = createMemorySystem({ store, llm, embed });
+    const system = createMemorySystem({ store, embed });
     const result = await system.ingest(sessionId);
     expect(result.recall).toBe(0);
   });
@@ -194,13 +191,13 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
         createdAt: now,
         updatedAt: now,
       });
-      const target = await store.ensureVectorModel!({
+      const target = await store.ensureVectorModel({
         provider: "test",
         modelName: "fake-embed",
         dim: DIM,
         modelId: "test/fake-embed",
       });
-      await store.lockSessionEmbeddingModel!(distributedSessionId, target);
+      await store.lockSessionEmbeddingModel(distributedSessionId, target);
       await store.appendTurnMessage({
         id: "m-two-pods",
         sessionId: distributedSessionId,
@@ -214,14 +211,12 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
 
       const firstPod = createMemorySystem({
         store,
-        llm,
         embed: countedEmbed,
         runIngestExclusive: (_sessionId, task) =>
           firstLock.withLock(lockKey, task),
       });
       const secondPod = createMemorySystem({
         store: secondStore,
-        llm,
         embed: countedEmbed,
         runIngestExclusive: (_sessionId, task) =>
           secondLock.withLock(lockKey, task),

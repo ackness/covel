@@ -1,6 +1,7 @@
 import {
   DEFAULT_LOCALE,
   characterSchemaSchema,
+  summarizeWorld,
   worldDimensionsSchema,
   worldWireRecordSchema,
   decodePageCursor,
@@ -20,6 +21,7 @@ import type {
   SessionRecord,
   StatePatchRecord,
   WorldRecord,
+  WorldSummary,
 } from "../api.js";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
@@ -282,7 +284,12 @@ export class LocalDataService implements DataService {
       await this.vault.initializeWorlds([]);
       return;
     }
-    const catalog = await api.listWorlds();
+    // The vault keeps full records (a browser session plays from them), and the
+    // catalog list carries summaries.
+    const summaries = await api.listWorlds();
+    const catalog = await Promise.all(
+      summaries.map((summary) => api.getWorld(summary.id)),
+    );
     await this.vault.initializeWorlds(
       catalog.map((world) => ({
         ...world,
@@ -380,10 +387,10 @@ export class LocalDataService implements DataService {
 
   // Worlds
 
-  async listWorlds(): Promise<WorldRecord[]> {
+  async listWorlds(): Promise<WorldSummary[]> {
     const worlds = await (await this.ready()).listWorlds();
     return worlds
-      .map(toFrontendWorld)
+      .map((world) => summarizeWorld(toFrontendWorld(world)))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 

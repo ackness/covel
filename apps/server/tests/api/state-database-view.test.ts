@@ -176,7 +176,7 @@ describe("GET /api/sessions/:id/state — database view", () => {
     const codex = body.tables["plugin_data/codex:entries"];
     expect(codex).toBeDefined();
     expect(Object.keys(codex!.data).sort()).toEqual(["codex-1", "codex-2"]);
-    expect((codex.data["codex-1"]! as Record<string, unknown>).title).toBe(
+    expect((codex!.data["codex-1"] as Record<string, unknown>).title).toBe(
       "百灵沼泽",
     );
 
@@ -193,6 +193,7 @@ describe("GET /api/sessions/:id/state — database view", () => {
       type: "player",
       name: "张三",
       fields: { hp: 100, background: "外门弟子" },
+      version: 1,
       createdAt: now,
       updatedAt: now,
     });
@@ -204,7 +205,7 @@ describe("GET /api/sessions/:id/state — database view", () => {
 
     const chars = body.tables.characters;
     expect(chars).toBeDefined();
-    expect((chars.data["char-1"]! as Record<string, unknown>).name).toBe(
+    expect((chars!.data["char-1"] as Record<string, unknown>).name).toBe(
       "张三",
     );
   });

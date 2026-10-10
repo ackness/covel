@@ -7,7 +7,8 @@ import {
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
-import type { WorldRecord } from "@/services/api.js";
+import type { WorldRecord, WorldSummary } from "@/services/api.js";
+import { useWorldRecord } from "@/services/world-records.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Separator } from "@/components/ui/separator.js";
@@ -30,7 +31,8 @@ import {
   isWorldTranslatable,
 } from "./world-translate-panel.js";
 export interface WorldDetailViewProps {
-  world: WorldRecord;
+  /** The list's summary: it paints the header while the full record loads. */
+  world: WorldSummary;
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -46,7 +48,10 @@ export function WorldDetailView({
   onRevised,
 }: WorldDetailViewProps) {
   const { t, i18n } = useTranslation();
-  const dims = world.dimensions;
+  const record = useWorldRecord(world.id);
+  // The lore, the dimensions and the panels that edit the record need it whole.
+  const full = record.world;
+  const dims = full?.dimensions;
   const interfaceLocale = i18n.resolvedLanguage ?? i18n.language;
   // The language this player would play the world in.
   const playLocale = worldPlayLocale(world, interfaceLocale);
@@ -57,9 +62,10 @@ export function WorldDetailView({
     {
       name: text(world.name),
       description: text(world.description),
-      lore: text(world.lore),
+      lore: text(full?.lore),
       locale: world.locale,
-      metadata: world.metadata,
+      // The lore translations are in the full record's metadata only.
+      metadata: full?.metadata ?? world.metadata,
     },
     playLocale,
   );
@@ -198,21 +204,34 @@ export function WorldDetailView({
           t={t}
         />
 
-        {onRevised && isWorldTranslatable(world, interfaceLocale) && (
+        {full && onRevised && isWorldTranslatable(full, interfaceLocale) && (
           <WorldTranslatePanel
-            world={world}
+            world={full}
             locale={interfaceLocale}
             onTranslated={onRevised}
           />
         )}
-        {onRevised && isWorldRevisable(world) && (
-          <WorldRevisePanel world={world} onRevised={onRevised} />
+        {full && onRevised && isWorldRevisable(full) && (
+          <WorldRevisePanel world={full} onRevised={onRevised} />
         )}
 
         <Separator />
 
         {/* Dimensions */}
-        {hasDimensions && dims ? (
+        {!full ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            {record.status !== "loading" ? (
+              <>
+                {t("common.error")}{" "}
+                <Button variant="link" size="sm" onClick={record.retry}>
+                  {t("common.retry")}
+                </Button>
+              </>
+            ) : (
+              t("common.loading")
+            )}
+          </p>
+        ) : hasDimensions && dims ? (
           <div className="space-y-4">
             {Object.entries(dims).map(([id, definition]) => (
               <section key={id} className="space-y-2 rounded border p-4">

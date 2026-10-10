@@ -41,12 +41,13 @@ describe("SSE Events", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: "sess-1",
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 0,
 
       activePlugins: [],
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
   });
 
@@ -87,7 +88,7 @@ describe("SSE Events", () => {
     it("should notify onEmit subscribers", async () => {
       const received: SubscriptionEvent[] = [];
       eventBus.onEmit((event) => {
-        if (event.topic === "test.event") received.push(event);
+        if (event.type === "test.event") received.push(event);
       });
 
       await app.request("/api/events/emit", {
@@ -164,12 +165,13 @@ describe("SSE Events", () => {
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),
         },
         id: "sess-topic",
-        worldId: null,
         status: "active",
+        locale: "zh-CN",
         completedPlayerTurns: 1,
 
         activePlugins: [],
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
       subApp.use("*", async (c, next) => {
         c.set("eventBus", eventBus);

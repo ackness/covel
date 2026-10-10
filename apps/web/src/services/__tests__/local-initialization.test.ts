@@ -3,10 +3,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { LocalDataService } from "../data-service/local.js";
 import type { WorldRecord } from "../api.js";
+import { summarizeWorld } from "@covel/shared";
 import i18n from "@/i18n";
 import { worldStorageLabel } from "@/components/session/world-select-screen.js";
 
-const api = vi.hoisted(() => ({ listWorlds: vi.fn(), deleteSession: vi.fn() }));
+const api = vi.hoisted(() => ({
+  listWorlds: vi.fn(),
+  getWorld: vi.fn(),
+  deleteSession: vi.fn(),
+}));
 vi.mock("../api.js", () => api);
 
 const catalog: WorldRecord[] = [
@@ -43,7 +48,17 @@ let vault: BrowserVault;
 let secondVault: BrowserVault;
 
 beforeEach(() => {
-  api.listWorlds.mockReset().mockResolvedValue(structuredClone(catalog));
+  // The catalog list carries summaries; the first visit reads each full record.
+  api.listWorlds
+    .mockReset()
+    .mockResolvedValue(
+      structuredClone(catalog).map((world) => summarizeWorld(world)),
+    );
+  api.getWorld
+    .mockReset()
+    .mockImplementation(async (id: string) =>
+      structuredClone(catalog.find((world) => world.id === id)),
+    );
   api.deleteSession.mockReset().mockResolvedValue(undefined);
   dbName = `local-initialization-${crypto.randomUUID()}`;
   vault = new BrowserVault({ dbName });
@@ -58,12 +73,17 @@ afterEach(async () => {
 
 it("imports the actual catalog with stable IDs and full package content into browser storage", async () => {
   await i18n.changeLanguage("en-US");
-  const worlds = await new LocalDataService(vault).listWorlds();
-  const academy = worlds.find((world) => world.id === "haruka-academy");
+  const service = new LocalDataService(vault);
+  const worlds = await service.listWorlds();
   expect(worlds.map((world) => world.id).sort()).toEqual([
     "emberback",
     "haruka-academy",
   ]);
+  // The list is summaries; the vault and `getWorld` hold the full record.
+  expect(
+    worlds.find((world) => world.id === "haruka-academy"),
+  ).not.toHaveProperty("lore");
+  const academy = await service.getWorld("haruka-academy");
   expect(academy).toEqual({
     ...catalog[0],
     metadata: {

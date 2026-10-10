@@ -120,12 +120,13 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 1,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     const eventBus = createEventBus(store);
@@ -239,7 +240,6 @@ describe("action observation cannot own business finalization", () => {
       registry.register(makeEntry(loaded));
       await store.createSession({
         id: SESSION_ID,
-        worldId: null,
         status: "active",
         phase: "playing",
         locale: "en",
@@ -251,6 +251,7 @@ describe("action observation cannot own business finalization", () => {
         activePlugins: [RUNTIME_ID],
         completedPlayerTurns: 1,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
       const { llm } = makeFakeLLM("Committed exactly once.");
       const calls = vi.spyOn(llm, "generate");
@@ -270,7 +271,7 @@ describe("action observation cannot own business finalization", () => {
       const original = SSEStreamingApi.prototype.writeSSE;
       const writes = vi
         .spyOn(SSEStreamingApi.prototype, "writeSSE")
-        .mockImplementation(function (frame) {
+        .mockImplementation(function (this: SSEStreamingApi, frame) {
           if (JSON.parse(String(frame.data)).type === "narrative.completed") {
             reached();
             return mode === "hang"

@@ -13,16 +13,26 @@ import {
 } from "@covel/store";
 import { createMemoryStore, createMemoryMediaStore } from "@covel/store/memory";
 import { buildSessionSnapshot } from "@covel/runtime";
+
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
   createInProcessSessionLock,
   type SessionLock,
 } from "../../src/lib/session-lock.js";
 
+/** The session snapshot; a missing session fails the test with its id. */
+async function requireSnapshot(
+  ...args: Parameters<typeof buildSessionSnapshot>
+) {
+  const snapshot = await buildSessionSnapshot(...args);
+  if (!snapshot) throw new Error(`no snapshot for session ${args[1]}`);
+  return snapshot;
+}
+
 const at = "2026-09-01T00:00:00.000Z";
 let store: DataStore;
 let mediaStore: MediaStore;
-let app: Hono;
+let app: Pick<Hono, "request">;
 beforeEach(async () => {
   store = createMemoryStore();
   mediaStore = createMemoryMediaStore();
@@ -115,8 +125,8 @@ it("preserves ordered chat history and excludes later same-millisecond messages 
   await add("a-later");
   await add("later", "2026-09-02T00:00:00.000Z");
   const child = await successfulFork(snapshot);
-  const restored = await buildSessionSnapshot(store, child.sessionId);
-  expect(restored!.messages.map((message) => message.content)).toEqual([
+  const restored = await requireSnapshot(store, child.sessionId);
+  expect(restored.messages.map((message) => message.content)).toEqual([
     "old",
     "b-story",
     "z-story",
@@ -127,7 +137,7 @@ it("preserves ordered chat history and excludes later same-millisecond messages 
   });
   expect(await store.listTurnMessages(child.sessionId)).toHaveLength(1);
   expect(
-    restored!.messages.every(
+    restored.messages.every(
       (message) => !["old", "b-story", "z-story"].includes(message.id),
     ),
   ).toBe(true);
@@ -135,7 +145,7 @@ it("preserves ordered chat history and excludes later same-millisecond messages 
   await add("child-later", at, undefined, child.sessionId);
   const grandchild = await successfulFork(childSnapshot);
   expect(
-    (await buildSessionSnapshot(store, grandchild.sessionId)).messages.map(
+    (await requireSnapshot(store, grandchild.sessionId)).messages.map(
       (message) => message.content,
     ),
   ).toEqual(["old", "b-story", "z-story"]);
@@ -163,9 +173,7 @@ it("keeps an explicitly empty chat boundary empty after the parent gains message
   expect(snapshot.payload.displayMessagesBoundary).toBeNull();
   await add("later");
   const child = await successfulFork(snapshot);
-  expect((await buildSessionSnapshot(store, child.sessionId)).messages).toEqual(
-    [],
-  );
+  expect((await requireSnapshot(store, child.sessionId)).messages).toEqual([]);
 });
 
 it("rejects an unavailable chat boundary without leaving a partial child", async () => {
@@ -193,7 +201,7 @@ it("keeps chat-only media readable after deleting the parent", async () => {
   await mediaStore.releaseSession("parent");
   expect(await mediaStore.isReferencedBy(ref.id, child.sessionId)).toBe(true);
   expect(
-    (await buildSessionSnapshot(store, child.sessionId)).messages[0]?.block,
+    (await requireSnapshot(store, child.sessionId)).messages[0]?.block,
   ).toEqual({ image: ref });
 });
 
@@ -231,7 +239,7 @@ it.each(["chat", "state", "export"])(
         pluginId: "fixture",
         namespace: "image",
         key: "image",
-        value: { ref },
+        value: { ref: { id: ref.id, mime: ref.mime, size: ref.size } },
         createdAt: at,
         updatedAt: at,
       });
@@ -245,7 +253,7 @@ it.each(["chat", "state", "export"])(
         pluginVersion: "1.0.0",
         schemaDigest: "synthetic-digest",
         resultId: "synthetic-result",
-        value: { ref },
+        value: { ref: { id: ref.id, mime: ref.mime, size: ref.size } },
         committedAt: at,
       });
     const snapshot = await capture();

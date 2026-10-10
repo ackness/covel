@@ -9,6 +9,7 @@ import {
   createBrowserWorkspaceRoutes,
 } from "../../src/routes/api/browser-workspace.js";
 import { registerSessionDeleteRoute } from "../../src/routes/api/session/delete-route.js";
+import type { SessionRouteEnv } from "../../src/routes/api/session/route-env.js";
 import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guard.js";
 
 const OWNER = "synthetic-browser-owner";
@@ -20,7 +21,8 @@ async function setup() {
   const sessionLock = createInProcessSessionLock();
   const pluginRegistry = createPluginRegistry();
   const routes = createBrowserWorkspaceRoutes(cache);
-  registerSessionDeleteRoute(routes);
+  const sessionRoutes = new Hono<SessionRouteEnv>();
+  registerSessionDeleteRoute(sessionRoutes);
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -31,6 +33,7 @@ async function setup() {
     await next();
   });
   app.route("/api/sessions", routes);
+  app.route("/api/sessions", sessionRoutes);
   await store.upsertWorld({
     id: "world",
     name: "World",

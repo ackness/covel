@@ -57,7 +57,7 @@ describe("server resource ownership", () => {
       },
     });
     const executor = createToolExecutor({ findTool: () => module });
-    resources.api!.closeTools = () => executor.close();
+    resources.api = { ...resources.api!, closeTools: () => executor.close() };
     const running = executor.execute(
       { toolCallId: "call", name: "probe", arguments: "{}" },
       {

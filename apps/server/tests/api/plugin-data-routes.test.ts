@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import {
   createPluginRegistry,
-  type ParsedPluginManifest,
+  type ParsedRuntimeMd,
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
@@ -36,12 +36,12 @@ function makeManifest(pluginId: string): RuntimeManifest {
   return {
     name: pluginId,
     pluginId,
-    runtime: "agent",
+    runtimeType: "agent",
     description: `${pluginId} runtime`,
     trigger: { type: "manual" },
     stage: "narrative",
     tools: { builtin: [], plugin: [] },
-    permissions: [],
+    permissions: {},
     outputKind: "plugin",
   };
 }
@@ -52,10 +52,11 @@ function registerPlugin(
   pluginType: "plugin" | "core-plugin" = "plugin",
 ): void {
   const manifest = { ...makeManifest(pluginId), pluginType };
-  const parsed: ParsedPluginManifest = {
+  const parsed: ParsedRuntimeMd = {
+    runtime: { type: "agent" },
     manifest,
+    promptTemplate: "",
     rawFrontmatter: {},
-    markdown: "",
   };
   registry.register({
     id: pluginId,

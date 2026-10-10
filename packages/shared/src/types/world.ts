@@ -32,6 +32,15 @@ export interface World {
 
 export type WorldWireRecord = World;
 
+/**
+ * What `GET /api/worlds` returns for each world: everything a list, card or
+ * session-prep header paints, and none of the large content. `lore` and
+ * `dimensions` are left out and `metadata` is cut to
+ * {@link WORLD_SUMMARY_METADATA_KEYS}; `GET /api/worlds/:id` returns the
+ * full {@link World}.
+ */
+export type WorldSummary = Omit<World, "lore" | "dimensions">;
+
 // ── Geography ────────────────────────────────────────────────────
 
 export interface WorldLandmark {

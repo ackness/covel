@@ -2,6 +2,7 @@ import i18n from "i18next";
 import { emitToast } from "@/lib/toast-channel.js";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
+import { invalidateAllWorldRecords } from "@/services/world-records.js";
 import { registerPluginUserSettings } from "@/settings/registry/plugin.js";
 import { getSettings, registerKnownProviders } from "@/settings/store.js";
 import type { SessionDispatch } from "./types.js";
@@ -48,6 +49,8 @@ export async function bootSessionStore({
       registerKnownProviders(llmConfig.providers);
     }
 
+    // The list was fetched again: full records read before it may be stale.
+    invalidateAllWorldRecords();
     dispatch({
       type: "BOOT_SUCCESS",
       presets,

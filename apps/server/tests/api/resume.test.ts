@@ -26,6 +26,7 @@ import {
   type SessionLock,
 } from "../../src/lib/session-lock.js";
 import { SESSION_INCARNATION_KEY } from "../../src/routes/api/session/session-guard.js";
+import { setSessionWorld } from "../helpers/session-world.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -134,8 +135,8 @@ async function createSuspension(
     pendingContinuation: {
       executionContext: {
         executionId: crypto.randomUUID(),
-        origin: "player",
-        countPolicy: "complete-player-turn",
+        origin: "player" as const,
+        countPolicy: "complete-player-turn" as const,
         logicalTurnId: crypto.randomUUID(),
       },
       messages: [
@@ -175,7 +176,8 @@ function makeDefaultLLM() {
 const TEST_MANIFEST: RuntimeManifest = {
   name: "test-plugin",
   pluginId: "test-plugin",
-  pluginType: "community" as const,
+  description: "Resume fixture runtime",
+  pluginType: "plugin" as const,
   stage: "narrative",
   trigger: { type: "auto" as const },
   model: "gpt-4o-mini",
@@ -210,10 +212,10 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
       id: "test-plugin",
       name: "Test Plugin",
       description: "",
-      version: "0.0.0",
-      pluginType: "community",
-      source: "community",
+      pluginType: "plugin",
+      runtimeCount: 1,
     },
+    source: "community",
     packageManifest: {
       plugin: {
         id: "test-plugin",
@@ -232,12 +234,14 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
     },
     manifests: [
       {
+        runtime: { type: "agent" },
         manifest: TEST_MANIFEST,
         promptTemplate: "Test prompt",
+        rawFrontmatter: {},
       },
     ],
     loadedRuntimes: new Map(),
-    status: "loaded",
+    status: "registered",
   });
 
   return {
@@ -344,7 +348,7 @@ describe("Resume Routes", () => {
 
     it("threads player, world, and manifest settings to resumed runtime hooks", async () => {
       const worldId = `settings-world-${crypto.randomUUID()}`;
-      await store.updateSession("sess-1", { worldId });
+      await setSessionWorld(store, "sess-1", worldId);
       await store.upsertWorld({
         id: worldId,
         name: "Test world",
@@ -370,7 +374,7 @@ describe("Resume Routes", () => {
           },
         });
       }
-      hookPipeline.register({
+      hookPipeline.register<{ input: { userSettings?: unknown } }>({
         id: "test-plugin:PreRuntime:settings",
         event: "PreRuntime",
         pluginId: "test-plugin",

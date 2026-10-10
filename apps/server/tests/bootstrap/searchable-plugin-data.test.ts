@@ -10,7 +10,7 @@ it("lists the searchable namespaces of the plugins active in the session only", 
       getSession: async (id) =>
         id === "session"
           ? ({ activePlugins: ["journal", "broken"] } as never)
-          : undefined,
+          : null,
     },
     registry: {
       getAll: () =>

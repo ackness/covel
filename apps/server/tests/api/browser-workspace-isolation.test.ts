@@ -42,7 +42,7 @@ async function seed(
   });
 }
 
-function request(
+async function request(
   route: "browser-checkpoint" | "browser-commit",
   body: unknown,
   owner = "owner-a",
