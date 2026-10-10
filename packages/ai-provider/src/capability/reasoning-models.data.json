@@ -1,0 +1,221 @@
+{
+  "families": [
+    {
+      "id": "deepseek",
+      "model": ["deepseek"],
+      "provider": ["deepseek"],
+      "known": ["deepseek-(?:v4|flash|chat|reasoner|r1)"],
+      "tableFlag": true,
+      "rules": [{ "default": "high", "levels": ["disabled", "high", "max"] }]
+    },
+    {
+      "id": "anthropic",
+      "model": ["claude", "anthropic"],
+      "provider": ["anthropic"],
+      "known": [
+        "claude-(?:(?:fable|mythos|opus|sonnet)-5(?:[-.]|$)|opus-4-[5-8](?:-|$)|sonnet-4-6(?:-|$))"
+      ],
+      "thinkingAlwaysOn": [
+        "claude-(?:(?:fable|mythos)-5|(?:opus|sonnet)-5[.-]5)(?:[-.]|$)"
+      ],
+      "rules": [
+        {
+          "match": "claude-(?:opus|sonnet|fable|mythos)-5|opus-4-[78]",
+          "default": "high",
+          "levels": ["disabled", "low", "medium", "high", "xhigh", "max"],
+          "parameterStyle": "adaptive"
+        },
+        {
+          "match": "(?:opus|sonnet)-4-6",
+          "default": "high",
+          "levels": ["disabled", "low", "medium", "high", "max"],
+          "parameterStyle": "adaptive"
+        },
+        {
+          "default": "high",
+          "levels": ["disabled", "low", "medium", "high"]
+        }
+      ]
+    },
+    {
+      "id": "google",
+      "model": ["gemini", "google/"],
+      "provider": ["google", "gemini"],
+      "rules": [
+        {
+          "match": "(?:^|/)gemini-2\\.5-pro(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "levels": [
+            {
+              "value": "minimal",
+              "budget": 1024,
+              "protocols": ["openai-chat-v1"]
+            },
+            { "value": "low", "budget": 1024 },
+            { "value": "medium", "budget": 8192 },
+            { "value": "high", "budget": 24576 }
+          ]
+        },
+        {
+          "match": "(?:^|/)gemini-2\\.5-flash(?:-lite)?(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "levels": [
+            { "value": "none", "budget": 0 },
+            {
+              "value": "minimal",
+              "budget": 1024,
+              "protocols": ["openai-chat-v1"]
+            },
+            { "value": "low", "budget": 1024 },
+            { "value": "medium", "budget": 8192 },
+            { "value": "high", "budget": 24576 }
+          ]
+        },
+        {
+          "match": "(?:^|/)gemini-3-pro(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "default": "high",
+          "levels": ["low", "high"]
+        },
+        {
+          "match": "(?:^|/)gemini-3\\.1-pro(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "default": "high",
+          "levels": [
+            { "value": "minimal", "protocols": ["openai-chat-v1"] },
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "match": "(?:^|/)gemini-3-flash(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "default": "high",
+          "levels": ["minimal", "low", "medium", "high"]
+        },
+        {
+          "match": "(?:^|/)gemini-3\\.[15]-flash-lite(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "default": "minimal",
+          "levels": ["minimal", "low", "medium", "high"]
+        },
+        {
+          "match": "(?:^|/)gemini-3\\.[56]-flash(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "default": "medium",
+          "levels": ["minimal", "low", "medium", "high"]
+        },
+        {
+          "match": "(?:^|/)gemini-3\\.[78]-flash(?:-preview(?:-[\\d-]+)?|-latest|-\\d{3})?$",
+          "default": "medium",
+          "levels": ["low", "medium", "high"]
+        }
+      ]
+    },
+    {
+      "id": "xai",
+      "model": ["grok", "xai/"],
+      "provider": ["^xai$", "grok"],
+      "known": ["grok-(?:3-mini|4)"],
+      "tableFlag": true,
+      "rules": [
+        {
+          "match": "4\\.20|multi-agent",
+          "default": "high",
+          "levels": ["low", "medium", "high", "xhigh"]
+        },
+        { "default": "high", "levels": ["low", "medium", "high"] }
+      ]
+    },
+    {
+      "id": "qwen",
+      "model": ["qwen", "alibaba/"],
+      "provider": ["dashscope", "qwen", "alibaba"],
+      "known": ["qwen3"],
+      "tableFlag": true,
+      "thinkingAlwaysOn": [
+        "qwen[^\\s]*[-_/]thinking(?:[-_/]|$)",
+        "qwen3\\.8-2\\.4t-a95b",
+        "qwen3\\.7-max-(?:preview|2026-05-17)"
+      ],
+      "rules": [
+        {
+          "match": "qwen3\\.8-(?:max|flash|omni-flash|27b|2\\.4t-a95b)(?:-|$)",
+          "protocols": ["", "openai-chat-v1"],
+          "default": "xhigh",
+          "levels": ["disabled", "automatic", "low", "medium", "xhigh"],
+          "parameterStyle": "effort"
+        },
+        {
+          "match": "qwen3\\.[567]-(?:max|plus|flash)(?:-|$)",
+          "protocols": ["", "openai-chat-v1"],
+          "levels": [
+            "disabled",
+            "automatic",
+            { "value": "low", "budget": 2048 },
+            { "value": "medium", "budget": 8192 },
+            { "value": "high", "budget": 16384 }
+          ]
+        },
+        {
+          "whenThinkingAlwaysOn": true,
+          "default": "automatic",
+          "levels": ["automatic"]
+        },
+        {
+          "match": "qwen3\\.8-",
+          "levels": ["disabled", "automatic"],
+          "parameterStyle": "effort"
+        },
+        { "levels": ["disabled", "automatic"] }
+      ]
+    },
+    {
+      "id": "openai",
+      "model": ["gpt-", "(?:^|[/_-])o[134](?:-|$)", "openai/"],
+      "provider": ["openai"],
+      "known": ["gpt-[5-9]", "(?:^|[/_-])o[134](?:-|$)"],
+      "tableFlag": true,
+      "rules": [
+        {
+          "match": "gpt-[6-9]",
+          "levels": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        },
+        {
+          "match": "gpt-5-pro(?:-|$)",
+          "default": "high",
+          "levels": ["high"]
+        },
+        {
+          "match": ["gpt-5\\.1", "codex.*max|max.*codex"],
+          "default": "none",
+          "levels": ["none", "low", "medium", "high", "xhigh"]
+        },
+        {
+          "match": "gpt-5\\.1",
+          "default": "none",
+          "levels": ["none", "low", "medium", "high"]
+        },
+        {
+          "match": "(?:^|[/_-])o[134](?:-|$)",
+          "default": "medium",
+          "levels": ["low", "medium", "high"]
+        },
+        {
+          "match": "gpt-5\\.[2-9]",
+          "default": "medium",
+          "levels": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        },
+        {
+          "default": "medium",
+          "levels": ["minimal", "low", "medium", "high"]
+        }
+      ]
+    },
+    {
+      "id": "compatible",
+      "tableFlag": true,
+      "rules": [
+        {
+          "protocols": ["anthropic-messages-v1"],
+          "levels": ["low", "medium", "high"]
+        },
+        { "levels": ["minimal", "low", "medium", "high"] }
+      ]
+    }
+  ]
+}

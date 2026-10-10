@@ -4,6 +4,10 @@ export {
   REASONING_EFFORT_VALUES,
   resolveReasoningEffortProfile,
 } from "./reasoning-effort.js";
+export {
+  setReasoningModelOverrides,
+  type ReasoningModelsFile,
+} from "./capability/reasoning-models.js";
 export type {
   ProviderProtocol,
   OperationMode,
