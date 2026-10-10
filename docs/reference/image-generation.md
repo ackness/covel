@@ -37,6 +37,12 @@ flowchart LR
 
 `tag = "image"` 表示用途能力；`imageWire` 选择传输协议，两者不能互相代替。插件名称和模型名称不会自动选择协议。OpenAI 兼容图像接口使用 `openai-images`，DashScope 原生接口使用 `dashscope-wan`；配置示例见仓库 `llm.toml.example` 的 image generation 部分。
 
+用途的 `providerRequestMetadata` 里除 `imageWire` 外的字段原样写进 `openai-images` 的请求体，并且盖过调用方给的同名选项：模型只接受某个尺寸或画质时，在用途上写 `size`、`quality` 即可，插件不用改。`model`、`prompt` 和 `n` 属于这次调用，写在用途里也不会生效。语音的 `openai-speech` 同理：用途可以固定 `voice` 和 `response_format`，`model` 和 `input` 不能被替换。
+
+### 用量
+
+按 token 计费的图像模型（如 `gpt-image-1`）在响应里报告用量，`openai-images` 把它读出来；这次调用的 `gateway.responded` 轨迹带 `usage`、`model` 和 `provider`，花费进入 `/debug` 的成本面板。按张计费的模型和语音合成不报告 token，轨迹只带 `model` 和 `provider`，成本面板不计它们的金额。插件自己注册的 wire 在返回值的 `usage` 里给出 token 数即可进入同一条路径。
+
 ### 配置文件来源
 
 - 显式 `COVEL_LLM_TOML` 优先。

@@ -130,6 +130,10 @@ export interface PluginRuntimeGateway {
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
       | { kind: "url"; url: string; mime: string }
     >;
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 
@@ -146,6 +150,10 @@ export interface PluginRuntimeGateway {
     signal?: AbortSignal;
   }): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 
@@ -164,6 +172,10 @@ export interface PluginRuntimeGateway {
     signal?: AbortSignal;
   }): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 

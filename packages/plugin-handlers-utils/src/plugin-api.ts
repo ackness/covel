@@ -455,6 +455,10 @@ export interface PluginServiceGateway {
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
       | { kind: "url"; url: string; mime: string }
     >;
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: PluginUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
   synthesizeSpeech?(input: {
@@ -465,6 +469,10 @@ export interface PluginServiceGateway {
     signal?: AbortSignal;
   }): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: PluginUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
   composeMusic?(input: {
@@ -477,6 +485,10 @@ export interface PluginServiceGateway {
     signal?: AbortSignal;
   }): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: PluginUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
   transcribeAudio?(input: {

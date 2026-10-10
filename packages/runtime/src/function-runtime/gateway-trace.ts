@@ -96,6 +96,19 @@ function errorDiagnostics(error: unknown): unknown {
     : undefined;
 }
 
+/** The model a media call ran on and the tokens it reported, when it did. */
+function billed(result: {
+  usage?: LLMUsageSummary | null;
+  model?: string;
+  provider?: string;
+}): Record<string, unknown> {
+  return {
+    ...(result.usage ? { usage: result.usage } : {}),
+    ...(result.model ? { model: result.model } : {}),
+    ...(result.provider ? { provider: result.provider } : {}),
+  };
+}
+
 /** Summarize a call's prompt shape without leaking the text (PII guard). */
 function summarizeInput(input: GatewayCallInput): {
   presetId?: string;
@@ -229,6 +242,7 @@ export function withGatewayTrace(
           ...ctx,
           method: "synthesizeSpeech",
           audioBytes: result.audio.data.byteLength,
+          ...billed(result),
           durationMs: Date.now() - start,
         });
         return result;
@@ -263,6 +277,7 @@ export function withGatewayTrace(
           ...ctx,
           method: "composeMusic",
           audioBytes: result.audio.data.byteLength,
+          ...billed(result),
           durationMs: Date.now() - start,
         });
         return result;
@@ -329,13 +344,13 @@ export function withGatewayTrace(
       });
       try {
         const result = await generateImage(input);
-        // No usage/finishReason for image calls — cost aggregation
-        // (readUsage in the debug cost panel) already treats a missing
-        // `usage` field as "skip", so this is a safe, deliberate gap.
+        // A model billed per image reports no usage; the cost panel skips
+        // an event without it, and the model still shows in the trace.
         await emitter.emit("gateway.responded", {
           ...ctx,
           method: "generateImage",
           imageCount: result.images.length,
+          ...billed(result),
           durationMs: Date.now() - start,
         });
         return result;
