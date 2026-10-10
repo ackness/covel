@@ -348,6 +348,13 @@ promptCacheKey = true
 lateSystemAsUser = true
 ```
 
+同一个选项在 `google-generative-ai-v1` 上默认值相反：不写或写 `true` 时，第一条对话消息之后的 system 消息留在原位，作为 `contents` 里带 `<system-instruction>` 的 user 文本，只有开头的 system 消息进入 `systemInstruction`；相邻的同角色内容合并为一条，函数响应始终紧跟函数调用（规则见[提示词结构](./prompt-structure.md)）。写 `false` 恢复旧做法：所有 system 消息都进 `systemInstruction`，每条消息一条内容，代价是每回合变化的文字排在历史之前，前缀缓存每回合从头断开。Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验证过，没有在 Google 的端点上验证；如果 Google 的端点拒绝请求，`false` 就是退回去的办法。这个选项只由适配器读取，不会发给服务商。
+
+```toml
+[covel.story.providerOptions.google]
+lateSystemAsUser = false
+```
+
 ## 结构化输出
 
 `gateway.generateObject({ schema, messages })` 在发送请求前，将 Zod schema 的输入形态转换为 JSON Schema。Responses 将完整的 `name` / `schema` 放入 `text.format`；OpenAI Chat 使用兼容的 `json_object` 模式，并在系统消息中传递 schema；Anthropic 在系统消息中传递 schema 和 JSON 输出指令；Gemini 原生协议发送 `generationConfig.responseMimeType: "application/json"` 和 `responseJsonSchema`。Chat / Anthropic 的指令不保证模型一定遵守 schema，所有协议仍在返回后通过原始 Zod schema 的 `safeParse` 校验，应用默认值和转换。自定义 refinement 也在这一步校验。

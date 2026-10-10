@@ -142,7 +142,13 @@ const BUILTIN_PROTOCOLS: Record<BuiltinProviderProtocol, ProtocolDefinition> = {
     },
     reasoningFields: googleReasoningFields,
     providerOptionFields(settings, fields) {
-      const keys = ["thinkingConfig", "cachedContent", "seed"] as const;
+      const keys = [
+        "thinkingConfig",
+        "cachedContent",
+        "seed",
+        // Not a wire field: the adapter reads it and never forwards it.
+        "lateSystemAsUser",
+      ] as const;
       for (const key of keys) {
         if (settings[key] !== undefined) fields[key] = settings[key];
       }
