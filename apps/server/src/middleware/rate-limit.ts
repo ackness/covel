@@ -13,6 +13,8 @@ import { errorBody } from "../api-error.js";
 interface RateLimitOptions {
   /** Maximum requests per window. */
   max: number;
+  /** Cap on tracked (IP, route) counters; the oldest are evicted beyond it. */
+  maxEntries?: number;
 }
 
 interface WindowEntry {
@@ -22,6 +24,11 @@ interface WindowEntry {
 
 /** Sliding-window size — every caller uses the same 1-minute window. */
 const WINDOW_MS = 60_000;
+
+const DEFAULT_MAX_ENTRIES = 10_000;
+
+/** One client's budget across every value of a path parameter, in budgets of one path. */
+const TEMPLATE_BUDGET_FACTOR = 8;
 
 function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
   return new Set(
@@ -72,7 +79,10 @@ function clientIp(c: Context): string {
   return remote ?? "unknown";
 }
 
-export function rateLimiter({ max }: RateLimitOptions): MiddlewareHandler {
+export function rateLimiter({
+  max,
+  maxEntries = DEFAULT_MAX_ENTRIES,
+}: RateLimitOptions): MiddlewareHandler {
   const windows = new Map<string, WindowEntry>();
 
   // Periodic cleanup to prevent memory leak (every 5 minutes)
@@ -91,24 +101,41 @@ export function rateLimiter({ max }: RateLimitOptions): MiddlewareHandler {
     }
 
     const ip = clientIp(c);
-    const key = `${ip}:${c.req.path}`;
-    const entry = windows.get(key);
-
-    if (!entry || now >= entry.resetAt) {
+    // Two counters. One per concrete path keeps the budget of each session.
+    // One per route template, with a larger budget, stops a client that walks
+    // a path parameter to open a fresh counter for every value it tries.
+    const keys: Array<[string, number]> = [
+      [`${ip} ${c.req.path}`, max],
+      [`${ip} *${c.req.routePath}`, max * TEMPLATE_BUDGET_FACTOR],
+    ];
+    for (const [key, limit] of keys) {
+      const entry = windows.get(key);
+      if (entry && now < entry.resetAt && entry.count >= limit) {
+        c.header(
+          "Retry-After",
+          String(Math.ceil((entry.resetAt - now) / 1000)),
+        );
+        return c.json(
+          errorBody("Too many requests", { code: "rate_limit_exceeded" }),
+          429,
+        );
+      }
+    }
+    for (const [key] of keys) {
+      const entry = windows.get(key);
+      if (entry && now < entry.resetAt) {
+        entry.count++;
+        continue;
+      }
+      // Re-insert so the map stays ordered by window start; the oldest
+      // windows are the first to go when the table is full.
+      windows.delete(key);
+      for (const [k, e] of windows) {
+        if (now < e.resetAt && windows.size < maxEntries) break;
+        windows.delete(k);
+      }
       windows.set(key, { count: 1, resetAt: now + WINDOW_MS });
-      await next();
-      return;
     }
-
-    if (entry.count >= max) {
-      c.header("Retry-After", String(Math.ceil((entry.resetAt - now) / 1000)));
-      return c.json(
-        errorBody("Too many requests", { code: "rate_limit_exceeded" }),
-        429,
-      );
-    }
-
-    entry.count++;
     await next();
   };
 }

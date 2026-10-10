@@ -650,12 +650,16 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 > **接入状态（2026-04-27）**：内置 Web UI 目前使用 GET/list 读取 plugin-data（右侧面板、message UI specs、plugin data store）。PUT/DELETE 是管理/API 写入口，当前内置 Web UI 暂未直接调用；插件 runtime 推荐通过 plugin-data tools、plugin RPC 或 proposal 写入。PUT/DELETE 保持兼容，但若未来收窄攻击面，应先标记 deprecated 或加 admin/debug gate，而不是静默删除。
 
-| 方法   | 路径                                                      | 描述                      |
-| ------ | --------------------------------------------------------- | ------------------------- |
-| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace`      | 列出某 namespace 下的数据 |
-| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据              |
-| PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据             |
-| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                  |
+| 方法   | 路径                                                      | 描述                                                                            |
+| ------ | --------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| GET    | `/api/sessions/:id/plugin-data`                           | 一次列出会话内所有激活插件的可读数据，`items[]` 带 `pluginId`（Web 完整恢复用） |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId`                 | 列出某插件的全部数据                                                            |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace`      | 列出某 namespace 下的数据                                                       |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据                                                                    |
+| PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据                                                                   |
+| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                                                                        |
+
+会话级列表与按插件、按 namespace 的读取使用同一套可见性规则（`_hidden.*`、内核所有者的行不返回；维度行只返回公开形状）和同样的会话访问校验（托管形态下的 owner token）；它只包含会话已激活且已注册的插件，未激活插件的数据仍可通过按插件的路径读取。
 
 所有 `_` 前缀 namespace 保留给内核领域路径；PUT/DELETE 和通用 plugin-data 工具不能修改 `_dimensions` / `_dimension-settlements`。`_hidden.<namespace>`（`visibility: hidden` 世界数据）不出现在列表、`/state` 与 discovery 中，单条读取返回 404。玩家维度修改走[manual runtime RPC](#维度编辑与待结算恢复)，公共读取使用 session view，不扫描提供者私有规则。
 
@@ -1781,6 +1785,8 @@ Submission 里的其他键被丢弃：来源插件、字段定义和模板只从
 4. **Event 级**: `{ kind: "event", pluginId, topic, payload }` — 插件自己的界面发出一个该插件声明的领域事件（JSON-RENDER 或 `webview` 的 `emitEvent`）。`topic` 必须在这个插件的 `contributes.events` 里，`advertise: false` 的内部 topic 也可以；别的插件声明的 topic 一律返回 `404 event_not_declared`。`payload` 按该 topic 的 schema 校验，不合格返回 `400 event_payload_invalid`。校验和审批通过后，会话里所有订阅该 topic 的 runtime（`trigger: { type: event, topic }`，可以属于任何已启用的插件）在同一事务内排成事件任务（`_runtime_jobs`，`origin.activation: "event"`，`origin.sourceTurnId` 为本次发射的 `eventId`），由 runtime job worker 带着 `ctx.triggerEvent` 执行并各自提交。请求本身不执行 runtime：返回 `200 { status: "ok", eventId, topic, deferredJobs: [{ jobId, runtimeId }] }`，没有订阅者时 `deferredJobs` 为空。与手动触发 runtime 一样，点击就是触发决定，订阅者的 `startTurn` / `maxTriggerCount` / `cooldownTurns` 不参与判断。社区插件按 `event:<topic>` 走审批；订阅者里的社区 runtime 还各需要与手动触发相同的两项授权（服务端代码、`runtime:<name>`），否则 runtime 加载器会拒绝执行。请求每次返回缺少的第一项（`202 approval-required`），客户端批准后重试，直到全部具备才排入任务。后台任务只在会话有可用模型凭据时执行（与其他后台任务相同），否则保持 `queued`。
 
 **写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#输入和输出)。
+
+**Action 的 `context.store`**：绑定到当前会话和插件，只提供 `getSession()`、`listTurnMessages(limit?)` 和本插件的 `getPluginData` / `setPluginData` / `listPluginData`。`listTurnMessages` 只返回最近的已提交消息，最多 200 条（省略 `limit` 时也是 200）；没有 `savePlayerInput`——玩家提交只由表单提交通道写入并经表单校验，action 不能伪造。
 
 插件 action 必须属于会话当前启用的插件。服务端在审批前及取得会话锁后分别检查；禁用插件返回 `404 plugin_not_active`，不会执行 handler 或新增审批。`pluginId: "framework"` 的框架默认 action 不属于插件启用集，仍按各自准入条件执行。旧面板发出的迟到请求同样受此检查约束。
 

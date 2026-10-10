@@ -262,9 +262,8 @@ describe("createRpcHandlerStoreView", () => {
   it("binds action-level RPC reads and writes to the current session and plugin", async () => {
     const store = {
       getSession: vi.fn(async (id: string) => ({ id })),
-      listTurnMessages: vi.fn(async (sessionId: string) => [{ sessionId }]),
-      savePlayerInput: vi.fn(
-        async (_input: Record<string, unknown>) => undefined,
+      listRecentTurnMessages: vi.fn(
+        async (sessionId: string, _limit: number) => [{ sessionId }],
       ),
       setPluginData: vi.fn(
         async (_record: Record<string, unknown>) => undefined,
@@ -290,16 +289,10 @@ describe("createRpcHandlerStoreView", () => {
 
     await scoped.getSession();
     await scoped.listTurnMessages();
+    await scoped.listTurnMessages(5);
+    await scoped.listTurnMessages(1_000_000);
     // Forged identity fields are not part of the view's types; held in variables
     // they reach the view as a plugin could send them, and must be ignored.
-    const forgedInput = {
-      id: "input-1",
-      sessionId: "sess-attacker",
-      turnId: "turn-1",
-      formId: "form-1",
-      values: {},
-      createdAt: "2026-04-30T00:00:00.000Z",
-    };
     const forgedData = {
       sessionId: "sess-attacker",
       pluginId: "plugin-attacker",
@@ -309,14 +302,20 @@ describe("createRpcHandlerStoreView", () => {
       createdAt: "2026-04-30T00:00:00.000Z",
       updatedAt: "2026-04-30T00:00:00.000Z",
     };
-    await scoped.savePlayerInput(forgedInput);
     await scoped.setPluginData?.(forgedData);
     await scoped.getPluginData?.("ns", "key");
     await scoped.listPluginData?.("ns");
 
     expect(store.getSession).toHaveBeenCalledWith("sess-real");
-    expect(store.listTurnMessages).toHaveBeenCalledWith("sess-real");
-    expect(store.savePlayerInput.mock.calls[0]![0].sessionId).toBe("sess-real");
+    // Recent messages only, never more than the ceiling.
+    expect(
+      store.listRecentTurnMessages.mock.calls.map(([id, limit]) => [id, limit]),
+    ).toEqual([
+      ["sess-real", 200],
+      ["sess-real", 5],
+      ["sess-real", 200],
+    ]);
+    expect(scoped).not.toHaveProperty("savePlayerInput");
     expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
       sessionId: "sess-real",
       pluginId: "plugin-real",

@@ -119,6 +119,14 @@ separately as `envApiKeys`. The provider registry
 when the resolved target's `baseUrl` origin matches trusted configuration
 (`llm.toml` or registered provider defaults).
 
+The web client sends only the keys of providers its requests can reach: the
+provider each model role resolves to (the saved binding, otherwise the
+server's own provider for that role) plus a provider a request names directly,
+such as a model-list probe. A key for a provider no role uses never leaves the
+browser, which matters when the server belongs to someone else. Until the
+client has read the server's roles and presets it sends every saved key.
+(`buildProviderKeysHeader` in `apps/web/src/services/api/model-settings.ts`.)
+
 Failure mode this prevents: a request-scoped custom preset (`X-Slot-Config`
 overlay) that redirects a provider to another origin would otherwise receive the
 operator's key. Such a preset gets no environment key and no trusted default
@@ -180,6 +188,19 @@ consent:
   not stop code that calls the global `fetch` or `node:https` itself.
 - The session-bound store view, per-plugin tool lookup, and the proposal
   pipeline are authority boundaries of the plugin API, with the same limit.
+
+`ctx.gateway.resolveSlot()` is the same kind of boundary. It returns the
+`apiKey` and auth headers of the slot or preset it is asked about, for any slot
+name, because a plugin that implements its own wire (`registerWires`) needs them
+to call its provider. The plugin manifest names slots only through `type: slot`
+settings, whose value is the player's choice at run time, so there is no static
+list to enforce against; and a package that cannot read the key through
+`resolveSlot` can still read it as the `config` of its own wire, or from the
+process it runs in. A per-slot check on this one method would look like
+containment without being it, so none exists. A service call made on another
+plugin's behalf never carries key material (`lendGateway` in
+`packages/runtime/src/plugin-services.ts`). Approve a community package only if
+you would hand its author your provider keys.
 
 Approving a community package therefore means trusting its author with the
 account the server runs under, and the install and authorization dialogs say
@@ -424,7 +445,7 @@ action to release its lock.
 | World reads        | `GET /api/worlds` and `GET /api/worlds/:id` need no identity, in every tier: whoever can reach the server reads each world record, including a stored (generated) world's embedded characters, lorebook, contract data and any content its author marked hidden. Writes are gated; reads are not. A hosted deployment that cannot show that content to every visitor must keep the server behind its own access control                                                                                                                                                                                                                                                                | `apps/server/src/routes/api/worlds/crud.ts`   |
 | World gallery      | `GET /api/worlds/:id/gallery*` serves images of a world package without a session, to whoever can list worlds. A request names the two parts of a file's address; it is answered only when the gallery listing itself contains that file: a raster image (PNG, JPEG, WebP, never SVG) that the package's `media/gallery.json` lists up to the opening, or, without that file, one directly inside a public `kind: media` source. Paths resolve inside the package with symlinks rejected; sources with `enabled: false` or `visibility: hidden` are not served. The one audio file it serves is the `.mp3` / `.wav` that `world.yaml` names as `themeMusic`, under the same path rules | `apps/server/src/world-data/gallery.ts`       |
 | Write origin       | CORS only keeps a page from reading a response; a "simple" cross-site request (a form post, `fetch` with `text/plain`) still runs its handler. A `POST` / `PUT` / `PATCH` / `DELETE` that carries an `Origin` is refused with `403 origin_not_allowed` before any route unless the origin is on the CORS allowlist or its host is the host the request was sent to (`Host`, or `X-Forwarded-Host` behind a proxy). A request without `Origin` is a non-browser client and passes. This is not authentication, and it does not cover DNS rebinding                                                                                                                                      | `apps/server/src/middleware/origin-guard.ts`  |
-| Rate limiting      | `rateLimiter()` and `singleFlight()`; `RATE_LIMIT_RPM` sets the budget                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `apps/server/src/middleware/rate-limit.ts`    |
+| Rate limiting      | `rateLimiter()` and `singleFlight()`; `RATE_LIMIT_RPM` sets the budget. A client address has one budget per concrete path and a second, eight times as large, per route template (`/api/sessions/:id/state`), so each session keeps its own budget while rotating a path parameter stops at the larger one; the counter table holds at most 10,000 entries, evicting the oldest window first                                                                                                                                                                                                                                                                                           | `apps/server/src/middleware/rate-limit.ts`    |
 | Raw config files   | `GET` / `PUT /api/config/raw*` read and write `llm.toml` (and `config.toml` in desktop mode) as text. They share the install guard: operator token on a hosted tier, desktop token under the shell, `COVEL_INSTALL_API_ENABLED=1` in production. The names are a fixed list, never a path from the request; `keys.env` is not on it. A text is written only after the server's own parser accepts it                                                                                                                                                                                                                                                                                   | `apps/server/src/routes/raw-config-api.ts`    |
 | Error sanitization | `app.onError` returns `"Internal server error"` in production; stacks and paths go only to `console.error`. Development returns `err.message`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `routes/api/bootstrap.ts`, `app.ts`           |
 
