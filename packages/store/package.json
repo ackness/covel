@@ -58,7 +58,7 @@
     }
   },
   "scripts": {
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "generate-ddl": "tsx scripts/print-ddl.ts",
