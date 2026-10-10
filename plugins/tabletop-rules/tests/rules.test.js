@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { creationRules, validateAllocation } from "../lib/rules.js";
+import {
+  checkModifier,
+  creationRules,
+  validateAllocation,
+} from "../lib/rules.js";
 
 const mistportAbilities = [
   {
@@ -115,5 +119,22 @@ describe("validateAllocation", () => {
     expect(validateAllocation({ tideReading: 4, combat: 4 }, rules, ctx)).toBe(
       "需要正好分配 4 点，你已分配 6 点",
     );
+  });
+});
+
+describe("checkModifier", () => {
+  it("converts a value over its declared range, as dice-check does", () => {
+    expect(checkModifier(2, { min: 0, max: 5 })).toBe(4);
+    expect(checkModifier(5, { min: 0, max: 5 })).toBe(10);
+    // On a 3-18 scale the raw value would pass a normal check on any die.
+    expect(checkModifier(3, { min: 3, max: 18 })).toBe(0);
+    expect(checkModifier(18, { min: 3, max: 18 })).toBe(10);
+    expect(checkModifier(40, { min: 3, max: 18 })).toBe(10);
+  });
+
+  it("uses the value itself, held to the limit, when no range is declared", () => {
+    expect(checkModifier(3, undefined)).toBe(3);
+    expect(checkModifier(25, { min: 0 })).toBe(10);
+    expect(checkModifier(-25, {})).toBe(-10);
   });
 });

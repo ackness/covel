@@ -662,12 +662,14 @@ sources:
     const receipt = receipts[0]!.value as Record<string, unknown>;
     expect(receipt).toMatchObject({
       attribute: "tideReading",
-      modifier: 4,
+      // A 4 on the world's 0-5 scale.
+      score: 4,
+      modifier: 8,
       difficulty: 12,
     });
     expect(receipt.die).toBeGreaterThanOrEqual(1);
     expect(receipt.die).toBeLessThanOrEqual(20);
-    expect(receipt.total).toBe(Number(receipt.die) + 4);
+    expect(receipt.total).toBe(Number(receipt.die) + 8);
     expect(
       JSON.stringify(
         generate.mock.calls.filter(([request]) =>

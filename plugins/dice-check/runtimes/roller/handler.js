@@ -70,6 +70,9 @@ function nameOf(name, locale) {
  * reads the modifier here instead of guessing one from a bare value — a 2/5
  * is +4, not +2. Attributes without a declared range are left for the
  * narrative to convert by itself.
+ *
+ * The standalone `tabletop-rules` package converts the same way
+ * (`checkModifier` in its `lib/rules.js`); change both together.
  */
 function playerModifiers(world, locale) {
   const player = world?.characters?.find((c) => c.type === "player");

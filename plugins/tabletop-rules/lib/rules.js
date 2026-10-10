@@ -99,6 +99,31 @@ export function creationRules(schema, configured, locale) {
   return rules;
 }
 
+/** The largest modifier an attribute gives; a check adds it to a d20. */
+export const MODIFIER_LIMIT = 10;
+
+/**
+ * The modifier that an attribute value gives a check:
+ * `round((value - min) / (max - min) * MODIFIER_LIMIT)` over the range the
+ * world schema declares, so a 2 on a 0-5 scale is +4. This is the conversion
+ * of `dice-check` (`runtimes/roller/handler.js`); a world that runs both
+ * plugins gets the same modifier from both. Keep the two in step. An
+ * attribute without a declared range gives its own value, held to the limit.
+ *
+ * @param {number} value
+ * @param {{ min?: unknown, max?: unknown } | undefined} declared
+ */
+export function checkModifier(value, declared) {
+  const min = typeof declared?.min === "number" ? declared.min : 0;
+  const max = declared?.max;
+  if (typeof max !== "number" || max <= min)
+    return Math.min(Math.max(value, -MODIFIER_LIMIT), MODIFIER_LIMIT);
+  return Math.round(
+    ((Math.min(Math.max(value, min), max) - min) / (max - min)) *
+      MODIFIER_LIMIT,
+  );
+}
+
 export function validateRules(rules) {
   if (
     !rules ||
