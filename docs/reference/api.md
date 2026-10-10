@@ -131,7 +131,7 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 
 ## Personal configuration API
 
-`GET /api/llm-config` returns active slots with `serverKeyConfigured` (boolean), plus `source: { kind: "file" | "builtin", path }` and an optional load `error`. `POST /api/llm-config/reload` applies valid TOML in place; invalid reloads return `ok: false` and retain the active configuration. UI settings remain request-scoped overlays and are not written into TOML.
+`GET /api/llm-config` returns active slots with `serverKeyConfigured` (boolean), plus `source: { kind: "file" | "builtin", path }`, an optional load `error`, and `envKeyOverrides` (provider ids whose key saved in Settings is shadowed by the server's environment on desktop; Settings shows a notice for them). `POST /api/llm-config/reload` applies valid TOML in place; invalid reloads return `ok: false` and retain the active configuration. UI settings remain request-scoped overlays and are not written into TOML.
 
 On `demo` / `commercial`, the public `GET /api/llm-config` retains the model
 catalog used at client startup but omits `source` and load `error`; only the
