@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ZodError } from "zod";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import {
@@ -42,6 +43,15 @@ export interface UiSlotHost {
 }
 const cacheKey = (slot: string, key?: string) =>
   JSON.stringify([slot, key ?? null]);
+/** The message of a failed projection; a schema failure names each bad field path. */
+const describeProjectionError = (err: unknown): string => {
+  if (err instanceof ZodError) {
+    return err.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
+  }
+  return err instanceof Error ? err.message : String(err);
+};
 const terminalEvents = new Set([
   "turn.completed",
   "turn.failed",
@@ -206,9 +216,13 @@ export function createUiSlotHost(args: {
             }
           }
         }
-      } catch {
+      } catch (err) {
         if (!closed)
-          console.warn("[ui-slots] projection failed", { sessionId, slot });
+          console.warn("[ui-slots] projection failed", {
+            sessionId,
+            slot,
+            error: describeProjectionError(err),
+          });
       } finally {
         args.onProjection?.({
           sessionId,

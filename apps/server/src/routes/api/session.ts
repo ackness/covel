@@ -235,16 +235,15 @@ sessionRoutes.post("/", async (c) => {
   // player who asks for another one gets the world's own language, and the
   // response says so; the UI language is not affected.
   const requestedLocale = normalizeLocale(body.locale);
+  const world = rawWorldId ? await store.getWorld(rawWorldId) : undefined;
   const contentLocale = sessionContentLocale(
-    (rawWorldId ? await store.getWorld(rawWorldId) : undefined) ?? undefined,
+    world ?? undefined,
     requestedLocale,
   );
 
   // The world is a requirer too. Its contracts are read once here and kept
   // with the session, so later resolutions need no world lookup.
-  const requiredContracts = rawWorldId
-    ? worldRequiredContracts(await store.getWorld(rawWorldId))
-    : [];
+  const requiredContracts = rawWorldId ? worldRequiredContracts(world) : [];
   const selection = resolveSessionPluginPlan(
     parsedCreate.requestedPlugins,
     pluginRegistry,
@@ -341,12 +340,8 @@ sessionRoutes.post("/", async (c) => {
   // Do that before taking the session lock or opening the DB transaction; the
   // prepared plan is immutable input to the atomic write phase below.
   const preparedWorldData = await prepareWorldDataImportForSession({
-    dimensions: rawWorldId
-      ? (await store.getWorld(rawWorldId))?.metadata?.dimensions
-      : undefined,
-    contractData: rawWorldId
-      ? (await store.getWorld(rawWorldId))?.metadata?.contractData
-      : undefined,
+    dimensions: world?.metadata?.dimensions,
+    contractData: world?.metadata?.contractData,
     sessionId: id,
     worldId: rawWorldId,
     worldsDirs,

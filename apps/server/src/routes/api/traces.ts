@@ -67,7 +67,7 @@ type Env = {
 export const traceRoutes = new Hono<Env>();
 
 // GET /:sessionId — list all trace events for a session
-traceRoutes.get("/:sessionId", async (c) => {
+traceRoutes.get("/:sessionId", rateLimiter({ max: 120 }), async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("sessionId");
   // Traces contain full prompts/LLM output — session-existence + owner guard
@@ -93,7 +93,7 @@ traceRoutes.get("/:sessionId", async (c) => {
 });
 
 // GET /:sessionId/turns — trace events grouped by turn
-traceRoutes.get("/:sessionId/turns", async (c) => {
+traceRoutes.get("/:sessionId/turns", rateLimiter({ max: 120 }), async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("sessionId");
   const guard = await resolveSessionParam(c, "sessionId");

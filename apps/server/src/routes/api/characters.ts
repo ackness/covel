@@ -3,6 +3,7 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
 import { loadSessionHookScope } from "./session/hook-scope.js";
 import { createCommitPipeline, runWithHookScope } from "@covel/runtime";
@@ -26,6 +27,22 @@ type Env = {
 };
 
 export const characterRoutes = new Hono<Env>();
+
+const characterBodySchema = z.object({
+  id: z
+    .string({ error: "id (string) is required" })
+    .min(1, "id (string) is required")
+    .max(160, "id is too long"),
+  name: z
+    .string({ error: "name (string) is required" })
+    .min(1, "name (string) is required")
+    .max(256, "name is too long"),
+  type: z.string().min(1).max(64).optional(),
+  description: z.string().max(65_536).optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
+  version: z.number().optional(),
+  createdAt: z.string().optional(),
+});
 
 // GET /session/:id/characters
 characterRoutes.get("/:id/characters", async (c) => {
@@ -53,29 +70,33 @@ characterRoutes.post("/:id/characters", async (c) => {
     );
   }
 
-  const parsed = await readJsonBody<Record<string, unknown>>(c);
+  const parsed = await readJsonBody<unknown>(c);
   if (parsed instanceof Response) return parsed;
-  const body = parsed.body;
-
-  if (!body.id || typeof body.id !== "string") {
-    return c.json(errorBody("id (string) is required"), 400);
+  const valid = characterBodySchema.safeParse(parsed.body);
+  if (!valid.success) {
+    const issue = valid.error.issues[0];
+    const path = issue?.path.join(".");
+    return c.json(
+      errorBody(
+        path && issue && !issue.message.includes(path)
+          ? `${path}: ${issue.message}`
+          : (issue?.message ?? "Invalid character body"),
+      ),
+      400,
+    );
   }
-  if (!body.name || typeof body.name !== "string") {
-    return c.json(errorBody("name (string) is required"), 400);
-  }
+  const body = valid.data;
 
   const now = new Date().toISOString();
   const record: CharacterRecord = {
     id: body.id,
     sessionId,
     name: body.name,
-    type: typeof body.type === "string" ? body.type : "npc",
-    description:
-      typeof body.description === "string" ? body.description : undefined,
-    fields:
-      body.fields && typeof body.fields === "object" ? body.fields : undefined,
-    version: typeof body.version === "number" ? body.version : 1,
-    createdAt: typeof body.createdAt === "string" ? body.createdAt : now,
+    type: body.type ?? "npc",
+    description: body.description,
+    fields: body.fields,
+    version: body.version ?? 1,
+    createdAt: body.createdAt ?? now,
     updatedAt: now,
   };
 

@@ -111,7 +111,9 @@ export function validatePluginBundle(
   if (!/^[a-z0-9][a-z0-9-_]{0,63}$/i.test(canonicalId)) {
     throw httpError(400, `invalid canonical plugin id: ${canonicalId}`);
   }
-  if (reservedPluginIds.has(canonicalId)) {
+  // The ID format check is case-insensitive, so compare case-insensitively too.
+  const lowerId = canonicalId.toLowerCase();
+  if ([...reservedPluginIds].some((id) => id.toLowerCase() === lowerId)) {
     throw httpError(
       409,
       `plugin id "${canonicalId}" is reserved for a builtin plugin`,
