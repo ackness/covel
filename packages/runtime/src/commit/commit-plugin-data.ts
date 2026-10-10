@@ -13,6 +13,7 @@ import {
   requireNonEmptyArray,
   requireNonEmptyString,
 } from "./commit-validators.js";
+import { pluginDataSizeError } from "./plugin-data-limits.js";
 
 /**
  * Proposals carry plugin-authored namespaces, so the commit boundary rejects
@@ -28,6 +29,17 @@ function reservedNamespaceFailure(
   if (typeof namespace !== "string") return undefined;
   const reserved = pluginCodeNamespaceWriteError(namespace);
   return reserved ? commitError(`${proposalType}: ${reserved}`) : undefined;
+}
+
+function oversizedValueFailure(
+  proposalType: string,
+  pluginId: string,
+  namespace: string,
+  key: string,
+  value: unknown,
+): CommitResult | undefined {
+  const error = pluginDataSizeError(pluginId, namespace, key, value);
+  return error ? commitError(`${proposalType}: ${error}`) : undefined;
 }
 
 export function createPluginDataCommitHandlers(
@@ -56,6 +68,13 @@ export function createPluginDataCommitHandlers(
         "plugin.data: key must be a non-empty string",
       ),
       reservedNamespaceFailure("plugin.data", payload.namespace),
+      oversizedValueFailure(
+        "plugin.data",
+        proposal.source.pluginId,
+        payload.namespace,
+        payload.key,
+        payload.value,
+      ),
     );
     if (invalid) return invalid;
 
@@ -103,6 +122,13 @@ export function createPluginDataCommitHandlers(
           "plugin.data.batch: every item needs a non-empty key",
         ),
         reservedNamespaceFailure("plugin.data.batch", item.namespace),
+        oversizedValueFailure(
+          "plugin.data.batch",
+          proposal.source.pluginId,
+          item.namespace,
+          item.key,
+          item.value,
+        ),
       );
       if (itemInvalid) return itemInvalid;
       records.push({
