@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RuntimeManifest } from "@covel/shared";
+import type { JsonValue, RuntimeManifest } from "@covel/shared";
 import type {
   FunctionHandler,
   LoadedRuntime,
@@ -242,8 +242,8 @@ describe("same-depth synchronous event dependencies", () => {
         return {
           outcome: "success",
           value: {
-            observed: number?.cardinality === "one" ? number.value : undefined,
-            event: ctx.triggerEvent?.data,
+            observed: number?.cardinality === "one" ? number.value : null,
+            event: (ctx.triggerEvent?.data ?? null) as JsonValue,
           },
         };
       },

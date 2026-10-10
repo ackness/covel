@@ -24,6 +24,7 @@ function makeAgentManifest(
 ): RuntimeManifest {
   return {
     name: "guarded-agent",
+    description: "guarded-agent",
     pluginId: "guarded-agent",
     pluginType: "plugin",
     stage: "narrative",

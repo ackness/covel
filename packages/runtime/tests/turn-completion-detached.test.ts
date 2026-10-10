@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { InputSlot, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import type { FunctionHandler, LoadedRuntime } from "@covel/plugin-loader";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
@@ -36,10 +36,7 @@ function runtime(
 
 async function testDeps(
   manifests: readonly RuntimeManifest[],
-  handlers: ReadonlyMap<
-    string,
-    (ctx: unknown) => Promise<Record<string, unknown>>
-  >,
+  handlers: ReadonlyMap<string, FunctionHandler>,
 ): Promise<TurnExecutorDeps> {
   const store = createMemoryStore();
   const now = new Date().toISOString();
@@ -85,16 +82,16 @@ describe("scheduler-driven detached turn completion", () => {
       version: "1.2.3",
     });
     const detachedHandler = vi.fn(async () => ({
-      outcome: "success",
+      outcome: "success" as const,
       value: { shouldNotRun: true },
     }));
     const deps = await testDeps(
       [narrative, detached],
-      new Map([
+      new Map<string, FunctionHandler>([
         [
           narrative.name,
           async () => ({
-            outcome: "success",
+            outcome: "success" as const,
             value: { narrativeOutput: "hello" },
           }),
         ],
@@ -150,7 +147,7 @@ describe("scheduler-driven detached turn completion", () => {
     const seenTurn = vi.fn();
     const deps = await testDeps(
       [narrative, detached],
-      new Map([
+      new Map<string, FunctionHandler>([
         [
           detached.name,
           async (rawCtx) => {
@@ -166,7 +163,7 @@ describe("scheduler-driven detached turn completion", () => {
                 : undefined,
               ctx.activation,
             );
-            return { outcome: "success", value: { ok: true } };
+            return { outcome: "success" as const, value: { ok: true } };
           },
         ],
       ]),
@@ -207,7 +204,7 @@ describe("scheduler-driven detached turn completion", () => {
       },
     };
     // The source execution has committed, so the session clock moved on.
-    await deps!.store.updateSession("session", { completedPlayerTurns: 1 });
+    await deps.store!.updateSession("session", { completedPlayerTurns: 1 });
 
     const result = await executeTurn(input, [narrative, detached], deps);
 
@@ -236,16 +233,16 @@ describe("scheduler-driven detached turn completion", () => {
       needs: [{ capability: "facts" }],
     });
     const producerHandler = vi.fn(async () => ({
-      outcome: "success",
+      outcome: "success" as const,
       value: { facts: [] },
     }));
     const consumerHandler = vi.fn(async () => ({
-      outcome: "success",
+      outcome: "success" as const,
       value: { consumed: true },
     }));
     const deps = await testDeps(
       [producer, consumer],
-      new Map([
+      new Map<string, FunctionHandler>([
         [producer.name, producerHandler],
         [consumer.name, consumerHandler],
       ]),
@@ -273,10 +270,13 @@ describe("scheduler-driven detached turn completion", () => {
       turnCompletion: { mode: "detached" },
     });
     const handler = vi.fn(async () => ({
-      outcome: "success",
+      outcome: "success" as const,
       value: { ok: true },
     }));
-    const deps = await testDeps([unsafe], new Map([[unsafe.name, handler]]));
+    const deps = await testDeps(
+      [unsafe],
+      new Map<string, FunctionHandler>([[unsafe.name, handler]]),
+    );
 
     const result = await executeTurn(
       {
@@ -302,10 +302,13 @@ describe("scheduler-driven detached turn completion", () => {
       turnCompletion: { mode: "detached" },
     });
     const handler = vi.fn(async () => ({
-      outcome: "success",
+      outcome: "success" as const,
       value: { ok: true },
     }));
-    const deps = await testDeps([unsafe], new Map([[unsafe.name, handler]]));
+    const deps = await testDeps(
+      [unsafe],
+      new Map<string, FunctionHandler>([[unsafe.name, handler]]),
+    );
 
     const result = await executeTurn(
       {

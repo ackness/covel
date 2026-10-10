@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import type { RuntimeManifest } from "@covel/shared";
+import type { JsonValue, RuntimeManifest } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import {
   collectExecutionJournal,
@@ -45,16 +45,21 @@ async function playTurn(
     [once, cooled],
     {
       store,
+      llm: {
+        generate: async () => {
+          throw new Error("Function runtimes do not use the LLM");
+        },
+      },
       loadRuntime: async (manifest) => ({
         manifest,
         promptTemplate: "",
-        handler: async () => ({
-          outcome: "success" as const,
-          value:
+        handler: async () => {
+          const value: JsonValue =
             manifest.name === once.name
               ? { snapshot: { turn } }
-              : { narrativeOutput: `Turn ${turn} recap.` },
-        }),
+              : { narrativeOutput: `Turn ${turn} recap.` };
+          return { outcome: "success" as const, value };
+        },
       }),
     },
   );
@@ -117,6 +122,11 @@ describe("runtime trigger ledger", () => {
               value: { ready: true },
             }),
           }),
+          llm: {
+            generate: async () => {
+              throw new Error("Function runtimes do not use the LLM");
+            },
+          },
         },
       );
     const first = await run(1);

@@ -50,7 +50,8 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
     name: "test-plugin",
     pluginId: "test-plugin",
-    pluginType: "community",
+    description: "test-plugin",
+    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
@@ -526,7 +527,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
         llm: {
           async generate(params) {
             resumedMessages.push(
-              ...(params.messages as Array<Record<string, unknown>>),
+              ...params.messages.map((message) => ({ ...message })),
             );
             return {
               content: '{"narrativeOutput":"continued"}',
@@ -690,10 +691,9 @@ describe("TurnExecutor — function runtime suspend", () => {
     );
   });
 
-  it("captures a canonical envelope-v1 suspended outcome before success schema validation", async () => {
+  it("captures a suspended handler outcome before success schema validation", async () => {
     const manifest = makeManifest({
       runtimeType: "function",
-      resultFormat: "envelope-v1",
     });
     const loaded: LoadedRuntime = {
       manifest,
@@ -1262,12 +1262,6 @@ describe("resumeSuspendedRuntime", () => {
     await store.saveSuspension({
       ...suspension!,
       pendingContinuation: {
-        executionContext: {
-          executionId: crypto.randomUUID(),
-          origin: "player",
-          countPolicy: "complete-player-turn",
-          logicalTurnId: crypto.randomUUID(),
-        },
         ...suspension!.pendingContinuation,
         pendingProposals: [
           {
@@ -1515,7 +1509,6 @@ describe("resumeSuspendedRuntime", () => {
 
     const manifest = makeManifest({
       runtimeType: "function",
-      resultFormat: "envelope-v1",
     });
     const loaded: LoadedRuntime = {
       manifest,

@@ -19,13 +19,17 @@ import { tool } from "@covel/tools";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type {
+  LLMAdapter,
+  LLMMessage,
+  LLMResponse,
+} from "../src/llm/llm-adapter.js";
 import { z } from "zod";
 
 // ── Mock LLM ─────────────────────────────────────────────────────
 
 class MockLLM implements LLMAdapter {
-  calls: Array<{ messages: readonly { role: string; content: string }[] }> = [];
+  calls: Array<{ messages: readonly LLMMessage[] }> = [];
   response: LLMResponse = {
     content:
       "你踏入了黑暗的森林，空气中弥漫着腐叶和泥土的气息。远处传来一声低沉的吼叫，你的手不自觉地握紧了腰间的短剑。",

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { FunctionHandlerContext } from "@covel/plugin-loader";
-import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import type { InputSlot, RuntimeManifest, RuntimeResult } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 
 const sessionId = "batch-session";
+/** The value of a single-cardinality input binding. */
+function slotValue(slot: InputSlot | undefined): unknown {
+  return slot?.cardinality === "one" ? slot.value : undefined;
+}
 function manifest(
   name: string,
   extra: Partial<RuntimeManifest> = {},
@@ -120,7 +124,7 @@ describe("batch runtime recovery", () => {
       "form",
       {
         form: async (ctx) => {
-          expect(ctx.inputs?.schema?.value).toEqual({ version: 1 });
+          expect(slotValue(ctx.inputs?.schema)).toEqual({ version: 1 });
           return { ready: true };
         },
       },
@@ -135,7 +139,7 @@ describe("batch runtime recovery", () => {
     const bothStarted = Promise.withResolvers<void>();
     let started = 0;
     const handler = async (ctx: FunctionHandlerContext) => {
-      expect(ctx.inputs?.story?.value).toMatchObject({
+      expect(slotValue(ctx.inputs?.story)).toMatchObject({
         text: "Original story",
       });
       if (++started === 2) bothStarted.resolve();
@@ -190,7 +194,7 @@ describe("batch runtime recovery", () => {
       {
         a: async () => ({ version: "fresh" }),
         b: async (ctx) => {
-          expect(ctx.inputs?.a?.value).toEqual({ version: "fresh" });
+          expect(slotValue(ctx.inputs?.a)).toEqual({ version: "fresh" });
           return { ok: true };
         },
       },

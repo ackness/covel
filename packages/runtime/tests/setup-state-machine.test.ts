@@ -311,7 +311,7 @@ describe("setup session-gate SCC", () => {
           promptTemplate: "",
           handler: async () => {
             invoked.push(m.name);
-            return {};
+            return { outcome: "success" as const };
           },
         }),
         llm: new NoopLLM(),
@@ -356,7 +356,7 @@ describe("setup session-gate SCC", () => {
         promptTemplate: "",
         handler: async () => {
           invoked.push(m.name);
-          return {};
+          return { outcome: "success" as const };
         },
       }),
       llm: new NoopLLM(),
@@ -396,7 +396,7 @@ describe("main-loop dependency-cycle SCC", () => {
       updatedAt: now,
     });
 
-    const inject = (from: string) => ({
+    const inject = (from: string): Partial<RuntimeManifest> => ({
       input: {
         inject: [
           { kind: "runtime", from, field: "narrativeOutput", as: "<x>" },
@@ -509,7 +509,7 @@ describe("plugin version mismatch", () => {
         promptTemplate: "",
         handler: async () => {
           ranCount += 1;
-          return {};
+          return { outcome: "success" as const };
         },
       }),
       llm: new NoopLLM(),
@@ -555,8 +555,8 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
     selectTriggeredRuntimes({
       activeRuntimes: runtimes,
       manualRuntimeId: undefined,
-      messageHistory: [],
       runtimeTriggerCounts: new Map(),
+      runtimeTurnsSinceLastTrigger: new Map(),
       setupRuntimes,
       sessionId: "s-gate",
       turnNumber: 0,

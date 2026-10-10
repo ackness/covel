@@ -74,7 +74,11 @@ describe("executeTurn: saveTurnResult invariant", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async () => ({ preGameDone: true }),
+        handler: async () => ({
+          outcome: "success",
+          value: {},
+          completion: "done",
+        }),
       }),
       llm: new NoopLLM(),
       store,

@@ -177,8 +177,12 @@ describe("execution World Model", () => {
       pluginId: "actual",
       runtimeId: "actual/run",
       turnId: "actual-turn",
+      runId: "actual-run",
       status,
       output: {},
+      toolCalls: [],
+      durationMs: 0,
+      timestamp: "2026-01-01T00:00:00.000Z",
       pendingProposals: [{ ...schema(), sessionId: "forged" }],
     });
     const collected = collectUpstreamWorldProposals(
@@ -211,7 +215,7 @@ describe("execution World Model", () => {
     const reads = memoizeWorldModelReads(counted);
     const first = await createWorldModelView(reads, sessionId);
     const firstCharacters = await reads.listCharacters(sessionId);
-    firstCharacters[0]!.fields.hp = 0;
+    (firstCharacters[0]!.fields as { hp: number }).hp = 0;
     const second = await createWorldModelView(reads, sessionId);
     expect(characterReads).toBe(1);
     expect(second.characters).toEqual(first.characters);

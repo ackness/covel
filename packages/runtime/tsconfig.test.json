@@ -6,35 +6,5 @@
     "allowJs": true,
     "lib": ["esnext", "dom"]
   },
-  "include": ["tests"],
-  "exclude": [
-    "tests/agent-guard-timeout.test.ts",
-    "tests/event-dependency-execution.test.ts",
-    "tests/session-kernel.test.ts",
-    "tests/setup-state-machine.test.ts",
-    "tests/story-completion-contract.test.ts",
-    "tests/suspension-artifact.test.ts",
-    "tests/tool-executor-capabilities.test.ts",
-    "tests/tool-executor-trace.test.ts",
-    "tests/trigger-edge-cases.test.ts",
-    "tests/trigger-ledger.test.ts",
-    "tests/trigger.test.ts",
-    "tests/trust-boundary.test.ts",
-    "tests/turn-completion-detached.test.ts",
-    "tests/turn-digest.test.ts",
-    "tests/turn-emitter.test.ts",
-    "tests/turn-event-chain.test.ts",
-    "tests/turn-executor-abort.test.ts",
-    "tests/turn-executor-batch-retry.test.ts",
-    "tests/turn-executor-budget-wiring.test.ts",
-    "tests/turn-executor-late-setup-hazard.test.ts",
-    "tests/turn-executor-manual-trigger.test.ts",
-    "tests/turn-executor-recursive-call.test.ts",
-    "tests/turn-executor-session-context.test.ts",
-    "tests/turn-executor-suspend.test.ts",
-    "tests/turn-executor-turn-result-always-saved.test.ts",
-    "tests/turn-executor.test.ts",
-    "tests/world-ir-pipeline.test.ts",
-    "tests/world-model-view.test.ts"
-  ]
+  "include": ["tests"]
 }
