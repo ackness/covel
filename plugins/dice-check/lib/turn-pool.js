@@ -41,9 +41,9 @@ export function poolOf(sessionId, turnId) {
 }
 
 /**
- * A receipt of this turn agreed with the dice. `emit-event` records one
- * event of a topic in a turn, so a later receipt of the turn changes nothing
- * and is not sent back a second time.
+ * A receipt of this turn was recorded. `emit-event` records one event of a
+ * topic in a turn, so a later receipt of the turn changes nothing and is not
+ * sent back a second time.
  */
 export function acceptReceipt(sessionId, turnId) {
   const key = keyOf(sessionId, turnId);

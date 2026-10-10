@@ -58,10 +58,9 @@ export default function verifyCheckReceipt(ctx, payload) {
   const wrong = results.flatMap((result, index) =>
     result.outcome === checks[index].outcome ? [] : [index],
   );
-  if (wrong.length === 0) {
-    acceptReceipt(ctx.sessionId, ctx.turnId);
-    return { action: "continue" };
-  }
+  // Not marked as accepted here: the event catalogue can still refuse the
+  // payload, and the receipt sent after that must be checked as well.
+  if (wrong.length === 0) return { action: "continue" };
 
   const line = (index) => {
     const result = results[index];
@@ -80,4 +79,23 @@ export default function verifyCheckReceipt(ctx, payload) {
       "Send check.resolved again with these outcomes and the same actions, modifiers and difficulties. Then write the prose to match these outcomes.",
     ].join(" "),
   };
+}
+
+/**
+ * Mark the turn's receipt as accepted when `emit-event` recorded it. A receipt
+ * that agreed with the dice but was refused by the event catalogue (a missing
+ * field, for example) is not recorded, so the one sent after it is checked
+ * against the dice again.
+ */
+export function acceptRecordedReceipt(ctx, payload) {
+  if (payload.toolCall.name !== "emit-event") return { action: "continue" };
+  if (payload.result?.success !== true) return { action: "continue" };
+  let args;
+  try {
+    args = JSON.parse(payload.toolCall.arguments);
+  } catch {
+    return { action: "continue" };
+  }
+  if (args?.topic === TOPIC) acceptReceipt(ctx.sessionId, ctx.turnId);
+  return { action: "continue" };
 }
