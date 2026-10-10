@@ -4,7 +4,7 @@
 
 ## World Package
 
-世界包加载会读取声明语言对应的 `WORLD.<locale>.md`。叙事上下文按固定的会话语言选择正文，默认语言优先使用数据库中的已编辑内容；会话的 `loreOverride`（包括空字符串）优先。正文以有界的 `<world-lore>` 段进入故事提示词：上限约 8,000 token（按估算 token 计，中文一字约一个、其他文字四个字符约一个），超出时在最后一个放得下的整行之后截断。翻译模型结果先保存在内存中，发布时在世界操作锁内核对创建时间、实际包路径和目录身份，再合并新语言及其正文，保留已保存的编辑；删除中或同 ID 重建的世界拒绝旧翻译，旧请求不会写入或清理新包文件。
+世界包加载会读取声明语言对应的 `WORLD.<locale>.md`。叙事上下文按固定的会话语言选择正文，默认语言优先使用数据库中的已编辑内容；会话的 `loreOverride`（包括空字符串）优先。正文以有界的 `<world-lore>` 段进入故事提示词：上限约 8,000 token（按估算 token 计，中文一字约一个、其他文字四个字符约一个），超出时在最后一个放得下的整行之后截断。叙事专用段（`<!-- narrator-only -->`）也算在内，因为模型会读。`pnpm validate:world` 给出估算值与上限的警告，世界详情页对放不下的世界也会显示一条说明。翻译模型结果先保存在内存中，发布时在世界操作锁内核对创建时间、实际包路径和目录身份，再合并新语言及其正文，保留已保存的编辑；删除中或同 ID 重建的世界拒绝旧翻译，旧请求不会写入或清理新包文件。
 
 AI 修订发布时会在世界操作锁内复核原记录与文件包身份。生成期间的编辑、删除或同 ID 重建会使旧结果失效，不再用旧修订覆盖当前世界。
 
@@ -26,7 +26,7 @@ AI 修订发布时会在世界操作锁内复核原记录与文件包身份。�
 ```text
 worlds/my-world/
 ├── world.yaml
-├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en.md 等语言版本
+├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en-US.md 等语言版本
 ├── data/
 │   ├── world.data.yaml               # 可选：文件不在约定位置、或要指定顺序时才需要
 │   ├── dimensions.yaml
@@ -247,12 +247,12 @@ AI 创建器写出的包和手写的世界包一样按[约定路径](#按约定�
 
 世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内四个世界展示了不同的数据组合：
 
-| 示例                    | 玩家体验                                    | 主要能力                                                                                                                                                                                                                                            | 适合参考的文件                                                                                                                     |
-| ----------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按 locale 选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                           | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
-| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台 | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                          | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
-| `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
-| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
+| 示例                    | 玩家体验                                    | 主要能力                                                                                                                                                                                                                                                  | 适合参考的文件                                                                                                                     |
+| ----------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按 locale 选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                 | `world.yaml`、`WORLD.zh-CN.md` / `WORLD.en-US.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                  |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台 | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
+| `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                                     | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
+| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`            |
 
 雾港、春华学园与提灯古冢用 `data/world.data.yaml` 列出 source，Emberback 没有 descriptor、按约定路径读取；两种写法走同一导入协议，但不会为了展示能力而加入与题材无关的插件。四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：作者预设的隐藏事件之外，它会根据游玩中留下的线索追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
@@ -307,7 +307,9 @@ seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后�
 
 ZIP 安装在激活前复用 worldData 加载校验：声明的 descriptor/source 缺失、source 无法解析或不满足其自带 schema 等 `error` 诊断返回 400，不创建世界记录，并移除本次新建目录；修复后可用同一 ID 重试。`warning` 不阻止安装。校验只读取包内数据，不让本机 overrides 掩盖包错误，也不执行社区代码；启动 seed 的 worldData 错误容错策略不变。
 
-server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，包含 Linux。已有世界的 YAML / Markdown 文件变化会按物理目录延迟 500ms 合并后重读，读取后使用清单的 `id` 查询、更新世界并通知会话（目录名无需与 `id` 相同）；**仅维度发生变化时**更新存储，并向使用该世界的 session 发出 `world.dimensions.changed`。这是作者声明变化通知，不会将会话的演化值重置成新初值；已有会话需显式同步并检查冲突。它不是完整世界包或插件的热重载：直接放入一个新世界目录需重启 seed 或走安装入口，其他世界内容更新也应重启加载。
+server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，包含 Linux。世界包里除图片、音频和编辑器临时文件外的任何文件变化（`world.yaml`、`WORLD.md`、各语言版本、`data/`、`characters/`、`media/*.json` 等）都会按物理目录延迟 500ms 合并后重读，读取后用清单的 `id` 查询世界；有任何差异就更新存储中的世界记录，并在日志里写出重载了什么（设定正文、名称与简介、维度、插件策略与设置、世界数据与设置），目录名无需与 `id` 相同。清单或正文读不出来时记录 warning，已加载的版本继续使用。在应用里被玩家编辑过的世界（`packageModified`）保留编辑后的副本，文件改动不覆盖。
+
+重载影响的范围：**新建的会话**读取最新的世界包；**已有会话**在下一回合读到新的设定正文（正文每回合从世界记录读取，会话自带 `loreOverride` 时仍用它），但会话创建时已经导入的内容——角色、世界书条目、维度值、已提交的状态——不会被改写，想用新的数据需要新开会话（维度另有同步入口）。维度发生变化时向使用该世界的 session 发出 `world.dimensions.changed`；这是作者声明变化通知，不会将会话的演化值重置成新初值，已有会话需显式同步并检查冲突。它不是完整世界包或插件的热重载：直接放入一个新世界目录需重启 seed 或走安装入口。
 
 若文件系统不支持监听，启动会记录 warning；维度也可通过 `POST /api/worlds/:id/dimensions/import` 导入。插件安装后仍需重启服务。实现见 `apps/server/src/world-file-watcher.ts`，安装响应见 [API 参考](./api.md#installed-resource-storage-and-vector-configuration)。
 
@@ -474,15 +476,17 @@ sources:
 
 **主文件只写一种语言**，即 `world.yaml` 的 `defaultLocale`。其他语言放在主文件旁边的 `<name>.<locale>.<ext>` 里，只写译文，不重复结构：
 
+`<locale>` 写成 `supportedLocales` 里的完整写法（`en-US`、`zh-CN`），不要只写语言（`.en`、`.zh`）。`pnpm validate:world` 对只写语言的译文文件报错，并给出应改成的文件名。
+
 ```text
 world.yaml                     # 主文件，defaultLocale 的文本
 world.en-US.yaml               # 只有英文译文
 data/dimensions.yaml
 data/dimensions.en-US.yaml
 characters/main-cast.json
-characters/main-cast.en.json
+characters/main-cast.en-US.json
 WORLD.md
-WORLD.en.md                    # 正文类文件没有可对齐的 id，整份替换
+WORLD.en-US.md                 # 正文类文件没有可对齐的 id，整份替换
 ```
 
 ```yaml
@@ -903,6 +907,8 @@ sources:
     key: registryId
     after: music
 ```
+
+世界的封面和主题色同样写在 `world.yaml`：`cover` 是一张图片的路径（`media/` 下一层目录里的 `.png` / `.jpg` / `.webp`，例如 `media/gallery/world-cover.webp`），世界卡片、世界详情、准备页和会话背景都用它；`accentColor` 是卡片与标题的强调色，写 `#rrggbb` 或 `oklch(72% 0.12 75)`。两项都可省略：没有 `cover` 时界面用自带的默认背景，没有 `accentColor` 时按世界 ID 派生一个固定的色相。封面不必列在 `media/gallery.json` 里；列了的话，世界详情的图集不再把它重复展示一遍。`pnpm validate:world` 会检查封面文件能否显示，颜色写法不对则按 schema 报错。AI 生成的世界没有图片，所以不带这两项。
 
 世界列表上的音乐是另一回事：`world.yaml` 的 `themeMusic` 写一个音频文件的路径（`media/` 下一层目录里的 `.mp3` / `.wav`，例如 `media/music/theme.mp3`），世界选择页和世界详情在展示这个世界时播放它，不需要任何插件。它通常和曲目表里 `theme: true` 的那首是同一个文件。`pnpm validate:world` 会检查这个文件能否播放。
 

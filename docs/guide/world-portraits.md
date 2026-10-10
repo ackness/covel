@@ -81,7 +81,7 @@ node scripts/emit-presence.mjs haruka-academy
 node scripts/emit-presence.mjs emberback
 ```
 
-> ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。脚本只写默认语言文件；如有 `presence.en.json`，须同步媒体引用、保留英文显示名称，并运行世界资源测试。
+> ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。脚本只写默认语言文件；如有 `presence.en-US.json`，须同步媒体引用、保留英文显示名称，并运行世界资源测试。
 
 四个世界都已把 `character-blueprint` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
 

@@ -9,6 +9,9 @@
 
 import { resolveI18nText, validateDimensionData } from "@covel/shared";
 
+// `cover` and `accentColor` are left out on purpose: a generated world ships
+// no picture, so a model-written path would name a file that does not exist.
+// The app shows its default background for a world without a cover.
 const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "schemaVersion",
   "id",

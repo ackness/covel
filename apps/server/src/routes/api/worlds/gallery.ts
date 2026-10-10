@@ -14,6 +14,7 @@ import { errorBody } from "../../../api-error.js";
 import {
   listWorldGallery,
   listWorldGalleryFiles,
+  resolveWorldCover,
   resolveWorldThemeMusic,
 } from "../../../world-data/gallery.js";
 import { resolveWorldRoot } from "../../../world-data/session-import/utils.js";
@@ -74,7 +75,7 @@ worldGalleryRoutes.get("/:id/gallery", async (c) => {
   });
 });
 
-// GET /worlds/:id/gallery/:source/:file — a listed image, or the theme music
+// GET /worlds/:id/gallery/:source/:file — a listed image, the cover, or the theme music
 worldGalleryRoutes.get("/:id/gallery/:source/:file", async (c) => {
   const worldId = c.req.param("id");
   const worldRoot = await resolveWorldRoot(worldId, c.get("worldsDirs") ?? []);
@@ -83,17 +84,20 @@ worldGalleryRoutes.get("/:id/gallery/:source/:file", async (c) => {
   const names = (entry: { source: string; file: string }) =>
     entry.source === source && entry.file === file;
   const theme = worldRoot ? await resolveWorldThemeMusic({ worldRoot }) : null;
+  const cover = worldRoot ? await resolveWorldCover({ worldRoot }) : null;
   const match = !worldRoot
     ? undefined
     : theme && names(theme)
       ? theme
-      : (
-          await listWorldGalleryFiles({
-            worldRoot,
-            worldId,
-            covelHome: c.get("covelHome"),
-          })
-        ).find(names);
+      : cover && names(cover)
+        ? cover
+        : (
+            await listWorldGalleryFiles({
+              worldRoot,
+              worldId,
+              covelHome: c.get("covelHome"),
+            })
+          ).find(names);
   if (!match) return c.json(errorBody("File not found"), 404);
 
   const etag = `"${match.version}"`;

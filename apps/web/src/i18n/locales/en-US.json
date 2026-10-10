@@ -476,6 +476,7 @@
     "backToList": "Back to List",
     "noData": "No data available",
     "noStructuredData": "No structured data available",
+    "loreTooLong": "This world's lore is about {{tokens}} tokens, and the story prompt carries only the first {{budget}}. The rest is cut. Shorten WORLD.md, or move situational facts into lorebook entries.",
     "dimensionsEmpty": "No world dimension data generated yet.",
     "geography": "Geography",
     "geographyOverview": "Overview",

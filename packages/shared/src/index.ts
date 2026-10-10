@@ -115,6 +115,8 @@ export {
   withNarratorOnlyLore,
 } from "./utils/narrator-only-lore.js";
 export type { NarratorOnlyLoreIssue } from "./utils/narrator-only-lore.js";
+export { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "./utils/world-lore.js";
+export type { FittedWorldLore } from "./utils/world-lore.js";
 export type {
   PluginMessageCatalog,
   PluginMessages,
@@ -266,6 +268,7 @@ export {
   attributeDefinitionSchema,
   characterSchemaSchema,
   worldManifestSchema,
+  WORLD_ACCENT_PATTERN,
   worldDimensionsSchema,
   worldGeographySchema,
   worldFactionSchema,

@@ -476,6 +476,7 @@
     "backToList": "返回列表",
     "noData": "暂无数据",
     "noStructuredData": "暂无结构化数据",
+    "loreTooLong": "这个世界的设定约 {{tokens}} 词元，故事提示词只带前 {{budget}}，其余会被截掉。请精简 WORLD.md，或把情境性内容改写成世界书条目。",
     "dimensionsEmpty": "尚未生成世界维度数据。",
     "geography": "地理",
     "geographyOverview": "地理概述",

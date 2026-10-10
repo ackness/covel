@@ -1,11 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { WorldRecord } from "@/services/api.js";
-import {
-  worldVisual,
-  worldVisualForId,
-  worldVisualForTags,
-} from "../world-visuals.js";
+import { worldCoverRef, worldVisual } from "../world-visuals.js";
 
 function makeWorld(overrides: Partial<WorldRecord>): WorldRecord {
   return {
@@ -18,30 +14,39 @@ function makeWorld(overrides: Partial<WorldRecord>): WorldRecord {
 }
 
 describe("world visuals", () => {
-  it("matches bundled worlds by id", () => {
-    expect(worldVisualForId("emberback")?.image).toBe(
-      "/visuals/worlds/emberback.webp",
+  it("shows the cover and accent the world declares", () => {
+    const visual = worldVisual(
+      makeWorld({
+        metadata: {
+          cover: "media/gallery/world-cover.webp",
+          accentColor: "#c9a24b",
+        },
+      }),
     );
-    expect(worldVisualForId("mistport")?.image).toBe(
-      "/visuals/worlds/mistport.webp",
+    expect(visual.image).toBe(
+      "/api/worlds/test-world/gallery/gallery/world-cover.webp",
     );
-    expect(worldVisual(makeWorld({ id: "neonridge" })).image).toBe(
-      "/visuals/worlds/neonridge.webp",
+    expect(visual.accent).toBe("#c9a24b");
+  });
+
+  it("uses the studio background and a stable hue for a world that declares nothing", () => {
+    const first = worldVisual(makeWorld({ tags: ["romance"] }));
+    expect(first.image).toBe("/visuals/backgrounds/studio-shell.webp");
+    expect(first.accent).toMatch(/^oklch\(72% 0\.12 \d+\)$/);
+    expect(worldVisual(makeWorld({})).accent).toBe(first.accent);
+    expect(worldVisual(makeWorld({ id: "other-world" })).accent).not.toBe(
+      first.accent,
     );
   });
 
-  it("falls back to the first matching tag", () => {
-    expect(worldVisualForTags(["romance"])?.image).toBe(
-      "/visuals/worlds/haruka-academy.webp",
-    );
-    expect(worldVisual(makeWorld({ tags: ["custom", "xianxia"] })).image).toBe(
-      "/visuals/worlds/cloudmere.webp",
-    );
-  });
-
-  it("uses the studio background when no world signal matches", () => {
-    expect(worldVisual(makeWorld({ tags: ["unknown"] })).image).toBe(
+  it("ignores a cover path or accent it cannot use", () => {
+    const world = makeWorld({
+      metadata: { cover: "../secret.png", accentColor: "red; background: x" },
+    });
+    expect(worldCoverRef(world)).toBeNull();
+    expect(worldVisual(world).image).toBe(
       "/visuals/backgrounds/studio-shell.webp",
     );
+    expect(worldVisual(world).accent).toMatch(/^oklch\(/);
   });
 });

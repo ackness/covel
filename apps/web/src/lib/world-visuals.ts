@@ -1,88 +1,60 @@
+import { WORLD_ACCENT_PATTERN } from "@covel/shared";
 import type { WorldRecord } from "@/services/api.js";
 
 export interface WorldVisual {
   image: string;
   accent: string;
-  label: string;
 }
 
-const DEFAULT_VISUAL: WorldVisual = {
-  image: "/visuals/backgrounds/studio-shell.webp",
-  accent: "var(--accent-primary)",
-  label: "Covel Studio",
-};
+const DEFAULT_IMAGE = "/visuals/backgrounds/studio-shell.webp";
 
-const BUNDLED_VISUALS = {
-  "lantern-barrow": {
-    image: "/visuals/worlds/lantern-barrow.webp",
-    accent: "oklch(72% 0.12 75)",
-    label: "Lantern Barrow",
-  },
-  cloudmere: {
-    image: "/visuals/worlds/cloudmere.webp",
-    accent: "oklch(72% 0.16 75)",
-    label: "Cloudmere",
-  },
-  emberback: {
-    image: "/visuals/worlds/emberback.webp",
-    accent: "oklch(72% 0.14 50)",
-    label: "Emberback",
-  },
-  "haruka-academy": {
-    image: "/visuals/worlds/haruka-academy.webp",
-    accent: "oklch(72% 0.15 350)",
-    label: "Haruka Academy",
-  },
-  mistport: {
-    image: "/visuals/worlds/mistport.webp",
-    accent: "oklch(72% 0.1 185)",
-    label: "Mistport",
-  },
-  neonridge: {
-    image: "/visuals/worlds/neonridge.webp",
-    accent: "oklch(72% 0.16 220)",
-    label: "Neon Ridge",
-  },
-} satisfies Record<string, WorldVisual>;
-
-const VISUALS_BY_ID: Record<string, WorldVisual> = BUNDLED_VISUALS;
-
-const VISUALS_BY_TAG: Record<string, WorldVisual> = {
-  adventure: BUNDLED_VISUALS.cloudmere,
-  cyberpunk: BUNDLED_VISUALS.neonridge,
-  "dark-fantasy": BUNDLED_VISUALS.mistport,
-  exploration: BUNDLED_VISUALS.mistport,
-  hacker: BUNDLED_VISUALS.neonridge,
-  mystery: BUNDLED_VISUALS.mistport,
-  noir: BUNDLED_VISUALS.neonridge,
-  romance: BUNDLED_VISUALS["haruka-academy"],
-  school: BUNDLED_VISUALS["haruka-academy"],
-  "slice-of-life": BUNDLED_VISUALS["haruka-academy"],
-  thriller: BUNDLED_VISUALS.neonridge,
-  xianxia: BUNDLED_VISUALS.cloudmere,
-};
-
-export function worldVisualForId(id: string | undefined): WorldVisual | null {
-  return id ? (VISUALS_BY_ID[id] ?? null) : null;
+/** `media/<dir>/<file>` of a declared cover, or null when it is not that shape. */
+function coverParts(
+  declared: unknown,
+): { source: string; file: string } | null {
+  if (typeof declared !== "string") return null;
+  const segments = declared.split("/");
+  if (
+    segments.length !== 3 ||
+    segments[0] !== "media" ||
+    segments.some((segment) => !segment || segment.startsWith("."))
+  )
+    return null;
+  return { source: segments[1]!, file: segments[2]! };
 }
 
-export function worldVisualForTags(
-  tags: readonly string[] | undefined,
-): WorldVisual | null {
-  if (!tags) return null;
-  for (const tag of tags) {
-    const visual = VISUALS_BY_TAG[tag];
-    if (visual) return visual;
-  }
-  return null;
+/** The address of the world's declared cover on the server, if it declares one. */
+export function worldCoverRef(
+  world: Pick<WorldRecord, "id" | "metadata"> | null | undefined,
+): { url: string; source: string; file: string } | null {
+  const parts = coverParts(world?.metadata?.cover);
+  if (!world || !parts) return null;
+  return {
+    ...parts,
+    url: `/api/worlds/${encodeURIComponent(world.id)}/gallery/${encodeURIComponent(parts.source)}/${encodeURIComponent(parts.file)}`,
+  };
 }
 
+/** A world that declares no accent gets a stable hue from its ID. */
+function accentFromId(id: string): string {
+  let hash = 0;
+  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+  return `oklch(72% 0.12 ${hash})`;
+}
+
+/** What the world declares, else the app's default picture and a hue from its ID. */
 export function worldVisual(
   world: WorldRecord | null | undefined,
 ): WorldVisual {
-  return (
-    worldVisualForId(world?.id) ??
-    worldVisualForTags(world?.tags) ??
-    DEFAULT_VISUAL
-  );
+  const declared = world?.metadata?.accentColor;
+  const accent =
+    typeof declared === "string" && WORLD_ACCENT_PATTERN.test(declared)
+      ? declared
+      : world
+        ? accentFromId(world.id)
+        : "var(--accent-primary)";
+  return {
+    image: worldCoverRef(world)?.url ?? DEFAULT_IMAGE,
+    accent,
+  };
 }

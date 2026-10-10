@@ -22,6 +22,8 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
+cover: media/gallery/world-cover.webp
+accentColor: "oklch(72% 0.15 350)"
 pluginPolicy:
   packs:
     - id: haruka-galgame

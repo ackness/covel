@@ -18,7 +18,9 @@ import { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "@covel/context";
 import {
   DEFAULT_LOCALE,
   estimateTokens,
+  isKnownLocale,
   isValidPluginSetting,
+  localeLanguage,
   applyLocaleOverlay,
   findInlineLocaleMaps,
   narratorLore,
@@ -44,7 +46,7 @@ import { preflightWorldDataForSession } from "./session-import.js";
 import { readEffectiveDimensions } from "./session-import/dimensions.js";
 import { fileExists } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
-import { resolveWorldThemeMusic } from "./gallery.js";
+import { resolveWorldCover, resolveWorldThemeMusic } from "./gallery.js";
 import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
 import { loadWorldDataSummary } from "./world-load.js";
@@ -70,7 +72,9 @@ export interface WorldPackageDiagnostic {
     | "data-file-unused"
     | "inline-locale-map"
     | "prompt-size"
-    | "theme-music";
+    | "theme-music"
+    | "cover"
+    | "locale-file-name";
   /** Path relative to the world directory. */
   readonly file?: string;
   /** Location inside `file`, such as `pluginPolicy.requested[1]`. */
@@ -110,6 +114,7 @@ interface WorldManifestView {
   readonly dimensions?: unknown;
   readonly dimensionSources?: Readonly<Record<string, string>>;
   readonly themeMusic?: string;
+  readonly cover?: string;
   readonly pluginPolicy?: {
     readonly presetId?: string;
     readonly requested?: readonly string[];
@@ -242,6 +247,89 @@ async function checkThemeMusic(
       file: manifest.themeMusic,
       message: `\`themeMusic\` names "${manifest.themeMusic}", which the world list cannot play`,
       hint: "Name an existing `.mp3` or `.wav` file one directory under `media/`, such as `media/music/theme.mp3`, of at most 20 MB.",
+    },
+  ];
+}
+
+/** `<name>.<language>.<ext>`: a translation file named with a bare language. */
+const BARE_LANGUAGE_FILE = /^(.+)\.([A-Za-z]{2,3})\.(md|ya?ml|json)$/;
+const MAX_SCANNED_FILES = 5000;
+
+/**
+ * A translation file is named with the locale exactly as `supportedLocales`
+ * writes it (`WORLD.en-US.md`, `world.en-US.yaml`). A bare language (`.en`)
+ * is turned down: it would also answer a session in any other region of that
+ * language, and one world should not use two spellings for one edition.
+ */
+async function checkLocaleFileNames(
+  worldDir: string,
+  manifest: WorldManifestView,
+): Promise<WorldPackageDiagnostic[]> {
+  const declared = declaredLocales(manifest);
+  const diagnostics: WorldPackageDiagnostic[] = [];
+  let scanned = 0;
+  async function visit(directory: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(path.join(worldDir, directory), {
+        withFileTypes: true,
+      });
+    } catch {
+      return;
+    }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+      const relative = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(relative);
+        continue;
+      }
+      if (!entry.isFile() || ++scanned > MAX_SCANNED_FILES) continue;
+      const match = BARE_LANGUAGE_FILE.exec(entry.name);
+      if (!match) continue;
+      const [, name, tag, extension] = match as unknown as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      if (!isKnownLocale(tag)) continue;
+      const exact = declared.find(
+        (locale) =>
+          locale.toLowerCase() !== tag.toLowerCase() &&
+          localeLanguage(locale) === tag.toLowerCase(),
+      );
+      if (!exact || declared.some((l) => l.toLowerCase() === tag.toLowerCase()))
+        continue;
+      const renamed = path.join(directory, `${name}.${exact}.${extension}`);
+      diagnostics.push({
+        level: "error",
+        code: "locale-file-name",
+        file: relative,
+        locales: [exact],
+        message: `\`${entry.name}\` names its language as "${tag}", but the world declares "${exact}"`,
+        hint: `Rename it to \`${renamed}\`. A translation file uses the locale exactly as \`supportedLocales\` writes it.`,
+      });
+    }
+  }
+  await visit("");
+  return diagnostics;
+}
+
+/** The app shows `cover` only when the server can serve the file. */
+async function checkCover(
+  worldDir: string,
+  manifest: WorldManifestView,
+): Promise<WorldPackageDiagnostic[]> {
+  if (!manifest.cover) return [];
+  if (await resolveWorldCover({ worldRoot: worldDir })) return [];
+  return [
+    {
+      level: "error",
+      code: "cover",
+      file: manifest.cover,
+      message: `\`cover\` names "${manifest.cover}", which the app cannot show`,
+      hint: "Name an existing `.png`, `.jpg` or `.webp` file one directory under `media/`, such as `media/gallery/world-cover.webp`, of at most 20 MB.",
     },
   ];
 }
@@ -657,6 +745,7 @@ async function unclaimedDataFiles(
   for (const file of Object.values(manifest.dimensionSources ?? {}))
     claimed.add(file);
   if (manifest.themeMusic) claimed.add(manifest.themeMusic);
+  if (manifest.cover) claimed.add(manifest.cover);
   const directories = sources
     .filter((source) => source.descriptor.kind === "media")
     .map((source) => source.descriptor.path.replace(/\/$/, "") + "/");
@@ -930,6 +1019,8 @@ export async function validateWorldPackage(
       ...overlayDiagnostics(source.issues),
       ...(await checkLore(worldDir, manifest)),
       ...(await checkThemeMusic(worldDir, manifest)),
+      ...(await checkCover(worldDir, manifest)),
+      ...(await checkLocaleFileNames(worldDir, manifest)),
       ...(await checkEditions(worldDir, manifest)),
       ...checkPluginReferences(manifest, catalogue, strict),
       ...(await checkWorldData(worldDir, manifest, catalogue, strict)),

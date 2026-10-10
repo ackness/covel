@@ -69,6 +69,7 @@ export async function readWorldManifest(worldRoot: string): Promise<{
   characterSchema?: unknown;
   defaultLocale?: string;
   themeMusic?: string;
+  cover?: string;
 }> {
   // `world.<locale>.yaml` overlays are compiled in, as the world loader does.
   const { raw } = await readWorldManifestSource(worldRoot);
@@ -84,6 +85,7 @@ export async function readWorldManifest(worldRoot: string): Promise<{
           typeof raw.worldData === "string" ? raw.worldData : undefined,
         themeMusic:
           typeof raw.themeMusic === "string" ? raw.themeMusic : undefined,
+        cover: typeof raw.cover === "string" ? raw.cover : undefined,
       }
     : {};
 }
