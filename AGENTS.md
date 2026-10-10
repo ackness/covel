@@ -58,7 +58,8 @@ Guides (`docs/guide/`) — task walkthroughs:
 - Themes: `themes.md`; agent skills: `skills.md`
 
 Also: `README.md` / `docs/README.md` (intro, quick start), `docs/CONTRIBUTING.md`
-(contributing, CI, release), `docs/CHANGELOG.md`, `docs/DOCS_STRATEGY.md`
+(contributing, CI, release), `docs/CHANGELOG.md` (pending entries are the files in
+`docs/changelog.d/`; `pnpm changelog:preview` prints them), `docs/DOCS_STRATEGY.md`
 (information architecture), and `docs/v2/` (the reading-path rewrite in progress;
 it has its own `AGENTS.md`).
 
@@ -89,7 +90,8 @@ pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` fir
 pnpm dev:electron     # desktop shell in development
 pnpm stop             # kill stray dev/turbo processes
 pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails), package boundaries, deps:check,
-                      # plugin manifests, schema reference, prompt variants, i18n, script regressions, actionlint
+                      # plugin manifests, schema reference, prompt variants, i18n, changelog fragments,
+                      # script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package), test code included
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:docs        # the tests that read documentation; all a documentation-only change needs after pnpm check
@@ -142,15 +144,24 @@ pnpm check:boundaries # workspace public entry points, declared deps, package di
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity; exits non-zero
                       # while findings remain, so it is a report, not a gate
+pnpm check:push       # what the pre-push hook runs, on the committed HEAD: install, pnpm check, the tests of
+                      # the packages changed since origin/main with their dependents, pnpm e2e --list;
+                      # --full runs every suite, --base <ref> measures from another branch
+pnpm changelog:preview  # print [Unreleased] as the next release will have it, from docs/changelog.d/
+pnpm changelog:release  # at release: pnpm changelog:release <version> [--date YYYY-MM-DD] moves the
+                      # fragments into docs/CHANGELOG.md and deletes them (docs/changelog.d/README.md)
 pnpm format           # Prettier
 pnpm build            # all Turbo build targets
 pnpm build:electron   # production desktop installer → release/
 pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/prompt structure
 ```
 
-Before pushing, run `pnpm check` and `pnpm test` — `pnpm lint` alone misses the
-dependency, manifest, i18n, and workflow gates. Add `pnpm test:pg` for store or
-database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows.
+Before pushing, run `pnpm check` and the tests of the packages you changed
+(`pnpm --filter <pkg> test`) — `pnpm lint` alone misses the dependency, manifest,
+i18n, and workflow gates. `pnpm check:push` does both in a clean checkout, and the
+push that follows it sends without running them again. Add `pnpm test:pg` for
+store or database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows. CI runs
+every suite; `pnpm test` runs them all locally.
 
 Every command in the block above is expected to run as written. A command shown
 in `docs/`, a template, or a skill must be one that actually runs: when a root
@@ -159,13 +170,23 @@ sequence and fix every page that shows it.
 
 Git hooks: pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint (rules in
 `.oxlintrc.jsonc`, the same `--deny-warnings` as `pnpm check`), and the full
-`pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs install,
-`pnpm check`, `pnpm test`, and `pnpm e2e --list` in a clean checkout of each pushed
-tip (`pnpm check:push` runs the same check on HEAD). The checkout uses the Turbo
-cache the worktrees share, so a task already run on the same tracked inputs
-replays. CI (`.github/workflows/ci.yml`) runs check/test/build, Web unit tests,
-server tests with the runtime coverage floor, PostgreSQL integration, and browser
-smoke in parallel jobs; see `docs/CONTRIBUTING.md`.
+`pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs what the push can
+break, in a clean checkout of each pushed tip: install, `pnpm check`, the tests of
+the packages changed since the remote's main branch with the packages that depend
+on them, and `pnpm e2e --list` (`pnpm check:push` runs the same check on HEAD).
+A suite that reads files outside its package runs when its `$TURBO_ROOT$` inputs in
+`turbo.json` name a changed file, so keep those inputs true. Every suite runs when
+the change touches the lockfile, `turbo.json`, `vitest.base.ts`, the root
+`package.json` / `tsconfig.json`, or a root file no rule accounts for
+(`scripts/lib/push-scope.mjs`), on a push to `main` or of a tag, when the remote's
+main branch is unknown, and on request (`COVEL_PUSH_CHECK=full git push`,
+`pnpm check:push --full`). The checkout uses the Turbo cache the worktrees share,
+so a task already run on the same tracked inputs replays. A commit that passed is
+remembered for 12 hours and is not checked again when its push is repeated. CI
+(`.github/workflows/ci.yml`) runs everything: check, every test suite and the
+build, with Web unit tests, server tests with the runtime coverage floor,
+PostgreSQL integration, and browser smoke in parallel jobs; see
+`docs/CONTRIBUTING.md`.
 
 A change that touches only documentation takes a short path in both places: the
 hook and `.github/workflows/docs.yml` run `pnpm check` and `pnpm test:docs`, and
@@ -174,8 +195,9 @@ hook and `.github/workflows/docs.yml` run `pnpm check` and `pnpm test:docs`, and
 `.claude/skills/**`, `.assets/**`, `LICENSE`, and the issue and pull request
 templates (`scripts/lib/change-scope.mjs`). Markdown that a loader reads
 (`PLUGIN.md`, `RUNTIME.md`, `WORLD.md`, the files under `prompts/`) is source. A
-test that reads documentation must be named in the root `test:docs` script;
-`scripts/tests/change-scope.test.mjs` fails otherwise.
+changelog fragment is documentation. A test that reads documentation must be named
+in the root `test:docs` script; `scripts/tests/change-scope.test.mjs` fails
+otherwise.
 
 Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`.
 Keep `tailwind-lint` read-only: v0.12.1 can treat ordinary TypeScript identifiers
@@ -529,7 +551,7 @@ PR; a missing sync means an incomplete PR.
 - Change the plugin scaffold (`scripts/create-plugin.js`, `templates/`) → the template READMEs + `docs/guide/plugin-authoring.md` + `docs/guide/plugin-testing.md` + `.claude/skills/create-plugin/`
 - Change CI workflows, git hooks, or the pre-push verification steps → `docs/CONTRIBUTING.md` + `docs/CONTRIBUTING.en.md` + `.github/PULL_REQUEST_TEMPLATE.md`
 - Introduce or rename a term → `docs/glossary.md`
-- Any user-visible change → an entry under `[Unreleased]` in `docs/CHANGELOG.md`
+- Any user-visible change → a changelog fragment: a new file `docs/changelog.d/<slug>.md` with the entries under `### <Section>` headings (`docs/changelog.d/README.md`). Do not edit `docs/CHANGELOG.md`; `pnpm changelog:release` writes it at release
 - Edit a page that has an `.en.md` sibling, or `README.md` / `README.zh-CN.md` → update both in the same PR
 
 ## State & Persistence

@@ -25,14 +25,16 @@
 ## Verification / 验证方式
 
 <!-- Tick what actually ran and note what was skipped and why. The pre-push hook covers
-     `pnpm check`, `pnpm test`, and `pnpm e2e --list` in a clean checkout
-     (for a documentation-only push: `pnpm check` and `pnpm test:docs`).
-     只勾选真正跑过的项，没跑的写明原因。pre-push hook 会在干净检出里跑
-     `pnpm check`、`pnpm test` 和 `pnpm e2e --list`
-     （只改文档的推送：`pnpm check` 和 `pnpm test:docs`）。 -->
+     `pnpm check`, the tests of the packages this branch changed (with their dependents),
+     and `pnpm e2e --list` in a clean checkout (for a documentation-only push: `pnpm check`
+     and `pnpm test:docs`). CI runs every suite.
+     只勾选真正跑过的项，没跑的写明原因。pre-push hook 会在干净检出里跑 `pnpm check`、
+     本分支改动的包及依赖它们的包的测试，以及 `pnpm e2e --list`
+     （只改文档的推送：`pnpm check` 和 `pnpm test:docs`）。全部测试由 CI 运行。 -->
 
-- [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, workflows -->
-- [ ] `pnpm test`
+- [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, changelog fragments, workflows -->
+- [ ] Tests of the changed packages (`pnpm check:push`, or `pnpm --filter <pkg> test`) / 改动包的测试
+- [ ] `pnpm test` <!-- every suite; CI runs it / 全部测试，CI 会运行 -->
 - [ ] `pnpm test:pg` <!-- store or database changes / 改动存储或数据库时 -->
 - [ ] `pnpm e2e:smoke` / `pnpm e2e:extensions` / `pnpm e2e` <!-- UI or end-to-end flow changes / 改动界面或端到端流程时 -->
 - [ ] `pnpm validate:plugin` / `pnpm validate:world` <!-- plugin or world package changes / 改动插件或世界包时 -->
@@ -52,7 +54,7 @@
 
 - [ ] `docs/reference/` updated for changed contracts, APIs, tools, or protocol / 契约、API、工具或协议有变化时已更新 `docs/reference/`
 - [ ] Guides and both READMEs updated; pages with an `.en.md` sibling changed together / 已更新相关指南和中英文 README；有 `.en.md` 的页面两份同步修改
-- [ ] `docs/CHANGELOG.md` has an entry under `[Unreleased]` for user-visible changes / 用户可见的改动已写入 `docs/CHANGELOG.md` 的 `[Unreleased]`
+- [ ] A changelog fragment `docs/changelog.d/<slug>.md` for user-visible changes; `docs/CHANGELOG.md` is not edited / 用户可见的改动已新增 `docs/changelog.d/<slug>.md`，不直接改 `docs/CHANGELOG.md`
 - [ ] `AGENTS.md` updated if packages, root scripts, or conventions changed / 包结构、根脚本或约定有变化时已更新 `AGENTS.md`
 
 <!-- New assets: 3 MiB per file; worlds/*/media/gallery/*.png originals: 4 MiB. Prefer WebP for display. -->
