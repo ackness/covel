@@ -40,7 +40,7 @@ function makeCtx({
         worldTime: { value: { phase } },
         dimensions: { value: { location: { value: location, version: 1 } } },
       },
-      store: { getSession: async () => ({ completedPlayerTurns: 4 }) },
+      logicalTurn: 5,
       pluginData: {
         list: async (namespace) =>
           Object.entries(data[namespace] ?? {}).map(([key, value]) => ({

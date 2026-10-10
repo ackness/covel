@@ -10,7 +10,7 @@ function makeCtx(items) {
         plans: { cardinality: "all", items },
         dimensions: { value: { location: { value: "pier", version: 1 } } },
       },
-      store: { getSession: async () => ({ completedPlayerTurns: 2 }) },
+      logicalTurn: 3,
       pluginData: {
         list: async () => [],
         set: async (namespace, key, value) => {

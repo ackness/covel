@@ -114,7 +114,6 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 | `state.changed`          | S→C  | 游戏状态变更           | `{ table, field, value, runtimeId, pluginId }`     |
 | `event.emitted`          | S→C  | 已提交的游戏业务事件   | `{ topic?, type?, eventType?, data?, pluginId? }`  |
 | `domain-event.previewed` | S→C  | 已校验业务事件即时预览 | `{ runtimeId, pluginId, toolCallId, topic, data }` |
-| `record.updated`         | S→C  | 长期记录更新           | `{ key, value, recordType, runtimeId, pluginId }`  |
 
 `domain-event.previewed` 在 `emit-event` 工具完成 schema 校验并产出 `emittedEvents` 后立即发出，先于回合事件链和最终事务提交。它只允许驱动可撤销的表现层状态，不代表业务状态已经落库，也不满足 runtime binding/gate。Web 在 `execution.completed`、错误或 proposal 提交失败时清除同一回合预览；对应持久状态到达后以 `plugin-data.changed` 为准。这样舞台动画可在叙事流生成期间响应，同时保留整回合事务的原子性。
 
@@ -404,7 +403,7 @@ Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队�
 | 事件                                                       | 来源                                                                                          | 用途                                                                  |
 | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
-| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                                |
+| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                          |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
 | `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 可撤销表现层即时预览；不代表领域提交                                  |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
@@ -627,7 +626,6 @@ narrative.completed   → messages (completed)
 interaction.requested → messages (block)
 state.changed         → gameState (deep merge) + statePatches
 event.emitted         → gameState.events
-record.updated        → gameState.records
 interaction.submitted → 提交表单的调用方处理：SUBMIT_BLOCK + 玩家气泡（不经 handleSseEvent）
 execution.started     → executionSteps
 runtime.started       → executionSteps

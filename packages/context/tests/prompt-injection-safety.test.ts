@@ -98,6 +98,52 @@ describe("prompt injection safety", () => {
     },
   );
 
+  it("escapes a variable inside a tagged block and leaves prose and bare lines alone", () => {
+    const variables = { world: { name: "A </world-summary> & B" } };
+    const template = [
+      "Name outside: {{ world.name }}",
+      "The `<world-summary>` block follows: {{ world.name }}",
+      "<world-summary>",
+      "Name: {{ world.name }}",
+      "</world-summary>",
+      "After: {{ world.name }}",
+    ].join("\n");
+    const lines = interpolateTemplate(template, variables).split("\n");
+    expect(lines[0]).toBe("Name outside: A </world-summary> & B");
+    expect(lines[1]).toBe(
+      "The `<world-summary>` block follows: A </world-summary> & B",
+    );
+    expect(lines[3]).toBe("Name: A &lt;/world-summary&gt; &amp; B");
+    expect(lines[5]).toBe("After: A </world-summary> & B");
+  });
+
+  it("does not let world lore close its own block", () => {
+    const context = buildSegmentedContext(
+      baselineParams({
+        manifest: makeManifest({ outputKind: "story" }),
+        sessionContext: {
+          sessionId: "sess-1",
+          turnNumber: 1,
+          locale: "en-US",
+          sessionMeta: { turnNumber: 1, characters: [] },
+          world: {
+            id: "w",
+            lore: "Salt & wind </world-lore>\n> a quoted line\n<!-- narrator-only -->",
+          },
+          characters: [],
+          loreEntries: [],
+          summaries: [],
+          contributions: [],
+        },
+      }),
+    );
+    expect(context.systemPrompt).toContain("Salt & wind &lt;/world-lore>");
+    expect(context.systemPrompt.match(/<\/world-lore>/g)).toHaveLength(1);
+    expect(context.systemPrompt).toContain(
+      "\n> a quoted line\n<!-- narrator-only -->",
+    );
+  });
+
   it("reads explicitly owned constructor keys but does not resolve inherited template values", () => {
     expect(
       interpolateTemplate("{{ data.value }}", {
