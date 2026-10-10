@@ -45,12 +45,12 @@ describe("SQLite blob publication", () => {
       const spy =
         failure === "write"
           ? vi
-              .spyOn(fs, "writeFileSync")
-              .mockImplementation((file, data, options) => {
-                write(file, bytes.subarray(0, 4), options);
+              .spyOn(fs.promises, "writeFile")
+              .mockImplementation(async (file) => {
+                write(file as string, bytes.subarray(0, 4));
                 throw new Error("synthetic ENOSPC");
               })
-          : vi.spyOn(fs, "renameSync").mockImplementation(() => {
+          : vi.spyOn(fs.promises, "rename").mockImplementation(async () => {
               throw new Error("synthetic rename failure");
             });
       syncBuiltinESMExports();
@@ -80,4 +80,61 @@ describe("SQLite blob publication", () => {
       }
     });
   }
+
+  it("writes and reads the bytes without a blocking file call", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-blob-async-"));
+    const store = createSqliteMediaStore(path.join(root, "test.db"), {
+      mediaRoot: path.join(root, "media"),
+    });
+    const blocking = [
+      vi.spyOn(fs, "writeFileSync"),
+      vi.spyOn(fs, "readFileSync"),
+    ];
+    syncBuiltinESMExports();
+    try {
+      const bytes = new Uint8Array(64).fill(5);
+      const ref = await store.put(bytes, "image/png");
+      expect(await store.get(ref)).toEqual(bytes);
+      for (const spy of blocking) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of blocking) spy.mockRestore();
+      syncBuiltinESMExports();
+      await store.close?.();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stores the asset when a deletion lands after its file was seen", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-blob-race-"));
+    const store = createSqliteMediaStore(path.join(root, "test.db"), {
+      mediaRoot: path.join(root, "media"),
+    });
+    const bytes = new Uint8Array(16).fill(9);
+    const ref = await store.put(bytes, "image/png");
+    const access = fs.promises.access.bind(fs.promises);
+    // The second put sees the row and its file; the deletion takes both
+    // before the put records anything.
+    const seen = vi
+      .spyOn(fs.promises, "access")
+      .mockImplementation(async (file, mode) => {
+        await access(file, mode);
+        await store.delete(ref.id);
+      });
+    const rewrite = vi.spyOn(fs, "writeFileSync");
+    syncBuiltinESMExports();
+    try {
+      await store.put(bytes, "image/png", undefined, { sessionId: "sess-A" });
+
+      expect(seen).toHaveBeenCalledOnce();
+      expect(rewrite).toHaveBeenCalledOnce();
+      expect(await store.get(ref)).toEqual(bytes);
+      expect(await store.isReferencedBy(ref.id, "sess-A")).toBe(true);
+    } finally {
+      seen.mockRestore();
+      rewrite.mockRestore();
+      syncBuiltinESMExports();
+      await store.close?.();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

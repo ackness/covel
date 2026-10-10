@@ -817,6 +817,35 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
         [],
       );
     });
+
+    it("listExistingMessageIds names only the stored messages of the session", async () => {
+      const mine = makeMessage({ sessionId: "sess-ids" });
+      const alsoMine = makeMessage({ sessionId: "sess-ids" });
+      const unasked = makeMessage({ sessionId: "sess-ids" });
+      const foreign = makeMessage({ sessionId: "sess-ids-other" });
+      for (const message of [mine, alsoMine, unasked, foreign])
+        await store.addMessage(message);
+
+      const found = await store.listExistingMessageIds("sess-ids", [
+        mine.id,
+        mine.id,
+        alsoMine.id,
+        foreign.id,
+        "never-written",
+      ]);
+      expect([...found].sort()).toEqual([mine.id, alsoMine.id].sort());
+      expect(await store.listExistingMessageIds("sess-ids", [])).toEqual([]);
+    });
+
+    it("listExistingMessageIds answers for more IDs than one statement binds", async () => {
+      const stored = makeMessage({ sessionId: "sess-ids-many" });
+      await store.addMessage(stored);
+      const ids = Array.from({ length: 1200 }, (_, i) => `absent-${i}`);
+      ids.splice(900, 0, stored.id);
+      expect(await store.listExistingMessageIds("sess-ids-many", ids)).toEqual([
+        stored.id,
+      ]);
+    });
   });
 
   describe("Characters", () => {

@@ -11,11 +11,18 @@ import {
   createReadStream,
   existsSync,
   mkdirSync,
-  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import {
+  access,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
@@ -160,96 +167,141 @@ function initializeSqliteMediaStore(
     "SELECT 1 AS one FROM media_refs WHERE session_id = ? AND media_id = ? LIMIT 1",
   );
 
+  /**
+   * Put complete bytes at `path`, or leave no file there: the content goes to
+   * a file of its own first and takes the final name in one rename.
+   */
+  const publishFile = async (path: string, bytes: Uint8Array) => {
+    await mkdir(dirname(path), { recursive: true });
+    const temporaryPath = `${path}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporaryPath, bytes, { flag: "wx" });
+      await rename(temporaryPath, path);
+    } finally {
+      await rm(temporaryPath, { force: true });
+    }
+  };
+
+  /** {@link publishFile} for the transaction below, which cannot wait. */
+  const publishFileSync = (path: string, bytes: Uint8Array) => {
+    mkdirSync(dirname(path), { recursive: true });
+    const temporaryPath = `${path}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporaryPath, bytes, { flag: "wx" });
+      renameSync(temporaryPath, path);
+    } finally {
+      rmSync(temporaryPath, { force: true });
+    }
+  };
+
+  /**
+   * Record an asset whose bytes {@link publishFile} has normally put on disk
+   * already. The row, the claim and the last look at the file share one write
+   * transaction, as they did when the file was written here: a deletion from
+   * another process lands before it or after it, never in between. A file
+   * that such a deletion took since is written again here.
+   */
+  const recordAsset = async (
+    bytes: Uint8Array,
+    id: string,
+    mime: string,
+    meta: Readonly<Record<string, unknown>> | undefined,
+    initialRef: Parameters<MediaStore["put"]>[3],
+  ): Promise<MediaRef> =>
+    runSqliteTransaction(
+      sqlite,
+      () => {
+        const claim = () => {
+          if (initialRef)
+            insertRef.run({
+              sessionId: initialRef.sessionId,
+              mediaId: id,
+              pluginId: initialRef.pluginId ?? null,
+              createdAt: new Date().toISOString(),
+            });
+        };
+        const existing = select.get(id) as
+          | {
+              id: string;
+              mime: string;
+              size: number;
+              path: string;
+              meta: string | null;
+            }
+          | undefined;
+        if (existing) {
+          // The row survives when the file was deleted or not restored from
+          // a backup; writing the same bytes again repairs it.
+          if (!existsSync(existing.path)) publishFileSync(existing.path, bytes);
+          claim();
+          return {
+            id: existing.id,
+            mime: existing.mime,
+            size: existing.size,
+            ...(existing.meta
+              ? {
+                  meta: JSON.parse(existing.meta) as Readonly<
+                    Record<string, unknown>
+                  >,
+                }
+              : {}),
+          };
+        }
+        const path = mediaPath(mediaRoot, id);
+        if (!existsSync(path)) publishFileSync(path, bytes);
+        const ref: MediaRef = {
+          id,
+          mime,
+          size: bytes.byteLength,
+          ...(meta === undefined ? {} : { meta: toMeta(meta) }),
+        };
+        insertAsset.run({
+          id,
+          sha256: id,
+          mime,
+          size: bytes.byteLength,
+          path,
+          meta: meta === undefined ? null : JSON.stringify(meta),
+          createdAt: new Date().toISOString(),
+        });
+        claim();
+        return ref;
+      },
+      "immediate",
+    );
+
+  // Same connection as the DataStore ⇒ same operation gate. Without this a
+  // media write issued while another caller's transaction is open joins that
+  // transaction and is silently lost when it rolls back. Cleanup now performs
+  // its conditional DB deletion inline (rather than recursively calling the
+  // wrapped `delete`), so it can safely hold the gate for its complete sweep.
+  const gate = getConnectionWriteGate(sqlite);
+  const gatedRecord = gate.gateWrites(
+    { recordAsset },
+    new Set(["recordAsset"]),
+  ).recordAsset;
+
   const store: MediaStore = {
+    // The file is written before the gate is taken, without blocking the
+    // event loop: an upload of several megabytes holds up neither the streams
+    // of other sessions nor their database writes. Only the row waits its turn.
     async put(blob, mime, meta, initialRef) {
-      meta = toMeta(meta);
+      const cleanMeta = toMeta(meta);
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
-      return runSqliteTransaction(
-        sqlite,
-        () => {
-          const claim = () => {
-            if (initialRef)
-              insertRef.run({
-                sessionId: initialRef.sessionId,
-                mediaId: id,
-                pluginId: initialRef.pluginId ?? null,
-                createdAt: new Date().toISOString(),
-              });
-          };
-          const existing = select.get(id) as
-            | {
-                id: string;
-                mime: string;
-                size: number;
-                path: string;
-                meta: string | null;
-              }
-            | undefined;
-          if (existing) {
-            // The row survives when the file was deleted or not restored from
-            // a backup; writing the same bytes again repairs it.
-            if (!existsSync(existing.path)) {
-              mkdirSync(dirname(existing.path), { recursive: true });
-              const repairPath = `${existing.path}.${randomUUID()}.tmp`;
-              try {
-                writeFileSync(repairPath, bytes, { flag: "wx" });
-                renameSync(repairPath, existing.path);
-              } finally {
-                rmSync(repairPath, { force: true });
-              }
-            }
-            claim();
-            return {
-              id: existing.id,
-              mime: existing.mime,
-              size: existing.size,
-              ...(existing.meta
-                ? {
-                    meta: JSON.parse(existing.meta) as Readonly<
-                      Record<string, unknown>
-                    >,
-                  }
-                : {}),
-            };
-          }
-          const path = mediaPath(mediaRoot, id);
-          mkdirSync(dirname(path), { recursive: true });
-          // Publish only complete bytes. An orphan final file from an interrupted
-          // earlier write is replaced from the caller's verified content as well.
-          const temporaryPath = `${path}.${randomUUID()}.tmp`;
-          try {
-            writeFileSync(temporaryPath, bytes, { flag: "wx" });
-            renameSync(temporaryPath, path);
-          } finally {
-            rmSync(temporaryPath, { force: true });
-          }
-          const ref: MediaRef = {
-            id,
-            mime,
-            size: bytes.byteLength,
-            ...(meta === undefined ? {} : { meta: toMeta(meta) }),
-          };
-          insertAsset.run({
-            id,
-            sha256: id,
-            mime,
-            size: bytes.byteLength,
-            path,
-            meta: meta === undefined ? null : JSON.stringify(meta),
-            createdAt: new Date().toISOString(),
-          });
-          claim();
-          return ref;
-        },
-        "immediate",
-      );
+      const known = select.get(id) as { path: string } | undefined;
+      // A row vouches for its file; without one, a file left by an interrupted
+      // earlier write is replaced from the caller's verified content as well.
+      if (!known) await publishFile(mediaPath(mediaRoot, id), bytes);
+      else if (!(await isReadable(known.path)))
+        await publishFile(known.path, bytes);
+      return gatedRecord(bytes, id, mime, cleanMeta, initialRef);
     },
 
     async get(ref) {
       const row = select.get(ref.id) as { path: string } | undefined;
       if (!row) throw new Error(`Media asset not found: ${ref.id}`);
-      return new Uint8Array(readFileSync(row.path));
+      return new Uint8Array(await readFile(row.path));
     },
 
     async exists(id) {
@@ -404,10 +456,14 @@ function initializeSqliteMediaStore(
     },
   };
 
-  // Same connection as the DataStore ⇒ same operation gate. Without this a
-  // media write issued while another caller's transaction is open joins that
-  // transaction and is silently lost when it rolls back. Cleanup now performs
-  // its conditional DB deletion inline (rather than recursively calling the
-  // wrapped `delete`), so it can safely hold the gate for its complete sweep.
-  return getConnectionWriteGate(sqlite).gateWrites(store, MEDIA_WRITE_METHODS);
+  return { ...gate.gateWrites(store, MEDIA_WRITE_METHODS), put: store.put };
+}
+
+async function isReadable(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }

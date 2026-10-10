@@ -2455,6 +2455,8 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 
 获取会话的所有状态表及其数据。表名和数据键按原名保留，包括 `__proto__` 等合法 JSON 键。
 
+限流：同一客户端对同一路径每分钟最多 120 次，超出返回 `429`（`code: "rate_limit_exceeded"`，带 `Retry-After`）。
+
 **参数:**
 
 | 参数 | 位置 | 说明    |
@@ -2510,6 +2512,8 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 #### `GET /api/sessions/:id/messages`
 
 获取会话的**完整**消息列表（升序）。长会话优先用 `/page`；本端点保留给快照缺失兜底和批量同步。
+
+限流与 `/page` 相同：同一客户端对同一路径每分钟最多 120 次，超出返回 `429`（`code: "rate_limit_exceeded"`，带 `Retry-After`）。
 
 **参数:**
 
