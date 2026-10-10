@@ -180,4 +180,16 @@ describe("AudioPlayer", () => {
     )) as HTMLAnchorElement;
     await waitFor(() => expect(dl.getAttribute("download")).toBe("clip.wav"));
   });
+
+  it("keeps the resolved URL when the parent re-renders an equal ref object", async () => {
+    const { rerender } = render(
+      <AudioPlayer src={FAKE_REF} sessionId="sess" alt="narration" />,
+    );
+    await screen.findByRole("button", { name: "Play" });
+    rerender(
+      <AudioPlayer src={{ ...FAKE_REF }} sessionId="sess" alt="narration" />,
+    );
+    await screen.findByRole("button", { name: "Play" });
+    expect(resolveMediaSrc).toHaveBeenCalledTimes(1);
+  });
 });

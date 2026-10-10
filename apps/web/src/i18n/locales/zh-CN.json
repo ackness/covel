@@ -299,6 +299,9 @@
     "dimensionsImported": "导入成功",
     "reasonConnectionClosed": "连接结束但后端未上报结束",
     "reasonSessionBusy": "会话繁忙，请稍后重试",
+    "reasonExecutionCommitFailed": "本回合未能保存，请重试。",
+    "reasonExecutionFailed": "本回合执行失败，请重试。",
+    "reasonHistoryRestoreFailed": "消息历史恢复失败。如果内容一直没有更新，请刷新页面。",
     "selectionsReady": "已选择 {{count}} 项",
     "confirmSelections": "发送选择",
     "viewParsed": "解析",
@@ -1641,6 +1644,8 @@
     "approval": {
       "title": "授权插件操作",
       "confirmMessage": "插件 {{pluginId}} 请求执行 {{action}}。是否在本次会话内授权所有同类调用？",
+      "serverCodeMessage": "插件 {{pluginId}} 是社区插件。授权后，它的代码会在 Covel 后端运行，没有进程沙箱，直到后端重启。",
+      "runtimeMessage": "插件 {{pluginId}} 请求在本会话中运行它的任务 {{runtime}}。是否授权？",
       "allow": "授权",
       "deny": "拒绝",
       "denied": "已拒绝 {{action}}",
@@ -1664,6 +1669,7 @@
     },
     "runtimeErrors": {
       "title": "最近的插件错误",
+      "summary": "该插件的一个后台任务失败了。查看详情",
       "dismiss": "关闭插件错误"
     },
     "invalidPanelSpecReason": {
@@ -2134,6 +2140,11 @@
     "reloadingHint": "通常耗时几秒。"
   },
   "media": {
+    "loading": "媒体加载中",
+    "unavailable": "媒体不可用",
+    "video": "视频",
+    "downloadFile": "下载文件",
+    "download": "下载",
     "audio": "音频",
     "audioUnavailable": "音频不可用",
     "audioUnavailableAria": "{{label}} 不可用",

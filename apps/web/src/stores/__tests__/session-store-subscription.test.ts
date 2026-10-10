@@ -399,6 +399,7 @@ describe("session subscription event ownership", () => {
       },
       stateRef: { current: state },
       sessionIdRef: { current: "s1" },
+      onBackgroundJobEnded: () => {},
       onReset: () => {},
       isCurrent: () => true,
       getRecoveryGeneration: () => 0,

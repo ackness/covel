@@ -61,6 +61,19 @@ interface UseSessionSubscriptionOptions {
   deltaRafRef: DeltaRafRef;
 }
 
+/**
+ * `full` re-reads every session-side slice: events may have been lost. `state`
+ * re-reads only the session snapshot: the committed change is known, and the
+ * other slices follow their own events.
+ */
+export type RecoveryScope = "full" | "state";
+
+// A recovery that cannot finish must not hold live events without limit.
+const MAX_BUFFERED_EVENTS = 500;
+const RECOVERY_RETRY_BASE_MS = 3000;
+const RECOVERY_RETRY_MAX_MS = 30_000;
+const RECOVERY_RETRY_LIMIT = 5;
+
 interface ExecutionObservation {
   onSnapshotApplied?: () => void;
   stateRef: MutableRef<SessionState>;
@@ -80,6 +93,13 @@ function executionOwner(observation: ExecutionObservation): string {
  * its `_runtime_jobs` row changes are the same transitions, so only the status
  * event marks a terminal background result.
  */
+/** A detached runtime's result is committed outside every action stream. */
+function endsBackgroundJob(event: SubscriptionEvent): boolean {
+  if (event.type !== "job-status.updated") return false;
+  const step = buildJobStatusExecutionStep(event.payload ?? {}, undefined);
+  return !!step && ["completed", "failed", "skipped"].includes(step.status);
+}
+
 function isTerminalBackgroundEvent(event: SubscriptionEvent): boolean {
   if (event.type !== "job-status.updated") return false;
   const payload = event.payload ?? {};
@@ -118,6 +138,7 @@ export function createSubscriptionEventHandler(
     "dispatch" | "sessionIdRef" | "stateRef"
   > & {
     onReset: () => void;
+    onBackgroundJobEnded: () => void;
     isCurrent: () => boolean;
     getRecoveryGeneration: () => number;
   },
@@ -144,9 +165,8 @@ export function createSubscriptionEventHandler(
         // The server detected a replay gap or epoch change (ring wrapped,
         // session evicted, or pod/process restart) — our event cursor is
         // stale and we may have silently missed events. subscription.ts has
-        // already cleared the cursor; re-hydrate the drift-prone authoritative
-        // state (session plugins + game-state snapshot), reusing the same
-        // recovery path as a reconnect.
+        // already cleared the cursor; re-hydrate every session-side slice,
+        // reusing the same recovery path as a reconnect.
         options.onReset();
         break;
       }
@@ -228,9 +248,9 @@ export function createSubscriptionEventHandler(
         const step = buildJobStatusExecutionStep(payload, existing);
         if (step) {
           options.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
-          // Detached calls finish outside the action stream. Recover their traces.
-          if (["completed", "failed", "skipped"].includes(step.status))
-            options.onReset();
+          // Detached calls finish outside the action stream. Their traces and
+          // messages come from the snapshot; their data has its own events.
+          if (endsBackgroundJob(event)) options.onBackgroundJobEnded();
         }
         break;
       }
@@ -252,9 +272,11 @@ export function createSubscriptionEventHandler(
 }
 
 /**
- * Re-sync every session-side slice represented by subscription events. Each
- * async result checks both the target session and recovery generation before
- * dispatching, while the hook buffers live events and replays them afterward.
+ * Re-sync the session-side slices represented by subscription events: all of
+ * them for a `full` recovery, the session snapshot alone for a `state` one.
+ * Each async result checks both the target session and recovery generation
+ * before dispatching, while the hook buffers live events and replays them
+ * afterward.
  */
 export async function rehydrateSessionSideState(
   sessionId: string,
@@ -262,13 +284,14 @@ export async function rehydrateSessionSideState(
   dispatch: (action: SessionAction) => void,
   isRevisionCurrent: () => boolean = () => true,
   executionObservation?: ExecutionObservation,
+  scope: RecoveryScope = "full",
 ): Promise<void> {
   const initialExecutionOwner =
     executionObservation && executionOwner(executionObservation);
   const isCurrent = (): boolean =>
     sessionIdRef.current === sessionId && isRevisionCurrent();
 
-  const pluginsTask = (async () => {
+  const readPluginsAndData = async (): Promise<void> => {
     const loaded: { plugins?: api.SessionPlugin[] } = {};
     await refreshSessionResource(dispatch, ["plugins", sessionId], {
       isCurrent,
@@ -302,7 +325,7 @@ export async function rehydrateSessionSideState(
         dispatch({ type: "REPLACE_PLUGIN_DATA", pluginData });
       },
     });
-  })().catch(ignoreError("reload session plugins and data after reconnect"));
+  };
 
   const snapshotTask = (async () => {
     let worldId: string | undefined;
@@ -387,7 +410,7 @@ export async function rehydrateSessionSideState(
         },
       },
     );
-    if (!worldId || !isCurrent()) return;
+    if (scope !== "full" || !worldId || !isCurrent()) return;
     const targetWorldId = worldId;
     await refreshSessionResource(dispatch, ["world", worldId], {
       isCurrent,
@@ -399,6 +422,14 @@ export async function rehydrateSessionSideState(
     ignoreError("refresh session snapshot and world after reconnect")(error);
   });
 
+  if (scope !== "full") {
+    await snapshotTask;
+    return;
+  }
+
+  const pluginsTask = readPluginsAndData().catch(
+    ignoreError("reload session plugins and data after reconnect"),
+  );
   const suspensionsTask = refreshSessionResource(
     dispatch,
     ["suspensions", sessionId],
@@ -453,30 +484,58 @@ export function useSessionSubscription({
     let bufferedEvents: SubscriptionEvent[] = [];
     let hasConnected = false;
     let historyRetry: ReturnType<typeof setTimeout> | undefined;
+    let historyRetries = 0;
     let historyError: string | undefined;
+    let replaying = false;
     // A reconnect starts recovery as soon as the stream opens. After a server
     // restart the stream then opens with a stale-cursor `system.reset`, which
     // asks for that same recovery; it is skipped while only control frames
     // have arrived on the new stream.
     let reconnectRecoveryOpen = false;
 
-    let startRecovery: () => void = () => undefined;
+    let startRecovery: (scope: RecoveryScope, retry?: boolean) => void = () =>
+      undefined;
+    // A committed change is known: one snapshot read covers every notice that
+    // arrives before it is published, and one more covers the ones after.
+    const requestStateRefresh = (): void => {
+      invalidateSessionResource(dispatch, ["game-state", sessionId]);
+      if (recovering) stateRefreshPending = true;
+      else startRecovery("state");
+    };
     const applySubscriptionEvent = createSubscriptionEventHandler({
       dispatch,
       sessionIdRef,
       stateRef,
-      onReset: () => startRecovery(),
+      onReset: () => startRecovery("full"),
+      // A buffered job end asked for its refresh when it arrived.
+      onBackgroundJobEnded: () => {
+        if (!replaying) requestStateRefresh();
+      },
       isCurrent,
       getRecoveryGeneration: () => recoveryGeneration,
     });
+    const finishRecovery = (): void => {
+      recovering = false;
+      const replay = bufferedEvents;
+      bufferedEvents = [];
+      replaying = true;
+      try {
+        for (const event of replay) applySubscriptionEvent(event);
+      } finally {
+        replaying = false;
+      }
+    };
 
-    startRecovery = (): void => {
+    startRecovery = (scope, retry = false): void => {
       if (!isCurrent()) return;
       clearTimeout(historyRetry);
+      if (!retry) historyRetries = 0;
       const generation = ++recoveryGeneration;
       recovering = true;
       stateRefreshPending = false;
-      bufferedEvents = [];
+      // A full recovery reads again whatever the buffered events describe. A
+      // state refresh reads the snapshot alone, so they still apply after it.
+      if (scope === "full") bufferedEvents = [];
       let snapshotPublished = false;
       const observation = {
         stateRef,
@@ -495,6 +554,7 @@ export function useSessionSubscription({
         dispatch,
         () => isCurrent() && generation === recoveryGeneration,
         observation,
+        scope,
       )
         .then(() => {
           if (generation !== recoveryGeneration || !isCurrent()) {
@@ -506,16 +566,14 @@ export function useSessionSubscription({
             owner !== executionOwner(observation) ||
             (snapshotPublished && stateRefreshPending)
           ) {
-            startRecovery();
+            startRecovery("state");
             return;
           }
-          recovering = false;
+          historyRetries = 0;
           if (historyError && stateRef.current.executionError === historyError)
             dispatch({ type: "SET_EXECUTION_ERROR", error: null });
           historyError = undefined;
-          const replay = bufferedEvents;
-          bufferedEvents = [];
-          for (const event of replay) applySubscriptionEvent(event);
+          finishRecovery();
         })
         .catch((error: unknown) => {
           if (generation !== recoveryGeneration || !isCurrent()) return;
@@ -524,8 +582,20 @@ export function useSessionSubscription({
               error instanceof Error ? error.message : String(error);
             dispatch({ type: "SET_EXECUTION_ERROR", error: historyError });
           }
+          ignoreError("recover session state")(error);
           // Keep the old continuous window; retry the read, never the action.
-          historyRetry = setTimeout(startRecovery, 3000);
+          if (historyRetries >= RECOVERY_RETRY_LIMIT) {
+            // Stop asking a server that keeps failing. Live events apply to
+            // the old window, and the next commit or reconnect reads again.
+            finishRecovery();
+            return;
+          }
+          const delay = Math.min(
+            RECOVERY_RETRY_BASE_MS * 2 ** historyRetries,
+            RECOVERY_RETRY_MAX_MS,
+          );
+          historyRetries += 1;
+          historyRetry = setTimeout(() => startRecovery(scope, true), delay);
         });
     };
 
@@ -563,19 +633,24 @@ export function useSessionSubscription({
       ) {
         // These are committed state notifications. Reuse the in-flight snapshot
         // read instead of buffering reset triggers or duplicating action-stream
-        // patch history. A notice after publication needs one follow-up recovery.
-        invalidateSessionResource(dispatch, ["game-state", sessionId]);
-        if (recovering) stateRefreshPending = true;
-        else startRecovery();
+        // patch history. A notice after publication needs one follow-up read.
+        requestStateRefresh();
       } else if (event.type === "system.reset") {
         void recoverUiSlots(sessionId).catch(
           ignoreError("refresh UI slots after reset"),
         );
-        startRecovery();
+        startRecovery("full");
       } else if (recovering) {
+        if (bufferedEvents.length >= MAX_BUFFERED_EVENTS) {
+          // Reading everything again replaces the events that are dropped here.
+          startRecovery("full");
+          return;
+        }
         // Apply live changes after the authoritative snapshot so an older HTTP
         // response cannot overwrite events delivered during recovery.
         bufferedEvents.push(event);
+        // The snapshot in flight may predate this job's commit.
+        if (endsBackgroundJob(event)) requestStateRefresh();
       } else {
         applySubscriptionEvent(event);
       }
@@ -595,7 +670,7 @@ export function useSessionSubscription({
           void recoverUiSlots(sessionId).catch(
             ignoreError("refresh UI slots after reconnect"),
           );
-          startRecovery();
+          startRecovery("full");
           reconnectRecoveryOpen = true;
         }
       }

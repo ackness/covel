@@ -9,9 +9,10 @@ import {
 } from "./sse-handler.js";
 import type { SessionDispatch, SessionState, StreamMessage } from "./types.js";
 
+/** Shown to the player; the cause goes to the console. */
 export class RecoveredMessageWindowError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(cause: unknown) {
+    super("__i18n:session.reasonHistoryRestoreFailed__", { cause });
     this.name = "RecoveredMessageWindowError";
   }
 }
@@ -35,9 +36,7 @@ export async function readRecoveredSnapshot(
   const snapshot = await api
     .getSessionView(sessionId)
     .catch((error: unknown) => {
-      throw new RecoveredMessageWindowError(
-        `Unable to restore message history: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      throw new RecoveredMessageWindowError(error);
     });
   let messages = [...snapshot.messages];
   let cursor = snapshot.messagesCursor;
@@ -45,16 +44,12 @@ export async function readRecoveredSnapshot(
   const connected = () => messages.some((row) => loadedIds.has(row.id));
   while (isCurrent() && loadedIds.size > 0 && cursor && !connected()) {
     if (seenCursors.has(cursor))
-      throw new RecoveredMessageWindowError(
-        "Unable to restore message history: pagination did not advance",
-      );
+      throw new RecoveredMessageWindowError("pagination did not advance");
     seenCursors.add(cursor);
     const page = await api
       .listMessagesPage(sessionId, { cursor, limit: 40 })
       .catch((error: unknown) => {
-        throw new RecoveredMessageWindowError(
-          `Unable to restore message history: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        throw new RecoveredMessageWindowError(error);
       });
     if (!isCurrent()) return snapshot;
     const ids = new Set(messages.map((row) => row.id));
@@ -65,9 +60,7 @@ export async function readRecoveredSnapshot(
     });
     messages = [...older, ...messages];
     if (!connected() && page.nextCursor && older.length === 0)
-      throw new RecoveredMessageWindowError(
-        "Unable to restore message history: pagination did not advance",
-      );
+      throw new RecoveredMessageWindowError("pagination did not advance");
     cursor = page.nextCursor;
   }
   return { ...snapshot, messages };

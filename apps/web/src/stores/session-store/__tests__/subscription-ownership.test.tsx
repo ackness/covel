@@ -118,6 +118,8 @@ function setup() {
   return { ...hook, options, streams };
 }
 
+const HISTORY_ERROR = "__i18n:session.reasonHistoryRestoreFailed__";
+
 function event(type: string): SubscriptionEvent {
   return {
     type,
@@ -412,6 +414,218 @@ it("does not duplicate action-stream patch history when the subscription observe
     new Set(vi.mocked(ds.addStatePatch).mock.calls.map(([, patch]) => patch.id))
       .size,
   ).toBe(2);
+});
+
+function jobEnded(jobId: string): SubscriptionEvent {
+  return {
+    ...event("job-status.updated"),
+    id: `ended-${jobId}`,
+    payload: {
+      jobId,
+      pluginId: "current",
+      runtimeId: `current/${jobId}`,
+      state: "succeeded",
+      data: { durableStatus: "succeeded", originTurnId: "turn" },
+    },
+  };
+}
+
+function pluginDataChanged(key: string): SubscriptionEvent {
+  return {
+    ...event("plugin-data.changed"),
+    id: `data-${key}`,
+    payload: {
+      pluginId: "current",
+      changes: [{ namespace: "message", key, operation: "set", value: key }],
+    },
+  };
+}
+
+function expectSnapshotReadsOnly(views: number) {
+  expect(api.getSessionView).toHaveBeenCalledTimes(views);
+  expect(api.listSessionPlugins).not.toHaveBeenCalled();
+  expect(api.listPluginData).not.toHaveBeenCalled();
+  expect(api.getWorld).not.toHaveBeenCalled();
+  expect(api.listSuspensions).not.toHaveBeenCalled();
+}
+
+it("reads only the snapshot for committed state and shows what a turn changed", async () => {
+  const committed = {
+    session: { ...session, completedPlayerTurns: 2 },
+    messages: [historyMessage(1)],
+    characters: [{ id: "hero", name: "Hero" }],
+    dimensions: { mood: { hero: { value: 3 } } },
+    gameState: { stats: { hp: 9 } },
+    executionSteps: [],
+    execution: { state: "idle" },
+  };
+  api.getSessionView.mockResolvedValue(committed);
+  const { streams, options } = setup();
+  options.dispatch.mockImplementation((action) => {
+    options.stateRef.current = reducer(options.stateRef.current, action);
+  });
+  // An observer of a turn that another tab runs sees these events live.
+  await act(async () => {
+    streams[0]!.emit(event("state.changed"));
+    streams[0]!.emit(event("character.upserted"));
+    streams[0]!.emit(event("dimensions.changed"));
+    streams[0]!.emit(pluginDataChanged("note"));
+    streams[0]!.emit({
+      ...event("turn.suspended"),
+      payload: { suspensionId: "form", turnId: "turn", runtimeId: "r" },
+    });
+  });
+  expectSnapshotReadsOnly(2);
+  const state = options.stateRef.current;
+  expect(state.gameState).toMatchObject({
+    stats: { hp: 9 },
+    characters: committed.characters,
+    dimensions: committed.dimensions,
+  });
+  expect(state.messages.map((message) => message.id)).toEqual(["m1"]);
+  expect(state.session?.completedPlayerTurns).toBe(2);
+  // Events held during the read are applied after it, never dropped.
+  expect(state.pluginMessageData).toEqual({ current: { note: "note" } });
+  expect(state.suspensions.map((suspension) => suspension.id)).toEqual([
+    "form",
+  ]);
+});
+
+it("refreshes the snapshot once for background jobs that end together", async () => {
+  const pending = deferred<unknown>();
+  const snapshot = {
+    session,
+    messages: [],
+    characters: [],
+    gameState: {},
+    executionSteps: [],
+    execution: { state: "idle" },
+  };
+  api.getSessionView
+    .mockReturnValueOnce(pending.promise)
+    .mockResolvedValue(snapshot);
+  const { streams, options } = setup();
+  options.dispatch.mockImplementation((action) => {
+    options.stateRef.current = reducer(options.stateRef.current, action);
+  });
+  streams[0]!.emit(jobEnded("first"));
+  streams[0]!.emit(pluginDataChanged("memory"));
+  streams[0]!.emit(jobEnded("second"));
+  streams[0]!.emit(jobEnded("third"));
+  await act(async () => {
+    pending.resolve(snapshot);
+  });
+  // The read in flight when the later jobs ended is repeated once.
+  expectSnapshotReadsOnly(2);
+  expect(options.stateRef.current.pluginMessageData).toEqual({
+    current: { memory: "memory" },
+  });
+  expect(
+    options.stateRef.current.executionSteps.filter(
+      (step) => step.status === "completed",
+    ),
+  ).toHaveLength(3);
+  expect(options.workspace.checkpoint).toHaveBeenCalledTimes(3);
+});
+
+it("keeps events held by a full recovery through its follow-up snapshot read", async () => {
+  const pendingPlugins = deferred<ReturnType<typeof plugins>>();
+  api.listSessionPlugins.mockReturnValueOnce(pendingPlugins.promise);
+  const { streams, options } = setup();
+  options.dispatch.mockImplementation((action) => {
+    options.stateRef.current = reducer(options.stateRef.current, action);
+  });
+  await act(async () => {
+    streams[0]!.state("connected");
+    streams[0]!.state("reconnecting");
+    streams[0]!.state("connected");
+  });
+  streams[0]!.emit(pluginDataChanged("late"));
+  streams[0]!.emit(event("state.changed"));
+  await act(async () => {
+    pendingPlugins.resolve(plugins("current"));
+  });
+  // A reconnect reads every slice; the state notice adds one snapshot read.
+  expect(api.listSessionPlugins).toHaveBeenCalledOnce();
+  expect(api.listPluginData).toHaveBeenCalledExactlyOnceWith(
+    session.id,
+    "current",
+  );
+  expect(api.listSuspensions).toHaveBeenCalledOnce();
+  expect(api.getWorld).toHaveBeenCalledOnce();
+  expect(api.getSessionView).toHaveBeenCalledTimes(2);
+  expect(options.stateRef.current.pluginMessageData).toEqual({
+    current: { late: "late" },
+  });
+});
+
+it("reads everything again when a stalled recovery holds too many events", async () => {
+  api.getSessionView.mockReturnValueOnce(new Promise(() => {}));
+  const { streams, options } = setup();
+  options.dispatch.mockImplementation((action) => {
+    options.stateRef.current = reducer(options.stateRef.current, action);
+  });
+  streams[0]!.emit(event("state.changed"));
+  await act(async () => {
+    for (let i = 0; i <= 500; i += 1)
+      streams[0]!.emit(pluginDataChanged(`k${i}`));
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(2);
+  expect(api.listSessionPlugins).toHaveBeenCalledOnce();
+  expect(api.listPluginData).toHaveBeenCalledOnce();
+  // The held events are dropped; the full read is their replacement.
+  expect(options.stateRef.current.pluginMessageData).toEqual({});
+});
+
+it("backs off failed recovery reads, stops, and reads again on the next commit", async () => {
+  vi.useFakeTimers();
+  api.getSessionView.mockRejectedValue(new Error("offline"));
+  const { streams, options, unmount } = setup();
+  options.dispatch.mockImplementation((action) => {
+    options.stateRef.current = reducer(options.stateRef.current, action);
+  });
+  await act(async () => {
+    streams[0]!.emit(event("state.changed"));
+  });
+  streams[0]!.emit(pluginDataChanged("held"));
+  let reads = 1;
+  for (const delay of [3000, 6000, 12000, 24000, 30000]) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(delay - 1);
+    });
+    expect(api.getSessionView).toHaveBeenCalledTimes(reads);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(api.getSessionView).toHaveBeenCalledTimes(++reads);
+  }
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(600_000);
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(reads);
+  expect(options.stateRef.current.executionError).toBe(HISTORY_ERROR);
+  // Giving up releases the held events onto the old window.
+  expect(options.stateRef.current.pluginMessageData).toEqual({
+    current: { held: "held" },
+  });
+
+  api.getSessionView.mockResolvedValue({
+    session,
+    messages: [],
+    characters: [],
+    gameState: { stats: { hp: 2 } },
+    executionSteps: [],
+    execution: { state: "idle" },
+  });
+  await act(async () => {
+    streams[0]!.emit(event("state.changed"));
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(reads + 1);
+  expect(options.stateRef.current.executionError).toBeNull();
+  expect(options.stateRef.current.gameState).toMatchObject({
+    stats: { hp: 2 },
+  });
+  unmount();
 });
 
 it("does not retry a failed current snapshot merely because committed notices arrived", async () => {
@@ -732,9 +946,7 @@ it.each(["network", "repeated cursor", "duplicate page"])(
     expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
       historyWindow(1, 20).map((m) => m.id),
     );
-    expect(options.stateRef.current.executionError).toMatch(
-      /Unable to restore message history/,
-    );
+    expect(options.stateRef.current.executionError).toBe(HISTORY_ERROR);
     expect(api.listMessagesPage).toHaveBeenCalledOnce();
     api.listMessagesPage.mockResolvedValue({
       items: historyWindow(1, 80),
@@ -761,7 +973,7 @@ it("keeps retrying when the snapshot fails after a failed bridge page", async ()
   await act(async () => {
     streams[0]!.emit(event("system.reset"));
   });
-  expect(options.stateRef.current.executionError).toContain("page offline");
+  expect(options.stateRef.current.executionError).toBe(HISTORY_ERROR);
   expect(api.getSessionView).toHaveBeenCalledOnce();
 
   api.getSessionView.mockRejectedValueOnce(new Error("snapshot offline"));
@@ -773,13 +985,18 @@ it("keeps retrying when the snapshot fails after a failed bridge page", async ()
     await vi.advanceTimersByTimeAsync(3000);
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
-  expect(options.stateRef.current.executionError).toContain("snapshot offline");
+  expect(options.stateRef.current.executionError).toBe(HISTORY_ERROR);
   expect(options.stateRef.current.messages.map((m) => m.id)).toEqual(
     historyWindow(1, 20).map((m) => m.id),
   );
   expect(options.stateRef.current.olderMessagesCursor).toBe("oldest-cursor");
   expect(api.listMessagesPage).toHaveBeenCalledOnce();
 
+  // The second retry waits twice as long as the first.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(2);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(3000);
   });
@@ -803,7 +1020,7 @@ it("completes history recovery even when the separate world read fails", async (
   await act(async () => {
     streams[0]!.emit(event("system.reset"));
   });
-  expect(options.stateRef.current.executionError).toContain("page offline");
+  expect(options.stateRef.current.executionError).toBe(HISTORY_ERROR);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(3000);
   });

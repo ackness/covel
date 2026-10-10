@@ -299,6 +299,9 @@
     "dimensionsImported": "Imported successfully",
     "reasonConnectionClosed": "Connection closed but backend did not report completion",
     "reasonSessionBusy": "Session is busy, please retry",
+    "reasonExecutionCommitFailed": "The turn could not be saved. Please try again.",
+    "reasonExecutionFailed": "The turn failed. Please try again.",
+    "reasonHistoryRestoreFailed": "The message history could not be restored. Reload the page if it stays out of date.",
     "selectionsReady": "{{count}} selection(s) ready",
     "confirmSelections": "Send selections",
     "viewParsed": "Parsed",
@@ -1641,6 +1644,8 @@
     "approval": {
       "title": "Authorize plugin action",
       "confirmMessage": "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
+      "serverCodeMessage": "Plugin {{pluginId}} is a community plugin. Authorizing it lets its code run inside the Covel backend, without a process sandbox, until the backend restarts.",
+      "runtimeMessage": "Plugin {{pluginId}} asks to run its task {{runtime}} in this session. Authorize it?",
       "allow": "Authorize",
       "deny": "Deny",
       "denied": "Denied {{action}}",
@@ -1664,6 +1669,7 @@
     },
     "runtimeErrors": {
       "title": "Recent plugin error",
+      "summary": "A background task of this plugin failed. Show details",
       "dismiss": "Dismiss plugin error"
     },
     "invalidPanelSpecReason": {
@@ -2134,6 +2140,11 @@
     "reloadingHint": "Usually takes a few seconds."
   },
   "media": {
+    "loading": "loading media",
+    "unavailable": "media unavailable",
+    "video": "video",
+    "downloadFile": "download file",
+    "download": "Download",
     "audio": "audio",
     "audioUnavailable": "audio unavailable",
     "audioUnavailableAria": "{{label}} unavailable",

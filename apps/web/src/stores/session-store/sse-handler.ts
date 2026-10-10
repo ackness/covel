@@ -546,7 +546,7 @@ export function createSseEventHandler(
             type: "SET_EXECUTION_ERROR",
             error:
               (payload.error as string | undefined) ??
-              "Execution commit failed",
+              "__i18n:session.reasonExecutionCommitFailed__",
           });
         } else if (abortReason === PLAYER_ABORT_REASON) {
           // Cancel any pending rAF delta flush + drop buffered deltas first:
@@ -697,7 +697,8 @@ export function createSseEventHandler(
           error:
             payload.code === "session_busy"
               ? "__i18n:session.reasonSessionBusy__"
-              : ((payload.message as string) ?? "Execution failed"),
+              : ((payload.message as string) ??
+                "__i18n:session.reasonExecutionFailed__"),
         });
         deps.dispatch({ type: "SET_EXECUTING", value: false });
         deps.dispatch({

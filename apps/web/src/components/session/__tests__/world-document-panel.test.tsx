@@ -28,6 +28,32 @@ describe("WorldDocumentPanel", () => {
     expect(container.textContent).not.toContain("narrator-only");
   });
 
+  it("shows the lore of the session's language edition", async () => {
+    const { container } = render(
+      <WorldDocumentPanel
+        locale="en-US"
+        world={{
+          ...world,
+          locale: "zh-CN",
+          lore: "## 灰苇\n\n沼泽边的村子。",
+          metadata: {
+            localizedText: {
+              lore: {
+                "en-US":
+                  "## Greyreed\n\nA village by the marsh.\n\n<!-- narrator-only -->\n\nThe keeper lies.",
+              },
+            },
+          },
+        }}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Greyreed" })).toBeTruthy(),
+    );
+    expect(container.textContent).not.toContain("沼泽");
+    expect(container.textContent).not.toContain("keeper");
+  });
+
   it("shows the summary when all of the lore is narrator-only", () => {
     const { container } = render(
       <WorldDocumentPanel

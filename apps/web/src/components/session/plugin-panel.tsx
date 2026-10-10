@@ -603,16 +603,24 @@ function PluginPanelView({
           </div>
           <div className="mt-1 space-y-1">
             {failedJobs.map((job) => (
-              <div key={job.jobId} className="leading-relaxed">
-                <span className="font-mono text-[10px] opacity-80">
-                  {compactJobId(job.jobId)}
-                </span>
-                {job.runtimeId ? (
-                  <span className="opacity-80"> · {job.runtimeId}</span>
-                ) : null}
-                <span>: </span>
-                <span>{job.error ?? job.abortReason}</span>
-              </div>
+              <details key={job.jobId} className="leading-relaxed">
+                <summary className="cursor-pointer">
+                  {t("plugin.runtimeErrors.summary", {
+                    defaultValue:
+                      "A background task of this plugin failed. Show details",
+                  })}
+                </summary>
+                <div className="mt-1 wrap-break-word opacity-90">
+                  <span className="font-mono text-[10px] opacity-80">
+                    {compactJobId(job.jobId)}
+                  </span>
+                  {job.runtimeId ? (
+                    <span className="opacity-80"> · {job.runtimeId}</span>
+                  ) : null}
+                  <span>: </span>
+                  <span>{job.error ?? job.abortReason}</span>
+                </div>
+              </details>
             ))}
           </div>
         </div>

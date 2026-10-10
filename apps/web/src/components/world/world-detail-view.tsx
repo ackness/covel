@@ -52,12 +52,14 @@ export function WorldDetailView({
     {
       name: text(world.name),
       description: text(world.description),
+      lore: text(world.lore),
+      locale: world.locale,
       metadata: world.metadata,
     },
     playLocale,
   );
   const visual = worldVisual(world);
-  const lore = playerVisibleLore(text(world.lore)).trim();
+  const lore = playerVisibleLore(shown.lore ?? "").trim();
   const hasThemeMusic = useWorldThemeMusic(world);
 
   const hasDimensions =

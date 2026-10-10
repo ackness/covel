@@ -55,6 +55,37 @@ function makeProgress(
   };
 }
 
+describe("session-store — progress of finished assets", () => {
+  it("keeps only the last progress event of an asset once it has arrived", () => {
+    let state = initialState;
+    for (const [assetId, percent] of [
+      ["a-1", 10],
+      ["a-2", 20],
+      ["a-1", 60],
+      ["a-1", 100],
+    ] as const) {
+      state = reducer(state, {
+        type: "ASSET_PROGRESS",
+        turnId: "turn-1",
+        progress: makeProgress({ assetId, percent }),
+      });
+    }
+    state = reducer(state, {
+      type: "ASSET_GENERATED",
+      turnId: "turn-1",
+      asset: makeAsset({ id: "a-1" }),
+    });
+    expect(
+      state.assetProgressByTurn
+        .get("turn-1")
+        ?.map((p) => [p.assetId, p.percent]),
+    ).toEqual([
+      ["a-2", 20],
+      ["a-1", 100],
+    ]);
+  });
+});
+
 describe("session-store — P0-b assetsByTurn slice", () => {
   it("keeps generated assets ordered, turn-scoped, deduped, and observable by immutable consumers", () => {
     const a = makeAsset({ id: "a-1" });

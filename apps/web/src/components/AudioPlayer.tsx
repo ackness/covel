@@ -125,7 +125,9 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
         URL.revokeObjectURL(toRevoke);
       }
     };
-  }, [refValid, sessionId]);
+    // Depend on the ref's fields, not its identity: a parent that rebuilds an
+    // equal object must not revoke the playing URL and reload.
+  }, [refValid?.id, refValid?.url, refValid?.mime, sessionId]);
 
   // Subscribe to <audio> events whenever a fresh URL is mounted.
   useEffect(() => {

@@ -8,6 +8,7 @@ import {
 import { emitToast } from "@/lib/toast-channel.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
+import { approvalConfirmMessage } from "@/lib/approval-message.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
@@ -217,10 +218,11 @@ export function runActionStream(
           isCurrent() &&
           (await requestConfirm({
             title: i18n.t("plugin.approval.title"),
-            message: i18n.t("plugin.approval.confirmMessage", {
-              pluginId: approval.pending.pluginId,
-              action: approval.pending.action,
-            }),
+            message: approvalConfirmMessage(
+              (key, options) => i18n.t(key, options) as string,
+              approval.pending.pluginId,
+              approval.pending.action,
+            ),
             confirmLabel: i18n.t("plugin.approval.allow"),
             cancelLabel: i18n.t("plugin.approval.deny"),
           }));
