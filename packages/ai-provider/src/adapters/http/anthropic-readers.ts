@@ -194,6 +194,14 @@ export function toAnthropicMessages(
     out.unshift({ role: "user", content: EARLIER_TURNS_OMITTED });
 
   if (target?.config.cacheStrategy === "anthropic-explicit") {
+    // A breakpoint turns a message's string into a block array, and it moves:
+    // the message that carries it on one turn has none on the next. Anthropic
+    // documents a cache hit as identical segments and does not say that the
+    // two forms of one text are identical, so every text is sent as a block.
+    for (const message of out) {
+      if (typeof message.content === "string" && message.content)
+        message.content = [{ type: "text", text: message.content }];
+    }
     // One moving breakpoint covers conversation history and prior tool rounds.
     // Thinking blocks cannot carry explicit cache_control; cache the latest
     // text, image or tool block without mutating a provider continuation.
