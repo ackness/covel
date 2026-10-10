@@ -12,14 +12,16 @@ rg -n "ponytail:" apps packages plugins
 
 ## Kernel / runtime
 
-| Location                                                         | Accepted limit                                                                                  | Revisit when                                                                           |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `packages/runtime/src/schedule/effects.ts`                       | String equality on the `self` literal can over-match effects across plugins                     | False conflicts justify resolving `self` to the plugin ID                              |
-| `packages/runtime/src/function-runtime/turn-function-runtime.ts` | Revocation checks new calls; an external effect already in flight may finish after the deadline | Primitives need cooperative cancellation or worker isolation for late external effects |
-| `packages/runtime/src/turn-executor/turn-runtime-execution.ts`   | A consumer with `accepts` reloads the producer's declared output schema                         | Profiles show enough repeated work to justify a per-turn schema cache                  |
-| `packages/runtime/src/retry/llm-slots.ts`                        | LLM providers share one process-wide concurrency cap                                            | Independent providers need separate capacity                                           |
-| `packages/events/src/event-bus.ts`                               | Receive-ordering state has a FIFO cap; evicted streams must restart at sequence 1               | Multi-pod traffic justifies LRU/TTL state                                              |
-| `packages/store/src/media-store/filter.ts`                       | Metadata filtering scans `listAssets()`                                                         | Per-session media volume justifies SQL predicate pushdown                              |
+| Location                                                         | Accepted limit                                                                                       | Revisit when                                                                           |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `packages/runtime/src/schedule/effects.ts`                       | String equality on the `self` literal can over-match effects across plugins                          | False conflicts justify resolving `self` to the plugin ID                              |
+| `packages/runtime/src/function-runtime/turn-function-runtime.ts` | Revocation checks new calls; an external effect already in flight may finish after the deadline      | Primitives need cooperative cancellation or worker isolation for late external effects |
+| `packages/runtime/src/turn-executor/turn-runtime-execution.ts`   | A consumer with `accepts` reloads the producer's declared output schema                              | Profiles show enough repeated work to justify a per-turn schema cache                  |
+| `packages/runtime/src/retry/llm-slots.ts`                        | LLM providers share one process-wide concurrency cap                                                 | Independent providers need separate capacity                                           |
+| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | Resume data is not checked for MediaRefs before the tool loop; commit canonicalizes what persists    | A resumed runtime acts on a media reference before any proposal carries it             |
+| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | Acceptance scenarios 12 and 19-25 (plan/confirm enablement, persisted approval grants) are `it.todo` | The enablement resolver or durable approval grants are scheduled for implementation    |
+| `packages/events/src/event-bus.ts`                               | Receive-ordering state has a FIFO cap; evicted streams must restart at sequence 1                    | Multi-pod traffic justifies LRU/TTL state                                              |
+| `packages/store/src/media-store/filter.ts`                       | Metadata filtering scans `listAssets()`                                                              | Per-session media volume justifies SQL predicate pushdown                              |
 
 ## Server
 

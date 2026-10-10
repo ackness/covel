@@ -8,26 +8,27 @@ Terms are ordered alphabetically. Each entry includes a 1–2 sentence definitio
 
 One English term has one Chinese term. Chinese docs, UI copy and the Chinese prompt variants (`*.zh.md`) use the term in this table.
 
-| Term             | 中文         | Note                                                                |
-| ---------------- | ------------ | ------------------------------------------------------------------- |
-| Binding          | 绑定         |                                                                     |
-| Capability       | 能力标签     |                                                                     |
-| Collection       | 合集         |                                                                     |
-| Credits          | 作者信息     | The `author`, `license` and `homepage` fields of a package.         |
-| Kernel           | 内核         |                                                                     |
-| Pack             | 玩法包       |                                                                     |
-| PluginType       | 插件类型     |                                                                     |
-| Preset           | 预设         |                                                                     |
-| Proposal         | 提案         |                                                                     |
-| Provider         | 提供商       |                                                                     |
-| Runtime          | runtime      | Kept in English: it names a manifest unit, not "运行时" in general. |
-| Runtime manifest | runtime 清单 |                                                                     |
-| Segment          | 提示词段     |                                                                     |
-| Session          | 会话         |                                                                     |
-| Slot             | 槽位         |                                                                     |
-| Trigger mode     | 触发模式     |                                                                     |
-| Turn             | 回合         | "This turn" is 本回合.                                              |
-| World            | 世界         | A world package is 世界包.                                          |
+| Term             | 中文         | Note                                                                                                          |
+| ---------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Binding          | 绑定         |                                                                                                               |
+| Capability       | 能力标签     | A model route's `tag` (`text`, `image`, ...). Plugins are discovered by **Contract**, not by capability tags. |
+| Collection       | 合集         |                                                                                                               |
+| Contract         | 契约         | A versioned ID such as `narrative-engine@1`.                                                                  |
+| Credits          | 作者信息     | The `author`, `license` and `homepage` fields of a package.                                                   |
+| Kernel           | 内核         |                                                                                                               |
+| Pack             | 玩法包       |                                                                                                               |
+| PluginType       | 插件类型     |                                                                                                               |
+| Preset           | 预设         |                                                                                                               |
+| Proposal         | 提案         |                                                                                                               |
+| Provider         | 提供商       |                                                                                                               |
+| Runtime          | runtime      | Kept in English: it names a manifest unit, not "运行时" in general.                                           |
+| Runtime manifest | runtime 清单 |                                                                                                               |
+| Segment          | 提示词段     |                                                                                                               |
+| Session          | 会话         |                                                                                                               |
+| Slot             | 槽位         |                                                                                                               |
+| Trigger mode     | 触发模式     |                                                                                                               |
+| Turn             | 回合         | "This turn" is 本回合.                                                                                        |
+| World            | 世界         | A world package is 世界包.                                                                                    |
 
 ## Prompt vocabulary
 

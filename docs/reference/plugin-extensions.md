@@ -29,6 +29,10 @@ UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，ha
 
 `contributes.hooks` 按 `event` 与 `enforce` 声明允许的 Hook，省略 `enforce` 等同于 `normal`。同一声明可以通过多次 `covel.on()` 注册多个独立 handler；未声明的事件或阶段、以及没有实现的声明仍会使整个 entry 发布失败。
 
+同一事件的 handler 按 `enforce` 分组依次执行：`pre` → `normal` → `post`。组内先执行框架 Hook，再按注册顺序执行插件 Hook；不同插件之间的先后取决于插件的加载顺序，不是可声明的契约。两个插件改写同一份负载时，后执行的 `replace` 覆盖先执行的同名字段，需要确定先后的插件应声明不同的 `enforce`。
+
+`TurnStop` 在一次执行的全部 runtime 结束之后、提交之前触发：此时本次执行的写入还没有落库，也可能在提交时被拒绝。需要在数据落库之后响应的插件使用 `PostStateCommit`。
+
 ## 插件作者类型
 
 外部插件从公开包 `@covel/plugin-handlers-utils` 导入 `PluginAPI` 或 `PluginEntryFactory` 类型，无需安装私有的 runtime/shared workspace 包。`@covel/plugin-handlers-utils/extension-points` 提供扩展点的输入、输出和上下文类型；完整入口类型也可从 `@covel/plugin-handlers-utils/plugin-api` 导入。
@@ -277,6 +281,8 @@ const response = await window.covel.invoke("invokePluginAction", {
 扩展输出先经过点的 output schema，再执行权威归属处理与最终 schema 校验；三步均在一次 service 调用的结算边界内。槽位类型不匹配等最终错误记录为一次 `error / output-validation`，然后由点的 `onError` 决定 skip 或 fail-turn，不会先记 success 再补 failure。超时后的迟到结果不追加 success。
 
 具有回合 emitter 的扩展、压缩与 function service 调用使用同一 `plugin.service.completed` 完成事件写入持久 trace，嵌套调用继承 emitter 并携带 parentCallId。事件只包含身份、扩展 point/id/slot、耗时和固定结果分类，不含调用输入、输出、原始错误、凭据或私有 session incarnation。复用既有 TurnEmitter 的 traceId、seq 和重试范围，等待写入尝试完成；存储失败沿用 trace 的尽力记录语义，不改变插件结果，耗时不包含 trace I/O。没有回合 emitter 的 UI 后台投影只保留进程内诊断窗口。
+
+`onError` 为 skip 的点跳过失败或超时的提供者时，服务端日志记录一行 `[plugin-extensions] skipped provider <pluginId>/<extensionId> of <point> for session <sessionId>: <原因>`。trace 事件不含原始错误，作者在这一行查找自己的片段或槽位没有出现的原因。
 
 诊断按当前返回的最近 100 条调用（全进程最多保留 500 条）计算 point/provider 的 total、success、error、timeout、cancelled。缓存命中与同执行并发合并不增加事件或统计；未激活或未批准的提供者在 discovery 被排除，不算调用失败；调用发出后准入失败则保留失败事件。该统计仅代表当前窗口，会随淘汰变化，不是累计用量。
 

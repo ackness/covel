@@ -169,11 +169,13 @@ entry 注册与清单双向校验，未声明的注册和未实现的声明都�
 | `effects`     | 读写资源与 `parallelSafe`                                                  |
 | `permissions` | 执行权限声明                                                               |
 
+只有一个内联 runtime 的包（runtime ID 等于插件 ID）里，没有写 `agent.tools.plugin` 的 agent 自动获得 `contributes.tools` 的全部工具；写 `plugin: []` 表示一个也不给。给这样的包新增一个只想让界面动作使用的工具时，要同时给 agent 写明白名单。多 runtime 的包每个 runtime 都要自己声明工具。
+
 Function runtime 必须声明 `function.handler`，模块必须默认导出函数，不能同时配置 `agent`。Agent runtime 不能配置 `function`。`function.model` 声明 handler 内 `ctx.gateway` 调用使用的模型 slot（如 `memory`）：detached 后台任务在领取前用它判断凭证就绪，不声明时按系统默认 preset 判断，可能把请求级 slot 绑定漏掉，导致任务一直排队直到 `maxQueueMs` 超时。
 
 Agent 的 guard 在调用模型前执行。返回 `{ skip: false }` 时照常运行；返回 `{ skip: true, ...fields }` 时不调用模型，结果记为 `skipped`，`skip` 之外的字段就是本 runtime 的输出：声明 `io.output.contract` 时按契约校验，并照常绑定给消费者，`skip` 标记本身不进入校验和绑定。需要在本轮放弃工作时，返回契约允许的最小输出，例如 `story-events/plot` 关闭时返回空计划 `{ skip: true, events: [] }`。
 
-`io.concealed: true` 用于处理隐藏内容的 runtime（例如在剧情中策划隐藏事件的 agent）。框架在写入 trace 和推送实时流之前去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime / 工具名、状态、耗时与用量；`/turns` 和手动 RPC 返回的执行结果也会清空它的输出与工具内容。runtime 失败时，发给玩家的失败原因（回合流、trace、返回的结果）换成固定的通用提示，真实原因只写入服务端控制台日志。持久化的执行记录保留完整内容，供重试使用。
+`io.concealed: true` 用于处理隐藏内容的 runtime（例如在剧情中策划隐藏事件的 agent）。框架在写入 trace 和推送实时流之前去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime / 工具名、状态、耗时与用量；`/turns` 和手动 RPC 返回的执行结果也会清空它的输出与工具内容。runtime 失败时，发给玩家的失败原因（回合流、trace、返回的结果）换成固定的通用提示，真实原因只写入服务端控制台日志。持久化的执行记录保留完整内容，供重试使用。隐藏只覆盖上面列出的范围，不覆盖对话日志：隐藏 runtime 的输出里若带文字（`narrativeOutput` 或 `content`），这段文字仍会写入对话日志，并随之进入其他 runtime 的提示词历史、消息接口和“重建提示词”接口。因此隐藏 runtime 不应产生文字输出。
 
 `schedule.needs`、`schedule.after` 与 `io.inputs.*.from.runtime` 中的 runtime ID 只能属于本包（完整 `<pluginId>/<runtimeId>` 或单 runtime 的包 ID），裸字符串依赖也受此限制。跨包引用必须使用公开的版本化 contract；纯 `after` 不会自动激活提供者。
 
@@ -241,6 +243,8 @@ CLI 和安装器的静态校验同样检查 `scope: turn` 与 `scope: committed`
 Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`。运行时用 `canonicalValue` 保存原始业务值；对象投影为 `output`，标量、数组和 `null` 投影为 `{ value }`，缺省值投影为空对象。业务值中的 `events`、`pluginData`、`interactions` 或 `preGameDone` 等同名字段不会发起副作用或完成 setup；这些意图必须通过 `HandlerResult.effects` 和 `HandlerResult.completion` 表达。`effects.interactions`、`effects.notifications` 与 `effects.statePatches` 必须为数组，条目及 `effects.ui[].parts` 必须是对象：function 返回非数组通道或非对象条目时以 `output-schema-invalid` 失败，其他途径带入的同类内容在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](transactions.md)）。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
 
 Agent 继续使用现有的提示词输出协议。执行边界统一将声明的副作用和工具结果归入 `effects`，将 `preGameDone: true` 转为 `completion: "done"`；包含 `topic` 的事件归入副作用，WorldIR 的业务事件保留在 `output.events`。Agent 的公共契约值为拆分后的业务 `output`，普通执行与 resume 使用相同边界。
+
+Agent 最终输出里声明的副作用（`statePatches`、`pluginData`、`notifications`、`interactions`、带 `topic` 的 `events` 等）不经过工具，因此不受 `agent.tools` 白名单限制；`effects` 声明只对分离执行的 runtime 在提交前强制核对。`pluginData` 的归属由内核按来源插件确定，写不到别的插件；`statePatches` 写的是全会话共享的状态表（见 [Proposal 类型](tools.md#proposal-类型)）。只读用途的 agent 应在提示词的输出协议里不声明这些字段。
 
 `PostRuntime` 若改变 function 的 `output`，应同时明确提供匹配的 `canonicalValue`，新值会重新接受私有和公共 schema 校验。仅改写 `output` 会撤销业务值，停止 export 与下游值绑定；有公共输出契约时还会因缺失契约值而失败。修改副作用或完成信号应直接修改 `effects` 或 `completion`。失败 runtime 的副作用不提交，事件不触发后继 runtime。普通执行与 resume 共用 agent 输出 schema gate；非 story agent 声明私有 `io.output.schema` 后，先校验候选协议输出，再拆分业务值与副作用，最终无正文或空正文也接受校验，不符合 schema 即失败，暂停时积累的写入不提交。Story agent 保留独立的叙事正文检查，不使用私有 schema gate。
 

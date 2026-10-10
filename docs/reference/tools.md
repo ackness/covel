@@ -1209,6 +1209,8 @@ agent:
 
 Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。`ProposalType` 由单一真相源 `ProposalPayloadMap` 派生，commit handler 注册表（`satisfies CommitHandlerMap`）与 discovery 广告（`PROPOSAL_TYPES`）均与之编译期对齐——新增 proposal 类型只改 `ProposalPayloadMap` 一处，漏注册 handler 即编译失败。当前已注册类型：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`character.schema.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；从未实装的 `narrative.template`、`record.upsert` 也已移除——它们曾被声明并对外广告但无 commit handler，提交即以 `unknown proposal type` 失败。）
 
+`state.patch` 写入的状态表是全会话共享的：提交时只要求 `table` 与 `field` 为非空字符串，不按插件划分归属，也不按表的 schema 校验值；每次变更在变更记录里带上来源 `pluginId/runtimeId`。只属于一个插件的数据放在 `plugin.data`，它按 `(sessionId, pluginId, namespace, key)` 隔离。
+
 ### `ui.render`
 
 写入聊天消息中的通用 UI block，并发出 `ui.rendered` 事件。payload 使用 parts 模型：
