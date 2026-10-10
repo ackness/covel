@@ -11,7 +11,7 @@ import {
   readReasoningEffort,
   reasoningRequestFields,
 } from "../reasoning-effort.js";
-import { extractParameterOverrides } from "./common.js";
+import { extractParameterOverrides, fallbackToolCallIds } from "./common.js";
 import {
   postJson,
   parseJson,
@@ -241,17 +241,14 @@ export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
   const adapter: ModelProviderAdapter = {
     async generateText(config, params, context) {
       const warnings: LLMProviderWarning[] = [];
-      const response = await send(
-        config,
-        params.model,
-        requestBody(config, params, context, warnings),
-      );
+      const body = requestBody(config, params, context, warnings);
+      const response = await send(config, params.model, body);
       const payload = await parseJson(response);
       assertSuccess(response, payload, GOOGLE_PROVIDER);
       const result = new GoogleResponse();
       result.push(payload);
       return withProviderWarnings(
-        result.result(config, params.model),
+        result.result(config, params.model, fallbackToolCallIds(body)),
         warnings,
       );
     },
@@ -292,12 +289,8 @@ export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
     },
     async *streamText(config, params, context) {
       const warnings: LLMProviderWarning[] = [];
-      const response = await send(
-        config,
-        params.model,
-        requestBody(config, params, context, warnings),
-        true,
-      );
+      const body = requestBody(config, params, context, warnings);
+      const response = await send(config, params.model, body, true);
       if (!response.ok)
         assertSuccess(response, await parseJson(response), GOOGLE_PROVIDER);
       const accumulator = new GoogleResponse();
@@ -316,7 +309,7 @@ export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
         }
       }
       const result = withProviderWarnings(
-        accumulator.result(config, params.model),
+        accumulator.result(config, params.model, fallbackToolCallIds(body)),
         warnings,
       );
       for (const tool of result.toolCalls ?? [])

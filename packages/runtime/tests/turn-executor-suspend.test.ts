@@ -27,7 +27,11 @@ import {
   resumeSuspendedRuntime,
 } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type {
+  LLMAdapter,
+  LLMMessage,
+  LLMResponse,
+} from "../src/llm/llm-adapter.js";
 import type {
   ToolExecutor,
   ToolCallContext,
@@ -287,6 +291,78 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(s.pendingContinuation.executionContext).toEqual(
       turn.executionContext,
     );
+  });
+
+  it("resumes into the suspended call when an earlier step used the same tool-call ID", async () => {
+    // An endpoint without native IDs can hand every step of a loop the same
+    // one. The answer belongs to the last result under that ID.
+    const suspendArgs = { reason: "Need more info", resumeSchema: {} };
+    mockLLM.setResponses([
+      {
+        content: null,
+        toolCalls: [{ id: "call_0", name: "some-tool", arguments: "{}" }],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "call_0",
+            name: "suspend",
+            arguments: JSON.stringify(suspendArgs),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 15, outputTokens: 8 },
+      },
+    ]);
+    mockToolExecutor.setToolResult("some-tool", {
+      toolCallId: "call_0",
+      name: "some-tool",
+      result: '{"value":17}',
+      parsedResult: { value: 17 },
+      success: true,
+    });
+    mockToolExecutor.setToolResult("suspend", {
+      toolCallId: "call_0",
+      name: "suspend",
+      result: JSON.stringify({ _covelSuspend: true, ...suspendArgs }),
+      parsedResult: { _covelSuspend: true, ...suspendArgs },
+      success: true,
+    });
+    const turn = await executeTurn(makeTurnInput(), [agentManifest], {
+      loadRuntime: async () => agentLoaded,
+      llm: mockLLM,
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+    });
+    const suspension = collectExecutionSuspensions(turn)[0]!;
+
+    let resumed: readonly LLMMessage[] = [];
+    await resumeSuspendedRuntime(suspension, { name: "Alice" }, agentManifest, {
+      loadRuntime: async () => agentLoaded,
+      llm: {
+        generate: async (params) => {
+          resumed = params.messages;
+          return {
+            content: "Done.",
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
+      },
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+    });
+    expect(
+      resumed
+        .filter((message) => message.role === "tool")
+        .map((message) => message.content),
+    ).toEqual(['{"value":17}', '{"resumeData":{"name":"Alice"}}']);
   });
 
   it("should capture partialContent and toolCallsSoFar in pendingContinuation", async () => {

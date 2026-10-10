@@ -44,6 +44,7 @@ import {
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
+  fallbackToolCallIds,
   imagePartUrl,
   lateSystemOption,
 } from "./common.js";
@@ -558,13 +559,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       // Emit accumulated tool calls before done.
       if (toolCallAcc.size > 0) {
         const sorted = [...toolCallAcc.entries()].sort((a, b) => a[0] - b[0]);
+        const fallbackId = fallbackToolCallIds(body);
         for (const [index, tc] of sorted) {
           if (!tc.name) continue;
           yield {
             type: "tool-call",
-            // Some compatible gateways leave `id` out of the stream; the AI
-            // SDK makes one up, here it follows the call's position.
-            id: tc.id ?? `call_${index}`,
+            // Some compatible gateways leave `id` out of the stream.
+            id: tc.id ?? fallbackId(index),
             name: tc.name,
             arguments: tc.arguments || "{}",
           };

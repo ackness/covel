@@ -9,8 +9,31 @@
  * and its own field map; only the mechanics are unified here.
  */
 
+import { createHash } from "node:crypto";
 import type { ImagePart, TextMessage } from "../types.js";
 import { readReasoningEffort } from "../reasoning-effort.js";
+
+/**
+ * IDs for the tool calls of a response that came without them. The AI SDK
+ * makes up a random ID here; this one is a digest of the request body and the
+ * call's position instead, so it is as unique (each step of a tool loop sends
+ * a different body, and so does each runtime) and a recorded session still
+ * repeats byte for byte. The form is the one OpenAI uses, which every wire
+ * accepts when the ID is sent back.
+ */
+export function fallbackToolCallIds(
+  requestBody: Record<string, unknown>,
+): (index: number) => string {
+  let request: string | undefined;
+  return (index) => {
+    request ??= JSON.stringify(requestBody);
+    const digest = createHash("sha256")
+      .update(request)
+      .update(`\n${index}`)
+      .digest("hex");
+    return `call_${digest.slice(0, 24)}`;
+  };
+}
 
 /**
  * Maps a camelCase `parameterOverrides` source key to the provider's wire-format
