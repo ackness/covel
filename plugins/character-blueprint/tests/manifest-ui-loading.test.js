@@ -20,14 +20,14 @@ async function discover() {
 }
 
 describe("character-blueprint manifest and UI loading", () => {
-  it("loads the import and presence runtimes as manual functions", async () => {
+  it("loads the presence runtime as its one manual function", async () => {
     const discovery = await discover();
     const manifests = (await loadPluginManifest(discovery)).map(
       (entry) => entry.manifest,
     );
 
-    expect(manifests.map((manifest) => manifest.name).sort()).toEqual([
-      "character-blueprint/import",
+    // Cards come from the world package; nothing writes them during play.
+    expect(manifests.map((manifest) => manifest.name)).toEqual([
       "character-blueprint/presence",
     ]);
     for (const manifest of manifests) {
@@ -45,7 +45,6 @@ describe("character-blueprint manifest and UI loading", () => {
         manifests.map((manifest) => [manifest.name, manifest.outputContract]),
       ),
     ).toEqual({
-      "character-blueprint/import": "character-blueprint@1",
       "character-blueprint/presence": "character-presence@1",
     });
   });

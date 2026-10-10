@@ -96,11 +96,11 @@ contributes:
       - ./ui/character-presence-panel.json
 ---
 
-Character Profiles holds the world's preset cast. The `import` runtime stores a
-character blueprint and can instantiate it as a session character; the
-`presence` runtime stores a character's portrait, sprite, voice, and visual
-variants, which the `character.visual@1` slot projects onto the stage. Both are
-manual function runtimes; world packages fill the same namespaces through
-world data. A `prompt.segment@1` provider gives story runtimes the roleplay
+Character Profiles holds the world's preset cast. World packages fill the
+`blueprints`, `presence` and `assets` namespaces through world data; the cards
+are read-only during play. The manual `presence` runtime stores a character's
+portrait, sprite, voice, and visual variants, which the `character.visual@1`
+slot projects onto the stage: the portrait panel calls it when the player
+uploads a replacement portrait. A `prompt.segment@1` provider gives story runtimes the roleplay
 notes of each card whose character is in the session (`<character-notes>`). This root `PLUGIN.md` is metadata only — executable runtimes live
 under `runtimes/`.
