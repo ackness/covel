@@ -718,7 +718,6 @@ store. The session reducer retains only the `message` namespace needed to build
 historical message-card snapshots, plus derived durable job execution steps.
 Updates to unrelated namespaces do not replace the session context value.
 
-
 ### 挂起恢复面板
 
 agent runtime 调用 `suspend` 后，会话工具条上的徽标打开「挂起的执行」对话框（`suspensions-panel.tsx`）。每张卡片以 `reason` 为标题，并按 `resumeSchema` 选择作答控件（`suspension-input.ts`）：`boolean` 为是/否按钮，`enum` 或 `oneOf` 的 `const` 为选项按钮，`string` 为文本框，可由维度值编辑器覆盖的对象 / 数字 schema 为表单（复用 `DimensionValueEditor`）。只有 schema 缺失或没有控件能覆盖时才退回「高级」折叠区里的原始 JSON 文本框。
