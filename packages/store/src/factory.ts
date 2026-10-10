@@ -69,13 +69,35 @@ export async function createStore(config: StoreConfig): Promise<DataStore> {
  * const store = await createStoreFromEnv();
  * ```
  */
-export function createStoreFromEnv(): Promise<DataStore> {
+export async function createStoreFromEnv(): Promise<DataStore> {
   const env = readRuntimeEnv();
-  return createStore({
+  const config = {
     backend: env.storeBackend,
     sqlitePath: env.sqlitePath,
     databaseUrl: env.databaseUrl,
-  });
+  };
+  if (config.backend !== "sqlite" || config.sqlitePath === ":memory:")
+    return createStore(config);
+
+  // A server owns its SQLite file alone: a second process fails here, naming
+  // the owner, instead of running on the same file.
+  const { acquireSqliteLock } = await import("./sqlite/database-lock.js");
+  const release = acquireSqliteLock(config.sqlitePath);
+  try {
+    const store = await createStore(config);
+    const close = store.close.bind(store);
+    store.close = async () => {
+      try {
+        await close();
+      } finally {
+        release();
+      }
+    };
+    return store;
+  } catch (error) {
+    release();
+    throw error;
+  }
 }
 
 /**
