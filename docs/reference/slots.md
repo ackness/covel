@@ -239,6 +239,40 @@ reasoningEffort = "disabled"
 
 当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`（GPT-6 及之后的型号按名称识别，另有 `max`，不记录默认档位）、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 按型号与协议限定的子集、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/开启、原生档位或预算预设。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。Gemini 档位依据 [Google thinking 说明](https://ai.google.dev/gemini-api/docs/generate-content/thinking) 和 [OpenAI 兼容映射](https://ai.google.dev/gemini-api/docs/openai)。
 
+#### 档位数据
+
+“哪个模型支持哪些档位”是数据，不是代码：`packages/ai-provider/src/capability/reasoning-models.data.json` 按服务商系列（`deepseek`、`anthropic`、`google`、`xai`、`qwen`、`openai`、`compatible`）列出模型名称的正则和对应档位，代码（`reasoning-effort.ts` 里各协议的 wire）只负责把选中的档位写成该协议的请求字段。结构与 AI SDK 一致：先按模型名解析出能力，再由协议层写参数；区别是能力放在数据文件里。
+
+每个系列的字段：
+
+| 字段               | 含义                                                                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`            | 模型 ID（小写）匹配其中任一正则即属于该系列；按文件中的系列顺序判断                                                                                                          |
+| `provider`         | 没有任何系列的 `model` 匹配时，按服务商 ID 判断                                                                                                                              |
+| `known`            | 已确认支持档位的名称。系列写了 `known` 或 `tableFlag` 时，模型要先通过其中之一才读 `rules`                                                                                   |
+| `tableFlag`        | LiteLLM 模型表把模型标为 `reasoning` 时也算通过（只在查询带上模型表特性时生效，即设置页的档位列表；请求路径只按名称判断）                                                    |
+| `thinkingAlwaysOn` | 不能关闭思考的模型：不提供 `disabled`                                                                                                                                        |
+| `rules`            | 按顺序取第一条适用的规则。`match`（一个或多个正则，全部匹配）、`protocols`（适用的协议，`""` 表示未指定协议）、`whenThinkingAlwaysOn`、`default`、`levels`、`parameterStyle` |
+
+`levels` 的一项是档位名，或 `{ "value", "budget", "protocols" }`：`budget` 表示这一档按思考 token 预算发送，`protocols` 表示只在这些协议上提供。`parameterStyle` 在一个系列有多种写法时选择其一：Anthropic 的 `adaptive`（同时发送 `thinking.type: "adaptive"`）和 Qwen 的 `effort`（同时发送 `reasoning_effort`）。
+
+LiteLLM 模型表只提供 `reasoning` 这一个标记；它的 `supports_*_reasoning_effort`、`reasoning_effort_levels` 等字段目前只覆盖部分 OpenAI、Anthropic 和少数其他模型，Gemini 只有个别条目，Qwen、DeepSeek、xAI 没有，也不含预算预设和各协议的差异，所以档位数据由人工维护，每周的模型表刷新不会改动它。刷新会重新生成 `packages/ai-provider/tests/__snapshots__/reasoning-characterization.snap.txt`，其中记录每个模型名称在每个协议下得到的档位和请求字段；这个文件的 diff 就是新模型落在哪一类的清单。
+
+不等发版就给新模型加档位：在用户配置目录（桌面端为 `~/.covel/`，即 `COVEL_USER_CONFIG_DIR`）放一个同样格式的 `reasoning-models.json`，服务端启动时读取。其中的规则先于内置规则读取，并且不经过 `known` / `tableFlag`，所以每条规则必须写 `match`；`model`、`provider`、`thinkingAlwaysOn` 追加到内置列表，`known` 和 `tableFlag` 不能写。文件无效时记一条警告并只用内置数据。未设置 `COVEL_USER_CONFIG_DIR` 的部署（源码开发、Docker）不读取这个文件。
+
+```json
+{
+  "families": [
+    {
+      "id": "compatible",
+      "rules": [{ "match": "kimi-k3", "levels": ["low", "high", "max"] }]
+    }
+  ]
+}
+```
+
+没有任何规则命中的模型行为不变：属于某个已命名系列的不发送思考字段；`compatible` 系列（名称和服务商都不属于任何系列）按所选档位原样发送，在这个系列里加了规则的模型则只发送规则列出的档位。
+
 ### Responses 不让服务商保存对话
 
 Responses 协议的每个请求默认带 `store: false`：服务商不保存这次请求的提示和应答，玩家的对话只留在 Covel 自己的存储里。OpenAI 的 Responses 接口在不带这个字段时默认保存一段时间，所以 Covel 不依赖服务商的默认值。Chat 协议不受影响，仍然只在用途配置了 `store` 时发送它。

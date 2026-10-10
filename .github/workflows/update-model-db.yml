@@ -3,8 +3,9 @@ name: Update model data
 # Keep the bundled LiteLLM model snapshot (context windows, output limits,
 # modalities, prices) current. Once a week this pins the newest LiteLLM commit
 # that changed the model table, regenerates
-# packages/ai-provider/data/model-db.json, and opens or refreshes a pull
-# request for review. It never pushes to main.
+# packages/ai-provider/data/model-db.json and the record of which reasoning
+# levels each model name is offered, and opens or refreshes a pull request for
+# review. It never pushes to main.
 #
 # Pull requests opened with the default GITHUB_TOKEN do not trigger other
 # workflows, so CI will not run on them by itself. Store a token that may open
@@ -111,7 +112,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           gh auth setup-git
           git switch -C "$BRANCH"
-          git add packages/ai-provider/model-db-source.json packages/ai-provider/data/model-db.json
+          git add packages/ai-provider/model-db-source.json packages/ai-provider/data/model-db.json \
+            packages/ai-provider/tests/__snapshots__/reasoning-characterization.snap.txt
           git commit -m "chore(ai-provider): update LiteLLM model data to ${short}"
           git push --force origin "$BRANCH"
           body="$(cat <<EOF
@@ -119,7 +121,7 @@ jobs:
 
           Pins the bundled LiteLLM model data to BerriAI/litellm@${REVISION} (${UPDATED_AT}, ${count} models) and regenerates \`packages/ai-provider/data/model-db.json\`.
 
-          Opened by the scheduled \`Update model data\` workflow. Review limit and price changes for models the bundled worlds and \`llm.toml.example\` use before merging.
+          Opened by the scheduled \`Update model data\` workflow. Review limit and price changes for models the bundled worlds and \`llm.toml.example\` use before merging. The diff of \`reasoning-characterization.snap.txt\` shows which reasoning levels each new model name is offered; a model that takes other levels needs an entry in \`packages/ai-provider/src/capability/reasoning-models.data.json\`.
 
           ## Verification
 

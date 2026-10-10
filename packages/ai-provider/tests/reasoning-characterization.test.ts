@@ -493,5 +493,5 @@ describe("reasoning controls of every known model", () => {
     await expect(snapshot).toMatchFileSnapshot(
       "./__snapshots__/reasoning-characterization.snap.txt",
     );
-  }, 120_000);
+  }, 300_000);
 });

@@ -14,6 +14,7 @@
   llm.toml                   ← LLM slot 配置（provider / model / baseUrl）
   keys.env                   ← provider API key，KEY=VALUE 纯文本
   settings.json              ← 前端用户偏好（unified SettingsStore：locale / 外观 / slot 覆盖 / 每插件设置）
+  reasoning-models.json      ← 可选：内置数据尚未收录的模型的思考档位（见 ../reference/slots.md 的“档位数据”）
   app-update.json            ← 已忽略的桌面应用版本
   window-state.json          ← 窗口尺寸、位置、最大化与全屏状态
   plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）

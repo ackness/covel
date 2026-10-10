@@ -14,6 +14,7 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
   llm.toml                   ← LLM slot config (provider / model / baseUrl)
   keys.env                   ← provider API keys, plain KEY=VALUE lines
   settings.json              ← front-end preferences (unified SettingsStore: locale / appearance / slot overrides / per-plugin settings)
+  reasoning-models.json      ← optional: reasoning levels of models the bundled data does not name yet (reasoning level data in docs/reference/slots.md)
   app-update.json            ← ignored desktop app release
   window-state.json          ← window size, position, maximized and fullscreen state
   plugins/                   ← user plugins (merged on top of bundled cores)
