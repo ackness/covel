@@ -5,7 +5,7 @@
 ### Security
 
 - **The web client sends only the provider keys its requests can reach.** `X-Provider-Keys` carries the providers that the model roles resolve to (saved binding, otherwise the server's provider) and any provider a request names directly, instead of every saved key. Until the server's roles and presets are loaded it still sends all keys. See `docs/architecture/security.md`.
-- **Rate limits cannot be evaded by rotating path parameters, and their table is bounded.** The limiter counts per client address and route template, and keeps at most 10,000 counters, evicting the oldest.
+- **Rate limits cannot be evaded by rotating path parameters, and their table is bounded.** Besides the budget of each path, a client address has one budget per route template, eight times as large, and the limiter keeps at most 10,000 counters, evicting the oldest.
 
 ### Breaking
 

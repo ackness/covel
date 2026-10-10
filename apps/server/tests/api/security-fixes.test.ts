@@ -207,22 +207,27 @@ describe("[P2] rate limiter proxy trust", () => {
 describe("rate limiter keys and table size", () => {
   const env = { incoming: { socket: { remoteAddress: "203.0.113.10" } } };
 
-  it("counts every value of a path parameter against one budget", async () => {
+  it("keeps a budget per path and a larger one per route", async () => {
     const app = new Hono();
     app.get("/items/:id", rateLimiter({ max: 2 }), (c) => c.text("ok"));
+    const get = async (id: string) =>
+      (await app.request(`/items/${id}`, undefined, env)).status;
+    // One path has its own budget ...
+    expect([await get("a"), await get("a"), await get("a")]).toEqual([
+      200, 200, 429,
+    ]);
+    // ... and a client that walks the parameter stops at eight budgets.
     const statuses: number[] = [];
-    for (const id of ["a", "b", "c"]) {
-      const res = await app.request(`/items/${id}`, undefined, env);
-      statuses.push(res.status);
-    }
-    expect(statuses).toEqual([200, 200, 429]);
+    for (let i = 0; i < 15; i++) statuses.push(await get(`walk-${i}`));
+    expect(statuses.slice(0, 14).every((status) => status === 200)).toBe(true);
+    expect(statuses[14]).toBe(429);
   });
 
   it("evicts the oldest counter when the table is full", async () => {
     const app = new Hono();
-    app.use("/open/*", rateLimiter({ max: 1, maxEntries: 2 }));
+    app.use("/open/*", rateLimiter({ max: 1, maxEntries: 4 }));
     app.get("/open/:name", (c) => c.text("ok"));
-    // The middleware path is the template of `use`, so separate IPs fill the table.
+    // Each client holds two counters (its path and the route), so two fill the table.
     const from = (ip: string) =>
       app.request("/open/x", undefined, {
         incoming: { socket: { remoteAddress: ip } },

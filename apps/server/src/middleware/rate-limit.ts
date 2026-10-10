@@ -27,6 +27,9 @@ const WINDOW_MS = 60_000;
 
 const DEFAULT_MAX_ENTRIES = 10_000;
 
+/** One client's budget across every value of a path parameter, in budgets of one path. */
+const TEMPLATE_BUDGET_FACTOR = 8;
+
 function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
   return new Set(
     (raw ?? "")
@@ -98,34 +101,41 @@ export function rateLimiter({
     }
 
     const ip = clientIp(c);
-    // The route template, not the concrete path: a path parameter must not
-    // open a fresh counter for every value a client tries.
-    const key = `${ip}:${c.req.routePath}`;
-    const entry = windows.get(key);
-
-    if (!entry || now >= entry.resetAt) {
+    // Two counters. One per concrete path keeps the budget of each session.
+    // One per route template, with a larger budget, stops a client that walks
+    // a path parameter to open a fresh counter for every value it tries.
+    const keys: Array<[string, number]> = [
+      [`${ip} ${c.req.path}`, max],
+      [`${ip} *${c.req.routePath}`, max * TEMPLATE_BUDGET_FACTOR],
+    ];
+    for (const [key, limit] of keys) {
+      const entry = windows.get(key);
+      if (entry && now < entry.resetAt && entry.count >= limit) {
+        c.header(
+          "Retry-After",
+          String(Math.ceil((entry.resetAt - now) / 1000)),
+        );
+        return c.json(
+          errorBody("Too many requests", { code: "rate_limit_exceeded" }),
+          429,
+        );
+      }
+    }
+    for (const [key] of keys) {
+      const entry = windows.get(key);
+      if (entry && now < entry.resetAt) {
+        entry.count++;
+        continue;
+      }
       // Re-insert so the map stays ordered by window start; the oldest
       // windows are the first to go when the table is full.
       windows.delete(key);
-      // Oldest first: expired windows go, then live ones while over the cap.
       for (const [k, e] of windows) {
         if (now < e.resetAt && windows.size < maxEntries) break;
         windows.delete(k);
       }
       windows.set(key, { count: 1, resetAt: now + WINDOW_MS });
-      await next();
-      return;
     }
-
-    if (entry.count >= max) {
-      c.header("Retry-After", String(Math.ceil((entry.resetAt - now) / 1000)));
-      return c.json(
-        errorBody("Too many requests", { code: "rate_limit_exceeded" }),
-        429,
-      );
-    }
-
-    entry.count++;
     await next();
   };
 }

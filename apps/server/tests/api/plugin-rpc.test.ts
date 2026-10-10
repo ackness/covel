@@ -107,8 +107,8 @@ function setup(): {
 let nextClient = 0;
 
 /**
- * The route's rate limiter counts per client address and route template and
- * lives as long as the module. Give each app an address of its own so one
+ * The route's rate limiter counts per client address, with one budget per path
+ * and a larger one per route, and lives as long as the module. Give each app an address of its own so one
  * test's requests do not use up another's budget.
  */
 function ownClientAddress(app: { request: Hono["request"] }): void {
