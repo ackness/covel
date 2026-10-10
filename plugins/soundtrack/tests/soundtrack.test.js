@@ -1,6 +1,10 @@
 import { getPendingProposals } from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-import { moodVocabulary, selectTrack } from "../lib/soundtrack.js";
+import {
+  matchesScene,
+  moodVocabulary,
+  selectTrack,
+} from "../lib/soundtrack.js";
 import cue from "../runtimes/cue/handler.js";
 import scene from "../runtimes/scene/handler.js";
 import register from "../server/index.js";
@@ -45,6 +49,17 @@ describe("choosing a track", () => {
     expect(pick({ scene: "歪角鹿酒馆" })).toBe("tavern");
     expect(pick({ scene: "歪角鹿酒馆 · 吧台" })).toBe("tavern");
     expect(pick({ scene: "北山墓道" })).toBe("theme");
+  });
+
+  it("matches whole scene names only", () => {
+    expect(
+      matchesScene(["The Crooked Stag"], "the crooked stag, taproom"),
+    ).toBe(true);
+    expect(matchesScene(["Hall"], "Great Hall")).toBe(true);
+    expect(matchesScene(["inn"], "Dunn Cellar")).toBe(false);
+    expect(matchesScene(["Great Hall"], "Hall")).toBe(false);
+    expect(matchesScene(["旧街"], "旧街尽头")).toBe(true);
+    expect(matchesScene([], "Hall")).toBe(false);
   });
 
   it("answers the mood, with the track of this scene first", () => {

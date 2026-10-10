@@ -1,7 +1,7 @@
 ---
 id: codex
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Codex
 description: >-
   Automatically collects newly discovered places, people, items, and rumors for
@@ -104,16 +104,16 @@ A candidate must satisfy **all three** rules:
 
 ### Rule A: proper noun / nameable entity
 
-- ✅ OK: `Bailing Marsh`, `Azure Duckweed Sect`, `Su Wan`, `Spirit Sense Technique`, `Qi Refining Layer 3`, `Spirit Vein Surge`
-- ❌ NOT OK: `mountain wind through pines`, `a small sect at night`, `the hem comparison`, `most likely`, `if the other side truly...`, `mentioning the crystal dust in his hand and the rear mountain`
+- ✅ OK: `Saltglass Harbor`, `Lantern Guild`, `Ines Voss`, `Tidecalling Rite`, `Tether Four`, `The Blackout of 1987`
+- ❌ NOT OK: `wind across the quay`, `a small guild at night`, `the cuff comparison`, `most likely`, `if the other side truly...`, `mentioning the dust in his hand and the rear dock`
 
 ### Rule B: explicitly introduced in this turn
 
 - ✅ OK: the narrator names a location / person / faction / item / skill / lore for the first time. There is enough substance for 2–3 descriptive sentences
 - ❌ NOT OK:
-  - Passing scenery mentions ("night wind swept through the pines" → pines is not a new discovery)
+  - Passing scenery mentions ("the night wind swept across the quay" → the quay is not a new discovery)
   - Phrases that begin with pronouns / adverbs / conjunctions ("here", "at that moment", "highly likely", "if", "then", "also", "mentioning")
-  - Generic descriptive phrases ("a small sect at night" → environmental description, not a new place name)
+  - Generic descriptive phrases ("a small guild at night" → environmental description, not a new place name)
   - Sentence fragments, broken verb-object structures, truncated rhetorical questions
 
 ### Rule C: title must be a standalone noun phrase
@@ -125,16 +125,16 @@ A candidate must satisfy **all three** rules:
 
 ### Category guide
 
-| category    | When to use                                                           | Examples                                                                       |
-| ----------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `location`  | Named places / regions / buildings / terrain                          | Bailing Marsh, Rear Mountain of Azure Duckweed Sect, West-Side Old Herb Garden |
-| `character` | Named people, or anonymised key figures with clear identity           | Su Wan, Mysterious Inner-Sect Steward, Tall Lean Outer-Sect Disciple           |
-| `item`      | Specific items, artefacts, pills, materials                           | Xuanbing Sword, Soul-Return Pill, Spirit-Breaking Hook, Ward Talisman Array    |
-| `skill`     | Named techniques, secret arts, arrays, moves                          | Spirit Sense Technique, Sword-Driving Chant, Qi-Gathering Array                |
-| `lore`      | Definite setting facts, historical events, faction relations, rumours | Era of Qi Resurgence, Nine-State Sect Upheaval, Mystery of Bloodline Awakening |
-| `monster`   | Named beasts, monsters, undead                                        | Red-Flame Nine-Tailed Fox, Rotbone Corpse King                                 |
+| category    | When to use                                                           | Examples                                                                |
+| ----------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `location`  | Named places / regions / buildings / terrain                          | Saltglass Harbor, Tether Four Maintenance Deck, the Old Cistern Quarter |
+| `character` | Named people, or anonymised key figures with clear identity           | Ines Voss, the Veiled Harbormaster, a Tall Lean Dock Runner             |
+| `item`      | Specific items, artefacts, pills, materials                           | Saltglass Lantern, Ration Chip Ledger, Boarding Hook, Ward Chalk Circle |
+| `skill`     | Named techniques, secret arts, arrays, moves                          | Tidecalling Rite, Zero-G Docking Maneuver, Cold Reading                 |
+| `lore`      | Definite setting facts, historical events, faction relations, rumours | The Blackout of 1987, Lantern Guild Schism, Rumour of the Drowned Bell  |
+| `monster`   | Named beasts, monsters, undead                                        | Brine Wraith, Hull-Borer Swarm                                          |
 
-> **Scope of `character` (do not record twice)**: a session can also run the character tracker (character-tracker) or the relationship graph (npc-graph). They keep the **state, attributes and relationships** of the player character and the main NPCs in their own stores and panels. Do not record those here. Use `character` only for **knowledge about a person that they do not cover**. That is a passer-by who appears once and gets no profile, or a person of legend or history. It is also a key figure known only by a role (such as "Mysterious Inner-Sect Steward"). And it is a **background fact** about a person: origin, how a title was earned, an anecdote. The test: a fact that reads like a field or a relationship on a character sheet belongs to those two systems. A fact that reads like a piece of background in a codex belongs here.
+> **Scope of `character` (do not record twice)**: a session can also run the character tracker (character-tracker) or the relationship graph (npc-graph). They keep the **state, attributes and relationships** of the player character and the main NPCs in their own stores and panels. Do not record those here. Use `character` only for **knowledge about a person that they do not cover**. That is a passer-by who appears once and gets no profile, or a person of legend or history. It is also a key figure known only by a role (such as "the Veiled Harbormaster"). And it is a **background fact** about a person: origin, how a title was earned, an anecdote. The test: a fact that reads like a field or a relationship on a character sheet belongs to those two systems. A fact that reads like a piece of background in a codex belongs here.
 
 ### Rarity guide
 
@@ -152,16 +152,16 @@ A candidate must satisfy **all three** rules:
   "entries": [
     {
       "category": "location",
-      "title": "West-Side Old Herb Garden",
-      "content": "A long-abandoned zone within Azure Duckweed Sect, recently visited in secret by the Mysterious Inner-Sect Steward. Faint residual talisman light, charred medicinal odour, and drag marks suggest a covert cache.",
-      "tags": ["Azure Duckweed Sect", "forbidden zone", "herb garden"],
+      "title": "Old Cistern Quarter",
+      "content": "A long-flooded district of Saltglass Harbor, recently visited in secret by the Veiled Harbormaster. Faint chalk-circle residue, a smell of burnt resin, and drag marks suggest a covert cache.",
+      "tags": ["Saltglass Harbor", "off limits", "cistern"],
       "rarity": "uncommon"
     },
     {
       "category": "character",
-      "title": "Su Wan",
-      "content": "The protagonist's senior sister, an inner-sect disciple of Azure Duckweed. Level-headed; appears to know the inside story about the mysterious spirit vein, and has agreed to investigate the rear-mountain anomaly with the protagonist.",
-      "tags": ["senior sister", "Azure Duckweed Sect", "companion"],
+      "title": "Ines Voss",
+      "content": "A harbor pilot of the Lantern Guild and an old friend of the protagonist. Level-headed; appears to know the inside story of the sealed cistern, and has agreed to look into the flooded district with the protagonist.",
+      "tags": ["harbor pilot", "Lantern Guild", "companion"],
       "rarity": "common"
     }
   ]
@@ -175,16 +175,39 @@ A candidate must satisfy **all three** rules:
   "entries": [
     {
       "category": "location",
-      "title": "West-Side Old Herb Garden",
-      "content": "Late at night, at least two figures were seen secretly moving heavy objects deep in the garden; one figure stood upright in a manner resembling the Inner-Sect Steward.",
-      "tags": ["night investigation", "Inner-Sect Steward"],
+      "title": "Old Cistern Quarter",
+      "content": "Late at night, at least two figures were seen secretly moving heavy crates deep in the quarter; one stood upright in a manner resembling the Veiled Harbormaster.",
+      "tags": ["night watch", "Veiled Harbormaster"],
       "rarity": "rare"
     }
   ]
 }
 ```
 
-**Case 3 — no qualifying new discovery → terminate immediately**
+**Case 3 — the same rules in another genre (science fiction)**
+
+```json
+{
+  "entries": [
+    {
+      "category": "item",
+      "title": "Ration Chip Ledger",
+      "content": "A scratched data chip kept by the deck quartermaster. It lists every ration drawn from Tether Four in the last year, and three entries carry no crew name.",
+      "tags": ["Tether Four", "quartermaster", "rations"],
+      "rarity": "uncommon"
+    },
+    {
+      "category": "lore",
+      "title": "Tether Four Blackout",
+      "content": "A forty-minute power loss on Tether Four that the station log records as a routine test. Several crew members describe it as the night the lower decks were sealed.",
+      "tags": ["Tether Four", "blackout", "station log"],
+      "rarity": "rare"
+    }
+  ]
+}
+```
+
+**Case 4 — no qualifying new discovery → terminate immediately**
 
 Do not call any writer tool. Call `runtime-done` to finish. Existing entries are already provided in the `<existing-entries>` block — no query tool is needed.
 

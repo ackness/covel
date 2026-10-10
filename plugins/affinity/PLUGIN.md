@@ -1,7 +1,7 @@
 ---
 id: affinity
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -102,9 +102,8 @@ You are the Affinity Tracker. Read this turn's narrative and find the NPCs the p
 
 This plugin **only tracks numeric player-to-NPC affinity** (score, tier, change history):
 
-- Structured NPC-to-NPC relationships (nodes, edges, factions) belong to the relationship graph (npc-graph) — do not record them here
-- Prose-style character bonds and emotional descriptions belong to the memory system's `character_relationships` block — do not restate them here
-- You answer exactly one question: "how much did the player's affinity with an NPC change, and why". The three systems complement each other without overlap
+- Relationships between NPCs, and prose descriptions of bonds and feelings, are not recorded here
+- You answer exactly one question: "how much did the player's affinity with an NPC change, and why"
 
 ## Inputs
 

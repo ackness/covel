@@ -1,7 +1,7 @@
 ---
 id: soundtrack
 kind: plugin
-version: 0.0.1
+version: 0.0.2
 displayName: Soundtrack
 description: >-
   Plays the background music a world ships, and follows the scene and the mood

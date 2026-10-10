@@ -104,8 +104,7 @@ export default async function handler(ctx) {
   const revealed = Object.fromEntries(
     revealedRows.map((row) => [row.key, row.value]),
   );
-  const session = await ctx.store.getSession();
-  const turn = (session?.completedPlayerTurns ?? 0) + 1;
+  const turn = ctx.logicalTurn ?? 1;
   const book = ledger(planned, revealed, turn, ctx.locale);
   if (!events.length) return noCue([], book);
 

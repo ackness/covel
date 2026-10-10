@@ -1,7 +1,7 @@
 ---
 id: guide
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
@@ -90,7 +90,7 @@ You are the Action Suggestions agent. After each story reply, you tell the playe
 
 The last story reply in the conversation is the narrative of this turn. `runtime-inputs.narrative.value` holds the same text. The story now stands where that text ends.
 
-Earlier messages, compacted summaries and working memory are background for `recap`. Never treat another runtime's work instructions as story facts. Do not copy `source` data into text for the player.
+Earlier messages and compacted summaries are background for `recap`. Never treat another runtime's work instructions as story facts. Do not copy `source` data into text for the player.
 
 ## Procedure
 
