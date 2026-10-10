@@ -187,4 +187,54 @@ describe("create-character-form schema boundary", () => {
       }),
     ).resolves.toMatchObject({ created: true });
   });
+  it("offers the form again with the refused submission's answers filled in", async () => {
+    const result = await createCharacterForm.execute(
+      {
+        ...params,
+        fields: [
+          ...params.fields,
+          { name: "motive", type: "text", label: "Motive" },
+          {
+            name: "occupation",
+            type: "select",
+            label: "Occupation",
+            options: ["engineer", "medic"],
+          },
+        ],
+      },
+      {
+        ...context,
+        messages: {
+          translations: {
+            "This world no longer accepts some of your earlier answers. Check the form and submit it again.":
+              "请检查后重新提交。",
+          },
+        },
+        store: {
+          listPlayerInputs: async () => [
+            {
+              formId: "char-creation",
+              values: {
+                characterName: "Alex",
+                motive: "Debt",
+                occupation: "pilot",
+              },
+            },
+            { formId: "another-form", values: { characterName: "Other" } },
+          ],
+        },
+      },
+    );
+    expect(result.interaction.notice).toBe("请检查后重新提交。");
+    expect(
+      result.interaction.fields.map((field) => field.defaultValue),
+    ).toEqual(["Alex", "Debt", undefined]);
+  });
+  it("adds no notice to the first form", async () => {
+    const result = await createCharacterForm.execute(params, {
+      ...context,
+      store: { listPlayerInputs: async () => [] },
+    });
+    expect(result.interaction).not.toHaveProperty("notice");
+  });
 });

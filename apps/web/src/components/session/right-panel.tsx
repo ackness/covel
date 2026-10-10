@@ -46,6 +46,7 @@ import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { useOverflowEdges } from "@/hooks/use-overflow-edges.js";
 import { PanelStatus } from "./panel-status.js";
 import { PanelTabMenu } from "./panel-tab-menu.js";
+import { useSetting } from "@/settings/use-settings.js";
 
 export interface StorageStatus {
   readonly browserAuthority: boolean;
@@ -155,6 +156,8 @@ function SessionRightPanel({
     retrySpecs,
   } = panelState;
   const { state: sessionState } = useSession();
+  // The raw Database tab shows narrator-only rows, so it is opt-in.
+  const [developerView] = useSetting<boolean>("ui.developerView");
   const { upsertInteractionDraft } = useSessionActions();
   // Key of the plugin panel shown in the large dialog, if any.
   const [expandedPanelKey, setExpandedPanelKey] = useState<string | null>(null);
@@ -195,12 +198,16 @@ function SessionRightPanel({
         label: t("session.worldTab"),
         icon: BookOpen,
       },
-      {
-        id: "database",
-        value: "database",
-        label: t("session.database"),
-        icon: Database,
-      },
+      ...(developerView
+        ? [
+            {
+              id: "database",
+              value: "database",
+              label: t("session.database"),
+              icon: Database,
+            },
+          ]
+        : []),
       ...pluginTabGroups.map((group) => ({
         id: `plugin-${group.id}`,
         value: `plugin-${group.id}`,
@@ -209,7 +216,7 @@ function SessionRightPanel({
         icon: resolvePluginIcon(group.icon),
       })),
     ],
-    [pluginTabGroups, t],
+    [pluginTabGroups, developerView, t],
   );
 
   const storageStatus = resolveStorageStatus(storageData);
@@ -378,20 +385,22 @@ function SessionRightPanel({
               locale={sessionState.session?.locale}
             />
           </TabsContent>
-          <TabsContent value="database" className="p-4 m-0 max-w-full">
-            {!barTabs && (
-              <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
-                <Database className="w-4 h-4 shrink-0 text-muted-foreground" />
-                <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
-                  {t("session.database")}
-                </h3>
-              </div>
-            )}
-            <DatabasePanel
-              sessionId={sessionId}
-              refreshKey={statePatches.length}
-            />
-          </TabsContent>
+          {developerView && (
+            <TabsContent value="database" className="p-4 m-0 max-w-full">
+              {!barTabs && (
+                <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
+                  <Database className="w-4 h-4 shrink-0 text-muted-foreground" />
+                  <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
+                    {t("session.database")}
+                  </h3>
+                </div>
+              )}
+              <DatabasePanel
+                sessionId={sessionId}
+                refreshKey={statePatches.length}
+              />
+            </TabsContent>
+          )}
 
           {/* Dynamic plugin panel content (memory, codex, npc-graph, etc.) */}
           {pluginTabGroups.map((group) => {

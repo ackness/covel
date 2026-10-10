@@ -152,6 +152,7 @@ export type {
 export {
   createSubmitFormHandler,
   findCommittedInteraction,
+  FormRejectedError,
   RpcValidationError,
 } from "./rpc-defaults/submit-form.js";
 

@@ -10,6 +10,7 @@ import {
 import { type TurnMessageRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
+  COMPACTION_NOTICE_EVERY,
   createBootstrapCompactorRunner,
   createTurnContextBudget,
 } from "../../src/routes/api/bootstrap/compactor.js";
@@ -189,4 +190,90 @@ describe("createBootstrapCompactorRunner", () => {
       expect(generate).not.toHaveBeenCalled();
     },
   );
+
+  it("records a failed attempt in the trace and tells the player after repeated failures", async () => {
+    const store = createMemoryStore();
+    const services = new PluginServiceRegistry({
+      list: async () => ["history-compaction"],
+      ensure: async () => {},
+    });
+    const extensions = new PluginExtensionHost(services);
+    registerCompaction({
+      provideExtension(point, id, implementation) {
+        extensions.register(
+          "history-compaction",
+          { point, id },
+          implementation,
+        );
+      },
+    });
+    const llmAdapter: LLMAdapter = {
+      generate: vi.fn(async (): Promise<LLMResponse> => {
+        throw new Error("fast model unreachable");
+      }),
+      resolveBudget: () => ({ contextWindow: 1000, maxOutputTokens: 400 }),
+    };
+    const runner = createBootstrapCompactorRunner({
+      extensions,
+      store,
+      llmAdapter,
+    });
+    const messages: TurnMessageRecord[] = Array.from(
+      { length: 10 },
+      (_, index) => ({
+        id: `message-${index}`,
+        sessionId: "session-1",
+        turnId: `turn-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        sourceType: index % 2 === 0 ? "player" : "narrative",
+        order: index,
+        content: "x".repeat(200),
+        createdAt: new Date(index).toISOString(),
+      }),
+    );
+    for (const message of messages) await store.appendTurnMessage(message);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (let turn = 1; turn <= COMPACTION_NOTICE_EVERY; turn++) {
+        const emitter = createTurnEmitter({
+          store,
+          sessionId: "session-1",
+          turnId: `current-${turn}`,
+        });
+        const result = await runner.run(
+          "session-1",
+          "",
+          messages,
+          "en-US",
+          emitter.traceId,
+          emitter,
+        );
+        expect(result.compacted).toBe(false);
+      }
+    } finally {
+      warn.mockRestore();
+    }
+
+    const traces = await store.listTraceEvents("session-1");
+    const failed = traces.filter((t) => t.type === "context.compaction.failed");
+    expect(failed.map((t) => t.payload)).toEqual(
+      [1, 2, 3].map((consecutiveFailures) =>
+        expect.objectContaining({
+          pluginId: "history-compaction",
+          reason: expect.stringContaining("fast model unreachable"),
+          consecutiveFailures,
+        }),
+      ),
+    );
+    const notices = traces.filter((t) => t.type === "job-status.updated");
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      turnId: `current-${COMPACTION_NOTICE_EVERY}`,
+      payload: {
+        state: "failed",
+        message: expect.stringContaining("could not be condensed"),
+      },
+    });
+    await store.close();
+  });
 });

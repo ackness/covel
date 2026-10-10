@@ -1,5 +1,38 @@
+import { translate } from "@covel/plugin-handlers-utils";
+
 const COLLECTABLE_TYPES = ["string", "enum"];
 const CHARACTER_FORM_ID = "char-creation";
+
+/**
+ * The answers of an earlier character form in this session, or null. The
+ * setup guard turns a usable submission into the player, so one that is still
+ * here when the form is asked for again is one the world refused.
+ */
+async function earlierAnswers(context) {
+  try {
+    const inputs = (await context.store?.listPlayerInputs()) ?? [];
+    const values = inputs.findLast(
+      (input) => input.formId === CHARACTER_FORM_ID,
+    )?.values;
+    return values && typeof values === "object" && !Array.isArray(values)
+      ? values
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep an earlier answer as the field's default when the field still takes it. */
+function withEarlierAnswer(field, answer) {
+  if (typeof answer !== "string" || !answer.trim()) return field;
+  if (field.type === "select") {
+    const options = (field.options ?? []).map((option) =>
+      typeof option === "string" ? option : option.value,
+    );
+    if (!options.includes(answer)) return field;
+  } else if (field.type !== "text" && field.type !== "textarea") return field;
+  return { ...field, defaultValue: answer };
+}
 
 /**
  * What the form may hold in this world, written for the model: a rejection
@@ -91,10 +124,34 @@ export default function ({ tool }, createFormTool) {
       }
       // The setup guard finds this form's submission by this id, so it is set
       // here: the id must not depend on what the model passed.
-      return createFormTool.execute(
-        { ...params, formId: CHARACTER_FORM_ID },
+      const earlier = await earlierAnswers(context);
+      if (!earlier)
+        return createFormTool.execute(
+          { ...params, formId: CHARACTER_FORM_ID },
+          context,
+        );
+      // Asked again after a refused submission: the player corrects the form
+      // instead of filling it in from nothing.
+      const result = await createFormTool.execute(
+        {
+          ...params,
+          formId: CHARACTER_FORM_ID,
+          fields: params.fields.map((field) =>
+            withEarlierAnswer(field, earlier[field.name]),
+          ),
+        },
         context,
       );
+      return {
+        ...result,
+        interaction: {
+          ...result.interaction,
+          notice: translate(
+            context,
+            "This world no longer accepts some of your earlier answers. Check the form and submit it again.",
+          ),
+        },
+      };
     },
   });
 }

@@ -1,4 +1,6 @@
 import * as api from "@/services/api.js";
+import { ApiError } from "@/services/api/request.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import i18n from "i18next";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { resolvePluginRpcApprovalResponse } from "@/components/session/plugin-rpc-ui.js";
@@ -126,7 +128,15 @@ export async function submitInteractionBlock(
     }
   } catch (error) {
     if (!owner.isCurrent()) return;
-    if (!reportWorkspaceSyncError(error, dispatch)) {
+    if (error instanceof ApiError && error.code === "form_rejected") {
+      // The server wrote this text for the player, in the session's language.
+      // Nothing ran and nothing was stored: the form keeps what they typed.
+      emitToast(
+        "error",
+        i18n.t("form.rejected"),
+        error.response?.error ?? error.message,
+      );
+    } else if (!reportWorkspaceSyncError(error, dispatch)) {
       dispatch({
         type: "SET_EXECUTION_ERROR",
         error: error instanceof Error ? error.message : String(error),

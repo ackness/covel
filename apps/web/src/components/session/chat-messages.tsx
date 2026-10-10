@@ -122,12 +122,13 @@ export function ChatMessages({
 
   // 向上滚动加载更旧消息（游标分页）。顶部 sentinel 进入视口即预取一页，
   // 合并后按 scrollHeight 差值补偿 scrollTop 保持视图不跳。
-  const { topSentinelRef, loadingOlder } = useLoadOlderMessages({
-    viewportEl,
-    hasOlder: sessionState.olderMessagesCursor != null,
-    firstMessageId: messages[0]?.id,
-    onLoadOlder: loadOlderMessages,
-  });
+  const { topSentinelRef, loadingOlder, loadFailed, retry } =
+    useLoadOlderMessages({
+      viewportEl,
+      hasOlder: sessionState.olderMessagesCursor != null,
+      firstMessageId: messages[0]?.id,
+      onLoadOlder: loadOlderMessages,
+    });
   useChoiceHotkeys(viewportEl, !executing);
   const isPreGame = isPreGameSession(session);
   const isPlaying = session.status === "active" && session.phase === "playing";
@@ -315,6 +316,24 @@ export function ChatMessages({
           <div className="pointer-events-none absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {t("session.loadingOlder", "Loading earlier messages…")}
+          </div>
+        )}
+        {loadFailed && !loadingOlder && (
+          <div
+            role="alert"
+            className="absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-background/90 px-3 py-1 text-xs text-destructive shadow-sm"
+          >
+            <AlertCircle className="h-3.5 w-3.5" />
+            {t("session.loadOlderFailed", "Could not load earlier messages.")}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-6 px-2"
+              onClick={retry}
+            >
+              {t("session.retry", "Retry")}
+            </Button>
           </div>
         )}
         {showJumpButton && (

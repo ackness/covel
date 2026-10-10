@@ -4,6 +4,7 @@ import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import {
   createRpcHandlerStoreView,
   RpcDispatchError,
+  FormRejectedError,
   RpcValidationError,
 } from "@covel/runtime";
 import { pluginMessagesFor } from "@covel/shared";
@@ -404,7 +405,15 @@ export async function dispatchPluginAction(
     });
   } catch (err) {
     if (err instanceof RpcValidationError) {
-      return c.json(errorBody(err.message), 400);
+      // `form_rejected` marks text written for the player: the client shows
+      // it next to the form instead of reporting a failed request.
+      return c.json(
+        errorBody(
+          err.message,
+          err instanceof FormRejectedError ? { code: err.code } : undefined,
+        ),
+        400,
+      );
     }
     if (err instanceof RpcDispatchError && err.code !== "handler-threw") {
       const httpStatus = err.code === "unknown-action" ? 404 : 500;

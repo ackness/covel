@@ -104,6 +104,53 @@ const SUBMIT_FORM_LABELS = {
   },
 } as const satisfies Record<keyof SubmitFormLabels, I18nText>;
 
+/**
+ * What the player reads when a form is refused. Written for the player, not
+ * the client: it names the field by its label and says what to change.
+ */
+const FORM_REFUSALS = {
+  required: {
+    "en-US": 'Fill in "{label}".',
+    "zh-CN": "请填写“{label}”。",
+    "ru-RU": "Заполните поле «{label}».",
+  },
+  invalid: {
+    "en-US": '"{label}" has a value this form cannot take.',
+    "zh-CN": "“{label}”的值不符合表单要求。",
+    "ru-RU": "Поле «{label}» содержит недопустимое значение.",
+  },
+  number: {
+    "en-US": '"{label}" must be a number.',
+    "zh-CN": "“{label}”必须是数字。",
+    "ru-RU": "В поле «{label}» нужно ввести число.",
+  },
+  range: {
+    "en-US": '"{label}" must be from {min} to {max}.',
+    "zh-CN": "“{label}”必须在 {min} 到 {max} 之间。",
+    "ru-RU": "Значение поля «{label}» должно быть от {min} до {max}.",
+  },
+  min: {
+    "en-US": '"{label}" must be at least {min}.',
+    "zh-CN": "“{label}”不能小于 {min}。",
+    "ru-RU": "Значение поля «{label}» должно быть не меньше {min}.",
+  },
+  max: {
+    "en-US": '"{label}" must be at most {max}.',
+    "zh-CN": "“{label}”不能大于 {max}。",
+    "ru-RU": "Значение поля «{label}» должно быть не больше {max}.",
+  },
+  step: {
+    "en-US": '"{label}" must change in steps of {step}.',
+    "zh-CN": "“{label}”必须按 {step} 的步长填写。",
+    "ru-RU": "Значение поля «{label}» должно меняться с шагом {step}.",
+  },
+  option: {
+    "en-US": 'Choose one of the listed options for "{label}".',
+    "zh-CN": "请为“{label}”选择列表中的一项。",
+    "ru-RU": "Выберите для поля «{label}» один из предложенных вариантов.",
+  },
+} as const satisfies Record<string, I18nText>;
+
 function resolveLabel(value: I18nText, locale: string): string {
   return resolveI18nText(value, locale) ?? "";
 }
@@ -197,6 +244,7 @@ function optionValue(option: unknown): string | undefined {
 function validateFormValues(
   interaction: LocatedInteraction["interaction"],
   values: Readonly<Record<string, unknown>>,
+  locale: string,
 ): Record<string, unknown> {
   if (!Array.isArray(interaction.fields)) {
     throw new RpcValidationError(
@@ -224,6 +272,21 @@ function validateFormValues(
 
   const normalizedValues: Record<string, unknown> = { ...values };
   for (const [name, field] of declared) {
+    const refuse = (
+      reason: keyof typeof FORM_REFUSALS,
+      params: Record<string, unknown> = {},
+    ): FormRejectedError => {
+      const filled: Record<string, unknown> = {
+        label: typeof field.label === "string" ? field.label : name,
+        ...params,
+      };
+      return new FormRejectedError(
+        resolveLabel(FORM_REFUSALS[reason], locale).replace(
+          /\{(\w+)\}/g,
+          (match, key: string) => (key in filled ? String(filled[key]) : match),
+        ),
+      );
+    };
     const submitted = values[name];
     const value =
       (submitted === undefined ||
@@ -233,9 +296,7 @@ function validateFormValues(
         : submitted;
     if (value !== undefined) normalizedValues[name] = value;
     if (field.required === true && isMissingRequired(value)) {
-      throw new RpcValidationError(
-        `Required field "${name}" is missing for interactionId: ${interaction.interactionId}`,
-      );
+      throw refuse("required");
     }
     if (isMissingRequired(value)) {
       delete normalizedValues[name];
@@ -245,9 +306,7 @@ function validateFormValues(
     switch (field.type) {
       case "text":
       case "textarea":
-        if (typeof value !== "string") {
-          throw new RpcValidationError(`Field "${name}" must be a string`);
-        }
+        if (typeof value !== "string") throw refuse("invalid");
         break;
       case "number": {
         if (!(
@@ -256,26 +315,32 @@ function validateFormValues(
             value.trim().length > 0 &&
             Number.isFinite(Number(value)))
         )) {
-          throw new RpcValidationError(`Field "${name}" must be a number`);
+          throw refuse("number");
         }
         const numeric = Number(value);
+        const { min, max } = field;
         if (
-          (typeof field.min === "number" && numeric < field.min) ||
-          (typeof field.max === "number" && numeric > field.max)
+          (typeof min === "number" && numeric < min) ||
+          (typeof max === "number" && numeric > max)
         ) {
-          throw new RpcValidationError(
-            `Field "${name}" is outside its allowed range`,
+          throw refuse(
+            typeof min !== "number"
+              ? "max"
+              : typeof max !== "number"
+                ? "min"
+                : "range",
+            { min, max },
           );
         }
         if (typeof field.step === "number") {
-          const base = typeof field.min === "number" ? field.min : 0;
+          const base = typeof min === "number" ? min : 0;
           const steps = (numeric - base) / field.step;
           if (
             !(field.step > 0) ||
             !Number.isFinite(steps) ||
             Math.abs(steps - Math.round(steps)) > 1e-8
           ) {
-            throw new RpcValidationError(`Field "${name}" must match its step`);
+            throw refuse("step", { step: field.step });
           }
         }
         normalizedValues[name] = numeric;
@@ -287,22 +352,16 @@ function validateFormValues(
           value !== "true" &&
           value !== "false"
         ) {
-          throw new RpcValidationError(`Field "${name}" must be a checkbox`);
+          throw refuse("invalid");
         }
         normalizedValues[name] = value === true || value === "true";
         break;
       case "select": {
-        if (typeof value !== "string") {
-          throw new RpcValidationError(`Field "${name}" must be a string`);
-        }
+        if (typeof value !== "string") throw refuse("invalid");
         const allowed = Array.isArray(field.options)
           ? field.options.map(optionValue).filter((item) => item !== undefined)
           : [];
-        if (!allowed.includes(value)) {
-          throw new RpcValidationError(
-            `Field "${name}" must match a declared option`,
-          );
-        }
+        if (!allowed.includes(value)) throw refuse("option");
         break;
       }
       default:
@@ -317,6 +376,7 @@ function validateFormValues(
 function validateSubmissionValues(
   sub: Submission,
   interaction: LocatedInteraction["interaction"],
+  locale: string,
 ): Record<string, unknown> {
   if (sub.type !== interaction.type) {
     throw new RpcValidationError(
@@ -326,7 +386,7 @@ function validateSubmissionValues(
 
   switch (interaction.type) {
     case "form":
-      return validateFormValues(interaction, sub.values);
+      return validateFormValues(interaction, sub.values, locale);
     case "choice": {
       assertOnlyKeys(
         sub.values,
@@ -450,6 +510,15 @@ export class RpcValidationError extends Error {
   }
 }
 
+/**
+ * The player's values were refused and the form stays open for a correction.
+ * The message is for the player, in the session's language; every other
+ * `RpcValidationError` describes a request the client must not have sent.
+ */
+export class FormRejectedError extends RpcValidationError {
+  readonly code = "form_rejected";
+}
+
 export function createSubmitFormHandler(
   validatePluginForm: ValidatePluginForm | undefined,
   frameworkStore: Pick<
@@ -461,7 +530,8 @@ export function createSubmitFormHandler(
     payload: unknown,
     context: RpcHandlerContext,
   ): Promise<SubmitFormResult> => {
-    const { sessionId, locale } = context;
+    const { sessionId } = context;
+    const locale = context.locale ?? DEFAULT_LOCALE;
     const labels = resolveLabels(locale);
 
     if (!payload || typeof payload !== "object") {
@@ -533,7 +603,7 @@ export function createSubmitFormHandler(
           `No committed interaction found for turnId=${body.turnId}, interactionId=${sub.interactionId}`,
         );
       }
-      const values = validateSubmissionValues(sub, located.interaction);
+      const values = validateSubmissionValues(sub, located.interaction, locale);
       const validation = located.interaction.validation;
       if (validation !== undefined) {
         const pluginId = located.message.sourcePluginId;
@@ -553,20 +623,21 @@ export function createSubmitFormHandler(
             "Form validator is unavailable; activate and approve its plugin first",
           );
         }
+        let refusal: string | undefined;
         try {
-          const error = await validatePluginForm({
+          refusal = await validatePluginForm({
             sessionId,
             pluginId,
             name,
             values,
             data,
           });
-          if (error !== undefined) throw new RpcValidationError(String(error));
         } catch (error) {
           throw new RpcValidationError(
             error instanceof Error ? error.message : "Form validation failed",
           );
         }
+        if (refusal !== undefined) throw new FormRejectedError(String(refusal));
       }
       const normalizedSub: Submission = { ...sub, values };
       const key = `${body.turnId}\0${sub.interactionId}`;
@@ -593,6 +664,7 @@ export function createSubmitFormHandler(
           ? validateSubmissionValues(
               { ...sub, values: storedValues as Record<string, unknown> },
               located.interaction,
+              locale,
             )
           : storedValues;
       if (existing && stableJson(comparableValues) !== stableJson(values)) {

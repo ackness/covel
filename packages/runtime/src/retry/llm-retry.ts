@@ -431,9 +431,9 @@ function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
   )
     return false;
   if (signal.aborted) {
+    // Every deadline this module arms aborts with a `TimeoutError`.
     const reason = (signal as AbortSignal & { reason?: unknown }).reason;
-    const msg = reason instanceof Error ? reason.message : String(reason ?? "");
-    if (msg.toLowerCase().includes("timeout")) return true;
+    if (reason instanceof Error && reason.name === "TimeoutError") return true;
   }
   // Provider classifications remain authoritative when our own deadline did
   // not fire; e.g. a 400 mentioning an invalid timeout option is not a timeout.

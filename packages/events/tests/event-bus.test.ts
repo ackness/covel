@@ -204,3 +204,21 @@ describe("EventBus", () => {
     });
   });
 });
+
+describe("invalidateReplay", () => {
+  it("announces a reset with its reason and starts a new epoch", async () => {
+    const bus = createEventBus();
+    const resets: Array<{ sessionId: string; reason: string }> = [];
+    bus.onReset?.((reset) => resets.push(reset));
+    bus.emit(makeMessage({ sessionId: "s1" }));
+    const before = bus.getEventsAfter("s1", 0);
+
+    bus.invalidateReplay?.("s1", "publish-failed");
+
+    expect(resets).toEqual([{ sessionId: "s1", reason: "publish-failed" }]);
+    const after = bus.getEventsAfter("s1", 0);
+    expect(after.epoch).not.toBe(before.epoch);
+    expect(after.events).toEqual([]);
+    await bus.close();
+  });
+});

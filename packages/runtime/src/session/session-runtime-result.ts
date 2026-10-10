@@ -31,10 +31,15 @@ export interface ProcessRuntimeResultOutput {
   readonly failedProposals: ReadonlyArray<{
     readonly proposal: Proposal;
     readonly error: string;
+    readonly code?: string;
   }>;
 }
 
-type FailedProposal = { readonly proposal: Proposal; readonly error: string };
+type FailedProposal = {
+  readonly proposal: Proposal;
+  readonly error: string;
+  readonly code?: string;
+};
 
 /** The result shape every commit entry point accepts (top-level or nested). */
 export interface CommittableRuntimeResult {
@@ -351,6 +356,7 @@ async function persistProposals(
       failedProposals.push({
         proposal: proposals[i]!,
         error: cr.error ?? "unknown commit failure",
+        ...(cr.code ? { code: cr.code } : {}),
       });
     }
   }

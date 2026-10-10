@@ -96,32 +96,31 @@ it("preserves history when the injected template source fails", async () => {
   const messages = history("session");
   await store.appendTurnMessage(messages[0]!);
   const complete = vi.fn(async () => ({ content: "summary" }));
-  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    const result = await maybeCompact(
-      "session",
-      "",
-      messages,
-      {
-        store,
-        estimator: (text) => text.length,
-        inputWindow: 10_000,
-        contextWindow: 100,
-        fastSlotLlm: { complete },
-        loadPrompt: async () => {
-          throw new Error("Unavailable template source");
+  {
+    // The host skips a provider that throws and records the reason.
+    await expect(
+      maybeCompact(
+        "session",
+        "",
+        messages,
+        {
+          store,
+          estimator: (text) => text.length,
+          inputWindow: 10_000,
+          contextWindow: 100,
+          fastSlotLlm: { complete },
+          loadPrompt: async () => {
+            throw new Error("Unavailable template source");
+          },
         },
-      },
-      options,
-    );
-    expect(result.compacted).toBe(false);
+        options,
+      ),
+    ).rejects.toThrow(/Unavailable template source/);
     expect(complete).not.toHaveBeenCalled();
     expect(await store.listSessionSummaries("session")).toEqual([]);
     expect(await store.listUncompactedTurnMessages("session")).toEqual(
       messages,
     );
-  } finally {
-    warn.mockRestore();
   }
 });
 
@@ -144,9 +143,8 @@ it.each(["length"])(
       createdAt: new Date(index).toISOString(),
     }));
     for (const message of messages) await store.appendTurnMessage(message);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const result = await applyCompaction(
+    {
+      const compacting = applyCompaction(
         "truncated",
         "",
         messages,
@@ -168,13 +166,11 @@ it.each(["length"])(
         },
         { threshold: 0 },
       );
-      expect(result.compacted).toBe(false);
+      await expect(compacting).rejects.toThrow(/truncated/);
       expect(await store.listSessionSummaries("truncated")).toEqual([]);
       expect(await store.listUncompactedTurnMessages("truncated")).toEqual(
         messages,
       );
-    } finally {
-      warn.mockRestore();
     }
   },
 );

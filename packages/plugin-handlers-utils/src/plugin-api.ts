@@ -9,7 +9,7 @@ import type {
 import type { FunctionStoreView } from "./function-runtime.js";
 import type { JsonValue, MediaReference } from "./types.js";
 import type { withPendingProposals } from "./tool-result.js";
-import type { PluginMessages } from "./messages.js";
+import type { PluginMessageContext, PluginMessages } from "./messages.js";
 export type { PluginToolResult } from "./tool-result.js";
 
 export type HookEventName =
@@ -578,9 +578,15 @@ export interface PluginRpcOptions {
   readonly description?: string;
   readonly trustLevel?: "builtin" | "community";
 }
+/**
+ * Returns the text shown to the player when the submitted values are refused.
+ * `context` carries the session's language and the plugin's translations for
+ * it; pass it to `translate`.
+ */
 export type PluginFormValidator = (
   values: Readonly<Record<string, unknown>>,
   data: unknown,
+  context: PluginMessageContext & { readonly locale: string },
 ) => string | undefined;
 
 export interface PluginHttp {
