@@ -55,41 +55,41 @@ export function WorldPrimaryActions({
         ? "h-10 px-4 md:h-9"
         : "h-10 px-4 md:h-8.5";
   const iconSize = size === "lg" ? "h-4 w-4" : "h-3.5 w-3.5";
-  if (recentSession && onResume) {
-    return (
-      <>
+  const resumable = recentSession && onResume ? recentSession : undefined;
+  // The session list arrives after the first paint. The keys keep "enter" the
+  // same element when "continue" appears before it, so a click already aimed
+  // at "enter" cannot land on a button that now continues a session.
+  return (
+    <>
+      {resumable && onResume && (
         <button
+          key="continue"
           type="button"
-          onClick={() => onResume(recentSession)}
+          onClick={() => onResume(resumable)}
           disabled={disabled}
           aria-busy={busy}
           className={`ui-btn ui-world-enter ${sizing}`}
         >
           <Play className={iconSize} />
-          {sessionContinueLabel(t, recentSession.completedPlayerTurns)}
+          {sessionContinueLabel(t, resumable.completedPlayerTurns)}
         </button>
-        <button
-          type="button"
-          onClick={() => onEnter(world.id)}
-          disabled={disabled}
-          className={`ui-btn ${size === "lg" ? "ui-world-glass h-12 px-5 text-[15px]" : `ui-btn-quiet text-muted-foreground ${sizing}`}`}
-        >
-          {t("session.enter", "Enter")}
-        </button>
-      </>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => onEnter(world.id)}
-      disabled={disabled}
-      aria-busy={busy}
-      className={`ui-btn ui-world-enter ${sizing}`}
-    >
-      {t("session.enter", "Enter")}
-      <ArrowRight className={iconSize} />
-    </button>
+      )}
+      <button
+        key="enter"
+        type="button"
+        onClick={() => onEnter(world.id)}
+        disabled={disabled}
+        aria-busy={resumable ? undefined : busy}
+        className={
+          resumable
+            ? `ui-btn ${size === "lg" ? "ui-world-glass h-12 px-5 text-[15px]" : `ui-btn-quiet text-muted-foreground ${sizing}`}`
+            : `ui-btn ui-world-enter ${sizing}`
+        }
+      >
+        {t("session.enter", "Enter")}
+        {!resumable && <ArrowRight className={iconSize} />}
+      </button>
+    </>
   );
 }
 
