@@ -310,7 +310,7 @@ describe("core plugin manifest contract", () => {
     for (const runtimeId of manualUtilityIds) {
       const manifest = requireRuntime(manifests, runtimeId);
       expect(manifest.trigger).toMatchObject({ type: "manual" });
-      expect(manifest.priority).toBeUndefined();
+      expect(manifest.stage).toBeUndefined();
     }
   });
 

@@ -694,14 +694,25 @@ describe("streamLLMWithRetry", () => {
         deadline: Date.now() + 10_000,
       });
 
-    await expect(run(streamAfterBackoff(0))).resolves.toMatchObject({
-      response: { content: "answered" },
-    });
-    // The guard restarts once an attempt is answered, so a real stall still
-    // times out.
-    await expect(run(streamAfterBackoff(150))).rejects.toThrow(
-      "first-token timeout",
-    );
+    // Fake clock: the 150 ms backoff outlasts the 50 ms guard without any
+    // dependence on how fast the machine runs the event loop.
+    vi.useFakeTimers();
+    try {
+      const answered = run(streamAfterBackoff(0));
+      await vi.advanceTimersByTimeAsync(400);
+      await expect(answered).resolves.toMatchObject({
+        response: { content: "answered" },
+      });
+      // The guard restarts once an attempt is answered, so a real stall still
+      // times out.
+      const stalled = expect(run(streamAfterBackoff(150))).rejects.toThrow(
+        "first-token timeout",
+      );
+      await vi.advanceTimersByTimeAsync(400);
+      await stalled;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("forwards the deltas of a retry when the failed attempt showed nothing", async () => {

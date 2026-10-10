@@ -4,8 +4,8 @@
  *
  * A locale variant is a TRANSLATION, not a fork. Only natural-language fields
  * (description, display names, author's-note / post-history prose, …) may
- * differ; everything else is the runtime's execution contract — priority,
- * triggers, capabilities, tool whitelist, inject declarations, data schemas.
+ * differ; everything else is the runtime's execution contract — stage,
+ * triggers, contracts, tool whitelist, inject declarations, data schemas.
  * Translations drift in practice, and a drifted structural field means the
  * same runtime schedules differently, or reaches different tools, depending on
  * the player's UI language.
