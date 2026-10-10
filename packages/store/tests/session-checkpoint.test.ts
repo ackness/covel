@@ -150,6 +150,74 @@ describe("session checkpoint transfer", () => {
     ).toEqual(["quest.log@1", "world.facts@3"]);
   });
 
+  it("keeps the export revision a queued job reads, across export and restore", async () => {
+    const source = createMemoryStore();
+    const session = makeSession();
+    await source.createSession(session);
+    const at = (minute: number) => `2026-08-25T00:0${minute}:00.000Z`;
+    for (const revision of [1, 2, 3, 4]) {
+      await source.appendRuntimeExport(
+        makeRuntimeExport({
+          sessionId: session.id,
+          recordAs: "world.facts",
+          revision,
+          value: { revision },
+          committedAt: at(revision),
+        }),
+      );
+    }
+    await source.appendRuntimeExport(
+      makeRuntimeExport({
+        sessionId: session.id,
+        recordAs: "quest.log",
+        revision: 1,
+        value: { revision: 1 },
+        committedAt: at(4),
+      }),
+    );
+    // The job's source execution began after revision 2 and before 3.
+    const jobSourceStart = "2026-08-25T00:02:30.000Z";
+    const frozenRead = async (
+      checkpoint: Awaited<ReturnType<typeof exportSessionCheckpoint>>,
+    ) => {
+      const target = createMemoryStore();
+      await replaceSessionFromCheckpoint(target, checkpoint);
+      const producer = checkpoint.runtimeExports[0]!.producerRuntimeId;
+      return (
+        await target.getLatestRuntimeExport(
+          session.id,
+          producer,
+          "world.facts",
+          { atOrBefore: jobSourceStart },
+        )
+      )?.revision;
+    };
+
+    const withJob = await exportSessionCheckpoint(source, session.id, {
+      revision: 1,
+      actionId: "test",
+      exportsReadableFrom: jobSourceStart,
+    });
+    expect(
+      withJob.runtimeExports
+        .map((record) => `${record.recordAs}@${record.revision}`)
+        .sort(),
+    ).toEqual([
+      "quest.log@1",
+      "world.facts@2",
+      "world.facts@3",
+      "world.facts@4",
+    ]);
+    expect(await frozenRead(withJob)).toBe(2);
+
+    // Without a job nothing reads the past, and that read finds nothing.
+    const idle = await exportSessionCheckpoint(source, session.id, {
+      revision: 1,
+      actionId: "test",
+    });
+    expect(await frozenRead(idle)).toBeUndefined();
+  });
+
   it("exports and atomically restores durable session domains", async () => {
     const source = createMemoryStore();
     const target = createMemoryStore();
