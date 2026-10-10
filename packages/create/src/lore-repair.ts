@@ -1,4 +1,4 @@
-import type { LLMAdapter } from "@covel/shared";
+import type { LLMAdapter, LLMUsageSummary } from "@covel/shared";
 import type { PromptLoader } from "@covel/context";
 import { parseWorldLoreRepairOutput } from "./lore-processor.js";
 import { requestLlmResponse } from "./llm-request.js";
@@ -12,6 +12,7 @@ interface WorldLoreRepairOptions {
   readonly errors: readonly string[];
   readonly signal: AbortSignal;
   readonly idleTimeoutMs?: number;
+  readonly onUsage?: (usage: LLMUsageSummary) => void;
   readonly loadPrompt?: PromptLoader;
 }
 
@@ -31,6 +32,7 @@ export async function repairWorldLore(
     model: options.model,
     signal: options.signal,
     idleTimeoutMs: options.idleTimeoutMs,
+    onUsage: options.onUsage,
     messages: [
       { role: "system", content: systemPrompt },
       {

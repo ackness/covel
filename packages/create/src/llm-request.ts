@@ -6,7 +6,12 @@ import {
   unifyFinishReason,
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
 } from "@covel/shared";
-import type { LLMAdapter, LLMMessage, LLMResponse } from "@covel/shared";
+import type {
+  LLMAdapter,
+  LLMMessage,
+  LLMResponse,
+  LLMUsageSummary,
+} from "@covel/shared";
 
 /** The model sent nothing for the whole idle timeout. */
 export class LlmIdleTimeoutError extends Error {
@@ -45,6 +50,11 @@ interface LlmRequestOptions {
   readonly idleTimeoutMs?: number;
   /** Receives the length of the answer each time the model writes more of it. */
   readonly onText?: (length: number) => void;
+  /**
+   * Receives the tokens of each answer the model finished, a cut-off answer
+   * included: it was paid for although it is not used.
+   */
+  readonly onUsage?: (usage: LLMUsageSummary) => void;
 }
 
 export async function requestLlmResponse(
@@ -84,6 +94,7 @@ export async function requestLlmResponse(
         signal,
       );
       signal.throwIfAborted();
+      options.onUsage?.(response.usage);
       requireComplete(response.finishReason);
       return response;
     }
@@ -92,6 +103,8 @@ export async function requestLlmResponse(
     let finishReason: LLMResponse["finishReason"] = "stop";
     let reasoningContent = "";
     let completed = false;
+    // An adapter that reports no usage on its last event leaves this at zero.
+    let usage: LLMUsageSummary = { inputTokens: 0, outputTokens: 0 };
 
     for await (const event of iterateLlmRequest(
       options.llm.stream(request),
@@ -107,6 +120,10 @@ export async function requestLlmResponse(
       } else if (event.type === "reasoning-delta") {
         if (event.reasoningDelta.length > 0) wait();
       } else if (event.type === "done") {
+        if (event.usage) {
+          usage = event.usage;
+          options.onUsage?.(usage);
+        }
         requireComplete(event.finishReason);
         completed = true;
         finishReason =
@@ -124,7 +141,7 @@ export async function requestLlmResponse(
       content: content || null,
       toolCalls: [],
       finishReason,
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage,
       ...(reasoningContent ? { reasoningContent } : {}),
     };
   } catch (error) {
