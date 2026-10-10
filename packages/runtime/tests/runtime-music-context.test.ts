@@ -83,6 +83,27 @@ describe("ctx.music", () => {
     expect(assets[0]!.meta.promptHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("composes again when the music role is bound to another model", async () => {
+    let model = "music-a";
+    const { context, gateway } = setup(() => ({
+      presetId: "music",
+      provider: "acme",
+      protocol: "openai-chat-v1",
+      model,
+      metadata: { musicWire: "acme/music" },
+    }));
+    await context.generate({ prompt: "slow strings" });
+    model = "music-b";
+    expect((await context.generate({ prompt: "slow strings" })).cached).toBe(
+      false,
+    );
+    expect(gateway.composeMusic).toHaveBeenCalledTimes(2);
+    model = "music-a";
+    expect((await context.generate({ prompt: "slow strings" })).cached).toBe(
+      true,
+    );
+  });
+
   it("pays for one request once: the same request returns the stored piece", async () => {
     const { context, gateway } = setup();
     await context.generate({ prompt: "slow strings", durationSeconds: 45 });
