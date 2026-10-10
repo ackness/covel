@@ -69,6 +69,41 @@ describe("formToSpec narrativeTemplate preview", () => {
   });
 });
 
+describe("form refusals", () => {
+  const twoFields = {
+    ...formMsg("Hello {{characterName}}"),
+    block: {
+      type: "interactive_form",
+      fields: [
+        { type: "text", name: "characterName", label: "Name" },
+        { type: "number", name: "age", label: "Age" },
+      ],
+    },
+  } as unknown as StreamMessage;
+
+  it("puts each message under its field and the rest in one summary", () => {
+    const spec = messageToSpec(twoFields, [
+      { field: "age", message: "Age must be a number." },
+      { message: "Allocate exactly 4 points." },
+    ]) as Spec;
+    const fields = spec.children?.filter((c) => c.type === "FormField");
+    expect(fields?.map((f) => f.props?.error)).toEqual([
+      undefined,
+      "Age must be a number.",
+    ]);
+    const summary = spec.children?.find(
+      (c) => c.type === "Alert" && c.props?.level === "error",
+    );
+    expect(summary?.props?.message).toBe("Allocate exactly 4 points.");
+  });
+
+  it("shows no error state without refusals", () => {
+    const spec = messageToSpec(twoFields) as Spec;
+    expect(spec.children?.some((c) => c.props?.error)).toBe(false);
+    expect(spec.children?.some((c) => c.type === "Alert")).toBe(false);
+  });
+});
+
 describe("choice block", () => {
   it("renders its options as a choice list that keeps each description", () => {
     const spec = messageToSpec({

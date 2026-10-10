@@ -397,7 +397,13 @@ it("tells the player in their language what to correct, and keeps the form open"
     const unnamed = await h.submit(opening!, {});
     expect(unnamed).toEqual({
       status: 400,
-      body: { code: "form_rejected", error: "请填写“Name”。" },
+      body: {
+        code: "form_rejected",
+        error: "请填写“Name”。",
+        details: {
+          issues: [{ field: "characterName", message: "请填写“Name”。" }],
+        },
+      },
     });
     expect((await h.submit(opening!, { characterName: "Ada" })).status).toBe(
       200,
@@ -411,6 +417,9 @@ it("tells the player in their language what to correct, and keeps the form open"
       body: {
         code: "form_rejected",
         error: "需要正好分配 4 点，你已分配 8 点",
+        details: {
+          issues: [{ message: "需要正好分配 4 点，你已分配 8 点" }],
+        },
       },
     });
     // Nothing was stored: the same form takes the corrected values.

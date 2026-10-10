@@ -48,6 +48,7 @@ export type {
   PluginRpcStore,
   PluginRpcHandler,
   PluginRpcOptions,
+  PluginFormIssue,
   PluginFormValidator,
   PluginServiceDefinition,
   PluginServiceContext,

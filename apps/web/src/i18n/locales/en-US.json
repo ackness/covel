@@ -1840,8 +1840,7 @@
     "submittedHint": "Selected",
     "selectPrefix": "Select {{label}}",
     "selectPlaceholder": "Select...",
-    "requiredMissing": "Please fill in required fields",
-    "rejected": "Check the form"
+    "requiredMissing": "Please fill in required fields"
   },
   "interaction": {
     "playerSelected": "You chose:",

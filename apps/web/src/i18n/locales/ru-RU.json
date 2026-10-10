@@ -1842,8 +1842,7 @@
     "submittedHint": "Выбрано",
     "selectPrefix": "Выберите {{label}}",
     "selectPlaceholder": "Выберите...",
-    "requiredMissing": "Заполните обязательные поля",
-    "rejected": "Проверьте форму"
+    "requiredMissing": "Заполните обязательные поля"
   },
   "interaction": {
     "playerSelected": "Вы выбрали:",

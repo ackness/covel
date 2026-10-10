@@ -9,6 +9,7 @@
 
 import i18n from "@/i18n";
 import type { StreamMessage } from "@/stores/session-store.js";
+import type { FormIssue } from "@/stores/session-store/types.js";
 
 type NestedSpec = Record<string, unknown>;
 
@@ -71,7 +72,10 @@ export function messageToSpecDisabled(
  * Convert a StreamMessage to a json-render nested spec.
  * Returns null for messages that should not be rendered (empty, system).
  */
-export function messageToSpec(msg: StreamMessage): NestedSpec | null {
+export function messageToSpec(
+  msg: StreamMessage,
+  issues?: readonly FormIssue[],
+): NestedSpec | null {
   // Player message — right-aligned bubble
   if (msg.role === "user") {
     return {
@@ -82,7 +86,7 @@ export function messageToSpec(msg: StreamMessage): NestedSpec | null {
 
   // Block message (interactive form, notification, choice)
   if (msg.block) {
-    return blockToSpec(msg.block);
+    return blockToSpec(msg.block, issues);
   }
 
   // Narrative / story text
@@ -112,7 +116,10 @@ export function messageToSpec(msg: StreamMessage): NestedSpec | null {
  * carrying a nested json-render spec tree — this keeps the framework
  * agnostic to plugin-specific block type strings.
  */
-function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
+function blockToSpec(
+  block: Record<string, unknown>,
+  issues?: readonly FormIssue[],
+): NestedSpec | null {
   const type = block.type as string;
   const data = (block.data ?? block) as Record<string, unknown>;
   const innerType = data.type as string | undefined;
@@ -123,7 +130,7 @@ function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
     type === "interactive_form" ||
     (data.fields && Array.isArray(data.fields))
   ) {
-    return formToSpec(data);
+    return formToSpec(data, issues);
   }
 
   // Notification
@@ -162,7 +169,10 @@ function blockToSpec(block: Record<string, unknown>): NestedSpec | null {
 /**
  * Convert a form block to a json-render nested spec.
  */
-function formToSpec(data: Record<string, unknown>): NestedSpec {
+function formToSpec(
+  data: Record<string, unknown>,
+  issues: readonly FormIssue[] = [],
+): NestedSpec {
   const title = (data.title as string) ?? tr("form.defaultTitle");
   const fields = (data.fields ?? []) as Array<{
     name: string;
@@ -187,6 +197,25 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
       type: "Alert",
       props: { level: "warning", message: data.notice },
     });
+  }
+
+  // Refusals that belong to no field; the others sit under their field.
+  const formLevel = issues
+    .filter((issue) => !issue.field)
+    .map((issue) => issue.message);
+  if (formLevel.length > 0) {
+    children.push({
+      type: "Alert",
+      props: { level: "error", message: formLevel.join("\n") },
+    });
+  }
+  const fieldErrors = new Map<string, string[]>();
+  for (const issue of issues) {
+    if (!issue.field) continue;
+    fieldErrors.set(issue.field, [
+      ...(fieldErrors.get(issue.field) ?? []),
+      issue.message,
+    ]);
   }
 
   // Narrative template — a muted intro preview with blanks for the fields the
@@ -227,6 +256,7 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
         min: field.min,
         max: field.max,
         step: field.step,
+        error: fieldErrors.get(field.name)?.join(" "),
         value: { $bindState: `/form/${field.name}` },
       },
     });

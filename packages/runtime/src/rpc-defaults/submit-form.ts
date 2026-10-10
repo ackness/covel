@@ -12,7 +12,7 @@ import {
   type I18nText,
   type InteractionType,
 } from "@covel/shared";
-import type { ValidatePluginForm } from "../rpc/form-validator.js";
+import type { FormIssue, ValidatePluginForm } from "../rpc/form-validator.js";
 import type { DataStore } from "@covel/store";
 import type { RpcHandler, RpcHandlerContext } from "../rpc/rpc-registry.js";
 
@@ -271,21 +271,23 @@ function validateFormValues(
   assertOnlyKeys(values, new Set(declared.keys()), interaction.interactionId);
 
   const normalizedValues: Record<string, unknown> = { ...values };
+  const issues: FormIssue[] = [];
   for (const [name, field] of declared) {
     const refuse = (
       reason: keyof typeof FORM_REFUSALS,
       params: Record<string, unknown> = {},
-    ): FormRejectedError => {
+    ): FormIssue => {
       const filled: Record<string, unknown> = {
         label: typeof field.label === "string" ? field.label : name,
         ...params,
       };
-      return new FormRejectedError(
-        resolveLabel(FORM_REFUSALS[reason], locale).replace(
+      return {
+        field: name,
+        message: resolveLabel(FORM_REFUSALS[reason], locale).replace(
           /\{(\w+)\}/g,
           (match, key: string) => (key in filled ? String(filled[key]) : match),
         ),
-      );
+      };
     };
     const submitted = values[name];
     const value =
@@ -296,7 +298,8 @@ function validateFormValues(
         : submitted;
     if (value !== undefined) normalizedValues[name] = value;
     if (field.required === true && isMissingRequired(value)) {
-      throw refuse("required");
+      issues.push(refuse("required"));
+      continue;
     }
     if (isMissingRequired(value)) {
       delete normalizedValues[name];
@@ -306,7 +309,10 @@ function validateFormValues(
     switch (field.type) {
       case "text":
       case "textarea":
-        if (typeof value !== "string") throw refuse("invalid");
+        if (typeof value !== "string") {
+          issues.push(refuse("invalid"));
+          continue;
+        }
         break;
       case "number": {
         if (!(
@@ -315,7 +321,10 @@ function validateFormValues(
             value.trim().length > 0 &&
             Number.isFinite(Number(value)))
         )) {
-          throw refuse("number");
+          {
+            issues.push(refuse("number"));
+            continue;
+          }
         }
         const numeric = Number(value);
         const { min, max } = field;
@@ -323,14 +332,17 @@ function validateFormValues(
           (typeof min === "number" && numeric < min) ||
           (typeof max === "number" && numeric > max)
         ) {
-          throw refuse(
-            typeof min !== "number"
-              ? "max"
-              : typeof max !== "number"
-                ? "min"
-                : "range",
-            { min, max },
+          issues.push(
+            refuse(
+              typeof min !== "number"
+                ? "max"
+                : typeof max !== "number"
+                  ? "min"
+                  : "range",
+              { min, max },
+            ),
           );
+          continue;
         }
         if (typeof field.step === "number") {
           const base = typeof min === "number" ? min : 0;
@@ -340,7 +352,8 @@ function validateFormValues(
             !Number.isFinite(steps) ||
             Math.abs(steps - Math.round(steps)) > 1e-8
           ) {
-            throw refuse("step", { step: field.step });
+            issues.push(refuse("step", { step: field.step }));
+            continue;
           }
         }
         normalizedValues[name] = numeric;
@@ -352,16 +365,25 @@ function validateFormValues(
           value !== "true" &&
           value !== "false"
         ) {
-          throw refuse("invalid");
+          {
+            issues.push(refuse("invalid"));
+            continue;
+          }
         }
         normalizedValues[name] = value === true || value === "true";
         break;
       case "select": {
-        if (typeof value !== "string") throw refuse("invalid");
+        if (typeof value !== "string") {
+          issues.push(refuse("invalid"));
+          continue;
+        }
         const allowed = Array.isArray(field.options)
           ? field.options.map(optionValue).filter((item) => item !== undefined)
           : [];
-        if (!allowed.includes(value)) throw refuse("option");
+        if (!allowed.includes(value)) {
+          issues.push(refuse("option"));
+          continue;
+        }
         break;
       }
       default:
@@ -370,6 +392,7 @@ function validateFormValues(
         );
     }
   }
+  if (issues.length > 0) throw new FormRejectedError(issues);
   return normalizedValues;
 }
 
@@ -517,6 +540,18 @@ export class RpcValidationError extends Error {
  */
 export class FormRejectedError extends RpcValidationError {
   readonly code = "form_rejected";
+  /**
+   * What was refused, one entry per reason. An issue with a `field` belongs to
+   * that field of the form; one without belongs to the form as a whole.
+   */
+  readonly issues: readonly FormIssue[];
+
+  constructor(issues: readonly FormIssue[]) {
+    // `message` is the whole refusal as one text, for a client that does not
+    // read `issues`.
+    super(issues.map((issue) => issue.message).join("\n"));
+    this.issues = issues;
+  }
 }
 
 export function createSubmitFormHandler(
@@ -623,7 +658,7 @@ export function createSubmitFormHandler(
             "Form validator is unavailable; activate and approve its plugin first",
           );
         }
-        let refusal: string | undefined;
+        let refusal: readonly FormIssue[] | undefined;
         try {
           refusal = await validatePluginForm({
             sessionId,
@@ -637,7 +672,22 @@ export function createSubmitFormHandler(
             error instanceof Error ? error.message : "Form validation failed",
           );
         }
-        if (refusal !== undefined) throw new FormRejectedError(String(refusal));
+        if (refusal !== undefined && refusal.length > 0) {
+          // A field the form does not have makes the issue a form-level one.
+          const declared = new Set(
+            (Array.isArray(located.interaction.fields)
+              ? (located.interaction.fields as Array<Record<string, unknown>>)
+              : []
+            ).map((field) => field.name ?? field.id),
+          );
+          throw new FormRejectedError(
+            refusal.map((issue) =>
+              issue.field !== undefined && declared.has(issue.field)
+                ? issue
+                : { message: issue.message },
+            ),
+          );
+        }
       }
       const normalizedSub: Submission = { ...sub, values };
       const key = `${body.turnId}\0${sub.interactionId}`;

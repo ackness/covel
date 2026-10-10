@@ -16,7 +16,9 @@ describe("form provider authorization", () => {
   let app: Hono;
   let rpc: ReturnType<typeof createBootstrapPluginRpc>;
   let plugins: ReturnType<typeof createPluginRegistry>;
-  const validate = vi.fn(() => undefined as string | undefined);
+  const validate = vi.fn(
+    () => undefined as readonly { message: string }[] | undefined,
+  );
   const now = "2026-01-01T00:00:00.000Z";
   const payload = {
     turnId: "forms",
@@ -153,7 +155,7 @@ describe("form provider authorization", () => {
     validate
       .mockReturnValueOnce(undefined)
       .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce("Rejected last form");
+      .mockReturnValueOnce([{ message: "Rejected last form" }]);
     expect((await submit()).status).toBe(400);
     expect(await store.listPlayerInputs(sessionId)).toEqual([]);
     expect((await submit()).status).toBe(200);

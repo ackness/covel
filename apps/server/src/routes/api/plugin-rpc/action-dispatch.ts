@@ -410,7 +410,9 @@ export async function dispatchPluginAction(
       return c.json(
         errorBody(
           err.message,
-          err instanceof FormRejectedError ? { code: err.code } : undefined,
+          err instanceof FormRejectedError
+            ? { code: err.code, details: { issues: err.issues } }
+            : undefined,
         ),
         400,
       );
