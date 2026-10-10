@@ -318,4 +318,68 @@ describe("scene-stage cast handler", () => {
       "Zed",
     ]);
   });
+  describe("alias matching", () => {
+    const speakersFor = async (characters, playerMessage, recent = []) => {
+      const result = await handler({
+        sessionId: "sess-chat",
+        turnId: "turn-10",
+        pluginId: "scene-stage",
+        runtimeId: "scene-stage/cast",
+        playerMessage,
+        store: {
+          async listTurnMessages() {
+            return recent.map((content) => ({ content }));
+          },
+          async getPluginData() {
+            return null;
+          },
+        },
+        world: { characters },
+        completedResults: new Map(),
+        config: {},
+        recursiveCall: async () => {
+          throw new Error("unused");
+        },
+        recursionDepth: 0,
+        userSettings: { activeSpeakerCount: 4 },
+      });
+      return getToolContent(result)
+        .value.speakers.map((s) => s.id)
+        .sort();
+    };
+
+    it("does not read an alias inside another word or a longer title", async () => {
+      const characters = [
+        { id: "rin", name: "Tsukishiro Rin", aliases: ["Rin"], type: "npc" },
+        { id: "pres", name: "Saegusa", aliases: ["President"], type: "npc" },
+        {
+          id: "vice",
+          name: "Shiraishi",
+          aliases: ["Vice President Shiraishi"],
+          type: "npc",
+        },
+      ];
+      expect(
+        await speakersFor(
+          characters,
+          "Spring came, and during the walk we met Vice President Shiraishi.",
+        ),
+      ).toEqual(["vice"]);
+      expect(
+        await speakersFor(characters, "Rin, ask the President to come."),
+      ).toEqual(["pres", "rin"]);
+    });
+
+    it("prefers the longer name in text written without spaces", async () => {
+      const characters = [
+        { id: "chair", name: "三枝遥", aliases: ["会长"], type: "npc" },
+        { id: "vice", name: "白石悠真", aliases: ["副会长"], type: "npc" },
+      ];
+      expect(await speakersFor(characters, "我去找副会长。")).toEqual(["vice"]);
+      expect(await speakersFor(characters, "会长和副会长都来了。")).toEqual([
+        "chair",
+        "vice",
+      ]);
+    });
+  });
 });

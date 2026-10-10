@@ -1,6 +1,7 @@
 import {
   labelText,
   makeProposal,
+  mentionedCharacterIds,
   pickLocaleText,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
@@ -27,12 +28,20 @@ export default async function handler(ctx) {
     readPreviousCast(ctx),
   ]);
 
+  // Every character takes part in the matching, the player's too, so that a
+  // name inside the longer name of anyone else is not read as a mention.
+  const mentionedByPlayer = mentionedCharacterIds(playerMessage, characters);
+  const mentionedInScene = mentionedCharacterIds(
+    `${playerMessage}\n${messagesToText(messages)}`,
+    characters,
+  );
+
   const candidates = characters
     .filter((character) => character.type !== "player")
     .map((character) =>
       scoreCharacter(character, {
-        playerMessage,
-        messages,
+        mentionedByPlayer: mentionedByPlayer.has(character.id),
+        mentionedInScene: mentionedInScene.has(character.id),
         previousCast,
       }),
     )
@@ -152,19 +161,12 @@ function scoreCharacter(character, context) {
   const name = character.name ?? "";
   const description = character.description ?? "";
   const fieldsText = stringifyCompact(character.fields);
-  const haystack =
-    `${context.playerMessage}\n${messagesToText(context.messages)}`.toLowerCase();
-  // The text names a character by its name or by any of its aliases.
-  const names = [name, ...(character.aliases ?? [])]
-    .map((value) => String(value).trim().toLowerCase())
-    .filter(Boolean);
-  const namedIn = (text) => names.some((value) => text.includes(value));
-  const inMessages = namedIn(haystack);
+  const inMessages = context.mentionedInScene;
 
   let score = 0;
   const signals = [];
 
-  if (namedIn(context.playerMessage.toLowerCase())) {
+  if (context.mentionedByPlayer) {
     score += 6;
     signals.push("mentioned by player");
   }

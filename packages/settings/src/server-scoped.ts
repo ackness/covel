@@ -36,6 +36,11 @@ export class ServerScopedSettings {
     this.status = channel ? "pending" : "unavailable";
   }
 
+  /** Whether the server has answered at least once. */
+  get isReady(): boolean {
+    return this.status === "ready";
+  }
+
   state(key: SettingKey): ServerSettingState {
     const next = this.compute(key);
     const previous = this.states.get(key);
