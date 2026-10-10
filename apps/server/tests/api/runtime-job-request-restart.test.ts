@@ -62,7 +62,7 @@ describe("request-only runtime jobs across a SQLite restart", () => {
         return {
           text: "completed",
           finishReason: "stop",
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          usage: { inputTokens: 0, outputTokens: 0 },
         };
       },
     );

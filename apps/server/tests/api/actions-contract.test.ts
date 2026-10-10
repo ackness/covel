@@ -30,6 +30,7 @@ import {
   type SessionLock,
 } from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
+import { setSessionWorld } from "../helpers/session-world.js";
 
 function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
   return {
@@ -146,7 +147,7 @@ describe("POST /api/actions — action type contract ", () => {
 
   it("captures current world overrides for each player turn", async () => {
     const seen: unknown[] = [];
-    hookPipeline.register({
+    hookPipeline.register<{ input: { userSettings?: unknown } }>({
       id: "capture-settings",
       event: "PreRuntime",
       pluginId: NARRATOR_ID,
@@ -157,11 +158,12 @@ describe("POST /api/actions — action type contract ", () => {
       },
     });
     const worldId = `turn-settings-${crypto.randomUUID()}`;
-    await store.updateSession(sessionId, { worldId });
+    await setSessionWorld(store, sessionId, worldId);
     for (const tone of ["before", "after"]) {
       await store.upsertWorld({
         id: worldId,
         name: "Settings world",
+        description: "",
         createdAt: new Date().toISOString(),
         metadata: { pluginSettings: { [NARRATOR_ID]: { tone } } },
       });

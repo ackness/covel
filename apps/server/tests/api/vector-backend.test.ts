@@ -18,6 +18,7 @@ it.each(["none", "embedded"] as const)(
       await store.createSession({
         id: "session",
         status: "active",
+        locale: "zh-CN",
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},

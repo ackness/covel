@@ -348,7 +348,7 @@ describe("State Routes", () => {
         tables: Record<string, { data: Record<string, unknown> }>;
       };
       expect(Object.keys(body.tables)).toEqual(["session"]);
-      expect(body!.tables.session.data.id).toBe(sessionId);
+      expect(body.tables.session?.data.id).toBe(sessionId);
     });
 
     it("returns table data after creating a table", async () => {
@@ -390,9 +390,9 @@ describe("State Routes", () => {
         >;
       };
       expect(body.tables.character).toBeDefined();
-      expect(body!.tables.character.data.hp).toBe(100);
-      expect(body!.tables.character.data.name).toBe("Hero");
-      expect(body!.tables.character.schema).toBeDefined();
+      expect(body.tables.character?.data.hp).toBe(100);
+      expect(body.tables.character?.data.name).toBe("Hero");
+      expect(body.tables.character?.schema).toBeDefined();
     });
 
     it("returns 404 for unknown session", async () => {

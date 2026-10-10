@@ -171,7 +171,12 @@ describe("event directory", () => {
         name: "schema-owner/main",
         pluginId: "schema-owner",
         events: [
-          { topic: "value.changed", schema: "event.json", advertise: true },
+          {
+            topic: "value.changed",
+            description: "A value changed.",
+            schema: "event.json",
+            advertise: true,
+          },
         ],
       });
     const schema = (type: string) => ({

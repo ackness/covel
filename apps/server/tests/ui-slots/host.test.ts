@@ -253,11 +253,13 @@ describe("UI slot projection host", () => {
   it("composes ordered providers, isolates reads, caches unchanged values and watches only declared own namespaces", async () => {
     const f = await fixture();
     await f.store.setPluginData({
+      id: "stage-current",
       sessionId: "session",
       pluginId: "alpha",
       namespace: "stage",
       key: "current",
       value: { name: "Gate" },
+      createdAt: "2026-01-01",
       updatedAt: "2026-01-01",
     });
     const first = vi.fn(
@@ -520,11 +522,13 @@ it("coalesces repeated multi-provider bursts and reports each real projection on
   await f.host.get("session", { slot: "stage.backdrop@1" });
   for (let batch = 1; batch <= 10; batch++) {
     await f.store.setPluginData({
+      id: "places-current",
       sessionId: "session",
       pluginId: "alpha",
       namespace: "places",
       key: "current",
       value: { name: `Place ${batch}` },
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
     for (let update = 0; update < 20; update++)

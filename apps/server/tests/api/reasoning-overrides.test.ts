@@ -64,11 +64,9 @@ function fixture() {
       { role: "user" as const, content: "Continue the story." },
     ];
     if (c.req.param("kind") === "function") {
-      return c.json(
-        await c
-          .get("pluginGateway")
-          .generateText({ presetId: model, messages }),
-      );
+      const gateway = c.get("pluginGateway");
+      if (!gateway) throw new Error("pluginGateway is not configured");
+      return c.json(await gateway.generateText({ presetId: model, messages }));
     }
     if (c.req.param("kind") === "stream") {
       const events = [];

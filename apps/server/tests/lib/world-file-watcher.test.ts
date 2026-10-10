@@ -73,6 +73,7 @@ dimensionSources:
         metadata: { sessionIncarnationNonce: crypto.randomUUID() },
         worldId: "fixture-world",
         status: "active",
+        locale: "zh-CN",
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},

@@ -48,8 +48,8 @@ describe("form provider authorization", () => {
     store = createMemoryStore();
     await store.createSession({
       id: sessionId,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       completedPlayerTurns: 0,

@@ -88,6 +88,7 @@ describe("steer/abort routes", () => {
       id: "sess-r",
       worldId: "w",
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 1,
       activePlugins: [],
 

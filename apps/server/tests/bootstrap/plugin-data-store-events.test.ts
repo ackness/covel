@@ -72,7 +72,9 @@ describe("wrapStoreWithPluginDataEvents", () => {
   it("announces only the public projection of framework and hidden rows", async () => {
     const emit = vi.fn();
     const base = {
-      setPluginDataBatch: vi.fn(async () => {}),
+      setPluginDataBatch: vi.fn(
+        async (_records: readonly PluginDataRecord[]) => {},
+      ),
     } as unknown as DataStore;
     const store = wrapStoreWithPluginDataEvents(base, {
       emit,
@@ -110,7 +112,7 @@ describe("wrapStoreWithPluginDataEvents", () => {
     "isolates batch notifications by session and plugin (transaction=%s)",
     async (transaction) => {
       const emit = vi.fn();
-      const write = vi.fn(async () => {});
+      const write = vi.fn(async (_records: readonly PluginDataRecord[]) => {});
       const tx = { setPluginDataBatch: write };
       const base = {
         ...tx,
@@ -159,7 +161,9 @@ describe("wrapStoreWithPluginDataEvents", () => {
     // The tx write must still surface plugin-data.changed, or the live UI never
     // refreshes until a page reload.
     const tx = {
-      setPluginDataBatch: vi.fn(async () => {}),
+      setPluginDataBatch: vi.fn(
+        async (_records: readonly PluginDataRecord[]) => {},
+      ),
     };
     const store = {
       withTransaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
@@ -182,7 +186,9 @@ describe("wrapStoreWithPluginDataEvents", () => {
     const emit = vi.fn();
     const eventBus = { emit } as unknown as EventBus;
 
-    const tx = { setPluginData: vi.fn(async () => {}) };
+    const tx = {
+      setPluginData: vi.fn(async (_record: PluginDataRecord) => {}),
+    };
     // Capture how many events reached the real bus at the COMMIT boundary (just
     // before withTransaction returns). Buffering means it must be zero there.
     let emitsAtCommit = -1;
@@ -216,7 +222,9 @@ describe("wrapStoreWithPluginDataEvents", () => {
     const emit = vi.fn();
     const eventBus = { emit } as unknown as EventBus;
 
-    const tx = { setPluginData: vi.fn(async () => {}) };
+    const tx = {
+      setPluginData: vi.fn(async (_record: PluginDataRecord) => {}),
+    };
     // Real stores rethrow after rollback; a mid-chain proposal error is the
     // common trigger. The successful earlier write must not leave a phantom.
     const store = {
@@ -240,7 +248,9 @@ describe("wrapStoreWithPluginDataEvents", () => {
     const emit = vi.fn();
     const eventBus = { emit } as unknown as EventBus;
     const store = {
-      setPluginDataBatch: vi.fn(async () => {}),
+      setPluginDataBatch: vi.fn(
+        async (_records: readonly PluginDataRecord[]) => {},
+      ),
     } as unknown as DataStore;
 
     const wrapped = wrapStoreWithPluginDataEvents(store, eventBus);

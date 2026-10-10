@@ -72,7 +72,7 @@ async function install(
   const form = new FormData();
   form.append(
     "file",
-    new Blob([buffer], { type: "application/zip" }),
+    new Blob([new Uint8Array(buffer)], { type: "application/zip" }),
     "probe.zip",
   );
   const app = new Hono();
@@ -88,7 +88,12 @@ for (const layout of ["inline", "child"] as const) {
     recordAs: "facts",
   };
   describe(`plugin ZIP ${layout} committed input validation`, () => {
-    it.each([
+    it.each<{
+      name: string;
+      binding: object;
+      field: string;
+      files: Record<string, string>;
+    }>([
       {
         name: "missing accepts",
         binding: { ...committed, accepts: "./missing.json" },
