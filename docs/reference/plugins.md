@@ -175,7 +175,7 @@ Function runtime 必须声明 `function.handler`，模块必须默认导出函�
 
 Agent 的 guard 在调用模型前执行。返回 `{ skip: false }` 时照常运行；返回 `{ skip: true, ...fields }` 时不调用模型，结果记为 `skipped`，`skip` 之外的字段就是本 runtime 的输出：声明 `io.output.contract` 时按契约校验，并照常绑定给消费者，`skip` 标记本身不进入校验和绑定。需要在本轮放弃工作时，返回契约允许的最小输出，例如 `story-events/plot` 关闭时返回空计划 `{ skip: true, events: [] }`。
 
-`io.concealed: true` 用于处理隐藏内容的 runtime（例如在剧情中策划隐藏事件的 agent）。框架在写入 trace 和推送实时流之前去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime / 工具名、状态、耗时与用量；`/turns` 和手动 RPC 返回的执行结果也会清空它的输出与工具内容。runtime 失败时，发给玩家的失败原因（回合流、trace、返回的结果）换成固定的通用提示，真实原因只写入服务端控制台日志。持久化的执行记录保留完整内容，供重试使用。隐藏只覆盖上面列出的范围，不覆盖对话日志：隐藏 runtime 的输出里若带文字（`narrativeOutput` 或 `content`），这段文字仍会写入对话日志，并随之进入其他 runtime 的提示词历史、消息接口和“重建提示词”接口。因此隐藏 runtime 不应产生文字输出。
+`io.concealed: true` 用于处理隐藏内容的 runtime（例如在剧情中策划隐藏事件的 agent）。框架在写入 trace 和推送实时流之前去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime / 工具名、状态、耗时与用量；`/turns` 和手动 RPC 返回的执行结果也会清空它的输出与工具内容。runtime 失败时，发给玩家的失败原因（回合流、trace、返回的结果）换成固定的通用提示，真实原因只写入服务端控制台日志。持久化的执行记录保留完整内容，供重试使用。隐藏 runtime 输出里的文字（`narrativeOutput` 或 `content`）不写入对话日志，所以不会进入其他 runtime 的提示词历史、消息接口和“重建提示词”接口；它主动展示给玩家的内容（交互表单、UI 块）照常写入。`io.concealed: true` 不能与 `io.visibility: story` 同时声明：story runtime 的文字就是玩家读到的正文，这样的清单在加载时被拒绝。隐藏 runtime 通过 `io.output` 契约或 `effects` 把结果交给其他 runtime，由作者决定谁能读到。
 
 `schedule.needs`、`schedule.after` 与 `io.inputs.*.from.runtime` 中的 runtime ID 只能属于本包（完整 `<pluginId>/<runtimeId>` 或单 runtime 的包 ID），裸字符串依赖也受此限制。跨包引用必须使用公开的版本化 contract；纯 `after` 不会自动激活提供者。
 

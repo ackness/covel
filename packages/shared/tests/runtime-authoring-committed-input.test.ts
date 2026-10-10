@@ -60,3 +60,29 @@ describe("runtimeAuthoringManifestSchema committed inputs", () => {
     ).toBe(false);
   });
 });
+
+describe("runtimeAuthoringManifestSchema concealed runtimes", () => {
+  const concealed = (visibility?: string) =>
+    runtimeAuthoringManifestSchema.safeParse({
+      type: "agent",
+      schedule: { trigger: { type: "manual" } },
+      io: { concealed: true, ...(visibility ? { visibility } : {}) },
+    });
+  it("rejects a runtime that is both concealed and the story provider", () => {
+    const result = concealed("story");
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues).toEqual([
+        expect.objectContaining({
+          path: ["io", "concealed"],
+          message: expect.stringContaining("io.visibility: story"),
+        }),
+      ]);
+  });
+  it.each([undefined, "plugin", "system"])(
+    "accepts a concealed runtime with visibility %j",
+    (visibility) => {
+      expect(concealed(visibility).success).toBe(true);
+    },
+  );
+});
