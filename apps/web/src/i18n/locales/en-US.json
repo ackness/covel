@@ -181,6 +181,10 @@
     "worldLore": "World Document",
     "worldTab": "World",
     "worldDocumentEmpty": "No world document",
+    "externalImageHeld": "Image from {{host}} is not loaded",
+    "externalImageLoad": "Load this image",
+    "externalImageAlways": "Always load images from {{host}} in this world",
+    "externalImageBlocked": "Image not shown",
     "database": "Database",
     "dbTables": "table(s)",
     "dbVolumes": "{{count}} volume(s)",
@@ -844,6 +848,9 @@
       },
       "llmCapabilityOverrides": {
         "label": "Capability overrides"
+      },
+      "mediaAllowedImageHosts": {
+        "label": "Image hosts allowed per world"
       },
       "llmPrepRuntimeBindings": {
         "label": "Prep-phase runtime bindings"

@@ -181,6 +181,10 @@
     "worldLore": "Документ мира",
     "worldTab": "Мир",
     "worldDocumentEmpty": "Документ мира отсутствует",
+    "externalImageHeld": "Изображение с {{host}} не загружено",
+    "externalImageLoad": "Загрузить это изображение",
+    "externalImageAlways": "Всегда загружать изображения с {{host}} в этом мире",
+    "externalImageBlocked": "Изображение не показано",
     "database": "База данных",
     "dbTables": "табл.",
     "dbVolumes": "Томов: {{count}}",
@@ -846,6 +850,9 @@
       },
       "llmCapabilityOverrides": {
         "label": "Переопределения возможностей"
+      },
+      "mediaAllowedImageHosts": {
+        "label": "Разрешённые источники изображений по мирам"
       },
       "llmPrepRuntimeBindings": {
         "label": "Привязки среды выполнения на этапе подготовки"
