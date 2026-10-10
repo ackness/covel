@@ -78,7 +78,7 @@ messages
 
 原因是服务商的前缀缓存：一次请求只有从第一个字节起与之前的请求相同的部分才能命中。数据块在 system prompt 里时，system prompt 每回合都不同，排在它后面的整段历史就无法命中，会话越长浪费越多。现在 system prompt 逐回合保持不变，缓存可以一直覆盖到上一回合的历史。
 
-- 这段内容仍是 system 角色，其中由插件写给模型的指令（如掷骰步骤）权重不变。Anthropic 仅将开头的 system 消息放入顶层 system；历史之后的回合指令保留位置，以带 `<system-instruction>` 的 user 内容发送。
+- 这段内容在上下文里仍是 system 角色。发送时，Anthropic 仅将开头的 system 消息放入顶层 system；OpenAI Chat 和 Responses 同样只保留开头的 system 消息。历史之后的回合指令保留位置，以带 `<system-instruction>` 的 user 内容发送（`lateSystemMessagesAsUser`，`packages/ai-provider/src/adapters/common.ts`）。原因是中转：把请求转成单一 system 位的协议、或把所有 system 消息移到最前面的中转，会让每回合变化的回合上下文排到历史前面，历史全部落在缓存之外。实测（本机中转，叙事 runtime，8 回合）：每回合首个请求的缓存读取从 3,584 token（中转自带的固定指令）升到 8,704，占输入的 22% 升到 55%。`packages/ai-provider/tests/late-system-messages.test.ts` 固定了这一点：只有回合上下文不同的两次请求，序列化后到历史末尾为止逐字节相同。
 - 它不放在请求的最后。请求仍以本回合的消息和 post-history 段结尾：数据块紧挨着回复时，较小的模型会把数据块的写法带进工具参数（把参数包成输入块的形状、在字段后面补一个闭合标签）。
 - depth 插入按对话消息计数，回合上下文不占位置。
 - 预算裁剪把紧挨在受保护回合之前的 system 消息一并保留，所以它不会被丢掉。压缩阈值的估算把它和 system prompt 一起计入。`AssembledContext.turnContext` 是它的内容，没有时为空字符串。

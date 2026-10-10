@@ -53,6 +53,12 @@ export interface PluginRuntimeGateway {
       Record<string, Readonly<Record<string, unknown>>>
     >;
     readonly signal?: AbortSignal;
+    /**
+     * Cache-routing key, set by the host for a function runtime's calls
+     * (`promptCacheKeyFor(sessionId, runtimeId)`); a value a plugin passes is
+     * replaced.
+     */
+    readonly promptCacheKey?: string;
   }): Promise<{
     readonly text: string;
     readonly diagnostics?: LLMDiagnostics;
