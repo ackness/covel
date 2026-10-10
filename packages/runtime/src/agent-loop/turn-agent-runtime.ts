@@ -251,7 +251,6 @@ export async function executeAgentRuntime({
       frameworkHead: assembled.frameworkHead,
       messages: assembled.messages,
       outputKind: manifest.outputKind,
-      locale: input.locale,
       promptTemplate: loaded.promptTemplate,
       inputSlots: resolvedInputSlots,
       characters: (sessionContext?.characters ?? sessionMeta?.characters)?.map(

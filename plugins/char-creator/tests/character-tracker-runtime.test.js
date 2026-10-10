@@ -294,19 +294,14 @@ describe("character tracker correction budget", () => {
 });
 
 describe("tracker read budget", () => {
-  // The first line of the framework preamble, as each instruction language has it.
-  const PREAMBLE = {
-    zh: "[RUNTIME] 你正在执行一个互动叙事引擎的游戏内 runtime。",
-    en: "[RUNTIME] You are executing an in-game runtime for an interactive narrative engine.",
-  };
-  const added = (preamble) =>
+  // The hook context carries the session's content locale and the runtime.
+  const added = (locale) =>
     trackerReadBudget(
-      {},
+      { runtimeId: "char-creator/character-tracker", locale },
       {
-        runtimeId: "char-creator/character-tracker",
         tools: [],
         messages: [
-          { role: "system", content: `${preamble}\nbody` },
+          { role: "system", content: "body" },
           {
             role: "assistant",
             content: "",
@@ -317,15 +312,14 @@ describe("tracker read budget", () => {
     ).replace.messages.at(-1).content;
 
   it("adds its instruction in the language of the prompt it is added to", () => {
-    expect(added(PREAMBLE.zh)).toContain(
-      "调用 sync-characters 提交已确认的变化",
-    );
-    expect(added(PREAMBLE.zh).replace("sync-characters", "")).not.toMatch(
+    expect(added("zh-CN")).toContain("调用 sync-characters 提交已确认的变化");
+    expect(added("zh-CN").replace("sync-characters", "")).not.toMatch(
       /[A-Za-z]/,
     );
-    expect(added(PREAMBLE.en)).toContain(
+    expect(added("en")).toContain(
       "Call sync-characters with the confirmed changes",
     );
-    expect(added("no preamble")).toBe(added(PREAMBLE.en));
+    // A locale with no prompt body of its own reads the English one.
+    expect(added("ja")).toBe(added("en"));
   });
 });

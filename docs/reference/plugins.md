@@ -145,7 +145,7 @@ homepage: https://example.com/tidefall
 | `commands`         | 玩家命令元数据；`action` 必须列入 `actions`              |
 | `services`         | `registerService` 的契约 ID                              |
 | `extensions`       | `provideExtension` 的 `{point, id}`                      |
-| `hooks`            | hook 的 `{event, enforce}` 声明                          |
+| `hooks`            | hook 的 `{event, enforce}` 声明，见 [Hooks](hooks.md)    |
 | `wires`, `forms`   | 对应注册 ID                                              |
 | `events`           | 插件事件契约                                             |
 | `settings`         | 玩家配置项，运行时通过 `ctx.userSettings` 读取           |

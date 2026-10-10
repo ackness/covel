@@ -27,7 +27,7 @@ UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，ha
 
 只有 `entry`、Hook 或 UI 的包可以没有 runtime。它的 Hook 仍按会话已启用的插件集合执行，`ctx.getOwnSettings()` 读取包级 `userSettings` 默认值与本次世界、玩家覆盖值；没有 runtime 不会丢失这些默认值，也不会凭空调度一个 runtime。执行与提交各使用明确的会话 Hook scope；嵌入式 `executeTurn` 调用方如需包含零 runtime 包，应在 `TurnExecutorDeps.hookScope` 传入其 `activePluginIds` 和已解析的 `settings`，执行入口会捕获并冻结该边界，随后随 `execution` 自动传入 `commitExecution`。宿主从持久会话激活集合构造 scope，社区 Hook 每次调用仍检查当前 server-code 授权。
 
-`contributes.hooks` 按 `event` 与 `enforce` 声明允许的 Hook，省略 `enforce` 等同于 `normal`。同一声明可以通过多次 `covel.on()` 注册多个独立 handler；未声明的事件或阶段、以及没有实现的声明仍会使整个 entry 发布失败。
+每个 Hook 事件的触发时机、负载、可返回的结果和 handler 收到的上下文见 [Hooks](hooks.md)。`contributes.hooks` 按 `event` 与 `enforce` 声明允许的 Hook，省略 `enforce` 等同于 `normal`。同一声明可以通过多次 `covel.on()` 注册多个独立 handler；未声明的事件或阶段、以及没有实现的声明仍会使整个 entry 发布失败。
 
 同一事件的 handler 按 `enforce` 分组依次执行：`pre` → `normal` → `post`。组内先执行框架 Hook，再按注册顺序执行插件 Hook；不同插件之间的先后取决于插件的加载顺序，不是可声明的契约。两个插件改写同一份负载时，后执行的 `replace` 覆盖先执行的同名字段，需要确定先后的插件应声明不同的 `enforce`。
 

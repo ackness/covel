@@ -586,6 +586,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             pluginRegistry,
             activePluginIds: effectiveSession.activePlugins,
             userSettings,
+            locale: effectiveSession.locale,
           });
 
           const turnInput = {

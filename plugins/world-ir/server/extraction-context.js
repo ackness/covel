@@ -12,8 +12,8 @@ import { vocabularyEntries } from "../tools/vocabulary.js";
  * to prevent re-extracting old facts, which is a legitimate context trimming
  * use case allowed by the extension architecture (02 §2 "裁剪已有上下文").
  */
-export default async function extractionContext(_ctx, payload) {
-  if (payload.runtimeId !== "world-ir") return { action: "continue" };
+export default async function extractionContext(ctx, payload) {
+  if (ctx.runtimeId !== "world-ir") return { action: "continue" };
   const narrative = payload.inputSlots?.narrative;
   if (
     narrative?.cardinality !== "one" ||
