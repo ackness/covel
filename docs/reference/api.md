@@ -1738,7 +1738,7 @@ Submission 里的其他键被丢弃：来源插件、字段定义和模板只从
 
 `interaction_already_submitted` 同为写给玩家的文字，不带 `details`：这个 `(turnId, interactionId)` 已经有落库的回答，无论这次的值是否相同。回答它的那个请求同时开始了后续回合，所以客户端不重发，而是从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 取已存的值标记表单，并通过 `GET /api/sessions/:id/execution` 观察那个回合（运行中、已提交，或失败后可由现有重试再跑）。
 
-`invalid_interaction_submission` 是客户端不该发出的请求（交互不存在、类型不一致、值的形状不对）。
+`invalid_interaction_submission` 是客户端不该发出的请求（交互不存在、类型不一致、值的形状不对）。`form_validator_failed` 表示来源插件的表单校验器自己抛了错（不是正常返回拒绝原因）：`message` 是按会话 locale 写的固定文字，插件抛出的原文只进服务端日志（带请求方法、URL 和堆栈），开发环境下也不发给客户端；没有写入任何内容，同一张表单可以再次提交。
 
 流开始之前的 JSON 响应：
 

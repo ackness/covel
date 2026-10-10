@@ -158,6 +158,7 @@ export {
   createInteractionSubmitter,
   findCommittedInteraction,
   FormRejectedError,
+  FormValidatorFailedError,
   InteractionAlreadySubmittedError,
   InteractionSubmissionError,
 } from "./interaction/interaction-submission.js";

@@ -594,6 +594,26 @@ export class FormRejectedError extends InteractionSubmissionError {
   }
 }
 
+const VALIDATOR_FAILED = {
+  "en-US": "This form could not be checked. Try again.",
+  "zh-CN": "这张表单暂时无法校验，请再试一次。",
+  "ru-RU": "Не удалось проверить форму. Попробуйте ещё раз.",
+} as const satisfies I18nText;
+
+/**
+ * The plugin's validator threw instead of answering. The message is a fixed
+ * text for the player; what the plugin threw is `cause`, for the server log
+ * only: it is a plugin's internal error and can carry paths or stored data.
+ */
+export class FormValidatorFailedError extends InteractionSubmissionError {
+  override readonly code = "form_validator_failed";
+
+  constructor(message: string, cause: unknown) {
+    super(message);
+    this.cause = cause;
+  }
+}
+
 /**
  * The interaction already has a stored answer. The message is for the player,
  * in the session's language.
@@ -719,8 +739,10 @@ export function createInteractionSubmitter(
             data,
           });
         } catch (error) {
-          throw new InteractionSubmissionError(
-            error instanceof Error ? error.message : "Form validation failed",
+          if (error instanceof InteractionSubmissionError) throw error;
+          throw new FormValidatorFailedError(
+            resolveLabel(VALIDATOR_FAILED, locale),
+            error,
           );
         }
         if (refusal !== undefined && refusal.length > 0) {
