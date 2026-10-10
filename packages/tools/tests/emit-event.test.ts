@@ -20,13 +20,17 @@ interface FakeTopicEntry {
 
 function makeDirectory(entries: readonly FakeTopicEntry[]) {
   return {
-    listTopics: vi.fn((_sessionId: string) =>
+    listTopics: vi.fn(async (_sessionId: string) =>
       entries
         .filter((entry) => entry.advertised !== false)
         .map((entry) => entry.topic),
     ),
     validate: vi.fn(
-      (_sessionId: string, topic: string, data: Record<string, unknown>) => {
+      async (
+        _sessionId: string,
+        topic: string,
+        data: Record<string, unknown>,
+      ) => {
         const hit = entries.find(
           (entry) => entry.topic === topic && entry.advertised !== false,
         );
