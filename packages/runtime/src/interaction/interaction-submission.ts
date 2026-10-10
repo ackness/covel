@@ -9,6 +9,7 @@
 
 import {
   DEFAULT_LOCALE,
+  MAX_PLAYER_MESSAGE_CHARS,
   resolveI18nText,
   type I18nText,
   type InteractionType,
@@ -154,6 +155,11 @@ const FORM_REFUSALS = {
     "en-US": '"{label}" must change in steps of {step}.',
     "zh-CN": "“{label}”必须按 {step} 的步长填写。",
     "ru-RU": "Значение поля «{label}» должно меняться с шагом {step}.",
+  },
+  tooLong: {
+    "en-US": '"{label}" must be at most {max} characters.',
+    "zh-CN": "“{label}”不能超过 {max} 个字符。",
+    "ru-RU": "Поле «{label}» должно содержать не более {max} символов.",
   },
   option: {
     "en-US": 'Choose one of the listed options for "{label}".',
@@ -322,6 +328,12 @@ function validateFormValues(
       case "textarea":
         if (typeof value !== "string") {
           issues.push(refuse("invalid"));
+          continue;
+        }
+        // The answer becomes the player's message of the turn that follows,
+        // and the retry of that turn sends it as one.
+        if (value.length > MAX_PLAYER_MESSAGE_CHARS) {
+          issues.push(refuse("tooLong", { max: MAX_PLAYER_MESSAGE_CHARS }));
           continue;
         }
         break;
@@ -543,6 +555,12 @@ const ALREADY_SUBMITTED = {
   "ru-RU": "Этот ответ уже отправлен. Обновите страницу, чтобы увидеть его.",
 } as const satisfies I18nText;
 
+const ANSWER_TOO_LONG = {
+  "en-US": "The answers are too long together: at most {max} characters.",
+  "zh-CN": "填写的内容合起来太长：最多 {max} 个字符。",
+  "ru-RU": "Ответы вместе слишком длинные: не более {max} символов.",
+} as const satisfies I18nText;
+
 /**
  * The submission was refused and nothing was stored. Without a subclass it
  * describes a request the client must not have sent.
@@ -761,6 +779,22 @@ export function createInteractionSubmitter(
       preparedByKey.set(key, item);
     }
 
+    const playerMessage = prepared
+      .filter((item) => item.echo && item.filledNarrative)
+      .map((item) => item.filledNarrative)
+      .join("\n");
+    // Fields that each fit can still add up to more than one message holds.
+    if (playerMessage.length > MAX_PLAYER_MESSAGE_CHARS) {
+      throw new FormRejectedError([
+        {
+          message: resolveLabel(ANSWER_TOO_LONG, locale).replace(
+            "{max}",
+            String(MAX_PLAYER_MESSAGE_CHARS),
+          ),
+        },
+      ]);
+    }
+
     return {
       turnId: body.turnId,
       results: prepared.map((item) => ({
@@ -769,10 +803,7 @@ export function createInteractionSubmitter(
         values: item.values,
         filledNarrative: item.filledNarrative,
       })),
-      playerMessage: prepared
-        .filter((item) => item.echo && item.filledNarrative)
-        .map((item) => item.filledNarrative)
-        .join("\n"),
+      playerMessage,
       persist: async (target) => {
         const createdAt = new Date().toISOString();
         for (const item of prepared) {

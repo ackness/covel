@@ -1734,7 +1734,7 @@ Submission 里的其他键被丢弃：来源插件、字段定义和模板只从
     "message": "Interaction not found: …", "code": "invalid_interaction_submission" } }
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`message` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`message` 是这些条目用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项、文本长度，或来源插件的表单校验器）。文本长度与 `send_message.content` 用同一个上限（100 000 个字符，`MAX_PLAYER_MESSAGE_CHARS`）：单个 `text` / `textarea` 字段超过时按字段拒绝，各字段填成的整段玩家消息超过时作为整张表单的错误拒绝，因为这段文字就是后续回合的玩家消息，回合失败后的重试也把它当作一条消息发送。`message` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`message` 是这些条目用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。
 
 `interaction_already_submitted` 同为写给玩家的文字，不带 `details`：这个 `(turnId, interactionId)` 已经有落库的回答，无论这次的值是否相同。回答它的那个请求同时开始了后续回合，所以客户端不重发，而是从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 取已存的值标记表单，并通过 `GET /api/sessions/:id/execution` 观察那个回合（运行中、已提交，或失败后可由现有重试再跑）。
 
