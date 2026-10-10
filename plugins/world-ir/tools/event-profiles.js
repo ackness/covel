@@ -26,9 +26,13 @@ const EVENT_PROFILES = {
  * Validate the profiled events of a WorldIR value.
  *
  * @param {{ entities?: ReadonlyArray<{ id: string, type: string }>, events?: ReadonlyArray<{ type: string, attributes?: unknown }> }} facts
+ * @param {number} [entityLimit] The most entities an output may hold. An
+ *   undeclared item is not added as an entity at the limit, and the message
+ *   says so: "declare the item" would be advice the model cannot follow.
  * @returns {Array<{ path: Array<string | number>, message: string }>}
  */
-export function eventProfileIssues(facts) {
+export function eventProfileIssues(facts, entityLimit = Infinity) {
+  const full = (facts.entities ?? []).length >= entityLimit;
   const items = new Set(
     (facts.entities ?? [])
       .filter((entity) => entity.type === "item")
@@ -50,8 +54,9 @@ export function eventProfileIssues(facts) {
     if (event.type === "inventory_change" && !items.has(parsed.data.item))
       issues.push({
         path: ["events", index, "attributes", "item"],
-        message:
-          "inventory_change: item must be the id of an entity with type item in this output",
+        message: full
+          ? `inventory_change: item is not an entity of this output, and the output already has the most entities it may hold (${entityLimit}). Remove an entity that no event, relation or statement of this turn uses and add this item as an entity with type item, or leave this inventory change out`
+          : "inventory_change: item must be the id of an entity with type item in this output",
       });
   });
   return issues;

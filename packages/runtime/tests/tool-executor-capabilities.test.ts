@@ -6,7 +6,6 @@ import {
   z,
   withPendingProposals,
   withEmittedEvents,
-  shortIdBatch,
   type ToolExecutionContext,
 } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -146,7 +145,16 @@ describe("tool invocation capabilities", () => {
   });
   it("keeps completed quest objectives across two uncommitted tool calls", async () => {
     const store = await fixture();
-    const module = upsertQuests({ tool, z, shortIdBatch });
+    // The ledger is a function of its plugin; the executor runs it as a tool
+    // so that the second call reads the first call's pending writes.
+    const module = tool({
+      name: "upsert-quests",
+      description: "Create or advance quests.",
+      parameters: z.object({
+        quests: z.array(z.record(z.string(), z.unknown())),
+      }),
+      execute: upsertQuests,
+    });
     const executor = createToolExecutor({ store, findTool: () => module });
     const context = {
       ...identity,
