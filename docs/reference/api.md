@@ -1751,7 +1751,7 @@ Submission 里的其他键被丢弃：来源插件、字段定义和模板只从
 { "error": "Session not found: <id>", "code": "session_not_found" }      // 404
 ```
 
-带插件校验器的表单在服务端重启或撤销授权后，提交会先返回 **202** `approval-required`，请求其来源插件的 `covel:plugin-server-code` session grant。来源只从已提交 interaction 的 `sourcePluginId` 读取，客户端不能指定。批量提交可依次请求多个插件；全部授权和校验通过后才一次性写入。拒绝授权保留表单内容；已禁用或卸载的来源插件返回 400，不会自动启用。Web 在授权后用同一个 `requestId` 重发同一份提交，hosted 部署同时需要 operator 凭证。
+带插件校验器的表单在服务端重启或撤销授权后，提交会先返回 **202** `approval-required`，请求其来源插件的 `covel:plugin-server-code` session grant。来源只从已提交 interaction 的 `sourcePluginId` 读取，客户端不能指定。批量提交可依次请求多个插件；全部授权和校验通过后才一次性写入。拒绝授权保留表单内容；已禁用或卸载的来源插件返回 400，不会自动启用。Web 在授权后用同一个 `requestId` 重发同一份提交，hosted 部署同时需要 operator 凭证。授权检查先于“是否已回答”的判定：对一张已经回答过、来源插件的授权又已失效的表单再次提交，会先得到 202，授权之后才得到 `interaction_already_submitted`。
 
 **连接中断:** 回合一旦开始就在服务端运行到提交，与这条连接无关。响应丢失的客户端不知道回答是否落库，因此不重发：它轮询 `GET /api/sessions/:id/execution`，并从聚合视图的 `submittedInteractions` 把表单标成已提交。后续回合失败时，`execution.retry` 给出的是 `send_message`（内容为那条玩家消息）或 `retry_turn`（没有玩家消息时），重试不会再次提交回答。
 

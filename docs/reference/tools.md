@@ -278,16 +278,16 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 创建一个需要玩家填写的表单。框架渲染表单，玩家提交后结果注入下一轮上下文。手动 runtime 通过插件 UI 打开的表单同样会在事务内保存模板，支持刷新后继续填写及服务端校验；没有交互的手动输出仍不写入对话历史。
 
-| 参数              | 类型        | 必需 | 描述                                   |
-| ----------------- | ----------- | ---- | -------------------------------------- |
-| formId            | string      | ✓    | 表单唯一标识                           |
-| title             | string      | ✓    | 表单标题                               |
-| fields            | FormField[] | ✓    | 表单字段列表                           |
-| submitLabel       | string      | ✓    | 提交按钮文本                           |
-| narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符    |
-| validation        | object      |      | `{ name, data? }`，见下                |
-| submitBehavior    | object      |      | `{ echoFilledNarrative?, immediate? }` |
-| notice            | string      |      | 字段上方的提示，见下                   |
+| 参数              | 类型        | 必需 | 描述                                |
+| ----------------- | ----------- | ---- | ----------------------------------- |
+| formId            | string      | ✓    | 表单唯一标识                        |
+| title             | string      | ✓    | 表单标题                            |
+| fields            | FormField[] | ✓    | 表单字段列表                        |
+| submitLabel       | string      | ✓    | 提交按钮文本                        |
+| narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符 |
+| validation        | object      |      | `{ name, data? }`，见下             |
+| submitBehavior    | object      |      | `{ echoFilledNarrative? }`          |
+| notice            | string      |      | 字段上方的提示，见下                |
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`。`number` 的默认值与提交值是有限数字，`checkbox` 是布尔值，其余类型是字符串。数字字段支持 `min`、`max`、正数 `step`，步长相对 `min ?? 0` 计算；前端保留数值类型，服务端再次校验并把旧客户端的数字字符串规范化为数字。数字字段清空不会变成 0 或重新应用默认值；必填项会被拒绝。未提供的字段使用默认值（含 0、false）；文本/选择字段保留空字符串使用默认值的兼容行为。`placeholder` 只用于展示。`select` 默认值必须属于选项。
 
