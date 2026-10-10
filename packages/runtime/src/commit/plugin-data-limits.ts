@@ -9,6 +9,11 @@
  */
 export const MAX_PLUGIN_DATA_VALUE_BYTES = 256 * 1024;
 
+/** UTF-8 size of a value's JSON form, the quantity the limit applies to. */
+export function pluginDataSizeBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value) ?? "", "utf8");
+}
+
 /** The author-facing error for an oversized value, or undefined when it fits. */
 export function pluginDataSizeError(
   pluginId: string,
@@ -16,7 +21,7 @@ export function pluginDataSizeError(
   key: string,
   value: unknown,
 ): string | undefined {
-  const bytes = Buffer.byteLength(JSON.stringify(value) ?? "", "utf8");
+  const bytes = pluginDataSizeBytes(value);
   if (bytes <= MAX_PLUGIN_DATA_VALUE_BYTES) return undefined;
   return (
     `plugin "${pluginId}" wrote ${bytes} bytes under ${namespace}/${key}, ` +
