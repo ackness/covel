@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, SubscriptionEvent } from "@covel/shared";
+import type { FunctionHandler } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -65,7 +66,7 @@ function setupRuntime(
 }
 
 function makeDeps(
-  handlers: Map<string, (ctx: unknown) => Promise<Record<string, unknown>>>,
+  handlers: Map<string, FunctionHandler>,
   eventBus: EventBus,
   store: ReturnType<typeof createMemoryStore>,
 ): TurnExecutorDeps {
@@ -103,12 +104,12 @@ describe("late-setup hazard policy and detachment diagnostics", () => {
       effects: { writes: ["media:*"] },
     });
     const invoked: string[] = [];
-    const handlers = new Map(
+    const handlers = new Map<string, FunctionHandler>(
       [a, b].map((m) => [
         m.name,
         async () => {
           invoked.push(m.name);
-          return { outcome: "success", value: {} };
+          return { outcome: "success" as const, value: {} };
         },
       ]),
     );
@@ -149,7 +150,10 @@ describe("late-setup hazard policy and detachment diagnostics", () => {
       effects: { writes: ["media:*"] },
       turnCompletion: { mode: "detached", maxQueueMs: 30_000 },
     });
-    const handler = vi.fn(async () => ({ outcome: "success", value: {} }));
+    const handler = vi.fn(async () => ({
+      outcome: "success" as const,
+      value: {},
+    }));
     const handlers = new Map([[detachedSetup.name, handler]]);
 
     const result = await executeTurn(

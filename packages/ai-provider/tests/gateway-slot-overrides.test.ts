@@ -80,9 +80,6 @@ function createRecordingAdapter(
     async embed() {
       return { embeddings: [[0]], usage: { inputTokens: 0, outputTokens: 0 } };
     },
-    async generateImage() {
-      return { images: [], usage: null };
-    },
   };
 }
 
@@ -110,6 +107,12 @@ const basePresets: PresetConfig[] = [
     },
   },
 ];
+
+function firstBasePreset(): PresetConfig {
+  const preset = basePresets.at(0);
+  if (!preset) throw new Error("fixture has no base preset");
+  return preset;
+}
 
 function setup() {
   const calls: AdapterCall[] = [];
@@ -425,7 +428,7 @@ describe("gateway + slotOverrides", () => {
       profiles,
       presets: [
         {
-          ...basePresets[0],
+          ...firstBasePreset(),
           providerRequestMetadata: {
             parameterOverrides: { temperature: 0.35, topP: 0.8 },
           },
@@ -473,7 +476,7 @@ describe("gateway + slotOverrides", () => {
       profiles,
       presets: [
         {
-          ...basePresets[0],
+          ...firstBasePreset(),
           providerRequestMetadata: {
             reasoningEffort: "low",
             parameterOverrides: {
@@ -649,9 +652,6 @@ describe("gateway + slotOverrides", () => {
             },
             async embed() {
               throw new Error("boom embed");
-            },
-            async generateImage() {
-              throw new Error("boom image");
             },
           },
           defaults: {

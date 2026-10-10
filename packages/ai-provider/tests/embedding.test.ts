@@ -131,7 +131,7 @@ describe("openai-chat adapter: embed format dispatch", () => {
       { baseUrl: "http://localhost:11434/v1", apiKey: "test" },
       { model: "nomic-embed-text-v2-moe", values: ["hello", "world"] },
     );
-    const [, init] = vi.mocked(fetch).mock.calls[0];
+    const [, init] = vi.mocked(fetch).mock.calls[0] ?? [];
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.input).toEqual(["hello", "world"]);
     expect(body.model).toBe("nomic-embed-text-v2-moe");
@@ -148,7 +148,7 @@ describe("openai-chat adapter: embed format dispatch", () => {
         providerRequestMetadata: { embeddingFormat: "nemotron-multimodal" },
       },
     );
-    const [, init] = vi.mocked(fetch).mock.calls[0];
+    const [, init] = vi.mocked(fetch).mock.calls[0] ?? [];
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.input).toEqual([
       { content: [{ type: "text", text: "a cat" }] },
@@ -254,7 +254,7 @@ describe("gateway.embed: routes through embed-default profile", () => {
 
     expect(result.embeddings).toEqual([[0.1, 0.2]]);
     expect(embedAdapter).toHaveBeenCalledOnce();
-    const [, params] = embedAdapter.mock.calls[0];
+    const [, params] = embedAdapter.mock.calls[0] ?? [];
     expect(params.model).toBe("nomic-embed-text-v2-moe");
     expect(params.values).toEqual(["hello"]);
   });
@@ -313,7 +313,7 @@ describe("gateway.embed: routes through embed-default profile", () => {
     const gateway = createGateway({ providerRegistry, presetRegistry });
     await gateway.embed({ values: ["a cat"] });
 
-    const [, params] = embedAdapter.mock.calls[0];
+    const [, params] = embedAdapter.mock.calls[0] ?? [];
     expect(params.providerRequestMetadata?.embeddingFormat).toBe(
       "nemotron-multimodal",
     );

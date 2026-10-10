@@ -18,7 +18,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import type { Proposal, RuntimeManifest } from "@covel/shared";
-import { withPendingProposals } from "@covel/tools";
+import { tool, z } from "@covel/tools";
 import { createMemoryStore } from "@covel/store/memory";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { processRuntimeResult } from "../src/session/session-runtime-result.js";
@@ -39,18 +39,19 @@ function makeManifest(overrides: Partial<RuntimeManifest>): RuntimeManifest {
 }
 
 describe("executor-side tool authorization", () => {
-  const echoTool = {
+  const echoTool = tool({
     name: "echo",
     description: "echo",
-    jsonSchema: { type: "object" },
+    parameters: z.object({}),
     execute: vi.fn(async () => ({ _text: "ok" })),
-  };
-  const secretTool = {
+  });
+  const secretExecute = vi.fn(async () => ({ _text: "written" }));
+  const secretTool = tool({
     name: "memory-update-block",
     description: "privileged builtin",
-    jsonSchema: { type: "object" },
-    execute: vi.fn(async () => ({ _text: "written" })),
-  };
+    parameters: z.object({}),
+    execute: secretExecute,
+  });
 
   function makeExecutor() {
     const tools = new Map([
@@ -78,7 +79,7 @@ describe("executor-side tool authorization", () => {
     );
     expect(result.success).toBe(false);
     expect(result.result).toContain("UNAUTHORIZED");
-    expect(secretTool.execute).not.toHaveBeenCalled();
+    expect(secretExecute).not.toHaveBeenCalled();
   });
 
   it("allows declared tools through unchanged", async () => {
@@ -110,8 +111,9 @@ describe("tool-carried proposal rebinding", () => {
   it("rebinds sessionId/turnId/source of carried proposals to the executing runtime", async () => {
     const store = createMemoryStore();
     await store.createSession({
+      locale: "en-US",
+      updatedAt: "2026-01-01T00:00:00.000Z",
       id: "sess-1",
-      worldId: null,
       status: "active",
       activePlugins: ["p"],
       phase: "playing",
@@ -130,23 +132,19 @@ describe("tool-carried proposal rebinding", () => {
         namespace: "entries",
         key: "poison",
         value: { evil: true },
-        operation: "set",
       },
       timestamp: new Date().toISOString(),
     };
 
-    const output = withPendingProposals(
-      { _text: "done" } as Record<string, unknown>,
-      [forged],
-    );
-
+    // Carried proposals reach the commit through the result's pendingProposals.
     const { failedProposals } = await processRuntimeResult(
       {
         pluginId: "p",
         runtimeId: "p/r",
         turnId: "turn-1",
         status: "success",
-        output,
+        output: { _text: "done" },
+        pendingProposals: [forged],
       },
       store,
       "sess-1",
@@ -162,7 +160,7 @@ describe("tool-carried proposal rebinding", () => {
     );
     expect(victims).toHaveLength(0);
     const own = await store.getPluginData("sess-1", "p", "entries", "poison");
-    expect(own).toBeDefined();
+    expect(own?.value).toEqual({ evil: true });
   });
 });
 
@@ -170,8 +168,9 @@ describe("PreStateCommit replacement is payload-only", () => {
   it("pins the envelope when a hook tries to redirect the proposal", async () => {
     const store = createMemoryStore();
     await store.createSession({
+      locale: "en-US",
+      updatedAt: "2026-01-01T00:00:00.000Z",
       id: "sess-1",
-      worldId: null,
       status: "active",
       activePlugins: ["p"],
       phase: "playing",
@@ -216,7 +215,6 @@ describe("PreStateCommit replacement is payload-only", () => {
         namespace: "entries",
         key: "original",
         value: { v: 1 },
-        operation: "set",
       },
       timestamp: new Date().toISOString(),
     };
@@ -231,7 +229,7 @@ describe("PreStateCommit replacement is payload-only", () => {
       "entries",
       "rewritten",
     );
-    expect(rewritten).toBeDefined();
+    expect(rewritten?.key).toBe("rewritten");
     // …but the envelope redirect was ignored: nothing in the victim session
     // or under the impersonated plugin.
     expect(

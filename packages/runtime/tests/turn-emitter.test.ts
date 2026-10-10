@@ -222,6 +222,6 @@ describe("TurnEmitter", () => {
 
   it("noop emitter is a no-op", async () => {
     const e = createNoopTurnEmitter("S", "T");
-    await expect(e.emit("anything", {})).resolves.toBeUndefined();
+    await expect(e.emit("anything" as never, {})).resolves.toBeUndefined();
   });
 });

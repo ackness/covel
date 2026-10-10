@@ -49,6 +49,7 @@ export interface CharacterSummaryRecord {
   readonly id: string;
   readonly sessionId: string;
   readonly name: string;
+  readonly aliases?: readonly string[];
   readonly type: string;
   readonly description?: string;
   readonly fields?: unknown;

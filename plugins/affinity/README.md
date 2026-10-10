@@ -26,6 +26,7 @@
 - 好感记录写入 `plugin_data[affinity][affinity]`，key 为稳定短 ID（`shortIdBatch` 生成，或世界预置的 `id`），按 NPC 名字大小写不敏感去重。
 - `score` 累计并 clamp 在 [-100, 100]；档位阈值：≤ -60 敌视 / -59..-20 冷淡 / -19..19 中立 / 20..59 友好 / 60..84 亲密 / ≥ 85 挚爱。`tier` / `tierLabel` / `tierColor` / `scoreBar`（进度条用的 [0,200] 位移值，中点为中立）每次写入时由工具重新派生。
 - `history` 追加 `{turn, delta, reason}`，只保留最近 10 条。
+- 名字先按会话角色的名字和别名解析（`resolveCharacter`）：模型用别名称呼某个角色时，变更记在该角色名下的同一条记录上，不会多出一条。不在世界模型里的名字按原样匹配。
 - 本回合变更同时写入 `message` namespace（`__turnId` + `changes`），供聊天区消息卡渲染。
 - 没有明确互动的回合不调用工具、不产生任何写入。
 

@@ -16,6 +16,7 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { TrustedHandlerStore } from "../src/index.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
@@ -85,12 +86,11 @@ async function runGuardTurn(): Promise<{
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "",
-      guard: async (ctx: { store: DataStore }) => {
+      guard: async (ctx) => {
         const now = new Date().toISOString();
         // Buffered domain write — collected as a character.upsert proposal.
-        await ctx.store.upsertCharacter({
+        await (ctx.store as TrustedHandlerStore).upsertCharacter({
           id: "player-x",
-          sessionId: SESSION_ID,
           name: "Rin",
           type: "player",
           version: 1,
@@ -132,8 +132,6 @@ function failingSiblingResult(): Parameters<
     output: {},
     effects: { statePatches: [{ field: "hp", value: 1 }] },
     toolCalls: [],
-    durationMs: 1,
-    timestamp: new Date().toISOString(),
   };
 }
 

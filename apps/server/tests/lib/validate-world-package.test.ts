@@ -102,6 +102,29 @@ describe("validateWorldPackage", () => {
     expect(badColour.some((item) => item.level === "error")).toBe(true);
   });
 
+  it("reports an alias that an earlier character of the file has, at the later record", async () => {
+    const worldDir = await makeWorld({
+      "characters/characters.json": JSON.stringify([
+        { id: "ysolde", name: "Keeper Ysolde", aliases: ["the Keeper"] },
+        { id: "wren", name: "Sister Wren", aliases: ["Wren"] },
+        { id: "maud", name: "Maud", aliases: ["Old Maud", "THE KEEPER"] },
+      ]),
+    });
+    const errors = (await validate(worldDir)).filter(
+      (item) => item.level === "error",
+    );
+    expect(errors).toEqual([
+      expect.objectContaining({
+        file: "characters/characters.json",
+        pointer: "[2]",
+        message: expect.stringContaining(
+          'Alias "THE KEEPER" of Maud [maud] is already a name of Keeper Ysolde (aka the Keeper) [ysolde]',
+        ),
+        hint: "Give each name and alias to one character only.",
+      }),
+    ]);
+  });
+
   it("checks each character and lorebook record before session creation", async () => {
     const worldDir = await makeWorld(
       {

@@ -73,15 +73,18 @@ describe("reserved plugin-data namespaces", () => {
     await expect(writer.delete("_logs", "entry-1")).rejects.toThrow(/reserved/);
 
     const rpcStore = createRpcHandlerStoreView(store, CTX);
-    await expect(
-      rpcStore.setPluginData({
-        sessionId: SESSION_ID,
-        pluginId: PLUGIN_ID,
-        namespace: "_jobs",
-        key: "job-1",
-        value: { status: "ok" },
-      }),
-    ).rejects.toThrow(/reserved/);
+    // Identity fields are not part of the view's types; held in a variable they
+    // reach it as a plugin could send them.
+    const forgedRecord = {
+      sessionId: SESSION_ID,
+      pluginId: PLUGIN_ID,
+      namespace: "_jobs",
+      key: "job-1",
+      value: { status: "ok" },
+    };
+    await expect(rpcStore.setPluginData!(forgedRecord)).rejects.toThrow(
+      /reserved/,
+    );
 
     // Nothing leaked into the store on any path.
     expect(

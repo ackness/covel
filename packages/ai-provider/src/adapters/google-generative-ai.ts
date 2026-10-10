@@ -168,6 +168,9 @@ function requestBody(
       applyCapabilityFallback(params.messages, context),
       config,
       params.model,
+      // The slot option the OpenAI wires opt into; here it is on unless the
+      // slot turns it off. Read here and never forwarded.
+      meta.lateSystemAsUser !== false,
     ),
     generationConfig,
   };

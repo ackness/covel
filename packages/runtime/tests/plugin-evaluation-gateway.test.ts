@@ -1,18 +1,27 @@
 import { expect, it, vi } from "vitest";
-import { createPluginRuntimeGateway } from "../src/function-runtime/plugin-runtime-gateway.js";
+import {
+  createPluginRuntimeGateway,
+  type FullGatewayLike,
+} from "../src/function-runtime/plugin-runtime-gateway.js";
 import { withDefaultGatewaySignal } from "../src/function-runtime/runtime-abort-boundaries.js";
 import { withGatewayTrace } from "../src/function-runtime/gateway-trace.js";
 
 it("threads evaluation role, request credentials, overrides and abort signals through the plugin bridge without tracing state", async () => {
-  const evaluate = vi.fn(async () => ({
-    model: "fixture/jev",
-    answers: { allowed: { type: "boolean", probability: 0.7 } },
-    usage: { inputTokens: 17, outputTokens: 0 },
-  }));
+  const evaluateSpy = vi.fn(
+    async (_input: object, _options?: { signal?: AbortSignal }) => ({
+      model: "fixture/jev",
+      answers: { allowed: { type: "boolean" as const, probability: 0.7 } },
+      usage: { inputTokens: 17, outputTokens: 0 },
+    }),
+  );
+  // The spy returns one fixed answer set; the bridge only forwards it.
+  const evaluate = evaluateSpy as FullGatewayLike["evaluate"];
   const options = {
     apiKeys: { fixture: "test-only-placeholder" },
     traceId: "trace-1",
-    slotOverrides: { bindings: { evaluation: "fixture-model" } },
+    slotOverrides: {
+      slotBindings: { evaluation: { modelRef: "fixture-model" } },
+    },
   };
   const gateway = createPluginRuntimeGateway(
     {
@@ -51,11 +60,11 @@ it("threads evaluation role, request credentials, overrides and abort signals th
     },
     signal: caller.signal,
   });
-  expect(evaluate).toHaveBeenCalledWith(
+  expect(evaluateSpy).toHaveBeenCalledWith(
     expect.objectContaining({ presetId: "intent", state }),
     expect.objectContaining(options),
   );
-  const signal = evaluate.mock.calls[0]![1]!.signal as AbortSignal;
+  const signal = evaluateSpy.mock.calls[0]![1]!.signal as AbortSignal;
   runtime.abort(new Error("runtime expired"));
   expect(signal.aborted).toBe(true);
   expect(events.map((event) => event.type)).toEqual([

@@ -54,12 +54,9 @@ describe("agent request recovery budgets", () => {
         ? undefined
         : [
             {
-              type: "function",
-              function: {
-                name: "fixture",
-                description: "Fixture",
-                parameters: { type: "object" },
-              },
+              name: "fixture",
+              description: "Fixture",
+              parameters: { type: "object" },
             },
           ],
       responseFormat: undefined,
@@ -71,6 +68,7 @@ describe("agent request recovery budgets", () => {
       useStreaming,
       reportRetry: vi.fn(),
       onStreamDelta: async () => {},
+      deliversDeltas: true,
     });
   }
 
@@ -161,6 +159,7 @@ describe("agent request recovery budgets", () => {
       useStreaming: true,
       reportRetry: vi.fn(),
       onStreamDelta: async () => {},
+      deliversDeltas: true,
     });
     await vi.advanceTimersByTimeAsync(120_000);
     expect((await pending).content).toBe("recovered");
@@ -197,6 +196,7 @@ describe("agent request recovery budgets", () => {
       useStreaming: true,
       reportRetry: vi.fn(),
       onStreamDelta: async () => {},
+      deliversDeltas: true,
       onStreamTime,
     });
     await vi.advanceTimersByTimeAsync(600_000);

@@ -6,17 +6,15 @@ import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import type {
-  LLMAdapter,
-  LLMRequest,
-  LLMResponse,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import playerInitGuard from "../../../plugins/char-creator/runtimes/player-init/guard.js";
 
 class CapturingLLM implements LLMAdapter {
   readonly systemPrompts: string[] = [];
 
-  async generate(req: LLMRequest): Promise<LLMResponse> {
+  async generate(
+    req: Parameters<LLMAdapter["generate"]>[0],
+  ): Promise<LLMResponse> {
     const system = req.messages.find((message) => message.role === "system");
     if (typeof system?.content === "string") {
       this.systemPrompts.push(system.content);
@@ -79,7 +77,9 @@ async function createPregameStore(sessionId: string): Promise<DataStore> {
     sessionId,
     version: 1,
     types: ["npc", "companion"],
-    attributes: [{ id: "background", name: "Background", type: "string" }],
+    attributes: [
+      { id: "background", name: "Background", type: "string", category: "bio" },
+    ],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   });

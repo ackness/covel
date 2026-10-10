@@ -101,7 +101,11 @@ function main(argv) {
     const dateFlag = rest.indexOf("--date");
     const date = dateFlag === -1 ? today() : rest[dateFlag + 1];
     const version = rest
-      .find((value, index) => !value.startsWith("--") && index !== dateFlag + 1)
+      .find(
+        (value, index) =>
+          !value.startsWith("--") &&
+          (dateFlag === -1 || index !== dateFlag + 1),
+      )
       ?.replace(/^v/, "");
     const { text, moved } = assembleRelease(changelog, fragments, {
       version,

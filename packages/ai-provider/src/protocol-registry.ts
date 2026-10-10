@@ -113,6 +113,7 @@ const openAiOptionFields: ProviderOptionWire = (settings, fields) => {
     ["user", "user"],
     // Not a wire field: the adapters read it and never forward it.
     ["promptCacheKey", "promptCacheKey"],
+    ["lateSystemAsUser", "lateSystemAsUser"],
   ] as const;
   for (const [key, wire] of wireFields) {
     if (settings[key] !== undefined) fields[wire] = settings[key];
@@ -141,7 +142,13 @@ const BUILTIN_PROTOCOLS: Record<BuiltinProviderProtocol, ProtocolDefinition> = {
     },
     reasoningFields: googleReasoningFields,
     providerOptionFields(settings, fields) {
-      const keys = ["thinkingConfig", "cachedContent", "seed"] as const;
+      const keys = [
+        "thinkingConfig",
+        "cachedContent",
+        "seed",
+        // Not a wire field: the adapter reads it and never forwards it.
+        "lateSystemAsUser",
+      ] as const;
       for (const key of keys) {
         if (settings[key] !== undefined) fields[key] = settings[key];
       }

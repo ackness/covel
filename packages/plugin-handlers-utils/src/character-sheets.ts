@@ -5,6 +5,7 @@ import type {
 } from "./extension-points.js";
 import { modelFacingJson } from "./model-facing.js";
 import { pickLocaleText } from "./locale-text.js";
+import { characterLabel } from "./character-names.js";
 
 const PROFILES_BUDGET = 8000;
 const PROFILE_PART_CAP = 400;
@@ -53,9 +54,10 @@ function withRanges(
 }
 
 /**
- * One line per non-player character: `- name [type] | description | fields`.
- * Past the budget the rest are listed by name only, to be looked up when
- * needed. No ids: a model looks characters up by name. The format of the
+ * One line per non-player character: `- name [type] | description | fields`,
+ * the name followed by `(aka …)` when the character has aliases. Past the
+ * budget the rest are listed by name only, to be looked up when needed. No
+ * ids: a model looks characters up by name or alias. The format of the
  * `{{ characters.npcs }}` template variable.
  */
 function profileLines(
@@ -68,7 +70,7 @@ function profileLines(
   let used = 0;
   for (const character of characters) {
     if (character.type === "player") continue;
-    const parts = [`- ${character.name} [${character.type}]`];
+    const parts = [`- ${characterLabel(character)} [${character.type}]`];
     if (character.description) parts.push(capped(character.description));
     if (hasFields(character.fields))
       parts.push(
@@ -134,8 +136,15 @@ export function characterSheetSegments(
   const blocks: string[] = [];
   const player = characters.find((character) => character.type === "player");
   if (player) {
-    const { id, name, type, description, fields } = player;
-    const projected = modelFacingJson({ id, name, type, description, fields });
+    const { id, name, aliases, type, description, fields } = player;
+    const projected = modelFacingJson({
+      id,
+      name,
+      ...(aliases?.length ? { aliases } : {}),
+      type,
+      description,
+      fields,
+    });
     if (hasFields(projected.fields))
       projected.fields = withRanges(projected.fields, options.schema);
     const sheet = JSON.stringify(projected, null, 2);

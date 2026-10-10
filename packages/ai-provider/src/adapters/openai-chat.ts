@@ -45,6 +45,7 @@ import {
   createMetadataSanitizer,
   extractParameterOverrides,
   imagePartUrl,
+  lateSystemOption,
 } from "./common.js";
 import { readTokenCount } from "./usage.js";
 import { openAiPromptCacheKeyField } from "./prompt-cache-key.js";
@@ -84,6 +85,8 @@ const OPENAI_PROTECTED_KEYS = new Set([
   "reasoningEffort",
   // Whether to send `prompt_cache_key`; read by openAiPromptCacheKeyField.
   "promptCacheKey",
+  // Read by lateSystemOption; never forwarded.
+  "lateSystemAsUser",
 ]);
 
 /** camelCase override key → OpenAI Chat wire field. */
@@ -300,7 +303,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
       const body: Record<string, unknown> = {
         model: params.model,
-        messages: serializeMessages(messages, params.model, config),
+        messages: serializeMessages(
+          lateSystemOption(messages, params.providerRequestMetadata),
+          params.model,
+          config,
+        ),
         ...openAiPromptCacheKeyField(config, params),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
@@ -368,7 +375,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
       const response = await postJson(config, "/chat/completions", {
         model: params.model,
-        messages: serializeMessages(messages, params.model, config),
+        messages: serializeMessages(
+          lateSystemOption(messages, params.providerRequestMetadata),
+          params.model,
+          config,
+        ),
         response_format: { type: "json_object" },
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
@@ -428,7 +439,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
       const body: Record<string, unknown> = {
         model: params.model,
-        messages: serializeMessages(messages, params.model, config),
+        messages: serializeMessages(
+          lateSystemOption(messages, params.providerRequestMetadata),
+          params.model,
+          config,
+        ),
         stream: true,
         // OpenAI Chat only includes a final usage chunk when this option is
         // explicit. Compatible providers that support usage follow the same

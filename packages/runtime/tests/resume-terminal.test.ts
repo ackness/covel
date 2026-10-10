@@ -96,7 +96,7 @@ function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
     },
   });
   const handler = vi.fn(async () => ({
-    outcome: "success",
+    outcome: "success" as const,
     value: { text: "done" },
   }));
   const generate = vi.fn(async () => ({

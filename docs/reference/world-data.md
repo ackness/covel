@@ -156,6 +156,8 @@ ID 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`，且不能是 `__proto__`、`proto
 | 对象   | `properties`、`required`、`additionalProperties`（boolean 或 schema）                       |
 | 本地化 | `x-i18n: true`；`title` 可写 `I18nText`；`x-enumLabels` 为标量枚举成员提供显示名            |
 
+写入 `plugin_data` 的单条记录（一个 key 的值）序列化后不得超过 256 KiB（`MAX_PLUGIN_DATA_VALUE_BYTES`，与运行期写入共用）；超出的记录得到 error 诊断，整个导入失败，不会被截断。需要更多内容时拆成多条记录。
+
 不支持的关键字（包括 `$ref`、远程 schema、表达式与代码）直接拒绝，不会忽略。初值、玩家修改和自动提交共用校验，不做类型强转或默认值填充。共享 JSON 边界限制深度 32、节点数 10,000、UTF-8 序列化体积 256 KiB；维度 map 与 schema 同样接受边界校验，不仅检查单个字段。
 
 名称和说明是面板标签，按界面语言从 `I18nText` 解析；普通值不经过猜测式深度翻译。只有 schema 明确标记 `x-i18n: true` 的节点可以翻译。主文件写默认语言的文本，译文写在[语言文件](#语言文件namelocaleext)里；这些节点和 `updateRule` 在导入会话时按会话的内容语言解析成普通字符串，会话里不保存 locale map（见 [Dynamic Dimensions](./dynamic-dimensions.md)）。例如：
@@ -723,12 +725,15 @@ sources:
   {
     "id": "mio",
     "name": "Mio",
+    "aliases": ["Class President", "澪"],
     "type": "npc",
     "description": "A fellow student.",
     "fields": { "affection": 20 }
   }
 ]
 ```
+
+`aliases` 可选：故事里对同一个人的其他叫法（昵称、只指这一个人的头衔、另一种文字的名字），按希望展示的写法和顺序写。追踪角色、关系和好感的模型按名字找人，写了别名，模型用别名称呼时就会落到这个角色上，而不是另建一个。一个名字只能属于一个角色：别名与另一个角色的名字或别名相同（大小写、全角半角、空白、间隔号不算差别）时，`pnpm validate:world` 在后一条记录上报错，会话也不会带着这种数据创建。不要把「学者」「老板娘」这类可能指别人的普通名词写成别名。语言文件里的 `aliases` 整列替换主文件的列表。规则见[别名与按名字解析](world-model.md#别名与按名字解析)。
 
 导入器原样使用领域 ID（如 `mio`）写入 `characters` 并校验会话 schema；角色表按 `(sessionId, id)` 区分会话，ID 不再带会话前缀，提示词里的角色引用因此更短。角色读写不镜像到任何插件 namespace；面板和运行器通过 `ctx.world.characters` 或领域 API 获取同一份记录。关闭角色卡接收插件只跳过卡片数据，不影响独立的领域角色 source。
 

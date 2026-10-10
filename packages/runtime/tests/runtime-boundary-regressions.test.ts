@@ -6,6 +6,7 @@ import type {
   LLMAdapter,
   RuntimeManifest,
   RuntimeResult,
+  TurnInput,
 } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -406,7 +407,12 @@ describe("canonical function values", () => {
         getFrozenExport: async () => exported,
       });
       expect(committed.ok).toBe(true);
-      if (committed.ok) expect(committed.slots.data?.value).toEqual(value);
+      if (committed.ok) {
+        const slot = committed.slots.data;
+        expect(slot?.cardinality === "one" ? slot.value : undefined).toEqual(
+          value,
+        );
+      }
     },
   );
 

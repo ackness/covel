@@ -10,6 +10,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import type { FunctionHandlerContext } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
+import { createFunctionStoreView } from "../src/function-runtime/plugin-handler-helpers.js";
 import { commitExecution } from "../src/commit/commit-execution.js";
 import { executeTurn } from "../src/execution.js";
 import {
@@ -290,7 +291,10 @@ describe("ctx.progress full chain", () => {
         progress: 0.5,
         sequence: 2,
       });
-      return { narrativeOutput: "done" };
+      return {
+        outcome: "success" as const,
+        value: { narrativeOutput: "done" },
+      };
     };
 
     const ctx = {
@@ -299,8 +303,12 @@ describe("ctx.progress full chain", () => {
       pluginId: PLUGIN,
       runtimeId: RUNTIME,
       playerMessage: "",
-      store: {},
-      completedResults: new Map(),
+      store: createFunctionStoreView(undefined, {
+        sessionId: SESSION,
+        turnId: "turn-1",
+        pluginId: PLUGIN,
+        runtimeId: RUNTIME,
+      }),
       recursiveCall: async () => {
         throw new Error("not configured");
       },
@@ -309,7 +317,10 @@ describe("ctx.progress full chain", () => {
     } satisfies FunctionHandlerContext;
 
     const out = await handler(ctx);
-    expect(out).toEqual({ narrativeOutput: "done" });
+    expect(out).toEqual({
+      outcome: "success",
+      value: { narrativeOutput: "done" },
+    });
 
     const rows = await h.store.listJobStatus(SESSION, { jobId: "img-1" });
     expect(rows.map((r) => r.state)).toEqual(["queued", "progress"]);
@@ -322,8 +333,8 @@ describe("job status after the execution commit", () => {
     const store = createMemoryStore();
     const now = "2026-10-02T00:00:00.000Z";
     await store.createSession({
+      locale: "en-US",
       id: SESSION,
-      worldId: null,
       status: "active",
       phase: "playing",
       completedPlayerTurns: 0,
@@ -350,7 +361,7 @@ describe("job status after the execution commit", () => {
       });
       // Rejected at commit: plugin code cannot write a framework namespace.
       return {
-        outcome: "success",
+        outcome: "success" as const,
         value: {},
         effects: {
           pluginData: [{ namespace: "_jobs", key: "img-1", value: true }],

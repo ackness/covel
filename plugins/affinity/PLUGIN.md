@@ -120,7 +120,7 @@ The framework has already injected the session's full set of affinity records in
 - <id> | <value-summary>
 ```
 
-To check whether an NPC already has a record, match its name against this list. The tool also de-duplicates by name (case-insensitive), so always use the NPC's canonical name.
+To check whether an NPC already has a record, match its name against this list. The tool also de-duplicates by name (case-insensitive), and a known alias of a session character means that character. Use the NPC's canonical name.
 
 ## Procedure
 

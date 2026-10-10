@@ -259,8 +259,8 @@ describe("executeTurn: manual trigger", () => {
         finishReason: "stop",
         usage: { inputTokens: 1, outputTokens: 1 },
       }),
-      generateObject: async () => ({
-        object: {} as unknown,
+      generateObject: async <T>() => ({
+        object: {} as T,
         finishReason: "stop",
         usage: { inputTokens: 1, outputTokens: 1 },
       }),
@@ -388,6 +388,9 @@ describe("executeTurn: manual trigger", () => {
           },
           async isReferencedBy() {
             return true;
+          },
+          async listByMetadata() {
+            return [];
           },
         },
       },

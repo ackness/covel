@@ -144,9 +144,19 @@ async function appendStructuredPlans(options: {
         return false;
       }
       try {
+        // With the characters planned before it: an alias that an earlier
+        // character has as a name or alias is reported at this record. It
+        // is checked first, so the message is about it.
         validateWorldModel({
           characterSchema: options.characterSchema,
-          characters: [record],
+          characters: [
+            record,
+            ...options.writes.flatMap((write) =>
+              write.kind === "character" && write.record.id !== record.id
+                ? [write.record]
+                : [],
+            ),
+          ],
           dimensions: {},
         });
         return true;
@@ -163,7 +173,9 @@ async function appendStructuredPlans(options: {
         report(
           "error",
           message,
-          "Match the character type and fields to world.yaml characterSchema.",
+          message.startsWith("Alias ")
+            ? "Give each name and alias to one character only."
+            : "Match the character type and fields to world.yaml characterSchema.",
         );
         return false;
       }

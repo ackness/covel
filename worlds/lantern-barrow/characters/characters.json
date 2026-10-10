@@ -2,6 +2,7 @@
   {
     "id": "npc-brannoc-hale",
     "name": "布兰诺克・黑尔",
+    "aliases": ["布兰", "老黑尔"],
     "type": "companion",
     "description": "五十岁的退役老兵，在歪角鹿酒馆的角落里喝了三天闷酒。他说只是路过，却一直盯着古冢的方向。剑很旧，保养得很好。",
     "fields": {
@@ -18,6 +19,7 @@
   {
     "id": "npc-sister-wren",
     "name": "雷恩修女",
+    "aliases": ["雷恩"],
     "type": "companion",
     "description": "十九岁的黎明灯修会见习祭司，奉命来灰苇村检查古冢之灯，晚到了三天。她会治伤，会读古灯铭文，也藏着一个对信仰的疑问。",
     "fields": {
@@ -34,6 +36,7 @@
   {
     "id": "npc-mirelle-voss",
     "name": "梅瑞尔・沃斯",
+    "aliases": ["梅瑞尔"],
     "type": "npc",
     "description": "歪角鹿酒馆的老板娘，四十出头，记性好、嘴巴紧、账算得清。村里所有的传闻都会先经过她的吧台。",
     "fields": {
@@ -50,6 +53,7 @@
   {
     "id": "npc-aldous-penn",
     "name": "阿尔多斯・潘恩",
+    "aliases": ["村长", "潘恩"],
     "type": "npc",
     "description": "灰苇村的村长，在酒馆贴出了赏金告示。他急着把事情解决，却对守灯人失踪前的那几天含糊其辞。",
     "fields": {
@@ -66,6 +70,7 @@
   {
     "id": "npc-keeper-ysolde",
     "name": "守灯人伊索德",
+    "aliases": ["伊索德", "守灯人"],
     "type": "npc",
     "description": "七十多岁的守灯人，守了古冢之灯四十年。三天前灯灭的那晚，她独自走进了洞开的青铜墓门，再没出来。",
     "fields": {
@@ -82,6 +87,7 @@
   {
     "id": "npc-corvin-ashe",
     "name": "科尔文・艾什",
+    "aliases": ["科尔文"],
     "type": "npc",
     "description": "从王都来的年轻学者，一个月前住进酒馆，四处打听古冢之灯。灯灭前一天他退了房。没人看见他离开村子。",
     "fields": {

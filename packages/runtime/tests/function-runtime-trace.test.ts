@@ -32,8 +32,9 @@ function makeFunctionManifest(
 ): RuntimeManifest {
   return {
     name: "fn-plugin",
+    description: "fn-plugin",
     pluginId: "fn-plugin",
-    pluginType: "community",
+    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
@@ -228,7 +229,7 @@ describe("function-runtime trace", () => {
       promptTemplate: "",
       handler: async () => {
         await new Promise(() => {}); // never settles — simulates a hung provider call
-        return {};
+        return { outcome: "success" };
       },
     };
 
@@ -273,7 +274,7 @@ describe("function-runtime trace", () => {
       handler: async (ctx) => {
         handlerGateway = ctx.gateway;
         await ctx.gateway?.generateText({ prompt: "x" });
-        return {};
+        return { outcome: "success" };
       },
     };
 
@@ -304,7 +305,7 @@ describe("function-runtime trace", () => {
         inHandlerResult = await ctx.gateway?.generateText({
           messages: [],
         });
-        return {};
+        return { outcome: "success" };
       },
     };
 
@@ -342,7 +343,7 @@ describe("function-runtime trace", () => {
       handler: async (ctx) => {
         capturedLogger = ctx.logger;
         capturedAssetProgress = ctx.assetProgress;
-        return {};
+        return { outcome: "success" };
       },
     };
 
@@ -377,7 +378,7 @@ describe("function-runtime trace", () => {
       promptTemplate: "",
       handler: async (ctx) => {
         await ctx.gateway!.generateText({ prompt: "hello" });
-        return { narrativeOutput: "done" };
+        return { outcome: "success", value: { narrativeOutput: "done" } };
       },
     };
 

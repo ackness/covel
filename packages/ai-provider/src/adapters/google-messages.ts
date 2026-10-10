@@ -144,10 +144,14 @@ const hasFunctionCall = (content: Content | undefined): boolean =>
  * `contents` alternates between `user` and `model`. A model turn that calls
  * functions stays whole, so the function responses still follow it directly.
  */
-function pushContent(contents: Content[], content: Content): void {
+function pushContent(
+  contents: Content[],
+  content: Content,
+  merge = true,
+): void {
   if (!content.parts.length) return;
   const last = contents.at(-1);
-  if (last && last.role === content.role && !hasFunctionCall(last)) {
+  if (merge && last && last.role === content.role && !hasFunctionCall(last)) {
     last.parts.push(...content.parts);
     return;
   }
@@ -163,11 +167,16 @@ function pushContent(contents: Content[], content: Content): void {
  * stays where it is as `user` text in `<system-instruction>` tags: text that
  * changes every turn then leaves the request prefix up to the end of the
  * history unchanged, which is what Gemini's prefix cache matches on.
+ *
+ * `lateSystemInPlace: false` (the slot's `lateSystemAsUser = false`) sends the
+ * earlier shape instead, for an endpoint that refuses this one: every system
+ * message in `systemInstruction`, and one content per message.
  */
 export function googleMessages(
   messages: TextMessage[],
   config: ProviderConfig,
   model: string,
+  lateSystemInPlace = true,
 ): Record<string, unknown> {
   const contents: Content[] = [];
   const systemParts: Record<string, unknown>[] = [];
@@ -195,7 +204,7 @@ export function googleMessages(
       else pushContent(contents, { role: "user", parts: [instruction] });
       continue;
     }
-    leading = false;
+    leading = !lateSystemInPlace;
     if (message.role === "tool") {
       const responses: { call: Call; part: Record<string, unknown> }[] = [];
       const seen = new Set<string>();
@@ -273,10 +282,11 @@ export function googleMessages(
     } else {
       parts = serializeContent(message.content);
     }
-    pushContent(contents, {
-      role: message.role === "assistant" ? "model" : "user",
-      parts,
-    });
+    pushContent(
+      contents,
+      { role: message.role === "assistant" ? "model" : "user", parts },
+      lateSystemInPlace,
+    );
   }
   pushContent(contents, { role: "user", parts: afterResponses });
   return {

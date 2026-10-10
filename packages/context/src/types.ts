@@ -98,6 +98,7 @@ export interface SummaryRecord {
 export interface CharacterSummary {
   readonly id?: string;
   readonly name: string;
+  readonly aliases?: readonly string[];
   readonly type: string;
   readonly description?: string;
   readonly fields?: Record<string, unknown>;

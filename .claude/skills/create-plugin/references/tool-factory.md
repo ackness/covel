@@ -15,7 +15,8 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
       param2: z.number().optional().describe('可选参数'),
     }),
     execute: async (params, context) => {
-      // context: { sessionId, turnId, pluginId, runtimeId }
+      // context: { sessionId, turnId, pluginId, runtimeId, locale, messages,
+      //            store, world, signal, random, logicalTurn, ... }
       return { result: params.param1 };
     },
   });
@@ -28,6 +29,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 |------|------|
 | `tool` | 工具定义包装函数 |
 | `z` | Zod schema 库 |
+| `withPendingProposals(content, proposals)` | 返回正文并附上待提交的 proposals |
 | `shortId(prefix, label, sessionId, random?)` | 生成 LLM 友好的短 ID（如 `item-fire-sword`）；第四个参数传 `context.random` |
 | `shortIdBatch(prefix, labels, sessionId, random?)` | 批量生成短 ID（自动去重） |
 
@@ -53,7 +55,7 @@ execute: async (params) => ({
 
 ## 带持久化数据的工具
 
-使用 `plugin-data-*` builtin 工具而非自定义工具来读写数据。但如果需要在自定义工具内部操作数据，可以通过 `context.sessionId` + `context.pluginId` 配合 store 完成。
+使用 `plugin-data-*` builtin 工具而非自定义工具来读写数据。自定义工具内部读自己的数据用 `context.store.getPluginData(namespace, key)`（返回 `{ key, value }` 或 `null`，已经绑定了会话和插件，包含本次执行更早的写入）；写入返回 `plugin.data` proposal（`withPendingProposals`），一个值最多 256 KiB。
 
 ## 注册与声明（两步，缺一不可）
 

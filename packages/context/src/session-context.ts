@@ -173,6 +173,7 @@ async function loadCharacters(
     return records.map((c) => ({
       id: c.id,
       name: c.name,
+      ...(c.aliases?.length ? { aliases: c.aliases } : {}),
       type: c.type,
       description: c.description,
       fields:

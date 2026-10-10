@@ -99,15 +99,19 @@ describe("shouldTrigger", () => {
 
   // 9. error-retry is reserved and never fires
   it("should return false for reserved error-retry trigger", () => {
-    const manifest = makeManifest({ trigger: { type: "error-retry" } });
+    // Deliberately invalid: "error-retry" is no longer a trigger type.
+    const manifest = makeManifest({
+      trigger: { type: "error-retry" },
+    } as unknown as Partial<RuntimeManifest>);
     expect(shouldTrigger(manifest, makeContext())).toBe(false);
   });
 
   // 11. conditional with unknown condition returns false
   it("should return false for conditional trigger with unknown condition", () => {
+    // Deliberately invalid: "conditional" is no longer a trigger type.
     const manifest = makeManifest({
       trigger: { type: "conditional", condition: "has-write-conflicts" },
-    });
+    } as unknown as Partial<RuntimeManifest>);
     const ctx = makeContext();
     expect(shouldTrigger(manifest, ctx)).toBe(false);
   });

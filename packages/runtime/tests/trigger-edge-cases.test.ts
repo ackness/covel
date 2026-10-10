@@ -122,7 +122,10 @@ describe("shouldTrigger — event", () => {
 
 describe("shouldTrigger — error-retry (reserved)", () => {
   it("never triggers regardless of triggerCount", () => {
-    const m = manifest({ trigger: { type: "error-retry", maxRetryCount: 5 } });
+    // Deliberately invalid: "error-retry" is no longer a trigger type.
+    const m = manifest({
+      trigger: { type: "error-retry", maxRetryCount: 5 },
+    } as unknown as Partial<RuntimeManifest>);
     expect(shouldTrigger(m, ctx({ triggerCount: 0 }))).toBe(false);
     expect(shouldTrigger(m, ctx({ triggerCount: 3 }))).toBe(false);
   });

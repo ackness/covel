@@ -360,6 +360,82 @@ describe("upsert-npc-graph", () => {
     expect(getToolContent(list).nodes[0].summary).toMatch(/古老的阵法/);
   });
 
+  it("keeps one node for a session character named by its name and by an alias", async () => {
+    const world = {
+      characters: [
+        {
+          id: "npc-keeper-ysolde",
+          name: "Keeper Ysolde",
+          aliases: ["Ysolde", "the Keeper"],
+        },
+      ],
+    };
+    const cast = { ...ctx, world };
+    await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          {
+            name: "the keeper",
+            type: "individual",
+            summary: "Tends the barrow lantern.",
+          },
+          {
+            name: "Corvin Ashe",
+            type: "individual",
+            summary: "A scholar of the barrow.",
+          },
+        ],
+      },
+      cast,
+      store,
+    );
+    const second = await executeAndCommit(
+      upsertTool,
+      {
+        nodes: [
+          {
+            name: "Keeper Ysolde",
+            type: "individual",
+            summary: "Tends the barrow lantern; distrusts Corvin.",
+          },
+        ],
+        edges: [
+          {
+            sourceName: "YSOLDE",
+            targetName: "Corvin Ashe",
+            relation: "DISTRUSTS",
+            strength: -0.4,
+            fact: "Ysolde distrusts Corvin Ashe after he asked about the seal.",
+          },
+        ],
+      },
+      cast,
+      store,
+    );
+
+    expect(getToolContent(second).nodes).toMatchObject({
+      created: 0,
+      updated: 1,
+    });
+    expect(getToolContent(second).edges).toMatchObject({
+      created: 1,
+      skipped: 0,
+    });
+    const list = await listTool.execute({}, ctx);
+    const nodes = getToolContent(list).nodes;
+    expect(nodes.map((node) => node.name).sort()).toEqual([
+      "Corvin Ashe",
+      "Keeper Ysolde",
+    ]);
+    const stored = (
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "nodes")
+    ).map((row) => row.value);
+    expect(
+      stored.find((node) => node.name === "Keeper Ysolde").aliases,
+    ).toEqual(["Ysolde", "the Keeper"]);
+  });
+
   it("keeps an existing lastSeenTurn when a re-upsert carries no logicalTurn", async () => {
     const seeded = await executeAndCommit(
       upsertTool,

@@ -443,12 +443,12 @@ describe("fetchLiteLlmModels has 30s AbortController timeout", () => {
   });
 
   it("passes an AbortSignal to the fetch call", async () => {
-    let capturedSignal: AbortSignal | null | undefined = null;
+    const captured: { signal?: AbortSignal | null } = {};
 
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((_url: unknown, init?: RequestInit) => {
-        capturedSignal = init?.signal;
+        captured.signal = init?.signal;
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -464,21 +464,21 @@ describe("fetchLiteLlmModels has 30s AbortController timeout", () => {
 
     await fetchLiteLlmModels("https://example.com/models.json");
 
-    expect(capturedSignal).not.toBeNull();
-    expect(capturedSignal).not.toBeUndefined();
-    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(captured.signal).not.toBeNull();
+    expect(captured.signal).not.toBeUndefined();
+    expect(captured.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("signal aborts after 30 seconds", async () => {
     vi.useFakeTimers();
 
-    let capturedSignal: AbortSignal | null | undefined = null;
+    const captured: { signal?: AbortSignal | null } = {};
     let resolveHangingFetch!: () => void;
 
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((_url: unknown, init?: RequestInit) => {
-        capturedSignal = init?.signal;
+        captured.signal = init?.signal;
         // Return a controllable promise so we can resolve it after checking abort
         return new Promise<never>((_resolve, reject) => {
           resolveHangingFetch = () =>
@@ -495,13 +495,13 @@ describe("fetchLiteLlmModels has 30s AbortController timeout", () => {
     await Promise.resolve();
 
     // Before timeout, signal should NOT be aborted
-    expect(capturedSignal?.aborted).toBe(false);
+    expect(captured.signal?.aborted).toBe(false);
 
     // Advance just past the 30s timeout — this fires the setTimeout callback
     vi.advanceTimersByTime(30_001);
 
     // Signal should now be aborted
-    expect(capturedSignal?.aborted).toBe(true);
+    expect(captured.signal?.aborted).toBe(true);
 
     // Simulate the fetch rejecting (as browsers do when aborted)
     resolveHangingFetch();
@@ -574,9 +574,6 @@ describe("MEDIUM: SCHEMA_VALIDATION_FAILED does not trigger fallback", () => {
       },
       async embed() {
         return { embeddings: [], usage: { inputTokens: 0, outputTokens: 0 } };
-      },
-      async generateImage() {
-        return { images: [], usage: null };
       },
     };
 

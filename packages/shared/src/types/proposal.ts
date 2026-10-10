@@ -82,6 +82,17 @@ export interface PluginDataDeletePayload {
 export interface CharacterUpsertPayload {
   readonly id: string;
   readonly name: string;
+  /**
+   * Other names of the character. With `expectedVersion` these are added to
+   * the ones the stored character has; without it they are the whole list.
+   */
+  readonly aliases?: readonly string[];
+  /**
+   * Aliases the stored character loses, compared by `characterNameKey`. Read
+   * only with `expectedVersion`; a name the character does not have as an
+   * alias changes nothing, and the character's own name is never removed.
+   */
+  readonly removeAliases?: readonly string[];
   readonly type?: string;
   readonly description?: string;
   readonly fields?: unknown;

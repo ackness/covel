@@ -79,7 +79,9 @@ async function run(
       usage: reply.usage,
     };
   });
-  const onDelta = vi.fn(async () => undefined);
+  const onDelta = vi.fn(
+    async (_delta: { textDelta: string; reset?: true }) => undefined,
+  );
   const toolExecutor = {
     execute: vi.fn(),
     getToolInfo: () => ({
@@ -196,8 +198,8 @@ describe("plugin response validation", () => {
     expect(stream).toHaveBeenCalledTimes(2);
     expect(
       onDelta.mock.calls.map(([delta]) => [
-        (delta as { textDelta: string }).textDelta,
-        (delta as { reset?: true }).reset ?? false,
+        delta.textDelta,
+        delta.reset ?? false,
       ]),
     ).toEqual([
       ["Rejected draft", false],

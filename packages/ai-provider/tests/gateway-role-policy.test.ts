@@ -108,12 +108,14 @@ protocol = "typesafe-systemone-v1"
       customPresets: [
         {
           id: "primary",
+          name: "Primary",
           provider: "fixture",
           model: "failing-model",
           protocol: "openai-chat-v1",
         },
         {
           id: "backup",
+          name: "Backup",
           provider: "fixture",
           model: "local-backup",
           protocol: "openai-chat-v1",

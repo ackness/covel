@@ -926,6 +926,22 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       ]);
     });
 
+    it("keeps a character's aliases in order and drops them with a replacement that has none", async () => {
+      const initial = makeCharacter({
+        sessionId: "sess-aliases",
+        name: "Isolde",
+        aliases: ["the keeper", "Изольда", "Ｉｓｏｌｄｅ of the Light"],
+      });
+      await store.upsertCharacter(initial);
+      expect(await store.listCharacters("sess-aliases")).toEqual([initial]);
+
+      const { aliases: _aliases, ...withoutAliases } = initial;
+      await store.upsertCharacter({ ...withoutAliases, version: 2 });
+      const [saved] = await store.listCharacters("sess-aliases");
+      expect(saved?.aliases).toBeUndefined();
+      expect(saved?.version).toBe(2);
+    });
+
     it("normalizes null character fields to absence on every backend", async () => {
       const initial = makeCharacter({
         sessionId: "sess-1",

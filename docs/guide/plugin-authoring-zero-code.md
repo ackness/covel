@@ -109,7 +109,7 @@ agent:
     maxRetries: 0
 ```
 
-只有白名单中的工具会提供给该 agent。工具是否可用也受执行权限和上下文限制。需要保证调用某个自有工具后结束时，使用 `agent.loop.completion.afterTools`，见[本地工具示例](plugin-authoring-agent.md)。
+`list-characters` 最多返回 50 个角色（互动最多的在前，`count` 仍是总数，`_text` 末尾说明漏了几个以及怎么找：按 `type` 过滤，或用 `get-character` 按名字取）。只有白名单中的工具会提供给该 agent。工具是否可用也受执行权限和上下文限制。需要保证调用某个自有工具后结束时，使用 `agent.loop.completion.afterTools`，见[本地工具示例](plugin-authoring-agent.md)。
 
 ```yaml
 contributes:

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import type { Proposal } from "@covel/shared";
+import type { Proposal, ProposalFor, ProposalPayloadMap } from "@covel/shared";
 import { createEventBus } from "@covel/events";
 import {
   createCommitPipeline,
@@ -61,11 +61,11 @@ function createRecordingStore(): RecordingStore {
 
 // ── Proposal factory ──────────────────────────────────────────────
 
-function makeProposal(
-  type: Proposal["type"],
-  payload: Record<string, unknown>,
+function makeProposal<T extends Proposal["type"]>(
+  type: T,
+  payload: ProposalPayloadMap[T],
   suffix: string,
-): Proposal {
+): ProposalFor<T> {
   return {
     id: `prop-${suffix}`,
     type,

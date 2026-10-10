@@ -19,6 +19,7 @@ describe("createGatewayAdapter target resolution", () => {
       maxAttempts: 4,
       attempts: 0,
       deadline: Date.now() + 10_000,
+      ceiling: Date.now() + 10_000,
     };
     const responseFormat = {
       type: "json_schema" as const,
@@ -194,7 +195,7 @@ describe("createGatewayAdapter target resolution", () => {
     };
     const adapter = createGatewayAdapter(gateway);
     const params = {
-      messages: [{ role: "user", content: "hi" }],
+      messages: [{ role: "user" as const, content: "hi" }],
       promptCacheKey: "covel-abc",
     };
 

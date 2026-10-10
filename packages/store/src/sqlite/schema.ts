@@ -251,6 +251,7 @@ export const characters = sqliteTable(
     id: text("id").notNull(),
     sessionId: text("session_id").notNull(),
     name: text("name").notNull(),
+    aliases: text("aliases"), // JSON array of strings
     type: text("type").notNull(),
     description: text("description"),
     fields: text("fields"), // JSON

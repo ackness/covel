@@ -67,6 +67,7 @@ async function run(
   ];
   const manifest = {
     name: "external-extractor",
+    description: "external-extractor",
     pluginId: "external-extractor",
     stage: "post-turn",
     outputKind: "system",

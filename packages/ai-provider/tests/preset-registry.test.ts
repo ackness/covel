@@ -106,7 +106,7 @@ describe("preset-registry", () => {
   it("gives a preset without a profile the kernel's default context window", () => {
     const target = createPresetRegistry({
       profiles: [],
-      presets: [{ ...presets[1]!, tier: "unlisted" }],
+      presets: [{ ...presets[1]!, tier: "large" }],
     }).resolveTextTarget({ presetId: "fallback" });
     expect(target.profile.contextWindow).toBe(DEFAULT_LLM_CONTEXT_WINDOW);
   });

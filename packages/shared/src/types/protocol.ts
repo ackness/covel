@@ -703,6 +703,8 @@ export interface SnapshotMessage {
 export interface SnapshotCharacter {
   readonly id: string;
   readonly name: string;
+  /** Other names of the same person; absent when there are none. */
+  readonly aliases?: readonly string[];
   readonly type: string;
   readonly description?: string;
   readonly fields?: Readonly<Record<string, unknown>>;

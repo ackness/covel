@@ -15,6 +15,10 @@ import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { reservedPluginDataNamespaceError } from "@covel/shared";
+import {
+  MAX_PLUGIN_DATA_VALUE_BYTES,
+  pluginDataSizeBytes,
+} from "@covel/runtime";
 import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
 import {
@@ -179,10 +183,15 @@ pluginDataRoutes.put(
     if (parsed.data.value === undefined) {
       return c.json(errorBody("Invalid body: value field is required"), 400);
     }
-    // Guard against oversized payloads (max 64KB serialized)
-    const serialized = JSON.stringify(parsed.data.value);
-    if (serialized.length > 65_536) {
-      return c.json(errorBody("Value too large (max 64KB)"), 413);
+    // Same per-value limit as the proposal and handler write paths.
+    const bytes = pluginDataSizeBytes(parsed.data.value);
+    if (bytes > MAX_PLUGIN_DATA_VALUE_BYTES) {
+      return c.json(
+        errorBody(
+          `Value too large: ${bytes} bytes, over the ${MAX_PLUGIN_DATA_VALUE_BYTES}-byte limit for one plugin-data value`,
+        ),
+        413,
+      );
     }
     const body = parsed.data;
     const now = new Date().toISOString();

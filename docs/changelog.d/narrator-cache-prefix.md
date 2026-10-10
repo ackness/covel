@@ -1,0 +1,7 @@
+### Added
+
+- **`lateSystemAsUser` makes the story model's prompt cache reach the end of the previous turn's history on a relay that moves system messages.** Off by default. The turn's data and rules are a system message placed after the history; a relay that moves system messages to the front (the local Codex-style proxy used for tests does) puts that changing text ahead of the history, so the narrator read only the relay's own fixed instructions from cache. With `lateSystemAsUser = true` in a slot's `providerOptions` on `openai-chat-v1` or `openai-responses-v1`, a system message after the first conversation message goes out as a `user` message in `<system-instruction>` tags, in the same place and with the same text. On that proxy, in an eight-turn session, the narrator's first request of a turn read 55% of its input from cache instead of 22%. It changes the role the model sees; other servers were not measured. See `docs/reference/slots.md`.
+
+### Changed
+
+- **A function runtime's `ctx.gateway.generateText` calls carry the prompt cache key.** The host fills `promptCacheKey` with the hash of the session and the runtime (`promptCacheKeyFor`), so a runtime that keeps its instructions and stable data at the start of the request reads them from cache on the next call; a key a plugin passes is replaced. History compaction (a short fixed instruction, calls far apart), memory embeddings (no prompt cache) and world generation and translation (no session; only a retry repeats a prefix) send no key. See `docs/reference/slots.md`.

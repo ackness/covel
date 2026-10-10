@@ -1391,7 +1391,7 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 - `pluginPolicy.requires`：世界必需的契约 ID。创建时世界作为一个依赖方参与解析，唯一提供者被自动加入；需求随会话保存在 `metadata.pluginSelection.requiredContracts`，后续启停与重载沿用，不再读取世界。没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。玩家显式停用提供者，或提供者是尚待授权的社区插件时，会话照常创建。
 - `metadata.packageInfo`：世界包的 `version` 和[作者信息](./plugins.md#作者信息)（`author`、`license`、`homepage`），只用于世界卡片展示，不进入提示词。
 - `metadata.characterSchema`：创建会话时写入领域角色 schema，包含 `types/attributes`，版本由内核管理。Web 私有模式创建本地会话时写入同样的 schema；预设不合法时会话不创建。
-- `metadata.embeddedCharacters`：没有文件型 worldData 时，将通用 `{id,name,type,description?,fields?}` 记录导入会话 `characters`。它不是插件角色卡，不产生插件数据镜像。
+- `metadata.embeddedCharacters`：没有文件型 worldData 时，将通用 `{id,name,aliases?,type,description?,fields?}` 记录导入会话 `characters`。它不是插件角色卡，不产生插件数据镜像。
 - `metadata.embeddedLorebook`：没有文件型 worldData 时导入 world owner 的 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
 
 **响应 201:**
@@ -2647,7 +2647,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 
-写入或更新单条插件数据。Value 最大 64KB。
+写入或更新单条插件数据。Value 序列化成 JSON 后最大 256 KiB（UTF-8 字节，与 proposal / handler 写入共用同一上限，见 [tools.md](tools.md)），超出返回 `413` 且不写入。
 
 **请求体:**
 
@@ -2931,6 +2931,8 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 
 创建或更新一个角色（upsert 语义）。该兼容管理端点内部通过 `character.upsert` proposal 提交，因此后续可继续接入 commit pipeline 的 hook / trace 策略，同时保持原 URL 和响应形状。
 
+`aliases` 是可选的字符串数组，写入时替换已有别名；与另一个角色的名字或别名相同时返回 400（见[别名与按名字解析](world-model.md#别名与按名字解析)）。`GET` 的每个角色、会话视图的 `characters[]` 和 `character.upserted` 事件在角色有别名时带 `aliases`。
+
 Rejected character proposals return 400 with validation details; unexpected
 persistence failures use the logged, sanitized 500 handler. The aggregated
 session state view also returns 500 when a required character or plugin-data
@@ -2959,6 +2961,7 @@ query fails, instead of reporting a successful but incomplete database view.
 | ------------- | ------ | ---- | ------------------------------ |
 | `id`          | string | 是   | 角色 ID                        |
 | `name`        | string | 是   | 角色名称                       |
+| `aliases`     | array  | 否   | 别名的完整列表（最多 32 个）   |
 | `type`        | string | 是   | 角色类型（如 `player`, `npc`） |
 | `description` | string | 否   | 角色描述                       |
 | `fields`      | object | 否   | 自定义属性（JSON）             |

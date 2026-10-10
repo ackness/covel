@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createGoogleGenerativeAiAdapter } from "../src/adapters/google-generative-ai.js";
 import { googleMessages } from "../src/adapters/google-messages.js";
 import type { TextMessage } from "../src/types.js";
 
@@ -9,8 +10,8 @@ import type { TextMessage } from "../src/types.js";
 const config = { baseUrl: "https://generativelanguage.googleapis.com/v1beta" };
 const model = "gemini-2.5-flash";
 type Content = { role: string; parts: Record<string, unknown>[] };
-const convert = (messages: TextMessage[]) =>
-  googleMessages(messages, config, model) as {
+const convert = (messages: TextMessage[], lateSystemInPlace?: boolean) =>
+  googleMessages(messages, config, model, lateSystemInPlace) as {
     contents: Content[];
     systemInstruction?: { parts: { text: string }[] };
   };
@@ -200,6 +201,65 @@ describe("Gemini system messages after the conversation starts", () => {
     expect(
       convert([...history, { role: "system", content: "" }]).contents,
     ).toHaveLength(2);
+  });
+
+  it("sends the earlier shape when the slot turns the option off", async () => {
+    const messages: TextMessage[] = [
+      stable,
+      { role: "user", content: "One" },
+      { role: "user", content: "Two" },
+      { role: "system", content: "Turn 3 context" },
+    ];
+    expect(convert(messages, false)).toEqual({
+      contents: [
+        { role: "user", parts: [{ text: "One" }] },
+        { role: "user", parts: [{ text: "Two" }] },
+      ],
+      systemInstruction: {
+        parts: [{ text: "Stable rules" }, { text: "Turn 3 context" }],
+      },
+    });
+
+    // Through the adapter: in place unless the slot says false, and the
+    // option itself never reaches the provider.
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (_url, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)));
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: { role: "model", parts: [{ text: "ok" }] },
+                finishReason: "STOP",
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    const adapter = createGoogleGenerativeAiAdapter();
+    for (const lateSystemAsUser of [undefined, true, false]) {
+      await adapter.generateText(
+        { ...config, apiKey: "synthetic-test-key" },
+        {
+          model,
+          messages,
+          ...(lateSystemAsUser === undefined
+            ? {}
+            : { providerRequestMetadata: { lateSystemAsUser } }),
+        },
+      );
+    }
+    vi.unstubAllGlobals();
+    const [unset, on, off] = bodies;
+    expect(unset).toEqual(on);
+    expect(unset).toMatchObject(convert(messages));
+    expect(off).toMatchObject(convert(messages, false));
+    for (const body of bodies)
+      expect(JSON.stringify(body)).not.toContain("lateSystemAsUser");
   });
 
   it("rejects a late system message that is not text", () => {

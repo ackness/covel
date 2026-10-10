@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { HandlerResult, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore, createMemoryMediaStore } from "@covel/store/memory";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
@@ -48,8 +48,8 @@ function gatewayWithImages(): PluginRuntimeGateway {
       finishReason: "stop",
       usage: { inputTokens: 0, outputTokens: 0 },
     }),
-    generateObject: async () => ({
-      object: {},
+    generateObject: async <T>() => ({
+      object: {} as T,
       finishReason: "stop",
       usage: { inputTokens: 0, outputTokens: 0 },
     }),
@@ -71,7 +71,7 @@ function gatewayWithImages(): PluginRuntimeGateway {
 
 async function runWithHandler(
   runtimeId: string,
-  handler: (ctx: { images?: unknown }) => Promise<{ ok: boolean }>,
+  handler: (ctx: { images?: unknown }) => Promise<HandlerResult>,
   extraDeps: Partial<TurnExecutorDeps>,
 ): Promise<boolean> {
   const target = fnManifest(runtimeId);
@@ -107,7 +107,7 @@ describe("ctx.images wiring (plan task 8)", () => {
   it("builds ctx.images when the gateway supports generateImage and mediaStore is wired", async () => {
     const hasImages = await runWithHandler(
       "plug/needs-images",
-      async () => ({ ok: true }),
+      async () => ({ outcome: "success" as const, value: { ok: true } }),
       { gateway: gatewayWithImages(), mediaStore: createMemoryMediaStore() },
     );
     expect(hasImages).toBe(true);
@@ -120,8 +120,8 @@ describe("ctx.images wiring (plan task 8)", () => {
         finishReason: "stop",
         usage: { inputTokens: 0, outputTokens: 0 },
       }),
-      generateObject: async () => ({
-        object: {},
+      generateObject: async <T>() => ({
+        object: {} as T,
         finishReason: "stop",
         usage: { inputTokens: 0, outputTokens: 0 },
       }),
@@ -129,7 +129,7 @@ describe("ctx.images wiring (plan task 8)", () => {
     };
     const hasImages = await runWithHandler(
       "plug/no-image-wire",
-      async () => ({ ok: true }),
+      async () => ({ outcome: "success" as const, value: { ok: true } }),
       { gateway: legacyGateway, mediaStore: createMemoryMediaStore() },
     );
     expect(hasImages).toBe(false);
@@ -138,7 +138,7 @@ describe("ctx.images wiring (plan task 8)", () => {
   it("leaves ctx.images undefined when no mediaStore is wired", async () => {
     const hasImages = await runWithHandler(
       "plug/no-media-store",
-      async () => ({ ok: true }),
+      async () => ({ outcome: "success" as const, value: { ok: true } }),
       { gateway: gatewayWithImages() },
     );
     expect(hasImages).toBe(false);

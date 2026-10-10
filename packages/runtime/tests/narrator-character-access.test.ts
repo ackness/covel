@@ -21,8 +21,8 @@ describe.each(["narrator", "chat-mode-narrator"])(
       const now = new Date().toISOString();
       for (const sessionId of ["story", "other"]) {
         await store.createSession({
+          locale: "en-US",
           id: sessionId,
-          worldId: null,
           phase: "playing",
           status: "active",
           completedPlayerTurns: 1,

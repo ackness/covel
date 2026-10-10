@@ -233,8 +233,12 @@ describe("createFunctionStoreView", () => {
       });
     }
     const view = createFunctionStoreView(store, ctx);
+    // listPlayerInputs takes no argument, but plugin code can still pass one.
+    const listWithForgedArg = view.listPlayerInputs as (
+      sessionId: string,
+    ) => ReturnType<typeof view.listPlayerInputs>;
     expect(
-      (await view.listPlayerInputs("other-session")).map((input) => input.id),
+      (await listWithForgedArg("other-session")).map((input) => input.id),
     ).toEqual([SESSION_ID]);
   });
 
