@@ -108,6 +108,7 @@ function makeDeps(llm: LLMAdapter): TurnExecutorDeps {
 }
 
 const TURN_INPUT: TurnInput = {
+  origin: "player",
   sessionId: SESSION_ID,
   turnId: "turn-1",
   playerMessage: "roll for initiative",

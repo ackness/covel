@@ -1,5 +1,5 @@
 /**
- * Gate behaviour for `POST /api/media/cleanup` (audit P1/P2).
+ * Gate behaviour for `POST /api/media/cleanup`.
  *
  * Covers:
  *   1. env flag missing  → 403 forbidden

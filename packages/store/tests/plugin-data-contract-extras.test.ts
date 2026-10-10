@@ -81,9 +81,9 @@ for (const { name, create } of backends) {
       const fromB = await store.listPluginData(SESSION, "codex", "b");
 
       expect(fromA).toHaveLength(1);
-      expect(fromA[0].value).toBe("A");
+      expect(fromA[0]!.value).toBe("A");
       expect(fromB).toHaveLength(1);
-      expect(fromB[0].value).toBe("B");
+      expect(fromB[0]!.value).toBe("B");
     });
 
     it("isolates pluginId: codex writes do not leak into world-init reads", async () => {
@@ -119,7 +119,7 @@ for (const { name, create } of backends) {
       const b = await store.listPluginData("sess-B", "codex", "entries");
       expect(a).toHaveLength(1);
       expect(b).toHaveLength(1);
-      expect(a[0].value).not.toEqual(b[0].value);
+      expect(a[0]!.value).not.toEqual(b[0]!.value);
     });
 
     it("last write wins for the same (sessionId, pluginId, namespace, key)", async () => {

@@ -33,6 +33,7 @@ function fnManifest(
 
 function makeTurnInput(runtimeId: string): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-images",
     turnId: "turn-images",
     playerMessage: "",

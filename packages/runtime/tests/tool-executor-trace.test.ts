@@ -45,19 +45,19 @@ describe("ToolExecutor trace emissions", () => {
       "tool.calling",
       "tool.completed",
     ]);
-    expect(emitter.events[0].payload).toMatchObject({
+    expect(emitter.events[0]!.payload).toMatchObject({
       toolName: "echo",
       toolCallId: "c1",
       arguments: '{"hi":1}',
       source: "local",
       approvalStatus: "auto-allowed",
     });
-    expect(emitter.events[1].payload).toMatchObject({
+    expect(emitter.events[1]!.payload).toMatchObject({
       toolName: "echo",
       success: true,
       approvalStatus: "auto-allowed",
     });
-    expect(typeof emitter.events[1].payload.durationMs).toBe("number");
+    expect(typeof emitter.events[1]!.payload.durationMs).toBe("number");
   });
 
   it("previews validated domain events immediately after tool completion", async () => {
@@ -94,7 +94,7 @@ describe("ToolExecutor trace emissions", () => {
       "tool.completed",
       "domain-event.previewed",
     ]);
-    expect(emitter.events[2].payload).toMatchObject({
+    expect(emitter.events[2]!.payload).toMatchObject({
       runtimeId: "test-plugin/main",
       pluginId: "test-plugin",
       toolCallId: "c-preview",
@@ -112,8 +112,8 @@ describe("ToolExecutor trace emissions", () => {
     );
     expect(res.success).toBe(false);
     expect(emitter.events).toHaveLength(1);
-    expect(emitter.events[0].type).toBe("tool.failed");
-    expect(emitter.events[0].payload).toMatchObject({
+    expect(emitter.events[0]!.type).toBe("tool.failed");
+    expect(emitter.events[0]!.payload).toMatchObject({
       code: "NOT_FOUND",
       success: false,
     });
@@ -137,8 +137,8 @@ describe("ToolExecutor trace emissions", () => {
       { ...baseCtx, emitter },
     );
     expect(res.success).toBe(false);
-    expect(emitter.events[0].type).toBe("tool.failed");
-    expect(emitter.events[0].payload.code).toBe("INVALID_ARGS");
+    expect(emitter.events[0]!.type).toBe("tool.failed");
+    expect(emitter.events[0]!.payload.code).toBe("INVALID_ARGS");
   });
 
   it("runs a call whose arguments have one of the slips the parser settles", async () => {
@@ -211,8 +211,8 @@ describe("ToolExecutor trace emissions", () => {
     );
     expect(res.success).toBe(false);
     expect(emitter.events).toHaveLength(1);
-    expect(emitter.events[0].type).toBe("tool.failed");
-    expect(emitter.events[0].payload).toMatchObject({
+    expect(emitter.events[0]!.type).toBe("tool.failed");
+    expect(emitter.events[0]!.payload).toMatchObject({
       code: "DENIED",
       error: "explicit deny",
       approvalStatus: "policy-denied",
@@ -251,7 +251,7 @@ describe("ToolExecutor trace emissions", () => {
     issues.push({
       path: ["age"],
       message: "age is required",
-      code: issues[0].code,
+      code: issues[0]!.code,
     });
     const validationError = new ToolValidationError(zodError!);
 
@@ -276,7 +276,7 @@ describe("ToolExecutor trace emissions", () => {
       "tool.calling",
       "tool.failed",
     ]);
-    const failPayload = emitter.events[1].payload;
+    const failPayload = emitter.events[1]!.payload;
     expect(failPayload.code).toBe("VALIDATION_ERROR");
     expect(Array.isArray(failPayload.details)).toBe(true);
     // Dedup means only 2 unique paths survive (name + age), not 3 raw issues.

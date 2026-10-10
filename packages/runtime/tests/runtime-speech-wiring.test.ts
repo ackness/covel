@@ -29,6 +29,7 @@ function fnManifest(
 
 function makeTurnInput(runtimeId: string): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-speech",
     turnId: "turn-speech",
     playerMessage: "",

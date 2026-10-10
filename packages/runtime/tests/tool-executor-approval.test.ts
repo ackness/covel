@@ -127,7 +127,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
       await executor.execute(makeCall("echo", { message: "test" }), ctx);
       const calls = await store.listToolCalls("sess-1");
       expect(calls).toHaveLength(1);
-      expect(calls[0].approvalStatus).toBe("auto-allowed");
+      expect(calls[0]!.approvalStatus).toBe("auto-allowed");
     });
 
     it("should record denied status in store", async () => {
@@ -146,7 +146,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
       );
       const calls = await store.listToolCalls("sess-1");
       expect(calls).toHaveLength(1);
-      expect(calls[0].approvalStatus).toBe("policy-denied");
+      expect(calls[0]!.approvalStatus).toBe("policy-denied");
     });
   });
 
@@ -164,7 +164,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
       expect(result.success).toBe(true);
 
       const calls = await store.listToolCalls("sess-1");
-      expect(calls[0].approvalStatus).toBe("auto-allowed");
+      expect(calls[0]!.approvalStatus).toBe("auto-allowed");
     });
   });
 

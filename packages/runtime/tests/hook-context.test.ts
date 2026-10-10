@@ -36,6 +36,7 @@ it("gives every hook the session locale, and the runtime identity in the context
   });
   const teller: RuntimeManifest = {
     name: "teller/story",
+    description: "Tells the story",
     pluginId: "teller",
     runtimeType: "agent",
     stage: "narrative",
@@ -45,6 +46,7 @@ it("gives every hook the session locale, and the runtime identity in the context
   };
   const ledger: RuntimeManifest = {
     name: "ledger/write",
+    description: "Writes the ledger",
     pluginId: "ledger",
     runtimeType: "function",
     stage: "post-turn",
@@ -94,6 +96,7 @@ it("gives every hook the session locale, and the runtime identity in the context
       sessionId: "session",
       turnId: "turn",
       playerMessage: "Open the door",
+      origin: "player",
       locale: "ja",
     },
     [teller, ledger],
@@ -103,7 +106,9 @@ it("gives every hook the session locale, and the runtime identity in the context
       hookScope: { activePluginIds: new Set(["teller", "ledger", "watcher"]) },
       llm: { generate: vi.fn(async () => replies.shift()!) },
       toolExecutor: {
-        execute: vi.fn(async () => ({
+        execute: vi.fn(async (call) => ({
+          toolCallId: call.id,
+          name: call.name,
           result: '{"ok":true}',
           parsedResult: { ok: true },
           success: true,
@@ -114,8 +119,8 @@ it("gives every hook the session locale, and the runtime identity in the context
           jsonSchema: { type: "object" },
         })),
       },
-      loadRuntime: async (name) =>
-        name === teller.name
+      loadRuntime: async (loaded) =>
+        loaded.name === teller.name
           ? { manifest: teller, promptTemplate: "Tell the story." }
           : {
               manifest: ledger,

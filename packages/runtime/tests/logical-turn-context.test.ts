@@ -29,7 +29,7 @@ describe("logical turn in handler context", () => {
     } as RuntimeManifest;
     let seen: unknown;
     await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "go" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [manifest],
       {
         store,

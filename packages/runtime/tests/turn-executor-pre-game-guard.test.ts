@@ -1,5 +1,5 @@
 /**
- * Unit tests for retainPreGameRuntimes — the F-1 guard that prevents a
+ * Unit tests for retainPreGameRuntimes — the guard that prevents a
  * PreSchedule hook from dropping Pre-Game runtimes (priority ≤ 99) while
  * Pre-Game is still pending.
  */

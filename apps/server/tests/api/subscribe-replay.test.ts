@@ -96,7 +96,7 @@ describe("R-01 SSE reconnect + replay/live race", () => {
     const first = await open("");
     expect(first.filter((f) => !isSystemFrame(f))).toHaveLength(0);
     const connected = first.find((f) => f.event === "system.connected")!;
-    const cursor = (JSON.parse(connected.data) as { cursor?: string }).cursor;
+    const cursor = (JSON.parse(connected.data!) as { cursor?: string }).cursor;
     expect(cursor).toBe(`${epoch}:3`);
 
     // An event emitted while the client is away is replayed from that cursor.

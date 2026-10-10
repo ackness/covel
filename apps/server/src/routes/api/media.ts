@@ -379,7 +379,7 @@ async function buildProtectedMediaIds(
 /**
  * `POST /api/media/cleanup` — destructive maintenance endpoint.
  *
- * Hardening summary (audit P1/P2):
+ * Hardening summary:
  *
  *   1. Disabled by default: must set `COVEL_MEDIA_CLEANUP_ENABLED=true`.
  *   2. Forbidden in `DEPLOYMENT_TIER=commercial`; `demo` requires the hosted

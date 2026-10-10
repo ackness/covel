@@ -168,7 +168,7 @@ describe("resume commit composition", () => {
       const exports = await store.listRuntimeExports("session");
       expect(exports).toHaveLength(owned ? 1 : 0);
       if (owned)
-        expect(exports[0].value).toEqual({
+        expect(exports[0]!.value).toEqual({
           ...value,
           portrait: { id: assetId, mime: "image/png", size: 42 },
         });

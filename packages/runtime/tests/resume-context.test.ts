@@ -100,6 +100,7 @@ describe("resume context", () => {
       getToolSource: () => "builtin",
     });
     const manifest: RuntimeManifest = {
+      description: "test",
       name: "probe/agent",
       pluginId: "probe",
       runtimeType: "agent",
@@ -199,6 +200,7 @@ describe("resume context", () => {
     const store = await seededStore();
     const observed: Record<string, unknown>[] = [];
     const manifest: RuntimeManifest = {
+      description: "test",
       name: "probe/function",
       pluginId: "probe",
       runtimeType: "function",
@@ -307,6 +309,7 @@ describe("resume completion evidence", () => {
       getToolSource: () => "builtin",
     });
     const manifest: RuntimeManifest = {
+      description: "test",
       name: "probe/required-work",
       pluginId: "probe",
       runtimeType: "agent",
@@ -455,6 +458,7 @@ describe.each(["step limit", "hook stop"] as const)(
         },
       });
       const manifest: RuntimeManifest = {
+        description: "test",
         name: "probe/required-work",
         pluginId: "probe",
         runtimeType: "agent",

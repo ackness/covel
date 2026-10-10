@@ -39,6 +39,7 @@ function manifest(
 }
 
 const input: TurnInput = {
+  origin: "player",
   sessionId: "sess-abort",
   turnId: "turn-abort",
   playerMessage: "go",

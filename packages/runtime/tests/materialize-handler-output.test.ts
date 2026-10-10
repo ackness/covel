@@ -18,8 +18,8 @@ describe("materializeHandlerSuccess", () => {
     expect(result.output).toEqual(value);
     expect(result.effects).toEqual(effects);
     expect(result.completion).toBe("pending");
-    value.events[0].data.count = 2;
-    effects.events[0].topic = "changed";
+    value.events[0]!.data.count = 2;
+    effects.events[0]!.topic = "changed";
     expect(result.output?.events).toEqual([
       { topic: "business.only", data: { count: 1 } },
     ]);

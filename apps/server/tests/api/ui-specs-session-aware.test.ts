@@ -186,6 +186,6 @@ describe("GET /api/ui-specs session-aware filter", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { right: Array<{ pluginId: string }> };
     expect(body.right).toHaveLength(1);
-    expect(body.right[0].pluginId).toBe("codex");
+    expect(body.right[0]!.pluginId).toBe("codex");
   });
 });

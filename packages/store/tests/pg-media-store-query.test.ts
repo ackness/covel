@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Sql } from "postgres";
 import { createPgMediaStoreFromClient } from "../src/media-store/pg.js";
+import { toUint8Array } from "../src/contract/media-store-contract.js";
 
 function createSqlRecorder() {
   const queries: string[] = [];
@@ -52,7 +53,7 @@ describe("PgMediaStore query projections", () => {
       size: 3,
     });
 
-    expect([...bytes]).toEqual([1, 2, 3]);
+    expect([...(await toUint8Array(bytes))]).toEqual([1, 2, 3]);
     expect(queries).toEqual([
       "SELECT body FROM media_assets WHERE id = ? LIMIT 1",
     ]);

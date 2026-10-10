@@ -9,7 +9,7 @@ import {
   processRuntimeResult,
   createTraceRecorder,
 } from "../src/session/session-kernel.js";
-import type { Proposal, RuntimeResult } from "@covel/shared";
+import type { Proposal, RuntimeEffects, RuntimeResult } from "@covel/shared";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 const SOURCE = { pluginId: "test-plugin", runtimeId: "test-runtime" };
@@ -39,11 +39,11 @@ describe("normalizeOutput", () => {
       );
 
       expect(proposals).toHaveLength(1);
-      expect(proposals[0].type).toBe("narrative.append");
-      expect(proposals[0].source).toEqual(SOURCE);
-      expect(proposals[0].turnId).toBe(TURN_ID);
-      expect(proposals[0].sessionId).toBe(SESSION_ID);
-      expect(proposals[0].payload).toEqual({
+      expect(proposals[0]!.type).toBe("narrative.append");
+      expect(proposals[0]!.source).toEqual(SOURCE);
+      expect(proposals[0]!.turnId).toBe(TURN_ID);
+      expect(proposals[0]!.sessionId).toBe(SESSION_ID);
+      expect(proposals[0]!.payload).toEqual({
         content: "You enter the dark forest.",
         kind: "story",
       });
@@ -103,7 +103,7 @@ describe("normalizeOutput", () => {
 
   describe("interaction.request", () => {
     it("should extract interactions array as separate proposals", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         interactions: [
           {
             type: "form",
@@ -133,12 +133,12 @@ describe("normalizeOutput", () => {
         (p) => p.type === "interaction.request",
       );
       expect(interactionProposals).toHaveLength(2);
-      expect(interactionProposals[0].payload.interactionId).toBe(
+      expect(interactionProposals[0]!.payload.interactionId).toBe(
         "char-creation",
       );
-      expect(interactionProposals[0].payload.type).toBe("form");
-      expect(interactionProposals[1].payload.interactionId).toBe("direction");
-      expect(interactionProposals[1].payload.type).toBe("choice");
+      expect(interactionProposals[0]!.payload.type).toBe("form");
+      expect(interactionProposals[1]!.payload.interactionId).toBe("direction");
+      expect(interactionProposals[1]!.payload.type).toBe("choice");
     });
 
     it("should extract explicit ui effects as ui.render proposals", () => {
@@ -162,7 +162,7 @@ describe("normalizeOutput", () => {
 
       const renderProposals = proposals.filter((p) => p.type === "ui.render");
       expect(renderProposals).toHaveLength(1);
-      expect(renderProposals[0].payload).toMatchObject({
+      expect(renderProposals[0]!.payload).toMatchObject({
         status: "success",
         parts: [
           {
@@ -181,7 +181,7 @@ describe("normalizeOutput", () => {
 
   describe("state.patch", () => {
     it("should extract statePatches as separate proposals", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         statePatches: [
           { table: "world", field: "weather", value: "stormy" },
           { table: "player", field: "hp", value: 80 },
@@ -198,12 +198,12 @@ describe("normalizeOutput", () => {
 
       const stateProposals = proposals.filter((p) => p.type === "state.patch");
       expect(stateProposals).toHaveLength(2);
-      expect(stateProposals[0].payload).toEqual({
+      expect(stateProposals[0]!.payload).toEqual({
         table: "world",
         field: "weather",
         value: "stormy",
       });
-      expect(stateProposals[1].payload).toEqual({
+      expect(stateProposals[1]!.payload).toEqual({
         table: "player",
         field: "hp",
         value: 80,
@@ -213,7 +213,7 @@ describe("normalizeOutput", () => {
 
   describe("event.emit", () => {
     it("should extract events array as event.emit proposals", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         events: [{ topic: "combat.started", data: { enemies: 3 } }],
       };
       const proposals = normalizeOutput(
@@ -227,7 +227,7 @@ describe("normalizeOutput", () => {
 
       const eventProposals = proposals.filter((p) => p.type === "event.emit");
       expect(eventProposals).toHaveLength(1);
-      expect(eventProposals[0].payload).toEqual({
+      expect(eventProposals[0]!.payload).toEqual({
         topic: "combat.started",
         data: { enemies: 3 },
       });
@@ -258,7 +258,7 @@ describe("normalizeOutput", () => {
 
   describe("asset.generate", () => {
     it("emits asset.generate proposals from assetGenerations[]", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         assetGenerations: [
           { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
         ],
@@ -274,8 +274,8 @@ describe("normalizeOutput", () => {
       );
 
       expect(proposals).toHaveLength(1);
-      expect(proposals[0].type).toBe("asset.generate");
-      expect(proposals[0].payload).toEqual({
+      expect(proposals[0]!.type).toBe("asset.generate");
+      expect(proposals[0]!.payload).toEqual({
         ref: MEDIA_REF,
         modality: "image",
         meta: { prompt: "forest" },
@@ -283,7 +283,7 @@ describe("normalizeOutput", () => {
     });
 
     it("emits asset.generate proposals from assetGenerations[] and drops inline media", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         assetGenerations: [
           { ref: MEDIA_REF, modality: "image" },
           { base64: "abc", modality: "image" },
@@ -301,8 +301,8 @@ describe("normalizeOutput", () => {
       );
 
       expect(proposals).toHaveLength(1);
-      expect(proposals[0].type).toBe("asset.generate");
-      expect(proposals[0].payload).toEqual({
+      expect(proposals[0]!.type).toBe("asset.generate");
+      expect(proposals[0]!.payload).toEqual({
         ref: MEDIA_REF,
         modality: "image",
       });
@@ -323,7 +323,7 @@ describe("normalizeOutput", () => {
     // Function runtimes return `effects.pluginData` to request writes to their
     // own plugin_data namespace through the commit pipeline.
     it("emits a single plugin.data proposal for one entry", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         pluginData: [
           { namespace: "images", key: "job-1", value: { ref: MEDIA_REF } },
         ],
@@ -339,7 +339,7 @@ describe("normalizeOutput", () => {
 
       const dataProposals = proposals.filter((p) => p.type === "plugin.data");
       expect(dataProposals).toHaveLength(1);
-      expect(dataProposals[0].payload).toEqual({
+      expect(dataProposals[0]!.payload).toEqual({
         namespace: "images",
         key: "job-1",
         value: { ref: MEDIA_REF },
@@ -347,7 +347,7 @@ describe("normalizeOutput", () => {
     });
 
     it("batches multiple entries into a single plugin.data.batch proposal", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         pluginData: [
           { namespace: "images", key: "job-1", value: { ref: MEDIA_REF } },
           { namespace: "images", key: "job-2", value: { ref: MEDIA_REF } },
@@ -365,7 +365,7 @@ describe("normalizeOutput", () => {
 
       const batches = proposals.filter((p) => p.type === "plugin.data.batch");
       expect(batches).toHaveLength(1);
-      const payload = batches[0].payload as {
+      const payload = batches[0]!.payload as unknown as {
         items: ReadonlyArray<Record<string, unknown>>;
       };
       expect(payload.items).toHaveLength(3);
@@ -382,7 +382,7 @@ describe("normalizeOutput", () => {
     });
 
     it("silently drops malformed entries and keeps valid ones", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         pluginData: [
           { namespace: "good", key: "k1", value: 1 },
           { namespace: "", key: "k2", value: 2 }, // empty namespace
@@ -403,7 +403,7 @@ describe("normalizeOutput", () => {
 
       const batches = proposals.filter((p) => p.type === "plugin.data.batch");
       expect(batches).toHaveLength(1);
-      const payload = batches[0].payload as {
+      const payload = batches[0]!.payload as unknown as {
         items: ReadonlyArray<Record<string, unknown>>;
       };
       // Only `good/k1` and `good/k4` survive — the rest fail the shape guard.
@@ -453,7 +453,7 @@ describe("normalizeOutput", () => {
     // narrative.append proposal with kind='system' so it reaches the chat
     // surface through the same commit path as any other system message.
     it("emits one narrative.append per notification with kind=system", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         notifications: [
           {
             level: "info",
@@ -473,19 +473,19 @@ describe("normalizeOutput", () => {
       );
 
       expect(proposals).toHaveLength(2);
-      expect(proposals[0].type).toBe("narrative.append");
-      expect(proposals[0].payload).toEqual({
+      expect(proposals[0]!.type).toBe("narrative.append");
+      expect(proposals[0]!.payload).toEqual({
         content: "🌍 欢迎来到九州\n你的冒险即将开始...",
         kind: "system",
       });
-      expect(proposals[1].payload).toEqual({
+      expect(proposals[1]!.payload).toEqual({
         content: "⚠ 低灵根\n修炼速度较慢",
         kind: "system",
       });
     });
 
     it("omits missing title or message gracefully", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         notifications: [
           { level: "info", message: "仅有正文" },
           { level: "info", title: "仅有标题" },
@@ -501,18 +501,18 @@ describe("normalizeOutput", () => {
       );
 
       expect(proposals).toHaveLength(2);
-      expect(proposals[0].payload).toMatchObject({
+      expect(proposals[0]!.payload).toMatchObject({
         content: "仅有正文",
         kind: "system",
       });
-      expect(proposals[1].payload).toMatchObject({
+      expect(proposals[1]!.payload).toMatchObject({
         content: "仅有标题",
         kind: "system",
       });
     });
 
     it("skips entries that have neither title nor message", () => {
-      const effects = {
+      const effects: RuntimeEffects = {
         notifications: [{ level: "info" }, { level: "warn", message: "" }],
       };
       const proposals = normalizeOutput(
@@ -530,7 +530,7 @@ describe("normalizeOutput", () => {
       const output = {
         narrativeOutput: "World intro text.",
       };
-      const effects = {
+      const effects: RuntimeEffects = {
         notifications: [{ level: "info", title: "欢迎", message: "开始冒险" }],
       };
       // narrativeOutput + notifications both surface as narrative.append, but
@@ -564,7 +564,7 @@ describe("normalizeOutput", () => {
       const output = {
         narrativeOutput: "The story continues.",
       };
-      const effects = {
+      const effects: RuntimeEffects = {
         statePatches: [{ table: "world", field: "time", value: "night" }],
         interactions: [
           {
@@ -652,7 +652,7 @@ describe("createCommitPipeline", () => {
       payload,
       timestamp: new Date().toISOString(),
       ...overrides,
-    };
+    } as Proposal;
   }
 
   describe("narrative.append commit", () => {
@@ -674,7 +674,7 @@ describe("createCommitPipeline", () => {
 
       // Verify store.addMessage was called
       expect(store.addMessage).toHaveBeenCalledOnce();
-      const msgArg = store.addMessage.mock.calls[0][0];
+      const msgArg = store.addMessage.mock.calls[0]![0];
       expect(msgArg.role).toBe("assistant");
       expect(msgArg.content).toBe("The hero advances.");
       expect(msgArg.metadata.kind).toBe("story");
@@ -692,7 +692,7 @@ describe("createCommitPipeline", () => {
 
       await pipeline.commit(proposal);
 
-      const msgArg = store.addMessage.mock.calls[0][0];
+      const msgArg = store.addMessage.mock.calls[0]![0];
       expect(msgArg.role).toBe("system");
       expect(msgArg.metadata.kind).toBe("system");
     });
@@ -716,7 +716,7 @@ describe("createCommitPipeline", () => {
       expect(result.event!.payload.interactionId).toBe("char-creation");
 
       expect(store.addMessage).toHaveBeenCalledOnce();
-      const msgArg = store.addMessage.mock.calls[0][0];
+      const msgArg = store.addMessage.mock.calls[0]![0];
       expect(msgArg.content).toBe("");
       expect(msgArg.metadata.block).toBeDefined();
     });
@@ -732,7 +732,7 @@ describe("createCommitPipeline", () => {
 
       await pipeline.commit(proposal);
 
-      const msgArg = store.addMessage.mock.calls[0][0];
+      const msgArg = store.addMessage.mock.calls[0]![0];
       expect(msgArg.metadata.block.type).toBe("action-guide");
     });
   });
@@ -770,7 +770,7 @@ describe("createCommitPipeline", () => {
           },
         ],
       });
-      expect(store.addMessage.mock.calls[0][0].metadata.block.type).toBe(
+      expect(store.addMessage.mock.calls[0]![0].metadata.block.type).toBe(
         "ui.render",
       );
     });
@@ -861,7 +861,7 @@ describe("createCommitPipeline", () => {
         meta: { prompt: "forest" },
       });
       expect(store.addMessage).toHaveBeenCalledOnce();
-      const msgArg = store.addMessage.mock.calls[0][0];
+      const msgArg = store.addMessage.mock.calls[0]![0];
       expect(msgArg.content).toBe("");
       expect(msgArg.metadata.block.type).toBe("asset.generate");
       expect(msgArg.metadata.block.data.ref).toEqual(MEDIA_REF);
@@ -897,7 +897,7 @@ describe("createCommitPipeline", () => {
 
       expect(result.committed).toBe(true);
       expect(store.setPluginData).toHaveBeenCalledOnce();
-      expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+      expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
         sessionId: SESSION_ID,
         pluginId: "test-plugin",
         namespace: "entries",
@@ -924,7 +924,7 @@ describe("createCommitPipeline", () => {
 
       expect(result.committed).toBe(true);
       expect(store.setPluginDataBatch).toHaveBeenCalledOnce();
-      expect(store.setPluginDataBatch.mock.calls[0][0]).toHaveLength(2);
+      expect(store.setPluginDataBatch.mock.calls[0]![0]).toHaveLength(2);
     });
 
     it("should delete plugin data through the proposal source scope", async () => {
@@ -966,7 +966,7 @@ describe("createCommitPipeline", () => {
       expect(result.committed).toBe(true);
       expect(result.event?.type).toBe("character.upserted");
       expect(store.upsertCharacter).toHaveBeenCalledOnce();
-      expect(store.upsertCharacter.mock.calls[0][0]).toMatchObject({
+      expect(store.upsertCharacter.mock.calls[0]![0]).toMatchObject({
         id: "char-1",
         sessionId: SESSION_ID,
         name: "Ari",
@@ -1059,7 +1059,7 @@ describe("createCommitPipeline", () => {
       await pipeline.commit(proposal);
 
       expect(store.addTraceEvent).toHaveBeenCalled();
-      const traceArg = store.addTraceEvent.mock.calls[0][0];
+      const traceArg = store.addTraceEvent.mock.calls[0]![0];
       expect(traceArg.type).toBe("proposal.committed");
       expect(traceArg.sessionId).toBe(SESSION_ID);
       expect(traceArg.turnId).toBe(TURN_ID);
@@ -1082,8 +1082,8 @@ describe("createCommitPipeline", () => {
       const results = await pipeline.commitAll(proposals);
 
       expect(results).toHaveLength(2);
-      expect(results[0].event!.type).toBe("narrative.completed");
-      expect(results[1].event!.type).toBe("event.emitted");
+      expect(results[0]!.event!.type).toBe("narrative.completed");
+      expect(results[1]!.event!.type).toBe("event.emitted");
     });
   });
 
@@ -1302,8 +1302,8 @@ describe("processRuntimeResult", () => {
     );
 
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe("narrative.completed");
-    expect(events[0].payload.content).toBe("The hero enters the cave.");
+    expect(events[0]!.type).toBe("narrative.completed");
+    expect(events[0]!.payload.content).toBe("The hero enters the cave.");
     expect(events.every((e) => e.type !== ("phase.changed" as string))).toBe(
       true,
     );
@@ -1413,11 +1413,11 @@ describe("processRuntimeResult", () => {
     // once (for the block), not twice.
     expect(events.map((e) => e.type).sort()).toEqual(["ui.rendered"]);
     expect(store.addMessage).toHaveBeenCalledTimes(1);
-    expect(store.addMessage.mock.calls[0][0].metadata.block.type).toBe(
+    expect(store.addMessage.mock.calls[0]![0].metadata.block.type).toBe(
       "ui.render",
     );
     expect(
-      store.addMessage.mock.calls[0][0].metadata.block.data.parts[0],
+      store.addMessage.mock.calls[0]![0].metadata.block.data.parts[0],
     ).toMatchObject({
       type: "action-guide",
       status: "success",
@@ -1457,7 +1457,7 @@ describe("processRuntimeResult", () => {
     expect(events).toHaveLength(1);
     expect(failedProposals).toHaveLength(0);
     expect(store.setPluginData).toHaveBeenCalledOnce();
-    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+    expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
       namespace: "entries",
       key: "codex-qingping",
       value: { title: "青萍山" },
@@ -1478,11 +1478,11 @@ describe("processRuntimeResult", () => {
       "story",
     );
 
-    expect(events[0].source).toEqual({
+    expect(events[0]!.source).toEqual({
       pluginId: "narrator",
       runtimeId: "narrator",
     });
-    const msgArg = store.addMessage.mock.calls[0][0];
+    const msgArg = store.addMessage.mock.calls[0]![0];
     expect(msgArg.metadata.runtimeId).toBe("narrator");
   });
 
@@ -1512,8 +1512,8 @@ describe("processRuntimeResult", () => {
 
     expect(failedProposals).toHaveLength(0);
     expect(events).toHaveLength(1);
-    expect(events[0].type).toBe("asset.generated");
-    expect(events[0].payload.asset).toMatchObject({
+    expect(events[0]!.type).toBe("asset.generated");
+    expect(events[0]!.payload.asset).toMatchObject({
       type: "asset.generate",
       ref: MEDIA_REF,
       modality: "image",
@@ -1606,7 +1606,7 @@ describe("processRuntimeResult", () => {
       },
     });
     expect(store.setPluginData).toHaveBeenCalledOnce();
-    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+    expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
       sessionId: SESSION_ID,
       pluginId: "test-plugin",
       namespace: "_logs",
@@ -1684,13 +1684,13 @@ describe("processRuntimeResult", () => {
 
     expect(events).toHaveLength(0);
     expect(failedProposals).toHaveLength(1);
-    expect(failedProposals[0].error).toBe("image.generate.asset_missing");
+    expect(failedProposals[0]!.error).toBe("image.generate.asset_missing");
     const galleryWrites = store.setPluginData.mock.calls.filter(
       (call: ReadonlyArray<Record<string, unknown>>) =>
-        call[0].namespace === "images",
+        call[0]!.namespace === "images",
     );
     expect(galleryWrites).toHaveLength(1);
-    expect(galleryWrites[0][0]).toMatchObject({
+    expect(galleryWrites[0]![0]).toMatchObject({
       sessionId: SESSION_ID,
       namespace: "images",
       key: "img-001",
@@ -1743,7 +1743,7 @@ describe("processRuntimeResult", () => {
     });
     expect(store.addMessage).not.toHaveBeenCalled();
     expect(store.setPluginData).toHaveBeenCalledOnce();
-    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+    expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
       sessionId: SESSION_ID,
       pluginId: "test-plugin",
       namespace: "_logs",
@@ -1828,7 +1828,7 @@ describe("processRuntimeResult", () => {
     expect(events).toHaveLength(0);
     expect(failedProposals).toHaveLength(0);
     expect(store.setPluginData).toHaveBeenCalledOnce();
-    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+    expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
       namespace: "jobs",
       key: "job-1",
       value: { status: "pending" },
@@ -1865,7 +1865,7 @@ describe("processRuntimeResult", () => {
       expect(events).toHaveLength(0);
       expect(failedProposals).toHaveLength(0);
       expect(store.setPluginData).toHaveBeenCalledOnce();
-      expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+      expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
         namespace: "jobs",
         key: "job-1",
         value: { status },
@@ -1889,7 +1889,7 @@ describe("processRuntimeResult", () => {
     // Verify the structured return type
     expect(output.events).toHaveLength(1);
     expect(output.failedProposals).toHaveLength(0);
-    expect(output.events[0].type).toBe("narrative.completed");
+    expect(output.events[0]!.type).toBe("narrative.completed");
   });
 
   it("should report failedProposals for unknown proposal types via commitAll", async () => {
@@ -1919,8 +1919,8 @@ describe("processRuntimeResult", () => {
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const results = await pipeline.commitAll(proposals);
-    expect(results[0].committed).toBe(true);
-    expect(results[1].committed).toBe(false);
+    expect(results[0]!.committed).toBe(true);
+    expect(results[1]!.committed).toBe(false);
     // Should have logged partial commit warning
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
@@ -1947,7 +1947,7 @@ describe("createTraceRecorder", () => {
     });
 
     expect(store.addTraceEvent).toHaveBeenCalledOnce();
-    const arg = store.addTraceEvent.mock.calls[0][0];
+    const arg = store.addTraceEvent.mock.calls[0]![0];
     expect(arg.type).toBe("runtime.started");
     expect(arg.sessionId).toBe(SESSION_ID);
     expect(arg.turnId).toBe(TURN_ID);
@@ -1967,7 +1967,7 @@ describe("createTraceRecorder", () => {
     });
 
     expect(store.addTraceEvent).toHaveBeenCalledOnce();
-    const arg = store.addTraceEvent.mock.calls[0][0];
+    const arg = store.addTraceEvent.mock.calls[0]![0];
     expect(arg.type).toBe("runtime.completed");
     expect(arg.payload.durationMs).toBe(1500);
   });
@@ -1982,7 +1982,7 @@ describe("createTraceRecorder", () => {
       error: "LLM timeout",
     });
 
-    const arg = store.addTraceEvent.mock.calls[0][0];
+    const arg = store.addTraceEvent.mock.calls[0]![0];
     expect(arg.type).toBe("runtime.failed");
     expect(arg.payload.error).toBe("LLM timeout");
   });
@@ -1995,10 +1995,10 @@ describe("createTraceRecorder", () => {
     await recorder.turnCompleted({ durationMs: 3000, resultCount: 4 });
 
     expect(store.addTraceEvent).toHaveBeenCalledTimes(2);
-    expect(store.addTraceEvent.mock.calls[0][0].type).toBe("turn.started");
-    expect(store.addTraceEvent.mock.calls[0][0].payload.runtimeCount).toBe(5);
-    expect(store.addTraceEvent.mock.calls[1][0].type).toBe("turn.completed");
-    expect(store.addTraceEvent.mock.calls[1][0].payload.durationMs).toBe(3000);
+    expect(store.addTraceEvent.mock.calls[0]![0].type).toBe("turn.started");
+    expect(store.addTraceEvent.mock.calls[0]![0].payload.runtimeCount).toBe(5);
+    expect(store.addTraceEvent.mock.calls[1]![0].type).toBe("turn.completed");
+    expect(store.addTraceEvent.mock.calls[1]![0].payload.durationMs).toBe(3000);
   });
 
   it("stamps rows with an explicit traceId when provided, falling back to turnId (R-14)", async () => {
@@ -2011,11 +2011,11 @@ describe("createTraceRecorder", () => {
       "sse-trace-id",
     );
     await withTrace.turnStarted({ runtimeCount: 1 });
-    expect(store.addTraceEvent.mock.calls[0][0].traceId).toBe("sse-trace-id");
-    expect(store.addTraceEvent.mock.calls[0][0].turnId).toBe(TURN_ID);
+    expect(store.addTraceEvent.mock.calls[0]![0].traceId).toBe("sse-trace-id");
+    expect(store.addTraceEvent.mock.calls[0]![0].turnId).toBe(TURN_ID);
 
     const withoutTrace = createTraceRecorder(store as any, SESSION_ID, TURN_ID);
     await withoutTrace.turnStarted({ runtimeCount: 1 });
-    expect(store.addTraceEvent.mock.calls[1][0].traceId).toBe(TURN_ID);
+    expect(store.addTraceEvent.mock.calls[1]![0].traceId).toBe(TURN_ID);
   });
 });

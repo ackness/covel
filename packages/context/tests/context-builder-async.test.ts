@@ -214,9 +214,9 @@ describe("buildContext — runtime inject regression", () => {
 describe("buildContext — plugin-data inject", () => {
   function makeParams(
     store: DataStore,
-    extraInjects: RuntimeManifest["input"] extends { inject?: infer U }
-      ? U
-      : never = [],
+    extraInjects: NonNullable<
+      NonNullable<RuntimeManifest["input"]>["inject"]
+    > = [],
   ): ContextBuildParams {
     const manifest = makeManifest({
       input: {

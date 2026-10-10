@@ -223,7 +223,7 @@ describe("resolveExportBindings", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(Object.hasOwn(result.slots, name)).toBe(true);
-        expect(result.slots[name]?.value).toEqual({ threshold: 7 });
+        expect(result.slots[name]).toMatchObject({ value: { threshold: 7 } });
       }
     },
   );
@@ -372,8 +372,8 @@ describe("resolveExportBindings", () => {
       }),
     });
     expect(res.ok).toBe(true);
-    if (res.ok && res.slots.cfg.cardinality === "all") {
-      expect(res.slots.cfg.items.map((i) => i.source.runtimeId)).toEqual([
+    if (res.ok && res.slots.cfg!.cardinality === "all") {
+      expect(res.slots.cfg!.items.map((i) => i.source.runtimeId)).toEqual([
         "p/a",
         "p/b",
       ]);
@@ -416,8 +416,8 @@ describe("resolveExportBindings", () => {
       items: SCHEMA,
     });
     expect(res.ok).toBe(true);
-    if (res.ok && res.slots.cfg.cardinality === "all") {
-      expect(res.slots.cfg.items.map((item) => item.value)).toEqual([
+    if (res.ok && res.slots.cfg!.cardinality === "all") {
+      expect(res.slots.cfg!.items.map((item) => item.value)).toEqual([
         { threshold: 1 },
         { threshold: 2 },
       ]);
@@ -485,7 +485,12 @@ describe("agent export segment", () => {
     const assembled = await buildContext({
       promptTemplate: "You consume config.",
       manifest,
-      turnInput: { sessionId: "s", turnId: "t", playerMessage: "go" },
+      turnInput: {
+        origin: "player",
+        sessionId: "s",
+        turnId: "t",
+        playerMessage: "go",
+      },
       completedResults: new Map(),
       exportSlots,
     });

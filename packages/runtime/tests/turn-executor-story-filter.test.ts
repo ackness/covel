@@ -128,7 +128,7 @@ describe("runtime journal content", () => {
     } as RuntimeResult;
     attachRuntimeJournal(
       result,
-      { sessionId: "s", turnId: "t", playerMessage: "hi" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "hi" },
       {
         name: "p/r",
         pluginId: "p",

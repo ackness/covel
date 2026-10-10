@@ -116,15 +116,18 @@ it("preserves ordered chat history and excludes later same-millisecond messages 
   await add("later", "2026-09-02T00:00:00.000Z");
   const child = await successfulFork(snapshot);
   const restored = await buildSessionSnapshot(store, child.sessionId);
-  expect(restored.messages.map((message) => message.content)).toEqual([
+  expect(restored!.messages.map((message) => message.content)).toEqual([
     "old",
     "b-story",
     "z-story",
   ]);
-  expect(restored.messages[1]).toMatchObject({ kind: "story", turnId: "turn" });
+  expect(restored.messages[1]!).toMatchObject({
+    kind: "story",
+    turnId: "turn",
+  });
   expect(await store.listTurnMessages(child.sessionId)).toHaveLength(1);
   expect(
-    restored.messages.every(
+    restored!.messages.every(
       (message) => !["old", "b-story", "z-story"].includes(message.id),
     ),
   ).toBe(true);

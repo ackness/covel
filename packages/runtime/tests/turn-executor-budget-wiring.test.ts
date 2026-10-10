@@ -113,6 +113,7 @@ function makeLoaded(manifest: RuntimeManifest): LoadedRuntime {
 
 function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   return {
+    origin: "player",
     sessionId: SESSION_ID,
     turnId: "turn-1",
     playerMessage: CURRENT_USER,

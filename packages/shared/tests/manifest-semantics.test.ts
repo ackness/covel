@@ -50,8 +50,8 @@ describe("schedulable-missing-stage", () => {
 
   it("does not warn for manual or event runtimes (never stage-scheduled)", () => {
     expect(codes({ name: "x/btn", trigger: { type: "manual" } })).toEqual([]);
-    expect(
-      codes({ name: "x/follower", trigger: { type: "event", topic: "t" } }),
-    ).toEqual([]);
+    // A declared trigger carries its topic; only `type` matters to the check.
+    const eventTrigger = { type: "event", topic: "t" };
+    expect(codes({ name: "x/follower", trigger: eventTrigger })).toEqual([]);
   });
 });

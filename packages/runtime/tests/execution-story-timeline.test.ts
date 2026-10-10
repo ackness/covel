@@ -191,7 +191,7 @@ describe("story text of the current execution in the conversation", () => {
     // A seed read back from an in-memory store can still carry its journal.
     attachRuntimeJournal(
       seed,
-      { sessionId: "s", turnId: "t1", playerMessage: "x" },
+      { origin: "player", sessionId: "s", turnId: "t1", playerMessage: "x" },
       narrator,
       seed.output!,
     );

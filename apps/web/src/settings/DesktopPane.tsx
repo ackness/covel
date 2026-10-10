@@ -72,7 +72,7 @@ export function DesktopPane() {
   >("loading");
   const proxyLoadRequest = useRef(0);
 
-  // First-launch llm.toml detection (O-6). Only surface on desktop builds
+  // First-launch llm.toml detection. Only surface on desktop builds
   // where opening the file actually works; Web users can't edit the sidecar
   // config file anyway. `state.llmConfig.configured === false` means the
   // server booted without any `[covel.<slot>]` sections and is running on

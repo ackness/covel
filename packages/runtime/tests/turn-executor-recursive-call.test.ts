@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import type { RuntimeManifest } from "@covel/shared";
+import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   executeTurn,
@@ -9,7 +10,8 @@ import {
 } from "../src/turn-executor/turn-executor.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
-const input = {
+const input: TurnInput = {
+  origin: "player",
   sessionId: "sess-recursive",
   turnId: "turn-recursive",
   playerMessage: "start",
@@ -53,8 +55,11 @@ describe("executeTurn recursiveCall", () => {
               },
             );
             return {
-              depth: ctx.recursionDepth,
-              nestedDepth: nested.runtimeResults[0]?.output?.depth,
+              outcome: "success",
+              value: {
+                depth: ctx.recursionDepth,
+                nestedDepth: nested.runtimeResults[0]?.output?.depth,
+              },
             };
           },
         },
@@ -64,7 +69,10 @@ describe("executeTurn recursiveCall", () => {
         {
           manifest: leaf,
           promptTemplate: "",
-          handler: async (ctx) => ({ depth: ctx.recursionDepth }),
+          handler: async (ctx) => ({
+            outcome: "success",
+            value: { depth: ctx.recursionDepth },
+          }),
         },
       ],
     ]);
@@ -118,9 +126,12 @@ describe("executeTurn recursiveCall", () => {
               origin: "player",
             } as never);
             return {
-              hasCompleteTurn:
-                typeof (nested as { completeTurn?: unknown }).completeTurn ===
-                "function",
+              outcome: "success",
+              value: {
+                hasCompleteTurn:
+                  typeof (nested as { completeTurn?: unknown }).completeTurn ===
+                  "function",
+              },
             };
           },
         },
@@ -187,11 +198,15 @@ describe("executeTurn recursiveCall", () => {
       ],
     ]);
 
-    await executeTurn({ ...input, locale: "en-US" }, [caller, leaf], {
-      loadRuntime: async (rt) => loaded.get(rt.name),
-      llm: { generate: vi.fn() },
-      emitter: makeEmitterSpy(),
-    });
+    await executeTurn(
+      { origin: "player", ...input, locale: "en-US" },
+      [caller, leaf],
+      {
+        loadRuntime: async (rt) => loaded.get(rt.name),
+        llm: { generate: vi.fn() },
+        emitter: makeEmitterSpy(),
+      },
+    );
 
     expect(leafLocale).toBe("en-US");
   });
@@ -211,7 +226,7 @@ describe("executeTurn recursiveCall", () => {
               { manualTrigger: { runtimeId: "leaf" } },
               { reason: "limit check" },
             );
-            return { ok: true };
+            return { outcome: "success", value: { ok: true } };
           },
         },
       ],
@@ -220,7 +235,7 @@ describe("executeTurn recursiveCall", () => {
         {
           manifest: leaf,
           promptTemplate: "",
-          handler: async () => ({ ok: true }),
+          handler: async () => ({ outcome: "success", value: { ok: true } }),
         },
       ],
     ]);
@@ -329,7 +344,7 @@ describe("executeTurn recursiveCall", () => {
           promptTemplate: "",
           handler: async (ctx) => {
             await ctx.recursiveCall({ manualTrigger: { runtimeId: "leaf" } });
-            return { ok: true };
+            return { outcome: "success", value: { ok: true } };
           },
         },
       ],
@@ -399,7 +414,7 @@ describe("executeTurn recursiveCall", () => {
           promptTemplate: "",
           handler: async (ctx) => {
             await ctx.recursiveCall({ manualTrigger: { runtimeId: "leaf" } });
-            return { ok: true };
+            return { outcome: "success", value: { ok: true } };
           },
         },
       ],
@@ -412,7 +427,9 @@ describe("executeTurn recursiveCall", () => {
             await leafReleased;
             leafSignalAborted = ctx.signal?.aborted === true;
             try {
-              await ctx.store?.setPluginData({
+              await (
+                ctx.store as unknown as Pick<DataStore, "setPluginData">
+              ).setPluginData({
                 id: "late",
                 sessionId: ctx.sessionId,
                 pluginId: ctx.pluginId,
@@ -428,7 +445,7 @@ describe("executeTurn recursiveCall", () => {
             }
             leafDone = true;
             finishLeaf();
-            return { ok: true };
+            return { outcome: "success", value: { ok: true } };
           },
         },
       ],

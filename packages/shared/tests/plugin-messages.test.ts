@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { translate, labelText } from "@covel/plugin-handlers-utils";
-import { pluginMessagesFor, resolveI18nText } from "../src/index.js";
+import {
+  pluginMessagesFor,
+  resolveI18nText,
+  type PluginMessageCatalog,
+} from "../src/index.js";
 
-const catalogs = [
+const catalogs: PluginMessageCatalog[] = [
   { locale: "ja", messages: { Success: "成功だ" } },
   { locale: "zh", messages: { Success: "成功", Failure: "失败" } },
 ];
@@ -28,7 +32,7 @@ describe("pluginMessagesFor", () => {
   });
 
   it("resolves each message through exact, language and English fallbacks", () => {
-    const partial = [
+    const partial: PluginMessageCatalog[] = [
       { locale: "zh-SG", messages: { Continue: "区域继续" } },
       { locale: "zh-CN", messages: { Success: "操作成功" } },
       {

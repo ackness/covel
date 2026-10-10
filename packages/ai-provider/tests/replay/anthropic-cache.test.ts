@@ -201,7 +201,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -250,7 +250,7 @@ describe("Anthropic adapter — cache_control injection", () => {
             { role: "user", content: "go" },
           ],
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -277,7 +277,7 @@ describe("Anthropic adapter — cache_control injection", () => {
       await adapter.generateText(
         { ...ANTHROPIC_CONFIG_BASE, cacheStrategy: "anthropic-explicit" },
         { model: "claude-3-haiku-20240307", messages },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -301,7 +301,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithoutCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -319,7 +319,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -339,7 +339,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -357,7 +357,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           model: "claude-3-haiku-20240307",
           messages: makeMessagesWithoutCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "text" },
+        { profile: {} as never, preset: null, mode: "text" },
       );
 
       const body = readPostedBody();
@@ -402,7 +402,7 @@ describe("Anthropic adapter — cache_control injection", () => {
           schema,
           messages: makeMessagesWithCacheMarkers(),
         },
-        { profile: {} as never, preset: undefined, mode: "object" },
+        { profile: {} as never, preset: null, mode: "object" },
       );
 
       const body = readPostedBody();

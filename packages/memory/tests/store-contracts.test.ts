@@ -28,9 +28,10 @@ describe("memory tier storage adapters", () => {
     ]);
   });
 
-  it("searches archival character facts with only lorebook and character readers", async () => {
+  it("searches archival character facts without a plugin data resolver", async () => {
     const searcher = createKeywordArchivalSearcher({
       listSessionLorebookEntries: async () => [],
+      listPluginData: async () => [],
       listCharacters: async () => [
         {
           id: "character",

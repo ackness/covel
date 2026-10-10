@@ -143,7 +143,7 @@ describe("Lorebook API routes", () => {
 
       const entries = await store.listSessionLorebookEntries(SESSION_ID);
       expect(entries).toHaveLength(1);
-      expect(entries[0].id).toBe("manual-rule");
+      expect(entries[0]!.id).toBe("manual-rule");
     });
 
     it("returns 400 for invalid create body", async () => {
@@ -210,7 +210,7 @@ describe("Lorebook API routes", () => {
 
       const entries = await store.listSessionLorebookEntries(SESSION_ID);
       expect(entries).toHaveLength(1);
-      expect(entries[0].enabled).toBe(false);
+      expect(entries[0]!.enabled).toBe(false);
     });
 
     it("preserves all other fields when toggling enabled", async () => {
@@ -229,8 +229,8 @@ describe("Lorebook API routes", () => {
       });
 
       const entries = await store.listSessionLorebookEntries(SESSION_ID);
-      expect(entries[0].content).toBe("original content");
-      expect(entries[0].insertionOrder).toBe(42);
+      expect(entries[0]!.content).toBe("original content");
+      expect(entries[0]!.insertionOrder).toBe(42);
     });
 
     it("returns 400 on missing enabled field", async () => {
@@ -279,7 +279,7 @@ describe("Lorebook API routes", () => {
 
       const remaining = await store.listSessionLorebookEntries(SESSION_ID);
       expect(remaining).toHaveLength(1);
-      expect(remaining[0].id).toBe("e2");
+      expect(remaining[0]!.id).toBe("e2");
     });
 
     it("returns 404 when entry does not exist", async () => {

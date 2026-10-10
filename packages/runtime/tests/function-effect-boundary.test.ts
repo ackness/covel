@@ -8,6 +8,7 @@ import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { classifySetupResult } from "../src/turn-executor/setup-run.js";
 
 const producer: RuntimeManifest = {
+  description: "test",
   name: "probe/producer",
   pluginId: "probe",
   stage: "post-turn",

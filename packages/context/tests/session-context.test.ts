@@ -136,8 +136,6 @@ describe("buildSessionContextSnapshot — basic shape", () => {
     expect(snapshot.loreEntries).toEqual([]);
     expect(snapshot.summaries).toEqual([]);
     expect(snapshot.contributions).toEqual([]);
-    expect(snapshot.activePersona).toBeUndefined();
-
     expect(snapshot.world.schema).toBeUndefined();
     expect(snapshot.world.entries).toEqual([]);
   });
@@ -383,10 +381,7 @@ describe("buildSessionContextSnapshot — player identity wiring", () => {
       turnNumber: 4,
     });
 
-    expect(snapshot.activePersona).toBeUndefined();
-    expect(
-      snapshot.contributions.some((c) => c.kind === "persona_description"),
-    ).toBe(false);
+    expect(snapshot.contributions).toEqual([]);
   });
 });
 

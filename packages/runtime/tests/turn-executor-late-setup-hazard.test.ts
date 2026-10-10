@@ -32,6 +32,7 @@ async function playingStore(sessionId: string) {
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: sessionId,
     worldId: "w",
     status: "active",
@@ -112,7 +113,7 @@ describe("late-setup hazard policy and detachment diagnostics", () => {
       ]),
     );
     const result = await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "go" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [a, b],
       makeDeps(handlers, eventBus, store),
     );
@@ -152,7 +153,7 @@ describe("late-setup hazard policy and detachment diagnostics", () => {
     const handlers = new Map([[detachedSetup.name, handler]]);
 
     const result = await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "go" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [detachedSetup],
       makeDeps(handlers, eventBus, store),
     );

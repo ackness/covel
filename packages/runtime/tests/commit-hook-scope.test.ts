@@ -22,6 +22,7 @@ it("only retains still-active execution hooks at commit and preserves their capt
     updatedAt: timestamp,
   });
   const manifest: RuntimeManifest = {
+    description: "test",
     name: "a/write",
     pluginId: "a",
     runtimeType: "function",

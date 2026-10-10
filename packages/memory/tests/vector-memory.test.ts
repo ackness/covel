@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 
-import type { DataStore } from "@covel/store";
+import type { DataStore, VectorStore } from "@covel/store";
 import { assertSuccess } from "../../ai-provider/src/adapters/http/response.js";
 import { normalizeError } from "../../ai-provider/src/gateway-lifecycle.js";
 
@@ -24,12 +24,12 @@ function embedText(text: string): Float32Array {
   const v = new Float32Array(DIM);
   for (const ch of text.toLowerCase()) {
     if (/\s/.test(ch)) continue;
-    v[ch.charCodeAt(0) % DIM] += 1;
+    v[ch.charCodeAt(0) % DIM]! += 1;
   }
   let norm = 0;
-  for (let i = 0; i < DIM; i += 1) norm += v[i] * v[i];
+  for (let i = 0; i < DIM; i += 1) norm += v[i]! * v[i]!;
   norm = Math.sqrt(norm) || 1;
-  for (let i = 0; i < DIM; i += 1) v[i] /= norm;
+  for (let i = 0; i < DIM; i += 1) v[i]! /= norm;
   return v;
 }
 
@@ -51,6 +51,7 @@ async function lockModel(store: DataStore, sessionId: string): Promise<void> {
   if (!(await store.getSession(sessionId))) {
     const now = new Date().toISOString();
     await store.createSession({
+      locale: "en-US",
       id: sessionId,
       status: "active",
       phase: "playing",
@@ -63,9 +64,9 @@ async function lockModel(store: DataStore, sessionId: string): Promise<void> {
   }
   // supportsVector(store) is true for MemoryStore.
   const s = store as DataStore & {
-    ensureVectorModel: NonNullable<DataStore["ensureVectorModel"]>;
+    ensureVectorModel: VectorStore["ensureVectorModel"];
     lockSessionEmbeddingModel: NonNullable<
-      DataStore["lockSessionEmbeddingModel"]
+      VectorStore["lockSessionEmbeddingModel"]
     >;
   };
   const target = await s.ensureVectorModel({
@@ -142,7 +143,7 @@ async function addLorebook(
 }
 
 describe("vector recall (semantic)", () => {
-  let store: DataStore;
+  let store: DataStore & VectorStore;
   const sessionId = "sess-vec-1";
 
   beforeEach(async () => {
@@ -168,7 +169,7 @@ describe("vector recall (semantic)", () => {
 
     // Verify they actually landed in the memory-owned recall partition.
     const s = store as DataStore & {
-      searchVectors: NonNullable<DataStore["searchVectors"]>;
+      searchVectors: VectorStore["searchVectors"];
     };
     const hits = await s.searchVectors({
       sessionId,
@@ -249,10 +250,10 @@ describe("vector recall (semantic)", () => {
 
     const results = await system.recall.search(sessionId, "dragon fire", 3);
     expect(results.length).toBeGreaterThan(0);
-    expect(results[0].content).toContain("dragon");
+    expect(results[0]!.content).toContain("dragon");
     // Scores are positive and descending (distance -> score is monotonic).
     for (let i = 1; i < results.length; i += 1) {
-      expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score);
+      expect(results[i - 1]!.score).toBeGreaterThanOrEqual(results[i]!.score);
     }
   });
 
@@ -262,7 +263,7 @@ describe("vector recall (semantic)", () => {
 
     const first = await ingestor.ingest(sessionId);
     expect(first.recall).toBe(3);
-    const firstBatchLen = calls[0].length;
+    const firstBatchLen = calls[0]!.length;
     expect(firstBatchLen).toBe(3);
 
     // No new messages → nothing to embed on the second sweep.
@@ -369,6 +370,7 @@ describe("vector recall (semantic)", () => {
     await embeddingStarted;
     await store.deleteSession(sessionId);
     await store.createSession({
+      locale: "en-US",
       id: sessionId,
       status: "active",
       phase: "playing",
@@ -383,7 +385,7 @@ describe("vector recall (semantic)", () => {
 
     expect((await staleSweep).recall).toBe(0);
     const vectorStore = store as DataStore & {
-      searchVectors: NonNullable<DataStore["searchVectors"]>;
+      searchVectors: VectorStore["searchVectors"];
     };
     await expect(
       vectorStore.searchVectors({
@@ -554,7 +556,7 @@ describe("vector recall (semantic)", () => {
 });
 
 describe("vector archival (semantic over lorebook + characters)", () => {
-  let store: DataStore;
+  let store: DataStore & VectorStore;
   const sessionId = "sess-vec-arch";
 
   beforeEach(async () => {
@@ -715,8 +717,8 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     );
     expect(results.length).toBeGreaterThan(0);
     // Top hit should be the blacksmith character or the forge lorebook entry.
-    expect(["Aldric", "forge"]).toContain(results[0].key);
-    expect(["character", "lorebook"]).toContain(results[0].source);
+    expect(["Aldric", "forge"]).toContain(results[0]!.key);
+    expect(["character", "lorebook"]).toContain(results[0]!.source);
   });
 
   it("re-embeds an archival record only when its content changes", async () => {
@@ -740,7 +742,7 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     );
     const third = await ingestor.ingest(sessionId);
     expect(third.archival).toBe(1);
-    expect(calls[calls.length - 1].length).toBe(1);
+    expect(calls[calls.length - 1]!.length).toBe(1);
   });
 
   it.each(["listCharacters", "listSessionLorebookEntries"] as const)(
@@ -933,7 +935,7 @@ describe("graceful degradation", () => {
 });
 
 describe("vector recall", () => {
-  let store: DataStore;
+  let store: DataStore & VectorStore;
   const sessionId = "sess-vec-fixes";
 
   beforeEach(async () => {
@@ -967,7 +969,7 @@ describe("vector recall", () => {
 
     const hits = await (
       store as DataStore & {
-        searchVectors: NonNullable<DataStore["searchVectors"]>;
+        searchVectors: VectorStore["searchVectors"];
       }
     ).searchVectors({
       sessionId,
@@ -987,7 +989,7 @@ describe("vector recall", () => {
 
     // Seed only the first message into the vector table by hand.
     const s = store as DataStore & {
-      upsertVector: NonNullable<DataStore["upsertVector"]>;
+      upsertVector: VectorStore["upsertVector"];
     };
     await s.upsertVector({
       sessionId,
@@ -1023,7 +1025,7 @@ describe("vector recall", () => {
 
     const hits = await (
       store as DataStore & {
-        searchVectors: NonNullable<DataStore["searchVectors"]>;
+        searchVectors: VectorStore["searchVectors"];
       }
     ).searchVectors({
       sessionId,

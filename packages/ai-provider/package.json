@@ -24,7 +24,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "clean": "node ../../scripts/remove-paths.mjs dist",
     "update-model-db": "tsx scripts/update-model-db.ts"
   },
