@@ -329,6 +329,86 @@ describe("useGameViewComposer", () => {
     expect(sessionMock.clearInteractionDrafts).not.toHaveBeenCalled();
   });
 
+  it("holds a command typed before the command list is read, then runs it as a command", async () => {
+    const onSendMessage = vi.fn();
+    const { result, rerender } = renderHook(
+      (props: {
+        commands: readonly SessionSlashCommand[];
+        commandsLoaded: boolean;
+      }) =>
+        useGameViewComposer({
+          messages: [],
+          submittedBlockIds: new Set<string>(),
+          executing: false,
+          session: sessionRecord("playing"),
+          onSendMessage,
+          ...props,
+        }),
+      {
+        initialProps: {
+          commands: [] as readonly SessionSlashCommand[],
+          commandsLoaded: false,
+        },
+      },
+    );
+
+    act(() => result.current.setInputValue("/roll 2d6"));
+    act(() => result.current.handleSubmit());
+    // Not a player turn: the line stays in the box and the list is asked for.
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(postPluginRpcWithApproval).not.toHaveBeenCalled();
+    expect(result.current.inputValue).toBe("/roll 2d6");
+    expect(result.current.commandFeedback?.tone).toBe("info");
+    expect(sessionMock.loadSessionPlugins).toHaveBeenCalledTimes(1);
+
+    rerender({ commands: [rollCommand], commandsLoaded: true });
+    await waitFor(() =>
+      expect(postPluginRpcWithApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: {
+            kind: "command",
+            commandId: "dice-check:roll",
+            input: "/roll 2d6",
+          },
+        }),
+      ),
+    );
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("drops a held command when the player edits the line before the list arrives", () => {
+    const onSendMessage = vi.fn();
+    const { result, rerender } = renderHook(
+      (props: {
+        commands: readonly SessionSlashCommand[];
+        commandsLoaded: boolean;
+      }) =>
+        useGameViewComposer({
+          messages: [],
+          submittedBlockIds: new Set<string>(),
+          executing: false,
+          session: sessionRecord("playing"),
+          onSendMessage,
+          ...props,
+        }),
+      {
+        initialProps: {
+          commands: [] as readonly SessionSlashCommand[],
+          commandsLoaded: false,
+        },
+      },
+    );
+
+    act(() => result.current.setInputValue("/roll 2d6"));
+    act(() => result.current.handleSubmit());
+    act(() => result.current.setInputValue("look around"));
+    rerender({ commands: [rollCommand], commandsLoaded: true });
+
+    expect(postPluginRpcWithApproval).not.toHaveBeenCalled();
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(result.current.inputValue).toBe("look around");
+  });
+
   it("preserves an optional plugin filter from a diagnostics client action", async () => {
     postPluginRpcWithApproval.mockResolvedValueOnce({
       status: "ok",

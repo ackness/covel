@@ -127,6 +127,7 @@
     "commandAccepted": "命令已受理。",
     "commandFailed": "命令执行失败。",
     "commandCompleted": "{{command}} 已完成。",
+    "commandsLoading": "正在加载命令…",
     "ended": "本次会话已结束。",
     "game": "游戏",
     "events": "事件",

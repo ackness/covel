@@ -88,6 +88,10 @@ export default defineConfig({
             COVEL_USER_WORLDS_DIR: join(testHome!, "worlds"),
             COVEL_USER_PLUGINS_DIR: join(testHome!, "plugins"),
             COVEL_SERVER_LOG_FILE: "",
+            // Every worker reaches the server from 127.0.0.1, so the per-IP
+            // limit on event streams (60 a minute) would be one budget for
+            // the whole suite; `--repeat-each` runs go past it.
+            RATE_LIMIT_RPM: "100000",
           },
           url: `${e2eServerOrigin}/api/health`,
           reuseExistingServer: false,

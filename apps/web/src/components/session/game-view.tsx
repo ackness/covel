@@ -98,6 +98,7 @@ export function GameView({
     pluginLoadErrors,
     sessionPlugins,
     sessionCommands,
+    sessionCommandsLoaded,
     presets,
     llmConfig,
     statePatches,
@@ -196,6 +197,7 @@ export function GameView({
     session,
     onSendMessage,
     commands: sessionCommands,
+    commandsLoaded: sessionCommandsLoaded,
     onCommandClientAction: handleCommandClientAction,
   });
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);

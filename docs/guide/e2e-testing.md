@@ -136,6 +136,31 @@ MemoryStore 默认向 Web 暴露 browser-private 模式：世界和会话权威�
 直接 API 断言中复用世界的串行 spec，必须在首次导航前调用 `useServerWorlds(page)`，明确
 切换到服务端世界目录与临时 MemoryStore；纯浏览器持久化语义应在同一 page/context 内验证。
 
+### 所有 spec 共用一个服务端
+
+一次运行里，所有 worker 连的是同一个 server 进程、同一个 MemoryStore，来源地址都是
+`127.0.0.1`。写 spec 时按下面几条处理，否则单独跑能过、整套跑偶尔失败：
+
+- **不要假设服务端是空的。** 调用了 `useServerWorlds` 的 spec 能看到其他 spec（包括正在
+  并行运行的）创建的会话：世界卡片会多出“继续”按钮，会话准备页会列出已有会话。自己创建
+  会话、按它的 ID 操作，并在 `finally` 里删除。
+- **页面先画出来，数据后到。** `goto` / `reload` 之后，命令列表、会话列表、插件数据各自
+  异步到达，中间状态是真实存在的。先用会重试的断言等到最终状态（例如
+  `toHaveCount(1)`），再对单个元素做断言；定位到多个元素的 strict-mode 错误不会重试，会
+  立刻失败。
+- **按 IP 计的限流是整套共用的。** 默认配置把测试服务的 `RATE_LIMIT_RPM` 调高了；写死的
+  额度仍然生效（例如 `/api/actions` 每分钟 30 次），所以不需要真实回合的 spec 用
+  `page.route` 拦掉 `**/api/actions`。
+- **失败截图在 `finally` 之后才拍。** 如果 `finally` 删除了会话或跳到了空白页，截图和页面
+  快照里看到的是“重新连接中…”或白屏，不是失败时的页面；以错误信息和 call log 为准，
+  需要现场时用 `--trace on`。
+
+怀疑某个 spec 不稳定时，先单独重复运行它，再和整套一起跑：
+
+```bash
+pnpm e2e tests/e2e/reasoning-display.spec.ts --repeat-each=20 --workers=1
+```
+
 ### 不访问真实模型的模型输出
 
 需要模型输出、但不该访问真实 provider 的 spec 使用

@@ -45,6 +45,8 @@ interface UseGameViewComposerArgs {
   session: SessionRecord;
   onSendMessage: (content: string) => void;
   commands?: readonly SessionSlashCommand[];
+  /** False while the session's command directory has not been read yet. */
+  commandsLoaded?: boolean;
   onCommandClientAction?: (action: CommandClientAction) => void;
 }
 
@@ -55,10 +57,12 @@ export function useGameViewComposer({
   session,
   onSendMessage,
   commands = [],
+  commandsLoaded = true,
   onCommandClientAction,
 }: UseGameViewComposerArgs) {
   const { t, i18n } = useTranslation();
   const [inputValue, setInputValue] = useState("");
+  const [commandQueued, setCommandQueued] = useState(false);
   const [commandMenuDismissed, setCommandMenuDismissed] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [commandExecuting, setCommandExecuting] = useState(false);
@@ -97,6 +101,7 @@ export function useGameViewComposer({
     setInputValue(value);
     setCommandMenuDismissed(false);
     setCommandFeedback(null);
+    setCommandQueued(false);
   }, []);
 
   const pendingDrafts = sessionState.pendingInteractionDrafts;
@@ -282,6 +287,18 @@ export function useGameViewComposer({
       if (!executing) commitDrafts();
       return;
     }
+    if (commandQuery && !commandsLoaded) {
+      // The command list is read after the session opens. Sent now, the line
+      // would reach the story as a player turn; hold it until the list is
+      // here. Asking again covers a read that failed.
+      setCommandQueued(true);
+      setCommandFeedback({
+        tone: "info",
+        message: t("session.commandsLoading", "Loading commands…"),
+      });
+      void loadSessionPlugins();
+      return;
+    }
     if (commandQuery && selectedCommand) {
       if (!commandAcceptsTypedName(selectedCommand, val)) {
         if (!commandMenuDismissed) applyCommandCompletion(selectedCommand);
@@ -330,6 +347,8 @@ export function useGameViewComposer({
     composerDisabled,
     commandExecuting,
     commandQuery,
+    commandsLoaded,
+    loadSessionPlugins,
     selectedCommand,
     commandMenuDismissed,
     applyCommandCompletion,
@@ -341,6 +360,13 @@ export function useGameViewComposer({
     onSendMessage,
     t,
   ]);
+
+  useEffect(() => {
+    if (!commandQueued || !commandsLoaded) return;
+    setCommandQueued(false);
+    setCommandFeedback(null);
+    handleSubmit();
+  }, [commandQueued, commandsLoaded, handleSubmit]);
 
   const handleAbort = useCallback(() => {
     void abortActiveTurn().catch(() => {

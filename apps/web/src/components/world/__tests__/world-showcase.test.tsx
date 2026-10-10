@@ -1,7 +1,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
-import { getWorldGallery, type WorldRecord } from "@/services/api.js";
+import {
+  getWorldGallery,
+  type SessionRecord,
+  type WorldRecord,
+} from "@/services/api.js";
 import { WorldShowcase } from "../world-showcase.js";
 import { WorldTileCard } from "../world-list-variants.js";
 import type { WorldListViewProps } from "../world-list-view.js";
@@ -324,5 +328,44 @@ describe("world card", () => {
     expect(
       screen.getByRole("dialog").querySelector("img")?.getAttribute("src"),
     ).toBe(GALLERY[2]!.url);
+  });
+
+  it("keeps the enter button the same element when a session to continue arrives", async () => {
+    const onEnter = vi.fn();
+    const onResume = vi.fn();
+    const card = (recentSession?: SessionRecord) => (
+      <WorldTileCard
+        world={world("mistport", "Mistport")}
+        index={0}
+        isEntering={false}
+        dimmed={false}
+        storageLabel=""
+        interfaceLocale="zh-CN"
+        t={i18n.t}
+        onEnter={onEnter}
+        onViewDetails={() => {}}
+        onDelete={() => {}}
+        onResume={onResume}
+        recentSession={recentSession}
+      />
+    );
+    const enterName = i18n.t("session.enter");
+    const { rerender } = render(card());
+    await settle();
+    // What a click that started before the session list arrived is aimed at.
+    const enter = screen.getByRole("button", { name: enterName });
+
+    rerender(
+      card({
+        id: "mistport-1",
+        worldId: "mistport",
+        completedPlayerTurns: 3,
+      } as SessionRecord),
+    );
+    await settle();
+    expect(screen.getByRole("button", { name: enterName })).toBe(enter);
+    fireEvent.click(enter);
+    expect(onEnter).toHaveBeenCalledWith("mistport");
+    expect(onResume).not.toHaveBeenCalled();
   });
 });
