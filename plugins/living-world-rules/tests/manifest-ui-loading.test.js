@@ -3,10 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
-  compileInlineRuntime,
   loadPluginUi,
   loadPluginManifest,
-  loadRuntime,
   parsePluginMd,
 } from "@covel/plugin-loader";
 
@@ -15,7 +13,7 @@ const pluginsDir = path.dirname(pluginDir);
 const pluginMdPath = path.join(pluginDir, "PLUGIN.md");
 
 describe("living-world-rules manifest and UI loading", () => {
-  it("parses the manual runtime manifest through the strict schema", () => {
+  it("parses as a package of data, a projection and a panel, with no runtime", () => {
     const parsed = parsePluginMd(
       readFileSync(pluginMdPath, "utf-8"),
       pluginMdPath,
@@ -37,13 +35,7 @@ describe("living-world-rules manifest and UI loading", () => {
         },
       },
     });
-    expect(compileInlineRuntime(parsed).manifest).toMatchObject({
-      name: "living-world-rules",
-      pluginId: "living-world-rules",
-      runtimeType: "function",
-      handler: "./handler.js",
-      trigger: { type: "manual" },
-    });
+    expect(parsed.inlineRuntime).toBeUndefined();
     expect(parsed.plugin.provides).toEqual(
       expect.arrayContaining(["living-world-rules@1", "world-info@1"]),
     );
@@ -56,12 +48,9 @@ describe("living-world-rules manifest and UI loading", () => {
     );
     expect(discovery).toBeDefined();
 
-    const manifests = await loadPluginManifest(discovery);
-    expect(manifests).toHaveLength(1);
+    expect(await loadPluginManifest(discovery)).toHaveLength(0);
 
-    const loaded = await loadRuntime(discovery, "living-world-rules");
     const ui = await loadPluginUi(discovery);
-    expect(loaded.handler).toBeTypeOf("function");
     expect(ui.uiSpecs?.right).toHaveLength(1);
     // Read-only display panel (no editing): relies on emptyState rather than
     // alwaysRender, so a world without declared rules shows the empty hint.

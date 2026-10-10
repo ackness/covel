@@ -1,22 +1,14 @@
 import {
   getPendingProposals,
   getToolContent,
-  shortIdBatch,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { z } from "zod";
 
-import createUpdateInventory from "../../lib/update-inventory.js";
+import updateInventory from "../../lib/update-inventory.js";
 import {
   MAX_CHANGES,
   inventoryChangesFromWorldIR,
 } from "../../lib/world-ir.js";
-
-const updateInventory = createUpdateInventory({
-  tool: (definition) => definition,
-  z,
-  shortIdBatch,
-});
 
 /**
  * Apply this turn's player inventory changes from the shared WorldIR
@@ -36,10 +28,7 @@ export default async function handler(ctx) {
       outcome: "success",
       value: { applied: 0, skipped: 0, results: [] },
     };
-  const result = await updateInventory.execute(
-    updateInventory.parameters.parse({ changes }),
-    ctx,
-  );
+  const result = await updateInventory({ changes }, ctx);
   return withPendingProposals(
     {
       outcome: "success",

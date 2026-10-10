@@ -11,7 +11,6 @@ tags:
   - "data:lorebook"
   - "cost:function"
   - "ui:right-panel"
-  - "ui:manual-action"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
@@ -53,41 +52,17 @@ contributes:
   ui:
     right:
       - ./ui/living-world-rules-panel.json
-runtime:
-  type: function
-  schedule:
-    trigger:
-      type: manual
-  io:
-    output:
-      contract: living-world-rules@1
-    visibility: system
-  function:
-    handler: ./handler.js
 ---
 
 # Living World Rules
 
-Manual function runtime for saving a session world rule into the Covel lorebook.
+The lasting rules of a world. A world package imports them through its
+`world.rules@1` data source (with `lorebook: true`, so each rule also becomes a
+lorebook entry that the narrative reads), and the right panel shows them
+read-only. The package has no runtime: rules are authored in the world
+package, not edited during play.
 
 WorldIR `type: rule` statements project to rule ids of the form
 `world-ir-<sha256(statement.id)>`. The original id remains in
 `sourceStatementId`, so Unicode and long WorldIR ids are importable while
-projected rules satisfy the rule id constraint. The projection changes the
-imported rule key for existing WorldIR content; recreate affected development
-plugin data when adopting this contract.
-
-## Manual payload
-
-```json
-{
-  "ruleJson": "{\"schemaVersion\":1,\"id\":\"rain-market\",\"content\":\"雨市里没人会直接说出真实姓名。\",\"kind\":\"constant\",\"coordinate\":{\"position\":\"before_plugin\"}}"
-}
-```
-
-## Behavior
-
-1. Stores the normalized rule under `plugin_data[living-world-rules][rules][rule.id]`
-2. Emits `lorebook.upsert` with a stable entry id
-3. Uses `kind: "constant"` for always-on rules and `kind: "triggered"` for keyword rules
-4. Routes prompt placement through `coordinate.position`: `before_plugin`, `after_plugin`, or `at_depth`
+projected rules satisfy the rule id constraint.
