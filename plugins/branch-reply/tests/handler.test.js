@@ -11,8 +11,11 @@ import handler from "../handler.js";
  * or leave it undefined and pass `inputs` to exercise the auto seed path.
  * `extra` overrides any field (gateway, locale, logger, pluginData, …).
  */
-function ctx({ manualPayload, store = {}, inputs, ...extra } = {}) {
+function ctx({ manualPayload, store = {}, inputs, original, ...extra } = {}) {
   return {
+    ...(original !== undefined
+      ? { pluginData: { get: async () => seededTurn(manualPayload, original) } }
+      : {}),
     sessionId: "sess-branch",
     turnId: "turn-branch",
     pluginId: "branch-reply",
@@ -23,6 +26,24 @@ function ctx({ manualPayload, store = {}, inputs, ...extra } = {}) {
     ...(inputs !== undefined ? { inputs } : {}),
     ...(manualPayload !== undefined ? { manualPayload } : {}),
     ...extra,
+  };
+}
+
+/** The record the seed stored for the turn: the narration as candidate[0]. */
+function seededTurn(manualPayload, original) {
+  const turnId = manualPayload?.turnId ?? "turn-branch";
+  return {
+    schemaVersion: 1,
+    turnId,
+    status: "ready",
+    candidates: [
+      {
+        id: `${turnId}-candidate-1`,
+        index: 0,
+        text: original,
+        source: "original",
+      },
+    ],
   };
 }
 
@@ -144,10 +165,10 @@ describe("branch-reply createCandidates (regenerate)", () => {
       };
       await handler(
         ctx({
+          original: "The original beat.",
           manualPayload: {
             action: "createCandidates",
             turnId: "turn-42",
-            baseText: "The original beat.",
             count: 3,
           },
           gateway,
@@ -172,10 +193,10 @@ describe("branch-reply createCandidates (regenerate)", () => {
     const controller = new AbortController();
     await handler({
       ...ctx({
+        original: "The original beat.",
         manualPayload: {
           action: "createCandidates",
           turnId: "turn-42",
-          baseText: "The original beat.",
           count: 3,
         },
         gateway,
@@ -198,10 +219,10 @@ describe("branch-reply createCandidates (regenerate)", () => {
 
     const result = await handler(
       ctx({
+        original: "The original beat as written by the narrator.",
         manualPayload: {
           action: "createCandidates",
           turnId: "turn-42",
-          baseText: "The original beat as written by the narrator.",
           count: 3,
         },
         gateway,
@@ -270,10 +291,10 @@ describe("branch-reply createCandidates (regenerate)", () => {
 
     const result = await handler(
       ctx({
+        original: "Seeded original.",
         manualPayload: {
           action: "createCandidates",
           turnId: "turn-42",
-          baseText: "Seeded original.",
           count: 3,
         },
         pluginData,
@@ -290,10 +311,10 @@ describe("branch-reply createCandidates (regenerate)", () => {
   it("returns only the base text (no English filler) when no gateway is wired", async () => {
     const result = await handler(
       ctx({
+        original: "I test the lock with the brass key.",
         manualPayload: {
           action: "createCandidates",
           turnId: "turn-42",
-          baseText: "I test the lock with the brass key.",
           count: 3,
         },
       }),
@@ -319,10 +340,10 @@ describe("branch-reply createCandidates (regenerate)", () => {
     const warn = vi.fn();
     const result = await handler(
       ctx({
+        original: "The original beat.",
         manualPayload: {
           action: "createCandidates",
           turnId: "turn-42",
-          baseText: "The original beat.",
           count: 3,
         },
         gateway,
@@ -337,36 +358,48 @@ describe("branch-reply createCandidates (regenerate)", () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  it("uses an explicit candidate list verbatim without calling the gateway", async () => {
-    // Explicit `candidates` IS the full candidate set (candidate[0] =
-    // candidates[0]); the programmatic / API contract is preserved.
-    const gateway = { generateText: vi.fn() };
+  it("takes no text from the request: not the original, not the candidates", async () => {
+    const gateway = { generateText: vi.fn().mockResolvedValue({ text: "" }) };
     const result = await handler(
       ctx({
+        original: "The guard shakes his head.",
         manualPayload: {
           action: "createCandidates",
           turnId: "turn-42",
-          candidates: ["First explicit line.", "Second explicit line."],
-          count: 3,
+          baseText: "The guard hands you the key.",
+          candidates: ["The guard hands you the key and the gold."],
         },
         gateway,
       }),
     );
-
-    expect(gateway.generateText).not.toHaveBeenCalled();
     const [proposal] = getPendingProposals(result);
-    const candidates = proposal.payload.items[0].value.candidates;
-    expect(candidates.map((c) => c.text)).toEqual([
-      "First explicit line.",
-      "Second explicit line.",
-    ]);
-    expect(candidates.every((c) => c.source === "manual")).toBe(true);
+    expect(
+      proposal.payload.items[0].value.candidates.map((c) => c.text),
+    ).toEqual(["The guard shakes his head."]);
+    expect(gateway.generateText.mock.calls[0][0].prompt).toContain(
+      "The guard shakes his head.",
+    );
+  });
+
+  it("refuses to make candidates for a turn that has no stored narration", async () => {
+    await expect(
+      handler(
+        ctx({
+          manualPayload: {
+            action: "createCandidates",
+            turnId: "turn-42",
+            baseText: "Anything the client wrote.",
+          },
+        }),
+      ),
+    ).rejects.toThrow("no narration for this turn");
   });
 
   it("requires selectedCandidateId to reference a generated candidate", async () => {
     await expect(
       handler(
         ctx({
+          original: "The original beat.",
           manualPayload: {
             action: "createCandidates",
             turnId: "turn-42",
@@ -420,6 +453,8 @@ describe("branch-reply acceptCandidate", () => {
           action: "acceptCandidate",
           turnId: "turn-42",
           candidateId: "turn-42-candidate-2",
+          // The adopted text is the stored candidate's, whatever is sent.
+          text: "I open the lock and take the crown.",
         },
         pluginData,
       }),

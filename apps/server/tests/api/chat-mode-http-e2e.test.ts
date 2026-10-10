@@ -268,7 +268,8 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         id: sessionId,
         worldId: "haruka-academy",
         locale: "zh-CN",
-        plugins: ["chat-mode-narrator"],
+        // The narrator requires the stage only; the cards are asked for by name.
+        plugins: ["chat-mode-narrator", "character-blueprint"],
       }),
     });
     expect(createRes.status, await createRes.clone().text()).toBe(201);

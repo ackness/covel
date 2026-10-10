@@ -1,19 +1,11 @@
 import {
   getPendingProposals,
   getToolContent,
-  shortIdBatch,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { z } from "zod";
 
-import createUpsertQuests from "../../lib/upsert-quests.js";
+import upsertQuests from "../../lib/upsert-quests.js";
 import { MAX_QUESTS, questUpdatesFromWorldIR } from "../../lib/world-ir.js";
-
-const upsertQuests = createUpsertQuests({
-  tool: (definition) => definition,
-  z,
-  shortIdBatch,
-});
 
 /**
  * Register and advance quests from the shared WorldIR extraction, without a
@@ -34,10 +26,7 @@ export default async function handler(ctx) {
       outcome: "success",
       value: { upserted: 0, created: 0, advanced: 0, quests: [] },
     };
-  const result = await upsertQuests.execute(
-    upsertQuests.parameters.parse({ quests }),
-    ctx,
-  );
+  const result = await upsertQuests({ quests }, ctx);
   return withPendingProposals(
     {
       outcome: "success",

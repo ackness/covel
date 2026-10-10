@@ -30,7 +30,6 @@ messages:
   Your bag contains {count} item entries.: 行囊中有 {count} 项物品。
   Gained: 获得
   Lost: 失去
-  Updated: 更新
   Equipped: 装备
   Unequipped: 卸下
   Pack: 行囊

@@ -137,6 +137,44 @@ describe("evaluate handler", () => {
     expect((await handler(ctx)).value.cue).toBeNull();
   });
 
+  it("gives last turn's event once more, as a reminder, and then no more", async () => {
+    const fired = { lastTurn: 4, lastTurnId: "t-1", count: 1 };
+    const { ctx, writes } = makeCtx({
+      turnId: "t-2",
+      revealed: { "lighthouse-orphan": fired },
+    });
+    const result = await handler(ctx);
+    expect(result.value.cue).toMatchObject({
+      eventId: "lighthouse-orphan",
+      reminder: true,
+    });
+    // The narrative is told to check its previous turn, not to fire it anew.
+    expect(result.value.cueContext).toMatch(
+      /^The hidden story event below was given to the narrative in the previous turn\./,
+    );
+    expect(result.value.cueContext).toContain("hands you a child");
+    expect(writes).toEqual([
+      {
+        namespace: "revealed",
+        key: "lighthouse-orphan",
+        value: { ...fired, reminderTurnId: "t-2" },
+      },
+    ]);
+
+    const reminded = { "lighthouse-orphan": writes[0].value };
+    // A retry of the reminder turn gets the reminder again.
+    const retried = makeCtx({
+      turnId: "t-2b",
+      sourceTurnId: "t-2",
+      revealed: reminded,
+    });
+    expect((await handler(retried.ctx)).value.cue?.reminder).toBe(true);
+    expect(retried.writes).toEqual([]);
+    // Another turn does not.
+    const later = makeCtx({ turnId: "t-3", revealed: reminded });
+    expect((await handler(later.ctx)).value.cue).toBeNull();
+  });
+
   it("fires planned events and lists only fired and planned events for planners", async () => {
     const debt = {
       id: "harbor-debt",

@@ -2,16 +2,10 @@
  * `direction/current`. The record itself is authoritative once present:
  * `actors: []` means the director intentionally cleared the stage. */
 
+import { matchScene } from "./scene-match.js";
 import { sourceLabelFor } from "./stage-data.js";
 
 export const MAX_SPRITE_SLOTS = 4;
-
-function normalizeSceneLocation(value) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "");
-}
 
 /** Resolve a validated scene.set event against already-imported world art for
  * immediate display, the same way the durable resolver will: an unknown
@@ -20,27 +14,11 @@ export function applySceneSetPreview(ctx, current, registry, data, turnId) {
   const location =
     typeof data.location === "string" ? data.location.trim() : "";
   if (!location) return current;
-  const token = normalizeSceneLocation(location);
   const variant = data.timeOfDay === "night" ? "night" : "day";
-  const scenes = Array.isArray(registry?.scenes)
-    ? registry.scenes.filter(
-        (scene) =>
-          Boolean(scene) && typeof scene === "object" && !Array.isArray(scene),
-      )
-    : [];
-  const exact = scenes.find(
-    (scene) =>
-      normalizeSceneLocation(scene.name) === token ||
-      normalizeSceneLocation(scene.locationRef) === token,
+  const matched = matchScene(
+    Array.isArray(registry?.scenes) ? registry.scenes : [],
+    location,
   );
-  const matched =
-    exact ??
-    scenes.find((scene) =>
-      [scene.name, scene.locationRef]
-        .map(normalizeSceneLocation)
-        .filter(Boolean)
-        .some((key) => token.includes(key) || key.includes(token)),
-    );
   if (!matched) {
     return {
       ...current,

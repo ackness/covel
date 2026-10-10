@@ -10,7 +10,7 @@
  *  1. Loads existing records from `plugin_data[namespace="affinity"]` and
  *     overlays same-turn pending writes (tool calls within one turn do not
  *     commit between each other, so a second call must see the first one).
- *  2. Matches names case-insensitively; unknown names get a stable short ID
+ *  2. Matches names by `nameKey`; unknown names get a stable short ID
  *     via `shortIdBatch` and start at score 0 before the delta applies.
  *  3. Accumulates `score` with clamping to [-100, 100] and re-derives the
  *     display fields (`tier` / `tierLabel` / `tierColor` / `scoreBar`) on
@@ -37,6 +37,17 @@ import {
 const HISTORY_LIMIT = 10;
 const MAX_CHANGES_PER_TURN = 5;
 const MAX_DELTA = 20;
+
+/**
+ * The form of a name that two spellings of one name share: letter case,
+ * full-width and half-width forms, and the amount of white space do not make
+ * a second NPC.
+ *
+ * @param {string} name
+ */
+function nameKey(name) {
+  return name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+}
 
 export default function ({ tool, z, shortIdBatch }) {
   const changeSchema = z.object({
@@ -87,14 +98,14 @@ export default function ({ tool, z, shortIdBatch }) {
       const indexRow = (row) => {
         const v = row.value ?? {};
         if (typeof v.name !== "string" || v.name.length === 0) return;
-        recordByName.set(v.name.toLowerCase(), { key: row.key, value: v });
+        recordByName.set(nameKey(v.name), { key: row.key, value: v });
       };
       for (const row of rows) indexRow(row);
       // ── 2. Assign stable short IDs to names not seen before ──
       const newNames = [];
       const seenNewNames = new Set();
       for (const change of params.changes) {
-        const lookup = change.name.toLowerCase();
+        const lookup = nameKey(change.name);
         if (!recordByName.has(lookup) && !seenNewNames.has(lookup)) {
           seenNewNames.add(lookup);
           newNames.push(change.name);
@@ -112,7 +123,7 @@ export default function ({ tool, z, shortIdBatch }) {
       /** @type {Map<string, string>} */
       const newNameToId = new Map();
       for (let i = 0; i < newNames.length; i += 1) {
-        newNameToId.set(newNames[i].toLowerCase(), assignedIds[i]);
+        newNameToId.set(nameKey(newNames[i]), assignedIds[i]);
       }
 
       // ── 3. Apply changes sequentially (duplicate names accumulate) ──
@@ -122,7 +133,7 @@ export default function ({ tool, z, shortIdBatch }) {
       const messageChanges = [];
 
       for (const change of params.changes) {
-        const lookup = change.name.toLowerCase();
+        const lookup = nameKey(change.name);
         const existing = recordByName.get(lookup);
         const key = existing?.key ?? newNameToId.get(lookup);
         if (!key) continue;

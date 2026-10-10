@@ -1,7 +1,6 @@
 import {
   getToolContent,
   getPendingProposals,
-  shortIdBatch,
 } from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
 import {
@@ -36,8 +35,7 @@ import {
   loadRuntime,
 } from "@covel/plugin-loader";
 
-import { tool, z } from "@covel/tools";
-import createUpdateInventory from "../lib/update-inventory.js";
+import updateInventory from "../lib/update-inventory.js";
 import { inventoryChangesFromWorldIR } from "../lib/world-ir.js";
 import ledger from "../runtimes/ledger/handler.js";
 import vocabulary from "../runtimes/vocabulary/handler.js";
@@ -59,11 +57,7 @@ describe("update-inventory", () => {
   beforeEach(async () => {
     mockStore = await createPluginTestStore(ctx);
     updateInventoryTool = bindToolStore(
-      createUpdateInventory({
-        tool,
-        z,
-        shortIdBatch,
-      }),
+      { execute: updateInventory },
       mockStore,
     );
   });
@@ -380,61 +374,6 @@ describe("update-inventory", () => {
     expect(getToolContent(result).results[0]).toMatchObject({
       status: "skipped",
     });
-    const rows = await mockStore.listPluginData("sess-1", "inventory");
-    expect(rows).toHaveLength(0);
-  });
-
-  it("updates only the provided fields on set", async () => {
-    // Arrange
-    const created = await executeAndCommit(
-      updateInventoryTool,
-      {
-        changes: [
-          {
-            op: "add",
-            name: "Gold Coin",
-            quantity: 10,
-            description: "Shiny.",
-            tags: ["currency"],
-          },
-        ],
-      },
-      ctx,
-      mockStore,
-    );
-    const itemId = getToolContent(created).results[0].itemId;
-
-    // Act — correct the quantity estimate, leave description/tags alone
-    await executeAndCommit(
-      updateInventoryTool,
-      { changes: [{ op: "set", name: "Gold Coin", quantity: 50 }] },
-      { ...ctx, turnId: "turn-2" },
-      mockStore,
-    );
-
-    // Assert
-    const stored = await mockStore.getPluginData(
-      "sess-1",
-      "inventory",
-      "items",
-      itemId,
-    );
-    expect(stored.value.quantity).toBe(50);
-    expect(stored.value.description).toBe("Shiny.");
-    expect(stored.value.tags).toEqual(["currency"]);
-  });
-
-  it("rejects a batch with more than 8 changes", async () => {
-    // Arrange — 9 changes
-    const changes = Array.from({ length: 9 }, (_, i) => ({
-      op: "add",
-      name: `Item ${i}`,
-    }));
-
-    // Act / Assert — zod validation fails before execute runs
-    await expect(updateInventoryTool.execute({ changes }, ctx)).rejects.toThrow(
-      /validation/i,
-    );
     const rows = await mockStore.listPluginData("sess-1", "inventory");
     expect(rows).toHaveLength(0);
   });

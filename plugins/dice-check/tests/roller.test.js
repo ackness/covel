@@ -106,8 +106,22 @@ describe("dice-check roller handler", () => {
     const world = {
       characterSchema: {
         attributes: [
-          { id: "grit", name: "坚毅", type: "number", min: 0, max: 5, category: "stats" },
-          { id: "vitality", name: "体力", type: "number", min: 0, max: 100, category: "stats" },
+          {
+            id: "grit",
+            name: "坚毅",
+            type: "number",
+            min: 0,
+            max: 5,
+            category: "stats",
+          },
+          {
+            id: "vitality",
+            name: "体力",
+            type: "number",
+            min: 0,
+            max: 100,
+            category: "stats",
+          },
           { id: "calling", name: "使命", type: "string", category: "bio" },
         ],
       },

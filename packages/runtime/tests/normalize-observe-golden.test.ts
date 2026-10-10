@@ -315,11 +315,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(resolver.declaredTrigger.type).toBe("event");
 
     // Manual runtimes (real plugin-rpc actions): no stage, trigger untouched.
-    for (const id of [
-      "character-blueprint/import",
-      "character-blueprint/presence",
-      "living-world-rules",
-    ]) {
+    for (const id of ["character-blueprint/presence"]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBeUndefined();
       expect(spec.declaredTrigger.type).toBe("manual");

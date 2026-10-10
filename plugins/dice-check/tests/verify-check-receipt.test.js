@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import verifyCheckReceipt from "../hooks/verify-check-receipt.js";
+import verifyCheckReceipt, {
+  acceptRecordedReceipt,
+} from "../hooks/verify-check-receipt.js";
 import { forgetPool, rememberPool } from "../lib/turn-pool.js";
 
 const ctx = { sessionId: "sess-1", turnId: "turn-7" };
+const recorded = { success: true, result: { _text: "emitted" } };
 
 function emit(checks, topic = "check.resolved") {
   return {
@@ -53,11 +56,32 @@ describe("dice-check receipt guard", () => {
     expect(verifyCheckReceipt(ctx, emit([check()]))).toEqual({
       action: "continue",
     });
+    acceptRecordedReceipt(ctx, { ...emit([check()]), result: recorded });
     // emit-event records one event of a topic in a turn and answers a repeat
     // itself. Sending the repeat back would only cost another round.
     expect(
       verifyCheckReceipt(ctx, emit([check({ outcome: "success" })])),
     ).toEqual({ action: "continue" });
+  });
+
+  it("checks the next receipt when the event catalogue refused the first", () => {
+    // The outcome agrees with the die, but the item has no action: the guard
+    // lets it through and emit-event refuses it.
+    const incomplete = emit([check({ action: undefined })]);
+    expect(verifyCheckReceipt(ctx, incomplete)).toEqual({
+      action: "continue",
+    });
+    acceptRecordedReceipt(ctx, {
+      ...incomplete,
+      result: { success: false, result: "event payload rejected" },
+    });
+
+    const result = verifyCheckReceipt(
+      ctx,
+      emit([check({ outcome: "success" })]),
+    );
+    expect(result.action).toBe("abort");
+    expect(result.reason).toContain('the dice give "failure"');
   });
 
   it("sends back a receipt that reports a success the die did not give", () => {

@@ -1,7 +1,6 @@
 import {
   getToolContent,
   getPendingProposals,
-  shortIdBatch,
 } from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
 import {
@@ -36,8 +35,7 @@ import {
   loadRuntime,
 } from "@covel/plugin-loader";
 
-import { tool, z } from "@covel/tools";
-import createUpsertQuests from "../lib/upsert-quests.js";
+import upsertQuests from "../lib/upsert-quests.js";
 import { questUpdatesFromWorldIR, resolveQuestName } from "../lib/world-ir.js";
 import questLog from "../runtimes/log/handler.js";
 import vocabulary from "../runtimes/vocabulary/handler.js";
@@ -65,14 +63,7 @@ describe("upsert-quests", () => {
 
   beforeEach(async () => {
     mockStore = await createPluginTestStore(ctx);
-    upsertQuestsTool = bindToolStore(
-      createUpsertQuests({
-        tool,
-        z,
-        shortIdBatch,
-      }),
-      mockStore,
-    );
+    upsertQuestsTool = bindToolStore({ execute: upsertQuests }, mockStore);
   });
 
   async function findQuestByName(name) {
@@ -578,25 +569,6 @@ describe("upsert-quests", () => {
     // Assert
     const stored = await findQuestByName("寻回断魂钩");
     expect(stored.value.status).toBe("completed");
-  });
-
-  it("rejects a call with more than 5 quests via parameter validation", async () => {
-    // Arrange — zod caps the batch at 5; an oversized call must fail
-    // validation (so the LLM retries smaller) instead of writing anything
-    const params = {
-      quests: Array.from({ length: 7 }, (_, i) => ({ name: `任务${i + 1}` })),
-    };
-
-    // Act + Assert
-    await expect(
-      executeAndCommit(upsertQuestsTool, params, ctx, mockStore),
-    ).rejects.toThrow();
-    const rows = await mockStore.listPluginData(
-      "sess-1",
-      "core-quest",
-      "quests",
-    );
-    expect(rows).toHaveLength(0);
   });
 
   it("advances a world-pack preseeded record by name without duplicating it", async () => {

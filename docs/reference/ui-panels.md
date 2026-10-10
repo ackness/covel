@@ -102,7 +102,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | ------------------------------------------------------------------------ | ------------------- | ------------------ | ------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
 | affinity                                                                 | affinity            | heart              | affinity      | affinity           | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因）                                   |
 | char-creator/player-init                                                 | character           | users              | character     | session.characters | 角色列表（类型由当前角色 schema 定义）                                                           |
-| character-blueprint/import                                               | character-blueprint | id-card            | character     | blueprints         | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                        |
+| character-blueprint                                                      | character-blueprint | id-card            | character     | blueprints         | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                        |
 | character-blueprint/presence                                             | character-presence  | image              | character-art | presence           | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像）                                 |
 | codex                                                                    | codex               | book-open          | codex         | entries            | 知识图鉴                                                                                         |
 | core-quest                                                               | core-quest          | scroll-text        | core-quest    | quests             | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组）                                  |
@@ -513,7 +513,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 `stage.cast@1` 中演员的可选 `active` 标记控制立绘高亮。只要有演员明确指定该标记，就按各自的布尔值显示；全部省略时默认高亮第一位未退场的演员。
 
-对白名牌读取当前回合 `dialogue/<turnId>.paragraphSpeakers`，由 `stage.direction` 显式提供角色 ID 并解析为 `{ characterId, displayName } | null`。同回合实时事件可以先行预览，旧的已提交映射不会在同回合重试的流式阶段复用。打字机与署名校验共用 `splitStageParagraphs`（CRLF 转 LF，三个以上换行视为一个空行分隔）；正文结束后的分段数量必须和映射一致。旁白、未知身份、旧消息无映射或回合不匹配时不显示人物名牌，演员焦点不参与署名。
+对白名牌读取当前回合 `dialogue/current.paragraphSpeakers`，由 `stage.direction` 显式提供角色 ID 并解析为 `{ characterId, displayName } | null`。同回合实时事件可以先行预览，旧的已提交映射不会在同回合重试的流式阶段复用。打字机与署名校验共用 `splitStageParagraphs`（CRLF 转 LF，三个以上换行视为一个空行分隔）；正文结束后的分段数量必须和映射一致。旁白、未知身份、旧消息无映射或回合不匹配时不显示人物名牌，演员焦点不参与署名。
 
 决策面板在窄屏最多占舞台下方 60%，宽屏为 65%，始终在舞台范围内。回顾默认折叠、点击“当前信息”可展开；回顾、问题和选项共用可滚动内容区，自由输入保持固定可见。立绘底部渐隐，窄屏提高站位以让脸部露出决策面板，宽屏保留原有站位高度；有角色图时不重复叠加名字徽标，缺图时保留姓名占位。
 

@@ -1,4 +1,4 @@
-import { pickLocaleText, translate } from "../../lib/rules.js";
+import { checkModifier, pickLocaleText, translate } from "../../lib/rules.js";
 
 export default async function (ctx) {
   const rules =
@@ -44,9 +44,15 @@ export default async function (ctx) {
       const dc = Number(difficulty);
       if (!rule || ![8, 12, 16, 20].includes(dc))
         throw new Error("Invalid check request");
-      const modifier = player.fields?.[attribute];
-      if (!Number.isSafeInteger(modifier))
+      const score = player.fields?.[attribute];
+      if (!Number.isSafeInteger(score))
         throw new Error("The selected attribute is not numeric");
+      const modifier = checkModifier(
+        score,
+        ctx.world?.characterSchema?.attributes?.find(
+          (declared) => declared.id === attribute,
+        ),
+      );
       const die = ctx.random.int(1, 21);
       // The same critical rules as `dice-check/lib/check-rules.js`; keep them in step.
       const outcome =
@@ -63,6 +69,7 @@ export default async function (ctx) {
         resolvedTurnId: sourceTurn,
         characterId: player.id,
         attribute,
+        score,
         modifier,
         die,
         difficulty: dc,

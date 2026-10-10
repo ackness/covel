@@ -361,6 +361,34 @@ describe("update-affinity", () => {
     expect(records[0].value.name).toBe("Lian");
   });
 
+  it("reads full-width letters and extra spaces as the same name", async () => {
+    await seedRecord(mockStore, "aff-herman", {
+      id: "aff-herman",
+      name: "Captain Herman",
+      score: 0,
+      history: [],
+    });
+
+    const result = await executeAndCommit(
+      updateAffinityTool,
+      {
+        changes: [
+          {
+            name: " Ｃａｐｔａｉｎ  Herman",
+            delta: -3,
+            reason: "You defied him",
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    expect(getToolContent(result).results).toEqual([
+      expect.objectContaining({ id: "aff-herman", status: "updated" }),
+    ]);
+  });
+
   it("accumulates duplicate names within one batched call in order", async () => {
     await executeAndCommit(
       updateAffinityTool,

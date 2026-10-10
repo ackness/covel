@@ -21,10 +21,6 @@ requires:
   - scene-cast@1
   - scene-stage@1
   - scene-prompts@1
-  - character-blueprint@1
-  - character-presence@1
-  - living-world-rules@1
-  - branch-reply@1
 conflicts:
   - narrative-engine@1
 optional:
@@ -247,4 +243,4 @@ When `tabletopCheck.value` in `<runtime-inputs>` contains `Settled tabletop chec
 
 When `<runtime-inputs>` contains `worldTime`, use its value as this turn's authoritative starting date/phase. Follow the definition's direction and evolution.prompt; describe elapsed time or transitions coherently. The time plugin settles after narration. Old memory must not override this starting time.
 
-When `storyEvent.value` in `<runtime-inputs>` is a hidden event cue (not `No hidden story event this turn.`), the world state has just met a condition the author set. Let that event happen naturally in this turn as part of the scene. Never mention conditions, triggers, or that it was hidden. Do not resolve everything at once: leave the player room to respond. When the input is empty or absent, narrate as usual and never invent hidden events.
+When `storyEvent.value` in `<runtime-inputs>` is a hidden event cue (not `No hidden story event this turn.`), the world state has met a condition the author set. The cue starts with an instruction. It says that the event happens in this turn, or that it was given to you in the previous turn. In the second case the event happens now only if it did not happen then. Follow that instruction and write the event as part of the scene. Never mention conditions, triggers, or that it was hidden. Do not resolve everything at once: leave the player room to respond. When the input is empty or absent, narrate as usual and never invent hidden events.

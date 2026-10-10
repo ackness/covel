@@ -9,6 +9,7 @@
  *
  */
 import { translate } from "@covel/plugin-handlers-utils";
+import { mentionedNodeIds } from "../../lib/mentions.js";
 
 /**
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
@@ -52,22 +53,7 @@ export default async function handler(ctx) {
     }
 
     // ── 1. Name + alias matching against playerMessage ───────────
-    const haystack = (playerMessage ?? "").toLowerCase();
-    /** @type {Set<string>} */
-    const seedNodeIds = new Set();
-    if (haystack.length > 0) {
-      for (const node of nodes) {
-        if (!node?.name || !node?.id) continue;
-        const candidates = [node.name, ...(node.aliases ?? [])];
-        for (const candidate of candidates) {
-          if (typeof candidate !== "string" || candidate.length === 0) continue;
-          if (haystack.includes(candidate.toLowerCase())) {
-            seedNodeIds.add(node.id);
-            break;
-          }
-        }
-      }
-    }
+    const seedNodeIds = mentionedNodeIds(playerMessage, nodes);
 
     // Character ids and graph node ids belong to different namespaces. Only
     // unambiguous full names/aliases connect the current cast to graph nodes.

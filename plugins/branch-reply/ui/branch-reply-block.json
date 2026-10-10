@@ -47,9 +47,6 @@
           "turnId": {
             "from": "props.turnId"
           },
-          "baseText": {
-            "from": "props.candidates.0.text"
-          },
           "count": 3
         }
       }

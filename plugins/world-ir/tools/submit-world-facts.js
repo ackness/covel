@@ -363,7 +363,7 @@ export default function ({ tool }) {
         }
         return;
       }
-      for (const issue of eventProfileIssues(value))
+      for (const issue of eventProfileIssues(value, MAX_ENTITIES))
         ctx.addIssue({ code: "custom", ...issue });
     });
   const parameters = z.preprocess(normalizeArguments, facts);

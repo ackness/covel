@@ -38,6 +38,8 @@ contributes:
   hooks:
     - event: PreToolUse
       enforce: normal
+    - event: PostToolUse
+      enforce: normal
   ui:
     message:
       - ./runtimes/recorder/ui/check-message.json
