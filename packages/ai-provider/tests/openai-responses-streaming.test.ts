@@ -298,6 +298,7 @@ describe("openai-responses streamText — request body", () => {
         name: "get_weather",
         description: "Look up the weather",
         parameters: WEATHER_TOOL.function.parameters,
+        strict: false,
       },
     ]);
     expect(captured[0]?.body.tool_choice).toBe("auto");
