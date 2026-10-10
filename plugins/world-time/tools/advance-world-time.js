@@ -5,7 +5,7 @@ import {
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
-import { advanceTime, describeTime } from "../clock.js";
+import { advanceTime, describeTime, summarizeTime } from "../clock.js";
 
 export default function ({ tool }) {
   return tool({
@@ -47,8 +47,18 @@ export default function ({ tool }) {
       if (!Number.isSafeInteger(base.tick))
         throw new Error("Invalid current time tick");
       const previous = await context.store.getPluginData("clock", "current");
+      // `summary` is for the runtimes that read this result. The stored clock
+      // keeps the tick; the summary is derived from it.
       if (previous?.value?.lastTurnId === context.turnId)
-        return { ...previous.value };
+        return {
+          ...previous.value,
+          summary: summarizeTime(
+            definition,
+            previous.value.tick,
+            previous.value.lastDelta ?? 0,
+            base.locale,
+          ),
+        };
       if (previous && previous.value.tick !== base.tick)
         throw new Error("World time changed since this narrative started");
       const next = advanceTime(definition, base.tick, request, context.turnId);
@@ -61,7 +71,13 @@ export default function ({ tool }) {
         lastDelta: next.delta,
         reason: request.reason,
       };
-      return withPendingProposals(value, [
+      const summary = summarizeTime(
+        definition,
+        next.tick,
+        next.delta,
+        base.locale,
+      );
+      return withPendingProposals({ ...value, summary }, [
         makeProposal(context, new Date().toISOString(), "plugin.data", {
           namespace: "clock",
           key: "current",

@@ -27,7 +27,7 @@ import createAdvance from "../tools/advance-world-time.js";
 import { DEFAULT_TIME, initialTick, loadTime } from "../clock.js";
 
 const now = "2026-09-18T00:00:00Z";
-async function fixture() {
+async function fixture({ withReader = false } = {}) {
   const store = createMemoryStore();
   await store.createSession({
     id: "s",
@@ -99,7 +99,33 @@ async function fixture() {
     finishReason: "tool_calls",
     usage: { inputTokens: 1, outputTokens: 1 },
   }));
-  const runtimes = [...manifests, story];
+  // A post-turn runtime of another plugin that reads the settled time.
+  const readerHandler = vi.fn(async () => ({ outcome: "success", value: {} }));
+  if (withReader)
+    loaded.set("ledger", {
+      manifest: {
+        name: "ledger",
+        pluginId: "ledger",
+        stage: "post-turn",
+        runtimeType: "function",
+        outputKind: "system",
+        trigger: { type: "auto" },
+        inputs: {
+          worldTime: {
+            from: { capability: "world-time-evolution@1", cardinality: "one" },
+            select: "/summary",
+            required: false,
+          },
+        },
+      },
+      handler: readerHandler,
+      promptTemplate: "",
+    });
+  const runtimes = [
+    ...manifests,
+    story,
+    ...(withReader ? [loaded.get("ledger").manifest] : []),
+  ];
   const run = (turnId = "turn", options) =>
     executeTurn(
       {
@@ -133,7 +159,7 @@ async function fixture() {
       },
       extraInTx,
     });
-  return { store, run, commit, storyHandler, generate, advance };
+  return { store, run, commit, storyHandler, readerHandler, generate, advance };
 }
 
 describe("world-time pipeline", () => {
@@ -218,6 +244,36 @@ describe("world-time pipeline", () => {
       ).tick,
     ).toBe(value.tick + 60);
   });
+  it("gives a same-stage reader this turn's settled time, not the time the turn started at", async () => {
+    const { run, commit, readerHandler } = await fixture({ withReader: true });
+    await commit(await run());
+    expect(readerHandler.mock.calls[0][0].inputs.worldTime.value).toEqual({
+      display: "World era 1 · Month 1 1 · 09:00 · Morning",
+      unit: "minute",
+      elapsedSinceStart: 60,
+      elapsedThisTurn: 60,
+    });
+    await commit(await run("next-turn"));
+    expect(readerHandler.mock.calls[1][0].inputs.worldTime.value).toMatchObject(
+      { elapsedSinceStart: 120, elapsedThisTurn: 60 },
+    );
+  });
+
+  it("runs the reader without the time when the time was not settled", async () => {
+    const { run, readerHandler, generate } = await fixture({
+      withReader: true,
+    });
+    generate.mockRejectedValue(new Error("model unavailable"));
+    const result = await run();
+    expect(
+      result.result.runtimeResults.find(
+        (item) => item.runtimeId === "world-time/advance",
+      ).status,
+    ).toBe("failed");
+    expect(readerHandler).toHaveBeenCalledOnce();
+    expect(readerHandler.mock.calls[0][0].inputs?.worldTime).toBeUndefined();
+  });
+
   it("rolls back time when a sibling commit fails", async () => {
     const { store, run, commit } = await fixture();
     expect(

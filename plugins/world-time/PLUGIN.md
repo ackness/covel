@@ -1,7 +1,7 @@
 ---
 id: world-time
 kind: core
-version: 0.0.1
+version: 0.0.2
 displayName: World Time
 description: >-
   Tracks world-defined calendars, phases and time direction, settling each story
@@ -20,6 +20,8 @@ optional:
 contracts:
   world-time-context@1:
     schema: ./schemas/world-time-context.schema.json
+  world-time-evolution@1:
+    schema: ./schemas/world-time-evolution.schema.json
 entry: ./server/index.js
 contributes:
   data:

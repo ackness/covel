@@ -122,6 +122,22 @@ export function describeTime(definition, tick, locale = "en") {
   };
 }
 
+/**
+ * The settled time as other runtimes read it: the display text and how far
+ * the clock has moved, in base units (`minute` on a calendar, `phase` on a
+ * phase cycle). A rule such as "three hours after the start" then needs one
+ * subtraction, not a reading of calendar text. Both counts are negative when
+ * the clock ran backward.
+ */
+export function summarizeTime(definition, tick, delta, locale = "en") {
+  return {
+    display: describeTime(definition, tick, locale).display,
+    unit: timeUnits(definition)[0],
+    elapsedSinceStart: safe(tick - initialTick(definition)),
+    elapsedThisTurn: delta,
+  };
+}
+
 function seededFraction(seed) {
   let hash = 2166136261;
   for (const character of seed)

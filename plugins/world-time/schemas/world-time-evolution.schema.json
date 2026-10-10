@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "contract:world-time-evolution@1",
+  "title": "Covel settled world time output v1",
+  "description": "The clock after this turn. A turn that settles no time (a nested narrative) carries only `reason`, so no field is required at the root.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "definition": { "type": "object" },
+    "tick": { "type": "integer" },
+    "display": { "type": "string" },
+    "lastDelta": { "type": "integer" },
+    "reason": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["display", "unit", "elapsedSinceStart", "elapsedThisTurn"],
+      "properties": {
+        "display": { "type": "string" },
+        "unit": { "type": "string" },
+        "elapsedSinceStart": { "type": "integer" },
+        "elapsedThisTurn": { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
