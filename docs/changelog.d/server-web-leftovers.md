@@ -10,3 +10,7 @@
 ### Breaking
 
 - **A plugin action can no longer write a player submission, and its turn-message read is bounded.** `savePlayerInput` is removed from the store view of `registerRpc` handlers (`PluginRpcStore` in `@covel/plugin-handlers-utils`), so an action cannot store input that skips form validation for another plugin to trust. `listTurnMessages(limit?)` there now returns the most recent committed messages, at most 200, instead of the whole history; use `readTurnMessages` in a function runtime for paging. No bundled plugin used either. A community plugin that called `savePlayerInput` must submit through the form flow instead. See `docs/reference/api.md`.
+
+### Documentation
+
+- **The security page states that `resolveSlot` hands a plugin any slot's key.** `ctx.gateway.resolveSlot()` returns credentials for any slot name by design (custom wires need them) and plugin server code is not sandboxed, so approving a community package already means trusting its author with the provider keys; see `docs/architecture/security.md`.

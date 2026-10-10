@@ -189,6 +189,19 @@ consent:
 - The session-bound store view, per-plugin tool lookup, and the proposal
   pipeline are authority boundaries of the plugin API, with the same limit.
 
+`ctx.gateway.resolveSlot()` is the same kind of boundary. It returns the
+`apiKey` and auth headers of the slot or preset it is asked about, for any slot
+name, because a plugin that implements its own wire (`registerWires`) needs them
+to call its provider. The plugin manifest names slots only through `type: slot`
+settings, whose value is the player's choice at run time, so there is no static
+list to enforce against; and a package that cannot read the key through
+`resolveSlot` can still read it as the `config` of its own wire, or from the
+process it runs in. A per-slot check on this one method would look like
+containment without being it, so none exists. A service call made on another
+plugin's behalf never carries key material (`lendGateway` in
+`packages/runtime/src/plugin-services.ts`). Approve a community package only if
+you would hand its author your provider keys.
+
 Approving a community package therefore means trusting its author with the
 account the server runs under, and the install and authorization dialogs say
 that the code runs without a process sandbox.
