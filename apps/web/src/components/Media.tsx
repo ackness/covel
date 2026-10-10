@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { clsx } from "clsx";
 import { useTranslation } from "react-i18next";
+import { ImageOff } from "lucide-react";
 import type { MediaRef } from "@covel/shared";
 import { isMediaRef } from "../lib/media-ref-utils.js";
 import { resolveMediaSrc } from "../lib/media-resolve.js";
@@ -170,20 +171,29 @@ export function Media(props: MediaProps): ReactElement {
   }
 
   if (state.status === "error" || state.url.length === 0) {
+    // Also the state of media the player deleted from the media library: say
+    // that it is gone instead of showing its caption alone.
+    const unavailable = t("media.unavailable", "media unavailable");
     return (
       <div
         className={clsx(
-          "bg-muted border border-border flex items-center justify-center w-full",
+          "bg-muted border border-border flex flex-col items-center justify-center gap-1 w-full px-2 text-center",
           radius,
           className,
         )}
         style={baseStyle}
         role="img"
-        aria-label={alt || t("media.unavailable", "media unavailable")}
+        aria-label={alt ? `${alt} (${unavailable})` : unavailable}
       >
+        <ImageOff aria-hidden className="size-4 text-muted-foreground/70" />
         <span className="text-[10px] text-muted-foreground/70 font-mono">
-          {alt || t("media.unavailable", "media unavailable")}
+          {unavailable}
         </span>
+        {alt && (
+          <span className="max-w-full truncate text-[10px] text-muted-foreground/70">
+            {alt}
+          </span>
+        )}
       </div>
     );
   }
