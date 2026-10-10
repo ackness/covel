@@ -166,6 +166,16 @@ describe("memory plugin extraction", () => {
     expect(writes.map((write) => write.key)).toEqual(["scene"]);
   });
 
+  it("leaves retrying a failed provider call to the gateway", async () => {
+    const { ctx, writes, gateway } = fixture();
+    gateway.generateText.mockRejectedValue(
+      Object.assign(new Error("fetch failed"), { code: "ECONNRESET" }),
+    );
+    await expect(extract(ctx)).rejects.toThrow("fetch failed");
+    expect(gateway.generateText).toHaveBeenCalledTimes(1);
+    expect(writes).toEqual([]);
+  });
+
   it("does not write after cancellation, including a provider that ignores its signal", async () => {
     const { ctx, controller, writes, gateway } = fixture();
     gateway.generateText.mockImplementationOnce(async () => {
