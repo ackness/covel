@@ -314,6 +314,16 @@ export interface MessageStore {
     sessionId: string,
     opts: CursorPageOpts,
   ): Promise<MessageRecord[]>;
+  /**
+   * Which of `ids` name a message of this session, in no particular order.
+   * A point lookup by ID: a caller that only needs to know whether some
+   * messages are stored (bulk sync skipping the ones it already wrote) does
+   * not read the session's history for it. An empty `ids` returns `[]`.
+   */
+  listExistingMessageIds(
+    sessionId: string,
+    ids: readonly string[],
+  ): Promise<string[]>;
 }
 
 /** Character records. Part of `sql-session-content-records`. */

@@ -147,4 +147,77 @@ describe("POST /api/sessions/:id/messages/sync", () => {
     expect(response.status).toBe(500);
     expect(await base.listMessages("s")).toEqual([]);
   });
+
+  it("skips stored and repeated ids without reading the session's history", async () => {
+    const base = createMemoryStore();
+    await base.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
+      id: "s",
+      worldId: "w",
+      status: "active",
+      locale: "zh-CN",
+      completedPlayerTurns: 0,
+
+      activePlugins: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await base.addMessage({
+      id: "stored",
+      sessionId: "s",
+      role: "user",
+      content: "kept",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    let fullReads = 0;
+    const store = new Proxy(base, {
+      get(target, property, receiver) {
+        if (property !== "withTransaction")
+          return Reflect.get(target, property, receiver);
+        return async (fn: (tx: StoreTransaction) => Promise<unknown>) =>
+          base.withTransaction!(async (tx) =>
+            fn(
+              new Proxy(tx, {
+                get(txTarget, txProperty, txReceiver) {
+                  if (txProperty === "listMessages") fullReads += 1;
+                  return Reflect.get(txTarget, txProperty, txReceiver);
+                },
+              }),
+            ),
+          );
+      },
+    }) as DataStore;
+    const app = new Hono();
+    const sessionLock = createInProcessSessionLock();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("sessionLock", sessionLock);
+      await next();
+    });
+    app.route("/api/sessions", messageRoutes);
+
+    const response = await app.request("/api/sessions/s/messages/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          { id: "stored", role: "user", content: "changed" },
+          { id: "new", role: "assistant", content: "first" },
+          { id: "new", role: "assistant", content: "second" },
+          { role: "assistant", content: "no id" },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(fullReads).toBe(0);
+    expect(
+      (await base.listMessages("s")).map((message) => message.content).sort(),
+    ).toEqual(["first", "kept", "no id"]);
+  });
 });

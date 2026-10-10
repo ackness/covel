@@ -10,6 +10,7 @@
 import { Hono } from "hono";
 import type { StateChangeEntry, StateTableSchema } from "@covel/shared";
 import type { DataStore } from "@covel/store";
+import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
   isPublicPluginDataRecord,
   publicPluginDataValue,
@@ -42,7 +43,10 @@ export const stateRoutes = new Hono<Env>();
 // tables; the `schema.fields` array is derived from the data keys so the
 // accordion header shows the right field/value counts even for tables
 // with no registered schema.
-stateRoutes.get("/:id/state", async (c) => {
+//
+// Rate-limited like the other whole-session reads: one call reads every
+// character, plugin-data row and state table of the session.
+stateRoutes.get("/:id/state", rateLimiter({ max: 120 }), async (c) => {
   const store = c.get("store");
   const id = c.req.param("id");
 
