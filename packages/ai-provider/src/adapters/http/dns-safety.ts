@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { Agent } from "undici";
 import { readRuntimeEnv } from "@covel/shared";
+import { SsrfPolicyError } from "../../errors.js";
 import { isPublicIpAddress, parseIpv6 } from "./ip-safety.js";
 export { isPublicIpAddress } from "./ip-safety.js";
 
@@ -132,7 +133,7 @@ async function resolveAllowedAddresses(
   }
 
   if (addresses.length === 0) {
-    throw new Error(
+    throw new SsrfPolicyError(
       `SSRF policy rejected ${hostname}: DNS returned no addresses`,
     );
   }
@@ -154,7 +155,7 @@ async function resolveAllowedAddresses(
       ? isLoopbackIpAddress(result.address)
       : isPublicIpAddress(result.address);
     if (!allowed) {
-      throw new Error(
+      throw new SsrfPolicyError(
         `SSRF policy rejected ${hostname}: DNS resolved to disallowed address ${result.address}`,
       );
     }
@@ -182,7 +183,9 @@ function isLoopbackIpAddress(rawAddress: string): boolean {
 
 function toResolvedAddress(address: string, family: number): ResolvedAddress {
   if (family !== 4 && family !== 6) {
-    throw new Error(`SSRF policy rejected DNS address with family ${family}`);
+    throw new SsrfPolicyError(
+      `SSRF policy rejected DNS address with family ${family}`,
+    );
   }
   return { address, family };
 }

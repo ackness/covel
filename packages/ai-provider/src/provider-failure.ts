@@ -1,3 +1,5 @@
+import { providerErrorKind } from "./adapters/provider-error-kind.js";
+import { ProviderBaseUrlError } from "./errors.js";
 import { normalizeError } from "./gateway-lifecycle.js";
 
 /**
@@ -58,9 +60,36 @@ const TIMEOUT_CODES = new Set([
 /**
  * A provider reports an empty account under several statuses: OpenAI as 429
  * `insufficient_quota`, DeepSeek as 402, Anthropic as 400 with a message.
+ * The status and the provider's error code are read first. This text is the
+ * fallback for an endpoint that says it only in its message, as Anthropic's
+ * 400 `invalid_request_error` does.
  */
-const QUOTA_PATTERN =
+const QUOTA_MESSAGE_FALLBACK =
   /insufficient[_ ]quota|insufficient[_ ]balance|credit balance|billing|payment required|exceeded your current quota/i;
+
+function isEmptyAccount(
+  statusCode: number,
+  details: Record<string, unknown> | undefined,
+): boolean {
+  if (statusCode === 402) return true;
+  if (
+    providerErrorKind(details?.providerCode, details?.providerType) === "quota"
+  )
+    return true;
+  return (
+    typeof details?.message === "string" &&
+    QUOTA_MESSAGE_FALLBACK.test(details.message)
+  );
+}
+
+function hasBaseUrlFault(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; current instanceof Error && depth < 8; depth++) {
+    if (current instanceof ProviderBaseUrlError) return true;
+    current = current.cause;
+  }
+  return false;
+}
 
 const TLS_CODE = /^(CERT_|DEPTH_ZERO_|SELF_SIGNED_|UNABLE_TO_VERIFY|ERR_TLS_)/;
 
@@ -116,22 +145,13 @@ export function classifyProviderFailure(
     const cause = transportCause(error);
     if (cause) return failure(cause.kind, cause.message || normalized.message);
     if (isTimeout(error)) return failure("timeout");
-    if (/baseUrl .*(is not allowed|is required)/.test(normalized.message))
-      return failure("config");
+    if (hasBaseUrlFault(error)) return failure("config");
     return failure(
       normalized.code === "RATE_LIMITED" ? "rate_limited" : "unknown",
     );
   }
 
-  const providerWords = [
-    details?.providerCode,
-    details?.providerType,
-    details?.message,
-  ]
-    .filter((value): value is string => typeof value === "string")
-    .join(" ");
-  if (statusCode === 402 || QUOTA_PATTERN.test(providerWords))
-    return failure("quota");
+  if (isEmptyAccount(statusCode, details)) return failure("quota");
   if (statusCode === 401 || statusCode === 403) return failure("auth");
   if (statusCode === 404) return failure("not_found");
   if (statusCode === 408 || statusCode === 504) return failure("timeout");

@@ -133,6 +133,43 @@ export class LLMRetryError extends Error {
   }
 }
 
+const TRANSIENT_ERROR_NAMES = new Set(["AbortError", "TimeoutError"]);
+const TRANSIENT_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+
+/**
+ * What the fields of an error from outside the gateway say: the AI SDK's
+ * `isRetryable` and `statusCode`, the official SDKs' `status`, the platform's
+ * error names and Node's transport codes. Undefined when it has none of them.
+ */
+function structuredTransience(err: unknown): boolean | undefined {
+  if (!(err instanceof Error)) return undefined;
+  const fields = err as Error & {
+    isRetryable?: unknown;
+    statusCode?: unknown;
+    status?: unknown;
+    code?: unknown;
+  };
+  if (typeof fields.isRetryable === "boolean") return fields.isRetryable;
+  const status =
+    typeof fields.statusCode === "number" ? fields.statusCode : fields.status;
+  if (typeof status === "number") {
+    return status === 408 || status === 409 || status === 429 || status >= 500;
+  }
+  if (TRANSIENT_ERROR_NAMES.has(err.name)) return true;
+  if (typeof fields.code === "string" && TRANSIENT_ERROR_CODES.has(fields.code))
+    return true;
+  return undefined;
+}
+
 /**
  * Decide whether an error is worth retrying. Errs on the side of retry for
  * timeouts / network / 5xx; never retries client-side (4xx) or schema
@@ -158,9 +195,13 @@ export function isTransientError(err: unknown): boolean {
     return err.code === "RATE_LIMITED" || err.retriable;
   }
 
-  // Unknown third-party adapters may expose only a message. Gateway errors
-  // above retain their structured classification even if their prose contains
-  // words such as "network" or omits recognizable rate-limit wording.
+  const structured = structuredTransience(err);
+  if (structured !== undefined) return structured;
+
+  // Fallback: an adapter outside the gateway may expose only a message.
+  // Gateway errors above retain their structured classification even if their
+  // prose contains words such as "network" or omits recognizable rate-limit
+  // wording.
   const msg = extractMessage(err).toLowerCase();
 
   // Abort / timeout variants across Node, undici, browser fetch.

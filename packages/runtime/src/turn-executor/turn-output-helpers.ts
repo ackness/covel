@@ -5,6 +5,7 @@
  * orchestration, hooks, scheduling, and persistence.
  */
 
+import { AiProviderError, MALFORMED_TOOL_ARGUMENTS } from "@covel/ai-provider";
 import type { RuntimeResult } from "@covel/shared";
 
 export interface ExecutedToolCallState {
@@ -239,7 +240,17 @@ export function formatToolLoopFailure(args: {
   return `Runtime "${args.runtimeId}" ${reasonText}. Last tool failure: ${lastFailure.toolName}${lastFailure.message ? ` - ${lastFailure.message}` : ""}`;
 }
 
+/**
+ * The provider rejected the request because a tool call in its history has
+ * arguments that are not JSON. The gateway marks that in
+ * `details.requestFault`.
+ */
 export function shouldRetryMalformedToolArguments(error: unknown): boolean {
+  if (error instanceof AiProviderError) {
+    return error.details?.requestFault === MALFORMED_TOOL_ARGUMENTS;
+  }
+  // Fallback for an adapter outside the gateway, whose error has only the
+  // provider's text.
   const message = error instanceof Error ? error.message : String(error);
   return (
     message.includes("function.arguments") && message.includes("JSON format")

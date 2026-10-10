@@ -3,6 +3,7 @@ import {
   ERROR_PREVIEW_MAX_CHARS,
   MAX_JSON_RESPONSE_BYTES,
 } from "./constants.js";
+import { AiProviderError } from "../../errors.js";
 import type { UsageSummary } from "../../types.js";
 import { isRetriableStatus } from "./retry.js";
 
@@ -214,26 +215,56 @@ export function assertSuccess(
         : undefined;
   const isRateLimit =
     response.status === 429 || errorType === "rate_limit_error";
+  const details: Record<string, unknown> = {
+    ...errorObj,
+    ...(errorMessage ? { message: errorMessage } : {}),
+    ...(typeof errorType === "string"
+      ? { type: errorType, providerType: errorType }
+      : {}),
+    ...(typeof errorObj?.code === "string"
+      ? { providerCode: errorObj.code }
+      : {}),
+    ...(response.status === 400 &&
+    errorMessage &&
+    MALFORMED_TOOL_ARGUMENTS_TEXT.test(errorMessage)
+      ? { requestFault: MALFORMED_TOOL_ARGUMENTS }
+      : {}),
+  };
 
-  throw new Error(
-    JSON.stringify({
-      name: "AiProviderError",
-      code: isRateLimit ? "RATE_LIMITED" : "PROVIDER_ERROR",
-      provider,
-      retriable: isRateLimit || isRetriableStatus(response.status),
-      statusCode: response.status,
-      details: {
-        ...errorObj,
-        ...(errorMessage ? { message: errorMessage } : {}),
-        ...(typeof errorType === "string"
-          ? { type: errorType, providerType: errorType }
-          : {}),
-        ...(typeof errorObj?.code === "string"
-          ? { providerCode: errorObj.code }
-          : {}),
-      },
-    }),
-  );
+  throw new AiProviderError({
+    code: isRateLimit ? "RATE_LIMITED" : "PROVIDER_ERROR",
+    message: providerErrorMessage(provider, response.status, details),
+    provider,
+    retriable: isRateLimit || isRetriableStatus(response.status),
+    statusCode: response.status,
+    details,
+  });
+}
+
+/**
+ * `details.requestFault` of a 400 that rejects the request because a tool call
+ * in its history has arguments that are not JSON. A caller can repair that
+ * and send again.
+ */
+export const MALFORMED_TOOL_ARGUMENTS = "malformed-tool-arguments";
+
+/**
+ * DashScope and DeepSeek report that fault under a general code
+ * (`invalid_request_error`, `InvalidParameter`), so their message is the only
+ * mark. It is read once, here, and recorded as `details.requestFault`.
+ */
+const MALFORMED_TOOL_ARGUMENTS_TEXT = /function\.arguments.*JSON format/s;
+
+function providerErrorMessage(
+  provider: string,
+  statusCode: number | undefined,
+  details: Record<string, unknown> | undefined,
+): string {
+  const detail = details
+    ? ` — ${typeof details.message === "string" ? details.message : JSON.stringify(details)}`
+    : "";
+  const status = statusCode === undefined ? "" : ` HTTP ${statusCode}`;
+  return `[${provider}]${status}${detail}`;
 }
 
 /**
@@ -243,38 +274,31 @@ export function assertSuccess(
 export function createStructuredOutputError(
   provider: string,
   usage?: UsageSummary,
-): Error {
-  return new Error(
-    JSON.stringify({
-      name: "AiProviderError",
-      code: "SCHEMA_VALIDATION_FAILED",
-      provider,
-      retriable: false,
-      ...(usage
-        ? {
-            details: {
-              message: "reply does not match the requested schema",
-              usage,
-            },
-          }
-        : {}),
-    }),
-  );
+): AiProviderError {
+  const details = usage
+    ? { message: "reply does not match the requested schema", usage }
+    : undefined;
+  return new AiProviderError({
+    code: "SCHEMA_VALIDATION_FAILED",
+    message: providerErrorMessage(provider, undefined, details),
+    provider,
+    retriable: false,
+    details,
+  });
 }
 
 export function createUnsupportedModeError(
   provider: string,
   mode: string,
-): Error {
-  return new Error(
-    JSON.stringify({
-      name: "AiProviderError",
-      code: "PROVIDER_ERROR",
-      provider,
-      retriable: false,
-      details: { mode },
-    }),
-  );
+): AiProviderError {
+  const details = { mode, message: `the ${mode} mode is not supported` };
+  return new AiProviderError({
+    code: "PROVIDER_ERROR",
+    message: providerErrorMessage(provider, undefined, details),
+    provider,
+    retriable: false,
+    details,
+  });
 }
 
 export function appendProviderMetadata(

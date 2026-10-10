@@ -1,5 +1,6 @@
 import { unifyFinishReason, type LLMFinishReason } from "@covel/shared";
 import { AiProviderError } from "../errors.js";
+import { providerErrorKind } from "./provider-error-kind.js";
 
 /** HTTP 200 does not imply that a generation completed successfully. */
 export function assertGenerationPayload(
@@ -27,16 +28,10 @@ export function assertGenerationPayload(
         : typeof payload.error === "string"
           ? payload.error
           : undefined;
-    const category =
-      `${providerCode ?? ""} ${providerType ?? ""}`.toLowerCase();
-    const refusal = /content_filter|content_policy|safety|refusal/.test(
-      category,
-    );
-    const permanent =
-      refusal ||
-      /invalid_request|context_length|token_limit|authentication|permission|insufficient_quota|billing|not_found/.test(
-        category,
-      );
+    // Every kind the provider names is a fault a second send would repeat.
+    const kind = providerErrorKind(providerCode, providerType);
+    const refusal = kind === "refusal";
+    const permanent = kind !== undefined;
     throw new AiProviderError({
       code: refusal ? "REFUSAL" : "PROVIDER_ERROR",
       message: `${provider} returned a generation error${detail ? `: ${detail}` : ""}`,

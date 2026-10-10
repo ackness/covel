@@ -15,6 +15,7 @@ import { createOpenAiChatAdapter } from "../src/adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "../src/adapters/openai-responses.js";
 import { fetchLiteLlmModels } from "../src/capability/model-db.js";
 import { parseLlmConfig } from "../src/config/llm-loader.js";
+import { AiProviderError } from "../src/errors.js";
 import { createGateway } from "../src/gateway.js";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import { createProviderRegistry } from "../src/provider-registry.js";
@@ -548,25 +549,21 @@ describe("MEDIUM: SCHEMA_VALIDATION_FAILED does not trigger fallback", () => {
     const stubAdapter: ModelProviderAdapter = {
       async generateText() {
         callCount++;
-        throw new Error(
-          JSON.stringify({
-            name: "AiProviderError",
-            code: "SCHEMA_VALIDATION_FAILED",
-            provider: "test",
-            retriable: false,
-          }),
-        );
+        throw new AiProviderError({
+          message: "provider failure",
+          code: "SCHEMA_VALIDATION_FAILED",
+          provider: "test",
+          retriable: false,
+        });
       },
       async generateObject() {
         callCount++;
-        throw new Error(
-          JSON.stringify({
-            name: "AiProviderError",
-            code: "SCHEMA_VALIDATION_FAILED",
-            provider: "test",
-            retriable: false,
-          }),
-        );
+        throw new AiProviderError({
+          message: "provider failure",
+          code: "SCHEMA_VALIDATION_FAILED",
+          provider: "test",
+          retriable: false,
+        });
       },
       async *streamText() {
         yield {

@@ -66,7 +66,15 @@ export type {
   ProviderOptionSettings,
   ProviderOptionWire,
 } from "./provider-options.js";
-export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
+export {
+  AiProviderError,
+  OutboundFetchError,
+  ProviderBaseUrlError,
+  SsrfPolicyError,
+  WireAlreadyRegisteredError,
+  type AiProviderErrorCode,
+} from "./errors.js";
+export { MALFORMED_TOOL_ARGUMENTS } from "./adapters/http/response.js";
 export {
   classifyProviderFailure,
   type ProviderFailure,
