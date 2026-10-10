@@ -9,7 +9,12 @@ import type {
   PluginProposalType,
 } from "./plugin-api.js";
 
-export type { JsonValue, ImageGenerationResult } from "./types.js";
+export type {
+  JsonValue,
+  ImageGenerationResult,
+  PluginDataEntry,
+  PluginDataReader,
+} from "./types.js";
 export {
   getToolContent,
   getPendingProposals,
@@ -76,7 +81,6 @@ export type {
   ExtensionPointId,
   ExtensionPointHandler,
   ExtensionHandlerContext,
-  ExtensionPluginDataRecord,
   ExtensionServiceClient,
   ExtensionServiceDescriptor,
   ExtensionWorldModel,

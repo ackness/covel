@@ -4,6 +4,7 @@ import type { ExtensionWorldModel } from "./extension-points.js";
 import type { HandlerResult, JobStatusEffect } from "./handler-result.js";
 import type { PluginToolResult } from "./tool-result.js";
 import type { PluginMessages } from "./messages.js";
+import type { PluginDataReader } from "./types.js";
 
 export interface FunctionStoreView {
   /** Read a single plugin_data row scoped to the calling plugin. */
@@ -65,19 +66,13 @@ export interface PluginTurnMessage {
   readonly compacted: boolean;
 }
 
-export interface PluginDataWriter {
+export interface PluginDataWriter extends PluginDataReader {
   /**
    * Upsert a single plugin_data row. When `value === null`, the row is
    * deleted — matches the generic "set-or-delete" pattern other kernel
    * writers use.
    */
   set(namespace: string, key: string, value: unknown): Promise<void>;
-  /** Read the current value for a key (returns `null` when absent). */
-  get(namespace: string, key: string): Promise<unknown>;
-  /** List every entry in a namespace, earliest-created first (store order). */
-  list(
-    namespace: string,
-  ): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;
   /** Delete a row explicitly. */
   delete(namespace: string, key: string): Promise<void>;
 }

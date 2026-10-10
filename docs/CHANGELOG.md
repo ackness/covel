@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Breaking
+
+- **`ctx.pluginData` reads have one shape in every context.** In an extension-point handler, `ctx.pluginData.get(namespace, key)` now returns the stored value, or `null` when there is none, as it does in a function runtime and a guard; before, it returned the whole row or `undefined`. `list(namespace)` returns `{ key, value, createdAt, updatedAt }` entries in both contexts: an extension handler no longer gets `pluginId`, `namespace`, `sessionId` and `id` on a row, and a function handler now gets the two timestamps. A plugin whose extension handler reads `(await ctx.pluginData.get(ns, key))?.value` must drop `.value`. The SDK type `ExtensionPluginDataRecord` is replaced by `PluginDataEntry` and `PluginDataReader`.
+
 ### Added
 
 - **Memory search no longer depends on an embedding model for good results.** Without an embedding slot, `memory-search` ranks with BM25 instead of counting shared words: a name or an item outweighs a word that every passage holds, and a long passage is not put last for being long. On a synthetic 60-message Chinese session with paragraph-length narration, the first result was the right one for 11 of 12 questions, against 6 before. An embedding slot stays optional and is used when present.
@@ -76,7 +80,6 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Documentation
 
-- `docs/reference/extension-points.md` states that `ctx.pluginData.get` returns the stored value in a function runtime and the whole row in an extension handler.
 - `docs/reference/ui-panels.md` describes the `__turnId` convention of message blocks; the theme pages state that an imported theme's CSS can load remote resources.
 
 ### Upgrade notes
