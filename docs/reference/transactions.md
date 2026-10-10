@@ -481,9 +481,13 @@ server transaction API in the browser.
 >   时钟不动。resume 传入：同一逻辑回合最后一个 suspension 恢复时计数一次；被恢复的
 >   是 setup runtime 且报告完成时，`done` 镜像与（全部 setup 完成时的）phase 翻转
 >   随这次提交写入，attempt 账本沿用挂起时的那次尝试。
-> - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入；
->   `framework.submit-form` 再用 store transaction 原子提交批量 player input。因而同一 session
->   的 turn 与重复表单提交不会穿插，PG 多进程部署也由同一分布式锁键串行化。
+> - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入，
+>   因而不会与同一 session 的 turn 穿插，PG 多进程部署也由同一分布式锁键串行化。
+> - **交互回答与后续回合**：`submit_interaction` action 在回合的 session lock 内校验回答并
+>   确认它还没有被回答过，再用一个 store transaction 写入批量 player input 和后续回合的
+>   `turn.started`。回答落库与回合开始因此同成同败：重复提交在锁内看到已有回答而被拒绝，
+>   不会出现回答已保存而回合没有开始的状态。回合自身的结果仍由 `finalizeExecution` 提交；
+>   它失败时回答保留，回合经现有重试再跑。
 >
 > **必需事务**：`finalizeExecution` 要求完整 DataStore，直接调用 `withTransaction`，
 > 不提供无事务回合提交的降级。底层 `commitAll` 接收到 `StoreTransaction` 视图时不再开

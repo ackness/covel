@@ -120,7 +120,7 @@ npx tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm \
 1. **Runtime Timeline** — 按 `(stage, name)` 排序的 runtime 列表，含 `stage`、`runtime`、`status`、`dur`、`output` 摘要
 2. **Tool Calls** — 所有工具调用（runtime、tool、status、dur、approval、output 前 40 字符）
 3. **Trigger Verification** — 对每个已声明的 runtime 按 stage 调度语义比对「期望 vs 实际」，结果列见下表
-4. **Detected interaction form**（setup 阶段，最多 3 个）— 从 runtime 结果的 `effects.interactions`（或 `create-form` / `create-character-form` 工具调用）识别 setup 表单（如角色创建，以及之后 `tabletop-rules` 的开局配点），填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交并发送一条消息推进；只要会话仍在 setup 且又出现新表单就继续处理。数字字段取 `defaultValue`（否则取 `min`），声明 `validation: { name: "point-buy" }` 的表单按 `data.budget` 把点数逐一分配到未覆盖的数字字段
+4. **Detected interaction form**（setup 阶段，最多 3 个）— 从 runtime 结果的 `effects.interactions`（或 `create-form` / `create-character-form` 工具调用）识别 setup 表单（如角色创建，以及之后 `tabletop-rules` 的开局配点），填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/actions` 的 `submit_interaction` 提交（同一个请求保存回答并运行后续回合）；只要会话仍在 setup 且又出现新表单就继续处理。数字字段取 `defaultValue`（否则取 `min`），声明 `validation: { name: "point-buy" }` 的表单按 `data.budget` 把点数逐一分配到未覆盖的数字字段
 
 Trigger Verification 的裁决列：
 
@@ -154,7 +154,7 @@ Trigger Verification 的裁决列：
 - 不带 `cooldownTurns` / `maxTriggerCount` 的 `auto`：每个 in-band 回合都期望触发（严格 `PASS`/`FAIL`）。
 - `scheduled`，以及带 `cooldownTurns` / `maxTriggerCount` 的 `auto`：只断言在允许的回合里**至少触发 1 次**（冷却与触发次数不逐轮复刻）；本轮空转记 `WAIT`，run 级的「≥1 次」断言在 Phase 7 兜底。
 - `turnCompletion.mode: detached` 的运行时不出现在本回合结果里；流内的 `runtime.deferred` 算作触发（`DEFER`）。Phase 6 等待后台队列清空，要求本会话每个后台作业以 `succeeded`（或主动 `cancelled`）结束。
-- `setup` stage：完成信号直接取自会话 `setupRuntimes[runtimeId].state === "done"`，在 Phase 6 权威裁决——因为 setup 工作可能落在 `submit-form` 子执行里，逐轮 timeline 未必看得到。
+- `setup` stage：完成信号直接取自会话 `setupRuntimes[runtimeId].state === "done"`，在 Phase 6 权威裁决——因为 setup 工作可能落在表单提交之后的回合里，逐轮 timeline 未必看得到。
 - `skipped` 状态**不是失败**：表示调度器已到达但运行时 guard/空转，计入「已触发」。只有 `failed` 才判 FAIL。
 
 这意味着：**新增插件只要声明 PLUGIN.md frontmatter 完整、并被会话激活，就会自动进入测试矩阵**，不需要改脚本。

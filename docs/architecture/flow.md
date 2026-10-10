@@ -81,7 +81,7 @@ stateDiagram-v2
 
 **业务真值** = `(status, phase, completedPlayerTurns, setupRuntimes)`：
 
-- **Setup**：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime；每个 runtime 以显式完成信号（function 返回 `outcome: "success"` + `completion: "done"`，agent 输出 `preGameDone: true`，或 guard 返回 `{ skip: true }`）记入 `setupRuntimes` 状态镜像（`pending` / `done` / `blocked`），玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。耗尽重试预算（`maxTriggerCount`）不算完成——该 runtime 落到 `blocked`，会话停留在 setup 阶段等待玩家重试或豁免，不再"跳过坏掉的 setup 继续推进"。失败但还有预算的 runtime 保持 `pending` 并记下 `lastError`；再发一次 `start_session` 只重跑未完成的 runtime，不新建会话、不记录玩家消息（`blocked` 的要先经 `retry` 端点解封）。读取已保存表单的 setup runtime 不能因为这份提交而每次都失败：提交无法使用时把它作废并重新发出表单（带 `notice` 和上次的值），否则同一份提交会让会话永远停在 setup。挂起的 setup runtime 在 resume 后给出完成信号时，`done` 镜像与 `phase` 翻转随 resume 的提交写入。setup runtime 之间的 `needs(scope: session)` 读取已提交的 `done` 镜像；只有任何顺序都无法放行的成员才在执行前标为 `blocked`（`setup-session-cycle`）：已完成的目标直接满足依赖，`blocked` 或不在活动集的目标留给玩家处理，`cardinality: one` 的契约依赖只要有一个提供者已完成、被阻塞或能先完成就不成环，`all` 则等待每个待完成的提供者。
+- **Setup**：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime；每个 runtime 以显式完成信号（function 返回 `outcome: "success"` + `completion: "done"`，agent 输出 `preGameDone: true`，或 guard 返回 `{ skip: true }`）记入 `setupRuntimes` 状态镜像（`pending` / `done` / `blocked`），玩家可以多次提交表单/消息迭代（例如 `char-creator` 的表单经 `submit_interaction` 提交）。耗尽重试预算（`maxTriggerCount`）不算完成——该 runtime 落到 `blocked`，会话停留在 setup 阶段等待玩家重试或豁免，不再"跳过坏掉的 setup 继续推进"。失败但还有预算的 runtime 保持 `pending` 并记下 `lastError`；再发一次 `start_session` 只重跑未完成的 runtime，不新建会话、不记录玩家消息（`blocked` 的要先经 `retry` 端点解封）。读取已保存表单的 setup runtime 不能因为这份提交而每次都失败：提交无法使用时把它作废并重新发出表单（带 `notice` 和上次的值），否则同一份提交会让会话永远停在 setup。挂起的 setup runtime 在 resume 后给出完成信号时，`done` 镜像与 `phase` 翻转随 resume 的提交写入。setup runtime 之间的 `needs(scope: session)` 读取已提交的 `done` 镜像；只有任何顺序都无法放行的成员才在执行前标为 `blocked`（`setup-session-cycle`）：已完成的目标直接满足依赖，`blocked` 或不在活动集的目标留给玩家处理，`cardinality: one` 的契约依赖只要有一个提供者已完成、被阻塞或能先完成就不成环，`all` 则等待每个待完成的提供者。
 - **phase 翻转**：所有 setup runtime 都报告完成后，Kernel 在 setup 提交事务内把 `phase` 从 `'setup'` 翻到 `'playing'`；该事务的 `completedPlayerTurns` 仍为 0。提交失败时 phase 翻转和 setup 镜像一并回滚。
 - **Setup completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先提交 setup，再以新的 `turnId` 和独立事务立即补跑主循环 runtime。接力执行的 origin 是 `continuation`，不计入 `completedPlayerTurns`：它保持 0，直到第一条主循环玩家消息提交后才推进到 1，因此开场叙事与第一回合共用 `logicalTurn = 1`（`startTurn` / `interval` 按此计算）。玩家可直接看到第一段正式叙事；同一 SSE 流、trace 和 snapshot 会覆盖 setup completion 与 main-loop followup 两次执行。
 - **冻结的逻辑回合**：执行入口冻结的 `logicalTurn` 原样传给 function handler 及其 `ctx.tools.call` 调用；二者共享同值，不在工具桥重算。已完成 7 个玩家回合时为 8；初始 setup 与 opening continuation 都为 1。未提供执行时钟的独立薄宿主可省略工具上下文的 optional 字段。
@@ -507,25 +507,25 @@ stage 屏障保证 narrative 阶段结束后才运行 post-turn。stage 内独�
   │  │                                                            │ │
   │  │ 玩家填写：陆青云 / 水灵根 / 渔民之子 / 灵识敏锐            │ │
   │  │                                                            │ │
-  │  │ 点击提交 → submitFormInputs():                             │ │
-  │  │   1. POST /api/sessions/:id/plugin-rpc                     │ │
-  │  │      { pluginId: "framework", action: "submit-form",       │ │
-  │  │        payload: { turnId, submissions: [...] } }            │ │
+  │  │ 点击提交 → submitInteraction():                            │ │
+  │  │   POST /api/actions                                        │ │
+  │  │     { type: "submit_interaction",                          │ │
+  │  │       payload: { turnId, submissions: [...] } }             │ │
   │  │                                                            │ │
-  │  │   服务端 submit-form:                                      │ │
+  │  │   服务端在会话锁内一次完成:                                │ │
   │  │   ├─ 定位已提交交互、来源插件、字段与跨字段校验             │ │
   │  │   ├─ 填充 {{characterName}} → "陆青云"                      │ │
   │  │   ├─ 生成叙事文本（自然语言，非 JSON）                      │ │
-  │  │   └─ 原子保存 player_inputs，返回 filledNarrative          │ │
+  │  │   ├─ 一个事务保存 player_inputs 与后续回合的 turn.started   │ │
+  │  │   └─ SSE: interaction.submitted，随后运行后续回合           │ │
   │  │                                                            │ │
-  │  │   下一次 /api/actions 由 char-creator 的 guard 运行：       │ │
+  │  │   后续回合由 char-creator 的 guard 运行：                   │ │
   │  │   生成 character.upsert + plugin.data proposals            │ │
   │  │   （guard 用 `preGameDone: true` 登记完成；集齐后           │ │
   │  │    Kernel 在提交事务内把 phase 翻到 'playing'，             │ │
   │  │    无 phase.changed SSE 推送）                             │ │
   │  │                                                            │ │
-  │  │   2. POST /api/actions (player_action)                     │ │
-  │  │      → 同请求完成 setup 并补跑 main-loop followup           │ │
+  │  │   同一请求完成 setup 并补跑 main-loop followup              │ │
   │  │      → narrator + guide + codex                            │ │
   │  └────────────────────────────────────────────────────────────┘ │
   └─────────────────────────────────────────────────────────────────┘
@@ -701,11 +701,11 @@ sequenceDiagram
     Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
 
     Player->>Web: 填写并提交角色创建表单
-    Web->>Server: POST /api/sessions/:id/plugin-rpc submit-form
-    Server-->>Web: 返回 filledNarrative (仅模板填充，不写 turn_messages)
+    Web->>Server: POST /api/actions { type: 'submit_interaction', turnId, submissions }
+    Note over Server: 会话锁内校验回答，一个事务保存回答与 turn.started
+    Server-->>Web: SSE: interaction.submitted (已存的值 + filledNarrative 玩家消息)
 
     Note over Server,Plugin: setup 可能多次迭代；<br/>所有 setup runtime 的完成信号成功提交后<br/>setup 事务把 phase 翻到 'playing'，completedPlayerTurns 保持 0
-    Web->>Server: POST /api/actions { type: 'send_message', content: filledNarrative }
     Server-->>Web: SSE: setup execution.started (turnId A)
     Note over Server,Plugin: setup 提交成功后，同一请求以 turnId B 自动接力主循环；<br/>接力不计数，completedPlayerTurns 仍为 0；<br/>第一条玩家消息提交后才 0 → 1
     Server-->>Web: SSE: main-loop execution.started (turnId B)

@@ -1039,9 +1039,10 @@ Bootstrap 时自动分类：
   ↓ 聚合为数组存入 TurnMessage.pendingInput
   ↓ 返回 TurnResult.pendingInputs（支持多插件、多交互）
   ↓ 前端渲染所有交互 UI
-  ↓ 玩家提交 plugin-rpc framework.submit-form { submissions: [...] }
+  ↓ 玩家提交 POST /api/actions submit_interaction { turnId, submissions: [...] }
   ↓ 每个 submission 用 narrativeTemplate 翻译为自然语言
-  ↓ 追加到消息历史（纯文本，LLM 看到的和普通消息一样）
+  ↓ 同一个请求保存回答并运行后续回合，叙事文本是该回合的玩家消息
+    （纯文本，LLM 看到的和普通消息一样）
 ```
 
 ### 交互类型
@@ -1089,12 +1090,12 @@ When a placeholder is immediately followed by `.` or `。` and its filled value 
 ### 提交 API
 
 ```
-POST /api/sessions/:id/plugin-rpc
+POST /api/actions
 
 {
-  "kind": "action",
-  "pluginId": "framework",
-  "action": "submit-form",
+  "requestId": "...",
+  "type": "submit_interaction",
+  "sessionId": "...",
   "payload": {
     "turnId": "...",
     "submissions": [
@@ -1104,6 +1105,8 @@ POST /api/sessions/:id/plugin-rpc
   }
 }
 ```
+
+响应是 SSE 流：`interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互)。
 
 ---
 

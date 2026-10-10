@@ -470,11 +470,12 @@ ui:
 
 ```
 玩家填写表单 → 点击提交按钮
-  → submitFormInputs():
-    1. POST /api/sessions/:id/plugin-rpc (`framework.submit-form`)
-       (记录 submission + narrativeTemplate 填充)
-    2. 根据 `submitBehavior` 决定是否回显自然语言与是否自动继续下一轮
-    3. 下一轮由对应插件读取 `player.lastFormValues` 完成业务写入
+  → submitInteraction():
+    1. POST /api/actions (`submit_interaction`)：服务端在一次操作里
+       保存 submission、填充 narrativeTemplate 并开始后续回合
+    2. SSE `interaction.submitted`：表单标成已提交；交互没有声明
+       `submitBehavior.echoFilledNarrative: false` 时回显自然语言
+    3. 同一条流上的后续回合由对应插件读取 `player.lastFormValues` 完成业务写入
 ```
 
 ### 行动引导交互
