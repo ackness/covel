@@ -214,6 +214,54 @@ describe("world-init domain tools", () => {
       ),
     ).rejects.toThrow();
   });
+  it("refuses a settlement that skips a dimension it says follows the clock, in a turn the clock moved", async () => {
+    const clock = (elapsedThisTurn: number) => ({
+      cardinality: "one",
+      value: {
+        display: "Year 1 · 07:26",
+        unit: "minute",
+        elapsedSinceStart: 72,
+        elapsedThisTurn,
+      },
+      source: { pluginId: "clock", runtimeId: "clock/advance", resultId: "c" },
+    });
+    const settle = (
+      params: Record<string, unknown>,
+      worldTime?: ReturnType<typeof clock>,
+    ) => {
+      const ctx = trackerContext();
+      return updateDimensions({ tool, z }).execute(params, {
+        ...ctx,
+        inputSlots: { ...ctx.inputSlots, ...(worldTime ? { worldTime } : {}) },
+      });
+    };
+    const quiet = { followsClock: ["reputation"], updates: [] };
+    await expect(settle(quiet, clock(12))).rejects.toThrow(
+      /now Year 1 · 07:26, 12 minute later than last turn and 72 minute after the start.*reputation/,
+    );
+    // The value, or a statement that the rule gives the same value.
+    for (const update of [
+      { id: "reputation", value: 5 },
+      { id: "reputation", reason: "Under one point this turn." },
+    ])
+      expect(
+        getToolContent(
+          await settle({ ...quiet, updates: [update] }, clock(12)),
+        ),
+      ).toMatchObject({ success: true });
+    // Nothing to check: the clock stood still, no clock is bound, the list
+    // is left out, or it names something that is not a dimension.
+    for (const [params, worldTime] of [
+      [quiet, clock(0)],
+      [quiet, undefined],
+      [{ updates: [] }, clock(12)],
+      [{ followsClock: ["storm"], updates: [] }, clock(12)],
+    ] as const)
+      expect(getToolContent(await settle(params, worldTime))).toMatchObject({
+        success: true,
+        updateCount: 0,
+      });
+  });
   it("supplies the version of an update from the values the execution read", async () => {
     const ctx = trackerContext();
     ctx.world.dimensions.reputation.version = 4;

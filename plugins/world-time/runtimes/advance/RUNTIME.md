@@ -24,6 +24,7 @@ io:
       accepts: ./narrative.schema.json
   output:
     contract: world-time-evolution@1
+    schema: ../../schemas/world-time-evolution.schema.json
   visibility: system
 agent:
   model: plugin

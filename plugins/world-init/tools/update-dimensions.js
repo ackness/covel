@@ -82,7 +82,13 @@ const isRecord = (value) =>
  */
 function normalizeArguments(input) {
   if (!isRecord(input) || !Array.isArray(input.updates)) return input;
-  const { reason: _reason, ...call } = input;
+  const { reason: _reason, followsClock, ...call } = input;
+  // A list that is left out, or written as one ID, has one meaning.
+  call.followsClock = Array.isArray(followsClock)
+    ? followsClock.filter((id) => typeof id === "string")
+    : typeof followsClock === "string"
+      ? [followsClock]
+      : [];
   const updates = [];
   for (const entry of call.updates) {
     if (!isRecord(entry)) {
@@ -179,15 +185,42 @@ function resolveUpdates(updates, dimensions) {
   });
 }
 
+/**
+ * A settlement that leaves out a dimension the model itself says follows the
+ * clock, in a turn in which the clock moved, is refused with the clock in the
+ * message. In real-model runs a turn in which nothing else happened was
+ * settled as "no change", and a countdown stood still beside a moving clock.
+ * An entry with only `{id, reason}` passes: the rule can give the same value.
+ */
+function requireClockFollowers(params, ctx) {
+  const slot = ctx.inputSlots?.worldTime;
+  const clock = slot && "value" in slot ? slot.value : undefined;
+  if (!isRecord(clock) || !clock.elapsedThisTurn) return;
+  const settled = new Set(params.updates.map((update) => update.id));
+  const missing = params.followsClock.filter(
+    (id) => Object.hasOwn(ctx.world.dimensions, id) && !settled.has(id),
+  );
+  if (!missing.length) return;
+  throw new Error(
+    `The world clock moved this turn: it is now ${clock.display}, ${clock.elapsedThisTurn} ${clock.unit} later than last turn and ${clock.elapsedSinceStart} ${clock.unit} after the start. followsClock lists ${missing.join(", ")} without an update. Add one entry for each: the value its rule gives for this clock, or only {id, reason} when the rule gives the value it already has.`,
+  );
+}
+
 /** The model supplies values, never the authoritative source or read set. */
 export default function ({ tool, z }) {
   return tool({
     name: "update-dimensions",
     description:
-      'Settle this narrative\'s dimension rules once. Submit a batch of {id, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
+      'Settle this narrative\'s dimension rules once. Submit a batch of {id, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. followsClock names every dimension whose rule depends on the world time or on how much time passed; in a turn in which the world clock moved, each of them needs an entry in updates. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
     parameters: z.preprocess(
       normalizeArguments,
       z.strictObject({
+        followsClock: z
+          .array(z.string())
+          .max(64)
+          .describe(
+            "IDs of the dimensions whose rule depends on the world time or on elapsed time (a countdown, a deadline, a cost per hour). [] when there is none.",
+          ),
         updates: z
           .array(
             z.strictObject({
@@ -209,6 +242,7 @@ export default function ({ tool, z }) {
       }),
     ),
     execute: async (params, ctx) => {
+      requireClockFollowers(params, ctx);
       const updates = resolveUpdates(params.updates, ctx.world.dimensions);
       const narrative = ctx.inputSlots?.narrative;
       if (

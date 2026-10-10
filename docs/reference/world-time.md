@@ -83,6 +83,28 @@ evolution:
 1. `world-time/context`（pre-turn function）读取会话时钟或世界初值，发布 `world-time-context@1` 契约输出。初值和本地化显示更新通过 proposal 暂存。导入定义面板在首次叙事前即显示规则；未导入定义时显示默认历法说明。
 2. `world-time/advance`（post-turn agent）通过 required inputs 读取本轮成功叙事和时间起点，调用 `advance-world-time`。模型只提议跨度/方向，插件完成历法运算和策略校验。单位取自 `currentTime.value.units`；amount 为 0 时任何单位都接受（零时长与单位无关），非零时长用了该时钟没有的单位会被拒绝，错误信息列出可用单位。工具成功即结束；默认 20 步工具预算、超时和循环检测仍有效。
 
+`world-time/advance` 的输出是公开契约 `world-time-evolution@1`：本轮结算之后的时钟。它与上面的 `world-time-context@1` 是同一个时钟的两个时刻，前者是本轮的终点，后者是本轮的起点。输出包含结算后的 `definition`、`tick`、`display`、`lastDelta`、`reason`，以及给其他 runtime 读取的 `summary`：
+
+| `summary` 字段      | 含义                                                                 |
+| ------------------- | -------------------------------------------------------------------- |
+| `display`           | 结算后的时间显示文本，已按会话内容语言解析                           |
+| `unit`              | 两个计数使用的基础单位：calendar 为 `minute`，phases 为 `phase`      |
+| `elapsedSinceStart` | 当前刻度减去世界定义的 `initial`，即开局以来经过的基础单位数         |
+| `elapsedThisTurn`   | 本轮移动的基础单位数（即 `lastDelta`）；时间倒流时两个计数都可为负数 |
+
+需要按本轮结束时间记账的 post-turn runtime 用可选输入读取它。这条绑定同时是同阶段的排序边，所以消费者在时间结算之后运行，读到的是本轮的值；`scope: committed` 或 pre-turn 的 `world-time-context@1` 读到的都是上一轮结束时的值。
+
+```yaml
+io:
+  inputs:
+    worldTime:
+      from: { contract: world-time-evolution@1, cardinality: one }
+      select: /summary
+      required: false
+```
+
+根 `PLUGIN.md` 的 `optional` 要列出 `world-time-evolution@1`。时间没有结算时（模型调用失败，或递归子叙事由外层结算，此时输出只有 `reason`），这个槽位不存在，消费者照常运行。内置的 `world-init/dimension-tracker` 就是这样读取时钟的，见 [动态世界维度](dynamic-dimensions.md#冻结读取与维护)。
+
 叙事插件的 `RUNTIME.md` 接入：
 
 ```yaml
