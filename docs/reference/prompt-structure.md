@@ -152,7 +152,7 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 根内联 runtime 的 `PLUGIN.md` 正文，或子 runtime 的 `RUNTIME.md` 正文，支持 `{{ variable }}` 插值。常用变量包括：
 
 - `player.message`、`player.lastFormValues`、`player.character`。
-- `characters.npcs`：全部非玩家角色的档案，每行 `姓名 [类型] | description | fields`（description 与 fields 各截至 400 字符，合计约 8000 字符；超出的角色只列姓名）。不含 id，模型按姓名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
+- `characters.npcs`：全部非玩家角色的档案，每行 `姓名 [类型] | description | fields`，角色有别名时姓名后跟 `(aka 别名, …)`（description 与 fields 各截至 400 字符，合计约 8000 字符；超出的角色只列姓名）。不含 id，模型按姓名或别名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
 - `session.id`、`session.turnNumber`。
 - `inputs.<pluginId>.<runtimeId>.<field>`。
 

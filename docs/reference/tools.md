@@ -19,10 +19,10 @@
 | plugin-data-get                       | builtin | —                   | auto-allow | 读取当前插件持久化数据                                                                             |
 | plugin-data-list                      | builtin | —                   | auto-allow | 列出当前插件持久化数据                                                                             |
 | **create-character**                  | builtin | —                   | auto-allow | 创建世界模型角色，类型按 schema 校验，写入 characters                                              |
-| **update-character**                  | builtin | —                   | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                                           |
+| **update-character**                  | builtin | —                   | auto-allow | 按 id、名字或别名更新角色描述/字段（shallow merge）并可追加别名，自动 version++                    |
 | **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                                 |
 | **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                              |
-| **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                                         |
+| **get-character**                     | builtin | —                   | auto-allow | 按 id、名字或别名查找单个角色                                                                      |
 | **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                                  |
 | **world-dimension-get**               | builtin | —                   | auto-allow | 按 ID/path 分页读取回合冻结的当前维度值                                                            |
 | **world-dimension-list**              | builtin | —                   | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则                                                  |
@@ -607,11 +607,12 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 `char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。表单含有不可收集的字段时，工具一次列出全部被拒字段及原因（不是世界属性，或是数值/复合属性），并给出该世界可收集的属性清单；世界没有 string/enum 属性时明确说明表单只有 `characterName` 一个字段。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
 
-创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
+创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。名字按[归一规则](world-model.md#别名与按名字解析)比较（大小写、全角半角、空白、间隔号不算差别）；名字是任一已有角色的**别名**时，不论类型都返回那个角色，不创建。
 
 | 参数        | 类型                    | 必需 | 描述                                                      |
 | ----------- | ----------------------- | ---- | --------------------------------------------------------- |
 | name        | string                  | ✓    | 角色名称                                                  |
+| aliases     | string[]                |      | 同一个人的其他叫法（昵称、头衔、另一种文字的名字）        |
 | type        | enum                    | ✓    | `player` / `npc` / `companion`                            |
 | description | string                  |      | 角色简短描述                                              |
 | fields      | Record<string, unknown> |      | 属性键值对（应符合世界 schema 中的 character-attributes） |
@@ -630,6 +631,12 @@ Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根
 Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
 ```
 
+`aliases` 里有别的角色的名字或别名时，调用失败、不产生 proposal，错误写明那个角色，模型可以改为更新它：
+
+```
+"守灯人" is already a name of 守灯人伊索德 (aka 伊索德, 守灯人) [npc-keeper-ysolde]. If 老妇人 is that person, update npc-keeper-ysolde and create nothing; if not, leave this alias out.
+```
+
 **使用者**: 通用 builtin；捆绑的 `char-creator/character-tracker` 通过下方 `sync-characters` 间接复用。`player-init` 的表单提交由 guard 直接生成同类 proposal，不向模型暴露此工具。
 
 > **提交语义（缓冲提交）**：`create-character` / `update-character` 在执行阶段**不再直写** `characters` 表，而是把写入缓冲成一条 [`character.upsert`](#characterupsert) proposal。同一 tool loop 内的读取走**读穿透 overlay**——先 create 再 update 时，update 能读到自己刚缓冲的 create。真正的 `characters` 表写入 + plugin-data 镜像（`characters` namespace）由 commit handler 在回合结束时随该执行的**单一事务**一起落库：`success` / `skipped` 结果会提交其缓冲 proposal，`failed` / `suspended` 则不提交。
@@ -640,15 +647,18 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 ### update-character
 
-按 id 更新已有角色。`fields` 按 shallow merge 合并（新键覆盖旧键），`version` 自动 +1。适用于状态变化、装备变更、受伤、死亡等。
+按 id 更新已有角色。`fields` 按 shallow merge 合并（新键覆盖旧键），`aliases` 追加到已有别名之后，`version` 自动 +1。适用于状态变化、装备变更、受伤、死亡，以及故事揭示了角色的另一个名字。
 
-| 参数        | 类型                    | 必需 | 描述                     |
-| ----------- | ----------------------- | ---- | ------------------------ |
-| id          | string                  | ✓    | 要更新的角色 id          |
-| description | string                  |      | 新描述（未传则保留原值） |
-| fields      | Record<string, unknown> |      | 要合并的字段             |
+`id` 经 [`resolveCharacter`](world-model.md#别名与按名字解析) 解析：先按 id，再按名字，再按别名，所以模型写了名字或别名也能更新到同一个角色，不会因为对不上 id 而另建一个。写入不做部分匹配。
 
-**成功输出 (parsedResult)**: `{ _text, success: true, characterId, version }`。角色不存在时抛出错误，例如 `Character missing not found in session. It may have been removed or the id is wrong.`；执行器将该次调用记录为失败，而不是正常返回业务 `success: false`。它不会满足 agent 的 `completeAfterTools`；function runtime 即使捕获该错误，也不会提交此前缓冲的写入。
+| 参数        | 类型                    | 必需 | 描述                                       |
+| ----------- | ----------------------- | ---- | ------------------------------------------ |
+| id          | string                  | ✓    | 要更新的角色 id；角色的名字或别名也可以    |
+| aliases     | string[]                |      | 要追加的别名；已有的、与名字相同的自动略过 |
+| description | string                  |      | 新描述（未传则保留原值）                   |
+| fields      | Record<string, unknown> |      | 要合并的字段                               |
+
+**成功输出 (parsedResult)**: `{ _text, success: true, characterId, version }`。找不到角色时抛出错误并列出最相近的已知名字（没有相近的就列出会话里的角色，最多 30 个），例如 `Character "伊索尔德" not found. Closest known names: 守灯人伊索德 (aka 伊索德, 守灯人). If it is one of them, use that name. Nothing was updated.`；名字或别名属于不止一个角色时列出各自的 id：`"Maud" names 2 characters: Maud [npc-a]; maud [npc-b]. Pass the id of the one you mean. Nothing was updated.`；要追加的别名属于别的角色时同样失败并写明属主。模型在工具循环里收到的是 `{"success":false,"error":"Tool \"update-character\" failed during execution: …","code":"EXECUTION_ERROR"}`。执行器将该次调用记录为失败，而不是正常返回业务 `success: false`。它不会满足 agent 的 `completeAfterTools`；function runtime 即使捕获该错误，也不会提交此前缓冲的写入。
 
 **LLM 看到的 `_text` 示例**：
 
@@ -679,13 +689,13 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 **使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
 
-该 tracker 声明 `toolChoice: required`，每次回复都必须调用工具，无变化时提交空批次；它继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册列出每个角色的 id、姓名、类型和 description（session 段，角色新增或改写时才变）；`<character-fields>` 每行一个 id，在 12000 字符预算内带上该角色当前的 `fields`（turn 段），通常一次模型调用即可同步；超出预算的角色那一行写 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
+该 tracker 声明 `toolChoice: required`，每次回复都必须调用工具，无变化时提交空批次；它继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册列出每个角色的 id、姓名、别名（有时才出现）、类型和 description（session 段，角色新增或改写时才变）；`<character-fields>` 每行一个 id，在 12000 字符预算内带上该角色当前的 `fields`（turn 段），通常一次模型调用即可同步；超出预算的角色那一行写 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
 
 ---
 
 ### list-characters
 
-列出本 session 所有角色（session 作用域，跨插件可见）。输出是**紧凑文本列表**，一行一个角色，包含 id / 名字 / 类型 / 版本 / 简短描述 —— 方便 LLM 快速对齐已知人物，需要完整属性时再单独调用 `get-character`。
+列出本 session 所有角色（session 作用域，跨插件可见）。输出是**紧凑文本列表**，一行一个角色，包含 id / 名字（有别名时后面跟 `(aka …)`）/ 类型 / 版本 / 简短描述 —— 方便 LLM 快速对齐已知人物，需要完整属性时再单独调用 `get-character`。
 
 叙事与聊天叙事插件声明此工具，用于查询当前场景之外的角色；第三方插件也可声明。已经通过上下文注入角色名册的插件，可用 `get-character` 补充摘要中没有的完整属性。
 
@@ -718,14 +728,16 @@ Characters in session (3 total, sorted by frequency then recency):
 
 叙事插件可以声明 `list-characters` 和 `get-character` 两个只读 builtin 工具，无需依赖角色管理插件；读取范围始终是当前会话，包含非活跃、从未出场的角色。
 
-按 id 或 name 查询单个角色的**完整属性**（description、version、时间戳、全部 fields）。必须传入 id 或 name 其中之一。与 `list-characters` 的简洁列表形成对照，适合需要深入了解某个角色全部状态的场景。
+按 id、名字或别名查询单个角色的**完整属性**（别名、description、version、时间戳、全部 fields）。必须传入 id 或 name 其中之一。与 `list-characters` 的简洁列表形成对照，适合需要深入了解某个角色全部状态的场景。
 
-| 参数 | 类型   | 必需 | 描述                 |
-| ---- | ------ | ---- | -------------------- |
-| id   | string |      | 角色 id              |
-| name | string |      | 角色名称（精确匹配） |
+查找用 [`resolveCharacter`](world-model.md#别名与按名字解析) 并打开 `partial`：没有精确匹配时，唯一一个名字或别名包含查询词（或被它包含）的角色也算找到。它只读，所以允许这种宽松匹配；写入工具不允许。
 
-**输出 (parsedResult)**: `{ _text, found, character: CharacterSnapshot }` 或 `{ _text, found: false }`
+| 参数 | 类型   | 必需 | 描述                                           |
+| ---- | ------ | ---- | ---------------------------------------------- |
+| id   | string |      | 角色 id                                        |
+| name | string |      | 角色名字或别名；只写一部分（如不带头衔）也可以 |
+
+**输出 (parsedResult)**: `{ _text, found, character: CharacterSnapshot }` 或 `{ _text, found: false, candidates: string[] }`。没找到时 `_text` 与 `update-character` 的未找到信息相同（最相近的名字，或歧义的候选），`candidates` 是这些角色的名字。
 
 **LLM 看到的 `_text` 示例**：
 

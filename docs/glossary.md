@@ -10,6 +10,7 @@ One English term has one Chinese term. Chinese docs, UI copy and the Chinese pro
 
 | Term                  | 中文         | Note                                                                                                          |
 | --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Alias                 | 别名         | Another name of one character (`aliases`). Not a compatibility name for a field or an ID.                     |
 | Binding               | 绑定         |                                                                                                               |
 | Capability            | 能力标签     | A model route's `tag` (`text`, `image`, ...). Plugins are discovered by **Contract**, not by capability tags. |
 | Collection            | 合集         |                                                                                                               |
@@ -57,6 +58,12 @@ The words a prompt body uses for what a runtime reads and writes. A body uses on
 | scene            | 场景     | The place and time the narrative is in.                                 |                                        |
 | inject           | 注入     | The framework puts a block of data into the prompt.                     | insert, provide                        |
 | block            | 区块     | A tagged part of the prompt: `<existing-quests>`.                       | section (a section is a heading)       |
+
+## Alias
+
+Another name of the same character of the World Model: a nickname, a title that names one person, the name in another script. A character record holds them in `aliases`, next to `name`. Within a session one name or alias means one character; `resolveCharacter` turns an ID, a name or an alias into the character, and reports a name that two characters have as ambiguous.
+
+See: [docs/reference/world-model.md](./reference/world-model.md#别名与按名字解析).
 
 ## Binding
 

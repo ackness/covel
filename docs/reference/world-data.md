@@ -723,12 +723,15 @@ sources:
   {
     "id": "mio",
     "name": "Mio",
+    "aliases": ["Class President", "澪"],
     "type": "npc",
     "description": "A fellow student.",
     "fields": { "affection": 20 }
   }
 ]
 ```
+
+`aliases` 可选：故事里对同一个人的其他叫法（昵称、只指这一个人的头衔、另一种文字的名字），按希望展示的写法和顺序写。追踪角色、关系和好感的模型按名字找人，写了别名，模型用别名称呼时就会落到这个角色上，而不是另建一个。一个名字只能属于一个角色：别名与另一个角色的名字或别名相同（大小写、全角半角、空白、间隔号不算差别）时，`pnpm validate:world` 在后一条记录上报错，会话也不会带着这种数据创建。不要把「学者」「老板娘」这类可能指别人的普通名词写成别名。语言文件里的 `aliases` 整列替换主文件的列表。规则见[别名与按名字解析](world-model.md#别名与按名字解析)。
 
 导入器原样使用领域 ID（如 `mio`）写入 `characters` 并校验会话 schema；角色表按 `(sessionId, id)` 区分会话，ID 不再带会话前缀，提示词里的角色引用因此更短。角色读写不镜像到任何插件 namespace；面板和运行器通过 `ctx.world.characters` 或领域 API 获取同一份记录。关闭角色卡接收插件只跳过卡片数据，不影响独立的领域角色 source。
 

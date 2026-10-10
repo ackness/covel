@@ -10,6 +10,50 @@ AI 世界生成在接受角色补充前，按生成 manifest 的 `characterSchem
 
 角色创建与更新走领域 proposal 和工具；角色面板从会话 `session.characters` 读取，角色字段组件从会话 `characterSchema` 读取。插件角色卡可以保留自己的原始蓝图，但不将领域角色镜像到插件 namespace。dimension 的资源 schema 不会自动转换成角色属性；角色、背包、好感和时间继续由各自领域属主维护。
 
+### 别名与按名字解析
+
+故事里同一个人有很多叫法：名字、昵称、头衔、另一种文字写的名字。角色记录因此在 `name` 之外有可选的 `aliases`：一个有序的字符串列表，按展示用的写法保存，没有别名时不出现该字段。
+
+```ts
+interface CharacterRecord {
+  id: string;
+  name: string;
+  aliases?: readonly string[]; // 守灯人伊索德 → ["伊索德", "守灯人"]
+  type: string;
+  // description, fields, version, createdAt, updatedAt
+}
+```
+
+**一个名字只指一个人。** 会话内任何别名都不能是另一个角色的名字或别名，角色的名字也不能是另一个角色的别名。这条规则在 `validateWorldModel` 里检查，世界导入、执行内读取和提交用的是同一份校验；违反时报错并写明另一个角色是谁，不会悄悄选一个。两个角色同名（不同类型）沿用原先的行为，仍然允许，按名字查到它们时结果是「有歧义」。
+
+**把名字变成角色只有一条规则**：`@covel/plugin-handlers-utils` 的 `resolveCharacter(characters, query, options?)`（`@covel/shared` 同名再导出）。内置角色工具和捆绑插件都用它，结果有三种：
+
+| 结果        | 含义                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `found`     | 依次按 ID 原样、名字、别名匹配到唯一角色，`matchedBy` 说明是哪一步                          |
+| `ambiguous` | 这个名字或别名属于不止一个角色，`candidates` 列出它们；调用方必须报告，不能自行选择         |
+| `missing`   | 没有角色叫这个名字；`closest` 按相似程度列出最多 5 个相近的角色，供错误信息提示，不用于匹配 |
+
+名字和别名比较前先用 `characterNameKey` 归一：
+
+- 折叠：字母大小写；全角与半角（NFKC）；首尾空白和连续空白；包在名字外面的引号与书名号（`"…"`、`「…」`、`《…》`）；译名中间的间隔号（`・`、`·`、`•` 视为同一个）；撇号的写法；英文开头的 `the`。
+- **不折叠**：头衔、敬称和称谓前后缀（`Dr.`、`Sister`、`先生`、`小姐`、`老`）。`Dr. Park` 和 `Mr. Park`、「陈先生」和「陈小姐」可以是两个人，去掉称谓会把他们并成一个。只指一个人的头衔写成别名。
+- 不做编辑距离或读音之类的模糊匹配：拼错一个字母不会解析成功，只会出现在 `closest` 里让模型自己改正。
+
+`{ partial: true }` 只给读取用：没有精确匹配时，如果恰好只有一个角色的名字或别名包含查询词（或被它包含），就返回该角色（`Mina Park` 找到 `Dr. Mina Park`）。写入不能用它：「陈」今天只匹配陈远山，故事里来了第二个姓陈的人之后就会写到错的人身上。
+
+别名的来源有三处：
+
+- 世界作者在 `characters/characters.json` 里写 `aliases`（见[领域角色](world-data.md#领域角色与插件角色卡)），语言文件可以整列替换。
+- 模型在故事揭示新名字时，通过 `update-character` / `sync-characters.updates[]` 的 `aliases` 参数追加；`create-character` 也接受 `aliases`。
+- `character.upsert` proposal 的 `aliases`：带 `expectedVersion` 时追加到已有别名之后（与 `fields` 的浅合并同理，同一回合两次追加都保留），不带时是完整列表。与角色名字相同的别名、重复的别名在写入时去掉。
+
+模型读到的写法是名字后面跟一个括号：`- 守灯人伊索德 (aka 伊索德, 守灯人) [npc] | …`（`characterLabel`）。`characterSheetSegments`、`{{ characters.npcs }}`、`list-characters` 和角色追踪的名册都只在有别名时多出这一段，没有别名的角色一个字符也不多。内置四个世界每个角色多 5 到 9 个 token。
+
+玩家在角色面板里看到别名（只读）。游玩界面不提供编辑。
+
+> **BREAKING CHANGE**：`characters` 表新增 `aliases` 列。服务端只建表、不改表，此前创建的 SQLite / PostgreSQL 开发数据库缺这一列，读取角色时报 `no such column: aliases`。按[迁移说明](../guide/env-registry.md#plugin-extension-development-data)备份后换一个新的数据库文件（PostgreSQL 重建 schema）。浏览器私有存档里的角色没有别名，照常读取。
+
 ## 动态维度快照
 
 世界包的 `dimensions` 是作者 definition map，保存结构、初值与可选更新规则；`ctx.world.dimensions` 是**会话当前值**，采用 `world.dimensions@1` 公共契约：
