@@ -1,11 +1,14 @@
 import type { CharacterRecord } from "../types/character-record.js";
 import type { CharacterUpsertPayload } from "../types/proposal.js";
-import { mergeCharacterAliases } from "@covel/plugin-handlers-utils";
+import {
+  characterNameKey,
+  mergeCharacterAliases,
+} from "@covel/plugin-handlers-utils";
 
 /**
  * Materialize one character instruction without mutating its inputs.
- * Versioned writes patch the current record (fields merge, aliases are
- * added); unversioned writes replace it.
+ * Versioned writes patch the current record (fields merge, `removeAliases`
+ * are taken away, then `aliases` are added); unversioned writes replace it.
  * The commit boundary owns validation, including expected-version checks.
  */
 export function materializeCharacterUpsert(
@@ -25,7 +28,11 @@ export function materializeCharacterUpsert(
         : payload.fields
     : payload.fields;
   const name = live?.name ?? payload.name;
-  const aliases = mergeCharacterAliases(name, live?.aliases, payload.aliases);
+  const removed = new Set((payload.removeAliases ?? []).map(characterNameKey));
+  const kept = (live?.aliases ?? []).filter(
+    (alias) => !removed.has(characterNameKey(alias)),
+  );
+  const aliases = mergeCharacterAliases(name, kept, payload.aliases);
   return {
     id: payload.id,
     sessionId,

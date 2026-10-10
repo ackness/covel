@@ -145,7 +145,7 @@ function assertAliasesFree(
   const conflict = findCharacterAliasConflict(all, character);
   if (conflict)
     throw new Error(
-      `"${conflict.alias}" is already a name of ${characterLabel(conflict.owner)} [${conflict.owner.id}]. If ${character.name} is that person, update ${conflict.owner.id} and create nothing; if not, leave this alias out.`,
+      `"${conflict.alias}" is already a name of ${characterLabel(conflict.owner)} [${conflict.owner.id}]. If ${character.name} is that person, update ${conflict.owner.id} and create nothing. If the alias is wrong for ${conflict.owner.name}, remove it there first: update ${conflict.owner.id} with removeAliases. Otherwise leave this alias out.`,
     );
 }
 
@@ -282,7 +282,7 @@ function createCreateCharacterTool(
 // ── update-character ─────────────────────────────────────────────
 
 const UPDATE_DESCRIPTION =
-  "Update a character by id; its name or an alias also finds it. `description` is replaced, `fields` are shallow-merged, `aliases` are added, and `version` increases by 1. Send only what changed.";
+  "Update a character by id; its name or an alias also finds it. `description` is replaced, `fields` are shallow-merged, `aliases` are added, `removeAliases` are taken away, and `version` increases by 1. Send only what changed.";
 
 function createUpdateCharacterParametersSchema() {
   return z.object({
@@ -295,6 +295,12 @@ function createUpdateCharacterParametersSchema() {
       .optional()
       .describe(
         "Names to add when the story reveals another name of this same person; omit otherwise",
+      ),
+    removeAliases: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "Aliases to take away because they do not name this person; omit otherwise. The character's name stays",
       ),
     description: z
       .string()
@@ -325,11 +331,22 @@ function createUpdateCharacterTool(
         );
       }
       const existing = resolution.character;
+      // Removal runs first, so one call can replace a wrong alias, and a name
+      // in both lists stays.
+      const removeKeys = new Set(
+        (params.removeAliases ?? []).map(characterNameKey),
+      );
+      const removedAliases = (existing.aliases ?? []).filter((alias) =>
+        removeKeys.has(characterNameKey(alias)),
+      );
+      const keptAliases = (existing.aliases ?? []).filter(
+        (alias) => !removeKeys.has(characterNameKey(alias)),
+      );
       const addedAliases = mergeCharacterAliases(
         existing.name,
-        existing.aliases,
+        keptAliases,
         params.aliases,
-      ).slice(existing.aliases?.length ?? 0);
+      ).slice(keptAliases.length);
       assertAliasesFree(all, {
         id: existing.id,
         name: existing.name,
@@ -363,6 +380,9 @@ function createUpdateCharacterTool(
           id: existing.id,
           name: existing.name,
           ...(addedAliases.length > 0 ? { aliases: addedAliases } : {}),
+          ...(removedAliases.length > 0
+            ? { removeAliases: removedAliases }
+            : {}),
           type: existing.type,
           ...(params.description !== undefined
             ? { description: params.description }
@@ -385,6 +405,8 @@ function createUpdateCharacterTool(
       }
       if (addedAliases.length > 0)
         changeLines.push(`  aliases: + ${addedAliases.join(", ")}`);
+      if (removedAliases.length > 0)
+        changeLines.push(`  aliases: - ${removedAliases.join(", ")}`);
       if (params.fields) {
         for (const [k, newVal] of Object.entries(params.fields)) {
           const oldVal = prevFields[k];

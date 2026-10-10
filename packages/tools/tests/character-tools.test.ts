@@ -951,6 +951,53 @@ describe("builtin character tools", () => {
       expect(loop.pending).toEqual([]);
     });
 
+    it("takes away an alias in any spelling, so another character can have the name", async () => {
+      const result = await loop.call("update-character", {
+        id: "Isolde",
+        removeAliases: ["The  Keeper", "never an alias", "Isolde"],
+      });
+      expect(result._text).toContain("aliases: - the keeper");
+      await loop.call("update-character", {
+        id: "Corvin",
+        aliases: ["the keeper"],
+      });
+      loop.commit();
+      expect(isolde()).toMatchObject({ name: "Isolde", aliases: ["伊索德"] });
+      expect(
+        store.characters.find((c) => c.name === "Corvin")!.aliases,
+      ).toEqual(["the keeper"]);
+    });
+
+    it("moves a wrong alias in one sync-characters call and drops the list with the last alias", async () => {
+      await loop.call("sync-characters", {
+        creates: [],
+        updates: [
+          { id: "Isolde", removeAliases: ["the keeper", "伊索德"] },
+          { id: "Corvin", aliases: ["the keeper"] },
+        ],
+      });
+      loop.commit();
+      expect(isolde()).not.toHaveProperty("aliases");
+      expect(
+        store.characters.find((c) => c.name === "Corvin")!.aliases,
+      ).toEqual(["the keeper"]);
+    });
+
+    it("replaces an alias in one update and tells how to free a wrong one", async () => {
+      await loop.call("update-character", {
+        id: "Isolde",
+        removeAliases: ["the keeper"],
+        aliases: ["the lamp keeper"],
+      });
+      loop.commit();
+      expect(isolde().aliases).toEqual(["伊索德", "the lamp keeper"]);
+      await expect(
+        loop.call("update-character", { id: "Corvin", aliases: ["伊索德"] }),
+      ).rejects.toThrow(
+        `If the alias is wrong for Isolde, remove it there first: update ${isolde().id} with removeAliases.`,
+      );
+    });
+
     it("names the closest known characters when an update misses, and writes nothing", async () => {
       await expect(
         loop.call("update-character", { id: "Isolda", fields: { hp: 1 } }),

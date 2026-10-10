@@ -636,7 +636,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 `aliases` 里有别的角色的名字或别名时，调用失败、不产生 proposal，错误写明那个角色，模型可以改为更新它：
 
 ```
-"守灯人" is already a name of 守灯人伊索德 (aka 伊索德, 守灯人) [npc-keeper-ysolde]. If 老妇人 is that person, update npc-keeper-ysolde and create nothing; if not, leave this alias out.
+"守灯人" is already a name of 守灯人伊索德 (aka 伊索德, 守灯人) [npc-keeper-ysolde]. If 老妇人 is that person, update npc-keeper-ysolde and create nothing. If the alias is wrong for 守灯人伊索德, remove it there first: update npc-keeper-ysolde with removeAliases. Otherwise leave this alias out.
 ```
 
 **使用者**: 通用 builtin；捆绑的 `char-creator/character-tracker` 通过下方 `sync-characters` 间接复用。`player-init` 的表单提交由 guard 直接生成同类 proposal，不向模型暴露此工具。
@@ -649,16 +649,19 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 ### update-character
 
-按 id 更新已有角色。`fields` 按 shallow merge 合并（新键覆盖旧键），`aliases` 追加到已有别名之后，`version` 自动 +1。适用于状态变化、装备变更、受伤、死亡，以及故事揭示了角色的另一个名字。
+按 id 更新已有角色。`fields` 按 shallow merge 合并（新键覆盖旧键），`aliases` 追加到已有别名之后，`removeAliases` 去掉已有的别名，`version` 自动 +1。适用于状态变化、装备变更、受伤、死亡，以及故事揭示了角色的另一个名字。
 
 `id` 经 [`resolveCharacter`](world-model.md#别名与按名字解析) 解析：先按 id，再按名字，再按别名，所以模型写了名字或别名也能更新到同一个角色，不会因为对不上 id 而另建一个。写入不做部分匹配。
 
-| 参数        | 类型                    | 必需 | 描述                                       |
-| ----------- | ----------------------- | ---- | ------------------------------------------ |
-| id          | string                  | ✓    | 要更新的角色 id；角色的名字或别名也可以    |
-| aliases     | string[]                |      | 要追加的别名；已有的、与名字相同的自动略过 |
-| description | string                  |      | 新描述（未传则保留原值）                   |
-| fields      | Record<string, unknown> |      | 要合并的字段                               |
+| 参数          | 类型                    | 必需 | 描述                                       |
+| ------------- | ----------------------- | ---- | ------------------------------------------ |
+| id            | string                  | ✓    | 要更新的角色 id；角色的名字或别名也可以    |
+| aliases       | string[]                |      | 要追加的别名；已有的、与名字相同的自动略过 |
+| removeAliases | string[]                |      | 要去掉的别名（见下）                       |
+| description   | string                  |      | 新描述（未传则保留原值）                   |
+| fields        | Record<string, unknown> |      | 要合并的字段                               |
+
+`removeAliases` 用来撤销挂错的别名：按[归一规则](world-model.md#别名与按名字解析)比较，不是该角色别名的名字不产生任何变化也不报错，角色自己的名字不会被去掉。同一次调用里先去掉再追加，所以可以一次换掉一个别名；在 `sync-characters.updates[]` 里，前一项去掉的别名后一项可以加给另一个角色。
 
 **成功输出 (parsedResult)**: `{ _text, success: true, characterId, version }`。找不到角色时抛出错误并列出最相近的已知名字（没有相近的就列出会话里的角色，最多 30 个），例如 `Character "伊索尔德" not found. Closest known names: 守灯人伊索德 (aka 伊索德, 守灯人). If it is one of them, use that name. Nothing was updated.`；名字或别名属于不止一个角色时列出各自的 id：`"Maud" names 2 characters: Maud [npc-a]; maud [npc-b]. Pass the id of the one you mean. Nothing was updated.`；要追加的别名属于别的角色时同样失败并写明属主。模型在工具循环里收到的是 `{"success":false,"error":"Tool \"update-character\" failed during execution: …","code":"EXECUTION_ERROR"}`。执行器将该次调用记录为失败，而不是正常返回业务 `success: false`。它不会满足 agent 的 `completeAfterTools`；function runtime 即使捕获该错误，也不会提交此前缓冲的写入。
 

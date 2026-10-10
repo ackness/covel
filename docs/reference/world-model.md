@@ -46,7 +46,7 @@ interface CharacterRecord {
 
 - 世界作者在 `characters/characters.json` 里写 `aliases`（见[领域角色](world-data.md#领域角色与插件角色卡)），语言文件可以整列替换。
 - 模型在故事揭示新名字时，通过 `update-character` / `sync-characters.updates[]` 的 `aliases` 参数追加；`create-character` 也接受 `aliases`。
-- `character.upsert` proposal 的 `aliases`：带 `expectedVersion` 时追加到已有别名之后（与 `fields` 的浅合并同理，同一回合两次追加都保留），不带时是完整列表。与角色名字相同的别名、重复的别名在写入时去掉。
+- `character.upsert` proposal 的 `aliases`：带 `expectedVersion` 时追加到已有别名之后（与 `fields` 的浅合并同理，同一回合两次追加都保留），不带时是完整列表。与角色名字相同的别名、重复的别名在写入时去掉。带 `expectedVersion` 的 proposal 还可以带 `removeAliases`：先从已有别名里去掉这些（按归一后的写法比较，没有的略过），再追加 `aliases`。模型挂错的别名靠它撤销，否则按「一个名字只指一个人」，真正叫这个名字的角色永远拿不到它；别名冲突的报错里会提示这一点。
 
 模型读到的写法是名字后面跟一个括号：`- 守灯人伊索德 (aka 伊索德, 守灯人) [npc] | …`（`characterLabel`）。`characterSheetSegments`、`{{ characters.npcs }}`、`list-characters` 和角色追踪的名册都只在有别名时多出这一段，没有别名的角色一个字符也不多。内置四个世界每个角色多 5 到 9 个 token。
 

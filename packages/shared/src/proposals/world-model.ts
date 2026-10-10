@@ -46,6 +46,7 @@ export const characterUpsertPayloadSchema = z
     id: z.string().trim().min(1),
     name: z.string().trim().min(1),
     aliases: z.array(z.string().trim().min(1)).optional(),
+    removeAliases: z.array(z.string().trim().min(1)).optional(),
     type: z.string().trim().min(1).optional(),
     description: z.string().optional(),
     fields: z.unknown().optional(),
@@ -67,7 +68,7 @@ function assertCharacterNamesFree(
   const conflict = findCharacterAliasConflict(characters, character);
   if (conflict)
     throw new Error(
-      `Alias "${conflict.alias}" of ${character.name} [${character.id}] is already a name of ${characterLabel(conflict.owner)} [${conflict.owner.id}]. If they are one person, write to ${conflict.owner.id}; if not, use a different alias.`,
+      `Alias "${conflict.alias}" of ${character.name} [${character.id}] is already a name of ${characterLabel(conflict.owner)} [${conflict.owner.id}]. If they are one person, write to ${conflict.owner.id}. If the alias is wrong for ${conflict.owner.name}, remove it there first (removeAliases). Otherwise use a different alias.`,
     );
   const key = characterNameKey(character.name);
   const owner = characters.find(
@@ -77,7 +78,7 @@ function assertCharacterNamesFree(
   );
   if (owner)
     throw new Error(
-      `Name "${character.name}" of [${character.id}] is an alias of ${characterLabel(owner)} [${owner.id}]. If they are one person, write to ${owner.id}; if not, use a different name.`,
+      `Name "${character.name}" of [${character.id}] is an alias of ${characterLabel(owner)} [${owner.id}]. If they are one person, write to ${owner.id}. If the alias is wrong for ${owner.name}, remove it there first (removeAliases). Otherwise use a different name.`,
     );
 }
 
