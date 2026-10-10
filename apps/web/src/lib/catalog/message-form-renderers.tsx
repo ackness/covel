@@ -107,11 +107,23 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
       ? rawValue
       : "";
   const disabled = element.props?.disabled as boolean;
+  // The server's refusal for this field, shown under it.
+  const error =
+    typeof element.props?.error === "string" && element.props.error
+      ? element.props.error
+      : undefined;
+  const errorId = `${fieldId}-error`;
   const { set } = useStateStore();
   const bindPath = bindings?.value;
 
-  const fieldCls =
-    "ui-input-shell w-full bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 text-foreground placeholder:text-muted-foreground";
+  const fieldCls = clsx(
+    "ui-input-shell w-full bg-background border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 text-foreground placeholder:text-muted-foreground",
+    error ? "border-destructive" : "border-border",
+  );
+  const errorProps = {
+    "aria-invalid": error ? true : undefined,
+    "aria-describedby": error ? errorId : undefined,
+  };
 
   return (
     <div className="space-y-1.5">
@@ -134,6 +146,7 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
           onChange={(e) => bindPath && set(bindPath, e.target.value)}
           disabled={disabled}
           className={fieldCls}
+          {...errorProps}
         >
           <option value="">
             {placeholder ?? t("form.selectPrefix", { label })}
@@ -153,6 +166,7 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
           placeholder={placeholder}
           className={fieldCls}
           onChange={(e) => bindPath && set(bindPath, e.target.value)}
+          {...errorProps}
         />
       ) : fieldType === "checkbox" ? (
         <input
@@ -161,6 +175,7 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
           checked={rawValue === true || rawValue === "true"}
           disabled={disabled}
           onChange={(e) => bindPath && set(bindPath, e.target.checked)}
+          {...errorProps}
         />
       ) : (
         <input
@@ -183,7 +198,13 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
           placeholder={placeholder}
           disabled={disabled}
           className={fieldCls}
+          {...errorProps}
         />
+      )}
+      {error && (
+        <p id={errorId} role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
       )}
     </div>
   );

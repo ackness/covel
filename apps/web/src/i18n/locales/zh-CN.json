@@ -1840,8 +1840,7 @@
     "submittedHint": "已选择",
     "selectPrefix": "选择{{label}}",
     "selectPlaceholder": "请选择...",
-    "requiredMissing": "请填写必填字段",
-    "rejected": "请检查表单"
+    "requiredMissing": "请填写必填字段"
   },
   "interaction": {
     "playerSelected": "你的选择：",

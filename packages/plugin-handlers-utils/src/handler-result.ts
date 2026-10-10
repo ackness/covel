@@ -52,6 +52,36 @@ export interface ObservabilityEffects {
 }
 
 /**
+ * A form a runtime offers through `effects.interactions` (the `create-form`
+ * tool returns the same shape as `interaction`). The player's answer is
+ * checked against `fields`, then against the `validation` the plugin
+ * registered with `covel.registerFormValidator`.
+ */
+export type PluginFormInteraction = {
+  readonly type: "form";
+  readonly interactionId: string;
+  readonly title: string;
+  readonly fields: readonly { readonly [key: string]: JsonValue }[];
+  readonly submitLabel: string;
+  /** Text with `{{fieldName}}` placeholders; the submitted values fill it. */
+  readonly narrativeTemplate?: string;
+  readonly validation?: {
+    readonly name: string;
+    readonly data?: JsonValue;
+  };
+  readonly submitBehavior?: {
+    readonly echoFilledNarrative?: boolean;
+    readonly immediate?: boolean;
+  };
+  /**
+   * A note shown above the fields, in the session's language: why the player
+   * sees this form again, for example because an earlier submission could not
+   * be used. Leave it out on the first offer.
+   */
+  readonly notice?: string;
+};
+
+/**
  * Effects a `success` outcome may carry: the observation channels plus domain
  * writes. The kernel carries these separately from the business output through
  * scheduling and proposal normalization.
@@ -59,7 +89,7 @@ export interface ObservabilityEffects {
 export interface RuntimeEffects extends ObservabilityEffects {
   readonly statePatches?: readonly JsonValue[];
   readonly events?: readonly JsonValue[];
-  readonly interactions?: readonly JsonValue[];
+  readonly interactions?: readonly (PluginFormInteraction | JsonValue)[];
   readonly ui?: readonly JsonValue[];
   readonly assetGenerations?: readonly JsonValue[];
   readonly pluginData?: readonly JsonValue[];

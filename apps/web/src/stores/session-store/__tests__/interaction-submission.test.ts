@@ -111,25 +111,49 @@ describe("interaction submission", () => {
     expect(deps.runSingleAction).not.toHaveBeenCalled();
   });
 
-  it("shows the server's refusal next to the form instead of failing the turn", async () => {
+  it("hands the server's refusal back to the form instead of failing the turn", async () => {
     const deps = makeDeps();
     api.submitInputs.mockRejectedValueOnce(
       new ApiError(
         400,
         "/api/sessions/session-1/plugin-rpc",
-        JSON.stringify({ error: "请填写“姓名”。", code: "form_rejected" }),
+        JSON.stringify({
+          error: "请填写“姓名”。\n总点数不对",
+          code: "form_rejected",
+          details: {
+            issues: [
+              { field: "name", message: "请填写“姓名”。" },
+              { message: "总点数不对" },
+            ],
+          },
+        }),
       ),
     );
-    await submitInteractionBlock(deps, submission);
-    expect(toast).toHaveBeenCalledExactlyOnceWith(
-      "error",
-      expect.any(String),
-      "请填写“姓名”。",
-    );
+    await expect(submitInteractionBlock(deps, submission)).resolves.toEqual({
+      rejected: [
+        { field: "name", message: "请填写“姓名”。" },
+        { message: "总点数不对" },
+      ],
+    });
     // The form stays open with what the player typed: no error state, no turn.
+    expect(toast).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalled();
     expect(deps.submitBlock).not.toHaveBeenCalled();
     expect(deps.runSingleAction).not.toHaveBeenCalled();
+  });
+
+  it("treats a refusal without issues as one form-level message", async () => {
+    const deps = makeDeps();
+    api.submitInputs.mockRejectedValueOnce(
+      new ApiError(
+        400,
+        "/api/sessions/session-1/plugin-rpc",
+        JSON.stringify({ error: "Nope", code: "form_rejected" }),
+      ),
+    );
+    await expect(submitInteractionBlock(deps, submission)).resolves.toEqual({
+      rejected: [{ message: "Nope" }],
+    });
   });
 
   it.each(["allow", "deny", "switch"])(

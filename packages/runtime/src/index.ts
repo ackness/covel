@@ -285,9 +285,11 @@ export {
 
 export { resolveRequestContextBudget } from "./agent-loop/request-context-budget.js";
 export type {
+  FormIssue,
   FormValidator,
   ValidatePluginForm,
 } from "./rpc/form-validator.js";
+export { normalizeFormRefusal } from "./rpc/form-validator.js";
 export { PluginEntryScope } from "./plugin-entry-scope.js";
 export type { PluginServiceCallEvent } from "./plugin-services.js";
 

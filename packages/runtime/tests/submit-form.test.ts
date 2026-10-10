@@ -610,14 +610,18 @@ describe("submitFormHandler (Epic A)", () => {
         () => undefined,
         (error: unknown) => error,
       );
+    // Every refused field is reported at once, each under its own field.
     const missing = await refusal({ age: "old" }, "en-US");
     expect(missing).toBeInstanceOf(FormRejectedError);
     expect(missing).toMatchObject({
       code: "form_rejected",
-      message: 'Fill in "Name".',
+      issues: [
+        { field: "name", message: 'Fill in "Name".' },
+        { field: "age", message: '"Age" must be a number.' },
+      ],
     });
     expect(await refusal({ age: "old" }, "zh-CN")).toMatchObject({
-      message: "请填写“Name”。",
+      issues: [{ field: "name", message: "请填写“Name”。" }, expect.anything()],
     });
     expect(await refusal({ name: "Aria", age: "old" }, "en-US")).toMatchObject({
       code: "form_rejected",

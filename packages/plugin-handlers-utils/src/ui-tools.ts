@@ -187,6 +187,13 @@ export const createFormTool = tool({
       .describe(
         "Optional submit behavior: echo the filled narrative, submit immediately",
       ),
+    notice: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional note shown above the fields, in the player's language: why the form is offered again (for example an earlier submission could not be used)",
+      ),
   }),
   execute: async (params) => {
     for (const field of params.fields) {
@@ -213,6 +220,7 @@ export const createFormTool = tool({
         submitLabel: params.submitLabel,
         narrativeTemplate: params.narrativeTemplate,
         submitBehavior: params.submitBehavior,
+        ...(params.notice ? { notice: params.notice } : {}),
       },
     };
   },
