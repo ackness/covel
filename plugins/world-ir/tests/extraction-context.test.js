@@ -106,6 +106,11 @@ describe("world-ir extraction context", () => {
       { type: "item", name: "Brass Key" },
       { type: "quest", name: "Find the keeper", details: ["Ask at the pier"] },
     ]);
+    // What holds from turn to turn comes first, so that the next turn's
+    // request repeats this one up to the narrative.
+    expect(Object.keys(JSON.parse(result.replace.messages[0].content))).toEqual(
+      ["characters", "vocabulary", "narrative"],
+    );
   });
 
   it("does not reshape other runtimes or guess inputs from rendered text", async () => {

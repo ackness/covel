@@ -56,7 +56,7 @@ runtime:
   agent:
     model: plugin
     history:
-      maxTurns: 2
+      maxTurns: 0
     # The conversation is story text; without a required tool call the model
     # sometimes continues the story first.
     llm:

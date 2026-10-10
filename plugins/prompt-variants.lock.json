@@ -4,16 +4,16 @@
     "zh": "0cb5d93e7485752c"
   },
   "plugins/char-creator/runtimes/character-tracker/RUNTIME.md": {
-    "en": "0cf251d69acd9e02",
-    "zh": "59cff9643d44152d"
+    "en": "1ee3ed4b9da9d736",
+    "zh": "3559f8962fde8722"
   },
   "plugins/char-creator/runtimes/player-init/RUNTIME.md": {
     "en": "2d09f5faf39b76fd",
     "zh": "8c1ecccd9bcc510d"
   },
   "plugins/chat-mode-narrator/PLUGIN.md": {
-    "en": "57796fe808ed41db",
-    "zh": "52e30757ae0d8340"
+    "en": "b1e398ff46ad480b",
+    "zh": "a0c2f89fe62f5c53"
   },
   "plugins/codex/PLUGIN.md": {
     "en": "2b3683df527bbca4",
@@ -28,8 +28,8 @@
     "zh": "f4591b7a23197f6b"
   },
   "plugins/npc-graph/runtimes/extractor/RUNTIME.md": {
-    "en": "b4362df166299078",
-    "zh": "82da0fc49cbf491b"
+    "en": "77e443f66fac166c",
+    "zh": "c97f8db4bf48b84b"
   },
   "plugins/npc-graph/runtimes/rag-retriever/RUNTIME.md": {
     "en": "07522f00d8c97ac8",
@@ -44,8 +44,8 @@
     "zh": "ac73559d323cb860"
   },
   "plugins/world-init/runtimes/dimension-tracker/RUNTIME.md": {
-    "en": "634867c0b80d4aa4",
-    "zh": "eed2f25dc358540a"
+    "en": "f9dd3e576e231354",
+    "zh": "5a8e3a2396d0f25b"
   },
   "plugins/world-init/runtimes/schema-gen/RUNTIME.md": {
     "en": "1ba30e3d2d97d4bd",

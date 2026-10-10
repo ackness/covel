@@ -23,7 +23,7 @@ io:
 agent:
   model: plugin
   history:
-    maxTurns: 2
+    maxTurns: 1
   llm:
     reasoningEffort: disabled
     toolChoice: required
@@ -47,7 +47,7 @@ guard: ./guard.js
 
 Settle only the facts that `runtime-inputs.narrative.value` states for this turn. WorldIR is supporting evidence; it never replaces the narrative text.
 
-`<dimension-rules>` gives, for each dimension you maintain, the author's full rule (`rule`), the schema, and the frozen current value (`value`). Settle from that block directly and do not read the same data again with tools. Only for a dimension listed under Truncated: read its rule and schema page by page with `dimension-rule-get`, and read its value with `world-dimension-get`.
+`<dimension-rules>` gives, for each dimension you maintain, the author's full rule (`rule`) and the schema. `<dimension-values>` gives the frozen current value of each. Settle from these two blocks directly and do not read the same data again with tools. Only for a dimension listed under Truncated: read its rule and schema page by page with `dimension-rule-get`, and read its value with `world-dimension-get`.
 
 Update only dimensions that have a non-empty rule. Do not invent events, do not count a promise before it is kept, and do not record old history again. You cannot change character, inventory or time data.
 
