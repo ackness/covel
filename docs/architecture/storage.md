@@ -478,6 +478,17 @@ state entry keeps its ID, a world or lorebook entry keeps its creation time, and
 a re-saved suspension keeps its turn, runtime, plugin and creation time. Memory,
 SQLite and PostgreSQL agree on this; the shared contract suite checks it.
 
+A pending suspension holds the whole request it continues: the messages up to
+the suspend point, the tool calls and proposals buffered so far, the frozen
+inputs. Resume sends that transcript on unchanged, so none of it can be rebuilt
+from the session's later state. When the resume commits,
+`markSuspensionResolved` keeps the row (a repeated resume request and the
+session's list of suspensions still find it) and drops what the resume consumed:
+a resolved row holds the execution identity, locale and turn number only
+(`settledSuspensionContinuation`). Snapshots copy pending suspensions only, so a
+resolved one never carries a prompt into a snapshot, a fork, an export or the
+browser checkpoint.
+
 SQLite's turn-result append-position query uses the covering index
 `(session_id, created_at, seq)`. The boot DDL derives that index from the Drizzle
 schema. This preserves existing sequence allocation and ordering; it does not

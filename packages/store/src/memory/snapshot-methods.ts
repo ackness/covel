@@ -1,5 +1,6 @@
 import { compareText } from "@covel/shared";
 import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
+import { settledSuspensionContinuation } from "../records/snapshot-records.js";
 import type { SnapshotMetadata } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 import { assertSessionRecordScope } from "./session-record-scope.js";
@@ -41,6 +42,9 @@ export function createSuspensionMethods(
       if (!existing) return;
       state.suspensions.set(id, {
         ...existing,
+        pendingContinuation: settledSuspensionContinuation(
+          existing.pendingContinuation,
+        ),
         resolvedAt: new Date().toISOString(),
       });
     },

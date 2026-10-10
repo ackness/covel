@@ -664,6 +664,10 @@ export interface SessionSummaryStore {
 export interface SuspensionStore {
   saveSuspension(record: SuspensionRecord): Promise<void>;
   getSuspension(id: string): Promise<SuspensionRecord | null>;
+  /**
+   * Record that the resume committed: sets `resolvedAt` and drops the
+   * consumed continuation (`settledSuspensionContinuation`).
+   */
   markSuspensionResolved(id: string): Promise<void>;
   listSuspensions(sessionId: string): Promise<readonly SuspensionRecord[]>;
   deleteSuspension(id: string): Promise<void>;

@@ -469,7 +469,9 @@ server transaction API in the browser.
 >   仅在 COMMIT 之后按序 flush；回滚连缓冲一并丢弃，客户端绝不会看到已回滚写入的
 >   "committed" 事件。
 > - resume 通过 `extraInTx` 把助手回合消息与 suspension resolved 标记折叠进同一事务，
->   任一失败连同 proposal 一起回滚，claim 释放后可重试。
+>   任一失败连同 proposal 一起回滚，claim 释放后可重试。resolved 标记同时清掉这条
+>   suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用与 proposal、输入），
+>   只留执行标识、语言和回合号；回滚时这些内容随事务恢复。
 > - **会话时钟写入进同一事务（调度重构 W3b，2026-07-22）**：玩家路径（`actions.ts`）
 >   通过 `sessionClock` 参数把逻辑回合计数（`completedPlayerTurns` 的 logical-turn
 >   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
