@@ -242,9 +242,7 @@ CLI 和安装器的静态校验同样检查 `scope: turn` 与 `scope: committed`
 
 Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`。运行时用 `canonicalValue` 保存原始业务值；对象投影为 `output`，标量、数组和 `null` 投影为 `{ value }`，缺省值投影为空对象。业务值中的 `events`、`pluginData`、`interactions` 或 `preGameDone` 等同名字段不会发起副作用或完成 setup；这些意图必须通过 `HandlerResult.effects` 和 `HandlerResult.completion` 表达。`effects.interactions`、`effects.notifications` 与 `effects.statePatches` 必须为数组，条目及 `effects.ui[].parts` 必须是对象：function 返回非数组通道或非对象条目时以 `output-schema-invalid` 失败，其他途径带入的同类内容在提交时作为该 runtime 被拒绝的写入处理（见[事务参考](transactions.md)）。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
 
-Agent 继续使用现有的提示词输出协议。执行边界统一将声明的副作用和工具结果归入 `effects`，将 `preGameDone: true` 转为 `completion: "done"`；包含 `topic` 的事件归入副作用，WorldIR 的业务事件保留在 `output.events`。Agent 的公共契约值为拆分后的业务 `output`，普通执行与 resume 使用相同边界。
-
-Agent 最终输出里声明的副作用（`statePatches`、`pluginData`、`notifications`、`interactions`、带 `topic` 的 `events` 等）不经过工具，因此不受 `agent.tools` 白名单限制；`effects` 声明只对分离执行的 runtime 在提交前强制核对。`pluginData` 的归属由内核按来源插件确定，写不到别的插件；`statePatches` 写的是全会话共享的状态表（见 [Proposal 类型](tools.md#proposal-类型)）。只读用途的 agent 应在提示词的输出协议里不声明这些字段。
+Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白名单为准。执行边界把工具结果里的副作用（工具返回的 proposal、`emit-event` 发出的事件、表单与 UI 块）归入 `effects`，把最终输出里的 `preGameDone: true` 或 `completion` 转为完成信号。模型在最终 JSON 里写的 `statePatches`、`pluginData`、`notifications`、`assetGenerations`、`interactions`、`ui` 和带 `topic` 的 `events` 不起作用，与 function 业务值里的同名字段一样：这些字段在拆分时被去掉，服务端日志记一条带 runtime 名和字段名的警告。不带 `topic` 的 `events`（例如 WorldIR 的业务事件）保留在 `output.events`。结束工具自己的返回值作为输出时，其中的副作用字段照常生效，因为它出自白名单内的工具。Agent 的公共契约值为拆分后的业务 `output`，普通执行与 resume 使用相同边界。
 
 `PostRuntime` 若改变 function 的 `output`，应同时明确提供匹配的 `canonicalValue`，新值会重新接受私有和公共 schema 校验。仅改写 `output` 会撤销业务值，停止 export 与下游值绑定；有公共输出契约时还会因缺失契约值而失败。修改副作用或完成信号应直接修改 `effects` 或 `completion`。失败 runtime 的副作用不提交，事件不触发后继 runtime。普通执行与 resume 共用 agent 输出 schema gate；非 story agent 声明私有 `io.output.schema` 后，先校验候选协议输出，再拆分业务值与副作用，最终无正文或空正文也接受校验，不符合 schema 即失败，暂停时积累的写入不提交。Story agent 保留独立的叙事正文检查，不使用私有 schema gate。
 

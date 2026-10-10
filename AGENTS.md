@@ -333,7 +333,8 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   stage fully settles before the next).
 - **Results**: `RuntimeResult` keeps `output`, `effects`, and `completion` apart; a
   function handler returns them as `HandlerResult`, and an effect-shaped field
-  inside `value` does nothing. Setup runtimes finish with `completion: "done"`
+  inside `value` does nothing. An agent's effects come from its tools only: an
+  effect-shaped field in the model's final JSON does nothing either. Setup runtimes finish with `completion: "done"`
   (agents report `preGameDone: true`). Setup completion is recorded per plugin
   `version`, so a version bump re-runs setup — setup guards must return
   `{ skip: true }` for work already done.

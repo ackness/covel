@@ -12,7 +12,8 @@ const manifest = {
 } as RuntimeManifest;
 
 describe("agent output boundary", () => {
-  it("checks the raw envelope, then separates declared and tool-emitted effects", () => {
+  it("checks the raw envelope, ignores effects the model wrote and keeps tool-emitted ones", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const declaredEvent = { topic: "world.changed", data: { value: 1 } };
     const toolEvent = { topic: "world.updated", data: { value: 2 } };
     const worldEvent = { id: "birth", description: "a world fact" };
@@ -65,19 +66,48 @@ describe("agent output boundary", () => {
       name: "Atlas",
       events: [worldEvent],
     });
+    // Only what the whitelisted tools produced: the final JSON is not a
+    // second write channel past `agent.tools`.
     expect(finalized.effects).toEqual({
-      events: [declaredEvent, toolEvent],
+      events: [toolEvent],
       interactions: [{ interactionId: "tool", type: "form" }],
-      ui: [
-        { id: "declared-ui", type: "form" },
-        { id: "tool-ui", type: "form" },
-      ],
-      statePatches: [{ table: "world", field: "name", value: "Atlas" }],
-      pluginData: [{ namespace: "world", key: "name", value: "Atlas" }],
-      assetGenerations: [{ ref: "asset-1", modality: "image" }],
-      notifications: [{ message: "Ready" }],
+      ui: [{ id: "tool-ui", type: "form" }],
     });
+    // The completion signal is not an effect.
     expect(finalized.completion).toBe("done");
+    expect(warn).toHaveBeenCalledOnce();
+    const message = String(warn.mock.calls[0]?.[0]);
+    for (const field of [
+      "probe/agent",
+      "statePatches",
+      "pluginData",
+      "notifications",
+      "assetGenerations",
+      "interactions",
+      "ui",
+      "events[].topic",
+    ])
+      expect(message).toContain(field);
+    warn.mockRestore();
+  });
+
+  it("keeps the effects of a completing tool's own result", () => {
+    const finalized = finalizeAgentOutput({
+      manifest,
+      finalContent: "Done.",
+      preferredOutput: {
+        saved: true,
+        notifications: [{ message: "Saved" }],
+      },
+      executedToolCalls: [],
+      failedToolCalls: [],
+      pendingProposals: [],
+    });
+    expect(finalized).toEqual({
+      kind: "ok",
+      output: { saved: true },
+      effects: { notifications: [{ message: "Saved" }] },
+    });
   });
 
   it("preserves a WorldIR events array without a topic as business output", () => {
