@@ -13,6 +13,8 @@ import { errorBody } from "../api-error.js";
 interface RateLimitOptions {
   /** Maximum requests per window. */
   max: number;
+  /** Cap on tracked (IP, route) counters; the oldest are evicted beyond it. */
+  maxEntries?: number;
 }
 
 interface WindowEntry {
@@ -22,6 +24,8 @@ interface WindowEntry {
 
 /** Sliding-window size — every caller uses the same 1-minute window. */
 const WINDOW_MS = 60_000;
+
+const DEFAULT_MAX_ENTRIES = 10_000;
 
 function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
   return new Set(
@@ -72,7 +76,10 @@ function clientIp(c: Context): string {
   return remote ?? "unknown";
 }
 
-export function rateLimiter({ max }: RateLimitOptions): MiddlewareHandler {
+export function rateLimiter({
+  max,
+  maxEntries = DEFAULT_MAX_ENTRIES,
+}: RateLimitOptions): MiddlewareHandler {
   const windows = new Map<string, WindowEntry>();
 
   // Periodic cleanup to prevent memory leak (every 5 minutes)
@@ -91,10 +98,20 @@ export function rateLimiter({ max }: RateLimitOptions): MiddlewareHandler {
     }
 
     const ip = clientIp(c);
-    const key = `${ip}:${c.req.path}`;
+    // The route template, not the concrete path: a path parameter must not
+    // open a fresh counter for every value a client tries.
+    const key = `${ip}:${c.req.routePath}`;
     const entry = windows.get(key);
 
     if (!entry || now >= entry.resetAt) {
+      // Re-insert so the map stays ordered by window start; the oldest
+      // windows are the first to go when the table is full.
+      windows.delete(key);
+      // Oldest first: expired windows go, then live ones while over the cap.
+      for (const [k, e] of windows) {
+        if (now < e.resetAt && windows.size < maxEntries) break;
+        windows.delete(k);
+      }
       windows.set(key, { count: 1, resetAt: now + WINDOW_MS });
       await next();
       return;

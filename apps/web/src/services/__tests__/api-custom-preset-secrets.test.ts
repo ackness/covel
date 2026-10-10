@@ -49,6 +49,8 @@ let setProviderProfiles: ApiModule["setProviderProfiles"];
 let setProviderPriceMultipliers: ApiModule["setProviderPriceMultipliers"];
 let setSlotConfig: ApiModule["setSlotConfig"];
 let buildProviderKeysHeader: ModelSettingsModule["buildProviderKeysHeader"];
+let rememberServerSlotProviders: ModelSettingsModule["rememberServerSlotProviders"];
+let rememberServerPresetProviders: ModelSettingsModule["rememberServerPresetProviders"];
 let buildSlotConfigHeaderInternal: ModelSettingsModule["buildSlotConfigHeaderInternal"];
 
 function readSettingsBlob(): Record<string, unknown> {
@@ -78,8 +80,12 @@ beforeEach(async () => {
     setProviderPriceMultipliers,
     setSlotConfig,
   } = await import("../api.js"));
-  ({ buildProviderKeysHeader, buildSlotConfigHeaderInternal } =
-    await import("../api/model-settings.js"));
+  ({
+    buildProviderKeysHeader,
+    buildSlotConfigHeaderInternal,
+    rememberServerSlotProviders,
+    rememberServerPresetProviders,
+  } = await import("../api/model-settings.js"));
   await initSettings();
 });
 
@@ -375,5 +381,57 @@ describe("current-only model settings", () => {
     ]);
     await getSettings().set("keys.fixture", SERVER_MANAGED_SECRET);
     expect(buildProviderKeysHeader()).toEqual({});
+  });
+});
+
+describe("provider keys follow the bindings in use", () => {
+  const sentKeys = (
+    options?: Parameters<typeof buildProviderKeysHeader>[0],
+  ): string[] => {
+    const encoded = buildProviderKeysHeader(options)["X-Provider-Keys"];
+    return encoded ? Object.keys(JSON.parse(atob(encoded))).sort() : [];
+  };
+
+  beforeEach(async () => {
+    await setProviderProfiles([
+      {
+        id: "mine",
+        name: "Mine",
+        baseUrl: "https://mine.example/v1",
+        models: [{ ref: "mine-model", modelId: "m" }],
+      },
+    ]);
+    for (const id of ["mine", "deepseek", "openai", "unused"])
+      await getSettings().set(`keys.${id}`, `synthetic-${id}`);
+  });
+
+  it("sends every saved key until the server's providers are known", () => {
+    expect(sentKeys()).toEqual(["deepseek", "mine", "openai", "unused"]);
+  });
+
+  it("sends only the providers that slots resolve to", () => {
+    rememberServerSlotProviders({
+      story: { provider: "deepseek" },
+      memory: { provider: "openai" },
+    });
+    rememberServerPresetProviders([{ id: "ds", provider: "deepseek" }]);
+    setSlotConfig({ memory: { modelRef: "mine-model" } });
+    // story keeps the server default, memory is rebound to the local model.
+    expect(sentKeys()).toEqual(["deepseek", "mine"]);
+  });
+
+  it("follows a server preset binding and adds providers a request names", () => {
+    rememberServerSlotProviders({
+      story: { provider: "deepseek" },
+      memory: { provider: "deepseek" },
+    });
+    rememberServerPresetProviders([{ id: "oa", provider: "openai" }]);
+    setSlotConfig({ memory: { presetId: "oa" } });
+    expect(sentKeys()).toEqual(["deepseek", "openai"]);
+    expect(sentKeys({ providers: ["unused"] })).toEqual([
+      "deepseek",
+      "openai",
+      "unused",
+    ]);
   });
 });
