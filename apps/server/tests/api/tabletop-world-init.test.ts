@@ -14,6 +14,7 @@ import {
   buildTabletopProbeZip,
   tabletopProbeId,
 } from "../helpers/tabletop-package.js";
+import { runtimeResultsOf } from "../helpers/runtime-results.js";
 
 it("creates a third-party form from the real world-init guard in the first setup execution", async () => {
   const project = path.resolve(import.meta.dirname, "../../../..");
@@ -43,7 +44,7 @@ it("creates a third-party form from the real world-init guard in the first setup
     const upload = new FormData();
     upload.append(
       "file",
-      new Blob([await buildTabletopProbeZip()]),
+      new Blob([new Uint8Array(await buildTabletopProbeZip())]),
       "tabletop-probe.zip",
     );
     const installed = await boot.app.request("/api/install/plugin", {
@@ -125,7 +126,7 @@ it("creates a third-party form from the real world-init guard in the first setup
         }),
       ]),
     );
-    const creation = turns[0]!.runtimeResults.find(
+    const creation = runtimeResultsOf(turns[0]!).find(
       (r) => r.runtimeId === `${tabletopProbeId}/creation`,
     )!;
     expect(creation.toolCalls.map((call) => call.toolName)).not.toContain(

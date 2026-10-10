@@ -10,7 +10,7 @@ import { CollapsibleCardHeader } from "./collapsible-card-header.js";
 import { useTranslation } from "react-i18next";
 
 interface WorldInfoCardProps {
-  world: api.WorldRecord;
+  world: api.WorldSummary;
   expanded: boolean;
   onToggle: () => void;
 }

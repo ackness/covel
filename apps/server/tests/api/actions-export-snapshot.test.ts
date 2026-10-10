@@ -68,6 +68,13 @@ runtime:
     registry.register({
       id: "producer",
       source: "builtin",
+      summary: {
+        id: "producer",
+        name: "producer",
+        description: "",
+        pluginType: "plugin",
+        runtimeCount: definition.manifests.length,
+      },
       rootPath: root,
       status: "registered",
       packageManifest: definition.packageManifest,

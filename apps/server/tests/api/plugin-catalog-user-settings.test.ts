@@ -40,18 +40,22 @@ describe("plugin catalog settings", () => {
       "---\nid: probe\nkind: plugin\ndescription: Probe\n---\n",
       "probe/PLUGIN.md",
     );
-    const value = entry(root);
-    value.manifests = [
-      {
-        manifest: {
-          name: "probe/run",
-          description: "Run",
-          userSettings: [{ key: "stale", type: "text", label: "Stale" }],
+    const value: PluginRegistryEntry = {
+      ...entry(root),
+      manifests: [
+        {
+          runtime: { type: "agent" },
+          manifest: {
+            name: "probe/run",
+            pluginId: "probe",
+            description: "Run",
+            userSettings: [{ key: "stale", type: "text", label: "Stale" }],
+          },
+          promptTemplate: "",
+          rawFrontmatter: {},
         },
-        promptTemplate: "",
-        rawFrontmatter: {},
-      },
-    ];
+      ],
+    };
     expect(buildPluginSummary(value).userSettings).toEqual([]);
   });
   it("exposes the real narrator narrative-person setting from the canonical package", async () => {
@@ -61,7 +65,7 @@ describe("plugin catalog settings", () => {
       )
     ).find((plugin) => plugin.id === "narrator")!;
     const definition = await loadPluginDefinition(discovery);
-    const value = {
+    const value: PluginRegistryEntry = {
       ...entry(definition.packageManifest),
       id: discovery.id,
       manifests: definition.manifests,

@@ -6,14 +6,5 @@
     "allowJs": true,
     "lib": ["esnext", "dom"]
   },
-  "include": ["tests"],
-  "exclude": [
-    "tests/character-tool-helpers.test.ts",
-    "tests/character-tools.test.ts",
-    "tests/emit-event.test.ts",
-    "tests/plugin-data-tools.test.ts",
-    "tests/result.test.ts",
-    "tests/schema-to-zod.test.ts",
-    "tests/tool.test.ts"
-  ]
+  "include": ["tests"]
 }

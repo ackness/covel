@@ -39,7 +39,7 @@ describe("execution reads through the bootstrap response barrier", () => {
     return body.ownerToken;
   }
 
-  function status(token = ownerToken, id = sessionId) {
+  async function status(token = ownerToken, id = sessionId) {
     return api.app.request(`/api/sessions/${id}/execution`, {
       headers: { authorization: `Bearer ${token}` },
     });

@@ -9,6 +9,11 @@ import {
   type LLMAdapter,
 } from "@covel/runtime";
 import { promptSegmentV1, type RuntimeManifest } from "@covel/shared";
+import type { FunctionHandler, LoadedRuntime } from "@covel/plugin-loader";
+import {
+  stubPluginGateway,
+  type GenerateTextInput,
+} from "../helpers/plugin-gateway.js";
 import extractMemory from "../../../../plugins/memory/server/extract.js";
 import registerMemory from "../../../../plugins/memory/server/index.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -79,20 +84,29 @@ async function fixture() {
   const extensions = new PluginExtensionHost(services);
   registerMemory({
     toolkit: { z },
-    registerService: (definition) => services.register("memory", definition),
-    provideExtension: (point, id, definition) =>
-      extensions.register("memory", { point, id }, definition),
+    registerService: (definition: Parameters<typeof services.register>[1]) =>
+      services.register("memory", definition),
+    provideExtension: (
+      point: string,
+      id: string,
+      definition: Parameters<typeof extensions.register>[2],
+    ) => extensions.register("memory", { point, id }, definition),
   });
-  const loadRuntime = async (manifest: RuntimeManifest) => ({
+  const storyHandler: FunctionHandler = async () => ({
+    outcome: "success",
+    value: { narrativeOutput: "The source-turn harbour." },
+  });
+  const loadRuntime = async (
+    manifest: RuntimeManifest,
+  ): Promise<LoadedRuntime> => ({
     manifest,
     promptTemplate: "",
+    // extract.js is plain JavaScript, so its inferred return type widens the
+    // outcome literals the handler contract names.
     handler:
       manifest.name === "story"
-        ? async () => ({
-            outcome: "success",
-            value: { narrativeOutput: "The source-turn harbour." },
-          })
-        : extractMemory,
+        ? storyHandler
+        : (extractMemory as FunctionHandler),
   });
   const raw = createInProcessSessionLock();
   const settled = createSettledSessionLock({
@@ -106,19 +120,19 @@ async function fixture() {
 describe("memory detached lifecycle", () => {
   it("uses source request services and lets the next execution snapshot see only the committed extraction", async () => {
     const { store, extensions, raw, settled, loadRuntime } = await fixture();
-    const generateText = vi.fn(async () => ({
+    const generateText = vi.fn(async (_input: GenerateTextInput) => ({
       text: '{"scene":"Committed harbour memory"}',
       finishReason: "stop",
       usage: { inputTokens: 1, outputTokens: 1 },
     }));
-    const original = { llm, gateway: { generateText } };
+    const original = { llm, gateway: stubPluginGateway(generateText) };
     const replacement = {
       llm,
-      gateway: {
-        generateText: vi.fn(async () => {
+      gateway: stubPluginGateway(
+        vi.fn(async (_input: GenerateTextInput) => {
           throw new Error("Wrong request credentials");
         }),
-      },
+      ),
     };
     const formA = {
       id: "form-a",
@@ -318,7 +332,7 @@ it("settles ten source turns in order and never publishes a timed-out late memor
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const generateText = vi.fn(async () => {
+    const generateText = vi.fn(async (_input: GenerateTextInput) => {
       entered();
       await gate;
       return {
@@ -339,7 +353,7 @@ it("settles ten source turns in order and never publishes a timed-out late memor
       // deadline (the handler's own work is not part of what it checks), so
       // the deadline is short but far above how long that takes on a slow CI.
       [story, { ...memory, timeoutMs: index === 5 ? 250 : 5000 }],
-      { store, llm, loadRuntime, gateway: { generateText } },
+      { store, llm, loadRuntime, gateway: stubPluginGateway(generateText) },
     );
     await started;
     const nextStarted = vi.fn();

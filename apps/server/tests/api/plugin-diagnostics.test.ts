@@ -30,6 +30,7 @@ function session(id = "session", incarnation = "original"): SessionRecord {
     id,
     worldId: "fixture",
     status: "active",
+    locale: "zh-CN",
     phase: "playing",
     setupRuntimes: {},
     completedPlayerTurns: 0,
@@ -105,17 +106,35 @@ function fixture() {
           description: "private-description",
           contributes: {
             commands: [
-              { name: "inspect", action: "inspect-action" },
-              { name: "missing", action: "missing-action" },
+              {
+                name: "inspect",
+                description: "Inspect",
+                action: "inspect-action",
+              },
+              {
+                name: "missing",
+                description: "Missing",
+                action: "missing-action",
+              },
             ],
           },
         },
         manifest: {
           name: id,
+          pluginId: id,
+          pluginType: "plugin",
           description: "private-description",
           commands: [
-            { name: "inspect", action: "inspect-action" },
-            { name: "missing", action: "missing-action" },
+            {
+              name: "inspect",
+              description: "Inspect",
+              action: "inspect-action",
+            },
+            {
+              name: "missing",
+              description: "Missing",
+              action: "missing-action",
+            },
           ],
         },
         promptTemplate: "",
@@ -131,13 +150,23 @@ function fixture() {
       },
       manifests: [
         {
+          runtime: { type: "function" },
           manifest: {
             name: `${id}/runtime`,
+            pluginId: id,
             description: "private-description",
             stage: "post-turn",
             commands: [
-              { name: "inspect", action: "inspect-action" },
-              { name: "missing", action: "missing-action" },
+              {
+                name: "inspect",
+                description: "Inspect",
+                action: "inspect-action",
+              },
+              {
+                name: "missing",
+                description: "Missing",
+                action: "missing-action",
+              },
             ],
           },
           promptTemplate: "private-prompt",

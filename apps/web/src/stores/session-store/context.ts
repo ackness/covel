@@ -51,8 +51,8 @@ export interface SessionActions {
   refreshExecutionRecovery: () => void;
   resetSession: () => void;
   backToWorldSelect: () => void;
-  updateWorldLocal: (world: api.WorldRecord) => void;
-  addWorldLocal: (world: api.WorldRecord) => void;
+  updateWorldLocal: (world: api.WorldSummary) => void;
+  addWorldLocal: (world: api.WorldSummary) => void;
   removeWorldLocal: (worldId: string) => void;
   loadSessionPlugins: () => Promise<void>;
   toggleSessionPlugin: (pluginId: string, enable: boolean) => Promise<void>;

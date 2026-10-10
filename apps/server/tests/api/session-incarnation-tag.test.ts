@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type DataStore } from "@covel/store";
+import { type DataStore, type StoreBackend } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
 import { createPluginRegistry } from "@covel/plugin-loader";
@@ -9,7 +9,7 @@ import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 
-describe.each(["memory", "sqlite"])(
+describe.each<StoreBackend>(["memory", "sqlite"])(
   "public session incarnation on %s",
   (backend) => {
     let store: DataStore;

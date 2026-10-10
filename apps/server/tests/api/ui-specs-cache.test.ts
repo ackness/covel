@@ -84,11 +84,12 @@ describe("GET /api/ui-specs — registry snapshot", () => {
       phase: "playing",
       setupRuntimes: {},
       id: sessionId,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 1,
       activePlugins: ["panel-plugin"],
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       metadata: {
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),

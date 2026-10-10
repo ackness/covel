@@ -11,7 +11,7 @@ import {
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { WorldDetailView } from "@/components/world/world-detail-view.js";
 import { isWorldDeletable } from "@/components/world/world-deletion.js";
-import { WorldEditor } from "@/components/world/world-editor.js";
+import { WorldEditorLoader } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import { WorldListView } from "@/components/world/world-list-view.js";
 import { getDataService } from "@/services/data-service.js";
@@ -21,6 +21,7 @@ import type {
   PluginSummary,
   SessionRecord,
   WorldRecord,
+  WorldSummary,
 } from "@/services/api.js";
 import { useRecentSessions } from "@/components/world/use-recent-sessions.js";
 import { text } from "@/components/world/editor-helpers.js";
@@ -37,7 +38,7 @@ import { DEFAULT_FALLBACK_LOCALE } from "@covel/shared";
 type ViewMode = "list" | "detail" | "edit";
 
 interface WorldSelectScreenProps {
-  worlds: WorldRecord[];
+  worlds: WorldSummary[];
   plugins: PluginSummary[];
   resolvedSlots: ResolvedSlot[];
   settingsOpen: boolean;
@@ -47,8 +48,8 @@ interface WorldSelectScreenProps {
   /** Offers "continue" entries for worlds that already have a session. */
   onResumeSession?: (session: SessionRecord) => void;
   onOpenOnboarding?: () => void;
-  onWorldUpdated?: (world: WorldRecord) => void;
-  onWorldCreated?: (world: WorldRecord) => void;
+  onWorldUpdated?: (world: WorldSummary) => void;
+  onWorldCreated?: (world: WorldSummary) => void;
   onWorldDeleted?: (worldId: string) => void;
 }
 
@@ -331,7 +332,7 @@ export function WorldSelectScreen({
 
   if (mode === "edit" && selectedWorld) {
     return (
-      <WorldEditor
+      <WorldEditorLoader
         world={selectedWorld}
         onSave={handleSave}
         onCancel={() => setMode("detail")}

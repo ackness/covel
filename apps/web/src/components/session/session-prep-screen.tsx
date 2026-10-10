@@ -38,7 +38,11 @@ import {
 import { WorldInfoCard } from "./session-prep/world-info-card.js";
 import { SessionHistoryCard } from "./session-prep/session-history-card.js";
 import { WorldLoreCard } from "./session-prep/world-lore-card.js";
-import { useWorldLore } from "./session-prep/use-world-lore.js";
+import {
+  useWorldLore,
+  type LoreDraftStatus,
+} from "./session-prep/use-world-lore.js";
+import { useWorldRecord } from "@/services/world-records.js";
 import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
@@ -190,7 +194,12 @@ export function SessionPrepScreen({
     [deletingId, t, i18n, world.name, onDeleteSession],
   );
 
-  const originalLore = text(world.lore);
+  // The list's summary paints the header; the lore and the dimension flag come
+  // from the full record, and Begin waits for them so a session never starts
+  // with a lore override built from an empty placeholder.
+  const record = useWorldRecord(world.id);
+  const recordReady = record.status === "ready";
+  const originalLore = text(record.world?.lore);
   const lore = useWorldLore(world.id, originalLore);
   // The card shows and edits the lore a player may read. The narrator-only
   // blocks of the world stay in the text that the session starts with.
@@ -208,8 +217,14 @@ export function SessionPrepScreen({
         ? originalLore
         : withNarratorOnlyLore(value, originalLore),
     );
+  const loreStatus: LoreDraftStatus = recordReady
+    ? lore.status
+    : record.status === "loading"
+      ? "loading"
+      : "load-error";
+  const retryLore = recordReady ? lore.retry : record.retry;
   const loreUnavailable =
-    lore.status === "loading" || lore.status === "load-error";
+    loreStatus === "loading" || loreStatus === "load-error";
 
   const handleSettingsOpenChange = useCallback(
     (open: boolean) => {
@@ -569,16 +584,17 @@ export function SessionPrepScreen({
                 onToggle={() => setLoreExpanded(!loreExpanded)}
                 loreValue={visibleLore}
                 originalLore={visibleOriginalLore}
-                isModified={lore.value !== originalLore}
+                isModified={recordReady && lore.value !== originalLore}
+                locked={!recordReady}
                 onLoreChange={changeVisibleLore}
                 onResetLore={lore.reset}
-                draftStatus={lore.status}
-                onRetry={lore.retry}
+                draftStatus={loreStatus}
+                onRetry={retryLore}
               />
 
               <DimensionActions
                 worldId={world.id}
-                enabled={Boolean(world.dimensions)}
+                enabled={Boolean(record.world?.dimensions)}
               />
             </section>
 

@@ -8,6 +8,10 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
 import * as api from "@/services/api.js";
+import {
+  invalidateAllWorldRecords,
+  primeWorldRecord,
+} from "@/services/world-records.js";
 import { SessionPrepScreen } from "../session-prep-screen.js";
 import type { SessionPrepScreenProps } from "../session-prep/types.js";
 
@@ -17,8 +21,9 @@ vi.mock("@/services/api.js", () => ({
   removeWorldOverlay: vi.fn(),
   fetchPluginFlows: vi.fn(async () => ({ steps: [] })),
 }));
+const getWorld = vi.fn();
 vi.mock("@/services/data-service.js", () => ({
-  getDataService: () => ({ listSessions: async () => [] }),
+  getDataService: () => ({ listSessions: async () => [], getWorld }),
 }));
 vi.mock("@/hooks/use-slot-config.js", () => ({
   useSlotConfig: () => ({ resolvedSlots: [], refresh: vi.fn() }),
@@ -68,13 +73,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const world = {
+// The full record, which the screen reads its lore from; the screen's prop is
+// the summary the list carries.
+const fullWorld = {
   id: "world-a",
   name: "World A",
   description: "",
   lore: "Original A",
   createdAt: "2026-01-01",
 };
+const { lore: _lore, ...world } = fullWorld;
 function props(
   overrides: Partial<SessionPrepScreenProps> = {},
 ): SessionPrepScreenProps {
@@ -98,6 +106,8 @@ function openLore() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  invalidateAllWorldRecords();
+  primeWorldRecord(fullWorld);
   await i18n.changeLanguage("en-US");
   vi.mocked(api.getWorldOverlay).mockResolvedValue(null);
   vi.mocked(api.setWorldOverlay).mockResolvedValue(undefined);
@@ -110,11 +120,8 @@ describe("session prep narrator-only lore", () => {
 
   it("shows the player-visible lore and starts with the whole text", async () => {
     const onStart = vi.fn();
-    render(
-      <SessionPrepScreen
-        {...props({ world: { ...world, lore: marked }, onStart })}
-      />,
-    );
+    primeWorldRecord({ ...fullWorld, lore: marked });
+    render(<SessionPrepScreen {...props({ onStart })} />);
     const input = openLore() as HTMLTextAreaElement;
     await waitFor(() => expect(input.value).toBe("A village.\n\nRain."));
     fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
@@ -123,9 +130,8 @@ describe("session prep narrator-only lore", () => {
   });
 
   it("keeps the narrator-only blocks in the draft of an edited lore", async () => {
-    render(
-      <SessionPrepScreen {...props({ world: { ...world, lore: marked } })} />,
-    );
+    primeWorldRecord({ ...fullWorld, lore: marked });
+    render(<SessionPrepScreen {...props()} />);
     const input = openLore() as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "A town." } });
     expect(input.value).toBe("A town.");
@@ -136,6 +142,26 @@ describe("session prep narrator-only lore", () => {
     // Typing the visible lore back is the original again, not a draft.
     fireEvent.change(input, { target: { value: "A village.\n\nRain." } });
     expect(api.removeWorldOverlay).toHaveBeenCalledWith("world-a");
+  });
+});
+
+describe("session prep full record", () => {
+  it("does not start while the full record loads, and never with an empty lore", async () => {
+    const read = deferred<typeof fullWorld | null>();
+    invalidateAllWorldRecords();
+    getWorld.mockReturnValueOnce(read.promise);
+    const onStart = vi.fn();
+    render(<SessionPrepScreen {...props({ onStart })} />);
+    // The header paints from the summary at once.
+    expect(screen.getAllByText("World A").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
+    expect(onStart).not.toHaveBeenCalled();
+    await act(async () => read.resolve(fullWorld));
+    await waitFor(() =>
+      expect((openLore() as HTMLTextAreaElement).value).toBe("Original A"),
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
+    expect(onStart).toHaveBeenCalledWith(["fixture-plugin"], "Original A", []);
   });
 });
 
@@ -259,12 +285,11 @@ describe("session prep lore ownership", () => {
   it("resets to the new world's text and ignores the old world's late read", async () => {
     const read = deferred<api.WorldOverlay | null>();
     vi.mocked(api.getWorldOverlay).mockReturnValueOnce(read.promise);
+    primeWorldRecord({ ...fullWorld, id: "world-b", lore: "Original B" });
     const view = render(<SessionPrepScreen {...props()} />);
     const input = openLore();
     view.rerender(
-      <SessionPrepScreen
-        {...props({ world: { ...world, id: "world-b", lore: "Original B" } })}
-      />,
+      <SessionPrepScreen {...props({ world: { ...world, id: "world-b" } })} />,
     );
     await act(async () =>
       read.resolve({ lore: "Draft A", updatedAt: "2026-01-01" }),

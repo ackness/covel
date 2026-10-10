@@ -24,6 +24,7 @@ import {
   buildTabletopProbeZip,
   tabletopProbeId,
 } from "../helpers/tabletop-package.js";
+import { runtimeResultsOf } from "../helpers/runtime-results.js";
 
 const project = path.resolve(import.meta.dirname, "../../../..");
 const pluginId = tabletopProbeId;
@@ -135,7 +136,7 @@ describe("tabletop package installed as a third-party ZIP", () => {
     ).toBe(true);
     expect(last?.commitStatus, text).toBe("committed");
     expect(
-      last.runtimeResults.filter((result) => result.status === "failed"),
+      runtimeResultsOf(last).filter((result) => result.status === "failed"),
       text,
     ).toEqual([]);
     return last;
@@ -278,7 +279,6 @@ describe("tabletop package installed as a third-party ZIP", () => {
     const now = new Date().toISOString();
     await store.createSession({
       id: sessionId,
-      worldId: null,
       status: "active",
       phase: "setup",
       setupRuntimes: {},
@@ -297,7 +297,7 @@ describe("tabletop package installed as a third-party ZIP", () => {
     const upload = new FormData();
     upload.append(
       "file",
-      new Blob([zip], { type: "application/zip" }),
+      new Blob([new Uint8Array(zip)], { type: "application/zip" }),
       "tabletop-rules.zip",
     );
     const installed = await boot.app.request("/api/install/plugin", {
@@ -375,7 +375,7 @@ sources:
     const result = (await store.listTurnResults(sessionId)).at(-1)!;
     expect(previousIds.has(result.turnId)).toBe(false);
     expect(
-      result.runtimeResults.find(
+      runtimeResultsOf(result).find(
         (item) => item.runtimeId === `${pluginId}/creation`,
       ),
     ).toMatchObject({
@@ -396,7 +396,7 @@ sources:
     await store.deletePluginData(sessionId, pluginId, "rules", "creation");
     const recovered = await action("start_session", {});
     expect(
-      recovered.runtimeResults.some(
+      runtimeResultsOf(recovered).some(
         (runtime) => runtime.runtimeId === "core-fixture/schema",
       ),
     ).toBe(false);
@@ -684,7 +684,7 @@ sources:
     });
     expect(retried.turnId).not.toBe(resolved.turnId);
     expect(
-      retried.runtimeResults.find(
+      runtimeResultsOf(retried).find(
         (result) => result.runtimeId === `${pluginId}/check`,
       )?.output,
     ).toMatchObject({ receipt });
@@ -846,7 +846,7 @@ sources:
       ]),
     );
     expect(
-      settled.runtimeResults
+      runtimeResultsOf(settled)
         .find((result) => result.runtimeId === "narrator")
         ?.toolCalls.map((call) => call.toolName),
     ).toContain("emit-event");

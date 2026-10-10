@@ -20,7 +20,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import { worldEditionLocales } from "@covel/shared";
-import { type DataStore } from "@covel/store";
+import { type DataStore, type WorldRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import * as worldCreation from "@covel/create";
 import { aiRoutes } from "../../src/routes/api/ai.js";
@@ -124,9 +124,23 @@ function createTestApp(
   return app;
 }
 
-async function readSseJson(
-  res: Response,
-): Promise<Array<Record<string, unknown>>> {
+interface SseEvent {
+  type: string;
+  message?: string;
+  world?: WorldRecord;
+  [field: string]: unknown;
+}
+
+/** The `done` event; a stream that ended without one fails the test. */
+function doneEvent(events: SseEvent[]): SseEvent & { world: WorldRecord } {
+  const done = events.find((event) => event.type === "done");
+  if (!done?.world) {
+    throw new Error(`no done event with a world: ${JSON.stringify(events)}`);
+  }
+  return { ...done, world: done.world };
+}
+
+async function readSseJson(res: Response): Promise<SseEvent[]> {
   const text = await res.text();
   return text
     .split("\n")
@@ -313,8 +327,8 @@ describe("ai world generation route", () => {
       }),
     );
     expect(events.some((event) => event.type === "error")).toBe(false);
-    const done = events.find((event) => event.type === "done");
-    expect(JSON.stringify(done?.warnings)).toContain(
+    const done = doneEvent(events);
+    expect(JSON.stringify(done.warnings)).toContain(
       "check model configuration or server logs",
     );
     // The two answers that arrived are counted; the failed requests have none.
@@ -421,9 +435,7 @@ describe("ai world generation route", () => {
       });
       const events = await readSseJson(response);
       expect(events.filter((event) => event.type === "error")).toEqual([]);
-      const done = events.find((event) => event.type === "done") as {
-        world: import("@covel/store").WorldRecord;
-      };
+      const done = doneEvent(events);
       expect(done.world).toMatchObject({
         locale: expectedLocale,
         metadata: {
@@ -529,9 +541,7 @@ describe("ai world generation route", () => {
       });
       const events = await readSseJson(response);
       expect(events.filter((event) => event.type === "error")).toEqual([]);
-      const done = events.find((event) => event.type === "done") as {
-        world: import("@covel/store").WorldRecord;
-      };
+      const done = doneEvent(events);
       expect(done.world.metadata?.contractData).toEqual([
         {
           contract: "memory.blocks@1",
@@ -545,6 +555,7 @@ describe("ai world generation route", () => {
         id: "memory-session",
         worldId: done.world.id,
         status: "active",
+        locale: "zh-CN",
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
@@ -584,6 +595,9 @@ describe("ai world generation route", () => {
       );
       const discovery = discoveries.find((item) => item.id === "world-time")!;
       const definition = await loadPluginDefinition(discovery);
+      const acceptedData =
+        definition.packageManifest.plugin.contributes?.data?.definitions;
+      if (!acceptedData) throw new Error("world-time declares no definitions");
       const registry = createPluginRegistry();
       // A different receiver ID must work without changes to world data.
       const pluginId =
@@ -602,7 +616,7 @@ describe("ai world generation route", () => {
         rootPath: discovery.rootPath,
         manifests: [],
         packageManifest: parsePluginMd(
-          `---\n${JSON.stringify({ ...definition.packageManifest.plugin, id: pluginId, contributes: { ...definition.packageManifest.plugin.contributes, data: { [namespace]: definition!.packageManifest.plugin.contributes.data!.definitions! } } })}\n---`,
+          `---\n${JSON.stringify({ ...definition.packageManifest.plugin, id: pluginId, contributes: { ...definition.packageManifest.plugin.contributes, data: { [namespace]: acceptedData } } })}\n---`,
           "fixture/PLUGIN.md",
         ),
         loadedRuntimes: new Map(),
@@ -638,10 +652,9 @@ describe("ai world generation route", () => {
         }),
       });
       const events = await readSseJson(response);
-      const done = events.find((event) => event.type === "done") as
-        { world: import("@covel/store").WorldRecord } | undefined;
+      const done = doneEvent(events);
       expect(events.filter((event) => event.type === "error")).toEqual([]);
-      expect(done?.world.metadata?.contractData).toEqual(records);
+      expect(done.world.metadata?.contractData).toEqual(records);
       expect(JSON.stringify(generate.mock.calls)).toContain(
         "world.time-definition@1",
       );
@@ -652,9 +665,9 @@ describe("ai world generation route", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            id: done!.world.id,
+            id: done.world.id,
             name: "Tidal city",
-            metadata: done!.world.metadata,
+            metadata: done.world.metadata,
           }),
         });
         expect(created.status).toBe(201);
@@ -778,7 +791,7 @@ describe("ai world generation route", () => {
     const generate: LLMAdapter["generate"] = vi.fn(async ({ signal }) => {
       signal!.throwIfAborted();
       started.resolve(signal!);
-      return new Promise((_resolve, reject) => {
+      return new Promise<LLMResponse>((_resolve, reject) => {
         signal!.addEventListener("abort", () => reject(signal!.reason), {
           once: true,
         });
@@ -833,8 +846,8 @@ describe("ai world generation route", () => {
       const events = await readSseJson(await generate());
       expect(await store.getWorld("generated-world")).toEqual(before);
       if (failure === "collision") {
-        const done = events.find((event) => event.type === "done");
-        expect(done?.world.id).toBe("generated-world-2");
+        const done = doneEvent(events);
+        expect(done.world.id).toBe("generated-world-2");
         expect(events.some((event) => event.type === "error")).toBe(false);
         expect(await store.getWorld("generated-world-2")).not.toBeNull();
         expect(await readdir(worldsDir)).toEqual(["generated-world-2"]);
@@ -871,8 +884,8 @@ describe("ai world generation route", () => {
       });
       expect(res.status).toBe(200);
       const events = await readSseJson(res);
-      const done = events.find((event) => event.type === "done");
-      expect(done?.world.metadata.storage).toMatchObject({
+      const done = doneEvent(events);
+      expect(done.world.metadata?.storage).toMatchObject({
         backend: "file",
         path: userDir,
       });
@@ -895,14 +908,14 @@ describe("ai world generation route", () => {
 
     expect(res.status).toBe(200);
     const events = await readSseJson(res);
-    const done = events.find((event) => event.type === "done");
-    expect(done?.world.metadata.source).toBe("server-store");
-    expect(done?.world.metadata.storage).toMatchObject({
+    const done = doneEvent(events);
+    expect(done.world.metadata?.source).toBe("server-store");
+    expect(done.world.metadata?.storage).toMatchObject({
       scope: "server",
       backend: "memory",
       durable: false,
     });
-    expect(done?.world.metadata.worldDataPath).toBeUndefined();
+    expect(done.world.metadata?.worldDataPath).toBeUndefined();
     expect(await store.getWorld("generated-world")).toMatchObject({
       id: "generated-world",
       metadata: {
@@ -924,8 +937,8 @@ describe("ai world generation route", () => {
 
     expect(res.status).toBe(200);
     const events = await readSseJson(res);
-    const done = events.find((event) => event.type === "done");
-    expect(done?.world.metadata.storage).toMatchObject({
+    const done = doneEvent(events);
+    expect(done.world.metadata?.storage).toMatchObject({
       scope: "transient",
       backend: "response",
       durable: false,
@@ -1006,8 +1019,8 @@ describe("ai world generation route", () => {
 
     expect(res.status).toBe(200);
     const events = await readSseJson(res);
-    const done = events.find((event) => event.type === "done");
-    expect(done?.world.metadata).toMatchObject({
+    const done = doneEvent(events);
+    expect(done.world.metadata).toMatchObject({
       source: "server-store",
       characterBlueprints: expect.arrayContaining([
         expect.objectContaining({ id: "keeper" }),
@@ -1021,8 +1034,8 @@ describe("ai world generation route", () => {
         rules: 3,
       },
     });
-    expect(done?.world.metadata.worldDataPath).toBeUndefined();
-    expect(done?.world.metadata.characterBlueprintSources).toBeUndefined();
+    expect(done.world.metadata?.worldDataPath).toBeUndefined();
+    expect(done.world.metadata?.characterBlueprintSources).toBeUndefined();
   });
 
   it("returns a world that falls short of the brief, with warnings", async () => {
@@ -1210,7 +1223,7 @@ describe("ai world generation route", () => {
       }
     }
 
-    const post = (route: string, body: object) =>
+    const post = async (route: string, body: object) =>
       app.request(`/api/ai/${route}`, {
         method: "POST",
         headers: {

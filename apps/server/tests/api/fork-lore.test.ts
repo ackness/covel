@@ -42,7 +42,7 @@ const parentMetadata = {
 
 describe.each(["memory", "sqlite"])("fork lore on %s", (backend) => {
   let store: DataStore;
-  let app: Hono;
+  let app: Pick<Hono, "request">;
 
   beforeEach(async () => {
     store =
