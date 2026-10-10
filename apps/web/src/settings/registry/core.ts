@@ -66,6 +66,17 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   });
 
   store.register({
+    key: "ui.developerView",
+    schema: z.boolean(),
+    default: false,
+    group: "general",
+    widget: "toggle",
+    label: "Developer view",
+    description:
+      "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator.",
+  });
+
+  store.register({
     key: MUSIC_ENABLED_SETTING,
     schema: z.boolean(),
     default: true,

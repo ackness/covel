@@ -147,8 +147,11 @@ export function validateRules(rules) {
  * Validate an allocation-only submission: every attribute must be an integer
  * within its range and the budget must be spent exactly. The character name
  * belongs to the character-creation form, not to point allocation.
+ *
+ * The player reads the returned text. `ctx` (the form validator's third
+ * argument, or a runtime context) gives it in the session's language.
  */
-export function validateAllocation(values, rules) {
+export function validateAllocation(values, rules, ctx) {
   const invalid = validateRules(rules);
   if (invalid) return invalid;
   let spent = 0;
@@ -159,9 +162,17 @@ export function validateAllocation(values, rules) {
       value < attribute.base ||
       value > attribute.max
     )
-      return `${attribute.label}: value must be an integer from ${attribute.base} to ${attribute.max}`;
+      return translate(
+        ctx,
+        "{label}: enter a whole number from {min} to {max}",
+        { label: attribute.label, min: attribute.base, max: attribute.max },
+      );
     spent += value - attribute.base;
   }
   if (spent !== rules.budget)
-    return `Allocate exactly ${rules.budget} points; currently allocated ${spent}`;
+    return translate(
+      ctx,
+      "Allocate exactly {budget} points; you have allocated {spent}",
+      { budget: rules.budget, spent },
+    );
 }

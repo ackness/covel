@@ -56,7 +56,8 @@ export interface ExecutionStep {
     | "completed"
     | "failed"
     | "skipped"
-    | "suspended";
+    | "suspended"
+    | "unknown";
   label?: string;
   detail?: string;
   /** Qualified tool name when status is "tool". */

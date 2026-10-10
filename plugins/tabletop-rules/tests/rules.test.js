@@ -99,7 +99,21 @@ describe("validateAllocation", () => {
       /exactly 4 points/,
     );
     expect(validateAllocation({ tideReading: 6, combat: 0 }, rules)).toMatch(
-      /integer from 1 to 5/,
+      /whole number from 1 to 5/,
+    );
+  });
+
+  it("answers in the session's language when given its translations", () => {
+    const ctx = {
+      messages: {
+        translations: {
+          "Allocate exactly {budget} points; you have allocated {spent}":
+            "需要正好分配 {budget} 点，你已分配 {spent} 点",
+        },
+      },
+    };
+    expect(validateAllocation({ tideReading: 4, combat: 4 }, rules, ctx)).toBe(
+      "需要正好分配 4 点，你已分配 6 点",
     );
   });
 });

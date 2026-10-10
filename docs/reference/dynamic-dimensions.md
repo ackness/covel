@@ -55,7 +55,7 @@ host 在叙事提交边界独立登记义务，冻结原 `resultId`、`sourceTur
 
 - 普通编辑、明确人工处理/跳过调用 `editorRuntimeId`，使用同一 `dimension.update` 和 expectedVersion。
 - 原源重试直接调用 `trackerRuntimeId`，携带 `retryFromTurnId`。仅同时有 sourceTurnId 和 retrySeedResults 的显式重试可以解析冻结源 IO；普通 manual 调用没有 turn bindings。scoped recovery 不开放 recursiveCall。
-- 终态回执阻止再次补算；手改不会隐式解除 pending。冲突使用稳定 `dimension-version-conflict` 和当前版本，客户端刷新后明确重试，不自动 rebase。
+- 终态回执阻止再次补算；手改不会隐式解除 pending。冲突使用稳定 `dimension-version-conflict` 和当前版本（提交失败的 proposal 以 `code` 字段携带它，宿主不再读错误文字），客户端刷新后明确重试，不自动 rebase。
 
 `dimensions.changed` 只发布已提交公共值；`dimensions.settlement.changed` 单独发布回执状态。通知在事务提交后发送，版本单调合并；订阅恢复读取权威快照。`SessionSnapshot.dimensions` 必填，provider/recovery 元数据由 host 验证，不接受 plugin-data 自报权限。
 

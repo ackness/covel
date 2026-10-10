@@ -29,8 +29,11 @@ export default async function (ctx) {
   if (!storedRules && rules) await ctx.pluginData.set("setup", "rules", rules);
 
   const formId = `${ctx.pluginId}-allocation`;
+  const voided = await ctx.pluginData.get("setup", "voided");
   const submissions = await ctx.store.listPlayerInputs();
-  const submitted = submissions.findLast((input) => input.formId === formId);
+  const submitted = submissions.findLast(
+    (input) => input.formId === formId && input.id !== voided?.submissionId,
+  );
 
   if (submitted && allocated?.submissionId !== submitted.id) {
     if (!player) {
@@ -39,8 +42,22 @@ export default async function (ctx) {
       return { outcome: "success", completion: "pending", value: {} };
     }
     if (!rules) throw new Error("Point-buy rules vanished after submission");
-    const error = validateAllocation(submitted.values, rules);
-    if (error) throw new Error(error);
+    const error = validateAllocation(submitted.values, rules, ctx);
+    if (error) {
+      // The form validator refuses such values before they are stored, so
+      // this submission got past it. Failing here would fail on every later
+      // run with the same stored values: set it aside and ask again.
+      await ctx.pluginData.set("setup", "voided", {
+        submissionId: submitted.id,
+      });
+      const form = await allocationForm(ctx, formId, rules, submitted.values);
+      return {
+        outcome: "success",
+        completion: "pending",
+        value: { playerId, rules },
+        effects: { interactions: [{ ...form, notice: error }] },
+      };
+    }
     const fields = {};
     for (const attribute of rules.attributes) {
       fields[attribute.id] = submitted.values[attribute.id];
@@ -109,6 +126,21 @@ export default async function (ctx) {
   // Opening flow: the identity/personality form already created the player;
   // offer the allocation form on top of those fields. Rules freeze at first
   // display so later configuration changes cannot alter a shown form.
+  const form = await allocationForm(ctx, formId, rules);
+  await ctx.pluginData.set("setup", "offered", { formId });
+  return {
+    outcome: "success",
+    completion: "pending",
+    value: { playerId, rules },
+    effects: { interactions: [form] },
+  };
+}
+
+/**
+ * The allocation form. `earlier` holds the values of a submission that was
+ * set aside: each one still inside its range stays filled in.
+ */
+async function allocationForm(ctx, formId, rules, earlier) {
   const result = await ctx.tools.call("create-form", {
     formId,
     title: translate(
@@ -116,27 +148,29 @@ export default async function (ctx) {
       "Opening point allocation: distribute {budget} points",
       { budget: rules.budget },
     ),
-    fields: rules.attributes.map((attribute) => ({
-      type: "number",
-      name: attribute.id,
-      label: attribute.label,
-      min: attribute.base,
-      max: attribute.max,
-      step: 1,
-      defaultValue: attribute.base,
-      required: true,
-    })),
+    fields: rules.attributes.map((attribute) => {
+      const value = earlier?.[attribute.id];
+      return {
+        type: "number",
+        name: attribute.id,
+        label: attribute.label,
+        min: attribute.base,
+        max: attribute.max,
+        step: 1,
+        defaultValue:
+          Number.isSafeInteger(value) &&
+          value >= attribute.base &&
+          value <= attribute.max
+            ? value
+            : attribute.base,
+        required: true,
+      };
+    }),
     validation: { name: "point-buy", data: rules },
     submitLabel: translate(ctx, "Finish allocation"),
     narrativeTemplate: translate(ctx, "Opening point allocation complete."),
   });
-  await ctx.pluginData.set("setup", "offered", { formId });
-  return {
-    outcome: "success",
-    completion: "pending",
-    value: { playerId, rules },
-    effects: { interactions: [result.interaction] },
-  };
+  return result.interaction;
 }
 
 /** Read the execution view, including the schema generated upstream. */

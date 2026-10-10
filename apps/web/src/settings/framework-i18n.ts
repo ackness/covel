@@ -63,6 +63,16 @@ function frameworkSettingText(
         "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
       ),
     },
+    "ui.developerView": {
+      label: t(
+        "settings.frameworkEntries.developerView.label",
+        "Developer view",
+      ),
+      description: t(
+        "settings.frameworkEntries.developerView.description",
+        "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator.",
+      ),
+    },
     "audio.musicEnabled": {
       label: t(
         "settings.frameworkEntries.musicEnabled.label",
