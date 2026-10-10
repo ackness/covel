@@ -1,6 +1,7 @@
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const RUN_DIR_MARKER = "COVEL_TEST_TEMP_DIR";
 
@@ -46,8 +47,15 @@ export function useRunTempDir(): void {
 
 useRunTempDir();
 
+// Tests replace global `fetch` to stand in for a provider. The outbound
+// transport uses the global one only where this mark is set, and this file is
+// also the setup file of every worker (`setupFiles` below), so the mark exists
+// in a test run and nowhere else.
+Reflect.set(globalThis, Symbol.for("covel.test.outbound-global-fetch"), true);
+
 export default {
   test: {
+    setupFiles: [fileURLToPath(import.meta.url)],
     include: ["tests/**/*.test.ts"],
     // PG-backed integration files create and drop a real database per worker,
     // and `store.close()` must drain a connection pool before the isolated
