@@ -136,7 +136,7 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 
 Use the [desktop release checklist](./guide/desktop-packaging.md#release-checklist) as the single operational checklist:
 
-1. Prepare versions, CHANGELOG and docs on a development branch. `pnpm changelog:release <version>` writes the version's section of `docs/CHANGELOG.md` from the fragments in `docs/changelog.d/` and deletes them; add the summary paragraph by hand. Root, `apps/*` and `packages/*` versions must match the target tag; plugin and world packages may version independently.
+1. Prepare versions, CHANGELOG and docs on a development branch. `pnpm release:prepare <version>` (`--dry-run` first) sets the version in the root, `apps/*` and `packages/*` manifests and in the README badges, and writes the version's section of `docs/CHANGELOG.md` from the fragments in `docs/changelog.d/`, deleting them; it needs a clean tree and makes no commit. Add the summary paragraph and the README upgrade sentence by hand. Root, `apps/*` and `packages/*` versions must match the target tag; plugin and world packages may version independently.
 2. Complete local `pnpm check`, `pnpm test`, `pnpm test:pg`, UI/E2E checks and `pnpm release:preflight` sequentially, then exercise the [real-model player flow](./guide/e2e-testing.md#发版前的玩家流程验收) with isolated data.
 3. Push the PR after local checks pass. Wait for CI / PostgreSQL integration and a `Build Desktop` dry run on the candidate branch (`publish_release=false`).
 4. Merge the PR, verify checks and the exact commit on `main`, then create and push an annotated `v*` tag on that commit.

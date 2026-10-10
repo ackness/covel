@@ -136,7 +136,7 @@ PR、main 和发布复用同一份 CI 检查，pre-push hook 省去的内容都�
 
 发布检查的唯一操作清单是[桌面打包指南](./guide/desktop-packaging.md#release-checklist)。按以下顺序执行：
 
-1. 在开发分支准备版本、CHANGELOG 和文档。`pnpm changelog:release <version>` 把 `docs/changelog.d/` 里的片段写入 `docs/CHANGELOG.md` 的该版本小节并删除片段；版本摘要段落手写。根目录、`apps/*` 与 `packages/*` 的版本匹配目标 tag；插件和世界包可以独立版本化。
+1. 在开发分支准备版本、CHANGELOG 和文档。`pnpm release:prepare <version>`（先加 `--dry-run` 看结果）设置根目录、`apps/*` 与 `packages/*` 的版本和 README 版本徽章，并把 `docs/changelog.d/` 里的片段写入 `docs/CHANGELOG.md` 的该版本小节、删除片段；它要求工作区干净，不提交。版本摘要段落和 README 的升级说明手写。根目录、`apps/*` 与 `packages/*` 的版本匹配目标 tag；插件和世界包可以独立版本化。
 2. 先顺序完成本地 `pnpm check`、`pnpm test`、`pnpm test:pg`、UI/E2E 检查和 `pnpm release:preflight`，再用隔离数据完成[真实模型玩家流程](./guide/e2e-testing.md#发版前的玩家流程验收)。
 3. 本地通过后推送 PR，等待 CI / PostgreSQL 集成，以及候选分支的 `Build Desktop` dry run（`publish_release=false`）通过。
 4. 合并 PR，确认 `main` 的检查和准确提交，再在该提交创建并推送 annotated `v*` tag。

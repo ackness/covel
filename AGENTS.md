@@ -150,6 +150,9 @@ pnpm check:push       # what the pre-push hook runs, on the committed HEAD: inst
 pnpm changelog:preview  # print [Unreleased] as the next release will have it, from docs/changelog.d/
 pnpm changelog:release  # at release: pnpm changelog:release <version> [--date YYYY-MM-DD] moves the
                       # fragments into docs/CHANGELOG.md and deletes them (docs/changelog.d/README.md)
+pnpm release:prepare  # pnpm release:prepare <version> [--dry-run] [--date YYYY-MM-DD]: sets the version in
+                      # the root, apps/* and packages/* manifests and both README badges, then runs the
+                      # changelog assembly; refuses a lower version or a dirty tree; no commit or tag
 pnpm format           # Prettier
 pnpm build            # all Turbo build targets
 pnpm build:electron   # production desktop installer → release/
