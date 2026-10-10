@@ -27,6 +27,7 @@ import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js"
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
 import { completionContractError } from "./runtime-completion.js";
+import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
 
 export interface AgentCompactionRefresh {
   readonly compacted: boolean;
@@ -191,6 +192,11 @@ export async function executeAgentRuntime({
           ? []
           : effectiveSessionSummaries,
       ...(visibleStory.length > 0 ? { executionStory: visibleStory } : {}),
+      // Only the model that writes the story is shown pictures; each call
+      // decides by its actual model whether they are sent.
+      ...(manifest.outputKind === "story" && deps.mediaStore
+        ? { pictureAttachments: MAX_PICTURE_ATTACHMENTS }
+        : {}),
       // Thread the unified snapshot into context building so templates can
       // read structured session data via `world`, `session`, and `player`.
       ...(sessionContext ? { sessionContext } : {}),

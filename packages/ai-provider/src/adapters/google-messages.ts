@@ -6,6 +6,7 @@ import type {
   TextMessage,
   TextMessageContent,
 } from "../types.js";
+import { imagePartSource } from "./common.js";
 import {
   GOOGLE_PROTOCOL,
   googleError,
@@ -24,15 +25,17 @@ function serializeContent(
   return (content ?? []).map((part) => {
     if (part.type === "text")
       return { text: stripPromptCacheMarkers(part.text) };
-    const { url, mime } = part.image;
-    const data = url?.match(
-      /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i,
-    );
-    if (data) return { inlineData: { mimeType: data[1], data: data[2] } };
-    if (url && mime.startsWith("image/")) {
+    const source = imagePartSource(part);
+    if (source.kind === "data") {
+      return {
+        inlineData: { mimeType: source.mediaType, data: source.data },
+      };
+    }
+    const mime = part.mediaType;
+    if (mime?.startsWith("image/")) {
       let parsed: URL | undefined;
       try {
-        parsed = new URL(url);
+        parsed = new URL(source.url);
       } catch {
         /* Report the supported forms below. */
       }
@@ -46,11 +49,11 @@ function serializeContent(
         !parsed.username &&
         !parsed.password
       ) {
-        return { fileData: { mimeType: mime, fileUri: url } };
+        return { fileData: { mimeType: mime, fileUri: source.url } };
       }
     }
     throw googleError(
-      "Gemini images require an image data URL or a Google Files URI; arbitrary image URLs must be resolved before generation",
+      "Gemini images require image data or a Google Files URI with its mediaType; arbitrary image URLs must be resolved before generation",
       true,
     );
   });
