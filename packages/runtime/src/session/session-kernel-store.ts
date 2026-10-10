@@ -21,6 +21,8 @@ export interface KernelStore {
     metadata?: unknown;
     createdAt: string;
   }): Promise<void>;
+  /** Adds a row to the conversation the prompt history is built from. */
+  appendTurnMessage?: import("@covel/store").DataStore["appendTurnMessage"];
   updateSession(id: string, patch: Record<string, unknown>): Promise<void>;
   saveEvent(record: {
     id: string;

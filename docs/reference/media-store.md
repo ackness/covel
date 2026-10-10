@@ -196,6 +196,15 @@ have no automatic expiry. An operator must establish that the import is no
 longer active before manually removing an abandoned temporary reference. No
 persistent schema change or development-data recreation is required.
 
+## Pictures sent to the story model
+
+The kernel reads image bytes for one purpose besides serving them to the player: a story agent whose model accepts image input receives the newest pictures of its session as inline base64 image parts ([prompt structure](./prompt-structure.md#展示过的图片)). The read stays inside the same boundary as a player read:
+
+- The agent loop holds only `MediaRef`s until the model call. It calls `lookup()` for the stored MIME type and size, `isReferencedBy(id, sessionId)` for the session's right to the asset, then `get()`. An asset the session neither owns nor references is not sent.
+- Only `image/png`, `image/jpeg`, `image/webp` and `image/gif` are sent, and only up to 3,750,000 raw bytes each. A picture over the limit is left out; the kernel does not resize.
+- The provider layer receives bytes and never a location: no media URL, signed token, file path or `MediaRef.url` enters a prompt, and the provider layer fetches nothing. A failed read logs a warning and the call goes on without that picture.
+- Traces keep the length of the inline data, not the data.
+
 ## Lifecycle Cleanup
 
 The SQLite media factory owns its shared connection reference until construction

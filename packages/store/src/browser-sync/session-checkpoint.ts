@@ -97,7 +97,9 @@ export async function exportSessionCheckpoint(
     store.listLogicalTurnCompletions(sessionId),
     store.listSetupAttempts(sessionId),
     store.listJobStatus(sessionId),
-    store.listRuntimeExports(sessionId),
+    // Only the newest revision of each series: older ones are read by an
+    // execution that is still running, and none runs in a restored workspace.
+    store.listRuntimeExports(sessionId, { latestOnly: true }),
     store.listStateSchemas(sessionId),
   ]);
 

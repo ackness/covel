@@ -111,6 +111,20 @@ describe("applyHistoryWindow", () => {
     expect(applyHistoryWindow(history, { maxTurns: 0 })).toEqual([]);
     expect(applyHistoryWindow(history, { maxTurns: 10 })).toEqual(history);
   });
+
+  it("does not count the note of a picture as a turn", () => {
+    // A background job wrote it under its own turn ID after turn t3.
+    const note = {
+      turnId: "job-1",
+      sourceType: "system",
+      content: "A picture was shown to the player here.",
+    } as TurnMessageRecord;
+    const withNote = [...history, note];
+    expect(
+      applyHistoryWindow(withNote, { maxTurns: 1 }).map((m) => m.content),
+    ).toEqual(["three", note.content]);
+    expect(applyHistoryWindow(withNote, { maxTurns: 0 })).toEqual([]);
+  });
 });
 
 describe("runtime journal content", () => {
