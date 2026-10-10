@@ -126,14 +126,6 @@ function extractResponsesParameterOverrides(
       : {};
   if (knownReasoningModel && options.effort !== "none") {
     fields.reasoning = { summary: "auto", ...options };
-    if (meta?.store === false) {
-      fields.include = [
-        ...new Set([
-          ...(Array.isArray(meta.include) ? meta.include : []),
-          "reasoning.encrypted_content",
-        ]),
-      ];
-    }
   }
   return fields;
 }
@@ -211,12 +203,13 @@ function serializeResponsesInput(
   messages: TextMessage[],
   model: string,
   config: ProviderConfig,
+  stateless: boolean,
 ): unknown[] {
   const items: unknown[] = [];
   for (const msg of messages) {
     const native = continuationItems(msg, "openai-responses-v1", model, config);
     if (native) {
-      items.push(...native);
+      items.push(...(stateless ? statelessReplayItems(native) : native));
       continue;
     }
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
@@ -253,10 +246,141 @@ function serializeResponsesInput(
   return items;
 }
 
+const ENCRYPTED_REASONING = "reasoning.encrypted_content";
+
+/**
+ * Endpoints (base URL and model) that refused `include:
+ * ["reasoning.encrypted_content"]`. Later requests leave it out instead of
+ * failing once more on every call.
+ */
+const encryptedReasoningRefused = new Set<string>();
+
+function endpointKey(config: ProviderConfig, model: unknown): string {
+  return `${config.baseUrl}\n${String(model)}`;
+}
+
+/**
+ * Output items of an earlier response, for a request the provider does not
+ * store. The provider cannot find a reasoning item by its ID then, so a
+ * reasoning item goes back only with its `encrypted_content`. When one cannot
+ * be carried it is left out, and the other items go back without their IDs: an
+ * ID would point at an item the provider never kept.
+ */
+function statelessReplayItems(
+  items: readonly Readonly<Record<string, unknown>>[],
+): readonly Readonly<Record<string, unknown>>[] {
+  const carried = items.filter(
+    (item) =>
+      item.type !== "reasoning" ||
+      (typeof item.encrypted_content === "string" &&
+        item.encrypted_content.length > 0),
+  );
+  if (carried.length === items.length) return items;
+  return carried.map(({ id: _id, ...item }) => item);
+}
+
+/**
+ * The fields every Responses request shares. `store` is `false` unless the
+ * slot sets it: the provider then keeps neither the prompt nor the reply, and
+ * a tool loop carries reasoning between its calls as `encrypted_content`.
+ */
+function responsesRequestBody(
+  config: ProviderConfig,
+  params: {
+    model: string;
+    providerRequestMetadata?: Record<string, unknown>;
+  },
+  messages: TextMessage[],
+  context: ModelRequestContext | undefined,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: params.model,
+    store: false,
+    ...sanitizeResponsesMetadata(params.providerRequestMetadata),
+    ...extractResponsesParameterOverrides(
+      params.providerRequestMetadata,
+      context,
+      params.model,
+    ),
+  };
+  const stateless = body.store !== true;
+  const reasoning = body.reasoning as { effort?: unknown } | null | undefined;
+  if (
+    stateless &&
+    reasoning?.effort !== "none" &&
+    !encryptedReasoningRefused.has(endpointKey(config, params.model))
+  ) {
+    body.include = [
+      ...new Set([
+        ...(Array.isArray(body.include) ? body.include : []),
+        ENCRYPTED_REASONING,
+      ]),
+    ];
+  }
+  body.input = serializeResponsesInput(
+    messages,
+    params.model,
+    config,
+    stateless,
+  );
+  return body;
+}
+
+/** True when a 400 response says the model does not take encrypted reasoning. */
+async function refusesEncryptedReasoning(response: Response): Promise<boolean> {
+  if (response.status !== 400) return false;
+  try {
+    const payload = (await response.clone().json()) as {
+      error?: { param?: unknown; message?: unknown };
+      message?: unknown;
+    };
+    const message = payload.error?.message ?? payload.message;
+    return (
+      payload.error?.param === "include" ||
+      (typeof message === "string" && /encrypted[ _]content/i.test(message))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send a Responses request. A model without reasoning rejects the request for
+ * encrypted reasoning; the request is then sent once more without it, and the
+ * reasoning items of this endpoint are left out of later replays.
+ */
+async function postResponses(
+  config: ProviderConfig,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const response = await postJson(config, "/responses", body);
+  const include = Array.isArray(body.include) ? body.include : [];
+  if (
+    !include.includes(ENCRYPTED_REASONING) ||
+    !(await refusesEncryptedReasoning(response))
+  )
+    return response;
+  const { include: _include, ...rest } = body;
+  const kept = include.filter((entry) => entry !== ENCRYPTED_REASONING);
+  const retried = await postJson(config, "/responses", {
+    ...rest,
+    ...(kept.length ? { include: kept } : {}),
+  });
+  // Remembered only when leaving it out was what the endpoint wanted.
+  if (retried.ok)
+    encryptedReasoningRefused.add(endpointKey(config, body.model));
+  return retried;
+}
+
 /**
  * Convert Chat-style `ToolDefinition[]` into the Responses API tool shape.
  * The Responses API flattens the `function` envelope: `name`, `description`,
  * and `parameters` live at the top level of each tool object.
+ *
+ * `strict: false` is explicit: the Responses API treats a function tool as
+ * strict when the field is absent (Chat does the opposite), and a strict
+ * schema makes every optional property required, so the model fills each one
+ * with an empty value that the tool then rejects.
  */
 function serializeResponsesTools(tools: ToolDefinition[]): unknown[] {
   return tools.map((tool) => ({
@@ -266,6 +390,7 @@ function serializeResponsesTools(tools: ToolDefinition[]): unknown[] {
       ? { description: tool.function.description }
       : {}),
     parameters: tool.function.parameters ?? {},
+    strict: false,
   }));
 }
 
@@ -295,19 +420,9 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     async generateText(config, params, context) {
       params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(params.messages, context);
-      const body: Record<string, unknown> = {
-        model: params.model,
-        input: serializeResponsesInput(messages, params.model, config),
-        ...(params.responseFormat
-          ? { text: { format: toResponsesJsonSchema(params.responseFormat) } }
-          : {}),
-        ...sanitizeResponsesMetadata(params.providerRequestMetadata),
-        ...extractResponsesParameterOverrides(
-          params.providerRequestMetadata,
-          context,
-          params.model,
-        ),
-      };
+      const body = responsesRequestBody(config, params, messages, context);
+      if (params.responseFormat)
+        body.text = { format: toResponsesJsonSchema(params.responseFormat) };
       if (params.tools?.length) {
         body.tools = serializeResponsesTools(params.tools);
         body.tool_choice = defaultToolChoice(
@@ -316,7 +431,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           "responses",
         );
       }
-      const response = await postJson(config, "/responses", body);
+      const response = await postResponses(config, body);
       const payload = await parseJson(response);
       const diagnostics = readResponseDiagnostics(
         payload,
@@ -352,20 +467,13 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
     async generateObject(config, params, context) {
       const messages = applyCapabilityFallback(params.messages, context);
-      const response = await postJson(config, "/responses", {
-        model: params.model,
-        input: serializeResponsesInput(messages, params.model, config),
+      const response = await postResponses(config, {
+        ...responsesRequestBody(config, params, messages, context),
         text: {
           format: toResponsesJsonSchema(
             objectResponseFormat(params.schema, "openai-responses"),
           ),
         },
-        ...sanitizeResponsesMetadata(params.providerRequestMetadata),
-        ...extractResponsesParameterOverrides(
-          params.providerRequestMetadata,
-          context,
-          params.model,
-        ),
       });
       const payload = await parseJson(response);
       const diagnostics = readResponseDiagnostics(
@@ -419,20 +527,10 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     async *streamText(config, params, context) {
       params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(params.messages, context);
-      const body: Record<string, unknown> = {
-        model: params.model,
-        input: serializeResponsesInput(messages, params.model, config),
-        stream: true,
-        ...(params.responseFormat
-          ? { text: { format: toResponsesJsonSchema(params.responseFormat) } }
-          : {}),
-        ...sanitizeResponsesMetadata(params.providerRequestMetadata),
-        ...extractResponsesParameterOverrides(
-          params.providerRequestMetadata,
-          context,
-          params.model,
-        ),
-      };
+      const body = responsesRequestBody(config, params, messages, context);
+      body.stream = true;
+      if (params.responseFormat)
+        body.text = { format: toResponsesJsonSchema(params.responseFormat) };
       if (params.tools && params.tools.length > 0) {
         body.tools = serializeResponsesTools(params.tools);
         body.tool_choice = defaultToolChoice(
@@ -441,7 +539,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           "responses",
         );
       }
-      const response = await postJson(config, "/responses", body);
+      const response = await postResponses(config, body);
 
       if (!response.ok) {
         const payload = await parseJson(response);
@@ -537,7 +635,9 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
             const responseObj = payload.response as
               Record<string, unknown> | undefined;
             usage = readOpenAiResponsesUsage(responseObj);
-            if (Array.isArray(responseObj?.output))
+            // Some endpoints end the stream with an empty `output` and send
+            // the items only as `output_item.done` events.
+            if (Array.isArray(responseObj?.output) && responseObj.output.length)
               completedOutput = responseObj.output;
             streamFinishReason = mapResponseStatus(
               responseObj?.status ?? terminalStatus,
