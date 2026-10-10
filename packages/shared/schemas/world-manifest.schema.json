@@ -725,7 +725,7 @@
         },
         "x-i18n": {
           "type": "boolean",
-          "description": "Marks this node as translatable text: its value is a string or a locale map. Nodes without it are never localized."
+          "description": "Marks this node as translatable text: its value is a string written in the file's own language; translations go in the locale edition of the file. Nodes without it are never localized."
         },
         "x-enumLabels": {
           "type": "object",

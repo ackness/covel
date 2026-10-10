@@ -72,7 +72,9 @@ export const runtimeAuthoringManifestSchema = z
         "`agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler.",
       ),
     description: textSchema
-      .describe("What the runtime does. Plain string or a locale map.")
+      .describe(
+        "What the runtime does. Plain string; translations go in locale files.",
+      )
       .optional(),
     schedule: z
       .strictObject({

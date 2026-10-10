@@ -165,7 +165,7 @@ const recursiveValueSchema: z.ZodType<DimensionValueSchema> = z.lazy(() =>
       "x-i18n": z
         .boolean()
         .describe(
-          "Marks this node as translatable text: its value is a string or a locale map. Nodes without it are never localized.",
+          "Marks this node as translatable text: its value is a string written in the file's own language; translations go in the locale edition of the file. Nodes without it are never localized.",
         )
         .optional(),
       "x-enumLabels": z
