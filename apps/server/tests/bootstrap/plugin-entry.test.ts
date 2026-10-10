@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getMusicWire, getSpeechWire } from "@covel/ai-provider";
+import { getMusicWire, getSpeechWire, getTextWire } from "@covel/ai-provider";
 import {
   createPluginRegistry,
   loadPluginDefinition,
@@ -345,6 +345,43 @@ describe("createBootstrapPluginEntries", () => {
       await activation;
       await entries.close();
       delete globals.__covelIsolatedEntry;
+    }
+  });
+
+  it("serves a plugin's text protocol only to sessions in which that plugin is active", async () => {
+    const plugin = writePlugin(
+      "entry-text-wire",
+      `
+      export default function(api) {
+        api.registerWires({ text: [{
+          id: "chat",
+          async generateText() { return { text: "ok" }; },
+          async *streamText() {},
+        }] });
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries(params);
+    try {
+      await entries.ensurePluginEntry("entry-text-wire", "with");
+      params.pluginRegistry.syncSessionActivations("with", ["entry-text-wire"]);
+      params.pluginRegistry.syncSessionActivations("without", []);
+      await entries.withSnapshot("with", async () => {
+        expect(getTextWire("entry-text-wire/chat")).not.toBeNull();
+      });
+      await entries.withSnapshot("without", async () => {
+        expect(getTextWire("entry-text-wire/chat")).toBeNull();
+      });
+      // Outside any session: the self tier has one player, who approved the
+      // plugin; a hosted tier refuses a community plugin's protocol.
+      expect(getTextWire("entry-text-wire/chat")).not.toBeNull();
+      vi.stubEnv("DEPLOYMENT_TIER", "demo");
+      expect(getTextWire("entry-text-wire/chat")).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+      await entries.close();
     }
   });
 

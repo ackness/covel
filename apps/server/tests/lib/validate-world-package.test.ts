@@ -138,6 +138,35 @@ describe("validateWorldPackage", () => {
     expect(diagnostics.filter((item) => item.level === "error")).toEqual([]);
   });
 
+  it("warns about narrator-only markers that hide more than the author marked", async () => {
+    const loreWarnings = async (lore: string) =>
+      (await validate(await makeWorld({ "WORLD.md": lore }))).filter(
+        (item) => item.code === "lore-narrator-only",
+      );
+    expect(
+      await loreWarnings(
+        "Shown.\n\n<!-- narrator-only -->\n\nSecret.\n\n<!-- /narrator-only -->\n\nShown.",
+      ),
+    ).toEqual([]);
+    expect(
+      await loreWarnings(
+        "Shown.\n\n<!-- narrator-only -->\n\nSecret.\n\n<!-- end narrator-only -->\n\nMeant to be shown.",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        file: "WORLD.md",
+        pointer: "line 7",
+        message: expect.stringContaining("not one of the two marker lines"),
+      }),
+      expect.objectContaining({
+        level: "warning",
+        pointer: "line 3",
+        message: expect.stringContaining("no closing line"),
+      }),
+    ]);
+  });
+
   it("measures lore the same in Chinese and in English", async () => {
     const warnsAboutLore = async (lore: string) =>
       (await validate(await makeWorld({ "WORLD.md": lore }, MANIFEST))).some(

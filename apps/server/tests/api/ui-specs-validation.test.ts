@@ -99,9 +99,6 @@ describe("GET /api/ui-specs — per-spec validation", () => {
     await writePlugin(dir, "bad-panel", NO_VIEW_SPEC);
     await writePlugin(dir, "future-panel", FUTURE_SPEC);
 
-    process.env.COVEL_PLUGINS_DIR = dir;
-    delete process.env.COVEL_USER_PLUGINS_DIR;
-
     store = createMemoryStore();
     registry = createPluginRegistry();
     await registerTestPlugins(registry, [dir]);
@@ -127,7 +124,6 @@ describe("GET /api/ui-specs — per-spec validation", () => {
 
   afterEach(async () => {
     __resetUiSpecsCache();
-    delete process.env.COVEL_PLUGINS_DIR;
     await rm(dir, { recursive: true, force: true });
   });
 

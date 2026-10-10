@@ -21,7 +21,10 @@ import {
   isValidPluginSetting,
   applyLocaleOverlay,
   findInlineLocaleMaps,
+  narratorLore,
+  narratorOnlyLoreIssues,
   validateWorldManifest,
+  type NarratorOnlyLoreIssue,
 } from "@covel/shared";
 import { discoverAndRegisterPlugins } from "../routes/api/bootstrap/plugin-discovery.js";
 import { resolveLocaleFilePath } from "../world-seed-loader.js";
@@ -53,6 +56,7 @@ export interface WorldPackageDiagnostic {
     | "manifest-invalid"
     | "lore-missing"
     | "lore-fallback-missing"
+    | "lore-narrator-only"
     | "unknown-plugin"
     | "unknown-setting"
     | "invalid-setting"
@@ -242,6 +246,20 @@ async function checkThemeMusic(
   ];
 }
 
+/** Every one of these hides text from the player; none shows it. */
+const NARRATOR_ONLY_ISSUE_MESSAGES: Record<
+  NarratorOnlyLoreIssue["kind"],
+  string
+> = {
+  unclosed:
+    "this narrator-only block has no closing line; the player sees nothing from here to the end of the file",
+  unopened: "this line closes a narrator-only block, but none is open",
+  nested:
+    "this line opens a narrator-only block inside one that is already open",
+  unrecognized:
+    "this comment names narrator-only but is not one of the two marker lines; it is read as the opening line",
+};
+
 async function checkLore(
   worldDir: string,
   manifest: WorldManifestView,
@@ -253,8 +271,19 @@ async function checkLore(
     const file = await resolveLocaleFilePath(worldDir, "WORLD.md", locale);
     if (!file) missing.push(locale);
     else {
+      const written = await readFile(file, "utf8");
+      for (const issue of narratorOnlyLoreIssues(written))
+        diagnostics.push({
+          level: "warning",
+          code: "lore-narrator-only",
+          file: path.relative(worldDir, file),
+          pointer: `line ${issue.line}`,
+          locales: [locale],
+          message: NARRATOR_ONLY_ISSUE_MESSAGES[issue.kind],
+          hint: "Put `<!-- narrator-only -->` on a line of its own before the part, and `<!-- /narrator-only -->` on a line of its own after it.",
+        });
       // The measure the story prompt cuts the lore with.
-      const lore = fitWorldLore(await readFile(file, "utf8"));
+      const lore = fitWorldLore(narratorLore(written));
       if (lore.truncated)
         diagnostics.push({
           level: "warning",

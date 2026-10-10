@@ -1799,16 +1799,14 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     );
     expect(acceptCandidate.status).toBe(200);
 
-    const branchTurns = await store.listPluginData(
+    const accepted = await store.listPluginData(
       session.id,
       "branch-reply",
-      "turns",
+      "accepted",
     );
-    expect(branchTurns[0]?.value).toMatchObject({
+    expect(accepted[0]?.value).toMatchObject({
       turnId: "turn-story-1",
-      status: "accepted",
-      acceptedCandidateId: "turn-story-1-candidate-2",
-      acceptedText: "Accepted branch text.",
+      text: "Accepted branch text.",
     });
 
     // Advance to the playing band so send_message schedules the main-loop

@@ -701,41 +701,49 @@ aiRoutes.post(
                 );
             }
           }
-          let loaded: WorldRecord | null;
+          const commit = async (loaded: WorldRecord): Promise<WorldRecord> => {
+            const revised = withGeneratedPackageMetadata(
+              loaded,
+              result.packageContent,
+            );
+            const record: WorldRecord = {
+              ...(saveTarget === "server-file"
+                ? revised
+                : recordForStoreOnly(revised, saveTarget)),
+              createdAt: existing.createdAt,
+            };
+            if (saveTarget === "return-only") return record;
+            await store.upsertWorld(record);
+            // The record as the store gives it, in the shape of `GET /worlds/:id`.
+            return (await store.getWorld(record.id)) ?? record;
+          };
           if (saveTarget === "server-file") {
             signal.throwIfAborted();
-            // The old package stays until the new one is in place.
+            let saved: WorldRecord | undefined;
+            // The old package stays until the read-back and the record update
+            // have succeeded; a failure of either puts it back.
             await writeWorldPackage(worldsDir, result, {
               replace: true,
               dataContracts,
+              afterPublish: async () => {
+                const loaded = await loadSingleWorld(worldDir, metadata);
+                if (!loaded)
+                  throw new Error(
+                    `Revised world "${result.id}" failed post-write validation`,
+                  );
+                saved = await commit(loaded);
+              },
             });
-            loaded = await loadSingleWorld(worldDir, metadata);
-            if (!loaded)
-              throw new Error(
-                `Revised world "${result.id}" failed post-write validation`,
-              );
-          } else {
-            loaded = worldRecordFromManifest(result.manifest, result.lore, {
+            return saved!;
+          }
+          return commit(
+            worldRecordFromManifest(result.manifest, result.lore, {
               ...metadata,
               ...(result.packageContent.characters.length
                 ? { embeddedCharacters: result.packageContent.characters }
                 : {}),
-            });
-          }
-          const revised = withGeneratedPackageMetadata(
-            loaded,
-            result.packageContent,
+            }),
           );
-          const record: WorldRecord = {
-            ...(saveTarget === "server-file"
-              ? revised
-              : recordForStoreOnly(revised, saveTarget)),
-            createdAt: existing.createdAt,
-          };
-          if (saveTarget === "return-only") return record;
-          await store.upsertWorld(record);
-          // The record as the store gives it, in the shape of `GET /worlds/:id`.
-          return (await store.getWorld(record.id)) ?? record;
         };
 
         await send({ type: "progress", phase: "saving" });

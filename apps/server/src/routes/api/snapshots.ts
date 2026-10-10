@@ -30,6 +30,7 @@ import {
   DIMENSION_SETTLEMENT_NAMESPACE,
   collectMediaRefIds,
   isControlPlanePluginDataNamespace,
+  type SuspensionSummary,
 } from "@covel/shared";
 import { rebindSnapshotPayloadSession } from "@covel/store/session";
 import type {
@@ -42,9 +43,16 @@ import type {
   PluginDataRecord,
   SessionSummaryRecord,
   SuspensionRecord,
+  SnapshotPayload,
   TurnMessageRecord,
 } from "@covel/store";
 import { buildSnapshotPayload } from "@covel/runtime";
+import { registeredConcealedRuntimeIds } from "./concealed-runtimes.js";
+import { suspensionSummary } from "./resume.js";
+import {
+  isPublicPluginDataRecord,
+  publicPluginDataValue,
+} from "./plugin-rpc/runtime-job-public.js";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import type { EventBus } from "@covel/events";
 import { errorBody, logRequestError, parseJsonBody } from "../../api-error.js";
@@ -172,7 +180,13 @@ snapshotRoutes.post("/:id/snapshots", async (c) => {
         });
       }
 
-      return c.json(snapshot, 201);
+      return c.json(
+        playerSnapshot(
+          snapshot,
+          registeredConcealedRuntimeIds(c.get("pluginRegistry")),
+        ),
+        201,
+      );
     },
   });
 });
@@ -226,6 +240,35 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
 
 // ── GET /api/sessions/:id/snapshots/:snapshotId — full payload ────
 
+type PlayerSnapshot = Omit<SnapshotRecord, "payload"> & {
+  readonly payload: Omit<SnapshotPayload, "suspensions"> & {
+    readonly suspensions: readonly SuspensionSummary[];
+  };
+};
+
+function playerSnapshot(
+  snapshot: SnapshotRecord,
+  concealed: ReadonlySet<string>,
+): PlayerSnapshot {
+  const { payload } = snapshot;
+  return {
+    ...snapshot,
+    payload: {
+      ...payload,
+      pluginData: payload.pluginData.flatMap((record) => {
+        if (!isPublicPluginDataRecord(record)) return [];
+        const value = publicPluginDataValue(record);
+        return value === undefined ? [] : [{ ...record, value }];
+      }),
+      runtimeExports: payload.runtimeExports.filter(
+        (record) => !concealed.has(record.producerRuntimeId),
+      ),
+      // Continuations hold the suspended runtime's full prompt.
+      suspensions: payload.suspensions.map(suspensionSummary),
+    },
+  };
+}
+
 snapshotRoutes.get("/:id/snapshots/:snapshotId", async (c) => {
   const sessionId = c.req.param("id");
   const snapshotId = c.req.param("snapshotId");
@@ -238,7 +281,14 @@ snapshotRoutes.get("/:id/snapshots/:snapshotId", async (c) => {
   if (!snapshot || snapshot.sessionId !== sessionId) {
     return c.json(errorBody("Snapshot not found", { code: "not_found" }), 404);
   }
-  return c.json(snapshot);
+  // The stored payload stays complete for fork and restore; the response
+  // carries only what the other player-facing reads already expose.
+  return c.json(
+    playerSnapshot(
+      snapshot,
+      registeredConcealedRuntimeIds(c.get("pluginRegistry")),
+    ),
+  );
 });
 
 // ── POST /api/sessions/:id/fork — fork from snapshot ──────────────

@@ -125,9 +125,6 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
       USER_UI_SPEC,
     );
 
-    process.env.COVEL_PLUGINS_DIR = bundledDir;
-    process.env.COVEL_USER_PLUGINS_DIR = userDir;
-
     store = createMemoryStore();
     registry = createPluginRegistry();
     await registerTestPlugins(registry, [bundledDir, userDir]);
@@ -154,8 +151,6 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
   });
 
   afterEach(async () => {
-    delete process.env.COVEL_PLUGINS_DIR;
-    delete process.env.COVEL_USER_PLUGINS_DIR;
     await rm(bundledDir, { recursive: true, force: true });
     await rm(userDir, { recursive: true, force: true });
   });

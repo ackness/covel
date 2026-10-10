@@ -12,6 +12,10 @@ import { type DataStore, type MediaStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import { decodePageCursor, type SubscriptionEvent } from "@covel/shared";
+import {
+  createPluginRegistry,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import { makeErrorHandler } from "../../src/api-error.js";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
@@ -26,6 +30,13 @@ import {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+/** Let every already-queued microtask and I/O callback run. */
+async function flushEventLoop(): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
 function createTestApp(
   store: DataStore,
   eventBus?: EventBus,
@@ -36,6 +47,7 @@ function createTestApp(
     Variables: {
       store: DataStore;
       sessionLock: SessionLock;
+      pluginRegistry: PluginRegistry;
       eventBus?: EventBus;
       mediaStore?: MediaStore;
     };
@@ -44,6 +56,7 @@ function createTestApp(
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("sessionLock", sessionLock);
+    c.set("pluginRegistry", createPluginRegistry());
     if (eventBus) c.set("eventBus", eventBus);
     if (mediaStore) c.set("mediaStore", mediaStore);
     await next();
@@ -279,11 +292,14 @@ describe("Snapshot routes", () => {
           }),
       );
 
-      await Promise.resolve();
+      const lockCalls = vi.spyOn(sessionLock, "withLock");
       const request = app.request("/api/sessions/sess-1/snapshots", {
         method: "POST",
       });
-      await Promise.resolve();
+      // The route has queued for the lock; flush the event loop so any write
+      // that ignored the lock would have landed by now.
+      await vi.waitFor(() => expect(lockCalls).toHaveBeenCalled());
+      await flushEventLoop();
       expect(await store.listSnapshots("sess-1")).toHaveLength(0);
 
       release();
@@ -676,13 +692,14 @@ describe("Snapshot routes", () => {
           }),
       );
 
-      await Promise.resolve();
+      const lockCalls = vi.spyOn(sessionLock, "withLock");
       const request = app.request("/api/sessions/sess-1/fork", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fromSnapshotId: snapId }),
       });
-      await Promise.resolve();
+      await vi.waitFor(() => expect(lockCalls).toHaveBeenCalled());
+      await flushEventLoop();
       expect(await store.listSessions()).toHaveLength(1);
 
       release();

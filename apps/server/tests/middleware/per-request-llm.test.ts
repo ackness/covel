@@ -621,7 +621,6 @@ describe("per-request LLM middleware", () => {
           provider: "vendorX",
           baseUrl: "https://ok.example",
           model: "ok-m",
-          protocol: "unsupported-wire",
         },
         // Missing provider
         { id: "bad1", name: "Bad", provider: "", model: "m" },
@@ -629,15 +628,25 @@ describe("per-request LLM middleware", () => {
         { id: "bad2", name: "Bad", provider: "p", model: "" },
       ],
     };
+    const send = (config: unknown) =>
+      app.request("/echo", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "X-Slot-Config": b64(config),
+        },
+        body: JSON.stringify({ model: "good" }),
+      });
 
-    const res = await app.request("/echo", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "X-Slot-Config": b64(slotConfig),
-      },
-      body: JSON.stringify({ model: "good" }),
+    // Control: the good entry is accepted on its own, so the invalid
+    // siblings are the only reason the batch below is refused.
+    const control = await send({
+      customPresets: [slotConfig.customPresets[0]],
     });
+    expect(control.status).toBe(200);
+    calls.length = 0;
+
+    const res = await send(slotConfig);
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       code: "invalid_llm_configuration",

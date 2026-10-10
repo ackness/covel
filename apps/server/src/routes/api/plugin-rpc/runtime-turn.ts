@@ -764,6 +764,9 @@ export function createPluginRpcRuntimeTurnRunner(
         sourceTurnId: args.descriptor.sourceTurnId,
         sourceExecutionId: args.descriptor.sourceExecutionId,
         sourceExecutionStartedAt: args.descriptor.sourceExecutionStartedAt,
+        ...(typeof args.descriptor.sourceLogicalTurn === "number"
+          ? { sourceLogicalTurn: args.descriptor.sourceLogicalTurn }
+          : {}),
         ...(args.descriptor.sourceLogicalTurnId
           ? { sourceLogicalTurnId: args.descriptor.sourceLogicalTurnId }
           : {}),

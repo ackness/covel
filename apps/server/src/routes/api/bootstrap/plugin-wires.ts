@@ -27,6 +27,7 @@ export function registerNamespaced(
   mod: WireModuleShape,
   onRegistered: (dispose: () => void) => void = () => {},
   invoke: <T>(fn: () => T | Promise<T>) => Promise<T> = async (fn) => fn(),
+  builtin = false,
 ): void {
   const groups: ReadonlyArray<{
     readonly wires: readonly { id: string }[] | undefined;
@@ -76,7 +77,12 @@ export function registerNamespaced(
       );
     }
     const id = `${pluginId}/${wire.id}`;
-    register(id, () => registerTextWire(namespacedTextWire(id, wire, invoke)));
+    register(id, () =>
+      registerTextWire(namespacedTextWire(id, wire, invoke), {
+        pluginId,
+        builtin,
+      }),
+    );
   }
 
   for (const group of groups) {

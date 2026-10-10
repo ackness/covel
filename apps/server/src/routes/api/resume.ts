@@ -39,7 +39,11 @@ import { Hono } from "hono";
 import { trackRequestWork } from "../../application-work.js";
 import { z } from "zod";
 import { validateResumeData } from "../../lib/resume-schema.js";
-import type { DataStore, StoreTransaction } from "@covel/store";
+import type {
+  DataStore,
+  StoreTransaction,
+  SuspensionRecord,
+} from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
@@ -49,6 +53,7 @@ import {
   runWithHookScope,
 } from "@covel/runtime";
 import {
+  CONCEALED_FAILURE_MESSAGE,
   concealedRuntimeIds,
   DEFAULT_LOCALE,
   type RuntimeManifest,
@@ -159,20 +164,6 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   const eventBus = c.get("eventBus");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
-  // Per-turn trace emitter — mirrors the actions.ts wiring so resume flows
-  // also populate the /debug timeline with tool / llm / message / block /
-  // state / hook events. The resumed runtime reuses the original suspension's
-  // turnId so trace rows line up with the originating turn.
-  const emitter = createTurnEmitter({
-    store,
-    ...(eventBus ? { eventBus } : {}),
-    sessionId,
-    turnId: suspension.turnId,
-    concealedRuntimeIds: concealedRuntimeIds(
-      pluginRegistry.getActiveRuntimes(sessionId),
-    ),
-  });
-
   let claimAcquired = false;
   const releaseClaim = async (): Promise<void> => {
     if (!claimAcquired) return;
@@ -260,6 +251,20 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           404,
         );
       }
+
+      // Per-turn trace emitter — mirrors the actions.ts wiring so resume flows
+      // also populate the /debug timeline with tool / llm / message / block /
+      // state / hook events. The resumed runtime reuses the original suspension's
+      // turnId so trace rows line up with the originating turn. Built after the
+      // activation sync so the concealed set matches the runtimes that will run.
+      const emitter = createTurnEmitter({
+        store,
+        ...(eventBus ? { eventBus } : {}),
+        sessionId,
+        turnId: suspension.turnId,
+        concealedRuntimeIds: concealedRuntimeIds(activeRuntimes),
+      });
+
       const userSettings = snapshotUserSettings(
         await loadSessionPluginUserSettings(
           store,
@@ -306,7 +311,14 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           // in `runtime.failed`. An exception below stays a generic 500.
           const message = `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`;
           logRequestError(c, "[resume] runtime failed", new Error(message));
-          return c.json(errorBody(message), 500);
+          return c.json(
+            errorBody(
+              effectiveManifest?.concealed
+                ? `Resume failed: ${CONCEALED_FAILURE_MESSAGE}`
+                : message,
+            ),
+            500,
+          );
         }
 
         // The resume that completes a suspended turn queues the detached
@@ -434,22 +446,25 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
 
-  const suspensions = await store.listSuspensions(sessionId);
-  return c.json(
-    listBody(
-      suspensions.map(
-        (suspension) =>
-          ({
-            id: suspension.id,
-            sessionId: suspension.sessionId,
-            turnId: suspension.turnId,
-            runtimeId: suspension.runtimeId,
-            pluginId: suspension.pluginId,
-            reason: suspension.reason,
-            resumeSchema: suspension.resumeSchema,
-            createdAt: suspension.createdAt,
-          }) satisfies SuspensionSummary,
-      ),
-    ),
+  // Resolved (or claimed by an in-flight resume) records stay stored but are not pending.
+  const suspensions = (await store.listSuspensions(sessionId)).filter(
+    (suspension) => !suspension.resolvedAt,
   );
+  return c.json(listBody(suspensions.map(suspensionSummary)));
 });
+
+/** The player-facing fields of a suspension; the continuation (prompts) stays server-side. */
+export function suspensionSummary(
+  suspension: SuspensionRecord,
+): SuspensionSummary {
+  return {
+    id: suspension.id,
+    sessionId: suspension.sessionId,
+    turnId: suspension.turnId,
+    runtimeId: suspension.runtimeId,
+    pluginId: suspension.pluginId,
+    reason: suspension.reason,
+    resumeSchema: suspension.resumeSchema,
+    createdAt: suspension.createdAt,
+  };
+}

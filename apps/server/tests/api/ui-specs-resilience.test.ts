@@ -82,7 +82,6 @@ describe("GET /api/ui-specs — one bad runtime must not 500 the whole response"
     // Corrupt UI spec JSON → loadRuntime throws while reading ui/panel.json.
     await writePlugin(dir, "broken-plugin", "{ this is not valid json");
 
-    process.env.COVEL_PLUGINS_DIR = dir;
     store = createMemoryStore();
     registry = createPluginRegistry();
     await registerTestPlugins(registry, [dir]);
@@ -106,8 +105,6 @@ describe("GET /api/ui-specs — one bad runtime must not 500 the whole response"
 
   afterEach(async () => {
     __resetUiSpecsCache();
-    delete process.env.COVEL_PLUGINS_DIR;
-    delete process.env.COVEL_USER_PLUGINS_DIR;
     await rm(dir, { recursive: true, force: true });
   });
 
