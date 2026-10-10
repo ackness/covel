@@ -1786,6 +1786,8 @@ Submission 里的其他键被丢弃：来源插件、字段定义和模板只从
 
 **写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#输入和输出)。
 
+**Action 的 `context.store`**：绑定到当前会话和插件，只提供 `getSession()`、`listTurnMessages(limit?)` 和本插件的 `getPluginData` / `setPluginData` / `listPluginData`。`listTurnMessages` 只返回最近的已提交消息，最多 200 条（省略 `limit` 时也是 200）；没有 `savePlayerInput`——玩家提交只由表单提交通道写入并经表单校验，action 不能伪造。
+
 插件 action 必须属于会话当前启用的插件。服务端在审批前及取得会话锁后分别检查；禁用插件返回 `404 plugin_not_active`，不会执行 handler 或新增审批。`pluginId: "framework"` 的框架默认 action 不属于插件启用集，仍按各自准入条件执行。旧面板发出的迟到请求同样受此检查约束。
 
 **参数:**

@@ -6,3 +6,7 @@
 
 - **The web client sends only the provider keys its requests can reach.** `X-Provider-Keys` carries the providers that the model roles resolve to (saved binding, otherwise the server's provider) and any provider a request names directly, instead of every saved key. Until the server's roles and presets are loaded it still sends all keys. See `docs/architecture/security.md`.
 - **Rate limits cannot be evaded by rotating path parameters, and their table is bounded.** The limiter counts per client address and route template, and keeps at most 10,000 counters, evicting the oldest.
+
+### Breaking
+
+- **A plugin action can no longer write a player submission, and its turn-message read is bounded.** `savePlayerInput` is removed from the store view of `registerRpc` handlers (`PluginRpcStore` in `@covel/plugin-handlers-utils`), so an action cannot store input that skips form validation for another plugin to trust. `listTurnMessages(limit?)` there now returns the most recent committed messages, at most 200, instead of the whole history; use `readTurnMessages` in a function runtime for paging. No bundled plugin used either. A community plugin that called `savePlayerInput` must submit through the form flow instead. See `docs/reference/api.md`.
