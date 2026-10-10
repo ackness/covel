@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.49-8b5cf6)](./docs/CHANGELOG.md#0049---2026-10-09)
+[![Version](https://img.shields.io/badge/version-v0.0.50-8b5cf6)](./docs/CHANGELOG.md#0050---2026-10-11)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Source version: v0.0.49**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Read the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) before upgrading. Existing v0.0.48 SQLite databases remain readable without deleting data. Upgrades from earlier versions still follow the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/guide/upgrade-0.0.42.en.md). Back up affected storage before upgrading; development data is not automatically migrated.
+> **Source version: v0.0.50**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Read the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050) before upgrading. **A database created by v0.0.49 or earlier does not work with v0.0.50 (character reads and writes fail) and must be recreated**; sessions are not migrated. Upgrades from earlier versions also follow the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/guide/upgrade-0.0.42.en.md). Back up affected storage before upgrading; development data is not automatically migrated.
 
 ## Highlights
 
