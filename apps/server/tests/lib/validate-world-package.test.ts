@@ -52,6 +52,56 @@ describe("validateWorldPackage", () => {
     expect(await validate(await makeWorld({}))).toEqual([]);
   });
 
+  it("rejects a translation file named with a bare language and gives the declared name", async () => {
+    const declared = `${MANIFEST}supportedLocales: [en-US, zh-CN]\n`;
+    const bare = await validate(
+      await makeWorld(
+        { "WORLD.en-US.md": "Lore.", "data/items.zh.yaml": "[]" },
+        declared,
+      ),
+    );
+    expect(bare.filter((item) => item.code === "locale-file-name")).toEqual([
+      expect.objectContaining({
+        level: "error",
+        file: "data/items.zh.yaml",
+        hint: expect.stringContaining("`data/items.zh-CN.yaml`"),
+      }),
+    ]);
+    // The declared spelling is accepted.
+    const exact = await validate(
+      await makeWorld(
+        { "WORLD.en-US.md": "Lore.", "data/items.zh-CN.yaml": "[]" },
+        declared,
+      ),
+    );
+    expect(exact.filter((item) => item.code === "locale-file-name")).toEqual(
+      [],
+    );
+  });
+
+  it("rejects a cover the app cannot show and accepts one it can", async () => {
+    const png = "\u0089PNG";
+    const ok = await validate(
+      await makeWorld(
+        { "media/art/front.png": png },
+        `${MANIFEST}cover: media/art/front.png\naccentColor: "#336699"\n`,
+      ),
+    );
+    expect(ok.filter((item) => item.level === "error")).toEqual([]);
+
+    const missing = await validate(
+      await makeWorld({}, `${MANIFEST}cover: media/art/absent.png\n`),
+    );
+    expect(missing).toEqual([
+      expect.objectContaining({ level: "error", code: "cover" }),
+    ]);
+
+    const badColour = await validate(
+      await makeWorld({}, `${MANIFEST}accentColor: red\n`),
+    );
+    expect(badColour.some((item) => item.level === "error")).toBe(true);
+  });
+
   it("checks each character and lorebook record before session creation", async () => {
     const worldDir = await makeWorld(
       {
@@ -347,7 +397,7 @@ describe("validateWorldPackage", () => {
     const worldDir = path.join(parent, "sample-world");
     await mkdir(worldDir, { recursive: true });
     await writeFile(path.join(worldDir, "world.yaml"), declared);
-    await writeFile(path.join(worldDir, "WORLD.en.md"), "Lore.");
+    await writeFile(path.join(worldDir, "WORLD.en-US.md"), "Lore.");
     // The manifest's own text has no Chinese either; that is another finding.
     const lore = async () =>
       (await validate(worldDir)).filter((item) =>
@@ -433,7 +483,7 @@ sources:
     });
     // An id that the main cast file does not have, and a key that
     // `world.yaml` does not have.
-    const castPath = path.join(worldDir, "characters/main-cast.en.json");
+    const castPath = path.join(worldDir, "characters/main-cast.en-US.json");
     const cast = JSON.parse(await readFile(castPath, "utf-8")) as Record<
       string,
       unknown
@@ -458,7 +508,7 @@ sources:
       }),
       expect.objectContaining({
         level: "warning",
-        file: "characters/main-cast.en.json",
+        file: "characters/main-cast.en-US.json",
         sourceId: "cast",
         pointer: "[id=npc-nobody]",
       }),
@@ -475,7 +525,7 @@ sources:
     });
     // A trigger word copied from the Chinese main file: an English session
     // never matches it, and the model is shown it as the rule's key.
-    const rulesPath = path.join(worldDir, "data/rules/barrow-rules.en.yaml");
+    const rulesPath = path.join(worldDir, "data/rules/barrow-rules.en-US.yaml");
     await writeFile(
       rulesPath,
       (await readFile(rulesPath, "utf-8")).replace(
@@ -491,7 +541,7 @@ sources:
     ).toEqual([
       expect.objectContaining({
         level: "warning",
-        file: "data/rules/barrow-rules.en.yaml",
+        file: "data/rules/barrow-rules.en-US.yaml",
         pointer: "[3].keys[0]",
       }),
     ]);
@@ -512,7 +562,7 @@ sources:
       recursive: true,
     });
     // The world declares en-US; its quests lose their English file.
-    await rm(path.join(worldDir, "data/quests.en.yaml"));
+    await rm(path.join(worldDir, "data/quests.en-US.yaml"));
 
     const editions = (await validate(worldDir, true)).filter(
       (item) => item.code === "edition-incomplete",

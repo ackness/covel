@@ -17,6 +17,7 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import {
   pluginCodeNamespaceWriteError,
+  pluginDataEntry,
   readEnvChoice,
   readEnvString,
   type RpcHandlerStore,
@@ -360,9 +361,7 @@ export function createPluginDataWriter(
       const merged = buffer
         ? mergePluginDataRows(rows, buffer, sessionId, pluginId, namespace)
         : rows;
-      return structuredClone(
-        merged.map((r) => ({ key: r.key, value: r.value })),
-      );
+      return structuredClone(merged.map(pluginDataEntry));
     },
     async delete(namespace: string, key: string) {
       assertWritableNamespace(namespace);

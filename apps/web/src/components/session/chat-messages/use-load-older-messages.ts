@@ -30,6 +30,10 @@ interface UseLoadOlderMessagesResult {
   readonly topSentinelRef: React.RefObject<HTMLDivElement | null>;
   /** 正在加载更旧消息 —— 用于展示加载指示。 */
   readonly loadingOlder: boolean;
+  /** 上一次加载失败时为 true；重试成功或再次开始加载后清除。 */
+  readonly loadFailed: boolean;
+  /** 重新加载更旧一页（失败提示旁的重试按钮）。 */
+  readonly retry: () => void;
 }
 
 /** 顶部提前量：滚动到距顶部该像素内就预取，减少可见空白。 */
@@ -43,6 +47,7 @@ export function useLoadOlderMessages({
 }: UseLoadOlderMessagesArgs): UseLoadOlderMessagesResult {
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   // 加载前的滚动锚点（视口高度 + 位置）。加载后按新旧高度差补偿 scrollTop。
   const anchorRef = useRef<{ height: number; top: number } | null>(null);
   // ref 版 loading，供 IntersectionObserver 回调同步判重（避免闭包陈旧 / 并发触发）。
@@ -54,9 +59,13 @@ export function useLoadOlderMessages({
     if (!vp) return;
     loadingRef.current = true;
     setLoadingOlder(true);
+    setLoadFailed(false);
     anchorRef.current = { height: vp.scrollHeight, top: vp.scrollTop };
     try {
       await onLoadOlder();
+    } catch {
+      anchorRef.current = null;
+      setLoadFailed(true);
     } finally {
       loadingRef.current = false;
       setLoadingOlder(false);
@@ -66,7 +75,7 @@ export function useLoadOlderMessages({
   // 顶部 sentinel 进入视口即触发加载。仅在有更旧消息且视口就绪时挂载观察器。
   useEffect(() => {
     const sentinel = topSentinelRef.current;
-    if (!sentinel || !viewportEl || !hasOlder) return;
+    if (!sentinel || !viewportEl || !hasOlder || loadFailed) return;
     if (typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -79,7 +88,7 @@ export function useLoadOlderMessages({
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [viewportEl, hasOlder, trigger]);
+  }, [viewportEl, hasOlder, loadFailed, trigger]);
 
   // 更旧消息合并到前部后（首条 id 变化），按 scrollHeight 差值补偿 scrollTop。
   // useLayoutEffect 在绘制前同步调整，避免可见跳动。anchor 为空时（普通追加 /
@@ -93,5 +102,10 @@ export function useLoadOlderMessages({
     anchorRef.current = null;
   }, [firstMessageId, viewportEl]);
 
-  return { topSentinelRef, loadingOlder };
+  return {
+    topSentinelRef,
+    loadingOlder,
+    loadFailed,
+    retry: () => void trigger(),
+  };
 }

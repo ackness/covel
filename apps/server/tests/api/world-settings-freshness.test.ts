@@ -122,7 +122,7 @@ describe.each(["memory", "sqlite"])(
       loadSessionHookScope({
         store,
         pluginRegistry: registry,
-        session: { activePlugins: [pluginId], worldId },
+        session: { activePlugins: [pluginId], worldId, locale: "en-US" },
       });
     const tone = async (store: DataStore) =>
       (await scope(store)).settings?.[pluginId]?.tone;

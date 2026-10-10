@@ -355,6 +355,11 @@ export interface FormInteraction extends BaseInteraction {
   /** Plugin-owned validation registered through registerFormValidator; source is pinned to the committed message. */
   readonly validation?: { readonly name: string; readonly data?: unknown };
   readonly submitLabel: string;
+  /**
+   * Shown above the fields, in the session's language: why the player sees
+   * this form again (an earlier submission could not be used).
+   */
+  readonly notice?: string;
 }
 
 export interface ChoiceInteraction extends BaseInteraction {

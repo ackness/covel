@@ -64,7 +64,7 @@ export function supportsDimensionFields(
   );
 }
 
-function emptyValue(schema: DimensionValueSchema): JsonValue {
+export function emptyValue(schema: DimensionValueSchema): JsonValue {
   if (schema.enum?.length) return schema.enum[0]!;
   switch (valueType(schema, undefined)) {
     case "string":

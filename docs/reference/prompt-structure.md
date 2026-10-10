@@ -26,6 +26,8 @@
 - `agent.history.maxTurns` 不计入本回合：`0` 仍会发送当前玩家输入和本回合正文。
 - 这段正文和结尾提示属于当前回合，预算裁剪时与当前玩家输入一起受保护。回合中途玩家插入的消息同样计入当前回合；runtime 暂停后恢复时，保护范围随 continuation 一起保存（`currentTurnUserMessages`），与暂停前一致。
 
+正文只发一次。`io.inputs` 里某个 `cardinality: one` 的输入如果整个值就是这段正文（内置的 `narrative`、`narrator-output` 绑定都是），`<runtime-inputs>` 里它的 `value` 换成一句指向对话里那条消息的话，不再重复全文；`source` 照常保留，function runtime 的 `ctx.inputs` 和工具读到的 `ctx.inputSlots` 仍是原值。值只是包含这段正文（例如一个带 `summary` 字段的对象）时不替换。提交后重试的执行没有投影的正文，输入保持原值。
+
 没有这一步时，叙事之后运行的 agent 读到的对话停在「上一回合的正文 + 本回合玩家输入」，模型会把上一回合结尾当成当下；`<runtime-inputs>` 里虽然有本回合正文，但那是数据块里的一个字段，不是对话的一部分。同一个 runtime 在提交后被重试时，历史里已经有本回合正文，两种情况现在读到的对话一致。
 
 `history.compact@2` 是 single 扩展点。框架负责阈值、返回值校验及摘要与消息标记的原子持久化；默认 `history-compaction` 插件负责选择连续历史前缀、调用摘要模型和限制摘要长度。当前默认策略保护最近两个用户回合和最后五条消息，按 fast 模型可读的输入容量选择连续前缀，为新历史生成独立摘要。旧段原文保持稳定，只有总预算或最多八段的限制要求收缩时才合并最旧连续段。单段目标为源文本 estimated tokens 的 25%，下限 128，上限为有效窗口的 4% 与 2048 中较小值；总预算为有效窗口的 12%，下限 128、上限 8192，且不超过窗口自身。实际生成的摘要长度决定是否合并；小窗口会在合并旧段和新段之间分配预算。有效窗口取 story 与 fast 输入容量（扣除各自响应预留）的较小值，摘要模型请求仍使用 fast 自身容量。单条源消息装不进 fast 时保留原文，不截断源消息。
@@ -71,6 +73,17 @@ messages
 - 预算裁剪把紧挨在受保护回合之前的 system 消息一并保留，所以它不会被丢掉。压缩阈值的估算把它和 system prompt 一起计入。`AssembledContext.turnContext` 是它的内容，没有时为空字符串。
 - 标签名不变。正文继续写 `runtime-inputs.<binding>.value`。
 
+### 记账 runtime 的布局
+
+叙事之后的记账 agent 每回合各发一次请求，合起来比叙事本身的请求还大。它们声明了 `agent.history.maxTurns`，历史窗口每回合滑动，所以能跨回合重复的只有工具定义和 system prompt，其余每回合都是新内容。对这类 runtime：
+
+- 整局不变的数据放进 system prompt（`volatility: session` 的段），只把会变的值留在回合上下文。内置 `world-init` 把维度的规则和 schema 放在 `<dimension-rules>`（session 段），当前值放在 `<dimension-values>`（turn 段）。
+- 一条记录里既有很少变的部分又有常变的部分时，拆成两个块，很少变的在前。内置 `char-creator` 的名册 `<existing-characters>` 只有 id、姓名、类型和 description（session 段），各角色当前的 `fields` 在 `<character-fields>` 里（turn 段）：某个角色的一个数值变了，名册不变。
+- 历史窗口按需要取。当前玩家输入和本回合正文始终发送，不计入 `maxTurns`。只结算本回合事实、已有状态又由数据块给出的 runtime 用 `maxTurns: 0`（内置 `affinity`、`codex`、`npc-graph/extractor`、`world-time/advance`）；直接读正文、需要上一回合来分辨指代的用 `1`（`char-creator/character-tracker`、`world-init/dimension-tracker`）；`guide` 写前情回顾，用 `2` 加摘要。
+- 自己拼请求的 runtime 把变化少的字段排在前面。`world-ir` 的用户消息依次是角色名册、词表、本回合正文。
+
+`pnpm prompt:prefix <covel.db>` 按 runtime 列出一局会话里每回合首个请求的大小、它与上一回合请求从头相同的部分，以及第一处不同出现在哪里（见[第 5 节](#5-token-预算与缓存)）。
+
 仍会让请求前缀提前变化的情况：正文里内插的模板变量取值变了（如 `{{ characters.npcs }}`、`{{ player.character }}`；替代做法见[第 4 节](#4-template-变量与数据边界)）、按关键词触发的世界书条目变了、要求 `pre-history` 的 turn 扩展段变了、历史被压缩。声明了 `agent.history.maxTurns` 的 runtime 的历史窗口每回合滑动，本来就无法跨回合命中历史。
 
 扩展段先按 `audience` 过滤，再依次按 `volatility`（stable、session、turn）、`order`、provider plugin ID 和段 ID 排序。`audience: self` 覆盖提供插件的全部 runtime；`story` 匹配故事输出；`{ contract: "narrative-engine@1" }` 匹配 runtime 的输出契约。
@@ -93,12 +106,12 @@ contributes:
 ```js
 api.provideExtension("prompt.segment@1", "status", {
   async handler(input, ctx) {
-    const record = await ctx.pluginData.get("status", "current");
-    return record
+    const status = await ctx.pluginData.get("status", "current");
+    return status
       ? [
           {
             id: "current-status",
-            content: JSON.stringify(record.value),
+            content: JSON.stringify(status),
             position: "pre-history",
             audience: "self",
             volatility: "turn",
@@ -163,7 +176,7 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 
 捆绑 `character-blueprint` 通过同一扩展点提供 story 受众的 `<character-notes>` session 段：世界角色卡里写给扮演用的内容（口吻、举止、性格、目标、恐惧、秘密、关系、规则、示例台词），只写角色在会话里的卡，按卡 ID 排序，约 6000 token 的预算内逐档裁剪（先示例台词，后规则，口吻不裁）。它是会话内稳定的文本，位于系统提示的稳定区；角色名册变化时才会变。字段与裁剪规则见[插件 README](../../plugins/character-blueprint/README.md#角色卡怎样进入叙事)。
 
-投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 的 self-only `<dimension-rules>` 段在预算内直接带完整规则、schema 与冻结值，超出预算的维度再用 `dimension-rule-get` 分页获取。没有有效规则时不调用维护模型。
+投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 的 self-only 段在预算内直接带完整规则、schema 与冻结值：`<dimension-rules>` 是 session 段，带规则和 schema，进入 system prompt；`<dimension-values>` 是 turn 段，每行 `id: 冻结值`，进入回合上下文。两段都不带版本号（每次更新都变，写入工具自己读取）。超出预算的维度列在 `<dimension-rules>` 的“已截断”下，再用 `dimension-rule-get` 分页获取。没有有效规则时不调用维护模型。
 
 pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post-turn 提交后新执行再发布新版，不反向绑定 tracker 输出，不以 `recordAs` 或世界初值兜底。来源重试通过 `retryFromTurnId` 使用原 turn artifact，失败/未结算不是无变化。完整状态见 [World Model](world-model.md#回合时序与结算回执)。本期没有 #97 的隐藏事件载荷或条件触发层。
 
@@ -176,6 +189,18 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。响应 schema 按两份计：桥接层把它写进 system prompt，Responses 与 Gemini 协议还会作为原生字段再发一次，而预算阶段不知道最终走哪种协议。当前用户回合（含它前面的回合上下文、本回合正文及其结尾提示）和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
 
 `serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；留在 system prompt 的 turn 扩展段（system 角色的 `pre-history`）放在最后一个缓存边界之后，不设置断点；`position: system` 的 turn 扩展段不在 system prompt 里，见[回合上下文](#回合上下文)。user/assistant 角色的 pre-history、post-history 和 depth 段保持各自消息位置，不承诺这些消息位于某个 system 缓存边界内。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
+
+### 测量前缀
+
+```bash
+pnpm prompt:prefix data/covel.db                      # 库里每局会话一张表
+pnpm prompt:prefix data/covel.db --session <id> --show world-init/dimension-tracker
+pnpm prompt:prefix data/covel.db --json
+```
+
+脚本读 `trace_events` 里的 `llm.calling`（记录了发给服务商的请求体），不需要模型，也不需要服务在运行。对每个 runtime，它取每回合的第一个请求，按服务商计算缓存键的顺序（工具定义，然后各条消息）与上一回合的第一个请求逐字符比较。表里的 `req tok` 是请求大小，`shared` 是从头相同的部分，最后一列是第一处不同所在的消息和偏移；`--show` 打印该处前后的文字。同一回合里工具循环的后续请求是在前一个请求后面追加，不参与比较。
+
+这是对前缀的测量，token 数按字符估算（CJK 一字约一个 token，其余约四个字符一个 token），不是服务商的账单：实际是否命中还取决于服务商的最小缓存长度、缓存存活时间和它自己的分词。
 
 稳定内容排在前面可以保留相同前缀。`volatility` 决定排序、缓存边界，以及 `position: system` 的段落在 system prompt 还是回合上下文；它不保证内容永远不变，也不取消执行内的扩展结果复用。
 
@@ -205,7 +230,7 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 
 `world-ir` 的 `PostContextAssembly` Hook 继续负责裁剪自身历史输出及相关记忆，而非追加一个提示词段；这类变换保留 Hook，新增内容使用 `prompt.segment@1`。
 
-Anthropic 保留至多两个稳定 system 缓存边界，并在最新可缓存的历史/工具块上设置移动边界；thinking 块不带缓存控制。其他协议在序列化时移除内部 `COVEL_CACHE_BREAK` 标记。硬裁剪为后续回合预留空间，裁剪标记不含变化的消息计数。压缩触发窗口取 story 与摘要调用槽位输入窗口的较小值，摘要请求仍使用摘要槽位。
+Anthropic 保留至多两个稳定 system 缓存边界，并在消息里设置两个边界：一个在历史的最后一条消息上（对话里第一条回合指令之前），一个在请求最后一个可缓存的块上。后者写入的内容包含本回合的数据，只有同一回合工具循环的后续请求能读到；下一回合的请求与本回合相同的部分到历史结尾为止，读的是前者。四个边界是该 API 的上限。请求里没有历史时（`maxTurns: 0` 的 runtime，回合上下文并入顶层 system）只有最后那个边界。thinking 块不带缓存控制。其他协议在序列化时移除内部 `COVEL_CACHE_BREAK` 标记。硬裁剪为后续回合预留空间，裁剪标记不含变化的消息计数。压缩触发窗口取 story 与摘要调用槽位输入窗口的较小值，摘要请求仍使用摘要槽位。
 
 The dimension provider separates definitions without an `updateRule` into session-stable prompt segments and tracked values into turn segments. The Emberback lore example uses keyword activation and omits character biographies already supplied by the character records. A lore entry may opt into `extra.scanDepth` prior committed messages (0–20); the current player message is always scanned.
 

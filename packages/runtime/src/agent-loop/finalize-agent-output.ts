@@ -12,8 +12,16 @@
  *      structured tool output, or fail when only failed tool calls remain.
  *   2. Run the shared schema gate between build and decoration when a private
  *      output schema is declared. A gate hit short-circuits finalize.
- *   3. Extract declared and tool-emitted effects, sanitize story narrative,
- *      attach buffered proposals to the business output.
+ *   3. Drop effect-shaped fields from an envelope the model wrote, extract
+ *      tool-emitted effects, sanitize story narrative, attach buffered
+ *      proposals to the business output.
+ *
+ * Effects come from tools only. `agent.tools` is the complete list of what a
+ * model can write, so a field of the model's final JSON that is shaped like an
+ * effect (`pluginData`, `statePatches`, an event with a `topic`, …) does
+ * nothing, as an effect-shaped field of a function handler's `value` does
+ * nothing. The completion signal (`preGameDone` / `completion`) is not an
+ * effect and is still read from the envelope.
  */
 
 import type {
@@ -105,6 +113,8 @@ export function finalizeAgentOutput(
   let output: Record<string, unknown>;
   let parsedAsJson = true;
   let schemaFinalContent: string | null = null;
+  // Whether `output` is JSON the model wrote, not the result of a tool.
+  let modelAuthored = false;
   if (preferredOutput) {
     output = { ...preferredOutput };
   } else if (finalContent) {
@@ -127,6 +137,7 @@ export function finalizeAgentOutput(
     output = suppressNarrative
       ? (structured ?? presentable ?? { narrativeOutput: "" })
       : parsed.output;
+    modelAuthored = !suppressNarrative && parsed.parsedAsJson;
   } else if (failedToolCalls.length > 0) {
     return { kind: "tool-failed" };
   } else {
@@ -142,6 +153,8 @@ export function finalizeAgentOutput(
     if (failed) return { kind: "short-circuit", result: failed };
   }
 
+  if (modelAuthored) dropModelAuthoredEffects(output, manifest.name);
+
   const declaredEvents = Array.isArray(output.events) ? output.events : [];
   const effectEvents = declaredEvents.filter(isEffectEvent);
   if (effectEvents.length > 0) {
@@ -152,8 +165,8 @@ export function finalizeAgentOutput(
     else delete output.events;
   }
 
-  // An envelope-declared event precedes a tool-emitted event with the same
-  // topic, preserving the turn-event-chain's first-wins order.
+  // An event of a tool's own result precedes an `emit-event` event with the
+  // same topic, preserving the turn-event-chain's first-wins order.
   const effects: Record<string, unknown> = {};
   if (effectEvents.length > 0 || emittedEvents.length > 0) {
     effects.events = [...effectEvents, ...emittedEvents];
@@ -243,6 +256,39 @@ export function finalizeAgentOutput(
       : {}),
     ...(completion ? { completion } : {}),
   };
+}
+
+/** Envelope fields that carry effects when a tool result supplies them. */
+const EFFECT_FIELDS = [
+  "interactions",
+  "interaction",
+  "ui",
+  "statePatches",
+  "assetGenerations",
+  "pluginData",
+  "notifications",
+] as const;
+
+/**
+ * Remove what would become an effect from JSON the model wrote. Business
+ * events (no `topic`) stay in `output.events`.
+ */
+function dropModelAuthoredEffects(
+  output: Record<string, unknown>,
+  runtimeName: string,
+): void {
+  const dropped: string[] = EFFECT_FIELDS.filter((key) => key in output);
+  for (const key of dropped) delete output[key];
+  if (Array.isArray(output.events) && output.events.some(isEffectEvent)) {
+    const business = output.events.filter((event) => !isEffectEvent(event));
+    if (business.length > 0) output.events = business;
+    else delete output.events;
+    dropped.push("events[].topic");
+  }
+  if (dropped.length > 0)
+    console.warn(
+      `[runtime] ${runtimeName} wrote ${dropped.join(", ")} in its final JSON; an agent's final output carries no effects, so they were ignored. Write through a tool listed in agent.tools.`,
+    );
 }
 
 function isEffectEvent(value: unknown): value is JsonValue {

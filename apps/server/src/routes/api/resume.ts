@@ -276,6 +276,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         pluginRegistry,
         activePluginIds: liveSession.activePlugins,
         userSettings,
+        locale: liveSession.locale,
       });
       return runWithHookScope(hookScope, async () => {
         // Claim while holding the same lifecycle lock as resume execution and

@@ -13,6 +13,7 @@ import type {
   CommitHandlerMap,
 } from "./session-commit-handlers.js";
 import { emitCommittedProposal } from "./session-commit-emitter.js";
+import { flushPostCommit } from "./post-commit-fanout.js";
 export type { KernelStore } from "../session/session-kernel-store.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 
@@ -337,16 +338,14 @@ export function createCommitPipeline(
       if (deferPostCommit) {
         for (const fn of postCommit) deferPostCommit(fn);
       } else {
-        for (const fn of postCommit) {
-          try {
-            await fn();
-          } catch (err) {
-            console.warn(
-              "[session-kernel] commitAll: post-commit fan-out failed:",
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-        }
+        const sessionId = proposals[0]?.sessionId;
+        if (sessionId !== undefined)
+          await flushPostCommit(postCommit, {
+            sessionId,
+            label: "session-kernel",
+            ...(eventBus ? { eventBus } : {}),
+            ...(emitter ? { emitter } : {}),
+          });
       }
       warnPartialCommit(proposals, results, "transactional mode");
       return results;

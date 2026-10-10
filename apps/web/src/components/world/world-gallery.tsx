@@ -11,7 +11,7 @@ import {
 import type { I18nText } from "@covel/shared";
 import { text } from "@/components/world/editor-helpers.js";
 import { useInView } from "@/hooks/use-in-view.js";
-import { worldVisualForId } from "@/lib/world-visuals.js";
+import { worldCoverRef } from "@/lib/world-visuals.js";
 
 /**
  * The art a world package ships — scenes and character portraits — shown on
@@ -76,6 +76,12 @@ export function useWorldThemeMusicUrl(
  * ever shown whole, and the hero is the world's own cover. Without that, shape
  * decides: a wide image is a scene, the rest are figures.
  */
+/** `source/file` of a gallery item, the form a declared cover is compared in. */
+function galleryFileKey(item: WorldGalleryItem): string {
+  const last = item.url.split("?")[0]!.split("/").at(-1) ?? "";
+  return `${item.source}/${decodeURIComponent(last)}`;
+}
+
 function splitGallery(items: readonly WorldGalleryItem[]): {
   hero: WorldGalleryItem | undefined;
   backdrops: WorldGalleryItem[];
@@ -501,8 +507,8 @@ export function WorldGalleryLightbox({
 
 /**
  * A world's art split for display: the slides behind a title, and every
- * picture. The first slide is the cover: the app's own for a bundled world,
- * else the hero of the package, else the first scene it ships.
+ * picture. The first slide is the cover: the one `world.yaml` declares, else
+ * the hero of the package, else the first scene it ships.
  */
 export function useWorldArt(
   world: WorldRecord | null | undefined,
@@ -515,9 +521,14 @@ export function useWorldArt(
   pictures: WorldGalleryItem[];
 } {
   const gallery = useWorldGallery(world);
-  const ownCover = worldVisualForId(world?.id) !== null;
+  const declared = worldCoverRef(world);
+  const ownCover = declared !== null;
+  const coverKey = declared ? `${declared.source}/${declared.file}` : "";
   return useMemo(() => {
-    const { hero, backdrops, figures, maps } = splitGallery(gallery);
+    // A declared cover that the gallery also lists leads once, not twice.
+    const { hero, backdrops, figures, maps } = splitGallery(
+      gallery.filter((item) => !coverKey || galleryFileKey(item) !== coverKey),
+    );
     const lead: { url: string; name?: I18nText }[] = ownCover
       ? [{ url: cover }]
       : hero
@@ -539,7 +550,7 @@ export function useWorldArt(
         ...(hero && !ownCover ? [hero] : []),
       ],
     };
-  }, [gallery, cover, ownCover]);
+  }, [gallery, cover, ownCover, coverKey]);
 }
 
 /**

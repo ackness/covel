@@ -12,8 +12,8 @@ import { vocabularyEntries } from "../tools/vocabulary.js";
  * to prevent re-extracting old facts, which is a legitimate context trimming
  * use case allowed by the extension architecture (02 §2 "裁剪已有上下文").
  */
-export default async function extractionContext(_ctx, payload) {
-  if (payload.runtimeId !== "world-ir") return { action: "continue" };
+export default async function extractionContext(ctx, payload) {
+  if (ctx.runtimeId !== "world-ir") return { action: "continue" };
   const narrative = payload.inputSlots?.narrative;
   if (
     narrative?.cardinality !== "one" ||
@@ -33,15 +33,18 @@ export default async function extractionContext(_ctx, payload) {
       messages: [
         {
           role: "user",
+          // The roster and the vocabulary change on few turns and the
+          // narrative on every turn, so they come first: a provider's prompt
+          // cache serves a request only as far as it repeats the last one.
           content: JSON.stringify({
+            characters,
+            ...(vocabulary.length ? { vocabulary } : {}),
             // Only the text: the result id, plugin id and runtime id are
             // bookkeeping the model has no use for.
             narrative: {
               cardinality: narrative.cardinality,
               value: narrative.value,
             },
-            characters,
-            ...(vocabulary.length ? { vocabulary } : {}),
           }),
         },
       ],

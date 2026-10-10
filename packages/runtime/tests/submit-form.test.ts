@@ -13,6 +13,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { InteractionPayload, InteractionType } from "@covel/shared";
 import {
   createSubmitFormHandler,
+  FormRejectedError,
   RpcValidationError,
   VALID_TYPES,
 } from "../src/rpc-defaults/submit-form.js";
@@ -598,27 +599,39 @@ describe("submitFormHandler (Epic A)", () => {
       ],
     });
 
-    await expect(
-      submitOne(store, {
-        interactionId: "profile",
-        type: "form",
-        values: { age: "old" },
-      }),
-    ).rejects.toThrow(/required.*name/i);
-    await expect(
-      submitOne(store, {
-        interactionId: "profile",
-        type: "form",
-        values: { name: "Aria", age: "old" },
-      }),
-    ).rejects.toThrow(/age.*number/i);
-    await expect(
-      submitOne(store, {
-        interactionId: "profile",
-        type: "form",
-        values: { name: "Aria", origin: "moon" },
-      }),
-    ).rejects.toThrow(/origin.*option/i);
+    // A refusal the player can correct names the field by its label, in the
+    // session's language, and is told apart from a malformed request.
+    const refusal = (values: Record<string, unknown>, locale: string) =>
+      submitOne(
+        store,
+        { interactionId: "profile", type: "form", values },
+        locale,
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    const missing = await refusal({ age: "old" }, "en-US");
+    expect(missing).toBeInstanceOf(FormRejectedError);
+    expect(missing).toMatchObject({
+      code: "form_rejected",
+      message: 'Fill in "Name".',
+    });
+    expect(await refusal({ age: "old" }, "zh-CN")).toMatchObject({
+      message: "请填写“Name”。",
+    });
+    expect(await refusal({ name: "Aria", age: "old" }, "en-US")).toMatchObject({
+      code: "form_rejected",
+      message: '"Age" must be a number.',
+    });
+    expect(
+      await refusal({ name: "Aria", origin: "moon" }, "en-US"),
+    ).toMatchObject({
+      code: "form_rejected",
+      message: 'Choose one of the listed options for "Origin".',
+    });
+    const malformed = await refusal({ name: "Aria", admin: true }, "en-US");
+    expect(malformed).toBeInstanceOf(RpcValidationError);
+    expect(malformed).not.toBeInstanceOf(FormRejectedError);
     await expect(
       submitOne(store, {
         interactionId: "profile",

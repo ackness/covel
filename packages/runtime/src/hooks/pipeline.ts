@@ -24,6 +24,7 @@ import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { GUARD_HOOK_EVENTS, HOOK_SEMANTICS } from "./types.js";
 import {
   currentActivePluginIds,
+  currentHookLocale,
   currentOwnSettings,
   isHookInScope,
   isHookScopeActive,
@@ -299,8 +300,10 @@ export class HookPipeline {
     // gate. Scope-less calls still receive the per-handler cancellation signal.
     // Framework hooks (no pluginId) get a getter returning `{}`.
     const ownSettings = currentOwnSettings(reg.pluginId);
+    const locale = ctx.locale ?? currentHookLocale();
     const ctxForHandler: HookContext = {
       ...ctx,
+      ...(locale === undefined ? {} : { locale }),
       // A supplied activation set needs isolation even without an ambient scope.
       ...(ctx.activePluginIds
         ? { activePluginIds: new Set(ctx.activePluginIds) }

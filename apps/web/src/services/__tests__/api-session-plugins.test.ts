@@ -51,6 +51,7 @@ function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
     optional: [],
     conflicts: [],
     extensions: [],
+    eventTopics: [],
     id: "memory",
     displayName: "Memory",
     description: "Memory plugin",

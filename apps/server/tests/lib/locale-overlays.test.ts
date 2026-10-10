@@ -121,8 +121,8 @@ blocks:
     portrait.sprite.id = "b".repeat(64);
     const root = await world({
       "media/presence.json": JSON.stringify(original),
-      "media/presence.en.json": await readFile(
-        path.join(bundled, "presence.en.json"),
+      "media/presence.en-US.json": await readFile(
+        path.join(bundled, "presence.en-US.json"),
         "utf8",
       ),
     });

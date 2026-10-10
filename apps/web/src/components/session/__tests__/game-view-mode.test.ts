@@ -33,7 +33,9 @@ describe("game view mode", () => {
     expect(result.current[0]).toBe("raw");
 
     act(() => result.current[1]("parsed"));
-    rerender({ world: { metadata: { defaultViewMode: "stage", source: "x" } } });
+    rerender({
+      world: { metadata: { defaultViewMode: "stage", source: "x" } },
+    });
     expect(result.current[0]).toBe("parsed");
   });
 });

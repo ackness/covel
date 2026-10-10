@@ -10,6 +10,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import type { SessionPlugin, UISpecsResponse } from "@/services/api.js";
 import i18n from "@/i18n";
 import { RightPanel } from "../right-panel.js";
+import { getSettings, initSettings } from "@/settings/store.js";
 
 const mocks = vi.hoisted(() => ({
   plugins: [] as SessionPlugin[],
@@ -87,6 +88,7 @@ const plugin = (id: string): SessionPlugin => ({
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   id,
   displayName: id,
   description: id,
@@ -213,4 +215,20 @@ it("moves a plugin panel into the large dialog and back", async () => {
   fireEvent.keyDown(dialog, { key: "Escape" });
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(screen.getByText(/Mounted panel: provider-a$/)).toBeTruthy();
+});
+
+it("shows the raw Database tab only when the developer view is on", async () => {
+  await initSettings();
+  const props = { sessionId: "session-a", world: null, statePatches: [] };
+  const view = render(<RightPanel {...props} />);
+  await screen.findByRole("tab", { name: "Shared panels" });
+  expect(screen.queryByRole("tab", { name: "Database" })).toBeNull();
+  await act(async () => {
+    await getSettings().set("ui.developerView", true);
+  });
+  expect(await screen.findByRole("tab", { name: "Database" })).toBeTruthy();
+  await act(async () => {
+    await getSettings().set("ui.developerView", false);
+  });
+  view.unmount();
 });

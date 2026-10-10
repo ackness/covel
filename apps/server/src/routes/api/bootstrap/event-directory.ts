@@ -132,7 +132,10 @@ export function createEventDirectory(
               );
             }
           }
-          continue; // first-wins (getActivePluginDeclarations is name-sorted)
+          // Session plugin resolution admits one declarer of a topic, so this
+          // is reached only by an active set that did not pass it: first wins
+          // (getActivePluginDeclarations is name-sorted).
+          continue;
         }
         byTopic.set(decl.topic, {
           pluginId: manifest.pluginId,

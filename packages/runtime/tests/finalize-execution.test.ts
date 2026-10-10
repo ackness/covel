@@ -9,7 +9,7 @@
  * which rolls back via snapshot restore.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import type { SuspensionRecord } from "@covel/store";
@@ -494,6 +494,59 @@ describe("finalizeExecution", () => {
     expect(
       emits.map((e) => (e.payload.patch as { summary: string }).summary),
     ).toEqual(["hp", "mp"]);
+  });
+
+  it("resets subscribers and traces it when the committed events cannot be published", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const eventBus = createEventBus();
+    const resets: Array<{ sessionId: string; reason: string }> = [];
+    eventBus.onReset?.((reset) => resets.push(reset));
+    const { emitter, emits } = makeRecordingEmitter();
+    const emit = emitter.emit.bind(emitter);
+    (emitter as { emit: TurnEmitter["emit"] }).emit = async (type, payload) => {
+      if (type === "state.patch.applied") throw new Error("subscriber gone");
+      await emit(type, payload);
+    };
+    const logged = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const outcome = await finalizeExecution({
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "manual",
+          countPolicy: "none",
+        },
+        store,
+        sessionId: SESSION_ID,
+        runtimes: [makeRuntime("rt-a")],
+        results: [makeResult("rt-a", {}, statePatch("hp", 10))],
+        turnIds: [TURN_ID],
+        emitter,
+        eventBus,
+      });
+
+      // The data is stored; only the way to hear about it failed.
+      expect(outcome.status).toBe("committed");
+      expect(outcome.fanOutFailed).toBe(true);
+      expect(
+        (await store.getStateEntry(SESSION_ID, "stats", "hp"))?.value,
+      ).toBe(10);
+      expect(resets).toEqual([
+        { sessionId: SESSION_ID, reason: "publish-failed" },
+      ]);
+      expect(emits).toEqual([
+        {
+          type: "commit.fanout.failed",
+          payload: expect.objectContaining({
+            failedCount: 1,
+            errors: ["subscriber gone"],
+          }),
+        },
+      ]);
+    } finally {
+      logged.mockRestore();
+      await eventBus.close();
+    }
   });
 
   it("rejects empty story before committing sibling proposals and preserves existing durable state", async () => {

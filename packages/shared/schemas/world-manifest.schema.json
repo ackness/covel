@@ -460,6 +460,18 @@
       "enum": ["stage", "parsed"],
       "description": "Initial view for new sessions. `stage` is the fullscreen visual-novel stage. The player's own choice wins once made."
     },
+    "cover": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Cover picture of the world for the world list, the world page and the session backdrop, as a path relative to the world root: a `.png`, `.jpg` or `.webp` file one directory under `media/`. Without it the app shows its own default.",
+      "examples": ["media/gallery/world-cover.webp"]
+    },
+    "accentColor": {
+      "type": "string",
+      "pattern": "^(?:#[0-9a-fA-F]{6}|oklch\\(\\s*\\d+(?:\\.\\d+)?%?\\s+\\d+(?:\\.\\d+)?\\s+\\d+(?:\\.\\d+)?\\s*\\))$",
+      "description": "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour. Without it the app derives one from the world ID.",
+      "examples": ["#c9a24b", "oklch(72% 0.12 75)"]
+    },
     "themeMusic": {
       "type": "string",
       "minLength": 1,

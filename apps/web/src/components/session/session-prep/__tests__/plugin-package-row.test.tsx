@@ -13,6 +13,7 @@ const plugin: PluginSummary = {
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   id: "fixture",
   displayName: "Current plugin",
   description: "Current metadata",

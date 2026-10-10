@@ -72,7 +72,7 @@
 
 ### 设计原则
 
-- **插件状态面板由 `ui.right` 声明**，与框架提供的世界文档、数据库入口共同显示；Lorebook 只有 HTTP API，见下方「世界文档」章节后的说明。
+- **插件状态面板由 `ui.right` 声明**，与框架提供的世界文档入口共同显示（原始「数据库」页签只在设置「通用」打开 `ui.developerView` 后出现，见下）；Lorebook 只有 HTTP API，见下方「世界文档」章节后的说明。
 - **框架不知道具体插件**，通过 `/api/ui-specs` 发现面板
 - **json-render 渲染**，插件提供 JSON spec，框架提供组件 catalog
 - **pluginData 驱动数据**，通过 `plugin-data.changed` SSE 事件实时更新
@@ -91,6 +91,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 > 不带 `sessionId` 的请求返回 registry 快照中的全部插件（用于 boot/debug）。`right-panel.tsx` 在 session 切换时会清空状态并以新 sessionId 重新拉取，避免跨会话的 Tab 残留。
 
 切换会话时同时重置所选分组、子面板及其本地 UI 状态。插件数据加载带有目标 sessionId，旧会话响应不能写入当前会话。所选插件分组移除后回到世界文档；纵向导航可独立滚动，窄屏弹层同样支持长面板列表。
+
+**数据库页签是开发者视图。** 它按表原样列出每一行公开的插件数据，其中包括只写给叙述者看的内容（例如角色卡里的秘密），所以默认不在游玩界面出现。玩家在设置「通用」打开 `ui.developerView`（默认关闭）后，右侧面板才多出「数据库」页签；关闭后页签与内容一并移除，`open-database` 导航请求回到世界文档。`/debug` 页始终提供完整视图。
 
 数据库面板的手动刷新、失败重试与状态事件触发的自动刷新共用请求生命周期。会话或刷新版本变化后，旧请求返回的数据和错误均被忽略，也不能修改当前请求的加载状态。
 
@@ -519,11 +521,11 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 输入直接是 `stage.backdrop@1` 槽位值，符合 `stageBackdropSchema`；`label` 供状态文案展示，不控制回退。
 
-| 档         | 触发                     | 表现                                 |
-| ---------- | ------------------------ | ------------------------------------ |
-| `scene`    | 槽位 `ref` 是 `MediaRef` | 渲染场景图（换图 600ms crossfade）   |
-| `hero`     | 槽位缺失，或无有效 `ref` | 世界头图（`worldVisual().image`）    |
-| `gradient` | 理论兜底                 | 世界 accent 渐变（选择器当前不返回） |
+| 档         | 触发                     | 表现                                                          |
+| ---------- | ------------------------ | ------------------------------------------------------------- |
+| `scene`    | 槽位 `ref` 是 `MediaRef` | 渲染场景图（换图 600ms crossfade）                            |
+| `hero`     | 槽位缺失，或无有效 `ref` | 世界头图（`worldVisual().image`，即 `world.yaml` 的 `cover`） |
+| `gradient` | 理论兜底                 | 世界 accent 渐变（选择器当前不返回）                          |
 
 ### 履历抽屉与表单模态
 
@@ -715,3 +717,11 @@ Live plugin namespaces have one frontend authority, the external plugin-data
 store. The session reducer retains only the `message` namespace needed to build
 historical message-card snapshots, plus derived durable job execution steps.
 Updates to unrelated namespaces do not replace the session context value.
+
+### 挂起恢复面板
+
+agent runtime 调用 `suspend` 后，会话工具条上的徽标打开「挂起的执行」对话框（`suspensions-panel.tsx`）。每张卡片以 `reason` 为标题，并按 `resumeSchema` 选择作答控件（`suspension-input.ts`）：`boolean` 为是/否按钮，`enum` 或 `oneOf` 的 `const` 为选项按钮，`string` 为文本框，可由维度值编辑器覆盖的对象 / 数字 schema 为表单（复用 `DimensionValueEditor`）。只有 schema 缺失或没有控件能覆盖时才退回「高级」折叠区里的原始 JSON 文本框。
+
+### 加载更早消息与执行状态
+
+向上滚动加载更早一页失败时，消息区顶部显示翻译后的失败提示和「重试」按钮，不再静默；成功后提示消失。执行时间线遇到客户端不认识的 runtime 状态时，显示中性的「未知状态」标签并在控制台记录一次，不再画成「已完成」。

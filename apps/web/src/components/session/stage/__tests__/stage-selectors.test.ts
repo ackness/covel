@@ -23,7 +23,6 @@ import {
 const worldVisual: WorldVisual = {
   image: "/visuals/worlds/haruka-academy.webp",
   accent: "oklch(72% 0.15 350)",
-  label: "Haruka Academy",
 };
 
 const ref = (id: string) => ({ id, mime: "image/png", size: 100 });

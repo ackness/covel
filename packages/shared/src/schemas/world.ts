@@ -422,6 +422,10 @@ export const characterSchemaSchema = z
   })
   .strict();
 
+/** A colour the app can put in a style without escaping: hex or oklch. */
+export const WORLD_ACCENT_PATTERN =
+  /^(?:#[0-9a-fA-F]{6}|oklch\(\s*\d+(?:\.\d+)?%?\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s*\))$/;
+
 export const worldManifestSchema = z
   .object({
     schemaVersion: z
@@ -530,6 +534,25 @@ export const worldManifestSchema = z
       .describe(
         "Initial view for new sessions. `stage` is the fullscreen visual-novel stage. The player's own choice wins once made.",
       )
+      .optional(),
+    cover: z
+      .string()
+      .min(1)
+      .describe(
+        "Cover picture of the world for the world list, the world page and the session backdrop, as a path relative to the world root: a `.png`, `.jpg` or `.webp` file one directory under `media/`. Without it the app shows its own default.",
+      )
+      .meta({ examples: ["media/gallery/world-cover.webp"] })
+      .optional(),
+    accentColor: z
+      .string()
+      .regex(WORLD_ACCENT_PATTERN, {
+        message:
+          'accentColor must be a hex colour like "#c9a24b" or an oklch colour like "oklch(72% 0.12 75)"',
+      })
+      .describe(
+        "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour. Without it the app derives one from the world ID.",
+      )
+      .meta({ examples: ["#c9a24b", "oklch(72% 0.12 75)"] })
       .optional(),
     themeMusic: z
       .string()

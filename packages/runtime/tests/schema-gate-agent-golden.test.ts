@@ -182,7 +182,8 @@ describe("agent schema gate (golden)", () => {
 });
 
 describe("ordinary and resumed private schema parity", () => {
-  it("passes separated effects and completion through ordinary and resumed results", async () => {
+  it("passes the business value and completion, and no model-written effect, through ordinary and resumed results", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const worldEvent = { id: "founding", description: "The city was founded" };
     const output = {
       name: "Atlas",
@@ -232,11 +233,11 @@ describe("ordinary and resumed private schema parity", () => {
     for (const result of [ordinary.runtimeResults[0], resumed]) {
       expect(result?.status).toBe("success");
       expect(result?.output).toEqual({ name: "Atlas", events: [worldEvent] });
-      expect(result?.effects).toEqual({
-        notifications: [{ message: "Ready" }],
-      });
+      expect(result?.effects).toBeUndefined();
       expect(result?.completion).toBe("done");
     }
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 
   it.each([null, ""])(

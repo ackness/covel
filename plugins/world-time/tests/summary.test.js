@@ -21,7 +21,7 @@ const messages = await loadPluginMessages(
 const withClock = (value, locale = "en") => ({
   locale,
   messages,
-  pluginData: { get: async () => (value ? { value } : undefined) },
+  pluginData: { get: async () => value ?? null },
 });
 
 describe("world-time session summary", () => {

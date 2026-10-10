@@ -48,7 +48,11 @@ interface BaseOpts {
   readonly emitter?: TurnEmitter;
 }
 
-/** Optional per-runtime identity threaded into the HookContext. */
+/**
+ * Identity of the runtime an event is about. It goes into the HookContext
+ * and nowhere else, so a handler finds it at `ctx.pluginId` / `ctx.runtimeId`
+ * for every event.
+ */
 interface HookCtxExtra {
   readonly pluginId?: string;
   readonly runtimeId?: string;
@@ -350,13 +354,6 @@ export interface AssembledContextView {
    * the field a non-breaking addition.
    */
   readonly outputKind?: "story" | "plugin" | "system";
-  /**
-   * Resolved session locale for this turn. Surfaced so PostContextAssembly
-   * handlers that inject prose (e.g. a narration director's preamble) can
-   * localize it instead of hardcoding one language. Optional / non-breaking —
-   * absent when the caller does not supply it; handlers fall back to a default.
-   */
-  readonly locale?: string;
   /** Locale-resolved source template; informational and never hook-rewritten. */
   readonly promptTemplate?: string;
   /** Authoritative resolved inputs, before prompt serialization. */
@@ -368,11 +365,6 @@ export interface AssembledContextView {
     readonly type: string;
     readonly description?: string;
   }[];
-}
-
-interface PostContextAssemblyPayload extends AssembledContextView {
-  readonly pluginId: string;
-  readonly runtimeId: string;
 }
 
 /**
@@ -393,16 +385,13 @@ export async function runPostContextAssemblyHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   assembled: AssembledContextView,
 ): Promise<AssembledContextView> {
-  const payload: PostContextAssemblyPayload = {
+  const payload: AssembledContextView = {
     systemPrompt: assembled.systemPrompt,
     messages: assembled.messages,
     outputKind: assembled.outputKind,
-    locale: assembled.locale,
     promptTemplate: assembled.promptTemplate,
     inputSlots: assembled.inputSlots,
     characters: assembled.characters,
-    pluginId: opts.pluginId,
-    runtimeId: opts.runtimeId,
   };
   const hookResult = await runHook(opts, "PostContextAssembly", payload, {
     pluginId: opts.pluginId,
@@ -418,7 +407,6 @@ export async function runPostContextAssemblyHook(
       frameworkHead: assembled.frameworkHead,
       messages: replace.messages ?? assembled.messages,
       outputKind: assembled.outputKind,
-      locale: assembled.locale,
       promptTemplate: assembled.promptTemplate,
       inputSlots: assembled.inputSlots,
       characters: assembled.characters,
@@ -442,21 +430,11 @@ export interface PreLLMCallRequest {
   readonly stream?: false;
 }
 
-interface PreLLMCallPayload extends PreLLMCallRequest {
-  readonly pluginId: string;
-  readonly runtimeId: string;
-}
-
 export async function runPreLLMCallHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   request: PreLLMCallRequest,
 ): Promise<PreLLMCallRequest> {
-  const payload: PreLLMCallPayload = {
-    ...request,
-    pluginId: opts.pluginId,
-    runtimeId: opts.runtimeId,
-  };
-  const hookResult = await runHook(opts, "PreLLMCall", payload, {
+  const hookResult = await runHook(opts, "PreLLMCall", request, {
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   });
@@ -482,8 +460,6 @@ export interface PostLLMResponsePayload {
   readonly messages: readonly LLMMessage[];
   /** Reject this draft and request a bounded correction before tool dispatch. */
   readonly correction?: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
 }
 
 export async function runPostLLMResponseHook(
@@ -491,12 +467,7 @@ export async function runPostLLMResponseHook(
   response: LLMResponse,
   messages: readonly LLMMessage[],
 ): Promise<{ response: LLMResponse; correction?: string }> {
-  const payload: PostLLMResponsePayload = {
-    response,
-    messages,
-    pluginId: opts.pluginId,
-    runtimeId: opts.runtimeId,
-  };
+  const payload: PostLLMResponsePayload = { response, messages };
   const hookResult = await runHook(opts, "PostLLMResponse", payload, {
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
@@ -516,8 +487,6 @@ interface PreToolUsePayload {
     readonly name: string;
     readonly arguments: string;
   };
-  readonly pluginId: string;
-  readonly runtimeId: string;
 }
 
 export type PreToolUseOutcome =
@@ -535,11 +504,7 @@ export async function runPreToolUseHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   toolCall: { id: string; name: string; arguments: string },
 ): Promise<PreToolUseOutcome> {
-  const payload: PreToolUsePayload = {
-    toolCall,
-    pluginId: opts.pluginId,
-    runtimeId: opts.runtimeId,
-  };
+  const payload: PreToolUsePayload = { toolCall };
   const hookResult = await runHook(opts, "PreToolUse", payload, {
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,

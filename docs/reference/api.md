@@ -460,7 +460,9 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 ### Setup runtime 控制（重试 / 跳过）
 
-setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 `blocked`，会把会话钉在 setup 频段——该插件的其余 runtime 因隐式会话门被 `skipped: setup-incomplete`。以下两个端点是玩家把它解封的唯一手段（沿用 `resolveSessionParam` 的 owner-token 鉴权）：
+会话停在 setup 时，再发一次 `start_session` 就是“重试 setup”：它不记录玩家消息，只运行还没完成的 setup runtime（`pending` 的重新执行，`done` 的不动），已保存的表单提交照常被读取。玩家在表单提交之后、后续动作发出之前关掉页面，回来后也用它继续。Web 在会话处于 setup、屏幕上没有待填表单、也没有执行在跑时显示这条提示和按钮；有 runtime 记录了 `lastError` 时提示为失败并显示错误。
+
+setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 `blocked`，会把会话钉在 setup 频段——该插件的其余 runtime 因隐式会话门被 `skipped: setup-incomplete`。`blocked` 的 runtime 不会被 `start_session` 重新执行，要先用以下端点解封（沿用 `resolveSessionParam` 的 owner-token 鉴权）；Web 的“重试”按钮先对每个 `blocked` 的 runtime 调 `retry`，再发 `start_session`：
 
 | 方法 | 路径                                       | 描述                                                                                                                                                                            |
 | ---- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1242,7 +1244,9 @@ SSE 已打开后 HTTP 状态保持 200，失败使用既有 `{ type: "error", me
 
 两种情况都只列 PNG / JPEG / WebP，最多 60 张；读不出像素尺寸的文件不列出。没有世界包的世界（只存在数据库或浏览器里）返回空列表。
 
-`world.yaml` 声明了 `themeMusic`、且文件可以播放时（`media/` 下一层目录里的 `.mp3` / `.wav`），响应多一个 `themeMusic: { url, mime }`，地址形状与图片相同，由同一个文件接口返回。
+`world.yaml` 声明了 `cover` 时（`media/` 下一层目录里的图片），同一个文件接口也返回它，地址为 `/api/worlds/:id/gallery/<目录>/<文件名>`；世界记录的 `metadata.cover` 与 `metadata.accentColor` 原样带着这两项声明，不需要先读图集。
+
+`world.yaml` 声明了 `themeMusic'、且文件可以播放时（`media/`下一层目录里的`.mp3`/`.wav`），响应多一个 `themeMusic: { url, mime }`，地址形状与图片相同，由同一个文件接口返回。
 
 ```json
 {
@@ -1381,7 +1385,7 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 - `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态
 - `phase`(必填,`'setup' \| 'playing'`) — setup/主循环频段真相字段。会话激活集含 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后翻转为 `playing`
 - `completedPlayerTurns`(必填,number) — 已提交的主循环玩家逻辑回合数；setup 交互不计入，由 finalize 事务内的 logical-turn ledger 幂等推进
-- `setupRuntimes`(必填,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像。`SetupRuntimeState` 为三态联合：`pending{ generation, attempts, lastError? }`（尚未完成，`attempts` 为当代次终态非 suspended 的 attempt-ledger 计数）· `done{ resolution:"completed"|"waived", generation, attempts, completedAt, warning? }`（`waived` 为玩家跳过的降级完成）· `blocked{ generation, attempts, reason, blockedAt }`（耗尽 `maxTriggerCount` 预算仍未完成，把会话钉在 setup 频段，需经 `retry`/`waive` 端点解封）。各态均带 `pluginVersion`；插件版本变化会使旧 `done` 失效并以 `generation+1` 重跑
+- `setupRuntimes`(必填,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像。`SetupRuntimeState` 为三态联合：`pending{ generation, attempts, lastError? }`（尚未完成，`attempts` 为当代次终态非 suspended 的 attempt-ledger 计数）· `done{ resolution:"completed"|"waived", generation, attempts, completedAt, warning? }`（`waived` 为玩家跳过的降级完成）· `blocked{ generation, attempts, reason, blockedAt, lastError? }`（耗尽 `maxTriggerCount` 预算仍未完成，把会话钉在 setup 频段，需经 `retry`/`waive` 端点解封；`lastError` 是用完预算的那次尝试的错误）。各态均带 `pluginVersion`；插件版本变化会使旧 `done` 失效并以 `generation+1` 重跑
 
 > **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `mistport-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
 
@@ -1687,8 +1691,11 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 { "error": "turnId is required" }                           // 400
 { "error": "submissions[] is required" }                    // 400
+{ "error": "请填写“姓名”。", "code": "form_rejected" }        // 400
 { "error": "Session not found: <id>", "code": "session_not_found" }  // 404
 ```
+
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。客户端把这段文字显示在表单旁边，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
 
 **使用说明:**
 
@@ -2299,6 +2306,7 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 | `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error` 与加载错误                                                                            |
 | `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                                                                                                          |
 | `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                                                                                            |
+| `eventTopics`                                               | `contributes.events` 声明的 topic；会话解析用它保证一个 topic 只有一个声明者                                                                |
 | `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                                                                                                |
 | `languages`                                                 | `{ text: string[], instructions: string[] }`：插件有文字的语言（标签、界面和代码文字，含翻译目录里的译文）和有指令的语言。两者都至少含 `en` |
 | `version?`, `author?`, `license?`, `homepage?`              | 清单里的版本和[作者信息](./plugins.md#作者信息)，只用于展示。`author.about` 和链接 `label` 可能是 locale map                                |
@@ -2364,6 +2372,7 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
       "optional": [],
       "conflicts": [],
       "extensions": [],
+      "eventTopics": [],
       "sessionState": "active",
       "serverCodeApproved": true,
       "tags": ["mode:traditional-story", "cost:llm"]
@@ -3629,6 +3638,8 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 | `proposal.failed`               | 流程控制     | 单条 proposal 提交失败——显式上报而非静默丢弃，由提交方直接写入 action stream                   |
 | `job-status.updated`            | 流程控制     | 后台 function runtime 经 `ctx.progress` 汇报进度（append-only job 通道，转发到 action stream） |
 | `context.pruned`                | 系统         | prompt 装配超出 slot 预算、历史被硬裁剪；仅 trace（`/debug` 用），不进 action stream           |
+| `context.compaction.failed`     | 系统         | 历史压缩尝试失败及原因；仅 trace（`/debug` 用）                                                |
+| `commit.fanout.failed`          | 系统         | 回合已提交但部分提交后事件未能发布；仅 trace，订阅流同时收到 `system.reset`                    |
 | `error.occurred`                | 系统         | 执行错误                                                                                       |
 | `connection.restored`           | 系统         | 连接恢复                                                                                       |
 

@@ -103,6 +103,7 @@ export function resolveSessionPluginPlan(
           optional: summary.optional,
           conflicts: summary.conflicts,
           extensions: summary.extensions,
+          eventTopics: summary.eventTopics,
         };
       }),
   });

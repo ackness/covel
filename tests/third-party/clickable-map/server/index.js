@@ -11,9 +11,7 @@ export default function (covel) {
       // (`appendSummaryEntries` from `@covel/plugin-handlers-utils` does the
       // same; this package has no dependencies, so it does it by hand.)
       const earlier = previous?.entries ?? [];
-      const state = readState(
-        (await ctx.pluginData.get(MAP_NAMESPACE, MAP_KEY))?.value,
-      );
+      const state = readState(await ctx.pluginData.get(MAP_NAMESPACE, MAP_KEY));
       const place = state?.places.find((item) => item.id === state.current);
       if (!place) return { entries: earlier };
       return {

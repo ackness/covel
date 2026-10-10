@@ -17,6 +17,7 @@ function plugin(
     optional: [],
     conflicts: [],
     extensions: [],
+    eventTopics: [],
     id,
     displayName: `${id[0]!.toUpperCase()}${id.slice(1)} Plugin`,
     description: `${id} plugin`,

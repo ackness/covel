@@ -27,7 +27,7 @@ UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，ha
 
 只有 `entry`、Hook 或 UI 的包可以没有 runtime。它的 Hook 仍按会话已启用的插件集合执行，`ctx.getOwnSettings()` 读取包级 `userSettings` 默认值与本次世界、玩家覆盖值；没有 runtime 不会丢失这些默认值，也不会凭空调度一个 runtime。执行与提交各使用明确的会话 Hook scope；嵌入式 `executeTurn` 调用方如需包含零 runtime 包，应在 `TurnExecutorDeps.hookScope` 传入其 `activePluginIds` 和已解析的 `settings`，执行入口会捕获并冻结该边界，随后随 `execution` 自动传入 `commitExecution`。宿主从持久会话激活集合构造 scope，社区 Hook 每次调用仍检查当前 server-code 授权。
 
-`contributes.hooks` 按 `event` 与 `enforce` 声明允许的 Hook，省略 `enforce` 等同于 `normal`。同一声明可以通过多次 `covel.on()` 注册多个独立 handler；未声明的事件或阶段、以及没有实现的声明仍会使整个 entry 发布失败。
+每个 Hook 事件的触发时机、负载、可返回的结果和 handler 收到的上下文见 [Hooks](hooks.md)。`contributes.hooks` 按 `event` 与 `enforce` 声明允许的 Hook，省略 `enforce` 等同于 `normal`。同一声明可以通过多次 `covel.on()` 注册多个独立 handler；未声明的事件或阶段、以及没有实现的声明仍会使整个 entry 发布失败。
 
 同一事件的 handler 按 `enforce` 分组依次执行：`pre` → `normal` → `post`。组内先执行框架 Hook，再按注册顺序执行插件 Hook；不同插件之间的先后取决于插件的加载顺序，不是可声明的契约。两个插件改写同一份负载时，后执行的 `replace` 覆盖先执行的同名字段，需要确定先后的插件应声明不同的 `enforce`。
 
@@ -282,7 +282,7 @@ const response = await window.covel.invoke("invokePluginAction", {
 
 具有回合 emitter 的扩展、压缩与 function service 调用使用同一 `plugin.service.completed` 完成事件写入持久 trace，嵌套调用继承 emitter 并携带 parentCallId。事件只包含身份、扩展 point/id/slot、耗时和固定结果分类，不含调用输入、输出、原始错误、凭据或私有 session incarnation。复用既有 TurnEmitter 的 traceId、seq 和重试范围，等待写入尝试完成；存储失败沿用 trace 的尽力记录语义，不改变插件结果，耗时不包含 trace I/O。没有回合 emitter 的 UI 后台投影只保留进程内诊断窗口。
 
-`onError` 为 skip 的点跳过失败或超时的提供者时，服务端日志记录一行 `[plugin-extensions] skipped provider <pluginId>/<extensionId> of <point> for session <sessionId>: <原因>`。trace 事件不含原始错误，作者在这一行查找自己的片段或槽位没有出现的原因。
+`onError` 为 skip 的点跳过失败或超时的提供者时，服务端日志记录一行 `[plugin-extensions] skipped provider <pluginId>/<extensionId> of <point> for session <sessionId>: <原因>`。trace 事件不含原始错误，作者在这一行查找自己的片段或槽位没有出现的原因。宿主调用方可以在 `createExecution` 的作用域里传 `onProviderError`，在跳过发生时拿到提供者标识与原始错误；历史压缩用它把原因写进回合 trace，见[扩展点参考](extension-points.md#历史压缩-historycompact2)。
 
 诊断按当前返回的最近 100 条调用（全进程最多保留 500 条）计算 point/provider 的 total、success、error、timeout、cancelled。缓存命中与同执行并发合并不增加事件或统计；未激活或未批准的提供者在 discovery 被排除，不算调用失败；调用发出后准入失败则保留失败事件。该统计仅代表当前窗口，会随淘汰变化，不是累计用量。
 

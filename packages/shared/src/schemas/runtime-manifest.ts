@@ -196,7 +196,7 @@ export const runtimeAuthoringManifestSchema = z
         concealed: z
           .boolean()
           .describe(
-            "`true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results.",
+            "`true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results, and text it returns is not written to the conversation. Not allowed with `visibility: story`.",
           )
           .optional(),
       })
@@ -374,6 +374,13 @@ export const runtimeAuthoringManifestSchema = z
         code: "custom",
         path: ["function"],
         message: "Agent runtime cannot declare function",
+      });
+    if (value.io?.concealed && value.io.visibility === "story")
+      ctx.addIssue({
+        code: "custom",
+        path: ["io", "concealed"],
+        message:
+          "A runtime with io.visibility: story writes the text the player reads and cannot be io.concealed; conceal a plugin or system runtime instead",
       });
     for (const [name, binding] of Object.entries(value.io?.inputs ?? {})) {
       if (binding.scope === "committed" && binding.select !== undefined)

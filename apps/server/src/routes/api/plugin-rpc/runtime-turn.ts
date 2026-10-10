@@ -341,7 +341,7 @@ export function createPluginRpcRuntimeTurnRunner(
     const conflict = outcome.failedProposals.find(
       (item) =>
         item.proposal.type === "dimension.update" &&
-        item.error?.startsWith("dimension-version-conflict"),
+        item.code === "dimension-version-conflict",
     );
     const currentVersions = conflict
       ? Object.fromEntries(

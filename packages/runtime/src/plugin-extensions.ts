@@ -13,6 +13,7 @@ import {
   type PluginExtensionDefinition,
   type PluginMessageCatalog,
   isHiddenPluginDataNamespace,
+  pluginDataEntry,
   pluginMessagesFor,
 } from "@covel/shared";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
@@ -29,6 +30,17 @@ export interface PluginExtensionExecutionScope {
     readonly pluginId: string;
   }[];
   readonly signal: AbortSignal;
+  /**
+   * Called when a provider of a `skip` extension point throws and is left out.
+   * The host has already logged it; this lets the caller report why the
+   * contribution is missing, for instance in the turn's trace.
+   */
+  readonly onProviderError?: (failure: {
+    readonly pluginId: string;
+    readonly providerId: string;
+    readonly point: string;
+    readonly error: unknown;
+  }) => void;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
   /**
@@ -237,13 +249,14 @@ export class PluginExtensionHost {
             signal.throwIfAborted();
             const rows = await namespaceRows(pluginId, namespace);
             signal.throwIfAborted();
-            return structuredClone(rows.find((row) => row.key === key));
+            const row = rows.find((candidate) => candidate.key === key);
+            return row ? structuredClone(row.value) : null;
           },
           list: async (namespace) => {
             signal.throwIfAborted();
             const rows = await namespaceRows(pluginId, namespace);
             signal.throwIfAborted();
-            return structuredClone(rows);
+            return structuredClone(rows.map(pluginDataEntry));
           },
         },
       }),
@@ -312,6 +325,16 @@ export class PluginExtensionHost {
                   `[plugin-extensions] skipped provider ${provider.pluginId}/${provider.id} of ${point.id} for session ${scope.sessionId}: ` +
                     (error instanceof Error ? error.message : String(error)),
                 );
+                try {
+                  scope.onProviderError?.({
+                    pluginId: provider.pluginId,
+                    providerId: provider.id,
+                    point: point.id,
+                    error,
+                  });
+                } catch {
+                  // A reporting failure must not change the skip.
+                }
                 continue;
               }
               // Composition belongs to the kernel contract. A broken contract

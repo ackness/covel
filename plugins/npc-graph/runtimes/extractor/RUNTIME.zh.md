@@ -11,8 +11,8 @@
 
 本会话已登记的节点与关系在 prompt 末尾自动注入，常规判断**直接读它就够**：
 
-- `<existing-npcs>`：已有节点，每行 `- <节点id> | <更新时间> | {name, type, summary, ...}`。按 **name** 比对避免重复创建（工具也按 name 去重）。
-- `<existing-relations>`：已有关系，每行 `- <边id> | <更新时间> | {source, target, relation, strength, fact, validAt, invalidAt?}`。`source`/`target` 是节点 id；带 `invalidAt` 的是已失效的旧版本，忽略。摘要里的 `fact` 可能被截断——只用来判断"这条关系是否已登记过"，据此避免重复记录未变化的关系。
+- `<existing-npcs>`：已有节点，每行 `- <节点id> | {name, type, summary, ...}`。按 **name** 比对避免重复创建（工具也按 name 去重）。
+- `<existing-relations>`：已有关系，每行 `- <边id> | {source, target, relation, strength, fact, validAt, invalidAt?}`。`source`/`target` 是节点 id；带 `invalidAt` 的是已失效的旧版本，忽略。摘要里的 `fact` 可能被截断——只用来判断"这条关系是否已登记过"，据此避免重复记录未变化的关系。
 
 若摘要被截断到无法确认关系是否变化，保守跳过该关系，等待后续出现明确证据。
 

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { submitInteractionBlock } from "../interaction-submission.js";
 import { claimSessionAction } from "../runtime-refs.js";
 import { initialState } from "../reducer.js";
+import { ApiError } from "@/services/api/request.js";
 
 const api = vi.hoisted(() => ({
   submitInputs: vi.fn(),
@@ -13,6 +14,8 @@ const api = vi.hoisted(() => ({
 vi.mock("@/services/api.js", () => api);
 const confirm = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: confirm }));
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/toast-channel.js", () => ({ emitToast: toast }));
 
 const accepted = {
   results: [
@@ -104,6 +107,27 @@ describe("interaction submission", () => {
       type: "SET_EXECUTION_ERROR",
       error: "Invalid allocation",
     });
+    expect(deps.submitBlock).not.toHaveBeenCalled();
+    expect(deps.runSingleAction).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's refusal next to the form instead of failing the turn", async () => {
+    const deps = makeDeps();
+    api.submitInputs.mockRejectedValueOnce(
+      new ApiError(
+        400,
+        "/api/sessions/session-1/plugin-rpc",
+        JSON.stringify({ error: "请填写“姓名”。", code: "form_rejected" }),
+      ),
+    );
+    await submitInteractionBlock(deps, submission);
+    expect(toast).toHaveBeenCalledExactlyOnceWith(
+      "error",
+      expect.any(String),
+      "请填写“姓名”。",
+    );
+    // The form stays open with what the player typed: no error state, no turn.
+    expect(deps.dispatch).not.toHaveBeenCalled();
     expect(deps.submitBlock).not.toHaveBeenCalled();
     expect(deps.runSingleAction).not.toHaveBeenCalled();
   });
