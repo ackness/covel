@@ -176,7 +176,7 @@ Fires once after a runtime finished, with any status.
 
 Payload: `{ result }`: the `RuntimeResult`.
 
-`replace.result` replaces the result. The kernel keeps `pluginId`, `runtimeId`, `runId` and `turnId` of the original, and the suspension fields of a suspended result. When a handler changes `output` and leaves `canonicalValue` as it was, the kernel discards the old `canonicalValue`, so the value other runtimes read cannot disagree with the rewritten output.
+`replace.result` replaces the result. The kernel keeps `pluginId`, `runtimeId`, `runId` and `turnId` of the original, and the suspension fields of a suspended result. When a handler changes `output` and leaves `canonicalValue` as it was, the kernel discards the old `canonicalValue`, so the value other runtimes read cannot disagree with the rewritten output. The rewritten result is checked against the runtime's `output.schema` again: a function runtime's `canonicalValue`, and an agent's `output` when the hook changed it. A mismatch fails the runtime with `output-schema-invalid` and commits nothing.
 
 ### `PreToolUse`
 

@@ -659,6 +659,29 @@ describe("upsert-npc-graph", () => {
     expect(cut.edgesTruncated).toMatch(/2 most recently changed of 3/);
   });
 
+  it("lists the most recently seen nodes first and says when the cap cuts the list", async () => {
+    const rows = Array.from({ length: 125 }, (_, i) => ({
+      sessionId: ctx.sessionId,
+      pluginId: ctx.pluginId,
+      namespace: "nodes",
+      key: `n-${i}`,
+      value: { id: `n-${i}`, name: `Person ${i}`, lastSeenTurn: i },
+      updatedAt: "2026-01-01T00:00:00Z",
+    }));
+    await store.setPluginDataBatch(rows);
+
+    const result = getToolContent(await listTool.execute({}, ctx));
+    expect(result.nodeCount).toBe(125);
+    expect(result.nodes).toHaveLength(120);
+    expect(result.nodes[0].id).toBe("n-124");
+    expect(result.nodes.map((n) => n.id)).not.toContain("n-4");
+    expect(result.nodesTruncated).toMatch(/120 most recently seen of 125/);
+
+    const all = getToolContent(await listTool.execute({ limit: 200 }, ctx));
+    expect(all.nodes).toHaveLength(125);
+    expect(all.nodesTruncated).toBeUndefined();
+  });
+
   it("keeps distinct versions when the same relation is revised across calls in one turn", async () => {
     // Tool calls within a turn don't commit between each other and each starts
     // its batch index at 0, so a turn+index suffix reused the same id for a

@@ -34,7 +34,7 @@
 - Schema 中没有 `string` 或 `enum` 属性时，表单只有一个字段：`characterName`。其余细节作为固定文字写进 `narrativeTemplate`。
 - 类型映射：`enum` → `select`，option value 必须逐字等于 schema options 中的值；`string` 优先用 `text`，也可用 `textarea` 或返回字符串的 `select` 提供建议。
 - 需要解释 select 选项时使用 `{ value, label }`；`value` 保持适合嵌入叙事的短词。被 `narrativeTemplate` 引用的可选字段必须有自然的 `defaultValue`，select 默认值必须等于某个 option value。
-- 固定传入 `formId: "char-creation"` 和 `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`，加上合适的标题、提交文案、字段以及含字段占位符的 `narrativeTemplate`。
+- 固定传入 `formId: "char-creation"` 和 `submitBehavior: { "echoFilledNarrative": true }`，加上合适的标题、提交文案、字段以及含字段占位符的 `narrativeTemplate`。
 - 总字段数不超过 4。只调用一次 `create-character-form`，不要调用 `runtime-done`。
 
 本 runtime 工作流：

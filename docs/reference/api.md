@@ -2888,6 +2888,8 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 
 返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；快照的维度数据属于子会话无法启用的 community provider 时返回 `409 { code: 'dimension_provider_required' }`；内部写入失败返回 `500`。
 
+同一个父 session 每分钟（同一客户端地址）最多接受 10 次 fork 请求，超过返回 `429 { code: 'rate_limit_exceeded' }` 和 `Retry-After`；限流在校验请求体之前计数，所有部署层级相同。
+
 整个 fork 在父 session 执行锁内读取来源数据，并在 `withTransaction` 下写入；中途任何失败都会 rollback，不会留下半成品子 session。与手动快照一样，PG 部署下锁获取超时返回 `503 { code: 'session_busy' }`。
 
 关联世界的 fork 在提交前检查世界仍存在且未删除，分别以 `404 world_not_found` 或 `409 world_deleting` 拒绝无效分叉；无世界会话仍可 fork。
