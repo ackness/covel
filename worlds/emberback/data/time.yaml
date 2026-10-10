@@ -1,0 +1,22 @@
+id: world
+definition:
+  kind: calendar
+  name: Station time
+  calendar:
+    era: Station Year
+    months:
+      - { name: Duskmonth, days: 30 }
+    hoursPerDay: 24
+    minutesPerHour: 60
+  initial: { year: 1, month: 1, day: 1, hour: 6, minute: 14 }
+  evolution:
+    mode: forward
+    defaultStep: 10
+    maxStep: 240
+    prompt: >-
+      Station time is the one clock of this world, and the Crownfire storm
+      reaches the ridge at 09:14 station time, three hours after the 06:14 call.
+      Count the story time the turn actually spends: a short conversation 5–10
+      minutes, a repair, search, or argument 15–40, a crawler run to Mile
+      Seventeen or Nightglass 30–60. If the narrative states a clock time or the
+      remaining window, use it. Time never goes back.

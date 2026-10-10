@@ -67,6 +67,9 @@ export default defineConfig({
     {
       name: "chromium-dev",
       testIgnore: ignore(specs.filter((name) => !sourceSpecs.has(name))),
+      // The dev server transforms each module on its first request, so a
+      // page's first paint takes as long as the machine is slow.
+      expect: { timeout: 20_000 },
       use: {
         ...devices["Desktop Chrome"],
         baseURL: process.env.E2E_BASE_URL ?? e2eWebOrigin,

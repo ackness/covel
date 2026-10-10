@@ -1,0 +1,11 @@
+# zh-CN text for time.yaml. Only translated text; structure and ids come from time.yaml.
+definition:
+  name: 站点时间
+  calendar:
+    era: 站点纪年
+    months:
+      - name: 暮月
+  evolution:
+    prompt: >-
+      站点时间是这个世界唯一的时钟，王冠火风暴将在站点时间 09:14
+      抵达山脊，即 06:14 那通呼叫之后三小时。按本轮叙事实际花费的故事时间计时：简短对话5–10分钟，修理、搜索或争论15–40分钟，前往十七英里或夜玻璃的爬行器行程30–60分钟。如果叙事给出了钟点或剩余窗口期，则使用该数值。时间永不回溯。

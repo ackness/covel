@@ -25,7 +25,7 @@ crownfire:
     minutesRemaining: 180
     stage: distant
   updateRule: >-
-    Subtract the story time this turn's narrative actually spends: a short conversation 5–10 minutes, a repair, search, or argument 15–40, a crawler run to Mile Seventeen or Nightglass 30–60. If the narrative states the remaining window, use that number. Time never comes back. Set stage approaching at 120 minutes or less, imminent at 30 or less, overhead at 0, and passing only when the narrative says the storm front has moved on.
+    Subtract the story time this turn's narrative actually spends: a short conversation 5–10 minutes, a repair, search, or argument 15–40, a crawler run to Mile Seventeen or Nightglass 30–60. The countdown follows the station clock: the storm reaches the ridge at 09:14 station time, so minutes remaining is 09:14 minus the time the narrative gives; if the narrative states the clock time or the remaining window, use that number. Time never comes back. Set stage approaching at 120 minutes or less, imminent at 30 or less, overhead at 0, and passing only when the narrative says the storm front has moved on.
 
 relayGrid:
   name: Relay Grid

@@ -10,17 +10,17 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## Top-level fields
 
-| Field         | Type                        | Required | Description                                                                                 |
-| ------------- | --------------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `type`        | `"agent"` or `"function"`   | yes      | `agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler. |
-| `description` | text (string or locale map) | no       | What the runtime does. Plain string or a locale map.                                        |
-| `schedule`    | object                      | no       | When and in what order the runtime runs.                                                    |
-| `io`          | object                      | no       | What the runtime reads and produces.                                                        |
-| `agent`       | object                      | no       | Settings of an `agent` runtime. Not allowed on a `function` runtime.                        |
-| `function`    | object                      | no       | Settings of a `function` runtime. Required when `type` is `function`.                       |
-| `guard`       | string                      | no       | Path of the guard module. It runs before the runtime and can skip it.                       |
-| `effects`     | object                      | no       | Declared read and write sets, used to detect parallel hazards.                              |
-| `permissions` | object                      | no       | Declared permission upper bounds.                                                           |
+| Field         | Type                      | Required | Description                                                                                 |
+| ------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `type`        | `"agent"` or `"function"` | yes      | `agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler. |
+| `description` | text                      | no       | What the runtime does. Plain string; translations go in locale files.                       |
+| `schedule`    | object                    | no       | When and in what order the runtime runs.                                                    |
+| `io`          | object                    | no       | What the runtime reads and produces.                                                        |
+| `agent`       | object                    | no       | Settings of an `agent` runtime. Not allowed on a `function` runtime.                        |
+| `function`    | object                    | no       | Settings of a `function` runtime. Required when `type` is `function`.                       |
+| `guard`       | string                    | no       | Path of the guard module. It runs before the runtime and can skip it.                       |
+| `effects`     | object                    | no       | Declared read and write sets, used to detect parallel hazards.                              |
+| `permissions` | object                    | no       | Declared permission upper bounds.                                                           |
 
 ## `schedule`
 

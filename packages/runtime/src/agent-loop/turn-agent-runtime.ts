@@ -446,6 +446,9 @@ export async function executeAgentRuntime({
       lastTarget: toolLoop.lastTarget,
       deltaCount: streamDeltaCount,
       outputContractSchema: loaded.outputContractSchema,
+      ...(loaded.outputSchema
+        ? { agentOutputSchema: loaded.outputSchema }
+        : {}),
     },
   );
   if (deps.store && result.output) {
