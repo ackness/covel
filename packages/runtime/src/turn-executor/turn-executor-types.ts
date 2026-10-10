@@ -79,6 +79,12 @@ export interface AgentLoopDeps {
    * in test harnesses — all control sites are optional-chained.
    */
   readonly turnControl?: TurnControl;
+  /**
+   * MediaStore of the server. Function handlers reach it as
+   * `FunctionHandlerContext.media`; the agent loop reads the session's recent
+   * pictures from it for a model that accepts image input.
+   */
+  readonly mediaStore?: MediaStoreLike;
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
@@ -120,12 +126,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * test harnesses; handlers must null-check before use.
    */
   readonly utils?: PluginRuntimeUtils;
-  /**
-   * Optional MediaStore forwarded to function-runtime handlers as
-   * `FunctionHandlerContext.media`. Store implementation is provided by
-   * the P0-a MediaStore Core package.
-   */
-  readonly mediaStore?: MediaStoreLike;
   /**
    * Resolve trust from plugin discovery source. Registry/bootstrap wires this
    * from the directory a plugin was loaded from, which is stronger than the

@@ -232,25 +232,25 @@ type AssetGeneration = {
 
 `@covel/ai-provider` 的 `TextMessage.content` 使用双形态契约：
 
-| 形态            | 用途                                                                                      | 生命周期 |
-| --------------- | ----------------------------------------------------------------------------------------- | -------- |
-| `string`        | 纯文本消息快路径                                                                          | 长期保留 |
-| `null`          | assistant tool-call 等 provider 允许空内容的消息                                          | 长期保留 |
-| `ContentPart[]` | 多模态消息路径，当前包含 `{ type: "text", text }` 与 `{ type: "image", image: MediaRef }` | 长期保留 |
+| 形态            | 用途                                                                               | 生命周期 |
+| --------------- | ---------------------------------------------------------------------------------- | -------- |
+| `string`        | 纯文本消息快路径                                                                   | 长期保留 |
+| `null`          | assistant tool-call 等 provider 允许空内容的消息                                   | 长期保留 |
+| `ContentPart[]` | 多模态消息路径：`{ type: "text", text }` 与 `{ type: "image", image, mediaType? }` | 长期保留 |
 
-`@covel/shared` / `@covel/runtime` 保持 provider-agnostic content parts；`@covel/ai-provider` adapter 负责把 `MediaRef` 编码成各 provider 的 wire shape。`assetGenerateToLLM()` 会把 `asset.generate` proposal 派生成文本摘要，并在图片资产场景追加 image part。
+图片 part 与 Vercel AI SDK 的同名 part 形状一致：`image` 是一个字符串，可以是裸 base64、`data:` URL 或 `http(s)` URL；`mediaType` 是 MIME 类型，裸 base64 没有写时按文件头识别（PNG、JPEG、GIF、WebP），识别不出按 `image/png`。provider 层只编码收到的内容，不下载、不读取 MediaStore。框架自己发图片时（见 [Prompt 结构参考：展示过的图片](./prompt-structure.md#展示过的图片)）由 runtime 从 MediaStore 读出字节，以裸 base64 加 `mediaType` 传入；kernel 内部在此之前使用 `{ type: "media", ref: MediaRef }`，这种 part 不会到达 provider 层。
 
 Provider 图片输入矩阵：
 
-| Provider 路径                     | 图片 wire shape                                   | 输入优先级                                                                     | 当前状态                      |
-| --------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------- |
-| OpenAI Chat                       | `{ type: "image_url", image_url: { url } }`       | `MediaRef.url` URL / data URL 优先；File API 作为大图或复用资产后续能力        | URL-backed image parts 已实现 |
-| OpenAI Responses                  | `{ type: "input_image", image_url }`              | `MediaRef.url` URL / data URL 优先；File API 作为大图或复用资产后续能力        | URL-backed image parts 已实现 |
-| Anthropic Messages                | `{ type: "image", source: { type: "url", url } }` | URL source 优先；Files API 用于大图或复用资产；base64 用于小图兜底             | URL-backed image parts 已实现 |
-| Gemini native                     | `inlineData` 或 `fileData`                        | 图片 data URL 转为带 MIME 的内联字节；已上传的 Google 文件 URI 转为 `fileData` | 原生文本适配器已实现          |
-| Gemini OpenAI-compatible endpoint | 跟随 OpenAI Chat 形态                             | 显式使用 `openai-chat-v1` 与 `/v1beta/openai` 地址                             | 随兼容协议 preset 生效        |
+| Provider 路径                     | 内联数据（base64 / data URL）                                       | `http(s)` URL                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| OpenAI Chat                       | `{ type: "image_url", image_url: { url: "data:<mime>;base64,…" } }` | 同一形状，`url` 为原 URL                                                                         |
+| OpenAI Responses                  | `{ type: "input_image", image_url: "data:<mime>;base64,…" }`        | 同一形状，`image_url` 为原 URL                                                                   |
+| Anthropic Messages                | `{ type: "image", source: { type: "base64", media_type, data } }`   | `{ type: "image", source: { type: "url", url } }`                                                |
+| Gemini native                     | `{ inlineData: { mimeType, data } }`                                | 仅已上传的 Google 文件 URI，转为 `fileData`（需要 `mediaType`）；其他 URL 以 `CONFIG_ERROR` 拒绝 |
+| Gemini OpenAI-compatible endpoint | 跟随 OpenAI Chat 形状                                               | 跟随 OpenAI Chat 形状                                                                            |
 
-当前 adapter 直接消费 `MediaRef.url`。Chat、Responses、Anthropic 的 image part 缺少 `url` 时会序列化为文本 `image_ref` JSON，保留资产 id / mime / size 供 trace 和模型上下文读取。Gemini 原生图片输入接受带 MIME 的 data URL 或已上传的 Google 文件 URI；缺少 URL 或使用普通 HTTP(S) 图片 URL 会拒绝，尚无 File API 上传或框架内下载转换。其他远程 provider vision 调用应在进入 adapter 前提供 provider 可取回的 URL、data URL 或 provider file upload 引用；`file://` / `memory://` 这类本地 URL 主要服务本地后端、测试与展示路径。[Google 原生图片输入说明](https://ai.google.dev/gemini-api/docs/image-understanding) 区分内联数据与文件引用。
+目标模型已知只接受文本时（模型表或 `llm.toml` 的 `input` 不含 `image`），请求里的图片 part 在编码前被去掉；一条只有图片的消息换成文本 `[image]`。能力未知的模型不做处理，由服务商决定是否接受。记录到 trace 的请求体里，超过 4,096 字符的内联图片数据换成长度说明，该请求的 `complete` 为 `false`。[Google 原生图片输入说明](https://ai.google.dev/gemini-api/docs/image-understanding) 区分内联数据与文件引用。
 
 ### Gemini 原生文本协议
 

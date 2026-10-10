@@ -49,9 +49,9 @@ import {
   collectDepthContributions,
   renderSystemLoreContributions,
 } from "./contribution-aggregator.js";
-import { messageContentFromHistoryRecord } from "./llm-content-parts.js";
 import {
   buildExecutionStoryMessages,
+  buildRecentPicturesMessage,
   buildMessageHistoryWithSummaries,
   insertDepthContributions,
   type RenderedDepthContribution,
@@ -231,11 +231,7 @@ function executionStoryInConversation(
 ): { readonly texts: ReadonlySet<string>; readonly note: string } | undefined {
   const texts = new Set(
     (params.executionStory ?? [])
-      .filter(
-        (record) =>
-          record.content.length > 0 &&
-          messageContentFromHistoryRecord(record) === record.content,
-      )
+      .filter((record) => record.content.length > 0)
       .map((record) => record.content),
   );
   if (texts.size === 0) return undefined;
@@ -510,11 +506,19 @@ function finalizeSegmentedContext(
     .join("\n\n");
   // Depth positions count conversation messages, so it goes in afterwards.
   const turnStart = withDepthContributions.indexOf(currentMessage);
+  // Recent pictures open the current turn, after the turn context: they are
+  // rebuilt every turn like it, and the history before them stays as it was.
+  const pictures = buildRecentPicturesMessage(
+    params.messageHistory ?? [],
+    params.pictureAttachments ?? 0,
+    params.turnInput.locale,
+  );
 
   // Segment 10 — append post-history instructions after everything else.
   const messages: readonly LLMMessage[] = [
     ...withDepthContributions.slice(0, turnStart),
     ...(turnContext ? [{ role: "system" as const, content: turnContext }] : []),
+    ...(pictures ? [pictures] : []),
     ...withDepthContributions.slice(turnStart),
     ...segments.postHistoryInstructions,
   ];
@@ -525,6 +529,7 @@ function finalizeSegmentedContext(
   // protected window still starts at the player message.
   const currentTurnUserMessages =
     1 +
+    (pictures ? 1 : 0) +
     messages
       .slice(messages.indexOf(currentMessage) + 1)
       .filter((message) => message.role === "user").length;

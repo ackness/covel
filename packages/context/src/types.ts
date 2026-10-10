@@ -3,7 +3,7 @@
  */
 
 import type {
-  ContentPart,
+  LLMContentPart,
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
@@ -13,22 +13,16 @@ import type {
 import type { SessionContextStore } from "./session-context-store.js";
 import type { BudgetOptions, TokenEstimator } from "./budget.js";
 
-/** Re-export for callers that consume {@link LLMMessage}. */
-export type { ContentPart } from "@covel/shared";
-
 /**
  * A single LLM message in the conversation.
  *
- * `content` is `string` for the historical text-only path. When a message
- * carries multimodal data (e.g. a generated image referenced from history)
- * the bridge in `buildMessageHistoryWithSummaries` rewrites the field to a
- * `readonly ContentPart[]`. Downstream adapters in `@covel/ai-provider`
- * accept the same union via their `TextMessageContent` shape, so the value
- * passes through without conversion.
+ * `content` is a string except for the message that shows the model recent
+ * pictures: that one is an array of text and `media` parts (see
+ * `buildRecentPicturesMessage`).
  */
 export interface LLMMessage {
   readonly role: "system" | "user" | "assistant" | "tool";
-  readonly content: string | readonly ContentPart[];
+  readonly content: string | readonly LLMContentPart[];
   readonly name?: string;
   readonly toolCallId?: string;
 }
@@ -82,19 +76,11 @@ export interface MessageHistoryRecord {
    */
   readonly compactedAtTurnId?: string;
   /**
-   * Optional free-form bag mirroring the `metadata` payload that
-   * `commit*` handlers in `@covel/runtime` write to wire-format
-   * messages. The context-builder bridge inspects
-   * `metadata.block.type === 'asset.generate'` to upgrade plain text
-   * history entries into multimodal {@link ContentPart} arrays so a
-   * vision-capable runtime can reason over previously generated assets.
-   *
-   * The shape is intentionally `unknown` — the bridge narrows defensively
-   * and falls back to the plain-string path when fields are missing or
-   * mistyped, so callers that do not know about block metadata keep the same
-   * text-only behaviour.
+   * Blocks the row showed the player (`TurnMessageRecord.ui`). The row of a
+   * picture carries its `asset.generate` block here; `content` is the note
+   * that tells every model about it.
    */
-  readonly metadata?: unknown;
+  readonly ui?: unknown;
 }
 
 /**
@@ -183,6 +169,12 @@ export interface ContextBuildParams {
    * closed by a user-role cue.
    */
   readonly executionStory?: readonly MessageHistoryRecord[];
+  /**
+   * How many of the newest pictures in `messageHistory` to show the model as
+   * images, in one message at the start of the current turn. The caller sets
+   * it only for a model that accepts image input; 0 or absent sends none.
+   */
+  readonly pictureAttachments?: number;
   /** Session-level metadata (turnNumber, characters, lastFormValues). */
   readonly sessionMeta?: SessionMeta;
   /**
