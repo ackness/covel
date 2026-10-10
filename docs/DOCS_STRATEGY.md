@@ -33,6 +33,15 @@
 - 开发过程资料统一放在 `devs/docs/`；落地后只把面向用户或开发者的稳定结论提炼到 `docs/guide/`、`docs/reference/` 或 `docs/architecture/`。
 - 新增文档要从 `docs/README.md` 或对应目录 `README.md` 可达。
 
+## Languages
+
+A page has one authoritative language; a language sibling is optional, not required.
+
+- A page written in English needs no Chinese sibling, and a Chinese page needs no English one. The existing `.en.md` siblings (`CONTRIBUTING`, `desktop-config`, `upgrade-0.0.42`, `settings-store`) were added because a reader outside the Chinese-speaking audience needs that page first (contribution, install, upgrade); they are not a rule that every page has one.
+- A page that has a sibling is updated together with it (`AGENTS.md`, "Documentation sync").
+- New pages are written in English (`AGENTS.md`: documentation is English), and a sibling is added only for a page a first-time reader must read before anything else.
+- `docs/reference/hooks.md` is English only. It was written new, in English, and has no Chinese sibling because its readers are plugin authors, who work against English SDK types and code. The Chinese guides link to it. If a Chinese edition is wanted, translate it together with the reference pages around it, so a Chinese reader does not meet one English page between Chinese ones.
+
 ## Gradual v2 migration
 
 新方向见 [`v2/README.md`](./v2/README.md)：游玩 → 创建世界 → 开发插件 → 验证与分发，

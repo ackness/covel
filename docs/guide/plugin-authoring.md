@@ -66,11 +66,13 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 所有包级贡献写在根 `contributes`。entry 模块注册工具、RPC action、服务、扩展、hook、wire 或 form 时，名称必须与清单一致。`contributes.commands` 是玩家命令元数据，实际 RPC 名还必须列在 `contributes.actions`。
 
+`contributes.events` 声明插件发出的事件 topic 及其 schema。一个会话里每个 topic 只能有一个声明者：两个启用的插件声明了同一个 topic 时，后被接受的那个以 `event-topic-conflict` 被排除出该会话，原因里写明 topic 和两个插件。给 topic 加上插件自己的前缀（`my-plugin.noted`），避免撞名。
+
 只在运行时需要的工具放进 `agent.tools`。这份白名单控制 agent 能调用什么；`contributes.tools` 声明包实际注册什么。两者用途不同。只有一个 runtime 的包（根 `runtime:`）不写 `agent.tools.plugin` 时，这个 runtime 得到 `contributes.tools` 的全部工具，不用重复列一遍；写了就以写的为准，`plugin: []` 表示一个都不给。多 runtime 的包里每个 runtime 仍然各自列出自己的工具。
 
 跨插件调用使用版本化契约，例如 `narrative-engine@1`。根 `requires` 驱动会话依赖解析，`io.inputs` 绑定执行结果，`schedule.needs` 控制运行条件。普通契约可以有多个提供者；用 `cardinality: one/all` 指定输入要求，用显式 `conflicts` 或单提供者扩展点表达互斥。
 
-runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声明 `io.concealed: true`。它的提示词、工具参数、工具结果和输出不会进入 trace、实时流和玩家可见的执行历史，失败时的原因文字也会换成固定的通用提示（真实原因只写入服务端日志）。只留下名称、状态、耗时和用量。需要把隐藏内容交给其他插件时，用契约输出传递，由接收插件写入它自己的 `_hidden.<namespace>`；参见 [story-events 的 plot runtime](../../plugins/story-events/runtimes/plot/RUNTIME.md) 与 [World Data · 隐藏数据](../reference/world-data.md#隐藏数据visibility-hidden)。
+runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声明 `io.concealed: true`。它的提示词、工具参数、工具结果和输出不会进入 trace、实时流和玩家可见的执行历史，失败时的原因文字也会换成固定的通用提示（真实原因只写入服务端日志）。只留下名称、状态、耗时和用量。它返回的正文（`narrativeOutput` 或 `content`）也不写入对话记录，不会进入其他 runtime 的历史，所以 `io.concealed: true` 不能和 `io.visibility: story` 同时声明（故事 runtime 的正文就是玩家读到的内容），加载会失败；表单和界面块照常写入。需要把隐藏内容交给其他插件时，用契约输出传递，由接收插件写入它自己的 `_hidden.<namespace>`；参见 [story-events 的 plot runtime](../../plugins/story-events/runtimes/plot/RUNTIME.md) 与 [World Data · 隐藏数据](../reference/world-data.md#隐藏数据visibility-hidden)。
 
 **跨包依赖边界**：`needs`、`after` 和 `io.inputs` 的跨包引用必须使用版本化契约（如 `narrative-engine@1`），不允许直接引用其他插件的 runtime 名称（如 `other-plugin/some-runtime`）。包内多个 runtime 之间可以使用 runtime 名称建立排序和输入关系，但跨包必须通过公开契约解耦。违反此规则的 manifest 加载时会被拒绝。
 
@@ -80,7 +82,7 @@ runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声
 
 角色和角色 schema 读取 `ctx.world`，角色写入通过 proposals。不要把角色复制到本插件的 `characters` namespace，也不要扫描其他插件私有 schema。
 
-插件私有数据使用绑定 store：`getPluginData(namespace, key)`、`listPluginData(namespace?)`。不同插件共享数据必须声明公开契约。要让某个 namespace 的记录能被框架的记忆检索查到，在它的声明里加 `search: { text: <字段名> }`（见 [可检索的数据](../reference/plugins.md#可检索的数据)）。可导入世界数据的 namespace 在 `contributes.data` 声明 `version/schema/accepts`，其契约 schema 放在根 `contracts`；再用 `authoring` 声明标题、写作提示、示例和约定路径，世界作者和创作工具通过 `pnpm describe:authoring` 读到它（见[进阶指南](./plugin-authoring-advanced.md#数据契约与世界导入)）。见 [World Data](../reference/world-data.md)。
+插件私有数据使用绑定 store：`getPluginData(namespace, key)`、`listPluginData(namespace?)`；`ctx.pluginData`（function runtime、guard 和扩展 handler 里都有）读同一份数据，`get` 在每种上下文里都返回存下的值本身，没有时返回 `null`，`list` 返回 `{ key, value, createdAt, updatedAt }`。一个值序列化成 JSON 后最多 256 KiB，超过时 proposal 或 `ctx.pluginData.set` 失败并说明插件、`namespace/key`、实际大小和上限，原值不变也不截断；会不断增长的列表要拆到多个 key 或自己裁剪。不同插件共享数据必须声明公开契约。要让某个 namespace 的记录能被框架的记忆检索查到，在它的声明里加 `search: { text: <字段名> }`（见 [可检索的数据](../reference/plugins.md#可检索的数据)）。可导入世界数据的 namespace 在 `contributes.data` 声明 `version/schema/accepts`，其契约 schema 放在根 `contracts`；再用 `authoring` 声明标题、写作提示、示例和约定路径，世界作者和创作工具通过 `pnpm describe:authoring` 读到它（见[进阶指南](./plugin-authoring-advanced.md#数据契约与世界导入)）。见 [World Data](../reference/world-data.md)。
 
 记忆语义由 memory 插件和其 `memory.block-definitions@1` 服务拥有。世界自定义记忆块通过 `memory.blocks@1` 导入。不要新增 `memoryBlocks` 或 `summaryFocus` 根字段。
 
@@ -101,7 +103,7 @@ Agent 正文放在相应 `PLUGIN.md` 或 `RUNTIME.md`。静态附加段用根 `c
 
 测试应验证用户可观察的结果、非法输入、数据归属，以及失败时不发生部分提交。CI 前运行项目的 `pnpm lint` 和 `pnpm test`；涉及玩家 UI 流程时补相应浏览器验收。
 
-公开 SDK 提供 `resolveI18nText` / `resolveI18nDeep`、locale registry、`estimateTokens`、表单工具和角色字段校验。`world.dimensions@1` 的提供者使用 `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer。Node 插件用 `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)` 加载自己的模板；该子入口不进入浏览器根模块。`shared` / `tools` / `context` 复用这些实现，插件代码只依赖 SDK。
+公开 SDK 提供 `resolveI18nText` / `resolveI18nDeep`、locale registry、`estimateTokens`、`rankTexts` / `searchTerms` / `searchExcerpt`（与内核同一套 BM25，给插件自己的文本排序，不调用模型）、表单工具和角色字段校验。骰点和其他游戏随机数一律用 `ctx.random`（工具里是 `context.random`，`shortId` 的第四个参数），不要用 `node:crypto` 或 `Math.random`：用 `COVEL_RANDOM_SEED` 启动的测试服务器才能让同一局重复出同样的结果。`world.dimensions@1` 的提供者使用 `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer。Node 插件用 `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)` 加载自己的模板；该子入口不进入浏览器根模块。`shared` / `tools` / `context` 复用这些实现，插件代码只依赖 SDK。
 
 默认 analyst 示例在 `post-turn` 自动运行，读取本回合叙事绑定；note 示例保留手动函数入口。记录 ID 来自 `ctx.random`，时间戳由代码或存储写入，agent 只提交稳定的事实 key 和内容。
 
