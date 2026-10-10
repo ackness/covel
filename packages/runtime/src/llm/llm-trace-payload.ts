@@ -45,6 +45,31 @@ export interface LlmCallingPayloadInput {
   readonly queueWaitMs?: number;
 }
 
+/**
+ * Messages as a trace keeps them: the base64 body of an image is megabytes
+ * and is replaced by its size. The provider request of the same event shows
+ * the part in its wire shape.
+ */
+function traceMessages(messages: readonly LLMMessage[]): readonly unknown[] {
+  return messages.map((message) =>
+    // A replayed tool-call message can hold `null` content.
+    !Array.isArray(message.content) ||
+    !message.content.some((part) => part.type === "image")
+      ? message
+      : {
+          ...message,
+          content: message.content.map((part) =>
+            part.type === "image" && !/^https?:\/\//i.test(part.image)
+              ? {
+                  ...part,
+                  image: `[image data omitted: ${part.image.length} base64 characters]`,
+                }
+              : part,
+          ),
+        },
+  );
+}
+
 export function buildLlmCallingPayload(
   input: LlmCallingPayloadInput,
 ): Record<string, unknown> {
@@ -62,7 +87,7 @@ export function buildLlmCallingPayload(
     slot: input.slot,
     model: input.model,
     provider: input.provider,
-    messages: input.messages,
+    messages: traceMessages(input.messages),
     tools: (input.tools ?? []).map((t) => ({
       name: t.name,
       description: t.description,

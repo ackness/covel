@@ -18,19 +18,12 @@ export interface AssetGenerateView {
   readonly createdAt: string;
 }
 
-export interface AssetGenerateLLMTextPart {
-  readonly type: "text";
-  readonly text: string;
+/** A picture the player was shown, as the model is told about it. */
+export interface ShownPicture {
+  readonly ref: MediaRef;
+  /** What the picture depicts; absent when its producer said nothing. */
+  readonly caption?: string;
 }
-
-export interface AssetGenerateLLMImagePart {
-  readonly type: "image";
-  readonly image: MediaRef;
-}
-
-export type AssetGenerateLLMPart =
-  AssetGenerateLLMTextPart | AssetGenerateLLMImagePart;
-export type AssetGenerateLLMContent = readonly AssetGenerateLLMPart[];
 
 export function isAssetGeneratePayload(
   value: unknown,
@@ -95,39 +88,47 @@ export function assetGenerateToView(proposal: Proposal): AssetGenerateView {
   };
 }
 
-export function assetGenerateToLLM(
-  proposal: Proposal,
-): AssetGenerateLLMContent {
-  return assetGenerateViewToLLM(assetGenerateToView(proposal));
+/** A caption longer than this is cut: an image prompt can run to pages. */
+const PICTURE_CAPTION_MAX_CHARS = 600;
+
+/**
+ * The picture an asset view shows, or `null` for another modality. The
+ * caption is the producer's `meta.caption`, else the `meta.prompt` the
+ * picture was generated from.
+ */
+export function pictureOf(view: AssetGenerateView): ShownPicture | null {
+  if (view.modality !== "image" && !view.ref.mime.startsWith("image/"))
+    return null;
+  const text = [view.meta?.caption, view.meta?.prompt].find(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+  const caption = text?.replace(/\s+/g, " ").trim();
+  return {
+    ref: view.ref,
+    ...(caption
+      ? {
+          caption:
+            caption.length > PICTURE_CAPTION_MAX_CHARS
+              ? `${caption.slice(0, PICTURE_CAPTION_MAX_CHARS)}…`
+              : caption,
+        }
+      : {}),
+  };
 }
 
 /**
- * View-based counterpart to {@link assetGenerateToLLM}. Useful when the
- * view is already in hand (e.g. read back from `MessageRecord.metadata.block.data`
- * during LLM-history assembly) and reconstructing a full {@link Proposal}
- * envelope would be wasteful.
- *
- * Output shape mirrors {@link assetGenerateToLLM} byte-for-byte: a `text`
- * summary first, followed by an `image` part for any image-modality
- * asset. Adapters that cannot accept image parts (text-only models)
- * collapse the array back to its summary text — see the per-adapter
- * fallback in `@covel/ai-provider`.
+ * Pictures among the blocks a conversation row showed the player (the `ui`
+ * of a turn message). Anything that is not an image asset block is skipped.
  */
-export function assetGenerateViewToLLM(
-  view: AssetGenerateView,
-): AssetGenerateLLMContent {
-  const summary = [
-    `Generated ${view.modality} asset`,
-    `id=${view.ref.id}`,
-    `mime=${view.ref.mime}`,
-    `size=${view.ref.size}`,
-  ].join(" ");
-
-  const parts: AssetGenerateLLMPart[] = [{ type: "text", text: summary }];
-  if (view.modality === "image" || view.ref.mime.startsWith("image/")) {
-    parts.push({ type: "image", image: view.ref });
-  }
-  return parts;
+export function picturesShown(blocks: unknown): readonly ShownPicture[] {
+  if (!Array.isArray(blocks)) return [];
+  return blocks.flatMap((block: unknown) => {
+    if (!block || typeof block !== "object") return [];
+    const data = (block as { readonly data?: unknown }).data;
+    const picture = isAssetGenerateView(data) ? pictureOf(data) : null;
+    return picture ? [picture] : [];
+  });
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

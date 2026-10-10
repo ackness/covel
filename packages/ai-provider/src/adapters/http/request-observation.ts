@@ -44,6 +44,9 @@ const MODEL_FIELDS = new Set([
   "store",
 ]);
 
+/** Inline data longer than this is recorded by its length only. */
+const INLINE_DATA_TRACE_LIMIT = 4_096;
+
 /** Detached from the request body: an observer cannot change the sent JSON. */
 export function projectRequestBody(serializedBody: string): {
   body: Record<string, unknown>;
@@ -65,8 +68,25 @@ export function projectRequestBody(serializedBody: string): {
   // public URLs and data URIs; make redaction explicit rather than claiming a
   // redacted resource can be replayed. Prompt text retains the existing trace
   // privacy contract and must not be treated as a safe public export.
-  const sanitized = JSON.stringify(body, (_key, value: unknown) => {
-    if (typeof value !== "string" || !/^https?:\/\//i.test(value)) return value;
+  const sanitized = JSON.stringify(body, (key, value: unknown) => {
+    if (typeof value !== "string") return value;
+    // Inline image bytes (an image data URL; the base64 `data` of an
+    // Anthropic source or a Gemini `inlineData`) are megabytes per call. The
+    // record keeps the part and its size, and no longer replays as sent.
+    const image = /^data:image\/[a-z0-9.+-]+;base64,/i.exec(value);
+    if (image && value.length > INLINE_DATA_TRACE_LIMIT) {
+      complete = false;
+      return `${image[0]}[${value.length - image[0].length} base64 characters omitted]`;
+    }
+    if (
+      key === "data" &&
+      value.length > INLINE_DATA_TRACE_LIMIT &&
+      /^[A-Za-z0-9+/]+={0,2}$/.test(value)
+    ) {
+      complete = false;
+      return `[${value.length} base64 characters omitted]`;
+    }
+    if (!/^https?:\/\//i.test(value)) return value;
     try {
       const url = new URL(value);
       if (url.username || url.password || url.search || url.hash) {

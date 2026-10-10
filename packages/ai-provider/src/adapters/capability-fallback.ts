@@ -1,23 +1,18 @@
 /**
  * Model-capability fallback for multimodal message content.
  *
- * Context-builder hands every adapter a `TextMessageContent` that may be a
- * `string` or a `readonly TextMessageContentPart[]` containing image
- * segments (added by the 2026-04-26 multimodal audit fix). When the
- * resolved model does NOT accept image input, those image parts must be
- * collapsed into their text descriptors so the request still reaches the
- * provider in a shape it understands.
+ * A request may carry image parts. When the model that actually takes the
+ * call (the slot's target, or a fallback the gateway moved to) is known not
+ * to accept image input, the image parts are removed so the request still
+ * reaches the provider in a shape it understands. Whoever built the request
+ * put the same information in text: the kernel's history holds a note for
+ * every picture.
  *
- * The fallback is conservative:
- *   - When `context` is missing or `capability.input` is undefined, the
- *     messages are returned untouched (no information to act on).
- *   - When the model is text-only, image parts become a JSON `image_ref`
- *     descriptor — same shape used by the URL-missing fallback in each
- *     wire serializer — so the model still sees the asset id, mime, and
- *     size for downstream reasoning.
+ * When `context` is missing or `capability.input` is undefined, the messages
+ * are returned untouched (no information to act on).
  *
- * This wrapper is the only place that needs to know about model
- * capability; per-protocol serializers stay focused on wire format.
+ * This wrapper is the only place that needs to know about model capability;
+ * per-protocol serializers stay focused on wire format.
  */
 
 import type {
@@ -25,6 +20,7 @@ import type {
   TextMessage,
   TextMessageContent,
 } from "../types.js";
+import { IMAGE_PLACEHOLDER_TEXT } from "./common.js";
 
 /**
  * Return a message list safe to send to the resolved model. When the
@@ -56,18 +52,10 @@ function shouldDowngrade(context: ModelRequestContext | undefined): boolean {
 
 function downgradeContent(content: TextMessageContent): TextMessageContent {
   if (!Array.isArray(content)) return content;
-  let mutated = false;
-  const next = content.map((part) => {
-    if (part.type === "text") return part;
-    mutated = true;
-    return {
-      type: "text" as const,
-      text: JSON.stringify({
-        type: "image_ref",
-        ref: part.image,
-        note: "Model does not accept image input; image part was downgraded to a text descriptor.",
-      }),
-    };
-  });
-  return mutated ? next : content;
+  const text = content.filter((part) => part.type === "text");
+  if (text.length === content.length) return content;
+  // A message of images only keeps its place in the conversation.
+  return text.length > 0
+    ? text
+    : [{ type: "text" as const, text: IMAGE_PLACEHOLDER_TEXT }];
 }
