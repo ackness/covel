@@ -31,6 +31,7 @@ import {
   assertSuccess,
   createStructuredOutputError,
   readOpenAiResponsesUsage,
+  readResponseText,
   readResponsesOutputText,
   readResponsesStreamFunctionCallAdded,
   readResponsesStreamFunctionCallArgsDelta,
@@ -331,17 +332,19 @@ function responsesRequestBody(
   return body;
 }
 
-/** True when a 400 response says the model does not take encrypted reasoning. */
-async function refusesEncryptedReasoning(response: Response): Promise<boolean> {
-  if (response.status !== 400) return false;
+/** An error body is a short JSON object; a longer one fails the call. */
+const MAX_REFUSAL_BODY_BYTES = 1024 * 1024;
+
+/** True when a 400 body says the model does not take encrypted reasoning. */
+function refusesEncryptedReasoning(text: string): boolean {
   try {
-    const payload = (await response.clone().json()) as {
+    const payload = JSON.parse(text) as {
       error?: { param?: unknown; message?: unknown };
       message?: unknown;
-    };
-    const message = payload.error?.message ?? payload.message;
+    } | null;
+    const message = payload?.error?.message ?? payload?.message;
     return (
-      payload.error?.param === "include" ||
+      payload?.error?.param === "include" ||
       (typeof message === "string" && /encrypted[ _]content/i.test(message))
     );
   } catch {
@@ -360,11 +363,20 @@ async function postResponses(
 ): Promise<Response> {
   const response = await postJson(config, "/responses", body);
   const include = Array.isArray(body.include) ? body.include : [];
-  if (
-    !include.includes(ENCRYPTED_REASONING) ||
-    !(await refusesEncryptedReasoning(response))
-  )
+  if (!include.includes(ENCRYPTED_REASONING) || response.status !== 400)
     return response;
+  // Read once, with a ceiling, and hand the caller the same body again.
+  const text = await readResponseText(response, MAX_REFUSAL_BODY_BYTES);
+  if (!refusesEncryptedReasoning(text)) {
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    headers.delete("content-encoding");
+    return new Response(text, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
   const { include: _include, ...rest } = body;
   const kept = include.filter((entry) => entry !== ENCRYPTED_REASONING);
   const retried = await postJson(config, "/responses", {

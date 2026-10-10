@@ -221,8 +221,36 @@ describe("OpenAI Responses without provider-side storage", () => {
         { baseUrl: "https://other-400.invalid" },
         { model, messages },
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/Unknown parameter/);
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops reading a 400 body that does not end", async () => {
+    const chunk = new Uint8Array(256 * 1024).fill(0x20);
+    let sent = 0;
+    const cancelled = vi.fn();
+    respondEach([
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              sent += chunk.byteLength;
+              controller.enqueue(chunk);
+            },
+            cancel: cancelled,
+          }),
+          { status: 400 },
+        ),
+    ]);
+    const adapter = createOpenAiResponsesAdapter();
+    await expect(
+      adapter.generateText(
+        { baseUrl: "https://endless-400.invalid" },
+        { model, messages },
+      ),
+    ).rejects.toThrow(/byte limit/);
+    expect(cancelled).toHaveBeenCalled();
+    expect(sent).toBeLessThan(4 * 1024 * 1024);
   });
 
   it("keeps the streamed items when the final event has an empty output", async () => {
