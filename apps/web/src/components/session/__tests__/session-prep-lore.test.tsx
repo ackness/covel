@@ -118,7 +118,7 @@ describe("session prep narrator-only lore", () => {
   const marked =
     "A village.\n\n<!-- narrator-only -->\n\nThe keeper put the lamp out.\n\n<!-- /narrator-only -->\n\nRain.";
 
-  it("shows the player-visible lore and starts with the whole text", async () => {
+  it("shows the player-visible lore and starts without an override while it is unchanged", async () => {
     const onStart = vi.fn();
     primeWorldRecord({ ...fullWorld, lore: marked });
     render(<SessionPrepScreen {...props({ onStart })} />);
@@ -126,7 +126,42 @@ describe("session prep narrator-only lore", () => {
     await waitFor(() => expect(input.value).toBe("A village.\n\nRain."));
     fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
     await waitFor(() => expect(onStart).toHaveBeenCalled());
-    expect(onStart.mock.calls[0]![1]).toBe(marked);
+    // The server reads the session's own edition when no override is sent.
+    expect(onStart.mock.calls[0]![1]).toBeUndefined();
+  });
+
+  it("shows and starts from the edition of the session's language", async () => {
+    const onStart = vi.fn();
+    const bilingual = {
+      ...fullWorld,
+      lore: "中文设定",
+      locale: "zh-CN",
+      metadata: {
+        supportedLocales: ["zh-CN", "en-US"],
+        localizedText: { lore: { "en-US": "English lore" } },
+      },
+    };
+    primeWorldRecord(bilingual);
+    render(
+      <SessionPrepScreen
+        {...props({
+          onStart,
+          world: {
+            ...world,
+            locale: "zh-CN",
+            metadata: bilingual.metadata,
+          },
+        })}
+      />,
+    );
+    const input = openLore() as HTMLTextAreaElement;
+    await waitFor(() => expect(input.value).toBe("English lore"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    expect(onStart.mock.calls[0]![1]).toBeUndefined();
+    fireEvent.change(input, { target: { value: "My lore" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
+    expect(onStart.mock.calls[1]![1]).toBe("My lore");
   });
 
   it("keeps the narrator-only blocks in the draft of an edited lore", async () => {
@@ -161,7 +196,7 @@ describe("session prep full record", () => {
       expect((openLore() as HTMLTextAreaElement).value).toBe("Original A"),
     );
     fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
-    expect(onStart).toHaveBeenCalledWith(["fixture-plugin"], "Original A", []);
+    expect(onStart).toHaveBeenCalledWith(["fixture-plugin"], undefined, []);
   });
 });
 
