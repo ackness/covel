@@ -272,13 +272,14 @@ Lorebook 使用 owner 与 id 的复合身份，owner 为 world、plugin 或 play
 
 `world.dimensions@1` 发布 `{id: {name, description?, schema, value, version}}`。插件读取 `ctx.world.dimensions.<id>.value`；不要从 `worldRecord.dimensions` / `metadata.dimensions` 取当前值，那里是作者 definition 与初值，也不要扫描另一个插件的 `_dimensions`。
 
-捆绑的 `world-init` 使用三个 runtime：
+捆绑的 `world-init` 使用四个 runtime：`dimension-clock` 排在时间结算和 `dimension-tracker` 之后。
 
-| Runtime             | 阶段              | 职责                                                                                                                                                                                         |
-| ------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dimension-context` | pre-turn function | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                                                                                          |
-| `dimension-tracker` | post-turn agent   | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证，本轮结算后的世界时钟（`world-time-evolution@1`）为可选输入；`toolChoice: required`，无变化也以 `update-dimensions({updates: []})` 结算 |
-| `edit-dimensions`   | manual function   | 玩家改值、确认人工处理或明确跳过                                                                                                                                                             |
+| Runtime             | 阶段               | 职责                                                                                                                                                                                         |
+| ------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dimension-context` | pre-turn function  | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                                                                                          |
+| `dimension-tracker` | post-turn agent    | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证，本轮结算后的世界时钟（`world-time-evolution@1`）为可选输入；`toolChoice: required`，无变化也以 `update-dimensions({updates: []})` 结算 |
+| `dimension-clock`   | post-turn function | 不调用模型，按本轮结算后的世界时钟（`world-time-evolution@1`，可选输入）计算 schema 里带 `x-derive` 的字段，值有变化时提交 `dimension.update`                                                |
+| `edit-dimensions`   | manual function    | 玩家改值、确认人工处理或明确跳过                                                                                                                                                             |
 
 同一次执行的公共 dimension 读取冻结。setup 初始化和写入者自身 proposal 可形成局部预览，但不替换公共快照，不泄露给并行 sibling。公共 builtin `world-dimension-get/list` 始终读取冻结快照，不叠加自身写入，也不回退初值。模板选取 `{{ world.dimensions.<id>.value }}`；默认提示词段是预算内投影，而非全量记录。
 

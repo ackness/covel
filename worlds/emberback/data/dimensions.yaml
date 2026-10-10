@@ -4,28 +4,49 @@ crownfire:
   schema:
     type: object
     properties:
+      # The storm reaches the ridge at 09:14 station time, 180 minutes after
+      # the 06:14 call. Both fields are computed from the station clock.
       minutesRemaining:
         type: integer
         title: Minutes left
         minimum: 0
         maximum: 180
+        x-derive:
+          source: clock.elapsedSinceStart
+          start: 180
+          perUnit: -1
+          min: 0
+          max: 180
       stage:
         type: string
         title: Storm
-        enum: [distant, approaching, imminent, overhead, passing]
+        enum: [distant, approaching, imminent, overhead]
         x-enumLabels:
           distant: On the horizon
           approaching: Approaching
           imminent: Imminent
           overhead: Overhead
-          passing: Passing
-    required: [minutesRemaining, stage]
+        x-derive:
+          source: clock.elapsedSinceStart
+          start: 180
+          perUnit: -1
+          min: 0
+          ranges:
+            - { from: 121, value: distant }
+            - { from: 31, value: approaching }
+            - { from: 1, value: imminent }
+            - { value: overhead }
+      frontPassed:
+        type: boolean
+        title: Front has passed
+    required: [minutesRemaining, stage, frontPassed]
     additionalProperties: false
   initialValue:
     minutesRemaining: 180
     stage: distant
+    frontPassed: false
   updateRule: >-
-    The countdown follows the station clock. The storm reaches the ridge at 09:14 station time, 180 minutes after the 06:14 call, so minutes remaining is 180 minus the minutes the station clock has counted since the start, and never below 0. Set it again on every turn in which the clock moved. Only when no station clock is given, subtract the story time this turn's narrative actually spends: a short conversation 5–10 minutes, a repair, search, or argument 15–40, a crawler run to Mile Seventeen or Nightglass 30–60. Time never comes back. Stage follows minutes remaining: distant above 120, approaching from 120 down to 31, imminent from 30 down to 1, overhead at 0. Set passing only when the narrative says the storm front has moved on.
+    Set frontPassed to true only when the narrative says the storm front has moved on past the ridge. Never set it back to false.
 
 relayGrid:
   name: Relay Grid

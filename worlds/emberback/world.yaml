@@ -2,7 +2,7 @@
 schemaVersion: "1.0"
 id: emberback
 name: Emberback Relay
-version: 1.1.0
+version: 1.2.0
 summary: A lonely relay on a tidally locked world receives a distress call in
   your own voice—sent from seventy-two hours in the future.
 defaultLocale: en-US

@@ -103,7 +103,7 @@ io:
       required: false
 ```
 
-根 `PLUGIN.md` 的 `optional` 要列出 `world-time-evolution@1`。时间没有结算时（模型调用失败，或递归子叙事由外层结算，此时输出只有 `reason`），这个槽位不存在，消费者照常运行。内置的 `world-init/dimension-tracker` 就是这样读取时钟的，见 [动态世界维度](dynamic-dimensions.md#冻结读取与维护)。
+根 `PLUGIN.md` 的 `optional` 要列出 `world-time-evolution@1`。时间没有结算时（模型调用失败，或递归子叙事由外层结算，此时输出只有 `reason`），这个槽位不存在，消费者照常运行。内置的 `world-init/dimension-tracker` 和 `world-init/dimension-clock` 就是这样读取时钟的：前者让模型按时间结算规则，后者不调用模型，按 `elapsedSinceStart` 计算世界声明为 `x-derive` 的维度字段（倒计时、阶段），见 [动态世界维度](dynamic-dimensions.md#由时钟推导的字段)。
 
 叙事插件的 `RUNTIME.md` 接入：
 
