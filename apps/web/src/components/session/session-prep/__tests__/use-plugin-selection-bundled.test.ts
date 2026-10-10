@@ -46,6 +46,9 @@ const PLUGINS = bundled("plugins").map((id) => {
     optional: list(manifest.optional),
     conflicts: list(manifest.conflicts),
     extensions: list(manifest.contributes?.extensions),
+    eventTopics: list<{ topic: string }>(manifest.contributes?.events).map(
+      (event) => event.topic,
+    ),
     runtimes: [],
     tools: [],
     userSettings: [],

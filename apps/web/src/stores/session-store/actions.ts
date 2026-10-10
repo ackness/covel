@@ -346,26 +346,23 @@ export function useBuildSessionActions({
     const generation = sessionGenerationRef.current;
     const cursor = stateRef.current.olderMessagesCursor;
     if (!sid || !cursor) return;
-    try {
-      const page = await ds.listMessagesPage(sid, {
-        cursor,
-        limit: OLDER_MESSAGES_PAGE_SIZE,
-      });
-      // A previous visit or an already consumed page cannot rewind history.
-      if (
-        sessionIdRef.current !== sid ||
-        sessionGenerationRef.current !== generation ||
-        stateRef.current.olderMessagesCursor !== cursor
-      )
-        return;
-      dispatch({
-        type: "PREPEND_MESSAGES",
-        messages: toStreamMessages(page.items),
-        cursor: page.nextCursor,
-      });
-    } catch {
-      // 非关键：下次滚动到顶部时会重试。
-    }
+    // A failure propagates so the message list can show it with a retry.
+    const page = await ds.listMessagesPage(sid, {
+      cursor,
+      limit: OLDER_MESSAGES_PAGE_SIZE,
+    });
+    // A previous visit or an already consumed page cannot rewind history.
+    if (
+      sessionIdRef.current !== sid ||
+      sessionGenerationRef.current !== generation ||
+      stateRef.current.olderMessagesCursor !== cursor
+    )
+      return;
+    dispatch({
+      type: "PREPEND_MESSAGES",
+      messages: toStreamMessages(page.items),
+      cursor: page.nextCursor,
+    });
   }, [ds, dispatch, sessionIdRef, sessionGenerationRef, stateRef]);
 
   const submitBlock = useCallback(

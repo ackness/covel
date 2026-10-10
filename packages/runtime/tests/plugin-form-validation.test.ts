@@ -78,7 +78,7 @@ describe("plugin-owned form validation", () => {
         },
         context,
       ),
-    ).rejects.toThrow("Over budget");
+    ).rejects.toMatchObject({ code: "form_rejected", message: "Over budget" });
     expect(await store.listPlayerInputs("session")).toHaveLength(0);
     await handler(
       {

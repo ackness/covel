@@ -10,6 +10,7 @@ const plugins: PluginSummary[] = [
     optional: [],
     conflicts: [],
     extensions: [],
+    eventTopics: [],
     id: "fixture-package",
     displayName: "Fixture package",
     description: "Fixture package",

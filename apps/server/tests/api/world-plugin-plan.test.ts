@@ -158,6 +158,31 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
       ),
     ).toEqual([]);
   });
+  it("activates one of two plugins that declare the same event topic", () => {
+    const events = (file: string) => ({
+      contributes: {
+        events: [
+          { topic: "scene.set", schema: `./schemas/${file}`, description: "" },
+        ],
+      },
+    });
+    registry.register(entry("stage", events("scene.json")));
+    registry.register(entry("theatre", events("other-shape.json")));
+    expect(buildPluginSummary(registry.get("stage")!).eventTopics).toEqual([
+      "scene.set",
+    ]);
+    const plan = resolveSessionPluginPlan(["stage", "theatre"], registry);
+    // The second declaration never reaches the session, so no event of it is
+    // validated against the first one's schema.
+    expect(plan.active).toEqual(["stage", "core"]);
+    expect(plan.rejected).toEqual([
+      expect.objectContaining({
+        pluginId: "theatre",
+        code: "event-topic-conflict",
+        reason: expect.stringContaining("stage and theatre"),
+      }),
+    ]);
+  });
   it.each(["builtin", "community"] as const)(
     "keeps a %s request distinct from dependency and authorization resolution",
     async (source) => {

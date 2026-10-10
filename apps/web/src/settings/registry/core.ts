@@ -3,6 +3,7 @@ import type { SettingsStoreApi } from "@covel/settings";
 import { WORLD_AUTHORING_IDLE_TIMEOUT_MS } from "@covel/shared";
 import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
 import { resolveInitialLocale } from "@/i18n/locale-detector.js";
+import { ALLOWED_IMAGE_HOSTS_SETTING } from "@/lib/external-images.js";
 import { registerThemeSettings } from "@/theme-system/settings.js";
 
 export const WORLD_AUTHORING_IDLE_TIMEOUT_SETTING =
@@ -40,6 +41,17 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
 
   registerThemeSettings(store);
 
+  // Written by the "always load images from this host" choice on a held
+  // image; there is no editor for it.
+  store.register({
+    key: ALLOWED_IMAGE_HOSTS_SETTING,
+    schema: z.record(z.string(), z.array(z.string())),
+    default: {},
+    group: "general",
+    widget: "custom",
+    label: "Image hosts allowed per world",
+  });
+
   store.register({
     key: "ui.chatMessageWindow",
     schema: z.number().int().min(200).max(20000),
@@ -63,6 +75,17 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     label: "Expand turn updates",
     description:
       "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
+  });
+
+  store.register({
+    key: "ui.developerView",
+    schema: z.boolean(),
+    default: false,
+    group: "general",
+    widget: "toggle",
+    label: "Developer view",
+    description:
+      "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator.",
   });
 
   store.register({

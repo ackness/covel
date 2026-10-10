@@ -231,4 +231,6 @@ export interface CommitResult {
   readonly committed: boolean;
   readonly event?: SessionEvent;
   readonly error?: string;
+  /** Machine-readable reason for a failure a caller must tell apart; `error` is for people. */
+  readonly code?: string;
 }

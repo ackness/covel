@@ -30,6 +30,7 @@ function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
     optional: [],
     conflicts: [],
     extensions: [],
+    eventTopics: [],
     id,
     displayName: id === "p1" ? "P1" : "Off",
     description: "",

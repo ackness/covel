@@ -39,7 +39,7 @@ export default async function (ctx) {
 }
 ```
 
-Supported outcomes are `success`, `skipped`, `failed`, and `blocked`. Domain effects commit only on success. `ctx.pluginData.set(namespace,key,value)` writes the execution buffer, not immediately committed state. `effects.pluginData` likewise targets only the owning plugin. Other effects include domain proposals, emitted events, UI interactions, notifications, and asset generation records, according to the host's public `HandlerResult` schema. Never write reserved `_jobs`/`_logs` namespaces as business data.
+Supported outcomes are `success`, `skipped`, `failed`, and `blocked`. Domain effects commit only on success. `ctx.pluginData.set(namespace,key,value)` writes the execution buffer, not immediately committed state. `ctx.pluginData.get(namespace,key)` returns the stored value or `null`, and `list(namespace)` returns `{key, value, createdAt, updatedAt}` entries; an extension handler reads with the same two methods. `effects.pluginData` likewise targets only the owning plugin. Other effects include domain proposals, emitted events, UI interactions, notifications, and asset generation records, according to the host's public `HandlerResult` schema. Never write reserved `_jobs`/`_logs` namespaces as business data.
 
 `ctx.progress.report` and `ctx.logger` report bounded execution diagnostics. Preserve the cancellation signal when invoking providers or services. Rethrow cancellation instead of converting it into a successful domain write. Return a failed/skipped result for unsupported configuration rather than inventing output.
 

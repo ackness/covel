@@ -262,7 +262,7 @@ describe("UI slot projection host", () => {
     });
     const first = vi.fn(
       async (_input: UiSlotProjectionInput, ctx: PluginExtensionContext) => ({
-        name: (await ctx.pluginData.get("stage", "current"))?.value && "Gate",
+        name: (await ctx.pluginData.get("stage", "current")) && "Gate",
       }),
     );
     const second = vi.fn((input: UiSlotProjectionInput) => ({
@@ -490,8 +490,7 @@ it("coalesces repeated multi-provider bursts and reports each real projection on
   const samples: number[] = [];
   const f = await fixture((metric) => samples.push(metric.durationMs));
   const first = vi.fn(async (_input, ctx) => ({
-    name:
-      (await ctx.pluginData.get("places", "current"))?.value?.name ?? "Cold",
+    name: (await ctx.pluginData.get("places", "current"))?.name ?? "Cold",
   }));
   const second = vi.fn((input) => ({
     ...input.previous,

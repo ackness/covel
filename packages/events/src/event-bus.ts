@@ -74,7 +74,11 @@ export interface SessionPin {
 /** Control signal emitted when the local replay cursor can no longer be trusted. */
 export interface EventBusReset {
   readonly sessionId: string;
-  readonly reason: "transport-gap";
+  /**
+   * `transport-gap`: a cross-pod frame was lost. `publish-failed`: the commit
+   * owner could not publish the events of data it had already committed.
+   */
+  readonly reason: "transport-gap" | "publish-failed";
 }
 
 export interface EventBus {
@@ -92,6 +96,12 @@ export interface EventBus {
   onEmit(callback: (event: SubscriptionEvent) => void): () => void;
   /** Register for replay invalidations that require connected clients to reset. */
   onReset?(callback: (reset: EventBusReset) => void): () => void;
+  /**
+   * Drop a session's replay state and tell every connected client to reset and
+   * re-read. For a caller that knows events were lost, such as a commit whose
+   * data is stored but whose events could not be published.
+   */
+  invalidateReplay?(sessionId: string, reason: EventBusReset["reason"]): void;
   /**
    * Await idle audit-event persistence, including queued saves and events
    * emitted while the bus is still draining. `emit()` is intentionally
@@ -363,14 +373,17 @@ export function createEventBus(
     }
   }
 
-  function invalidateReplay(sessionId: string): void {
+  function invalidateReplay(
+    sessionId: string,
+    reason: EventBusReset["reason"] = "transport-gap",
+  ): void {
     const state = touchSession(sessionId);
     state.seq = 0;
     state.transportSeq = 0;
     state.epoch = nextEpoch();
     state.buffer = new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX);
     state.replayFloor = 0;
-    const reset: EventBusReset = { sessionId, reason: "transport-gap" };
+    const reset: EventBusReset = { sessionId, reason };
     for (const cb of resetCallbacks) {
       try {
         cb(reset);
@@ -778,6 +791,10 @@ export function createEventBus(
       return () => {
         emitCallbacks.delete(callback);
       };
+    },
+
+    invalidateReplay(sessionId, reason) {
+      if (!closed) invalidateReplay(sessionId, reason);
     },
 
     onReset(callback: (reset: EventBusReset) => void): () => void {

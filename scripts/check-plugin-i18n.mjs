@@ -164,11 +164,12 @@ function isPluginHandlerJsFile(rel) {
 const FRAMEWORK_CHINESE_LINES = {
   // Player-facing label and notice pairs.
   "apps/desktop/src/main-i18n.ts": 59,
+  "apps/server/src/routes/api/bootstrap/compactor.ts": 1,
   "apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts": 2,
   "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
   "apps/server/src/routes/api/session/commands.ts": 4,
   "apps/server/src/routes/misc-api/plugin-flow.ts": 6,
-  "packages/runtime/src/rpc-defaults/submit-form.ts": 6,
+  "packages/runtime/src/rpc-defaults/submit-form.ts": 14,
   "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
   "packages/context/src/message-insertion.ts": 1,
@@ -176,7 +177,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/context/src/prompt-internals.ts": 20,
   "packages/context/src/session-context.ts": 1,
   "packages/plugin-handlers-utils/src/character-sheets.ts": 1,
-  "packages/plugin-handlers-utils/src/narrative-review.ts": 14,
+  "packages/plugin-handlers-utils/src/narrative-review.ts": 13,
   "packages/runtime/src/agent-loop/request-context-budget.ts": 2,
   "packages/runtime/src/agent-loop/response-review.ts": 1,
   "packages/runtime/src/agent-loop/runtime-completion.ts": 3,

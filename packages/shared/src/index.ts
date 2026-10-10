@@ -162,6 +162,7 @@ export {
   hiddenPluginDataNamespace,
   isControlPlanePluginDataNamespace,
   isHiddenPluginDataNamespace,
+  pluginDataEntry,
   isKernelPluginDataOwner,
   pluginCodeNamespaceWriteError,
   reservedPluginDataNamespaceError,

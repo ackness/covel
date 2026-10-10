@@ -530,6 +530,8 @@ export const dimensionSettlementReceiptSchema = z.strictObject({
   sourceTurnId: z.string().min(1),
   version: z.number().int().positive(),
   error: z.string().optional(),
+  /** Why settlement is held back, for the host to test instead of reading `error`. */
+  blockedBy: z.literal("extraction-failed").optional(),
 });
 
 export function dimensionSnapshotFromRecords(

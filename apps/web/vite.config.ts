@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import { fileURLToPath } from "node:url";
+import { injectPageCsp } from "./src/lib/page-csp.js";
 
 const RUNTIME_PROXY_PATHS = ["/api"] as const;
 
@@ -96,6 +97,11 @@ export default defineConfig(({ mode }) => ({
     TanStackRouterVite({ autoCodeSplitting: true }),
     tailwindcss(),
     react(),
+    {
+      name: "covel-page-csp",
+      apply: "build",
+      transformIndexHtml: injectPageCsp,
+    },
   ],
   server: {
     proxy: createRuntimeProxyConfig(loadEnv(mode, resolveWorkspaceRoot(), "")),

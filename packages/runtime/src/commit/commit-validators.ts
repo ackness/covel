@@ -12,8 +12,8 @@
 import type { CommitResult } from "@covel/shared";
 
 /** Build a failed commit result with a leading error message. */
-export function commitError(message: string): CommitResult {
-  return { committed: false, error: message };
+export function commitError(message: string, code?: string): CommitResult {
+  return { committed: false, error: message, ...(code ? { code } : {}) };
 }
 
 /**

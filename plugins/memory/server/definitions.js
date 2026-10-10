@@ -47,6 +47,6 @@ export async function loadDefinitions(ctx) {
       add(await ctx.services.call({ ...provider, input: {} }));
   }
   const world = await ctx.pluginData.get("definitions", "world");
-  if (world !== undefined && world !== null) add(world.blocks);
+  if (world !== null) add(world.blocks);
   return [...definitions.values()];
 }

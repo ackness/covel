@@ -327,7 +327,15 @@ describe("createPluginDataWriter with a write buffer", () => {
     ).toBeNull();
     expect(await writer.get("generated", "img-1")).toEqual({ url: "a" });
     const list = await writer.list("generated");
-    expect(list).toEqual([{ key: "img-1", value: { url: "a" } }]);
+    // The entry shape an extension handler lists: key, value, timestamps.
+    expect(list).toEqual([
+      {
+        key: "img-1",
+        value: { url: "a" },
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      },
+    ]);
 
     // Deletes must stay inside the execution transaction too.
     const now = new Date().toISOString();
@@ -355,7 +363,7 @@ describe("createPluginDataWriter with a write buffer", () => {
       ),
     ).not.toBeNull();
     expect(await writer.get("generated", "img-2")).toBeNull();
-    expect(await writer.list("generated")).toEqual([
+    expect(await writer.list("generated")).toMatchObject([
       { key: "img-1", value: { url: "a" } },
     ]);
 
@@ -367,7 +375,7 @@ describe("createPluginDataWriter with a write buffer", () => {
     expect(await writer.get("generated", "img-2")).toEqual({
       restored: true,
     });
-    expect(await writer.list("generated")).toEqual([
+    expect(await writer.list("generated")).toMatchObject([
       { key: "img-2", value: { restored: true } },
     ]);
 

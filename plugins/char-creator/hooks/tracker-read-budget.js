@@ -1,19 +1,8 @@
-/**
- * A hook has no locale. The framework preamble that opens the system prompt
- * is in the instruction language of the session, so its language is the one
- * to add text in.
- */
-const readsChinese = (messages) =>
-  messages.some(
-    (message) =>
-      message.role === "system" &&
-      typeof message.content === "string" &&
-      /^\[RUNTIME\] [^\n]*\p{Script=Han}/u.test(message.content),
-  );
+import { instructionLocaleFor } from "@covel/plugin-handlers-utils";
 
 /** Allow one detail read, reserving subsequent steps for writes and correction. */
-export default function trackerReadBudget(_ctx, payload) {
-  if (payload.runtimeId !== "char-creator/character-tracker") {
+export default function trackerReadBudget(ctx, payload) {
+  if (ctx.runtimeId !== "char-creator/character-tracker") {
     return { action: "continue" };
   }
   const tools = payload.tools?.map((tool) => {
@@ -52,9 +41,11 @@ export default function trackerReadBudget(_ctx, payload) {
         ...payload.messages,
         {
           role: "system",
-          content: readsChinese(payload.messages)
-            ? "角色详情已读取完毕。调用 sync-characters 提交已确认的变化；没有任何变化有依据时，用空数组调用。同步失败后，改正并重新提交整批内容。不要再请求更多角色详情，也不要编造缺失的值。"
-            : "The character detail read is complete. Call sync-characters with the confirmed changes, or with empty arrays when no change is supported. After a failed sync, correct and resubmit the full batch. Do not request more character details or invent missing values.",
+          // Added text is in the language the prompt body is read in.
+          content:
+            instructionLocaleFor(ctx.locale) === "zh"
+              ? "角色详情已读取完毕。调用 sync-characters 提交已确认的变化；没有任何变化有依据时，用空数组调用。同步失败后，改正并重新提交整批内容。不要再请求更多角色详情，也不要编造缺失的值。"
+              : "The character detail read is complete. Call sync-characters with the confirmed changes, or with empty arrays when no change is supported. After a failed sync, correct and resubmit the full batch. Do not request more character details or invent missing values.",
         },
       ],
     },

@@ -10,8 +10,6 @@ const ref = (value) =>
   typeof value.id === "string" &&
   typeof value.mime === "string" &&
   typeof value.size === "number";
-const own = async (ctx, namespace, key) =>
-  (await ctx.pluginData.get(namespace, key))?.value;
 const actors = (speakers) =>
   speakers.map((speaker, index) => ({
     characterId: speaker.id,
@@ -26,7 +24,7 @@ const actors = (speakers) =>
 export default function (covel) {
   covel.provideExtension("ui.slot@1", "cast", {
     async handler(_input, ctx) {
-      const current = await own(ctx, "active-cast", "current");
+      const current = await ctx.pluginData.get("active-cast", "current");
       return {
         actors: (current?.speakers ?? []).map((speaker, index) => ({
           characterId: speaker.id,
@@ -41,8 +39,8 @@ export default function (covel) {
   });
   covel.provideExtension("ui.slot@1", "backdrop", {
     async handler({ events }, ctx) {
-      let current = await own(ctx, "stage", "current");
-      const registry = await own(ctx, "scenes", "scene-registry");
+      let current = await ctx.pluginData.get("stage", "current");
+      const registry = await ctx.pluginData.get("scenes", "scene-registry");
       for (const event of events) {
         if (event.topic === "scene.set" && current?.turnId !== event.turnId)
           current = applySceneSetPreview(
@@ -68,7 +66,7 @@ export default function (covel) {
   });
   covel.provideExtension("ui.slot@1", "direction", {
     async handler({ previous, events }, ctx) {
-      const current = await own(ctx, "direction", "current");
+      const current = await ctx.pluginData.get("direction", "current");
       const previews = events.filter(
         (event) =>
           event.topic === "stage.direction" && current?.turnId !== event.turnId,

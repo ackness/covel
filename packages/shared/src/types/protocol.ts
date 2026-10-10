@@ -437,6 +437,19 @@ export type CovelEvent =
   // so /debug can explain a turn that lost context instead of silently losing it.
   // Trace-only (forward:false) — the player-facing stream is unaffected.
   | { readonly type: "context.pruned"; readonly payload: CovelEventPayload }
+  // History compaction attempt that failed (TurnEmitter): carries the reason
+  // and the count of consecutive failures. Trace-only (forward:false).
+  | {
+      readonly type: "context.compaction.failed";
+      readonly payload: CovelEventPayload;
+    }
+  // A commit whose data is stored but whose post-commit events could not all be
+  // published (TurnEmitter). The server resets subscribers so they re-read;
+  // trace-only (forward:false), so /debug shows why a client resynchronised.
+  | {
+      readonly type: "commit.fanout.failed";
+      readonly payload: CovelEventPayload;
+    }
   // Kernel job-status channel (append-only). Emitted whenever a long-running
   // function runtime reports progress via `ctx.progress` — the sole real-time
   // exception to effects isolation. Forwarded to the action stream so media
@@ -543,6 +556,9 @@ export const COVEL_EVENT_META = {
   "utils.fetch.failed": { forwardToActionStream: false },
   // Prompt-budget prune trace — /debug only.
   "context.pruned": { forwardToActionStream: false },
+  // History compaction failure and post-commit publish failure — /debug only.
+  "context.compaction.failed": { forwardToActionStream: false },
+  "commit.fanout.failed": { forwardToActionStream: false },
   // Kernel job-status progress — forwarded live so media-generation progress
   // reaches the client without waiting for the domain commit.
   "job-status.updated": { forwardToActionStream: true },

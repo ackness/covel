@@ -105,7 +105,19 @@ export function toExecutionStepStatus(
   if (status === "failed") return "failed";
   if (status === "skipped") return "skipped";
   if (status === "suspended") return "suspended";
-  return "completed";
+  if (status === undefined || status === "completed" || status === "success")
+    return "completed";
+  warnUnknownStatusOnce(status);
+  return "unknown";
+}
+
+const reportedUnknownStatuses = new Set<string>();
+
+/** A status the server added without a client mapping must not read as success. */
+function warnUnknownStatusOnce(status: string): void {
+  if (reportedUnknownStatuses.has(status)) return;
+  reportedUnknownStatuses.add(status);
+  console.warn(`[execution] unknown runtime status "${status}"`);
 }
 
 /**

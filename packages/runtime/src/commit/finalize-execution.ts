@@ -78,6 +78,7 @@ import {
   registerDimensionSettlements,
 } from "./dimension-finalization.js";
 import { droppedUpstream } from "./commit-dependencies.js";
+import { flushPostCommit } from "./post-commit-fanout.js";
 
 /**
  * Manifests resolve output kind, capabilities, scope, the persistent
@@ -94,6 +95,7 @@ type FinalizableResult = CommittableRuntimeResult;
 interface FailedProposal {
   readonly proposal: Proposal;
   readonly error: string;
+  readonly code?: string;
 }
 
 export interface FinalizeExecutionArgs {
@@ -143,6 +145,8 @@ export interface FinalizeExecutionArgs {
   readonly activePluginIds?: ReadonlySet<string>;
   /** Frozen operation-start settings shared with execution; otherwise manifest defaults apply. */
   readonly hookSettings?: HookScope["settings"];
+  /** The session's content locale, handed to the commit hooks. */
+  readonly hookLocale?: string;
   /**
    * Caller-specific writes folded into the same transaction, run after every
    * result commits and before `commit_status` settles. Resume uses it for the
@@ -206,6 +210,11 @@ export interface FinalizeExecutionOutcome {
   readonly isolatedRuntimes?: readonly IsolatedRuntime[];
   /** A non-proposal error (store error / `extraInTx` throw) that rolled back the execution. */
   readonly error?: string;
+  /**
+   * The data committed but some of its events could not be published; the
+   * session's subscribers were reset to re-read it.
+   */
+  readonly fanOutFailed?: boolean;
 }
 
 export interface IsolatedRuntime {
@@ -526,6 +535,7 @@ export async function finalizeExecution(
   const scope: HookScope = {
     activePluginIds,
     settings: args.hookSettings ?? buildHookSettings(runtimes, undefined),
+    locale: args.hookLocale,
   };
   return runWithHookScope(scope, async () => {
     // Externally-visible fan-out is buffered while the transaction is open and
@@ -806,20 +816,17 @@ export async function finalizeExecution(
       });
     }
 
-    for (const fn of postCommit) {
-      try {
-        await fn();
-      } catch (err) {
-        console.warn(
-          "[finalize-execution] post-commit fan-out failed:",
-          errorMessage(err),
-        );
-      }
-    }
+    const fanOutFailed = await flushPostCommit(postCommit, {
+      sessionId,
+      label: "finalize-execution",
+      ...(eventBus ? { eventBus } : {}),
+      ...(emitter ? { emitter } : {}),
+    });
     return conclude({
       status: "committed",
       events: committedEvents,
       failedProposals: isolatedFailures,
+      ...(fanOutFailed ? { fanOutFailed } : {}),
       ...(isolated.size > 0
         ? {
             isolatedRuntimes: [...isolated].map(([runtimeId, error]) => ({

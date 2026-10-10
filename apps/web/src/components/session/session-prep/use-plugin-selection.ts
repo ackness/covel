@@ -272,7 +272,8 @@ export function usePluginSelection(
             if (
               selectedPluginIdSet.has(rejected.pluginId) &&
               (rejected.code === "conflict" ||
-                rejected.code === "single-provider-conflict")
+                rejected.code === "single-provider-conflict" ||
+                rejected.code === "event-topic-conflict")
             ) {
               next.delete(rejected.pluginId);
               excluded.add(rejected.pluginId);

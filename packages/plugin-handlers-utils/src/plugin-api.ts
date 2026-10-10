@@ -9,7 +9,7 @@ import type {
 import type { FunctionStoreView } from "./function-runtime.js";
 import type { JsonValue, MediaReference } from "./types.js";
 import type { withPendingProposals } from "./tool-result.js";
-import type { PluginMessages } from "./messages.js";
+import type { PluginMessageContext, PluginMessages } from "./messages.js";
 export type { PluginToolResult } from "./tool-result.js";
 
 export type HookEventName =
@@ -35,8 +35,17 @@ export interface PluginHookContext {
   readonly signal?: AbortSignal;
   readonly event: HookEventName;
   readonly sessionId: string;
+  /** Empty for `SessionStart` and `SessionEnd`, which fire outside a turn. */
   readonly turnId: string;
+  /** The session's content locale; a session host always supplies it. */
+  readonly locale?: string;
+  /**
+   * Plugin of the runtime the event is about, not the plugin that registered
+   * the handler. Set together with `runtimeId` for every event that concerns
+   * one runtime; payloads do not repeat the identity.
+   */
   readonly pluginId?: string;
+  /** Runtime the event is about; see `pluginId`. */
   readonly runtimeId?: string;
   readonly activePluginIds?: ReadonlySet<string>;
   readonly getOwnSettings?: () => Readonly<Record<string, unknown>>;
@@ -578,9 +587,15 @@ export interface PluginRpcOptions {
   readonly description?: string;
   readonly trustLevel?: "builtin" | "community";
 }
+/**
+ * Returns the text shown to the player when the submitted values are refused.
+ * `context` carries the session's language and the plugin's translations for
+ * it; pass it to `translate`.
+ */
 export type PluginFormValidator = (
   values: Readonly<Record<string, unknown>>,
   data: unknown,
+  context: PluginMessageContext & { readonly locale: string },
 ) => string | undefined;
 
 export interface PluginHttp {

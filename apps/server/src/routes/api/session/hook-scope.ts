@@ -8,12 +8,13 @@ import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
 export async function loadSessionHookScope(args: {
   readonly store: DataStore;
   readonly pluginRegistry: PluginRegistry | undefined;
-  readonly session: Pick<SessionRecord, "activePlugins" | "worldId">;
+  readonly session: Pick<SessionRecord, "activePlugins" | "worldId" | "locale">;
   readonly userSettings?: TurnInput["userSettings"];
 }): Promise<HookScope> {
   return buildSessionHookScope({
     pluginRegistry: args.pluginRegistry,
     activePluginIds: args.session.activePlugins,
+    locale: args.session.locale,
     userSettings: await loadSessionPluginUserSettings(
       args.store,
       args.session,
@@ -27,6 +28,8 @@ export function buildSessionHookScope(args: {
   readonly pluginRegistry?: PluginRegistry;
   readonly activePluginIds: Iterable<string>;
   readonly userSettings?: TurnInput["userSettings"];
+  /** The session's content locale; a turn falls back to its input's locale. */
+  readonly locale?: string;
 }): HookScope {
   const activePluginIds = new Set(args.activePluginIds);
   const declarations = [...activePluginIds].flatMap((pluginId) => {
@@ -41,5 +44,6 @@ export function buildSessionHookScope(args: {
   return {
     activePluginIds,
     settings: buildHookSettings(declarations, args.userSettings),
+    ...(args.locale === undefined ? {} : { locale: args.locale }),
   };
 }

@@ -181,6 +181,10 @@
     "worldLore": "World Document",
     "worldTab": "World",
     "worldDocumentEmpty": "No world document",
+    "externalImageHeld": "Image from {{host}} is not loaded",
+    "externalImageLoad": "Load this image",
+    "externalImageAlways": "Always load images from {{host}} in this world",
+    "externalImageBlocked": "Image not shown",
     "database": "Database",
     "dbTables": "table(s)",
     "dbVolumes": "{{count}} volume(s)",
@@ -336,10 +340,15 @@
     "composerAwaitingBeginPlaceholder": "Click “Begin Adventure” first — the story has to start before you can speak",
     "suspensionsBadge": "{{count}} waiting",
     "suspensionsTitle": "Suspended executions",
-    "suspensionsDescription": "Runtimes paused for external data. Enter resume data below to continue.",
+    "suspensionsDescription": "The story is waiting for your answer before it can continue.",
     "suspensionsEmpty": "No suspended executions.",
     "suspensionResumeLabel": "Resume",
     "suspensionCancelLabel": "Abandon",
+    "suspensionConfirmYes": "Yes",
+    "suspensionConfirmNo": "No",
+    "suspensionAnswerLabel": "Your answer",
+    "suspensionAnswerPlaceholder": "Type your answer",
+    "suspensionAdvanced": "Advanced: send raw data",
     "suspensionResumePlaceholder": "resume data (JSON or text)",
     "suspensionAgoSeconds": "{{count}}s ago",
     "suspensionAgoMinutes": "{{count}}m ago",
@@ -382,6 +391,8 @@
       "server": "Server"
     },
     "jumpToLatest": "Jump to latest",
+    "loadOlderFailed": "Could not load earlier messages.",
+    "statusUnknown": "Unknown status",
     "loadingOlder": "Loading earlier messages…",
     "startingGame": "Creating…",
     "resuming": "Resuming…",
@@ -409,6 +420,13 @@
     "recoveryRefresh": "Check status",
     "recoveryStop": "Stop task",
     "recoveryStopFailed": "Could not stop the task. Check its status and try again.",
+    "setupFailedTitle": "Setup did not finish",
+    "setupFailedDetail": "A step that prepares the story failed. What is already done is kept; retrying runs only the unfinished steps.",
+    "setupRetry": "Retry setup",
+    "setupUnfinishedTitle": "Setup is not finished yet",
+    "setupUnfinishedDetail": "The story is still being prepared. Continue to run the remaining steps with what you have already entered.",
+    "setupContinue": "Continue setup",
+    "setupRetryFailed": "Could not restart setup. Check the connection and try again.",
     "reasonInterrupted": "This task stopped before completion and did not commit a result. This is its recorded execution history.",
     "retryTask": "Retry this task",
     "executionHistory": "History",
@@ -819,6 +837,10 @@
         "label": "Chat window message limit",
         "description": "How many messages stay loaded in the chat. Older messages leave the window and load again when you scroll up."
       },
+      "developerView": {
+        "label": "Developer view",
+        "description": "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator."
+      },
       "expandTurnUpdates": {
         "label": "Expand turn updates",
         "description": "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line."
@@ -845,6 +867,9 @@
       },
       "llmCapabilityOverrides": {
         "label": "Capability overrides"
+      },
+      "mediaAllowedImageHosts": {
+        "label": "Image hosts allowed per world"
       },
       "llmPrepRuntimeBindings": {
         "label": "Prep-phase runtime bindings"
@@ -1815,7 +1840,8 @@
     "submittedHint": "Selected",
     "selectPrefix": "Select {{label}}",
     "selectPlaceholder": "Select...",
-    "requiredMissing": "Please fill in required fields"
+    "requiredMissing": "Please fill in required fields",
+    "rejected": "Check the form"
   },
   "interaction": {
     "playerSelected": "You chose:",

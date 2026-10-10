@@ -181,6 +181,14 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
 
   const children: NestedSpec[] = [{ type: "FormHeader", props: { title } }];
 
+  // Why the form is shown again, written by its plugin for the player.
+  if (typeof data.notice === "string" && data.notice.trim()) {
+    children.push({
+      type: "Alert",
+      props: { level: "warning", message: data.notice },
+    });
+  }
+
   // Narrative template — a muted intro preview with blanks for the fields the
   // player hasn't filled. The `Text` component renders plain text, so the raw
   // template's markdown and newlines would leak through verbatim: weaker models

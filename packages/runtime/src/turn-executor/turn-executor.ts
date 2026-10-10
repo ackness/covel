@@ -166,8 +166,15 @@ export async function executeTurn(
     activePluginIds: new Set(activeRuntimes.map((r) => r.pluginId)),
     settings: buildHookSettings(activeRuntimes, userSettings),
   };
-  return runWithHookScope(hookScope, () =>
-    executeTurnImpl({ ...input, userSettings }, activeRuntimes, deps, options),
+  return runWithHookScope(
+    { ...hookScope, locale: hookScope.locale ?? input.locale },
+    () =>
+      executeTurnImpl(
+        { ...input, userSettings },
+        activeRuntimes,
+        deps,
+        options,
+      ),
   );
 }
 

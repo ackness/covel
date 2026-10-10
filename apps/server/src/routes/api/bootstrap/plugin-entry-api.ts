@@ -5,7 +5,7 @@ import type {
   PluginToolkit,
   PluginEntryScope,
 } from "@covel/runtime";
-import type { RpcTrustLevel } from "@covel/shared";
+import { pluginMessagesFor, type RpcTrustLevel } from "@covel/shared";
 import { validatePluginHookRegistration } from "@covel/runtime";
 import {
   shortId,
@@ -209,10 +209,20 @@ export function buildEntryApi(
             ) {
               throw new Error("Form provider requires server-code approval");
             }
+            // The validator's answer is shown to the player, so it gets the
+            // session's language and the plugin's own translations for it.
+            const messages = pluginMessagesFor(
+              params.pluginRegistry?.get(pluginId)?.messages,
+              session.locale,
+            );
             return batch.invoke(() =>
               validator(
                 Object.freeze(structuredClone(request.values)),
                 structuredClone(request.data),
+                Object.freeze({
+                  locale: session.locale,
+                  ...(messages ? { messages } : {}),
+                }),
               ),
             );
           }),
