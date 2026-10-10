@@ -4,7 +4,12 @@ import {
   type BrowserCheckpoint,
   type PersistenceProfile,
 } from "./browser-sync.js";
-import type { DataStore, SessionRecord, StoreTransaction } from "../types.js";
+import type {
+  DataStore,
+  RuntimeExportRecord,
+  SessionRecord,
+  StoreTransaction,
+} from "../types.js";
 
 /**
  * A checkpoint is uploaded and downloaded whole at every action of a private
@@ -29,6 +34,32 @@ export interface ExportSessionCheckpointOptions {
   readonly revision: number;
   readonly actionId: string;
   readonly committedAt?: string;
+  /**
+   * When the source execution of the earliest unfinished background job
+   * began. Such a job reads each runtime export as it was at that instant, so
+   * the checkpoint keeps the revision that was live then and every later one.
+   * Omitted when no job is unfinished: only the newest revision is kept.
+   */
+  readonly exportsReadableFrom?: string;
+}
+
+/**
+ * Of each export series, the revision live at `from` and the later ones.
+ * `exports` holds each series oldest to newest.
+ */
+function exportsReadableFrom(
+  exports: readonly RuntimeExportRecord[],
+  from: string,
+): RuntimeExportRecord[] {
+  const series = new Map<string, RuntimeExportRecord[]>();
+  for (const record of exports) {
+    const key = `${record.producerRuntimeId}\u0000${record.recordAs}`;
+    const kept = series.get(key);
+    if (!kept) series.set(key, [record]);
+    else if (record.committedAt <= from) kept.splice(0, kept.length, record);
+    else kept.push(record);
+  }
+  return [...series.values()].flat();
 }
 
 export interface ReplaceSessionCheckpointOptions {
@@ -97,9 +128,17 @@ export async function exportSessionCheckpoint(
     store.listLogicalTurnCompletions(sessionId),
     store.listSetupAttempts(sessionId),
     store.listJobStatus(sessionId),
-    // Only the newest revision of each series: older ones are read by an
-    // execution that is still running, and none runs in a restored workspace.
-    store.listRuntimeExports(sessionId, { latestOnly: true }),
+    // Only the newest revision of each series, unless a background job is
+    // still to run: an older one is read by an execution that began before it
+    // was replaced, and a queued job is the one such execution that a
+    // restored workspace continues.
+    options.exportsReadableFrom === undefined
+      ? store.listRuntimeExports(sessionId, { latestOnly: true })
+      : store
+          .listRuntimeExports(sessionId)
+          .then((exports) =>
+            exportsReadableFrom(exports, options.exportsReadableFrom!),
+          ),
     store.listStateSchemas(sessionId),
   ]);
 

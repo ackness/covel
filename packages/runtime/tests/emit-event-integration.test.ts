@@ -352,3 +352,97 @@ describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
     expect(eventEmitProposals).toHaveLength(1);
   });
 });
+
+describe("emit-event: a refused emit and the runtime's result", () => {
+  async function runSystemEmitter(args: {
+    readonly topic: string;
+    readonly validate: EventDirectoryLike["validate"];
+    readonly requireToolUse?: boolean;
+  }) {
+    let step = 0;
+    const llm: LLMAdapter = {
+      async generate(): Promise<LLMResponse> {
+        step++;
+        const usage = { inputTokens: 10, outputTokens: 5 };
+        return step === 1
+          ? {
+              content: null,
+              toolCalls: [
+                {
+                  id: "tc-1",
+                  name: "emit-event",
+                  arguments: JSON.stringify({ topic: args.topic, data: {} }),
+                },
+              ],
+              finishReason: "tool_calls",
+              usage,
+            }
+          : {
+              content: "Nothing to report.",
+              toolCalls: [],
+              finishReason: "stop",
+              usage,
+            };
+      },
+    };
+    const manifest = {
+      name: "plug/emitter",
+      pluginId: "plug",
+      description: "Emits domain events via emit-event",
+      stage: "post-turn",
+      outputKind: "system",
+      tools: { builtin: ["emit-event"] },
+      trigger: { type: "auto" },
+      ...(args.requireToolUse ? { requireToolUse: true } : {}),
+    } as RuntimeManifest;
+    const store = await mainLoopStore("sess-1");
+    const result = await executeTurn(
+      makeTurnInput(),
+      [manifest],
+      {
+        loadRuntime: async (m) => ({ manifest: m, promptTemplate: "Emit." }),
+        llm,
+        store,
+        toolExecutor: createToolExecutor({
+          findTool: (name) =>
+            name === "emit-event"
+              ? createEmitEventTool({
+                  directory: { ...directory, validate: args.validate },
+                })
+              : undefined,
+          store,
+        }),
+      },
+      { maxSteps: 4 },
+    );
+    return result.runtimeResults.find((r) => r.runtimeId === "plug/emitter");
+  }
+
+  it("does not fail a runtime whose only call named a topic nobody declared", async () => {
+    const result = await runSystemEmitter({
+      topic: "nobody.listens",
+      validate: async () => ({ ok: true }),
+    });
+    expect(result?.status).toBe("success");
+    expect(result?.effects?.events).toBeUndefined();
+  });
+
+  it("is still no business work: requireToolUse stays unmet", async () => {
+    const result = await runSystemEmitter({
+      topic: "nobody.listens",
+      validate: async () => ({ ok: true }),
+      requireToolUse: true,
+    });
+    expect(result?.status).toBe("failed");
+    expect(result?.error).toContain("requireToolUse");
+  });
+
+  it("fails the runtime when the payload breaks the declared contract", async () => {
+    const result = await runSystemEmitter({
+      topic: "test.ping",
+      validate: async () => ({ ok: false, reason: "data/x must be number" }),
+    });
+    expect(result?.status).toBe("failed");
+    expect(result?.error).toContain("event payload rejected");
+  });
+});

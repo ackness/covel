@@ -1,5 +1,6 @@
 /** Browser-safe checkpoint contract. No server backend modules are exported. */
 export {
+  BROWSER_CHECKPOINT_MAX_BYTES,
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
   PERSISTENCE_PROFILES,
   ActionIdConflictError,

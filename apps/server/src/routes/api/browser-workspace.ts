@@ -32,6 +32,7 @@ import {
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
+import { earliestUnfinishedJobSourceStart } from "./plugin-rpc/runtime-job-worker.js";
 
 type Env = {
   Variables: {
@@ -567,10 +568,20 @@ export function createBrowserWorkspaceRoutes(
 
         try {
           const revision = head.revision + 1;
+          const exportsReadableFrom = await earliestUnfinishedJobSourceStart(
+            c.get("store"),
+            sessionId,
+          );
           const rawCheckpoint = await exportSessionCheckpoint(
             c.get("store"),
             sessionId,
-            { revision, actionId },
+            {
+              revision,
+              actionId,
+              ...(exportsReadableFrom === undefined
+                ? {}
+                : { exportsReadableFrom }),
+            },
           );
           const checkpoint = validateBrowserCheckpoint({
             ...rawCheckpoint,

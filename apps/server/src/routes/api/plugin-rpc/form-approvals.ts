@@ -27,7 +27,9 @@ export async function preflightFormApprovals(
   const parsed = submissionTargets.safeParse(payload);
   // The interaction submitter owns input validation and its error messages.
   if (!parsed.success) return;
-  const messages = await c.get("store").listTurnMessages(session.id);
+  const messages = await c
+    .get("store")
+    .listTurnMessages(session.id, { turnId: parsed.data.turnId });
   const registry = c.get("pluginRegistry");
   const providers = new Set<string>();
   for (const { interactionId } of parsed.data.submissions) {

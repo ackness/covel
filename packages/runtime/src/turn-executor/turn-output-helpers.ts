@@ -13,6 +13,8 @@ export interface ExecutedToolCallState {
   readonly arguments: string;
   readonly result: unknown;
   readonly success: boolean;
+  /** A failed call the tool refused; see `ToolCallResult.refused`. */
+  readonly refused?: true;
 }
 
 export interface FailedToolCallState {

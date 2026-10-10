@@ -509,7 +509,12 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 **单通道语义**：发射成功时结果只经 `emittedEvents` result channel 携带（`withEmittedEvents`，见 `packages/tools/src/result.ts`），由工具循环累积、`finalize-agent-output.ts` 合并进 `RuntimeResult.output.events`——**绝不**同时返回 `event.emit` pendingProposal，避免同一事件被 `turn-event-chain.ts` 的 fan-out 与提案归一化重复处理。合并进 `output.events` 后走已有的回合内事件 fan-out（同 depth 同 topic 首胜）与 `event.emit` proposal 归一化，最终以 `event.emitted` SSE 事件下发（见 [protocol.md](protocol.md)）。归一化只把含 `topic` 字段的 `{ topic, data? }` 事件信封识别为领域事件；插件输出 schema 可以把同名 `events` 用作自身数据字段（例如 WorldIR 的事实事件），这类条目不会生成 `event.emit` proposal。
 
-**校验流程与错误形态**（第 2、3 种拒绝以失败的工具调用返回，错误文本回给 LLM，不计入 `requireToolUse` 或结束工具的完成判定；第 1 种 no-op 仍按成功返回）：
+**校验流程与错误形态**（第 2、3 种拒绝以失败的工具调用返回，错误文本回给 LLM，不计入 `requireToolUse` 或结束工具的完成判定；第 1 种 no-op 仍按成功返回）。两种拒绝对 runtime 结果的影响不同：
+
+- **未知 topic（第 2 种）不算 runtime 的失败。** 没有激活的插件声明这个 topic 时，模型无从改正，这次调用什么也没做。工具用 `ToolRefusal`（`@covel/tools`）拒绝：它不是业务工作（`requireToolUse` 仍未满足，也不触发 `completeAfterTools`），也不是一条“尚未解决的失败”。只发了这一次 emit、随后以文字或 `runtime-done` 收尾的 agent 正常成功，只是没有事件发出。卸掉消费方插件不会让发射方的 runtime 失败。
+- **payload 不合声明的 schema（第 3 种）是失败。** 契约存在而数据不对，模型可以按错误文本重发；同一工具后来成功的一次调用会抵消它。没有重发成功、也没有其他输出就收尾的 `system` runtime 以 `tool_failed_without_output` 失败，声明了 `requireExplicitCompletion` 的 runtime 不能在它未解决时用 `runtime-done` 收尾。
+
+各步骤：
 
 1. topic 本回合已经发射过（`context.emittedEventTopics` 由工具循环累积传入，见 `packages/tools/src/types.ts` 的 `ToolExecutionContext.emittedEventTopics`）→ no-op：`event "<topic>" was already emitted this turn and is recorded. Do not emit it again; continue with the task.`，不产生第二条 `emittedEvents`
 2. topic 不在当前 session 的**已 advertise 目录**里 → `unknown topic "<topic>"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: <逗号分隔列表，或 "(none — no consumer plugin active)">`。`advertise: false` 的内部 topic 不进 emit-event 白名单（`listTopics` 与 `validate` 均只认 advertised），只能由声明它的插件自己的**函数 runtime**经 `output.events` 结果通道发射——agent 无法经 `emit-event` 直发绕过生成门；回显的可用列表也不泄漏内部 topic 名

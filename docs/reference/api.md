@@ -444,7 +444,8 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 `PUT /api/sessions/:id/browser-checkpoint` 的完整 JSON 请求体上限为 **64 MiB**，
 包含全部消息、轨迹与快照；超过上限返回 `413`。此专用额度仅适用于该路径的
 `PUT` 请求，`browser-commit` 等普通 API 仍使用 **1 MiB** 上限。当前协议不支持
-分块上传，因此完整 checkpoint 必须保持在该额度内。
+分块上传，因此完整 checkpoint 必须保持在该额度内。Web 客户端在请求体达到额度的
+80% 时提示玩家一次（每个会话、每次页面载入）。
 
 浏览器准备或恢复已有世界时，自动世界同步若收到准确的
 `401 operator_token_required`，会保留服务端共享世界并继续同步会话；其他鉴权、
@@ -460,7 +461,7 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 > 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 >
-> 视图的 `submittedInteractions` 列出玩家已经回答过的交互 `{ turnId, interactionId, values }[]`，`values` 是服务端落库的值（会话内全部记录，不受消息窗口限制）。答案与它的后续回合在同一个 `submit_interaction` 请求里落库和开始，所以列在这里的交互一定已经有回合跟上：客户端把对应消息里的表单标成已提交并回填，不再发送。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。提交的响应丢失时，客户端从这里得知答案已经落库，并通过 `execution` 状态观察那个回合。
+> 视图的 `submittedInteractions` 列出玩家已经回答过的交互 `{ turnId, interactionId, values }[]`，`values` 是服务端落库的值。只返回 `messages` 窗口内消息所在回合的回答（消息的 `turnId`，或表单块自己的 `meta.turnId`）：回答的用途是标记窗口里的表单块，更早的表单随历史分页载入，按位置视为已回答。答案与它的后续回合在同一个 `submit_interaction` 请求里落库和开始，所以列在这里的交互一定已经有回合跟上：客户端把对应消息里的表单标成已提交并回填，不再发送。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。提交的响应丢失时，客户端从这里得知答案已经落库，并通过 `execution` 状态观察那个回合。
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 

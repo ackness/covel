@@ -1874,7 +1874,8 @@
     "networkError": "Network error — check your connection",
     "bootFailed": "Failed to initialise session",
     "sendMessageFailed": "Failed to send message",
-    "syncFailed": "Could not sync this session to the server"
+    "syncFailed": "Could not sync this session to the server",
+    "checkpointNearLimit": "This session uses {{percent}}% of the size a browser-stored session can have. At the limit it can no longer be saved; continue the story in a new session soon."
   },
   "error": {
     "actionable": {
