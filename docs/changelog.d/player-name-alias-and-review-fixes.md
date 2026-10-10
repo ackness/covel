@@ -1,0 +1,7 @@
+### Breaking
+
+- **The player cannot take a name or an alias of a character of the world.** The character form refuses it at the name field (`form_rejected` with an issue on `characterName`); before, a name equal to another character's full name was accepted and made a second character of that name. `create-character` with `type: "player"` now fails for such a name, where it returned the other character as "already exists" (alias) or created the duplicate (full name). A plugin that creates the player through `create-character` must ask the player for another name when the call fails. Existing sessions are not changed.
+
+### Fixed
+
+- **A player name that a world character has as an alias no longer blocks setup.** Bundled worlds declare first names as aliases (`Tomas`, `June`, `Mina`); a player who chose one had the character refused at commit on every setup attempt, with the form already answered, until setup was blocked. `char-creator` now registers the form validator `player-name`: the name is refused when the form is submitted, with a sentence under the field in the session's language, nothing is stored and the player submits the same form again. If such a name is already stored (the world's characters changed, or the form was made earlier), the setup guard offers the form again with a note instead of proposing a character the World Model refuses. Rule: `docs/reference/world-model.md`.

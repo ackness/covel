@@ -10,6 +10,7 @@ function rosterHandler() {
       if (id === "character-roster") handler = extension.handler;
     },
     registerTool: () => {},
+    registerFormValidator: () => {},
     on: () => {},
   });
   return handler;

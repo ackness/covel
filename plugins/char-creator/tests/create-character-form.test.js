@@ -43,19 +43,64 @@ const params = {
 };
 
 describe("create-character-form schema boundary", () => {
-  it("does not advertise validators or emit a model-invented characterName validator", async () => {
+  it("sets the name validator itself and ignores a validator the model passed", async () => {
     expect(createCharacterForm.jsonSchema.properties).not.toHaveProperty(
       "validation",
     );
     const result = await createCharacterForm.execute(
       { ...params, validation: { name: "characterName", data: null } },
-      context,
+      {
+        ...context,
+        world: {
+          ...context.world,
+          characters: [
+            { id: "p", name: "Wren", type: "player" },
+            { id: "a", name: "Tomas Vale", aliases: ["Tomas"], type: "npc" },
+          ],
+        },
+      },
     );
     expect(result).toMatchObject({ created: true, fieldCount: 1 });
-    expect(result.interaction.validation).toBeUndefined();
-    expect(JSON.parse(JSON.stringify(result.interaction))).not.toHaveProperty(
-      "validation",
+    expect(result.interaction.validation).toEqual({
+      name: "player-name",
+      data: { taken: ["tomas vale", "tomas"] },
+    });
+  });
+
+  it("offers the form again without the taken name and says why", async () => {
+    const result = await createCharacterForm.execute(
+      {
+        ...params,
+        fields: [
+          ...params.fields,
+          { name: "motive", type: "text", label: "Motive" },
+        ],
+      },
+      {
+        ...context,
+        world: {
+          ...context.world,
+          characters: [
+            { id: "a", name: "Tomas Vale", aliases: ["Tomas"], type: "npc" },
+          ],
+        },
+        store: {
+          listPlayerInputs: async () => [
+            {
+              formId: "char-creation",
+              values: { characterName: "tomas", motive: "debt" },
+            },
+          ],
+        },
+      },
     );
+    expect(result.interaction.notice).toBe(
+      'The name "tomas" already belongs to a character of this world. Choose another name.',
+    );
+    expect(result.interaction.fields).toEqual([
+      { name: "characterName", type: "text", label: "Name", required: true },
+      { name: "motive", type: "text", label: "Motive", defaultValue: "debt" },
+    ]);
   });
 
   it("gives the form the id the setup guard reads, whatever the model passed", async () => {

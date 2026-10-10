@@ -32,6 +32,8 @@ contributes:
       - ./ui/character-panel.json
   tools:
     - create-character-form
+  forms:
+    - player-name
   hooks:
     - event: PreLLMCall
       enforce: normal

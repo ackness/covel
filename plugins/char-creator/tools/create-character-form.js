@@ -1,4 +1,11 @@
 import { translate } from "@covel/plugin-handlers-utils";
+import {
+  NAME_FIELD,
+  PLAYER_NAME_VALIDATOR,
+  isNameTaken,
+  nameTakenMessage,
+  takenNameKeys,
+} from "../lib/player-name.js";
 
 const COLLECTABLE_TYPES = ["string", "enum"];
 const CHARACTER_FORM_ID = "char-creation";
@@ -60,8 +67,8 @@ export default function ({ tool }, createFormTool) {
     name: "create-character-form",
     description:
       "Create the opening character form. Collect characterName and optional declared string/enum attributes only; retain numeric and compound attribute defaults.",
-    // This plugin has no registered form validators; keep their names out of
-    // the LLM contract and strip unsolicited validation metadata before output.
+    // The validator is set below, not chosen by the model: keep it out of the
+    // LLM contract and drop validation metadata the model passed anyway.
     parameters: createFormTool.parametersSchema.omit({ validation: true }),
     execute: async (params, context) => {
       const schema = context.world.characterSchema;
@@ -123,26 +130,35 @@ export default function ({ tool }, createFormTool) {
         throw new Error("Include a required characterName text field.");
       }
       // The setup guard finds this form's submission by this id, so it is set
-      // here: the id must not depend on what the model passed.
+      // here: the id must not depend on what the model passed. The validator
+      // gets the names the world's characters have now, so a taken name is
+      // refused at the field, before the answer is stored.
+      const taken = takenNameKeys(context.world.characters);
+      const form = {
+        ...params,
+        formId: CHARACTER_FORM_ID,
+        validation: { name: PLAYER_NAME_VALIDATOR, data: { taken } },
+      };
       const earlier = await earlierAnswers(context);
-      if (!earlier)
-        return createFormTool.execute(
-          { ...params, formId: CHARACTER_FORM_ID },
-          context,
-        );
+      if (!earlier) return createFormTool.execute(form, context);
       // Asked again after a refused submission: the player corrects the form
-      // instead of filling it in from nothing.
+      // instead of filling it in from nothing. A name that a character of the
+      // world has is not filled in again.
+      const nameTaken = isNameTaken(taken, earlier[NAME_FIELD]);
       return createFormTool.execute(
         {
-          ...params,
-          formId: CHARACTER_FORM_ID,
+          ...form,
           fields: params.fields.map((field) =>
-            withEarlierAnswer(field, earlier[field.name]),
+            nameTaken && field.name === NAME_FIELD
+              ? field
+              : withEarlierAnswer(field, earlier[field.name]),
           ),
-          notice: translate(
-            context,
-            "This world no longer accepts some of your earlier answers. Check the form and submit it again.",
-          ),
+          notice: nameTaken
+            ? nameTakenMessage(context, earlier[NAME_FIELD])
+            : translate(
+                context,
+                "This world no longer accepts some of your earlier answers. Check the form and submit it again.",
+              ),
         },
         context,
       );

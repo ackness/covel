@@ -295,7 +295,7 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 可选 `notice`（字符串，会话语言）：客户端把它显示在字段上方，用来说明这张表单为什么再次出现。首次发出的表单不带它；插件在一次已接受的提交无法使用、需要重新发出表单时设置它，并用上一次的值作为字段的 `defaultValue`。工具返回的 `interaction` 带有同名字段；运行时直接通过 `effects.interactions` 发出表单时，同样写在表单对象上（SDK 类型 `PluginFormInteraction`）。
 
-角色创建使用专用 `create-character-form` 工具，只收集必填姓名和世界声明的字符串或枚举属性。该工具不接受插件校验器引用，字段约束由工具和提交接口校验。此前生成的角色表单若包含虚构的 `validation.name`，需重新生成；更新代码不会改写已保存的表单。已接受的角色表单不会让会话停在 setup：世界属性的默认值不符合它自己的类型时，建角时不写入这个默认值；玩家提交的值不再被世界的属性类型接受时（表单发出后属性类型变了），下一次 setup 运行重新发出表单，仍然有效的旧答案已填好，并带一条 `notice`。
+角色创建使用专用 `create-character-form` 工具，只收集必填姓名和世界声明的字符串或枚举属性。模型不能为它指定校验器（参数里没有 `validation`，传了也会被丢弃）；工具自己挂上 `char-creator` 注册的 `player-name` 校验器，拒绝与世界里已有角色的名字或别名相同的角色名（见 [World Model](world-model.md)），其余字段约束由工具和提交接口校验。已接受的角色表单不会让会话停在 setup：世界属性的默认值不符合它自己的类型时，建角时不写入这个默认值；玩家提交的值不再被世界的属性类型接受时（表单发出后属性类型变了），下一次 setup 运行重新发出表单，仍然有效的旧答案已填好，并带一条 `notice`。
 
 旧插件的有限数字字符串和 `"true"` / `"false"` 默认值仍可使用，提交时统一规范化；新插件应直接声明数字、布尔值。
 
@@ -598,6 +598,8 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 `create-character` 与 `update-character` 的 LLM wire schema 把 `fields` 保持为紧凑对象，不在两份工具定义中重复整个世界属性表。权威 id、类型、范围、enum、默认值和说明仍保存在会话 world schema；执行边界按该 schema 合并默认值、强制校验已声明字段，对未声明字段返回 warning。这样 8k 等小窗口 slot 不会仅因角色属性较多就被两份重复 JSON Schema 占满。
 
 会话工具描述另附精简字段约束（类型、数值上下界、enum options、数组/映射元素类型及嵌套结构），不重复长描述和默认值。`sync-characters` 的 creates/updates 共用一份约束说明；执行时仍重新读取权威 schema。数值 patch 是更新后的绝对值，不是增量。
+
+`create-character` 创建 `type: "player"` 时，名字若是其他角色的名字或别名，工具报错并要求向玩家另要一个名字：玩家不会是世界里一个已有的 NPC。
 
 已声明属性的类型、范围、enum 与嵌套结构在产生写入 proposal **之前**强制校验；非法字符串、null 或非有限数值不能替代数值属性。`create-character` 合并缺省值后校验；`update-character` 校验本次 patch，允许逐字段修复既有旧数据。未声明键仍保留并返回 warning。`mergeSchemaDefaults` 与 `assertCharacterFields` 向插件提供相同边界，失败抛出 `CharacterFieldValidationError`。
 

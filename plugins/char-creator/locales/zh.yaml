@@ -14,3 +14,4 @@ messages:
   All Characters: 所有角色
   "[System] Character {name} created — your adventure is about to begin…": "[系统] 已创建角色 {name}，冒险即将开始……"
   This world no longer accepts some of your earlier answers. Check the form and submit it again.: 这个世界不再接受你之前填写的部分内容，请检查后重新提交。
+  'The name "{name}" already belongs to a character of this world. Choose another name.': “{name}”已经是这个世界里一位角色的名字，请换一个名字。

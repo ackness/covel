@@ -8,6 +8,7 @@ import {
   CharacterFieldValidationError,
   mergeSchemaDefaults,
 } from "@covel/plugin-handlers-utils";
+import { isNameTaken, takenNameKeys } from "../../lib/player-name.js";
 
 /**
  * guard.js — Pre-execution gate for player-init runtime.
@@ -24,9 +25,10 @@ import {
  *        we remove the non-determinism that blocks the whole turn pipeline.
  *   3. No player AND no usable submission → proceed to LLM so it generates
  *      the opening form (Step 1 in PLUGIN.md). A submission the world no
- *      longer accepts lands here too: the form tool offers the form again
- *      with the earlier answers filled in, so the player is never left with
- *      an accepted form that cannot become a character.
+ *      longer accepts, or whose name a character of the world has, lands
+ *      here too: the form tool offers the form again with the usable earlier
+ *      answers filled in, so the player is never left with an accepted form
+ *      that cannot become a character.
  *
  * @type {import("@covel/plugin-handlers-utils").PluginAgentGuard}
  */
@@ -70,14 +72,24 @@ export default async function guard(ctx) {
           ? /** @type {Record<string, unknown>} */ (submission.values)
           : {};
       const name = pickName(values);
+      // The form's validator refuses such a name before it is stored. It can
+      // still arrive here: the world's characters changed since, or the form
+      // was made before the validator existed. The World Model would refuse
+      // the player at commit on every attempt, so offer the form again.
+      const nameTaken = isNameTaken(takenNameKeys(characters), name);
       // Merge declared schema defaults into stored fields so the player
       // record the model reads (get-character / prompt context) matches
       // what the character panel shows (the panel overlays defaults at
       // render time).
-      const sheet = name
-        ? characterFields(stripNameKeys(values), schema)
-        : null;
-      if (sheet?.refused) {
+      const sheet =
+        name && !nameTaken
+          ? characterFields(stripNameKeys(values), schema)
+          : null;
+      if (nameTaken) {
+        await logger?.warn?.(
+          "player-init guard: the submitted name belongs to a character of the world, offering the form again",
+        );
+      } else if (sheet?.refused) {
         // The form was valid when it was shown; the world's attribute types
         // changed since. Never let an LLM reinterpret the values: offer the
         // form again and let the player answer under the current types.

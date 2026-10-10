@@ -52,6 +52,14 @@ interface CharacterRecord {
 
 玩家在角色面板里看到别名（只读）。游玩界面不提供编辑。
 
+**玩家的名字不能是世界里已有角色的名字或别名**（按 `characterNameKey` 比较）。世界常把常见的名写成别名（`Tomas`、`June`），玩家起了这样的名字，世界模型会在提交时拒绝这个玩家；与某个 NPC 全名相同虽然不被拒绝，之后按这个名字的每次查找都是 `ambiguous`。所以建角的三处都执行同一条规则：
+
+- 建角表单带校验器 `player-name`（`char-creator` 用 `registerFormValidator` 注册，表单发出时把当时已有角色的名字键放进 `validation.data.taken`）。提交这样的名字得到 `form_rejected`，`issues` 指向 `characterName` 字段，文字用会话的内容语言；答案没有保存，玩家改名后再提交同一张表单。
+- `player-init` 的 guard 再查一次（表单发出后世界角色变了，或表单是加校验器之前生成的）：名字仍冲突时不产生 `character.upsert`，而是让 runtime 重新发出表单，`notice` 说明这个名字已有角色使用，其余答案保留。setup 不会因此反复失败。
+- `create-character` 创建 `type: "player"` 时，名字是其他角色的名字或别名则报错并说明要向玩家另要一个名字，不再把那个 NPC 当作“已存在的角色”返回。
+
+提交处的规则不变：两个非玩家角色可以同名（查找时报 `ambiguous`），名字等于别人的别名才被拒绝。
+
 > **BREAKING CHANGE**：`characters` 表新增 `aliases` 列。服务端只建表、不改表，此前创建的 SQLite / PostgreSQL 开发数据库缺这一列，读取角色时报 `no such column: aliases`。按[迁移说明](../guide/env-registry.md#plugin-extension-development-data)备份后换一个新的数据库文件（PostgreSQL 重建 schema）。浏览器私有存档里的角色没有别名，照常读取。
 
 ## 动态维度快照

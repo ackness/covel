@@ -2,6 +2,10 @@ import { createFormTool } from "@covel/plugin-handlers-utils";
 import makeCharacterForm from "../tools/create-character-form.js";
 import trackerReadBudget from "../hooks/tracker-read-budget.js";
 import protectCharacterProfiles from "../hooks/protect-character-profiles.js";
+import {
+  PLAYER_NAME_VALIDATOR,
+  validatePlayerName,
+} from "../lib/player-name.js";
 
 /** Characters of current field values carried in the roster. */
 const ROSTER_FIELDS_BUDGET = 12000;
@@ -64,6 +68,7 @@ export default function (covel) {
     },
   });
   covel.registerTool(makeCharacterForm(covel.toolkit, createFormTool));
+  covel.registerFormValidator(PLAYER_NAME_VALIDATOR, validatePlayerName);
   covel.on("PreLLMCall", trackerReadBudget);
   covel.on("PreToolUse", protectCharacterProfiles);
 }

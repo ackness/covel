@@ -911,6 +911,21 @@ describe("builtin character tools", () => {
       expect(store.characters).toHaveLength(2);
     });
 
+    it("refuses a player whose name is a name or an alias of another character", async () => {
+      for (const name of ["伊索德", "ＴＨＥ  Keeper", "corvin"]) {
+        await expect(
+          loop.call("create-character", { name, type: "player" }),
+        ).rejects.toThrow(/ask the player for a different name/);
+      }
+      expect(loop.pending).toHaveLength(0);
+
+      const created = await loop.call("create-character", {
+        name: "Wren",
+        type: "player",
+      });
+      expect(created).toMatchObject({ existed: false, type: "player" });
+    });
+
     it("adds an alias the story reveals and keeps the earlier ones", async () => {
       const result = await loop.call("update-character", {
         id: isolde().id,
