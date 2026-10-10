@@ -127,6 +127,7 @@
     "commandAccepted": "Команда принята.",
     "commandFailed": "Не удалось выполнить команду.",
     "commandCompleted": "{{command}} завершено.",
+    "commandsLoading": "Загрузка команд…",
     "ended": "Эта сессия завершилась.",
     "game": "Игра",
     "events": "События",

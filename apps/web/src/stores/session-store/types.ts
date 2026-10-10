@@ -159,6 +159,8 @@ export interface SessionState {
   sessionPlugins: api.SessionPlugin[];
   /** Framework + active-plugin slash command directory from the same snapshot. */
   sessionCommands: import("@covel/shared").SessionSlashCommand[];
+  /** False until this session's command directory has been read once. */
+  sessionCommandsLoaded: boolean;
 
   // Active session
   world: api.WorldRecord | null;

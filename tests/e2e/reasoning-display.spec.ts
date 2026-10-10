@@ -106,6 +106,10 @@ for (const width of [1280, 390]) {
         ),
       ).toBe(true);
       await page.reload();
+      // The job row that ties the background turn to its source turn is read
+      // separately from the session view. Until it arrives the background
+      // reasoning has a row of its own, as on the first load above.
+      await expect(disclosure).toHaveCount(1);
       await expect(disclosure).not.toHaveAttribute("open");
       await expect(disclosure.locator("summary")).toContainText("思考内容 · 2");
       await expect(page.locator('[data-row-kind="execution"]')).toHaveCount(1);

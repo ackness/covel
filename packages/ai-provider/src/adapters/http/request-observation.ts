@@ -42,6 +42,7 @@ const MODEL_FIELDS = new Set([
   "verbosity",
   "service_tier",
   "store",
+  "include",
 ]);
 
 /** Inline data longer than this is recorded by its length only. */
