@@ -134,13 +134,14 @@ jobs:
       - name: Check
         run: pnpm check
 
-      # The web and server suites run in the parallel `web` and `server` jobs;
+      # The web and server suites run in the parallel `web` and `server` jobs,
+      # and so does the runtime suite (with coverage);
       # each was this step's critical path in turn.
       - name: Test
         # Bound both workspace tasks and their worker pools on shared runners.
         env:
           VITEST_MAX_WORKERS: "2"
-        run: pnpm test --concurrency=2 --filter=!@covel/web --filter=!@covel/server
+        run: pnpm test --concurrency=2 --filter=!@covel/web --filter=!@covel/server --filter=!@covel/runtime
 
       # The release matrix builds desktop and its web/server dependencies.
       # Build outputs (the desktop staging tree is ~90 MB per entry) are read
@@ -237,8 +238,9 @@ jobs:
         run: pnpm test --filter=@covel/server
 
       # The kernel's coverage must not fall under the floor in
-      # packages/runtime/vitest.config.ts. It runs the runtime suite again, so
-      # it sits in this job, which finishes before `verify` does.
+      # packages/runtime/vitest.config.ts. This is the only run of the runtime
+      # suite (`verify` leaves @covel/runtime out), and it sits in this job,
+      # which finishes before `verify` does.
       - name: Runtime coverage floor
         env:
           VITEST_MAX_WORKERS: "4"
@@ -316,8 +318,27 @@ jobs:
       - name: Collect browser tests
         run: pnpm e2e --list
 
+      # The browser download is cached by Playwright version (from the
+      # lockfile). The system packages are not part of it and are installed on
+      # every run.
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium
+        id: chromium-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Chromium
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Chromium system packages
+        if: steps.chromium-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
 
       - name: Test browser smoke
         run: pnpm e2e:smoke

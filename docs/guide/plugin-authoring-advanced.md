@@ -141,9 +141,25 @@ PLUGIN.md:
 
 后台 function runtime 使用 `schedule.manual.execution: background`，事件 runtime 使用 `schedule.trigger: {type: event, topic: ...}`。`schedule.completion` 描述回合等待语义；不是所有组合都允许 detached，需通过当前 manifest 和运行时准入校验。
 
-Function 通过 `function.tools` 声明 `ctx.tools.call` 的白名单，不能额外声明 `agent` 组。外部 API 的超时放在 `function.timeoutMs`，agent 的步数、调用超时和重试放在 `agent.loop`。保持任务取消、错误结果、幂等与提交边界明确。仅把合法结果返回 proposal 管线；执行失败不能留下部分业务写入。
+Function 通过 `function.tools` 声明 `ctx.tools.call` 的白名单，不能额外声明 `agent` 组。外部 API 的超时放在 `function.timeoutMs`，agent 的步数、调用超时和重试放在 `agent.loop`：`timeoutMs`、`callTimeoutMs`（不流式的调用）、`maxRetries`（默认 1）、`firstTokenTimeoutMs` 与 `idleTimeoutMs`（流式调用，默认各 120 秒）、`loopDetection`（默认 3），语义见[插件契约参考](../reference/plugins.md)。保持任务取消、错误结果、幂等与提交边界明确。仅把合法结果返回 proposal 管线；执行失败不能留下部分业务写入。
 
 网络调用使用 SDK 提供的受约束工具与 URL 验证；不要把任意玩家 URL 直接交给后端抓取。权限、审批与资源限额仍由宿主执行，作者声明不等于授予权限。
+
+## Hook
+
+Hook 只守卫、改写或审计，不放玩法逻辑。根 `contributes.hooks` 列出事件，entry 用 `covel.on(event, handler)` 注册；两边必须一致。handler 是 `async (ctx, payload) => result`：
+
+```js
+export default function (covel) {
+  covel.on("PreToolUse", async (ctx, payload) => {
+    if (ctx.runtimeId !== "my-plugin/tracker") return { action: "continue" };
+    if (payload.toolCall.name !== "delete-note") return { action: "continue" };
+    return { action: "abort", reason: "This runtime may not delete notes." };
+  });
+}
+```
+
+事件说的是哪个 runtime，在上下文里读：`ctx.pluginId` 和 `ctx.runtimeId`；载荷不再重复它们（读 `payload.runtimeId` 永远匹配不到，handler 什么也不做）。`ctx.locale` 是会话的内容语言，hook 往提示词里加文字时用 `instructionLocaleFor(ctx.locale)` 选语言，不要从提示词文字猜。事件列表、载荷、可返回的结果和失败处理见 [Hooks 参考](../reference/hooks.md)。
 
 ## 世界模型与记忆
 
