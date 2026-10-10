@@ -391,6 +391,8 @@ export type ExtensionWorldCharacter = {
   readonly id: string;
   readonly sessionId: string;
   readonly name: string;
+  /** Other names of the same person, in display form; see `resolveCharacter`. */
+  readonly aliases?: readonly string[];
   readonly type: string;
   readonly description?: string;
   readonly fields?: unknown;

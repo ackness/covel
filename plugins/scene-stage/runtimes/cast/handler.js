@@ -154,38 +154,32 @@ function scoreCharacter(character, context) {
   const fieldsText = stringifyCompact(character.fields);
   const haystack =
     `${context.playerMessage}\n${messagesToText(context.messages)}`.toLowerCase();
-  const nameLower = name.toLowerCase();
+  // The text names a character by its name or by any of its aliases.
+  const names = [name, ...(character.aliases ?? [])]
+    .map((value) => String(value).trim().toLowerCase())
+    .filter(Boolean);
+  const namedIn = (text) => names.some((value) => text.includes(value));
+  const inMessages = namedIn(haystack);
 
   let score = 0;
   const signals = [];
 
-  if (
-    nameLower.length > 0 &&
-    context.playerMessage.toLowerCase().includes(nameLower)
-  ) {
+  if (namedIn(context.playerMessage.toLowerCase())) {
     score += 6;
     signals.push("mentioned by player");
   }
 
-  if (nameLower.length > 0 && haystack.includes(nameLower)) {
+  if (inMessages) {
     score += 3;
     signals.push("present in recent messages");
   }
 
-  if (
-    description.length > 0 &&
-    nameLower.length > 0 &&
-    haystack.includes(nameLower)
-  ) {
+  if (description.length > 0 && inMessages) {
     score += 1;
     signals.push("has character profile");
   }
 
-  if (
-    fieldsText.length > 2 &&
-    nameLower.length > 0 &&
-    haystack.includes(nameLower)
-  ) {
+  if (fieldsText.length > 2 && inMessages) {
     score += 1;
     signals.push("has tracked state");
   }
@@ -317,6 +311,7 @@ function normalizeCharacters(rows) {
       id: String(row.id ?? row.name ?? ""),
       name: String(row.name ?? ""),
       type: String(row.type ?? "npc"),
+      ...(Array.isArray(row.aliases) ? { aliases: row.aliases } : {}),
       description: typeof row.description === "string" ? row.description : "",
       fields: row.fields,
     }))

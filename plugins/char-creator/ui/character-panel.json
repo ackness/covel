@@ -87,6 +87,14 @@
                 ]
               },
               {
+                "component": "TagList",
+                "props": {
+                  "tags": {
+                    "$item": "value/aliases"
+                  }
+                }
+              },
+              {
                 "component": "Text",
                 "props": {
                   "content": {

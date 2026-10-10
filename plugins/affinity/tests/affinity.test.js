@@ -361,6 +361,69 @@ describe("update-affinity", () => {
     expect(records[0].value.name).toBe("Lian");
   });
 
+  it("records a change addressed by an alias on the session character's one record", async () => {
+    const world = {
+      characters: [
+        {
+          id: "npc-keeper-ysolde",
+          name: "Keeper Ysolde",
+          aliases: ["Ysolde", "the Keeper"],
+        },
+      ],
+    };
+    await seedRecord(mockStore, "aff-ysolde", {
+      id: "aff-ysolde",
+      name: "Keeper Ysolde",
+      score: 10,
+      history: [],
+    });
+
+    const result = await executeAndCommit(
+      updateAffinityTool,
+      {
+        changes: [
+          { name: "the keeper", delta: 3, reason: "You relit her lantern" },
+          { name: "ＹＳＯＬＤＥ", delta: 2, reason: "You kept her secret" },
+        ],
+      },
+      { ...ctx, world },
+      mockStore,
+    );
+
+    expect(getToolContent(result).results.map((r) => r.id)).toEqual([
+      "aff-ysolde",
+      "aff-ysolde",
+    ]);
+    const records = (
+      await mockStore.listPluginData("sess-1", "affinity", "affinity")
+    ).filter((row) => row.namespace === "affinity");
+    expect(records).toHaveLength(1);
+    expect(records[0].value).toMatchObject({
+      name: "Keeper Ysolde",
+      score: 15,
+    });
+  });
+
+  it("names a new record after the session character, not after the alias used", async () => {
+    const result = await executeAndCommit(
+      updateAffinityTool,
+      { changes: [{ name: "Wren", delta: 4, reason: "You shared bread" }] },
+      {
+        ...ctx,
+        world: {
+          characters: [
+            { id: "npc-sister-wren", name: "Sister Wren", aliases: ["Wren"] },
+          ],
+        },
+      },
+      mockStore,
+    );
+    expect(getToolContent(result).results[0]).toMatchObject({
+      name: "Sister Wren",
+      status: "created",
+    });
+  });
+
   it("reads full-width letters and extra spaces as the same name", async () => {
     await seedRecord(mockStore, "aff-herman", {
       id: "aff-herman",

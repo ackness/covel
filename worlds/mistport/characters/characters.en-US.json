@@ -2,6 +2,7 @@
   {
     "id": "npc-lin-yuanzhou",
     "name": "Lin Yuanzhou",
+    "aliases": ["Yuanzhou", "Apprentice Lin"],
     "type": "npc",
     "description": "A newly minted apprentice of the Tide-Reader Guild — cautious, yet insatiably curious. During his examination he discovered, to his own alarm, a faint sensitivity to the tide-force, and has told no one.",
     "fields": {
@@ -28,6 +29,7 @@
   {
     "id": "npc-su-yao",
     "name": "Su Yao",
+    "aliases": ["Tide-Reader Su", "the Examiner"],
     "type": "npc",
     "description": "A fully qualified Tide-Reader, Old Qi's assistant, and the examiner for the player's entrance trial. Meticulous to a fault — and since Qi vanished, she has begun to doubt everything she once believed.",
     "fields": {
@@ -59,6 +61,7 @@
   {
     "id": "npc-iron-meg",
     "name": "Iron Meg",
+    "aliases": ["The Second"],
     "type": "npc",
     "description": "Second-in-command of the Salt Fangs, past thirty. Her left arm, from the elbow down, was lost to fog-rot in a relic accident — half-translucent now, glowing a faint grey. Cold and hard, but true to her word; she quietly collects relic fragments.",
     "fields": {
@@ -85,6 +88,7 @@
   {
     "id": "npc-chen-yuanshan",
     "name": "Chen Yuanshan",
+    "aliases": ["Councilor Chen", "the Chair"],
     "type": "npc",
     "description": "Chair of the Mistport Council, past sixty, a master of statecraft. In public he pushes the Tide-Seal Decree in the name of public safety; in private he sends his own expeditions deep into the Undertow, again and again, in search of the 'Key'.",
     "fields": {
@@ -111,6 +115,7 @@
   {
     "id": "npc-guildmaster-qi",
     "name": "Old Qi",
+    "aliases": ["Guildmaster Qi"],
     "type": "npc",
     "description": "Guildmaster of the Tide-Readers, a gentle white-haired scholar who knows the truth of the Riftide and keeps it sealed behind his lips. Before the story opens he leaves a letter and walks into the Undertow at flood tide — and vanishes.",
     "fields": {
@@ -137,6 +142,7 @@
   {
     "id": "npc-xiao-shuang",
     "name": "Frost",
+    "aliases": ["Mist-Speaker Frost"],
     "type": "npc",
     "description": "The youngest Mist-Speaker of the Congregation of the Mist — no more than fifteen or sixteen. She claims to hear the whispers of the fog, and has more than once foretold ebb times and ruin sites exactly. Prophet, madwoman, or fraud?",
     "fields": {
@@ -163,6 +169,7 @@
   {
     "id": "npc-grey-falcon",
     "name": "Grey Falcon",
+    "aliases": ["Captain Falcon"],
     "type": "npc",
     "description": "Captain of Chen Yuanshan's private expedition and the sharpest hand enforcing the Tide-Seal Decree. Silent, efficient, without a wasted emotion; his latest quarry points toward the direction in which Old Qi vanished.",
     "fields": {

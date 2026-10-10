@@ -52,6 +52,7 @@ export const stateChanges = createdRow.extend({
 });
 export const characters = createdRow.extend({
   name: z.string(),
+  aliases: z.array(z.string()).optional(),
   type: z.string(),
   description: z.string().optional(),
   fields: jsonValue.optional(),

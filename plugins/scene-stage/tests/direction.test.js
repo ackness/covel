@@ -36,6 +36,27 @@ function committedDirection(result) {
 }
 
 describe("scene-stage direction handler", () => {
+  it("places the character a cue names by an alias, and no one for an alias two characters share", async () => {
+    const ctx = makeCtx([
+      { type: "actor.enter", character: "班长", position: "left" },
+      { type: "actor.enter", character: "学姐", position: "right" },
+    ]);
+    ctx.world = {
+      characters: [
+        { ...CHARACTERS[2], aliases: ["澪", "班长"] },
+        { ...CHARACTERS[0], aliases: ["学姐"] },
+        { ...CHARACTERS[1], aliases: ["学姐"] },
+      ],
+    };
+    const result = await handler(ctx);
+    expect(committedDirection(result).actors).toMatchObject([
+      { characterId: "sess-npc-kamishiro-mio", displayName: "神代澪" },
+    ]);
+    expect(getToolContent(result).value.diagnostics).toEqual([
+      "unresolved character: 学姐",
+    ]);
+  });
+
   it("enters actors, resolves a unique short name, and applies focus", async () => {
     const result = await handler(
       makeCtx([

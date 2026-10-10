@@ -6,6 +6,8 @@
  * content, merges tags, and can only raise the rarity; any other title
  * becomes a new entry. The model never handles entry ids and never chooses
  * between a create and an update call, so a guessed id cannot fail the turn.
+ * A `character` entry titled with an alias of a session character is the
+ * entry of that character, under the character's name.
  *
  * A new entry's key is its title as words (`codex-west-herb-garden`,
  * `codex-西侧旧药园`). Persisted values carry `categoryMeta` (icon / color)
@@ -16,6 +18,7 @@
 
 import {
   makeProposal,
+  resolveCharacter,
   withPendingProposals,
   wordId,
 } from "@covel/plugin-handlers-utils";
@@ -130,7 +133,16 @@ export default function ({ tool, z }) {
       const created = new Set();
       const skipped = [];
       const ui = [];
-      for (const entry of entries) {
+      const cast = context.world?.characters ?? [];
+      for (const submitted of entries) {
+        const person =
+          submitted.category === "character"
+            ? resolveCharacter(cast, submitted.title)
+            : null;
+        const entry =
+          person?.status === "found"
+            ? { ...submitted, title: person.character.name }
+            : submitted;
         const lookup = titleKey(entry.title);
         const existing = byTitle.get(lookup);
         let key;

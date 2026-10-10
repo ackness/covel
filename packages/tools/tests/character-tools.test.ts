@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import type { Proposal } from "@covel/shared";
+import { materializeCharacterUpsert, type Proposal } from "@covel/shared";
 import { getPendingProposals, getToolContent } from "../src/result.js";
 import { createCharacterTools } from "../src/builtin/character-tools.js";
 import type { ToolModule, ToolExecutionContext } from "../src/types.js";
@@ -23,6 +23,7 @@ interface CharacterLike {
   id: string;
   sessionId: string;
   name: string;
+  aliases?: readonly string[];
   type: string;
   description?: string;
   fields?: unknown;
@@ -87,37 +88,18 @@ function commitCharacterProposals(
 ): void {
   for (const p of pending) {
     if (p.type !== "character.upsert") continue;
-    const pl = p.payload;
-    const live =
-      pl.expectedVersion === undefined
-        ? undefined
-        : store.characters.find((character) => character.id === pl.id);
-    const liveFields =
-      live?.fields &&
-      typeof live.fields === "object" &&
-      !Array.isArray(live.fields)
-        ? (live.fields as Record<string, unknown>)
-        : {};
-    const patch =
-      pl.fields && typeof pl.fields === "object" && !Array.isArray(pl.fields)
-        ? (pl.fields as Record<string, unknown>)
-        : {};
-    // Use the proposal's logical timestamp for updatedAt so a sequence of
+    // The proposal's logical timestamp is the update time, so a sequence of
     // buffered writes keeps a deterministic order in tests (the real commit
     // handler stamps commit-time now; ordering among same-turn writes is a
     // deliberate don't-care under the proposal model).
-    const ts = p.timestamp;
-    store.upsertCharacter({
-      id: pl.id,
-      sessionId: p.sessionId,
-      name: live?.name ?? pl.name,
-      type: live?.type ?? pl.type ?? "npc",
-      description: pl.description ?? live?.description,
-      fields: live ? { ...liveFields, ...patch } : pl.fields,
-      version: live ? live.version + 1 : (pl.version ?? 1),
-      createdAt: live?.createdAt ?? pl.createdAt ?? ts,
-      updatedAt: ts,
-    });
+    store.upsertCharacter(
+      materializeCharacterUpsert(
+        p.payload,
+        store.characters.find((character) => character.id === p.payload.id),
+        p.sessionId,
+        p.timestamp,
+      ),
+    );
   }
 }
 
@@ -553,7 +535,7 @@ describe("builtin character tools", () => {
           id: "nonexistent",
           fields: { hp: 1 },
         }),
-      ).rejects.toThrow("Character nonexistent not found in session");
+      ).rejects.toThrow('Character "nonexistent" not found');
       expect(loop.pending).toHaveLength(0);
     });
   });
@@ -888,6 +870,173 @@ describe("builtin character tools", () => {
     });
   });
 
+  describe("aliases", () => {
+    beforeEach(async () => {
+      await loop.call("create-character", {
+        name: "Isolde",
+        aliases: ["the keeper", "伊索德", "isolde"],
+        type: "npc",
+        fields: { hp: 10 },
+      });
+      await loop.call("create-character", { name: "Corvin", type: "npc" });
+      loop.commit();
+    });
+    const isolde = () => store.characters.find((c) => c.name === "Isolde")!;
+
+    it("stores the aliases a character is created with, without its own name", () => {
+      expect(isolde().aliases).toEqual(["the keeper", "伊索德"]);
+    });
+
+    it("updates the existing character when it is addressed by an alias, in another spelling", async () => {
+      const result = await loop.call("update-character", {
+        id: "The  Keeper",
+        fields: { hp: 4 },
+      });
+      loop.commit();
+      expect(result.characterId).toBe(isolde().id);
+      expect(isolde().fields).toEqual({ hp: 4 });
+      expect(store.characters).toHaveLength(2);
+    });
+
+    it("returns the existing character when a create names it by an alias, whatever the type", async () => {
+      const result = await loop.call("create-character", {
+        name: "伊索德",
+        type: "companion",
+      });
+      loop.commit();
+      expect(result).toMatchObject({
+        existed: true,
+        characterId: isolde().id,
+      });
+      expect(store.characters).toHaveLength(2);
+    });
+
+    it("adds an alias the story reveals and keeps the earlier ones", async () => {
+      const result = await loop.call("update-character", {
+        id: isolde().id,
+        aliases: ["Keeper Ysolde", "THE KEEPER"],
+      });
+      loop.commit();
+      expect(result._text).toContain("aliases: + Keeper Ysolde");
+      expect(isolde().aliases).toEqual([
+        "the keeper",
+        "伊索德",
+        "Keeper Ysolde",
+      ]);
+    });
+
+    it("adds aliases from two updates of one execution", async () => {
+      await loop.call("update-character", { id: "Isolde", aliases: ["Sol"] });
+      await loop.call("update-character", { id: "Sol", aliases: ["Izzy"] });
+      loop.commit();
+      expect(isolde().aliases).toEqual(["the keeper", "伊索德", "Sol", "Izzy"]);
+    });
+
+    it("refuses an alias that is a name or alias of another character and names the owner", async () => {
+      await expect(
+        loop.call("update-character", {
+          id: "Corvin",
+          aliases: ["The Keeper"],
+        }),
+      ).rejects.toThrow(
+        `"The Keeper" is already a name of Isolde (aka the keeper, 伊索德) [${isolde().id}]`,
+      );
+      await expect(
+        loop.call("create-character", {
+          name: "Old Woman",
+          aliases: ["Isolde"],
+          type: "npc",
+        }),
+      ).rejects.toThrow("is already a name of Isolde");
+      expect(loop.pending).toEqual([]);
+    });
+
+    it("takes away an alias in any spelling, so another character can have the name", async () => {
+      const result = await loop.call("update-character", {
+        id: "Isolde",
+        removeAliases: ["The  Keeper", "never an alias", "Isolde"],
+      });
+      expect(result._text).toContain("aliases: - the keeper");
+      await loop.call("update-character", {
+        id: "Corvin",
+        aliases: ["the keeper"],
+      });
+      loop.commit();
+      expect(isolde()).toMatchObject({ name: "Isolde", aliases: ["伊索德"] });
+      expect(
+        store.characters.find((c) => c.name === "Corvin")!.aliases,
+      ).toEqual(["the keeper"]);
+    });
+
+    it("moves a wrong alias in one sync-characters call and drops the list with the last alias", async () => {
+      await loop.call("sync-characters", {
+        creates: [],
+        updates: [
+          { id: "Isolde", removeAliases: ["the keeper", "伊索德"] },
+          { id: "Corvin", aliases: ["the keeper"] },
+        ],
+      });
+      loop.commit();
+      expect(isolde()).not.toHaveProperty("aliases");
+      expect(
+        store.characters.find((c) => c.name === "Corvin")!.aliases,
+      ).toEqual(["the keeper"]);
+    });
+
+    it("replaces an alias in one update and tells how to free a wrong one", async () => {
+      await loop.call("update-character", {
+        id: "Isolde",
+        removeAliases: ["the keeper"],
+        aliases: ["the lamp keeper"],
+      });
+      loop.commit();
+      expect(isolde().aliases).toEqual(["伊索德", "the lamp keeper"]);
+      await expect(
+        loop.call("update-character", { id: "Corvin", aliases: ["伊索德"] }),
+      ).rejects.toThrow(
+        `If the alias is wrong for Isolde, remove it there first: update ${isolde().id} with removeAliases.`,
+      );
+    });
+
+    it("names the closest known characters when an update misses, and writes nothing", async () => {
+      await expect(
+        loop.call("update-character", { id: "Isolda", fields: { hp: 1 } }),
+      ).rejects.toThrow(
+        'Character "Isolda" not found. Closest known names: Isolde (aka the keeper, 伊索德).',
+      );
+      expect(loop.pending).toEqual([]);
+    });
+
+    it("does not let an update reach a character by a part of its name", async () => {
+      await expect(
+        loop.call("update-character", { id: "Isol", fields: { hp: 1 } }),
+      ).rejects.toThrow("not found");
+    });
+
+    it("reports an alias that two stored characters share as ambiguous", async () => {
+      store.characters.push({
+        ...isolde(),
+        id: "char-other",
+        name: "Maud",
+        aliases: ["the keeper"],
+      });
+      await expect(
+        loop.call("update-character", { id: "the keeper", fields: { hp: 1 } }),
+      ).rejects.toThrow('"the keeper" names 2 characters');
+      const read = await loop.call("get-character", { name: "the keeper" });
+      expect(read.found).toBe(false);
+      expect(read.candidates).toEqual(["Isolde", "Maud"]);
+    });
+
+    it("shows aliases in get-character and list-characters", async () => {
+      const read = await loop.call("get-character", { name: "伊索德" });
+      expect(read._text).toContain("Also known as: the keeper, 伊索德");
+      const list = await loop.call("list-characters", {});
+      expect(list._text).toContain("Isolde (aka the keeper, 伊索德) [npc]");
+      expect(list._text).toMatch(/\d\. Corvin \[npc\]/);
+    });
+  });
+
   describe("update-character _text output", () => {
     it("summarizes what changed in the returned _text", async () => {
       const created = await loop.call("create-character", {
@@ -916,7 +1065,7 @@ describe("builtin character tools", () => {
           id: "missing",
           fields: { hp: 1 },
         }),
-      ).rejects.toThrow("Character missing not found in session");
+      ).rejects.toThrow('Character "missing" not found');
     });
   });
 

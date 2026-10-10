@@ -26,7 +26,10 @@
  * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function }} injection
  */
 import {
+  characterNameKey,
   makeProposal,
+  mergeCharacterAliases,
+  resolveCharacter,
   withPendingProposals,
   wordId,
 } from "@covel/plugin-handlers-utils";
@@ -148,7 +151,7 @@ export default function ({ tool, z, shortIdBatch }) {
   return tool({
     name: "upsert-npc-graph",
     description:
-      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name. Edges are versioned by (sourceName, targetName, relation): resubmit a relation whose strength or fact changed and the tool supersedes the previous version; resubmitting an identical one is a no-op. No need to list existing data first — the tool merges and updates internally. A call with no node and no edge records nothing.",
+      "Batch-write NPC nodes and relationship edges. Nodes are de-duplicated by name and alias; an alias of a session character means that character. Edges are versioned by (sourceName, targetName, relation): resubmit a relation whose strength or fact changed and the tool supersedes the previous version; resubmitting an identical one is a no-op. No need to list existing data first — the tool merges and updates internally. A call with no node and no edge records nothing.",
     parameters: z.preprocess(
       withGraphNodesOnly,
       // A call with no node and no edge is the answer "nothing changed". It
@@ -184,17 +187,29 @@ export default function ({ tool, z, shortIdBatch }) {
       const readRows = (namespace) => context.store.listPluginData(namespace);
 
       // ── 1. Load existing nodes and build a name → NpcNode index ──
+      // A name or alias of a session character means that character, under
+      // the character's own name: "the keeper" and "Isolde" are one node. A
+      // name of nobody in the World Model (a group, a faction, a person not
+      // tracked there) is matched as written.
+      const cast = context.world?.characters ?? [];
+      const castMember = (name) => {
+        const resolution = resolveCharacter(cast, name);
+        return resolution.status === "found" ? resolution.character : null;
+      };
+      const keyOf = (name) => characterNameKey(castMember(name)?.name ?? name);
       const existingNodeRows = await readRows("nodes");
       /** @type {Map<string, any>} */
       const nodeByName = new Map();
       for (const row of existingNodeRows) {
         const v = row.value ?? {};
-        if (typeof v.name === "string") {
-          nodeByName.set(v.name.toLowerCase(), v);
-        }
         for (const alias of v.aliases ?? []) {
-          nodeByName.set(alias.toLowerCase(), v);
+          if (typeof alias === "string") nodeByName.set(keyOf(alias), v);
         }
+      }
+      // Names after aliases: a node's own name wins over another's alias.
+      for (const row of existingNodeRows) {
+        const v = row.value ?? {};
+        if (typeof v.name === "string") nodeByName.set(keyOf(v.name), v);
       }
 
       // ── 2. Assign word IDs to nodes that don't already exist ──
@@ -204,9 +219,9 @@ export default function ({ tool, z, shortIdBatch }) {
       /** @type {Map<string, string>} */
       const newNameToId = new Map();
       for (const { name } of incomingNodes) {
-        const lookup = name.toLowerCase();
+        const lookup = keyOf(name);
         if (nodeByName.has(lookup) || newNameToId.has(lookup)) continue;
-        const id = wordId("npc", name, occupiedIds);
+        const id = wordId("npc", castMember(name)?.name ?? name, occupiedIds);
         occupiedIds.add(id);
         newNameToId.set(lookup, id);
       }
@@ -218,8 +233,11 @@ export default function ({ tool, z, shortIdBatch }) {
       const nodeResults = [];
 
       for (const incoming of incomingNodes) {
-        const lookupKey = incoming.name.toLowerCase();
+        const lookupKey = keyOf(incoming.name);
         const existing = nodeByName.get(lookupKey);
+        const member = castMember(incoming.name);
+        // The name the model wrote is an alias when the node has another.
+        const namedAs = [...(incoming.aliases ?? []), incoming.name];
 
         if (existing) {
           // Merge — existing wins on immutable fields, new wins on extendable ones.
@@ -227,11 +245,10 @@ export default function ({ tool, z, shortIdBatch }) {
             ...existing,
             name: existing.name,
             type: existing.type ?? incoming.type,
-            aliases: Array.from(
-              new Set([
-                ...(existing.aliases ?? []),
-                ...(incoming.aliases ?? []),
-              ]),
+            aliases: mergeCharacterAliases(
+              existing.name,
+              existing.aliases,
+              namedAs,
             ),
             labels: Array.from(
               new Set([...(existing.labels ?? []), ...(incoming.labels ?? [])]),
@@ -259,10 +276,11 @@ export default function ({ tool, z, shortIdBatch }) {
         } else {
           const id = newNameToId.get(lookupKey);
           if (!id) continue;
+          const name = member?.name ?? incoming.name;
           const fresh = {
             id,
-            name: incoming.name,
-            aliases: incoming.aliases ?? [],
+            name,
+            aliases: mergeCharacterAliases(name, member?.aliases, namedAs),
             type: incoming.type,
             labels: (incoming.labels ?? []).slice(0, 5),
             summary: incoming.summary,
@@ -277,7 +295,8 @@ export default function ({ tool, z, shortIdBatch }) {
           });
           nodeByName.set(lookupKey, fresh);
           for (const alias of fresh.aliases) {
-            nodeByName.set(alias.toLowerCase(), fresh);
+            if (!nodeByName.has(keyOf(alias)))
+              nodeByName.set(keyOf(alias), fresh);
           }
           nodeResults.push({ id, name: fresh.name, status: "created" });
         }
@@ -336,8 +355,8 @@ export default function ({ tool, z, shortIdBatch }) {
       const adjacencyUpdates = new Map();
 
       for (const incoming of incomingEdges) {
-        const src = nodeByName.get(incoming.sourceName.toLowerCase());
-        const tgt = nodeByName.get(incoming.targetName.toLowerCase());
+        const src = nodeByName.get(keyOf(incoming.sourceName));
+        const tgt = nodeByName.get(keyOf(incoming.targetName));
         if (!src || !tgt) {
           edgeResults.push({
             id: "",
