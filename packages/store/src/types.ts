@@ -495,6 +495,12 @@ export interface TurnMessageStats {
   readonly playerMessageCount: number;
 }
 
+/** One compacted turn message and the session summary that replaced it. */
+export interface CompactedTurnMessageTag {
+  readonly id: string;
+  readonly summaryId: string;
+}
+
 /** Append-only turn-message log. Part of `sql-session-journal-records`. */
 export interface TurnMessageStore {
   appendTurnMessage(record: TurnMessageRecord): Promise<void>;
@@ -547,6 +553,14 @@ export interface TurnMessageStore {
     sessionId: string,
     limit: number,
   ): Promise<TurnMessageRecord[]>;
+  /**
+   * The compacted messages of a session and the summary each was folded into,
+   * oldest-first, without their content. A snapshot records this mapping; it
+   * does not need the text of the whole log to build it.
+   */
+  listCompactedTurnMessageTags(
+    sessionId: string,
+  ): Promise<CompactedTurnMessageTag[]>;
   /**
    * Tag a set of turn messages as compacted into the given summary.
    * Sets `compactedAtTurnId = summaryId` on each message identified by

@@ -427,6 +427,16 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return sorted.slice(-limit);
     },
 
+    async listCompactedTurnMessageTags(sessionId) {
+      return sortTurnMessages(
+        state.turnMessages.filter((r) => r.sessionId === sessionId),
+      ).flatMap((r) =>
+        r.compactedAtTurnId == null
+          ? []
+          : [{ id: r.id, summaryId: r.compactedAtTurnId }],
+      );
+    },
+
     async savePlayerInput(record) {
       state.playerInputs.push(record);
     },
