@@ -25,6 +25,18 @@ export interface ExtensionDimensionValueSchema {
   readonly additionalProperties?: boolean | ExtensionDimensionValueSchema;
   readonly "x-i18n"?: boolean;
   readonly "x-enumLabels"?: Readonly<Record<string, ExtensionWorldI18nText>>;
+  readonly "x-derive"?: {
+    readonly source: "clock.elapsedSinceStart";
+    readonly start?: number;
+    readonly perUnit?: number;
+    readonly min?: number;
+    readonly max?: number;
+    readonly ranges?: readonly {
+      readonly from?: number;
+      readonly to?: number;
+      readonly value: string | number | boolean;
+    }[];
+  };
 }
 export interface ExtensionDimensionDefinition {
   readonly name: ExtensionWorldI18nText;

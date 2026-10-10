@@ -196,7 +196,11 @@ describe("normalize golden (bundled plugin set)", () => {
       "story-events/plot",
       "world-init/dimension-tracker",
     ]);
-    expect(levels[2]).toEqual(["story-events/intake"]);
+    // The clock-derived dimension values are computed after the tracker.
+    expect(levels[2]).toEqual([
+      "story-events/intake",
+      "world-init/dimension-clock",
+    ]);
   });
 
   it("maps the documented core chain onto the single-declaration surface", async () => {

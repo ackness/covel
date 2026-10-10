@@ -871,6 +871,8 @@ Attributes:
 
 `followsClock` 列出规则取决于世界时间或经过了多久的维度（倒计时、期限、按小时计的消耗），由模型按规则文本判断；漏写时按 `[]` 处理，不是维度的 ID 被忽略。runtime 绑定了本轮结算后的世界时钟（输入 `worldTime`，见 [World time](world-time.md#runtime-and-state)）且时钟在本轮走动时，`followsClock` 里的每个维度都要在 `updates` 里有一条：给出新值，或在规则给出的值与现值相同时只写 `{id, reason}`。缺少时整次调用被拒绝，错误信息写明现在的时间、本轮和开局以来经过的时间以及缺的是哪些维度，模型据此重交。没有绑定时钟或时钟本轮未动时不做这项检查。
 
+schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计算（见 [由时钟推导的字段](dynamic-dimensions.md#由时钟推导的字段)），不在给模型的 schema 和冻结值里，也不属于 `followsClock`。完整 `value` 可以不带这些字段；模型写了它们（`value` 或 `changes`）时，工具不退回重交，写入的仍是当前值。
+
 本轮无变化也必须调用 `update-dimensions({updates:[]})`。既没有 `value`、`changes` 也为空或缺失的条目表示该维度未变化，工具直接略去它，不为此退回模型重交。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 
 ---

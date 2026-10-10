@@ -4,6 +4,8 @@
 PLUGIN.md:
   displayName: 世界维度
   description: 初始化角色属性和作者声明的世界维度，持续维护可变状态。
+runtimes/dimension-clock/RUNTIME.md:
+  description: 按世界时钟计算作者声明为由时钟推导的维度值，不调用模型。
 runtimes/dimension-context/RUNTIME.md:
   description: 发布本回合冻结的世界维度快照，不调用模型。
 runtimes/dimension-tracker/RUNTIME.md:

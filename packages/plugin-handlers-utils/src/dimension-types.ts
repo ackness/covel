@@ -27,6 +27,31 @@ export interface DimensionValueSchema {
   readonly "x-i18n"?: boolean;
   /** Display labels for scalar enum members, keyed by `String(member)`. */
   readonly "x-enumLabels"?: Readonly<Record<string, I18nText>>;
+  /** The value is computed from the world clock; no model writes it. */
+  readonly "x-derive"?: DimensionDerivation;
+}
+
+/** One label of a derivation: the first range that holds the number gives the value. */
+export interface DimensionDerivationRange {
+  /** Inclusive lower bound. Left out: no lower bound. */
+  readonly from?: number;
+  /** Inclusive upper bound. Left out: no upper bound. */
+  readonly to?: number;
+  readonly value: string | number | boolean;
+}
+
+/**
+ * A value that code computes from the world clock: `start + perUnit * source`,
+ * kept inside `min` / `max`. With `ranges` the value is the label of the first
+ * range that holds that number.
+ */
+export interface DimensionDerivation {
+  readonly source: "clock.elapsedSinceStart";
+  readonly start?: number;
+  readonly perUnit?: number;
+  readonly min?: number;
+  readonly max?: number;
+  readonly ranges?: readonly DimensionDerivationRange[];
 }
 
 export interface WorldDimensionDefinition {

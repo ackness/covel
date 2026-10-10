@@ -142,7 +142,7 @@ dimensions:
 | `initialValue` | yes  | 满足 schema 的 JSON 初值；`null` 是值，不是删除                       |
 | `updateRule`   | no   | 自然语言更新规则，支持 `I18nText`；有效 locale 下非空时才启用自动维护 |
 
-随世界时间变化的维度（倒计时、期限）把 `updateRule` 写成时钟的函数：维护 runtime 每回合读到结算后的世界时钟和开局以来经过的时间，见 [动态世界维度](./dynamic-dimensions.md#冻结读取与维护)。
+随世界时间变化的值（倒计时、期限、阶段）在字段的 schema 上写 `x-derive`，由代码按世界时钟计算，不经过模型，见 [由时钟推导的字段](./dynamic-dimensions.md#由时钟推导的字段)。不能这样表达、但仍取决于时间的规则，把 `updateRule` 写成时钟的函数：维护 runtime 每回合读到结算后的世界时钟和开局以来经过的时间，见 [动态世界维度](./dynamic-dimensions.md#冻结读取与维护)。
 
 ID 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`，且不能是 `__proto__`、`prototype`、`constructor`。每项 definition 拒绝未知顶层字段。标量表示单例，嵌套对象表示复合状态，数组的 object items 表示行集，`additionalProperties` schema 表示动态命名记录；无需另一套 table/singleton 格式。玩家可修改值及 schema 允许的行，但不能在会话内新建 definition 或修改其结构。
 

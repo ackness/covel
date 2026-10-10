@@ -17,13 +17,77 @@ dimensions:
 
 定义形状为 `{name, description?, schema, initialValue, updateRule?}`。支持标量、nullable、嵌套对象、数组及 `additionalProperties` 声明的命名记录。所有初值和提交值都校验同一 schema。
 
-支持的 JSON Schema 字段以 `packages/shared/src/schemas/dimensions.ts` 为准：`type`、`enum`、`const`、`minimum`、`maximum`、`minLength`、`maxLength`、`minItems`、`maxItems`、`items`、`properties`、`required`、`additionalProperties`、`title`（可为 `I18nText`）、`description`、`x-i18n`、`x-enumLabels`（标量枚举成员的显示名，值仍存 ID）。未知关键字明确报错，不忽略约束。声明、规则、JSON 值、批次及查询都有体积/深度/数量预算。
+支持的 JSON Schema 字段以 `packages/shared/src/schemas/dimensions.ts` 为准：`type`、`enum`、`const`、`minimum`、`maximum`、`minLength`、`maxLength`、`minItems`、`maxItems`、`items`、`properties`、`required`、`additionalProperties`、`title`（可为 `I18nText`）、`description`、`x-i18n`、`x-enumLabels`（标量枚举成员的显示名，值仍存 ID）、`x-derive`（[由时钟推导的字段](#由时钟推导的字段)）。未知关键字明确报错，不忽略约束。声明、规则、JSON 值、批次及查询都有体积/深度/数量预算。
 
 只有显式 `x-i18n: true` 的文本节点可以在世界包里写成 locale map。普通 JSON 的语言形似键、枚举和业务 ID 不会被当作翻译。
 
 **翻译在导入时解析，会话里只存一种语言。** 创建会话（或同步世界数据）时，`initialValue` 里的 `x-i18n` 节点和 `updateRule` 按会话的内容语言解析成普通字符串再写入；缺少该语言时按[统一解析规则](./i18n.md#统一解析规则)回退。插件在游玩中通过 `dimension.initialize` 声明定义时（例如开局时把世界包的声明再提交一次），框架在物化记录前做同样的解析，所以无论走哪条路径，会话里的记录都只有一种语言，重复声明也不会和已导入的记录冲突。会话状态里的维度值、存下的 `initialValue` 和 `updateRule` 都是普通字符串，提交 locale map 会被校验拒绝；模型和玩家修改时也只写一份文本。`name`、`description`、schema 的 `title` 与 `x-enumLabels` 是面板标签，继续保留 locale map，按玩家当前的界面语言显示。此前创建的开发会话若存有 locale map 形式的维度值，需要重新创建。
 
 `world.yaml` inline、`dimensionSources` 单项文件、`covel://world/dimensions → world:metadata.dimensions` 使用同一 definition map。外部同名定义优先于 inline；descriptor 替换最终 map。单项文件内容是完整 definition，不是旧 raw value。
+
+## 由时钟推导的字段
+
+有些值是世界时钟的函数：倒计时、期限、随时间推进的阶段。在字段的 schema 节点上写 `x-derive`，这个值就由代码计算，不经过模型：
+
+```yaml
+crownfire:
+  name: Crownfire Countdown
+  schema:
+    type: object
+    properties:
+      minutesRemaining:
+        type: integer
+        minimum: 0
+        maximum: 180
+        x-derive:
+          source: clock.elapsedSinceStart
+          start: 180
+          perUnit: -1
+          min: 0
+          max: 180
+      stage:
+        type: string
+        enum: [distant, approaching, imminent, overhead]
+        x-derive:
+          source: clock.elapsedSinceStart
+          start: 180
+          perUnit: -1
+          min: 0
+          ranges:
+            - { from: 121, value: distant }
+            - { from: 31, value: approaching }
+            - { from: 1, value: imminent }
+            - { value: overhead }
+      frontPassed:
+        type: boolean
+    required: [minutesRemaining, stage, frontPassed]
+    additionalProperties: false
+  initialValue: { minutesRemaining: 180, stage: distant, frontPassed: false }
+  updateRule: Set frontPassed to true only when the narrative says the storm front has moved on.
+```
+
+| 字段      | 必填 | 说明                                                                                                                                                   |
+| --------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `source`  | yes  | 目前只有 `clock.elapsedSinceStart`：世界时钟自开局以来经过的基础单位数（日历制是分钟，阶段制是阶段），见 [World time](world-time.md#runtime-and-state) |
+| `start`   | no   | `source` 为 0 时的数，默认 0                                                                                                                           |
+| `perUnit` | no   | `source` 每增加 1，数增加多少；倒计时写负数。默认 1                                                                                                    |
+| `min`     | no   | 数的下限                                                                                                                                               |
+| `max`     | no   | 数的上限                                                                                                                                               |
+| `ranges`  | no   | 把数换成标签：从上到下第一个包含这个数的区间给出 `value`。`from`、`to` 都是闭区间端点，可省略；最后一项不写端点，接住前面没有覆盖的数                  |
+
+数等于 `start + perUnit × source`，再限制在 `min`、`max` 之间。没有 `ranges` 时值就是这个数（`integer` 字段四舍五入）；有 `ranges` 时值是区间给出的标签。没有表达式语言，世界文件里不写代码。
+
+校验（`pnpm validate:world`、导入和提交用同一份 schema）：
+
+- `x-derive` 只能写在维度值本身，或只经 `properties` 到达的属性上；数组元素和 `additionalProperties` 的命名记录没有固定位置，不能推导。
+- 字段要有单一的标量类型。`number` / `integer` 可以不写 `ranges`；`string`、`boolean` 必须写 `ranges`，且每个 `value` 都是该字段允许的值（类型、`enum`、`const`）。`x-i18n` 文本不能推导。
+- 字段写了 `minimum` / `maximum` 时，`min` / `max` 必须落在其中，算出的数才不会被字段自己的约束拒绝。
+- `initialValue` 里这个字段必须等于 `source` 为 0 时的值：开局时还没有任何回合去计算它。
+- 整个值都由推导给出的维度不能再写 `updateRule`。
+
+**计算在哪里发生。** `world-init/dimension-clock` 是 post-turn 的 function runtime，通过契约 `world-time-evolution@1` 读取本轮结算后的时钟，对每个带 `x-derive` 的维度算出新值，值有变化时提交一条带版本的 `dimension.update`（不是叙事结算，不占用回执）。它排在时间结算和 tracker 之后（`schedule.after`），读到的值已经带上 tracker 本轮的更新，只改其中的推导字段，两者不会从同一版本写同一个维度；不调用模型，不增加回合耗时。同一回合提交后，面板和下一回合的叙事读到的就是时钟对应的值。值只取决于时钟读数，不取决于上一个值：重跑一个回合、从较早的回合分叉、或某一回合时间没有结算，之后算出的值都与时钟一致。会话里没有提供该契约的插件时，推导字段保持初值。
+
+**模型不写推导字段。** tracker 看到的 schema 和冻结值里没有这些字段；`update-dimensions` 收到的值无论是否带着它们，写入时都保留当前值。一个维度可以同时有推导字段和由 `updateRule` 维护的字段（上例的 `frontPassed`）。只有推导字段、没有 `updateRule` 的维度不产生模型调用，但仍算作随回合变化的维度，进入叙事提示词的回合段。玩家通过 `edit-dimensions` 改动推导字段不会被拒绝，时钟下一次走动时会被重新算出的值覆盖。
 
 ## 会话权威与同步
 
@@ -43,9 +107,9 @@ pre-turn 的 function publisher 不调用模型，发布 Sₙ；本轮 `ctx.worl
 
 world-init 的 post-turn tracker 以本轮 narrative 为必要来源，WorldIR 为可选辅证。没有非空规则时零维护模型调用，也不强制抽取 WorldIR。已有但失败的共享 WorldIR 不能解释成无变化。
 
-tracker 还通过可选输入 `world-time-evolution@1` 读取本轮结算之后的世界时钟（`runtime-inputs.worldTime.value`：显示文本 `display`、基础单位 `unit`、开局以来经过的 `elapsedSinceStart` 和本轮经过的 `elapsedThisTurn`，见 [World time](world-time.md#runtime-and-state)）。这条输入让 tracker 排在时间结算之后，读到的是本轮的时钟，不是上一轮的。随时间变化的维度（倒计时、期限、按小时计的消耗）应把规则写成时钟的函数，例如“剩余分钟数等于 180 减去时钟自开局以来走过的分钟数；只要时钟在本回合走动了就重新设定”。这样正文没有提到钟点的回合，面板上的数也和时钟一致；只写“减去正文花掉的时间”的规则，在正文不提时间时不会更新。没有提供该契约的插件、或本轮时间未能结算时，tracker 照常运行，只是没有时钟可读。
+tracker 还通过可选输入 `world-time-evolution@1` 读取本轮结算之后的世界时钟（`runtime-inputs.worldTime.value`：显示文本 `display`、基础单位 `unit`、开局以来经过的 `elapsedSinceStart` 和本轮经过的 `elapsedThisTurn`，见 [World time](world-time.md#runtime-and-state)）。这条输入让 tracker 排在时间结算之后，读到的是本轮的时钟，不是上一轮的。能写成时钟的线性函数或分段标签的值（倒计时、期限、阶段）用 [`x-derive`](#由时钟推导的字段) 声明，由代码计算。不能这样表达、但仍取决于时间的规则（例如取决于当前状态的每小时消耗）应把规则写成时钟的函数，按 `elapsedThisTurn` 结算，而不是“减去正文花掉的时间”：正文不提时间的回合，后一种写法不会更新。没有提供该契约的插件、或本轮时间未能结算时，tracker 照常运行，只是没有时钟可读。
 
-模型在“本回合什么都没发生”时倾向于直接提交空结果，倒计时就停在原地。为此 `update-dimensions` 要求模型在 `followsClock` 里列出规则取决于时间的维度；时钟在本轮走动时，列出的维度在 `updates` 里缺一条，这次提交就被拒绝并带回时钟，模型再提交一次（见 [update-dimensions](tools.md#update-dimensions)）。数值仍由模型按规则算出：框架没有“由时钟确定性推导维度值”的声明字段，规则写得越接近一次加减法（“180 减去开局以来的分钟数”），结果越稳定。
+模型在“本回合什么都没发生”时倾向于直接提交空结果，倒计时就停在原地。为此 `update-dimensions` 要求模型在 `followsClock` 里列出规则取决于时间的维度；时钟在本轮走动时，列出的维度在 `updates` 里缺一条，这次提交就被拒绝并带回时钟，模型再提交一次（见 [update-dimensions](tools.md#update-dimensions)）。`followsClock` 只管由模型结算的规则；`x-derive` 字段由代码计算，不需要也不应列入。
 
 tracker 的提示词和 `dimension-rule-get` 给出每个维度的规则、schema 和冻结值：规则和 schema 在 system prompt 的 `<dimension-rules>` 里，整局不变；冻结值在回合上下文的 `<dimension-values>` 里（见 [Prompt 结构](prompt-structure.md#记账-runtime-的布局)）。给它看的 schema 里，文本字段的 `maxLength` 是作者所写值的 80%：模型不会数字数，按上限写经常多出几个到几十个字，整次提交被拒后还要再调一次模型；留出余量后，写得略超也仍在作者的上限以内。写入时校验的始终是作者写的上限。`update-dimensions` 每条更新的 `expectedVersion` 由工具取本次执行读到的版本，不由模型填写。
 

@@ -3,8 +3,11 @@ import { resolveI18nDeep } from "@covel/plugin-handlers-utils";
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
 import {
   DIMENSION_DATA_NAMESPACE,
+  derivedDimensionFields,
   dimensionRecordSchema,
+  dimensionSchemaWithoutDerived,
   dimensionSnapshotFromRecords,
+  dimensionValueWithoutDerived,
   projectDimensionSnapshot,
 } from "@covel/plugin-handlers-utils/dimensions";
 import { schemaForTracker } from "../lib/schema-for-tracker.js";
@@ -97,12 +100,17 @@ export default function (covel) {
   covel.provideExtension("prompt.segment@1", "dimensions", {
     async handler(_input, ctx) {
       const rows = await ctx.pluginData.list(DIMENSION_DATA_NAMESPACE);
+      // A value changes in play when a rule maintains it or the clock
+      // computes it.
       const dynamicIds = new Set(
         rows
-          .filter(
-            (row) =>
-              dimensionRecordSchema.parse(row.value).definition.updateRule,
-          )
+          .filter((row) => {
+            const { definition } = dimensionRecordSchema.parse(row.value);
+            return (
+              definition.updateRule ||
+              derivedDimensionFields(definition.schema).length
+            );
+          })
           .map((row) => row.key),
       );
       return ["session", "turn"].flatMap((volatility) => {
@@ -154,21 +162,25 @@ export default function (covel) {
       // a provider's prompt cache serves on every later turn. Neither carries
       // the version: it changes with each update, and the update tool reads it
       // itself.
+      //
+      // A field the world derives from the clock is in neither: code sets it,
+      // and a model that is shown a field writes it.
       const complete = [];
       const values = [];
       const truncated = [];
       let used = 0;
       for (const { id, record, rule } of rules) {
         const frozen = ctx.world.dimensions?.[id];
+        const { schema } = record.definition;
         const block = [
           `<dimension id="${id}">`,
           `rule: ${rule}`,
           // Titles and enum labels are locale maps for the panels. The model
           // reads one language: the session's.
-          `schema: ${JSON.stringify(schemaForTracker(resolveI18nDeep(record.definition.schema, ctx.locale)))}`,
+          `schema: ${JSON.stringify(schemaForTracker(resolveI18nDeep(dimensionSchemaWithoutDerived(schema) ?? schema, ctx.locale)))}`,
           "</dimension>",
         ].join("\n");
-        const value = `${id}: ${JSON.stringify(frozen ? frozen.value : record.value)}`;
+        const value = `${id}: ${JSON.stringify(dimensionValueWithoutDerived(schema, frozen ? frozen.value : record.value))}`;
         if (used + block.length + value.length <= FULL_RULES_BUDGET) {
           complete.push(block);
           values.push(value);
