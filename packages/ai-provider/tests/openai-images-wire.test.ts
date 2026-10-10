@@ -6,12 +6,12 @@ const PNG_B64 = Buffer.from(
 ).toString("base64");
 
 function mockFetchOnce(status: number, json: unknown) {
-  const fn = vi.fn(async () => ({
+  const fn = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? "OK" : "Bad Request",
     text: async () => JSON.stringify(json),
-  })) as unknown as typeof fetch;
+  }));
   vi.stubGlobal("fetch", fn);
   return fn;
 }
@@ -239,12 +239,12 @@ describe("openai-images wire", () => {
   });
 
   it("throws on non-JSON response body", async () => {
-    const fn = vi.fn(async () => ({
+    const fn = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({
       ok: true,
       status: 200,
       statusText: "OK",
       text: async () => "oops",
-    })) as unknown as typeof fetch;
+    }));
     vi.stubGlobal("fetch", fn);
     await expect(
       openAiImagesWire.generate(

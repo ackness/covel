@@ -27,9 +27,10 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
   it("executes world-init tools, records calls, then commits schema and protected dimension records without duplicate lorebook rows", async () => {
     const store = createMemoryStore();
     await store.createSession({
+      locale: "en-US",
       id: context.sessionId,
       status: "active",
-      phase: "initializing",
+      phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
       activePlugins: ["world-init"],

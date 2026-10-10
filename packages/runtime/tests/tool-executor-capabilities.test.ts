@@ -302,13 +302,17 @@ describe("tool invocation capabilities", () => {
     const content = { ok: true };
     const events = [{ topic: "test", data: { count: 2 } }];
     const inputs = {
-      value: { cardinality: "one" as const, value: { count: 1 } },
+      value: {
+        cardinality: "one" as const,
+        value: { count: 1 },
+        source: { pluginId: "producer", runtimeId: "producer", resultId: "r1" },
+      },
     };
     const topics = ["earlier"];
     let retained: ToolExecutionContext["store"];
     const module = makeTool(async (ctx) => {
       retained = ctx.store;
-      (ctx.inputSlots!.value!.value as { count: number }).count = 999;
+      (ctx.inputSlots!.value as { value: { count: number } }).value.count = 999;
       (ctx.emittedEventTopics as string[]).push("injected");
       return withEmittedEvents(
         withPendingProposals(content, [proposal]),

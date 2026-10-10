@@ -101,7 +101,6 @@ describe("provider response body ceiling", () => {
       vi.fn(async () => body.response),
     );
     const config: ProviderConfig = {
-      provider: "test",
       baseUrl: "https://x.test",
       apiKey: "k",
       protocol: "openai-chat-v1",

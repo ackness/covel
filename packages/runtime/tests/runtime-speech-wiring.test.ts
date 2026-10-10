@@ -44,8 +44,8 @@ function baseGateway(): PluginRuntimeGateway {
       finishReason: "stop",
       usage: { inputTokens: 0, outputTokens: 0 },
     }),
-    generateObject: async () => ({
-      object: {},
+    generateObject: async <T>() => ({
+      object: {} as T,
       finishReason: "stop",
       usage: { inputTokens: 0, outputTokens: 0 },
     }),
@@ -78,7 +78,7 @@ async function runWithHandler(
       promptTemplate: "",
       handler: async (ctx) => {
         sawSpeech = ctx.speech;
-        return { ok: true };
+        return { outcome: "success" as const, value: { ok: true } };
       },
     }),
     llm: {

@@ -1,6 +1,6 @@
 # Plugin invocation context
 
-Function handlers default-export `async function (ctx)`. Use public `@covel/shared/plugin-runtime` types while authoring; bundle runtime helpers into standalone plugin artifacts. A helper's types are structural and do not grant authority.
+Function handlers default-export `async function (ctx)`. Type a handler with `PluginFunctionHandler` and `PluginFunctionContext` from `@covel/plugin-handlers-utils`; bundle runtime helpers into standalone plugin artifacts. A helper's types are structural and do not grant authority.
 
 ## Identity, inputs, and state
 
@@ -39,7 +39,7 @@ export default async function (ctx) {
 }
 ```
 
-Supported outcomes are `success`, `skipped`, `failed`, and `blocked`. Domain effects commit only on success. `ctx.pluginData.set(namespace,key,value)` writes the execution buffer, not immediately committed state. `ctx.pluginData.get(namespace,key)` returns the stored value or `null`, and `list(namespace)` returns `{key, value, createdAt, updatedAt}` entries; an extension handler reads with the same two methods. `effects.pluginData` likewise targets only the owning plugin. Other effects include domain proposals, emitted events, UI interactions, notifications, and asset generation records, according to the host's public `HandlerResult` schema. Never write reserved `_jobs`/`_logs` namespaces as business data.
+Supported outcomes are `success`, `skipped`, `failed`, and `blocked`. Domain effects commit only on success. `ctx.pluginData.set(namespace,key,value)` writes the execution buffer, not immediately committed state. `ctx.pluginData.get(namespace,key)` returns the stored value or `null`, and `list(namespace)` returns `{key, value, createdAt, updatedAt}` entries; an extension handler reads with the same two methods. One value is at most 256 KiB of JSON; a larger one fails the write with the size and the limit, and nothing is truncated. Draw dice and other game randomness from `ctx.random.int(min, max)`, never `node:crypto` or `Math.random`. `effects.pluginData` likewise targets only the owning plugin. Other effects include domain proposals, emitted events, UI interactions, notifications, and asset generation records, according to the host's public `HandlerResult` schema. Never write reserved `_jobs`/`_logs` namespaces as business data.
 
 `ctx.progress.report` and `ctx.logger` report bounded execution diagnostics. Preserve the cancellation signal when invoking providers or services. Rethrow cancellation instead of converting it into a successful domain write. Return a failed/skipped result for unsupported configuration rather than inventing output.
 

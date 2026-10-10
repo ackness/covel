@@ -9,7 +9,7 @@
  * and its own field map; only the mechanics are unified here.
  */
 
-import type { ImagePart } from "../types.js";
+import type { ImagePart, TextMessage } from "../types.js";
 import { readReasoningEffort } from "../reasoning-effort.js";
 
 /**
@@ -128,3 +128,56 @@ export function imagePartUrl(part: ImagePart): string {
 
 /** Stands for an image where a wire field holds text only. */
 export const IMAGE_PLACEHOLDER_TEXT = "[image]";
+
+/**
+ * Re-labels every system message that follows the first conversation message
+ * as a `user` message in a `<system-instruction>` envelope. Leading system
+ * messages stay as they are.
+ *
+ * The kernel puts the per-turn context (data blocks, rules for this turn) in a
+ * system message after the committed history, so that the history stays a
+ * stable prefix. A server that reads the request in order keeps that prefix.
+ * A relay that moves every system message to the front, or converts the
+ * request to a protocol with one system slot, puts the changing text ahead of
+ * the history, and everything after it misses the cache. A user message keeps
+ * its place on every route. The Anthropic adapter does the same.
+ */
+export function lateSystemMessagesAsUser(
+  messages: readonly TextMessage[],
+): TextMessage[] {
+  const isInstruction = (m: TextMessage) =>
+    m.role === "system" || m.role === "developer";
+  const first = messages.findIndex((m) => !isInstruction(m));
+  if (first < 0) return [...messages];
+  return messages.map((message, index) => {
+    if (index < first || !isInstruction(message)) return message;
+    const open = "<system-instruction>\n";
+    const close = "\n</system-instruction>";
+    const content = message.content;
+    return {
+      ...message,
+      role: "user",
+      content:
+        typeof content === "string" || content === null
+          ? `${open}${content ?? ""}${close}`
+          : [
+              { type: "text", text: open },
+              ...content,
+              { type: "text", text: close },
+            ],
+    };
+  });
+}
+
+/**
+ * Applies `lateSystemMessagesAsUser` when the slot's `lateSystemAsUser`
+ * provider option is on (metadata key `lateSystemAsUser`, default off).
+ */
+export function lateSystemOption(
+  messages: TextMessage[],
+  metadata: Record<string, unknown> | undefined,
+): TextMessage[] {
+  return metadata?.lateSystemAsUser === true
+    ? lateSystemMessagesAsUser(messages)
+    : messages;
+}

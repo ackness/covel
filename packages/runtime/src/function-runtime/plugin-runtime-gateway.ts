@@ -71,6 +71,7 @@ export interface FullGatewayLike {
       providerOptions?: Readonly<
         Record<string, Readonly<Record<string, unknown>>>
       >;
+      promptCacheKey?: string;
     },
     options?: FullGatewayOptions,
   ): Promise<{
@@ -272,6 +273,9 @@ export function createPluginRuntimeGateway(
             : {}),
           ...(input.providerRequestMetadata
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
+            : {}),
+          ...(input.promptCacheKey
+            ? { promptCacheKey: input.promptCacheKey }
             : {}),
         },
         callOptions(input),

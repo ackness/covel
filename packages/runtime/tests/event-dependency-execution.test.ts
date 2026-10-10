@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RuntimeManifest } from "@covel/shared";
+import type { JsonValue, RuntimeManifest } from "@covel/shared";
 import type {
   FunctionHandler,
   LoadedRuntime,
@@ -237,13 +237,16 @@ describe("same-depth synchronous event dependencies", () => {
         outcome: "success",
         value: { number: 42 },
       }),
-      [consumer.name]: async (ctx) => ({
-        outcome: "success",
-        value: {
-          observed: ctx.inputs?.number?.value,
-          event: ctx.triggerEvent?.data,
-        },
-      }),
+      [consumer.name]: async (ctx) => {
+        const number = ctx.inputs?.number;
+        return {
+          outcome: "success",
+          value: {
+            observed: number?.cardinality === "one" ? number.value : null,
+            event: (ctx.triggerEvent?.data ?? null) as JsonValue,
+          },
+        };
+      },
     });
     expect(
       results.find((result) => result.runtimeId === consumer.name),

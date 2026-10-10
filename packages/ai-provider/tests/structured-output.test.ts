@@ -62,7 +62,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe.each(protocols)("$name structured output", ({ name, create }) => {
   it("sends each object schema to the provider and retains local validation", async () => {
     mockResponse({});
-    const schemas = [
+    const schemas: z.ZodType[] = [
       z.object({ first: z.string().optional() }),
       z.object({ second: z.number().optional() }),
     ];

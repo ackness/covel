@@ -442,6 +442,12 @@ submitBehavior: {
 
 插件作者无需特殊适配——只要按 [`guide/ui/guide-block.json`](../../plugins/guide/ui/guide-block.json) 的方式使用 `draftMessage` 等动作，玩家选择就会被自动记录与回放。
 
+### 4.5 表单被拒绝、已回答与重新载入
+
+- 玩家的提交没有通过校验时，响应是 `400` 加 `code: "form_rejected"`，`details.issues` 列出每条 `{ field?, message }`。表单把消息显示在对应字段下面并聚焦第一个出错字段，没有 `field` 的显示在字段上方，玩家填的内容保留；不会出现错误 toast。表单交互的可选 `notice` 显示在字段上方。
+- 同一张表单（`turnId` + `interactionId`）只回答一次。后续回合开始之后再提交，返回 `code: "interaction_already_submitted"`，客户端显示拒绝原因并载入已存的答案。
+- 在另一个标签页或设备上重新载入时，客户端从 `GET /api/sessions/:id/view` 的 `submittedInteractions`（`{ turnId, interactionId, values, followedUp }`）把表单标为已回答；`followedUp` 为 `false` 说明答案已存但后续回合没有跑起来，表单保持打开并填好已存的值，再点一次提交就会发起后续回合。
+
 ---
 
 ## 5. Message UI 设计建议

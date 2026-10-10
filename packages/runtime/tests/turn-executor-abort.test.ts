@@ -124,7 +124,7 @@ describe("executeTurn player abort", () => {
           // can cancel instead of running to completion.
           controller.abort();
           observedAbortedFlag = ctx.signal?.aborted;
-          return { narrativeOutput: "done" };
+          return { outcome: "success", value: { narrativeOutput: "done" } };
         },
       }),
       llm: { generate: async () => prose("unused") } as LLMAdapter,

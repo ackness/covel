@@ -53,6 +53,7 @@ import {
   extractParameterOverrides,
   IMAGE_PLACEHOLDER_TEXT,
   imagePartUrl,
+  lateSystemOption,
 } from "./common.js";
 import type {
   ModelRequestContext,
@@ -70,6 +71,7 @@ const RESPONSES_PROTECTED_KEYS = new Set([
   "tools",
   "tool_choice",
   "promptCacheKey",
+  "lateSystemAsUser",
   "parameterOverrides",
   "reasoning_effort",
   "reasoningEffort",
@@ -321,7 +323,7 @@ function responsesRequestBody(
     ];
   }
   body.input = serializeResponsesInput(
-    messages,
+    lateSystemOption(messages, params.providerRequestMetadata),
     params.model,
     config,
     stateless,

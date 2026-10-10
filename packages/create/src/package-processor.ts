@@ -129,6 +129,7 @@ export function validateGeneratedCharacters(
       characters: characters.map((character) => ({
         id: character.id,
         name: character.name,
+        ...(character.aliases?.length ? { aliases: character.aliases } : {}),
         type: character.type ?? "npc",
         fields: character.fields,
         sessionId: "",

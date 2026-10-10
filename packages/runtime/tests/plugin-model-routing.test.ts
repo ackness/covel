@@ -73,6 +73,7 @@ it("dispatches full plugin targets after system reload, with request/runtime sel
   const modelTargets = new Map<string, PluginLlmModelTarget>();
   const manifest = {
     name: "runtime",
+    pluginId: "runtime",
     description: "test",
     stage: "narrative" as const,
     model: "fast",

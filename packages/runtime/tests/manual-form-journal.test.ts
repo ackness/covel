@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { createFormTool } from "@covel/tools";
-import type { InteractionPayload, RuntimeManifest } from "@covel/shared";
+import type { RuntimeManifest } from "@covel/shared";
+import type { PluginFormInteraction } from "@covel/plugin-handlers-utils";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
@@ -11,7 +12,9 @@ import { createInteractionSubmitter } from "../src/interaction/interaction-submi
 const form = {
   formId: "manual-form",
   title: "Check",
-  fields: [{ type: "text", name: "action", label: "Action", required: true }],
+  fields: [
+    { type: "text" as const, name: "action", label: "Action", required: true },
+  ],
   submitLabel: "Continue",
   narrativeTemplate: "{{action}}",
 };
@@ -25,8 +28,8 @@ describe.each(["function", "agent"] as const)(
         const store = createMemoryStore();
         const now = new Date().toISOString();
         await store.createSession({
+          locale: "en-US",
           id: "s",
-          worldId: null,
           phase: "playing",
           status: "active",
           completedPlayerTurns: 1,
@@ -71,7 +74,7 @@ describe.each(["function", "agent"] as const)(
                               pluginId: "external",
                               runtimeId: manifest.name,
                               turnId: "t",
-                            })) as { interaction: InteractionPayload }
+                            })) as { interaction: PluginFormInteraction }
                           ).interaction,
                         ],
                       },
@@ -121,7 +124,7 @@ describe.each(["function", "agent"] as const)(
             },
           ],
         };
-        const context = { sessionId: "s", pluginId: "framework", store };
+        const context = { sessionId: "s" };
         await expect(
           createInteractionSubmitter(undefined, store)(payload, context),
         ).rejects.toThrow("committed interaction");

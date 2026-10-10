@@ -78,7 +78,8 @@ messages
 
 原因是服务商的前缀缓存：一次请求只有从第一个字节起与之前的请求相同的部分才能命中。数据块在 system prompt 里时，system prompt 每回合都不同，排在它后面的整段历史就无法命中，会话越长浪费越多。现在 system prompt 逐回合保持不变，缓存可以一直覆盖到上一回合的历史。
 
-- 这段内容仍是 system 角色，其中由插件写给模型的指令（如掷骰步骤）权重不变。Anthropic 仅将开头的 system 消息放入顶层 system；历史之后的回合指令保留位置，以带 `<system-instruction>` 的 user 内容发送。
+- 这段内容在上下文里仍是 system 角色。Anthropic 仅将开头的 system 消息放入顶层 system；历史之后的回合指令保留位置，以带 `<system-instruction>` 的 user 内容发送。OpenAI Chat 和 Responses 默认原样以 system 发送；slot 的 `lateSystemAsUser = true` 让它们也这样发送（`lateSystemMessagesAsUser`，`packages/ai-provider/src/adapters/common.ts`），用于会把 system 消息移到最前面的中转，数字和代价见[提示词缓存键](./slots.md#提示词缓存键)。`packages/ai-provider/tests/late-system-messages.test.ts` 固定了选项打开时只有回合上下文不同的两次请求到历史末尾为止逐字节相同，以及默认不改角色。
+- 已知限制（Gemini 原生协议）：`google-generative-ai-v1` 把所有 system 消息，包括这段每回合都变的回合上下文，合并进 `systemInstruction`，而它排在 `contents` 之前，所以前缀缓存每回合从头断开。没有改的原因：改法是把历史之后的 system 消息放进 `contents` 的 user 轮，但 Gemini 要求函数调用后紧跟函数响应轮，在工具循环里插入 user 轮可能被拒绝，而且没有 Gemini 端点可验证。要改时需要先在真实端点上验证工具循环。
 - 它不放在请求的最后。请求仍以本回合的消息和 post-history 段结尾：数据块紧挨着回复时，较小的模型会把数据块的写法带进工具参数（把参数包成输入块的形状、在字段后面补一个闭合标签）。
 - depth 插入按对话消息计数，回合上下文不占位置。
 - 预算裁剪把紧挨在受保护回合之前的 system 消息一并保留，所以它不会被丢掉。压缩阈值的估算把它和 system prompt 一起计入。`AssembledContext.turnContext` 是它的内容，没有时为空字符串。
@@ -152,7 +153,7 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 根内联 runtime 的 `PLUGIN.md` 正文，或子 runtime 的 `RUNTIME.md` 正文，支持 `{{ variable }}` 插值。常用变量包括：
 
 - `player.message`、`player.lastFormValues`、`player.character`。
-- `characters.npcs`：全部非玩家角色的档案，每行 `姓名 [类型] | description | fields`（description 与 fields 各截至 400 字符，合计约 8000 字符；超出的角色只列姓名）。不含 id，模型按姓名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
+- `characters.npcs`：全部非玩家角色的档案，每行 `姓名 [类型] | description | fields`，角色有别名时姓名后跟 `(aka 别名, …)`（description 与 fields 各截至 400 字符，合计约 8000 字符；超出的角色只列姓名）。不含 id，模型按姓名或别名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
 - `session.id`、`session.turnNumber`。
 - `inputs.<pluginId>.<runtimeId>.<field>`。
 

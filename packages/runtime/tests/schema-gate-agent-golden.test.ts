@@ -101,8 +101,10 @@ describe("agent schema gate (golden)", () => {
   it("fails with a schema-validation error when JSON has the wrong shape", async () => {
     const llm = new FixedContentLLM('{"wrong":"shape"}');
     const onRuntimeComplete = vi.fn();
-    const deps = makeDeps(llm, { ...OBJECT_SCHEMA });
-    deps.onRuntimeComplete = onRuntimeComplete;
+    const deps: TurnExecutorDeps = {
+      ...makeDeps(llm, { ...OBJECT_SCHEMA }),
+      onRuntimeComplete,
+    };
     const result = await executeTurn(
       input("sess-wrong"),
       [manifest({ output: { schema: "./output.schema.json" } })],
@@ -247,18 +249,20 @@ describe("ordinary and resumed private schema parity", () => {
       const store = createMemoryStore();
       const validContent = '{"prompt":"portrait"}';
       let nextContent: string | null = content;
-      const deps = makeDeps(
-        {
-          generate: async () => ({
-            content: nextContent,
-            toolCalls: [],
-            finishReason: "stop",
-            usage: { inputTokens: 1, outputTokens: 0 },
-          }),
-        },
-        { ...OBJECT_SCHEMA },
-      );
-      deps.store = store;
+      const deps: TurnExecutorDeps = {
+        ...makeDeps(
+          {
+            generate: async () => ({
+              content: nextContent,
+              toolCalls: [],
+              finishReason: "stop",
+              usage: { inputTokens: 1, outputTokens: 0 },
+            }),
+          },
+          { ...OBJECT_SCHEMA },
+        ),
+        store,
+      };
       const turnInput = input(`empty-${content === null ? "null" : "string"}`);
       const ordinary = await executeTurn(turnInput, [m], deps);
       expect(ordinary.runtimeResults[0]?.status).toBe("failed");
@@ -380,7 +384,7 @@ describe("ordinary and resumed private schema parity", () => {
         requireToolUse: true,
         tools: { plugin: ["complete"] },
       });
-      const deps = makeDeps(
+      const baseDeps = makeDeps(
         {
           generate: async () => ({
             content: "incidental prose",
@@ -404,10 +408,13 @@ describe("ordinary and resumed private schema parity", () => {
               }
             : { wrong: true },
       });
-      deps.toolExecutor = createToolExecutor({
-        findTool: () => complete,
-        store: deps.store!,
-      });
+      const deps: TurnExecutorDeps = {
+        ...baseDeps,
+        toolExecutor: createToolExecutor({
+          findTool: () => complete,
+          store: baseDeps.store!,
+        }),
+      };
       const ordinary = await executeTurn(input("tool-parity"), [m], deps);
       const resumed = await resumeSuspendedRuntime(
         {

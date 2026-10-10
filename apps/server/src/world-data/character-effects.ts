@@ -1,4 +1,5 @@
 import type { CharacterRecord } from "@covel/store";
+import { mergeCharacterAliases } from "@covel/shared";
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -24,12 +25,22 @@ export function characterRecordFromValue(
   const id = typeof value.id === "string" ? value.id : undefined;
   const name = typeof value.name === "string" ? value.name : undefined;
   if (!id || !name) return null;
+  const aliases = mergeCharacterAliases(
+    name,
+    [],
+    Array.isArray(value.aliases)
+      ? value.aliases.filter(
+          (alias): alias is string => typeof alias === "string",
+        )
+      : [],
+  );
   return {
     // Character keys are per session already; the world's own id is used
     // as is, so prompts carry `npc-mio`, not `<sessionId>-npc-mio`.
     id,
     sessionId,
     name,
+    ...(aliases.length > 0 ? { aliases } : {}),
     type: typeof value.type === "string" ? value.type : "npc",
     ...(typeof value.description === "string"
       ? { description: value.description }

@@ -6,7 +6,7 @@ import type {
   RuntimeManifest,
   TurnInput,
 } from "@covel/shared";
-import { WORLD_IR_V1_JSON_SCHEMA as worldIrSchema } from "@covel/shared";
+import { WORLD_IR_V1_JSON_SCHEMA as worldIrSchema } from "../../../plugins/world-ir/schemas/world-ir.js";
 import {
   discoverPlugins,
   loadPluginManifest,

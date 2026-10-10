@@ -191,6 +191,34 @@ describe("submit-world-facts", () => {
     ]);
   });
 
+  it("reads an alias of a session character as that character", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      entities: [],
+      events: [
+        {
+          id: "meet",
+          type: "interaction",
+          participantIds: ["the Keeper", "伊索德"],
+        },
+      ],
+    });
+    const result = await submitWorldFacts.execute(facts, {
+      world: {
+        characters: [
+          {
+            id: "c-1",
+            name: "Keeper Ysolde",
+            aliases: ["Ysolde", "the Keeper", "伊索德"],
+            type: "npc",
+          },
+          { id: "c-2", name: "Mira Vale", type: "npc" },
+        ],
+      },
+    });
+    expect(result.events[0].participantIds).toEqual(["c-1", "c-1"]);
+  });
+
   it("does not guess between two characters with the same letters", async () => {
     const facts = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,

@@ -246,7 +246,7 @@ describe("ToolExecutor trace emissions", () => {
         }>;
       }
     ).issues;
-    issues.push({ ...issues[0], message: "phantom duplicate on same path" });
+    issues.push({ ...issues[0]!, message: "phantom duplicate on same path" });
     // Add a second distinct path so we end up with 2 deduped details total.
     issues.push({
       path: ["age"],

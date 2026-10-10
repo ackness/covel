@@ -191,10 +191,21 @@ describe("Plugin Data REST API routes", () => {
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: "x".repeat(65_537) }),
+        body: JSON.stringify({ value: "x".repeat(262_145) }),
       },
     );
     expect(tooLarge.status).toBe(413);
+
+    // Between the old 64 KB cap and the shared 256 KiB limit is accepted.
+    const fits = await app.request(
+      `/api/sessions/${sessionId}/plugin-data/${pluginId}/settings/medium`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: "x".repeat(100_000) }),
+      },
+    );
+    expect(fits.status).toBe(200);
   });
 
   it("write operations require the plugin to be active in the session", async () => {

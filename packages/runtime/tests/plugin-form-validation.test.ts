@@ -25,7 +25,7 @@ async function fixture(sourcePluginId: string | undefined = "provider") {
       validation: { name: "budget", data: { limit: 4 } },
     })),
   });
-  const context = { sessionId: "session", pluginId: "framework", store };
+  const context = { sessionId: "session" };
   const submission = (interactionId: string, points: unknown) => ({
     interactionId,
     type: "form",

@@ -130,8 +130,6 @@ async function run(
               status: "failed",
               output: null,
               toolCalls: [],
-              durationMs: 1,
-              timestamp: now,
             },
           ]
         : []),

@@ -122,6 +122,49 @@ describe("sync-codex-entries", () => {
     expect((await stored("codex-azure-peak")).rarity).toBe("rare");
   });
 
+  it("keeps one character entry for a session character named by an alias, and leaves other categories alone", async () => {
+    const world = {
+      characters: [
+        { id: "npc-ysolde", name: "Keeper Ysolde", aliases: ["the Keeper"] },
+      ],
+    };
+    const syncWithCast = async (entries) =>
+      getToolContent(
+        await executeAndCommit(
+          syncTool,
+          { entries },
+          { ...ctx, world },
+          mockStore,
+        ),
+      );
+    await syncWithCast([
+      {
+        category: "character",
+        title: "Keeper Ysolde",
+        content: "She tends the barrow lantern.",
+      },
+    ]);
+    const result = await syncWithCast([
+      {
+        category: "character",
+        title: "The Keeper",
+        content: "She has not left the hill in ten years.",
+      },
+      {
+        category: "lore",
+        title: "The Keeper",
+        content: "An office of the Dawn Lantern order.",
+      },
+    ]);
+    expect(result).toMatchObject({
+      created: ["codex-the-keeper"],
+      updated: ["codex-keeper-ysolde"],
+    });
+    expect((await stored("codex-keeper-ysolde")).content).toContain(
+      "ten years",
+    );
+  });
+
   it("does not append a sentence the entry already holds", async () => {
     await sync([mountain]);
     await sync([mountain]);

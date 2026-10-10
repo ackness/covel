@@ -33,6 +33,8 @@ function setup(capacity: number | undefined, requested: number | undefined) {
         supportedModes: ["text"],
         enabled: true,
         capability: {
+          input: ["text"],
+          output: ["text"],
           contextWindow: 131_072,
           ...(capacity === undefined ? {} : { maxOutputTokens: capacity }),
         },

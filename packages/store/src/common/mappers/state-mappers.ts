@@ -66,6 +66,7 @@ export interface CharacterRow {
   id: string;
   sessionId: string;
   name: string;
+  aliases: unknown;
   type: string;
   description: string | null;
   fields: unknown;
@@ -156,6 +157,7 @@ export function toCharacterRecord(
     id: row.id,
     sessionId: row.sessionId,
     name: row.name,
+    aliases: json.read(row.aliases) as CharacterRecord["aliases"],
     type: row.type,
     description: row.description ?? undefined,
     fields: json.read(row.fields),

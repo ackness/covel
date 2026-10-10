@@ -8,7 +8,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mirrorSetupDone } from "@covel/shared";
-import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import type { JsonValue, RuntimeManifest, RuntimeResult } from "@covel/shared";
 import { runEventChain } from "../src/trigger/turn-event-chain.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -16,7 +16,7 @@ afterEach(() => vi.restoreAllMocks());
 function resultEmitting(
   runtimeId: string,
   topic: string,
-  data: Record<string, unknown>,
+  data: Record<string, JsonValue>,
 ): RuntimeResult {
   return {
     pluginId: runtimeId.split("/")[0]!,

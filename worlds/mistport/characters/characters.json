@@ -2,6 +2,7 @@
   {
     "id": "npc-lin-yuanzhou",
     "name": "林远舟",
+    "aliases": ["远舟", "林学徒"],
     "type": "npc",
     "description": "验潮师公会新晋学徒，谨慎却好奇心极强。在考核中意外发现自己能微弱感知潮力，不敢告诉任何人。",
     "fields": {
@@ -28,6 +29,7 @@
   {
     "id": "npc-su-yao",
     "name": "苏窈",
+    "aliases": ["苏验潮师", "监考官"],
     "type": "npc",
     "description": "已出师的验潮师，齐老的助手，也是玩家入门考核的监考官。做事一丝不苟，齐老失踪后开始怀疑自己一直相信的一切。",
     "fields": {
@@ -54,6 +56,7 @@
   {
     "id": "npc-iron-meg",
     "name": "铁姑",
+    "aliases": ["铁二当家", "Iron Meg"],
     "type": "npc",
     "description": "盐牙会二当家，三十余岁，左臂从肘部以下因遗物事故陷入雾蚀，半透明地泛着灰光。冷厉而守信，暗中搜集遗物碎片。",
     "fields": {
@@ -80,6 +83,7 @@
   {
     "id": "npc-chen-yuanshan",
     "name": "陈远山",
+    "aliases": ["陈议长", "Councilor Chen"],
     "type": "npc",
     "description": "雾港议会议长，年过六旬，精于权术。表面推行封潮令是为公共安全，私下却派亲信探险队反复深入下潮区搜寻'钥匙'。",
     "fields": {
@@ -106,6 +110,7 @@
   {
     "id": "npc-guildmaster-qi",
     "name": "齐老",
+    "aliases": ["齐公会长", "Guildmaster Qi"],
     "type": "npc",
     "description": "验潮师公会长，白发苍苍的温和学者，知晓裂潮真相却守口如瓶。开场前留信走进涨潮期的下潮区，从此失踪。",
     "fields": {
@@ -132,6 +137,7 @@
   {
     "id": "npc-xiao-shuang",
     "name": "小霜",
+    "aliases": ["雾使小霜", "Frost"],
     "type": "npc",
     "description": "雾中教会最年轻的'雾使'，不过十五六岁。声称能听见雾的低语，数次准确预言退潮时间与遗迹位置。先知、疯子，还是骗子？",
     "fields": {
@@ -158,6 +164,7 @@
   {
     "id": "npc-grey-falcon",
     "name": "灰隼",
+    "aliases": ["隼队长", "Grey Falcon"],
     "type": "npc",
     "description": "陈远山私人探险队队长，也是封潮令最锋利的执行之手。沉默、高效、没有多余情绪；最近追查的目标指向齐老消失的方向。",
     "fields": {

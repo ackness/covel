@@ -22,6 +22,7 @@ import type {
 } from "@covel/shared";
 import {
   canonicalizeLocale,
+  characterLabel,
   instructionLocaleFor,
   localeDisplayName,
   localeRegistry,
@@ -339,8 +340,9 @@ const capped = (text: string) =>
  * `{{ characters.npcs }}`: every non-player character's description and
  * fields, one line each, so a template can give the model the profiles up
  * front instead of a `get-character` round trip per person. Past the budget
- * the rest are listed by name only, to be looked up when needed. No ids: a
- * model looks characters up by name.
+ * the rest are listed by name only, to be looked up when needed. A name is
+ * followed by `(aka …)` when the character has aliases. No ids: a model
+ * looks characters up by name or alias.
  */
 export function renderNpcProfiles(
   characters: readonly CharacterSummary[],
@@ -351,7 +353,7 @@ export function renderNpcProfiles(
   let used = 0;
   for (const character of characters) {
     if (character.type === "player") continue;
-    const parts = [`- ${character.name} [${character.type}]`];
+    const parts = [`- ${characterLabel(character)} [${character.type}]`];
     if (character.description) parts.push(capped(character.description));
     if (character.fields && Object.keys(character.fields).length > 0)
       parts.push(capped(safeStringify(modelFacingJson(character.fields))));

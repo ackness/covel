@@ -7,14 +7,16 @@ import protectCharacterProfiles from "../hooks/protect-character-profiles.js";
 const ROSTER_FIELDS_BUDGET = 12000;
 
 /**
- * Who is in the session: id, name, type and description. These hold until a
- * character is created or rewritten. No record version: the tracker passes
- * none, and it changes with every update of a character.
+ * Who is in the session: id, name, aliases (when there are any), type and
+ * description. These hold until a character is created or rewritten. No
+ * record version: the tracker passes none, and it changes with every update
+ * of a character.
  */
 function rosterRows(characters) {
-  return characters.map(({ id, name, type, description }) => ({
+  return characters.map(({ id, name, aliases, type, description }) => ({
     id,
     name,
+    ...(aliases?.length ? { aliases } : {}),
     type,
     description,
   }));

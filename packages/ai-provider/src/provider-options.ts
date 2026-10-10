@@ -18,6 +18,8 @@ export interface ProviderOptionSettings {
   user?: string;
   /** Send (or leave out) OpenAI's `prompt_cache_key`; default by endpoint. */
   promptCacheKey?: boolean;
+  /** Send a system message after the first conversation message as a `user` message; default off. */
+  lateSystemAsUser?: boolean;
   thinking?:
     | { type: "enabled"; budgetTokens: number }
     | { type: "disabled" | "adaptive" };
@@ -79,6 +81,7 @@ const settingsSchema = z.object({
   seed: z.number().int().safe().optional(),
   user: z.string().optional(),
   promptCacheKey: z.boolean().optional(),
+  lateSystemAsUser: z.boolean().optional(),
   thinkingConfig: z
     .object({
       thinkingBudget: z.number().int().min(-1).optional(),

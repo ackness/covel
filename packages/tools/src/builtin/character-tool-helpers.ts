@@ -24,6 +24,7 @@ export interface CharacterStore {
     id: string;
     sessionId: string;
     name: string;
+    aliases?: readonly string[];
     type: string;
     description?: string;
     fields?: unknown;
@@ -36,6 +37,7 @@ export interface CharacterStore {
       id: string;
       sessionId: string;
       name: string;
+      aliases?: readonly string[];
       type: string;
       description?: string;
       fields?: unknown;
@@ -56,6 +58,7 @@ export function characterTypeSchema(schema?: CharacterSchema | null) {
 export interface CharacterSnapshot {
   readonly id: string;
   readonly name: string;
+  readonly aliases?: readonly string[];
   readonly type: string;
   readonly description?: string;
   readonly fields?: unknown;
@@ -67,6 +70,7 @@ export interface CharacterSnapshot {
 export function toSnapshot(record: {
   id: string;
   name: string;
+  aliases?: readonly string[];
   type: string;
   description?: string;
   fields?: unknown;
@@ -77,6 +81,7 @@ export function toSnapshot(record: {
   return {
     id: record.id,
     name: record.name,
+    ...(record.aliases?.length ? { aliases: record.aliases } : {}),
     type: record.type,
     description: record.description,
     fields: record.fields,
