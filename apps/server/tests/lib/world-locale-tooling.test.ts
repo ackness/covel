@@ -40,12 +40,12 @@ describe("world translation tooling", () => {
     const rules = status.files.find(
       (file) => file.file === "data/rules/barrow-rules.yaml",
     )!;
-    expect(rules.localeFile).toBe("data/rules/barrow-rules.en.yaml");
+    expect(rules.localeFile).toBe("data/rules/barrow-rules.en-US.yaml");
     expect(rules.total).toBeGreaterThan(10);
     expect(rules.missing).toEqual([]);
     // Lore is one text: the whole file.
     expect(status.files.find((file) => file.file === "WORLD.md")).toMatchObject(
-      { localeFile: "WORLD.en.md", total: 1, missing: [] },
+      { localeFile: "WORLD.en-US.md", total: 1, missing: [] },
     );
   });
 
@@ -229,7 +229,7 @@ describe("world translation tooling", () => {
   }, 30_000);
 
   it("keeps the translations a locale file already has", async () => {
-    const target = path.join(worldDir, "data/quests.en.yaml");
+    const target = path.join(worldDir, "data/quests.en-US.yaml");
     const before = parseYaml(await readFile(target, "utf-8")) as Record<
       string,
       unknown

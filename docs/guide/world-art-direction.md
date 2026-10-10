@@ -86,7 +86,7 @@ pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 
 ## 画廊资料与前端使用
 
-四个在用世界的 `media/gallery.json` 保存新增图片与既有素材的编辑资料，语言文件为 `gallery.en.json` 或 `gallery.zh-CN.json`。世界列表和世界详情的画廊读这份清单：按清单顺序展示图片，用 `kind` 决定用法，用 `name`、`description`、`background`、`location` 作介绍，有 `webFilename` 时展示它。它不是会话的导入 contract：会话里的立绘和场景仍以原来的 portraits/scenes 清单为准。
+四个在用世界的 `media/gallery.json` 保存新增图片与既有素材的编辑资料，语言文件为 `gallery.en-US.json` 或 `gallery.zh-CN.json`。世界列表和世界详情的画廊读这份清单：按清单顺序展示图片，用 `kind` 决定用法，用 `name`、`description`、`background`、`location` 作介绍，有 `webFilename` 时展示它。它不是会话的导入 contract：会话里的立绘和场景仍以原来的 portraits/scenes 清单为准。
 
 画廊在开始游玩之前展示，所以只列出 `spoilerLevel` 为 `opening`（或没有声明）的图片。`filename` 和 `webFilename` 必须是 `media/` 下「一层目录 / 文件名」的路径，其余写法的图片不展示。`kind` 的用法：`scene` 和 `still` 会铺满屏幕轮播，裁切时上下各少一条；`map` 只完整显示，不参与轮播；`portrait` 作为人物图；`hero` 是世界自己的封面，应用没有内置封面的世界（例如玩家安装的世界）用它开场。
 

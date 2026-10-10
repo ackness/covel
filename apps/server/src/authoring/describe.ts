@@ -104,7 +104,7 @@ const WORLD_FILES: AuthoringSurface["files"] = [
   {
     path: "<file>.<locale>.<ext>",
     purpose:
-      "Translation of the YAML or JSON file beside it, for example `world.en.yaml` or `data/dimensions.en.yaml`. It holds only translated text under the same keys and ids; it does not repeat structure. Never write a locale map inside a main file.",
+      "Translation of the YAML or JSON file beside it, for example `world.en-US.yaml` or `data/dimensions.en-US.yaml`, with the locale written exactly as `supportedLocales` writes it. It holds only translated text under the same keys and ids; it does not repeat structure. Never write a locale map inside a main file.",
     reference: "docs/reference/world-data.md",
   },
   {

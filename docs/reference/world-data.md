@@ -26,7 +26,7 @@ AI 修订发布时会在世界操作锁内复核原记录与文件包身份。�
 ```text
 worlds/my-world/
 ├── world.yaml
-├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en.md 等语言版本
+├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en-US.md 等语言版本
 ├── data/
 │   ├── world.data.yaml               # 可选：文件不在约定位置、或要指定顺序时才需要
 │   ├── dimensions.yaml
@@ -247,12 +247,12 @@ AI 创建器写出的包和手写的世界包一样按[约定路径](#按约定�
 
 世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内四个世界展示了不同的数据组合：
 
-| 示例                    | 玩家体验                                    | 主要能力                                                                                                                                                                                                                                            | 适合参考的文件                                                                                                                     |
-| ----------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按 locale 选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                           | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
-| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台 | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                          | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
-| `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
-| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
+| 示例                    | 玩家体验                                    | 主要能力                                                                                                                                                                                                                                                  | 适合参考的文件                                                                                                                     |
+| ----------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按 locale 选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                 | `world.yaml`、`WORLD.zh-CN.md` / `WORLD.en-US.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                  |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台 | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
+| `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                                     | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
+| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`            |
 
 雾港、春华学园与提灯古冢用 `data/world.data.yaml` 列出 source，Emberback 没有 descriptor、按约定路径读取；两种写法走同一导入协议，但不会为了展示能力而加入与题材无关的插件。四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：作者预设的隐藏事件之外，它会根据游玩中留下的线索追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
@@ -476,15 +476,17 @@ sources:
 
 **主文件只写一种语言**，即 `world.yaml` 的 `defaultLocale`。其他语言放在主文件旁边的 `<name>.<locale>.<ext>` 里，只写译文，不重复结构：
 
+`<locale>` 写成 `supportedLocales` 里的完整写法（`en-US`、`zh-CN`），不要只写语言（`.en`、`.zh`）。`pnpm validate:world` 对只写语言的译文文件报错，并给出应改成的文件名。
+
 ```text
 world.yaml                     # 主文件，defaultLocale 的文本
 world.en-US.yaml               # 只有英文译文
 data/dimensions.yaml
 data/dimensions.en-US.yaml
 characters/main-cast.json
-characters/main-cast.en.json
+characters/main-cast.en-US.json
 WORLD.md
-WORLD.en.md                    # 正文类文件没有可对齐的 id，整份替换
+WORLD.en-US.md                 # 正文类文件没有可对齐的 id，整份替换
 ```
 
 ```yaml

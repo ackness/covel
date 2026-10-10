@@ -380,7 +380,7 @@ function printViolation(rel, violation) {
   const sample = violation.value.slice(0, 120);
   if (violation.kind === "bare-cjk" && violation.context === "world.yaml") {
     console.error(
-      `${rel}: "${pathStr}" has no English text ("${sample}") - add it under the same path in world.en.yaml beside world.yaml`,
+      `${rel}: "${pathStr}" has no English text ("${sample}") - add it under the same path in world.en-US.yaml beside world.yaml`,
     );
     return;
   }
