@@ -1,4 +1,9 @@
-import { localizedWorldText, playerVisibleLore } from "@covel/shared";
+import {
+  WORLD_LORE_TOKEN_BUDGET,
+  fitWorldLore,
+  localizedWorldText,
+  playerVisibleLore,
+} from "@covel/shared";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
@@ -60,6 +65,8 @@ export function WorldDetailView({
   );
   const visual = worldVisual(world);
   const lore = playerVisibleLore(shown.lore ?? "").trim();
+  // The model reads the narrator-only parts too, so the whole text counts.
+  const fitted = fitWorldLore(shown.lore ?? "");
   const hasThemeMusic = useWorldThemeMusic(world);
 
   const hasDimensions =
@@ -172,6 +179,18 @@ export function WorldDetailView({
           packageName={shown.name ?? world.id}
           className="max-w-3xl text-sm"
         />
+
+        {fitted.truncated && (
+          <p
+            role="note"
+            className="max-w-3xl rounded border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+          >
+            {t("world.loreTooLong", {
+              tokens: fitted.tokens,
+              budget: WORLD_LORE_TOKEN_BUDGET,
+            })}
+          </p>
+        )}
 
         <WorldGallerySection
           world={world}
