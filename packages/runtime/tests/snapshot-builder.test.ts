@@ -36,6 +36,14 @@ describe("buildSessionSnapshot", () => {
           createdAt: "2026-01-01",
         },
       ]),
+      listPlayerInputs: vi.fn().mockResolvedValue([
+        {
+          id: "i1",
+          turnId: "t1",
+          formId: "name-form",
+          values: { name: "Aria" },
+        },
+      ]),
       listCharacters: vi.fn().mockResolvedValue([
         {
           id: "c1",
@@ -105,6 +113,11 @@ describe("buildSessionSnapshot", () => {
       world: { weather: "rain", time: "night" },
       player: { hp: 100 },
     });
+
+    // What the player already answered, with the stored values
+    expect(snapshot!.submittedInteractions).toEqual([
+      { turnId: "t1", interactionId: "name-form", values: { name: "Aria" } },
+    ]);
 
     // Execution steps
     expect(snapshot!.executionSteps).toHaveLength(2);

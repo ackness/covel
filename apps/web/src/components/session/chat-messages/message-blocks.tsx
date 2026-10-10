@@ -14,6 +14,7 @@ import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import { rewriteComponentToType } from "@/lib/plugin-panel-spec.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { useSessionActions } from "@/stores/session-store.js";
+import { readBlockInteractionRef } from "@/stores/session-store/submitted-interactions.js";
 import { PluginPanel } from "../plugin-panel.js";
 import { RawJsonBlock } from "./message-primitives.js";
 
@@ -246,12 +247,10 @@ export function MessageBlockRenderer({
 
   const readBlockMeta = useCallback(() => {
     const data = (block.data ?? block) as Record<string, unknown>;
-    const meta = (block.meta ?? {}) as Record<string, unknown>;
-    const interactionId =
-      (data.interactionId as string | undefined) ??
-      (data.formId as string | undefined) ??
-      "form";
-    const turnId = (meta.turnId as string | undefined) ?? msg.turnId ?? "";
+    const { turnId, interactionId } = readBlockInteractionRef(
+      block,
+      msg.turnId,
+    );
     const rawBehavior = data.submitBehavior as
       Record<string, unknown> | undefined;
     const submitBehavior = rawBehavior

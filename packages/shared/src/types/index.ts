@@ -252,6 +252,7 @@ export type {
   SessionSnapshot,
   SessionExecutionStatus,
   SnapshotMessage,
+  SnapshotSubmittedInteraction,
   SnapshotCharacter,
   SnapshotTraceEvent,
   SnapshotPluginStatus,

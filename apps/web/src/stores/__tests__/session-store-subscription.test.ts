@@ -61,6 +61,7 @@ const snapshot = {
     setupRuntimes: {},
   },
   messages: [],
+  submittedInteractions: [],
   characters: [],
   gameState: { hp: 7 },
   executionSteps: [],

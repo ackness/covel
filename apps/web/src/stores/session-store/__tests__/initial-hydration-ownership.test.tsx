@@ -180,6 +180,7 @@ beforeEach(() => {
     characters: [],
     gameState: {},
     executionSteps: [],
+    submittedInteractions: [],
   });
   api.listSessionPlugins.mockResolvedValue({
     items: [plugin("current")],
@@ -476,6 +477,7 @@ it.each(["server", "local fallback"])(
           characters: [],
           gameState: {},
           executionSteps: [],
+          submittedInteractions: [],
         });
       else pending.reject(new Error("offline"));
       await restoring;
@@ -498,6 +500,7 @@ it.each(["restore", "reconnect"])(
       characters: [],
       gameState: { stats: { hp: 9, mp: 3 } },
       executionSteps: [],
+      submittedInteractions: [],
       execution: { state: "idle" },
     };
     api.getSessionView
@@ -562,6 +565,7 @@ it("accepts an empty authoritative initial view after committed state was delete
       characters: [],
       gameState: { stats: { hp: 1 } },
       executionSteps: [],
+      submittedInteractions: [],
     });
     await restoring;
   });
@@ -593,6 +597,7 @@ it("keeps newer contents for a shared message ID and adopts the initial history 
       characters: [],
       gameState: {},
       executionSteps: [],
+      submittedInteractions: [],
       messagesCursor: "older-edge",
       messages: [
         {

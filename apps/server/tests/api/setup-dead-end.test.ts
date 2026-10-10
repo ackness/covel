@@ -438,6 +438,28 @@ it("tells the player in their language what to correct, and keeps the form open"
     expect((await h.submit(allocation!, { might: 3, wits: 3 })).status).toBe(
       200,
     );
+    // The answer is stored once: asking again would run the turn again, so
+    // the server refuses it and the session view returns the stored values.
+    expect(await h.submit(allocation!, { might: 3, wits: 3 })).toEqual({
+      status: 400,
+      body: {
+        code: "interaction_already_submitted",
+        error: "这一项已经提交过了。刷新后可以看到已提交的内容。",
+      },
+    });
+    const view = await h.boot.app.request(`/api/sessions/${h.sessionId}/view`);
+    expect(
+      ((await view.json()) as { submittedInteractions: unknown })
+        .submittedInteractions,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          turnId: allocation!.turnId,
+          interactionId: "tabletop-rules-allocation",
+          values: { might: 3, wits: 3 },
+        },
+      ]),
+    );
     await h.action("send_message", { content: "Allocation complete." });
     expect((await h.player())?.fields).toMatchObject({ might: 3, wits: 3 });
     expect((await h.session()).phase).toBe("playing");

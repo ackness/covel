@@ -416,6 +416,8 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 > 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 >
+> 视图的 `submittedInteractions` 列出玩家已经通过 `submit-form` 回答过的交互 `{ turnId, interactionId, values }[]`，`values` 是服务端落库的值（会话内全部记录，不受消息窗口限制）。客户端据此把对应消息里的表单标成已提交并回填，刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。
+>
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
 恢复已有会话时，最近窗口与已加载消息不重叠则用同一 `/messages/page` 接口向旧锚点补读，再合并连续窗口；不把中间页当作全局最旧页，不覆盖旧历史或它的分页游标。补读失败保留旧窗口并提示、重试只读恢复。该补偿不新增 API，也不触发回合重发。
@@ -1696,13 +1698,13 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 { "error": "Session not found: <id>", "code": "session_not_found" }  // 404
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。`interaction_already_submitted` 同为写给玩家的文字，不带 `details`。没有 `code` 的 400 是客户端不该发出的请求。
 
 **使用说明:**
 
 - handler 只接受当前 session 对话日志中已经提交的 assistant interaction；`turnId` / `interactionId` / `type` 必须与原交互一致，客户端无法凭空构造表单或改写交互类型
 - `form` 会校验 required、字段集合和字段类型；`choice.selectedId` 必须来自原 options，`selectedLabel` 由服务端按原 option 规范化；`confirmation.confirmed` 必须是 boolean
-- 同一 `(turnId, interactionId)` 重复提交相同值会返回原 `submissionId`；不同值返回 400。批量提交会先全部校验，再在事务内统一写入
+- 同一 `(turnId, interactionId)` 只能回答一次：再次提交（无论值是否相同）返回 400 和 `code: "interaction_already_submitted"`，`error` 是按会话 locale 写给玩家的文字，不写入任何内容。相同值也被拒绝，因为客户端在 `accepted` 之后会把 `filledNarrative` 作为下一次 action 发出，重复接受会让后续回合再跑一遍；已存的回答从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 读取。同一批次内对同一交互重复给出相同值仍合并为一条。批量提交会先全部校验，再在事务内统一写入
 - `filledNarrative` 是将玩家输入填入模板后的**纯自然语言**文本，不含 JSON 结构
 - handler 本身不写 `turn_messages`；Web 把该文本作为下一次 action 的玩家消息，供叙事者参考
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法

@@ -68,6 +68,13 @@ export interface SnapshotStore {
       createdAt: string;
     }[]
   >;
+  listPlayerInputs(sessionId: string): Promise<
+    readonly {
+      turnId: string;
+      formId: string;
+      values: unknown;
+    }[]
+  >;
   listCharacters(sessionId: string): Promise<
     readonly {
       id: string;
@@ -113,9 +120,10 @@ export async function buildSessionSnapshot(
   // Parallel queries for all session data. Messages + trace events are
   // windowed to the most-recent slice (see the *_LIMIT constants); older
   // messages load on demand via the cursor endpoint.
-  const [rawMessages, characters, stateSchemas, traceEvents] =
+  const [rawMessages, playerInputs, characters, stateSchemas, traceEvents] =
     await Promise.all([
       store.listMessagesPage(sessionId, { limit: SNAPSHOT_MESSAGE_LIMIT }),
+      store.listPlayerInputs(sessionId),
       store.listCharacters(sessionId),
       store.listStateSchemas(sessionId),
       store.listTraceEventsPage(sessionId, {
@@ -229,6 +237,17 @@ export async function buildSessionSnapshot(
     },
     messages,
     messagesCursor: messagesCursor ? encodePageCursor(messagesCursor) : null,
+    submittedInteractions: playerInputs.flatMap((input) =>
+      input.values && typeof input.values === "object"
+        ? [
+            {
+              turnId: input.turnId,
+              interactionId: input.formId,
+              values: input.values as Record<string, unknown>,
+            },
+          ]
+        : [],
+    ),
     characters: snapshotCharacters,
     gameState,
     executionSteps,

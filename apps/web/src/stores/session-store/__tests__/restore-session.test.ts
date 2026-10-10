@@ -53,6 +53,7 @@ function emptySnapshot() {
     gameState: {},
     characterSchema: null,
     executionSteps: [],
+    submittedInteractions: [],
   };
 }
 
@@ -298,6 +299,61 @@ describe("restoreSessionState workspace ordering", () => {
     expect(api.listSessionPlugins).not.toHaveBeenCalled();
     expect(api.listSuspensions).not.toHaveBeenCalled();
     expect(pluginData.setActiveSession).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("restoreSessionState submitted interactions", () => {
+  it("marks a form the server holds an answer for, and the server's values replace the browser's", async () => {
+    const ds = makeDataService([]);
+    vi.mocked(ds.loadSubmittedBlocks).mockResolvedValue({
+      ids: ["m-form"],
+      values: { "m-form": { name: "Stale local" } },
+    });
+    api.getSessionView.mockResolvedValue({
+      ...emptySnapshot(),
+      messages: [
+        {
+          id: "m-form",
+          role: "assistant",
+          content: "",
+          turnId: "t1",
+          createdAt: "2026-08-25T00:00:00.000Z",
+          block: { type: "interactive_form", data: { interactionId: "name" } },
+        },
+        {
+          id: "m-open",
+          role: "assistant",
+          content: "",
+          turnId: "t1",
+          createdAt: "2026-08-25T00:00:01.000Z",
+          block: { type: "interactive_form", data: { interactionId: "other" } },
+        },
+      ],
+      submittedInteractions: [
+        { turnId: "t1", interactionId: "name", values: { name: "Aria" } },
+      ],
+    });
+    const dispatch = vi.fn();
+    await restoreSessionState({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef: { current: null },
+      sessionGenerationRef,
+      worlds: [world],
+      session,
+    });
+    const submitted = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "SUBMIT_BLOCK");
+    expect(submitted).toEqual([
+      {
+        type: "SUBMIT_BLOCK",
+        blockId: "m-form",
+        values: { name: "Stale local" },
+      },
+      { type: "SUBMIT_BLOCK", blockId: "m-form", values: { name: "Aria" } },
+    ]);
   });
 });
 

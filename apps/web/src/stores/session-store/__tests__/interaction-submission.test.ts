@@ -52,7 +52,6 @@ function makeDeps(): Parameters<typeof submitInteractionBlock>[0] {
     },
     claimAction: (sid) =>
       claimSessionAction(activeActionRef, sessionIdRef, sid),
-    submitBlock: vi.fn(),
     runSingleAction: vi.fn(async () => {}),
     resyncSession: vi.fn(),
     inFlight: new Set(),
@@ -107,7 +106,9 @@ describe("interaction submission", () => {
       type: "SET_EXECUTION_ERROR",
       error: "Invalid allocation",
     });
-    expect(deps.submitBlock).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+    );
     expect(deps.runSingleAction).not.toHaveBeenCalled();
   });
 
@@ -138,7 +139,57 @@ describe("interaction submission", () => {
     // The form stays open with what the player typed: no error state, no turn.
     expect(toast).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalled();
-    expect(deps.submitBlock).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+    );
+    expect(deps.runSingleAction).not.toHaveBeenCalled();
+  });
+
+  it("shows an interaction answered in another tab as answered and reloads the stored answer", async () => {
+    const deps = makeDeps();
+    api.submitInputs.mockRejectedValueOnce(
+      new ApiError(
+        400,
+        "/api/sessions/session-1/plugin-rpc",
+        JSON.stringify({
+          error: "This was already submitted. Reload to see the answer.",
+          code: "interaction_already_submitted",
+        }),
+      ),
+    );
+    api.getSessionView.mockResolvedValueOnce({
+      messages: [
+        {
+          id: "block-1",
+          turnId: "turn-1",
+          block: {
+            type: "interactive_form",
+            data: { interactionId: "form-1" },
+          },
+        },
+      ],
+      submittedInteractions: [
+        {
+          turnId: "turn-1",
+          interactionId: "form-1",
+          values: { name: "Elsewhere" },
+        },
+      ],
+    });
+    await expect(
+      submitInteractionBlock(deps, submission),
+    ).resolves.toBeUndefined();
+    await vi.waitFor(() =>
+      expect(deps.dispatch).toHaveBeenCalledWith({
+        type: "SUBMIT_BLOCK",
+        blockId: "block-1",
+        values: { name: "Elsewhere" },
+      }),
+    );
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_ERROR",
+      error: "This was already submitted. Reload to see the answer.",
+    });
     expect(deps.runSingleAction).not.toHaveBeenCalled();
   });
 
@@ -190,9 +241,11 @@ describe("interaction submission", () => {
         "session-1",
       );
       expect(retry).toHaveBeenCalledTimes(decision === "allow" ? 1 : 0);
-      expect(deps.submitBlock).toHaveBeenCalledTimes(
-        decision === "allow" ? 1 : 0,
-      );
+      expect(
+        vi
+          .mocked(deps.dispatch)
+          .mock.calls.filter(([action]) => action.type === "SUBMIT_BLOCK"),
+      ).toHaveLength(decision === "allow" ? 1 : 0);
       expect(deps.runSingleAction).toHaveBeenCalledTimes(
         decision === "allow" ? 1 : 0,
       );
@@ -212,15 +265,19 @@ describe("interaction submission", () => {
     );
     const deps = makeDeps();
     await submitInteractionBlock(deps, submission);
-    expect(deps.submitBlock).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+    );
     expect(deps.runSingleAction).not.toHaveBeenCalled();
     expect(deps.dispatch).toHaveBeenCalledWith({
       type: "SET_EXECUTION_ERROR",
       error: "Invalid character field",
     });
     await submitInteractionBlock(deps, submission);
-    expect(deps.submitBlock).toHaveBeenCalledWith("block-1", {
-      name: "Player",
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "SUBMIT_BLOCK",
+      blockId: "block-1",
+      values: { name: "Player" },
     });
     expect(deps.runSingleAction).toHaveBeenCalledExactlyOnceWith("Ready", {
       echoUserMessage: true,
@@ -259,7 +316,9 @@ describe("interaction submission", () => {
     deps.sessionIdRef.current = "session-2";
     resolve(accepted);
     await pending;
-    expect(deps.submitBlock).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+    );
     expect(deps.runSingleAction).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalled();
   });
@@ -277,7 +336,9 @@ describe("interaction submission", () => {
     deps.claimAction("session-1");
     resolve(accepted);
     await pending;
-    expect(deps.submitBlock).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+    );
     expect(deps.runSingleAction).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalled();
   });

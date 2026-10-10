@@ -153,6 +153,7 @@ export {
   createSubmitFormHandler,
   findCommittedInteraction,
   FormRejectedError,
+  InteractionAlreadySubmittedError,
   RpcValidationError,
 } from "./rpc-defaults/submit-form.js";
 

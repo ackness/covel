@@ -660,6 +660,13 @@ export interface SessionSnapshot {
    * start of the chat — i.e. there is nothing older to load.
    */
   readonly messagesCursor?: PageCursor | null;
+  /**
+   * Every form, choice or confirmation the player already answered through
+   * `submit-form`, with the values the server stored. The client marks the
+   * matching message blocks as answered from this, so a reload or a second tab
+   * shows the same state as the browser that submitted.
+   */
+  readonly submittedInteractions: readonly SnapshotSubmittedInteraction[];
   readonly characters: readonly SnapshotCharacter[];
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
@@ -667,6 +674,12 @@ export interface SessionSnapshot {
   readonly plugins: readonly SnapshotPluginStatus[];
   /** Character attribute schema from world-data-provider plugin (if available). */
   readonly characterSchema?: Readonly<Record<string, unknown>>;
+}
+
+export interface SnapshotSubmittedInteraction {
+  readonly turnId: string;
+  readonly interactionId: string;
+  readonly values: Readonly<Record<string, unknown>>;
 }
 
 export interface SnapshotMessage {

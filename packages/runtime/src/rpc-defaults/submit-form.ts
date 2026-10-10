@@ -526,6 +526,12 @@ function fillTemplate(
   );
 }
 
+const ALREADY_SUBMITTED = {
+  "en-US": "This was already submitted. Reload to see the answer.",
+  "zh-CN": "这一项已经提交过了。刷新后可以看到已提交的内容。",
+  "ru-RU": "Этот ответ уже отправлен. Обновите страницу, чтобы увидеть его.",
+} as const satisfies I18nText;
+
 export class RpcValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -552,6 +558,14 @@ export class FormRejectedError extends RpcValidationError {
     super(issues.map((issue) => issue.message).join("\n"));
     this.issues = issues;
   }
+}
+
+/**
+ * The interaction already has a stored answer. The message is for the player,
+ * in the session's language.
+ */
+export class InteractionAlreadySubmittedError extends RpcValidationError {
+  readonly code = "interaction_already_submitted";
 }
 
 export function createSubmitFormHandler(
@@ -702,32 +716,25 @@ export function createSubmitFormHandler(
         continue;
       }
 
-      const existing = existingInputs.find(
-        (input) =>
-          input.turnId === body.turnId && input.formId === sub.interactionId,
-      );
-      const storedValues = existing?.values;
-      const comparableValues =
-        storedValues &&
-        typeof storedValues === "object" &&
-        !Array.isArray(storedValues)
-          ? validateSubmissionValues(
-              { ...sub, values: storedValues as Record<string, unknown> },
-              located.interaction,
-              locale,
-            )
-          : storedValues;
-      if (existing && stableJson(comparableValues) !== stableJson(values)) {
-        throw new RpcValidationError(
-          `Interaction ${sub.interactionId} was already submitted with different values`,
+      // One answer per interaction: a second request would run the same
+      // narrative turn again, so it is refused whatever its values. The client
+      // reads the stored answer from the session view.
+      if (
+        existingInputs.some(
+          (input) =>
+            input.turnId === body.turnId && input.formId === sub.interactionId,
+        )
+      ) {
+        throw new InteractionAlreadySubmittedError(
+          resolveLabel(ALREADY_SUBMITTED, locale),
         );
       }
       const item = {
-        submissionId: existing?.id ?? crypto.randomUUID(),
+        submissionId: crypto.randomUUID(),
         interactionId: sub.interactionId,
         values,
         filledNarrative: fillTemplate(normalizedSub, located, labels),
-        shouldPersist: !existing,
+        shouldPersist: true,
       };
       prepared.push(item);
       preparedByKey.set(key, item);

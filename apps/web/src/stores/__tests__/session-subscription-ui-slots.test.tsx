@@ -40,6 +40,7 @@ vi.mock("@/services/api", () => ({
     characters: [],
     gameState: {},
     executionSteps: [],
+    submittedInteractions: [],
     plugins: [],
   })),
   getWorld: vi.fn(async () => ({ id: "w", name: "World" })),

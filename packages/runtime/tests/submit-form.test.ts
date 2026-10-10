@@ -14,6 +14,7 @@ import type { InteractionPayload, InteractionType } from "@covel/shared";
 import {
   createSubmitFormHandler,
   FormRejectedError,
+  InteractionAlreadySubmittedError,
   RpcValidationError,
   VALID_TYPES,
 } from "../src/rpc-defaults/submit-form.js";
@@ -666,7 +667,7 @@ describe("submitFormHandler (Epic A)", () => {
     });
   });
 
-  it("replays an identical submission idempotently and rejects conflicting values", async () => {
+  it("refuses a second submission of an answered interaction, whatever its values", async () => {
     await seedInteraction(store, {
       interactionId: "name-form",
       type: "form",
@@ -675,40 +676,25 @@ describe("submitFormHandler (Epic A)", () => {
       fields: [{ type: "text", name: "name", label: "Name", required: true }],
       narrativeTemplate: "Hello {{name}}",
     });
-    const payload = {
-      turnId: TURN,
-      submissions: [
-        {
-          interactionId: "name-form",
-          type: "form" as const,
-          values: { name: "Aria" },
-        },
-      ],
-    };
-    const first = (await createSubmitFormHandler(undefined, store)(
-      payload,
-      makeCtx(store),
-    )) as {
-      results: Array<{ submissionId: string }>;
-    };
-    const replay = (await createSubmitFormHandler(undefined, store)(
-      payload,
-      makeCtx(store),
-    )) as {
-      results: Array<{ submissionId: string }>;
-    };
-    expect(replay.results[0]?.submissionId).toBe(
-      first.results[0]?.submissionId,
-    );
-    expect(await store.listPlayerInputs(SESSION)).toHaveLength(1);
-
-    await expect(
-      submitOne(store, {
+    await submitOne(store, {
+      interactionId: "name-form",
+      type: "form",
+      values: { name: "Aria" },
+    });
+    for (const name of ["Aria", "Different"]) {
+      const refusal = await submitOne(store, {
         interactionId: "name-form",
         type: "form",
-        values: { name: "Different" },
-      }),
-    ).rejects.toThrow(/already submitted/i);
+        values: { name },
+      }).catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(InteractionAlreadySubmittedError);
+      expect(refusal).toMatchObject({
+        code: "interaction_already_submitted",
+      });
+    }
+    expect(await store.listPlayerInputs(SESSION)).toMatchObject([
+      { values: { name: "Aria" } },
+    ]);
   });
 
   it("validates the whole batch before writing any player input", async () => {
@@ -758,44 +744,6 @@ describe("submitFormHandler (Epic A)", () => {
 });
 
 describe("typed numeric form constraints", () => {
-  it("replays pre-upgrade string values without rewriting accepted input", async () => {
-    const store = createMemoryStore();
-    await seedTemplate(store, "legacy", "{{points}} {{ready}}", [
-      { type: "number", name: "points", label: "Points", required: true },
-      { type: "checkbox", name: "ready", label: "Ready" },
-    ]);
-    await store.savePlayerInput({
-      id: "legacy-input",
-      sessionId: SESSION,
-      turnId: TURN,
-      formId: "legacy",
-      values: { points: "3", ready: "false" },
-      createdAt: new Date().toISOString(),
-    });
-    for (const values of [
-      { points: "3", ready: "false" },
-      { points: 3, ready: false },
-    ]) {
-      const result = (await createSubmitFormHandler(undefined, store)(
-        {
-          turnId: TURN,
-          submissions: [{ interactionId: "legacy", type: "form", values }],
-        },
-        makeCtx(store),
-      )) as { results: Array<{ submissionId: string }> };
-      expect(result.results[0]?.submissionId).toBe("legacy-input");
-    }
-    await expect(
-      submitOne(store, {
-        interactionId: "legacy",
-        type: "form",
-        values: { points: 4, ready: false },
-      }),
-    ).rejects.toThrow("already submitted");
-    expect(await store.listPlayerInputs(SESSION)).toMatchObject([
-      { id: "legacy-input", values: { points: "3", ready: "false" } },
-    ]);
-  });
   it.each(["", "NaN", "Infinity", -1, 6, 2.5])(
     "rejects %s without accepting the form",
     async (value) => {
