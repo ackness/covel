@@ -278,16 +278,16 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 创建一个需要玩家填写的表单。框架渲染表单，玩家提交后结果注入下一轮上下文。手动 runtime 通过插件 UI 打开的表单同样会在事务内保存模板，支持刷新后继续填写及服务端校验；没有交互的手动输出仍不写入对话历史。
 
-| 参数              | 类型        | 必需 | 描述                                   |
-| ----------------- | ----------- | ---- | -------------------------------------- |
-| formId            | string      | ✓    | 表单唯一标识                           |
-| title             | string      | ✓    | 表单标题                               |
-| fields            | FormField[] | ✓    | 表单字段列表                           |
-| submitLabel       | string      | ✓    | 提交按钮文本                           |
-| narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符    |
-| validation        | object      |      | `{ name, data? }`，见下                |
-| submitBehavior    | object      |      | `{ echoFilledNarrative?, immediate? }` |
-| notice            | string      |      | 字段上方的提示，见下                   |
+| 参数              | 类型        | 必需 | 描述                                |
+| ----------------- | ----------- | ---- | ----------------------------------- |
+| formId            | string      | ✓    | 表单唯一标识                        |
+| title             | string      | ✓    | 表单标题                            |
+| fields            | FormField[] | ✓    | 表单字段列表                        |
+| submitLabel       | string      | ✓    | 提交按钮文本                        |
+| narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符 |
+| validation        | object      |      | `{ name, data? }`，见下             |
+| submitBehavior    | object      |      | `{ echoFilledNarrative? }`          |
+| notice            | string      |      | 字段上方的提示，见下                |
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`。`number` 的默认值与提交值是有限数字，`checkbox` 是布尔值，其余类型是字符串。数字字段支持 `min`、`max`、正数 `step`，步长相对 `min ?? 0` 计算；前端保留数值类型，服务端再次校验并把旧客户端的数字字符串规范化为数字。数字字段清空不会变成 0 或重新应用默认值；必填项会被拒绝。未提供的字段使用默认值（含 0、false）；文本/选择字段保留空字符串使用默认值的兼容行为。`placeholder` 只用于展示。`select` 默认值必须属于选项。
 
@@ -1054,9 +1054,10 @@ Bootstrap 时自动分类：
   ↓ 聚合为数组存入 TurnMessage.pendingInput
   ↓ 返回 TurnResult.pendingInputs（支持多插件、多交互）
   ↓ 前端渲染所有交互 UI
-  ↓ 玩家提交 plugin-rpc framework.submit-form { submissions: [...] }
+  ↓ 玩家提交 POST /api/actions submit_interaction { turnId, submissions: [...] }
   ↓ 每个 submission 用 narrativeTemplate 翻译为自然语言
-  ↓ 追加到消息历史（纯文本，LLM 看到的和普通消息一样）
+  ↓ 同一个请求保存回答并运行后续回合，叙事文本是该回合的玩家消息
+    （纯文本，LLM 看到的和普通消息一样）
 ```
 
 ### 交互类型
@@ -1104,12 +1105,12 @@ When a placeholder is immediately followed by `.` or `。` and its filled value 
 ### 提交 API
 
 ```
-POST /api/sessions/:id/plugin-rpc
+POST /api/actions
 
 {
-  "kind": "action",
-  "pluginId": "framework",
-  "action": "submit-form",
+  "requestId": "...",
+  "type": "submit_interaction",
+  "sessionId": "...",
   "payload": {
     "turnId": "...",
     "submissions": [
@@ -1119,6 +1120,8 @@ POST /api/sessions/:id/plugin-rpc
   }
 }
 ```
+
+响应是 SSE 流：`interaction.submitted`，随后是后续回合的事件。请求、拒绝和恢复见 [api.md § 玩家交互](./api.md#玩家交互)。
 
 ---
 

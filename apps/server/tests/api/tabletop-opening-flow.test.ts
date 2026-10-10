@@ -182,38 +182,30 @@ for (const community of [false, true]) {
           }
           return undefined;
         }
-        async function submit(
+        /** Answer a form; returns the last turn the request committed. */
+        function submit(
           target: NonNullable<Awaited<ReturnType<typeof form>>>,
           values: Record<string, unknown>,
         ) {
-          const response = await request(
-            `/api/sessions/${sessionId}/plugin-rpc`,
-            {
-              kind: "action",
-              pluginId: "framework",
-              action: "submit-form",
-              payload: {
-                turnId: target.turnId,
-                submissions: [
-                  {
-                    interactionId: target.form.interactionId,
-                    type: "form",
-                    values,
-                  },
-                ],
+          return action("submit_interaction", {
+            turnId: target.turnId,
+            submissions: [
+              {
+                interactionId: target.form.interactionId,
+                type: "form",
+                values,
               },
-            },
-          );
-          expect(response.status, await response.text()).toBe(200);
+            ],
+          });
         }
         await action("start_session");
         const opening = await form("char-creation");
         expect(opening).toBeDefined();
         expect(await form(`${pluginId}-allocation`)).toBeUndefined();
         expect(await store.listCharacters(sessionId)).toHaveLength(0);
-        await submit(opening!, { characterName: "Ada", persona: "Curious" });
-        const creationTurn = await action("send_message", {
-          content: "Ada begins.",
+        const creationTurn = await submit(opening!, {
+          characterName: "Ada",
+          persona: "Curious",
         });
         const player = (await store.listCharacters(sessionId))[0]!;
         expect(
@@ -244,7 +236,6 @@ for (const community of [false, true]) {
           );
           values[rules.attributes[0]!.id]! += rules.budget;
           await submit(allocation!, values);
-          await action("send_message", { content: "Allocation complete." });
           const updated = (await store.listCharacters(sessionId))[0]!;
           expect(updated.id).toBe(player.id);
           expect(updated.fields).toMatchObject({

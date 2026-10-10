@@ -12,7 +12,8 @@ import {
 import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
 import { createFormTool } from "../../packages/tools/src/builtin/ui-tools.js";
 import { createMemoryStore } from "../../packages/store/src/memory-entry.js";
-import { createSubmitFormHandler } from "../../packages/runtime/src/rpc-defaults/submit-form.js";
+import { createInteractionSubmitter } from "../../packages/runtime/src/interaction/interaction-submission.js";
+import { actionStreamBody } from "./helpers/action-stream.js";
 import { makeRandom } from "../../packages/plugin-test-utils/src/manual-context.js";
 
 // API tests exercise ZIP installation, authorization and durable commits. Here the
@@ -36,7 +37,7 @@ for (const width of [1512, 390]) {
       locale,
     );
     const store = createMemoryStore();
-    const submitFormHandler = createSubmitFormHandler(undefined, store);
+    const submitInteraction = createInteractionSubmitter(undefined, store);
     const data = new Map<string, unknown>([
       [
         "setup/rules",
@@ -194,14 +195,43 @@ for (const width of [1512, 390]) {
             json: { status: "ok", turnId: "opened", runtimeResults: [] },
           });
         }
-        const result = await submitFormHandler(body.payload, {
-          sessionId: fixture.id,
-          pluginId: "framework",
-          store,
-        });
-        return route.fulfill({ json: { status: "ok", result } });
+        return route.fallback();
       },
     );
+    // The answer and its follow-up turn are one action. Registered after the
+    // fixture's own stub, so it sees the request first.
+    let answered = 0;
+    await page.route("**/api/actions", async (route) => {
+      const body = route.request().postDataJSON();
+      if (body.type !== "submit_interaction") return route.fallback();
+      const prepared = await submitInteraction(body.payload, {
+        sessionId: fixture.id,
+      });
+      await prepared.persist(store);
+      answered += 1;
+      return route.fulfill({
+        contentType: "text/event-stream",
+        body: actionStreamBody(body, "settled", [
+          [
+            "interaction.submitted",
+            {
+              interactionTurnId: prepared.turnId,
+              results: prepared.results,
+              ...(prepared.playerMessage
+                ? {
+                    message: {
+                      id: "check-answer",
+                      content: prepared.playerMessage,
+                    },
+                  }
+                : {}),
+            },
+          ],
+          ["execution.started", { status: "executing", runtimeCount: 0 }],
+          ["execution.completed", { committed: true, runtimeCount: 0 }],
+        ]),
+      });
+    });
     try {
       for (const turnId of ["ordinary", "another"]) {
         const output = await check({ ...context, turnId });
@@ -239,7 +269,8 @@ for (const width of [1512, 390]) {
         .getByRole("combobox", { name: "属性", exact: true })
         .selectOption("combat");
       await page.getByRole("button", { name: "进行检定", exact: true }).click();
-      await expect.poll(() => fixture.actions.length).toBe(1);
+      await expect.poll(() => answered).toBe(1);
+      expect(fixture.actions).toHaveLength(0);
       const settled = await check({ ...context, turnId: "settled" });
       expect(settled.value.receipt?.action).toBe("Climb the harbor wall");
       expect(settled.effects?.interactions ?? []).toEqual([]);

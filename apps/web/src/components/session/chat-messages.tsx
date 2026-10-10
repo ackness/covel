@@ -59,7 +59,6 @@ export interface ChatMessagesProps {
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
-    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<InteractionSubmitResult>;
   onRetryRuntime?: (
     runtimeId: string | readonly string[] | undefined,

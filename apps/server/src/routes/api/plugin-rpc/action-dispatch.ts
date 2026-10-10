@@ -4,8 +4,6 @@ import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import {
   createRpcHandlerStoreView,
   RpcDispatchError,
-  FormRejectedError,
-  InteractionAlreadySubmittedError,
   RpcValidationError,
 } from "@covel/runtime";
 import { pluginMessagesFor } from "@covel/shared";
@@ -26,11 +24,10 @@ import {
   resolveSessionCommand,
 } from "../session/commands.js";
 import { runTracedCommand } from "./command-trace.js";
-import { preflightFormApprovals } from "./form-approvals.js";
 import { errorBody } from "../../../api-error.js";
 import { readLockedSession } from "../session/locked-mutation.js";
 
-/** Action dispatch and form authorization share the same session commit lock. */
+/** Action dispatch shares the session commit lock with turns. */
 export async function dispatchPluginAction(
   c: Context,
   session: SessionRecord,
@@ -238,10 +235,9 @@ export async function dispatchPluginAction(
 
   // Action-level dispatch.
   try {
-    // Action handlers can perform read-validate-write sequences (the framework
-    // submit-form default is one). Serialize them with turns and sibling RPCs
-    // so the interaction check and idempotent player-input write are atomic at
-    // the session boundary, including across PG-backed server processes.
+    // Action handlers can perform read-validate-write sequences. Serialize
+    // them with turns and sibling RPCs so each one is atomic at the session
+    // boundary, including across PG-backed server processes.
     const dispatchAction = async () => {
       // Approval was evaluated before taking the session lock so a dialog can
       // return promptly. Re-read the incarnation under the lock before running
@@ -270,14 +266,6 @@ export async function dispatchPluginAction(
       const liveActivePlugins = liveSession.activePlugins ?? [];
       const inactive = inactiveAction(liveSession);
       if (inactive) return inactive;
-      if (pluginId === FRAMEWORK_PLUGIN_SENTINEL && action === "submit-form") {
-        const approval = await preflightFormApprovals(
-          c,
-          liveSession,
-          actionPayload,
-        );
-        if (approval) return approval;
-      }
       let liveCommand = resolvedCommand;
       let liveInvocation = commandInvocation;
       let activeRuntimes: readonly import("@covel/shared").RuntimeManifest[] =
@@ -347,8 +335,7 @@ export async function dispatchPluginAction(
             action,
             payload: body.kind === "command" ? liveInvocation : body.payload,
           },
-          // session.locale lets framework defaults (submit-form) localize their
-          // produced narrative; resolution order request → session → world → app.
+          // session.locale lets a handler localize the text it produces.
           {
             sessionId,
             store: rpcStore,
@@ -406,19 +393,7 @@ export async function dispatchPluginAction(
     });
   } catch (err) {
     if (err instanceof RpcValidationError) {
-      // `form_rejected` marks text written for the player: the client shows
-      // it next to the form instead of reporting a failed request.
-      return c.json(
-        errorBody(
-          err.message,
-          err instanceof FormRejectedError
-            ? { code: err.code, details: { issues: err.issues } }
-            : err instanceof InteractionAlreadySubmittedError
-              ? { code: err.code }
-              : undefined,
-        ),
-        400,
-      );
+      return c.json(errorBody(err.message), 400);
     }
     if (err instanceof RpcDispatchError && err.code !== "handler-threw") {
       const httpStatus = err.code === "unknown-action" ? 404 : 500;

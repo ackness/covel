@@ -29,6 +29,7 @@ const ACTION_TYPES = [
   "retry_runtime",
   "retry_failed_runtimes",
   "retry_turn",
+  "submit_interaction",
 ] as const;
 
 function requiredActionString(
@@ -178,6 +179,40 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
       ...actionBase,
       type: z.literal("retry_turn"),
       payload: z.object(actionRecoveryPayload).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...actionBase,
+      type: z.literal("submit_interaction"),
+      // The answer itself is checked against the committed interaction under
+      // the session lock; a refusal there is written for the player.
+      payload: z
+        .object({
+          turnId: requiredActionString(
+            "submit_interaction.turnId",
+            256,
+            ACTION_ID_PATTERN,
+          ),
+          submissions: z
+            .array(
+              // Not strict: what a client adds beside these three is dropped,
+              // never read (a form's provider comes from the committed message).
+              z.object({
+                interactionId: requiredActionString(
+                  "submit_interaction.interactionId",
+                  256,
+                ),
+                type: z.enum(["form", "choice", "confirmation"]),
+                values: z.record(z.string(), z.unknown()),
+              }),
+            )
+            .min(1, {
+              message: "submit_interaction.submissions must not be empty",
+            })
+            .max(20),
+        })
+        .strict(),
     })
     .strict(),
 ]);

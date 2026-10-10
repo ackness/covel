@@ -1,8 +1,8 @@
 import type { SnapshotSubmittedInteraction } from "@covel/shared";
 
 /**
- * The turn and interaction a message block answers to, as the `submit-form`
- * request names them. One reader for the form that submits and for the restore
+ * The turn and interaction a message block answers to, as the
+ * `submit_interaction` action names them. One reader for the form that submits and for the restore
  * that matches the server's record back to blocks.
  */
 export function readBlockInteractionRef(
@@ -32,20 +32,12 @@ export function submittedBlocksFromServer(
     block?: Record<string, unknown>;
   }[],
   submitted: readonly SnapshotSubmittedInteraction[],
-): {
-  blockId: string;
-  values: Record<string, unknown>;
-  followedUp: boolean;
-}[] {
+): { blockId: string; values: Record<string, unknown> }[] {
   if (submitted.length === 0) return [];
   const byKey = new Map(
     submitted.map((item) => [`${item.turnId}\0${item.interactionId}`, item]),
   );
-  const out: {
-    blockId: string;
-    values: Record<string, unknown>;
-    followedUp: boolean;
-  }[] = [];
+  const out: { blockId: string; values: Record<string, unknown> }[] = [];
   for (const message of messages) {
     if (!message.block) continue;
     const ref = readBlockInteractionRef(message.block, message.turnId);
@@ -54,7 +46,6 @@ export function submittedBlocksFromServer(
       out.push({
         blockId: message.id,
         values: match.values as Record<string, unknown>,
-        followedUp: match.followedUp,
       });
   }
   return out;

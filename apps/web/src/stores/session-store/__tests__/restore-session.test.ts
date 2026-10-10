@@ -334,13 +334,6 @@ describe("restoreSessionState submitted interactions", () => {
           turnId: "t1",
           interactionId: "name",
           values: { name: "Aria" },
-          followedUp: true,
-        },
-        {
-          turnId: "t1",
-          interactionId: "other",
-          values: { name: "Lost" },
-          followedUp: false,
         },
       ],
     });
@@ -364,14 +357,6 @@ describe("restoreSessionState submitted interactions", () => {
         values: { name: "Stale local" },
       },
       { type: "SUBMIT_BLOCK", blockId: "m-form", values: { name: "Aria" } },
-    ]);
-    // An answer no turn followed stays open with the stored values.
-    expect(
-      dispatch.mock.calls
-        .map(([action]) => action)
-        .filter((action) => action.type === "PREFILL_BLOCK"),
-    ).toEqual([
-      { type: "PREFILL_BLOCK", blockId: "m-open", values: { name: "Lost" } },
     ]);
   });
 });
@@ -507,22 +492,5 @@ describe("restoreSessionState stale requests", () => {
       await restoring;
     });
     expect(result.current.state.session?.id).toBe(session.id);
-  });
-});
-
-describe("PREFILL_BLOCK", () => {
-  it("opens a block marked answered and keeps the stored values for the form", () => {
-    const answered = reducer(initialState, {
-      type: "SUBMIT_BLOCK",
-      blockId: "m1",
-      values: { name: "Old" },
-    });
-    const reopened = reducer(answered, {
-      type: "PREFILL_BLOCK",
-      blockId: "m1",
-      values: { name: "Stored" },
-    });
-    expect(reopened.submittedBlockIds.has("m1")).toBe(false);
-    expect(reopened.submittedBlockValues).toEqual({ m1: { name: "Stored" } });
   });
 });

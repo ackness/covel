@@ -1,15 +1,12 @@
 /**
- * Framework default `submit-form` RPC handler.
+ * A player's answer to a committed form, choice or confirmation.
  *
- * Persists player inputs and fills the originating interaction template.
- * This framework default is registered as `plugin-rpc` action
- * `{ pluginId: "framework", action: "submit-form" }`.
+ * The submitter validates the answer against the committed interaction and
+ * fills its narrative template. It writes nothing: the caller stores the
+ * answer with `persist` in the transaction that starts the follow-up turn, so
+ * an interaction is answered once and its turn runs once.
  */
 
-import {
-  answerWasFollowedUp,
-  latestTurnStartedAt,
-} from "./answer-follow-up.js";
 import {
   DEFAULT_LOCALE,
   resolveI18nText,
@@ -18,7 +15,6 @@ import {
 } from "@covel/shared";
 import type { FormIssue, ValidatePluginForm } from "../rpc/form-validator.js";
 import type { DataStore } from "@covel/store";
-import type { RpcHandler, RpcHandlerContext } from "../rpc/rpc-registry.js";
 
 interface Submission {
   readonly interactionId: string;
@@ -27,19 +23,30 @@ interface Submission {
   readonly values: Record<string, unknown>;
 }
 
-interface SubmitFormPayload {
+interface SubmissionPayload {
   readonly turnId: string;
   readonly submissions?: unknown;
 }
 
-interface SubmitFormResult {
-  readonly accepted: boolean;
+export interface PreparedInteractionSubmission {
+  /** The turn whose message carries the answered interactions. */
+  readonly turnId: string;
+  /** One entry per distinct interaction, in the order they were submitted. */
   readonly results: ReadonlyArray<{
     readonly submissionId: string;
     readonly interactionId: string;
+    /** The values as stored: defaults applied, numbers and booleans coerced. */
+    readonly values: Readonly<Record<string, unknown>>;
     readonly filledNarrative: string;
-    readonly accepted: boolean;
   }>;
+  /**
+   * What the follow-up turn takes as the player's message: the filled
+   * narratives, one per line. Empty when every interaction declares
+   * `submitBehavior.echoFilledNarrative: false`.
+   */
+  readonly playerMessage: string;
+  /** Store the answers. Call it in the transaction that starts the turn. */
+  persist(target: Pick<DataStore, "savePlayerInput">): Promise<void>;
 }
 
 interface MessageLike {
@@ -222,7 +229,7 @@ function assertOnlyKeys(
 ): void {
   const unknown = Object.keys(values).find((key) => !allowed.has(key));
   if (unknown) {
-    throw new RpcValidationError(
+    throw new InteractionSubmissionError(
       `Unknown field "${unknown}" for interactionId: ${interactionId}`,
     );
   }
@@ -251,7 +258,7 @@ function validateFormValues(
   locale: string,
 ): Record<string, unknown> {
   if (!Array.isArray(interaction.fields)) {
-    throw new RpcValidationError(
+    throw new InteractionSubmissionError(
       `Committed form ${interaction.interactionId} is missing fields`,
     );
   }
@@ -266,7 +273,7 @@ function validateFormValues(
           ? field.id
           : "";
     if (!name) {
-      throw new RpcValidationError(
+      throw new InteractionSubmissionError(
         `Committed form ${interaction.interactionId} contains a field without a name`,
       );
     }
@@ -391,7 +398,7 @@ function validateFormValues(
         break;
       }
       default:
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           `Committed form ${interaction.interactionId} has unsupported field type: ${String(field.type)}`,
         );
     }
@@ -406,7 +413,7 @@ function validateSubmissionValues(
   locale: string,
 ): Record<string, unknown> {
   if (sub.type !== interaction.type) {
-    throw new RpcValidationError(
+    throw new InteractionSubmissionError(
       `Submission type must match committed interaction type "${interaction.type}" for interactionId: ${sub.interactionId}`,
     );
   }
@@ -422,7 +429,7 @@ function validateSubmissionValues(
       );
       const selectedId = sub.values.selectedId;
       if (typeof selectedId !== "string" || !selectedId) {
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           `selectedId (string) is required for interactionId: ${sub.interactionId}`,
         );
       }
@@ -431,7 +438,7 @@ function validateSubmissionValues(
         : [];
       const selected = choices.find((choice) => choice.id === selectedId);
       if (!selected || typeof selected.label !== "string") {
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           `selectedId must match a declared choice for interactionId: ${sub.interactionId}`,
         );
       }
@@ -440,7 +447,7 @@ function validateSubmissionValues(
     case "confirmation":
       assertOnlyKeys(sub.values, new Set(["confirmed"]), sub.interactionId);
       if (typeof sub.values.confirmed !== "boolean") {
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           `confirmed (boolean) is required for interactionId: ${sub.interactionId}`,
         );
       }
@@ -536,20 +543,25 @@ const ALREADY_SUBMITTED = {
   "ru-RU": "Этот ответ уже отправлен. Обновите страницу, чтобы увидеть его.",
 } as const satisfies I18nText;
 
-export class RpcValidationError extends Error {
+/**
+ * The submission was refused and nothing was stored. Without a subclass it
+ * describes a request the client must not have sent.
+ */
+export class InteractionSubmissionError extends Error {
+  readonly code: string = "invalid_interaction_submission";
+
   constructor(message: string) {
     super(message);
-    this.name = "RpcValidationError";
+    this.name = "InteractionSubmissionError";
   }
 }
 
 /**
  * The player's values were refused and the form stays open for a correction.
- * The message is for the player, in the session's language; every other
- * `RpcValidationError` describes a request the client must not have sent.
+ * The message is for the player, in the session's language.
  */
-export class FormRejectedError extends RpcValidationError {
-  readonly code = "form_rejected";
+export class FormRejectedError extends InteractionSubmissionError {
+  override readonly code = "form_rejected";
   /**
    * What was refused, one entry per reason. An issue with a `field` belongs to
    * that field of the form; one without belongs to the form as a whole.
@@ -568,39 +580,37 @@ export class FormRejectedError extends RpcValidationError {
  * The interaction already has a stored answer. The message is for the player,
  * in the session's language.
  */
-export class InteractionAlreadySubmittedError extends RpcValidationError {
-  readonly code = "interaction_already_submitted";
+export class InteractionAlreadySubmittedError extends InteractionSubmissionError {
+  override readonly code = "interaction_already_submitted";
 }
 
-export function createSubmitFormHandler(
+/**
+ * Call the submitter under the session lock: the "already answered" check and
+ * the caller's `persist` are one decision only while no other request writes.
+ */
+export function createInteractionSubmitter(
   validatePluginForm: ValidatePluginForm | undefined,
-  frameworkStore: Pick<
-    DataStore,
-    | "listPlayerInputs"
-    | "listTurnMessages"
-    | "withTransaction"
-    | "queryTraceEvents"
-  >,
-): RpcHandler {
+  store: Pick<DataStore, "listPlayerInputs" | "listTurnMessages">,
+) {
   return async (
     payload: unknown,
-    context: RpcHandlerContext,
-  ): Promise<SubmitFormResult> => {
+    context: { readonly sessionId: string; readonly locale?: string },
+  ): Promise<PreparedInteractionSubmission> => {
     const { sessionId } = context;
     const locale = context.locale ?? DEFAULT_LOCALE;
     const labels = resolveLabels(locale);
 
     if (!payload || typeof payload !== "object") {
-      throw new RpcValidationError("payload must be an object");
+      throw new InteractionSubmissionError("payload must be an object");
     }
-    const body = payload as SubmitFormPayload;
+    const body = payload as SubmissionPayload;
 
     if (!body.turnId || typeof body.turnId !== "string") {
-      throw new RpcValidationError("turnId (string) is required");
+      throw new InteractionSubmissionError("turnId (string) is required");
     }
 
     if (!Array.isArray(body.submissions) || body.submissions.length === 0) {
-      throw new RpcValidationError("submissions[] is required");
+      throw new InteractionSubmissionError("submissions[] is required");
     }
 
     const submissions: Submission[] = [];
@@ -610,16 +620,18 @@ export function createSubmitFormHandler(
         typeof rawSubmission !== "object" ||
         Array.isArray(rawSubmission)
       ) {
-        throw new RpcValidationError("Each submission must be an object");
+        throw new InteractionSubmissionError(
+          "Each submission must be an object",
+        );
       }
       const sub = rawSubmission as Submission;
       if (!sub.interactionId || typeof sub.interactionId !== "string") {
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           "Each submission requires interactionId (string)",
         );
       }
       if (!VALID_TYPES.has(sub.type)) {
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           `Invalid submission type: ${sub.type}. Must be form|choice|confirmation`,
         );
       }
@@ -628,27 +640,23 @@ export function createSubmitFormHandler(
         typeof sub.values !== "object" ||
         Array.isArray(sub.values)
       ) {
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           `submission.values must be an object for interactionId: ${sub.interactionId}`,
         );
       }
       submissions.push(sub);
     }
 
-    const messages = (await frameworkStore.listTurnMessages(
+    const messages = (await store.listTurnMessages(
       sessionId,
     )) as readonly MessageLike[];
-    const existingInputs = await frameworkStore.listPlayerInputs(sessionId);
-    const latestTurnStarted = await latestTurnStartedAt(
-      frameworkStore,
-      sessionId,
-    );
+    const existingInputs = await store.listPlayerInputs(sessionId);
     const prepared: Array<{
       readonly submissionId: string;
       readonly interactionId: string;
       readonly values: Record<string, unknown>;
       readonly filledNarrative: string;
-      readonly shouldPersist: boolean;
+      readonly echo: boolean;
     }> = [];
     const preparedByKey = new Map<string, (typeof prepared)[number]>();
 
@@ -659,7 +667,7 @@ export function createSubmitFormHandler(
         sub.interactionId,
       );
       if (!located) {
-        throw new RpcValidationError(
+        throw new InteractionSubmissionError(
           `No committed interaction found for turnId=${body.turnId}, interactionId=${sub.interactionId}`,
         );
       }
@@ -673,13 +681,13 @@ export function createSubmitFormHandler(
           typeof validation !== "object" ||
           Array.isArray(validation)
         ) {
-          throw new RpcValidationError(
+          throw new InteractionSubmissionError(
             "Committed form has invalid validation metadata",
           );
         }
         const { name, data } = validation as Record<string, unknown>;
         if (typeof name !== "string" || !name || !validatePluginForm) {
-          throw new RpcValidationError(
+          throw new InteractionSubmissionError(
             "Form validator is unavailable; activate and approve its plugin first",
           );
         }
@@ -693,7 +701,7 @@ export function createSubmitFormHandler(
             data,
           });
         } catch (error) {
-          throw new RpcValidationError(
+          throw new InteractionSubmissionError(
             error instanceof Error ? error.message : "Form validation failed",
           );
         }
@@ -719,80 +727,65 @@ export function createSubmitFormHandler(
       const duplicateInBatch = preparedByKey.get(key);
       if (duplicateInBatch) {
         if (stableJson(duplicateInBatch.values) !== stableJson(values)) {
-          throw new RpcValidationError(
+          throw new InteractionSubmissionError(
             `Interaction ${sub.interactionId} is submitted more than once with conflicting values`,
           );
         }
-        prepared.push({ ...duplicateInBatch, shouldPersist: false });
         continue;
       }
 
-      // One answer per interaction, and its follow-up turn runs once. A
-      // second request is refused when a turn already started after the
-      // answer. While none has (the response was lost, or the follow-up never
-      // left the browser) the same values are accepted again and return the
-      // stored submission, so the client can start the follow-up.
-      const existing = existingInputs.find(
-        (input) =>
-          input.turnId === body.turnId && input.formId === sub.interactionId,
-      );
-      if (existing) {
-        const comparable =
-          existing.values &&
-          typeof existing.values === "object" &&
-          !Array.isArray(existing.values)
-            ? validateSubmissionValues(
-                { ...sub, values: existing.values as Record<string, unknown> },
-                located.interaction,
-                locale,
-              )
-            : existing.values;
-        if (
-          answerWasFollowedUp(existing.createdAt, latestTurnStarted) ||
-          stableJson(comparable) !== stableJson(values)
-        ) {
-          throw new InteractionAlreadySubmittedError(
-            resolveLabel(ALREADY_SUBMITTED, locale),
-          );
-        }
+      // One answer per interaction. The answer is stored in the transaction
+      // that starts its follow-up turn, so a stored answer means the turn
+      // exists: a second submit is refused whatever its values, and the
+      // client reads the turn instead.
+      if (
+        existingInputs.some(
+          (input) =>
+            input.turnId === body.turnId && input.formId === sub.interactionId,
+        )
+      ) {
+        throw new InteractionAlreadySubmittedError(
+          resolveLabel(ALREADY_SUBMITTED, locale),
+        );
       }
+      const submitBehavior = located.interaction.submitBehavior as
+        { readonly echoFilledNarrative?: unknown } | undefined;
       const item = {
-        submissionId: existing?.id ?? crypto.randomUUID(),
+        submissionId: crypto.randomUUID(),
         interactionId: sub.interactionId,
         values,
         filledNarrative: fillTemplate(normalizedSub, located, labels),
-        shouldPersist: !existing,
+        echo: submitBehavior?.echoFilledNarrative !== false,
       };
       prepared.push(item);
       preparedByKey.set(key, item);
     }
 
-    const writes = prepared.filter((item) => item.shouldPersist);
-    const persist = async (target: Pick<DataStore, "savePlayerInput">) => {
-      const createdAt = new Date().toISOString();
-      for (const item of writes) {
-        await target.savePlayerInput({
-          id: item.submissionId,
-          sessionId,
-          turnId: body.turnId,
-          formId: item.interactionId,
-          values: item.values,
-          createdAt,
-        });
-      }
-    };
-    if (writes.length > 0) {
-      await frameworkStore.withTransaction(async (tx) => persist(tx));
-    }
-
     return {
-      accepted: true,
+      turnId: body.turnId,
       results: prepared.map((item) => ({
         submissionId: item.submissionId,
         interactionId: item.interactionId,
+        values: item.values,
         filledNarrative: item.filledNarrative,
-        accepted: true,
       })),
+      playerMessage: prepared
+        .filter((item) => item.echo && item.filledNarrative)
+        .map((item) => item.filledNarrative)
+        .join("\n"),
+      persist: async (target) => {
+        const createdAt = new Date().toISOString();
+        for (const item of prepared) {
+          await target.savePlayerInput({
+            id: item.submissionId,
+            sessionId,
+            turnId: body.turnId,
+            formId: item.interactionId,
+            values: item.values,
+            createdAt,
+          });
+        }
+      },
     };
   };
 }

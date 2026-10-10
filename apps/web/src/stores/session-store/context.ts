@@ -40,7 +40,6 @@ export interface SessionActions {
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
-    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<InteractionSubmitResult>;
   executeCommand: (command: string) => void;
   retryRuntime: (

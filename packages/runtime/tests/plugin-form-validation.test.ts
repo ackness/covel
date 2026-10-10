@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import { createSubmitFormHandler } from "../src/rpc-defaults/submit-form.js";
-import { createRpcHandlerStoreView } from "../src/function-runtime/plugin-handler-helpers.js";
+import { submitAndStore as createSubmitFormHandler } from "./submit-and-store.js";
 
 async function fixture(sourcePluginId: string | undefined = "provider") {
   const store = createMemoryStore();
@@ -26,14 +25,7 @@ async function fixture(sourcePluginId: string | undefined = "provider") {
       validation: { name: "budget", data: { limit: 4 } },
     })),
   });
-  const context = {
-    sessionId: "session",
-    pluginId: "framework",
-    store: createRpcHandlerStoreView(store, {
-      sessionId: "session",
-      pluginId: "framework",
-    }),
-  };
+  const context = { sessionId: "session" };
   const submission = (interactionId: string, points: unknown) => ({
     interactionId,
     type: "form",

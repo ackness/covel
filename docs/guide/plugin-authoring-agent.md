@@ -153,9 +153,9 @@ covel.registerFormValidator("point-buy", (values, data, context) => {
 });
 ```
 
-校验器是同步纯函数，第三个参数是会话语言和本插件在该语言下的翻译。返回字符串是整张表单的错误；返回 `{ field, message }` 或它们的数组（`PluginFormIssue`）时，玩家在对应字段下面看到每一条，所有出错的字段一次全部列出。被拒绝的提交返回 `400` 和 `code: "form_rejected"`，不写入任何内容，玩家填的值保留。
+校验器是同步纯函数，第三个参数是会话语言和本插件在该语言下的翻译。返回字符串是整张表单的错误；返回 `{ field, message }` 或它们的数组（`PluginFormIssue`）时，玩家在对应字段下面看到每一条，所有出错的字段一次全部列出。被拒绝的提交在响应流里是一个 `code: "form_rejected"` 的 `error.occurred`，不写入任何内容，也不开始回合，玩家填的值保留。
 
-同一张表单（同一个 `turnId` 和 `interactionId`）只能回答一次：答案之后已有回合开始时，再次提交返回 `code: "interaction_already_submitted"`。别的标签页或设备重新载入时，`GET /api/sessions/:id/view` 的 `submittedInteractions` 把已回答的表单标为已回答。契约见 [tools.md](../reference/tools.md) 和 [api.md](../reference/api.md)。
+玩家的回答通过 `POST /api/actions` 的 `submit_interaction` 提交：同一个请求保存回答并运行读取它的回合。同一张表单（同一个 `turnId` 和 `interactionId`）只能回答一次，再次提交得到 `code: "interaction_already_submitted"`。别的标签页或设备重新载入时，`GET /api/sessions/:id/view` 的 `submittedInteractions` 把已回答的表单标为已回答。契约见 [tools.md](../reference/tools.md) 和 [api.md](../reference/api.md)。
 
 ## RPC 与玩家命令
 

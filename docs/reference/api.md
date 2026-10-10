@@ -294,12 +294,12 @@ curl -N -X POST http://localhost:3001/api/actions \
 ### 10. 提交玩家交互（如果 Turn 返回了 pendingInputs）
 
 ```bash
-curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
+curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
-    "kind": "action",
-    "pluginId": "framework",
-    "action": "submit-form",
+    "requestId": "req-003",
+    "type": "submit_interaction",
+    "sessionId": "<sessionId>",
     "payload": {
       "turnId": "<turnId>",
       "submissions": [
@@ -460,7 +460,7 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 > 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 >
-> 视图的 `submittedInteractions` 列出玩家已经通过 `submit-form` 回答过的交互 `{ turnId, interactionId, values, followedUp }[]`，`values` 是服务端落库的值（会话内全部记录，不受消息窗口限制），`followedUp` 表示答案落库之后是否有回合开始（由 trace 里的 `turn.started` 推出，不另存字段）。`followedUp` 为 true 时客户端把对应消息里的表单标成已提交并回填；为 false（后续请求丢失）时表单保持打开并填入已存的值，玩家点一次提交即可让后续回合运行。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。
+> 视图的 `submittedInteractions` 列出玩家已经回答过的交互 `{ turnId, interactionId, values }[]`，`values` 是服务端落库的值（会话内全部记录，不受消息窗口限制）。答案与它的后续回合在同一个 `submit_interaction` 请求里落库和开始，所以列在这里的交互一定已经有回合跟上：客户端把对应消息里的表单标成已提交并回填，不再发送。刷新、换设备或在第二个标签页打开时与提交的那个浏览器一致；浏览器自己的缓存只在提交与下次恢复之间有效，服务端记录优先。提交的响应丢失时，客户端从这里得知答案已经落库，并通过 `execution` 状态观察那个回合。
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
@@ -524,7 +524,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 | 方法   | 路径                                  | 描述                                                                                               |
 | ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action / runtime / command / event 级，含 `submit-form`)                         |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action / runtime / command / event 级)                                           |
 | GET    | `/api/sessions/:id/approvals`         | 列出该 session 的待批准 RPC 请求                                                                   |
 | DELETE | `/api/sessions/:id/approvals`         | 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
 | POST   | `/api/approvals/:approvalId/decision` | 提交玩家批准决定(allow/deny + once/session)                                                        |
@@ -1559,7 +1559,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
 - `session.completedPlayerTurns` 表示已提交的主循环玩家进度：setup 阶段的执行会保存 `turn_results`，但不会计入；`phase` 翻到 `playing` 后由首个成功的 player logical turn 推进为 `1`
 - 服务端通过 `commitExecution` 在一个事务中提交顶层和递归子执行结果、journal 与 suspension；内部逐结果执行 normalize → state.commit，事务提交后再发布 SessionEvent。
-- 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
+- 如果某个 Runtime 的输出包含 `pendingInputs`，玩家的回答通过 `POST /api/actions` 的 `submit_interaction` 提交：同一个请求保存回答并运行读取它的回合
 - `turnCompletion.mode: detached` 只会对通过安全检查的 `post-turn` / `audit` function 叶节点生效；其上游结果、来源 execution、模型和设置在原始回合冻结，queued 记录与原始回合原子提交。静态不安全的声明保留前台执行并产生诊断
 
 ---
@@ -1617,27 +1617,19 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ### 玩家交互
 
-当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过 `framework.submit-form` 提交响应。handler 校验并持久化提交，返回自然语言 `filledNarrative`；Web 再把该文本作为下一次 `/api/actions` 的玩家消息。若该动作完成最后一个 setup runtime，服务端会在同一 SSE 流中以新的 `turnId` 和独立事务自动接力主循环，因此 setup completion 与第一段正式叙事属于两个 turn。
+当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家的回答通过 `submit_interaction` action 提交。**保存回答和开始后续回合是服务端的一次操作**：在同一把会话锁内校验回答、确认它还没有被回答过，然后在一个事务里写入玩家输入和后续回合的 `turn.started`，随后在同一条 SSE 流上运行这个回合，回答填成的自然语言就是这个回合的玩家消息。不存在“回答已保存、回合没有开始”的中间状态，第二个标签页或一次重试也不会让回合再跑一遍。若该回合完成最后一个 setup runtime，服务端会在同一 SSE 流中以新的 `turnId` 和独立事务自动接力主循环，因此 setup completion 与第一段正式叙事属于两个 turn。
 
-#### `POST /api/sessions/:id/plugin-rpc` (`framework.submit-form`)
+#### `POST /api/actions` (`submit_interaction`)
 
-带插件校验器的旧表单在重启或撤销授权后，提交会先返回 **202** `approval-required`，请求其来源插件的 `covel:plugin-server-code` session grant。来源只从已提交 interaction 的 `sourcePluginId` 读取，客户端不能指定。批量提交可依次请求多个插件；全部授权和校验通过后才一次性写入。拒绝授权保留表单内容；已禁用或卸载的来源插件返回 400，不会自动启用。Web 在授权后重发同一份提交，hosted 部署同时需要 operator 凭证。
-
-提交一个或多个玩家交互响应。
-
-**参数:**
-
-| 参数 | 位置 | 说明    |
-| ---- | ---- | ------- |
-| `id` | 路径 | 会话 ID |
+提交一个或多个玩家交互响应，并运行读取它们的回合。请求头、SSE 帧格式和开场接力见 [`POST /api/actions`](#post-apiactions)。
 
 **请求体:**
 
 ```json
 {
-  "kind": "action",
-  "pluginId": "framework",
-  "action": "submit-form",
+  "requestId": "req-003",
+  "type": "submit_interaction",
+  "sessionId": "mistport-a1b2c3d4",
   "payload": {
     "turnId": "a1b2c3d4-...",
     "submissions": [
@@ -1655,12 +1647,11 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-| 字段                  | 类型         | 必填 | 说明                   |
-| --------------------- | ------------ | ---- | ---------------------- |
-| `pluginId`            | string       | 是   | 固定为 `"framework"`   |
-| `action`              | string       | 是   | 固定为 `"submit-form"` |
-| `payload.turnId`      | string       | 是   | 产生该交互的 Turn ID   |
-| `payload.submissions` | Submission[] | 是   | 提交数组               |
+| 字段                  | 类型         | 必填 | 说明                          |
+| --------------------- | ------------ | ---- | ----------------------------- |
+| `type`                | string       | 是   | 固定为 `"submit_interaction"` |
+| `payload.turnId`      | string       | 是   | 产生该交互的 Turn ID          |
+| `payload.submissions` | Submission[] | 是   | 提交数组，1–20 项             |
 
 **Submission 对象:**
 
@@ -1669,6 +1660,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 | `interactionId` | string                                     | 交互 ID，来自 Turn 输出的 `pendingInputs` |
 | `type`          | `"form"` \| `"choice"` \| `"confirmation"` | 交互类型                                  |
 | `values`        | object                                     | 玩家输入的值                              |
+
+Submission 里的其他键被丢弃：来源插件、字段定义和模板只从已提交的交互读取。
 
 **三种交互类型的 values 格式：**
 
@@ -1702,46 +1695,75 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-**响应:**
+**响应:** SSE 事件流。回答被接受时，第一个事件是 `interaction.submitted`，之后是一个普通回合的事件（`execution.started` … `execution.completed`）：
 
 ```json
 {
-  "status": "ok",
-  "result": {
+  "type": "interaction.submitted",
+  "turnId": "<后续回合的 turnId>",
+  "payload": {
+    "interactionTurnId": "a1b2c3d4-...",
     "results": [
       {
+        "submissionId": "…",
         "interactionId": "char-creation-form",
-        "filledNarrative": "旅人自称艾尔文，是一名孤儿出身的流浪剑客，以战士之姿行走江湖。",
-        "accepted": true
+        "values": { "name": "艾尔文", "class": "战士" },
+        "filledNarrative": "旅人自称艾尔文，是一名孤儿出身的流浪剑客，以战士之姿行走江湖。"
       }
     ],
-    "accepted": true
+    "message": { "id": "…", "content": "旅人自称艾尔文，……" }
   }
 }
 ```
 
-**错误响应:**
+| 字段                | 说明                                                                                                                                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interactionTurnId` | 产生该交互的回合。envelope 的 `turnId` 是后续回合                                                                                                                                                                                       |
+| `results[].values`  | 服务端落库的值（数字、布尔已按字段类型规范化，`selectedLabel` 取自原 option）。客户端用它回填表单，而不是用玩家键入的文字                                                                                                               |
+| `message`           | 后续回合的玩家消息：`id` 是落库的 `turn_messages` 行的 ID，`content` 是各 `filledNarrative` 用换行连起来的文字。交互声明 `submitBehavior.echoFilledNarrative: false` 时它的叙事不计入；全部不计入时没有 `message`，回合不带玩家消息运行 |
+
+**拒绝:** 回答没有被接受时，流里只有一个 `error.occurred`，没有 `interaction.submitted` 和 `execution.started`，没有任何内容落库，也没有回合开始。HTTP 状态是 200。
 
 ```json
-{ "error": "turnId is required" }                           // 400
-{ "error": "submissions[] is required" }                    // 400
-{ "error": "请填写“姓名”。", "code": "form_rejected",
-  "details": { "issues": [{ "field": "name", "message": "请填写“姓名”。" }] } }  // 400
-{ "error": "Session not found: <id>", "code": "session_not_found" }  // 404
+{ "type": "error.occurred", "payload": {
+    "message": "请填写“姓名”。", "code": "form_rejected",
+    "details": { "issues": [{ "field": "name", "message": "请填写“姓名”。" }] } } }
+{ "type": "error.occurred", "payload": {
+    "message": "这项内容已经提交过了。……", "code": "interaction_already_submitted" } }
+{ "type": "error.occurred", "payload": {
+    "message": "Interaction not found: …", "code": "invalid_interaction_submission" } }
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。`interaction_already_submitted` 同为写给玩家的文字，不带 `details`。没有 `code` 的 400 是客户端不该发出的请求。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`message` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`message` 是这些条目用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。
+
+`interaction_already_submitted` 同为写给玩家的文字，不带 `details`：这个 `(turnId, interactionId)` 已经有落库的回答，无论这次的值是否相同。回答它的那个请求同时开始了后续回合，所以客户端不重发，而是从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 取已存的值标记表单，并通过 `GET /api/sessions/:id/execution` 观察那个回合（运行中、已提交，或失败后可由现有重试再跑）。
+
+`invalid_interaction_submission` 是客户端不该发出的请求（交互不存在、类型不一致、值的形状不对）。
+
+流开始之前的 JSON 响应：
+
+```json
+{ "status": "approval-required", "approvalId": "…", "pending": { … } }   // 202
+{ "error": "…", "code": "invalid_action_request" }                       // 400，请求体不合 schema
+{ "error": "…", "code": "form_provider_inactive" }                       // 400
+{ "error": "…", "code": "form_provider_unavailable" }                    // 400
+{ "error": "…", "code": "form_validator_undeclared" }                    // 400
+{ "error": "Session not found: <id>", "code": "session_not_found" }      // 404
+```
+
+带插件校验器的表单在服务端重启或撤销授权后，提交会先返回 **202** `approval-required`，请求其来源插件的 `covel:plugin-server-code` session grant。来源只从已提交 interaction 的 `sourcePluginId` 读取，客户端不能指定。批量提交可依次请求多个插件；全部授权和校验通过后才一次性写入。拒绝授权保留表单内容；已禁用或卸载的来源插件返回 400，不会自动启用。Web 在授权后用同一个 `requestId` 重发同一份提交，hosted 部署同时需要 operator 凭证。授权检查先于“是否已回答”的判定：对一张已经回答过、来源插件的授权又已失效的表单再次提交，会先得到 202，授权之后才得到 `interaction_already_submitted`。
+
+**连接中断:** 回合一旦开始就在服务端运行到提交，与这条连接无关。响应丢失的客户端不知道回答是否落库，因此不重发：它轮询 `GET /api/sessions/:id/execution`，并从聚合视图的 `submittedInteractions` 把表单标成已提交。后续回合失败时，`execution.retry` 给出的是 `send_message`（内容为那条玩家消息）或 `retry_turn`（没有玩家消息时），重试不会再次提交回答。
 
 **使用说明:**
 
-- handler 只接受当前 session 对话日志中已经提交的 assistant interaction；`turnId` / `interactionId` / `type` 必须与原交互一致，客户端无法凭空构造表单或改写交互类型
+- 只接受当前 session 对话日志中已经提交的 assistant interaction；`turnId` / `interactionId` / `type` 必须与原交互一致，客户端无法凭空构造表单或改写交互类型
 - `form` 会校验 required、字段集合和字段类型；`choice.selectedId` 必须来自原 options，`selectedLabel` 由服务端按原 option 规范化；`confirmation.confirmed` 必须是 boolean
-- 同一 `(turnId, interactionId)` 只能回答一次，后续回合也只跑一次。答案落库之后只要有回合（成功的，或失败后由现有重试再跑的）在它之后开始，再次提交（无论值是否相同）都返回 400 和 `code: "interaction_already_submitted"`，`error` 是按会话 locale 写给玩家的文字，不写入任何内容。这样第二个标签页里还开着的旧表单不会让回合再跑一遍。答案已落库但还没有回合跟上（响应丢失、或浏览器在两个请求之间关闭）时，相同的值会再次被接受并返回已存的 `submissionId` 与 `filledNarrative`，客户端据此发出后续 action；不同的值同样返回 `interaction_already_submitted`。已存的回答和 `followedUp` 从 `GET /api/sessions/:id/view` 的 `submittedInteractions` 读取。同一批次内对同一交互重复给出相同值仍合并为一条。批量提交会先全部校验，再在事务内统一写入
-- `filledNarrative` 是将玩家输入填入模板后的**纯自然语言**文本，不含 JSON 结构
-- handler 本身不写 `turn_messages`；Web 把该文本作为下一次 action 的玩家消息，供叙事者参考
+- 同一 `(turnId, interactionId)` 只能回答一次。两个请求同时提交同一个交互时，会话锁让它们先后判定：先到的保存回答并运行回合，后到的收到 `interaction_already_submitted`。同一批次内对同一交互重复给出相同值合并为一条。批量提交先全部校验，再与 `turn.started` 在同一个事务内写入
+- `filledNarrative` 是将玩家输入填入模板后的**纯自然语言**文本，不含 JSON 结构；它作为后续回合的玩家消息写入 `turn_messages`，供叙事者参考
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
 - 已提交交互缺少模板时会生成简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
-- **本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]`/`[玩家选择]`/`[玩家确认]`/`[玩家取消]`）按**会话 locale** 解析——框架把 `session.locale` 注入 handler，由共享 locale 解析器选择文案。内置交互文案支持 `zh-CN`、`en-US` 和 `ru-RU`；未提供 locale 时保留 `zh-CN` 默认输出，指定但不受支持的 locale 按共享解析规则回退 `en-US`。`en-US` 会产出 `Confirm`/`Cancel` 与 `[Player input]`/`[Player choice]`/`[Player confirmed]`/`[Player cancelled]`。
+- **本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]`/`[玩家选择]`/`[玩家确认]`/`[玩家取消]`）按**会话 locale** 解析。内置交互文案支持 `zh-CN`、`en-US` 和 `ru-RU`；指定但不受支持的 locale 按共享解析规则回退 `en-US`。`en-US` 会产出 `Confirm`/`Cancel` 与 `[Player input]`/`[Player choice]`/`[Player confirmed]`/`[Player cancelled]`。
 
 ---
 
@@ -1751,14 +1773,14 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 统一的"结构化插件指令"通道。同时支持:
 
-1. **Action 级**: `{ kind: "action", pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
+1. **Action 级**: `{ kind: "action", pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `slash-debug`)。返回单次 JSON。
 2. **Runtime 级**: `{ kind: "runtime", pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 在会话锁内排入一条持久 runtime job（`_runtime_jobs`，`origin.activation: "manual"`）后立即返回 202 + `jobId`；runtime job worker 认领、执行并在同一事务内提交领域写入与任务终态。状态经 `job-status.updated` 与 `_runtime_jobs` 的 `plugin-data.changed` 推送。入口 runtime 发出的 background follower 在同一提交事务内排为事件任务（`origin.activation: "event"`），记录在父任务 `result.deferredJobs`。
 3. **Command 级**: `{ kind: "command", commandId, input }` 或 `{ kind: "command", commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
 4. **Event 级**: `{ kind: "event", pluginId, topic, payload }` — 插件自己的界面发出一个该插件声明的领域事件（JSON-RENDER 或 `webview` 的 `emitEvent`）。`topic` 必须在这个插件的 `contributes.events` 里，`advertise: false` 的内部 topic 也可以；别的插件声明的 topic 一律返回 `404 event_not_declared`。`payload` 按该 topic 的 schema 校验，不合格返回 `400 event_payload_invalid`。校验和审批通过后，会话里所有订阅该 topic 的 runtime（`trigger: { type: event, topic }`，可以属于任何已启用的插件）在同一事务内排成事件任务（`_runtime_jobs`，`origin.activation: "event"`，`origin.sourceTurnId` 为本次发射的 `eventId`），由 runtime job worker 带着 `ctx.triggerEvent` 执行并各自提交。请求本身不执行 runtime：返回 `200 { status: "ok", eventId, topic, deferredJobs: [{ jobId, runtimeId }] }`，没有订阅者时 `deferredJobs` 为空。与手动触发 runtime 一样，点击就是触发决定，订阅者的 `startTurn` / `maxTriggerCount` / `cooldownTurns` 不参与判断。社区插件按 `event:<topic>` 走审批；订阅者里的社区 runtime 还各需要与手动触发相同的两项授权（服务端代码、`runtime:<name>`），否则 runtime 加载器会拒绝执行。请求每次返回缺少的第一项（`202 approval-required`），客户端批准后重试，直到全部具备才排入任务。后台任务只在会话有可用模型凭据时执行（与其他后台任务相同），否则保持 `queued`。
 
-**写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行，例如 `submit-form` 的表单批次原子提交。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#输入和输出)。
+**写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#输入和输出)。
 
 插件 action 必须属于会话当前启用的插件。服务端在审批前及取得会话锁后分别检查；禁用插件返回 `404 plugin_not_active`，不会执行 handler 或新增审批。`pluginId: "framework"` 的框架默认 action 不属于插件启用集，仍按各自准入条件执行。旧面板发出的迟到请求同样受此检查约束。
 
@@ -1769,26 +1791,6 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 | `id` | 路径 | 会话 ID |
 
 **请求体:**
-
-```json
-{
-  "kind": "action",
-  "pluginId": "framework",
-  "action": "submit-form",
-  "payload": {
-    "turnId": "a1b2c3d4-...",
-    "submissions": [
-      {
-        "interactionId": "char-form",
-        "type": "form",
-        "values": { "name": "艾尔文" }
-      }
-    ]
-  }
-}
-```
-
-或 action 级:
 
 ```json
 {
@@ -1847,13 +1849,12 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 **解析顺序(action 级):**
 
 1. 插件在 `entry` 中注册的 action(通过 `pluginId` 命名空间隔离)
-2. 框架默认 action(全局)——包括 `submit-form` 与内置 `/debug` 使用的 `slash-debug` (`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
+2. 框架默认 action(全局)——内置 `/debug` 使用的 `slash-debug` 与 `/plugins` 使用的 `slash-plugins` (`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
 
 **框架默认 action:**
 
 | Action          | 说明                                                                                   |
 | --------------- | -------------------------------------------------------------------------------------- |
-| `submit-form`   | 绑定已提交 interaction，校验并幂等持久化玩家输入，再按 `{{字段}}` 填充自然语言         |
 | `slash-debug`   | 读取 `/debug` 声明的 session/runtime/model 上下文并让客户端打开当前会话调试页          |
 | `slash-plugins` | 仅接受 `framework:plugins` command 上下文，打开当前会话的插件诊断视图，可带 `pluginId` |
 
@@ -3105,20 +3106,21 @@ id: evt-002
 }
 ```
 
-支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime` · `retry_failed_runtimes`。六种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
+支持的 `type`：`send_message` · `execute_command` · `submit_interaction` · `start_session` · `retry_turn` · `retry_runtime` · `retry_failed_runtimes`。七种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
 
 **社区插件授权**：缺少授权时，在启动 SSE 和写入回合之前返回 HTTP **202 JSON** `{ status: "approval-required", approvalId, pending }`。客户端通过审批接口授予当前会话权限后，使用同一个 `requestId` 重发原请求；可能依次询问 `covel:plugin-server-code` 及各个 `runtime:<name>`。普通动作检查已选插件中参与自动执行的 runtime（经过 contract dependency resolver 解析），显式重试只检查选定的目标；手动 runtime 的普通调用仍走 plugin-RPC 授权。拒绝审批不得执行回合。hosted 模式仍要求 operator 权限；执行器在真正加载代码时继续检查授权。Web 客户端支持连续审批，并拒绝重复或跨会话的审批响应。
 
-| `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                                                                         |
-| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                              |
-| `command`         | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                         |
-| `loreOverride`    | `start_session`         | 可选的显式覆盖，最多 500000 字符。服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空；省略则保留已保存快照。Web Prep 在创建会话时传入快照，开始冒险不再发送世界草稿。 |
-| —                 | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                                                                              |
-| `runtimeId`       | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                   |
-| `retryFromTurnId` | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。                                                       |
-| `runtimeIds`      | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                                                                         |
-| `retryFromTurnId` | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                                                                                  |
+| `payload` 字段          | 适用 `type`             | 说明                                                                                                                                                                                                                                         |
+| ----------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`               | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                              |
+| `command`               | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                         |
+| `turnId`, `submissions` | `submit_interaction`    | 回答一个回合提出的交互并运行读取它的回合，见[玩家交互](#玩家交互)。                                                                                                                                                                          |
+| `loreOverride`          | `start_session`         | 可选的显式覆盖，最多 500000 字符。服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空；省略则保留已保存快照。Web Prep 在创建会话时传入快照，开始冒险不再发送世界草稿。 |
+| —                       | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                                                                              |
+| `runtimeId`             | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                   |
+| `retryFromTurnId`       | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。                                                       |
+| `runtimeIds`            | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                                                                         |
+| `retryFromTurnId`       | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                                                                                  |
 
 **批量恢复边界**：一次 action、一次会话锁和一次事务提交，不追加玩家输入、不推进玩家回合数、不触发开场接力。仅原始回合及关联的已提交重试中成功的非目标结果可作为上下文；种子不会重复提交或重放事件。目标间保留正常输入校验、依赖顺序和独立任务并行；失败依赖导致的 skipped 不会把原失败任务标为已修复。批量恢复和带明确来源的单任务恢复均保持前台，不通过事件订阅、递归调用或后台分发扩大所选范围。显式单任务来源重试同样校验来源与最新失败状态；普通不带来源的 manual / plugin-RPC 调用保留原有事件链、递归和分发行为。
 
@@ -3128,7 +3130,7 @@ id: evt-002
 
 **`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 先读取服务端 `GET /api/worlds/:id/plugin-plan` 的解析结果，再把玩家最终选择显式传给创建接口。`plugin-plan.defaultPluginIds` 使用与会话相同的 `requires`、`conflicts` 和可信 builtin core 替换规则解析；准备页遵守该结果，不重新锁定已被替代的 core 插件。服务端创建路由不再次读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
-**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力以 `origin: continuation` 执行，不增加 `completedPlayerTurns`。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` / `retry_failed_runtimes` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
+**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `submit_interaction` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力以 `origin: continuation` 执行，不增加 `completedPlayerTurns`。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` / `retry_failed_runtimes` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 
 > 玩家输入字段是 `payload.content`（`send_message`）/ `payload.command`（`execute_command`），没有别的别名。插件侧发事件请用 builtin `emit-event` 工具；未列出的 `type` 一律 400。
 

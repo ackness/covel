@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { validatePluginRpcBody } from "../../src/routes/api/plugin-rpc/body.js";
+import { validateActionRequest } from "@covel/shared";
 
 const executeFile = promisify(execFile);
 const script = fileURLToPath(
@@ -60,7 +60,10 @@ describe("e2e plugin verification CLI HTTP contract", () => {
             return json({ ok: true, activePluginIds: session.activePlugins });
           case "GET /api/sessions/contract-session":
             return json(session);
-          case "POST /api/actions":
+          case "POST /api/actions": {
+            // The script's requests must be ones the real route accepts.
+            const parsed = validateActionRequest(body);
+            if (!parsed.ok) return json({ error: parsed.error }, 400);
             actionCount += 1;
             res.writeHead(200, { "content-type": "text/event-stream" });
             res.end(
@@ -71,6 +74,7 @@ describe("e2e plugin verification CLI HTTP contract", () => {
               })}\n\n`,
             );
             return;
+          }
           case "GET /api/sessions/contract-session/turns":
             return json({
               items: [
@@ -105,11 +109,6 @@ describe("e2e plugin verification CLI HTTP contract", () => {
                 },
               ],
             });
-          case "POST /api/sessions/contract-session/plugin-rpc": {
-            const parsed = validatePluginRpcBody(body);
-            if (!parsed.ok) return json({ error: parsed.error }, 400);
-            return json({ status: "ok", result: {} });
-          }
           case "GET /api/sessions/contract-session/view":
             return json({
               session: { id: session.id },
@@ -201,11 +200,10 @@ describe("e2e plugin verification CLI HTTP contract", () => {
       });
       expect(requests).toContainEqual({
         method: "POST",
-        path: "/api/sessions/contract-session/plugin-rpc",
-        body: {
-          kind: "action",
-          pluginId: "framework",
-          action: "submit-form",
+        path: "/api/actions",
+        body: expect.objectContaining({
+          sessionId: "contract-session",
+          type: "submit_interaction",
           payload: {
             turnId: "contract-turn-1",
             submissions: [
@@ -216,7 +214,7 @@ describe("e2e plugin verification CLI HTTP contract", () => {
               },
             ],
           },
-        },
+        }),
       });
       expect(requests).toContainEqual({
         method: "GET",

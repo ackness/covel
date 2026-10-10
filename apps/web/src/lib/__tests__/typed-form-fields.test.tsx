@@ -124,7 +124,6 @@ it("submits untouched zero defaults and edited values with their original types"
       "allocation",
       "form",
       { points: 0, ready: false },
-      undefined,
     ),
   );
   fireEvent.change(screen.getByRole("spinbutton", { name: "Points" }), {
@@ -139,7 +138,6 @@ it("submits untouched zero defaults and edited values with their original types"
       "allocation",
       "form",
       { points: 3, ready: true },
-      undefined,
     ),
   );
   fireEvent.change(screen.getByRole("spinbutton", { name: "Points" }), {

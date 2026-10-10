@@ -80,7 +80,6 @@ export interface StageViewProps {
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
-    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<InteractionSubmitResult>;
   readonly onRetryRuntime?: (
     runtimeId: string | readonly string[] | undefined,

@@ -25,6 +25,10 @@ import {
   tabletopProbeId,
 } from "../helpers/tabletop-package.js";
 import { runtimeResultsOf } from "../helpers/runtime-results.js";
+import {
+  formSubmissionAction,
+  settledSubmission,
+} from "../helpers/submit-interaction.js";
 
 const project = path.resolve(import.meta.dirname, "../../../..");
 const pluginId = tabletopProbeId;
@@ -153,21 +157,30 @@ describe("tabletop package installed as a third-party ZIP", () => {
       form: (message.pendingInput as Array<Record<string, unknown>>)[0]!,
     };
   }
+  /** One answer, no approval handling: its outcome as a status. */
   async function submit(
     target: Awaited<ReturnType<typeof latestForm>>,
     values: Record<string, unknown>,
   ) {
-    return request(`${sessionPath}/plugin-rpc`, "POST", {
-      kind: "action",
-      pluginId: "framework",
-      action: "submit-form",
-      payload: {
-        turnId: target.turnId,
-        submissions: [
-          { interactionId: target.form.interactionId, type: "form", values },
-        ],
-      },
-    });
+    return settledSubmission(
+      await request(
+        "/api/actions",
+        "POST",
+        formSubmissionAction(sessionId, target, values),
+      ),
+    );
+  }
+  /** Grant what the answer's turn asks for, then its outcome. */
+  async function submitAllowed(
+    target: Awaited<ReturnType<typeof latestForm>>,
+    values: Record<string, unknown>,
+  ) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const response = await submit(target, values);
+      if (response.status !== 202) return response;
+      await allow(response);
+    }
+    throw new Error("Submission approval did not settle");
   }
 
   beforeEach(async () => {
@@ -465,7 +478,6 @@ sources:
           combat: 2,
         });
         expect(accepted.status, await accepted.clone().text()).toBe(200);
-        await action("send_message", { content: "Begin" });
         const after = (await store.listCharacters(sessionId))[0]!;
         expect(after.id).toBe("existing-player");
         expect(after.createdAt).toBe(before[0]!.createdAt);
@@ -518,18 +530,21 @@ sources:
       ).status,
     ).toBe(200);
     expect(await store.listPlayerInputs(sessionId)).toEqual([]);
-    await allow(await submit(creation, values));
-    expect((await submit(creation, { ...values, combat: 4 })).status).toBe(400);
+    // Granted: refused values still store nothing, valid ones are answered
+    // once.
+    expect(
+      (await submitAllowed(creation, { ...values, combat: 4 })).status,
+    ).toBe(400);
     expect(await store.listPlayerInputs(sessionId)).toEqual([]);
-    expect((await submit(creation, values)).status).toBe(200);
-    expect((await submit(creation, values)).status).toBe(200);
+    expect((await submitAllowed(creation, values)).status).toBe(200);
+    expect((await submit(creation, values)).status).toBe(400);
     expect(await store.listPlayerInputs(sessionId)).toHaveLength(1);
     expect(
       (await request(`${sessionPath}/approvals?pluginId=${pluginId}`, "DELETE"))
         .status,
     ).toBe(200);
-    await allow(await submit(creation, values));
-    expect((await submit(creation, values)).status).toBe(200);
+    // A revoked grant is asked for again before anything else is decided.
+    expect((await submit(creation, values)).status).toBe(202);
     expect(await store.listPlayerInputs(sessionId)).toHaveLength(1);
     await restart();
     expect(
@@ -559,7 +574,6 @@ sources:
       combat: 2,
     });
     expect(accepted.status, await accepted.text()).toBe(200);
-    await action("send_message", { content: "Begin" });
     expect((await store.listCharacters(sessionId))[0]).toMatchObject({
       name: "Lin",
       fields: { tideReading: 2, stealth: 2, diplomacy: 2, combat: 2 },
@@ -616,12 +630,12 @@ sources:
     await restart();
     await enable();
     const values = { tideReading: 4, combat: 2 };
-    const accepted = await submit(creation, values);
+    const accepted = await submitAllowed(creation, values);
     expect(accepted.status, await accepted.text()).toBe(200);
-    expect((await submit(creation, values)).status).toBe(200);
+    // Answered: the same values and other values are both refused.
+    expect((await submit(creation, values)).status).toBe(400);
     expect((await submit(creation, { ...values, combat: 3 })).status).toBe(400);
     expect(await store.listPlayerInputs(sessionId)).toHaveLength(1);
-    await action("send_message", { content: "Begin" });
     expect(await store.listCharacters(sessionId)).toEqual([
       expect.objectContaining({
         name: "Lin",
@@ -648,15 +662,14 @@ sources:
     });
     expect(opened.status, await opened.text()).toBe(200);
     const check = await latestForm();
-    const checkAccepted = await submit(check, {
-      action: "Read the tide",
-      attribute: "tideReading",
-      difficulty: "12",
-    });
-    expect(checkAccepted.status, await checkAccepted.text()).toBe(200);
-    const resolved = await action("send_message", {
-      content: "Resolve the check",
-    });
+    const resolved = await action(
+      "submit_interaction",
+      formSubmissionAction(sessionId, check, {
+        action: "Read the tide",
+        attribute: "tideReading",
+        difficulty: "12",
+      }).payload,
+    );
     const receipts = await store.listPluginData(sessionId, pluginId, "checks");
     expect(receipts).toHaveLength(1);
     const receipt = receipts[0]!.value as Record<string, unknown>;
@@ -722,7 +735,6 @@ sources:
     expect(
       (await submit(allocation, { tideReading: 4, combat: 2 })).status,
     ).toBe(200);
-    await action("send_message", { content: "Begin" });
     const enabledDice = await request(
       `${sessionPath}/plugins/dice-check`,
       "PUT",
@@ -737,15 +749,6 @@ sources:
     });
     expect(opened.status, await opened.text()).toBe(200);
     const check = await latestForm();
-    expect(
-      (
-        await submit(check, {
-          action: "Check the receiver wiring for a loose connection",
-          attribute: "tideReading",
-          difficulty: "12",
-        })
-      ).status,
-    ).toBe(200);
 
     let emit = true;
     let expectTabletopReceipt = true;
@@ -830,9 +833,14 @@ sources:
       };
     });
 
-    const settled = await action("send_message", {
-      content: "Resolve the submitted check",
-    });
+    const settled = await action(
+      "submit_interaction",
+      formSubmissionAction(sessionId, check, {
+        action: "Check the receiver wiring for a loose connection",
+        attribute: "tideReading",
+        difficulty: "12",
+      }).payload,
+    );
     expect(settled.runtimeResults).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

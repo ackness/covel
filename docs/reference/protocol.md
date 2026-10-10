@@ -120,14 +120,15 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 ### 执行生命周期事件
 
-| 事件类型              | 方向 | 描述                                      | 负载                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| --------------------- | ---- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`   | S→C  | 回合执行开始                              | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `runtime.started`     | S→C  | 单个 runtime 开始                         | `{ runtimeId, pluginId, turnId, runId, label }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `runtime.deferred`    | S→C  | staged runtime 已随原始回合提交并转入后台 | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `runtime.completed`   | S→C  | 单个 runtime 完成                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `runtime.failed`      | S→C  | 单个 runtime 失败                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error }`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `execution.completed` | S→C  | 回合执行终态                              | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`）。`resync: true` 仅在 `committed: true` 且该回合提交后的部分事件未能发布时出现：数据已落库，客户端应读取已存状态而不是等待那些事件（订阅流同时收到 `system.reset`，`reason: "publish-failed"`） |
+| 事件类型                | 方向 | 描述                                                                                | 负载                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------- | ---- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`     | S→C  | 回合执行开始                                                                        | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `interaction.submitted` | S→C  | `submit_interaction` 的回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }`                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, turnId, runId, label }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                           | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error }`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `execution.completed`   | S→C  | 回合执行终态                                                                        | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`）。`resync: true` 仅在 `committed: true` 且该回合提交后的部分事件未能发布时出现：数据已落库，客户端应读取已存状态而不是等待那些事件（订阅流同时收到 `system.reset`，`reason: "publish-failed"`） |
 
 > **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态并按 `committed` 收敛 optimistic 输出）。setup 提交失败时不会启动接力，终态直接返回 `committed: false`。
 
@@ -148,11 +149,11 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 ### 系统事件
 
-| 事件类型         | 方向 | 描述     | 负载                 |
-| ---------------- | ---- | -------- | -------------------- |
-| `error.occurred` | S→C  | 执行错误 | `{ message, code? }` |
+| 事件类型         | 方向 | 描述     | 负载                           |
+| ---------------- | ---- | -------- | ------------------------------ |
+| `error.occurred` | S→C  | 执行错误 | `{ message, code?, details? }` |
 
-`code` 是可选的稳定错误码（如 `"session_busy"`），客户端可据此做 i18n/重试语义；无 `code` 时按 `message` 展示。
+`code` 是可选的稳定错误码（如 `"session_busy"`），客户端可据此做 i18n/重试语义；无 `code` 时按 `message` 展示。`details` 只随 `code: "form_rejected"` 出现，见[交互响应](#交互响应)。
 
 世界翻译端点使用独立的 `{ type: "error", message }` SSE 事件，不新增 `code` 字段。流已打开后不再改变 HTTP 状态；未知生产错误与 JSON 分类器采用相同的 `Internal server error` 消息，锁超时采用固定安全忙碌提示，原始诊断只进服务端日志。此处不改变 action 的 `error.occurred` 结构或传输队列。
 
@@ -470,11 +471,18 @@ Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队�
 
 ### 交互响应
 
-| 命令           | 方法 | 端点                           | 响应                                                                                   |
-| -------------- | ---- | ------------------------------ | -------------------------------------------------------------------------------------- |
-| `input.submit` | POST | `/api/sessions/:id/plugin-rpc` | Action `{ kind: "action", pluginId: "framework", action: "submit-form" }` 的 JSON 响应 |
+| 命令           | 方法 | 端点           | 响应                                                                                  |
+| -------------- | ---- | -------------- | ------------------------------------------------------------------------------------- |
+| `input.submit` | POST | `/api/actions` | `type: "submit_interaction"` 的 SSE 流：`interaction.submitted`，随后是后续回合的事件 |
 
-玩家填的值没有通过校验时，响应是 400 和 `code: "form_rejected"`，`error` 是按会话语言写给玩家的文字。`details.issues` 按字段列出每条原因（`{ field?, message }`，缺 `field` 的属于整张表单）。客户端把每条消息显示在对应字段下面、聚焦第一个出错字段，整张表单的错误显示在字段上方，并保留玩家已填的内容，不进入执行错误状态。表单交互的可选 `notice` 字段显示在字段上方。
+保存回答和开始后续回合是一次操作（同一把会话锁、同一个事务），见 [api.md § 玩家交互](./api.md#玩家交互)。`interaction.submitted` 的信封 `turnId` 是后续回合；客户端用 `results[].values`（服务端落库的值）把表单标成已提交，用 `message` 画出玩家气泡（`message.id` 是落库消息的 ID，回合结束后的刷新不会多出一行）。
+
+回答没有被接受时，流里只有一个 `error.occurred`，没有内容落库，也没有回合开始：
+
+- `code: "form_rejected"`：玩家填的值没有通过校验，`message` 是按会话语言写给玩家的文字。`details.issues` 按字段列出每条原因（`{ field?, message }`，缺 `field` 的属于整张表单）。客户端把每条消息显示在对应字段下面、聚焦第一个出错字段，整张表单的错误显示在字段上方，并保留玩家已填的内容，不进入执行错误状态。
+- `code: "interaction_already_submitted"`：这个交互已经被回答（另一个标签页，或一次响应丢失的提交）。客户端不重发：从会话视图的 `submittedInteractions` 标记表单，并用 `GET /api/sessions/:id/execution` 观察那次提交开始的回合。
+
+连接在流开始后中断时同样不重发：回合在服务端运行到提交，客户端经执行状态轮询和会话视图恢复。表单交互的可选 `notice` 字段显示在字段上方。
 
 ### 插件管理
 
@@ -496,8 +504,8 @@ Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队�
 ```json
 {
   "kind": "action",
-  "pluginId": "framework",
-  "action": "submit-form",
+  "pluginId": "my-plugin",
+  "action": "my-action",
   "payload": {/* ... */}
 }
 ```
@@ -544,7 +552,7 @@ Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队�
 
 所有非 2xx 响应均使用 `{ error, code?, details? }`，不返回业务 `status`。
 
-带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，同一请求重复索取相同 `(pluginId, action)` 授权时终止，并拒绝跨会话审批响应。`framework.submit-form` 的批次可涉及多个来源插件，不设两阶段数量限制；各来源的 server-code 授权齐全后才校验、原子持久化。
+带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，同一请求重复索取相同 `(pluginId, action)` 授权时终止，并拒绝跨会话审批响应。`submit_interaction` action 的批次可涉及多个来源插件，不设两阶段数量限制；各来源的 server-code 授权齐全后才校验、原子持久化。
 
 **框架默认 action:** 见 [api.md](api.md#post-apisessionsidplugin-rpc) 的"框架默认 action"小节。
 
@@ -619,6 +627,7 @@ interaction.requested → messages (block)
 state.changed         → gameState (deep merge) + statePatches
 event.emitted         → gameState.events
 record.updated        → gameState.records
+interaction.submitted → 提交表单的调用方处理：SUBMIT_BLOCK + 玩家气泡（不经 handleSseEvent）
 execution.started     → executionSteps
 runtime.started       → executionSteps
 runtime.deferred      → executionSteps（pending，按 sourceTurnId 归属原始回合）

@@ -12,7 +12,6 @@ import {
   PluginServiceRegistry,
   createPluginRpcRegistry,
   createRpcExecutor,
-  createSubmitFormHandler,
   type PluginRpcRegistry,
   type RpcExecutor,
   type LLMAdapter,
@@ -29,11 +28,7 @@ import {
   type LoadedRuntime,
   type FunctionHandler,
 } from "@covel/plugin-loader";
-import type {
-  InteractionPayload,
-  LLMMessage,
-  RuntimeManifest,
-} from "@covel/shared";
+import type { LLMMessage, RuntimeManifest } from "@covel/shared";
 import { createEventBus } from "@covel/events";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
@@ -70,10 +65,6 @@ function setup(): {
 } {
   const store = createMemoryStore();
   const registry = createPluginRpcRegistry();
-  registry.registerFrameworkDefault(
-    "submit-form",
-    createSubmitFormHandler(undefined, store),
-  );
   registry.registerFrameworkDefault("echo", async (payload) => ({
     echoed: payload,
   }));
@@ -155,42 +146,6 @@ async function decideSessionApproval(
     },
     sessionApprovalScope(session, pluginId),
   );
-}
-
-async function seedInteractionTemplate(
-  store: DataStore,
-  sessionId: string,
-  interaction: InteractionPayload,
-): Promise<void> {
-  await store.appendTurnMessage({
-    id: `tpl-${interaction.interactionId}`,
-    sessionId,
-    turnId: "turn-1",
-    sourceType: "runtime",
-    role: "assistant",
-    name: "tpl",
-    content: "",
-    order: 700,
-    pendingInput: [interaction],
-    createdAt: new Date().toISOString(),
-  });
-}
-
-function submitFormRequest(
-  app: Pick<Hono, "request">,
-  sessionId: string,
-  submissions: ReadonlyArray<Record<string, unknown>>,
-) {
-  return app.request(`/api/sessions/${sessionId}/plugin-rpc`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      kind: "action",
-      pluginId: "framework",
-      action: "submit-form",
-      payload: { turnId: "turn-1", submissions },
-    }),
-  });
 }
 
 describe("POST /api/sessions/:id/plugin-rpc", () => {
@@ -745,32 +700,9 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(body).not.toHaveProperty("status");
   });
 
-  it("forwards submit-form payload to the framework default handler", async () => {
-    // Seed a template message so the handler can fill it.
-    await store.appendTurnMessage({
-      id: "msg-template",
-      sessionId: "sess-rpc-1",
-      turnId: "turn-1",
-      sourceType: "runtime",
-      sourcePluginId: "char-creator",
-      role: "assistant",
-      name: "form-template",
-      content: "Player name is {{name}}",
-      order: 700,
-      pendingInput: [
-        {
-          interactionId: "form-char-creation",
-          type: "form",
-          title: "Character name",
-          fields: [
-            { type: "text", name: "name", label: "Name", required: true },
-          ],
-          submitLabel: "Continue",
-        },
-      ],
-      createdAt: new Date().toISOString(),
-    });
-
+  it("has no framework action that stores a form answer without its turn", async () => {
+    // Answers go through the `submit_interaction` action, which stores them
+    // and runs the follow-up turn as one step.
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -778,169 +710,13 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
         kind: "action",
         pluginId: "framework",
         action: "submit-form",
-        payload: {
-          turnId: "turn-1",
-          submissions: [
-            {
-              interactionId: "form-char-creation",
-              type: "form",
-              values: { name: "Aria" },
-            },
-          ],
-        },
+        payload: { turnId: "turn-1", submissions: [] },
       }),
     });
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      status: string;
-      result: {
-        accepted: boolean;
-        results: ReadonlyArray<{ filledNarrative: string }>;
-      };
-    };
-    expect(body.status).toBe("ok");
-    expect(body.result.accepted).toBe(true);
-    expect(body.result.results[0]!.filledNarrative).toBe("Player name is Aria");
-  });
-
-  it("forwards a choice submission and fills the template with selectedLabel", async () => {
-    await seedInteractionTemplate(store, "sess-rpc-1", {
-      interactionId: "ch-1",
-      type: "choice",
-      prompt: "Choose",
-      choices: [{ id: "a", label: "Attack" }],
-      narrativeTemplate: "You chose {{selectedLabel}}",
-    });
-    const res = await submitFormRequest(app, "sess-rpc-1", [
-      {
-        interactionId: "ch-1",
-        type: "choice",
-        values: { selectedId: "a", selectedLabel: "Attack" },
-      },
-    ]);
-    const body = (await res.json()) as {
-      result: { results: Array<{ filledNarrative: string }> };
-    };
-    expect(body.result.results[0]!.filledNarrative).toBe("You chose Attack");
-  });
-
-  it("serializes concurrent identical submissions into one player input", async () => {
-    await seedInteractionTemplate(store, "sess-rpc-1", {
-      interactionId: "form-concurrent",
-      type: "form",
-      title: "Name",
-      submitLabel: "Continue",
-      fields: [{ type: "text", name: "name", label: "Name", required: true }],
-    });
-    const submission = {
-      interactionId: "form-concurrent",
-      type: "form",
-      values: { name: "Aria" },
-    };
-    const [left, right] = await Promise.all([
-      submitFormRequest(app, "sess-rpc-1", [submission]),
-      submitFormRequest(app, "sess-rpc-1", [submission]),
-    ]);
-    expect([left.status, right.status]).toEqual([200, 200]);
-    const leftBody = (await left.json()) as {
-      result: { results: Array<{ submissionId: string }> };
-    };
-    const rightBody = (await right.json()) as {
-      result: { results: Array<{ submissionId: string }> };
-    };
-    expect(rightBody.result.results[0]?.submissionId).toBe(
-      leftBody.result.results[0]?.submissionId,
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { code?: string }).code).toBe(
+      "unknown_action",
     );
-    expect(
-      (await store.listPlayerInputs("sess-rpc-1")).filter(
-        (input) => input.formId === "form-concurrent",
-      ),
-    ).toHaveLength(1);
-  });
-
-  it("threads session.locale into the handler: confirmation localizes to en-US", async () => {
-    await seedSession(store, "sess-rpc-en", "en-US");
-    await seedInteractionTemplate(store, "sess-rpc-en", {
-      interactionId: "cf-1",
-      type: "confirmation",
-      prompt: "Proceed?",
-      narrativeTemplate: "Result: {{confirmed}}",
-    });
-    const res = await submitFormRequest(app, "sess-rpc-en", [
-      {
-        interactionId: "cf-1",
-        type: "confirmation",
-        values: { confirmed: true },
-      },
-    ]);
-    const body = (await res.json()) as {
-      result: { results: Array<{ filledNarrative: string }> };
-    };
-    // Proves plugin-rpc.ts threads session.locale='en-US' into the dispatch ctx.
-    expect(body.result.results[0]!.filledNarrative).toBe("Result: Confirm");
-  });
-
-  it("confirmation stays 确认 under the default zh-CN session locale", async () => {
-    await seedInteractionTemplate(store, "sess-rpc-1", {
-      interactionId: "cf-2",
-      type: "confirmation",
-      prompt: "Proceed?",
-      narrativeTemplate: "Result: {{confirmed}}",
-    });
-    const res = await submitFormRequest(app, "sess-rpc-1", [
-      {
-        interactionId: "cf-2",
-        type: "confirmation",
-        values: { confirmed: true },
-      },
-    ]);
-    const body = (await res.json()) as {
-      result: { results: Array<{ filledNarrative: string }> };
-    };
-    expect(body.result.results[0]!.filledNarrative).toBe("Result: 确认");
-  });
-
-  it("processes a batch of form+choice submissions in one request", async () => {
-    await seedInteractionTemplate(store, "sess-rpc-1", {
-      interactionId: "b1",
-      type: "form",
-      title: "Name",
-      submitLabel: "Continue",
-      fields: [{ type: "text", name: "name", label: "Name" }],
-    });
-    await seedInteractionTemplate(store, "sess-rpc-1", {
-      interactionId: "b2",
-      type: "choice",
-      prompt: "Choose",
-      choices: [{ id: "x", label: "X" }],
-    });
-    const res = await submitFormRequest(app, "sess-rpc-1", [
-      { interactionId: "b1", type: "form", values: { name: "A" } },
-      { interactionId: "b2", type: "choice", values: { selectedId: "x" } },
-    ]);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      result: { results: Array<{ interactionId: string }> };
-    };
-    expect(body.result.results.map((r) => r.interactionId)).toEqual([
-      "b1",
-      "b2",
-    ]);
-  });
-
-  it("returns 400 for an invalid submission type", async () => {
-    const res = await submitFormRequest(app, "sess-rpc-1", [
-      { interactionId: "x", type: "bogus", values: {} },
-    ]);
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 400 when submission.values is not an object", async () => {
-    const res = await submitFormRequest(app, "sess-rpc-1", [
-      { interactionId: "x", type: "form", values: [] },
-    ]);
-    expect(res.status).toBe(400);
   });
 
   it("rejects framework actions when pluginId is not the canonical sentinel", async () => {
@@ -959,20 +735,6 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code?: string };
     expect(body.code).toBe("unknown_action");
-  });
-
-  it("returns 400 when submit-form payload is missing turnId", async () => {
-    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        kind: "action",
-        pluginId: "framework",
-        action: "submit-form",
-        payload: { submissions: [] },
-      }),
-    });
-    expect(res.status).toBe(400);
   });
 });
 

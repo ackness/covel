@@ -404,7 +404,6 @@ describe("extractInteractionChoices", () => {
           { id: "a", label: "Agree" },
           { id: "b", label: "Refuse", description: "Walk away" },
         ],
-        submitBehavior: undefined,
       },
     ]);
   });

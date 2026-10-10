@@ -403,14 +403,12 @@ HTML 怎么写：
 ```ts
 submitBehavior: {
   echoFilledNarrative?: boolean
-  immediate?: boolean
 }
 ```
 
 字段语义：
 
-- `echoFilledNarrative`（默认 `true`）：把填充后的叙事作为玩家气泡回显到聊天流。设为 `false` 时只用作下一轮的隐藏输入，不出现在对话里。
-- `immediate`：玩家提交后立即关闭表单并继续执行。
+- `echoFilledNarrative`（默认 `true`）：填充后的叙事是后续回合的玩家消息，并作为玩家气泡回显到聊天流。设为 `false` 时这段叙事不进入对话，后续回合不带玩家消息运行，插件从已保存的表单值读取回答。服务端从已提交的交互读取这个字段，客户端不能改写。
 
 这条协议是框架级能力，不绑定任何具体插件。
 
@@ -444,9 +442,9 @@ submitBehavior: {
 
 ### 4.5 表单被拒绝、已回答与重新载入
 
-- 玩家的提交没有通过校验时，响应是 `400` 加 `code: "form_rejected"`，`details.issues` 列出每条 `{ field?, message }`。表单把消息显示在对应字段下面并聚焦第一个出错字段，没有 `field` 的显示在字段上方，玩家填的内容保留；不会出现错误 toast。表单交互的可选 `notice` 显示在字段上方。
-- 同一张表单（`turnId` + `interactionId`）只回答一次。后续回合开始之后再提交，返回 `code: "interaction_already_submitted"`，客户端显示拒绝原因并载入已存的答案。
-- 在另一个标签页或设备上重新载入时，客户端从 `GET /api/sessions/:id/view` 的 `submittedInteractions`（`{ turnId, interactionId, values, followedUp }`）把表单标为已回答；`followedUp` 为 `false` 说明答案已存但后续回合没有跑起来，表单保持打开并填好已存的值，再点一次提交就会发起后续回合。
+- 玩家的回答通过 `POST /api/actions` 的 `submit_interaction` 提交，同一个请求保存回答并运行后续回合。没有通过校验时，响应流里只有一个 `code: "form_rejected"` 的 `error.occurred`，`details.issues` 列出每条 `{ field?, message }`，没有内容落库。表单把消息显示在对应字段下面并聚焦第一个出错字段，没有 `field` 的显示在字段上方，玩家填的内容保留；不会出现错误 toast。表单交互的可选 `notice` 显示在字段上方。
+- 同一张表单（`turnId` + `interactionId`）只回答一次。再次提交得到 `code: "interaction_already_submitted"`，客户端显示拒绝原因、载入已存的答案，并观察那次回答开始的回合，不重发。
+- 在另一个标签页或设备上重新载入时，客户端从 `GET /api/sessions/:id/view` 的 `submittedInteractions`（`{ turnId, interactionId, values }`）把表单标为已回答并填入已存的值。回答与后续回合的开始在同一个事务里落库，所以列在这里的表单一定已经有回合跟上。
 
 ---
 

@@ -14,7 +14,6 @@ import {
 import {
   createPluginRpcRegistry,
   createRpcExecutor,
-  createSubmitFormHandler,
   type LLMAdapter,
   type LLMResponse,
 } from "@covel/runtime";
@@ -249,10 +248,6 @@ function makeApp(
   const eventBus = createEventBus(store);
   const sessionLock = createInProcessSessionLock();
   const rpcRegistry = createPluginRpcRegistry();
-  rpcRegistry.registerFrameworkDefault(
-    "submit-form",
-    createSubmitFormHandler(undefined, store),
-  );
   const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
   const rpcApprovalGate = createRpcApprovalGate();
 
@@ -366,46 +361,29 @@ describe("start-game API lifecycle scenario", () => {
     const startEvents = await drainActionStream(start);
     const bootstrapTurnId = startEvents[0]?.turnId ?? "turn-bootstrap";
 
-    const submit = await app.request(
-      "/api/sessions/sess-start-flow-api/plugin-rpc",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "action",
-          pluginId: "framework",
-          action: "submit-form",
-          payload: {
-            turnId: bootstrapTurnId,
-            submissions: [
-              {
-                interactionId: "form-char-creation",
-                type: "form",
-                values: { name: "Aria", concept: "cartographer" },
-              },
-            ],
-          },
-        }),
-      },
-    );
-    expect(submit.status).toBe(200);
-    const submitted = (await submit.json()) as {
-      result: { results: ReadonlyArray<{ filledNarrative: string }> };
-    };
-    const filledNarrative = submitted.result.results[0]!.filledNarrative;
-
+    // One request stores the answer and runs the turn that reads it.
     const followup = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-followup",
-        type: "send_message",
+        type: "submit_interaction",
         sessionId: "sess-start-flow-api",
-        payload: { content: filledNarrative },
+        payload: {
+          turnId: bootstrapTurnId,
+          submissions: [
+            {
+              interactionId: "form-char-creation",
+              type: "form",
+              values: { name: "Aria", concept: "cartographer" },
+            },
+          ],
+        },
       }),
     });
     expect(followup.status).toBe(200);
     const followupEvents = await drainActionStream(followup);
+    expect(followupEvents[0]?.type).toBe("interaction.submitted");
     const followupTurnId = followupEvents[0]?.turnId ?? "turn-form-submit";
 
     const characters = await store.listCharacters("sess-start-flow-api");

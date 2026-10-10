@@ -7,11 +7,6 @@
  * Flattens message metadata and aggregates state entries by table.
  */
 
-import type { DataStore } from "@covel/store";
-import {
-  latestTurnStartedAt,
-  answerWasFollowedUp,
-} from "../rpc-defaults/answer-follow-up.js";
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
@@ -81,7 +76,6 @@ export interface SnapshotStore {
       createdAt: string;
     }[]
   >;
-  queryTraceEvents: DataStore["queryTraceEvents"];
   listCharacters(sessionId: string): Promise<
     readonly {
       id: string;
@@ -128,23 +122,16 @@ export async function buildSessionSnapshot(
   // Parallel queries for all session data. Messages + trace events are
   // windowed to the most-recent slice (see the *_LIMIT constants); older
   // messages load on demand via the cursor endpoint.
-  const [
-    rawMessages,
-    playerInputs,
-    latestTurnStarted,
-    characters,
-    stateSchemas,
-    traceEvents,
-  ] = await Promise.all([
-    store.listMessagesPage(sessionId, { limit: SNAPSHOT_MESSAGE_LIMIT }),
-    store.listPlayerInputs(sessionId),
-    latestTurnStartedAt(store, sessionId),
-    store.listCharacters(sessionId),
-    store.listStateSchemas(sessionId),
-    store.listTraceEventsPage(sessionId, {
-      limit: SNAPSHOT_TRACE_EVENT_LIMIT,
-    }),
-  ]);
+  const [rawMessages, playerInputs, characters, stateSchemas, traceEvents] =
+    await Promise.all([
+      store.listMessagesPage(sessionId, { limit: SNAPSHOT_MESSAGE_LIMIT }),
+      store.listPlayerInputs(sessionId),
+      store.listCharacters(sessionId),
+      store.listStateSchemas(sessionId),
+      store.listTraceEventsPage(sessionId, {
+        limit: SNAPSHOT_TRACE_EVENT_LIMIT,
+      }),
+    ]);
 
   // A full window (=== limit) means older messages exist; hand back the oldest
   // returned position as the cursor to fetch them. A short window reaches the
@@ -260,10 +247,6 @@ export async function buildSessionSnapshot(
               turnId: input.turnId,
               interactionId: input.formId,
               values: input.values as Record<string, unknown>,
-              followedUp: answerWasFollowedUp(
-                input.createdAt,
-                latestTurnStarted,
-              ),
             },
           ]
         : [],

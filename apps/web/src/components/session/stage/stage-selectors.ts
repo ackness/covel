@@ -302,7 +302,6 @@ export interface StageInteractionChoice {
     readonly label: string;
     readonly description?: string;
   }>;
-  readonly submitBehavior?: { readonly echoFilledNarrative?: boolean };
 }
 
 /**
@@ -335,8 +334,6 @@ export function extractInteractionChoices(
     if (innerType !== "choice" && type !== "interactive_choice") continue;
 
     const meta = (block.meta ?? {}) as Record<string, unknown>;
-    const rawBehavior = data.submitBehavior as
-      Record<string, unknown> | undefined;
 
     result.push({
       blockId: msg.id,
@@ -344,12 +341,6 @@ export function extractInteractionChoices(
       interactionId: (data.interactionId as string | undefined) ?? "choice",
       prompt: (data.prompt as string | undefined) ?? "",
       choices: (data.choices ?? []) as StageInteractionChoice["choices"],
-      submitBehavior: rawBehavior
-        ? {
-            echoFilledNarrative: rawBehavior.echoFilledNarrative as
-              boolean | undefined,
-          }
-        : undefined,
     });
   }
 
@@ -454,7 +445,6 @@ export type StageChoiceItem =
       readonly turnId: string;
       readonly interactionId: string;
       readonly choiceId: string;
-      readonly submitBehavior?: { readonly echoFilledNarrative?: boolean };
     }
   | {
       readonly kind: "prompt";
@@ -519,7 +509,6 @@ export function mergeChoices(
         turnId: block.turnId,
         interactionId: block.interactionId,
         choiceId: choice.id,
-        submitBehavior: block.submitBehavior,
       };
       items.push(item);
       groupItems.push(item);
