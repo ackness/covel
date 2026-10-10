@@ -7,6 +7,10 @@
  */
 
 import {
+  answerWasFollowedUp,
+  latestTurnStartedAt,
+} from "./answer-follow-up.js";
+import {
   DEFAULT_LOCALE,
   resolveI18nText,
   type I18nText,
@@ -572,7 +576,10 @@ export function createSubmitFormHandler(
   validatePluginForm: ValidatePluginForm | undefined,
   frameworkStore: Pick<
     DataStore,
-    "listPlayerInputs" | "listTurnMessages" | "withTransaction"
+    | "listPlayerInputs"
+    | "listTurnMessages"
+    | "withTransaction"
+    | "queryTraceEvents"
   >,
 ): RpcHandler {
   return async (
@@ -632,6 +639,10 @@ export function createSubmitFormHandler(
       sessionId,
     )) as readonly MessageLike[];
     const existingInputs = await frameworkStore.listPlayerInputs(sessionId);
+    const latestTurnStarted = await latestTurnStartedAt(
+      frameworkStore,
+      sessionId,
+    );
     const prepared: Array<{
       readonly submissionId: string;
       readonly interactionId: string;
@@ -716,25 +727,41 @@ export function createSubmitFormHandler(
         continue;
       }
 
-      // One answer per interaction: a second request would run the same
-      // narrative turn again, so it is refused whatever its values. The client
-      // reads the stored answer from the session view.
-      if (
-        existingInputs.some(
-          (input) =>
-            input.turnId === body.turnId && input.formId === sub.interactionId,
-        )
-      ) {
-        throw new InteractionAlreadySubmittedError(
-          resolveLabel(ALREADY_SUBMITTED, locale),
-        );
+      // One answer per interaction, and its follow-up turn runs once. A
+      // second request is refused when a turn already started after the
+      // answer. While none has (the response was lost, or the follow-up never
+      // left the browser) the same values are accepted again and return the
+      // stored submission, so the client can start the follow-up.
+      const existing = existingInputs.find(
+        (input) =>
+          input.turnId === body.turnId && input.formId === sub.interactionId,
+      );
+      if (existing) {
+        const comparable =
+          existing.values &&
+          typeof existing.values === "object" &&
+          !Array.isArray(existing.values)
+            ? validateSubmissionValues(
+                { ...sub, values: existing.values as Record<string, unknown> },
+                located.interaction,
+                locale,
+              )
+            : existing.values;
+        if (
+          answerWasFollowedUp(existing.createdAt, latestTurnStarted) ||
+          stableJson(comparable) !== stableJson(values)
+        ) {
+          throw new InteractionAlreadySubmittedError(
+            resolveLabel(ALREADY_SUBMITTED, locale),
+          );
+        }
       }
       const item = {
-        submissionId: crypto.randomUUID(),
+        submissionId: existing?.id ?? crypto.randomUUID(),
         interactionId: sub.interactionId,
         values,
         filledNarrative: fillTemplate(normalizedSub, located, labels),
-        shouldPersist: true,
+        shouldPersist: !existing,
       };
       prepared.push(item);
       preparedByKey.set(key, item);

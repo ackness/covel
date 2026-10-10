@@ -165,9 +165,9 @@ export async function submitInteractionBlock(
       error instanceof ApiError &&
       error.code === "interaction_already_submitted"
     ) {
-      // Answered elsewhere (another tab or device): show it as answered, say
-      // so, and load the stored answer.
-      dispatch({ type: "SUBMIT_BLOCK", blockId });
+      // Answered elsewhere (another tab or device). Say so and load the
+      // stored answer: the view marks the block answered when a turn followed
+      // it, and leaves it open with the stored values when none did.
       dispatch({
         type: "SET_EXECUTION_ERROR",
         error: error.response?.error ?? error.message,

@@ -438,8 +438,37 @@ it("tells the player in their language what to correct, and keeps the form open"
     expect((await h.submit(allocation!, { might: 3, wits: 3 })).status).toBe(
       200,
     );
-    // The answer is stored once: asking again would run the turn again, so
-    // the server refuses it and the session view returns the stored values.
+    const answered = async () => {
+      const view = await h.boot.app.request(
+        `/api/sessions/${h.sessionId}/view`,
+      );
+      return (
+        (await view.json()) as {
+          submittedInteractions: { interactionId: string }[];
+        }
+      ).submittedInteractions.filter(
+        (item) => item.interactionId === "tabletop-rules-allocation",
+      );
+    };
+    const stored = {
+      turnId: allocation!.turnId,
+      interactionId: "tabletop-rules-allocation",
+      values: { might: 3, wits: 3 },
+    };
+    // The response was lost before the follow-up started: the view says no
+    // turn followed the answer, and sending the same values again is accepted
+    // so the client can start the follow-up.
+    expect(await answered()).toEqual([{ ...stored, followedUp: false }]);
+    expect((await h.submit(allocation!, { might: 3, wits: 3 })).status).toBe(
+      200,
+    );
+    expect((await h.submit(allocation!, { might: 4, wits: 3 })).status).toBe(
+      400,
+    );
+    await h.action("send_message", { content: "Allocation complete." });
+    // A turn started after the answer: a second tab still showing the form
+    // is refused instead of running the follow-up twice.
+    expect(await answered()).toEqual([{ ...stored, followedUp: true }]);
     expect(await h.submit(allocation!, { might: 3, wits: 3 })).toEqual({
       status: 400,
       body: {
@@ -447,20 +476,6 @@ it("tells the player in their language what to correct, and keeps the form open"
         error: "这一项已经提交过了。刷新后可以看到已提交的内容。",
       },
     });
-    const view = await h.boot.app.request(`/api/sessions/${h.sessionId}/view`);
-    expect(
-      ((await view.json()) as { submittedInteractions: unknown })
-        .submittedInteractions,
-    ).toEqual(
-      expect.arrayContaining([
-        {
-          turnId: allocation!.turnId,
-          interactionId: "tabletop-rules-allocation",
-          values: { might: 3, wits: 3 },
-        },
-      ]),
-    );
-    await h.action("send_message", { content: "Allocation complete." });
     expect((await h.player())?.fields).toMatchObject({ might: 3, wits: 3 });
     expect((await h.session()).phase).toBe("playing");
   } finally {

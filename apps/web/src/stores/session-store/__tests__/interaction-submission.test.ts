@@ -173,6 +173,7 @@ describe("interaction submission", () => {
           turnId: "turn-1",
           interactionId: "form-1",
           values: { name: "Elsewhere" },
+          followedUp: true,
         },
       ],
     });
@@ -190,6 +191,52 @@ describe("interaction submission", () => {
       type: "SET_EXECUTION_ERROR",
       error: "This was already submitted. Reload to see the answer.",
     });
+    expect(deps.runSingleAction).not.toHaveBeenCalled();
+  });
+
+  it("reopens an answered form with its stored values when no turn followed the answer", async () => {
+    const deps = makeDeps();
+    api.submitInputs.mockRejectedValueOnce(
+      new ApiError(
+        400,
+        "/api/sessions/session-1/plugin-rpc",
+        JSON.stringify({
+          error: "Already submitted.",
+          code: "interaction_already_submitted",
+        }),
+      ),
+    );
+    api.getSessionView.mockResolvedValueOnce({
+      messages: [
+        {
+          id: "block-1",
+          turnId: "turn-1",
+          block: {
+            type: "interactive_form",
+            data: { interactionId: "form-1" },
+          },
+        },
+      ],
+      submittedInteractions: [
+        {
+          turnId: "turn-1",
+          interactionId: "form-1",
+          values: { name: "Stored" },
+          followedUp: false,
+        },
+      ],
+    });
+    await submitInteractionBlock(deps, submission);
+    await vi.waitFor(() =>
+      expect(deps.dispatch).toHaveBeenCalledWith({
+        type: "PREFILL_BLOCK",
+        blockId: "block-1",
+        values: { name: "Stored" },
+      }),
+    );
+    expect(deps.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+    );
     expect(deps.runSingleAction).not.toHaveBeenCalled();
   });
 

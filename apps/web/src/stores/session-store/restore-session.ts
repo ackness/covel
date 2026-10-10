@@ -66,7 +66,7 @@ export function publishSubmittedInteractions(
   dispatch: SessionDispatch,
   snapshot: Pick<SessionSnapshot, "messages" | "submittedInteractions">,
 ): void {
-  for (const { blockId, values } of submittedBlocksFromServer(
+  for (const { blockId, values, followedUp } of submittedBlocksFromServer(
     snapshot.messages.map((message) => ({
       id: message.id,
       turnId: message.turnId,
@@ -74,7 +74,14 @@ export function publishSubmittedInteractions(
     })),
     snapshot.submittedInteractions,
   )) {
-    dispatch({ type: "SUBMIT_BLOCK", blockId, values });
+    // An answer no turn followed (its response or its follow-up request was
+    // lost) stays open with the stored values filled in: sending it again is
+    // accepted once more and starts the follow-up.
+    dispatch(
+      followedUp
+        ? { type: "SUBMIT_BLOCK", blockId, values }
+        : { type: "PREFILL_BLOCK", blockId, values },
+    );
   }
 }
 

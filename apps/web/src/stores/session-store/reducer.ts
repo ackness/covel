@@ -572,6 +572,17 @@ export function reducer(
           ? { ...state.submittedBlockValues, [action.blockId]: action.values }
           : state.submittedBlockValues,
       };
+    case "PREFILL_BLOCK":
+      return {
+        ...state,
+        submittedBlockIds: new Set(
+          [...state.submittedBlockIds].filter((id) => id !== action.blockId),
+        ),
+        submittedBlockValues: {
+          ...state.submittedBlockValues,
+          [action.blockId]: action.values,
+        },
+      };
     case "RESET_SESSION":
       return { ...state, ...SESSION_RESET };
     case "RESET_TO_WORLD_SELECT":

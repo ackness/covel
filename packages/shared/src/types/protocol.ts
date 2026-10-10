@@ -680,6 +680,13 @@ export interface SnapshotSubmittedInteraction {
   readonly turnId: string;
   readonly interactionId: string;
   readonly values: Readonly<Record<string, unknown>>;
+  /**
+   * Whether a turn started after the answer was stored. `false` means the
+   * follow-up never ran (the response was lost, or the browser closed between
+   * the two requests): the form can be sent again with the same values and
+   * the server accepts it once more.
+   */
+  readonly followedUp: boolean;
 }
 
 export interface SnapshotMessage {

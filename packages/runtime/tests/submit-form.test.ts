@@ -667,34 +667,73 @@ describe("submitFormHandler (Epic A)", () => {
     });
   });
 
-  it("refuses a second submission of an answered interaction, whatever its values", async () => {
-    await seedInteraction(store, {
+  describe("answering an interaction twice", () => {
+    const form = {
       interactionId: "name-form",
-      type: "form",
+      type: "form" as const,
       title: "Name",
       submitLabel: "Continue",
       fields: [{ type: "text", name: "name", label: "Name", required: true }],
       narrativeTemplate: "Hello {{name}}",
-    });
-    await submitOne(store, {
+    };
+    const answer = (name: string) => ({
       interactionId: "name-form",
-      type: "form",
-      values: { name: "Aria" },
+      type: "form" as const,
+      values: { name },
     });
-    for (const name of ["Aria", "Different"]) {
-      const refusal = await submitOne(store, {
-        interactionId: "name-form",
-        type: "form",
-        values: { name },
-      }).catch((error: unknown) => error);
-      expect(refusal).toBeInstanceOf(InteractionAlreadySubmittedError);
-      expect(refusal).toMatchObject({
-        code: "interaction_already_submitted",
+    const startTurn = () =>
+      store.addTraceEvent({
+        id: crypto.randomUUID(),
+        sessionId: SESSION,
+        type: "turn.started",
+        traceId: "trace",
+        turnId: "followup-turn",
+        payload: {},
+        createdAt: new Date(Date.now() + 1000).toISOString(),
       });
-    }
-    expect(await store.listPlayerInputs(SESSION)).toMatchObject([
-      { values: { name: "Aria" } },
-    ]);
+
+    it("accepts the same answer again while no turn followed it, so a lost follow-up can start", async () => {
+      await seedInteraction(store, form);
+      const first = (await createSubmitFormHandler(undefined, store)(
+        { turnId: TURN, submissions: [answer("Aria")] },
+        makeCtx(store),
+      )) as {
+        results: Array<{ submissionId: string; filledNarrative: string }>;
+      };
+      const again = (await createSubmitFormHandler(undefined, store)(
+        { turnId: TURN, submissions: [answer("Aria")] },
+        makeCtx(store),
+      )) as {
+        results: Array<{ submissionId: string; filledNarrative: string }>;
+      };
+      expect(again.results[0]).toMatchObject({
+        submissionId: first.results[0]?.submissionId,
+        filledNarrative: "Hello Aria",
+      });
+      expect(await store.listPlayerInputs(SESSION)).toHaveLength(1);
+      // Other values are a different answer: the stored one stands.
+      await expect(
+        submitOne(store, answer("Different")),
+      ).rejects.toBeInstanceOf(InteractionAlreadySubmittedError);
+    });
+
+    it("refuses any second answer once a turn started after it", async () => {
+      await seedInteraction(store, form);
+      await submitOne(store, answer("Aria"));
+      await startTurn();
+      for (const name of ["Aria", "Different"]) {
+        const refusal = await submitOne(store, answer(name)).catch(
+          (error: unknown) => error,
+        );
+        expect(refusal).toBeInstanceOf(InteractionAlreadySubmittedError);
+        expect(refusal).toMatchObject({
+          code: "interaction_already_submitted",
+        });
+      }
+      expect(await store.listPlayerInputs(SESSION)).toMatchObject([
+        { values: { name: "Aria" } },
+      ]);
+    });
   });
 
   it("validates the whole batch before writing any player input", async () => {

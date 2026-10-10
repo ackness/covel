@@ -425,7 +425,9 @@ export function buildInitialFormState(
   submitted: boolean,
   submittedValues?: Readonly<Record<string, unknown>>,
 ): { form: Record<string, unknown> } {
-  if (submitted && submittedValues) return { form: { ...submittedValues } };
+  // An answered form shows what was sent; an open one with stored values (an
+  // answer no turn followed) starts from them so it can be sent again as is.
+  if (submittedValues) return { form: { ...submittedValues } };
   const data = (block.data ?? block) as Record<string, unknown>;
   const fields = Array.isArray(data.fields) ? data.fields : [];
   const form: Record<string, unknown> = {};
