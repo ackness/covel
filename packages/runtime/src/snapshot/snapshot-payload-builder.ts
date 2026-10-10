@@ -7,9 +7,10 @@
  *
  * Automatic snapshots are captured by the server after proposal commit —
  * throttled to checkpoint cadence by `saveAutoSnapshot` (audit 2026-07-11
- * R-04), which is what keeps the full store reads below (message history in
- * particular is O(T)) off the per-turn hot path. Manual and fork snapshots
- * are captured by the server routes as well.
+ * R-04), which is what keeps the full store reads below off the per-turn hot
+ * path. The model history is not one of them: a snapshot takes its last ID
+ * and its compaction tags. Manual and fork snapshots are captured by the
+ * server routes as well.
  *
  * Session lorebook entries: included once the store
  * exposes `listSessionLorebookEntries`. World- and
@@ -81,10 +82,11 @@ export async function buildSnapshotPayload(
     latestOnly: true,
   });
 
-  // Messages cursor — last turn_message.id for this session.
-  const turnMessages = await store.listTurnMessages(sessionId);
+  // Messages cursor — last turn_message.id for this session. One row and the
+  // compaction tags below are all a snapshot takes from the model history, so
+  // neither read carries the text of the log.
   const messagesCursor =
-    turnMessages.length > 0 ? turnMessages[turnMessages.length - 1]!.id : "";
+    (await store.listRecentTurnMessages(sessionId, 1)).at(-1)?.id ?? "";
   const displayMessagesBoundary = await captureDisplayMessagesBoundary(
     store,
     sessionId,
@@ -97,11 +99,9 @@ export async function buildSnapshotPayload(
   // snapshot build instead of persisting an incomplete payload.
   const requiredSummaryIds = new Set<string>();
   const compactedMessageSummaryIds: Record<string, string> = {};
-  for (const message of turnMessages) {
-    if (message.compactedAtTurnId !== undefined) {
-      requiredSummaryIds.add(message.compactedAtTurnId);
-      compactedMessageSummaryIds[message.id] = message.compactedAtTurnId;
-    }
+  for (const tag of await store.listCompactedTurnMessageTags(sessionId)) {
+    requiredSummaryIds.add(tag.summaryId);
+    compactedMessageSummaryIds[tag.id] = tag.summaryId;
   }
   const allSessionSummaries = await store.listSessionSummaries(sessionId);
   const summariesById = new Map(

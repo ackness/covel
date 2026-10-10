@@ -313,7 +313,7 @@ export function createCommitPipeline(
         );
       }
       const results = await store.withTransaction(async (tx) => {
-        const txHandlers = createCommitHandlers(tx);
+        const txHandlers = createCommitHandlers(tx, { singleBatch: true });
         const txResults: CommitResult[] = [];
         for (const entry of screened) {
           txResults.push(
@@ -358,9 +358,14 @@ export function createCommitPipeline(
     // transaction is still open (and could still roll these writes back).
     // The outer transaction still owns rollback; surface handler-level partial
     // results so the caller can decide whether to abort that transaction.
+    // PreStateCommit runs between the records unless the caller ran it
+    // beforehand; only then is the batch the sole writer for its whole length.
+    const batchHandlers = options.preStateCommitApplied
+      ? createCommitHandlers(store, { singleBatch: true })
+      : handlers;
     const results: CommitResult[] = [];
     for (const p of proposals) {
-      results.push(await commitWith(handlers, store, p, deferPostCommit));
+      results.push(await commitWith(batchHandlers, store, p, deferPostCommit));
     }
     warnPartialCommit(proposals, results, "enclosing transaction");
     return results;

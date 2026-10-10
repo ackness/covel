@@ -159,7 +159,6 @@ const formFieldSchema = z
 
 const submitBehaviorSchema = z.object({
   echoFilledNarrative: z.boolean().optional(),
-  immediate: z.boolean().optional(),
 });
 
 export const createFormTool = tool({
@@ -185,7 +184,7 @@ export const createFormTool = tool({
     submitBehavior: submitBehaviorSchema
       .optional()
       .describe(
-        "Optional submit behavior: echo the filled narrative, submit immediately",
+        "Optional submit behavior: whether the filled narrative is echoed as a player message",
       ),
     notice: z
       .string()

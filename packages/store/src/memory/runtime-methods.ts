@@ -300,6 +300,15 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return applyWriteOrderPage(sorted, opts);
     },
 
+    async listExistingMessageIds(sessionId, ids) {
+      return [...new Set(ids)].filter((id) => {
+        const index = state.messagePositions.get(id);
+        return (
+          index !== undefined && state.messages[index]?.sessionId === sessionId
+        );
+      });
+    },
+
     async getCharacterSchema(sessionId) {
       return state.characterSchemas.get(sessionId) ?? null;
     },
@@ -425,6 +434,16 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         state.turnMessages.filter((r) => r.sessionId === sessionId),
       );
       return sorted.slice(-limit);
+    },
+
+    async listCompactedTurnMessageTags(sessionId) {
+      return sortTurnMessages(
+        state.turnMessages.filter((r) => r.sessionId === sessionId),
+      ).flatMap((r) =>
+        r.compactedAtTurnId == null
+          ? []
+          : [{ id: r.id, summaryId: r.compactedAtTurnId }],
+      );
     },
 
     async savePlayerInput(record) {

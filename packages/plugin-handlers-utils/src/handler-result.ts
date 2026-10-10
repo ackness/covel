@@ -71,7 +71,6 @@ export type PluginFormInteraction = {
   };
   readonly submitBehavior?: {
     readonly echoFilledNarrative?: boolean;
-    readonly immediate?: boolean;
   };
   /**
    * A note shown above the fields, in the session's language: why the player

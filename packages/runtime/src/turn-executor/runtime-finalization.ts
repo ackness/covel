@@ -5,6 +5,7 @@ import {
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
+import { isDeepStrictEqual } from "node:util";
 import { validateOutput } from "@covel/tools";
 import {
   runPostRuntimeHook,
@@ -76,9 +77,15 @@ export async function finalizeRuntimeResult(
     readonly deltaCount?: number;
     readonly outputContractSchema?: Readonly<Record<string, unknown>>;
     readonly outputSchema?: Readonly<Record<string, unknown>>;
+    /**
+     * An agent has no canonical value: its output was checked against this
+     * schema before PostRuntime and is checked again only when a hook rewrote it.
+     */
+    readonly agentOutputSchema?: Readonly<Record<string, unknown>>;
   } = {},
 ): Promise<RuntimeResult> {
   result = withAgentFailureTarget(result, options.lastTarget);
+  const preHookOutput = result.output;
   let finalized = await runPostRuntimeHook(
     {
       pipeline: deps.hookPipeline,
@@ -113,16 +120,20 @@ export async function finalizeRuntimeResult(
     if (error)
       finalized = { ...finalized, status: "failed", output: null, error };
   }
-  if (
-    finalized.status === "success" &&
-    finalized.canonicalValue?.value !== undefined &&
-    options.outputSchema
-  ) {
+  const schemaTarget =
+    finalized.canonicalValue?.value !== undefined
+      ? { schema: options.outputSchema, value: finalized.canonicalValue.value }
+      : !finalized.canonicalValue &&
+          manifest.outputKind !== "story" &&
+          !isDeepStrictEqual(finalized.output, preHookOutput)
+        ? { schema: options.agentOutputSchema, value: finalized.output }
+        : undefined;
+  if (finalized.status === "success" && schemaTarget?.schema) {
     let error: string | undefined;
     try {
       const validation = validateOutput(
-        finalized.canonicalValue.value,
-        options.outputSchema,
+        schemaTarget.value,
+        schemaTarget.schema,
       );
       if (!validation.valid)
         error = (validation.errors ?? []).slice(0, 5).join("; ");
