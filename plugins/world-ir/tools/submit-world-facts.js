@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
+import { resolveCharacter } from "@covel/plugin-handlers-utils";
 import { characterHandles } from "./character-handles.js";
 import { eventProfileIssues } from "./event-profiles.js";
 import { vocabularyEntries } from "./vocabulary.js";
@@ -173,7 +174,7 @@ const lettersOf = (text) =>
  * sometimes writes the name itself or puts the hyphen elsewhere (`雷恩-修女`
  * for `雷恩修女`). A reference that no entity of this output has as its id
  * means the one session character whose handle has the same letters and
- * digits.
+ * digits, or else the one that has it as a name or an alias.
  */
 function withCharacterIds(facts, handles) {
   const declared = new Set(facts.entities.map((entity) => entity.id));
@@ -183,9 +184,16 @@ function withCharacterIds(facts, handles) {
     // Two characters with the same letters: the letters name neither.
     byLetters.set(letters, byLetters.has(letters) ? null : character);
   }
+  const cast = [...handles.values()];
+  const named = (reference) => {
+    const resolution = resolveCharacter(cast, reference);
+    return resolution.status === "found" ? resolution.character.id : undefined;
+  };
   const real = (id) =>
     handles.get(id)?.id ??
-    (declared.has(id) ? id : (byLetters.get(lettersOf(id))?.id ?? id));
+    (declared.has(id)
+      ? id
+      : (byLetters.get(lettersOf(id))?.id ?? named(id) ?? id));
   const realAll = (ids) => ids && ids.map(real);
   return {
     ...facts,

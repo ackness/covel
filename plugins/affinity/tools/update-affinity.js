@@ -10,8 +10,11 @@
  *  1. Loads existing records from `plugin_data[namespace="affinity"]` and
  *     overlays same-turn pending writes (tool calls within one turn do not
  *     commit between each other, so a second call must see the first one).
- *  2. Matches names by `nameKey`; unknown names get a stable short ID
- *     via `shortIdBatch` and start at score 0 before the delta applies.
+ *  2. Turns each name into the session character it means (name or alias,
+ *     `resolveCharacter`) and matches records by `characterNameKey` of that
+ *     character's name; a name of nobody in the World Model is matched as
+ *     written. Unknown names get a stable short ID via `shortIdBatch` and
+ *     start at score 0 before the delta applies.
  *  3. Accumulates `score` with clamping to [-100, 100] and re-derives the
  *     display fields (`tier` / `tierLabel` / `tierColor` / `scoreBar`) on
  *     every write. World-preseeded records ({id, name, score, notes?}) carry
@@ -23,7 +26,9 @@
  */
 
 import {
+  characterNameKey,
   makeProposal,
+  resolveCharacter,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
@@ -39,14 +44,16 @@ const MAX_CHANGES_PER_TURN = 5;
 const MAX_DELTA = 20;
 
 /**
- * The form of a name that two spellings of one name share: letter case,
- * full-width and half-width forms, and the amount of white space do not make
- * a second NPC.
+ * The name a record is kept under: the name of the session character that
+ * `name` means, so "the keeper" and "Isolde" are one record. A name that no
+ * character has, or that two have, stays as written.
  *
+ * @param {ReadonlyArray<{ id: string, name: string, aliases?: readonly string[] }>} cast
  * @param {string} name
  */
-function nameKey(name) {
-  return name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+function canonicalName(cast, name) {
+  const resolution = resolveCharacter(cast, name);
+  return resolution.status === "found" ? resolution.character.name : name;
 }
 
 export default function ({ tool, z, shortIdBatch }) {
@@ -76,7 +83,7 @@ export default function ({ tool, z, shortIdBatch }) {
   return tool({
     name: "update-affinity",
     description:
-      "Batch-apply player-to-NPC affinity changes for this turn. NPCs are de-duplicated by name; an unknown name is created at score 0 before its delta applies. Scores accumulate across turns and clamp to [-100, 100]; tiers are derived automatically.",
+      "Batch-apply player-to-NPC affinity changes for this turn. NPCs are de-duplicated by name, and an alias of a session character means that character; an unknown name is created at score 0 before its delta applies. Scores accumulate across turns and clamp to [-100, 100]; tiers are derived automatically.",
     parameters: z.object({
       changes: z
         .array(changeSchema)
@@ -93,12 +100,19 @@ export default function ({ tool, z, shortIdBatch }) {
 
       // ── 1. Read records including earlier pending writes ──
       const rows = (await context.store.listPluginData("affinity")) ?? [];
+      const cast = context.world?.characters ?? [];
+      const nameKey = (name) => characterNameKey(canonicalName(cast, name));
       /** @type {Map<string, { key: string, value: any }>} */
       const recordByName = new Map();
       const indexRow = (row) => {
         const v = row.value ?? {};
         if (typeof v.name !== "string" || v.name.length === 0) return;
-        recordByName.set(nameKey(v.name), { key: row.key, value: v });
+        // A record written under an alias before the alias was known
+        // must not hide the record under the character's own name.
+        const lookup = nameKey(v.name);
+        if (recordByName.has(lookup) && characterNameKey(v.name) !== lookup)
+          return;
+        recordByName.set(lookup, { key: row.key, value: v });
       };
       for (const row of rows) indexRow(row);
       // ── 2. Assign stable short IDs to names not seen before ──
@@ -108,7 +122,7 @@ export default function ({ tool, z, shortIdBatch }) {
         const lookup = nameKey(change.name);
         if (!recordByName.has(lookup) && !seenNewNames.has(lookup)) {
           seenNewNames.add(lookup);
-          newNames.push(change.name);
+          newNames.push(canonicalName(cast, change.name));
         }
       }
       const assignedIds =
@@ -139,7 +153,7 @@ export default function ({ tool, z, shortIdBatch }) {
         if (!key) continue;
         const prior = existing?.value ?? {
           id: key,
-          name: change.name,
+          name: canonicalName(cast, change.name),
           score: 0,
         };
 

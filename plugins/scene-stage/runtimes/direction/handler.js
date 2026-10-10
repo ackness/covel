@@ -1,5 +1,6 @@
 import {
   makeProposal,
+  resolveCharacter,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
@@ -232,29 +233,36 @@ function normalizeToken(value) {
     .replace(/\s+/g, "");
 }
 
+/**
+ * Who a cue means: a session character by id, name or alias, or an actor
+ * already on stage. A cue places a picture and writes no game state, so one
+ * character whose name contains the cue's also counts.
+ */
 function resolveActor(value, actors, characters) {
   const token = normalizeToken(value);
   if (!token) return null;
+  // One entry per id, the session character first: it has the aliases.
   const available = [
-    ...actors.map((actor) => ({
-      id: actor.characterId,
-      name: actor.displayName,
-    })),
-    ...characters,
+    ...new Map(
+      [
+        ...actors.map((actor) => ({
+          id: actor.characterId,
+          name: actor.displayName,
+        })),
+        ...characters,
+      ].map((candidate) => [candidate.id, candidate]),
+    ).values(),
   ];
-  const exact = available.find((candidate) => {
+  // A world's character id ends with the cue's short form (`npc-mio`).
+  const byId = available.find((candidate) => {
     const id = normalizeToken(candidate.id);
-    const name = normalizeToken(candidate.name);
-    return id === token || name === token || id.endsWith(`-${token}`);
+    return id === token || id.endsWith(`-${token}`);
   });
-  if (exact) return exact;
-
-  const partial = available.filter((candidate) => {
-    const name = normalizeToken(candidate.name);
-    return name.includes(token) || token.includes(name);
+  if (byId) return byId;
+  const resolution = resolveCharacter(available, String(value), {
+    partial: true,
   });
-  const unique = new Map(partial.map((candidate) => [candidate.id, candidate]));
-  return unique.size === 1 ? [...unique.values()][0] : null;
+  return resolution.status === "found" ? resolution.character : null;
 }
 
 function listCharacters(world) {
@@ -268,5 +276,10 @@ function listCharacters(world) {
         typeof row.id === "string" &&
         typeof row.name === "string",
     )
-    .map((row) => ({ id: row.id, name: row.name, type: row.type }));
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      ...(Array.isArray(row.aliases) ? { aliases: row.aliases } : {}),
+      type: row.type,
+    }));
 }
