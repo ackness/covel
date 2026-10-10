@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { RuntimeManifest } from "@covel/shared";
+import type { HandlerResult, RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   commitExecution,
@@ -52,7 +52,7 @@ async function suspendedFixture(nested = false) {
     loadRuntime: async (manifest: RuntimeManifest): Promise<LoadedRuntime> => ({
       manifest,
       promptTemplate: "",
-      handler: async (context) => {
+      handler: async (context): Promise<HandlerResult> => {
         if (manifest.name === parent.name) {
           await context.recursiveCall({
             manualTrigger: { runtimeId: child.name },

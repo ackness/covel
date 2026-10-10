@@ -173,7 +173,10 @@ it.each(["agent", "function", "guard"] as const)(
       event: "PostRuntime",
       handler: post,
     });
-    const handler = vi.fn(async () => ({ outcome: "success", value: {} }));
+    const handler = vi.fn(async () => ({
+      outcome: "success" as const,
+      value: {},
+    }));
     const guard = vi.fn(async () => ({ skip: true }));
     const generate = vi.fn();
     const onRuntimeComplete = vi.fn(async () => {});

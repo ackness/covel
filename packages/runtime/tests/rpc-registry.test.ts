@@ -290,15 +290,17 @@ describe("createRpcHandlerStoreView", () => {
 
     await scoped.getSession();
     await scoped.listTurnMessages();
-    await scoped.savePlayerInput({
+    // Forged identity fields are not part of the view's types; held in variables
+    // they reach the view as a plugin could send them, and must be ignored.
+    const forgedInput = {
       id: "input-1",
       sessionId: "sess-attacker",
       turnId: "turn-1",
       formId: "form-1",
       values: {},
       createdAt: "2026-04-30T00:00:00.000Z",
-    });
-    await scoped.setPluginData?.({
+    };
+    const forgedData = {
       sessionId: "sess-attacker",
       pluginId: "plugin-attacker",
       namespace: "ns",
@@ -306,7 +308,9 @@ describe("createRpcHandlerStoreView", () => {
       value: 1,
       createdAt: "2026-04-30T00:00:00.000Z",
       updatedAt: "2026-04-30T00:00:00.000Z",
-    });
+    };
+    await scoped.savePlayerInput(forgedInput);
+    await scoped.setPluginData?.(forgedData);
     await scoped.getPluginData?.("ns", "key");
     await scoped.listPluginData?.("ns");
 

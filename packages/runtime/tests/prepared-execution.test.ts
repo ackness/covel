@@ -32,6 +32,7 @@ function manifest(
   return {
     name,
     pluginId: "probe",
+    description: name,
     runtimeType: "function",
     stage: "narrative",
     trigger: { type: "auto" },

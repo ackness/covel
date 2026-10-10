@@ -17,6 +17,7 @@ import type { FunctionHandler } from "@covel/plugin-loader";
 import { executeFunctionRuntime } from "../src/function-runtime/turn-function-runtime.js";
 import { processRuntimeResult } from "../src/session/session-runtime-result.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import type { TrustedHandlerStore } from "../src/index.js";
 
 const SESSION_ID = "sess-trusted-ns";
 
@@ -51,7 +52,6 @@ async function runTrustedHandler(
     manifest,
     input,
     loaded: { manifest, promptTemplate: "", handler },
-    completedResults: new Map(),
     deps: {
       store,
       getPluginSource: () => "builtin",
@@ -73,17 +73,12 @@ describe("trusted function-runtime store handle", () => {
     let writeError: unknown;
 
     await runTrustedHandler(store, async (ctx) => {
-      const handlerStore = ctx.store;
+      const handlerStore = ctx.store as TrustedHandlerStore;
       try {
         await handlerStore.setPluginData({
-          id: `${SESSION_ID}:builtin-plugin:_jobs:forged`,
-          sessionId: SESSION_ID,
-          pluginId: "builtin-plugin",
           namespace: "_jobs",
           key: "forged",
           value: { status: "done" },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         });
       } catch (err) {
         writeError = err;
@@ -117,18 +112,13 @@ describe("trusted function-runtime store handle", () => {
 
     let observedJob: unknown;
     const result = await runTrustedHandler(store, async (ctx) => {
-      const handlerStore = ctx.store;
+      const handlerStore = ctx.store as TrustedHandlerStore;
       const row = await handlerStore.getPluginData("_jobs", "job-1");
       observedJob = row?.value;
       await handlerStore.setPluginData({
-        id: `${SESSION_ID}:builtin-plugin:state:progress`,
-        sessionId: SESSION_ID,
-        pluginId: "builtin-plugin",
         namespace: "state",
         key: "progress",
         value: { step: 1 },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       });
       return { outcome: "success", value: { proposals: [] } };
     });
