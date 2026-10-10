@@ -176,3 +176,41 @@ it("gives streamed tool calls without an id one that no other step of the loop h
   // The same request names its calls the same way: a replay repeats.
   expect(await ids(first)).toEqual(stepOne);
 });
+
+it("keeps a tool call of a reply that is not streamed when it has no id", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async () =>
+      Response.json({
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                { function: { name: "write", arguments: "{}" } },
+                { id: "given", function: { name: "write", arguments: "{}" } },
+                { id: "", function: { name: "write", arguments: "{}" } },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      }),
+    ),
+  );
+  const calls = async () =>
+    (
+      await createOpenAiChatAdapter().generateText(
+        { baseUrl: "https://provider.example" },
+        { model: "test", messages: [{ role: "user", content: "Write." }] },
+      )
+    ).toolCalls?.map((call) => call.id);
+  const ids = await calls();
+  expect(ids).toHaveLength(3);
+  expect(ids![1]).toBe("given");
+  expect(ids![0]).toMatch(/^call_[0-9a-f]{24}$/);
+  expect(ids![2]).toMatch(/^call_[0-9a-f]{24}$/);
+  expect(ids![0]).not.toBe(ids![2]);
+  expect(await calls()).toEqual(ids);
+});

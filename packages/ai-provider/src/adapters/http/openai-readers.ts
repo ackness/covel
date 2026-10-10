@@ -138,31 +138,34 @@ export function readOpenAiChatStreamToolCallDeltas(
   });
 }
 
+/**
+ * The tool calls of a non-streamed reply. Some compatible gateways leave `id`
+ * out; such a call takes `fallbackId` of its position, as the streamed reader
+ * gives it.
+ */
 export function readOpenAiChatToolCalls(
   payload: Record<string, unknown>,
+  fallbackId: (index: number) => string,
 ): Array<{ id: string; name: string; arguments: string }> | null {
   const toolCalls = asRecord(firstChoice(payload)?.message)?.tool_calls;
   if (!Array.isArray(toolCalls) || toolCalls.length === 0) return null;
-  const valid = toolCalls.filter(
-    (
-      tc: unknown,
-    ): tc is { id: string; function: { name: string; arguments: string } } => {
-      const entry = tc as Record<string, unknown> | null | undefined;
-      return (
-        typeof entry?.id === "string" &&
-        typeof (entry?.function as Record<string, unknown> | undefined)
-          ?.name === "string" &&
-        typeof (entry?.function as Record<string, unknown> | undefined)
-          ?.arguments === "string"
-      );
-    },
-  );
-  if (valid.length === 0) return null;
-  return valid.map((tc) => ({
-    id: tc.id,
-    name: tc.function.name,
-    arguments: tc.function.arguments,
-  }));
+  const valid = toolCalls.flatMap((tc: unknown, index) => {
+    const entry = asRecord(tc);
+    const fn = asRecord(entry?.function);
+    if (typeof fn?.name !== "string" || typeof fn.arguments !== "string")
+      return [];
+    return [
+      {
+        id:
+          typeof entry?.id === "string" && entry.id
+            ? entry.id
+            : fallbackId(index),
+        name: fn.name,
+        arguments: fn.arguments,
+      },
+    ];
+  });
+  return valid.length === 0 ? null : valid;
 }
 
 export function readResponsesOutputText(
