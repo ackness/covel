@@ -49,6 +49,7 @@ import {
   collectDepthContributions,
   renderSystemLoreContributions,
 } from "./contribution-aggregator.js";
+import { messageContentFromHistoryRecord } from "./llm-content-parts.js";
 import {
   buildExecutionStoryMessages,
   buildMessageHistoryWithSummaries,
@@ -173,6 +174,10 @@ function buildRuntimeActivationBlock(params: ContextBuildParams): string {
  */
 function modelFacingSlots(
   slots: Readonly<Record<string, InputSlot>>,
+  inConversation?: {
+    readonly texts: ReadonlySet<string>;
+    readonly note: string;
+  },
 ): Record<string, unknown> {
   const source = ({ pluginId, runtimeId }: InputSource) => ({
     pluginId,
@@ -184,7 +189,11 @@ function modelFacingSlots(
       slot.cardinality === "one"
         ? {
             ...slot,
-            value: modelFacingJson(slot.value),
+            value:
+              typeof slot.value === "string" &&
+              inConversation?.texts.has(slot.value)
+                ? inConversation.note
+                : modelFacingJson(slot.value),
             source: source(slot.source),
           }
         : {
@@ -207,7 +216,36 @@ function modelFacingSlots(
 function buildInputsBindingBlock(params: ContextBuildParams): string {
   const slots = params.inputSlots;
   if (!slots || Object.keys(slots).length === 0) return "";
-  return `<runtime-inputs>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots)))}\n</runtime-inputs>`;
+  return `<runtime-inputs>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots, executionStoryInConversation(params))))}\n</runtime-inputs>`;
+}
+
+/**
+ * Story text of the running execution that the conversation already carries
+ * as an assistant message (see `buildExecutionStoryMessages`). An input whose
+ * whole value is that text would send it a second time, so the slot names the
+ * message instead. A retry after the commit has no execution story: the text
+ * is then in the history and the slot keeps its value.
+ */
+function executionStoryInConversation(
+  params: ContextBuildParams,
+): { readonly texts: ReadonlySet<string>; readonly note: string } | undefined {
+  const texts = new Set(
+    (params.executionStory ?? [])
+      .filter(
+        (record) =>
+          record.content.length > 0 &&
+          messageContentFromHistoryRecord(record) === record.content,
+      )
+      .map((record) => record.content),
+  );
+  if (texts.size === 0) return undefined;
+  return {
+    texts,
+    note:
+      instructionLocaleFor(params.turnInput.locale) === "zh"
+        ? "（本回合的故事正文：见下方对话里最后一段故事正文，这里不重复）"
+        : "(this turn's story text: the last story reply in the conversation below; not repeated here)",
+  };
 }
 
 /**

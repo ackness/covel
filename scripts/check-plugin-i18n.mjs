@@ -172,7 +172,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
   "packages/context/src/message-insertion.ts": 1,
-  "packages/context/src/prompt-assembler.ts": 1,
+  "packages/context/src/prompt-assembler.ts": 2,
   "packages/context/src/prompt-internals.ts": 20,
   "packages/context/src/session-context.ts": 1,
   "packages/plugin-handlers-utils/src/character-sheets.ts": 1,
