@@ -287,9 +287,17 @@ export class LocalDataService implements DataService {
     // The vault keeps full records (a browser session plays from them), and the
     // catalog list carries summaries.
     const summaries = await api.listWorlds();
-    const catalog = await Promise.all(
-      summaries.map((summary) => api.getWorld(summary.id)),
+    // A world deleted between the list and its read is no longer in the
+    // catalog: leave it out instead of failing the first visit.
+    const read = await Promise.all(
+      summaries.map((summary) =>
+        api.getWorld(summary.id).catch((error: unknown) => {
+          if (isNotFound(error)) return null;
+          throw error;
+        }),
+      ),
     );
+    const catalog = read.filter((world) => world !== null);
     await this.vault.initializeWorlds(
       catalog.map((world) => ({
         ...world,
