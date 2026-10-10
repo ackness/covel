@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { LocalDataService } from "../data-service/local.js";
 import type { WorldRecord } from "../api.js";
+import { ApiError } from "../api/request.js";
 import { summarizeWorld } from "@covel/shared";
 import i18n from "@/i18n";
 import { worldStorageLabel } from "@/components/session/world-select-screen.js";
@@ -94,6 +95,29 @@ it("imports the actual catalog with stable IDs and full package content into bro
   });
   expect(worldStorageLabel(academy!)).toBe("Browser IndexedDB");
   expect(await vault.hasInitializedWorlds()).toBe(true);
+});
+
+it("leaves out a world deleted between the catalog list and its read", async () => {
+  const gone = catalog[0]!.id;
+  api.getWorld.mockImplementation(async (id: string) => {
+    if (id === gone) {
+      throw new ApiError(
+        404,
+        `/api/worlds/${id}`,
+        '{"error":"World not found"}',
+      );
+    }
+    return structuredClone(catalog.find((world) => world.id === id));
+  });
+  const worlds = await new LocalDataService(vault).listWorlds();
+  expect(worlds.map((world) => world.id)).not.toContain(gone);
+  expect(worlds).toHaveLength(catalog.length - 1);
+});
+
+it("still fails the first visit when a world read fails for another reason", async () => {
+  api.getWorld.mockRejectedValue(new ApiError(500, "/api/worlds/x", "boom"));
+  await expect(new LocalDataService(vault).listWorlds()).rejects.toThrow();
+  expect(await vault.listWorlds()).toEqual([]);
 });
 
 it("retries a failed first catalog load without initializing an empty library", async () => {
