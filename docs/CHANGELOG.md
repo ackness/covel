@@ -236,6 +236,7 @@ Not verified for this release: no session was played in the desktop app (a local
 - **Bundled world translation files hold only translated text.** The `.en-US` files of `lantern-barrow` and `mistport` no longer copy structure (insertion order, enabled flags, conditions, attributes, tags) from the main files; changing the main file no longer leaves a stale copy behind. The merged result is identical.
 - **`role:*` preference tags are gone from the bundled worlds' plugin policies**, since no plugin declares them.
 - **A Qwen model named with capital letters sends the level it was offered.** The offered levels were read from the lower-cased model ID and the request fields from the ID as written, so `Qwen/Qwen3.8-27B`, `Qwen3.8-Max`, `Qwen3.8-Flash` and `Qwen3.8-2.4T-A95B` on an aggregator sent `enable_thinking` without `reasoning_effort` for `low` / `medium` / `xhigh`, and the thinking-only `Qwen3-…-Thinking` models sent nothing for a level they do not offer where the lower-case name keeps thinking on. Thirteen names in the bundled table were affected.
+- **A world deleted while the app loads no longer stops it from starting.** On the first visit with browser storage the app reads every world of the catalog; when one was deleted between the list and its read (another tab, another player of a shared server), the app showed "Startup failed: World not found". That world is now left out.
 
 ### Security
 
