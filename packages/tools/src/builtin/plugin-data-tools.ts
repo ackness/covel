@@ -9,6 +9,7 @@
  */
 
 import {
+  pluginDataToolSizeError,
   reservedPluginDataNamespaceError,
   type PluginDataBatchPayload,
   type PluginDataPayload,
@@ -108,6 +109,16 @@ function isModelReadableNamespace(namespace: string): boolean {
   return reservedPluginDataNamespaceError(namespace) === null;
 }
 
+/**
+ * The commit boundary refuses an oversized value, but by then the model has
+ * been told the write succeeded and the runtime's other writes go with it.
+ * Refused here, the model reads the sizes and can write less.
+ */
+function assertValueFits(namespace: string, key: string, value: unknown): void {
+  const tooLarge = pluginDataToolSizeError(namespace, key, value);
+  if (tooLarge) throw new Error(tooLarge);
+}
+
 // ── plugin-data-set ─────────────────────────────────────────────
 
 function createPluginDataSetTool(): ToolModule {
@@ -125,6 +136,7 @@ function createPluginDataSetTool(): ToolModule {
     }),
     execute: async (params, context) => {
       assertModelWritableNamespace(params.namespace);
+      assertValueFits(params.namespace, params.key, params.value);
       const timestamp = new Date().toISOString();
       return withPendingProposals(
         {
@@ -168,8 +180,10 @@ function createPluginDataSetBatchTool(): ToolModule {
         .describe("Entries to write"),
     }),
     execute: async (params, context) => {
-      for (const item of params.items)
+      for (const item of params.items) {
         assertModelWritableNamespace(item.namespace);
+        assertValueFits(item.namespace, item.key, item.value);
+      }
       const timestamp = new Date().toISOString();
       return withPendingProposals(
         {

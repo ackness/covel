@@ -13,7 +13,7 @@ import {
   requireNonEmptyArray,
   requireNonEmptyString,
 } from "./commit-validators.js";
-import { pluginDataSizeError } from "./plugin-data-limits.js";
+import { pluginDataSizeError } from "@covel/shared";
 
 /**
  * Proposals carry plugin-authored namespaces, so the commit boundary rejects

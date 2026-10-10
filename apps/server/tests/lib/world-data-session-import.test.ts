@@ -9,7 +9,7 @@ import {
   discoverPlugins,
   loadPluginDefinition,
 } from "@covel/plugin-loader";
-import { MAX_PLUGIN_DATA_VALUE_BYTES } from "@covel/runtime";
+import { MAX_PLUGIN_DATA_VALUE_BYTES } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {

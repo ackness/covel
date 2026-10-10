@@ -14,11 +14,11 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import { reservedPluginDataNamespaceError } from "@covel/shared";
 import {
   MAX_PLUGIN_DATA_VALUE_BYTES,
   pluginDataSizeBytes,
-} from "@covel/runtime";
+  reservedPluginDataNamespaceError,
+} from "@covel/shared";
 import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
 import {

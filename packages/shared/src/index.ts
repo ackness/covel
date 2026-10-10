@@ -183,6 +183,12 @@ export {
   pluginCodeNamespaceWriteError,
   reservedPluginDataNamespaceError,
 } from "./utils/plugin-data-namespace.js";
+export {
+  MAX_PLUGIN_DATA_VALUE_BYTES,
+  pluginDataSizeBytes,
+  pluginDataSizeError,
+  pluginDataToolSizeError,
+} from "./utils/plugin-data-limits.js";
 export { decodePageCursor, encodePageCursor } from "./utils/page-cursor.js";
 export {
   parseSlashCommandInvocation,

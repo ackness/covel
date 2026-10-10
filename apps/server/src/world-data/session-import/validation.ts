@@ -1,13 +1,11 @@
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
+  MAX_PLUGIN_DATA_VALUE_BYTES,
+  pluginDataSizeBytes,
 } from "@covel/shared";
 import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import { z } from "zod";
-import {
-  MAX_PLUGIN_DATA_VALUE_BYTES,
-  pluginDataSizeBytes,
-} from "@covel/runtime";
 import {
   pluginSchemaUriForTarget,
   resolvePluginSchema,

@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { Proposal } from "@covel/shared";
+import { MAX_PLUGIN_DATA_VALUE_BYTES, type Proposal } from "@covel/shared";
 import {
   createCommitPipeline,
   type KernelStore,
@@ -15,7 +15,6 @@ import {
   createPluginDataWriter,
   createRpcHandlerStoreView,
 } from "../src/function-runtime/plugin-handler-helpers.js";
-import { MAX_PLUGIN_DATA_VALUE_BYTES } from "../src/commit/plugin-data-limits.js";
 
 const SESSION_ID = "sess-size-limit";
 const PLUGIN_ID = "bulky-plugin";
