@@ -97,15 +97,7 @@ describe("Gemini native generateContent", () => {
           {
             role: "user",
             content: [
-              {
-                type: "image",
-                image: {
-                  id: "a".repeat(64),
-                  size: 4,
-                  mime: "image/png",
-                  url: "data:image/png;base64,YWJjZA==",
-                },
-              },
+              { type: "image", image: "data:image/png;base64,YWJjZA==" },
             ],
           },
         ],
@@ -116,9 +108,7 @@ describe("Gemini native generateContent", () => {
         preset: { capability: { input: ["text"] } } as never,
       },
     );
-    expect(request().body.contents[0].parts).toHaveLength(1);
-    expect(request().body.contents[0].parts[0].text).toContain("image_ref");
-    expect(request().body.contents[0].parts[0].inlineData).toBeUndefined();
+    expect(request().body.contents[0].parts).toEqual([{ text: "[image]" }]);
   });
 
   it("preserves unsigned native function IDs across tool rounds", async () => {
@@ -358,7 +348,8 @@ describe("Gemini native generateContent", () => {
     mockJson(answer());
     const image = (url: string) => ({
       type: "image" as const,
-      image: { id: "a".repeat(64), size: 4, mime: "image/png", url },
+      image: url,
+      mediaType: "image/png",
     });
     await adapter.generateText(config, {
       ...params,
@@ -367,6 +358,7 @@ describe("Gemini native generateContent", () => {
           role: "user",
           content: [
             image("data:image/png;base64,YWJjZA=="),
+            { type: "image", image: "YWJjZA==", mediaType: "image/jpeg" },
             image(
               "https://generativelanguage.googleapis.com/v1beta/files/synthetic",
             ),
@@ -376,6 +368,7 @@ describe("Gemini native generateContent", () => {
     });
     expect(request().body.contents[0].parts).toEqual([
       { inlineData: { mimeType: "image/png", data: "YWJjZA==" } },
+      { inlineData: { mimeType: "image/jpeg", data: "YWJjZA==" } },
       {
         fileData: {
           mimeType: "image/png",

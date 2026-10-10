@@ -53,6 +53,9 @@ export function filterRuntimeHistory(
  * Keep only the newest `maxTurns` turns of an already-filtered history.
  * Turns are counted by distinct `turnId`, newest first, so one turn's player
  * input and runtime outputs stay together. `maxTurns: 0` yields no history.
+ * A `system` row (the note of a picture, written by the background job that
+ * made it) is no turn: it stays with the turns around it and uses up none of
+ * the window.
  */
 export function applyHistoryWindow(
   messageHistory: readonly TurnMessageRecord[],
@@ -61,12 +64,12 @@ export function applyHistoryWindow(
   const kept = new Set<string>();
   let start = messageHistory.length;
   while (start > 0) {
-    const turnId = messageHistory[start - 1]!.turnId;
-    if (!kept.has(turnId)) {
+    const message = messageHistory[start - 1]!;
+    if (message.sourceType !== "system" && !kept.has(message.turnId)) {
       if (kept.size === policy.maxTurns) break;
-      kept.add(turnId);
+      kept.add(message.turnId);
     }
     start--;
   }
-  return messageHistory.slice(start);
+  return kept.size === 0 ? [] : messageHistory.slice(start);
 }

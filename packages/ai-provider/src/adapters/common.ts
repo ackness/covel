@@ -80,14 +80,51 @@ export function createMetadataSanitizer(
   };
 }
 
+/** Where the bytes of an image part are: inline, or at a URL the provider reads. */
+export type ImageSource =
+  | { readonly kind: "data"; readonly mediaType: string; readonly data: string }
+  | { readonly kind: "url"; readonly url: string };
+
+/** Base64 openings of the formats the image-input protocols accept. */
+const BASE64_SIGNATURES: readonly (readonly [string, string])[] = [
+  ["iVBORw0KGgo", "image/png"],
+  ["/9j/", "image/jpeg"],
+  ["R0lGOD", "image/gif"],
+  ["UklGR", "image/webp"],
+];
+
 /**
- * Serialize a vision `ImagePart` that has no resolved URL into a text
- * placeholder. Shared verbatim by the two OpenAI adapters.
+ * Read an image part. A `data:` URL names its own format; bare base64 takes
+ * `mediaType`, else the format its first bytes show.
  */
-export function mediaRefFallbackText(part: ImagePart): string {
-  return JSON.stringify({
-    type: "image_ref",
-    ref: part.image,
-    note: "MediaRef has no resolved URL; provider vision input requires a retrievable image URL.",
-  });
+export function imagePartSource(part: ImagePart): ImageSource {
+  const { image } = part;
+  if (/^https?:\/\//i.test(image)) return { kind: "url", url: image };
+  const dataUrl = /^data:([a-z0-9.+/-]+);base64,/i.exec(image);
+  if (dataUrl) {
+    return {
+      kind: "data",
+      mediaType: dataUrl[1]!.toLowerCase(),
+      data: image.slice(dataUrl[0].length),
+    };
+  }
+  return {
+    kind: "data",
+    mediaType:
+      part.mediaType ??
+      BASE64_SIGNATURES.find(([prefix]) => image.startsWith(prefix))?.[1] ??
+      "image/png",
+    data: image,
+  };
 }
+
+/** The `data:` or `http(s)` URL of an image part, for the wires that take one. */
+export function imagePartUrl(part: ImagePart): string {
+  const source = imagePartSource(part);
+  return source.kind === "url"
+    ? source.url
+    : `data:${source.mediaType};base64,${source.data}`;
+}
+
+/** Stands for an image where a wire field holds text only. */
+export const IMAGE_PLACEHOLDER_TEXT = "[image]";

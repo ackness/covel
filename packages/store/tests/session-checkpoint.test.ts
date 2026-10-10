@@ -10,6 +10,7 @@ import {
   makeEvent,
   makeMessage,
   makeLorebookEntry,
+  makeRuntimeExport,
   makeRuntimeOutput,
   makeSession,
   makeToolCall,
@@ -114,6 +115,39 @@ describe("session checkpoint transfer", () => {
     // Logs that nothing reads stay behind.
     expect(checkpoint.toolCalls).toEqual([]);
     expect(checkpoint.events).toEqual([]);
+  });
+
+  it("carries only the newest revision of each runtime export", async () => {
+    const store = createMemoryStore();
+    const session = makeSession();
+    await store.createSession(session);
+    for (const revision of [1, 2, 3]) {
+      await store.appendRuntimeExport(
+        makeRuntimeExport({
+          sessionId: session.id,
+          recordAs: "world.facts",
+          revision,
+          value: { revision },
+        }),
+      );
+    }
+    await store.appendRuntimeExport(
+      makeRuntimeExport({
+        sessionId: session.id,
+        recordAs: "quest.log",
+        revision: 1,
+        value: { revision: 1 },
+      }),
+    );
+    const checkpoint = await exportSessionCheckpoint(store, session.id, {
+      revision: 1,
+      actionId: "test",
+    });
+    expect(
+      checkpoint.runtimeExports
+        .map((record) => `${record.recordAs}@${record.revision}`)
+        .sort(),
+    ).toEqual(["quest.log@1", "world.facts@3"]);
   });
 
   it("exports and atomically restores durable session domains", async () => {

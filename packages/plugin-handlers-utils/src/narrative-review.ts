@@ -6,14 +6,7 @@ interface ReviewMessage {
     | string
     | readonly (
         | { readonly type: "text"; readonly text: string }
-        | {
-            readonly type: "image";
-            readonly image: {
-              readonly id: string;
-              readonly mime: string;
-              readonly size: number;
-            };
-          }
+        | { readonly type: "image" | "media" }
       )[];
 }
 interface ReviewResponse {

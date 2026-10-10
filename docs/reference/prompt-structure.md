@@ -34,6 +34,16 @@
 
 输出为 `{ summaries: [{ messageIds, replacesSummaryIds, content, focusSections, truncated? }] }`。每段只能覆盖新消息或旧摘要中的一种；框架只接受同一 session 中连续未压缩前缀的消息 ID，以及从最旧段开始连续选择的旧摘要 ID，拒绝跳过、重排、重复和外部来源。保留段加新段须满足总量、单段和段数限制。合并沿用最旧被替换段的 ID、起始回合与创建时间，只删除选中的旧段并重标记对应消息，保留段不变；全部写入在同一事务内提交。提供者需升级至 `@2`，不提供旧契约分支；已持久化摘要的记录形状未变。摘要以 `user` 角色、经过 XML 转义的 `<compacted_history>` 数据信封进入上下文。原始消息仍留在日志中；压缩只替换 prompt 中的表示。
 
+### 展示过的图片
+
+一张图片提交（`asset.generate`，`modality: "image"`）时，框架除了写玩家看到的消息，还在 `turn_messages` 里写一行说明，`sourceType: "system"`、`role: "user"`，正文是一句话：这里向玩家展示了一张图片，以及画面内容。画面内容取 `meta.caption`，没有时取 `meta.prompt`，折成一行，最长 600 字符；两者都没有时只写前半句。说明里没有媒体 ID、会话 ID、时间或路径。它按提交时间排在历史里，之后不再改写，所以每个读历史的模型都知道此处出现过图片，前缀缓存也不受影响。音频等其他媒体不写这一行。
+
+- 说明行不算一个回合：`agent.history.maxTurns` 按玩家回合计数，窗口内回合之间的说明行随窗口保留。
+- 图片本身不放进历史。`outputKind: story` 的 agent 在回合上下文之后、当前玩家输入之前多一条 user 消息，列出未压缩历史里最新的 2 张图片（从旧到新，各带同一句画面内容）。每次模型调用前，框架按本次调用实际使用的模型用途判断：模型表或 `llm.toml` 的 `input` 写明接受图片时，从 MediaStore 读出字节作为内联 base64 图片发出；否则整条消息去掉，只留历史里的说明。判断依据是[模型能力](./slots.md)，不看模型名。
+- 上限：每次调用最多 2 张；单张原始字节不超过 3,750,000（base64 后 5 MB，是各服务商单图上限里最紧的）；格式限 PNG、JPEG、WebP、GIF。超限、格式不符、读取失败或不属于本会话的图片不发送，说明仍在。预算估算按每张 1,500 token 计。
+- 图片放在回合区而不是历史里，是成本上的取舍：留在历史里，图片滑出「最新 2 张」时要改写旧消息，其后的历史缓存全部失效；放在回合区，历史前缀逐回合不变，代价是图片每次调用都按未缓存的输入计费（一张约 800–1,600 token，两张约 3,000 token），同一回合工具循环的后续请求可以命中。
+- trace 里的 `llm.calling` 和 `providerRequests` 不记录图片字节，只记录长度。
+
 ## 2. 段位与排序
 
 ```text
@@ -50,6 +60,7 @@ messages
   pre-history 非 system 扩展消息
   摘要替换后的历史
   回合上下文：本回合的数据块与 turn 扩展段（一条 system 消息）
+  最近展示的图片（一条 user 消息，仅 story runtime 且模型接受图片输入）
   当前玩家输入
   本次执行已产出的故事正文与结尾提示（仅叙事之后的 runtime）
   按 depth 插入的世界书和扩展消息
@@ -222,6 +233,7 @@ pnpm prompt:prefix data/covel.db --json
 - `packages/runtime/src/agent-loop/turn-agent-runtime.ts`：扩展段收集、压缩屏障和 agent context。
 - `packages/context/src/prompt-assembler.ts`、`extension-segments.ts`：段组装、受众过滤与排序。
 - `packages/context/src/prompt-serialization.ts`：system 段和缓存标记。
+- `packages/runtime/src/commit/commit-ui.ts`、`packages/runtime/src/agent-loop/picture-attachments.ts`：图片说明行，图片字节的读取与上限。
 - `packages/context/src/history-budget.ts`：压缩准入与原子持久化。
 - `plugins/history-compaction/server/strategy.ts`：默认摘要策略。
 - `packages/context/src/session-context.ts`：世界与世界书视图。
