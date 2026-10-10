@@ -229,6 +229,28 @@ describe("POST /api/media (upload)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects a body whose bytes are not a raster image despite an image header", async () => {
+    const { app, mediaStore } = await makeApp();
+    const res = await app.request("/api/media?sessionId=s1", {
+      method: "POST",
+      headers: { "content-type": "image/png" },
+      body: new TextEncoder().encode("<html><script>1</script></html>"),
+    });
+    expect(res.status).toBe(400);
+    expect(await mediaStore!.listAssets()).toEqual([]);
+  });
+
+  it("stores the type the bytes declare, not the header's", async () => {
+    const { app } = await makeApp();
+    const res = await app.request("/api/media?sessionId=s1", {
+      method: "POST",
+      headers: { "content-type": "image/png" },
+      body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
+    });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { mime: string }).mime).toBe("image/jpeg");
+  });
+
   it("rejects a non-image content type", async () => {
     const { app } = await makeApp();
     const res = await app.request("/api/media?sessionId=s1", {
