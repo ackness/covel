@@ -233,7 +233,7 @@ reasoningEffort = "disabled"
 统一的 `reasoningEffort` 设置会按接口协议转换：
 
 - OpenAI Chat 和兼容接口：`reasoning_effort`；DeepSeek 同时发送 `thinking.type`，Qwen 开关使用 `enable_thinking`；Qwen3.8 Chat 的原生 `low/medium/xhigh` 使用 `reasoning_effort`，已确认的 Qwen3.5–3.7 Max/Plus/Flash 使用 `thinking_budget` 预算预设（2048/8192/16384），界面明确标注 token 数值。预算预设不是服务商原生档位，实际消耗可以少于预算。显式档位会清理继承的预算，避免 Qwen3.8 同时发送两种参数。
-- OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。`store: false` 时请求加密 reasoning，用于工具续调。
+- OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。`store: false` 时请求加密 reasoning，用于工具续调。Covel 只在用途配置了 `store` 时发送这个字段；不配置时由服务商决定是否保存请求和应答（OpenAI 的 Responses 接口默认保存一段时间）。不想让服务商保存时，在该用途的 `providerOptions` 里写 `store = false`（见[供应商参数](#供应商参数)）。
 - Anthropic Messages：`output_config: { effort }`；已识别的自适应思考模型选择档位时启用 `thinking.type: "adaptive"`，默认请求可见摘要 `display: "summarized"`；不可关闭思考的模型不显示关闭选项。Claude 请求会移除与思考冲突的采样参数，关闭思考时清理继承的 effort，避免组合产生 400 错误。DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
 - Gemini 原生 `generateContent`：Gemini 3 使用 `generationConfig.thinkingConfig.thinkingLevel`；Gemini 2.5 使用 `thinkingBudget`。3 Pro 仅有 low/high，3.1 Pro 为 low/medium/high，3 Flash、3.5/3.6 Flash 及 3.1/3.5 Flash-Lite 为 minimal/low/medium/high，3.7/3.8 Flash 为 low/medium/high。2.5 Pro 不提供关闭；2.5 Flash/Flash-Lite 的 `none` 转为预算 0。2.5 的 low/medium/high 分别是应用预算预设 1024/8192/24576 token，不是 Google 原生档位。未知 Gemini 型号不推测档位。Google OpenAI 兼容接口仍发送 `reasoning_effort`，其中 `minimal` 在 3.1 Pro 映射为 low、在 2.5 映射为 1024 token；这不代表原生协议支持这些型号的 `minimal` 档位。
 
