@@ -143,6 +143,16 @@ function validateTagName(name: string): string {
 }
 
 /**
+ * Long authored text (world lore) keeps its Markdown: a quote line, a comment
+ * marker and an ampersand read as written. Only a closing tag of the block
+ * that holds the text is rewritten, so the text cannot leave the block.
+ */
+export function keepInsideBlock(value: string, tagName: string): string {
+  const closing = new RegExp(`<(\\s*/\\s*${tagName}\\s*>)`, "gi");
+  return value.replace(closing, "&lt;$1");
+}
+
+/**
  * Escape XML-special characters in content so injected values cannot break
  * the surrounding XML tag structure.
  */
@@ -369,7 +379,7 @@ const capped = (text: string) =>
  * `{{ characters.npcs }}`: every non-player character's description and
  * fields, one line each, so a template can give the model the profiles up
  * front instead of a `get-character` round trip per person. Past the budget
- * the rest are counted in one closing line, not named. A name is
+ * the rest are listed by name only, to be looked up when needed. A name is
  * followed by `(aka …)` when the character has aliases. No ids: a model
  * looks characters up by name or alias.
  */
@@ -378,7 +388,7 @@ export function renderNpcProfiles(
   locale?: string,
 ): string {
   const lines: string[] = [];
-  let unlisted = 0;
+  const unlisted: string[] = [];
   let used = 0;
   for (const character of characters) {
     if (character.type === "player") continue;
@@ -387,18 +397,18 @@ export function renderNpcProfiles(
     if (character.fields && Object.keys(character.fields).length > 0)
       parts.push(capped(safeStringify(modelFacingJson(character.fields))));
     const line = parts.join(" | ");
-    if (unlisted > 0 || used + line.length > NPC_PROFILES_BUDGET) {
-      unlisted += 1;
+    if (unlisted.length > 0 || used + line.length > NPC_PROFILES_BUDGET) {
+      unlisted.push(character.name);
       continue;
     }
     lines.push(line);
     used += line.length + 1;
   }
-  if (unlisted > 0)
+  if (unlisted.length > 0)
     lines.push(
       instructionLocaleFor(locale) === "zh"
-        ? `- （另有 ${unlisted} 个角色的档案未列出）`
-        : `- (${unlisted} more profiles not shown)`,
+        ? `- （未列出档案：${unlisted.join("、")}）`
+        : `- (profiles not shown: ${unlisted.join(", ")})`,
     );
   return lines.join("\n");
 }

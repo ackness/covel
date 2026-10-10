@@ -47,6 +47,8 @@ describe("characters.npcs", () => {
     );
     const lines = rendered.split("\n");
     expect(rendered.length).toBeLessThan(8200);
-    expect(lines.at(-1)).toMatch(/^- \(\d+ more profiles not shown\)$/);
+    expect(lines.at(-1)).toMatch(
+      /^- \(profiles not shown: NPC \d+, .*NPC 11\)$/,
+    );
   });
 });

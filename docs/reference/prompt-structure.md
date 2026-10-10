@@ -196,7 +196,7 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 
 声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过[回合上下文](#回合上下文)里的 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。提示词里的 provenance 只有 `pluginId` 与 `runtimeId`：`resultId` 是只供工具和内核使用的 UUID，工具从 `ctx.inputSlots` 读取，不进入提示词（`<runtime-exports>` 同理）。
 
-模板变量落在标签块里时同样转义：正文里以 `<name>` 开头的行到下一个 `</name>` 之间，`{{ ... }}` 的值经 XML 转义再写入，所以世界文字或角色描述里的 `</world-summary>` 关不掉这个块；块外和行内提到标签的散文里的变量原样写入。内核自己写的 `<world-lore>` 同样转义，世界正文里的 `<`、`>`、`&` 因此以实体形式进入提示词。`{{ characters.npcs }}` 超出预算时，最后一行只给未列出档案的个数，不再列名字。
+模板变量落在标签块里时同样转义：正文里以 `<name>` 开头的行到下一个 `</name>` 之间，`{{ ... }}` 的值经 XML 转义再写入，所以世界文字或角色描述里的 `</world-summary>` 关不掉这个块；块外和行内提到标签的散文里的变量原样写入。内核自己写的 `<world-lore>` 只改写正文里出现的 `</world-lore>`（写成 `&lt;/world-lore>`）：世界正文是长篇 Markdown，引用行的 `>`、注释标记和 `&` 原样进入提示词。
 
 ## 5. Token 预算与缓存
 
