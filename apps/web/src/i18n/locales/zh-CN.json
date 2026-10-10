@@ -840,7 +840,7 @@
       },
       "traceRetention": {
         "label": "保留诊断记录",
-        "description": "诊断记录是调试页面里每次模型请求和回复的存档。删除旧记录不会改变你的故事或存档，只影响调试页面能看到的内容。适用于桌面应用，部署方固定该值时除外。"
+        "description": "诊断记录是调试页面里每次模型请求和回复的存档。删除旧记录不会改变你的故事或存档，只影响调试页面能看到的内容。"
       },
       "developerView": {
         "label": "开发者视图",
@@ -1115,9 +1115,14 @@
       "days30": "30 天",
       "days90": "90 天",
       "keep": "全部保留",
-      "otherDays": "{{count}} 天",
-      "fixedByDeployment": "此部署把保留期固定为{{period}}。",
-      "fixedHere": "只有桌面应用可以修改。此服务器保留诊断记录的时间是{{period}}。"
+      "otherDays": "{{count}} 天"
+    },
+    "serverSetting": {
+      "pending": "正在向服务器读取当前值…",
+      "unavailable": "服务器没有应答，现在无法修改。",
+      "fixedByDeployment": "此部署固定了这个值。",
+      "operatorOnly": "此项由服务器的运营者设定。",
+      "shared": "保存在服务器上：使用这台服务器的每个浏览器都是同一个值。"
     },
     "valueRange": "取值范围 {{min}}–{{max}}。",
     "rawConfigNavLabel": "配置文件",

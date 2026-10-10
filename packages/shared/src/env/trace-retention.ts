@@ -1,8 +1,10 @@
+import { z } from "zod";
+import { readEnvString, type EnvSource } from "./registry-readers.js";
 import {
-  readEnvString,
-  readRuntimeEnv,
-  type EnvSource,
-} from "./registry-readers.js";
+  resolveServerSetting,
+  type ServerSettingDefinition,
+  type ServerSettingSource,
+} from "./server-setting.js";
 
 /** Days a trace event is kept when neither the operator nor the player chose. */
 export const DEFAULT_TRACE_RETENTION_DAYS = 30;
@@ -18,7 +20,7 @@ export const TRACE_RETENTION_SETTING_VALUES = [
   "keep",
 ] as const;
 
-export type TraceRetentionSource = "env" | "setting" | "default";
+export type TraceRetentionSource = ServerSettingSource;
 
 export interface TraceRetention {
   /** Days a trace is kept; `0` keeps everything. */
@@ -44,6 +46,27 @@ function operatorDays(source: EnvSource | undefined): number | undefined {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+/** A day count in the terms of the setting: `0` is `keep`. */
+function settingValueFromDays(days: number): string {
+  return days === 0 ? "keep" : String(days);
+}
+
+/**
+ * The server-scoped setting. `COVEL_TRACE_RETENTION_DAYS` is the operator's
+ * value and may be a day count the setting does not offer to players.
+ */
+export const TRACE_RETENTION_SERVER_SETTING: ServerSettingDefinition<
+  (typeof TRACE_RETENTION_SETTING_VALUES)[number]
+> = {
+  key: TRACE_RETENTION_SETTING_KEY,
+  schema: z.enum(TRACE_RETENTION_SETTING_VALUES),
+  default: String(DEFAULT_TRACE_RETENTION_DAYS) as "30",
+  operatorValue: (source) => {
+    const days = operatorDays(source);
+    return days === undefined ? undefined : settingValueFromDays(days);
+  },
+};
+
 /**
  * Precedence: the operator's `COVEL_TRACE_RETENTION_DAYS`, then the player's
  * setting, then {@link DEFAULT_TRACE_RETENTION_DAYS}. A hosted tier ignores the
@@ -53,21 +76,20 @@ export function resolveTraceRetention(
   playerDays?: number,
   envSource?: EnvSource,
 ): TraceRetention {
-  const operator = operatorDays(envSource);
-  if (operator !== undefined) return { days: operator, source: "env" };
-  const hosted = readRuntimeEnv(envSource).deploymentTier !== "self";
-  if (!hosted && playerDays !== undefined) {
-    return { days: playerDays, source: "setting" };
-  }
-  return { days: DEFAULT_TRACE_RETENTION_DAYS, source: "default" };
+  const { value, source } = resolveServerSetting(
+    TRACE_RETENTION_SERVER_SETTING,
+    playerDays === undefined ? undefined : settingValueFromDays(playerDays),
+    envSource,
+  );
+  return { days: value === "keep" ? 0 : Number(value), source };
 }
 
 let playerSource: (() => number | undefined) | undefined;
 
 /**
- * The host registers where the player's choice lives (the server reads the
- * desktop `settings.json`). Without a source only the environment and the
- * default apply.
+ * The host registers where the player's choice lives (the server's own
+ * settings store). Without a source only the environment and the default
+ * apply.
  */
 export function setTraceRetentionPlayerSource(
   source: (() => number | undefined) | undefined,

@@ -840,7 +840,7 @@
       },
       "traceRetention": {
         "label": "Keep diagnostic traces",
-        "description": "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show. Applies to the desktop app unless the deployment fixes it."
+        "description": "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show."
       },
       "developerView": {
         "label": "Developer view",
@@ -1115,9 +1115,14 @@
       "days30": "30 days",
       "days90": "90 days",
       "keep": "Keep everything",
-      "otherDays": "{{count}} days",
-      "fixedByDeployment": "This deployment fixes the period at {{period}}.",
-      "fixedHere": "Only the desktop app can change this. This server keeps traces for {{period}}."
+      "otherDays": "{{count}} days"
+    },
+    "serverSetting": {
+      "pending": "Asking the server for its value…",
+      "unavailable": "The server did not answer, so this cannot be changed now.",
+      "fixedByDeployment": "This deployment fixes the value.",
+      "operatorOnly": "The operator of this server sets this.",
+      "shared": "Saved on the server: every browser that uses it gets the same value."
     },
     "valueRange": "Range: {{min}}–{{max}}.",
     "rawConfigNavLabel": "Configuration files",

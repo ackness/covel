@@ -65,7 +65,6 @@ import {
   writeStoredProxyConfig,
 } from "../lib/proxy-config.js";
 import { getDesktopSystemProxyResolver } from "../lib/desktop-system-proxy.js";
-import { traceRetentionInfo } from "../lib/trace-retention-source.js";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -114,7 +113,6 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         keysEnvPath: null,
         pluginsDir: null,
         worldsDir: null,
-        traceRetention: traceRetentionInfo(),
       });
     }
     const covelHome = resolveCovelHome();
@@ -135,9 +133,6 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       // config calls (settings read/write, key writes, data-root writes,
       // open-folder).
       requiresAuth: !!env.desktopRestToken,
-      // The retention in force, where it came from, and whether the player's
-      // Settings choice can change it on this server.
-      traceRetention: traceRetentionInfo(),
     });
   });
 

@@ -31,6 +31,7 @@ import { CREATE_TABLES_SQL, DROP_ALL_SQL } from "./pg-store-mappers.js";
 import { createPgStateRecords } from "./pg-state-records.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 import { createPgWorldRecords } from "./pg-world-records.js";
+import { createPgServerSettingRecords } from "./pg-server-setting-records.js";
 import * as schema from "./schema.js";
 
 export interface PgStoreOptions {
@@ -55,6 +56,7 @@ function buildPgData(
     ...createPgSessionContentRecords(getDb),
     ...createPgDataCrud(getDb),
     ...createPgWorldRecords(getDb),
+    ...createPgServerSettingRecords(getDb),
     ...createPgSessionJournalRecords(getDb),
     ...createPgSnapshotRecords(getDb),
     ...createPgLifecycleRecords(getDb),

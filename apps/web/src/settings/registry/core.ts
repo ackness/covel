@@ -1,9 +1,7 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
 import {
-  DEFAULT_TRACE_RETENTION_DAYS,
-  TRACE_RETENTION_SETTING_KEY,
-  TRACE_RETENTION_SETTING_VALUES,
+  TRACE_RETENTION_SERVER_SETTING,
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
 } from "@covel/shared";
 import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
@@ -94,9 +92,11 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   });
 
   store.register({
-    key: TRACE_RETENTION_SETTING_KEY,
-    schema: z.enum(TRACE_RETENTION_SETTING_VALUES),
-    default: String(DEFAULT_TRACE_RETENTION_DAYS) as "30",
+    // The server prunes traces, so the server keeps this value.
+    key: TRACE_RETENTION_SERVER_SETTING.key,
+    schema: TRACE_RETENTION_SERVER_SETTING.schema,
+    default: TRACE_RETENTION_SERVER_SETTING.default,
+    scope: "server",
     group: "general",
     widget: "select",
     options: [
@@ -107,7 +107,7 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     ],
     label: "Keep diagnostic traces",
     description:
-      "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show. Applies to the desktop app unless the deployment fixes it.",
+      "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show.",
   });
 
   store.register({

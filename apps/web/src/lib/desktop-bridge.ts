@@ -101,7 +101,7 @@ export function getDesktopRestAuthHeaders(): Record<string, string> {
     : {};
 }
 
-async function ensureDesktopRestToken(): Promise<void> {
+export async function ensureDesktopRestToken(): Promise<void> {
   if (desktopRestToken) return;
   const ipc = getCovelIpc();
   if (!ipc) return;

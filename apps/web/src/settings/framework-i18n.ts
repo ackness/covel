@@ -1,6 +1,10 @@
 import type { TFunction } from "i18next";
 import type { SettingEntry, SettingOption } from "@covel/settings";
-import { localeTier, resolveI18nText } from "@covel/shared";
+import {
+  localeTier,
+  resolveI18nText,
+  TRACE_RETENTION_SETTING_KEY,
+} from "@covel/shared";
 import i18n from "@/i18n";
 
 type SettingTextField = "label" | "description";
@@ -80,7 +84,7 @@ function frameworkSettingText(
       ),
       description: t(
         "settings.frameworkEntries.traceRetention.description",
-        "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show. Applies to the desktop app unless the deployment fixes it.",
+        "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show.",
       ),
     },
     "audio.musicEnabled": {
@@ -192,10 +196,38 @@ export function resolveSettingOptionText(
       ? `${name} (${i18n.getFixedT(locale)("onboarding.languageExperimental", "experimental")})`
       : name;
   }
+  if (!entry.pluginId && entry.key === TRACE_RETENTION_SETTING_KEY) {
+    return i18n.getFixedT(locale)(
+      `settings.traceRetention.${option.value === "keep" ? "keep" : `days${option.value}`}`,
+      fallback,
+    );
+  }
   if (entry.pluginId || entry.key !== "ui.scheme") return fallback;
   if (option.value !== "light" && option.value !== "dark") return fallback;
   return i18n.getFixedT(locale)(
     `settings.themeScheme.${option.value}`,
     fallback,
   );
+}
+
+/**
+ * The text for a value in force that is not one of the entry's options: a
+ * server operator may fix a value the Settings page does not offer.
+ */
+export function resolveSettingValueText(
+  entry: SettingEntry,
+  value: string,
+  locale: string,
+): string {
+  if (!entry.pluginId && entry.key === TRACE_RETENTION_SETTING_KEY) {
+    const count = Number(value);
+    if (Number.isFinite(count)) {
+      return i18n.getFixedT(locale)(
+        "settings.traceRetention.otherDays",
+        "{{count}} days",
+        { count },
+      );
+    }
+  }
+  return value;
 }

@@ -22,6 +22,7 @@ export function createMemoryState(): MemoryState {
     nextModelId: 1,
     sessionVectorTargets: new Map(),
     worlds: new Map(),
+    serverSettings: new Map(),
     traceEvents: [],
     runtimeOutputs: [],
     interactionRecords: [],

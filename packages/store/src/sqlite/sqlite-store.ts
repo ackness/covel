@@ -39,6 +39,7 @@ import {
 } from "./sqlite-transactions.js";
 import { createSqliteVectorCapability } from "./sqlite-vector.js";
 import { createSqliteWorlds } from "./sqlite-worlds.js";
+import { createSqliteServerSettings } from "./sqlite-server-settings.js";
 
 // ── Factory ─────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ export function createSqliteStore(
     ...createSqliteSessionRecords(db),
     ...createSqliteDataCrud(db),
     ...createSqliteWorlds(db),
+    ...createSqliteServerSettings(db),
     ...createSqliteSnapshotRecords(db),
     ...createSqliteLifecycleRecords(db),
     ...createSqliteExportRecords(db),
