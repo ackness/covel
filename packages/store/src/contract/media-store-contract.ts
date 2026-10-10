@@ -450,6 +450,29 @@ export function runMediaStoreContractTests(
       expect(await store.exists(remove.id)).toBe(false);
     });
 
+    it("cleanup with onlyIds selects among the listed assets and keeps the rest", async () => {
+      const store = await createStore();
+      const listed = await store.put(PNG, "image/png");
+      const unlisted = await store.put(OTHER, "application/octet-stream");
+      const claimed = await store.put(new Uint8Array([9, 9, 9]), "audio/wav");
+      await store.addRef(claimed.id, "sess-claim");
+
+      const policy = { maxBytes: 0, onlyIds: [listed.id, claimed.id] };
+      const dryRun = await store.cleanup(new Set(), {
+        ...policy,
+        dryRun: true,
+      });
+      expect(dryRun.deletedIds).toEqual([listed.id]);
+      expect(await store.exists(listed.id)).toBe(true);
+
+      const result = await store.cleanup(new Set(), policy);
+      expect(result.deletedIds).toEqual([listed.id]);
+      expect(result.bytesDeleted).toBe(listed.size);
+      expect(await store.exists(listed.id)).toBe(false);
+      expect(await store.exists(unlisted.id)).toBe(true);
+      expect(await store.exists(claimed.id)).toBe(true);
+    });
+
     it("cleanup rechecks current refs instead of trusting a stale protected set", async () => {
       const store = await createStore();
       const ref = await store.put(OTHER, "application/octet-stream");

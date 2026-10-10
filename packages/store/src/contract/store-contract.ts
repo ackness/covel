@@ -14,6 +14,7 @@ import { registerExportStoreSuites } from "./suites/export-suites.js";
 import { registerPluginDataStoreSuite } from "./suites/plugin-data-suite.js";
 import { registerRuntimeRecordStoreSuites } from "./suites/runtime-record-suites.js";
 import { registerPaginationStoreSuites } from "./suites/pagination-suites.js";
+import { registerJsonStringStoreSuite } from "./suites/json-string-suite.js";
 
 // ── Contract test suite ─────────────────────────────────────────
 
@@ -50,5 +51,6 @@ export function runStoreContractTests(
     registerIntegrityStoreSuites(getStore);
     registerLifecycleStoreSuites(getStore);
     registerExportStoreSuites(getStore);
+    registerJsonStringStoreSuite(getStore);
   });
 }

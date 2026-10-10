@@ -105,6 +105,7 @@ it("the production provider passes ownership and delta refs to terminal recovery
     ],
     execution: { state: "completed", turnId: "turn" },
     executionSteps: [],
+    submittedInteractions: [],
     characters: [],
     gameState: {},
   });

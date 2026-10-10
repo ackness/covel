@@ -39,6 +39,14 @@ export const worlds = sqliteTable("worlds", {
   updatedAt: text("updated_at"),
 });
 
+// ── Server settings (not session-scoped) ────────────────────────
+
+export const serverSettings = sqliteTable("server_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(), // JSON text, encoded by the query layer
+  updatedAt: text("updated_at").notNull(),
+});
+
 // ── Sessions ────────────────────────────────────────────────────
 
 export const sessions = sqliteTable("sessions", {

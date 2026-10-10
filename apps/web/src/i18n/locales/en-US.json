@@ -838,6 +838,10 @@
         "label": "Chat window message limit",
         "description": "How many messages stay loaded in the chat. Older messages leave the window and load again when you scroll up."
       },
+      "traceRetention": {
+        "label": "Keep diagnostic traces",
+        "description": "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show."
+      },
       "developerView": {
         "label": "Developer view",
         "description": "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator."
@@ -1106,8 +1110,23 @@
     "defaultValue": "Default",
     "currentValue": "Effective",
     "useDefault": "Use default",
+    "traceRetention": {
+      "days7": "7 days",
+      "days30": "30 days",
+      "days90": "90 days",
+      "keep": "Keep everything",
+      "otherDays": "{{count}} days"
+    },
+    "serverSetting": {
+      "pending": "Asking the server for its value…",
+      "unavailable": "The server did not answer, so this cannot be changed now.",
+      "fixedByDeployment": "This deployment fixes the value.",
+      "operatorOnly": "The operator of this server sets this.",
+      "shared": "Saved on the server: every browser that uses it gets the same value."
+    },
     "valueRange": "Range: {{min}}–{{max}}.",
     "rawConfigNavLabel": "Configuration files",
+    "mediaLibraryNavLabel": "Stored media",
     "paneRawConfigDescription": "View and change the raw configuration. The text is checked before it is saved, and the version before the change is kept.",
     "rawConfigSettingsTab": "Settings (JSON)",
     "rawConfigSettingsHint": "Every setting saved on this device, without API keys. A saved change takes effect at once; a setting you delete goes back to its default.",
@@ -2180,6 +2199,50 @@
     "seek": "Seek",
     "playbackSpeed": "Playback speed",
     "downloadAudio": "Download audio"
+  },
+  "mediaLibrary": {
+    "description": "Pictures, audio and video the app has stored for your sessions. Nothing is deleted unless you choose it here. Files inside world packages are not listed and are never deleted.",
+    "unavailable": "The media library is not available on this server: it stores media of several players and cannot tell which is yours.",
+    "summary": "Stored items: {{count}} · {{size}}",
+    "reclaimable": "Not used by any session: {{count}} · {{size}} can be freed",
+    "scanIncomplete": "One session has too many records to read completely, so the app cannot tell which media is unused. Nothing is marked as unused, and only one item at a time can be deleted.",
+    "kindFilter": "Kind of media",
+    "kind": {
+      "all": "All",
+      "image": "Images",
+      "audio": "Audio",
+      "video": "Video",
+      "other": "Other files"
+    },
+    "unusedOnly": "Only media not used by any session",
+    "selectPage": "Select unused on this page",
+    "clearPage": "Clear this page's selection",
+    "deleteSelected": "Delete selected ({{count}} · {{size}})",
+    "deleteAllUnused": "Delete everything not used by any session…",
+    "loadFailed": "The stored media could not be listed.",
+    "empty": "Nothing is stored here.",
+    "pageRange": "{{from}}–{{to}} of {{total}}",
+    "previousPage": "Previous",
+    "nextPage": "Next",
+    "previewDescription": "Full-size picture",
+    "selectItem": "Select {{name}}",
+    "deleteItem": "Delete {{name}}",
+    "enlarge": "Enlarge {{name}}",
+    "playVideo": "Load and play",
+    "usageUnused": "Not used by any session",
+    "usageHeld": "Not used by a current session, but still reserved by an import or by a session that no longer exists",
+    "usageUnknown": "Use could not be determined",
+    "usedBy": "Used by",
+    "moreSessions": "and {{count}} more",
+    "confirmUnusedTitle": "Delete unused media?",
+    "confirmUnusedMessage": "Items to delete: {{count}} ({{size}}). No session uses them. This cannot be undone.",
+    "confirmInUseTitle": "Delete media that is still in use?",
+    "confirmInUseMessage": "This item ({{size}}) is used by:\n{{sessions}}\n\nThese sessions will show a \"media unavailable\" placeholder in its place. This cannot be undone.",
+    "confirmHeldMessage": "This item ({{size}}) is still reserved by an import or by a session that no longer exists. If an import is running, it may fail. This cannot be undone.",
+    "confirmUnknownMessage": "The app could not determine whether a session uses this item ({{size}}). A session that uses it will show a \"media unavailable\" placeholder in its place. This cannot be undone.",
+    "confirmDelete": "Delete",
+    "deleted": "Deleted items: {{count}} · {{size}} freed",
+    "skipped": "Kept because a session uses them now: {{count}}"
   },
   "branchReply": {
     "replyCandidates": "Reply candidates",

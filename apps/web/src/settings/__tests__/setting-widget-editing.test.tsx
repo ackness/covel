@@ -14,6 +14,7 @@ const settings = vi.hoisted(() => ({
 vi.mock("../use-settings.js", () => ({
   useSetting: () => [settings.value, settings.set],
   useSettingOverride: () => [settings.overridden, settings.restoreDefault],
+  useServerSettingState: () => undefined,
 }));
 
 const wait: SettingEntry = {

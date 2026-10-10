@@ -18,6 +18,8 @@ import type { CharacterSchemaRecord, LorebookOwner } from "@covel/shared";
 export type { WorldRecord } from "./records/world-records.js";
 export { normalizeWorldRecord } from "./records/world-records.js";
 
+export type { ServerSettingRecord } from "./records/server-setting-records.js";
+
 export type { SessionRecord } from "./records/session-records.js";
 export { mergeSessionPatch } from "./records/session-records.js";
 
@@ -83,6 +85,7 @@ export type {
 // ── Local imports for the DataStore interface signatures ─────────
 
 import type { WorldRecord } from "./records/world-records.js";
+import type { ServerSettingRecord } from "./records/server-setting-records.js";
 import type { SessionRecord } from "./records/session-records.js";
 import type {
   FailedRuntimeResult,
@@ -433,6 +436,19 @@ export interface WorldStore {
 }
 
 /** Trace event journal. Part of `sql-session-journal-records`. */
+/**
+ * Server-scoped settings (`common/sql-server-setting-records.ts`): values the
+ * server acts on, shared by every process that uses the database. A key that
+ * is not set has no row.
+ */
+export interface ServerSettingStore {
+  /** Every stored setting, in key order. */
+  listServerSettings(): Promise<ServerSettingRecord[]>;
+  /** Insert the setting or replace its value. */
+  setServerSetting(record: ServerSettingRecord): Promise<void>;
+  deleteServerSetting(key: string): Promise<void>;
+}
+
 export interface TraceStore {
   addTraceEvent(record: TraceEventRecord): Promise<void>;
   getTraceEventById(
@@ -877,6 +893,7 @@ export interface DataStore
     CharacterStore,
     PluginDataStore,
     WorldStore,
+    ServerSettingStore,
     TraceStore,
     TurnMessageStore,
     PlayerInputStore,

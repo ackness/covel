@@ -95,10 +95,11 @@ export const CREATE_TABLES_SQL = [
 // ── Table names for cleanup ─────────────────────────────────────
 
 // Session-scoped child tables come from the single-source registry; the
-// non-session tables (worlds, media) are listed explicitly. Adding a session
+// non-session tables (worlds, server settings, media) are listed explicitly. Adding a session
 // table to the registry extends the DROP list automatically.
 export const ALL_TABLE_NAMES: readonly string[] = [
   "worlds",
+  "server_settings",
   SESSIONS_TABLE,
   ...SESSION_SCOPED_TABLE_NAMES,
   "vector_models",

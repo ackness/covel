@@ -44,7 +44,10 @@ function withRanges(
       const def = ranges.get(key);
       if (!def || typeof value !== "number") return [key, value];
       const min = def.min ?? 0;
-      return [key, min === 0 ? `${value}/${def.max}` : `${value} (${min}–${def.max})`];
+      return [
+        key,
+        min === 0 ? `${value}/${def.max}` : `${value} (${min}–${def.max})`,
+      ];
     }),
   );
 }
@@ -70,9 +73,7 @@ function profileLines(
     if (hasFields(character.fields))
       parts.push(
         capped(
-          JSON.stringify(
-            withRanges(modelFacingJson(character.fields), schema),
-          ),
+          JSON.stringify(withRanges(modelFacingJson(character.fields), schema)),
         ),
       );
     const line = parts.join(" | ");

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
-import { WORLD_AUTHORING_IDLE_TIMEOUT_MS } from "@covel/shared";
+import {
+  TRACE_RETENTION_SERVER_SETTING,
+  WORLD_AUTHORING_IDLE_TIMEOUT_MS,
+} from "@covel/shared";
 import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
 import { resolveInitialLocale } from "@/i18n/locale-detector.js";
 import { ALLOWED_IMAGE_HOSTS_SETTING } from "@/lib/external-images.js";
@@ -86,6 +89,25 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     label: "Developer view",
     description:
       "Show the raw Database tab in the side panel. It lists every stored plugin row, including material meant only for the narrator.",
+  });
+
+  store.register({
+    // The server prunes traces, so the server keeps this value.
+    key: TRACE_RETENTION_SERVER_SETTING.key,
+    schema: TRACE_RETENTION_SERVER_SETTING.schema,
+    default: TRACE_RETENTION_SERVER_SETTING.default,
+    scope: "server",
+    group: "general",
+    widget: "select",
+    options: [
+      { value: "7", label: "7 days" },
+      { value: "30", label: "30 days" },
+      { value: "90", label: "90 days" },
+      { value: "keep", label: "Keep everything" },
+    ],
+    label: "Keep diagnostic traces",
+    description:
+      "Traces are the debug page's record of each model request and reply. Deleting old ones does not change your story or saves, only what the debug page can show.",
   });
 
   store.register({

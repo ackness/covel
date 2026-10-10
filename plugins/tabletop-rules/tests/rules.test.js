@@ -102,9 +102,10 @@ describe("validateAllocation", () => {
     expect(validateAllocation({ tideReading: 4, combat: 4 }, rules)).toMatch(
       /exactly 4 points/,
     );
-    expect(validateAllocation({ tideReading: 6, combat: 0 }, rules)).toMatch(
-      /whole number from 1 to 5/,
-    );
+    expect(validateAllocation({ tideReading: 6, combat: 0 }, rules)).toEqual({
+      field: "tideReading",
+      message: expect.stringMatching(/whole number from 1 to 5/),
+    });
   });
 
   it("answers in the session's language when given its translations", () => {

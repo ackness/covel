@@ -4,7 +4,7 @@ import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
-import type { SnapshotMessage } from "@covel/shared";
+import type { SessionSnapshot, SnapshotMessage } from "@covel/shared";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import {
@@ -12,6 +12,7 @@ import {
   publishSessionGameState,
 } from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
+import { submittedBlocksFromServer } from "./submitted-interactions.js";
 
 interface RestoreSessionOptions {
   ds: DataService;
@@ -60,6 +61,30 @@ export function toStreamMessages(
   }));
 }
 
+/** Marks the blocks the server holds an answer for as submitted. */
+export function publishSubmittedInteractions(
+  dispatch: SessionDispatch,
+  snapshot: Pick<SessionSnapshot, "messages" | "submittedInteractions">,
+): void {
+  for (const { blockId, values, followedUp } of submittedBlocksFromServer(
+    snapshot.messages.map((message) => ({
+      id: message.id,
+      turnId: message.turnId,
+      block: message.block as Record<string, unknown> | undefined,
+    })),
+    snapshot.submittedInteractions,
+  )) {
+    // An answer no turn followed (its response or its follow-up request was
+    // lost) stays open with the stored values filled in: sending it again is
+    // accepted once more and starts the follow-up.
+    dispatch(
+      followedUp
+        ? { type: "SUBMIT_BLOCK", blockId, values }
+        : { type: "PREFILL_BLOCK", blockId, values },
+    );
+  }
+}
+
 async function restoreServerSnapshot(
   sessionId: string,
   dispatch: SessionDispatch,
@@ -79,6 +104,9 @@ async function restoreServerSnapshot(
             type: "MERGE_RECOVERED_MESSAGES",
             messages: toStreamMessages(snapshot.messages),
           });
+          // The server's record of what was answered is the truth; it goes in
+          // after the browser's own cache and replaces its values.
+          publishSubmittedInteractions(dispatch, snapshot);
           // snapshot.messages 只是最近一窗；记录游标作为"加载更旧"的起点。
           // null / undefined ⇒ 已到历史开头，禁用向上加载。
           dispatch({
@@ -336,6 +364,9 @@ export async function restoreSessionState({
 
   const localSteps = await restorePersistedExecutionSteps(ds, freshSession);
   if (!isCurrent()) return;
+  // The browser's own cache first: the server's record replaces it below.
+  await restoreSubmittedBlocks(ds, freshSession, dispatchCurrent);
+  if (!isCurrent()) return;
   const snapshotLoaded = await restoreServerSnapshot(
     session.id,
     dispatch,
@@ -358,9 +389,6 @@ export async function restoreSessionState({
       },
     });
   }
-
-  await restoreSubmittedBlocks(ds, freshSession, dispatchCurrent);
-  if (!isCurrent()) return;
 
   refreshSessionSideData(session.id, dispatch, isCurrent);
 }

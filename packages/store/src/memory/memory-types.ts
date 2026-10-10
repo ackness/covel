@@ -26,6 +26,7 @@ import type {
   TurnResultRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
+  ServerSettingRecord,
 } from "../types.js";
 import type {
   VectorModelOps,
@@ -69,6 +70,7 @@ export interface MemoryState {
   nextModelId: number;
   readonly sessionVectorTargets: Map<string, VectorTarget | null>;
   readonly worlds: Map<string, WorldRecord>;
+  readonly serverSettings: Map<string, ServerSettingRecord>;
   readonly traceEvents: TraceEventRecord[];
   readonly runtimeOutputs: RuntimeOutputRecord[];
   readonly interactionRecords: InteractionRecordRow[];

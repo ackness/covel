@@ -7,7 +7,7 @@
  *
  * - JSON columns: PG uses native `jsonb` (no app-layer (de)serialization);
  *   SQLite stores the same data as `text` and (de)serializes at the mapper
- *   layer. Write jsonb via `sql.json(value)` — never `JSON.stringify()`.
+ *   layer. Columns use the `jsonb` type defined below, not drizzle's own.
  * - JSON defaults: PG uses native literals (`.default([])` / `.default({})`);
  *   SQLite uses JSON strings (`.default("[]")` / `.default("{}")`).
  * - Binary (media_assets): PG stores bytes inline in a `bytea` column (`body`);
@@ -21,7 +21,6 @@ import {
   integer,
   bigint,
   doublePrecision,
-  jsonb,
   serial,
   bigserial,
   index,
@@ -33,6 +32,22 @@ import {
 const bytea = customType<{ data: Buffer | null }>({
   dataType() {
     return "bytea";
+  },
+});
+
+// postgres-js already parses a jsonb value on read, and drizzle's own `jsonb`
+// parses it again when the result is a string — so a stored string that spells
+// JSON (`"30"`) came back as the number 30. Write the JSON text (drizzle makes
+// the jsonb serializer a pass-through) and keep the driver's parsed value.
+const jsonb = customType<{ data: unknown; driverData: unknown }>({
+  dataType() {
+    return "jsonb";
+  },
+  toDriver(value) {
+    return JSON.stringify(value);
+  },
+  fromDriver(value) {
+    return value;
   },
 });
 
@@ -48,6 +63,15 @@ export const worlds = pgTable("worlds", {
   metadata: jsonb("metadata"), // JSON
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at"),
+});
+
+// ── Server settings (not session-scoped) ────────────────────────
+
+export const serverSettings = pgTable("server_settings", {
+  key: text("key").primaryKey(),
+  // JSON text, not jsonb: see `common/sql-server-setting-records.ts`.
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });
 
 // ── Sessions ────────────────────────────────────────────────────
