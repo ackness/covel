@@ -394,6 +394,7 @@ export type {
   HandlerResult,
   JsonSchema,
   JobStatusEffect,
+  PluginFormInteraction,
   RuntimeDiagnostic,
   ObservabilityEffects,
   RuntimeEffects,
