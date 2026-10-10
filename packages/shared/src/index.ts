@@ -357,6 +357,7 @@ export {
   type CreateSessionRequest,
   actionRequestSchema,
   actionTypeSchema,
+  MAX_PLAYER_MESSAGE_CHARS,
   apiListResponseSchema,
   apiErrorResponseSchema,
   pluginSummarySchema,

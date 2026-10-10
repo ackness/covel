@@ -169,7 +169,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
   "apps/server/src/routes/api/session/commands.ts": 4,
   "apps/server/src/routes/misc-api/plugin-flow.ts": 6,
-  "packages/runtime/src/interaction/interaction-submission.ts": 15,
+  "packages/runtime/src/interaction/interaction-submission.ts": 18,
   "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
   "packages/context/src/message-insertion.ts": 3,

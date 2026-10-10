@@ -348,7 +348,7 @@ promptCacheKey = true
 lateSystemAsUser = true
 ```
 
-同一个选项在 `google-generative-ai-v1` 上默认值相反：不写或写 `true` 时，第一条对话消息之后的 system 消息留在原位，作为 `contents` 里带 `<system-instruction>` 的 user 文本，只有开头的 system 消息进入 `systemInstruction`；相邻的同角色内容合并为一条，函数响应始终紧跟函数调用（规则见[提示词结构](./prompt-structure.md)）。写 `false` 恢复旧做法：所有 system 消息都进 `systemInstruction`，每条消息一条内容，代价是每回合变化的文字排在历史之前，前缀缓存每回合从头断开。Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验证过，没有在 Google 的端点上验证；如果 Google 的端点拒绝请求，`false` 就是退回去的办法。这个选项只由适配器读取，不会发给服务商。
+同一个选项在 `google-generative-ai-v1` 上默认值相反：不写或写 `true` 时，第一条对话消息之后的 system 消息留在原位，作为 `contents` 里带 `<system-instruction>` 的 user 文本，只有开头的 system 消息进入 `systemInstruction`；相邻的同角色纯文本内容合并为一条，函数响应始终紧跟函数调用并独占一条 user 内容（规则见[提示词结构](./prompt-structure.md)）。写 `false` 恢复旧做法：所有 system 消息都进 `systemInstruction`，每条消息一条内容，代价是每回合变化的文字排在历史之前，前缀缓存每回合从头断开。Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验证过，没有在 Google 的端点上验证；如果 Google 的端点拒绝请求，`false` 就是退回去的办法。这个选项只由适配器读取，不会发给服务商。
 
 ```toml
 [covel.story.providerOptions.google]

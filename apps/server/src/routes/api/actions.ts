@@ -36,6 +36,7 @@ import {
   createTurnEmitter,
   InteractionSubmissionError,
   FormRejectedError,
+  FormValidatorFailedError,
   snapshotUserSettings,
   type PreparedInteractionSubmission,
 } from "@covel/runtime";
@@ -55,6 +56,7 @@ import {
 import type { CompactorRunner } from "@covel/context";
 import {
   errorBody,
+  logRequestError,
   SESSION_BUSY_CODE,
   SESSION_BUSY_MESSAGE,
   type ApiErrorResponse,
@@ -459,7 +461,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 request.name,
               );
               if (!validator)
-                throw new Error(
+                throw new InteractionSubmissionError(
                   "Form validator is unavailable; activate and approve its plugin first",
                 );
               return validator(request);
@@ -1096,6 +1098,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       if (lockBusy) {
         console.warn(
           `[actions] session lock timeout for ${sessionId}: ${message}`,
+        );
+      } else if (err instanceof FormValidatorFailedError) {
+        // The client gets the fixed text; what the plugin threw stays here.
+        logRequestError(
+          c,
+          `[actions] form validator failed for ${sessionId}`,
+          err.cause,
         );
       } else {
         console.error(
