@@ -27,6 +27,11 @@
  *      immutable upstream commit.
  *   7. Production source env reads are covered by the shared registry.
  *   8. `actionlint` passes for all workflow YAML files.
+ *   9. `docs/CHANGELOG.md` has a section for the version in the root
+ *      `package.json` and every changelog fragment is valid. Entries that
+ *      still wait for a release are a warning here, because this gate also
+ *      runs for a packaging dry run between releases; the release workflow
+ *      refuses to publish a tag while one remains.
  *
  * Exit code 0 = safe to push. Non-zero = fix before tagging.
  *
@@ -46,6 +51,7 @@ import { checkPluginEventSchemas } from "./lib/plugin-event-schemas.mjs";
 import { checkLockfile } from "./check-lockfile.mjs";
 import { checkPluginManifests } from "./check-plugin-manifests.mjs";
 import { checkWorkflows } from "./check-workflows.mjs";
+import { checkChangelog } from "./changelog.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -147,7 +153,7 @@ function pkgRoot(spec) {
 }
 
 // ── 1. Lockfile sync ─────────────────────────────────────────────
-console.log("\n[1/8] Lockfile sync (isolated metadata-only pnpm validation)");
+console.log("\n[1/9] Lockfile sync (isolated metadata-only pnpm validation)");
 if (args.has("--skip-lockfile")) {
   warn("skipped (--skip-lockfile)");
 } else {
@@ -160,7 +166,7 @@ if (args.has("--skip-lockfile")) {
 }
 
 // ── 2. Undeclared imports ─────────────────────────────────────────
-console.log("\n[2/8] Undeclared bare imports across packages/* and apps/*");
+console.log("\n[2/9] Undeclared bare imports across packages/* and apps/*");
 const wsPkgDirs = [
   ...fs
     .readdirSync(path.join(repoRoot, "packages"), { withFileTypes: true })
@@ -218,7 +224,7 @@ if (undeclaredCount === 0)
   ok(`all ${wsPkgDirs.length} workspace packages have all imports declared`);
 
 // ── 3. plugins/ structure ─────────────────────────────────────────
-console.log("\n[3/8] plugins/<id>/ structure (verify-release sentinels)");
+console.log("\n[3/9] plugins/<id>/ structure (verify-release sentinels)");
 const pluginDirs = fs
   .readdirSync(path.join(repoRoot, "plugins"), { withFileTypes: true })
   // `_`-prefixed dirs are non-plugin conventions (plugins/_archive holds
@@ -262,7 +268,7 @@ if (pluginIssues === 0)
   );
 
 // ── 4. worlds/ structure ──────────────────────────────────────────
-console.log("\n[4/8] worlds/<id>/ structure");
+console.log("\n[4/9] worlds/<id>/ structure");
 const worldDirs = fs
   .readdirSync(path.join(repoRoot, "worlds"), { withFileTypes: true })
   // `_`-prefixed dirs are archives (e.g. worlds/_archive) — the world-seed
@@ -310,7 +316,7 @@ if (worldIssues === 0)
   );
 
 // ── 5. prompts/server/ ────────────────────────────────────────────
-console.log("\n[5/8] prompts/server/*.md");
+console.log("\n[5/9] prompts/server/*.md");
 const promptsDir = path.join(repoRoot, "prompts/server");
 if (!fs.existsSync(promptsDir)) {
   fail("prompts/server/ does not exist");
@@ -321,7 +327,7 @@ if (!fs.existsSync(promptsDir)) {
 }
 
 // ── 6. Bundled model database snapshot ──────────────────────────
-console.log("\n[6/8] Bundled LiteLLM model database snapshot");
+console.log("\n[6/9] Bundled LiteLLM model database snapshot");
 const modelDbPath = path.join(
   repoRoot,
   "packages/ai-provider/data/model-db.json",
@@ -393,7 +399,7 @@ if (fs.existsSync(modelDbPath) && fs.existsSync(modelDbSourcePath)) {
 }
 
 // ── 7. Production env registry coverage ─────────────────────────
-console.log("\n[7/8] Production env registry coverage");
+console.log("\n[7/9] Production env registry coverage");
 try {
   execFileSync(
     process.execPath,
@@ -411,12 +417,39 @@ try {
 }
 
 // ── 8. actionlint ────────────────────────────────────────────────
-console.log("\n[8/8] GitHub Actions workflow lint");
+console.log("\n[8/9] GitHub Actions workflow lint");
 try {
   checkWorkflows(repoRoot);
   ok("actionlint passed");
 } catch (e) {
   fail(e.message);
+}
+
+// ── 9. Changelog ─────────────────────────────────────────────────
+console.log("\n[9/9] Changelog section and fragments");
+try {
+  const { version } = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"),
+  );
+  const changelog = fs.readFileSync(
+    path.join(repoRoot, "docs/CHANGELOG.md"),
+    "utf-8",
+  );
+  const { errors, fragments, legacy } = checkChangelog(repoRoot);
+  for (const error of errors) fail(error);
+  if (!changelog.includes(`\n## [${version}]`)) {
+    fail(
+      `docs/CHANGELOG.md has no section for ${version}; run "pnpm changelog:release ${version}"`,
+    );
+  } else if (fragments + legacy > 0) {
+    warn(
+      `${fragments} fragment(s) and ${legacy} [Unreleased] entries are not in a release; before tagging, run "pnpm changelog:release ${version}"`,
+    );
+  } else if (errors.length === 0) {
+    ok(`docs/CHANGELOG.md has [${version}] and nothing is pending`);
+  }
+} catch (e) {
+  fail(`changelog check failed: ${e.message}`);
 }
 
 // ── Summary ──────────────────────────────────────────────────────

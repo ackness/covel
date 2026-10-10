@@ -525,3 +525,4 @@ export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 export { isValidPluginSetting } from "./plugin-settings.js";
 
 export * from "./world-data-target.js";
+export * from "./plugin-frame.js";

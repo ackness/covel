@@ -24,6 +24,7 @@ import {
   type WorldModelView,
 } from "@covel/shared";
 import { overlayPluginDataValue } from "@covel/tools";
+import { pluginDataSizeError } from "../commit/plugin-data-limits.js";
 import {
   bufferCharacterUpsert,
   bufferPluginData,
@@ -97,6 +98,16 @@ export function makeRevocableFn<A extends readonly unknown[], R>(
 function assertWritableNamespace(namespace: string): void {
   const reserved = pluginCodeNamespaceWriteError(namespace);
   if (reserved) throw new Error(reserved);
+}
+
+function assertPluginDataSize(
+  pluginId: string,
+  namespace: string,
+  key: string,
+  value: unknown,
+): void {
+  const error = pluginDataSizeError(pluginId, namespace, key, value);
+  if (error) throw new Error(error);
 }
 
 const TURN_MESSAGE_PAGE_DEFAULT = 100;
@@ -327,6 +338,7 @@ export function createPluginDataWriter(
         }
         return;
       }
+      assertPluginDataSize(pluginId, namespace, key, value);
       if (buffer) {
         bufferPluginData(buffer, ctx, namespace, key, value);
         return;
@@ -561,6 +573,12 @@ export function createRpcHandlerStoreView(
     },
     async setPluginData(record) {
       assertWritableNamespace(record.namespace);
+      assertPluginDataSize(
+        ctx.pluginId,
+        record.namespace,
+        record.key,
+        record.value,
+      );
       const input = structuredClone(record);
       const existing = await store.getPluginData(
         ctx.sessionId,

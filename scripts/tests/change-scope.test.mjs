@@ -21,6 +21,9 @@ function workflow(name) {
 test("documentation is what people and agents read, wherever it lives", () => {
   for (const file of [
     "docs/README.md",
+    // A changelog fragment alone takes the short path; a source change
+    // always comes with other files.
+    "docs/changelog.d/trace-retention.md",
     "docs/reference/schema/plugin-manifest.md",
     "docs/guide/assets/diagram.png",
     "README.md",

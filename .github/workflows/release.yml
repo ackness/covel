@@ -124,6 +124,12 @@ jobs:
               echo "::error::docs/CHANGELOG.md has no section for $release_tag."
               exit 1
             fi
+            # A fragment left in docs/changelog.d is an entry missing from the
+            # release notes. The script needs no installed dependency.
+            if ! node scripts/changelog.mjs check --no-pending; then
+              echo "::error::Changelog entries are not assembled; run pnpm changelog:release $version."
+              exit 1
+            fi
           fi
 
           {
