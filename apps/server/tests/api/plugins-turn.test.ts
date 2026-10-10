@@ -11,6 +11,7 @@ import { frameworkRoutes } from "../../src/routes/api/framework.js";
 import {
   createPluginRegistry,
   parsePluginMd,
+  type ParsedRuntimeMd,
   type PluginRegistry,
   type PluginSummary,
   type PluginRegistryEntry,
@@ -48,16 +49,18 @@ function makeParsedManifest(
     name: string;
     description?: string;
   },
-) {
+): ParsedRuntimeMd {
+  const { name, description, pluginId, ...rest } = manifest;
   return {
-    runtime: { type: "agent" as const },
+    runtime: { type: "agent" },
     manifest: {
-      name: manifest.name,
-      description: manifest.description ?? `${manifest.name} runtime`,
+      name,
+      pluginId: pluginId ?? name,
+      description: description ?? `${name} runtime`,
       pluginType: "plugin",
       outputKind: "plugin",
       trigger: { type: "manual" },
-      ...manifest,
+      ...rest,
     },
     promptTemplate: "",
     rawFrontmatter: {},
@@ -226,6 +229,10 @@ describe("Plugin Routes", () => {
               name: "my-plugin",
               pluginId: "my-plugin",
               pluginType: "plugin",
+              ui: {
+                right: ["./ui/panel.json"],
+                message: ["./ui/message.json"],
+              },
             },
           },
 

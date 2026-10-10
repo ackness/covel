@@ -26,6 +26,7 @@ it("passes this turn's cast to graph retrieval while its stored cast is still un
   await store.upsertCharacter({
     id: "character-alice",
     sessionId,
+    version: 1,
     name: "Alice",
     type: "npc",
     description: "Merchant",
@@ -78,6 +79,7 @@ it("passes this turn's cast to graph retrieval while its stored cast is still un
     {
       sessionId,
       turnId: "current-turn",
+      origin: "player",
       playerMessage: "Ask her about the promise.",
     },
     [graph, cast],

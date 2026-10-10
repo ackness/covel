@@ -103,7 +103,9 @@ describe("detached runtime cross-process lock boundary", () => {
         [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
       ]),
       deps: {
-        loadRuntime: async (runtime): Promise<LoadedRuntime> => ({
+        loadRuntime: async (
+          runtime: RuntimeManifest,
+        ): Promise<LoadedRuntime> => ({
           manifest: runtime,
           promptTemplate: "",
           handler,
@@ -128,7 +130,7 @@ describe("detached runtime cross-process lock boundary", () => {
     const handler = vi.fn<FunctionHandler>(async () => {
       started.resolve();
       await release.promise;
-      return { ok: true };
+      return { outcome: "success", value: { ok: true } };
     });
     const { runner } = await setup(handler);
     const first = runner.runDeferredFollowerTurn({
@@ -197,7 +199,7 @@ describe("detached runtime cross-process lock boundary", () => {
       maxActive = Math.max(maxActive, active);
       if (calls === 1) await firstGate.promise;
       active--;
-      return { ok: true };
+      return { outcome: "success", value: { ok: true } };
     };
     const { runner, lock, requestedKeys } = await setup(handler);
 
@@ -232,7 +234,10 @@ describe("detached runtime cross-process lock boundary", () => {
   });
 
   it("rejects detached work before execution when approval was revoked", async () => {
-    const handler = vi.fn<FunctionHandler>(async () => ({ ok: true }));
+    const handler = vi.fn<FunctionHandler>(async () => ({
+      outcome: "success",
+      value: { ok: true },
+    }));
     const { runner, store, session } = await setup(handler);
     await store.updateSession(SESSION_ID, {
       metadata: rotateSessionApprovalScope(session, PLUGIN_ID),
@@ -255,7 +260,7 @@ describe("detached runtime cross-process lock boundary", () => {
     const handler: FunctionHandler = async () => {
       started.resolve();
       await finish.promise;
-      return { ok: true };
+      return { outcome: "success", value: { ok: true } };
     };
     const { runner, store, session } = await setup(handler);
     const running = runner.runManualTurn({
@@ -286,7 +291,7 @@ describe("detached runtime cross-process lock boundary", () => {
       maxActive = Math.max(maxActive, active);
       await gate.promise;
       active--;
-      return { ok: true };
+      return { outcome: "success", value: { ok: true } };
     };
     const { runner } = await setup(handler);
 

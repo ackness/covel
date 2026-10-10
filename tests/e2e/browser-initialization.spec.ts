@@ -22,6 +22,16 @@ test("concurrent first visits share the catalog and deleting them survives both 
   await context.route("**/api/worlds", (route) =>
     route.fulfill({ json: { items: catalog } }),
   );
+  // The first visit copies each catalog world's full record, not its summary.
+  await context.route("**/api/worlds/*", (route) => {
+    const id = decodeURIComponent(
+      new URL(route.request().url()).pathname.split("/").at(-1)!,
+    );
+    const world = catalog.find((item) => item.id === id);
+    return world
+      ? route.fulfill({ json: world })
+      : route.fulfill({ status: 404, json: { error: "World not found" } });
+  });
   const second = await context.newPage();
   await seedAppSettings(page);
   await seedAppSettings(second);

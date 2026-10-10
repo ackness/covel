@@ -16,7 +16,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { createEventBus, type SubscriptionEvent } from "@covel/events";
+import { createEventBus, type EventBus } from "@covel/events";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -100,7 +100,7 @@ describe("POST /api/actions — turn commit barrier", () => {
   let store: DataStore;
   let registry: PluginRegistry;
   let app: Hono;
-  let busEvents: SubscriptionEvent[];
+  let busEvents: Parameters<Parameters<EventBus["onEmit"]>[0]>[0][];
   let hookPipeline: ReturnType<typeof createHookPipeline>;
 
   beforeEach(async () => {

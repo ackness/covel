@@ -51,7 +51,7 @@ function setup(
   store: DataStore = createMemoryStore(),
   gate: RpcApprovalGate = createRpcApprovalGate(),
 ): {
-  app: Hono;
+  app: Pick<Hono, "request">;
   store: DataStore;
   registry: PluginRpcRegistry;
   gate: RpcApprovalGate;
@@ -106,7 +106,10 @@ async function seedSession(
   });
 }
 
-async function dispatchRpc(app: Hono, sessionId: string): Promise<Response> {
+async function dispatchRpc(
+  app: Pick<Hono, "request">,
+  sessionId: string,
+): Promise<Response> {
   return app.request(`/api/sessions/${sessionId}/plugin-rpc`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -125,7 +128,7 @@ async function dispatchRpc(app: Hono, sessionId: string): Promise<Response> {
  * phase 1 with a session-scoped grant and returns the phase-2 response.
  */
 async function clearServerCodePhase(
-  app: Hono,
+  app: Pick<Hono, "request">,
   sessionId: string,
 ): Promise<Response> {
   const first = await dispatchRpc(app, sessionId);
@@ -139,7 +142,7 @@ async function clearServerCodePhase(
 }
 
 describe("Plugin RPC approval flow", () => {
-  let app: Hono;
+  let app: Pick<Hono, "request">;
   let store: DataStore;
   let gate: RpcApprovalGate;
 
@@ -382,7 +385,7 @@ describe("Plugin RPC approval flow", () => {
       sessionLock?: SessionLock;
       activate?: (pluginId: string) => Promise<void>;
     }): {
-      app: Hono;
+      app: Pick<Hono, "request">;
       store: DataStore;
       gate: RpcApprovalGate;
       activatorCalls: string[];

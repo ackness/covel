@@ -60,7 +60,7 @@ async function zipBuffer(entries: Record<string, string>) {
 async function upload(app: Hono, entries: Record<string, string>) {
   const buffer = await zipBuffer(entries);
   const form = new FormData();
-  form.append("file", new Blob([buffer]), "synthetic.zip");
+  form.append("file", new Blob([new Uint8Array(buffer)]), "synthetic.zip");
   return app.request("/api/install/world", { method: "POST", body: form });
 }
 

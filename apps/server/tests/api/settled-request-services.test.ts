@@ -9,7 +9,12 @@ const b64 = (value: unknown) =>
   Buffer.from(JSON.stringify(value)).toString("base64");
 
 describe("detached request service admission", () => {
-  it.each([
+  it.each<{
+    label: string;
+    headers: Record<string, string>;
+    handoff: boolean;
+    ready: boolean;
+  }>([
     { label: "no headers", headers: {}, handoff: false, ready: false },
     {
       label: "empty headers",

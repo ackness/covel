@@ -98,7 +98,7 @@ describe("tool result composition", () => {
 
   it("does not mistake business fields for an effects envelope", () => {
     const content = { content: "user data", pendingProposals: [proposal] };
-    expect(getToolContent(content)).toBe(content);
+    expect(getToolContent<unknown>(content)).toBe(content);
     expect(getPendingProposals(content)).toEqual([]);
   });
 });

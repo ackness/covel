@@ -86,7 +86,7 @@ describe("Lorebook API routes", () => {
     it("returns empty list when no entries exist", async () => {
       const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook`);
       expect(res.status).toBe(200);
-      const body = await res.json<{ items: LorebookEntryRecord[] }>();
+      const body = (await res.json()) as { items: LorebookEntryRecord[] };
       expect(body.items).toEqual([]);
     });
 
@@ -98,10 +98,10 @@ describe("Lorebook API routes", () => {
 
       const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook`);
       expect(res.status).toBe(200);
-      const body = await res.json<{ items: LorebookEntryRecord[] }>();
+      const body = (await res.json()) as { items: LorebookEntryRecord[] };
       expect(body.items).toHaveLength(2);
-      expect(body.items[0].id).toBe("a");
-      expect(body.items[1].id).toBe("b");
+      expect(body.items[0]?.id).toBe("a");
+      expect(body.items[1]?.id).toBe("b");
     });
 
     it("returns 404 when session does not exist", async () => {
@@ -127,7 +127,7 @@ describe("Lorebook API routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json<LorebookEntryRecord>();
+      const body = (await res.json()) as LorebookEntryRecord;
       expect(body).toMatchObject({
         id: "manual-rule",
         sessionId: SESSION_ID,
@@ -181,7 +181,7 @@ describe("Lorebook API routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json<LorebookEntryRecord>();
+      const body = (await res.json()) as LorebookEntryRecord;
       expect(body).toMatchObject({
         id: "e1",
         owner: { kind: "player" },

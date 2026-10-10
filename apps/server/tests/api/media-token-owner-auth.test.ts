@@ -17,8 +17,9 @@ async function createTestApp() {
   const now = new Date().toISOString();
   await store.createSession({
     id: "media-session",
-    worldId: null,
     status: "active",
+    activePlugins: [],
+    locale: "zh-CN",
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},

@@ -141,7 +141,6 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
     app.route("/api/actions", actionRoutes);
     await store.createSession({
       id: SESSION_ID,
-      worldId: null,
       locale: "en",
       metadata: {
         ownerTokenHash: hashSessionOwnerToken("original-owner"),
@@ -153,6 +152,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       setupRuntimes: {},
       completedPlayerTurns: 1,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     const locked = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
@@ -242,14 +242,15 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
     app.route("/api/actions", actionRoutes);
     await store.createSession({
       id: SESSION_ID,
-      worldId: null,
       metadata: { sessionIncarnationNonce: crypto.randomUUID() },
       phase: "playing",
       status: "active",
+      locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       setupRuntimes: {},
       completedPlayerTurns: 1,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     const locked = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
@@ -308,7 +309,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
           releaseFirstTurn = resolve;
         });
       }
-      return { ok: true };
+      return { outcome: "success", value: { ok: true } };
     };
     pluginRegistry.register(makeRegistryEntry(handler));
 
@@ -340,12 +341,13 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 
       createdAt: now,
+      updatedAt: now,
     });
 
     const post = (requestId: string) =>

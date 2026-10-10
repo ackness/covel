@@ -38,6 +38,13 @@ export interface WorldRecord {
   updatedAt?: string;
 }
 
+/**
+ * A world as the list endpoint and the session store hold it: enough to paint
+ * a card, a title or a header. `lore` and `dimensions` come from the full
+ * record (`getWorld`, or `useWorldRecord` in a component).
+ */
+export type WorldSummary = Omit<WorldRecord, "lore" | "dimensions">;
+
 export type GeneratedWorldSaveTarget =
   "server-file" | "server-store" | "return-only";
 

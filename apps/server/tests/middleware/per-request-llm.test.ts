@@ -25,28 +25,16 @@ interface RecordedCall {
   presetId: string | undefined;
   apiKeys: Record<string, string> | undefined;
   envApiKeys: Record<string, string> | undefined;
-  slotOverrides: GenerateOptions extends { slotOverrides?: infer S }
-    ? S
-    : never;
-  capabilityOverridePolicy: GenerateOptions extends {
-    capabilityOverridePolicy?: infer P;
-  }
-    ? P
-    : never;
+  slotOverrides: NonNullable<GenerateOptions>["slotOverrides"];
+  capabilityOverridePolicy: NonNullable<GenerateOptions>["capabilityOverridePolicy"];
 }
 
 interface RecordedResolveSlotCall {
   presetId: string | undefined;
   apiKeys: Record<string, string> | undefined;
   envApiKeys: Record<string, string> | undefined;
-  slotOverrides: GenerateOptions extends { slotOverrides?: infer S }
-    ? S
-    : never;
-  capabilityOverridePolicy: GenerateOptions extends {
-    capabilityOverridePolicy?: infer P;
-  }
-    ? P
-    : never;
+  slotOverrides: NonNullable<GenerateOptions>["slotOverrides"];
+  capabilityOverridePolicy: NonNullable<GenerateOptions>["capabilityOverridePolicy"];
 }
 
 function stubDefaultPluginGateway(): PluginRuntimeGateway {
@@ -82,7 +70,10 @@ function createMockAi(): {
   const resolveSlotCalls: RecordedResolveSlotCall[] = [];
 
   const gateway: AiStack["gateway"] = {
-    async generateText(input, options) {
+    async generateText(
+      input: Parameters<AiStack["gateway"]["generateText"]>[0],
+      options?: GenerateOptions,
+    ) {
       calls.push({
         presetId: input.presetId,
         apiKeys: options?.apiKeys,
@@ -106,7 +97,7 @@ function createMockAi(): {
     async embed() {
       throw new Error("embed: not used in this test");
     },
-    resolveSlot(presetId, options) {
+    resolveSlot(presetId: string | undefined, options?: GenerateOptions) {
       resolveSlotCalls.push({
         presetId,
         apiKeys: options?.apiKeys,
@@ -247,9 +238,9 @@ describe("per-request LLM middleware", () => {
       expect(calls[0]!.slotOverrides).toMatchObject({
         parameterOverrides: { fast: { temperature: 0.3 } },
       });
-      expect(
-        calls[0]!.slotOverrides?.parameterOverrides?.fast.maxOutputTokens,
-      ).toBeUndefined();
+      const fast = calls[0]!.slotOverrides?.parameterOverrides?.fast;
+      expect(fast).toBeDefined();
+      expect(fast?.maxOutputTokens).toBeUndefined();
     },
   );
   it("forwards customPresets and slotBindings to the gateway", async () => {

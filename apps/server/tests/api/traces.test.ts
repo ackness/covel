@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import {
   createPluginRegistry,
+  type ParsedRuntimeMd,
   type PluginRegistry,
   type PluginRegistryEntry,
   type PluginSummary,
@@ -41,6 +42,7 @@ function makeSession(
     id,
     worldId: "world-1",
     status: "active",
+    locale: "zh-CN",
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
@@ -69,16 +71,16 @@ function makeSummary(overrides?: Partial<PluginSummary>): PluginSummary {
 function makeEntry(
   overrides?: Partial<PluginRegistryEntry>,
 ): PluginRegistryEntry {
-  const parsed = {
-    runtime: { type: "function" as const },
+  const parsed: ParsedRuntimeMd = {
+    runtime: { type: "function" },
     manifest: {
       name: "image-plugin",
+      pluginId: "image-plugin",
       description: "Image plugin runtime",
       pluginType: "plugin",
       outputKind: "plugin",
       runtimeType: "function",
       trigger: { type: "manual" },
-      capabilities: ["image-generation"],
       input: {
         inject: [
           {

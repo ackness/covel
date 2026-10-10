@@ -52,7 +52,7 @@ function createMockStore() {
     characters,
     pluginData,
     getCharacterSchema: async () => null,
-    upsertCharacter(record: CharacterLike) {
+    async upsertCharacter(record: CharacterLike) {
       const idx = characters.findIndex((c) => c.id === record.id);
       if (idx >= 0) characters[idx] = record;
       else characters.push(record);

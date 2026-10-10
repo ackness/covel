@@ -111,12 +111,13 @@ describe("GET /api/ui-specs — per-spec validation", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: sessionId,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 1,
 
       activePlugins: ["good-panel", "bad-panel", "future-panel"],
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     app = createMiscApiRoutes(stubAi, registry, store);

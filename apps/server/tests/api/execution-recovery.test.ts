@@ -12,11 +12,13 @@ async function fixture() {
   await store.createSession({
     id: "recovery",
     status: "active",
+    locale: "zh-CN",
     phase: "playing",
     activePlugins: [],
     completedPlayerTurns: 0,
     setupRuntimes: {},
     createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
   });
   const trace = async (
     type: string,
@@ -137,6 +139,7 @@ describe("foreground execution recovery", () => {
       id: "setup-result",
       sessionId: "recovery",
       turnId: "setup",
+      origin: "player",
       runtimeResults: [],
       durationMs: 1,
       createdAt: "2026-01-01T00:00:00.001Z",
@@ -216,6 +219,7 @@ describe("foreground execution recovery", () => {
       id: "result",
       sessionId: "recovery",
       turnId: "opening",
+      origin: "player",
       runtimeResults: [],
       durationMs: 15,
       createdAt: new Date().toISOString(),

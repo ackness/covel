@@ -107,7 +107,7 @@ describe("buildFieldsZodFromSchema", () => {
     expect(
       (props.skills as { type: string; items: { type: string } }).items.type,
     ).toBe("string");
-    expect(props!.awakened.type).toBe("boolean");
+    expect(props.awakened?.type).toBe("boolean");
 
     // Nested object: the equipment schema should expose `weapon` and `consumables`
     const equipment = props.equipment as {
@@ -227,7 +227,7 @@ describe("i18n attribute labels", () => {
     type Z4 = { toJSONSchema(): Record<string, unknown> };
     const json = (z as unknown as Z4).toJSONSchema();
     const props = json.properties as Record<string, Record<string, unknown>>;
-    const desc = props!.faction.description as string;
+    const desc = props.faction?.description as string;
 
     expect(desc).toContain("门派");
     expect(desc).toContain("[social]");

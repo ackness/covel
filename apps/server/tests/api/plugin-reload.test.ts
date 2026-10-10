@@ -22,6 +22,8 @@ function fixture(development = true) {
     close: async () => {},
     watch: () => {},
     hasPendingEntry: () => false,
+    isEntryPublished: () => true,
+    isEntryRetryDeferred: () => false,
     ensurePluginEntry: async () => {},
     withSnapshot: async (_id, fn) => fn(),
   };

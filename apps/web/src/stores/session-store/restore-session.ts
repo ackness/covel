@@ -21,7 +21,7 @@ interface RestoreSessionOptions {
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
   generation?: number;
-  worlds: readonly api.WorldRecord[];
+  worlds: readonly api.WorldSummary[];
   session: api.SessionRecord;
 }
 
