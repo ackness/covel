@@ -26,6 +26,7 @@ import type { SessionAction, SessionState } from "../types.js";
 const api = vi.hoisted(() => ({
   fetchUiSpecs: vi.fn(),
   listPluginData: vi.fn(),
+  listSessionPluginData: vi.fn(),
   listSessionPlugins: vi.fn(),
   listSuspensions: vi.fn(),
   getSessionView: vi.fn(),
@@ -862,9 +863,19 @@ it("preserves special own namespace/key properties in whole-plugin recovery with
     items: [plugin("plugin")],
     commands: [],
   });
-  api.listPluginData.mockResolvedValue([
-    { namespace: "__proto__", key: probe, value: "kept" },
-    { namespace: "panel", key: "__proto__", value: { marker: "kept" } },
+  api.listSessionPluginData.mockResolvedValue([
+    {
+      pluginId: "plugin",
+      namespace: "__proto__",
+      key: probe,
+      value: "kept",
+    },
+    {
+      pluginId: "plugin",
+      namespace: "panel",
+      key: "__proto__",
+      value: { marker: "kept" },
+    },
   ]);
   const { stateRef, sessionIdRef, dispatch } = setup();
   try {

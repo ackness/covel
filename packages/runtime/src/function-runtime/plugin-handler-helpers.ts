@@ -548,6 +548,9 @@ export function createFunctionStoreView(
   };
 }
 
+/** Ceiling (and default) of `listTurnMessages` in a plugin action's store view. */
+const RPC_TURN_MESSAGE_LIMIT = 200;
+
 /**
  * Build a scoped immediate-write store for all plugin action-level RPC handlers.
  * Method shapes stay compatible with `RpcHandlerStore`, while session/plugin
@@ -562,14 +565,16 @@ export function createRpcHandlerStoreView(
     async getSession() {
       return structuredClone(await store.getSession(ctx.sessionId));
     },
-    async listTurnMessages() {
-      return structuredClone(await store.listTurnMessages(ctx.sessionId));
-    },
-    savePlayerInput(input) {
-      return store.savePlayerInput({
-        ...structuredClone(input),
-        sessionId: ctx.sessionId,
-      });
+    async listTurnMessages(limit) {
+      // An action wants recent context, never the whole history.
+      const wanted =
+        limit !== undefined && Number.isFinite(limit)
+          ? Math.trunc(limit)
+          : RPC_TURN_MESSAGE_LIMIT;
+      const count = Math.min(Math.max(wanted, 0), RPC_TURN_MESSAGE_LIMIT);
+      return structuredClone(
+        await store.listRecentTurnMessages(ctx.sessionId, count),
+      );
     },
     async setPluginData(record) {
       assertWritableNamespace(record.namespace);

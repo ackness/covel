@@ -223,6 +223,50 @@ describe("Plugin Data REST API routes", () => {
     expect(res.status).toBe(403);
   });
 
+  it("GET session-wide list returns the readable rows of active plugins only", async () => {
+    registerPlugin(registry, "idle-plugin");
+    const now = new Date().toISOString();
+    const row = (
+      id: string,
+      plugin: string,
+      namespace: string,
+      key: string,
+      value: unknown,
+    ) =>
+      store.setPluginData({
+        id,
+        sessionId,
+        pluginId: plugin,
+        namespace,
+        key,
+        value,
+        createdAt: now,
+        updatedAt: now,
+      });
+    await row("pd-all-1", pluginId, "entries", "alpha", { title: "Alpha" });
+    await row("pd-all-2", pluginId, "_hidden.secrets", "k", "secret");
+    await row("pd-all-3", "idle-plugin", "entries", "beta", "inactive");
+
+    const res = await app.request(`/api/sessions/${sessionId}/plugin-data`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: {
+        pluginId: string;
+        namespace: string;
+        key: string;
+        value: unknown;
+      }[];
+    };
+    expect(
+      body.items.map((i) => [i.pluginId, i.namespace, i.key, i.value]),
+    ).toEqual([[pluginId, "entries", "alpha", { title: "Alpha" }]]);
+  });
+
+  it("GET session-wide list 404s for an unknown session", async () => {
+    const res = await app.request(`/api/sessions/missing/plugin-data`);
+    expect(res.status).toBe(404);
+  });
+
   it("GET _index lists namespaces and keys without values", async () => {
     const now = new Date().toISOString();
     await store.setPluginData({

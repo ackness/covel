@@ -5,6 +5,5 @@ export function emptyRpcStore(): RpcHandlerStore {
   return {
     getSession: async () => null,
     listTurnMessages: async () => [],
-    savePlayerInput: async () => {},
   };
 }

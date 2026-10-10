@@ -304,6 +304,16 @@ jobs:
       - name: Inspect artifacts
         run: ls -lh release/electron/
 
+      # The installers are unsigned; a checksum list lets a downloader confirm
+      # a file was not replaced after the build.
+      - name: Write SHA-256 checksums
+        shell: bash
+        working-directory: release/electron
+        run: |
+          set -euo pipefail
+          sha256sum -- *.dmg *.zip *.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       # action-gh-release updates an existing release for the immutable tag;
       # do not delete a valid release before all new assets are ready.
       - name: Create or update GitHub Release
@@ -320,3 +330,4 @@ jobs:
             release/electron/*.dmg
             release/electron/*.zip
             release/electron/*.exe
+            release/electron/SHA256SUMS.txt
