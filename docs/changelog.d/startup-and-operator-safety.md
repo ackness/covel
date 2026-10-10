@@ -1,5 +1,6 @@
 ### Breaking
 
+- **Sessions created before dimension values held one language no longer open.** The read-time repair that rewrote locale-map dimension records is gone, together with `resolveDimensionRecordLocale` and the `_legacy.dimension-locale-maps` backup namespace. Recreate such development sessions (this release already requires recreating existing databases).
 - **An unknown `STORE_BACKEND`, `MEDIA_BACKEND` or `VECTOR_BACKEND` stops the server from starting.** Before, a typo such as `STORE_BACKEND=postgres` silently ran on a local SQLite file. The error names the variable and the accepted values; fix the value in `.env`, the shell or the desktop config. `NODE_ENV` keeps its fallback. See `docs/guide/env-registry.md`.
 
 ### Fixed
