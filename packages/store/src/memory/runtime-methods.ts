@@ -400,11 +400,15 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       state.turnMessages.push(record);
     },
 
-    async listTurnMessages(sessionId, pagination?) {
+    async listTurnMessages(sessionId, options?) {
       const filtered = sortTurnMessages(
-        state.turnMessages.filter((r) => r.sessionId === sessionId),
+        state.turnMessages.filter(
+          (r) =>
+            r.sessionId === sessionId &&
+            (options?.turnId === undefined || r.turnId === options.turnId),
+        ),
       );
-      return applyPagination(filtered, pagination);
+      return applyPagination(filtered, options);
     },
 
     async listUncompactedTurnMessages(sessionId, limit) {

@@ -164,6 +164,18 @@ export async function buildSessionSnapshot(
     };
   });
 
+  // An answer marks a form block of a returned message, so only the answers
+  // to the turns of this window are returned. A block names its turn itself
+  // or takes its message's.
+  const windowTurnIds = new Set<string>();
+  for (const message of messages) {
+    if (message.turnId) windowTurnIds.add(message.turnId);
+    const blockTurnId = (
+      message.block?.meta as { turnId?: unknown } | undefined
+    )?.turnId;
+    if (typeof blockTurnId === "string") windowTurnIds.add(blockTurnId);
+  }
+
   // Map characters
   const snapshotCharacters: SnapshotCharacter[] = characters.map((c) => ({
     id: c.id,
@@ -241,7 +253,9 @@ export async function buildSessionSnapshot(
     messages,
     messagesCursor: messagesCursor ? encodePageCursor(messagesCursor) : null,
     submittedInteractions: playerInputs.flatMap((input) =>
-      input.values && typeof input.values === "object"
+      windowTurnIds.has(input.turnId) &&
+      input.values &&
+      typeof input.values === "object"
         ? [
             {
               turnId: input.turnId,

@@ -802,6 +802,46 @@ export function registerRuntimeRecordStoreSuites(
       expect(list[0]!.id).toBe(m1.id);
     });
 
+    it("listTurnMessages with turnId returns that turn's messages only, in order", async () => {
+      const rows = [
+        makeTurnMessage({
+          sessionId: "sess-turn",
+          turnId: "t1",
+          createdAt: ts(0),
+        }),
+        makeTurnMessage({
+          sessionId: "sess-turn",
+          turnId: "t2",
+          createdAt: ts(100),
+        }),
+        makeTurnMessage({
+          sessionId: "sess-turn",
+          turnId: "t1",
+          createdAt: ts(200),
+        }),
+        makeTurnMessage({
+          sessionId: "sess-other",
+          turnId: "t1",
+          createdAt: ts(50),
+        }),
+      ];
+      for (const row of rows) await store.appendTurnMessage(row);
+      expect(
+        (await store.listTurnMessages("sess-turn", { turnId: "t1" })).map(
+          (row) => row.id,
+        ),
+      ).toEqual([rows[0]!.id, rows[2]!.id]);
+      expect(
+        (
+          await store.listTurnMessages("sess-turn", { turnId: "t1", limit: 1 })
+        ).map((row) => row.id),
+      ).toEqual([rows[0]!.id]);
+      expect(
+        await store.listTurnMessages("sess-turn", { turnId: "missing" }),
+      ).toEqual([]);
+      expect(await store.listTurnMessages("sess-turn")).toHaveLength(3);
+    });
+
     it("should return messages sorted by createdAt", async () => {
       const m1 = makeTurnMessage({
         sessionId: "sess-1",

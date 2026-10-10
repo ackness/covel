@@ -78,6 +78,7 @@ type TraceEventsTable = Table & {
 };
 type TurnMessagesTable = Table & {
   sessionId: Column;
+  turnId: Column;
   createdAt: Column;
   order: Column;
   id: Column;
@@ -249,13 +250,18 @@ export function createSqlSessionJournalRecords(
 
     async listTurnMessages(
       sessionId: string,
-      pagination?: PaginationOpts,
+      options?: PaginationOpts & { readonly turnId?: string },
     ): Promise<TurnMessageRecord[]> {
       const rows = await runner.select<TurnMessageRow>(turnMessages, {
-        where: eq(turnMessages.sessionId, sessionId),
+        where: and(
+          eq(turnMessages.sessionId, sessionId),
+          options?.turnId === undefined
+            ? undefined
+            : eq(turnMessages.turnId, options.turnId),
+        ),
         orderBy: turnMessageOrder,
-        limit: pagination?.limit,
-        offset: pagination?.offset,
+        limit: options?.limit,
+        offset: options?.offset,
       });
       return rows.map((row) => toTurnMessageRecord(row, json));
     },
