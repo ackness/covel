@@ -143,11 +143,6 @@ async function createCandidates(ctx, payload) {
   const now = new Date().toISOString();
   const targetTurnId = normalizeTurnId(payload.turnId ?? ctx.turnId);
   const count = normalizeCount(payload.count);
-  const explicitVariants = normalizeStringArray(
-    payload.candidates,
-    "candidates",
-  );
-
   // Carry the seeded narrator runtimeId forward so regenerate keeps targeting
   // the narrator's message (not branch-reply's auto-seed message) when the
   // player later accepts a variant. Read it back from the existing turn record
@@ -155,31 +150,27 @@ async function createCandidates(ctx, payload) {
   const existing = await readTurnRecord(ctx, targetTurnId);
   const narrativeRuntimeId =
     typeof existing?.runtimeId === "string" ? existing.runtimeId : undefined;
-  // The original narration is candidate[0] of the stored set, so it is not
-  // limited by the request-size cap that applies to `baseText` in a payload.
-  const baseText =
-    normalizeOptionalString(payload.baseText, "baseText") ??
-    existing?.candidates[0]?.text ??
-    normalizeFallbackText(ctx.playerMessage);
-
-  // Candidate composition, in priority order:
-  //   1. explicit `candidates` payload (programmatic / API) — that array IS the
-  //      full candidate list (candidate[0] = candidates[0]), no LLM.
-  //   2. LLM regenerate via the fast text slot when a gateway is wired —
-  //      candidate[0] is the original (`baseText`), then genuine variants.
-  //   3. no gateway — return just the original (NEVER fabricate filler text).
-  let texts;
-  let sourceFor;
-  if (explicitVariants) {
-    texts = dedupeTexts(explicitVariants).slice(0, count);
-    sourceFor = () => "manual";
-  } else {
-    const variants = ctx.gateway
-      ? await generateVariants(ctx, baseText, count - 1)
-      : [];
-    texts = dedupeTexts([baseText, ...variants]).slice(0, Math.max(1, count));
-    sourceFor = (index) => (index === 0 ? "original" : "regenerated");
+  // The original narration is candidate[0] of the set that the seed stored.
+  // A request cannot supply it, or its own candidates: an adopted candidate
+  // replaces the turn's narration in the model's history, so every candidate
+  // is the narrative's text or a rephrasing of it.
+  const baseText = existing?.candidates[0]?.text;
+  if (!baseText) {
+    throw new Error(
+      "branch-reply has no narration for this turn, so there is nothing to rephrase",
+    );
   }
+
+  // With a gateway, candidate[0] is the original and the rest are variants
+  // from the fast text slot. Without one, only the original: no filler text.
+  const variants = ctx.gateway
+    ? await generateVariants(ctx, baseText, count - 1)
+    : [];
+  const texts = dedupeTexts([baseText, ...variants]).slice(
+    0,
+    Math.max(1, count),
+  );
+  const sourceFor = (index) => (index === 0 ? "original" : "regenerated");
 
   const candidates = toCandidates(targetTurnId, texts, sourceFor, now);
   const selectedCandidateId =
@@ -248,8 +239,7 @@ async function acceptCandidate(ctx, payload) {
       "manualPayload.candidateId must reference an existing candidate",
     );
   }
-  const acceptedText =
-    normalizeOptionalString(payload.text, "text") ?? accepted.text;
+  const acceptedText = accepted.text;
   const messageState = makeMessageState({
     turnId: targetTurnId,
     status: "accepted",
@@ -417,13 +407,6 @@ function normalizeOptionalString(value, field) {
   return normalizeRequiredString(value, field);
 }
 
-function normalizeFallbackText(value) {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim().slice(0, MAX_TEXT_LENGTH);
-  }
-  return "Continue from this moment.";
-}
-
 function normalizeCount(value) {
   if (value === undefined || value === null) return DEFAULT_COUNT;
   if (!Number.isInteger(value) || value < 1 || value > MAX_COUNT) {
@@ -432,16 +415,6 @@ function normalizeCount(value) {
     );
   }
   return value;
-}
-
-function normalizeStringArray(value, field) {
-  if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value)) {
-    throw new Error(`manualPayload.${field} must be an array`);
-  }
-  return value.map((item, index) =>
-    normalizeRequiredString(item, `${field}[${index}]`),
-  );
 }
 
 function selectCandidateId(candidates, requestedId) {

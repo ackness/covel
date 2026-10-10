@@ -71,7 +71,6 @@ Function runtime for Covel-native swipe + regenerate storage. Runs two ways:
 {
   "action": "createCandidates",
   "turnId": "turn-123",
-  "baseText": "I step closer and ask what happened.",
   "count": 3
 }
 ```
@@ -83,6 +82,11 @@ Function runtime for Covel-native swipe + regenerate storage. Runs two ways:
   "candidateId": "turn-123-candidate-1"
 }
 ```
+
+A request carries no narrative text. `createCandidates` rephrases the
+narration that the seed stored for the turn, and `acceptCandidate` adopts one of
+the stored candidates by ID: an adopted reply replaces the turn's narration in
+the model's history, so it must be the narrative's text or a rephrasing of it.
 
 ## Behavior
 

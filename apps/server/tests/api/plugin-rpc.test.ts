@@ -1760,25 +1760,39 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       createdAt: "2026-01-01T00:00:01.000Z",
     });
 
-    const createCandidates = await app.request(
-      `/api/sessions/${session.id}/plugin-rpc`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          kind: "runtime",
-          pluginId: "branch-reply",
-          runtimeId: "branch-reply",
-          payload: {
-            action: "createCandidates",
-            turnId: "turn-story-1",
-            candidates: ["Candidate one text.", "Accepted branch text."],
-            count: 2,
+    // The candidate set of the turn, as the seed and a regenerate store it:
+    // the narration first, then a rephrasing.
+    await store.setPluginData({
+      id: "branch-message-1",
+      sessionId: session.id,
+      pluginId: "branch-reply",
+      namespace: "message",
+      key: "turn-story-1",
+      value: {
+        schemaVersion: 1,
+        turnId: "turn-story-1",
+        __turnId: "turn-story-1",
+        status: "ready",
+        runtimeId: "chat-mode-narrator",
+        candidates: [
+          {
+            id: "turn-story-1-candidate-1",
+            index: 0,
+            text: "Original narrator text.",
+            source: "original",
           },
-        }),
+          {
+            id: "turn-story-1-candidate-2",
+            index: 1,
+            text: "Accepted branch text.",
+            source: "regenerated",
+          },
+        ],
+        selectedCandidateId: "turn-story-1-candidate-1",
       },
-    );
-    expect(createCandidates.status).toBe(200);
+      createdAt: "2026-01-01T00:00:02.000Z",
+      updatedAt: "2026-01-01T00:00:02.000Z",
+    });
 
     const acceptCandidate = await app.request(
       `/api/sessions/${session.id}/plugin-rpc`,
