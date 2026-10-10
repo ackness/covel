@@ -707,6 +707,7 @@
     "backupDownload": "Download",
     "backupUnreadable": "This copy cannot be read.",
     "serverKeyAvailable": "An instance API key is available for server defaults. The personal key entered here stays on this device.",
+    "keyOverriddenByEnv": "An environment variable (shell, .env or .env.llm) sets a different key for this provider and takes precedence over the one saved here. Unset it to use the saved key.",
     "modelBindingMissing": "The selected model is unavailable. Choose another model or reset this role.",
     "resetModelBinding": "Reset model binding",
     "storageMode": "Data Storage",

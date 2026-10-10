@@ -40,7 +40,7 @@ const openingForm =
             title: "Create your character",
             submitLabel: "Create",
             fields: [nameField, ...fields],
-            submitBehavior: { echoFilledNarrative: true, immediate: true },
+            submitBehavior: { echoFilledNarrative: true },
             narrativeTemplate: "{{characterName}} begins.",
           }),
         },

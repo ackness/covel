@@ -391,7 +391,7 @@ sources:
 
 导入顺序是：维度，然后 media，然后其余契约数据，最后是 `characters`。
 
-内置世界 `worlds/emberback` 就是这样读的：它没有 descriptor，12 个 source 全部来自约定路径。
+内置世界 `worlds/emberback` 就是这样读的：它没有 descriptor，13 个 source 全部来自约定路径。
 
 **什么时候仍然写 descriptor**：文件不在约定路径上（比如规则文件叫 `data/rules/tide-mystery.yaml`）、一个契约有多个文件、需要 `after` 指定顺序、或要关掉某个 source。写了 `worldData` 之后只认 descriptor，约定不再生效，因此 descriptor 要列全。
 

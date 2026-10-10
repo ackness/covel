@@ -20,6 +20,12 @@ import {
 import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 import { packageCreditFields } from "./package-info.js";
 
+/**
+ * The longest message a player's action may carry, in characters. A form
+ * answer becomes such a message, so a submission is held to the same limit.
+ */
+export const MAX_PLAYER_MESSAGE_CHARS = 100_000;
+
 const ACTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
 const SAFE_WORLD_ID_PATTERN = /^[a-z0-9_-]{1,64}$/i;
 const ACTION_TYPES = [
@@ -83,7 +89,10 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
       type: z.literal("send_message"),
       payload: z
         .object({
-          content: requiredActionString("send_message.content", 100_000),
+          content: requiredActionString(
+            "send_message.content",
+            MAX_PLAYER_MESSAGE_CHARS,
+          ),
           inputMessageId: requiredActionString(
             "inputMessageId",
             128,

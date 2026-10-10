@@ -139,10 +139,18 @@ const hasFunctionCall = (content: Content | undefined): boolean =>
   content?.role === "model" &&
   content.parts.some((part) => part.functionCall !== undefined);
 
+const hasFunctionResponse = (content: Content): boolean =>
+  content.parts.some((part) => part.functionResponse !== undefined);
+
 /**
- * Appends a turn, merging it into the previous one when the role repeats:
- * `contents` alternates between `user` and `model`. A model turn that calls
- * functions stays whole, so the function responses still follow it directly.
+ * Appends a turn, merging it into the previous one when the role repeats and
+ * neither holds a function part. A model turn that calls functions stays
+ * whole, so the function responses still follow it directly, and the content
+ * with the function responses holds nothing else: text that follows them is
+ * the next `user` content. That is the shape this adapter always sent for a
+ * tool result followed by a user message, and the one the AI SDK's Google
+ * provider sends; a `functionResponse` next to instruction text in one
+ * content has not been checked against Google's endpoint.
  */
 function pushContent(
   contents: Content[],
@@ -151,7 +159,13 @@ function pushContent(
 ): void {
   if (!content.parts.length) return;
   const last = contents.at(-1);
-  if (merge && last && last.role === content.role && !hasFunctionCall(last)) {
+  if (
+    merge &&
+    last &&
+    last.role === content.role &&
+    !hasFunctionCall(last) &&
+    !hasFunctionResponse(last)
+  ) {
     last.parts.push(...content.parts);
     return;
   }
@@ -182,7 +196,8 @@ export function googleMessages(
   const systemParts: Record<string, unknown>[] = [];
   const calls = new Map<string, Call>();
   // Instructions that arrived between a function call and its responses; they
-  // go out after the responses, which must follow the call directly.
+  // go out as the `user` content after the responses, which must follow the
+  // call directly.
   let afterResponses: Record<string, unknown>[] = [];
   let leading = true;
   for (let index = 0; index < messages.length; index++) {
@@ -235,11 +250,9 @@ export function googleMessages(
       responses.sort((left, right) => left.call.order - right.call.order);
       contents.push({
         role: "user",
-        parts: [
-          ...responses.map((response) => response.part),
-          ...afterResponses,
-        ],
+        parts: responses.map((response) => response.part),
       });
+      pushContent(contents, { role: "user", parts: afterResponses });
       afterResponses = [];
       continue;
     }

@@ -14,7 +14,7 @@
             {
               "id": "call-create-character-form",
               "name": "create-character-form",
-              "arguments": "{\"formId\":\"char-creation\",\"title\":\"创建主角\",\"fields\":[{\"type\":\"text\",\"name\":\"characterName\",\"label\":\"角色名\",\"required\":true}],\"submitLabel\":\"踏入故事\",\"narrativeTemplate\":\"你名为 {{characterName}}，此刻踏入雾中的港口。\",\"submitBehavior\":{\"echoFilledNarrative\":true,\"immediate\":true}}"
+              "arguments": "{\"formId\":\"char-creation\",\"title\":\"创建主角\",\"fields\":[{\"type\":\"text\",\"name\":\"characterName\",\"label\":\"角色名\",\"required\":true}],\"submitLabel\":\"踏入故事\",\"narrativeTemplate\":\"你名为 {{characterName}}，此刻踏入雾中的港口。\",\"submitBehavior\":{\"echoFilledNarrative\":true}}"
             }
           ]
         },

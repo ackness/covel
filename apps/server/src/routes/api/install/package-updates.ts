@@ -150,12 +150,13 @@ export async function applyPendingPackageUpdates(
         error instanceof Error
           ? error.message
           : "Unable to apply package update";
-      console.warn(`[package-update] ${id}: ${message}`);
-      // If restoration failed, do not boot with a missing/ambiguous package.
-      if (await exists(backup))
-        throw new Error(`Package update recovery requires attention: ${id}`, {
-          cause: error,
-        });
+      // A retained backup means the transaction was interrupted and could not
+      // be settled: keep both directories untouched (the next start retries)
+      // and carry on without this package rather than refusing to boot.
+      const recovery = await exists(backup);
+      console.warn(
+        `[package-update] ${id}: ${recovery ? "recovery needs attention, skipped; retried at next start: " : ""}${message}`,
+      );
       await writeFile(
         path.join(directory, "error.txt"),
         message.slice(0, 8000),

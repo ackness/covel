@@ -47,14 +47,16 @@ describe("store factory env wiring", () => {
     savedEnv[key] = process.env[key];
   }
 
-  it("resolves invalid STORE_BACKEND through the shared env fallback", () => {
+  it("rejects an unknown STORE_BACKEND instead of falling back", () => {
     withEnv({
       STORE_BACKEND: "idb",
       SQLITE_PATH: undefined,
       DATABASE_URL: undefined,
     });
 
-    expect(resolveBackendFromEnv()).toBe("sqlite");
+    expect(() => resolveBackendFromEnv()).toThrow(
+      'Unknown STORE_BACKEND "idb". Accepted values: memory, sqlite, pg.',
+    );
   });
 
   it("creates an in-memory store when STORE_BACKEND=memory", async () => {
@@ -122,34 +124,20 @@ describe("store factory env wiring", () => {
     await expect(createMediaStoreFromEnv()).resolves.toBeUndefined();
   });
 
-  it("falls back from non-server media backends on the server env path", async () => {
-    withEnv({
-      STORE_BACKEND: "memory",
-      SQLITE_PATH: undefined,
-      DATABASE_URL: undefined,
-      MEDIA_BACKEND: "idb",
-      MEDIA_ROOT: undefined,
-    });
+  it("rejects non-server media backends on the server env path", async () => {
+    for (const backend of ["idb", "s3"]) {
+      withEnv({
+        STORE_BACKEND: "memory",
+        SQLITE_PATH: undefined,
+        DATABASE_URL: undefined,
+        MEDIA_BACKEND: backend,
+        MEDIA_ROOT: undefined,
+      });
 
-    const store = await createMediaStoreFromEnv();
-    expect(store).toBeDefined();
-    const ref = await store!.put(new Uint8Array([4, 5, 6]), "image/png");
-    expect(await store!.resolveUrl(ref)).toBe(`memory://media/${ref.id}`);
-
-    withEnv({
-      STORE_BACKEND: "memory",
-      SQLITE_PATH: undefined,
-      DATABASE_URL: undefined,
-      MEDIA_BACKEND: "s3",
-      MEDIA_ROOT: undefined,
-    });
-
-    const s3Fallback = await createMediaStoreFromEnv();
-    expect(s3Fallback).toBeDefined();
-    const s3Ref = await s3Fallback!.put(new Uint8Array([7, 8, 9]), "image/png");
-    expect(await s3Fallback!.resolveUrl(s3Ref)).toBe(
-      `memory://media/${s3Ref.id}`,
-    );
+      await expect(async () => createMediaStoreFromEnv()).rejects.toThrow(
+        `Unknown MEDIA_BACKEND "${backend}"`,
+      );
+    }
   });
 
   it("summarizes storage migration descriptors", () => {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenAiChatAdapter } from "../src/adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "../src/adapters/openai-responses.js";
 import { createAnthropicMessagesAdapter } from "../src/adapters/anthropic-messages.js";
-import type { StreamEvent } from "../src/types.js";
+import type { StreamEvent, TextMessage } from "../src/types.js";
 
 const protocols = [
   {
@@ -128,7 +128,7 @@ it("does not release chat tool arguments from a truncated generation", async () 
   expect(output).toEqual([{ type: "tool-argument-delta" }]);
 });
 
-it("gives a streamed tool call without an id one from its position", async () => {
+it("gives streamed tool calls without an id one that no other step of the loop has", async () => {
   stub([
     {
       choices: [
@@ -136,6 +136,7 @@ it("gives a streamed tool call without an id one from its position", async () =>
           delta: {
             tool_calls: [
               { index: 0, function: { name: "write", arguments: "{}" } },
+              { index: 1, function: { name: "write", arguments: "{}" } },
             ],
           },
         },
@@ -143,13 +144,35 @@ it("gives a streamed tool call without an id one from its position", async () =>
     },
     { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
   ]);
-  const calls: StreamEvent[] = [];
-  for await (const event of createOpenAiChatAdapter().streamText(
-    { baseUrl: "https://provider.example" },
-    { model: "test", messages: [] },
-  ))
-    if (event.type === "tool-call") calls.push(event);
-  expect(calls).toEqual([
-    { type: "tool-call", id: "call_0", name: "write", arguments: "{}" },
+  const ids = async (messages: TextMessage[]) => {
+    const found: string[] = [];
+    for await (const event of createOpenAiChatAdapter().streamText(
+      { baseUrl: "https://provider.example" },
+      { model: "test", messages },
+    ))
+      if (event.type === "tool-call") found.push(event.id);
+    return found;
+  };
+  const first: TextMessage[] = [{ role: "user", content: "Write twice." }];
+  const stepOne = await ids(first);
+  // The next step of the loop sends the first step's calls and results.
+  const stepTwo = await ids([
+    ...first,
+    {
+      role: "assistant",
+      content: "",
+      toolCalls: stepOne.map((id) => ({ id, name: "write", arguments: "{}" })),
+    },
+    ...stepOne.map((id): TextMessage => ({
+      role: "tool",
+      toolCallId: id,
+      content: "ok",
+    })),
   ]);
+  const all = [...stepOne, ...stepTwo];
+  expect(all).toHaveLength(4);
+  expect(new Set(all).size).toBe(4);
+  for (const id of all) expect(id).toMatch(/^call_[0-9a-f]{24}$/);
+  // The same request names its calls the same way: a replay repeats.
+  expect(await ids(first)).toEqual(stepOne);
 });

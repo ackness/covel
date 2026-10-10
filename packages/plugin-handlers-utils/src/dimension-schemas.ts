@@ -165,7 +165,7 @@ const recursiveValueSchema: z.ZodType<DimensionValueSchema> = z.lazy(() =>
       "x-i18n": z
         .boolean()
         .describe(
-          "Marks this node as translatable text: its value is a string or a locale map. Nodes without it are never localized.",
+          "Marks this node as translatable text: its value is a string written in the file's own language; translations go in the locale edition of the file. Nodes without it are never localized.",
         )
         .optional(),
       "x-enumLabels": z
@@ -608,35 +608,6 @@ export function resolveDimensionDefinitionLocale(
     ),
     ...(rule === undefined ? {} : { updateRule: rule }),
   };
-}
-
-/**
- * A record from a session that was created while session state still held
- * the world package's locale maps: its value, its initial value and its
- * update rule may be maps. Every read of such a record fails validation, so
- * the session cannot be opened. The text of the session's language is in
- * each map. This returns the record with that text in place of the maps, or
- * undefined when the result is still not a valid record.
- */
-export function resolveDimensionRecordLocale(
-  value: unknown,
-  locale?: string,
-): DimensionRecord | undefined {
-  const stored = dimensionRecordShape.safeParse(value);
-  if (!stored.success) return undefined;
-  const resolved = dimensionRecordSchema.safeParse({
-    ...stored.data,
-    definition: resolveDimensionDefinitionLocale(
-      stored.data.definition,
-      locale,
-    ),
-    value: localizeDimensionValue(
-      stored.data.definition.schema,
-      stored.data.value,
-      locale,
-    ),
-  });
-  return resolved.success ? resolved.data : undefined;
 }
 
 /** World dimensions as a session of this content locale stores them. */

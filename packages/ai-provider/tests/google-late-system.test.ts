@@ -145,7 +145,7 @@ describe("Gemini system messages after the conversation starts", () => {
     expectAlternating(out.contents);
   });
 
-  it("puts an instruction after the function responses of a tool loop, in their turn", () => {
+  it("puts an instruction after the function responses of a tool loop, as the next user content", () => {
     const out = convert([
       stable,
       { role: "user", content: "Roll." },
@@ -156,9 +156,9 @@ describe("Gemini system messages after the conversation starts", () => {
     expect(out.contents).toEqual([
       { role: "user", parts: [{ text: "Roll." }] },
       { role: "model", parts: [functionCall] },
-      { role: "user", parts: [functionResponse, instruction("Retry rule")] },
+      { role: "user", parts: [functionResponse] },
+      { role: "user", parts: [instruction("Retry rule")] },
     ]);
-    expectAlternating(out.contents);
   });
 
   it("never separates a function call from its responses", () => {
@@ -173,14 +173,29 @@ describe("Gemini system messages after the conversation starts", () => {
     expect(out.contents).toEqual([
       { role: "user", parts: [{ text: "Roll." }] },
       { role: "model", parts: [functionCall] },
-      {
-        role: "user",
-        parts: [
-          functionResponse,
-          instruction("Between"),
-          { text: "And then?" },
-        ],
-      },
+      { role: "user", parts: [functionResponse] },
+      { role: "user", parts: [instruction("Between"), { text: "And then?" }] },
+    ]);
+  });
+
+  it("never puts text in the content that holds function responses", () => {
+    const out = convert([
+      stable,
+      { role: "user", content: "Roll." },
+      call,
+      result,
+      { role: "user", content: "Again." },
+      { role: "system", content: "Retry rule" },
+      call,
+      result,
+    ]);
+    expect(out.contents).toEqual([
+      { role: "user", parts: [{ text: "Roll." }] },
+      { role: "model", parts: [functionCall] },
+      { role: "user", parts: [functionResponse] },
+      { role: "user", parts: [{ text: "Again." }, instruction("Retry rule")] },
+      { role: "model", parts: [functionCall] },
+      { role: "user", parts: [functionResponse] },
     ]);
   });
 

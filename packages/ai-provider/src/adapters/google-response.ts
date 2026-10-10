@@ -222,7 +222,11 @@ export class GoogleResponse {
     return parts;
   }
 
-  result(config: ProviderConfig, model: string): TextGenerationResult {
+  result(
+    config: ProviderConfig,
+    model: string,
+    fallbackId: (index: number) => string,
+  ): TextGenerationResult {
     if (!this.finish)
       throw googleError("Gemini response ended without a finish reason");
     const toolParts = this.parts.filter(
@@ -230,10 +234,10 @@ export class GoogleResponse {
     );
     if (toolParts.length && this.finish !== "STOP")
       throw googleError("Gemini tool calls were not completed successfully");
-    // A call without a native id gets one from its position, so a recorded
-    // session repeats byte for byte.
+    // A call without a native id gets one that no other call of the
+    // conversation has (`fallbackToolCallIds`).
     const toolCalls = toolParts.map((part, index) => ({
-      id: part.functionCall!.id ?? `call_${index}`,
+      id: part.functionCall!.id ?? fallbackId(index),
       name: part.functionCall!.name,
       arguments: JSON.stringify(part.functionCall!.args ?? {}),
     }));

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
+import { FormValidatorFailedError } from "../src/interaction/interaction-submission.js";
 import { submitAndStore as createSubmitFormHandler } from "./submit-and-store.js";
 
 async function fixture(sourcePluginId: string | undefined = "provider") {
@@ -115,6 +116,27 @@ describe("plugin-owned form validation", () => {
         { message: "Not a field" },
       ],
     });
+  });
+
+  it("answers a validator that throws with a fixed text and keeps what it threw as the cause", async () => {
+    const { store, context, submission } = await fixture();
+    const thrown = new Error("ENOENT: /srv/covel/plugins/provider/budget.db");
+    const failure: unknown = await createSubmitFormHandler(async () => {
+      throw thrown;
+    }, store)(
+      { turnId: "turn", submissions: [submission("first", 3)] },
+      { ...context, locale: "en-US" },
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(FormValidatorFailedError);
+    expect(failure).toMatchObject({
+      code: "form_validator_failed",
+      message: "This form could not be checked. Try again.",
+      cause: thrown,
+    });
+    expect(await store.listPlayerInputs("session")).toHaveLength(0);
   });
 
   it.each(["missing-owner", "missing-validator"])(

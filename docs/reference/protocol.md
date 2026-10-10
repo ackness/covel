@@ -481,6 +481,7 @@ Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队�
 
 - `code: "form_rejected"`：玩家填的值没有通过校验，`message` 是按会话语言写给玩家的文字。`details.issues` 按字段列出每条原因（`{ field?, message }`，缺 `field` 的属于整张表单）。客户端把每条消息显示在对应字段下面、聚焦第一个出错字段，整张表单的错误显示在字段上方，并保留玩家已填的内容，不进入执行错误状态。
 - `code: "interaction_already_submitted"`：这个交互已经被回答（另一个标签页，或一次响应丢失的提交）。客户端不重发：从会话视图的 `submittedInteractions` 标记表单，并用 `GET /api/sessions/:id/execution` 观察那次提交开始的回合。
+- `code: "form_validator_failed"`：来源插件的表单校验器抛了错。`message` 是按会话语言写的固定文字，插件抛出的原文只进服务端日志。客户端按普通错误显示，表单可以再次提交。
 
 连接在流开始后中断时同样不重发：回合在服务端运行到提交，客户端经执行状态轮询和会话视图恢复。表单交互的可选 `notice` 字段显示在字段上方。
 

@@ -11,7 +11,7 @@ export default function ({ tool, z }) {
   return tool({
     name: "list-npc-graph",
     description:
-      "List the NPC nodes and relationship edges already registered in the current session, to help tell which are newly introduced and which are already known. Returns each node's name/type/labels/summary plus the fact of every current edge (most recently changed first).",
+      "List the NPC nodes and relationship edges already registered in the current session, to help tell which are newly introduced and which are already known. Returns each node's name/type/labels/summary plus the fact of every current edge. Nodes (most recently seen first) and edges (most recently changed first) are capped, and the result says when it cut a list.",
     parameters: z.object({
       limit: z
         .number()
@@ -29,7 +29,13 @@ export default function ({ tool, z }) {
       const nodeRows = (await context.store.listPluginData("nodes")) ?? [];
       const edgeRows = (await context.store.listPluginData("edges")) ?? [];
 
-      const nodes = nodeRows.slice(0, limit).map((row) => {
+      // Newest first, like the edges: when the cap cuts the list, the people
+      // who just appeared are the ones the model must not miss.
+      const recentNodeRows = [...nodeRows].sort(
+        (a, b) => (b.value?.lastSeenTurn ?? -1) - (a.value?.lastSeenTurn ?? -1),
+      );
+
+      const nodes = recentNodeRows.slice(0, limit).map((row) => {
         const value =
           /** @type {{ id: string, name: string, type: string, labels: string[], summary: string, lastSeenTurn: number }} */ (
             row.value ?? {}
@@ -72,6 +78,11 @@ export default function ({ tool, z }) {
         edgeCount: openEdgeRows.length,
         nodes,
         edges,
+        ...(nodeRows.length > nodes.length
+          ? {
+              nodesTruncated: `Showing the ${nodes.length} most recently seen of ${nodeRows.length} nodes.`,
+            }
+          : {}),
         ...(openEdgeRows.length > edges.length
           ? {
               edgesTruncated: `Showing the ${edges.length} most recently changed of ${openEdgeRows.length} current edges.`,
