@@ -122,6 +122,8 @@ export type {
   StageMusicModel,
 } from "./extension-points.js";
 export { appendSummaryEntries } from "./session-summary.js";
+export { mentionedCharacterIds } from "./character-mentions.js";
+export type { MentionableCharacter } from "./character-mentions.js";
 export { characterSheetSegments } from "./character-sheets.js";
 export {
   characterLabel,
