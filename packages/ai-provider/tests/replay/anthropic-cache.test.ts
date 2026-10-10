@@ -190,6 +190,52 @@ describe("Anthropic adapter — cache_control injection", () => {
     ).toEqual([false, false, true]);
   });
 
+  it("sends a message in the same form on the turn it carries the breakpoint and on the next", async () => {
+    const sent = async (messages: TextMessage[]) => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeTextResponse()));
+      await createAnthropicMessagesAdapter().generateText(
+        { ...ANTHROPIC_CONFIG_BASE, cacheStrategy: "anthropic-explicit" },
+        { model: "claude-sonnet-4-6", messages },
+      );
+      return readPostedBody().messages as Array<{ content: unknown }>;
+    };
+    const system: TextMessage = {
+      role: "system",
+      content: `stable${PROMPT_CACHE_BREAKPOINT_MARKER}`,
+    };
+    const turnOne: TextMessage[] = [
+      { role: "user", content: "first action" },
+      { role: "assistant", content: "first story" },
+    ];
+    const first = await sent([
+      system,
+      ...turnOne,
+      { role: "system", content: "turn data" },
+      { role: "user", content: "second action" },
+    ]);
+    const second = await sent([
+      system,
+      ...turnOne,
+      { role: "user", content: "second action" },
+      { role: "assistant", content: "second story" },
+      { role: "system", content: "turn data" },
+      { role: "user", content: "third action" },
+    ]);
+    // "first story" ends the history of the first request and is inside the
+    // history of the second: only the marker differs.
+    expect(first[1]?.content).toEqual([
+      {
+        type: "text",
+        text: "first story",
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
+    expect(second[1]?.content).toEqual([{ type: "text", text: "first story" }]);
+    expect(second[0]).toEqual(first[0]);
+    for (const message of second)
+      expect(Array.isArray(message.content)).toBe(true);
+  });
+
   describe("cacheStrategy: 'anthropic-explicit' + sentinel present", () => {
     it("emits an array `system` field with cache_control on each sentinel-preceded segment", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeTextResponse()));
