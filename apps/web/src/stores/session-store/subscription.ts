@@ -3,6 +3,7 @@ import { pluginDataNamespaces } from "./plugin-data-records.js";
 import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
+import { primeWorldRecord } from "@/services/world-records.js";
 import type { SessionWorkspace, StorageMode } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
@@ -212,7 +213,10 @@ export function createSubscriptionEventHandler(
               options.stateRef.current.session?.worldId === worldId &&
               recovery === options.getRecoveryGeneration(),
             read: () => api.getWorld(worldId),
-            apply: (world) => options.dispatch({ type: "UPDATE_WORLD", world }),
+            apply: (world) => {
+              primeWorldRecord(world);
+              options.dispatch({ type: "UPDATE_WORLD", world });
+            },
           }).catch(ignoreError("refresh world on dimensions changed"));
         }
         break;
@@ -415,7 +419,10 @@ export async function rehydrateSessionSideState(
     await refreshSessionResource(dispatch, ["world", worldId], {
       isCurrent,
       read: () => api.getWorld(targetWorldId),
-      apply: (world) => dispatch({ type: "UPDATE_WORLD", world }),
+      apply: (world) => {
+        primeWorldRecord(world);
+        dispatch({ type: "UPDATE_WORLD", world });
+      },
     });
   })().catch((error: unknown) => {
     if (error instanceof RecoveredMessageWindowError) throw error;

@@ -5,6 +5,7 @@ import {
   worldCreateRequestSchema,
   worldPatchRequestSchema,
   worldPluginPlanSchema,
+  worldSummarySchema,
   worldWireRecordSchema,
   type WorldCreationBrief,
   type WorldCreateRequest,
@@ -22,6 +23,7 @@ import type {
   GeneratedWorldSaveTarget,
   WorldDataPreflightResponse,
   WorldRecord,
+  WorldSummary,
 } from "./types.js";
 
 // -- World API ------------------------------------------------------
@@ -38,9 +40,17 @@ function mapWorldRecord(value: unknown): WorldRecord {
   };
 }
 
-export async function listWorlds(): Promise<WorldRecord[]> {
+/** Every world as a summary; the full record is `getWorld`. */
+export async function listWorlds(): Promise<WorldSummary[]> {
   const res = await request<{ items: unknown[] }>("/api/worlds");
-  return res.items.map(mapWorldRecord);
+  return res.items.map((item) => {
+    const w = worldSummarySchema.parse(item);
+    return {
+      ...w,
+      metadata: w.metadata ? { ...w.metadata } : undefined,
+      tags: w.tags ? [...w.tags] : undefined,
+    };
+  });
 }
 
 export async function getWorld(

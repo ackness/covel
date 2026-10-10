@@ -35,7 +35,8 @@ import {
   type DimensionsState,
 } from "./editor-helpers.js";
 import { DimensionsJsonEditor } from "./dimensions-json-editor.js";
-import type { WorldRecord } from "@/services/api.js";
+import type { WorldRecord, WorldSummary } from "@/services/api.js";
+import { useWorldRecord } from "@/services/world-records.js";
 import { getDataService } from "@/services/data-service.js";
 import { GeographyTab } from "./tabs/geography-tab.js";
 import { FactionsTab } from "./tabs/factions-tab.js";
@@ -107,6 +108,47 @@ const TABS: TabDef[] = [
     icon: <Flag className="h-4 w-4" />,
   },
 ];
+
+interface WorldEditorLoaderProps {
+  /** The list's summary; the editor opens on the full record. */
+  world: WorldSummary;
+  onSave: (updated: WorldRecord) => void;
+  onCancel: () => void;
+}
+
+/** Opens the editor once the world's full record (dimensions, lore) is here. */
+export function WorldEditorLoader({
+  world,
+  onSave,
+  onCancel,
+}: WorldEditorLoaderProps) {
+  const { t } = useTranslation();
+  const record = useWorldRecord(world.id);
+  if (!record.world) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+        <p role="status">
+          {record.status === "loading"
+            ? t("common.loading")
+            : t("common.error")}
+        </p>
+        <div className="flex gap-2">
+          {record.status !== "loading" && (
+            <Button variant="outline" onClick={record.retry}>
+              {t("common.retry")}
+            </Button>
+          )}
+          <Button variant="outline" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <WorldEditor world={record.world} onSave={onSave} onCancel={onCancel} />
+  );
+}
 
 export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
   const { t } = useTranslation();
