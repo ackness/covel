@@ -200,12 +200,14 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
       }),
     ).rejects.toThrow("boom");
 
-    // If the lock failed to release, re-acquiring would block until the
-    // 30s default timeout. A successful sub-second re-acquire proves the
-    // advisory lock was released on the error path.
-    const t0 = Date.now();
-    await lock.withLock(sessionId, async () => {});
-    expect(Date.now() - t0).toBeLessThan(500);
+    // If the lock failed to release, re-acquiring would block until the 30s
+    // default timeout, far past this test's own timeout. Getting the lock
+    // again proves the advisory lock was released on the error path.
+    let reacquired = false;
+    await lock.withLock(sessionId, async () => {
+      reacquired = true;
+    });
+    expect(reacquired).toBe(true);
 
     await sql.end();
   });

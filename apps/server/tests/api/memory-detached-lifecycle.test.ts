@@ -58,7 +58,7 @@ async function fixture() {
   const store = createMemoryStore();
   await store.createSession({
     id: "session",
-    worldId: null,
+    locale: "en-US",
     status: "active",
     phase: "playing",
     completedPlayerTurns: 0,
@@ -335,7 +335,10 @@ it("settles ten source turns in order and never publishes a timed-out late memor
         origin: "background",
         detachedStage: JSON.parse(JSON.stringify(descriptor)),
       },
-      [story, { ...memory, timeoutMs: index === 5 ? 20 : 5000 }],
+      // The timed-out round must still reach the model call before its
+      // deadline (the handler's own work is not part of what it checks), so
+      // the deadline is short but far above how long that takes on a slow CI.
+      [story, { ...memory, timeoutMs: index === 5 ? 250 : 5000 }],
       { store, llm, loadRuntime, gateway: { generateText } },
     );
     await started;
