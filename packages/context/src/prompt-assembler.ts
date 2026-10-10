@@ -377,7 +377,7 @@ function buildPromptSegmentsCommon(
       ? params.sessionContext?.world.lore
       : undefined;
   const worldLore = lore?.trim()
-    ? `<world-lore>\n${fitWorldLore(lore).text}\n</world-lore>`
+    ? `<world-lore>\n${escapeXmlContent(fitWorldLore(lore).text)}\n</world-lore>`
     : "";
   return {
     stableExtensions: [

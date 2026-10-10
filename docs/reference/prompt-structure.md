@@ -196,6 +196,8 @@ pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post
 
 声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过[回合上下文](#回合上下文)里的 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。提示词里的 provenance 只有 `pluginId` 与 `runtimeId`：`resultId` 是只供工具和内核使用的 UUID，工具从 `ctx.inputSlots` 读取，不进入提示词（`<runtime-exports>` 同理）。
 
+模板变量落在标签块里时同样转义：正文里以 `<name>` 开头的行到下一个 `</name>` 之间，`{{ ... }}` 的值经 XML 转义再写入，所以世界文字或角色描述里的 `</world-summary>` 关不掉这个块；块外和行内提到标签的散文里的变量原样写入。内核自己写的 `<world-lore>` 同样转义，世界正文里的 `<`、`>`、`&` 因此以实体形式进入提示词。`{{ characters.npcs }}` 超出预算时，最后一行只给未列出档案的个数，不再列名字。
+
 ## 5. Token 预算与缓存
 
 有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。响应 schema 按两份计：桥接层把它写进 system prompt，Responses 与 Gemini 协议还会作为原生字段再发一次，而预算阶段不知道最终走哪种协议。当前用户回合（含它前面的回合上下文、本回合正文及其结尾提示）和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。

@@ -193,7 +193,7 @@ describe("characterSheetSegments", () => {
     const [segment] = characterSheetSegments(crowd, { profiles: true });
 
     expect(segment!.content).toContain("- npc-0 [npc] | ");
-    expect(segment!.content).toMatch(/- \(profiles not shown: .*npc-29\)/);
+    expect(segment!.content).toMatch(/- \(\d+ more profiles not shown\)$/m);
     expect(segment!.content.length).toBeLessThan(9000);
 
     // The one sentence of the block follows the language of the prompt body.
@@ -201,12 +201,12 @@ describe("characterSheetSegments", () => {
       profiles: true,
       locale: "zh-CN",
     });
-    expect(chinese!.content).toMatch(/- （未列出档案：.*npc-29）/);
-    expect(chinese!.content).not.toContain("profiles not shown");
+    expect(chinese!.content).toMatch(/- （另有 \d+ 个角色的档案未列出）/);
+    expect(chinese!.content).not.toContain("more profiles");
     const [traditional] = characterSheetSegments(crowd, {
       profiles: true,
       locale: "zh-Hant-TW",
     });
-    expect(traditional!.content).toContain("(profiles not shown: ");
+    expect(traditional!.content).toContain("more profiles not shown)");
   });
 });

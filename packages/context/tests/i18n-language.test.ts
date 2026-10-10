@@ -257,10 +257,10 @@ describe("fixed text of the prompt assembly", () => {
       fields: { notes: "y".repeat(400) },
     }));
     expect(renderNpcProfiles(cast, "zh-CN").split("\n").at(-1)).toMatch(
-      /^- （未列出档案：NPC \d+、.*NPC 11）$/,
+      /^- （另有 \d+ 个角色的档案未列出）$/,
     );
     expect(renderNpcProfiles(cast, "en-US").split("\n").at(-1)).toMatch(
-      /^- \(profiles not shown: NPC \d+, .*NPC 11\)$/,
+      /^- \(\d+ more profiles not shown\)$/,
     );
   });
 

@@ -64,20 +64,49 @@ function resolvePath(
 }
 
 /**
+ * Character ranges of the template that lie inside a tagged block: a line
+ * that opens with `<name>` up to the next `</name>`. A mention of a tag in
+ * prose (`` `<name>` ``) does not open a block.
+ */
+function taggedRanges(template: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const open = /^[ \t]*<([A-Za-z][\w-]*)>/gm;
+  let match: RegExpExecArray | null;
+  while ((match = open.exec(template)) !== null) {
+    const name = match[1] ?? "";
+    const start = match.index + match[0].length;
+    const end = template.indexOf(`</${name}>`, start);
+    if (end < 0) continue;
+    ranges.push([start, end]);
+    open.lastIndex = end;
+  }
+  return ranges;
+}
+
+/**
  * Replace `{{ path }}` template variables in a prompt string.
- * Unresolved variables are replaced with an empty string.
+ * Unresolved variables are replaced with an empty string. A value that lands
+ * inside a tagged block is XML-escaped, so a closing tag in world text or a
+ * character description cannot leave the block.
  */
 export function interpolateTemplate(
   template: string,
   variables: Readonly<Record<string, unknown>>,
 ): string {
-  return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, path: string) => {
-    const value = resolvePath(variables, path.trim());
-    if (value === undefined || value === null) {
-      return "";
-    }
-    return renderTemplateValue(value);
-  });
+  const ranges = taggedRanges(template);
+  return template.replace(
+    /\{\{\s*([^}]+?)\s*\}\}/g,
+    (_match, path: string, offset: number) => {
+      const value = resolvePath(variables, path.trim());
+      if (value === undefined || value === null) {
+        return "";
+      }
+      const text = renderTemplateValue(value);
+      return ranges.some(([from, to]) => offset >= from && offset < to)
+        ? escapeXmlContent(text)
+        : text;
+    },
+  );
 }
 
 function renderTemplateValue(value: unknown): string {
@@ -340,7 +369,7 @@ const capped = (text: string) =>
  * `{{ characters.npcs }}`: every non-player character's description and
  * fields, one line each, so a template can give the model the profiles up
  * front instead of a `get-character` round trip per person. Past the budget
- * the rest are listed by name only, to be looked up when needed. A name is
+ * the rest are counted in one closing line, not named. A name is
  * followed by `(aka …)` when the character has aliases. No ids: a model
  * looks characters up by name or alias.
  */
@@ -349,7 +378,7 @@ export function renderNpcProfiles(
   locale?: string,
 ): string {
   const lines: string[] = [];
-  const unlisted: string[] = [];
+  let unlisted = 0;
   let used = 0;
   for (const character of characters) {
     if (character.type === "player") continue;
@@ -358,18 +387,18 @@ export function renderNpcProfiles(
     if (character.fields && Object.keys(character.fields).length > 0)
       parts.push(capped(safeStringify(modelFacingJson(character.fields))));
     const line = parts.join(" | ");
-    if (unlisted.length > 0 || used + line.length > NPC_PROFILES_BUDGET) {
-      unlisted.push(character.name);
+    if (unlisted > 0 || used + line.length > NPC_PROFILES_BUDGET) {
+      unlisted += 1;
       continue;
     }
     lines.push(line);
     used += line.length + 1;
   }
-  if (unlisted.length > 0)
+  if (unlisted > 0)
     lines.push(
       instructionLocaleFor(locale) === "zh"
-        ? `- （未列出档案：${unlisted.join("、")}）`
-        : `- (profiles not shown: ${unlisted.join(", ")})`,
+        ? `- （另有 ${unlisted} 个角色的档案未列出）`
+        : `- (${unlisted} more profiles not shown)`,
     );
   return lines.join("\n");
 }

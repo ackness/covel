@@ -56,7 +56,7 @@ function withRanges(
 /**
  * One line per non-player character: `- name [type] | description | fields`,
  * the name followed by `(aka …)` when the character has aliases. Past the
- * budget the rest are listed by name only, to be looked up when needed. No
+ * budget the rest are counted in one closing line, not named. No
  * ids: a model looks characters up by name or alias. The format of the
  * `{{ characters.npcs }}` template variable.
  */
@@ -66,7 +66,7 @@ function profileLines(
   schema: ExtensionCharacterSchema | null | undefined,
 ): string {
   const lines: string[] = [];
-  const unlisted: string[] = [];
+  let unlisted = 0;
   let used = 0;
   for (const character of characters) {
     if (character.type === "player") continue;
@@ -79,19 +79,19 @@ function profileLines(
         ),
       );
     const line = parts.join(" | ");
-    if (unlisted.length > 0 || used + line.length > PROFILES_BUDGET) {
-      unlisted.push(character.name);
+    if (unlisted > 0 || used + line.length > PROFILES_BUDGET) {
+      unlisted += 1;
       continue;
     }
     lines.push(line);
     used += line.length + 1;
   }
-  if (unlisted.length > 0)
+  if (unlisted > 0)
     lines.push(
       pickLocaleText(
         locale,
-        `- （未列出档案：${unlisted.join("、")}）`,
-        `- (profiles not shown: ${unlisted.join(", ")})`,
+        `- （另有 ${unlisted} 个角色的档案未列出）`,
+        `- (${unlisted} more profiles not shown)`,
       ),
     );
   return lines.join("\n");
@@ -119,8 +119,8 @@ function profileLines(
  * ```
  *
  * Returns no segment when the session has no character to show. Pass
- * `ctx.locale` as `locale`: the one sentence this writes (the names of the
- * profiles left out) is then in the language of the prompt body. Pass
+ * `ctx.locale` as `locale`: the one sentence this writes (how many
+ * profiles are left out) is then in the language of the prompt body. Pass
  * `ctx.world.characterSchema` as `schema` and a number attribute renders
  * with its range (`"might": "2/5"`); without it the model sees a bare
  * number and cannot tell 2/5 from 2/100.
