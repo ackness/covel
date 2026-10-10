@@ -2299,6 +2299,7 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 | `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error` 与加载错误                                                                            |
 | `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                                                                                                          |
 | `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                                                                                            |
+| `eventTopics`                                               | `contributes.events` 声明的 topic；会话解析用它保证一个 topic 只有一个声明者                                                                |
 | `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                                                                                                |
 | `languages`                                                 | `{ text: string[], instructions: string[] }`：插件有文字的语言（标签、界面和代码文字，含翻译目录里的译文）和有指令的语言。两者都至少含 `en` |
 | `version?`, `author?`, `license?`, `homepage?`              | 清单里的版本和[作者信息](./plugins.md#作者信息)，只用于展示。`author.about` 和链接 `label` 可能是 locale map                                |
@@ -2364,6 +2365,7 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
       "optional": [],
       "conflicts": [],
       "extensions": [],
+      "eventTopics": [],
       "sessionState": "active",
       "serverCodeApproved": true,
       "tags": ["mode:traditional-story", "cost:llm"]

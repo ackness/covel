@@ -340,6 +340,7 @@ namespace 声明 `search` 后，它的记录进入框架的记忆检索（[`memo
 - 显式排除优先，core 也不会被恢复。
 - 默认提供者在明确提供者激活时退出。
 - 必需契约补入提供者；缺失、歧义、冲突与授权不足返回原因。
+- 一个事件 topic 在一个会话里只有一个声明者：两个活动插件的 `contributes.events` 含同一个 topic 时，后被接受的那个以 `event-topic-conflict` 被拒绝，原因里写出 topic 和两个插件的 ID（显式请求先于自动依赖，其余按请求顺序）。topic 是会话内全局的名字，发出者和订阅者往往属于别的插件，所以它只能对应一份 payload schema；两个插件可以同时安装，只是不能进同一个会话。给自己的 topic 加上插件相关的前缀可以避免撞名。
 - 失去必需提供者的插件和孤立自动依赖会被移除。
 - `requested` 与计算出的 `active` 分开持久化，自动依赖不会变成用户的显式选择。
 - 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入，世界与插件一样是依赖方：唯一提供者自动加入且不被当作孤立依赖移除。无法满足的需求在 `unmet` 中返回，原因为 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`；前两种阻止创建会话，后两种是玩家的选择，不阻止。

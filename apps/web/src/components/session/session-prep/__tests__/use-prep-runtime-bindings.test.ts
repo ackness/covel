@@ -18,6 +18,7 @@ const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   id,
   displayName: id,
   description: "",

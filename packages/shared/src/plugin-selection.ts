@@ -17,6 +17,8 @@ export interface SessionPluginCandidate {
   readonly optional?: readonly string[];
   readonly conflicts?: readonly string[];
   readonly extensions?: readonly ExtensionDeclaration[];
+  /** Topics of `contributes.events`; one session has one declarer per topic. */
+  readonly eventTopics?: readonly string[];
 }
 export interface PluginResolutionRejection {
   readonly pluginId: string;
@@ -29,6 +31,7 @@ export interface PluginResolutionRejection {
     | "ambiguous-provider"
     | "conflict"
     | "single-provider-conflict"
+    | "event-topic-conflict"
     | "default-replaced";
   readonly reason: string;
   readonly candidates?: readonly string[];
@@ -258,6 +261,25 @@ export function resolveSessionPlugins(args: {
         id,
         "single-provider-conflict",
         `Single extension point already provided by ${duplicate}`,
+      );
+      continue;
+    }
+    // A topic names one payload contract for every emitter and subscriber of
+    // the session, so two declarations of it cannot both be in force.
+    const topicOwner = accepted.find((other) =>
+      p.eventTopics?.some((topic) =>
+        registry.get(other)!.eventTopics?.includes(topic),
+      ),
+    );
+    if (topicOwner) {
+      const topic = p.eventTopics!.find((candidate) =>
+        registry.get(topicOwner)!.eventTopics?.includes(candidate),
+      )!;
+      reject(
+        id,
+        "event-topic-conflict",
+        `Event topic "${topic}" is declared by both ${topicOwner} and ${id}; a session can have one of them`,
+        [topicOwner],
       );
       continue;
     }

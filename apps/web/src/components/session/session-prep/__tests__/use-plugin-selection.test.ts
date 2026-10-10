@@ -28,6 +28,7 @@ function plugin(
     optional: [],
     conflicts: [],
     extensions: [],
+    eventTopics: [],
     id,
     displayName: id,
     description: "",

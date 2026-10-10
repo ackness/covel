@@ -117,6 +117,11 @@ export function buildPluginSummary(
         ? [{ point: "prompt.segment@1", id: "static-prompt" }]
         : []),
     ],
+    eventTopics: uniqueSorted(
+      declarations.flatMap((manifest) =>
+        (manifest.events ?? []).map((event) => event.topic),
+      ),
+    ),
     tags: uniqueSorted([
       ...(entry.summary.tags ?? []),
       ...declarations.flatMap((manifest) => manifest.tags ?? []),

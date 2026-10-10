@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Breaking
 
+- **One session has one declarer of an event topic.** When two plugins of a session declare the same topic in `contributes.events`, the one accepted later is left out of the session with the rejection `event-topic-conflict`, and the reason names the topic and both plugins. Before, both were active and every event of the topic was validated against the schema of the plugin whose ID sorts first, with one warning in the server log. Both plugins can stay installed; a player picks one per session. A plugin author avoids the collision with a topic prefix of the plugin's own. `GET /api/plugins` and the session plugin list return `eventTopics` for each plugin.
 - **`ctx.pluginData` reads have one shape in every context.** In an extension-point handler, `ctx.pluginData.get(namespace, key)` now returns the stored value, or `null` when there is none, as it does in a function runtime and a guard; before, it returned the whole row or `undefined`. `list(namespace)` returns `{ key, value, createdAt, updatedAt }` entries in both contexts: an extension handler no longer gets `pluginId`, `namespace`, `sessionId` and `id` on a row, and a function handler now gets the two timestamps. A plugin whose extension handler reads `(await ctx.pluginData.get(ns, key))?.value` must drop `.value`. The SDK type `ExtensionPluginDataRecord` is replaced by `PluginDataEntry` and `PluginDataReader`.
 
 ### Added
