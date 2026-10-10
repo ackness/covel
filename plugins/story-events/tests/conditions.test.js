@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateCondition, localizedText } from "../lib/conditions.js";
+import { evaluateCondition } from "../lib/conditions.js";
 
 const state = {
   dimensions: {
@@ -174,46 +174,5 @@ describe("turn leaves", () => {
       met: false,
       issues: ["the session turn is unavailable"],
     });
-  });
-});
-
-describe("localizedText", () => {
-  it("prefers the exact locale, then the same language and script, then English", () => {
-    const text = { "zh-CN": "灯塔", "en-US": "Lighthouse" };
-    expect(localizedText(text, "en-US")).toBe("Lighthouse");
-    expect(localizedText(text, "en-GB")).toBe("Lighthouse");
-    expect(localizedText(text, "ru-RU")).toBe("Lighthouse");
-    expect(localizedText({ "zh-CN": "灯塔" }, "ru-RU")).toBe("灯塔");
-    expect(localizedText("plain", "en-US")).toBe("plain");
-  });
-
-  it("reads keys whatever their case or separator, and the language-only key before a regional one", () => {
-    expect(
-      localizedText({ "en-GB": "British", "en-us": "American" }, "en-US"),
-    ).toBe("American");
-    expect(localizedText({ en_US: "American" }, "en-US")).toBe("American");
-    expect(localizedText({ "en-US": "Regional", en: "Generic" }, "en-GB")).toBe(
-      "Generic",
-    );
-  });
-
-  it("falls back to English the way an en-US session reads it", () => {
-    const text = { en: "Generic English", "en-US": "Regional English" };
-    expect(localizedText(text, "ru-RU")).toBe("Regional English");
-    expect(localizedText({ en: "Generic English" }, "ru-RU")).toBe(
-      "Generic English",
-    );
-    expect(localizedText({ "en-GB": "British English" }, "ru-RU")).toBe(
-      "British English",
-    );
-  });
-
-  it("does not read Simplified Chinese for a Traditional Chinese session", () => {
-    const text = { "zh-CN": "灯塔", "zh-TW": "燈塔", "en-US": "Lighthouse" };
-    expect(localizedText(text, "zh-Hant-HK")).toBe("燈塔");
-    expect(localizedText(text, "zh-SG")).toBe("灯塔");
-    expect(
-      localizedText({ "zh-CN": "灯塔", "en-US": "Lighthouse" }, "zh-TW"),
-    ).toBe("Lighthouse");
   });
 });

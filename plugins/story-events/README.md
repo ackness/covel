@@ -5,6 +5,7 @@
 ## 运行时结构
 
 - `evaluate`：pre-turn function runtime。每回合读取隐藏事件、冻结的维度快照（`world.dimensions@1`）和世界时间（`world-time-context@1`），按确定性规则判断，最多揭示一个事件，输出 `story-event-cue@1`。
+- 事件揭示后的下一回合，如果没有新的事件要揭示，`evaluate` 会把同一个事件再交给叙事一次（`cue.reminder: true`），提示语改为「上一回合没写进去就现在写，写过了就接着写后果」。这样叙事模型漏掉提示时，只触发一次的事件不会就此消失。提醒只发一次。
 - `narrator` 与 `chat-mode-narrator` 以可选输入 `storyEvent` 消费该合约；没有启用本插件时输入为空，叙事行为不变。
 - `intake`：post-turn function runtime。接收在剧情中发布的 `story-event.plan@1` 计划（内置的 `plot` 或其他插件），校验后写入 `_hidden.planned`（见下文「剧情中追加事件」）。
 - `plot`：post-turn agent runtime，即剧情策划，只在设置 `planner` 开启时运行（见下文「剧情策划」）。

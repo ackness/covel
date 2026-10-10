@@ -17,6 +17,10 @@
         },
         "payload": {
           "type": "string"
+        },
+        "reminder": {
+          "description": "True when the event fired in the previous turn and is given once more, in case the narrative left it out.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false
