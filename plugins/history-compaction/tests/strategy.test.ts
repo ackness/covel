@@ -677,7 +677,7 @@ describe("maybeCompact", () => {
         expect(fastSlotLlm.complete).not.toHaveBeenCalled();
       });
 
-      it("rejects when the merge of older segments fails", async () => {
+      describe("when the merge of older segments fails", () => {
         const old = (id: string) => ({
           id,
           sessionId: "sess-1",
@@ -687,20 +687,50 @@ describe("maybeCompact", () => {
           focusSections: [],
           createdAt: new Date(0).toISOString(),
         });
-        let calls = 0;
-        const llm: CompactorLLMAdapter = {
-          complete: vi.fn(async () => {
-            if (++calls === 2) throw new Error("merge failed");
-            return { content: "new summary" };
-          }),
+        const failingMerge = () => {
+          let calls = 0;
+          const llm: CompactorLLMAdapter = {
+            complete: vi.fn(async () => {
+              if (++calls === 2) throw new Error("merge failed");
+              return { content: "new summary" };
+            }),
+          };
+          return llm;
         };
-        await expect(
-          compactHistory(
+
+        it("keeps the new summary and reports the merge as deferred", async () => {
+          const llm = failingMerge();
+          const output = await compactHistory(
             { ...input(), existingSummaries: [old("a"), old("b")] },
             deps(llm),
-          ),
-        ).rejects.toThrow("merge failed");
-        expect(calls).toBe(2);
+          );
+          expect(llm.complete).toHaveBeenCalledTimes(2);
+          expect(output?.summaries).toHaveLength(1);
+          expect(output?.summaries[0]).toMatchObject({
+            content: "new summary",
+            replacesSummaryIds: [],
+          });
+          expect(output?.summaries[0]?.messageIds.length).toBeGreaterThan(0);
+          expect(output?.deferred?.reason).toMatch(/not merged.*merge failed/);
+        });
+
+        it("stops instead of keeping a partial result when the turn is cancelled", async () => {
+          const controller = new AbortController();
+          const llm: CompactorLLMAdapter = {
+            complete: vi.fn(async () => {
+              if (vi.mocked(llm.complete).mock.calls.length === 2)
+                controller.abort();
+              if (controller.signal.aborted) throw new Error("aborted");
+              return { content: "new summary" };
+            }),
+          };
+          await expect(
+            compactHistory(
+              { ...input(), existingSummaries: [old("a"), old("b")] },
+              { ...deps(llm), signal: controller.signal },
+            ),
+          ).rejects.toThrow("aborted");
+        });
       });
 
       it("resolves null when there is nothing to compact", async () => {
@@ -1260,6 +1290,47 @@ describe("segmented history persistence", () => {
     ).rejects.toThrow("Invalid history compaction result");
     expect(await store.listSessionSummaries("sess-1")).toEqual(before);
     expect(await store.listTurnMessages("sess-1")).toEqual(messages);
+  });
+
+  it("keeps a new summary over the budget while its merge is deferred, within a bound", async () => {
+    const deferredFresh = (reason: string) => async () => ({
+      summaries: [
+        {
+          messageIds: ["fresh"],
+          replacesSummaryIds: [],
+          content: "fresh summary",
+          focusSections: [],
+        },
+      ],
+      deferred: { reason },
+    });
+    const run = (store: Awaited<ReturnType<typeof fixture>>) =>
+      store.listTurnMessages("sess-1").then((messages) =>
+        applyCompaction(
+          "sess-1",
+          "",
+          messages,
+          {
+            store,
+            estimator,
+            contextWindow: 10_000,
+            compact: deferredFresh("merge failed"),
+          },
+          { threshold: 0 },
+        ),
+      );
+    // Eight segments is the limit, so a ninth is only allowed while deferred.
+    const atLimit = await fixture(8);
+    await expect(run(atLimit)).resolves.toMatchObject({
+      compacted: true,
+      deferredReason: "merge failed",
+    });
+    expect(await atLimit.listSessionSummaries("sess-1")).toHaveLength(9);
+    // Twice the limit is the ceiling: a merge that never succeeds is refused.
+    const pastBound = await fixture(16);
+    await expect(run(pastBound)).rejects.toThrow(
+      "Invalid history compaction result",
+    );
   });
 
   it("refuses a stale provider result when summaries changed during generation", async () => {

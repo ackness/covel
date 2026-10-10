@@ -1691,11 +1691,12 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 { "error": "turnId is required" }                           // 400
 { "error": "submissions[] is required" }                    // 400
-{ "error": "请填写“姓名”。", "code": "form_rejected" }        // 400
+{ "error": "请填写“姓名”。", "code": "form_rejected",
+  "details": { "issues": [{ "field": "name", "message": "请填写“姓名”。" }] } }  // 400
 { "error": "Session not found: <id>", "code": "session_not_found" }  // 404
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。客户端把这段文字显示在表单旁边，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
 
 **使用说明:**
 

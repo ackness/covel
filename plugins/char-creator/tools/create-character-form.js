@@ -132,26 +132,20 @@ export default function ({ tool }, createFormTool) {
         );
       // Asked again after a refused submission: the player corrects the form
       // instead of filling it in from nothing.
-      const result = await createFormTool.execute(
+      return createFormTool.execute(
         {
           ...params,
           formId: CHARACTER_FORM_ID,
           fields: params.fields.map((field) =>
             withEarlierAnswer(field, earlier[field.name]),
           ),
-        },
-        context,
-      );
-      return {
-        ...result,
-        interaction: {
-          ...result.interaction,
           notice: translate(
             context,
             "This world no longer accepts some of your earlier answers. Check the form and submit it again.",
           ),
         },
-      };
+        context,
+      );
     },
   });
 }

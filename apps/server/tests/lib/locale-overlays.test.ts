@@ -61,7 +61,7 @@ describe("locale overlays of world files", () => {
     const root = await world({
       "data/items.yaml": ITEMS,
       // Only what is translated; structure and numbers come from the main file.
-      "data/items.en.yaml": "- id: lantern\n  name: Lantern\n",
+      "data/items.en-US.yaml": "- id: lantern\n  name: Lantern\n",
     });
     const items = source(root, "data/items.yaml");
 
@@ -84,7 +84,7 @@ blocks:
   - { label: clues, displayName: 线索 }
   - { label: debts, displayName: 人情 }
 `,
-      "data/items.en.yaml": `blocks:
+      "data/items.en-US.yaml": `blocks:
   - { label: debts, displayName: Debts }
   - { label: clues, displayName: Clues }
 `,
@@ -146,7 +146,7 @@ blocks:
   it("warns about an overlay entry it cannot place and keeps the main text", async () => {
     const root = await world({
       "data/items.yaml": ITEMS,
-      "data/items.en.yaml":
+      "data/items.en-US.yaml":
         "- id: lantern\n  name: Lantern\n  quantity: 9\n- id: torch\n  name: Torch\n",
     });
     const read = await readWorldDataSource(
@@ -160,7 +160,7 @@ blocks:
     expect(read.diagnostics).toEqual([
       expect.objectContaining({
         level: "warning",
-        path: "data/items.en.yaml",
+        path: "data/items.en-US.yaml",
         pointer: "[id=lantern].quantity",
         localeOverlay: true,
       }),
@@ -237,5 +237,72 @@ dimensions:
         (overlay) => overlay.file,
       ),
     ).toEqual(["data/items.en-US.yaml"]);
+  });
+
+  describe("a file named with a bare language", () => {
+    const manifest = `
+schemaVersion: "1.0"
+id: lamp
+name: 提灯古冢
+version: 0.1.0
+summary: 灯灭了。
+defaultLocale: zh-CN
+supportedLocales: [zh-CN, en-US]
+`;
+
+    it("is not read for the edition it would have meant", async () => {
+      const root = await world({
+        "data/items.yaml": ITEMS,
+        "data/items.en.yaml": "- id: lantern\n  name: Lantern\n",
+      });
+      const items = source(root, "data/items.yaml");
+      expect((await readWorldDataSource(items, "en-US")).value).toEqual([
+        { id: "lantern", name: "提灯", quantity: 1 },
+        { id: "rope", name: "麻绳", quantity: 2 },
+      ]);
+      expect(
+        await findLocaleOverlays(root, "data/items.yaml", ["zh-CN", "en-US"]),
+      ).toEqual([]);
+    });
+
+    it("leaves the lore and the manifest in the main language", async () => {
+      const root = await world({
+        "world.yaml": manifest,
+        "world.en.yaml": "name: Lantern Barrow\n",
+        "WORLD.md": "# 提灯古冢\n",
+        "WORLD.en.md": "# Lantern Barrow\n",
+      });
+      const record = await loadSingleWorld(root);
+      expect(record).toMatchObject({ name: "提灯古冢" });
+      // The en-US edition has no lore file of its own: it reads the main one.
+      const text = record?.metadata?.localizedText as
+        { lore: Record<string, string> } | undefined;
+      expect(text?.lore["en-US"]).toBe("# 提灯古冢\n");
+    });
+
+    it("is reported to an installer as an error naming the expected file", async () => {
+      const root = await world({
+        "world.yaml": manifest,
+        "WORLD.md": "# 提灯古冢\n",
+        "WORLD.en.md": "# Lantern Barrow\n",
+      });
+      let reported: readonly {
+        level: string;
+        message: string;
+        hint?: string;
+      }[] = [];
+      await loadSingleWorld(root, {
+        onWorldDataDiagnostics: (diagnostics) => {
+          reported = diagnostics;
+        },
+      });
+      expect(reported).toEqual([
+        expect.objectContaining({
+          level: "error",
+          message: expect.stringContaining("WORLD.en.md"),
+          hint: expect.stringContaining("WORLD.en-US.md"),
+        }),
+      ]);
+    });
   });
 });

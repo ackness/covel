@@ -6,7 +6,10 @@ import type {
   PluginEntryScope,
 } from "@covel/runtime";
 import { pluginMessagesFor, type RpcTrustLevel } from "@covel/shared";
-import { validatePluginHookRegistration } from "@covel/runtime";
+import {
+  normalizeFormRefusal,
+  validatePluginHookRegistration,
+} from "@covel/runtime";
 import {
   shortId,
   shortIdBatch,
@@ -215,7 +218,7 @@ export function buildEntryApi(
               params.pluginRegistry?.get(pluginId)?.messages,
               session.locale,
             );
-            return batch.invoke(() =>
+            const refusal = await batch.invoke(() =>
               validator(
                 Object.freeze(structuredClone(request.values)),
                 structuredClone(request.data),
@@ -225,6 +228,7 @@ export function buildEntryApi(
                 }),
               ),
             );
+            return normalizeFormRefusal(refusal);
           }),
         );
       });

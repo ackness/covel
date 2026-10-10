@@ -1,4 +1,5 @@
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import { resolveI18nSentinel } from "./execution-runtime-status.js";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -59,7 +60,7 @@ export interface ChatMessagesProps {
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
-  ) => Promise<void>;
+  ) => Promise<InteractionSubmitResult>;
   onRetryRuntime?: (
     runtimeId: string | readonly string[] | undefined,
     sourceTurnId?: string,

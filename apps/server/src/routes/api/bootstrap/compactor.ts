@@ -199,6 +199,12 @@ export function createBootstrapCompactorRunner(
         return { compacted: false };
       }
       if (failure) await reportFailure(failure);
+      else if (result.deferredReason)
+        await reportFailure({
+          pluginId: historyCompactV2.id,
+          providerId: "",
+          reason: result.deferredReason,
+        });
       else failures.delete(sessionId);
       return result;
     },

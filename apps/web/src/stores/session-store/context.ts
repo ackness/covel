@@ -1,6 +1,10 @@
 import { createContext, useContext } from "react";
 import type * as api from "@/services/api";
-import type { PendingInteractionDraft, SessionState } from "./types.js";
+import type {
+  InteractionSubmitResult,
+  PendingInteractionDraft,
+  SessionState,
+} from "./types.js";
 
 export interface SessionActions {
   boot: () => Promise<void>;
@@ -37,7 +41,7 @@ export interface SessionActions {
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
-  ) => Promise<void>;
+  ) => Promise<InteractionSubmitResult>;
   executeCommand: (command: string) => void;
   retryRuntime: (
     runtimeId?: string | readonly string[],

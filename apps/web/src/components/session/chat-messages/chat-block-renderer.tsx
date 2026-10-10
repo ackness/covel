@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import type { TFunction } from "i18next";
 import { isAssetGenerateView } from "@covel/shared";
 import { AssetRender } from "@/components/asset-render/index.js";
@@ -33,7 +34,7 @@ export interface ChatBlockRendererProps {
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
-  ) => Promise<void>;
+  ) => Promise<InteractionSubmitResult>;
   readonly t: TFunction;
 }
 

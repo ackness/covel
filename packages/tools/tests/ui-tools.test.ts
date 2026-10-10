@@ -176,6 +176,27 @@ describe("create-form select options", () => {
     expect(opt.label).toContain("与青砾町有过一段旧事");
   });
 
+  it("carries a notice on the interaction only when one is given", async () => {
+    const base = {
+      formId: "f",
+      title: "t",
+      submitLabel: "ok",
+      narrativeTemplate: "{{club}}",
+      fields: [{ type: "text" as const, name: "club", label: "Club" }],
+    };
+    const again = (await createFormTool.execute(
+      { ...base, notice: "Check the form and submit it again." },
+      CTX,
+    )) as { interaction: { notice?: string } };
+    expect(again.interaction.notice).toBe(
+      "Check the form and submit it again.",
+    );
+    const first = (await createFormTool.execute(base, CTX)) as {
+      interaction: object;
+    };
+    expect(first.interaction).not.toHaveProperty("notice");
+  });
+
   it("still accepts plain string options", async () => {
     const result = (await createFormTool.execute(
       {

@@ -9,6 +9,7 @@
  * DOM order Backdrop → Sprites → Hud → Dialog → Choices (z-index banded on
  * the components). UI slots supply committed values and turn previews.
  */
+import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
@@ -80,7 +81,7 @@ export interface StageViewProps {
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
-  ) => Promise<void>;
+  ) => Promise<InteractionSubmitResult>;
   readonly onRetryRuntime?: (
     runtimeId: string | readonly string[] | undefined,
     sourceTurnId?: string,

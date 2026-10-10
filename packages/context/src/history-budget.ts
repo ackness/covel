@@ -28,6 +28,8 @@ export interface CompactorOptions {
 export interface CompactorResult {
   readonly compacted: boolean;
   readonly summaryId?: string;
+  /** Why the provider left part of the work for a later turn. */
+  readonly deferredReason?: string;
 }
 export interface CompactorRunner {
   run(
@@ -155,11 +157,15 @@ export async function maybeCompact(
   });
   if (new Set(messageIds).size !== messageIds.length) invalid();
   const retained = existingSummaries.filter((s) => !replacedIds.has(s.id));
+  // A provider that kept a new summary and deferred a merge may leave the
+  // summaries over budget for a while. The allowance is bounded, so a merge
+  // that never succeeds ends in a refused result rather than unbounded growth.
+  const slack = result.deferred ? 2 : 1;
   if (
-    retained.length + records.length > summaryBudget.maxSegments ||
+    retained.length + records.length > summaryBudget.maxSegments * slack ||
     summaryTokens +
       retained.reduce((n, s) => n + deps.estimator(s.content), 0) >
-      summaryBudget.maxTokens
+      summaryBudget.maxTokens * slack
   )
     invalid();
 
@@ -246,5 +252,9 @@ export async function maybeCompact(
   } catch {
     // Trace persistence is non-critical after the summary transaction commits.
   }
-  return { compacted: true, summaryId };
+  return {
+    compacted: true,
+    summaryId,
+    ...(result.deferred ? { deferredReason: result.deferred.reason } : {}),
+  };
 }

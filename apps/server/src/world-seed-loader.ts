@@ -28,13 +28,15 @@ import {
   validateDimensionData,
   formatValidationErrors,
   dimensionIdSchema,
-  localeLookupCandidates,
+  canonicalizeLocale,
   WORLD_LOCALIZED_TEXT_KEY,
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import {
   compileLocaleOverlays,
+  findMisnamedLocaleFiles,
+  misnamedLocaleMessage,
   readWorldManifestSource,
 } from "./world-data/locale-overlays.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
@@ -46,7 +48,10 @@ import {
 
 /**
  * Resolve a locale-aware file inside the world directory.
- * Priority: exact canonical locale → compatible primary language → base file.
+ * Priority: the file named with `defaultLocale` exactly → base file. A
+ * translation file is named with the locale as the world's `supportedLocales`
+ * writes it, and a session reads an edition the world declares, so a bare
+ * language (`WORLD.en.md` for `en-US`) is never tried.
  */
 export async function resolveLocaleFilePath(
   worldDir: string,
@@ -54,7 +59,8 @@ export async function resolveLocaleFilePath(
   defaultLocale?: string,
 ): Promise<string | null> {
   const parsed = path.parse(relativePath);
-  for (const locale of localeLookupCandidates(defaultLocale)) {
+  const locale = canonicalizeLocale(defaultLocale);
+  if (locale) {
     const localePath = path.join(
       parsed.dir,
       `${parsed.name}.${locale}${parsed.ext}`,
@@ -307,7 +313,29 @@ export async function loadSingleWorld(
     }
   }
 
-  options?.onWorldDataDiagnostics?.(worldData.diagnostics);
+  // A translation file named with a bare language is never read. The seed
+  // loader only says so; an installer rejects the package on the error.
+  const misnamed = await findMisnamedLocaleFiles(worldDir, [
+    ...new Set([
+      ...(defaultLocale ? [defaultLocale] : []),
+      ...((manifest.supportedLocales as string[] | undefined) ?? []),
+    ]),
+  ]);
+  const misnamedDiagnostics: WorldDataDiagnostic[] = misnamed.map((item) => ({
+    level: "error",
+    path: item.file,
+    message: `${misnamedLocaleMessage(item)}; the file is ignored`,
+    hint: `Rename it to \`${item.renamed}\`. A translation file uses the locale exactly as \`supportedLocales\` writes it.`,
+  }));
+  for (const item of misnamed)
+    console.warn(
+      `[world-seed] ${worldId}: ${item.file} is ignored: ${misnamedLocaleMessage(item)}. Rename it to ${item.renamed}.`,
+    );
+
+  options?.onWorldDataDiagnostics?.([
+    ...worldData.diagnostics,
+    ...misnamedDiagnostics,
+  ]);
   return { ...baseRecord, metadata: worldData.metadata };
 }
 

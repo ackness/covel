@@ -67,7 +67,7 @@ describe("plugin-owned form validation", () => {
     const { store, context, submission } = await fixture();
     const handler = createSubmitFormHandler(
       async ({ values }) =>
-        Number(values.points) > 4 ? "Over budget" : undefined,
+        Number(values.points) > 4 ? [{ message: "Over budget" }] : undefined,
       store,
     );
     await expect(
@@ -78,7 +78,11 @@ describe("plugin-owned form validation", () => {
         },
         context,
       ),
-    ).rejects.toMatchObject({ code: "form_rejected", message: "Over budget" });
+    ).rejects.toMatchObject({
+      code: "form_rejected",
+      message: "Over budget",
+      issues: [{ message: "Over budget" }],
+    });
     expect(await store.listPlayerInputs("session")).toHaveLength(0);
     await handler(
       {
@@ -88,6 +92,29 @@ describe("plugin-owned form validation", () => {
       context,
     );
     expect(await store.listPlayerInputs("session")).toHaveLength(2);
+  });
+
+  it("keeps a plugin issue on its field and moves one for an unknown field to the form", async () => {
+    const { store, context, submission } = await fixture();
+    const handler = createSubmitFormHandler(
+      async () => [
+        { field: "points", message: "Too many" },
+        { field: "nowhere", message: "Not a field" },
+      ],
+      store,
+    );
+    await expect(
+      handler(
+        { turnId: "turn", submissions: [submission("first", 9)] },
+        context,
+      ),
+    ).rejects.toMatchObject({
+      code: "form_rejected",
+      issues: [
+        { field: "points", message: "Too many" },
+        { message: "Not a field" },
+      ],
+    });
   });
 
   it.each(["missing-owner", "missing-validator"])(
