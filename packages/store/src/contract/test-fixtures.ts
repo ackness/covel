@@ -27,9 +27,14 @@ import type {
 } from "../types.js";
 
 let seq = 0;
+// Timestamps hang off one instant per test, not off the clock at each call:
+// two rows built a few milliseconds apart on a loaded machine would otherwise
+// swap or tie where the test gave them a fixed offset (`ts(30)` after `ts(40)`).
+let baseMs = Date.now();
 
 export function resetTestIds(): void {
   seq = 0;
+  baseMs = Date.now();
 }
 
 export function id(): string {
@@ -37,7 +42,7 @@ export function id(): string {
 }
 
 export function ts(offsetMs = 0): string {
-  return new Date(Date.now() + offsetMs).toISOString();
+  return new Date(baseMs + offsetMs).toISOString();
 }
 
 export function makeSession(overrides?: Partial<SessionRecord>): SessionRecord {
