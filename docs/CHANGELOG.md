@@ -36,6 +36,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **The plugin SDK's protocol type names Gemini.** `PluginProviderConfig.protocol` did not list `google-generative-ai-v1`.
 - **The opening's facts are no longer overwritten.** The opening and the first player turn share turn 1, and the `memory` plugin numbered a turn's facts from 1 both times. New facts now continue after the highest number the turn already has.
 - **A background job reports the turn it belongs to.** A detached runtime runs after its turn has committed, and it then read a turn number one too high: the `memory` plugin dated the facts of turn 1 as turn 2. A job now keeps the turn number of the execution that queued it. Facts that existing sessions already hold keep the number they were written with.
+- **Affinity and the NPC graph count turns like every other panel.** Their history stamps used the count of player messages, which includes each setup form a player submits, so a relation recorded in turn 1 could be dated turn 3. Both now use the logical turn. Stamps that existing sessions already hold are not rewritten.
+- **A tool result's `ui` blocks are not sent back to the model.** They are cards for the player's screen and repeat what the model has just written; the kernel still renders them from the full result. In play this removes about 900 characters from each `sync-codex-entries` result.
 - **A browser-private game with a field named like a credential can be saved.** The save check rejected the whole checkpoint when game content had a field such as `password`, `credentials` or `apiKey`, and the session then could not run another action. The check now reads the session record only, which is the part framework code writes.
 - **A failed concealed runtime does not show its reason to the player.** For a runtime with `io.concealed: true` the turn stream, traces and result APIs carry a fixed text (the provider and model stay); the real reason goes to the server log.
 - **A refused `emit-event` call is a failed tool call.** An unknown topic or a rejected payload no longer counts toward `requireToolUse` or a finishing tool.
@@ -62,6 +64,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Documentation
 
+- `docs/reference/extension-points.md` states that `ctx.pluginData.get` returns the stored value in a function runtime and the whole row in an extension handler.
 - `docs/reference/ui-panels.md` describes the `__turnId` convention of message blocks; the theme pages state that an imported theme's CSS can load remote resources.
 
 ### Upgrade notes

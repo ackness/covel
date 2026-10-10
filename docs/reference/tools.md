@@ -577,7 +577,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 框架层面（`packages/runtime/src/agent-loop/tool-executor.ts`）检测 `_text` 字段：
 
 - 如果存在且为字符串 → LLM tool message content 直接写原始文本
-- 如果不存在 → 把结果序列化为 JSON，其中记录的簿记字段（行的 `updatedAt`、消息的 `timestamp`、UUID 型的 `…Id`、`sessionId`）不给模型，规则见 [记录里的簿记字段](plugins.md#输入和输出)；`parsedResult` 和 `ctx.tools.call` 的返回值仍是完整对象
+- 如果不存在 → 把结果序列化为 JSON，其中记录的簿记字段（行的 `updatedAt`、消息的 `timestamp`、UUID 型的 `…Id`、`sessionId`）不给模型，规则见 [记录里的簿记字段](plugins.md#输入和输出)，结果顶层的 `ui` 数组也不给模型（它是给玩家界面的卡片，内容是模型刚写过的）；`parsedResult` 和 `ctx.tools.call` 的返回值仍是完整对象
 
 这样的分层让 LLM 看到的是紧凑可读的自然语言（省 token、降噪），而框架依然有结构化数据做调试和追踪。其他 builtin 工具（如 `plugin-data-*`、`create-form`）目前保持 JSON 格式不变。
 
