@@ -7,7 +7,7 @@ import type {
   ToolCallPart,
   ToolDefinition,
 } from "../../types.js";
-import { mediaRefFallbackText } from "../common.js";
+import { IMAGE_PLACEHOLDER_TEXT, imagePartSource } from "../common.js";
 
 export function readAnthropicText(payload: Record<string, unknown>): string {
   return (Array.isArray(payload.content) ? payload.content : [])
@@ -252,9 +252,7 @@ function anthropicSystemText(content: TextMessageContent): string {
   if (typeof content === "string") return content;
   if (content === null) return "";
   return content
-    .map((part) =>
-      part.type === "text" ? part.text : mediaRefFallbackText(part),
-    )
+    .map((part) => (part.type === "text" ? part.text : IMAGE_PLACEHOLDER_TEXT))
     .filter(Boolean)
     .join("\n\n");
 }
@@ -267,9 +265,13 @@ function serializeAnthropicContent(
   return content.map((part) => {
     if (part.type === "text")
       return { type: "text", text: stripPromptCacheMarkers(part.text) };
-    if (part.image.url) {
-      return { type: "image", source: { type: "url", url: part.image.url } };
-    }
-    return { type: "text", text: mediaRefFallbackText(part) };
+    const source = imagePartSource(part);
+    return {
+      type: "image",
+      source:
+        source.kind === "url"
+          ? { type: "url", url: source.url }
+          : { type: "base64", media_type: source.mediaType, data: source.data },
+    };
   });
 }

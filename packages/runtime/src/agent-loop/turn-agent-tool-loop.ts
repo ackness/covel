@@ -31,6 +31,12 @@ import { prepareBudgetedRequest } from "./request-context-budget.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
 import { executeToolSearch, SEARCH_TOOLS_TOOL_NAME } from "./tool-search.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
+import {
+  createPictureLoader,
+  hasPictureAttachments,
+  inlinePictureAttachments,
+  withoutPictureAttachments,
+} from "./picture-attachments.js";
 import { handleSuspension } from "../resume/suspend-resume-handler.js";
 import { guardAgainstToolLoop, type LoopGuardState } from "./loop-detection.js";
 import {
@@ -290,6 +296,7 @@ async function runAgentToolLoopWithinBudget(
     messages,
     input.locale,
   );
+  const pictureLoader = createPictureLoader(deps.mediaStore, input.sessionId);
   // A player's interjection is one more user message of the current turn.
   let currentTurnUserMessages = initialTurnUserMessages;
   // One correction for a bare finish that violates the tool-use contract.
@@ -328,11 +335,24 @@ async function runAgentToolLoopWithinBudget(
     // ── PreLLMCall hook ──────────────────────────────────────────
     // Lets plugins non-destructively rewrite the request sent on THIS call
     // (messages / model / tools) without mutating the canonical transcript.
-    const llmRequest = await runPreLLMCallHook(hookOpts, {
+    const hookedRequest = await runPreLLMCallHook(hookOpts, {
       messages,
       model: effectiveModel,
       tools: activeToolDefs,
     });
+    // Pictures go only to a model known to read images. The hook may have
+    // chosen another model, so the decision is made for this call.
+    const sendPictures =
+      hasPictureAttachments(hookedRequest.messages as LLMMessage[]) &&
+      deps.llm.acceptsImageInput?.(hookedRequest.model) === true;
+    const llmRequest = sendPictures
+      ? hookedRequest
+      : {
+          ...hookedRequest,
+          messages: withoutPictureAttachments(
+            hookedRequest.messages as LLMMessage[],
+          ),
+        };
 
     // Budget after hooks and tool results, immediately before each call.
     const budgetedRequest = await prepareBudgetedRequest({
@@ -359,14 +379,19 @@ async function runAgentToolLoopWithinBudget(
       emitter: deps.emitter,
     });
 
+    const requestMessages =
+      budgetedRequest?.messages ?? (llmRequest.messages as LLMMessage[]);
+    const sentMessages = sendPictures
+      ? await inlinePictureAttachments(requestMessages, pictureLoader)
+      : requestMessages;
+
     budget.pauseForModel();
     let rawResponse: Awaited<ReturnType<typeof requestLLMResponse>>;
     try {
       rawResponse = await requestLLMResponse({
         manifest,
         deps,
-        messages:
-          budgetedRequest?.messages ?? (llmRequest.messages as LLMMessage[]),
+        messages: sentMessages,
         effectiveModel: llmRequest.model,
         toolDefs: llmRequest.tools,
         responseFormat,

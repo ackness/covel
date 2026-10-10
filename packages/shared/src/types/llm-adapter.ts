@@ -19,12 +19,28 @@ export interface LLMTextPart {
   readonly text: string;
 }
 
+/**
+ * An image the model reads. The shape of the Vercel AI SDK `ImagePart`:
+ * `image` is base64 data, a `data:` URL or an `http(s)` URL, and `mediaType`
+ * names the format of base64 data.
+ */
 export interface LLMImagePart {
   readonly type: "image";
-  readonly image: MediaRef;
+  readonly image: string;
+  readonly mediaType?: string;
 }
 
-export type LLMContentPart = LLMTextPart | LLMImagePart;
+/**
+ * A stored picture, by reference. The kernel builds requests with this part
+ * and, right before a call, replaces it with an {@link LLMImagePart} that
+ * carries the bytes, or removes it. It never reaches a provider.
+ */
+export interface LLMMediaPart {
+  readonly type: "media";
+  readonly ref: MediaRef;
+}
+
+export type LLMContentPart = LLMTextPart | LLMImagePart | LLMMediaPart;
 export type LLMMessageContent = string | readonly LLMContentPart[];
 
 /** Opaque adapter state for same-target tool continuation, separate from visible reasoning. */
@@ -163,6 +179,12 @@ export interface LLMAdapter {
    * the concrete per-call identity.
    */
   resolveTarget?(slot?: string): LLMTargetIdentity | undefined;
+
+  /**
+   * Whether the model a slot resolves to is known to accept image input.
+   * Absent or `false`: the kernel sends that slot no image.
+   */
+  acceptsImageInput?(slot?: string): boolean;
 
   /** Effective model limits and the user's requested output budget for a slot. */
   resolveBudget?(slot?: string):

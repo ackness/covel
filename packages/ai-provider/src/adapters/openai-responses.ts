@@ -51,7 +51,8 @@ import {
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
-  mediaRefFallbackText,
+  IMAGE_PLACEHOLDER_TEXT,
+  imagePartUrl,
 } from "./common.js";
 import type {
   ModelRequestContext,
@@ -168,9 +169,7 @@ function serializeResponsesContent(content: TextMessageContent): unknown {
   return content.map((part) => {
     if (part.type === "text")
       return { type: "input_text", text: stripPromptCacheMarkers(part.text) };
-    if (part.image.url)
-      return { type: "input_image", image_url: part.image.url };
-    return { type: "input_text", text: mediaRefFallbackText(part) };
+    return { type: "input_image", image_url: imagePartUrl(part) };
   });
 }
 
@@ -186,7 +185,7 @@ function responsesContentToText(content: TextMessageContent): string {
     .map((part) =>
       part.type === "text"
         ? stripPromptCacheMarkers(part.text)
-        : mediaRefFallbackText(part),
+        : IMAGE_PLACEHOLDER_TEXT,
     )
     .join("");
 }

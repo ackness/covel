@@ -1,6 +1,10 @@
 import type { PluginLlmModelTarget } from "./model-resolver.js";
 import { instructionLocaleFor, unifyFinishReason } from "@covel/shared";
-import type { LLMProviderContinuation } from "@covel/shared";
+import type {
+  LLMImagePart,
+  LLMProviderContinuation,
+  LLMTextPart,
+} from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
 /**
@@ -15,7 +19,6 @@ import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
 import type {
   LLMAdapter,
   LLMMessage,
-  LLMMessageContent,
   LLMResponse,
   LLMResponseFormat,
   LLMRequestDefaults,
@@ -105,7 +108,11 @@ export interface GatewayLike {
   ): {
     provider: string;
     model: string;
-    capability?: { contextWindow?: number; maxOutputTokens?: number };
+    capability?: {
+      contextWindow?: number;
+      maxOutputTokens?: number;
+      input?: readonly string[];
+    };
     parameterOverrides?: { maxOutputTokens?: number };
   } | null;
 
@@ -114,7 +121,7 @@ export interface GatewayLike {
       presetId?: string;
       messages: Array<{
         role: string;
-        content: LLMMessageContent | null;
+        content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
         reasoningContent?: string;
@@ -161,7 +168,7 @@ export interface GatewayLike {
       presetId?: string;
       messages: Array<{
         role: string;
-        content: LLMMessageContent | null;
+        content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
         reasoningContent?: string;
@@ -268,6 +275,11 @@ export function createGatewayAdapter(
       return target
         ? { provider: target.provider, model: target.model }
         : undefined;
+    },
+    // Protocol defaults are text only, so `image` is listed only for a model
+    // the model table knows or the configuration declares.
+    acceptsImageInput(slot) {
+      return resolveSlot(slot)?.capability?.input?.includes("image") === true;
     },
     resolveBudget(slot) {
       const target = resolveSlot(slot);
@@ -541,7 +553,14 @@ function toGatewayMessages(
     ...(msg.providerContinuation
       ? { providerContinuation: msg.providerContinuation }
       : {}),
-    content: msg.content,
+    // A stored picture is inlined by the kernel before the call; a reference
+    // that is still here has no bytes and is not sent.
+    content:
+      typeof msg.content === "string" || !msg.content
+        ? msg.content
+        : msg.content.filter(
+            (part): part is LLMTextPart | LLMImagePart => part.type !== "media",
+          ),
     ...(msg.name ? { name: msg.name } : {}),
     ...(msg.toolCallId ? { toolCallId: msg.toolCallId } : {}),
     ...(msg.toolCalls?.length ? { toolCalls: [...msg.toolCalls] } : {}),

@@ -44,7 +44,7 @@ import {
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
-  mediaRefFallbackText,
+  imagePartUrl,
 } from "./common.js";
 import { readTokenCount } from "./usage.js";
 import { openAiPromptCacheKeyField } from "./prompt-cache-key.js";
@@ -143,10 +143,7 @@ function serializeOpenAiChatContent(content: TextMessageContent): unknown {
   return content.map((part) => {
     if (part.type === "text")
       return { type: "text", text: stripPromptCacheMarkers(part.text) };
-    if (part.image.url) {
-      return { type: "image_url", image_url: { url: part.image.url } };
-    }
-    return { type: "text", text: mediaRefFallbackText(part) };
+    return { type: "image_url", image_url: { url: imagePartUrl(part) } };
   });
 }
 
