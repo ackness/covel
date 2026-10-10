@@ -1,42 +1,85 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SseEnvelope } from "@covel/shared";
 import { submitInteractionBlock } from "../interaction-submission.js";
 import { claimSessionAction } from "../runtime-refs.js";
 import { initialState } from "../reducer.js";
 import { ApiError } from "@/services/api/request.js";
 
 const api = vi.hoisted(() => ({
-  submitInputs: vi.fn(),
+  sendAction: vi.fn(),
   getSessionView: vi.fn(),
   resolveApproval: vi.fn(),
   listSessionPlugins: vi.fn(),
 }));
 vi.mock("@/services/api.js", () => api);
-const confirm = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: confirm }));
+vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: vi.fn() }));
 const toast = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/toast-channel.js", () => ({ emitToast: toast }));
 
-const accepted = {
-  results: [
-    {
-      submissionId: "input-1",
-      interactionId: "form-1",
-      filledNarrative: "Ready",
-      accepted: true,
-    },
-  ],
-};
 const submission: Parameters<typeof submitInteractionBlock>[1] = [
   "block-1",
   "turn-1",
   "form-1",
   "form",
-  { name: "Player" },
+  { name: "Player", points: "3" },
 ];
 
+function envelope(
+  type: string,
+  payload: Record<string, unknown> = {},
+): SseEnvelope {
+  return {
+    type,
+    requestId: "request",
+    traceId: "trace",
+    sessionId: "session-1",
+    turnId: "follow-up-turn",
+    flowId: "trace",
+    seq: 0,
+    timestamp: "2026-01-01T00:00:00.000Z",
+    payload,
+  };
+}
+
+const stored = envelope("interaction.submitted", {
+  interactionTurnId: "turn-1",
+  results: [
+    {
+      submissionId: "input-1",
+      interactionId: "form-1",
+      values: { name: "Player", points: 3 },
+      filledNarrative: "Ready",
+    },
+  ],
+  message: { id: "server-message", content: "Ready" },
+});
+
+/** The open stream of the one request a submission makes. */
+function stream(call = 0) {
+  const [request, onEvent, onError, onDone] = api.sendAction.mock.calls[
+    call
+  ]! as [
+    Record<string, unknown>,
+    (event: SseEnvelope) => void,
+    (error: Error) => void,
+    () => void,
+  ];
+  return { request, onEvent, onError, onDone };
+}
+
+/** Answer the next request with these events and close its stream. */
+function answerWith(...events: SseEnvelope[]) {
+  api.sendAction.mockImplementationOnce(
+    (_request, onEvent, _onError, onDone) => {
+      for (const event of events) onEvent(event);
+      onDone();
+    },
+  );
+}
+
 function makeDeps(): Parameters<typeof submitInteractionBlock>[0] {
-  const sessionIdRef = { current: "session-1" };
+  const sessionIdRef = { current: "session-1" as string | null };
   const activeActionRef = { current: null as symbol | null };
   return {
     dispatch: vi.fn(),
@@ -52,7 +95,7 @@ function makeDeps(): Parameters<typeof submitInteractionBlock>[0] {
     },
     claimAction: (sid) =>
       claimSessionAction(activeActionRef, sessionIdRef, sid),
-    runSingleAction: vi.fn(async () => {}),
+    handleSseEvent: vi.fn(),
     resyncSession: vi.fn(),
     inFlight: new Set(),
   };
@@ -60,7 +103,6 @@ function makeDeps(): Parameters<typeof submitInteractionBlock>[0] {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  api.submitInputs.mockResolvedValue(accepted);
   api.getSessionView.mockRejectedValue(new Error("Refresh unavailable"));
   api.listSessionPlugins.mockResolvedValue({ items: [], commands: [] });
 });
@@ -72,63 +114,90 @@ describe("interaction submission", () => {
     deps.stateRef.current.executing = true;
     await submitInteractionBlock(deps, submission);
     expect(running.isCurrent()).toBe(true);
-    expect(api.submitInputs).not.toHaveBeenCalled();
+    expect(api.sendAction).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalled();
   });
-  it("refreshes authorization even when the restored form then fails validation", async () => {
+
+  it("answers the form and runs its turn with one request", async () => {
     const deps = makeDeps();
-    confirm.mockResolvedValue(true);
-    api.submitInputs.mockImplementationOnce(
-      async (_sid, _body, resolveResponse) => {
-        return resolveResponse(
+    const started = envelope("execution.started", { runtimeCount: 1 });
+    const completed = envelope("execution.completed", { committed: true });
+    answerWith(stored, started, completed);
+    await expect(
+      submitInteractionBlock(deps, submission),
+    ).resolves.toBeUndefined();
+
+    expect(api.sendAction).toHaveBeenCalledOnce();
+    expect(stream().request).toMatchObject({
+      type: "submit_interaction",
+      sessionId: "session-1",
+      payload: {
+        turnId: "turn-1",
+        submissions: [
           {
-            status: "approval-required",
-            approvalId: "restored-form",
-            pending: {
-              sessionId: "session-1",
-              pluginId: "provider",
-              action: "covel:plugin-server-code",
-            },
+            interactionId: "form-1",
+            type: "form",
+            values: { name: "Player", points: "3" },
           },
-          async () => {
-            throw new Error("Invalid allocation");
-          },
-        );
+        ],
       },
+    });
+    // The block shows what the server stored, not what was typed.
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "SUBMIT_BLOCK",
+      blockId: "block-1",
+      values: { name: "Player", points: 3 },
+    });
+    // The player's bubble carries the stored message's id and its turn.
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "ADD_MESSAGE",
+      message: {
+        id: "server-message",
+        role: "user",
+        content: "Ready",
+        timestamp: stored.timestamp,
+        turnId: "follow-up-turn",
+      },
+    });
+    // The rest of the stream is an ordinary turn.
+    expect(vi.mocked(deps.handleSseEvent).mock.calls).toEqual([
+      [started],
+      [completed],
+    ]);
+    expect(deps.dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: "FINALIZE_HANGING_RUNTIMES" }),
+    );
+    expect(deps.resyncSession).toHaveBeenCalledOnce();
+    expect(deps.inFlight.size).toBe(0);
+  });
+
+  it("adds no player bubble for an answer the interaction keeps silent", async () => {
+    const deps = makeDeps();
+    answerWith(
+      envelope("interaction.submitted", {
+        results: [{ interactionId: "form-1", values: { name: "Player" } }],
+      }),
+      envelope("execution.completed", { committed: true }),
     );
     await submitInteractionBlock(deps, submission);
-    expect(deps.dispatch).toHaveBeenCalledWith({
-      type: "LOAD_SESSION_PLUGINS",
-      plugins: [],
-      commands: [],
-    });
-    expect(deps.dispatch).toHaveBeenCalledWith({
-      type: "SET_EXECUTION_ERROR",
-      error: "Invalid allocation",
-    });
     expect(deps.dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+      expect.objectContaining({ type: "ADD_MESSAGE" }),
     );
-    expect(deps.runSingleAction).not.toHaveBeenCalled();
   });
 
   it("hands the server's refusal back to the form instead of failing the turn", async () => {
     const deps = makeDeps();
-    api.submitInputs.mockRejectedValueOnce(
-      new ApiError(
-        400,
-        "/api/sessions/session-1/plugin-rpc",
-        JSON.stringify({
-          error: "请填写“姓名”。\n总点数不对",
-          code: "form_rejected",
-          details: {
-            issues: [
-              { field: "name", message: "请填写“姓名”。" },
-              { message: "总点数不对" },
-            ],
-          },
-        }),
-      ),
+    answerWith(
+      envelope("error.occurred", {
+        message: "请填写“姓名”。\n总点数不对",
+        code: "form_rejected",
+        details: {
+          issues: [
+            { field: "name", message: "请填写“姓名”。" },
+            { message: "总点数不对" },
+          ],
+        },
+      }),
     );
     await expect(submitInteractionBlock(deps, submission)).resolves.toEqual({
       rejected: [
@@ -136,26 +205,52 @@ describe("interaction submission", () => {
         { message: "总点数不对" },
       ],
     });
-    // The form stays open with what the player typed: no error state, no turn.
+    // The form stays open with what the player typed: no error state, no
+    // turn, and the refusal never reaches the turn's event handler.
     expect(toast).not.toHaveBeenCalled();
-    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.handleSseEvent).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "SUBMIT_BLOCK" }),
     );
-    expect(deps.runSingleAction).not.toHaveBeenCalled();
+    expect(
+      vi
+        .mocked(deps.dispatch)
+        .mock.calls.filter(
+          ([action]) => action.type === "SET_EXECUTION_ERROR" && action.error,
+        ),
+    ).toEqual([]);
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTING",
+      value: false,
+    });
+    expect(deps.resyncSession).not.toHaveBeenCalled();
+
+    // The corrected form goes out as a new request.
+    answerWith(stored, envelope("execution.completed", { committed: true }));
+    await submitInteractionBlock(deps, submission);
+    expect(api.sendAction).toHaveBeenCalledTimes(2);
+    expect(deps.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+    );
   });
 
-  it("shows an interaction answered in another tab as answered and reloads the stored answer", async () => {
+  it("treats a refusal without issues as one form-level message", async () => {
     const deps = makeDeps();
-    api.submitInputs.mockRejectedValueOnce(
-      new ApiError(
-        400,
-        "/api/sessions/session-1/plugin-rpc",
-        JSON.stringify({
-          error: "This was already submitted. Reload to see the answer.",
-          code: "interaction_already_submitted",
-        }),
-      ),
+    answerWith(
+      envelope("error.occurred", { message: "Nope", code: "form_rejected" }),
+    );
+    await expect(submitInteractionBlock(deps, submission)).resolves.toEqual({
+      rejected: [{ message: "Nope" }],
+    });
+  });
+
+  it("watches the turn of an interaction answered elsewhere instead of sending it again", async () => {
+    const deps = makeDeps();
+    answerWith(
+      envelope("error.occurred", {
+        message: "This was already submitted. Reload to see the answer.",
+        code: "interaction_already_submitted",
+      }),
     );
     api.getSessionView.mockResolvedValueOnce({
       messages: [
@@ -173,13 +268,13 @@ describe("interaction submission", () => {
           turnId: "turn-1",
           interactionId: "form-1",
           values: { name: "Elsewhere" },
-          followedUp: true,
         },
       ],
     });
     await expect(
       submitInteractionBlock(deps, submission),
     ).resolves.toBeUndefined();
+    // The block takes the answer the server holds.
     await vi.waitFor(() =>
       expect(deps.dispatch).toHaveBeenCalledWith({
         type: "SUBMIT_BLOCK",
@@ -191,219 +286,114 @@ describe("interaction submission", () => {
       type: "SET_EXECUTION_ERROR",
       error: "This was already submitted. Reload to see the answer.",
     });
-    expect(deps.runSingleAction).not.toHaveBeenCalled();
+    // The turn that answer started is observed through the recovery poll.
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: "session-1",
+        status: null,
+        checking: true,
+        hydrating: false,
+      },
+    });
+    expect(api.sendAction).toHaveBeenCalledOnce();
+    expect(deps.handleSseEvent).not.toHaveBeenCalled();
   });
 
-  it("reopens an answered form with its stored values when no turn followed the answer", async () => {
+  it("observes the turn after a lost connection and does not submit again", async () => {
     const deps = makeDeps();
-    api.submitInputs.mockRejectedValueOnce(
-      new ApiError(
-        400,
-        "/api/sessions/session-1/plugin-rpc",
-        JSON.stringify({
-          error: "Already submitted.",
-          code: "interaction_already_submitted",
-        }),
-      ),
-    );
-    api.getSessionView.mockResolvedValueOnce({
-      messages: [
-        {
-          id: "block-1",
-          turnId: "turn-1",
-          block: {
-            type: "interactive_form",
-            data: { interactionId: "form-1" },
-          },
-        },
-      ],
-      submittedInteractions: [
-        {
-          turnId: "turn-1",
-          interactionId: "form-1",
-          values: { name: "Stored" },
-          followedUp: false,
-        },
-      ],
+    api.sendAction.mockImplementationOnce((_request, _onEvent, onError) => {
+      onError(new TypeError("Failed to fetch"));
     });
-    await submitInteractionBlock(deps, submission);
-    await vi.waitFor(() =>
-      expect(deps.dispatch).toHaveBeenCalledWith({
-        type: "PREFILL_BLOCK",
-        blockId: "block-1",
-        values: { name: "Stored" },
-      }),
-    );
+    await expect(
+      submitInteractionBlock(deps, submission),
+    ).resolves.toBeUndefined();
+    // Whether the server stored the answer is unknown: the read-only
+    // recovery poll finds out, and the session view marks the block.
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: "session-1",
+        status: null,
+        checking: true,
+        hydrating: false,
+      },
+    });
+    expect(api.sendAction).toHaveBeenCalledOnce();
     expect(deps.dispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "SUBMIT_BLOCK" }),
     );
-    expect(deps.runSingleAction).not.toHaveBeenCalled();
-  });
-
-  it("treats a refusal without issues as one form-level message", async () => {
-    const deps = makeDeps();
-    api.submitInputs.mockRejectedValueOnce(
-      new ApiError(
-        400,
-        "/api/sessions/session-1/plugin-rpc",
-        JSON.stringify({ error: "Nope", code: "form_rejected" }),
-      ),
-    );
-    await expect(submitInteractionBlock(deps, submission)).resolves.toEqual({
-      rejected: [{ message: "Nope" }],
-    });
-  });
-
-  it.each(["allow", "deny", "switch"])(
-    "keeps restored-form authorization tied to its session: %s",
-    async (decision) => {
-      const deps = makeDeps();
-      confirm.mockImplementation(async () => {
-        if (decision === "switch") deps.sessionIdRef.current = "session-2";
-        return decision !== "deny";
-      });
-      const retry = vi.fn(async () => ({ status: "ok", result: accepted }));
-      api.submitInputs.mockImplementationOnce(
-        async (_sid, _body, resolveResponse) => {
-          const response = await resolveResponse(
-            {
-              status: "approval-required",
-              approvalId: "restored-form",
-              pending: {
-                sessionId: "session-1",
-                pluginId: "provider",
-                action: "covel:plugin-server-code",
-              },
-            },
-            retry,
-          );
-          return response?.result ?? null;
-        },
-      );
-      await submitInteractionBlock(deps, submission);
-      expect(api.resolveApproval).toHaveBeenCalledExactlyOnceWith(
-        "restored-form",
-        decision === "allow" ? "allow" : "deny",
-        "session",
-        "session-1",
-      );
-      expect(retry).toHaveBeenCalledTimes(decision === "allow" ? 1 : 0);
-      expect(
-        vi
-          .mocked(deps.dispatch)
-          .mock.calls.filter(([action]) => action.type === "SUBMIT_BLOCK"),
-      ).toHaveLength(decision === "allow" ? 1 : 0);
-      expect(deps.runSingleAction).toHaveBeenCalledTimes(
-        decision === "allow" ? 1 : 0,
-      );
-      if (decision !== "allow") expect(deps.dispatch).not.toHaveBeenCalled();
-      else
-        expect(deps.dispatch).toHaveBeenCalledWith({
-          type: "LOAD_SESSION_PLUGINS",
-          plugins: [],
-          commands: [],
-        });
-    },
-  );
-
-  it("keeps a rejected form editable and never converts invalid input into a story", async () => {
-    api.submitInputs.mockRejectedValueOnce(
-      new Error("Invalid character field"),
-    );
-    const deps = makeDeps();
-    await submitInteractionBlock(deps, submission);
-    expect(deps.dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
-    );
-    expect(deps.runSingleAction).not.toHaveBeenCalled();
-    expect(deps.dispatch).toHaveBeenCalledWith({
-      type: "SET_EXECUTION_ERROR",
-      error: "Invalid character field",
-    });
-    await submitInteractionBlock(deps, submission);
-    expect(deps.dispatch).toHaveBeenCalledWith({
-      type: "SUBMIT_BLOCK",
-      blockId: "block-1",
-      values: { name: "Player" },
-    });
-    expect(deps.runSingleAction).toHaveBeenCalledExactlyOnceWith("Ready", {
-      echoUserMessage: true,
-      owner: expect.objectContaining({ requestId: expect.any(String) }),
-    });
-  });
-
-  it("does not launch duplicate turns while a form request is pending", async () => {
-    let resolve!: (value: typeof accepted) => void;
-    api.submitInputs.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
-    const deps = makeDeps();
-    const pending = submitInteractionBlock(deps, submission);
-    await submitInteractionBlock(deps, submission);
-    expect(api.submitInputs).toHaveBeenCalledOnce();
-    resolve(accepted);
-    await pending;
-    expect(deps.runSingleAction).toHaveBeenCalledOnce();
     expect(deps.inFlight.size).toBe(0);
   });
 
-  it("does not mark a form in a new session when an old response arrives", async () => {
-    let resolve!: (value: typeof accepted) => void;
-    api.submitInputs.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
+  it("leaves the form as it is when the player declines the provider's code", async () => {
     const deps = makeDeps();
-    const pending = submitInteractionBlock(deps, submission);
-    deps.sessionIdRef.current = "session-2";
-    resolve(accepted);
-    await pending;
+    api.sendAction.mockImplementationOnce((_request, _onEvent, onError) => {
+      onError(
+        new ApiError(
+          403,
+          "/api/actions",
+          JSON.stringify({
+            error: "Plugin action was not authorized",
+            code: "plugin_approval_denied",
+          }),
+        ),
+      );
+    });
+    await submitInteractionBlock(deps, submission);
+    const errors = vi
+      .mocked(deps.dispatch)
+      .mock.calls.flatMap(([action]) =>
+        action.type === "SET_EXECUTION_ERROR" ? [action.error] : [],
+      );
+    expect(errors.at(-1)).toBeNull();
+    // A refused request started nothing to observe.
     expect(deps.dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
+      expect.objectContaining({
+        type: "SET_EXECUTION_RECOVERY",
+        recovery: expect.anything(),
+      }),
     );
-    expect(deps.runSingleAction).not.toHaveBeenCalled();
-    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.inFlight.size).toBe(0);
   });
 
-  it("ignores an old form response after another action starts in the same session", async () => {
-    let resolve!: (value: typeof accepted) => void;
-    api.submitInputs.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
+  it("does not launch duplicate turns while a form request is pending", async () => {
     const deps = makeDeps();
     const pending = submitInteractionBlock(deps, submission);
-    deps.claimAction("session-1");
-    resolve(accepted);
+    await submitInteractionBlock(deps, submission);
+    expect(api.sendAction).toHaveBeenCalledOnce();
+    const open = stream();
+    open.onEvent(stored);
+    open.onDone();
     await pending;
-    expect(deps.dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "SUBMIT_BLOCK" }),
-    );
-    expect(deps.runSingleAction).not.toHaveBeenCalled();
+    expect(api.sendAction).toHaveBeenCalledOnce();
+    expect(deps.inFlight.size).toBe(0);
+  });
+
+  it("does not mark a form in a new session when an old stream answers", async () => {
+    const deps = makeDeps();
+    const pending = submitInteractionBlock(deps, submission);
+    vi.mocked(deps.dispatch).mockClear();
+    deps.sessionIdRef.current = "session-2";
+    const open = stream();
+    open.onEvent(stored);
+    open.onEvent(envelope("execution.completed", { committed: true }));
+    open.onDone();
+    await pending;
     expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.handleSseEvent).not.toHaveBeenCalled();
+    expect(deps.resyncSession).not.toHaveBeenCalled();
   });
 
   it("does not finalize or refresh over a newer action after a slow form turn", async () => {
-    let finish!: () => void;
     const deps = makeDeps();
-    vi.mocked(deps.runSingleAction).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-    );
     const pending = submitInteractionBlock(deps, submission);
-    await vi.waitFor(() => expect(deps.runSingleAction).toHaveBeenCalledOnce());
+    const open = stream();
+    open.onEvent(stored);
     vi.mocked(deps.dispatch).mockClear();
     deps.claimAction("session-1");
-    finish();
+    open.onEvent(envelope("execution.completed", { committed: true }));
+    open.onDone();
     await pending;
     expect(deps.dispatch).not.toHaveBeenCalled();
     expect(deps.resyncSession).not.toHaveBeenCalled();

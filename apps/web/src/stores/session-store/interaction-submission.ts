@@ -1,8 +1,5 @@
 import * as api from "@/services/api.js";
 import { ApiError } from "@/services/api/request.js";
-import i18n from "i18next";
-import { requestConfirm } from "@/lib/confirm-channel.js";
-import { resolvePluginRpcApprovalResponse } from "@/components/session/plugin-rpc-ui.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionActions } from "./context.js";
 import {
@@ -12,6 +9,7 @@ import {
 import { publishSubmittedInteractions } from "./restore-session.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
+import type { SseEventHandler } from "./sse-handler.js";
 import type {
   FormIssue,
   InteractionSubmitResult,
@@ -22,7 +20,7 @@ import { canRunSessionAction } from "./selectors.js";
 import {
   finalizeActionExecution,
   reportWorkspaceSyncError,
-  refreshApprovedSessionPlugins,
+  runActionStream,
 } from "./runtime-rpc.js";
 
 interface SubmissionDependencies {
@@ -30,18 +28,17 @@ interface SubmissionDependencies {
   workspace: Pick<SessionWorkspace, "run">;
   sessionIdRef: MutableRef<string | null>;
   stateRef: MutableRef<SessionState>;
-  runSingleAction: (
-    content: string,
-    options: { echoUserMessage: boolean; owner: SessionActionOwner },
-  ) => Promise<void>;
+  handleSseEvent: SseEventHandler;
   resyncSession: (sessionId: string, isCurrentAction?: () => boolean) => void;
   claimAction: (sessionId: string) => SessionActionOwner;
   inFlight: Set<string>;
 }
 
 /** The refusal's issues, or the whole message as one form-level issue. */
-function readFormIssues(error: ApiError): FormIssue[] {
-  const raw = (error.details as { issues?: unknown } | undefined)?.issues;
+function readFormIssues(
+  payload: Readonly<Record<string, unknown>>,
+): FormIssue[] {
+  const raw = (payload.details as { issues?: unknown } | undefined)?.issues;
   const issues: FormIssue[] = [];
   if (Array.isArray(raw)) {
     for (const item of raw) {
@@ -53,22 +50,23 @@ function readFormIssues(error: ApiError): FormIssue[] {
       );
     }
   }
-  return issues.length > 0
-    ? issues
-    : [{ message: error.response?.error ?? error.message }];
+  return issues.length > 0 ? issues : [{ message: String(payload.message) }];
 }
 
 /**
- * Failed validation leaves the form editable; it must never become free text.
- * A refusal of the values settles with `rejected` so the form can show each
- * message under its field.
+ * Sends the answer as one `submit_interaction` action: the server stores it
+ * and runs the follow-up turn on the same stream, so there is no moment where
+ * the answer is stored and its turn was never asked for.
+ *
+ * A refusal of the values settles with `rejected` and leaves the form
+ * editable, with each message under its field; it must never become free
+ * text.
  */
 export async function submitInteractionBlock(
   deps: SubmissionDependencies,
   submission: Parameters<SessionActions["submitInteraction"]>,
 ): Promise<InteractionSubmitResult> {
-  const [blockId, turnId, interactionId, type, values, submitBehavior] =
-    submission;
+  const [blockId, turnId, interactionId, type, values] = submission;
   const { dispatch, sessionIdRef, inFlight } = deps;
   const sid = sessionIdRef.current;
   if (!sid || !canRunSessionAction(deps.stateRef.current)) return;
@@ -76,67 +74,108 @@ export async function submitInteractionBlock(
   if (inFlight.has(key)) return;
   inFlight.add(key);
   const owner = deps.claimAction(sid);
-  let started = false;
+  let rejected: FormIssue[] | undefined;
+  let answeredElsewhere: string | undefined;
+  let stored = false;
+
+  const onEvent: SseEventHandler = (envelope) => {
+    if (envelope.type === "interaction.submitted") {
+      // The answer is stored and its turn has started: from here on the
+      // stream is an ordinary turn.
+      stored = true;
+      const results = envelope.payload.results as
+        | { interactionId: string; values: Record<string, unknown> }[]
+        | undefined;
+      dispatch({
+        type: "SUBMIT_BLOCK",
+        blockId,
+        values:
+          results?.find((item) => item.interactionId === interactionId)
+            ?.values ?? values,
+      });
+      const message = envelope.payload.message as
+        { id: string; content: string } | undefined;
+      // The id is the stored message's, so the reload after the turn
+      // replaces this echo and does not add a second row.
+      if (message?.content)
+        dispatch({
+          type: "ADD_MESSAGE",
+          message: {
+            id: message.id,
+            role: "user",
+            content: message.content,
+            timestamp: envelope.timestamp,
+            turnId: envelope.turnId,
+          },
+        });
+      return;
+    }
+    if (envelope.type === "error.occurred" && !stored) {
+      // Both refusals are written for the player, in the session's language.
+      // Nothing was stored and no turn started.
+      if (envelope.payload.code === "form_rejected") {
+        rejected = readFormIssues(envelope.payload);
+        return;
+      }
+      if (envelope.payload.code === "interaction_already_submitted") {
+        answeredElsewhere = String(envelope.payload.message);
+        return;
+      }
+    }
+    deps.handleSseEvent(envelope);
+  };
+
+  dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
+  dispatch({ type: "SET_EXECUTING", value: true });
+  dispatch({ type: "SET_EXECUTION_ERROR", error: null });
   try {
-    const result = await deps.workspace.run(
+    await deps.workspace.run(
       sid,
-      `interaction:${owner.requestId}`,
+      owner.requestId,
       () => {
         if (!owner.isCurrent())
           throw new Error("Action was superseded before submission");
-        return api.submitInputs(
-          sid,
+        return runActionStream(
           {
-            turnId,
-            submissions: [{ interactionId, type, values }],
+            requestId: owner.requestId,
+            sessionId: sid,
+            type: "submit_interaction",
+            payload: {
+              turnId,
+              submissions: [{ interactionId, type, values }],
+            },
           },
-          (response, retry) =>
-            resolvePluginRpcApprovalResponse({
-              response,
-              sessionId: sid,
-              pluginId: "framework",
-              actionLabel: "submit-form",
-              t: (key, options) => i18n.t(key, options),
-              confirm: async (request) =>
-                owner.isCurrent() &&
-                (await requestConfirm(request)) &&
-                owner.isCurrent(),
-              retry: () => {
-                if (!owner.isCurrent())
-                  throw new Error("Action was superseded before submission");
-                return retry();
-              },
-              submitApproval: async (...args) => {
-                await api.resolveApproval(...args);
-                if (args[1] === "allow")
-                  refreshApprovedSessionPlugins(sid, dispatch, owner.isCurrent);
-              },
-            }),
+          onEvent,
+          dispatch,
+          { sessionIdRef, isCurrentAction: owner.isCurrent },
         );
       },
+      { isCurrent: owner.isCurrent },
     );
-    if (!result || !owner.isCurrent()) return;
-    if (
-      !result.results.find((item) => item.interactionId === interactionId)
-        ?.accepted
-    ) {
-      throw new Error(
-        "The form was not accepted. Review the values and submit again.",
-      );
-    }
-    // The server now holds the answer and returns it with the session view,
-    // so the browser keeps it only in memory until the next restore.
-    dispatch({ type: "SUBMIT_BLOCK", blockId, values });
-    const filled = result.results?.[0]?.filledNarrative ?? "";
-    const echo = submitBehavior?.echoFilledNarrative !== false;
-    started = true;
-    dispatch({ type: "SET_EXECUTING", value: true });
-    dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-    await deps.runSingleAction(echo ? filled : "", {
-      echoUserMessage: echo && Boolean(filled),
-      owner,
-    });
     if (!owner.isCurrent()) return;
+    if (rejected) return { rejected };
+    if (answeredElsewhere) {
+      // Answered in another tab or by a request whose response was lost. Say
+      // so, mark the block from the server's record, and watch the turn that
+      // answer started instead of sending it again.
+      dispatch({ type: "SET_EXECUTION_ERROR", error: answeredElsewhere });
+      dispatch({
+        type: "SET_EXECUTION_RECOVERY",
+        recovery: {
+          sessionId: sid,
+          status: null,
+          checking: true,
+          hydrating: false,
+        },
+      });
+      void refreshSessionResource(dispatch, ["game-state", sid, "answered"], {
+        isCurrent: owner.isCurrent,
+        read: () => api.getSessionView(sid),
+        apply: (snapshot) => publishSubmittedInteractions(dispatch, snapshot),
+      }).catch(() => {});
+      return;
+    }
+    if (!stored) return;
     try {
       await refreshSessionResource(
         dispatch,
@@ -156,38 +195,19 @@ export async function submitInteractionBlock(
       // Reconnect will reconcile the character schema if this refresh fails.
     }
   } catch (error) {
+    // The stream runner already reported a failed request and handed an
+    // unfinished turn to the recovery poll.
     if (!owner.isCurrent()) return;
-    if (error instanceof ApiError && error.code === "form_rejected") {
-      // The server wrote this text for the player, in the session's language.
-      // Nothing ran and nothing was stored: the form keeps what they typed.
-      return { rejected: readFormIssues(error) };
-    } else if (
-      error instanceof ApiError &&
-      error.code === "interaction_already_submitted"
-    ) {
-      // Answered elsewhere (another tab or device). Say so and load the
-      // stored answer: the view marks the block answered when a turn followed
-      // it, and leaves it open with the stored values when none did.
-      dispatch({
-        type: "SET_EXECUTION_ERROR",
-        error: error.response?.error ?? error.message,
-      });
-      void refreshSessionResource(dispatch, ["game-state", sid, "answered"], {
-        isCurrent: owner.isCurrent,
-        read: () => api.getSessionView(sid),
-        apply: (snapshot) => publishSubmittedInteractions(dispatch, snapshot),
-      }).catch(() => {});
-    } else if (!reportWorkspaceSyncError(error, dispatch)) {
-      dispatch({
-        type: "SET_EXECUTION_ERROR",
-        error: error instanceof Error ? error.message : String(error),
-      });
+    if (error instanceof ApiError && error.code === "plugin_approval_denied") {
+      // The player declined to load the form provider's code. That is their
+      // answer, not a failure: the form stays as it is.
+      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+    } else {
+      reportWorkspaceSyncError(error, dispatch);
     }
   } finally {
     inFlight.delete(key);
-    if (started) {
-      finalizeActionExecution(dispatch, sid, sessionIdRef, owner.isCurrent);
-      if (owner.isCurrent()) deps.resyncSession(sid, owner.isCurrent);
-    }
+    finalizeActionExecution(dispatch, sid, sessionIdRef, owner.isCurrent);
+    if (stored && owner.isCurrent()) deps.resyncSession(sid, owner.isCurrent);
   }
 }

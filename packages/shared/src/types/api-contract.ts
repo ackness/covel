@@ -64,6 +64,22 @@ export type ActionRequest = {
       readonly type: "retry_turn";
       readonly payload: Readonly<Record<never, never>>;
     })
+  | (ActionRequestBase & {
+      /**
+       * The player's answer to a committed form, choice or confirmation. The
+       * server stores it and runs the follow-up turn on this stream.
+       */
+      readonly type: "submit_interaction";
+      readonly payload: {
+        /** The turn whose message carries the interactions. */
+        readonly turnId: string;
+        readonly submissions: readonly {
+          readonly interactionId: string;
+          readonly type: "form" | "choice" | "confirmation";
+          readonly values: Readonly<Record<string, unknown>>;
+        }[];
+      };
+    })
 );
 
 export type ActionType = ActionRequest["type"];

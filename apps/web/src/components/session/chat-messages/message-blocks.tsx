@@ -158,9 +158,8 @@ function uiPartToSpec(
 }
 
 // Renders any block other than plugin_message using message-to-spec +
-// json-render. Form/choice handlers bridge into onSubmitInteraction so
-// the framework submit-form RPC + echoFilledNarrative UX hint keeps
-// working exactly as before.
+// json-render. The form handler bridges into onSubmitInteraction, which
+// sends the answer and runs its follow-up turn as one action.
 export function MessageBlockRenderer({
   msg,
   block,
@@ -183,7 +182,6 @@ export function MessageBlockRenderer({
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
-    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<InteractionSubmitResult>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
@@ -251,22 +249,14 @@ export function MessageBlockRenderer({
       block,
       msg.turnId,
     );
-    const rawBehavior = data.submitBehavior as
-      Record<string, unknown> | undefined;
-    const submitBehavior = rawBehavior
-      ? {
-          echoFilledNarrative: rawBehavior.echoFilledNarrative as
-            boolean | undefined,
-        }
-      : undefined;
-    return { data, turnId, interactionId, submitBehavior };
+    return { data, turnId, interactionId };
   }, [block, msg.turnId]);
 
   const handlers = useMemo(
     () => ({
       submitForm: async () => {
         if (effectiveSubmitted || executing) return;
-        const { data, turnId, interactionId, submitBehavior } = readBlockMeta();
+        const { data, turnId, interactionId } = readBlockMeta();
 
         // Extract form field values from json-render state tree (/form/<name>).
         const formValues: Record<string, unknown> = {
@@ -318,18 +308,17 @@ export function MessageBlockRenderer({
             interactionId,
             "form",
             formValues,
-            submitBehavior,
           );
           if (result) setIssues(result.rejected);
         } else {
-          // Fallback: submit-form unavailable -> stringified payload
+          // Fallback: no interaction to answer -> stringified payload
           onSubmitBlock(msg.id);
           onSendMessage(JSON.stringify(formValues));
         }
       },
       selectChoice: async (params: Record<string, unknown>) => {
         if (effectiveSubmitted || executing) return;
-        const { turnId, interactionId, submitBehavior } = readBlockMeta();
+        const { turnId, interactionId } = readBlockMeta();
         const label = params.label as string;
         if (!label) return;
         upsertInteractionDraft({
@@ -343,7 +332,6 @@ export function MessageBlockRenderer({
             selectedLabel: label,
           },
           sourceBlockId: msg.id,
-          submitBehavior,
         });
       },
       selectSuggestion: async (params: Record<string, unknown>) => {

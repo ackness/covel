@@ -1,9 +1,7 @@
-import type { DataStore } from "@covel/store";
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
   createPluginRpcRegistry,
   createRpcExecutor,
-  createSubmitFormHandler,
   type PluginRpcRegistry,
   type RpcExecutor,
 } from "@covel/runtime";
@@ -15,26 +13,8 @@ export interface BootstrapPluginRpc {
   readonly rpcApprovalGate: RpcApprovalGate;
 }
 
-export function createBootstrapPluginRpc(store: DataStore): BootstrapPluginRpc {
+export function createBootstrapPluginRpc(): BootstrapPluginRpc {
   const rpcRegistry: PluginRpcRegistry = createPluginRpcRegistry();
-  rpcRegistry.registerFrameworkDefault(
-    "submit-form",
-    createSubmitFormHandler(async (request) => {
-      const validator = rpcRegistry.getFormValidator(
-        request.pluginId,
-        request.name,
-      );
-      if (!validator)
-        throw new Error(
-          "Form validator is unavailable; activate and approve its plugin first",
-        );
-      return validator(request);
-    }, store),
-    {
-      description:
-        "Persist player input submissions and fill the originating template message.",
-    },
-  );
   rpcRegistry.registerFrameworkDefault(
     "slash-debug",
     async (_payload, context) => {

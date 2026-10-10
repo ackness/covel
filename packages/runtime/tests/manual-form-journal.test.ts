@@ -6,7 +6,7 @@ import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import { createSubmitFormHandler } from "../src/rpc-defaults/submit-form.js";
+import { createInteractionSubmitter } from "../src/interaction/interaction-submission.js";
 
 const form = {
   formId: "manual-form",
@@ -123,7 +123,7 @@ describe.each(["function", "agent"] as const)(
         };
         const context = { sessionId: "s", pluginId: "framework", store };
         await expect(
-          createSubmitFormHandler(undefined, store)(payload, context),
+          createInteractionSubmitter(undefined, store)(payload, context),
         ).rejects.toThrow("committed interaction");
         await finalizeExecution({
           store,
@@ -143,13 +143,15 @@ describe.each(["function", "agent"] as const)(
         });
         if (rollback) {
           await expect(
-            createSubmitFormHandler(undefined, store)(payload, context),
+            createInteractionSubmitter(undefined, store)(payload, context),
           ).rejects.toThrow("committed interaction");
           expect(await store.listTurnMessages("s")).toEqual([]);
         } else {
           await expect(
-            createSubmitFormHandler(undefined, store)(payload, context),
-          ).resolves.toMatchObject({ accepted: true });
+            createInteractionSubmitter(undefined, store)(payload, context),
+          ).resolves.toMatchObject({
+            results: [{ interactionId: "manual-form" }],
+          });
           expect((await store.listTurnMessages("s"))[0]?.sourcePluginId).toBe(
             "external",
           );

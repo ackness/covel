@@ -15,14 +15,17 @@ const submissionTargets = z.object({
   submissions: z.array(z.object({ interactionId: z.string().min(1) })).min(1),
 });
 
-/** Called under the session lock; only persisted form provenance can request code access. */
+/**
+ * Only persisted form provenance can request code access. The action route
+ * calls it before the stream opens and again under the session lock.
+ */
 export async function preflightFormApprovals(
   c: Context,
   session: SessionRecord,
   payload: unknown,
 ): Promise<Response | undefined> {
   const parsed = submissionTargets.safeParse(payload);
-  // The submit-form handler owns input validation and its error messages.
+  // The interaction submitter owns input validation and its error messages.
   if (!parsed.success) return;
   const messages = await c.get("store").listTurnMessages(session.id);
   const registry = c.get("pluginRegistry");
@@ -94,7 +97,7 @@ export async function preflightFormApprovals(
       sessionScope: scope,
       pluginId,
       action: COMMUNITY_SERVER_CODE_ACTION,
-      payload: { operation: "submit-form" },
+      payload: { operation: "submit-interaction" },
       trustLevel: trust.source,
       description: `Load form validation for community plugin ${pluginId}`,
     });

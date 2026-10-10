@@ -31,9 +31,13 @@ import {
   droppedUpstream,
   executeTurn,
   settleDroppedInputs,
+  createInteractionSubmitter,
   createTraceRecorder,
   createTurnEmitter,
+  InteractionSubmissionError,
+  FormRejectedError,
   snapshotUserSettings,
+  type PreparedInteractionSubmission,
 } from "@covel/runtime";
 import type {
   CovelEventType,
@@ -76,6 +80,7 @@ import { checkSessionOwner } from "./session/session-guard.js";
 import { readLockedSession } from "./session/locked-mutation.js";
 import { validateActionRequest } from "./actions/request.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
+import { preflightFormApprovals } from "./plugin-rpc/form-approvals.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import { buildSessionHookScope } from "./session/hook-scope.js";
 import {
@@ -119,6 +124,18 @@ class SessionEntryRejectedError extends Error {
     super(body.error);
     this.code = body.code;
   }
+}
+
+/** A guard's JSON refusal, for a stream that is already open. */
+async function entryRejection(
+  response: Response,
+): Promise<SessionEntryRejectedError> {
+  const body = (await response.json()) as Partial<ApiErrorResponse>;
+  return new SessionEntryRejectedError(
+    typeof body.error === "string"
+      ? (body as ApiErrorResponse)
+      : { error: "Plugin approval is required", code: "approval_required" },
+  );
 }
 
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
@@ -183,6 +200,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
   const approval = preflightActionApprovals(c, session, body);
   if (approval) return approval;
+  // A form's validator is its provider's server code: ask for that grant
+  // before the stream opens. The lock re-checks it against the live session.
+  if (type === "submit_interaction") {
+    const formApproval = await preflightFormApprovals(c, session, payload);
+    if (formApproval) return formApproval;
+  }
 
   // Lazy-lock the session's embedding model once per process boot.
   // No-op when the store has no vector capability or no embed slot is
@@ -372,11 +395,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           expectedSession: session,
           allowedStatuses: ["active"],
         });
-        if (live instanceof Response) {
-          throw new SessionEntryRejectedError(
-            (await live.json()) as ApiErrorResponse,
-          );
-        }
+        if (live instanceof Response) throw await entryRejection(live);
         return live;
       };
       const executeCapturedTurn = async () => {
@@ -421,6 +440,36 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 )
               : undefined;
           currentRetryScope = retryPlan?.scope;
+
+          // The answer is checked here, under the lock, and stored below with
+          // the `turn.started` marker: one decision answers the interaction
+          // and starts its turn, so a second submit finds both or neither.
+          let submission: PreparedInteractionSubmission | undefined;
+          if (type === "submit_interaction" && turnOrigin === "player") {
+            const denied = await preflightFormApprovals(
+              c,
+              liveSession,
+              payload,
+            );
+            if (denied) throw await entryRejection(denied);
+            const rpcRegistry = c.get("rpcRegistry");
+            submission = await createInteractionSubmitter(async (request) => {
+              const validator = rpcRegistry.getFormValidator(
+                request.pluginId,
+                request.name,
+              );
+              if (!validator)
+                throw new Error(
+                  "Form validator is unavailable; activate and approve its plugin first",
+                );
+              return validator(request);
+            }, store)(payload, { sessionId, locale: liveSession.locale });
+          }
+          const turnPlayerMessage =
+            submission?.playerMessage ?? turnArgs.playerMessage;
+          const submissionMessageId = submission
+            ? crypto.randomUUID()
+            : undefined;
           const registeredTurn = registerActiveTurn(
             sessionId,
             turnArgs.turnId,
@@ -472,16 +521,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // and the TurnMessage journal. Rollback removes new mirror rows and
           // turn attachments, preserving any uploaded browser input intent.
           const playerInputCreatedAt = new Date().toISOString();
-          const playerInputWrites = turnArgs.playerMessage
+          const playerInputWrites = turnPlayerMessage
             ? {
                 message: {
                   id:
+                    submissionMessageId ??
                     (type === "send_message" || type === "execute_command"
                       ? payload.inputMessageId
-                      : undefined) ?? crypto.randomUUID(),
+                      : undefined) ??
+                    crypto.randomUUID(),
                   sessionId,
                   role: "user" as const,
-                  content: turnArgs.playerMessage,
+                  content: turnPlayerMessage,
                   metadata: { turnId: turnArgs.turnId },
                   createdAt: playerInputCreatedAt,
                 },
@@ -495,9 +546,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   type:
                     type === "send_message"
                       ? ("message" as const)
-                      : ("rpc-call" as const),
+                      : type === "submit_interaction"
+                        ? ("form-submit" as const)
+                        : ("rpc-call" as const),
                   payload: {
-                    content: turnArgs.playerMessage,
+                    content: turnPlayerMessage,
                     actionType: type,
                   },
                   createdAt: playerInputCreatedAt,
@@ -538,17 +591,52 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // Emit execution started (protocol: execution.started). Goes
           // through the serial write queue like every other stream write, so
           // it keeps its envelope order relative to forwarded bus events.
-          await trace.turnStarted({
+          const turnStarted = {
             runtimeCount: activeRuntimes.length,
             requestId,
             origin: turnOrigin,
-            recoveryAction: recoveryAction(
-              type,
-              payload,
-              turnOrigin === "continuation",
-            ),
-          });
+            // A failed follow-up turn is retried as the message it carried:
+            // the answer is already stored and must not be submitted again.
+            recoveryAction: submission
+              ? turnPlayerMessage
+                ? recoveryAction("send_message", {
+                    content: turnPlayerMessage,
+                    inputMessageId: submissionMessageId,
+                  })
+                : recoveryAction("retry_turn", {})
+              : recoveryAction(type, payload, turnOrigin === "continuation"),
+          };
+          if (submission) {
+            const stored = submission;
+            await store.withTransaction(async (tx) => {
+              await stored.persist(tx);
+              await createTraceRecorder(
+                tx,
+                sessionId,
+                turnArgs.turnId,
+                traceId,
+              ).turnStarted(turnStarted);
+            });
+          } else {
+            await trace.turnStarted(turnStarted);
+          }
           hasStartedTurn = true;
+          if (submission) {
+            // Envelope `turnId` is the follow-up turn; `interactionTurnId` is
+            // the turn that asked.
+            await writeEvent("interaction.submitted", {
+              interactionTurnId: submission.turnId,
+              results: submission.results,
+              ...(turnPlayerMessage
+                ? {
+                    message: {
+                      id: submissionMessageId,
+                      content: turnPlayerMessage,
+                    },
+                  }
+                : {}),
+            });
+          }
           await writeEvent("execution.started", {
             status: "executing",
             runtimeCount: activeRuntimes.length,
@@ -592,7 +680,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const turnInput = {
             sessionId,
             turnId: turnArgs.turnId,
-            playerMessage: turnArgs.playerMessage,
+            playerMessage: turnPlayerMessage,
             locale: effectiveLocale,
             modelOverride: model,
             origin: isRuntimeRetry ? ("manual" as const) : turnOrigin,
@@ -1022,7 +1110,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           ? { message: SESSION_BUSY_MESSAGE, code: SESSION_BUSY_CODE }
           : err instanceof SessionEntryRejectedError
             ? { message: err.message, code: err.code }
-            : { message: isDev ? message : "Internal server error" },
+            : err instanceof InteractionSubmissionError
+              ? {
+                  // Written for the player (or names a malformed request):
+                  // nothing was stored and no turn started.
+                  message: err.message,
+                  code: err.code,
+                  ...(err instanceof FormRejectedError
+                    ? { details: { issues: err.issues } }
+                    : {}),
+                }
+              : { message: isDev ? message : "Internal server error" },
       ).catch(() => {});
     } finally {
       releaseTurnControl?.();

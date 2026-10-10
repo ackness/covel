@@ -37,7 +37,6 @@ export interface StageChoicesProps {
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
-    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<InteractionSubmitResult>;
   readonly onSendMessage: (text: string) => void;
 }
@@ -101,7 +100,6 @@ export function StageChoices({
         item.interactionId,
         "choice",
         { selectedId: item.choiceId, selectedLabel: item.label },
-        item.submitBehavior,
       );
       return;
     }

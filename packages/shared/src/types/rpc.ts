@@ -6,7 +6,7 @@
  *   - **Action level** (`{ kind: "action", pluginId, action, payload }`):
  *     Looks up the action registered by the plugin entry module and runs its
  *     handler. Used for high-level structured commands like
- *     "submit-form", "regenerate", "cancel".
+ *     "regenerate", "cancel".
  *
  *   - **Runtime level** (`{ kind: "runtime", pluginId, runtimeId, payload }`):
  *     Manually triggers a single runtime through the turn pipeline,

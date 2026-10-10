@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import { createSubmitFormHandler } from "../src/rpc-defaults/submit-form.js";
+import { submitAndStore as createSubmitFormHandler } from "./submit-and-store.js";
 
 async function fixture(sourcePluginId: string | undefined = "provider") {
   const store = createMemoryStore();

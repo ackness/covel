@@ -33,7 +33,6 @@ export interface ChatBlockRendererProps {
     interactionId: string,
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
-    submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<InteractionSubmitResult>;
   readonly t: TFunction;
 }

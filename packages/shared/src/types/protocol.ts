@@ -662,9 +662,11 @@ export interface SessionSnapshot {
   readonly messagesCursor?: PageCursor | null;
   /**
    * Every form, choice or confirmation the player already answered through
-   * `submit-form`, with the values the server stored. The client marks the
-   * matching message blocks as answered from this, so a reload or a second tab
-   * shows the same state as the browser that submitted.
+   * the `submit_interaction` action, with the values the server stored. An
+   * entry is written in the transaction that starts the follow-up turn, so
+   * each one has a turn. The client marks the matching message blocks as
+   * answered from this, so a reload or a second tab shows the same state as
+   * the browser that submitted.
    */
   readonly submittedInteractions: readonly SnapshotSubmittedInteraction[];
   readonly characters: readonly SnapshotCharacter[];
@@ -680,13 +682,6 @@ export interface SnapshotSubmittedInteraction {
   readonly turnId: string;
   readonly interactionId: string;
   readonly values: Readonly<Record<string, unknown>>;
-  /**
-   * Whether a turn started after the answer was stored. `false` means the
-   * follow-up never ran (the response was lost, or the browser closed between
-   * the two requests): the form can be sent again with the same values and
-   * the server accepts it once more.
-   */
-  readonly followedUp: boolean;
 }
 
 export interface SnapshotMessage {

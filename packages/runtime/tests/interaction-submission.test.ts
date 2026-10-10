@@ -1,5 +1,5 @@
 /**
- * submit-form framework default handler — direct unit coverage (Epic A).
+ * Interaction submission — direct unit coverage (Epic A).
  *
  * Pins the locale-aware narrative filling (the confirmation 确认/取消 and the
  * fallback prefixes were previously hardcoded Chinese), the zh-CN byte-compat
@@ -12,24 +12,19 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import type { InteractionPayload, InteractionType } from "@covel/shared";
 import {
-  createSubmitFormHandler,
+  createInteractionSubmitter,
   FormRejectedError,
   InteractionAlreadySubmittedError,
-  RpcValidationError,
+  InteractionSubmissionError,
   VALID_TYPES,
-} from "../src/rpc-defaults/submit-form.js";
-import type { RpcHandlerContext } from "../src/rpc/rpc-registry.js";
+} from "../src/interaction/interaction-submission.js";
+import { submitAndStore } from "./submit-and-store.js";
 
 const SESSION = "sess-1";
 const TURN = "turn-1";
 
-function makeCtx(store: DataStore, locale?: string): RpcHandlerContext {
-  return {
-    sessionId: SESSION,
-    pluginId: "framework",
-    store,
-    ...(locale ? { locale } : {}),
-  };
+function makeCtx(_store: DataStore, locale?: string) {
+  return { sessionId: SESSION, ...(locale ? { locale } : {}) };
 }
 
 async function seedTemplate(
@@ -88,10 +83,10 @@ async function submitOne(
   },
   locale?: string,
 ): Promise<string> {
-  const result = (await createSubmitFormHandler(undefined, store)(
+  const result = await submitAndStore(undefined, store)(
     { turnId: TURN, submissions: [sub] },
     makeCtx(store, locale),
-  )) as { results: Array<{ filledNarrative: string }> };
+  );
   return result.results[0]!.filledNarrative;
 }
 
@@ -119,6 +114,8 @@ describe("submitFormHandler (Epic A)", () => {
     await seedInteraction(store, {
       interactionId: "defaults",
       type: "form",
+      title: "Defaults",
+      submitLabel: "Submit",
       fields: [
         { type: "text", name: "origin", label: "Origin", defaultValue: "home" },
         {
@@ -151,6 +148,8 @@ describe("submitFormHandler (Epic A)", () => {
       await seedInteraction(store, {
         interactionId: "punctuation",
         type: "form",
+        title: "Punctuation",
+        submitLabel: "Submit",
         fields: [
           {
             type: "text",
@@ -431,7 +430,7 @@ describe("submitFormHandler (Epic A)", () => {
       prompt: "Choose",
       choices: [{ id: "x", label: "X" }],
     });
-    const result = (await createSubmitFormHandler(undefined, store)(
+    const result = await submitAndStore(undefined, store)(
       {
         turnId: TURN,
         submissions: [
@@ -440,7 +439,7 @@ describe("submitFormHandler (Epic A)", () => {
         ],
       },
       makeCtx(store),
-    )) as { results: Array<{ interactionId: string }> };
+    );
     expect(result.results.map((r) => r.interactionId)).toEqual(["b1", "b2"]);
   });
 
@@ -451,7 +450,7 @@ describe("submitFormHandler (Epic A)", () => {
     await seedTemplate(store, "p2", "", [
       { type: "number", name: "b", label: "B" },
     ]);
-    await createSubmitFormHandler(undefined, store)(
+    await submitAndStore(undefined, store)(
       {
         turnId: TURN,
         submissions: [
@@ -482,77 +481,74 @@ describe("submitFormHandler (Epic A)", () => {
   // ── validation errors ───────────────────────────────────────────
   it("throws when payload is not an object", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(null, makeCtx(store)),
-    ).rejects.toThrow(RpcValidationError);
+      submitAndStore(undefined, store)(null, makeCtx(store)),
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("throws when turnId is missing", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(
-        { submissions: [] },
-        makeCtx(store),
-      ),
-    ).rejects.toThrow(RpcValidationError);
+      submitAndStore(undefined, store)({ submissions: [] }, makeCtx(store)),
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("throws when submissions[] is empty", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(
+      submitAndStore(undefined, store)(
         { turnId: TURN, submissions: [] },
         makeCtx(store),
       ),
-    ).rejects.toThrow(RpcValidationError);
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("throws when submissions is not an array", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(
+      submitAndStore(undefined, store)(
         { turnId: TURN, submissions: { interactionId: "x" } },
         makeCtx(store),
       ),
-    ).rejects.toThrow(RpcValidationError);
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("throws when a submission is not an object", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(
+      submitAndStore(undefined, store)(
         { turnId: TURN, submissions: [null] },
         makeCtx(store),
       ),
-    ).rejects.toThrow(RpcValidationError);
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("throws when a submission interactionId is missing", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(
+      submitAndStore(undefined, store)(
         { turnId: TURN, submissions: [{ type: "form", values: {} }] },
         makeCtx(store),
       ),
-    ).rejects.toThrow(RpcValidationError);
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("throws for an invalid submission type", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(
+      submitAndStore(undefined, store)(
         {
           turnId: TURN,
           submissions: [{ interactionId: "x", type: "bogus", values: {} }],
         },
         makeCtx(store),
       ),
-    ).rejects.toThrow(RpcValidationError);
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("throws when submission.values is an array", async () => {
     await expect(
-      createSubmitFormHandler(undefined, store)(
+      submitAndStore(undefined, store)(
         {
           turnId: TURN,
           submissions: [{ interactionId: "x", type: "form", values: [] }],
         },
         makeCtx(store),
       ),
-    ).rejects.toThrow(RpcValidationError);
+    ).rejects.toThrow(InteractionSubmissionError);
   });
 
   it("rejects an interaction that was never committed and persists nothing", async () => {
@@ -635,7 +631,7 @@ describe("submitFormHandler (Epic A)", () => {
       message: 'Choose one of the listed options for "Origin".',
     });
     const malformed = await refusal({ name: "Aria", admin: true }, "en-US");
-    expect(malformed).toBeInstanceOf(RpcValidationError);
+    expect(malformed).toBeInstanceOf(InteractionSubmissionError);
     expect(malformed).not.toBeInstanceOf(FormRejectedError);
     await expect(
       submitOne(store, {
@@ -681,46 +677,10 @@ describe("submitFormHandler (Epic A)", () => {
       type: "form" as const,
       values: { name },
     });
-    const startTurn = () =>
-      store.addTraceEvent({
-        id: crypto.randomUUID(),
-        sessionId: SESSION,
-        type: "turn.started",
-        traceId: "trace",
-        turnId: "followup-turn",
-        payload: {},
-        createdAt: new Date(Date.now() + 1000).toISOString(),
-      });
 
-    it("accepts the same answer again while no turn followed it, so a lost follow-up can start", async () => {
-      await seedInteraction(store, form);
-      const first = (await createSubmitFormHandler(undefined, store)(
-        { turnId: TURN, submissions: [answer("Aria")] },
-        makeCtx(store),
-      )) as {
-        results: Array<{ submissionId: string; filledNarrative: string }>;
-      };
-      const again = (await createSubmitFormHandler(undefined, store)(
-        { turnId: TURN, submissions: [answer("Aria")] },
-        makeCtx(store),
-      )) as {
-        results: Array<{ submissionId: string; filledNarrative: string }>;
-      };
-      expect(again.results[0]).toMatchObject({
-        submissionId: first.results[0]?.submissionId,
-        filledNarrative: "Hello Aria",
-      });
-      expect(await store.listPlayerInputs(SESSION)).toHaveLength(1);
-      // Other values are a different answer: the stored one stands.
-      await expect(
-        submitOne(store, answer("Different")),
-      ).rejects.toBeInstanceOf(InteractionAlreadySubmittedError);
-    });
-
-    it("refuses any second answer once a turn started after it", async () => {
+    it("refuses any second answer: the stored one already has its turn", async () => {
       await seedInteraction(store, form);
       await submitOne(store, answer("Aria"));
-      await startTurn();
       for (const name of ["Aria", "Different"]) {
         const refusal = await submitOne(store, answer(name)).catch(
           (error: unknown) => error,
@@ -734,6 +694,72 @@ describe("submitFormHandler (Epic A)", () => {
         { values: { name: "Aria" } },
       ]);
     });
+
+    it("stores nothing until the caller persists", async () => {
+      await seedInteraction(store, form);
+      const prepared = await createInteractionSubmitter(undefined, store)(
+        { turnId: TURN, submissions: [answer("Aria")] },
+        makeCtx(store),
+      );
+      expect(prepared).toMatchObject({
+        turnId: TURN,
+        playerMessage: "Hello Aria",
+        results: [{ interactionId: "name-form", values: { name: "Aria" } }],
+      });
+      expect(await store.listPlayerInputs(SESSION)).toEqual([]);
+      await prepared.persist(store);
+      expect(await store.listPlayerInputs(SESSION)).toMatchObject([
+        { id: prepared.results[0]!.submissionId, formId: "name-form" },
+      ]);
+    });
+  });
+
+  it("leaves out of the player's message an interaction that asks for no echo", async () => {
+    await seedInteraction(store, {
+      interactionId: "quiet",
+      type: "form",
+      title: "Quiet",
+      submitLabel: "Continue",
+      fields: [{ type: "text", name: "name", label: "Name" }],
+      narrativeTemplate: "Quiet {{name}}",
+      submitBehavior: { echoFilledNarrative: false },
+    });
+    await seedInteraction(store, {
+      interactionId: "loud",
+      type: "choice",
+      prompt: "Choose",
+      choices: [{ id: "x", label: "X" }],
+      narrativeTemplate: "Chose {{selectedLabel}}",
+    });
+    const quiet = {
+      interactionId: "quiet",
+      type: "form",
+      values: { name: "A" },
+    };
+    const submit = createInteractionSubmitter(undefined, store);
+    expect(
+      (await submit({ turnId: TURN, submissions: [quiet] }, makeCtx(store)))
+        .playerMessage,
+    ).toBe("");
+    const both = await submit(
+      {
+        turnId: TURN,
+        submissions: [
+          quiet,
+          {
+            interactionId: "loud",
+            type: "choice",
+            values: { selectedId: "x" },
+          },
+        ],
+      },
+      makeCtx(store),
+    );
+    expect(both.playerMessage).toBe("Chose X");
+    expect(both.results.map((result) => result.filledNarrative)).toEqual([
+      "Quiet A",
+      "Chose X",
+    ]);
   });
 
   it("validates the whole batch before writing any player input", async () => {
@@ -745,7 +771,7 @@ describe("submitFormHandler (Epic A)", () => {
       fields: [{ type: "text", name: "name", label: "Name", required: true }],
     });
     await expect(
-      createSubmitFormHandler(undefined, store)(
+      submitAndStore(undefined, store)(
         {
           turnId: TURN,
           submissions: [

@@ -5,18 +5,12 @@ import type { MessageRecord, SessionRecord } from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import { ApiError } from "@/services/api/request.js";
 import { claimSessionAction } from "../runtime-refs.js";
-import { initialState } from "../reducer.js";
 
-const { sendAction, submitInputs, getSessionView } = vi.hoisted(() => ({
-  sendAction: vi.fn(),
-  submitInputs: vi.fn(),
-  getSessionView: vi.fn(),
-}));
-vi.mock("@/services/api", () => ({ sendAction, submitInputs, getSessionView }));
+const { sendAction } = vi.hoisted(() => ({ sendAction: vi.fn() }));
+vi.mock("@/services/api", () => ({ sendAction }));
 vi.mock("@/lib/toast-channel.js", () => ({ emitToast: vi.fn() }));
 const { runActionStream, runSingleSessionAction } =
   await import("../runtime-rpc.js");
-const { submitInteractionBlock } = await import("../interaction-submission.js");
 const request: ActionRequest = {
   requestId: "request-1",
   sessionId: "session-1",
@@ -153,46 +147,6 @@ describe("durable player input identity", () => {
       });
     },
   );
-
-  it("retains the opening form continuation's durable input id", async () => {
-    const f = fixture();
-    submitInputs.mockResolvedValue({
-      results: [
-        {
-          interactionId: "opening",
-          accepted: true,
-          filledNarrative: "My name is Player. Begin the adventure.",
-        },
-      ],
-    });
-    getSessionView.mockRejectedValue(
-      new Error("Synthetic refresh unavailable"),
-    );
-    const pending = submitInteractionBlock(
-      {
-        ...f,
-        stateRef: {
-          current: {
-            ...initialState,
-            session: { id: "session-1", status: "active" } as SessionRecord,
-          },
-        },
-        resyncSession: vi.fn(),
-        inFlight: new Set(),
-      },
-      ["block", "setup-turn", "opening", "form", { characterName: "Player" }],
-    );
-    await finish();
-    await pending;
-    expect(f.inputs).toHaveLength(1);
-    expect(sendAction.mock.calls[0]![0]).toMatchObject({
-      type: "send_message",
-      payload: {
-        content: "My name is Player. Begin the adventure.",
-        inputMessageId: f.inputs[0]!.id,
-      },
-    });
-  });
 });
 
 describe("action stream recovery", () => {

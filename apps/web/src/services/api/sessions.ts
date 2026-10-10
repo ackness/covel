@@ -2,7 +2,6 @@ import type {
   CursorPage,
   PageCursor,
   PluginMutationResponse,
-  PluginRpcResponse,
   RuntimeResult,
   SessionEvent,
   SessionPluginsResponse,
@@ -93,57 +92,6 @@ export async function waiveSetupRuntime(sessionId: string, runtimeId: string) {
     `/api/sessions/${encodeURIComponent(sessionId)}/setup/${encodeURIComponent(runtimeId)}/waive`,
     { method: "POST", body: JSON.stringify({ confirm: true }) },
   );
-}
-
-// -- Submit Inputs (form/choice/confirmation interactions) -------
-
-export interface SubmitInputsResult {
-  results: Array<{
-    submissionId: string;
-    interactionId: string;
-    filledNarrative: string;
-    accepted: boolean;
-  }>;
-}
-
-export async function submitInputs(
-  sessionId: string,
-  body: {
-    turnId: string;
-    submissions: Array<{
-      interactionId: string;
-      type: "form" | "choice" | "confirmation";
-      values: Record<string, unknown>;
-    }>;
-  },
-  resolveResponse?: (
-    response: PluginRpcResponse,
-    retry: () => Promise<PluginRpcResponse>,
-  ) => Promise<PluginRpcResponse | null>,
-): Promise<SubmitInputsResult | null> {
-  const send = () =>
-    request<PluginRpcResponse>(
-      `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
-      {
-        method: "POST",
-        operatorAuth: true,
-        // A refused form (400) is reported next to the form by the caller.
-        silentStatuses: [400],
-        body: JSON.stringify({
-          kind: "action",
-          pluginId: "framework",
-          action: "submit-form",
-          payload: body,
-        }),
-      },
-    );
-  const first = await send();
-  const response = resolveResponse ? await resolveResponse(first, send) : first;
-  if (!response) return null;
-  if (response.status !== "ok") {
-    throw new Error(`submit-form returned ${response.status}`);
-  }
-  return response.result as SubmitInputsResult;
 }
 
 // -- Session Snapshot (restore/reconnection) -------------------

@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store/memory";
+import { createEventBus } from "@covel/events";
 import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
 import { createBootstrapPluginRpc } from "../../src/routes/api/bootstrap/plugin-rpc-wiring.js";
-import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
+import { actionRoutes } from "../../src/routes/api/actions.js";
 import { approvalRoutes } from "../../src/routes/api/approvals.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
 import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guard.js";
+import { settledSubmission } from "../helpers/submit-interaction.js";
 
 describe("form provider authorization", () => {
   const sessionId = "forms-session";
@@ -29,17 +31,19 @@ describe("form provider authorization", () => {
       pluginId: "forged-client-provider",
     })),
   };
-  const submit = (body = payload, headers: Record<string, string> = {}) =>
-    app.request(`/api/sessions/${sessionId}/plugin-rpc`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({
-        kind: "action",
-        pluginId: "framework",
-        action: "submit-form",
-        payload: body,
+  const submit = async (body = payload, headers: Record<string, string> = {}) =>
+    settledSubmission(
+      await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({
+          requestId: crypto.randomUUID(),
+          sessionId,
+          type: "submit_interaction",
+          payload: body,
+        }),
       }),
-    });
+    );
 
   beforeEach(async () => {
     vi.stubEnv("NODE_ENV", "test");
@@ -62,9 +66,17 @@ describe("form provider authorization", () => {
       updatedAt: now,
     });
     plugins = createPluginRegistry();
-    rpc = createBootstrapPluginRpc(store);
+    rpc = createBootstrapPluginRpc();
     for (const [order, id] of providers.entries()) {
-      const loaded = makeFakeLoadedRuntime({ name: id });
+      // A manual runtime: the follow-up turn runs nothing and asks for no
+      // runtime grant, so every approval here is the form's own.
+      const { stage: _stage, ...fake } = makeFakeLoadedRuntime({
+        name: id,
+      }).manifest;
+      const loaded = {
+        ...makeFakeLoadedRuntime({ name: id }),
+        manifest: { ...fake, trigger: { type: "manual" as const } },
+      };
       const parsed = {
         runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
         manifest: loaded.manifest,
@@ -113,9 +125,18 @@ describe("form provider authorization", () => {
       });
     }
     const lock = createInProcessSessionLock();
+    const eventBus = createEventBus(store);
     app = new Hono();
     app.use("*", async (c, next) => {
       c.set("store", store);
+      c.set("eventBus", eventBus);
+      c.set("llmAdapter", {
+        generate: async () => {
+          throw new Error("No runtime runs in this turn");
+        },
+      });
+      c.set("loadRuntimeFn", async () => undefined);
+      c.set("resolveModel", () => undefined);
       c.set("pluginRegistry", plugins);
       c.set("rpcRegistry", rpc.rpcRegistry);
       c.set("rpcExecutor", rpc.rpcExecutor);
@@ -123,7 +144,7 @@ describe("form provider authorization", () => {
       c.set("sessionLock", lock);
       await next();
     });
-    app.route("/api/sessions", pluginRpcRoutes);
+    app.route("/api/actions", actionRoutes);
     app.route("/api/approvals", approvalRoutes);
   });
   afterEach(async () => {
@@ -225,7 +246,7 @@ describe("form provider authorization", () => {
     expect(await store.listPlayerInputs(sessionId)).toEqual([]);
   });
 
-  it("requires the hosted operator even though submit-form is a framework action", async () => {
+  it("requires the hosted operator before a community form validator loads", async () => {
     vi.stubEnv("DEPLOYMENT_TIER", "commercial");
     vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-operator");
     await store.updateSession(sessionId, {

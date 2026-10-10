@@ -451,7 +451,7 @@ async function assembleApi(
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
-    createBootstrapPluginRpc(store);
+    createBootstrapPluginRpc();
 
   // Entry import only honors the EXACT server-code grant. The old
   // no-action `hasGrant` matched any live grant for the plugin, so approving

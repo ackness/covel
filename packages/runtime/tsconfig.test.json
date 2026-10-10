@@ -72,7 +72,6 @@
     "tests/session-kernel.test.ts",
     "tests/setup-state-machine.test.ts",
     "tests/story-completion-contract.test.ts",
-    "tests/submit-form.test.ts",
     "tests/suspension-artifact.test.ts",
     "tests/tool-executor-capabilities.test.ts",
     "tests/tool-executor-core-plugin-commit.test.ts",

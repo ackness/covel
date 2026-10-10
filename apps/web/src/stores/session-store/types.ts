@@ -117,7 +117,6 @@ export interface PendingInteractionDraft {
    */
   sourceBlockId?: string;
   selectionGroup?: string;
-  submitBehavior?: { echoFilledNarrative?: boolean };
 }
 
 /** One reason the server refused a form; `field` is the field's `name`. */
@@ -352,7 +351,6 @@ export type SessionAction =
   | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string; values?: Record<string, unknown> }
-  | { type: "PREFILL_BLOCK"; blockId: string; values: Record<string, unknown> }
   | { type: "RESET_TO_WORLD_SELECT" }
   | {
       type: "REMOVE_MESSAGES_FROM_TURN";

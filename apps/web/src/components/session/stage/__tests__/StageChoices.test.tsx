@@ -81,7 +81,6 @@ describe("StageChoices", () => {
       "reply",
       "choice",
       { selectedId: "accept", selectedLabel: "答应替她保守秘密" },
-      undefined,
     );
   });
 

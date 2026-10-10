@@ -1840,8 +1840,8 @@ async function runMain(
   ctx.turnNumber += 1;
 
   // Auto form handling: setup can chain forms (character creation, then a
-  // rules plugin's point allocation). Submit each form the last request
-  // surfaced and post send_message to advance, until setup asks for no more.
+  // rules plugin's point allocation). Answer each form the last request
+  // surfaced with a submit_interaction action, until setup asks for no more.
   const submittedForms = new Set<string>();
   const nextSetupForm = (): DetectedForm | null => {
     for (const record of exec.turnRecords) {
@@ -1867,15 +1867,14 @@ async function runMain(
     const values = buildFormValues(detectedForm, args.formValues, args.locale);
     kv("Values", previewJson(values, 120));
 
-    const submitResp = await httpJson<{
-      status: string;
-      result?: {
-        results?: Array<{ filledNarrative?: string }>;
-      };
-    }>(args.server, `/sessions/${session.id}/plugin-rpc`, {
-      kind: "action",
-      pluginId: "framework",
-      action: "submit-form",
+    // One action stores the answer and runs the turn that reads it.
+    console.log("");
+    console.log(
+      `  Turn ${ctx.turnNumber + 1}: submit_interaction (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
+    );
+    console.log(DIV);
+    exec = await runTurn(args, session.id, {
+      type: "submit_interaction",
       payload: {
         turnId: detectedForm.turnId,
         submissions: [
@@ -1886,26 +1885,6 @@ async function runMain(
           },
         ],
       },
-    });
-    const filled = submitResp.result?.results?.[0]?.filledNarrative ?? "";
-    if (filled) kv("Filled narrative", truncate(filled, 80));
-
-    // Refresh phase from server — the submit-form + turn commit chain may
-    // have advanced the lifecycle into playing already.
-    const sessAfterSubmit = await httpGet<SessionRecord>(
-      args.server,
-      `/sessions/${session.id}`,
-    );
-    refreshSession(sessAfterSubmit);
-
-    console.log("");
-    console.log(
-      `  Turn ${ctx.turnNumber + 1}: send_message (after form submit, phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
-    );
-    console.log(DIV);
-    exec = await runTurn(args, session.id, {
-      type: "send_message",
-      payload: { content: filled || "继续" },
     });
     // The request that completes the LAST setup runtime chains one main-loop
     // turn onto the same SSE stream ("opening continuation", see api.md) under

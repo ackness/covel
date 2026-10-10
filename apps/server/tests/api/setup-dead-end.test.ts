@@ -162,14 +162,15 @@ async function harness(options: {
       }
       return found.at(-1);
     },
-    async submit(
+    /** Open the stream of a form answer; the caller reads or drops it. */
+    openSubmit(
       target: { turnId: string; form: { interactionId: string } },
       values: Record<string, unknown>,
     ) {
-      const response = await post(`/api/sessions/${sessionId}/plugin-rpc`, {
-        kind: "action",
-        pluginId: "framework",
-        action: "submit-form",
+      return post("/api/actions", {
+        requestId: crypto.randomUUID(),
+        sessionId,
+        type: "submit_interaction",
         payload: {
           turnId: target.turnId,
           submissions: [
@@ -181,7 +182,35 @@ async function harness(options: {
           ],
         },
       });
-      return { status: response.status, body: await response.json() };
+    },
+    /**
+     * Answer a form and read its stream to the end: the follow-up turn has
+     * run when this returns. `refused` is the payload of `error.occurred`.
+     */
+    async submit(
+      target: { turnId: string; form: { interactionId: string } },
+      values: Record<string, unknown>,
+    ) {
+      const response = await this.openSubmit(target, values);
+      const text = await response.text();
+      expect(response.status, text).toBe(200);
+      const events = text
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map(
+          (line) =>
+            JSON.parse(line.slice(5)) as {
+              type: string;
+              turnId: string;
+              payload: Record<string, unknown>;
+            },
+        );
+      return {
+        events,
+        types: events.map((event) => event.type),
+        refused: events.find((event) => event.type === "error.occurred")
+          ?.payload,
+      };
     },
     async close() {
       await closeTestApi(boot);
@@ -231,8 +260,30 @@ it("retries a failed character setup in the same session", async () => {
       ),
     ).toEqual([]);
     const form = await h.form("char-creation");
-    expect((await h.submit(form!, { characterName: "Ada" })).status).toBe(200);
-    await h.action("send_message", { content: "Ada begins." });
+    const submitted = await h.submit(form!, { characterName: "Ada" });
+    expect(submitted.refused).toBeUndefined();
+    // One request: the answer, then the turn that reads it.
+    expect(submitted.types.slice(0, 2)).toEqual([
+      "interaction.submitted",
+      "execution.started",
+    ]);
+    expect(submitted.events[0]!.payload).toMatchObject({
+      interactionTurnId: form!.turnId,
+      results: [
+        {
+          interactionId: "char-creation",
+          values: { characterName: "Ada" },
+          filledNarrative: "Ada begins.",
+        },
+      ],
+      message: { content: "Ada begins." },
+    });
+    expect(submitted.types.at(-1)).toBe("execution.completed");
+    expect(
+      (await h.store.listTurnMessages(h.sessionId))
+        .filter((message) => message.sourceType === "player")
+        .map((message) => message.content),
+    ).toEqual(["Ada begins."]);
     expect((await h.player())?.name).toBe("Ada");
     expect((await h.session()).phase).toBe("playing");
   } finally {
@@ -240,7 +291,7 @@ it("retries a failed character setup in the same session", async () => {
   }
 }, 60_000);
 
-it("continues a setup whose form was submitted before the page closed", async () => {
+it("runs and commits the follow-up turn of a submit whose connection dropped", async () => {
   const h = await harness({
     attributes: [persona],
     generate: openingForm([personaField]),
@@ -248,12 +299,89 @@ it("continues a setup whose form was submitted before the page closed", async ()
   try {
     await h.action("start_session");
     const form = await h.form("char-creation");
-    expect((await h.submit(form!, { characterName: "Ada" })).status).toBe(200);
-    // The client never sent the message that follows a submission. Running
-    // setup again reads the stored form and goes on into the opening.
-    await h.action("start_session");
+    const response = await h.openSubmit(form!, { characterName: "Ada" });
+    expect(response.status).toBe(200);
+    // The client goes away before it reads a single event.
+    await response.body!.cancel();
+    await vi.waitFor(
+      async () => expect((await h.session()).phase).toBe("playing"),
+      { timeout: 20_000, interval: 20 },
+    );
     expect((await h.player())?.name).toBe("Ada");
-    expect((await h.session()).phase).toBe("playing");
+
+    // What a returning client reads: the form is answered and its turn ran.
+    await vi.waitFor(async () => {
+      const execution = await h.boot.app.request(
+        `/api/sessions/${h.sessionId}/execution`,
+      );
+      expect(await execution.json()).toMatchObject({ state: "completed" });
+    });
+    const view = (await (
+      await h.boot.app.request(`/api/sessions/${h.sessionId}/view`)
+    ).json()) as { submittedInteractions: unknown[] };
+    expect(view.submittedInteractions).toEqual([
+      {
+        turnId: form!.turnId,
+        interactionId: "char-creation",
+        values: { characterName: "Ada" },
+      },
+    ]);
+    // Sending the form again is refused: the turn does not run twice.
+    const turns = (await h.store.listTurnResults(h.sessionId)).length;
+    expect(
+      (await h.submit(form!, { characterName: "Ada" })).refused,
+    ).toMatchObject({ code: "interaction_already_submitted" });
+    expect((await h.store.listTurnResults(h.sessionId)).length).toBe(turns);
+  } finally {
+    await h.close();
+  }
+}, 60_000);
+
+it("answers a form once when two requests submit it together", async () => {
+  const h = await harness({
+    attributes: [persona],
+    generate: openingForm([personaField]),
+  });
+  try {
+    await h.action("start_session");
+    const form = await h.form("char-creation");
+    const started = async () =>
+      (
+        await h.store.queryTraceEvents(h.sessionId, {
+          types: ["turn.started"],
+        })
+      ).length;
+    const before = await started();
+    const results = await Promise.all([
+      h.submit(form!, { characterName: "Ada" }),
+      h.submit(form!, { characterName: "Ada" }),
+    ]);
+    const refused = results.filter((result) => result.refused);
+    expect(refused).toHaveLength(1);
+    expect(refused[0]!.refused).toEqual({
+      code: "interaction_already_submitted",
+      message: "This was already submitted. Reload to see the answer.",
+    });
+    // The refused request started nothing and stored nothing.
+    expect(refused[0]!.types).toEqual(["error.occurred"]);
+    const accepted = results.find((result) => !result.refused)!;
+    expect(accepted.types).toContain("execution.completed");
+    // The setup turn and the opening that continues it; the refused request
+    // adds no third.
+    expect((await started()) - before).toBe(
+      new Set(
+        accepted.events
+          .filter((event) => event.type === "execution.started")
+          .map((event) => event.turnId),
+      ).size,
+    );
+    expect(await h.store.listPlayerInputs(h.sessionId)).toHaveLength(1);
+    expect(
+      (await h.store.listTurnMessages(h.sessionId)).filter(
+        (message) => message.sourceType === "player",
+      ),
+    ).toHaveLength(1);
+    expect((await h.player())?.name).toBe("Ada");
   } finally {
     await h.close();
   }
@@ -279,9 +407,8 @@ it("creates the character when an attribute default fails its own type", async (
     const form = await h.form("char-creation");
     expect(
       (await h.submit(form!, { characterName: "Ada", persona: "Curious" }))
-        .status,
-    ).toBe(200);
-    await h.action("send_message", { content: "Ada begins." });
+        .refused,
+    ).toBeUndefined();
     expect((await h.player())?.fields).toEqual({ persona: "Curious" });
     expect((await h.session()).phase).toBe("playing");
   } finally {
@@ -306,10 +433,6 @@ it("offers the form again, filled in, when the world no longer accepts a submiss
   try {
     await h.action("start_session");
     const first = await h.form("char-creation");
-    expect(
-      (await h.submit(first!, { characterName: "Ada", persona: "Curious" }))
-        .status,
-    ).toBe(200);
     // The attribute types change between the form and the run that reads it.
     const schema = (await h.store.getCharacterSchema(h.sessionId))!;
     await h.store.upsertCharacterSchema({
@@ -320,9 +443,15 @@ it("offers the form again, filled in, when the world no longer accepts a submiss
     });
     strict = true;
 
-    const turn = await h.action("send_message", { content: "Ada begins." });
     expect(
-      turn.runtimeResults.filter((result) => result.status === "failed"),
+      (await h.submit(first!, { characterName: "Ada", persona: "Curious" }))
+        .refused,
+    ).toBeUndefined();
+    const turn = (await h.store.listTurnResults(h.sessionId)).at(-1)!;
+    expect(
+      (turn.runtimeResults as readonly { status: string }[]).filter(
+        (result) => result.status === "failed",
+      ),
     ).toEqual([]);
     expect(await h.player()).toBeUndefined();
     const again = await h.form("char-creation");
@@ -338,9 +467,8 @@ it("offers the form again, filled in, when the world no longer accepts a submiss
 
     expect(
       (await h.submit(again!, { characterName: "Ada", persona: "stern" }))
-        .status,
-    ).toBe(200);
-    await h.action("send_message", { content: "Ada begins." });
+        .refused,
+    ).toBeUndefined();
     expect((await h.player())?.fields).toEqual({ persona: "stern" });
     expect((await h.session()).phase).toBe("playing");
   } finally {
@@ -373,8 +501,9 @@ it("goes on without a schema after the player skips the failed schema step", asy
     expect(waived.status, await waived.text()).toBe(200);
     await h.action("start_session");
     const form = await h.form("char-creation");
-    expect((await h.submit(form!, { characterName: "Ada" })).status).toBe(200);
-    await h.action("send_message", { content: "Ada begins." });
+    expect(
+      (await h.submit(form!, { characterName: "Ada" })).refused,
+    ).toBeUndefined();
     expect((await h.player())?.name).toBe("Ada");
     expect((await h.session()).phase).toBe("playing");
   } finally {
@@ -402,31 +531,26 @@ it("tells the player in their language what to correct, and keeps the form open"
     await h.action("start_session");
     const opening = await h.form("char-creation");
     const unnamed = await h.submit(opening!, {});
-    expect(unnamed).toEqual({
-      status: 400,
-      body: {
-        code: "form_rejected",
-        error: "请填写“Name”。",
-        details: {
-          issues: [{ field: "characterName", message: "请填写“Name”。" }],
-        },
+    // A refusal is the only event: no turn started.
+    expect(unnamed.types).toEqual(["error.occurred"]);
+    expect(unnamed.refused).toEqual({
+      code: "form_rejected",
+      message: "请填写“Name”。",
+      details: {
+        issues: [{ field: "characterName", message: "请填写“Name”。" }],
       },
     });
-    expect((await h.submit(opening!, { characterName: "Ada" })).status).toBe(
-      200,
-    );
-    await h.action("send_message", { content: "Ada begins." });
+    expect(
+      (await h.submit(opening!, { characterName: "Ada" })).refused,
+    ).toBeUndefined();
 
     const allocation = await h.form("tabletop-rules-allocation");
     const overspent = await h.submit(allocation!, { might: 5, wits: 5 });
-    expect(overspent).toEqual({
-      status: 400,
-      body: {
-        code: "form_rejected",
-        error: "需要正好分配 4 点，你已分配 8 点",
-        details: {
-          issues: [{ message: "需要正好分配 4 点，你已分配 8 点" }],
-        },
+    expect(overspent.refused).toEqual({
+      code: "form_rejected",
+      message: "需要正好分配 4 点，你已分配 8 点",
+      details: {
+        issues: [{ message: "需要正好分配 4 点，你已分配 8 点" }],
       },
     });
     // Nothing was stored: the same form takes the corrected values.
@@ -435,9 +559,9 @@ it("tells the player in their language what to correct, and keeps the form open"
         (input) => input.formId,
       ),
     ).toEqual(["char-creation"]);
-    expect((await h.submit(allocation!, { might: 3, wits: 3 })).status).toBe(
-      200,
-    );
+    expect(
+      (await h.submit(allocation!, { might: 3, wits: 3 })).refused,
+    ).toBeUndefined();
     const answered = async () => {
       const view = await h.boot.app.request(
         `/api/sessions/${h.sessionId}/view`,
@@ -455,27 +579,17 @@ it("tells the player in their language what to correct, and keeps the form open"
       interactionId: "tabletop-rules-allocation",
       values: { might: 3, wits: 3 },
     };
-    // The response was lost before the follow-up started: the view says no
-    // turn followed the answer, and sending the same values again is accepted
-    // so the client can start the follow-up.
-    expect(await answered()).toEqual([{ ...stored, followedUp: false }]);
-    expect((await h.submit(allocation!, { might: 3, wits: 3 })).status).toBe(
-      200,
-    );
-    expect((await h.submit(allocation!, { might: 4, wits: 3 })).status).toBe(
-      400,
-    );
-    await h.action("send_message", { content: "Allocation complete." });
-    // A turn started after the answer: a second tab still showing the form
-    // is refused instead of running the follow-up twice.
-    expect(await answered()).toEqual([{ ...stored, followedUp: true }]);
-    expect(await h.submit(allocation!, { might: 3, wits: 3 })).toEqual({
-      status: 400,
-      body: {
+    // The answer and its turn are one step: a second tab still showing the
+    // form is refused, whatever it sends.
+    expect(await answered()).toEqual([stored]);
+    for (const values of [
+      { might: 3, wits: 3 },
+      { might: 4, wits: 2 },
+    ])
+      expect((await h.submit(allocation!, values)).refused).toEqual({
         code: "interaction_already_submitted",
-        error: "这一项已经提交过了。刷新后可以看到已提交的内容。",
-      },
-    });
+        message: "这一项已经提交过了。刷新后可以看到已提交的内容。",
+      });
     expect((await h.player())?.fields).toMatchObject({ might: 3, wits: 3 });
     expect((await h.session()).phase).toBe("playing");
   } finally {

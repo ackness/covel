@@ -9,8 +9,8 @@
  *
  * Resolution order for action-level dispatch:
  *   1. Plugin-declared action (`registry.getPluginAction`)
- *   2. Framework default (`registry.getFrameworkDefault`) — currently
- *      `submit-form` is the only one registered.
+ *   2. Framework default (`registry.getFrameworkDefault`), such as the
+ *      actions behind the built-in slash commands.
  *
  * Runtime-level dispatch is handled separately (`runtimeId` set) by the
  * caller — the dispatcher just exposes the registry-aware path here.
@@ -22,6 +22,7 @@ import type {
   RpcRegistryEntry,
 } from "./rpc-registry.js";
 import { createPluginRandom } from "../function-runtime/plugin-random.js";
+import { RpcValidationError } from "./rpc-validation-error.js";
 
 export interface RpcDispatchRequest {
   readonly pluginId: string;
@@ -88,12 +89,8 @@ export function createRpcExecutor(deps: RpcDispatchDeps) {
       } catch (err) {
         if (err instanceof RpcDispatchError) throw err;
         // Preserve typed validation errors so the HTTP layer can map them
-        // to 400 responses. The runtime package re-exports RpcValidationError
-        // alongside this executor — we detect it by name to avoid a
-        // direct import cycle with rpc-defaults/.
-        if (err instanceof Error && err.name === "RpcValidationError") {
-          throw err;
-        }
+        // to 400 responses.
+        if (err instanceof RpcValidationError) throw err;
         throw new RpcDispatchError(
           `[plugin-rpc] handler for "${req.action}" threw: ${
             err instanceof Error ? err.message : String(err)

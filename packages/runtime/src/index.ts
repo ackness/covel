@@ -149,13 +149,15 @@ export type {
   RpcDispatchResult,
   RpcDispatchDeps,
 } from "./rpc/rpc-executor.js";
+export { RpcValidationError } from "./rpc/rpc-validation-error.js";
 export {
-  createSubmitFormHandler,
+  createInteractionSubmitter,
   findCommittedInteraction,
   FormRejectedError,
   InteractionAlreadySubmittedError,
-  RpcValidationError,
-} from "./rpc-defaults/submit-form.js";
+  InteractionSubmissionError,
+} from "./interaction/interaction-submission.js";
+export type { PreparedInteractionSubmission } from "./interaction/interaction-submission.js";
 
 // ── Gateway Bridge ──────────────────────────────────────────────
 export {
