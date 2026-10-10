@@ -192,6 +192,32 @@ describe("session plugin contract resolution", () => {
     expect(plan.active).toEqual(["b"]);
     expect(plan.rejected[0]?.code).toBe("single-provider-conflict");
   });
+  it("keeps one declarer of an event topic and names both plugins", () => {
+    const plugins = [
+      p("stage", { eventTopics: ["scene.set", "stage.direction"] }),
+      p("theatre", { eventTopics: ["scene.set"] }),
+      p("music", { eventTopics: ["music.cue"] }),
+    ];
+    const plan = resolveSessionPlugins({
+      requested: ["theatre", "stage", "music"],
+      plugins,
+    });
+    expect(plan.active).toEqual(["theatre", "music"]);
+    expect(plan.rejected).toEqual([
+      {
+        pluginId: "stage",
+        code: "event-topic-conflict",
+        reason:
+          'Event topic "scene.set" is declared by both theatre and stage; a session can have one of them',
+        candidates: ["theatre"],
+      },
+    ]);
+    // Both stay installable: the collision exists only inside one session.
+    expect(
+      resolveSessionPlugins({ requested: ["stage", "music"], plugins })
+        .rejected,
+    ).toEqual([]);
+  });
   it("rejects invalid kernel conflicts without suppressing collect providers", () => {
     const plan = resolveSessionPlugins({
       requested: ["invalid", "one", "two"],

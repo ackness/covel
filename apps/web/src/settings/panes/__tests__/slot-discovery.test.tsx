@@ -82,6 +82,7 @@ beforeEach(async () => {
       optional: [],
       conflicts: [],
       extensions: [],
+      eventTopics: [],
       id: "fixture",
       displayName: "Fixture",
       description: "Fixture",

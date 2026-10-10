@@ -31,8 +31,9 @@ const tools = [
   "update-dimensions",
   "runtime-done",
 ].map((name) => ({ name }));
-const call = (system: string, runtimeId = "world-init/dimension-tracker") => ({
-  runtimeId,
+// The runtime an event is about is in the hook context.
+const tracker = { runtimeId: "world-init/dimension-tracker" };
+const call = (system: string) => ({
   messages: [{ role: "system", content: system }],
   tools,
 });
@@ -41,7 +42,10 @@ describe("dimension tracker tools", () => {
   const hook = trackerHook();
 
   it("withholds the read tools when every rule is in the prompt", () => {
-    const result = hook({}, call('<dimension-rules>\n<dimension id="a">…'));
+    const result = hook(
+      tracker,
+      call('<dimension-rules>\n<dimension id="a">…'),
+    );
     expect(result.replace?.tools?.map((tool) => tool.name)).toEqual([
       "update-dimensions",
       "runtime-done",
@@ -51,17 +55,17 @@ describe("dimension tracker tools", () => {
   it("keeps them when the rules block lists truncated dimensions", () => {
     const system =
       "<dimension-rules>\nTruncated (read with dimension-rule-get and world-dimension-get before settling these):\nb (v1): …";
-    expect(hook({}, call(system))).toEqual({ action: "continue" });
+    expect(hook(tracker, call(system))).toEqual({ action: "continue" });
   });
 
   it("keeps them for the heading of a Chinese prompt too", () => {
     const system =
       "<dimension-rules>\n已截断（结算这些维度之前，先用 dimension-rule-get 和 world-dimension-get 读取）：\nb (v1): …";
-    expect(hook({}, call(system))).toEqual({ action: "continue" });
+    expect(hook(tracker, call(system))).toEqual({ action: "continue" });
   });
 
   it("leaves other runtimes alone", () => {
-    expect(hook({}, call("<dimension-rules>", "narrator"))).toEqual({
+    expect(hook({ runtimeId: "narrator" }, call("<dimension-rules>"))).toEqual({
       action: "continue",
     });
   });

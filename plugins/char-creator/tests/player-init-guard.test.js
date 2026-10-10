@@ -64,10 +64,54 @@ describe("player initialization World Model", () => {
       }),
     ]);
   });
-  it("rejects an invalid submitted attribute without rewriting the submission", async () => {
+  it("asks for the form again when the world refuses a submitted attribute", async () => {
     const values = { characterName: "Alex", systems: "self-taught" };
-    await expect(guard(context(values))).rejects.toThrow(/systems/);
+    expect(await guard(context(values))).toEqual({ skip: false });
     expect(values.systems).toBe("self-taught");
+  });
+  it("creates the player without a default that fails its own attribute type", async () => {
+    const ctx = context({ characterName: "Alex" });
+    ctx.world.characterSchema = {
+      ...schema,
+      attributes: [
+        ...schema.attributes,
+        {
+          id: "rank",
+          name: "Rank",
+          type: "enum",
+          category: "bio",
+          options: ["low", "high"],
+          defaultValue: "middle",
+        },
+      ],
+    };
+    const result = await guard(ctx);
+    expect(getToolContent(result)).toMatchObject({ preGameDone: true });
+    expect(getPendingProposals(result)).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ fields: { systems: 2 } }),
+      }),
+    ]);
+  });
+  it("goes on without a schema once the player skipped the failed setup step", async () => {
+    const ctx = context({ characterName: "Alex" });
+    ctx.world.characterSchema = null;
+    const setupRuntimes = {
+      "world-init/schema-gen": { state: "blocked" },
+      "char-creator/player-init": { state: "pending", lastError: "x" },
+    };
+    ctx.store.getSession = async () => ({ setupRuntimes });
+    await expect(guard(ctx)).rejects.toThrow("Character schema is not ready");
+    setupRuntimes["world-init/schema-gen"] = {
+      state: "done",
+      resolution: "waived",
+    };
+    const result = await guard(ctx);
+    expect(getPendingProposals(result)).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ name: "Alex", fields: {} }),
+      }),
+    ]);
   });
   it("buffers a player with schema defaults and no plugin-data mirror", async () => {
     const result = await guard(

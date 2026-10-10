@@ -59,6 +59,8 @@ export type SetupRuntimeState =
       readonly attempts: number;
       readonly reason: string;
       readonly blockedAt: string;
+      /** Error of the attempt that used up the retry budget, when it had one. */
+      readonly lastError?: string;
     };
 
 /** Lifecycle state of a single setup-runtime attempt. */

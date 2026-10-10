@@ -36,6 +36,7 @@ Reference (`docs/reference/`) — authoritative contracts:
 
 - Plugin manifest, runtime fields, session plugin selection: `plugins.md`
 - Extension points and plugin-to-plugin communication: `extension-points.md`, `plugin-extensions.md`
+- Hook events, payloads, results and the handler context: `hooks.md`
 - Tools and approval policy: `tools.md`
 - HTTP API: `api.md`; SSE protocol and transport: `protocol.md`
 - World Model, world data, dimensions, world time: `world-model.md`, `world-data.md`, `dynamic-dimensions.md`, `world-time.md`
@@ -336,7 +337,8 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   stage fully settles before the next).
 - **Results**: `RuntimeResult` keeps `output`, `effects`, and `completion` apart; a
   function handler returns them as `HandlerResult`, and an effect-shaped field
-  inside `value` does nothing. Setup runtimes finish with `completion: "done"`
+  inside `value` does nothing. An agent's effects come from its tools only: an
+  effect-shaped field in the model's final JSON does nothing either. Setup runtimes finish with `completion: "done"`
   (agents report `preGameDone: true`). Setup completion is recorded per plugin
   `version`, so a version bump re-runs setup — setup guards must return
   `{ skip: true }` for work already done.
@@ -360,7 +362,9 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   (`packages/shared/src/types/hooks.ts`). A package declares them in
   `contributes.hooks` and registers handlers with `covel.on()` in `entry`. Hooks are
   session-scoped through `AsyncLocalStorage`; `ctx.getOwnSettings()` exposes the
-  plugin's own resolved settings.
+  plugin's own resolved settings, `ctx.locale` the session's content locale, and
+  `ctx.pluginId` / `ctx.runtimeId` the runtime an event is about (payloads do not
+  repeat it). Reference: `docs/reference/hooks.md`.
 - **Session plugin set**: a global pool loads at startup; `resolveSessionPlugins`
   (`packages/shared/src/plugin-selection.ts`) computes each session's active set from
   the explicit `requested` / `excluded` lists, authorization, and contract
@@ -507,6 +511,7 @@ PR; a missing sync means an incomplete PR.
 
 - Add/modify/remove a bundled plugin; change `PLUGIN.md` / `RUNTIME.md` fields → `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md`
 - Add/change an extension point, service contract, or plugin API method → `docs/reference/extension-points.md` + `docs/reference/plugin-extensions.md`
+- Add/change a hook event, its payload, what a handler may return, or the hook context → `docs/reference/hooks.md`
 - Add/modify/remove a tool; approval/source gate → `docs/reference/tools.md`
 - Add/change a model slot → `docs/reference/slots.md`
 - Change SSE events / protocol → `docs/reference/protocol.md`

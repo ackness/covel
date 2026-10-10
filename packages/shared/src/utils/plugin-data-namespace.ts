@@ -76,3 +76,21 @@ export const KERNEL_PLUGIN_DATA_OWNER_PREFIX = "__kernel:";
 export function isKernelPluginDataOwner(pluginId: string): boolean {
   return pluginId.startsWith(KERNEL_PLUGIN_DATA_OWNER_PREFIX);
 }
+
+/**
+ * The shape `ctx.pluginData.list` hands to plugin code in every context: the
+ * key, the value and the row's timestamps, without storage identifiers.
+ */
+export function pluginDataEntry(row: {
+  readonly key: string;
+  readonly value: unknown;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}): import("@covel/plugin-handlers-utils").PluginDataEntry {
+  return {
+    key: row.key,
+    value: row.value,
+    ...(row.createdAt === undefined ? {} : { createdAt: row.createdAt }),
+    ...(row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
+  };
+}

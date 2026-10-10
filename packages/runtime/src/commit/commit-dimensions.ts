@@ -21,6 +21,9 @@ import type { CommitHandlerMap } from "./commit-handler-types.js";
 import { commitError } from "./commit-validators.js";
 import { settlementDefinitions } from "./dimension-finalization.js";
 
+/** `CommitResult.code` of a dimension write that lost to a newer version. */
+const DIMENSION_VERSION_CONFLICT = "dimension-version-conflict";
+
 export function createDimensionCommitHandlers(
   store: KernelStore,
 ): Pick<CommitHandlerMap, "dimension.initialize" | "dimension.update"> {
@@ -130,10 +133,19 @@ export function createDimensionCommitHandlers(
     if (receipt && receipt.status !== "pending-settlement")
       return { committed: true };
 
-    const pending = async (message: string): Promise<CommitResult> => {
-      if (!receipt) return commitError(message);
+    // A new pending message replaces the old one, and with it any hold on the
+    // receipt unless the caller restates that hold.
+    const pending = async (
+      message: string,
+      opts: { readonly code?: string; readonly blocked?: boolean } = {},
+    ): Promise<CommitResult> => {
+      if (!receipt) return commitError(message, opts.code);
+      const { blockedBy: _released, ...rest } = receipt;
       const updated = {
-        ...receipt,
+        ...rest,
+        ...(opts.blocked && receipt.blockedBy
+          ? { blockedBy: receipt.blockedBy }
+          : {}),
         error: message,
         version: receipt.version + 1,
       };
@@ -169,11 +181,13 @@ export function createDimensionCommitHandlers(
     try {
       if (payload && !payload.success) return pending(payload.error.message);
       if (
-        receipt?.error === "Shared WorldIR extraction failed" &&
+        receipt?.blockedBy === "extraction-failed" &&
         payload?.data?.settlement !== "manual" &&
         payload?.data?.settlement !== "skipped"
       )
-        return pending(receipt.error);
+        return pending(receipt.error ?? "Shared WorldIR extraction failed", {
+          blocked: true,
+        });
       if (payload?.success && receipt) {
         if (
           !dimensionsJsonEqual(
@@ -272,11 +286,11 @@ export function createDimensionCommitHandlers(
           entries,
         ))
       )
-        // Keep the stable prefix so a lost race maps to the same 409 as a
-        // pre-check conflict instead of a generic commit failure.
-        return pending(
-          "dimension-version-conflict: Dimension version conflict; refresh and re-evaluate",
-        );
+        // The stable code maps a lost race to the same 409 as a pre-check
+        // conflict instead of a generic commit failure.
+        return pending("Dimension version conflict; refresh and re-evaluate", {
+          code: DIMENSION_VERSION_CONFLICT,
+        });
       const publicChanges = changed.filter(
         ([id, record]) =>
           !base[id] ||
@@ -316,9 +330,10 @@ export function createDimensionCommitHandlers(
         return receipt
           ? pending(error.message)
           : commitError(
+              error.message,
               error instanceof DimensionConflictError
-                ? `dimension-version-conflict: ${error.message}`
-                : error.message,
+                ? DIMENSION_VERSION_CONFLICT
+                : undefined,
             );
       }
       // Infrastructure failures still roll back the enclosing execution;

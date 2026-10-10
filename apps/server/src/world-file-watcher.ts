@@ -4,15 +4,23 @@
  *
  * Uses Node.js native `fs.watch` with recursive mode.
  * Changes are debounced per world directory to handle multi-file writes.
+ *
+ * What a reload reaches: the world record in the store (lore and its
+ * editions, name, summary, tags, plugin policy, dimensions, data summaries).
+ * A new session reads the package from disk, and a running session reads the
+ * record's lore on its next turn unless the session holds a lore override.
+ * Nothing already written for a session (imported characters, lorebook
+ * entries, dimension values, committed state) is touched.
  */
 
 import type { SessionLock } from "./lib/session-lock.js";
 import { isWorldDeleting, worldOperationLockId } from "./world-lifecycle.js";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { watch, type FSWatcher } from "node:fs";
+import { WORLD_LOCALIZED_TEXT_KEY } from "@covel/shared";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
-import type { DataStore } from "@covel/store";
+import type { DataStore, WorldRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import {
   loadSingleWorld,
@@ -27,6 +35,94 @@ export interface WorldFileWatcher {
   start(): void;
   /** Stop intake and wait for reloads already using the store/event bus. */
   stop(): Promise<void>;
+}
+
+/** A change to a media file is served from disk; it needs no reload. */
+const IGNORED_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".mp4",
+  ".swp",
+  ".tmp",
+]);
+
+/** Whether a path inside a worlds directory can change what a reload reads. */
+export function isWorldSourceFile(filename: string): boolean {
+  const segments = filename.split(path.sep);
+  // Dotfiles and editor scratch files (`.WORLD.md.swp`, `WORLD.md~`).
+  if (segments.some((segment) => segment.startsWith(".") || !segment))
+    return false;
+  if (filename.endsWith("~")) return false;
+  return !IGNORED_EXTENSIONS.has(path.extname(filename).toLowerCase());
+}
+
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+export interface WorldReloadChange {
+  /** What differs, in the words an author uses. Empty when nothing does. */
+  readonly areas: string[];
+  /** Keys of the dimensions that differ. */
+  readonly dimensionKeys: string[];
+}
+
+/** Which parts of a world record a reload would change. */
+export function describeWorldChange(
+  before: WorldRecord,
+  after: WorldRecord,
+): WorldReloadChange {
+  const oldMeta = (before.metadata ?? {}) as Record<string, unknown>;
+  const newMeta = (after.metadata ?? {}) as Record<string, unknown>;
+  const text = (meta: Record<string, unknown>) =>
+    (meta[WORLD_LOCALIZED_TEXT_KEY] ?? {}) as Record<string, unknown>;
+  const { lore: oldLore, ...oldText } = text(oldMeta);
+  const { lore: newLore, ...newText } = text(newMeta);
+
+  const areas: string[] = [];
+  if (!same(before.lore, after.lore) || !same(oldLore, newLore))
+    areas.push("lore");
+  if (
+    !same(
+      [before.name, before.description, before.tags, before.locale, oldText],
+      [after.name, after.description, after.tags, after.locale, newText],
+    )
+  )
+    areas.push("name and summary");
+
+  const oldDims = (oldMeta.dimensions ?? {}) as Record<string, unknown>;
+  const newDims = (newMeta.dimensions ?? {}) as Record<string, unknown>;
+  const dimensionKeys = [
+    ...new Set([...Object.keys(oldDims), ...Object.keys(newDims)]),
+  ].filter((key) => !same(oldDims[key], newDims[key]));
+  if (dimensionKeys.length > 0) areas.push("dimensions");
+
+  if (
+    !same(
+      [oldMeta.pluginPolicy, oldMeta.pluginSettings],
+      [newMeta.pluginPolicy, newMeta.pluginSettings],
+    )
+  )
+    areas.push("plugin policy and settings");
+
+  const handled = new Set([
+    "dimensions",
+    "pluginPolicy",
+    "pluginSettings",
+    WORLD_LOCALIZED_TEXT_KEY,
+  ]);
+  const otherKeys = new Set([...Object.keys(oldMeta), ...Object.keys(newMeta)]);
+  for (const key of otherKeys)
+    if (!handled.has(key) && !same(oldMeta[key], newMeta[key])) {
+      areas.push("world data and settings");
+      break;
+    }
+  return { areas, dimensionKeys };
 }
 
 /**
@@ -78,7 +174,8 @@ export function createWorldFileWatcher(
   }
 
   /**
-   * Re-read a world package and update the store if dimensions changed.
+   * Re-read a world package and update the store when anything the record
+   * holds changed.
    */
   async function reloadWorld(directoryName: string) {
     const worldDir = path.join(worldsDir, directoryName);
@@ -87,58 +184,46 @@ export function createWorldFileWatcher(
       if (!(await resolveContainedPath(worldDir, "world.yaml"))) return;
       const { id: worldId } = await readWorldManifest(worldDir);
       if (!worldId) return;
-      const changedKeys = await sessionLock.withLock(
+      const outcome = await sessionLock.withLock(
         worldOperationLockId(worldId),
         async () => {
           const newRecord = await loadSingleWorld(worldDir);
-          if (!newRecord || newRecord.id !== worldId) return;
+          if (!newRecord || newRecord.id !== worldId) {
+            console.warn(
+              `[world-watcher] ${worldId}: ${directoryName} could not be read as a world (see the message above); the version loaded before stays in use`,
+            );
+            return;
+          }
           const activeRoot = await resolveWorldRoot(worldId, worldsDirs);
           if (activeRoot !== (await realpath(worldDir))) return;
           const existing = await store.getWorld(worldId);
           if (!existing || isWorldDeleting(existing)) return;
 
-          // Compare dimensions (serialized JSON comparison)
-          const oldDims = (
-            existing.metadata as Record<string, unknown> | undefined
-          )?.dimensions;
-          const newDims = (
-            newRecord.metadata as Record<string, unknown> | undefined
-          )?.dimensions;
-          const oldJson = JSON.stringify(oldDims ?? {});
-          const newJson = JSON.stringify(newDims ?? {});
-
-          if (oldJson === newJson) return;
-
-          // Find which dimension keys changed
-          const oldMap = (oldDims ?? {}) as Record<string, unknown>;
-          const newMap = (newDims ?? {}) as Record<string, unknown>;
-          const allKeys = new Set([
-            ...Object.keys(oldMap),
-            ...Object.keys(newMap),
-          ]);
-          const changedKeys: string[] = [];
-          for (const key of allKeys) {
-            if (JSON.stringify(oldMap[key]) !== JSON.stringify(newMap[key])) {
-              changedKeys.push(key);
-            }
-          }
-
           // Package reloads cannot change the world's storage ownership.
+          const next = preserveWorldProvenance(newRecord, existing);
+          if (next === existing) {
+            console.log(
+              `[world-watcher] ${worldId}: files changed, but the world was edited in the app; the edited copy stays`,
+            );
+            return;
+          }
+          const change = describeWorldChange(existing, next);
+          if (change.areas.length === 0) return;
           await store.upsertWorld({
-            ...preserveWorldProvenance(newRecord, existing),
+            ...next,
             updatedAt: new Date().toISOString(),
           });
-
-          return changedKeys;
+          return change;
         },
       );
-      if (!changedKeys) return;
+      if (!outcome) return;
       console.log(
-        `[world-watcher] ${worldId}: dimensions updated (${changedKeys.join(", ")})`,
+        `[world-watcher] ${worldId}: reloaded ${outcome.areas.join(", ")}. New sessions use it; a running session reads the lore on its next turn unless it has its own lore override, and what it already imported (characters, lorebook entries, dimension values) stays as it is.`,
       );
 
-      // Notify active sessions using this world
-      await notifySessions(worldId, changedKeys);
+      // Dimension values are read by running sessions: tell them.
+      if (outcome.dimensionKeys.length > 0)
+        await notifySessions(worldId, outcome.dimensionKeys);
     } catch (err) {
       console.warn(
         `[world-watcher] Failed to reload world directory ${directoryName}:`,
@@ -201,9 +286,7 @@ export function createWorldFileWatcher(
             // The first segment locates the package, not its logical world id.
             const directoryName = filename.split(path.sep)[0];
             if (!directoryName || directoryName.startsWith(".")) return;
-            // Ignore dotfiles and non-yaml/md files
-            const ext = path.extname(filename).toLowerCase();
-            if (ext !== ".yaml" && ext !== ".yml" && ext !== ".md") return;
+            if (!isWorldSourceFile(filename)) return;
 
             scheduleReload(directoryName);
           },

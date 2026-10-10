@@ -78,6 +78,7 @@ export function resolvePendingOrBlocked(args: {
       attempts,
       reason: `setup exhausted its retry budget (${attempts}/${budget} attempts, never completed)`,
       blockedAt: now,
+      ...(lastError ? { lastError } : {}),
     };
   }
   return {

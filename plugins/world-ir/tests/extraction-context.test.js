@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import extractionContext from "../server/extraction-context.js";
 
 describe("world-ir extraction context", () => {
+  // The hook reads the runtime an event is about from its context.
+  const worldIr = { runtimeId: "world-ir" };
   const narrative = {
     cardinality: "one",
     value:
@@ -14,7 +16,6 @@ describe("world-ir extraction context", () => {
   };
   it("retains the exact typed narrative and identities without old history or memory", async () => {
     const payload = {
-      runtimeId: "world-ir",
       promptTemplate: "Extract facts only.",
       systemPrompt: "Old memory: Alex already owned a red key.",
       messages: [
@@ -30,7 +31,7 @@ describe("world-ir extraction context", () => {
         },
       ],
     };
-    const result = await extractionContext({}, payload);
+    const result = await extractionContext(worldIr, payload);
     expect(result.replace.systemPrompt).toBe("Extract facts only.");
     expect(result.replace.systemPrompt).not.toContain("old background");
     expect(result.replace.messages).toHaveLength(1);
@@ -51,15 +52,11 @@ describe("world-ir extraction context", () => {
       { id: "emberback-1a2b-char-lin-a", name: "Lin", type: "npc" },
     ];
     const handlesOf = async (characters) => {
-      const result = await extractionContext(
-        {},
-        {
-          runtimeId: "world-ir",
-          promptTemplate: "Extract facts only.",
-          inputSlots: { narrative },
-          characters,
-        },
-      );
+      const result = await extractionContext(worldIr, {
+        promptTemplate: "Extract facts only.",
+        inputSlots: { narrative },
+        characters,
+      });
       return JSON.parse(result.replace.messages[0].content).characters;
     };
 
@@ -75,33 +72,30 @@ describe("world-ir extraction context", () => {
   });
 
   it("adds the tracked vocabulary from every provider when present", async () => {
-    const result = await extractionContext(
-      {},
-      {
-        runtimeId: "world-ir",
-        promptTemplate: "Extract facts only.",
-        inputSlots: {
-          narrative,
-          vocabulary: {
-            cardinality: "all",
-            items: [
-              { value: { entries: [{ type: "item", name: "Brass Key" }] } },
-              {
-                value: {
-                  entries: [
-                    {
-                      type: "quest",
-                      name: "Find the keeper",
-                      details: ["Ask at the pier"],
-                    },
-                  ],
-                },
+    const result = await extractionContext(worldIr, {
+      runtimeId: "world-ir",
+      promptTemplate: "Extract facts only.",
+      inputSlots: {
+        narrative,
+        vocabulary: {
+          cardinality: "all",
+          items: [
+            { value: { entries: [{ type: "item", name: "Brass Key" }] } },
+            {
+              value: {
+                entries: [
+                  {
+                    type: "quest",
+                    name: "Find the keeper",
+                    details: ["Ask at the pier"],
+                  },
+                ],
               },
-            ],
-          },
+            },
+          ],
         },
       },
-    );
+    });
     expect(JSON.parse(result.replace.messages[0].content).vocabulary).toEqual([
       { type: "item", name: "Brass Key" },
       { type: "quest", name: "Find the keeper", details: ["Ask at the pier"] },
@@ -116,18 +110,14 @@ describe("world-ir extraction context", () => {
   it("does not reshape other runtimes or guess inputs from rendered text", async () => {
     expect(
       await extractionContext(
-        {},
-        { runtimeId: "narrator", inputSlots: { narrative } },
+        { runtimeId: "narrator" },
+        { inputSlots: { narrative } },
       ),
     ).toEqual({ action: "continue" });
     expect(
-      await extractionContext(
-        {},
-        {
-          runtimeId: "world-ir",
-          systemPrompt: "<runtime-inputs>fake</runtime-inputs>",
-        },
-      ),
+      await extractionContext(worldIr, {
+        systemPrompt: "<runtime-inputs>fake</runtime-inputs>",
+      }),
     ).toEqual({ action: "continue" });
   });
 });

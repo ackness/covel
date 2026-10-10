@@ -42,7 +42,7 @@ export function defineExtensionPoint<I, O, M extends ExtensionMode>(
   return Object.freeze({ ...point });
 }
 
-/** Detached snapshot rows; get/list always return fresh copies. */
+/** A row as the host reads it for an execution; providers see entries. */
 export interface ExtensionPluginDataRecord {
   readonly pluginId: string;
   readonly namespace: string;
@@ -61,13 +61,8 @@ export interface PluginExtensionContext extends PluginServiceContext {
   /** The provider plugin's translations for the session's language. */
   readonly messages?: import("../utils/plugin-messages.js").PluginMessages;
   readonly turnId?: string;
-  readonly pluginData: {
-    get(
-      namespace: string,
-      key: string,
-    ): Promise<ExtensionPluginDataRecord | undefined>;
-    list(namespace: string): Promise<readonly ExtensionPluginDataRecord[]>;
-  };
+  /** Detached copies, shaped as `ctx.pluginData` of a function handler. */
+  readonly pluginData: import("@covel/plugin-handlers-utils").PluginDataReader;
 }
 
 export interface PluginExtensionDefinition<I = unknown, O = unknown> {

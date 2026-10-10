@@ -285,9 +285,11 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`。`number` 的默认值与提交值是有限数字，`checkbox` 是布尔值，其余类型是字符串。数字字段支持 `min`、`max`、正数 `step`，步长相对 `min ?? 0` 计算；前端保留数值类型，服务端再次校验并把旧客户端的数字字符串规范化为数字。数字字段清空不会变成 0 或重新应用默认值；必填项会被拒绝。未提供的字段使用默认值（含 0、false）；文本/选择字段保留空字符串使用默认值的兼容行为。`placeholder` 只用于展示。`select` 默认值必须属于选项。
 
-可选 `validation: { name, data? }` 指向发出表单的插件在根 `PLUGIN.md` 的 `contributes.forms` 中声明、并通过 `covel.registerFormValidator(name, validator)` 注册的同步纯校验函数。函数接收规范化的 `values` 与提交时不可修改的表单 `data`，返回错误字符串或 `undefined`。插件来源从已提交消息的 `sourcePluginId` 确定，客户端不能指定；所有字段和跨字段校验通过后，整个提交批次才落库。校验失败返回 400，允许修改原表单。插件必须仍处于启用和授权状态；缺失的校验器不会静默跳过。未声明的校验器引用返回 400 和 `form_validator_undeclared`，需要重新生成表单，授权无法修复它。重启或撤销授权后，提交接口先请求来源插件的 server-code 授权（202），授权后重试原提交。已禁用或卸载的插件仍返回 400。框架通过 `findCommittedInteraction` 统一定位已提交表单，授权和校验使用同一份来源记录。
+可选 `validation: { name, data? }` 指向发出表单的插件在根 `PLUGIN.md` 的 `contributes.forms` 中声明、并通过 `covel.registerFormValidator(name, validator)` 注册的同步纯校验函数。函数接收规范化的 `values`、提交时不可修改的表单 `data`，以及第三个参数 `{ locale, messages }`（会话语言和插件在该语言下的翻译，可直接传给 `translate`），返回错误字符串或 `undefined`。返回的字符串是给玩家看的：用 `translate(context, "...")` 写成会话语言，说明哪里不对、该怎么改。插件来源从已提交消息的 `sourcePluginId` 确定，客户端不能指定；所有字段和跨字段校验通过后，整个提交批次才落库。校验失败返回 400 和 `code: "form_rejected"`，不写入任何内容，玩家在原表单上修改后可以再次提交；框架自己的字段校验（必填、数字、范围、步长、选项）走同一个错误码，错误文字用字段的 `label` 和会话语言写成。其余 400（未知字段、找不到已提交的表单、重复提交不同的值）是客户端不该发出的请求，没有这个错误码。插件必须仍处于启用和授权状态；缺失的校验器不会静默跳过。未声明的校验器引用返回 400 和 `form_validator_undeclared`，需要重新生成表单，授权无法修复它。重启或撤销授权后，提交接口先请求来源插件的 server-code 授权（202），授权后重试原提交。已禁用或卸载的插件仍返回 400。框架通过 `findCommittedInteraction` 统一定位已提交表单，授权和校验使用同一份来源记录。
 
-角色创建使用专用 `create-character-form` 工具，只收集必填姓名和世界声明的字符串或枚举属性。该工具不接受插件校验器引用，字段约束由工具和提交接口校验。此前生成的角色表单若包含虚构的 `validation.name`，需重新生成；更新代码不会改写已保存的表单。
+表单交互可以带 `notice`（字符串，会话语言）：客户端把它显示在字段上方，用来说明这张表单为什么再次出现。`create-form` 的参数里没有它；插件在一次已接受的提交无法使用、需要重新发出表单时，把它加到工具返回的 `interaction` 上，并用上一次的值作为字段的 `defaultValue`。
+
+角色创建使用专用 `create-character-form` 工具，只收集必填姓名和世界声明的字符串或枚举属性。该工具不接受插件校验器引用，字段约束由工具和提交接口校验。此前生成的角色表单若包含虚构的 `validation.name`，需重新生成；更新代码不会改写已保存的表单。已接受的角色表单不会让会话停在 setup：世界属性的默认值不符合它自己的类型时，建角时不写入这个默认值；玩家提交的值不再被世界的属性类型接受时（表单发出后属性类型变了），下一次 setup 运行重新发出表单，仍然有效的旧答案已填好，并带一条 `notice`。
 
 旧插件的有限数字字符串和 `"true"` / `"false"` 默认值仍可使用，提交时统一规范化；新插件应直接声明数字、布尔值。
 
@@ -490,7 +492,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 ### emit-event
 
-声明在 `packages/tools/src/builtin/emit-event.ts`。发射一个由某个激活插件在 `events`（见 [plugins.md § Runtime 分组字段](plugins.md#runtime-分组字段)）声明的领域事件。校验和 topic 列举委托给注入的 `EventDirectoryLike`（server 侧实现见 `apps/server/src/routes/api/bootstrap/event-directory.ts`），聚合当前 session 激活插件集的声明。
+声明在 `packages/tools/src/builtin/emit-event.ts`。发射一个由某个激活插件在 `events`（见 [plugins.md § Runtime 分组字段](plugins.md#runtime-分组字段)）声明的领域事件。校验和 topic 列举委托给注入的 `EventDirectoryLike`（server 侧实现见 `apps/server/src/routes/api/bootstrap/event-directory.ts`），聚合当前 session 激活插件集的声明。一个 topic 在一个会话里只有一个声明插件（见 [plugins.md § 会话插件选择](plugins.md#会话插件选择)），所以 payload 总是按这唯一一份 schema 校验。
 
 | 参数  | 类型                    | 必需 | 描述                                                    |
 | ----- | ----------------------- | ---- | ------------------------------------------------------- |

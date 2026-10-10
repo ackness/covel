@@ -106,12 +106,12 @@ contributes:
 ```js
 api.provideExtension("prompt.segment@1", "status", {
   async handler(input, ctx) {
-    const record = await ctx.pluginData.get("status", "current");
-    return record
+    const status = await ctx.pluginData.get("status", "current");
+    return status
       ? [
           {
             id: "current-status",
-            content: JSON.stringify(record.value),
+            content: JSON.stringify(status),
             position: "pre-history",
             audience: "self",
             volatility: "turn",

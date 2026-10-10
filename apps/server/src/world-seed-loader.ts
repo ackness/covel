@@ -5,7 +5,7 @@
  *   world.yaml  — manifest (id, name, summary, dimensions, tags, …)
  *   WORLD.md    — default lore (fallback)
  *   WORLD.zh.md — Chinese lore (optional, locale-specific)
- *   WORLD.en.md — English lore (optional, locale-specific)
+ *   WORLD.en-US.md — English lore (optional, locale-specific)
  *
  * Lore resolution: WORLD.<locale-prefix>.md → WORLD.md → empty string
  *

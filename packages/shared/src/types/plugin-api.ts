@@ -70,6 +70,8 @@ export interface PluginSummary {
   readonly optional: readonly string[];
   readonly conflicts: readonly string[];
   readonly extensions: readonly import("../extension-points/index.js").ExtensionDeclaration[];
+  /** Topics the package declares in `contributes.events`. */
+  readonly eventTopics: readonly string[];
   readonly tags: readonly string[];
   readonly runtimes: readonly PluginRuntimeSummary[];
   readonly tools: readonly PluginToolSummary[];

@@ -90,10 +90,23 @@ export interface HookContext {
   readonly signal?: AbortSignal;
   readonly event: HookEvent;
   readonly sessionId: string;
+  /** Empty for the session events, which fire outside any turn. */
   readonly turnId: string;
-  /** Owning plugin if plugin-scoped hook. */
+  /**
+   * The session's content locale. The pipeline fills it from the session
+   * hook scope; absent only for a direct `pipeline.run` with no scope.
+   */
+  readonly locale?: string;
+  /**
+   * Plugin of the runtime the event is about — not the plugin that
+   * registered the handler. Set, with `runtimeId`, for every event that
+   * concerns one runtime: PreRuntime, PostContextAssembly, PreLLMCall,
+   * PostLLMResponse, PreToolUse, PostToolUse, PostRuntime, and the two
+   * commit events (the proposal's source). Absent for session and turn events.
+   * This is the one place for the identity: payloads do not repeat it.
+   */
   readonly pluginId?: string;
-  /** Populated for PreRuntime / PostRuntime. */
+  /** Runtime the event is about; see `pluginId`. */
   readonly runtimeId?: string;
   /**
    * Plugin ids active in this session. Populated by the pipeline from the

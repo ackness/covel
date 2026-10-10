@@ -8,6 +8,8 @@ Summary tokens are bounded to 12% of the effective window (minimum 128, maximum 
 
 `history.compact@2` returns `{ summaries: [{ messageIds, replacesSummaryIds, content, focusSections, truncated? }] }`. Each result segment covers either a consecutive raw prefix or selected old summary segments, never both. Old merges retain the earliest replaced summary's ID and timestamp to preserve chronological ordering. Providers must upgrade from `@1`; no version compatibility path is provided. Existing persisted summaries can continue to be read.
 
+The provider returns `null` only when there is nothing to compact. When an attempt cannot finish (the fast model errors or times out, returns an empty summary, a merge fails, or the request does not fit the input window) it throws an error whose message states the reason. The host skips the provider for that turn and records the reason in the turn's trace as `context.compaction.failed`; after three failures in a row the player is also told that the story's memory could not be condensed. The attempt repeats on every turn that is over the threshold.
+
 An explicit provider of the same contract replaces this default. Disabling the plugin removes its compaction policy; ordinary context budget pruning remains a kernel operation.
 
 Run `pnpm --filter @covel/plugin-history-compaction test` for the policy tests. Host admission, output validation, and transactional persistence are covered by the context and server compactor suites.

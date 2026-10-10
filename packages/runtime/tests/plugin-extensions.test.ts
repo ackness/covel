@@ -284,6 +284,44 @@ describe("kernel extension execution", () => {
     warn.mockRestore();
   });
 
+  it("tells the caller why a provider was skipped", async () => {
+    const { point, host, abort, readPluginData } = fixture("collect");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.register(
+      "alpha",
+      { point: point.id, id: "failing" },
+      {
+        handler: () => {
+          throw new Error("fast model unreachable");
+        },
+      },
+    );
+    host.register(
+      "beta",
+      { point: point.id, id: "good" },
+      { handler: (value: typeof input) => ({ value: value.value + 1 }) },
+    );
+    const failures: unknown[] = [];
+    const execution = host.createExecution({
+      sessionId: "session",
+      locale: "en",
+      turnId: "turn",
+      signal: abort.signal,
+      readPluginData,
+      onProviderError: (failure) => failures.push(failure),
+    });
+    await expect(execution.run(point, input)).resolves.toEqual([{ value: 3 }]);
+    expect(failures).toEqual([
+      {
+        pluginId: "alpha",
+        providerId: "failing",
+        point: point.id,
+        error: expect.objectContaining({ message: "fast model unreachable" }),
+      },
+    ]);
+    warn.mockRestore();
+  });
+
   it("returns undefined for an empty single point and rejects active conflicts", async () => {
     const { point, host, execution, active } = fixture("single");
     await expect(execution().run(point, input)).resolves.toBeUndefined();
@@ -347,21 +385,24 @@ describe("kernel extension execution", () => {
           retained = context;
           const list = await context.pluginData.list("values");
           expect(list).toHaveLength(1);
-          expect(list[0]?.updatedAt).toBe("2026-01-01");
+          // The same entry a function handler lists: no storage identifiers.
+          expect(list[0]).toEqual({
+            key: "one",
+            value: { number: 1 },
+            updatedAt: "2026-01-01",
+          });
           (list[0]!.value as { number: number }).number = 200;
           // Later source changes do not leak into the execution's first read.
           (snapshot[0]!.value as { number: number }).number = 100;
-          expect(
-            await context.pluginData.get("values", "secret"),
-          ).toBeUndefined();
-          const row = await context.pluginData.get("values", "one");
+          expect(await context.pluginData.get("values", "secret")).toBeNull();
+          const value = await context.pluginData.get("values", "one");
           expect(context).toMatchObject({
             sessionId: "session",
             locale: "en",
             turnId: "turn",
           });
           expect(context.pluginData).not.toHaveProperty("set");
-          return { value: (row!.value as { number: number }).number };
+          return { value: (value as { number: number }).number };
         },
       },
     );
@@ -384,7 +425,7 @@ describe("kernel extension execution", () => {
           expect(await context.pluginData.list("_hidden.events")).toEqual([]);
           expect(
             await context.pluginData.get("_hidden.events", "one"),
-          ).toBeUndefined();
+          ).toBeNull();
           return { value: 1 };
         },
       },

@@ -8,7 +8,7 @@
  * kernel zod schemas.
  */
 
-import type { JsonValue, MediaReference } from "./types.js";
+import type { JsonValue, MediaReference, PluginDataReader } from "./types.js";
 import type { PluginServiceContext } from "./plugin-api.js";
 import type { PluginMessages } from "./messages.js";
 import type {
@@ -319,18 +319,6 @@ export type UiSlotProjectionInput = {
 
 // ── Provider context ─────────────────────────────────────────────
 
-/** Detached plugin-data row; `get`/`list` always return fresh copies. */
-export type ExtensionPluginDataRecord = {
-  readonly pluginId: string;
-  readonly namespace: string;
-  readonly key: string;
-  readonly value: unknown;
-  readonly sessionId?: string;
-  readonly id?: string;
-  readonly createdAt?: string;
-  readonly updatedAt?: string;
-};
-
 export type ExtensionServiceDescriptor = {
   readonly pluginId: string;
   readonly name: string;
@@ -426,14 +414,11 @@ export interface ExtensionHandlerContext extends PluginServiceContext {
   /** This plugin's translations, read by `translate` and `labelText`. */
   readonly messages?: PluginMessages;
   readonly turnId?: string;
-  /** Read-only, own-plugin data snapshot for this execution. */
-  readonly pluginData: {
-    get(
-      namespace: string,
-      key: string,
-    ): Promise<ExtensionPluginDataRecord | undefined>;
-    list(namespace: string): Promise<readonly ExtensionPluginDataRecord[]>;
-  };
+  /**
+   * Read-only, own-plugin data snapshot for this execution; `get` and `list`
+   * return fresh copies shaped as in a function handler.
+   */
+  readonly pluginData: PluginDataReader;
 }
 
 // ── provideExtension ─────────────────────────────────────────────

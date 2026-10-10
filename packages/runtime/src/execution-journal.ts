@@ -96,7 +96,9 @@ export function collectExecutionJournal(
  * content: structured outputs already live on the `turn_results` row, and
  * copying them here made every turn's JSON count toward compaction, feed the
  * summary model and enter recall. A run with no text, interaction or UI block
- * writes no row; the trigger ledger counts it.
+ * writes no row; the trigger ledger counts it. A concealed runtime's text is
+ * never journaled: the conversation feeds other runtimes' prompts and the
+ * message endpoints. What it shows on purpose (interactions, UI blocks) is.
  */
 export function attachRuntimeJournal(
   result: RuntimeResult,
@@ -112,13 +114,14 @@ export function attachRuntimeJournal(
     (input.manualTrigger && !interactions?.length)
   )
     return;
-  const content = input.manualTrigger
-    ? ""
-    : typeof output.narrativeOutput === "string"
-      ? output.narrativeOutput
-      : typeof output.content === "string"
-        ? output.content
-        : "";
+  const content =
+    input.manualTrigger || manifest.concealed
+      ? ""
+      : typeof output.narrativeOutput === "string"
+        ? output.narrativeOutput
+        : typeof output.content === "string"
+          ? output.content
+          : "";
   attachRuntimeTrigger(result, manifest.name);
   const ui = Array.isArray(result.effects?.ui) ? result.effects.ui : undefined;
   if (!content && !interactions?.length && !ui?.length) return;

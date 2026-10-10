@@ -297,6 +297,7 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
         })
         .strict(),
     ),
+    eventTopics: z.array(z.string()),
     tags: z.array(z.string()),
     runtimes: z.array(pluginRuntimeSummarySchema),
     tools: z.array(

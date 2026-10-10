@@ -299,6 +299,33 @@ describe("GET /api/worlds/:id/gallery", () => {
     ).toBe(404);
   });
 
+  it("keeps the cover and accent world.yaml declares and serves only a cover it names", async () => {
+    const dir = await writeWorld("ash-harbor");
+    await writeFile(
+      path.join(dir, "world.yaml"),
+      `schemaVersion: "1.0"\nid: ash-harbor\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\ncover: media/art/front.png\naccentColor: "#c9a24b"\n`,
+    );
+    await mkdir(path.join(dir, "media/art"), { recursive: true });
+    await writeFile(path.join(dir, "media/art/front.png"), pngHeader(30, 20));
+    await writeFile(path.join(dir, "media/art/other.png"), pngHeader(30, 20));
+    await register(dir);
+
+    expect((await store.getWorld("ash-harbor"))?.metadata).toMatchObject({
+      cover: "media/art/front.png",
+      accentColor: "#c9a24b",
+    });
+    const cover = await app.request(
+      "/api/worlds/ash-harbor/gallery/art/front.png",
+    );
+    expect(cover.status).toBe(200);
+    expect(cover.headers.get("content-type")).toBe("image/png");
+    // A file in the same directory that is neither named nor listed stays private.
+    expect(
+      (await app.request("/api/worlds/ash-harbor/gallery/art/other.png"))
+        .status,
+    ).toBe(404);
+  });
+
   it("answers with no images for a world without a package", async () => {
     await register(await writeWorld("ash-harbor"));
     await store.createWorld({

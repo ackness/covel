@@ -8,10 +8,7 @@ const ref = { id: "a".repeat(64), mime: "image/png", size: 1 };
 const context = (data) => ({
   world: { characters: [{ id: "session-hero", name: "Hero" }] },
   pluginData: {
-    get: async (namespace, key) =>
-      data[`${namespace}/${key}`]
-        ? { value: data[`${namespace}/${key}`] }
-        : null,
+    get: async (namespace, key) => data[`${namespace}/${key}`] ?? null,
     list: async (namespace) =>
       Object.entries(data)
         .filter(([key]) => key.startsWith(`${namespace}/`))

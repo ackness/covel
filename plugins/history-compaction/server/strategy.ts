@@ -248,6 +248,19 @@ function computeProtectStart(
   return Math.min(tailProtect, userTurnProtect);
 }
 
+/**
+ * An attempt to compact that could not finish. The host skips a provider that
+ * throws, logs the message and reports it with the turn's trace, so the message
+ * is the reason an author reads there. Returning `null` stays for "nothing to
+ * compact".
+ */
+export class HistoryCompactionError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "HistoryCompactionError";
+  }
+}
+
 export async function compactHistory(
   input: HistoryCompactionInput,
   deps: {
@@ -275,11 +288,12 @@ export async function compactHistory(
     locale,
     focusSections,
     deps.loadPrompt ?? loadPrompt,
-  ).catch(() => null);
-  if (freshSystemPrompt === null) {
-    console.warn("[history-compaction] Failed to load prompt template");
-    return null;
-  }
+  ).catch((error: unknown) => {
+    throw new HistoryCompactionError(
+      `The summary prompt template could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  });
   // Pick the largest contiguous prefix that the fast model can actually read.
   // Never truncate a source message: its original content stays visible until
   // a complete summary can replace it.
@@ -298,7 +312,10 @@ export async function compactHistory(
     else high = mid - 1;
   }
   toCompact = toCompact.slice(0, low);
-  if (!toCompact.length) return null;
+  if (!toCompact.length)
+    throw new HistoryCompactionError(
+      "The oldest message does not fit the summary model's input window",
+    );
   const sourceTokens = toCompact.reduce(
     (n, message) => n + estimator(message.content),
     0,
@@ -307,122 +324,126 @@ export async function compactHistory(
     summaryBudget.maxSegmentTokens,
     Math.max(128, Math.ceil(sourceTokens * 0.25)),
   );
-  try {
-    const summarize = async (
-      selectedMessages: readonly TurnMessageRecord[],
-      selectedSummaries: readonly SessionSummaryRecord[],
-      maxTokens: number,
-      sections: readonly string[],
-    ) => {
-      const systemPrompt =
-        selectedSummaries.length === 0
-          ? freshSystemPrompt
-          : await buildCompactorSystemPrompt(
-              locale,
-              sections,
-              deps.loadPrompt ?? loadPrompt,
-            );
-      const userPrompt = buildCompactorUserPrompt(
-        selectedMessages,
-        locale,
-        selectedSummaries,
-        maxTokens,
-      );
-      if (estimator(systemPrompt) + estimator(userPrompt) > input.inputWindow)
-        return null;
-      const response = await deps.fastSlotLlm.complete({
-        systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      });
-      if (!response.content.trim()) return null;
-      const bounded = boundSummaryContent(
-        response.content,
-        maxTokens,
-        estimator,
-        locale,
-      );
-      if (!bounded.content.trim() || estimator(bounded.content) > maxTokens)
-        return null;
-      return {
-        content: bounded.content,
-        focusSections: sections,
-        truncated: bounded.truncated,
-      };
-    };
-    let fresh = await summarize(toCompact, [], newBudget, focusSections);
-    if (!fresh) return null;
-    const totalExistingTokens = existingSummaries.reduce(
-      (n, summary) => n + estimator(summary.content),
-      0,
+  const summarize = async (
+    selectedMessages: readonly TurnMessageRecord[],
+    selectedSummaries: readonly SessionSummaryRecord[],
+    maxTokens: number,
+    sections: readonly string[],
+  ) => {
+    const systemPrompt =
+      selectedSummaries.length === 0
+        ? freshSystemPrompt
+        : await buildCompactorSystemPrompt(
+            locale,
+            sections,
+            deps.loadPrompt ?? loadPrompt,
+          );
+    const userPrompt = buildCompactorUserPrompt(
+      selectedMessages,
+      locale,
+      selectedSummaries,
+      maxTokens,
     );
-    let mergeCount = 0;
-    let retainedTokens = totalExistingTokens;
-    let mergeBudget = 0;
-    let freshTokens = estimator(fresh.content);
-    if (
-      existingSummaries.length > 0 &&
-      totalExistingTokens + freshTokens > summaryBudget.maxTokens
-    ) {
-      // A tiny window cannot hold two full-sized segments. Bound only this
-      // fresh result once more, reserving room for the old prefix's merge.
-      newBudget = Math.min(newBudget, Math.floor(summaryBudget.maxTokens / 2));
-      if (newBudget < 1) return null;
-      const bounded = boundSummaryContent(
-        fresh.content,
-        newBudget,
-        estimator,
-        locale,
+    if (estimator(systemPrompt) + estimator(userPrompt) > input.inputWindow)
+      throw new HistoryCompactionError(
+        "The summary request does not fit the summary model's input window",
       );
-      if (estimator(bounded.content) > newBudget) return null;
-      fresh = {
-        ...fresh,
-        content: bounded.content,
-        truncated: fresh.truncated || bounded.truncated,
-      };
-      freshTokens = estimator(fresh.content);
-    }
-    // Use actual generated sizes rather than the maximum allocation: small
-    // segments must not trigger an unnecessary rewrite of older history.
-    while (
-      mergeCount < existingSummaries.length &&
-      (existingSummaries.length - mergeCount + 1 + (mergeCount > 0 ? 1 : 0) >
-        summaryBudget.maxSegments ||
-        retainedTokens + freshTokens + mergeBudget > summaryBudget.maxTokens)
-    ) {
-      retainedTokens -= estimator(existingSummaries[mergeCount]!.content);
-      mergeCount += 1;
-      const selectedTokens = totalExistingTokens - retainedTokens;
-      mergeBudget = Math.min(
-        summaryBudget.maxSegmentTokens,
-        Math.max(1, summaryBudget.maxTokens - freshTokens - retainedTokens),
-        Math.max(1, Math.ceil(selectedTokens * 0.75)),
-      );
-    }
-    const summaries: NonNullable<HistoryCompactionOutput>["summaries"][number][] =
-      [];
-    if (mergeCount > 0) {
-      const selected = existingSummaries.slice(0, mergeCount);
-      const mergedSections = [
-        ...new Set(selected.flatMap((summary) => summary.focusSections)),
-      ];
-      const merged = await summarize([], selected, mergeBudget, mergedSections);
-      if (!merged) return null;
-      summaries.push({
-        ...merged,
-        messageIds: [],
-        replacesSummaryIds: selected.map((summary) => summary.id),
-      });
-    }
-    summaries.push({
-      ...fresh,
-      messageIds: toCompact.map((message) => message.id),
-      replacesSummaryIds: [],
+    const response = await deps.fastSlotLlm.complete({
+      systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
     });
-    return { summaries };
-  } catch (error) {
-    console.warn(
-      `[history-compaction] Failed to load prompt template or generate summary: ${error instanceof Error ? error.message : String(error)}`,
+    if (!response.content.trim())
+      throw new HistoryCompactionError(
+        "The summary model returned an empty summary",
+      );
+    const bounded = boundSummaryContent(
+      response.content,
+      maxTokens,
+      estimator,
+      locale,
     );
-    return null;
+    if (!bounded.content.trim() || estimator(bounded.content) > maxTokens)
+      throw new HistoryCompactionError(
+        "The summary could not be bounded to its token budget",
+      );
+    return {
+      content: bounded.content,
+      focusSections: sections,
+      truncated: bounded.truncated,
+    };
+  };
+  let fresh = await summarize(toCompact, [], newBudget, focusSections);
+  const totalExistingTokens = existingSummaries.reduce(
+    (n, summary) => n + estimator(summary.content),
+    0,
+  );
+  let mergeCount = 0;
+  let retainedTokens = totalExistingTokens;
+  let mergeBudget = 0;
+  let freshTokens = estimator(fresh.content);
+  if (
+    existingSummaries.length > 0 &&
+    totalExistingTokens + freshTokens > summaryBudget.maxTokens
+  ) {
+    // A tiny window cannot hold two full-sized segments. Bound only this
+    // fresh result once more, reserving room for the old prefix's merge.
+    newBudget = Math.min(newBudget, Math.floor(summaryBudget.maxTokens / 2));
+    if (newBudget < 1)
+      throw new HistoryCompactionError(
+        "The summary budget is too small to merge older segments",
+      );
+    const bounded = boundSummaryContent(
+      fresh.content,
+      newBudget,
+      estimator,
+      locale,
+    );
+    if (estimator(bounded.content) > newBudget)
+      throw new HistoryCompactionError(
+        "The new summary could not be bounded to leave room for the merge",
+      );
+    fresh = {
+      ...fresh,
+      content: bounded.content,
+      truncated: fresh.truncated || bounded.truncated,
+    };
+    freshTokens = estimator(fresh.content);
   }
+  // Use actual generated sizes rather than the maximum allocation: small
+  // segments must not trigger an unnecessary rewrite of older history.
+  while (
+    mergeCount < existingSummaries.length &&
+    (existingSummaries.length - mergeCount + 1 + (mergeCount > 0 ? 1 : 0) >
+      summaryBudget.maxSegments ||
+      retainedTokens + freshTokens + mergeBudget > summaryBudget.maxTokens)
+  ) {
+    retainedTokens -= estimator(existingSummaries[mergeCount]!.content);
+    mergeCount += 1;
+    const selectedTokens = totalExistingTokens - retainedTokens;
+    mergeBudget = Math.min(
+      summaryBudget.maxSegmentTokens,
+      Math.max(1, summaryBudget.maxTokens - freshTokens - retainedTokens),
+      Math.max(1, Math.ceil(selectedTokens * 0.75)),
+    );
+  }
+  const summaries: NonNullable<HistoryCompactionOutput>["summaries"][number][] =
+    [];
+  if (mergeCount > 0) {
+    const selected = existingSummaries.slice(0, mergeCount);
+    const mergedSections = [
+      ...new Set(selected.flatMap((summary) => summary.focusSections)),
+    ];
+    const merged = await summarize([], selected, mergeBudget, mergedSections);
+    summaries.push({
+      ...merged,
+      messageIds: [],
+      replacesSummaryIds: selected.map((summary) => summary.id),
+    });
+  }
+  summaries.push({
+    ...fresh,
+    messageIds: toCompact.map((message) => message.id),
+    replacesSummaryIds: [],
+  });
+  return { summaries };
 }

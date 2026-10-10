@@ -773,6 +773,8 @@ export function createSseEventHandler(
       case "utils.fetch.failed":
       // Prompt-budget prune trace: /debug reads it from trace_events.
       case "context.pruned":
+      case "context.compaction.failed":
+      case "commit.fanout.failed":
         break;
       case "job-status.updated": {
         const jobId = runtimeJobCorrelationId(payload);

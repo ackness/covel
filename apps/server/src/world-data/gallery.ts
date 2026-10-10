@@ -258,20 +258,22 @@ export async function listWorldGalleryFiles(
   );
 }
 
-export type WorldThemeMusic = Pick<
+export type WorldDeclaredFile = Pick<
   WorldGalleryFile,
   "source" | "file" | "absolutePath" | "mime" | "bytes" | "version"
 >;
+export type WorldThemeMusic = WorldDeclaredFile;
 
 /**
- * The music `world.yaml` names for the world list (`themeMusic`), or null when
- * it names none or the file cannot be served: it must be an `.mp3` or `.wav`
- * file one directory under `media/`.
+ * A file `world.yaml` names by path, or null when it names none or the file
+ * cannot be served: it must be one directory under `media/` and of the
+ * allowed types.
  */
-export async function resolveWorldThemeMusic(
-  options: Pick<GalleryOptions, "worldRoot">,
-): Promise<WorldThemeMusic | null> {
-  const declared = (await readWorldManifest(options.worldRoot)).themeMusic;
+async function resolveDeclaredFile(
+  worldRoot: string,
+  declared: string | undefined,
+  types: Readonly<Record<string, string>>,
+): Promise<WorldDeclaredFile | null> {
   const segments = declared?.split("/") ?? [];
   if (
     segments.length !== 3 ||
@@ -282,12 +284,12 @@ export async function resolveWorldThemeMusic(
   )
     return null;
   const absolutePath = await resolveContainedPath(
-    options.worldRoot,
+    worldRoot,
     segments.join("/"),
     { rejectSymlinks: true },
   );
   const described = absolutePath
-    ? await describeFile(absolutePath, AUDIO_TYPES)
+    ? await describeFile(absolutePath, types)
     : null;
   if (!absolutePath || !described) return null;
   return {
@@ -296,6 +298,30 @@ export async function resolveWorldThemeMusic(
     absolutePath,
     ...described,
   };
+}
+
+/**
+ * The music `world.yaml` names for the world list (`themeMusic`), or null when
+ * it names none or the file cannot be served: it must be an `.mp3` or `.wav`
+ * file one directory under `media/`.
+ */
+export async function resolveWorldThemeMusic(
+  options: Pick<GalleryOptions, "worldRoot">,
+): Promise<WorldThemeMusic | null> {
+  const declared = (await readWorldManifest(options.worldRoot)).themeMusic;
+  return resolveDeclaredFile(options.worldRoot, declared, AUDIO_TYPES);
+}
+
+/**
+ * The cover picture `world.yaml` names (`cover`), or null when it names none
+ * or the file cannot be served: a raster image one directory under `media/`.
+ * It need not be listed in `media/gallery.json`.
+ */
+export async function resolveWorldCover(
+  options: Pick<GalleryOptions, "worldRoot">,
+): Promise<WorldDeclaredFile | null> {
+  const declared = (await readWorldManifest(options.worldRoot)).cover;
+  return resolveDeclaredFile(options.worldRoot, declared, IMAGE_TYPES);
 }
 
 // Keyed by path and version, so an edited file is measured again.

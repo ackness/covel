@@ -38,6 +38,7 @@ pnpm describe:authoring
 - 按玩法选 `pluginPolicy.presetId`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。
 - 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，就把接收它的插件写进 `pluginPolicy.requested`。
 - 视觉小说世界再声明 `defaultViewMode: stage`。立绘和场景图是渐进增强，没有也能运行。
+- 世界自带封面图时，才在 `world.yaml` 写 `cover: media/<目录>/<文件>`（图片必须存在，校验会查）和 `accentColor`；没有图就两项都不写，界面会用默认背景和按世界 ID 派生的颜色。
 
 成品参考（直接读这些目录，它们随框架同步更新）：
 
@@ -75,8 +76,8 @@ worlds/<id>/
 - 所有 ID（world id、source id、记录 id）用 kebab-case 英文。
 - 避免泛化的奇幻套路，追求独特的设定。
 - 用户给了署名信息时，在 `world.yaml` 写 `author`（`name`，可选 `url`、`about`、`links`）、`license`、`homepage`；没给就不写，不要编造作者或链接。链接只能是 `https`。作者名和许可证不翻译，`about` 和链接的 `label` 可以在 `world.<locale>.yaml` 里翻译。字段见 `docs/reference/plugins.md` 的“作者信息”。
-- 每个文件只写一种语言（`world.yaml` 的 `defaultLocale`）。要加别的语言时，在文件旁边放 `<名字>.<locale>.<扩展名>`，只写译文、不重复结构：`world.en.yaml`、`data/dimensions.en.yaml`、`characters/main-cast.en.json`；`WORLD.en.md` 是整份正文。主文件里不要写 `{ zh: …, en: … }` 这样的内联映射，校验会报错。
-- 写进本仓库 `worlds/` 的中文世界，`world.yaml` 的展示字段（`name`、`summary`、属性的 `name` / `description` 等）必须在 `world.en.yaml` 里有英文译文，仓库门禁会检查。`WORLD.md` 和 `data/` 里的内容用用户的语言即可。
+- 每个文件只写一种语言（`world.yaml` 的 `defaultLocale`）。要加别的语言时，在文件旁边放 `<名字>.<locale>.<扩展名>`，只写译文、不重复结构：`world.en-US.yaml`、`data/dimensions.en-US.yaml`、`characters/main-cast.en-US.json`；`WORLD.en-US.md` 是整份正文。`<locale>` 写成 `supportedLocales` 里的完整写法（`en-US`），不要写成 `.en`，校验会报错。主文件里不要写 `{ zh: …, en: … }` 这样的内联映射，校验会报错。
+- 写进本仓库 `worlds/` 的中文世界，`world.yaml` 的展示字段（`name`、`summary`、属性的 `name` / `description` 等）必须在 `world.en-US.yaml` 里有英文译文，仓库门禁会检查。`WORLD.md` 和 `data/` 里的内容用用户的语言即可。
 
 ### 5. 验证
 

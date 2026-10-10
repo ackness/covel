@@ -88,6 +88,7 @@ interface StructuredFile {
 const MANIFEST_NOT_TEXT: ReadonlySet<string> = new Set([
   "author.name",
   "license",
+  "accentColor",
 ]);
 
 const CJK = /[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/;

@@ -11,12 +11,15 @@ vi.mock("@/services/api.js", async (importOriginal) => ({
   getWorldGallery: vi.fn(),
 }));
 
-const world = (id: string, name: string): WorldRecord => ({
+const world = (id: string, name: string, cover = false): WorldRecord => ({
   id,
   name,
   description: `${name} summary`,
   createdAt: "2026-01-01T00:00:00.000Z",
+  ...(cover ? { metadata: { cover: "media/gallery/world-cover.webp" } } : {}),
 });
+
+const COVER = "/api/worlds/mistport/gallery/gallery/world-cover.webp";
 
 const picture = (id: string, width: number, height: number) => ({
   id,
@@ -99,13 +102,13 @@ describe("world showcase", () => {
 
   it("opens on the cover of a world that has one", async () => {
     vi.mocked(getWorldGallery).mockResolvedValue({ items: GALLERY });
-    const { container } = renderShowcase([world("mistport", "Mistport")]);
+    const { container } = renderShowcase([world("mistport", "Mistport", true)]);
     await settle();
 
     expect(
       screen.getAllByRole("button", { name: /^显示第 \d 张背景$/ }),
     ).toHaveLength(3);
-    expect(backdrop(container)).toBe("/visuals/worlds/mistport.webp");
+    expect(backdrop(container)).toBe(COVER);
   });
 
   it("opens the world's pictures at full size, portraits first", async () => {
@@ -286,7 +289,7 @@ describe("world card", () => {
   it("passes the world's scenes over the cover under the pointer and opens its gallery", async () => {
     const { container } = render(
       <WorldTileCard
-        world={world("mistport", "Mistport")}
+        world={world("mistport", "Mistport", true)}
         index={0}
         isEntering={false}
         dimmed={false}
@@ -305,13 +308,13 @@ describe("world card", () => {
 
     // At rest the card shows its cover, however long it is left alone.
     act(() => void vi.advanceTimersByTime(10_000));
-    expect(backdrop(container)).toBe("/visuals/worlds/mistport.webp");
+    expect(backdrop(container)).toBe(COVER);
 
     fireEvent.pointerEnter(cover);
     act(() => void vi.advanceTimersByTime(2600));
     expect(backdrop(container)).toBe(GALLERY[0]!.url);
     fireEvent.pointerLeave(cover);
-    expect(backdrop(container)).toBe("/visuals/worlds/mistport.webp");
+    expect(backdrop(container)).toBe(COVER);
 
     fireEvent.click(
       screen.getByRole("button", {
