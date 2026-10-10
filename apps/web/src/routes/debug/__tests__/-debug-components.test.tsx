@@ -125,6 +125,7 @@ describe("debug route components", () => {
           createdAt: "2026-05-11T00:00:00.000Z",
         },
       ],
+      submittedInteractions: [],
       characters: [
         {
           id: "character-1",

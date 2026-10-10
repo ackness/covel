@@ -55,7 +55,14 @@ export default async function (ctx) {
         outcome: "success",
         completion: "pending",
         value: { playerId, rules },
-        effects: { interactions: [{ ...form, notice: error }] },
+        effects: {
+          interactions: [
+            {
+              ...form,
+              notice: typeof error === "string" ? error : error.message,
+            },
+          ],
+        },
       };
     }
     const fields = {};

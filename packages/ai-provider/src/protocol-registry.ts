@@ -111,6 +111,8 @@ const openAiOptionFields: ProviderOptionWire = (settings, fields) => {
     ["parallelToolCalls", "parallel_tool_calls"],
     ["store", "store"],
     ["user", "user"],
+    // Not a wire field: the adapters read it and never forward it.
+    ["promptCacheKey", "promptCacheKey"],
   ] as const;
   for (const [key, wire] of wireFields) {
     if (settings[key] !== undefined) fields[wire] = settings[key];

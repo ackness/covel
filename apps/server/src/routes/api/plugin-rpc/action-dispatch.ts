@@ -5,6 +5,7 @@ import {
   createRpcHandlerStoreView,
   RpcDispatchError,
   FormRejectedError,
+  InteractionAlreadySubmittedError,
   RpcValidationError,
 } from "@covel/runtime";
 import { pluginMessagesFor } from "@covel/shared";
@@ -412,7 +413,9 @@ export async function dispatchPluginAction(
           err.message,
           err instanceof FormRejectedError
             ? { code: err.code, details: { issues: err.issues } }
-            : undefined,
+            : err instanceof InteractionAlreadySubmittedError
+              ? { code: err.code }
+              : undefined,
         ),
         400,
       );

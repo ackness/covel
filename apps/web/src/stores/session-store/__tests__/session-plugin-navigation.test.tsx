@@ -546,6 +546,7 @@ it.each(["GET", "reconnect"])(
       characters: [],
       gameState: {},
       executionSteps: [],
+      submittedInteractions: [],
     });
     api.listSuspensions.mockResolvedValue([]);
     const old = deferred<ReturnType<typeof catalog>>();

@@ -7,6 +7,10 @@
  */
 
 import {
+  answerWasFollowedUp,
+  latestTurnStartedAt,
+} from "./answer-follow-up.js";
+import {
   DEFAULT_LOCALE,
   resolveI18nText,
   type I18nText,
@@ -526,6 +530,12 @@ function fillTemplate(
   );
 }
 
+const ALREADY_SUBMITTED = {
+  "en-US": "This was already submitted. Reload to see the answer.",
+  "zh-CN": "这一项已经提交过了。刷新后可以看到已提交的内容。",
+  "ru-RU": "Этот ответ уже отправлен. Обновите страницу, чтобы увидеть его.",
+} as const satisfies I18nText;
+
 export class RpcValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -554,11 +564,22 @@ export class FormRejectedError extends RpcValidationError {
   }
 }
 
+/**
+ * The interaction already has a stored answer. The message is for the player,
+ * in the session's language.
+ */
+export class InteractionAlreadySubmittedError extends RpcValidationError {
+  readonly code = "interaction_already_submitted";
+}
+
 export function createSubmitFormHandler(
   validatePluginForm: ValidatePluginForm | undefined,
   frameworkStore: Pick<
     DataStore,
-    "listPlayerInputs" | "listTurnMessages" | "withTransaction"
+    | "listPlayerInputs"
+    | "listTurnMessages"
+    | "withTransaction"
+    | "queryTraceEvents"
   >,
 ): RpcHandler {
   return async (
@@ -618,6 +639,10 @@ export function createSubmitFormHandler(
       sessionId,
     )) as readonly MessageLike[];
     const existingInputs = await frameworkStore.listPlayerInputs(sessionId);
+    const latestTurnStarted = await latestTurnStartedAt(
+      frameworkStore,
+      sessionId,
+    );
     const prepared: Array<{
       readonly submissionId: string;
       readonly interactionId: string;
@@ -702,25 +727,34 @@ export function createSubmitFormHandler(
         continue;
       }
 
+      // One answer per interaction, and its follow-up turn runs once. A
+      // second request is refused when a turn already started after the
+      // answer. While none has (the response was lost, or the follow-up never
+      // left the browser) the same values are accepted again and return the
+      // stored submission, so the client can start the follow-up.
       const existing = existingInputs.find(
         (input) =>
           input.turnId === body.turnId && input.formId === sub.interactionId,
       );
-      const storedValues = existing?.values;
-      const comparableValues =
-        storedValues &&
-        typeof storedValues === "object" &&
-        !Array.isArray(storedValues)
-          ? validateSubmissionValues(
-              { ...sub, values: storedValues as Record<string, unknown> },
-              located.interaction,
-              locale,
-            )
-          : storedValues;
-      if (existing && stableJson(comparableValues) !== stableJson(values)) {
-        throw new RpcValidationError(
-          `Interaction ${sub.interactionId} was already submitted with different values`,
-        );
+      if (existing) {
+        const comparable =
+          existing.values &&
+          typeof existing.values === "object" &&
+          !Array.isArray(existing.values)
+            ? validateSubmissionValues(
+                { ...sub, values: existing.values as Record<string, unknown> },
+                located.interaction,
+                locale,
+              )
+            : existing.values;
+        if (
+          answerWasFollowedUp(existing.createdAt, latestTurnStarted) ||
+          stableJson(comparable) !== stableJson(values)
+        ) {
+          throw new InteractionAlreadySubmittedError(
+            resolveLabel(ALREADY_SUBMITTED, locale),
+          );
+        }
       }
       const item = {
         submissionId: existing?.id ?? crypto.randomUUID(),

@@ -53,6 +53,7 @@ function emptySnapshot() {
     gameState: {},
     characterSchema: null,
     executionSteps: [],
+    submittedInteractions: [],
   };
 }
 
@@ -301,6 +302,80 @@ describe("restoreSessionState workspace ordering", () => {
   });
 });
 
+describe("restoreSessionState submitted interactions", () => {
+  it("marks a form the server holds an answer for, and the server's values replace the browser's", async () => {
+    const ds = makeDataService([]);
+    vi.mocked(ds.loadSubmittedBlocks).mockResolvedValue({
+      ids: ["m-form"],
+      values: { "m-form": { name: "Stale local" } },
+    });
+    api.getSessionView.mockResolvedValue({
+      ...emptySnapshot(),
+      messages: [
+        {
+          id: "m-form",
+          role: "assistant",
+          content: "",
+          turnId: "t1",
+          createdAt: "2026-08-25T00:00:00.000Z",
+          block: { type: "interactive_form", data: { interactionId: "name" } },
+        },
+        {
+          id: "m-open",
+          role: "assistant",
+          content: "",
+          turnId: "t1",
+          createdAt: "2026-08-25T00:00:01.000Z",
+          block: { type: "interactive_form", data: { interactionId: "other" } },
+        },
+      ],
+      submittedInteractions: [
+        {
+          turnId: "t1",
+          interactionId: "name",
+          values: { name: "Aria" },
+          followedUp: true,
+        },
+        {
+          turnId: "t1",
+          interactionId: "other",
+          values: { name: "Lost" },
+          followedUp: false,
+        },
+      ],
+    });
+    const dispatch = vi.fn();
+    await restoreSessionState({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef: { current: null },
+      sessionGenerationRef,
+      worlds: [world],
+      session,
+    });
+    const submitted = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "SUBMIT_BLOCK");
+    expect(submitted).toEqual([
+      {
+        type: "SUBMIT_BLOCK",
+        blockId: "m-form",
+        values: { name: "Stale local" },
+      },
+      { type: "SUBMIT_BLOCK", blockId: "m-form", values: { name: "Aria" } },
+    ]);
+    // An answer no turn followed stays open with the stored values.
+    expect(
+      dispatch.mock.calls
+        .map(([action]) => action)
+        .filter((action) => action.type === "PREFILL_BLOCK"),
+    ).toEqual([
+      { type: "PREFILL_BLOCK", blockId: "m-open", values: { name: "Lost" } },
+    ]);
+  });
+});
+
 describe("restoreSessionState stale requests", () => {
   it.each(["snapshot", "fallback", "blocks", "steps"] as const)(
     "drops %s data after another session is selected",
@@ -432,5 +507,22 @@ describe("restoreSessionState stale requests", () => {
       await restoring;
     });
     expect(result.current.state.session?.id).toBe(session.id);
+  });
+});
+
+describe("PREFILL_BLOCK", () => {
+  it("opens a block marked answered and keeps the stored values for the form", () => {
+    const answered = reducer(initialState, {
+      type: "SUBMIT_BLOCK",
+      blockId: "m1",
+      values: { name: "Old" },
+    });
+    const reopened = reducer(answered, {
+      type: "PREFILL_BLOCK",
+      blockId: "m1",
+      values: { name: "Stored" },
+    });
+    expect(reopened.submittedBlockIds.has("m1")).toBe(false);
+    expect(reopened.submittedBlockValues).toEqual({ m1: { name: "Stored" } });
   });
 });
