@@ -119,7 +119,6 @@ describe("runtime contracts through an installed community package", () => {
       id: sessionId,
       phase: "playing",
       setupRuntimes: {},
-      worldId: null,
       status: "active",
       completedPlayerTurns: 0,
       activePlugins: [],
@@ -135,7 +134,9 @@ describe("runtime contracts through an installed community package", () => {
     const upload = new FormData();
     upload.append(
       "file",
-      new Blob([await buildThirdPartyPluginZip()], { type: "application/zip" }),
+      new Blob([new Uint8Array(await buildThirdPartyPluginZip())], {
+        type: "application/zip",
+      }),
       "probe.zip",
     );
     const installed = await boot.app.request("/api/install/plugin", {

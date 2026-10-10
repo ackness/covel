@@ -19,6 +19,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import path from "node:path";
 import type { Hono } from "hono";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import type { LLMMessageContent } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../helpers/close-api.js";
@@ -76,6 +77,12 @@ async function drainActionStream(res: Response): Promise<ActionEnvelope[]> {
 
 // ── Mock LLM that returns narrative text ─────────────────────────
 
+function messageText(content: LLMMessageContent): string {
+  return typeof content === "string"
+    ? content
+    : content.map((part) => (part.type === "text" ? part.text : "")).join("");
+}
+
 class MockNarratorLLM implements LLMAdapter {
   callCount = 0;
   dimensionUpdates?: readonly {
@@ -86,13 +93,16 @@ class MockNarratorLLM implements LLMAdapter {
   lastMessages: Array<{ role: string; content: string }> = [];
   allMessages: Array<readonly { role: string; content: string }[]> = [];
 
-  async generate(params: {
-    messages: readonly { role: string; content: string }[];
-    tools?: readonly { name: string }[];
-  }): Promise<LLMResponse> {
+  async generate(
+    params: Parameters<LLMAdapter["generate"]>[0],
+  ): Promise<LLMResponse> {
     this.callCount++;
-    this.lastMessages = [...params.messages];
-    this.allMessages.push([...params.messages]);
+    const messages = params.messages.map((message) => ({
+      role: message.role,
+      content: messageText(message.content),
+    }));
+    this.lastMessages = [...messages];
+    this.allMessages.push([...messages]);
 
     const updateTool = params.tools?.find(
       (tool) => tool.name.includes("update") && tool.name.includes("dimension"),
@@ -113,7 +123,7 @@ class MockNarratorLLM implements LLMAdapter {
     // Find the player message to echo back — use the LAST user turn so
     // seed messages from the turn-band bootstrap don't shadow the current
     // player action.
-    const userMsgs = params.messages.filter((m) => m.role === "user");
+    const userMsgs = messages.filter((m) => m.role === "user");
     const userMsg = userMsgs[userMsgs.length - 1];
     const playerAction = userMsg?.content ?? "未知操作";
 
@@ -144,9 +154,17 @@ describe("E2E: Narrator game flow", () => {
       canRunRuntimeJobWithServerServices: () => true,
       pluginGateway: {
         async generateText() {
-          return { text: "{}", finishReason: "stop", usage: {} };
+          return {
+            text: "{}",
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
         },
-      } as import("@covel/shared/plugin-runtime").PluginRuntimeGateway,
+        async generateObject() {
+          throw new Error("generateObject is not expected in this flow");
+        },
+        resolveSlot: () => null,
+      },
       store: createMemoryStore(),
       storeBackend: "memory",
     }));
@@ -433,7 +451,7 @@ describe("E2E: Narrator game flow", () => {
         (row) => row.turnId === receipt.sourceTurnId,
       )!;
       expect(
-        original.runtimeResults.some(
+        (original.runtimeResults as readonly { runId?: string }[]).some(
           (result) => result.runId === receipt.source.resultId,
         ),
         JSON.stringify(original.runtimeResults),

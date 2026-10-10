@@ -16,7 +16,12 @@ const COMMUNITY_ENTRY_FLAG = "__covelCommunityEntryImported";
 
 const stubLLM: LLMAdapter = {
   async generate(): Promise<LLMResponse> {
-    return { content: "", toolCalls: [], finishReason: "stop" };
+    return {
+      content: "",
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    };
   },
 };
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { Hono } from "hono";
 import {
   exportSessionCheckpoint,
@@ -15,8 +15,8 @@ const WORLD_ID = "browser-world";
 
 let store: DataStore;
 let app: Hono;
-let clearSlots: ReturnType<typeof vi.fn>;
-let invalidateSlots: ReturnType<typeof vi.fn>;
+let clearSlots: Mock<(sessionId: string) => void>;
+let invalidateSlots: Mock<(sessionId: string) => void>;
 
 async function seed(target: DataStore, metadata?: Record<string, unknown>) {
   await target.upsertWorld({
@@ -57,8 +57,10 @@ beforeEach(async () => {
   app = new Hono();
   app.use("*", async (c, next) => {
     c.set("uiSlots", {
+      get: async () => [],
       clearSession: clearSlots,
       invalidateSession: invalidateSlots,
+      close: async () => {},
     });
     c.set("store", store);
     c.set("storeBackend", "memory");

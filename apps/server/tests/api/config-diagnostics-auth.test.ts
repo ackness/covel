@@ -22,7 +22,11 @@ describe.each(["demo", "commercial"])(
       const misc = createMiscApiRoutes(ai, createPluginRegistry(), store);
       const config = createConfigApiRoutes({ apiKeys: {} });
       try {
-        for (const headers of [{}, { Authorization: "Bearer wrong-token" }]) {
+        const headerSets: Record<string, string>[] = [
+          {},
+          { Authorization: "Bearer wrong-token" },
+        ];
+        for (const headers of headerSets) {
           const publicConfig = await config.request("/api/config/info", {
             headers,
           });

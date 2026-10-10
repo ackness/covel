@@ -55,7 +55,7 @@ const MUTATIONS = [
   { method: "DELETE", url: `/api/worlds/${WORLD_ID}`, status: 200 },
 ] as const;
 
-function authHeaders(token?: string) {
+function authHeaders(token?: string): Record<string, string> {
   return token ? { authorization: `Bearer ${token}` } : {};
 }
 

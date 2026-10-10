@@ -15,6 +15,7 @@ import {
   loadPluginCatalogue,
   validateWorldPackage,
 } from "../../src/world-data/validate-world-package.js";
+import type { WorldDataSourceDescriptor } from "@covel/shared";
 
 const REPO = path.resolve(import.meta.dirname, "../../../..");
 const PLUGINS = path.join(REPO, "plugins");
@@ -65,7 +66,7 @@ describe("world data conventions", () => {
         (source) => [source.entry.path, source.entry],
       ),
     );
-    const fields = (entry: Record<string, unknown>) => ({
+    const fields = (entry: WorldDataSourceDescriptor) => ({
       kind: entry.kind,
       to: entry.to,
       key: entry.key,

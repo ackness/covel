@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store/memory";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
+import type { FunctionHandler } from "@covel/plugin-loader";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createApplicationWork } from "../../src/application-work.js";
@@ -111,10 +112,10 @@ describe("resume commit composition", () => {
             portrait: { type: "object" },
           },
         },
-        handler: async () => {
+        handler: (async () => {
           if (shutdown === "handler") closing = applicationWork.close();
           return { outcome: "success", value };
-        },
+        }) satisfies FunctionHandler,
       }));
       const isReferencedBy = vi.fn(async () => {
         if (shutdown === "commit") closing = applicationWork.close();
@@ -138,7 +139,14 @@ describe("resume commit composition", () => {
           },
         });
         c.set("mediaStore", {
-          lookup: async () => ({ mime: "image/png", size: 42 }),
+          ...createMemoryMediaStore(),
+          lookup: async () => ({
+            id: "asset",
+            mime: "image/png",
+            size: 42,
+            ownerSessionId: "session",
+            ownerPluginId: null,
+          }),
           isReferencedBy,
         });
         await next();

@@ -60,7 +60,6 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
         handler: "./producer.js",
         stage: "narrative",
         outputKind: "story",
-        capabilities: ["narrative-engine"],
         trigger: { type: "auto" },
       },
       {

@@ -160,7 +160,7 @@ async function postZip(
   const form = new FormData();
   form.append(
     "file",
-    new Blob([zipBuffer], { type: "application/zip" }),
+    new Blob([new Uint8Array(zipBuffer)], { type: "application/zip" }),
     "upload.zip",
   );
   return app.request(url, { method: "POST", body: form });
@@ -291,7 +291,7 @@ describe("POST /api/install/plugin", () => {
     const wrong = new FormData();
     wrong.append(
       "file",
-      new Blob([zip], { type: "application/zip" }),
+      new Blob([new Uint8Array(zip)], { type: "application/zip" }),
       "upload.zip",
     );
     expect(
@@ -307,7 +307,7 @@ describe("POST /api/install/plugin", () => {
     const ok = new FormData();
     ok.append(
       "file",
-      new Blob([zip], { type: "application/zip" }),
+      new Blob([new Uint8Array(zip)], { type: "application/zip" }),
       "upload.zip",
     );
     const res = await app.request("/api/install/plugin", {
@@ -397,7 +397,11 @@ describe("POST /api/install/plugin", () => {
     ).toBe(true);
   });
 
-  it.each([
+  it.each<{
+    name: string;
+    files: Record<string, string>;
+    error: RegExp;
+  }>([
     {
       name: "missing root",
       files: { "runtimes/worker/RUNTIME.md": "---\ntype: agent\n---\n" },

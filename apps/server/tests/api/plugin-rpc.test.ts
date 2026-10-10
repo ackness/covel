@@ -15,6 +15,8 @@ import {
   createSubmitFormHandler,
   type PluginRpcRegistry,
   type RpcExecutor,
+  type LLMAdapter,
+  type LLMResponse,
   type RpcHandlerContext,
 } from "@covel/runtime";
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
@@ -27,7 +29,11 @@ import {
   type LoadedRuntime,
   type FunctionHandler,
 } from "@covel/plugin-loader";
-import type { InteractionPayload, RuntimeManifest } from "@covel/shared";
+import type {
+  InteractionPayload,
+  LLMMessage,
+  RuntimeManifest,
+} from "@covel/shared";
 import { createEventBus } from "@covel/events";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
@@ -42,6 +48,7 @@ import { publicPluginDataValue } from "../../src/routes/api/plugin-rpc/runtime-j
 import branchReplyHandler from "../../../../plugins/branch-reply/handler.js";
 import branchReplyEntry from "../../../../plugins/branch-reply/server/index.js";
 import { makeErrorHandler } from "../../src/api-error.js";
+import { setSessionWorld } from "../helpers/session-world.js";
 
 type Env = {
   Variables: {
@@ -53,7 +60,7 @@ type Env = {
 };
 
 function setup(): {
-  app: Hono;
+  app: Hono<Env>;
   store: DataStore;
   registry: PluginRpcRegistry;
   executor: RpcExecutor;
@@ -170,7 +177,7 @@ async function seedInteractionTemplate(
 }
 
 function submitFormRequest(
-  app: Hono,
+  app: Pick<Hono, "request">,
   sessionId: string,
   submissions: ReadonlyArray<Record<string, unknown>>,
 ) {
@@ -187,7 +194,7 @@ function submitFormRequest(
 }
 
 describe("POST /api/sessions/:id/plugin-rpc", () => {
-  let app: Hono;
+  let app: Hono<Env>;
   let store: DataStore;
   let registry: PluginRpcRegistry;
   let pluginRegistry: PluginRegistry;
@@ -579,13 +586,19 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
         exposed = ["withTransaction", "close", "updateSession"].filter(
           (name) => typeof Reflect.get(context.store, name) === "function",
         );
-        const snapshot = (await context.store.getSession("other")) as {
+        // A hostile handler names a foreign session; the bound view must
+        // ignore the argument.
+        const getSession = context.store.getSession as (
+          sessionId: string,
+        ) => Promise<unknown>;
+        const snapshot = (await getSession("other")) as {
           status: string;
         };
         snapshot.status = "ended";
         const value = { ready: true };
         const now = new Date().toISOString();
-        await context.store.setPluginData!({
+        // Foreign identity fields are not part of the view's record type.
+        const foreignRecord = {
           sessionId: "other",
           pluginId: "other",
           namespace: "entries",
@@ -593,7 +606,8 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
           value,
           createdAt: now,
           updatedAt: now,
-        });
+        };
+        await context.store.setPluginData!(foreignRecord);
         value.ready = false;
         throw new Error("after the immediate write");
       },
@@ -975,7 +989,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   const PLUGIN_ID = "community-entry-plug";
 
   function setupEntry(): {
-    app: Hono;
+    app: Pick<Hono, "request">;
     store: DataStore;
     registry: PluginRpcRegistry;
     gate: RpcApprovalGate;
@@ -1021,7 +1035,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     return { app, store, registry, gate, activateCalls: () => activateCount };
   }
 
-  function call(app: Hono, action: string) {
+  function call(app: Pick<Hono, "request">, action: string) {
     return app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1122,13 +1136,14 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
 
 // ── Runtime-mode integration tests (plugin-rpc-runtime-pipeline M8b) ─────
 
-type FakeLlm = { generate: (...a: unknown[]) => Promise<unknown> };
-type CapturedLlmMessage = { readonly role: string; readonly content: unknown };
+type FakeLlm = LLMAdapter;
 
-class CapturingLlm {
-  readonly calls: CapturedLlmMessage[][] = [];
+class CapturingLlm implements LLMAdapter {
+  readonly calls: LLMMessage[][] = [];
 
-  async generate(params: { readonly messages: readonly CapturedLlmMessage[] }) {
+  async generate(
+    params: Parameters<LLMAdapter["generate"]>[0],
+  ): Promise<LLMResponse> {
     this.calls.push([...params.messages]);
     return {
       content: "Next narrator output.",
@@ -1149,10 +1164,18 @@ function makeSummary(id: string): PluginSummary {
   };
 }
 
+/**
+ * What a test handler may return: a full handler result, or a flat object the
+ * fixture wraps into one (`events`, `pluginData` and the like become effects).
+ */
+type FlatHandler = (
+  ctx: Parameters<FunctionHandler>[0],
+) => Promise<Record<string, unknown>>;
+
 function makeFunctionEntry(args: {
   pluginId: string;
   runtimeId: string;
-  handler: FunctionHandler;
+  handler: FlatHandler;
   execution?: "sync" | "background";
   stage?: RuntimeManifest["stage"];
   /** Semantic capability tags for framework discovery. */
@@ -1195,10 +1218,7 @@ function makeFunctionEntry(args: {
     manifest,
     promptTemplate: "",
     handler: async (ctx) => {
-      const raw = (await args.handler(ctx)) as unknown as Record<
-        string,
-        unknown
-      >;
+      const raw = await args.handler(ctx);
       if (
         raw.kind === "covel.tool-result" ||
         raw.outcome === "success" ||
@@ -1266,7 +1286,6 @@ function makeAgentEntry(args: {
   stage?: RuntimeManifest["stage"];
   source?: PluginSource;
   trigger?: RuntimeManifest["trigger"];
-  relations?: RuntimeManifest["relations"];
 }): { entry: PluginRegistryEntry; loaded: LoadedRuntime } {
   const manifest: RuntimeManifest = {
     name: args.runtimeId,
@@ -1277,7 +1296,6 @@ function makeAgentEntry(args: {
     outputKind: args.outputKind ?? "story",
     pluginType: "plugin",
     trigger: args.trigger ?? { type: "manual" },
-    ...(args.relations ? { relations: args.relations } : {}),
   } as RuntimeManifest;
 
   const loaded: LoadedRuntime = {
@@ -1303,7 +1321,7 @@ function makeAgentEntry(args: {
 }
 
 interface RuntimeTestEnv {
-  app: Hono;
+  app: Pick<Hono, "request">;
   store: DataStore;
   pluginRegistry: PluginRegistry;
   sessionLock: SessionLock;
@@ -1312,7 +1330,7 @@ interface RuntimeTestEnv {
 function setupRuntimeTestEnv(args: {
   pluginId: string;
   runtimeId: string;
-  handler: FunctionHandler;
+  handler: FlatHandler;
   execution?: "sync" | "background";
   source?: PluginSource;
   userSettings?: Parameters<typeof makeFunctionEntry>[0]["userSettings"];
@@ -1382,7 +1400,6 @@ function setupRuntimeTestEnv(args: {
     c.set("rpcApprovalGate", gate);
     c.set("llmAdapter", llm);
     c.set("loadRuntimeFn", loadRuntimeFn);
-    c.set("toolExecutor", undefined);
     c.set("resolveModel", () => undefined);
     c.set("eventBus", eventBus);
     c.set("compactorRunner", compactorRunner);
@@ -1646,7 +1663,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       pluginId: "branch-reply",
       runtimeId: "branch-reply",
       execution: "sync",
-      handler: branchReplyHandler as FunctionHandler,
+      handler: branchReplyHandler,
       stage: undefined,
     });
     const { entry: narratorEntry, loaded: narratorLoaded } = makeAgentEntry({
@@ -1654,9 +1671,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       runtimeId: "chat-mode-narrator",
       outputKind: "story",
       trigger: { type: "auto" },
-      relations: {
-        requires: ["branch-reply"],
-      },
     });
     pluginRegistry.register(branchEntry);
     pluginRegistry.register(narratorEntry);
@@ -1668,8 +1682,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       }),
     );
     branchReplyEntry({
-      provideExtension: (point, id, implementation) =>
-        extensions.register("branch-reply", { point, id }, implementation),
+      provideExtension: (
+        point: string,
+        id: string,
+        implementation: Parameters<PluginExtensionHost["register"]>[2],
+      ) => extensions.register("branch-reply", { point, id }, implementation),
     });
     const rpcRegistry = createPluginRpcRegistry();
     const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
@@ -1702,7 +1719,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       c.set("rpcApprovalGate", gate);
       c.set("llmAdapter", llm);
       c.set("loadRuntimeFn", loadRuntimeFn);
-      c.set("toolExecutor", undefined);
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("compactorRunner", {
@@ -2040,11 +2056,12 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
     await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
     const worldId = `rpc-settings-${crypto.randomUUID()}`;
-    await store.updateSession(SESSION_ID, { worldId });
+    await setSessionWorld(store, SESSION_ID, worldId);
     for (const tone of ["before", "after"]) {
       await store.upsertWorld({
         id: worldId,
         name: "Settings world",
+        description: "",
         createdAt: new Date().toISOString(),
         metadata: { pluginSettings: { [PLUGIN_ID]: { tone } } },
       });
@@ -2545,7 +2562,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       c.set("rpcApprovalGate", gate);
       c.set("llmAdapter", llm);
       c.set("loadRuntimeFn", loadRuntimeFn);
-      c.set("toolExecutor", undefined);
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("compactorRunner", compactorRunner);
@@ -2711,7 +2727,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       c.set("rpcApprovalGate", gate);
       c.set("llmAdapter", llm);
       c.set("loadRuntimeFn", loadRuntimeFn);
-      c.set("toolExecutor", undefined);
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("compactorRunner", compactorRunner);
@@ -2843,12 +2858,12 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   // and skips the followerGate/start/finish bookkeeping the earlier case tracks
   // (we care about emitter/store side effects here, not scheduling order).
   function setupTargetAndFollower(args: {
-    targetHandler?: FunctionHandler;
+    targetHandler?: FlatHandler;
     targetExecution?: "sync" | "background";
-    followerHandler: FunctionHandler;
+    followerHandler: FlatHandler;
     followerSource?: PluginSource;
   }): {
-    app: Hono;
+    app: Pick<Hono, "request">;
     store: DataStore;
     targetRuntimeId: string;
     followerRuntimeId: string;
@@ -2959,7 +2974,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       c.set("rpcApprovalGate", gate);
       c.set("llmAdapter", llm);
       c.set("loadRuntimeFn", loadRuntimeFn);
-      c.set("toolExecutor", undefined);
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("compactorRunner", compactorRunner);
@@ -2973,7 +2987,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   }
 
   async function dispatchTargetAndAwaitJobs(
-    app: Hono,
+    app: Pick<Hono, "request">,
     store: DataStore,
     targetRuntimeId: string,
   ): Promise<{ jobId: string }> {

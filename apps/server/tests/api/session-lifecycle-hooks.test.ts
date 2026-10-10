@@ -11,11 +11,16 @@ import { Hono } from "hono";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
-import { createHookPipeline } from "@covel/runtime";
+import {
+  createHookPipeline,
+  type SessionEndPayload,
+  type SessionStartPayload,
+} from "@covel/runtime";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { characterRoutes } from "../../src/routes/api/characters.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { backgroundRuntimeLockId } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
+import { setSessionWorld } from "../helpers/session-world.js";
 
 const TEST_APPROVAL_SCOPE = "session-lifecycle-test-scope";
 
@@ -193,9 +198,7 @@ describe("Session lifecycle hooks", () => {
     async (method) => {
       const { app, store } = await build();
       const id = await createSession(app);
-      await store.updateSession(id, {
-        worldId: `unreadable-${crypto.randomUUID()}`,
-      });
+      await setSessionWorld(store, id, `unreadable-${crypto.randomUUID()}`);
       vi.spyOn(store, "getWorld").mockRejectedValueOnce(
         new Error("Synthetic settings read failure"),
       );
@@ -263,6 +266,7 @@ describe("Session lifecycle hooks", () => {
       await store.upsertWorld({
         id: worldId,
         name: "Settings world",
+        description: "",
         createdAt: new Date().toISOString(),
         metadata: {
           pluginSettings: { [pluginId]: { tone: "world", detail: 2 } },
@@ -375,13 +379,13 @@ describe("Session lifecycle hooks", () => {
     const id = await createSession(app);
 
     expect(handler).toHaveBeenCalledTimes(1);
-    const [, payload] = handler.mock.calls[0];
+    const payload = handler.mock.calls.at(0)?.[1];
     expect(payload).toMatchObject({ sessionId: id, worldId: "cloudmere" });
   });
 
   it("lets SessionStart call the same session API without deadlocking", async () => {
     const { app, hookPipeline, store } = await build();
-    hookPipeline.register({
+    hookPipeline.register<SessionStartPayload>({
       id: "test:SessionStart:http-reentry",
       event: "SessionStart",
       handler: async (_context, payload) => {
@@ -576,7 +580,7 @@ describe("Session lifecycle hooks", () => {
 
   it("rejects a status transition re-entered from SessionEnd without deadlocking", async () => {
     const { app, hookPipeline, store } = await build();
-    hookPipeline.register({
+    hookPipeline.register<SessionEndPayload>({
       id: "test:SessionEnd:http-reentry",
       event: "SessionEnd",
       handler: async (_context, payload) => {
@@ -872,6 +876,7 @@ describe("Session lifecycle hooks", () => {
           id: "late-result",
           sessionId: id,
           turnId: "late-turn",
+          origin: "player",
           runtimeResults: [],
           commitStatus: "pending",
           durationMs: 1,

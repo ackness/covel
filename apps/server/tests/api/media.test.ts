@@ -36,6 +36,7 @@ function makeSession(id: string): SessionRecord {
     id,
     worldId: "world-1",
     status: "active",
+    locale: "zh-CN",
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
@@ -57,7 +58,7 @@ interface StoredAsset {
   /** `null` models the "ownership not yet recorded" state. */
   readonly ownerSessionId: string | null;
   readonly ownerPluginId?: string;
-  readonly references: ReadonlySet<string>;
+  readonly references: Set<string>;
 }
 
 interface MockMediaStoreOptions {

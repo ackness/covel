@@ -181,7 +181,6 @@ describe("GitHub plugin installation", () => {
     const store = createMemoryStore();
     await store.createSession({
       id: "hook-session",
-      worldId: null,
       phase: "playing",
       setupRuntimes: {},
       status: "active",
@@ -189,6 +188,7 @@ describe("GitHub plugin installation", () => {
       activePlugins: [],
       locale: "en-US",
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       metadata: {
         approvalScopeNonce: crypto.randomUUID(),
         sessionIncarnationNonce: crypto.randomUUID(),
@@ -197,6 +197,7 @@ describe("GitHub plugin installation", () => {
     const boot = await bootstrapApi({
       pluginsDir: builtin,
       pluginsDirs: [builtin, root],
+      llmAdapter: { generate: vi.fn() },
       store,
       storeBackend: "memory",
     });
@@ -263,7 +264,9 @@ describe("GitHub plugin installation", () => {
   });
 
   it("resolves the system proxy separately for GitHub API and codeload", async () => {
-    const resolveSystemProxy = vi.fn(async () => "PROXY 127.0.0.1:7890");
+    const resolveSystemProxy = vi.fn(
+      async (_url: string) => "PROXY 127.0.0.1:7890",
+    );
     configureOutboundProxy({ mode: "system", resolveSystemProxy });
     const item = await preview();
     expect(

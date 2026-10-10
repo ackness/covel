@@ -22,7 +22,7 @@ type Env = {
   };
 };
 
-function setupApp(store: DataStore, pluginRegistry: PluginRegistry): Hono {
+function setupApp(store: DataStore, pluginRegistry: PluginRegistry): Hono<Env> {
   const app = new Hono<Env>();
   const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
@@ -58,7 +58,7 @@ function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
 
 describe("PATCH /api/sessions/:id runtimeModelOverrides", () => {
   let store: DataStore;
-  let app: Hono;
+  let app: Hono<Env>;
 
   beforeEach(async () => {
     store = createMemoryStore();

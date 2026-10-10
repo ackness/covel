@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import type { EventBus } from "@covel/events";
+import { createEventBus } from "@covel/events";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
@@ -102,9 +102,11 @@ describe.each([
     };
     const lock = createInProcessSessionLock();
     const events: unknown[] = [];
+    const eventBus = createEventBus();
+    eventBus.onEmit((event) => events.push(event));
     const worker = createRuntimeJobWorker({
       store,
-      eventBus: { emit: (event: unknown) => events.push(event) } as EventBus,
+      eventBus,
       tryWithCommitLock: lock.tryWithLock.bind(lock),
       execute: async () => {
         throw new Error("No execution expected");
@@ -225,9 +227,11 @@ describe.each([
       );
     const lock = createInProcessSessionLock();
     const events: unknown[] = [];
+    const eventBus = createEventBus();
+    eventBus.onEmit((event) => events.push(event));
     const worker = createRuntimeJobWorker({
       store,
-      eventBus: { emit: (event: unknown) => events.push(event) } as EventBus,
+      eventBus,
       tryWithCommitLock: lock.tryWithLock.bind(lock),
       execute: async () => {},
     });

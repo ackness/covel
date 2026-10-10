@@ -9,6 +9,7 @@ import {
 } from "../../src/application-work.js";
 import { singleFlight } from "../../src/middleware/rate-limit.js";
 import { createServerResourceDrain } from "../../src/server-resources.js";
+import type { Server } from "node:http";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -73,10 +74,11 @@ describe("application work ownership", () => {
       return c.text("finished");
     });
     const listening = Promise.withResolvers<number>();
+    // Without an HTTP/2 option, serve() returns a plain http.Server.
     const server = serve(
       { fetch: app.fetch, port: 0, hostname: "127.0.0.1" },
       (info) => listening.resolve(info.port),
-    );
+    ) as Server;
     const port = await listening.promise;
     const request = fetch(`http://127.0.0.1:${port}/held`).catch(() => null);
     const drain = createServerResourceDrain({

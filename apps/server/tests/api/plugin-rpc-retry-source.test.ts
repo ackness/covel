@@ -101,7 +101,6 @@ describe("plugin-rpc retry source commit gate", () => {
     const now = new Date().toISOString();
     await store.createSession({
       id: sessionId,
-      worldId: null,
       status: "active",
       phase: "playing",
       locale: "en-US",

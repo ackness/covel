@@ -23,10 +23,7 @@ interface ActionEnvelope {
   readonly payload: Record<string, unknown>;
 }
 
-function manifest(
-  name: string,
-  resultFormat: RuntimeManifest["resultFormat"] = "legacy",
-): RuntimeManifest {
+function manifest(name: string): RuntimeManifest {
   return {
     name,
     pluginId: PLUGIN_ID,
@@ -35,7 +32,6 @@ function manifest(
     runtimeType: "function",
     trigger: { type: "auto" },
     outputKind: "plugin",
-    resultFormat,
   };
 }
 
@@ -47,8 +43,8 @@ async function runScenario(options: { readonly failCommit: boolean }) {
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
     },
     id: SESSION_ID,
-    worldId: null,
     status: "active",
+    locale: "zh-CN",
     activePlugins: [PLUGIN_ID],
     phase: "playing",
     completedPlayerTurns: 3,
@@ -58,8 +54,8 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     updatedAt: "2026-08-25T00:00:00.000Z",
   });
 
-  const suspendManifest = manifest("suspension-fixture/suspend", "envelope-v1");
-  const writerManifest = manifest("suspension-fixture/writer", "envelope-v1");
+  const suspendManifest = manifest("suspension-fixture/suspend");
+  const writerManifest = manifest("suspension-fixture/writer");
   const loaded = new Map<string, LoadedRuntime>([
     [
       suspendManifest.name,
@@ -135,7 +131,6 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     c.set("loadRuntimeFn", async (runtimeManifest: RuntimeManifest) =>
       loaded.get(runtimeManifest.name),
     );
-    c.set("toolExecutor", undefined);
     c.set("resolveModel", () => undefined);
     c.set("eventBus", eventBus);
     c.set("sessionLock", createInProcessSessionLock());

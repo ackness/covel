@@ -27,9 +27,9 @@ describe("graph identity across SQLite and allocator restarts", () => {
       const now = new Date().toISOString();
       await store.createSession({
         id: context.sessionId,
-        worldId: null,
         phase: "playing",
         status: "active",
+        locale: "zh-CN",
         completedPlayerTurns: 1,
         activePlugins: [context.pluginId],
         setupRuntimes: {},
@@ -127,7 +127,11 @@ describe("graph identity across SQLite and allocator restarts", () => {
         firstSeenTurn: 1,
         attributes: { original: true },
       });
-      expect(nodes.some((row) => row.value.name === "椎名夏帆")).toBe(true);
+      expect(
+        nodes.some(
+          (row) => (row.value as { name?: unknown }).name === "椎名夏帆",
+        ),
+      ).toBe(true);
       expect(
         await store.listPluginData(
           context.sessionId,
