@@ -45,6 +45,7 @@ import {
   createMetadataSanitizer,
   extractParameterOverrides,
   imagePartUrl,
+  lateSystemMessagesAsUser,
 } from "./common.js";
 import { readTokenCount } from "./usage.js";
 import { openAiPromptCacheKeyField } from "./prompt-cache-key.js";
@@ -246,7 +247,7 @@ function serializeMessages(
   config: ProviderConfig,
 ): Record<string, unknown>[] {
   const field = endpointReasoningField(messages, model, config);
-  return messages.map((msg) => {
+  return lateSystemMessagesAsUser(messages).map((msg) => {
     // Reasoning a model wrote inline is not sent back: models that think in
     // `<think>` blocks expect history to carry only their final replies.
     const inlineThink = continuationItems(msg, PROTOCOL, model, config)?.some(

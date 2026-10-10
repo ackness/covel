@@ -53,6 +53,7 @@ import {
   extractParameterOverrides,
   IMAGE_PLACEHOLDER_TEXT,
   imagePartUrl,
+  lateSystemMessagesAsUser,
 } from "./common.js";
 import type {
   ModelRequestContext,
@@ -207,7 +208,7 @@ function serializeResponsesInput(
   stateless: boolean,
 ): unknown[] {
   const items: unknown[] = [];
-  for (const msg of messages) {
+  for (const msg of lateSystemMessagesAsUser(messages)) {
     const native = continuationItems(msg, "openai-responses-v1", model, config);
     if (native) {
       items.push(...(stateless ? statelessReplayItems(native) : native));
