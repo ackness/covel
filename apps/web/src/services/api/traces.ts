@@ -96,10 +96,16 @@ export interface TraceDiscovery {
   pluginData: PluginDataDiscoveryIndex[];
 }
 
+/**
+ * The newest events of the session grouped by turn, at most 5000 events.
+ * `nextCursor` is set when older events remain; pass it to
+ * `fetchTraceTurnsPage` to read them.
+ */
 export async function fetchTraceTurns(sessionId: string): Promise<{
   sessionId: string;
   discovery?: TraceDiscovery;
   turns: TurnTrace[];
+  nextCursor: PageCursor | null;
 }> {
   return request(`/api/traces/${encodeURIComponent(sessionId)}/turns`, {
     sessionId,

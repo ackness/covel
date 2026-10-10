@@ -766,11 +766,11 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### Trace 调试
 
-| 方法 | 路径                                | 描述                                           |
-| ---- | ----------------------------------- | ---------------------------------------------- |
-| GET  | `/api/traces/:sessionId`            | 获取会话所有 trace 事件（全量）                |
-| GET  | `/api/traces/:sessionId/turns`      | 按 Turn 分组的 trace 事件（全量）              |
-| GET  | `/api/traces/:sessionId/turns/page` | 最近事件窗口分组为 Turn + 游标（向上加载更旧） |
+| 方法 | 路径                                | 描述                                                        |
+| ---- | ----------------------------------- | ----------------------------------------------------------- |
+| GET  | `/api/traces/:sessionId`            | 会话最近的 trace 事件，一次最多 5000 条，`?cursor` 读更早的 |
+| GET  | `/api/traces/:sessionId/turns`      | 同一窗口按 Turn 分组                                        |
+| GET  | `/api/traces/:sessionId/turns/page` | 最近事件窗口分组为 Turn + 游标（向上加载更旧）              |
 
 ### 媒体管理
 
@@ -3438,7 +3438,7 @@ SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修
 
 #### `GET /api/traces/:sessionId`
 
-获取会话的所有 trace 事件。
+获取会话最近的 trace 事件，按时间从旧到新排列。一次请求最多返回 5000 条（`TRACE_FULL_EVENT_LIMIT`，等于分页端点单页上限的十倍）：一条 trace 事件可以带整份提示词，长会话的全部事件不能一次读进内存。会话的事件多于这个数时，响应的 `nextCursor` 不为 `null`，把它作为 `?cursor` 再请求本端点或 `/turns/page` 即可读到更早的事件；非法的 `cursor` 返回 `400 invalid_cursor`。`discovery` 只在不带 `cursor` 的请求里返回。`count` 是本次返回的条数，`eventOrder` 是事件在本次响应里的序号。
 
 **响应:**
 
@@ -3505,7 +3505,7 @@ SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修
 
 #### `GET /api/traces/:sessionId/turns`
 
-按 Turn 分组的 trace 事件。
+按 Turn 分组的 trace 事件。读取的窗口、`?cursor`、`nextCursor` 和 `discovery` 的规则与 `GET /api/traces/:sessionId` 相同（最多 5000 条事件）；窗口边界可能把一个 Turn 切开，继续读更早的事件后按 `turnId` 合并。
 
 **响应:**
 
@@ -3532,7 +3532,7 @@ SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。修
 
 #### `GET /api/traces/:sessionId/turns/page`
 
-只把**最近一段事件窗口**分组为 Turn 返回，供 debug 时间线增量加载 —— `trace_events` 是增长最快的表，全量 `/turns` 在长会话上会把整表读进内存。
+只把**最近一段事件窗口**分组为 Turn 返回，供 debug 时间线增量加载 —— `trace_events` 是增长最快的表，`/turns` 一次读取的窗口是它的十倍。
 
 **参数:**
 

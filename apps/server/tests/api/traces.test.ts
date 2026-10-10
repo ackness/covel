@@ -9,7 +9,10 @@ import {
 } from "@covel/plugin-loader";
 import { type DataStore, type SessionRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { traceRoutes } from "../../src/routes/api/traces.js";
+import {
+  TRACE_FULL_EVENT_LIMIT,
+  traceRoutes,
+} from "../../src/routes/api/traces.js";
 
 function makeApp(
   store: DataStore,
@@ -433,6 +436,66 @@ describe("traceRoutes", () => {
     expect(pageBody.turns[0]!.events.map((event) => event.eventOrder)).toEqual([
       0, 1,
     ]);
+  });
+
+  it("reads at most the newest window on the unpaged endpoints and hands on a cursor", async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession("sess-long"));
+    const total = TRACE_FULL_EVENT_LIMIT + 3;
+    for (let index = 0; index < total; index++) {
+      await store.addTraceEvent({
+        id: `trace-${String(index).padStart(5, "0")}`,
+        sessionId: "sess-long",
+        type: "runtime.started",
+        traceId: "trace",
+        turnId: `turn-${Math.floor(index / 100)}`,
+        payload: {},
+        createdAt: new Date(Date.UTC(2026, 3, 26) + index).toISOString(),
+      });
+    }
+    const app = makeApp(store);
+    type Flat = {
+      count: number;
+      nextCursor: string | null;
+      discovery?: unknown;
+      events: Array<{ id: string }>;
+    };
+
+    const newest = (await (
+      await app.request("/api/traces/sess-long")
+    ).json()) as Flat;
+    expect(newest.count).toBe(TRACE_FULL_EVENT_LIMIT);
+    expect(newest.events[0]!.id).toBe("trace-00003");
+    expect(newest.events.at(-1)!.id).toBe(`trace-0${total - 1}`);
+    expect(newest.discovery).toBeDefined();
+    expect(newest.nextCursor).toEqual(expect.any(String));
+
+    const older = (await (
+      await app.request(
+        `/api/traces/sess-long?cursor=${encodeURIComponent(newest.nextCursor!)}`,
+      )
+    ).json()) as Flat;
+    expect(older.events.map((event) => event.id)).toEqual([
+      "trace-00000",
+      "trace-00001",
+      "trace-00002",
+    ]);
+    expect(older.nextCursor).toBeNull();
+    expect(older.discovery).toBeUndefined();
+
+    const turns = (await (
+      await app.request("/api/traces/sess-long/turns")
+    ).json()) as {
+      nextCursor: string | null;
+      turns: Array<{ eventCount: number }>;
+    };
+    expect(
+      turns.turns.reduce((count, turn) => count + turn.eventCount, 0),
+    ).toBe(TRACE_FULL_EVENT_LIMIT);
+    expect(turns.nextCursor).toBe(newest.nextCursor);
+
+    const invalid = await app.request("/api/traces/sess-long/turns?cursor=x");
+    expect(invalid.status).toBe(400);
   });
 
   it("includes a discovery snapshot on trace turns without plugin_data values", async () => {
