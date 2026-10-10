@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+<!-- changelog:legacy-entries: the entries below were written here before fragments existed. `pnpm changelog:release` moves them to the release and removes this comment; after that this section holds no entry. -->
+
+Entries for the next release are in [`changelog.d/`](./changelog.d/README.md), one file per change; do not add lines here. `pnpm changelog:preview` prints them as this section.
+
 ### Breaking
 
 - **`GET /api/worlds` returns summaries.** Each item has no `lore` and no `dimensions`, and its `metadata` keeps only `source`, `storage`, `packageManaged`, `generated`, `cover`, `accentColor`, `supportedLocales`, `packageInfo`, `defaultViewMode`, `pluginSettings` and the `name` / `description` entries of `localizedText`. The list of the four bundled worlds shrinks from about 267 KB to 3.9 KB. A client that read the lore, the dimensions or another metadata key (`embeddedCharacters`, `characterSchema`, `pluginPolicy`, `worldData`) from the list must call `GET /api/worlds/:id`, which still returns the whole record. In the web client the session store and the world list hold summaries; the session-prep screen, the world page, the world editor and the World tab read the full record when they open it. The first visit of the browser-private profile now reads each catalog world with `GET /api/worlds/:id`. The `WorldSummary` type, `worldSummarySchema` and `summarizeWorld` are in `@covel/shared`. Rules: `docs/reference/api.md`.
