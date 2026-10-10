@@ -1,8 +1,7 @@
 export default function (covel) {
   covel.provideExtension("ui.slot@1", "backdrop", {
     async handler({ previous, events }, ctx) {
-      const current = (await ctx.pluginData.get("scenery_private", "current"))
-        ?.value;
+      const current = await ctx.pluginData.get("scenery_private", "current");
       if (!current) return previous;
       const preview = events.find(
         (event) => event.topic === "community-stage.preview",
@@ -15,8 +14,7 @@ export default function (covel) {
   });
   covel.provideExtension("ui.slot@1", "cast", {
     async handler({ previous }, ctx) {
-      const current = (await ctx.pluginData.get("cast_private", "current"))
-        ?.value;
+      const current = await ctx.pluginData.get("cast_private", "current");
       return current ?? previous;
     },
   });

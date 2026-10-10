@@ -79,6 +79,7 @@ pnpm check:push                            # 手动检查当前已提交的 HEAD
 pnpm --filter @covel/runtime test          # 单包
 pnpm test:pg                               # 必须连接 PostgreSQL 的集成检查
 pnpm e2e:smoke                             # CI 的确定性 Chromium 核心流程
+pnpm e2e:extensions                        # CI 的社区插件验收（隔离目录里的第三方包）
 pnpm e2e                                   # Playwright 端到端
 ```
 
@@ -92,7 +93,7 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。CI（[`ci.yml`](../.github/workflows/ci.yml)）只对 `@covel/runtime` 强制覆盖率下限：`pnpm test:coverage:runtime` 带覆盖率运行它的测试，低于 `packages/runtime/vitest.config.ts` 里的 `thresholds` 即失败；下限比实测值低几个百分点，用来拦截下降，覆盖率上升后应随之调高。其余包的 ≥ 80% 仍是参考目标，未强制。
 
-PR、main 和发布复用同一份 CI 检查：静态检查连同可缓存的测试与构建，以及独立的 Web 单元测试、server 测试、PostgreSQL 与 Chromium smoke job。server 套件最长且从不缓存，所以独占一个 runner；同一个 job 还执行 runtime 的覆盖率下限。只改文档的变更不运行 `ci.yml`，改由 `docs.yml` 跑静态检查和 `pnpm test:docs`。文件清单就是 pre-push hook 用的那份；`scripts/tests/change-scope.test.mjs` 保证两个工作流与它一致，并在某个读取文档的测试没有列进 `test:docs` 时失败。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
+PR、main 和发布复用同一份 CI 检查：静态检查连同可缓存的测试与构建，以及独立的 Web 单元测试、server 测试、PostgreSQL 与 Chromium job（smoke 之后接着跑 `pnpm e2e:extensions`，约半分钟，用同一次安装和同一份 Chromium）。server 套件最长且从不缓存，所以独占一个 runner；同一个 job 还执行 runtime 的覆盖率下限。只改文档的变更不运行 `ci.yml`，改由 `docs.yml` 跑静态检查和 `pnpm test:docs`。文件清单就是 pre-push hook 用的那份；`scripts/tests/change-scope.test.mjs` 保证两个工作流与它一致，并在某个读取文档的测试没有列进 `test:docs` 时失败。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
 
 ### 框架/插件隔离（重要）
 
