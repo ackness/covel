@@ -4,6 +4,7 @@ export default function register(api) {
     async handler(input, ctx) {
       if (!ctx.gateway) return null;
       return compactHistory(input, {
+        signal: ctx.signal,
         fastSlotLlm: {
           async complete(request) {
             const result = await ctx.gateway.generateText({

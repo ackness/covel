@@ -267,6 +267,8 @@ export async function compactHistory(
     fastSlotLlm: CompactorLLMAdapter;
     estimator?: TokenEstimator;
     loadPrompt?: PromptLoader;
+    /** A cancelled turn stops here instead of keeping a partial result. */
+    signal?: AbortSignal;
   },
   opts: CompactionPolicyOptions = {},
 ): Promise<HistoryCompactionOutput> {
@@ -428,22 +430,32 @@ export async function compactHistory(
   }
   const summaries: NonNullable<HistoryCompactionOutput>["summaries"][number][] =
     [];
+  let deferred: { readonly reason: string } | undefined;
   if (mergeCount > 0) {
     const selected = existingSummaries.slice(0, mergeCount);
     const mergedSections = [
       ...new Set(selected.flatMap((summary) => summary.focusSections)),
     ];
-    const merged = await summarize([], selected, mergeBudget, mergedSections);
-    summaries.push({
-      ...merged,
-      messageIds: [],
-      replacesSummaryIds: selected.map((summary) => summary.id),
-    });
+    // The new summary is already paid for. When the merge of the older ones
+    // fails, keep the new summary and let a later turn merge again.
+    try {
+      const merged = await summarize([], selected, mergeBudget, mergedSections);
+      summaries.push({
+        ...merged,
+        messageIds: [],
+        replacesSummaryIds: selected.map((summary) => summary.id),
+      });
+    } catch (error) {
+      if (deps.signal?.aborted) throw error;
+      deferred = {
+        reason: `The older summaries were not merged: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
   }
   summaries.push({
     ...fresh,
     messageIds: toCompact.map((message) => message.id),
     replacesSummaryIds: [],
   });
-  return { summaries };
+  return { summaries, ...(deferred ? { deferred } : {}) };
 }

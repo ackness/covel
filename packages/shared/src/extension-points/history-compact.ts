@@ -42,6 +42,9 @@ export const historyCompactionOutputSchema = z
       )
       .min(1)
       .readonly(),
+    // Work the provider could not finish and leaves for a later turn; the
+    // summaries above are still kept.
+    deferred: z.strictObject({ reason: z.string().min(1) }).optional(),
   })
   .nullable();
 export type HistoryCompactionInput = z.infer<

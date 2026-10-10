@@ -136,6 +136,12 @@ export type HistoryCompactOutput = {
     readonly focusSections: readonly string[];
     readonly truncated?: boolean;
   }[];
+  /**
+   * Work the provider could not finish and leaves for a later turn, for
+   * example merging older summaries after the new one succeeded. The
+   * summaries are still kept; the host records the reason like a failure.
+   */
+  readonly deferred?: { readonly reason: string };
 } | null;
 
 // ── media.image-flow@1 ───────────────────────────────────────────
