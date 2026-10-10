@@ -95,6 +95,13 @@ export interface WriteWorldPackageOptions {
    * leaves the old package as it was.
    */
   readonly replace?: boolean;
+  /**
+   * With `replace`: runs once the new package is in place, before the old one
+   * is dropped. If it throws, the old package is put back and the error is
+   * rethrown, so the caller can tie the swap to its own read-back and record
+   * update.
+   */
+  readonly afterPublish?: () => Promise<void>;
   /** The contracts the world was generated with; each may name its file. */
   readonly dataContracts?: readonly ContractFile[];
 }
@@ -156,14 +163,34 @@ export async function writeWorldPackage(
       await rename(finalDir, kept);
       let removePrevious = true;
       try {
-        await rename(staging, finalDir);
-      } catch (error) {
         try {
-          await rename(kept, finalDir);
-        } catch (restoreError) {
-          removePrevious = false;
-          throw new WorldPackageRecoveryError(kept, [error, restoreError]);
+          await rename(staging, finalDir);
+        } catch (error) {
+          try {
+            await rename(kept, finalDir);
+          } catch (restoreError) {
+            throw new WorldPackageRecoveryError(kept, [error, restoreError]);
+          }
+          throw error;
         }
+        try {
+          await options.afterPublish?.();
+        } catch (error) {
+          // Set the rejected package aside, then bring the old one back.
+          try {
+            await rename(finalDir, path.join(previous, "rejected"));
+            await rename(kept, finalDir);
+          } catch (restoreError) {
+            console.error(
+              `[world-writer] could not restore ${finalDir} from ${kept}:`,
+              restoreError,
+            );
+            throw new WorldPackageRecoveryError(kept, [error, restoreError]);
+          }
+          throw error;
+        }
+      } catch (error) {
+        if (error instanceof WorldPackageRecoveryError) removePrevious = false;
         throw error;
       } finally {
         if (removePrevious)

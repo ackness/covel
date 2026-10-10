@@ -210,6 +210,18 @@ describe("buildLlmRespondedErrorPayload", () => {
     });
     expect(payload).toMatchObject({ finishReason: "error", diagnostics });
   });
+  it("reports the usage the provider attached to a rejected reply", () => {
+    const usage = { inputTokens: 40, outputTokens: 7 };
+    const payload = buildLlmRespondedErrorPayload({
+      ...baseIdentity,
+      error: Object.assign(new Error("schema mismatch"), {
+        details: { usage },
+      }),
+      durationMs: 1,
+      attempt: 0,
+    });
+    expect(payload).toMatchObject({ usage });
+  });
   it("produces the error shape required by the spec (finishReason=error, usage present)", () => {
     const payload = buildLlmRespondedErrorPayload({
       ...baseIdentity,

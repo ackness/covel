@@ -384,6 +384,10 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async appendTurnMessage(record) {
+      // Match the SQL turn_messages primary key: a duplicate id is an error.
+      if (state.turnMessages.some((r) => r.id === record.id)) {
+        throw new Error(`Turn message already exists: ${record.id}`);
+      }
       state.turnMessages.push(record);
     },
 

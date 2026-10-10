@@ -123,6 +123,7 @@ describe("scheduler-driven detached turn completion", () => {
       pluginId: "media",
       sourceTurnId: "source-turn",
       sourceLogicalTurnId: "logical-turn",
+      sourceLogicalTurn: 1,
       pluginVersion: "1.2.3",
     });
     expect(result.deferredRuntimeJobs?.[0]?.upstreamResults).toHaveLength(1);
@@ -145,6 +146,7 @@ describe("scheduler-driven detached turn completion", () => {
       turnCompletion: { mode: "detached" },
     });
     const seen = vi.fn();
+    const seenTurn = vi.fn();
     const deps = await testDeps(
       [narrative, detached],
       new Map([
@@ -154,7 +156,9 @@ describe("scheduler-driven detached turn completion", () => {
             const ctx = rawCtx as {
               inputs?: Readonly<Record<string, InputSlot>>;
               activation?: { source?: string; detached?: boolean };
+              logicalTurn?: number;
             };
+            seenTurn(ctx.logicalTurn);
             seen(
               ctx.inputs?.narrative && "value" in ctx.inputs.narrative
                 ? ctx.inputs.narrative.value
@@ -197,9 +201,12 @@ describe("scheduler-driven detached turn completion", () => {
         },
         sourceExecutionStartedAt: "2026-01-01T00:00:00.000Z",
         sourceLogicalTurnId: "logical-turn",
+        sourceLogicalTurn: 1,
         upstreamResults: [sourceResult],
       },
     };
+    // The source execution has committed, so the session clock moved on.
+    await deps.store.updateSession("session", { completedPlayerTurns: 1 });
 
     const result = await executeTurn(input, [narrative, detached], deps);
 
@@ -214,6 +221,8 @@ describe("scheduler-driven detached turn completion", () => {
       detached: true,
       payload: null,
     });
+    // The job reports the turn it was queued in, not the one after it.
+    expect(seenTurn).toHaveBeenCalledWith(1);
   });
 
   it("keeps a declared detached runtime foreground when another runtime consumes it", async () => {

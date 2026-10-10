@@ -1,6 +1,10 @@
 /** Captures committed world state and caller-resolved history summaries once per execution. */
 
-import { instructionLocaleFor, localizedWorldText } from "@covel/shared";
+import {
+  instructionLocaleFor,
+  localizedWorldText,
+  narratorLore,
+} from "@covel/shared";
 import type {
   LorebookEntryRecord,
   SessionContextReadStore,
@@ -83,13 +87,15 @@ export async function buildSessionContextSnapshot(
   ]);
 
   const loreOverride = sessionRecord?.metadata?.loreOverride;
+  const lore =
+    typeof loreOverride === "string"
+      ? loreOverride
+      : localizedWorldText(storedWorldRecord, opts.locale).lore;
+  // The model reads the narrator-only parts too, without their marker lines.
   const worldRecord = storedWorldRecord
     ? {
         ...storedWorldRecord,
-        lore:
-          typeof loreOverride === "string"
-            ? loreOverride
-            : localizedWorldText(storedWorldRecord, opts.locale).lore,
+        lore: lore === undefined ? undefined : narratorLore(lore),
       }
     : null;
 

@@ -778,6 +778,20 @@ export function registerRuntimeRecordStoreSuites(
       expect(list[1]!.id).toBe(m2.id);
     });
 
+    it("parity: appendTurnMessage rejects a duplicate id and keeps the original", async () => {
+      const original = makeTurnMessage({
+        sessionId: "sess-dup",
+        content: "original",
+      });
+      await store.appendTurnMessage(original);
+      await expect(
+        store.appendTurnMessage({ ...original, content: "replacement" }),
+      ).rejects.toThrow();
+      const list = await store.listTurnMessages("sess-dup");
+      expect(list).toHaveLength(1);
+      expect(list[0]!.content).toBe("original");
+    });
+
     it("should filter by sessionId", async () => {
       const m1 = makeTurnMessage({ sessionId: "sess-1" });
       const m2 = makeTurnMessage({ sessionId: "sess-2" });

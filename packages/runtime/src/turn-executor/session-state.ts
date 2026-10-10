@@ -178,7 +178,8 @@ export async function loadTurnSessionState(args: {
     ),
     sessionMeta: {
       turnNumber,
-      logicalTurn: completedPlayerTurns + 1,
+      logicalTurn:
+        input.detachedStage?.sourceLogicalTurn ?? completedPlayerTurns + 1,
       characters: sessionCharacters,
       lastPlayerInput,
       lastFormValues: lastPlayerInput?.values,

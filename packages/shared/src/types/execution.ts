@@ -104,6 +104,11 @@ export interface DeferredRuntimeJob {
   readonly sourceExecutionId: string;
   readonly sourceExecutionStartedAt: string;
   readonly sourceLogicalTurnId?: string;
+  /**
+   * Turn number of the source execution. The job runs after that execution's
+   * commit has advanced the session clock, so it must not count again.
+   */
+  readonly sourceLogicalTurn?: number;
   readonly pluginVersion?: string;
   readonly upstreamResults: readonly RuntimeResult[];
 }
@@ -117,6 +122,7 @@ export type DetachedStageInput = Pick<
   | "sourceExecutionId"
   | "sourceExecutionStartedAt"
   | "sourceLogicalTurnId"
+  | "sourceLogicalTurn"
   | "upstreamResults"
   | "turnDigest"
 >;

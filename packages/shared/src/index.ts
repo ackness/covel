@@ -108,6 +108,13 @@ export {
   worldEditionLocales,
 } from "./utils/content-locale.js";
 export type { WorldEditions } from "./utils/content-locale.js";
+export {
+  narratorLore,
+  narratorOnlyLoreIssues,
+  playerVisibleLore,
+  withNarratorOnlyLore,
+} from "./utils/narrator-only-lore.js";
+export type { NarratorOnlyLoreIssue } from "./utils/narrator-only-lore.js";
 export type {
   PluginMessageCatalog,
   PluginMessages,
@@ -142,6 +149,7 @@ export {
   toJsonValueOrDiagnostic,
 } from "./utils/json-value.js";
 export {
+  CONCEALED_FAILURE_MESSAGE,
   concealedRuntimeIds,
   concealRuntimeResult,
   concealTracePayload,

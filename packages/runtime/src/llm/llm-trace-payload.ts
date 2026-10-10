@@ -131,6 +131,10 @@ export function buildLlmRespondedErrorPayload(
     details && typeof details === "object" && "diagnostics" in details
       ? details.diagnostics
       : undefined;
+  const errorUsage =
+    details && typeof details === "object" && "usage" in details
+      ? (details.usage as LLMResponse["usage"])
+      : undefined;
   return {
     ...(diagnostics ? { diagnostics } : {}),
     runtimeId: input.runtimeId,
@@ -138,7 +142,7 @@ export function buildLlmRespondedErrorPayload(
     finishReason: "error",
     error:
       input.error instanceof Error ? input.error.message : String(input.error),
-    usage: input.usage ?? { inputTokens: 0, outputTokens: 0 },
+    usage: input.usage ?? errorUsage ?? { inputTokens: 0, outputTokens: 0 },
     durationMs: input.durationMs,
     attempt: input.attempt,
     ...(input.streaming ? { streaming: true } : {}),

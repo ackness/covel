@@ -13,6 +13,7 @@ import {
   type Proposal,
   type RuntimeManifest,
 } from "@covel/shared";
+import { registerDimensionSettlements } from "../src/commit/dimension-finalization.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
@@ -718,5 +719,63 @@ describe("story gate on the dimension provider", () => {
       result.runtimeResults.find((entry) => entry.runtimeId === "story/auto"),
     ).toMatchObject({ status: "skipped" });
     expect(seen).toEqual([]);
+  });
+});
+
+describe("settlement receipt retention", () => {
+  it("keeps the newest resolved receipts and every pending one", async () => {
+    const store = await setup();
+    const receipt = (status: string, n: number) => ({
+      source: { resultId: `old-${n}`, turnNumber: n },
+      status,
+      readVersions: { reputation: 1 },
+      definitions: {},
+      sourceTurnId: `t${n}`,
+      version: 1,
+    });
+    // Oldest first: one unresolved receipt, then 25 resolved ones.
+    for (let n = 0; n < 26; n++)
+      await store.compareAndSetPluginDataBatch("s", "owner", [
+        {
+          namespace: DIMENSION_SETTLEMENT_NAMESPACE,
+          key: `old-${n}`,
+          expectedVersion: null,
+          value: receipt(n === 0 ? "pending-settlement" : "settled", n),
+          timestamp: `2026-10-02T00:00:${String(n).padStart(2, "0")}.000Z`,
+        },
+      ]);
+
+    await store.withTransaction((tx) =>
+      registerDimensionSettlements({
+        sink: tx,
+        sessionId: "s",
+        scope: {
+          provider: "owner",
+          publisher: "owner/context",
+          locale: "en-US",
+          turnNumber: 27,
+        },
+        runtimes,
+        results: [
+          {
+            runtimeId: "story",
+            turnId: "t",
+            runId: "new",
+            status: "success",
+            output: null,
+          },
+        ],
+      }),
+    );
+
+    const keys = (
+      await store.listPluginData("s", "owner", DIMENSION_SETTLEMENT_NAMESPACE)
+    ).map((row) => row.key);
+    expect(keys).toContain("old-0");
+    expect(keys).toContain("new");
+    expect(keys).not.toContain("old-1");
+    expect(keys).not.toContain("old-5");
+    expect(keys).toContain("old-6");
+    expect(keys).toHaveLength(22);
   });
 });

@@ -57,6 +57,14 @@ type DimensionRuntime = Pick<
   "name" | "pluginId" | "outputKind" | "outputContract"
 >;
 
+/**
+ * Resolved receipts kept per session. After its turn a receipt is read only
+ * for the idempotent re-commit of that same source and for the recent-history
+ * display, so a short tail is enough; unresolved receipts are never pruned.
+ * Without a bound every snapshot build reads and parses one row per turn.
+ */
+const RESOLVED_RECEIPTS_KEPT = 20;
+
 /** The narrative a settlement update refers to, when it names one. */
 function settlementSourceOf(
   proposal: Proposal,
@@ -248,7 +256,39 @@ export async function registerDimensionSettlements(args: {
       });
     }
   }
+  if (events.length > 0) await pruneResolvedReceipts(sink, sessionId, provider);
   return events;
+}
+
+/** Delete resolved receipts older than the newest {@link RESOLVED_RECEIPTS_KEPT}. */
+async function pruneResolvedReceipts(
+  sink: StoreTransaction,
+  sessionId: string,
+  provider: string,
+): Promise<void> {
+  const rows = await sink.listPluginData(
+    sessionId,
+    provider,
+    DIMENSION_SETTLEMENT_NAMESPACE,
+  );
+  // Oldest first by creation time, whatever order the backend lists in. A row
+  // that does not parse is left alone: cleanup must not fail the commit.
+  const resolved = rows
+    .filter((row) => {
+      const receipt = dimensionSettlementReceiptSchema.safeParse(row.value);
+      return receipt.success && receipt.data.status !== "pending-settlement";
+    })
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  for (const row of resolved.slice(
+    0,
+    Math.max(0, resolved.length - RESOLVED_RECEIPTS_KEPT),
+  ))
+    await sink.deletePluginData(
+      sessionId,
+      provider,
+      DIMENSION_SETTLEMENT_NAMESPACE,
+      row.key,
+    );
 }
 
 /**

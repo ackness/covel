@@ -70,6 +70,7 @@ export function enforcePluginRegistrationContract(
         if (!wires || typeof wires !== "object")
           throw invalid("Invalid wire module");
         const groups = [
+          wires.text,
           wires.image,
           wires.speech,
           wires.transcription,

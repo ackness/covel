@@ -288,7 +288,10 @@ async function executeTurnImpl(
   // Logical-turn number for this execution (frozen): the count of committed
   // main-loop player turns plus one. Drives scheduled cadence / startTurn and
   // is independent of the raw player-message count `turnNumber`.
-  const logicalTurn = sessionState.completedPlayerTurns + 1;
+  // A detached job keeps the number of the execution that queued it.
+  const logicalTurn =
+    input.detachedStage?.sourceLogicalTurn ??
+    sessionState.completedPlayerTurns + 1;
   const dimensionBarrier = await dimensionExecutionBarrier({
     store: deps.store,
     sessionId: input.sessionId,
@@ -842,6 +845,7 @@ async function executeTurnImpl(
         sourceTurnId: input.turnId,
         sourceExecutionId: executionContext.executionId,
         sourceExecutionStartedAt: executionStartedAt,
+        sourceLogicalTurn: logicalTurn,
         ...(executionContext.logicalTurnId
           ? { sourceLogicalTurnId: executionContext.logicalTurnId }
           : {}),

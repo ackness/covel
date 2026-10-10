@@ -1,8 +1,9 @@
-import type {
-  LLMTargetIdentity,
-  RuntimeManifest,
-  RuntimeResult,
-  TurnInput,
+import {
+  CONCEALED_FAILURE_MESSAGE,
+  type LLMTargetIdentity,
+  type RuntimeManifest,
+  type RuntimeResult,
+  type TurnInput,
 } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 import {
@@ -203,6 +204,22 @@ export async function finalizeRuntimeResult(
         runId: finalized.runId,
       });
     }
+  }
+  if (manifest.concealed && finalized.status === "failed" && finalized.error) {
+    // The failure text can quote hidden content (tool validation messages), and
+    // it reaches the player stream, traces and the stored result.
+    console.warn("[runtime] concealed runtime failed", {
+      runtimeId: finalized.runtimeId,
+      runId: finalized.runId,
+      error: finalized.error,
+    });
+    // The provider and model name no hidden content, and they tell the player
+    // which model to look at.
+    const target = /^\[provider: [^\]]*\] /.exec(finalized.error)?.[0] ?? "";
+    finalized = {
+      ...finalized,
+      error: `${target}${CONCEALED_FAILURE_MESSAGE}`,
+    };
   }
   await reportRuntimeResult(deps, input.sessionId, finalized);
   return finalized;

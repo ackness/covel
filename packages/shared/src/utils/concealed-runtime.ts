@@ -52,6 +52,10 @@ export function concealTracePayload(
   return kept;
 }
 
+/** Failure text a player sees for a concealed runtime; the real one goes to the server log. */
+export const CONCEALED_FAILURE_MESSAGE =
+  "Runtime failed (details withheld for a concealed runtime)";
+
 /** Strip a concealed runtime's outputs, tool payloads, and proposals. */
 export function concealRuntimeResult(result: RuntimeResult): RuntimeResult {
   const {
@@ -62,6 +66,7 @@ export function concealRuntimeResult(result: RuntimeResult): RuntimeResult {
   } = result;
   return {
     ...rest,
+    ...(rest.error === undefined ? {} : { error: CONCEALED_FAILURE_MESSAGE }),
     output: null,
     toolCalls: result.toolCalls.map((call) => ({
       ...call,

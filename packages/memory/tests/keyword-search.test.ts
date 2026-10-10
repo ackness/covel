@@ -3,6 +3,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { LorebookEntryRecord } from "@covel/store";
 import { createKeywordRecallSearcher } from "../src/recall-search.js";
 import { createKeywordArchivalSearcher } from "../src/archival-search.js";
+import { characterItems } from "../src/archival-items.js";
 
 it("finds reordered Chinese phrases and returns the matching passage beyond the prefix", async () => {
   const content =
@@ -222,6 +223,37 @@ it("searches only the plugin data that an active plugin declared searchable", as
     expect(
       await createKeywordArchivalSearcher(store).search("session", "银钥匙"),
     ).toEqual([]);
+  } finally {
+    await store.close();
+  }
+});
+
+it("indexes character fields without their bookkeeping", async () => {
+  const store = createMemoryStore();
+  const now = "2026-01-01T00:00:00.000Z";
+  await store.upsertCharacter({
+    id: "character",
+    sessionId: "session",
+    name: "Aldric",
+    type: "npc",
+    description: "keeper",
+    fields: {
+      mood: "calm",
+      lastSeen: {
+        turnId: "0b6f6a2e-3c1d-4f5a-9b7e-1a2b3c4d5e6f",
+        at: "north gate",
+        updatedAt: now,
+      },
+    },
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  try {
+    const [item] = await characterItems(store, "session");
+    expect(item?.text).toContain("north gate");
+    expect(item?.text).not.toContain("0b6f6a2e");
+    expect(item?.text).not.toContain(now);
   } finally {
     await store.close();
   }

@@ -735,7 +735,10 @@ describe("TurnExecutor — function runtime suspend", () => {
   });
 
   it("community function handler with forged core-plugin manifest gets a scoped store", async () => {
-    const manifest = makeFunctionManifest({ pluginType: "core-plugin" });
+    const manifest = makeManifest({
+      runtimeType: "function",
+      pluginType: "core-plugin",
+    });
     let capturedStore: unknown;
     const loaded: LoadedRuntime = {
       manifest,
@@ -744,7 +747,10 @@ describe("TurnExecutor — function runtime suspend", () => {
         capturedStore = ctx.store;
         const writable = ctx.store as { setPluginData?: unknown };
         return {
-          canWriteDirectly: typeof writable.setPluginData === "function",
+          outcome: "success",
+          value: {
+            canWriteDirectly: typeof writable.setPluginData === "function",
+          },
         };
       },
     };
