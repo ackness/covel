@@ -103,6 +103,47 @@ describe("server-scoped settings", () => {
     expect(store.serverSetting("ui.theme")).toBeUndefined();
   });
 
+  it("retries a failed first read a few times, then leaves the focus refresh to the page", async () => {
+    vi.useFakeTimers();
+    try {
+      const info: ServerSettingInfo = {
+        value: "90",
+        source: "setting",
+        settable: true,
+      };
+      const load = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("down"))
+        .mockRejectedValueOnce(new Error("down"))
+        .mockResolvedValue({ [KEY]: info });
+      const { store } = createStore({ load, save: async () => ({}) });
+      await store.init();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.serverSetting(KEY)?.status).toBe("unavailable");
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(load).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(load).toHaveBeenCalledTimes(3);
+      expect(store.serverSetting(KEY)).toMatchObject({
+        status: "ready",
+        value: "90",
+      });
+      // Answered: no further read is scheduled.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(load).toHaveBeenCalledTimes(3);
+
+      const failing = vi.fn().mockRejectedValue(new Error("down"));
+      const second = createStore({ load: failing, save: async () => ({}) });
+      await second.store.init();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(failing).toHaveBeenCalledTimes(4);
+      expect(second.store.serverSetting(KEY)?.status).toBe("unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("writes to the server and never to the device's own storage", async () => {
     const server = createServer({
       [KEY]: { value: "30", source: "default", settable: true },
