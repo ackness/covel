@@ -25,9 +25,18 @@ import {
   type SessionLock,
 } from "../../src/lib/session-lock.js";
 
+/** The session snapshot; a missing session fails the test with its id. */
+async function requireSnapshot(
+  ...args: Parameters<typeof buildSessionSnapshot>
+) {
+  const snapshot = await buildSessionSnapshot(...args);
+  if (!snapshot) throw new Error(`no snapshot for session ${args[1]}`);
+  return snapshot;
+}
+
 describe.each(["memory", "sqlite"])("fork state schemas on %s", (backend) => {
   let store: DataStore;
-  let app: Hono;
+  let app: Pick<Hono, "request">;
   beforeEach(async () => {
     store =
       backend === "sqlite"
@@ -118,9 +127,9 @@ describe.each(["memory", "sqlite"])("fork state schemas on %s", (backend) => {
       schema: original.schema,
     });
     expect(schemas[0]!.id).not.toBe(original.id);
-    expect(
-      (await buildSessionSnapshot(store, child.sessionId)).gameState,
-    ).toEqual({ inventory: { gold: 10 } });
+    expect((await requireSnapshot(store, child.sessionId)).gameState).toEqual({
+      inventory: { gold: 10 },
+    });
     const childSnapshot = (await store.getSnapshot(child.forkSnapshotId))!;
     expect(childSnapshot.payload.stateSchemas).toEqual(schemas);
     const checkpoint = await exportSessionCheckpoint(store, child.sessionId, {
@@ -131,7 +140,7 @@ describe.each(["memory", "sqlite"])("fork state schemas on %s", (backend) => {
     await store.deleteStateSchema(child.sessionId, "inventory");
     const grandchild = await successfulFork(childSnapshot);
     expect(
-      (await buildSessionSnapshot(store, grandchild.sessionId)).gameState,
+      (await requireSnapshot(store, grandchild.sessionId)).gameState,
     ).toEqual({ inventory: { gold: 10 } });
     expect(
       (await store.listStateSchemas("parent")).map(

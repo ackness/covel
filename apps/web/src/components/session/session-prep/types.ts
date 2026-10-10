@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type * as api from "@/services/api.js";
 
 export interface SessionPrepScreenProps {
-  world: api.WorldRecord;
+  world: api.WorldSummary;
   plugins: api.PluginSummary[];
   presets: api.PresetSummary[];
   llmConfig?: api.LlmConfigResponse | null;

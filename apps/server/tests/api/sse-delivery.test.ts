@@ -68,22 +68,27 @@ it.each(["native-backpressure", "hung-connected"] as const)(
       releases.push(release);
       return { epoch: pin.epoch, release };
     });
-    for (const name of ["onEmit", "onReset"] as const) {
-      const original = bus[name]!.bind(bus);
-      // Both observer surfaces return the same cleanup contract.
-      vi.spyOn(bus, name).mockImplementation((callback) => {
-        const unsub = vi.fn(original(callback as never));
-        unsubs.push(unsub);
-        return unsub;
-      });
-    }
+    // Both observer surfaces return the same cleanup contract.
+    const originalOnEmit = bus.onEmit.bind(bus);
+    vi.spyOn(bus, "onEmit").mockImplementation((callback) => {
+      const unsub = vi.fn(originalOnEmit(callback));
+      unsubs.push(unsub);
+      return unsub;
+    });
+    if (!bus.onReset) throw new Error("the event bus must expose onReset");
+    const originalOnReset = bus.onReset.bind(bus);
+    vi.spyOn(bus, "onReset").mockImplementation((callback) => {
+      const unsub = vi.fn(originalOnReset(callback));
+      unsubs.push(unsub);
+      return unsub;
+    });
     const native = SSEStreamingApi.prototype.writeSSE;
     const instances: SSEStreamingApi[] = [];
     let started = 0;
     let settled = 0;
     const writes = vi
       .spyOn(SSEStreamingApi.prototype, "writeSSE")
-      .mockImplementation(function (frame) {
+      .mockImplementation(function (this: SSEStreamingApi, frame) {
         instances.push(this);
         started++;
         if (mode === "hung-connected") return new Promise<void>(() => {});

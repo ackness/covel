@@ -15,6 +15,7 @@ import {
   resetPluginData,
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
+import { invalidateWorldRecord } from "@/services/world-records.js";
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { submitInteractionBlock } from "./interaction-submission.js";
@@ -547,14 +548,16 @@ export function useBuildSessionActions({
   }, [dispatch, sessionGenerationRef, sessionIdRef]);
 
   const updateWorldLocal = useCallback(
-    (world: api.WorldRecord) => {
+    (world: api.WorldSummary) => {
+      invalidateWorldRecord(world.id);
       dispatch({ type: "UPDATE_WORLD", world });
     },
     [dispatch],
   );
 
   const addWorldLocal = useCallback(
-    (world: api.WorldRecord) => {
+    (world: api.WorldSummary) => {
+      invalidateWorldRecord(world.id);
       dispatch({ type: "ADD_WORLD", world });
     },
     [dispatch],
@@ -562,6 +565,7 @@ export function useBuildSessionActions({
 
   const removeWorldLocal = useCallback(
     (worldId: string) => {
+      invalidateWorldRecord(worldId);
       dispatch({ type: "REMOVE_WORLD", worldId });
     },
     [dispatch],

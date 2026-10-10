@@ -2,6 +2,10 @@ name: CI
 
 # Verify PRs and main, and reuse the same gates for release packaging.
 #
+# This is the complete gate. The local pre-push hook runs the static gate and
+# only the test suites of the packages a push changed (scripts/check-push.mjs);
+# every suite runs here: `verify` (all but web and server), `web`, `server`.
+#
 # Push is scoped to main deliberately. A `*-dev` branch with an open PR gets
 # two runs of the same commit otherwise — the PR ref and the branch ref hash
 # to different concurrency groups, so neither cancels the other. The PR run
@@ -286,7 +290,7 @@ jobs:
         run: pnpm test:pg
 
   browser:
-    name: Browser smoke
+    name: Browser smoke and community plugins
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -318,6 +322,9 @@ jobs:
       - name: Test browser smoke
         run: pnpm e2e:smoke
 
+      - name: Test community plugin acceptance
+        run: pnpm e2e:extensions
+
       - name: Upload browser failure artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -326,5 +333,6 @@ jobs:
           path: |
             tests/e2e/artifacts/ci-smoke
             tests/e2e/report/ci-smoke
+            tests/e2e/artifacts/extensions
           if-no-files-found: ignore
           retention-days: 7

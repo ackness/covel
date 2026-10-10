@@ -292,6 +292,7 @@ describe("commercial tier — owner token hard-required", () => {
       setupRuntimes: {},
       id: created.id,
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 0,
 
       activePlugins: [],

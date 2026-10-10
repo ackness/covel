@@ -153,6 +153,7 @@ it("refuses a conflicting stored world before creating files", async () => {
   await store.createWorld({
     id: "test-world",
     name: "Existing",
+    description: "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

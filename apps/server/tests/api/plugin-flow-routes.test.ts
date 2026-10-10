@@ -159,6 +159,7 @@ describe("plugin flow routes", () => {
   it("returns package runtime triggers with mode-shaped metadata", async () => {
     const manifest: RuntimeManifest = {
       name: "test-package",
+      pluginId: "test-package",
       description: "Test runtime",
       runtimeType: "agent",
       execution: "background",

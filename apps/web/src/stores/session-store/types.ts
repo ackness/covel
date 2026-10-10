@@ -149,7 +149,8 @@ export interface SessionState {
   plugins: api.PluginSummary[];
   /** Plugins that failed to load (manifest or dependency errors). */
   pluginLoadErrors: api.PluginLoadError[];
-  worlds: api.WorldRecord[];
+  /** Summaries; a screen that needs the lore or dimensions reads `useWorldRecord`. */
+  worlds: api.WorldSummary[];
   /** Server-side llm.toml config (null = legacy / unconfigured). */
   llmConfig: api.LlmConfigResponse | null;
   booted: boolean;
@@ -163,7 +164,7 @@ export interface SessionState {
   sessionCommandsLoaded: boolean;
 
   // Active session
-  world: api.WorldRecord | null;
+  world: api.WorldSummary | null;
   session: api.SessionRecord | null;
   messages: StreamMessage[];
 
@@ -269,13 +270,13 @@ export type SessionAction =
       presets: api.PresetSummary[];
       plugins: api.PluginSummary[];
       pluginLoadErrors: api.PluginLoadError[];
-      worlds: api.WorldRecord[];
+      worlds: api.WorldSummary[];
       llmConfig: api.LlmConfigResponse | null;
     }
   | { type: "BOOT_ERROR"; error: string }
-  | { type: "SET_WORLD"; world: api.WorldRecord }
-  | { type: "ADD_WORLD"; world: api.WorldRecord }
-  | { type: "UPDATE_WORLD"; world: api.WorldRecord }
+  | { type: "SET_WORLD"; world: api.WorldSummary }
+  | { type: "ADD_WORLD"; world: api.WorldSummary }
+  | { type: "UPDATE_WORLD"; world: api.WorldSummary }
   | { type: "REMOVE_WORLD"; worldId: string }
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }

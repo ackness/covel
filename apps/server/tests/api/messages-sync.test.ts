@@ -18,10 +18,12 @@ describe("POST /api/sessions/:id/messages/sync", () => {
       id: "s",
       worldId: "w",
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 0,
 
       activePlugins: [],
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     const app = new Hono();
     const sessionLock = createInProcessSessionLock();
@@ -90,10 +92,12 @@ describe("POST /api/sessions/:id/messages/sync", () => {
       id: "s",
       worldId: "w",
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 0,
 
       activePlugins: [],
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     const store = new Proxy(base, {
       get(target, property, receiver) {

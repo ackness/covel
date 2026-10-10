@@ -9,6 +9,7 @@ import { type DataStore, type MediaStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
@@ -150,16 +151,87 @@ sources:
   return { worldsDir, descriptorPath };
 }
 
+/** A registry holding one plugin that accepts world data for a namespace. */
+async function registryWithDataPlugin(
+  id: string,
+  namespace: string,
+  contract: string,
+): Promise<PluginRegistry> {
+  const rootPath = await mkdtemp(path.join(tmpdir(), "covel-data-plugin-"));
+  await mkdir(path.join(rootPath, "schemas"));
+  await writeFile(
+    path.join(rootPath, "schemas", `${namespace}.schema.json`),
+    "{}",
+  );
+  const registry = createPluginRegistry();
+  registry.register({
+    id,
+    rootPath,
+    summary: {
+      id,
+      name: id,
+      description: "",
+      pluginType: "plugin",
+      runtimeCount: 0,
+    },
+    packageManifest: parsePluginMd(
+      `---\nid: ${id}\nkind: plugin\ndescription: Fixture\ncontributes:\n  data:\n    ${namespace}:\n      version: 1\n      schema: ./schemas/${namespace}.schema.json\n      accepts: [${contract}]\n---\n`,
+      `${id}/PLUGIN.md`,
+    ),
+    loadedRuntimes: new Map(),
+    status: "registered",
+  });
+  return registry;
+}
+
 describe("world routes", () => {
   let store: DataStore;
   let app: Hono<Env>;
 
   beforeEach(() => {
     store = createMemoryStore();
-    const pluginRegistry = {
-      get: () => undefined,
-    } as PluginRegistry;
+    const pluginRegistry = createPluginRegistry();
     app = createTestApp(store, pluginRegistry);
+  });
+
+  it("GET /api/worlds lists summaries and GET /api/worlds/:id returns the full record", async () => {
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "world-full",
+      name: "Full",
+      description: "Summary text",
+      lore: "The long lore.",
+      dimensions: makeDimensions("Reach", "Guild"),
+      metadata: {
+        source: "file",
+        accentColor: "#336699",
+        embeddedCharacters: [{ id: "c1", name: "C" }],
+        localizedText: { name: { en: "Full" }, lore: { en: "Lore" } },
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const listed = (await (await app.request("/api/worlds")).json()) as {
+      items: Record<string, unknown>[];
+    };
+    const item = listed.items.find((world) => world.id === "world-full")!;
+    expect(item).not.toHaveProperty("lore");
+    expect(item).not.toHaveProperty("dimensions");
+    expect(item.metadata).toEqual({
+      source: "file",
+      accentColor: "#336699",
+      localizedText: { name: { en: "Full" } },
+    });
+
+    const full = (await (
+      await app.request("/api/worlds/world-full")
+    ).json()) as {
+      lore: string;
+      metadata: Record<string, unknown>;
+    };
+    expect(full.lore).toBe("The long lore.");
+    expect(full.metadata.embeddedCharacters).toEqual([{ id: "c1", name: "C" }]);
   });
 
   it("POST /api/worlds mints an id when omitted", async () => {
@@ -349,11 +421,13 @@ describe("world routes", () => {
       updatedAt: now,
     });
     await store.setPluginData({
+      id: "opaque-counter",
       sessionId: "sess-1",
       pluginId: "opaque",
       namespace: "default",
       key: "counter",
       value: { n: 9 },
+      createdAt: now,
       updatedAt: now,
     });
     const sync = () =>
@@ -440,36 +514,11 @@ describe("world routes", () => {
 
   it("POST /api/worlds/:id/world-data/preflight reports a read-only import plan", async () => {
     const { worldsDir } = await makeWorldDataFixture();
-    const pluginRegistry = {
-      getAll() {
-        return new Map(
-          ["world-notes", "character-presence"].flatMap((id) => {
-            const entry = this.get(id);
-            return entry ? [[id, entry]] : [];
-          }),
-        );
-      },
-      get: (pluginId: string) =>
-        pluginId === "world-notes"
-          ? {
-              id: "world-notes",
-              packageManifest: {
-                plugin: {
-                  contributes: {
-                    data: { facts: { version: 1, accepts: ["world.facts@1"] } },
-                  },
-                },
-              },
-              dataSchemas: {
-                facts: {
-                  namespace: "facts",
-                  schemaVersion: 1,
-                  acceptsWorldData: true,
-                },
-              },
-            }
-          : undefined,
-    } as PluginRegistry;
+    const pluginRegistry = await registryWithDataPlugin(
+      "world-notes",
+      "facts",
+      "world.facts@1",
+    );
     // Record every store call so the read-only claim covers any write the
     // route might make, whatever session id it used.
     const storeCalls: string[] = [];
@@ -527,36 +576,11 @@ describe("world routes", () => {
   it("POST /api/worlds/:id/sync-data dry-runs and applies importer-managed updates", async () => {
     const { worldsDir } = await makeWorldDataFixture();
     const now = new Date().toISOString();
-    const pluginRegistry = {
-      getAll() {
-        return new Map(
-          ["world-notes", "character-presence"].flatMap((id) => {
-            const entry = this.get(id);
-            return entry ? [[id, entry]] : [];
-          }),
-        );
-      },
-      get: (pluginId: string) =>
-        pluginId === "world-notes"
-          ? {
-              id: "world-notes",
-              packageManifest: {
-                plugin: {
-                  contributes: {
-                    data: { facts: { version: 1, accepts: ["world.facts@1"] } },
-                  },
-                },
-              },
-              dataSchemas: {
-                facts: {
-                  namespace: "facts",
-                  schemaVersion: 1,
-                  acceptsWorldData: true,
-                },
-              },
-            }
-          : undefined,
-    } as PluginRegistry;
+    const pluginRegistry = await registryWithDataPlugin(
+      "world-notes",
+      "facts",
+      "world.facts@1",
+    );
     app = createTestApp(store, pluginRegistry, { worldsDirs: [worldsDir] });
     await store.createSession({
       phase: "playing",
@@ -615,36 +639,11 @@ describe("world routes", () => {
   it("POST /api/worlds/:id/sync-data reports modified managed rows as conflicts", async () => {
     const { worldsDir } = await makeWorldDataFixture();
     const now = new Date().toISOString();
-    const pluginRegistry = {
-      getAll() {
-        return new Map(
-          ["world-notes", "character-presence"].flatMap((id) => {
-            const entry = this.get(id);
-            return entry ? [[id, entry]] : [];
-          }),
-        );
-      },
-      get: (pluginId: string) =>
-        pluginId === "world-notes"
-          ? {
-              id: "world-notes",
-              packageManifest: {
-                plugin: {
-                  contributes: {
-                    data: { facts: { version: 1, accepts: ["world.facts@1"] } },
-                  },
-                },
-              },
-              dataSchemas: {
-                facts: {
-                  namespace: "facts",
-                  schemaVersion: 1,
-                  acceptsWorldData: true,
-                },
-              },
-            }
-          : undefined,
-    } as PluginRegistry;
+    const pluginRegistry = await registryWithDataPlugin(
+      "world-notes",
+      "facts",
+      "world.facts@1",
+    );
     app = createTestApp(store, pluginRegistry, { worldsDirs: [worldsDir] });
     await store.createSession({
       phase: "playing",
@@ -708,41 +707,11 @@ describe("world routes", () => {
     const { worldsDir, descriptorPath } = await makeMediaWorldDataFixture();
     const now = new Date().toISOString();
     const mediaStore = createMemoryMediaStore();
-    const pluginRegistry = {
-      getAll() {
-        return new Map(
-          ["world-notes", "character-presence"].flatMap((id) => {
-            const entry = this.get(id);
-            return entry ? [[id, entry]] : [];
-          }),
-        );
-      },
-      get: (pluginId: string) =>
-        pluginId === "character-presence"
-          ? {
-              id: "character-presence",
-              packageManifest: {
-                plugin: {
-                  contributes: {
-                    data: {
-                      assets: {
-                        version: 1,
-                        accepts: ["character.portrait-assets@1"],
-                      },
-                    },
-                  },
-                },
-              },
-              dataSchemas: {
-                assets: {
-                  namespace: "assets",
-                  schemaVersion: 1,
-                  acceptsWorldData: true,
-                },
-              },
-            }
-          : undefined,
-    } as PluginRegistry;
+    const pluginRegistry = await registryWithDataPlugin(
+      "character-presence",
+      "assets",
+      "character.portrait-assets@1",
+    );
     app = createTestApp(store, pluginRegistry, {
       mediaStore,
       worldsDirs: [worldsDir],

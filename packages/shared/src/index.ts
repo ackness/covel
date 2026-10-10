@@ -109,6 +109,10 @@ export {
 } from "./utils/content-locale.js";
 export type { WorldEditions } from "./utils/content-locale.js";
 export {
+  WORLD_SUMMARY_METADATA_KEYS,
+  summarizeWorld,
+} from "./utils/world-summary.js";
+export {
   narratorLore,
   narratorOnlyLoreIssues,
   playerVisibleLore,
@@ -353,6 +357,7 @@ export {
   worldCreateRequestSchema,
   worldPatchRequestSchema,
   worldWireRecordSchema,
+  worldSummarySchema,
 } from "./schemas/api-contract.js";
 
 export {
@@ -520,3 +525,4 @@ export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 export { isValidPluginSetting } from "./plugin-settings.js";
 
 export * from "./world-data-target.js";
+export * from "./plugin-frame.js";

@@ -43,7 +43,16 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
         id: "inspector",
         kind: "plugin",
         description: "Inspector",
-        contributes: { commands: manifests[0]?.commands ?? [] },
+        contributes: {
+          // The manifest schema's command type is mutable; copy to match it.
+          commands: (manifests[0]?.commands ?? []).map((command) => ({
+            name: command.name,
+            ...(command.aliases ? { aliases: [...command.aliases] } : {}),
+            description: command.description,
+            action: command.action,
+            ...(command.context ? { context: [...command.context] } : {}),
+          })),
+        },
       },
       manifest: {
         name: "inspector",
@@ -71,10 +80,10 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
       promptTemplate: "",
       rawFrontmatter: {},
     })),
-  } as PluginRegistryEntry;
+  };
 }
 
-const session = {
+const session: SessionRecord = {
   id: "session-1",
   worldId: "world-1",
   status: "active",
@@ -82,7 +91,11 @@ const session = {
   locale: "en-US",
   activePlugins: ["inspector"],
   runtimeModelOverrides: { "inspector/story": "deep" },
-} as SessionRecord;
+  completedPlayerTurns: 0,
+  setupRuntimes: {},
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
 
 describe("session slash command directory", () => {
   it("reads commands only from the root contribution", () => {

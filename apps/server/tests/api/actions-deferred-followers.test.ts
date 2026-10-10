@@ -115,7 +115,7 @@ describe("POST /api/actions — deferred background followers (main path)", () =
             {
               namespace: "seen",
               key: "last",
-              value: { value: event?.data?.value },
+              value: { value: event?.data?.value ?? null },
             },
           ],
         },
@@ -199,12 +199,13 @@ describe("POST /api/actions — deferred background followers (main path)", () =
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 
       createdAt: now,
+      updatedAt: now,
     });
 
     const res = await app.request("/api/actions", {
@@ -390,12 +391,13 @@ describe("POST /api/actions — deferred background followers (main path)", () =
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 
       createdAt: now,
+      updatedAt: now,
     });
 
     const res = await app.request("/api/actions", {
@@ -584,12 +586,12 @@ describe("POST /api/actions — deferred background followers (main path)", () =
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
       locale: "en-US",
       createdAt: now,
+      updatedAt: now,
     });
 
     const res = await app.request("/api/actions", {

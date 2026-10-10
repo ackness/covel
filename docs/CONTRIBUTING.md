@@ -75,16 +75,23 @@ pnpm check                                 # CI 静态检查与脚本回归
 pnpm deps:check                            # Fallow 依赖与导入检查
 pnpm analyze                               # Fallow 死代码、重复代码与复杂度报告
 pnpm test                                  # 全量
-pnpm check:push                            # 手动检查当前已提交的 HEAD
+pnpm check:push                            # 对当前已提交的 HEAD 运行 pre-push hook 的检查
+pnpm check:push --full                     # 同上，但运行全部测试套件
+pnpm changelog:preview                     # 按 docs/changelog.d/ 预览待发布的 [Unreleased]
 pnpm --filter @covel/runtime test          # 单包
 pnpm test:pg                               # 必须连接 PostgreSQL 的集成检查
 pnpm e2e:smoke                             # CI 的确定性 Chromium 核心流程
+pnpm e2e:extensions                        # CI 的社区插件验收（隔离目录里的第三方包）
 pnpm e2e                                   # Playwright 端到端
 ```
 
-`pnpm check` 包含 peer 依赖、类型、Oxlint、包边界、依赖声明、插件 manifest、schema 参考页、提示词变体、i18n、脚本回归和工作流检查。修改作者可见的 schema 字段后运行 `pnpm schemas:generate`，重新生成 `packages/shared/schemas/*.json` 与 `docs/reference/schema/*.md`；每个字段都必须带 `.describe()` 说明，缺失或生成物过期都会让检查失败。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
+`pnpm check` 包含 peer 依赖、类型、Oxlint、包边界、依赖声明、插件 manifest、schema 参考页、提示词变体、i18n、changelog 片段、脚本回归和工作流检查。修改作者可见的 schema 字段后运行 `pnpm schemas:generate`，重新生成 `packages/shared/schemas/*.json` 与 `docs/reference/schema/*.md`；每个字段都必须带 `.describe()` 说明，缺失或生成物过期都会让检查失败。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
 
-安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile`、`pnpm check`、`VITEST_MAX_WORKERS=2 pnpm test --concurrency=2` 和 `pnpm e2e --list`；任何一步失败都会阻止推送。检查不复制工作区的 `.env`、`node_modules` 或 `test-results`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。Turbo 读写的是仓库所有 worktree 共用的缓存（主 worktree 的 `.turbo/cache`）：被推送的提交与某次已通过的运行有相同的已跟踪输入时，任务直接回放；回放看不出的是依赖了 Git 忽略文件的结果，这一类由 CI 兜底。提交已在 worktree 里测过时，检查约一分半钟，大部分是从不缓存的 store 和 server 套件；没测过时为数分钟。一次推送新增的内容全是文档时，hook 只跑静态检查和读取文档的测试（`pnpm test:docs`），约半分钟；新分支以远端的 main 分支为基准。文档指 `docs/**`、根目录的 `*.md`、任意位置的 `README.md` / `README.*.md`、嵌套的 `AGENTS.md` / `CLAUDE.md`、`.claude/skills/**`、`.assets/**`、`LICENSE` 以及 issue 与 PR 模板，清单在 `scripts/lib/change-scope.mjs`。由加载器读取的 Markdown（`PLUGIN.md`、`RUNTIME.md`、`WORLD.md`、`prompts/` 下的文件）是源码，走完整流程。需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。该检查只收集 E2E 测试，不执行 PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
+安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile`、`pnpm check`、本次推送可能影响的测试和 `pnpm e2e --list`；任何一步失败都会阻止推送。全部测试套件由 CI 运行。hook 运行的测试包括：分支自远端 main 分支（`origin/main`，本地从未获取过时会先获取一次）分出以来改动过的包、依赖这些包的包（`turbo test --filter=...<包名>`），以及 `turbo.json` 里 `$TURBO_ROOT$` 输入匹配到改动文件的套件——内置插件的文件会带上 plugin-loader、runtime 和 server 套件，`worlds/**`、`prompts/**` 会带上读取它们的套件。以下情况运行全部套件：改动了所有包都会读取的文件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`turbo.json`、`vitest.base.ts`、根目录的 `package.json` 与 `tsconfig.json`、`mise.toml`），改动了规则未覆盖的根目录文件（规则在 `scripts/lib/push-scope.mjs`），推送目标是 `main` 或 tag，或者无法确定远端 main 分支。`COVEL_PUSH_CHECK=full git push` 和 `pnpm check:push --full` 可以要求运行全部套件；`pnpm check:push --base <分支>` 让叠在其他分支上的分支以下层分支为基准。输出的最后两行说明运行了什么、哪些留给 CI。检查不复制工作区的 `.env`、`node_modules` 或 `test-results`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。Turbo 读写的是仓库所有 worktree 共用的缓存（主 worktree 的 `.turbo/cache`）：被推送的提交与某次已通过的运行有相同的已跟踪输入时，任务直接回放；回放看不出的是依赖了 Git 忽略文件的结果，这一类由 CI 兜底。在一台负载较高的开发机上、Turbo 缓存为空时实测：`apps/web` 的一行改动耗时 2 分 52 秒，运行全部套件为 4 分 43 秒；其中安装、`pnpm check` 和 E2E 收集约占 85 秒。`packages/shared` 被所有包依赖，改动它会选中全部套件（4 分 22 秒）。缓存已有结果时，未改动的任务直接回放；store 和 server 套件从不缓存，现在只在改动选中它们时运行。一次推送新增的内容全是文档时，hook 只跑静态检查和读取文档的测试（`pnpm test:docs`），约半分钟；新分支以远端的 main 分支为基准。文档指 `docs/**`、根目录的 `*.md`、任意位置的 `README.md` / `README.*.md`、嵌套的 `AGENTS.md` / `CLAUDE.md`、`.claude/skills/**`、`.assets/**`、`LICENSE` 以及 issue 与 PR 模板，清单在 `scripts/lib/change-scope.mjs`。由加载器读取的 Markdown（`PLUGIN.md`、`RUNTIME.md`、`WORLD.md`、`prompts/` 下的文件）是源码，走完整流程。需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。
+
+`git push` 先连接远端，再运行 hook；hook 运行期间这条连接上没有任何数据。远端、代理或 NAT 关闭空闲连接后，检查虽然通过，推送仍会失败（`git push` 以状态码 141 退出：它向已关闭的连接写入）。hook 无法让这条连接保持活动，所以做了两件事：少跑，并按 worktree 记录通过检查的提交，保留 12 小时。再次推送同一个提交会直接发送，先运行 `pnpm check:push` 再推送也一样；需要全部套件的改动，先运行 `pnpm check:push --full`，通过后再推送。在 `~/.ssh/config` 里为该主机设置 `ServerAliveInterval 30`，也能避免代理把 SSH 连接当作空闲连接。
+
+该检查只收集 E2E 测试，不执行本次推送未改动的测试套件、PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
 
 [Fallow](https://github.com/fallow-rs/fallow) 作为根开发依赖安装，替代 Knip。`deps:check` 会阻断未使用依赖、未声明依赖与无法解析的导入；`analyze` 提供完整报告，供人工核实后清理，不作为全量阻断项。`.fallowrc.jsonc` 声明文件路由、插件动态入口和手动运行的脚本；增加这类入口时同步维护配置，避免误报。工具版本遵循工作区的 7 天发布等待期。
 
@@ -92,7 +99,7 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。CI（[`ci.yml`](../.github/workflows/ci.yml)）只对 `@covel/runtime` 强制覆盖率下限：`pnpm test:coverage:runtime` 带覆盖率运行它的测试，低于 `packages/runtime/vitest.config.ts` 里的 `thresholds` 即失败；下限比实测值低几个百分点，用来拦截下降，覆盖率上升后应随之调高。其余包的 ≥ 80% 仍是参考目标，未强制。
 
-PR、main 和发布复用同一份 CI 检查：静态检查连同可缓存的测试与构建，以及独立的 Web 单元测试、server 测试、PostgreSQL 与 Chromium smoke job。server 套件最长且从不缓存，所以独占一个 runner；同一个 job 还执行 runtime 的覆盖率下限。只改文档的变更不运行 `ci.yml`，改由 `docs.yml` 跑静态检查和 `pnpm test:docs`。文件清单就是 pre-push hook 用的那份；`scripts/tests/change-scope.test.mjs` 保证两个工作流与它一致，并在某个读取文档的测试没有列进 `test:docs` 时失败。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
+PR、main 和发布复用同一份 CI 检查，pre-push hook 省去的内容都在这里运行：静态检查连同可缓存的测试与构建（`verify`：除 Web 和 server 之外的全部套件），以及独立的 Web 单元测试、server 测试、PostgreSQL 与 Chromium job（smoke 之后接着跑 `pnpm e2e:extensions`，约半分钟，用同一次安装和同一份 Chromium）。server 套件最长且从不缓存，所以独占一个 runner；同一个 job 还执行 runtime 的覆盖率下限。只改文档的变更不运行 `ci.yml`，改由 `docs.yml` 跑静态检查和 `pnpm test:docs`。文件清单就是 pre-push hook 用的那份；`scripts/tests/change-scope.test.mjs` 保证两个工作流与它一致，并在某个读取文档的测试没有列进 `test:docs` 时失败。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
 
 ### 框架/插件隔离（重要）
 
@@ -122,13 +129,14 @@ PR、main 和发布复用同一份 CI 检查：静态检查连同可缓存的测
 2. 推送后通过 GitHub UI 开 PR，指向 `main`
 3. 推送时等待 pre-push 检查通过，再确认 CI 全部绿；涉及数据库或 UI 的变更还需运行相应专项检查
 4. PR 描述说明「为什么」与「如何验证」
-5. 有破坏性变更时，在正文中标注 `BREAKING CHANGE:`
+5. 用户、作者或运维能察觉的改动，新增一个 changelog 片段 `docs/changelog.d/<slug>.md`（[格式](./changelog.d/README.md)，条目用英文）；不要直接修改 `docs/CHANGELOG.md`，它由发布脚本写入
+6. 有破坏性变更时，在正文中标注 `BREAKING CHANGE:`，并在片段里写一条 `### Breaking`
 
 ## Release Process
 
 发布检查的唯一操作清单是[桌面打包指南](./guide/desktop-packaging.md#release-checklist)。按以下顺序执行：
 
-1. 在开发分支准备版本、CHANGELOG 和文档。根目录、`apps/*` 与 `packages/*` 的版本匹配目标 tag；插件和世界包可以独立版本化。
+1. 在开发分支准备版本、CHANGELOG 和文档。`pnpm changelog:release <version>` 把 `docs/changelog.d/` 里的片段写入 `docs/CHANGELOG.md` 的该版本小节并删除片段；版本摘要段落手写。根目录、`apps/*` 与 `packages/*` 的版本匹配目标 tag；插件和世界包可以独立版本化。
 2. 先顺序完成本地 `pnpm check`、`pnpm test`、`pnpm test:pg`、UI/E2E 检查和 `pnpm release:preflight`，再用隔离数据完成[真实模型玩家流程](./guide/e2e-testing.md#发版前的玩家流程验收)。
 3. 本地通过后推送 PR，等待 CI / PostgreSQL 集成，以及候选分支的 `Build Desktop` dry run（`publish_release=false`）通过。
 4. 合并 PR，确认 `main` 的检查和准确提交，再在该提交创建并推送 annotated `v*` tag。

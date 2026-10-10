@@ -31,6 +31,7 @@ async function makeApp(
     id: "s",
     worldId: "w",
     status: "active",
+    locale: "zh-CN",
     activePlugins: ["plug"],
 
     phase: "setup",

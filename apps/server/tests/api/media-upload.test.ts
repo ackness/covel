@@ -45,8 +45,9 @@ async function makeApp(withStore = true): Promise<{
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
     },
     id: "s1",
-    worldId: null,
     status: "active",
+    activePlugins: [],
+    locale: "zh-CN",
     createdAt: now,
     updatedAt: now,
   });
@@ -202,8 +203,9 @@ describe("POST /api/media (upload)", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: "s1",
-      worldId: null,
       status: "active",
+      activePlugins: [],
+      locale: "zh-CN",
       createdAt: recreatedAt,
       updatedAt: recreatedAt,
     });

@@ -22,6 +22,7 @@ import type { PluginManifest, RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
+import { emptyRpcStore } from "../helpers/rpc-store.js";
 
 let tmpRoot: string;
 
@@ -966,7 +967,11 @@ export default async function (covel) {
     expect(
       await entry?.handler(
         {},
-        { sessionId: "s1", pluginId: p.discovery.id, store: params.store },
+        {
+          sessionId: "s1",
+          pluginId: p.discovery.id,
+          store: emptyRpcStore(),
+        },
       ),
     ).toBe(2);
     expect(
@@ -1202,11 +1207,12 @@ export default function (covel) {
         { source },
       );
       const params = makeParams([p]);
-      for (const [sessionId, owner, value] of [
+      const rows: Array<[string, string, string]> = [
         ["s1", pluginId, "first"],
         ["s2", pluginId, "second"],
         ["s1", "other-plugin", "foreign"],
-      ]) {
+      ];
+      for (const [sessionId, owner, value] of rows) {
         await params.store.setPluginData({
           id: `${sessionId}-${owner}`,
           sessionId,

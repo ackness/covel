@@ -440,6 +440,12 @@ export const worldWireRecordSchema = z
   })
   .strict();
 
+/** A world as the list endpoint returns it: no lore, no dimensions. */
+export const worldSummarySchema = worldWireRecordSchema.omit({
+  lore: true,
+  dimensions: true,
+});
+
 /** Session creation preserves explicit opt-outs independently of resolved activation. */
 export const createSessionRequestSchema = z.strictObject({
   id: z.string().optional(),

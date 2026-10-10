@@ -481,11 +481,19 @@ function createSyncCharactersTool(
 
 // ── list-characters ──────────────────────────────────────────────
 
+/**
+ * Lines `list-characters` returns. The bundled worlds seed 10 to 16
+ * characters; a long session adds the people it meets, and every call would
+ * otherwise repeat all of them. Most-interacted characters come first, so the
+ * ones cut are the least recently relevant.
+ */
+const MAX_LISTED_CHARACTERS = 50;
+
 function createListCharactersTool(store: CharacterStore): ToolModule {
   return tool({
     name: "list-characters",
     description:
-      "List every character in this session (session scope, visible to all plugins). Sorted by version, highest first (a higher version means more interaction), then by latest update. Can filter by a type the world schema declares. Returns a compact text list, one line per character: id / name / type / version / short description. Call get-character for full attributes.",
+      "List the characters in this session (session scope, visible to all plugins; at the most 50, with a note when more exist). Sorted by version, highest first (a higher version means more interaction), then by latest update. Can filter by a type the world schema declares. Returns a compact text list, one line per character: id / name / type / version / short description. Call get-character for full attributes.",
     parameters: z.object({
       type: z
         .preprocess((value) => {
@@ -522,15 +530,24 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
       const header = params.type
         ? `Characters in session (${sorted.length} ${params.type}, sorted by frequency then recency):`
         : `Characters in session (${sorted.length} total, sorted by frequency then recency):`;
-      const lines = sorted.map((c, idx) => {
+      const shown = sorted.slice(0, MAX_LISTED_CHARACTERS);
+      const hidden = sorted.length - shown.length;
+      const lines = shown.map((c, idx) => {
         const desc = c.description ? ` — ${truncate(c.description, 80)}` : "";
         return `${idx + 1}. ${c.name} [${c.type}] ${c.id} (v${c.version})${desc}`;
       });
 
+      const more =
+        hidden > 0
+          ? [
+              `… ${hidden} more not listed. Filter by type, or call get-character with a name to check for a specific one.`,
+            ]
+          : [];
+
       return {
-        _text: [header, ...lines].join("\n"),
+        _text: [header, ...lines, ...more].join("\n"),
         count: sorted.length,
-        characters: sorted.map(toSnapshot),
+        characters: shown.map(toSnapshot),
       };
     },
   });

@@ -128,7 +128,13 @@ function registry(entries: Record<string, readonly string[]>) {
       dataSchemas: Object.fromEntries(
         namespaces.map((namespace) => [
           namespace,
-          { namespace, schemaVersion: 1, acceptsWorldData: true },
+          {
+            namespace,
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            // An empty path declares no plugin schema for the namespace.
+            schema: "",
+          },
         ]),
       ),
       loadedRuntimes: new Map(),

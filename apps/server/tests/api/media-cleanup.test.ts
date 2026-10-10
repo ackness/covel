@@ -31,6 +31,7 @@ function makeSession(id: string, worldId = "world-1"): SessionRecord {
     id,
     worldId,
     status: "active",
+    locale: "zh-CN",
     phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},

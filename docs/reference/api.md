@@ -335,8 +335,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 | 方法   | 路径                                    | 描述                                                                                                                                                                                    |
 | ------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                           | 列出所有世界                                                                                                                                                                            |
-| GET    | `/api/worlds/:id`                       | 获取世界详情                                                                                                                                                                            |
+| GET    | `/api/worlds`                           | 列出所有世界的摘要（无 `lore` / `dimensions`）                                                                                                                                          |
+| GET    | `/api/worlds/:id`                       | 获取世界完整记录                                                                                                                                                                        |
 | POST   | `/api/worlds`                           | 创建世界；已有 ID 返回 `409 world_already_exists`                                                                                                                                       |
 | PATCH  | `/api/worlds/:id`                       | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                                         |
 | DELETE | `/api/worlds/:id`                       | 删除世界及其全部会话（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
@@ -925,7 +925,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `GET /api/worlds`
 
-列出所有已加载的世界。世界数据从 `worlds/` 目录读取并缓存在 Store 中。
+列出所有已加载的世界，每项是**摘要**（`WorldSummary`，`@covel/shared`）：世界列表、卡片、会话准备页头部要画的字段，不含大块内容。摘要没有 `lore` 和 `dimensions`；`metadata` 只保留 `source`、`storage`、`packageManaged`、`generated`、`cover`、`accentColor`、`supportedLocales`、`packageInfo`、`defaultViewMode`、`pluginSettings`，以及 `localizedText` 里的 `name` / `description`（各语言的设定正文 `localizedText.lore` 不在其中）。其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`pluginPolicy`、`worldData` 等）需要用 `GET /api/worlds/:id` 读完整记录；世界的插件策略解析结果见 `GET /api/worlds/:id/plugin-plan`。内置四个世界的列表约 3.9 KB（改前约 267 KB）。
 
 **响应:**
 
@@ -939,31 +939,17 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
       "locale": "zh-CN",
       "metadata": {
         "source": "file",
-        "pluginPolicy": {
-          "presetId": "traditional-story",
-          "requested": ["pregame", "world-init", "char-creator"],
-          "recommended": ["narrator", "guide"],
-          "preferredTags": ["mode:traditional-story"],
-          "avoidedTags": ["mode:dialogue"]
-        },
+        "supportedLocales": ["zh-CN", "en-US"],
+        "cover": "media/gallery/cover.webp",
+        "accentColor": "#5b8def",
         "packageInfo": {
           "version": "0.3.0",
           "author": { "name": "Covel Contributors" },
           "license": "MIT"
         },
-        "worldDataPath": "data/world.data.yaml",
-        "worldData": {
-          "schemaVersion": 1,
-          "sources": [
-            {
-              "id": "dimensions",
-              "target": "world:metadata.dimensions",
-              "digest": "sha256:...",
-              "order": 0,
-              "origin": "world",
-              "diagnostics": { "info": 0, "warning": 0, "error": 0 }
-            }
-          ]
+        "localizedText": {
+          "name": { "en-US": "Mistport" },
+          "description": { "en-US": "A fantasy world above the clouds..." }
         }
       },
       "createdAt": "2025-01-15T10:00:00.000Z",
@@ -975,7 +961,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `GET /api/worlds/:id`
 
-获取单个世界的详细信息。
+获取单个世界的**完整记录**：`lore`、`dimensions` 和全部 `metadata`。列表（`GET /api/worlds`）只返回摘要，需要设定正文或维度的调用方（会话准备页、世界详情、世界编辑器）在读取时请求这一条。
 
 **参数:**
 

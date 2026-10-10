@@ -20,7 +20,10 @@ beforeAll(async () => {
   await getSettings().set("ui.appearance", "panel");
 });
 
-const dataService = vi.hoisted(() => ({ deleteWorld: vi.fn() }));
+const dataService = vi.hoisted(() => ({
+  deleteWorld: vi.fn(),
+  getWorld: vi.fn(async () => null),
+}));
 vi.mock("@/services/data-service.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/data-service.js")>()),
   getDataService: () => dataService,

@@ -2,7 +2,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportSessionCheckpoint, type DataStore } from "@covel/store";
+import {
+  exportSessionCheckpoint,
+  supportsVector,
+  type DataStore,
+} from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../helpers/close-api.js";
@@ -48,6 +52,7 @@ async function fixture(
 ) {
   const pluginsDir = await mkdtemp(join(tmpdir(), "covel-ingest-"));
   const store = createMemoryStore();
+  if (!supportsVector(store)) throw new Error("expected vector support");
   await seed(store);
   const target = await store.ensureVectorModel!({
     provider: "test",
@@ -128,7 +133,7 @@ async function fixture(
       query: new Float32Array([1, 0]),
       topK: 1000,
     });
-  return { ...boot, action, vectors, ensureEmbeddingLock, llm };
+  return { ...boot, store, action, vectors, ensureEmbeddingLock, llm };
 }
 
 it("automatically ingests committed actions and fully rebuilds a fork beyond one batch", async () => {

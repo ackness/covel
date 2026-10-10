@@ -293,11 +293,13 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         // instead of the framework hardcoding the plugin id.
         dataSchemas: {
           blueprints: {
+            namespace: "blueprints",
             schemaVersion: 1,
             acceptsWorldData: true,
             schema: "./schemas/blueprints.schema.json",
           },
           characters: {
+            namespace: "characters",
             schemaVersion: 1,
             acceptsWorldData: true,
             schema: "./schemas/characters.schema.json",
@@ -364,12 +366,13 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
+      locale: "zh-CN",
       completedPlayerTurns: 1,
 
       activePlugins: ["narrator", "optional-plugin"],
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
   });
 
@@ -539,12 +542,13 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),
         },
         id: "sess-reverse-conflict",
-        worldId: null,
         status: "active",
+        locale: "zh-CN",
         completedPlayerTurns: 1,
 
         activePlugins: ["default-engine"],
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
       const reverseConflictSession = await store.getSession(
         "sess-reverse-conflict",

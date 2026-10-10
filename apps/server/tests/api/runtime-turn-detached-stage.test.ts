@@ -178,7 +178,10 @@ describe("plugin RPC detached-stage runner", () => {
     let settled!: ReturnType<typeof createSettledSessionLock>;
     const admitted = vi.fn();
     const captured = vi.fn();
-    const handler = vi.fn(async () => ({ outcome: "success", value: {} }));
+    const handler = vi.fn<FunctionHandler>(async () => ({
+      outcome: "success",
+      value: {},
+    }));
     const f = await setup(
       handler,
       undefined,
@@ -257,7 +260,10 @@ describe("plugin RPC detached-stage runner", () => {
     const raw = createInProcessSessionLock();
     let settled!: ReturnType<typeof createSettledSessionLock>;
     const onTimeout = vi.fn();
-    const handler = vi.fn(async () => ({ outcome: "success", value: {} }));
+    const handler = vi.fn<FunctionHandler>(async () => ({
+      outcome: "success",
+      value: {},
+    }));
     const f = await setup(
       handler,
       undefined,
@@ -349,6 +355,14 @@ describe("plugin RPC detached-stage runner", () => {
               held.delete(id);
             }
           });
+        },
+        withLocks(keys, fn) {
+          const ordered = [...new Set(keys)];
+          const acquire = (index: number): ReturnType<typeof fn> => {
+            const key = ordered[index];
+            return key ? lock.withLock(key, () => acquire(index + 1)) : fn();
+          };
+          return acquire(0);
         },
       };
       let captured = false;
@@ -478,8 +492,7 @@ describe("plugin RPC detached-stage runner", () => {
 
   it("rehydrates frozen inputs, commits output, and does not complete a player turn", async () => {
     const handler: FunctionHandler = async (ctx) => {
-      const narrative = ctx.inputs?.narrative as
-        { value?: unknown } | undefined;
+      const narrative = ctx.inputs?.narrative as { value?: string } | undefined;
       return {
         outcome: "success",
         value: {},
@@ -488,7 +501,7 @@ describe("plugin RPC detached-stage runner", () => {
             {
               namespace: "tracks",
               key: "track-1",
-              value: { source: narrative?.value },
+              value: { source: narrative?.value ?? null },
             },
           ],
         },

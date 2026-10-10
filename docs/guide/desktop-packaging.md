@@ -240,7 +240,7 @@ integration in `apps/desktop/src/main.ts`, and the publishing configuration abov
 ## Release checklist
 
 - [ ] Align the root, `apps/*` and `packages/*` manifest versions with the release tag; plugin and world packages may version independently
-- [ ] Update `docs/CHANGELOG.md` with the target version
+- [ ] Run `pnpm changelog:release <version>`: it moves the fragments in `docs/changelog.d/` and any entry under `[Unreleased]` to a `## [<version>] - <date>` section of `docs/CHANGELOG.md` and deletes the fragments. Write the summary paragraph under the heading, and check the `Breaking changes in v<version>` and `Upgrade notes for v<version>` sections that the READMEs link to. A fragment merged later needs a second run before the tag
 - [ ] Sync version badges, Release links, and current-version notices in `README.md` and `README.zh-CN.md`
 - [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard/constants.ts` if the tutorial changed
 - [ ] Run local `pnpm check`, `pnpm test`, `pnpm test:pg`, `pnpm e2e` and `pnpm release:preflight` sequentially; fix known failures before pushing
@@ -254,7 +254,8 @@ integration in `apps/desktop/src/main.ts`, and the publishing configuration abov
 - [ ] Download the published `.dmg` / `.zip` / installer and portable `.exe` assets, verify versions and digests, and repeat startup/plugin-lifecycle checks on the downloaded package
 
 Manual release builds resolve the requested ref once and pass its immutable commit to all jobs.
-Publishing requires an existing semantic-version tag, matching framework manifests and a changelog section;
+Publishing requires an existing semantic-version tag, matching framework manifests, a changelog section and no
+changelog fragment left in `docs/changelog.d/`;
 the workflow never creates or moves a tag. A dry run builds artifacts without creating a GitHub Release.
 Record which operating systems and player flows were actually exercised; a Windows build and API test
 do not substitute for a full interactive Windows playthrough.

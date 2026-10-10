@@ -70,7 +70,7 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     const body = new FormData();
     body.append(
       "file",
-      new Blob([packageZip], { type: "application/zip" }),
+      new Blob([new Uint8Array(packageZip)], { type: "application/zip" }),
       filename,
     );
     return boot.app.request("/api/install/plugin", {
@@ -159,7 +159,6 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       id: sessionId,
       phase: "playing",
       setupRuntimes: {},
-      worldId: null,
       status: "active",
       completedPlayerTurns: 0,
       activePlugins: [],

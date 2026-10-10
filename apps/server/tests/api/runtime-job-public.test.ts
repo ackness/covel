@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { type DataStore } from "@covel/store";
+import { createPluginRegistry } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 
 import {
@@ -52,10 +53,23 @@ describe("runtime job public projections", () => {
         userSettings: { media: { privateNote: PRIVATE_INPUT } },
       },
     });
+    const registry = createPluginRegistry();
+    registry.register({
+      id: PLUGIN_ID,
+      summary: {
+        id: PLUGIN_ID,
+        name: PLUGIN_ID,
+        description: "",
+        pluginType: "plugin",
+        runtimeCount: 0,
+      },
+      loadedRuntimes: new Map(),
+      status: "registered",
+    });
     app = new Hono();
     app.use("*", async (c, next) => {
       c.set("store", store);
-      c.set("pluginRegistry", { get: () => ({}) });
+      c.set("pluginRegistry", registry);
       await next();
     });
     app.route("/api/sessions", runtimeJobRoutes);
