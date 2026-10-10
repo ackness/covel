@@ -5,6 +5,7 @@ import {
   DIMENSION_SETTLEMENT_NAMESPACE,
   dimensionIdSchema,
   dimensionRecordSchema,
+  dimensionSchemaWithoutDerived,
   dimensionSettlementReceiptSchema,
 } from "@covel/plugin-handlers-utils/dimensions";
 import { schemaForTracker } from "../lib/schema-for-tracker.js";
@@ -44,7 +45,11 @@ export default function ({ tool, z }) {
           ? (resolveI18nText(definition.updateRule, session.locale) ?? "")
           : JSON.stringify(
               schemaForTracker(
-                resolveI18nDeep(definition.schema, session.locale),
+                resolveI18nDeep(
+                  dimensionSchemaWithoutDerived(definition.schema) ??
+                    definition.schema,
+                  session.locale,
+                ),
               ),
             );
       const characters = Array.from(text);

@@ -198,6 +198,50 @@
               }
             ]
           }
+        },
+        "x-derive": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": ["clock.elapsedSinceStart"]
+            },
+            "start": {
+              "type": "number"
+            },
+            "perUnit": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "ranges": {
+              "minItems": 1,
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "number"
+                  },
+                  "to": {
+                    "type": "number"
+                  },
+                  "value": {
+                    "type": ["string", "number", "boolean"]
+                  }
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["source"],
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

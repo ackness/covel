@@ -8,6 +8,7 @@ import {
   dimensionRecordSchema,
   dimensionSettlementReceiptSchema,
   dimensionUpdatePayloadSchema,
+  keepDerivedDimensionFields,
   materializeDimensionRecords,
 } from "@covel/plugin-handlers-utils/dimensions";
 
@@ -161,6 +162,10 @@ function unknownDimension(id, dimensions) {
  * not have to be rewritten in full. An entry with neither a value nor any
  * change says the dimension did not change; it is dropped rather than sent
  * back for another model call.
+ *
+ * A field the world derives from the clock keeps the value it has: the model
+ * is not shown it, so a whole value arrives without it, and a model that
+ * writes it anyway does not decide it.
  */
 function resolveUpdates(updates, dimensions) {
   const changed = updates.filter(
@@ -170,17 +175,19 @@ function resolveUpdates(updates, dimensions) {
     const current = dimensions[update.id];
     if (!current) throw new Error(unknownDimension(update.id, dimensions));
     const versioned = { ...update, expectedVersion: current.version };
-    if (!changes?.length) return versioned;
-    if (Object.hasOwn(update, "value"))
+    if (changes?.length && Object.hasOwn(update, "value"))
       throw new Error(
         `${update.id}: provide either value or changes, not both`,
       );
+    const written = changes?.length
+      ? changes.reduce(
+          (value, change) => setAtPath(value, change.path, change.value),
+          current.value,
+        )
+      : update.value;
     return {
       ...versioned,
-      value: changes.reduce(
-        (value, change) => setAtPath(value, change.path, change.value),
-        current.value,
-      ),
+      value: keepDerivedDimensionFields(current.schema, written, current.value),
     };
   });
 }
@@ -211,7 +218,7 @@ export default function ({ tool, z }) {
   return tool({
     name: "update-dimensions",
     description:
-      'Settle this narrative\'s dimension rules once. Submit a batch of {id, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. followsClock names every dimension whose rule depends on the world time or on how much time passed; in a turn in which the world clock moved, each of them needs an entry in updates. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
+      'Settle this narrative\'s dimension rules once. Submit a batch of {id, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. followsClock names every dimension whose rule depends on the world time or on how much time passed; in a turn in which the world clock moved, each of them needs an entry in updates. A field that is not in the schema you were given is computed by the world; do not write it. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
     parameters: z.preprocess(
       normalizeArguments,
       z.strictObject({
