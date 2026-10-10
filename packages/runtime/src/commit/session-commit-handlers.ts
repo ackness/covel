@@ -12,7 +12,10 @@
  */
 
 import type { KernelStore } from "../session/session-kernel-store.js";
-import { createCharacterCommitHandlers } from "./commit-character.js";
+import {
+  createCharacterCommitHandlers,
+  type CharacterCommitOptions,
+} from "./commit-character.js";
 import { createDimensionCommitHandlers } from "./commit-dimensions.js";
 import { createEventCommitHandlers } from "./commit-event.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
@@ -27,14 +30,17 @@ export type {
   CommitHandlerMap,
 } from "./commit-handler-types.js";
 
-export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
+export function createCommitHandlers(
+  store: KernelStore,
+  options: CharacterCommitOptions = {},
+): CommitHandlerMap {
   return {
     ...createNarrativeCommitHandlers(store),
     ...createUiCommitHandlers(store),
     ...createStateCommitHandlers(store),
     ...createEventCommitHandlers(store),
     ...createPluginDataCommitHandlers(store),
-    ...createCharacterCommitHandlers(store),
+    ...createCharacterCommitHandlers(store, options),
     ...createDimensionCommitHandlers(store),
     ...createMemoryLoreCommitHandlers(store),
   };
