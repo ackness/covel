@@ -43,6 +43,7 @@ const MODEL_FIELDS = new Set([
   "service_tier",
   "store",
   "prompt_cache_key",
+  "include",
 ]);
 
 /** Detached from the request body: an observer cannot change the sent JSON. */

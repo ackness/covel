@@ -233,11 +233,24 @@ reasoningEffort = "disabled"
 统一的 `reasoningEffort` 设置会按接口协议转换：
 
 - OpenAI Chat 和兼容接口：`reasoning_effort`；DeepSeek 同时发送 `thinking.type`，Qwen 开关使用 `enable_thinking`；Qwen3.8 Chat 的原生 `low/medium/xhigh` 使用 `reasoning_effort`，已确认的 Qwen3.5–3.7 Max/Plus/Flash 使用 `thinking_budget` 预算预设（2048/8192/16384），界面明确标注 token 数值。预算预设不是服务商原生档位，实际消耗可以少于预算。显式档位会清理继承的预算，避免 Qwen3.8 同时发送两种参数。
-- OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。`store: false` 时请求加密 reasoning，用于工具续调。Covel 只在用途配置了 `store` 时发送这个字段；不配置时由服务商决定是否保存请求和应答（OpenAI 的 Responses 接口默认保存一段时间）。不想让服务商保存时，在该用途的 `providerOptions` 里写 `store = false`（见[供应商参数](#供应商参数)）。
+- OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。服务商是否保存对话见 [Responses 不让服务商保存对话](#responses-不让服务商保存对话)。函数工具带 `strict: false`：这个接口在不带该字段时把工具当作严格模式（Chat 协议相反），所有可选参数都变成必填，模型会给每个可选参数填一个空值，工具随后拒绝这次调用。
 - Anthropic Messages：`output_config: { effort }`；已识别的自适应思考模型选择档位时启用 `thinking.type: "adaptive"`，默认请求可见摘要 `display: "summarized"`；不可关闭思考的模型不显示关闭选项。Claude 请求会移除与思考冲突的采样参数，关闭思考时清理继承的 effort，避免组合产生 400 错误。DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
 - Gemini 原生 `generateContent`：Gemini 3 使用 `generationConfig.thinkingConfig.thinkingLevel`；Gemini 2.5 使用 `thinkingBudget`。3 Pro 仅有 low/high，3.1 Pro 为 low/medium/high，3 Flash、3.5/3.6 Flash 及 3.1/3.5 Flash-Lite 为 minimal/low/medium/high，3.7/3.8 Flash 为 low/medium/high。2.5 Pro 不提供关闭；2.5 Flash/Flash-Lite 的 `none` 转为预算 0。2.5 的 low/medium/high 分别是应用预算预设 1024/8192/24576 token，不是 Google 原生档位。未知 Gemini 型号不推测档位。Google OpenAI 兼容接口仍发送 `reasoning_effort`，其中 `minimal` 在 3.1 Pro 映射为 low、在 2.5 映射为 1024 token；这不代表原生协议支持这些型号的 `minimal` 档位。
 
 当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`（GPT-6 及之后的型号按名称识别，另有 `max`，不记录默认档位）、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 按型号与协议限定的子集、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/开启、原生档位或预算预设。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。Gemini 档位依据 [Google thinking 说明](https://ai.google.dev/gemini-api/docs/generate-content/thinking) 和 [OpenAI 兼容映射](https://ai.google.dev/gemini-api/docs/openai)。
+
+### Responses 不让服务商保存对话
+
+Responses 协议的每个请求默认带 `store: false`：服务商不保存这次请求的提示和应答，玩家的对话只留在 Covel 自己的存储里。OpenAI 的 Responses 接口在不带这个字段时默认保存一段时间，所以 Covel 不依赖服务商的默认值。Chat 协议不受影响，仍然只在用途配置了 `store` 时发送它。
+
+不保存时，服务商无法按 ID 找回上一次应答里的 reasoning 条目，工具续调要把它原样带回去：
+
+- 请求没有关闭思考（`reasoning.effort` 不是 `none`）时，Covel 加上 `include: ["reasoning.encrypted_content"]`，不看模型名称；`include` 里已有的其他值保留。
+- 续调时，上一次应答的输出条目按原顺序放回 `input`。带 `encrypted_content` 的 reasoning 条目原样带回；没有 `encrypted_content` 的 reasoning 条目不带回，同一次应答的其余条目去掉 `id` 后带回，避免服务商去查一个它没有保存的 ID。模型这时看不到上一步的思考，工具调用和结果仍然完整。
+- 模型不接受加密 reasoning（400，错误指向 `include` 或提到 encrypted content）时，Covel 去掉这一项重发一次，并在本进程内记住这个地址和模型，之后的请求不再带它。其他 400 不重试。
+- 流式应答的结束事件里 `output` 为空时，Covel 用前面逐条收到的 `response.output_item.done` 组成续调条目。
+
+需要服务商保存（例如要在服务商控制台里查看应答）时，在该用途的 `providerOptions` 里写 `store = true`（见[供应商参数](#供应商参数)）。这时 Covel 不请求加密 reasoning，续调条目带原有 ID，由服务商按 ID 找回。Covel 自己不使用 `previous_response_id`，每次请求都带完整的上下文；经 `extraBody` 自行传 `previous_response_id` 的配置必须同时写 `store = true`，否则服务商找不到那次应答。
 
 ## 媒体 wire 路由键（`providerRequestMetadata`）
 
@@ -294,7 +307,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 ```toml
 [covel.story.providerOptions.openai]
-store = false
+store = true
 reasoningEffort = "high"
 
 [covel.story.providerOptions."openai-responses-v1"]
