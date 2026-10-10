@@ -130,7 +130,16 @@ function isSecretKey(key: string): boolean {
   );
 }
 
-function assertNoSecrets(value: unknown, path = "checkpoint"): void {
+/**
+ * Reject a session record that carries a credential-named field.
+ *
+ * Only the session record is checked: its fields and `metadata` are written by
+ * framework code, which is where an owner token or a provider key could leak
+ * in. Every other checkpoint domain and the world record hold game content
+ * from authors, models and plugins, whose field names are unrestricted (a
+ * character may have a `password`), so a key name proves nothing there.
+ */
+function assertNoSecrets(value: unknown, path = "checkpoint.session"): void {
   if (value === null || typeof value !== "object") return;
   if (Array.isArray(value)) {
     value.forEach((item, index) => assertNoSecrets(item, `${path}[${index}]`));
@@ -225,7 +234,7 @@ export class BrowserVault {
 
   async saveCheckpoint(value: BrowserCheckpoint): Promise<BrowserCheckpoint> {
     const checkpoint = validateBrowserCheckpoint(value);
-    assertNoSecrets(checkpoint);
+    assertNoSecrets(checkpoint.session);
 
     return this.db.transaction(
       "rw",
@@ -274,7 +283,7 @@ export class BrowserVault {
     value: SessionCommit,
   ): Promise<ApplySessionCommitResult> {
     const commit = validateSessionCommit(value);
-    assertNoSecrets(commit.checkpoint);
+    assertNoSecrets(commit.checkpoint.session);
     // Hash before opening the write transaction; native crypto is asynchronous.
     const digest = await hashCheckpointJson(stableJson(commit.checkpoint));
 
@@ -403,7 +412,6 @@ export class BrowserVault {
 
   async initializeWorlds(worlds: readonly WorldRecord[]): Promise<void> {
     const seeds = structuredClone(worlds);
-    for (const world of seeds) assertNoSecrets(world, "world");
     await this.db.transaction(
       "rw",
       this.db.worlds,
@@ -430,7 +438,6 @@ export class BrowserVault {
   }
 
   async upsertWorld(world: WorldRecord): Promise<void> {
-    assertNoSecrets(world, "world");
     await this.db.worlds.put(structuredClone(world));
   }
 

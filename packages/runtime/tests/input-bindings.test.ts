@@ -203,6 +203,50 @@ describe("checkAcceptsCompatibility (decidable subset)", () => {
     ).toBe("indeterminate");
   });
 
+  it("separates an exclusive numeric bound from an inclusive one", () => {
+    // The producer may emit the bound itself, which the consumer rejects.
+    expect(
+      checkAcceptsCompatibility(
+        { type: "number", minimum: 0 },
+        { type: "number", exclusiveMinimum: 0 },
+      ),
+    ).toBe("incompatible");
+    expect(
+      checkAcceptsCompatibility(
+        { type: "number", maximum: 10 },
+        { type: "number", exclusiveMaximum: 10 },
+      ),
+    ).toBe("incompatible");
+    expect(
+      checkAcceptsCompatibility(
+        { type: "number", exclusiveMinimum: 0 },
+        { type: "number", exclusiveMinimum: 0 },
+      ),
+    ).toBe("compatible");
+    // Integers above 4 are all at least 5: not a proven mismatch.
+    expect(
+      checkAcceptsCompatibility(
+        { type: "integer", exclusiveMinimum: 4 },
+        { type: "integer", minimum: 5 },
+      ),
+    ).toBe("indeterminate");
+  });
+
+  it("returns indeterminate for a type union on either side", () => {
+    expect(
+      checkAcceptsCompatibility(
+        { type: "number" },
+        { type: ["string", "null"] },
+      ),
+    ).toBe("indeterminate");
+    expect(
+      checkAcceptsCompatibility(
+        { type: ["string", "null"], minLength: 1 },
+        { minLength: 1 },
+      ),
+    ).toBe("indeterminate");
+  });
+
   it("compares numeric bounds and anchored mime prefixes", () => {
     expect(
       checkAcceptsCompatibility(

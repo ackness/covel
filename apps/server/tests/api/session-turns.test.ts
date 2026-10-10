@@ -66,7 +66,8 @@ describe("GET /api/sessions/:id/turns", () => {
           runtimeId: "planner/plot",
           runId: "run-planner",
           turnId: "turn-1",
-          status: "success",
+          status: "failed",
+          error: "spoiler",
           output: { plan: "spoiler" },
           toolCalls: [
             {

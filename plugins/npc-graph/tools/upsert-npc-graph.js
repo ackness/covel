@@ -170,14 +170,14 @@ export default function ({ tool, z, shortIdBatch }) {
     execute: async (params, context) => {
       const now = new Date().toISOString();
       const currentTurnId = context.turnId ?? "unknown";
-      // Authoritative logical turn (player-message count). These fields used
+      // Logical turn, the number every panel shows. These fields used
       // to be filled from the node COUNT, which measures how much has been
       // recorded rather than when — so a graph that grew fast looked "old"
       // and one mentioned repeatedly in a single turn advanced as if turns
       // had passed. Anything derived from them (relationship decay, recency
       // ranking) was meaningless. `-1` marks "unknown" for callers outside a
       // turn rather than silently pretending turn 0.
-      const currentTurn = context.turnNumber ?? -1;
+      const currentTurn = context.logicalTurn ?? -1;
 
       const incomingNodes = params.nodes ?? [];
       const incomingEdges = params.edges ?? [];

@@ -17,9 +17,9 @@
  *     feed shows a "+ Iron Sword ×1 / − Torch ×2" style toast.
  *
  * Removal to zero writes a tombstone (`quantity: 0, removed: true`) instead
- * of deleting the row — no proposal type expresses plugin-data deletion, the
- * UI hides tombstones, and re-acquiring the same name revives the record so
- * the item keeps one stable ID across its whole history.
+ * of deleting the row — the UI hides tombstones, and re-acquiring the same
+ * name revives the record so the item keeps one stable ID across its whole
+ * history.
  */
 
 import {

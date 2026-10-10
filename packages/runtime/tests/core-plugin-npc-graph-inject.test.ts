@@ -139,7 +139,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
         pluginId: "npc-graph",
         runtimeId: "npc-graph/extractor",
         turnId: "turn-buffered",
-        turnNumber: 0,
+        logicalTurn: 0,
         pendingProposals: pending,
       };
       const scopedContext = {

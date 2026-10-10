@@ -16,8 +16,11 @@ export interface LLMProviderRequest {
   /**
    * Why this transport sent the request again: the prior response asked for
    * it, or the connection gave no response. Absent on the first send.
+   * `http-4xx` is a retried client status other than 429 (408, 409, or one
+   * the provider marked retryable).
    */
-  readonly transportRetryReason?: "http-429" | "http-5xx" | "connection";
+  readonly transportRetryReason?:
+    "http-429" | "http-4xx" | "http-5xx" | "connection";
   /** HTTP acceptance is not a successful model/stream settlement. */
   readonly statusCode?: number;
   readonly failed?: true;

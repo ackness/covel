@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import {
@@ -8,6 +8,7 @@ import {
   createSlotRegistry,
   parseLlmConfig,
   registerTextWire,
+  withWireRegistrySnapshot,
   type TextWire,
 } from "../src/index.js";
 import {
@@ -18,6 +19,7 @@ import {
 
 const disposers: Array<() => void> = [];
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const dispose of disposers.splice(0)) dispose();
 });
 
@@ -136,7 +138,10 @@ describe("a text protocol a plugin registers", () => {
         schema: z.object({ age: z.number() }),
         messages: [{ role: "user", content: "who" }],
       }),
-    ).rejects.toMatchObject({ code: "SCHEMA_VALIDATION_FAILED" });
+    ).rejects.toMatchObject({
+      code: "SCHEMA_VALIDATION_FAILED",
+      details: { usage: { inputTokens: 1, outputTokens: 1 } },
+    });
   });
 
   it("is listed for the settings UI and lists its models when it can", async () => {
@@ -173,5 +178,55 @@ describe("a text protocol a plugin registers", () => {
     expect(() =>
       parseLlmConfig(SLOT.replace('"demo/echo"', '"made-up-v1"')),
     ).toThrow(/Unknown protocol/);
+  });
+});
+
+describe("which sessions may use a text protocol a plugin registers", () => {
+  const request = {
+    presetId: "story",
+    messages: [{ role: "user" as const, content: "hi" }],
+  };
+
+  it("refuses the protocol in a session where the plugin is not active, and names the plugin", async () => {
+    disposers.push(
+      registerTextWire(echoWire(), { pluginId: "demo", builtin: true }),
+    );
+    const gateway = gatewayFor(SLOT);
+
+    await expect(
+      withWireRegistrySnapshot(() => gateway.generateText(request), ["other"]),
+    ).rejects.toThrow(/plugin "demo".*not enabled for this session/);
+    await expect(
+      withWireRegistrySnapshot(() => gateway.generateText(request), ["demo"]),
+    ).resolves.toMatchObject({ text: expect.stringContaining("acme-1@") });
+  });
+
+  it("without a session, a hosted tier serves a builtin plugin's protocol but refuses a community one", async () => {
+    const dispose = registerTextWire(echoWire(), {
+      pluginId: "demo",
+      builtin: false,
+    });
+    const gateway = gatewayFor(SLOT);
+
+    // The self tier has one player, who approved the plugin.
+    await expect(gateway.generateText(request)).resolves.toMatchObject({
+      text: expect.stringContaining("acme-1@"),
+    });
+    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+
+    await expect(gateway.generateText(request)).rejects.toThrow(
+      /plugin "demo".*session that has enabled it/,
+    );
+    await expect(
+      withWireRegistrySnapshot(() => gateway.generateText(request), ["demo"]),
+    ).resolves.toMatchObject({ text: expect.stringContaining("acme-1@") });
+    dispose();
+
+    disposers.push(
+      registerTextWire(echoWire(), { pluginId: "demo", builtin: true }),
+    );
+    await expect(gateway.generateText(request)).resolves.toMatchObject({
+      text: expect.stringContaining("acme-1@"),
+    });
   });
 });

@@ -201,7 +201,9 @@ describe("SSE retry commit settlement", () => {
       h.send("runtime.completed", { status: "success" });
       h.send("execution.completed", { committed });
       expect(h.getState().executionSteps[1]!.attemptStatus).toBe("failed");
-      expect(h.getState().executionError).toBe("Execution commit failed");
+      expect(h.getState().executionError).toBe(
+        "__i18n:session.reasonExecutionCommitFailed__",
+      );
     },
   );
   it("shows the selected task during preparation before runtime.started", () => {

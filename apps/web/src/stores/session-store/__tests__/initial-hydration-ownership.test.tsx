@@ -98,6 +98,7 @@ function setup(batched = false) {
     sessionIdRef,
     stateRef,
     dispatch,
+    onBackgroundJobEnded: () => {},
     onReset: () => {},
     isCurrent: () => true,
     getRecoveryGeneration: () => 0,

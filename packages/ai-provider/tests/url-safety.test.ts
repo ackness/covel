@@ -1,8 +1,12 @@
 /**
  * Tests for SSRF protection in provider URL validation.
  */
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { validateBaseUrl, buildProviderUrl } from "../src/adapters/http.js";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("validateBaseUrl", () => {
   describe("allowed URLs", () => {
@@ -19,6 +23,18 @@ describe("validateBaseUrl", () => {
       expect(validateBaseUrl("http://127.0.0.1:8080")).toBe(true);
       expect(validateBaseUrl("http://localhost:3000/v1")).toBe(true);
     });
+
+    it.each(["demo", "commercial"])(
+      "blocks loopback on the hosted %s tier",
+      (tier) => {
+        vi.stubEnv("DEPLOYMENT_TIER", tier);
+        expect(validateBaseUrl("http://localhost:11434")).toBe(false);
+        expect(validateBaseUrl("http://127.0.0.1:8080")).toBe(false);
+        expect(validateBaseUrl("https://127.0.0.1:8080")).toBe(false);
+        expect(validateBaseUrl("http://[::1]:8080")).toBe(false);
+        expect(validateBaseUrl("https://api.openai.com")).toBe(true);
+      },
+    );
 
     it("allows subdomains of known providers", () => {
       expect(validateBaseUrl("https://models.api.openai.com")).toBe(true);

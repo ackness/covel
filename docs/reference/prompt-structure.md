@@ -150,6 +150,7 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 `<player-character>` 是玩家角色卡（与 `player.character` 相同的 JSON），`profiles: true` 时再加 `<character-profiles>`（与 `characters.npcs` 相同的行格式）。`locale` 决定“未列出档案”那一行用中文还是 English，与正文的语言一致。`schema` 让声明了 min/max 的数值属性带上量程渲染（`"might": "2/5"`），否则模型只看到一个光秃秃的数字，分不清 2/5 和 2/100。内置的 `narrator` 和 `chat-mode-narrator` 这样做。
 
 - `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。
+  `world.lore` 是整篇正文，包括[只给叙事者的部分](world-data.md#只给叙事者的正文narrator-only)，但不含那两行标记。
 - `userSettings.*`，由根 `contributes.settings` 默认值和玩家配置合成。
 
 世界扩展视图通过公共扩展点提供；插件不能从其他插件的私有数据中拼装它。较长世界内容应按当前任务选取，避免每轮内联全部 lore。`world-dimension-get` / `world-dimension-list` 是框架 builtin，从同一冻结 `world.dimensions@1` 快照按需读取。
@@ -159,6 +160,8 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 `world.dimensions.<id>` 包含 `{name,description?,schema,value,version}`，具体值写作 `{{ world.dimensions.reputation.value }}`。`worldRecord.dimensions` / `metadata.dimensions` 是作者声明，不是会话进度；旧 raw 值路径及 `world.tone/openingScenario` 不再是公共快捷字段。
 
 捆绑 `world-init` 通过 `prompt.segment@1` 提供 story 受众的 `<world-dimensions>` turn 段。它保留 ID、版本及预算内的本地化值：默认总预算 12000 字符，放得下时每个值都完整给出，因为每个被截断的值都会让模型多调一次 `world-dimension-get`，而那一轮要重发整个提示词；超出预算时从最长的值开始截到 240 字符（以省略号标记），仍放不下的维度计数会显式显示，并指引按 ID/path 或分页查询。省略不代表值不存在，预览不冒充完整 JSON。选择了某个模板路径也不意味着框架会自动全量展开所有行集。
+
+捆绑 `character-blueprint` 通过同一扩展点提供 story 受众的 `<character-notes>` session 段：世界角色卡里写给扮演用的内容（口吻、举止、性格、目标、恐惧、秘密、关系、规则、示例台词），只写角色在会话里的卡，按卡 ID 排序，约 6000 token 的预算内逐档裁剪（先示例台词，后规则，口吻不裁）。它是会话内稳定的文本，位于系统提示的稳定区；角色名册变化时才会变。字段与裁剪规则见[插件 README](../../plugins/character-blueprint/README.md#角色卡怎样进入叙事)。
 
 投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 的 self-only `<dimension-rules>` 段在预算内直接带完整规则、schema 与冻结值，超出预算的维度再用 `dimension-rule-get` 分页获取。没有有效规则时不调用维护模型。
 

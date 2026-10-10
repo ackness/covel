@@ -27,18 +27,33 @@ describe("responsive panel lifecycle", () => {
     expect(isCollapsed).not.toHaveBeenCalled();
   });
 
-  it("does not call a stale rail ref when mobile unmounts the panels", () => {
-    const { result, rerender } = renderHook(() => usePanelCollapse(), {
-      initialProps: { mobile: false },
-    });
-    const collapse = vi.fn(() => {
-      throw new Error("Panel unmounted");
-    });
-    result.current.rightPanelRef.current = {
-      collapse,
-    } as unknown as PanelImperativeHandle;
-    rerender({ mobile: true });
-    expect(collapse).not.toHaveBeenCalled();
+  it("does not call a stale rail ref when collapse state changes or the hook unmounts", () => {
+    const { result, rerender, unmount } = renderHook(() => usePanelCollapse());
+    const stale = {
+      collapse: vi.fn(() => {
+        throw new Error("Panel unmounted");
+      }),
+      expand: vi.fn(() => {
+        throw new Error("Panel unmounted");
+      }),
+      isCollapsed: vi.fn(() => {
+        throw new Error("Panel unmounted");
+      }),
+    };
+    result.current.rightPanelRef.current =
+      stale as unknown as PanelImperativeHandle;
+    act(() =>
+      result.current.handleRightResize({ asPercentage: 0, inPixels: 0 }),
+    );
+    rerender();
+    act(() =>
+      result.current.handleRightResize({ asPercentage: 26, inPixels: 390 }),
+    );
+    rerender();
+    unmount();
+    expect(stale.collapse).not.toHaveBeenCalled();
+    expect(stale.expand).not.toHaveBeenCalled();
+    expect(stale.isCollapsed).not.toHaveBeenCalled();
   });
 
   it("uses the current navigation target after both breakpoint transitions", () => {

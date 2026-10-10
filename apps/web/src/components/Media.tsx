@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { clsx } from "clsx";
+import { useTranslation } from "react-i18next";
 import type { MediaRef } from "@covel/shared";
 import { isMediaRef } from "../lib/media-ref-utils.js";
 import { resolveMediaSrc } from "../lib/media-resolve.js";
@@ -93,6 +94,7 @@ export function Media(props: MediaProps): ReactElement {
     maxHeight,
     as = "auto",
   } = props;
+  const { t } = useTranslation();
 
   const refForResolve = isMediaRef(src) ? src : null;
   const refMime = refForResolve?.mime ?? "";
@@ -162,7 +164,7 @@ export function Media(props: MediaProps): ReactElement {
         style={baseStyle}
         role="img"
         aria-busy="true"
-        aria-label={alt || "loading media"}
+        aria-label={alt || t("media.loading", "loading media")}
       />
     );
   }
@@ -177,10 +179,10 @@ export function Media(props: MediaProps): ReactElement {
         )}
         style={baseStyle}
         role="img"
-        aria-label={alt || "media unavailable"}
+        aria-label={alt || t("media.unavailable", "media unavailable")}
       >
         <span className="text-[10px] text-muted-foreground/70 font-mono">
-          {alt || "media unavailable"}
+          {alt || t("media.unavailable", "media unavailable")}
         </span>
       </div>
     );
@@ -224,7 +226,7 @@ export function Media(props: MediaProps): ReactElement {
       <audio
         src={state.url}
         controls
-        aria-label={alt || "audio"}
+        aria-label={alt || t("media.audio", "audio")}
         className={clsx("w-full block", className)}
       />
     );
@@ -235,7 +237,7 @@ export function Media(props: MediaProps): ReactElement {
       <video
         src={state.url}
         controls
-        aria-label={alt || "video"}
+        aria-label={alt || t("media.video", "video")}
         className={clsx("w-full block", radius, className)}
         style={baseStyle}
       />
@@ -251,9 +253,9 @@ export function Media(props: MediaProps): ReactElement {
         "inline-flex items-center px-3 py-2 text-sm border border-border rounded-md bg-card hover:bg-muted",
         className,
       )}
-      aria-label={alt || "download file"}
+      aria-label={alt || t("media.downloadFile", "download file")}
     >
-      {alt || "Download"}
+      {alt || t("media.download", "Download")}
     </a>
   );
 }

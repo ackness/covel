@@ -143,6 +143,21 @@ describe("Character REST API routes", () => {
     });
   });
 
+  it("rejects a wrongly typed optional field and names it", async () => {
+    const res = await app.request(`/api/sessions/${sessionId}/characters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "c",
+        name: "N",
+        fields: ["not", "an", "object"],
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/^fields/);
+    expect(await store.listCharacters(sessionId)).toEqual([]);
+  });
+
   it("refuses writes after the session is paused", async () => {
     await store.updateSession(sessionId, { status: "paused" });
     const res = await app.request(`/api/sessions/${sessionId}/characters`, {

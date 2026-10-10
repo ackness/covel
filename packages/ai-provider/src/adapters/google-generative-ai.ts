@@ -270,6 +270,7 @@ export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
           message: "Gemini returned invalid JSON",
           provider: GOOGLE_PROVIDER,
           retriable: false,
+          details: { usage: result.usage },
           cause,
         });
       }
@@ -280,6 +281,7 @@ export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
           message: "Gemini output does not match the requested schema",
           provider: GOOGLE_PROVIDER,
           retriable: false,
+          details: { usage: result.usage },
           cause: parsed.error,
         });
       const { text: _text, toolCalls: _toolCalls, ...rest } = result;

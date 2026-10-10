@@ -932,7 +932,7 @@ describe("TurnExecutor _interaction protocol", () => {
             id: "tc-1",
             name: "create-character-form",
             arguments: JSON.stringify({
-              formId: "test-form",
+              formId: "char-creation",
               title: "创建角色",
               fields: [
                 {
@@ -983,10 +983,10 @@ describe("TurnExecutor _interaction protocol", () => {
     const pi = result.pendingInputs![0];
     expect(pi.interaction).toBeDefined();
     expect(pi.interaction.type).toBe("form");
-    expect(pi.interaction.interactionId).toBe("test-form");
+    expect(pi.interaction.interactionId).toBe("char-creation");
     expect(pi.form).toBeDefined();
     expect((pi.form as Record<string, unknown>).interactionId).toBe(
-      "test-form",
+      "char-creation",
     );
   });
 });

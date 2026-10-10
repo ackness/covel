@@ -3,7 +3,7 @@
  *
  * Pulls the NPC subgraph relevant to the current player message and
  * returns it as a markdown list for narrator consumption. Entirely
- * structured retrieval (name matching + adjacency BFS) — no LLM, no
+ * structured retrieval (name matching + BFS over the current edges) — no LLM, no
  * embeddings. Current cast is an optional same-execution input, used only
  * when the player's message does not name a graph node.
  *
@@ -117,7 +117,17 @@ export default async function handler(ctx) {
     const currentEdges = Array.from(openByRelation.values());
     const edgeById = new Map(currentEdges.map((edge) => [edge.id, edge]));
 
-    // ── 2. 2-hop BFS via adjacency index ─────────────────────────
+    // ── 2. 2-hop BFS over the current edges ──────────────────────
+    // Built from the edges already read, so it cannot drift from them.
+    /** @type {Map<string, string[]>} */
+    const adjacency = new Map();
+    for (const edge of currentEdges) {
+      for (const endpoint of [edge.source, edge.target]) {
+        const list = adjacency.get(endpoint);
+        if (list) list.push(edge.id);
+        else adjacency.set(endpoint, [edge.id]);
+      }
+    }
     /** @type {Set<string>} */
     const visitedNodeIds = new Set(seedNodeIds);
     /** @type {Set<string>} */
@@ -129,9 +139,8 @@ export default async function handler(ctx) {
       /** @type {Set<string>} */
       const nextFrontier = new Set();
       for (const nodeId of frontier) {
-        const neighbourEdgeIds = await loadAdjacency(pluginData, nodeId);
-        for (const edgeId of neighbourEdgeIds) {
-          if (edgeById.has(edgeId)) collectedEdgeIds.add(edgeId);
+        for (const edgeId of adjacency.get(nodeId) ?? []) {
+          collectedEdgeIds.add(edgeId);
         }
       }
       // Expand the frontier using the edges we just collected.
@@ -192,39 +201,11 @@ export default async function handler(ctx) {
     await ctx.logger?.warn?.("rag-retriever handler error", {
       error: err instanceof Error ? err.message : String(err),
     });
-    // Graceful degradation stays a success carrying an empty context + error
-    // marker — a retrieval miss must not fail the narration turn.
+    // The narrator's input is optional, so a failed retrieval does not stop
+    // the turn, but the run is recorded as failed instead of an empty success.
     return {
-      outcome: "success",
-      value: {
-        npcContext: "",
-        matchedNodes: [],
-        edgeCount: 0,
-        error: err instanceof Error ? err.message : String(err),
-      },
+      outcome: "failed",
+      error: err instanceof Error ? err.message : String(err),
     };
   }
-}
-
-/**
- * Load adjacent edge IDs for a node by merging `by-source:{id}` and
- * `by-target:{id}` entries from the index namespace.
- *
- * @param {import('@covel/plugin-handlers-utils').PluginDataWriter | undefined} pluginData
- * @param {string} nodeId
- * @returns {Promise<string[]>}
- */
-async function loadAdjacency(pluginData, nodeId) {
-  /** @type {string[]} */
-  const out = [];
-  if (!pluginData) return out;
-  for (const indexKey of [`by-source:${nodeId}`, `by-target:${nodeId}`]) {
-    const value = await pluginData.get("index", indexKey);
-    if (Array.isArray(value)) {
-      for (const edgeId of value) {
-        if (typeof edgeId === "string") out.push(edgeId);
-      }
-    }
-  }
-  return out;
 }

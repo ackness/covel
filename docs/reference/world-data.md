@@ -70,6 +70,35 @@ defaultViewMode: stage
 
 `worldData` path 相对 world root；只有世界包带 descriptor 时才写它。`world.yaml` 的全部字段见生成的 [World manifest 字段表](schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](schema/world-dimensions.md)。
 
+### 只给叙事者的正文（narrator-only）
+
+`WORLD.md` 有两类读者：模型读整篇（故事提示词的 `<world-lore>` 段），玩家也能读到它（右侧面板的“世界”页签、开局准备页的“世界文档”、世界详情页）。只该叙事者知道的内容——暗线、谜底、怎样主持和控制节奏——放在两行标记之间：
+
+```markdown
+## 人物
+
+- **梅瑞尔**：酒馆老板娘，记性好、嘴巴紧。
+
+<!-- narrator-only -->
+
+## 暗线
+
+灯是守灯人自己吹灭的。前三个房间里不要说破。
+
+<!-- /narrator-only -->
+
+## 开局
+
+雨夜，你推开酒馆的门。
+```
+
+- 标记之间的内容照常进入提示词，写在这里的规则和设定在游玩中一样生效；模型读到的正文不含这两行标记。玩家看到的正文不含标记之间的内容。
+- 两行标记是 HTML 注释，在 Markdown 预览里不显示。每个标记独占一行；大小写和空格不敏感（`<!--Narrator-Only-->` 也可以）。一份正文可以有多段。
+- 语言版本（`WORLD.<locale>.md`）用同样的写法，各版本在同样的位置标记。
+- 拿不准的情况一律按“不给玩家看”处理：没有结束标记时，从开始标记到文末都不展示；写错的标记（例如 `<!-- end narrator-only -->`）当作开始标记。`pnpm validate:world` 对这些情况给出 `lore-narrator-only` warning，并指出行号。标记行写在代码块里也算标记。
+- 玩家在开局准备页编辑“世界文档”时只看到并修改可见部分，标记之间的内容原样保留在这局游戏使用的正文里。应用内的 AI 创建与修改世界处理的是整篇正文，包括标记。
+- 这是“不剧透”，不是保密：世界记录、世界包文件和接口返回的 `lore` 都是整篇正文，读文件或调接口的人看得到。需要“条件满足后才揭示”的内容用[隐藏数据](#隐藏数据visibility-hidden)。
+
 ### 动态世界维度（dimensions）
 
 `dimensions` 是世界作者声明的开放 map，不是固定的九类设定枚举。`geography`、`factions`、`powerSystem` 等只作为内容示例；金钱、声望、城墙、图鉴等可以使用作者自己的 ID 和数据结构。声明属于世界包，当前值属于会话：同一世界的两个会话独立演化，不回写包中的初值。
@@ -418,14 +447,14 @@ sources:
 
 框架统一保证：
 
-| 出口            | 处理                                                                                                                                             |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 提示词          | `io.selfData` 注入隐藏命名空间时直接报错；扩展点（`prompt.segment@1`、`ui.slot@1`、`session.world-context@1`）的 `ctx.pluginData` 读不到隐藏数据 |
-| 模型工具        | 内置 `plugin-data-get` / `plugin-data-list` 不返回隐藏命名空间                                                                                   |
-| 玩家可见接口    | 插件数据 API、`/state` 数据面板与 discovery 不列出，单条读取返回 404                                                                             |
-| lorebook 与投影 | 不允许 `+lorebook`；`worldProjections` 跳过隐藏 source                                                                                           |
-| 其他目标        | `characters`、`lorebook`、`world:metadata.*`、media 与 `indexTo` 都会被拒绝                                                                      |
-| 写入            | REST 与内置 `plugin-data-set` 工具不能写；只有所属插件自己的代码（function runtime、插件本地工具）能写自己的 `_hidden.*`                         |
+| 出口            | 处理                                                                                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 提示词          | `io.selfData` 注入隐藏命名空间时直接报错；扩展点（`prompt.segment@1`、`ui.slot@1`、`session.world-context@1`）的 `ctx.pluginData` 读不到隐藏数据                |
+| 模型工具        | 内置 `plugin-data-get` / `plugin-data-list` 不返回隐藏命名空间                                                                                                  |
+| 玩家可见接口    | 插件数据 API、`/state` 数据面板与 discovery 不列出，单条读取返回 404；快照读取接口（`GET` / `POST /snapshots`）的响应同样去掉隐藏命名空间，存储中的快照保持完整 |
+| lorebook 与投影 | 不允许 `+lorebook`；`worldProjections` 跳过隐藏 source                                                                                                          |
+| 其他目标        | `characters`、`lorebook`、`world:metadata.*`、media 与 `indexTo` 都会被拒绝                                                                                     |
+| 写入            | REST 与内置 `plugin-data-set` 工具不能写；只有所属插件自己的代码（function runtime、插件本地工具）能写自己的 `_hidden.*`                                        |
 
 只有接收插件自己的 runtime 代码能读取隐藏数据。插件决定揭示时，应通过本回合的 runtime 输出把内容交给需要的消费者，并在公开命名空间里留下不含原文的揭示记录；内置的 [`story-events`](plugins.md) 就是这样做的。揭示之后，内容会作为叙事该回合的输入出现在叙事的执行详情里。
 
@@ -700,6 +729,17 @@ sources:
 导入器原样使用领域 ID（如 `mio`）写入 `characters` 并校验会话 schema；角色表按 `(sessionId, id)` 区分会话，ID 不再带会话前缀，提示词里的角色引用因此更短。角色读写不镜像到任何插件 namespace；面板和运行器通过 `ctx.world.characters` 或领域 API 获取同一份记录。关闭角色卡接收插件只跳过卡片数据，不影响独立的领域角色 source。
 
 `effects: [characters]` 仍可把同一 source 的通用 `{id,name,type,description,fields}` 值投影为领域角色，但不会解释插件角色卡中的 `persona/attributes/instantiate` 语义。世界作者应优先使用独立的 `to: characters` source，明确提供要进入领域模型的字段。
+
+角色卡的字段分两路生效，前提是接收插件 `character-blueprint` 在会话里启用：
+
+| 角色卡字段                                                                                                   | 去向                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `name`、`persona.summary`、`description`、`role`、`aliases`、`tags`、`attributes`                            | 插件的只读“预设角色”面板                                                                                      |
+| `persona`（`voice`、`style`、`summary`、`traits`、`goals`、`fears`、`secrets`）、`rules`、`dialogueExamples` | 故事 runtime 的 `<character-notes>` 提示段：按这些说明扮演角色；`secrets` 标为只有叙事者知道                  |
+| `scenarioDefaults.relationships`、`scenarioDefaults.state`                                                   | 同一提示段；`state` 只作为开场事实列出，不保存、不能用工具修改                                                |
+| `attributes`、`instantiate`                                                                                  | 不会自动变成领域角色；领域角色来自 `to: characters` 的 source。手动运行 `import` runtime 并实例化时才使用它们 |
+
+提示段只写角色在会话里的卡：卡的 `id` 等于领域角色的 `id`，或领域角色的 `id` 是 `npc-<卡 id>`。所以角色卡和领域角色要用对得上的 ID。规则里要让模型修改的状态，应声明为 `characterSchema` 属性并写进领域角色的 `fields`；只写在 `scenarioDefaults.state` 里的开关没有可修改的字段。应用内 AI 创建世界默认只生成领域角色，口吻和动机写在 `description` 里；创作者勾选接收插件提供的“预设角色”内容时，才按上表另外生成角色卡。长度上限与裁剪顺序见[插件 README](../../plugins/character-blueprint/README.md#角色卡怎样进入叙事)。
 
 ## Character Presence Portraits
 
@@ -1089,6 +1129,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `manifest-invalid`      | error            | `world.yaml` 无法解析或不符合 schema                                                                        |
 | `lore-missing`          | error            | 某个声明的语言（`defaultLocale` / `supportedLocales`）解析不到 lore 文件                                    |
 | `lore-fallback-missing` | warning          | 没有 `WORLD.md`，未声明语言的会话会拿到空 lore                                                              |
+| `lore-narrator-only`    | warning          | [narrator-only 标记](#只给叙事者的正文narrator-only)没有结束、没有开始、嵌套或写错；后面的正文会对玩家隐藏  |
 | `unknown-plugin`        | error 或 warning | `pluginPolicy` / `pluginSettings` 引用的插件 ID 不在已扫描目录中                                            |
 | `unknown-setting`       | warning          | `pluginSettings` 的 key 不是该插件声明的设置项，值会被忽略                                                  |
 | `unprovided-contract`   | error 或 warning | `pluginPolicy.requires` 的契约没有提供者                                                                    |

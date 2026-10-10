@@ -9,6 +9,7 @@ import {
 } from "@/services/api.js";
 import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import { approvalConfirmMessage } from "@/lib/approval-message.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -200,12 +201,11 @@ export async function resolvePluginRpcApprovalResponse(params: {
       title: params.t("plugin.approval.title", {
         defaultValue: "Authorize plugin action",
       }),
-      message: params.t("plugin.approval.confirmMessage", {
-        pluginId: approvedPluginId,
-        action: approvedAction,
-        defaultValue:
-          "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
-      }),
+      message: approvalConfirmMessage(
+        params.t,
+        approvedPluginId,
+        approvedAction,
+      ),
       confirmLabel: params.t("plugin.approval.allow", {
         defaultValue: "Authorize",
       }),

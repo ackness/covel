@@ -3,6 +3,7 @@ import { AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { projectExecutionTurns } from "@/stores/session-store/execution-projection.js";
 import { ExecutionTimeline } from "../execution-timeline.js";
+import { resolveI18nSentinel } from "../execution-runtime-status.js";
 import type { StageViewProps } from "./StageView.js";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
 
@@ -38,6 +39,7 @@ export function StageExecutionStatus({
     !!turn?.steps.length &&
     (executing || turn.steps.some((step) => step.status === "failed"));
   if (!showTasks && !executionError) return null;
+  const resolvedError = resolveI18nSentinel(executionError ?? undefined, t);
   const canRetry = !executing && !!turn?.turnId && !!onRetryRuntime;
   return (
     <div
@@ -68,7 +70,11 @@ export function StageExecutionStatus({
               <p className="font-medium text-destructive">
                 {t("common.error")}
               </p>
-              <ActionableErrorNotice error={executionError} layout="panel" />
+              {resolvedError !== executionError ? (
+                <p className="text-destructive">{resolvedError}</p>
+              ) : (
+                <ActionableErrorNotice error={executionError} layout="panel" />
+              )}
             </div>
           </div>
         )}

@@ -1,4 +1,8 @@
 import { Hono } from "hono";
+import {
+  createPluginRegistry,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildSessionContextSnapshot } from "@covel/context";
 import {
@@ -50,11 +54,16 @@ describe.each(["memory", "sqlite"])("fork lore on %s", (backend) => {
       makeSession({ id: "parent", metadata: parentMetadata }),
     );
     const routes = new Hono<{
-      Variables: { store: DataStore; sessionLock: SessionLock };
+      Variables: {
+        store: DataStore;
+        sessionLock: SessionLock;
+        pluginRegistry: PluginRegistry;
+      };
     }>();
     const sessionLock = createInProcessSessionLock();
     routes.use("*", async (context, next) => {
       context.set("store", store);
+      context.set("pluginRegistry", createPluginRegistry());
       context.set("sessionLock", sessionLock);
       await next();
     });

@@ -1,4 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import {
+  createPluginRegistry,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import { Hono } from "hono";
 import {
   exportSessionCheckpoint,
@@ -49,10 +53,12 @@ beforeEach(async () => {
       store: DataStore;
       mediaStore: MediaStore;
       sessionLock: SessionLock;
+      pluginRegistry: PluginRegistry;
     };
   }>();
   routes.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("pluginRegistry", createPluginRegistry());
     c.set("mediaStore", mediaStore);
     c.set("sessionLock", lock);
     await next();

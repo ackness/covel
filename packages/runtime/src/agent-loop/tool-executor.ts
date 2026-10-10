@@ -57,6 +57,14 @@ function toolError(
 
 // ── Types ────────────────────────────────────────────────────────
 
+/** A tool result without the `ui` blocks the kernel renders for the player. */
+function withoutUiBlocks(result: unknown): unknown {
+  if (!result || typeof result !== "object" || Array.isArray(result))
+    return result;
+  const { ui, ...rest } = result as Record<string, unknown>;
+  return Array.isArray(ui) ? rest : result;
+}
+
 export interface ToolCall {
   readonly toolCallId: string;
   readonly name: string;
@@ -461,12 +469,14 @@ export function createToolExecutor(
         // for tools that don't opt in, without the bookkeeping a record carries
         // (`updatedAt` of a plugin-data row, the time of a recalled message): a
         // tool that hands the model an opaque handle writes it in `_text`.
+        // The `ui` blocks of a result are for the player's screen, and they
+        // repeat what the model has just written.
         const resultStr =
           parsedResult &&
           typeof parsedResult === "object" &&
           typeof (parsedResult as { _text?: unknown })._text === "string"
             ? (parsedResult as { _text: string })._text
-            : JSON.stringify(modelFacingJson(parsedResult));
+            : JSON.stringify(modelFacingJson(withoutUiBlocks(parsedResult)));
 
         const durationMs = Date.now() - startTime;
         await recordCall(

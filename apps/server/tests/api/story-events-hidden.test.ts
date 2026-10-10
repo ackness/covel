@@ -393,6 +393,22 @@ describe("hidden world data and story events", () => {
         `/api/sessions/${sessionId}/state`,
       ]),
     ).not.toContain(SECRET);
+
+    // A snapshot keeps the hidden bucket (fork needs it); reading it back does not.
+    const created = await boot.app.request(
+      `/api/sessions/${sessionId}/snapshots`,
+      { method: "POST" },
+    );
+    const createdText = await created.text();
+    expect(createdText).not.toContain(SECRET);
+    const { id: snapshotId } = JSON.parse(createdText) as { id: string };
+    const stored = await boot.store.getSnapshot(snapshotId);
+    expect(JSON.stringify(stored?.payload.pluginData)).toContain(SECRET);
+    expect(
+      await publicSurfaces(sessionId, [
+        `/api/sessions/${sessionId}/snapshots/${snapshotId}`,
+      ]),
+    ).not.toContain(SECRET);
   }, 30_000);
 
   it("stores events planned during play as hidden data and reveals them later", async () => {

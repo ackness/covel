@@ -7,7 +7,10 @@ import {
 import { z } from "zod";
 
 import createUpdateInventory from "../../lib/update-inventory.js";
-import { inventoryChangesFromWorldIR } from "../../lib/world-ir.js";
+import {
+  MAX_CHANGES,
+  inventoryChangesFromWorldIR,
+} from "../../lib/world-ir.js";
 
 const updateInventory = createUpdateInventory({
   tool: (definition) => definition,
@@ -25,10 +28,9 @@ export default async function handler(ctx) {
   const player = ctx.world?.characters.find(
     (character) => character.type === "player",
   );
-  const changes = inventoryChangesFromWorldIR(
-    ctx.inputs?.worldIR?.value,
-    player,
-  );
+  const all = inventoryChangesFromWorldIR(ctx.inputs?.worldIR?.value, player);
+  const changes = all.slice(0, MAX_CHANGES);
+  const notRecorded = all.length - changes.length;
   if (!changes.length)
     return {
       outcome: "success",
@@ -39,7 +41,16 @@ export default async function handler(ctx) {
     ctx,
   );
   return withPendingProposals(
-    { outcome: "success", value: getToolContent(result) },
+    {
+      outcome: "success",
+      value: {
+        ...getToolContent(result),
+        ...(notRecorded > 0 && {
+          notRecorded,
+          note: `${notRecorded} item change(s) were not recorded: a turn records at most ${MAX_CHANGES}.`,
+        }),
+      },
+    },
     getPendingProposals(result),
   );
 }

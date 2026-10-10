@@ -1,4 +1,5 @@
 const COLLECTABLE_TYPES = ["string", "enum"];
+const CHARACTER_FORM_ID = "char-creation";
 
 /**
  * What the form may hold in this world, written for the model: a rejection
@@ -88,7 +89,12 @@ export default function ({ tool }, createFormTool) {
       if (!params.fields.some(isName)) {
         throw new Error("Include a required characterName text field.");
       }
-      return createFormTool.execute(params, context);
+      // The setup guard finds this form's submission by this id, so it is set
+      // here: the id must not depend on what the model passed.
+      return createFormTool.execute(
+        { ...params, formId: CHARACTER_FORM_ID },
+        context,
+      );
     },
   });
 }

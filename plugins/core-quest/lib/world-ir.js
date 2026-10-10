@@ -9,7 +9,8 @@
  * never invents a second quest.
  */
 
-const MAX_QUESTS = 5;
+/** Most updates one log call takes; the handler reports the overflow. */
+export const MAX_QUESTS = 5;
 const STATUS = {
   accepted: undefined,
   progressed: undefined,
@@ -90,5 +91,5 @@ export function questUpdatesFromWorldIR(worldIR, knownQuestNames) {
       update.reward = attributes.reward;
     updates.push(update);
   }
-  return updates.slice(0, MAX_QUESTS);
+  return updates;
 }

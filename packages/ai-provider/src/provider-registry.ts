@@ -4,6 +4,7 @@ import {
   getBuiltinProviderConnection,
 } from "@covel/shared";
 import { getProtocolDefinition } from "./protocol-registry.js";
+import { describeUnavailableWire } from "./wire-lifecycle.js";
 import { ModelConfigurationError } from "./errors.js";
 import type {
   CacheStrategy,
@@ -160,6 +161,13 @@ export function createProviderRegistry(options?: {
       protocolRoute?.adapter ?? registered.adapter ?? builtinAdapter(protocol);
 
     if (!adapter) {
+      const unavailable = describeUnavailableWire("text", protocol);
+      if (unavailable)
+        throw new ModelConfigurationError(
+          unavailable.inSession
+            ? `Protocol "${protocol}" is provided by the plugin "${unavailable.pluginId}", which is not enabled for this session. Enable that plugin to use this model.`
+            : `Protocol "${protocol}" is provided by the plugin "${unavailable.pluginId}", which can only be used in a session that has enabled it. Start or open a session with that plugin enabled to use this model.`,
+        );
       throw new ModelConfigurationError(
         `Provider registry: protocol "${protocol}" not supported for "${target.provider}".`,
       );

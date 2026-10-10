@@ -69,12 +69,13 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
     });
     const items = proposal.payload.items;
     expect(items[0]).toMatchObject({
-      namespace: "turns",
+      namespace: "message",
       key: "turn-branch",
       value: {
         schemaVersion: 1,
         turnId: "turn-branch",
         status: "ready",
+        candidateCount: 1,
         // Stores WHICH runtime produced the narrative (from the slot's
         // source.runtimeId) so the prompt-history rewriter targets the
         // narrator's message, not branch-reply's own seed.
@@ -89,11 +90,7 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
         ],
       },
     });
-    expect(items[1]).toMatchObject({
-      namespace: "message",
-      key: "turn-branch",
-      value: { __turnId: "turn-branch", status: "ready", candidateCount: 1 },
-    });
+    expect(items).toHaveLength(1);
   });
 
   it("skips when no narrative input is bound", async () => {
@@ -109,7 +106,7 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
     const pluginData = {
       // ctx.pluginData already holds a record for this turn.
       async get(namespace, key) {
-        expect([namespace, key]).toEqual(["turns", "turn-branch"]);
+        expect([namespace, key]).toEqual(["message", "turn-branch"]);
         return {
           schemaVersion: 1,
           turnId: "turn-branch",
@@ -166,6 +163,28 @@ describe("branch-reply createCandidates (regenerate)", () => {
       );
       expect(system + prompt).not.toMatch(/\p{Script=Han}/u);
     }
+  });
+
+  it("passes the run's cancel signal and an output ceiling to the model call", async () => {
+    const gateway = {
+      generateText: vi.fn().mockResolvedValue({ text: "One.\n---\nTwo." }),
+    };
+    const controller = new AbortController();
+    await handler({
+      ...ctx({
+        manualPayload: {
+          action: "createCandidates",
+          turnId: "turn-42",
+          baseText: "The original beat.",
+          count: 3,
+        },
+        gateway,
+      }),
+      signal: controller.signal,
+    });
+    const request = gateway.generateText.mock.calls[0][0];
+    expect(request.signal).toBe(controller.signal);
+    expect(request.maxOutputTokens).toBe(12_000);
   });
 
   it("produces genuine LLM variants in addition to the original", async () => {
@@ -229,7 +248,7 @@ describe("branch-reply createCandidates (regenerate)", () => {
     // narrator's message, not branch-reply's own seed message.
     const pluginData = {
       async get(namespace, key) {
-        expect([namespace, key]).toEqual(["turns", "turn-42"]);
+        expect([namespace, key]).toEqual(["message", "turn-42"]);
         return {
           schemaVersion: 1,
           turnId: "turn-42",
@@ -390,7 +409,7 @@ describe("branch-reply acceptCandidate", () => {
     };
     const pluginData = {
       async get(namespace, key) {
-        expect([namespace, key]).toEqual(["turns", "turn-42"]);
+        expect([namespace, key]).toEqual(["message", "turn-42"]);
         return storedTurn;
       },
     };
@@ -416,26 +435,72 @@ describe("branch-reply acceptCandidate", () => {
     const [proposal] = getPendingProposals(result);
     const items = proposal.payload.items;
     expect(items[0]).toMatchObject({
-      namespace: "turns",
-      key: "turn-42",
-      value: {
-        status: "accepted",
-        // runtimeId survives accept so the rewriter targets the narrator.
-        runtimeId: "chat-mode-narrator",
-        selectedCandidateId: "turn-42-candidate-2",
-        acceptedCandidateId: "turn-42-candidate-2",
-        acceptedText: "I test the lock. I listen.",
-      },
-    });
-    expect(items[1]).toMatchObject({
       namespace: "message",
       key: "turn-42",
       value: {
         __turnId: "turn-42",
         status: "accepted",
+        // runtimeId survives accept so the rewriter targets the narrator.
+        runtimeId: "chat-mode-narrator",
         selectedCandidateId: "turn-42-candidate-2",
         acceptedCandidateId: "turn-42-candidate-2",
       },
+    });
+    // The adopted text lives in one small row that prompt history reads.
+    expect(items[1]).toEqual({
+      namespace: "accepted",
+      key: "turn-42",
+      value: {
+        turnId: "turn-42",
+        text: "I test the lock. I listen.",
+        runtimeId: "chat-mode-narrator",
+      },
+    });
+  });
+
+  it("keeps a narration over 4000 characters whole through seed and accept", async () => {
+    const longText = "The corridor stretches on. ".repeat(200).trim();
+    const seeded = await handler(ctx({ inputs: narrativeSlot(longText) }));
+    const [seedProposal] = getPendingProposals(seeded);
+    const messageRecord = seedProposal.payload.items[0].value;
+    expect(messageRecord.candidates[0].text).toBe(longText);
+
+    const result = await handler(
+      ctx({
+        manualPayload: {
+          action: "acceptCandidate",
+          turnId: "turn-branch",
+          candidateId: "turn-branch-candidate-1",
+        },
+        pluginData: { get: async () => ({ ...messageRecord }) },
+      }),
+    );
+    const [proposal] = getPendingProposals(result);
+    expect(proposal.payload.items[1].value.text).toBe(longText);
+  });
+
+  it("drops the adopted row when a new candidate set replaces an adopted reply", async () => {
+    const result = await handler(
+      ctx({
+        manualPayload: { action: "createCandidates", turnId: "turn-42" },
+        pluginData: {
+          get: async () => ({
+            schemaVersion: 1,
+            turnId: "turn-42",
+            status: "accepted",
+            candidates: [{ id: "turn-42-candidate-1", text: "Original." }],
+          }),
+        },
+      }),
+    );
+    const proposals = getPendingProposals(result);
+    expect(proposals.map((p) => p.type)).toEqual([
+      "plugin.data.batch",
+      "plugin.data.delete",
+    ]);
+    expect(proposals[1].payload).toEqual({
+      namespace: "accepted",
+      key: "turn-42",
     });
   });
 

@@ -171,7 +171,7 @@ describe("plugin-rpc-ui", () => {
     expect(confirm).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        message: expect.stringContaining("covel:plugin-server-code"),
+        message: expect.stringContaining("without a process sandbox"),
       }),
     );
     expect(confirm).toHaveBeenNthCalledWith(

@@ -111,7 +111,7 @@ function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
     requestedLine(
       requested,
       "characters",
-      "3-5 interconnected main character blueprints with motives, secrets, voice, relationships, and opening state.",
+      "3-5 interconnected main characters; each description gives the role in the crisis, the motive, and the way of speaking.",
     ),
     requestedLine(
       requested,

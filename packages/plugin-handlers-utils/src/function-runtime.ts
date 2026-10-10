@@ -74,7 +74,7 @@ export interface PluginDataWriter {
   set(namespace: string, key: string, value: unknown): Promise<void>;
   /** Read the current value for a key (returns `null` when absent). */
   get(namespace: string, key: string): Promise<unknown>;
-  /** List every entry in a namespace, newest first per store ordering. */
+  /** List every entry in a namespace, earliest-created first (store order). */
   list(
     namespace: string,
   ): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;

@@ -774,7 +774,7 @@ export async function createBootstrapPluginEntries(
                       return params.services
                         ? params.services.withSnapshot(inside)
                         : inside();
-                    }),
+                    }, params.pluginRegistry?.getActivePlugins(sessionId)),
                   ),
                 ),
               );

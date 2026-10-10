@@ -189,6 +189,18 @@ describe("character-blueprint presence handler", () => {
     });
   });
 
+  it("names the missing fields when a media reference is only partly filled in", async () => {
+    await expect(
+      handler(
+        ctx({
+          presenceForm: { displayName: "Lin", avatarMime: "image/png" },
+        }),
+      ),
+    ).rejects.toThrow(
+      "avatarId, avatarMime and avatarSize must be filled in together",
+    );
+  });
+
   it("rejects malformed presence payloads", async () => {
     await expect(handler(ctx({ presenceJson: "{bad json" }))).rejects.toThrow(
       "manualPayload.presenceJson must be valid JSON",

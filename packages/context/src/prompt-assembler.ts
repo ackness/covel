@@ -30,7 +30,7 @@ import { selectPromptSegments } from "./extension-segments.js";
  * the current user message, and any depth/post-history prompt contributions.
  */
 
-import { applyBudget } from "./budget.js";
+import { DEFAULT_PROTECT_LAST_USER_TURNS, applyBudget } from "./budget.js";
 import {
   assemblePromptVariables,
   buildCurrentTurnUserMessage,
@@ -455,7 +455,6 @@ function finalizeSegmentedContext(
     currentMessage,
     ...storyMessages,
   ];
-  const currentTurnUserMessages = storyMessages.length > 0 ? 2 : 1;
 
   // Insert depth-positioned lore and extension segments.
   const withDepthContributions = insertDepthContributions(
@@ -482,12 +481,27 @@ function finalizeSegmentedContext(
     ...segments.postHistoryInstructions,
   ];
 
+  // The budget protects trailing user-role messages. The player message is
+  // followed by the story cue and by any post-history or shallow-depth
+  // segment a plugin declared with the user role; count those too, so the
+  // protected window still starts at the player message.
+  const currentTurnUserMessages =
+    1 +
+    messages
+      .slice(messages.indexOf(currentMessage) + 1)
+      .filter((message) => message.role === "user").length;
+
   const budgetEnabled =
     params.estimator !== undefined && params.contextBudget !== undefined;
 
   if (budgetEnabled) {
     const result = applyBudget(systemPrompt, messages, {
       ...params.contextBudget!,
+      protectLastUserTurns:
+        (params.contextBudget!.protectLastUserTurns ??
+          DEFAULT_PROTECT_LAST_USER_TURNS) +
+        currentTurnUserMessages -
+        1,
       estimator: params.estimator!,
       locale: params.turnInput.locale,
     });

@@ -15,6 +15,32 @@ export async function fetchWithTimeout(
   }
 }
 
+/**
+ * One JSON request with a single deadline over the connection, the headers and
+ * the body, so a peer that accepts the socket and then stalls cannot hold the
+ * caller. A body that is not JSON reads as `null`. Rejects with the abort
+ * error when the deadline passes.
+ */
+export async function fetchJsonWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url, { ...init, signal: controller.signal });
+    const body: unknown = await res.json().catch((error: unknown) => {
+      if (controller.signal.aborted) throw error;
+      return null;
+    });
+    return { ok: res.ok, status: res.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Bind `port` on loopback (0 = any free port), release it, and report it. */
 function claimPort(port: number): Promise<number> {
   return new Promise((resolve, reject) => {

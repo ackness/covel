@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsStore, type SettingsBackendAdapter } from "@covel/settings";
 import { registerLlmSettings } from "@/settings/registry/llm.js";
+import { serializeLogged } from "../../test/serialize-logged.js";
 import { setProviderProfiles } from "../api/model-settings.js";
 
 const context = vi.hoisted(() => ({ store: null as unknown as SettingsStore }));
@@ -158,7 +159,7 @@ it("reports key cleanup failure separately after the model configuration commits
   expect(result.unclearedProviderIds).toEqual(["fixture"]);
   expect(entries).toEqual({ "llm.providers": [], "llm.slotConfig": {} });
   expect(secrets.fixture).toBe("synthetic-secret");
-  expect(JSON.stringify(warning.mock.calls)).not.toContain("synthetic-secret");
+  expect(serializeLogged(warning.mock.calls)).not.toContain("synthetic-secret");
   warning.mockRestore();
 });
 

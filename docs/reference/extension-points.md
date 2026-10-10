@@ -12,6 +12,15 @@
 
 提供者的 handler 收到契约输入与上下文。上下文中的 `ctx.pluginData` 只读且绑定提供者自己的数据（读不到 `_hidden.*` 隐藏世界数据，因为扩展输出会进入提示词或客户端），`ctx.world` 提供会话 World Model 视图；不能通过这里读取其他插件的私有 namespace。输入与每个输出都经过扩展点 schema 校验，超时和异常按该点的 `onError` 处理。需要跨插件请求/响应调用时使用公开服务契约；需要同轮上游结果时使用 runtime `io.inputs`。选择方法与事务边界见[插件扩展边界与通信](plugin-extensions.md#选择通信方式)。
 
+`ctx.pluginData.get` 在两种上下文里返回的形状不同，照搬写法会读到空值而不报错：
+
+| 上下文                                    | `get(namespace, key)` 返回                                          | 不存在时    | `list(namespace)` 的每一项 |
+| ----------------------------------------- | ------------------------------------------------------------------- | ----------- | -------------------------- |
+| 函数 runtime 的 handler、runtime 的 guard | 存储的值本身                                                        | `null`      | `{ key, value }`           |
+| 扩展点的 handler                          | 整行记录 `{ pluginId, namespace, key, value, … }`，值在 `.value` 里 | `undefined` | 整行记录                   |
+
+两边的 `list` 都能用 `row.value` 取值，所以在两种上下文之间共用的代码优先用 `list`。
+
 ```yaml
 entry: ./server/index.js
 contributes:

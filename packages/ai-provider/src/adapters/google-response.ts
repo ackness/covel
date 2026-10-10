@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { LLMDiagnostics } from "@covel/shared";
 import { AiProviderError } from "../errors.js";
@@ -231,8 +230,10 @@ export class GoogleResponse {
     );
     if (toolParts.length && this.finish !== "STOP")
       throw googleError("Gemini tool calls were not completed successfully");
-    const toolCalls = toolParts.map((part) => ({
-      id: part.functionCall!.id ?? randomUUID(),
+    // A call without a native id gets one from its position, so a recorded
+    // session repeats byte for byte.
+    const toolCalls = toolParts.map((part, index) => ({
+      id: part.functionCall!.id ?? `call_${index}`,
       name: part.functionCall!.name,
       arguments: JSON.stringify(part.functionCall!.args ?? {}),
     }));

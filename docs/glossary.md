@@ -8,26 +8,27 @@ Terms are ordered alphabetically. Each entry includes a 1–2 sentence definitio
 
 One English term has one Chinese term. Chinese docs, UI copy and the Chinese prompt variants (`*.zh.md`) use the term in this table.
 
-| Term             | 中文         | Note                                                                |
-| ---------------- | ------------ | ------------------------------------------------------------------- |
-| Binding          | 绑定         |                                                                     |
-| Capability       | 能力标签     |                                                                     |
-| Collection       | 合集         |                                                                     |
-| Credits          | 作者信息     | The `author`, `license` and `homepage` fields of a package.         |
-| Kernel           | 内核         |                                                                     |
-| Pack             | 玩法包       |                                                                     |
-| PluginType       | 插件类型     |                                                                     |
-| Preset           | 预设         |                                                                     |
-| Proposal         | 提案         |                                                                     |
-| Provider         | 提供商       |                                                                     |
-| Runtime          | runtime      | Kept in English: it names a manifest unit, not "运行时" in general. |
-| Runtime manifest | runtime 清单 |                                                                     |
-| Segment          | 提示词段     |                                                                     |
-| Session          | 会话         |                                                                     |
-| Slot             | 槽位         |                                                                     |
-| Trigger mode     | 触发模式     |                                                                     |
-| Turn             | 回合         | "This turn" is 本回合.                                              |
-| World            | 世界         | A world package is 世界包.                                          |
+| Term             | 中文         | Note                                                                                                          |
+| ---------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Binding          | 绑定         |                                                                                                               |
+| Capability       | 能力标签     | A model route's `tag` (`text`, `image`, ...). Plugins are discovered by **Contract**, not by capability tags. |
+| Collection       | 合集         |                                                                                                               |
+| Contract         | 契约         | A versioned ID such as `narrative-engine@1`.                                                                  |
+| Credits          | 作者信息     | The `author`, `license` and `homepage` fields of a package.                                                   |
+| Kernel           | 内核         |                                                                                                               |
+| Pack             | 玩法包       |                                                                                                               |
+| PluginType       | 插件类型     |                                                                                                               |
+| Preset           | 预设         |                                                                                                               |
+| Proposal         | 提案         |                                                                                                               |
+| Provider         | 提供商       |                                                                                                               |
+| Runtime          | runtime      | Kept in English: it names a manifest unit, not "运行时" in general.                                           |
+| Runtime manifest | runtime 清单 |                                                                                                               |
+| Segment          | 提示词段     |                                                                                                               |
+| Session          | 会话         |                                                                                                               |
+| Slot             | 槽位         |                                                                                                               |
+| Trigger mode     | 触发模式     |                                                                                                               |
+| Turn             | 回合         | "This turn" is 本回合.                                                                                        |
+| World            | 世界         | A world package is 世界包.                                                                                    |
 
 ## Prompt vocabulary
 
@@ -91,6 +92,12 @@ See: [docs/reference/extension-points.md](./reference/extension-points.md), [doc
 The framework runtime that schedules turns, assembles context, drives LLM tool-calls, validates proposals, and commits writes. Everything outside the `plugins/` directory (`packages/`, `apps/server/src/`, `apps/web/src/`) is kernel code.
 
 See: [docs/architecture/flow.md](./architecture/flow.md).
+
+## Narrator-only
+
+A part of `WORLD.md` between the lines `<!-- narrator-only -->` and `<!-- /narrator-only -->`. The model reads it; the World tab, the session-prep screen and the world detail page do not show it. It keeps spoilers out of the player's view and is not secrecy: the world record and the package files hold the whole text. Content that is revealed only when a condition holds is hidden data (`visibility: hidden`), a different mechanism.
+
+See: [docs/reference/world-data.md](./reference/world-data.md).
 
 ## Pack
 

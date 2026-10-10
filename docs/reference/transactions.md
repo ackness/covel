@@ -417,6 +417,8 @@ server transaction API in the browser.
   `commitExecution`
   进入这个边界，再由同一宿主入口协调通知、快照和记忆调度。
 
+`start_session` 带 `loreOverride` 时，服务端先把它写进会话 metadata，再进入回合事务，所以它不属于回合事务：随后的回合失败不会撤销这次写入。这是有意的，使后续回合和其他实例看到同一份世界背景快照。
+
 `/api/actions` 的 `onFinalized` 仅依据durable outcome结算宿主标记并入观察队列，不等待SSE消费；自动snapshot仍在同一session lock内执行。写入错误、队列溢出、观察截止与锁外drain失败不能把committed artifact改成failed，不能开放同turn恢复重放，也不能重试模型。恢复以durable artifact和只读execution/session端点为准，而不是是否收到最后一帧。
 
 > **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
@@ -588,29 +590,17 @@ commits (proposal apply, commit success/failure). The trace does not currently
 add a dedicated transaction-mode field; inspect the active store backend when
 debugging whether a run used transactions.
 
-## Schema migrations
+## Schema changes
 
 Table + index DDL is derived from the Drizzle schema
 (`packages/store/src/{sqlite,postgres}/schema.ts`) via
-`packages/store/src/common/ddl-codegen.ts`, using `CREATE TABLE IF NOT EXISTS`
-and additive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` so fresh installs and
-existing databases both boot. Store-managed migrations include the lossless
-character/lorebook identity change from a global `id` primary key to
-`(session_id, id)`: SQLite rebuilds both tables in one transaction, PostgreSQL
-changes the primary-key constraint after checking the catalog, and browser
-IndexedDB v15 rebuilds both object stores in the active versionchange
-transaction. Existing rows remain unchanged because the legacy global key is a
-subset of the new composite key; operators should still back up durable stores
-before a release migration.
-
-Constraint changes that require data cleanup remain operator-managed. For
-example, `media_refs UNIQUE` was widened from
-`(session_id, media_id, plugin_id)` to `(session_id, media_id)` to fix
-NULL-pluginId duplicate rows (see
-[`media-store.md`](./media-store.md#ownership)). The DDL still creates the new
-index, but operators with legacy duplicates must run a one-off cleanup SQL
-before the new index can be applied. Each such migration is documented next to
-the affected table in the relevant reference doc.
+`packages/store/src/common/ddl-codegen.ts`, using `CREATE TABLE IF NOT EXISTS`.
+During early development the stores do not migrate old data: a database made by
+an earlier build boots only when its tables already match, and a change to a
+table, a constraint or an index that old rows do not satisfy is listed under
+Breaking in `docs/CHANGELOG.md` with the development data to recreate. At start
+the stores delete retired tables and retired plugin-data namespaces; that is a
+removal, not a conversion.
 
 ## References
 

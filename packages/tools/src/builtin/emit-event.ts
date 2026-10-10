@@ -46,9 +46,11 @@ export function createEmitEventTool(deps: {
       }
       const known = await deps.directory.listTopics(context.sessionId);
       if (!known.includes(topic)) {
-        return {
-          _text: `unknown topic "${topic}"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: ${known.join(", ") || "(none — no consumer plugin active)"}`,
-        };
+        // Thrown, so the call counts as failed: a refused emit must not
+        // satisfy `requireToolUse` or a finishing-tool rule.
+        throw new Error(
+          `unknown topic "${topic}"; no active plugin consumes it, so it cannot be emitted. Do not retry it. Available topics: ${known.join(", ") || "(none — no consumer plugin active)"}`,
+        );
       }
       const verdict = await deps.directory.validate(
         context.sessionId,
@@ -56,7 +58,7 @@ export function createEmitEventTool(deps: {
         data,
       );
       if (!verdict.ok) {
-        return { _text: `event payload rejected: ${verdict.reason}` };
+        throw new Error(`event payload rejected: ${verdict.reason}`);
       }
       // One topic is emitted one time in a turn. The result says so: with a
       // bare "emitted" some models send the same event again to be sure.

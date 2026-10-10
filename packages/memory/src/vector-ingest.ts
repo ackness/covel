@@ -43,7 +43,6 @@ import {
   MEMORY_VECTOR_PLUGIN_ID,
   RECALL_NAMESPACE,
 } from "./vector-common.js";
-import { retryTransientProviderCall } from "./provider-retry.js";
 
 /** Outcome of one ingestion sweep. */
 export interface IngestResult {
@@ -501,13 +500,9 @@ async function embedWithRetry(
     batch: readonly string[],
   ): Promise<(Float32Array | null | undefined)[]> => {
     try {
-      const vectors = await retryTransientProviderCall(() => embed(batch), {
-        onRetry: (error, nextAttempt) => {
-          console.warn(
-            `[memory] vector ingest (${kind}) provider call failed for ${sessionId}; retrying attempt ${nextAttempt}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        },
-      });
+      // The provider transport already retries transient failures; a second
+      // loop here would multiply the attempts and retry an abort.
+      const vectors = await embed(batch);
       return batch.map((_, i) => vectors[i]);
     } catch (error) {
       if (!rejectedEmbeddingInput(error)) throw error;

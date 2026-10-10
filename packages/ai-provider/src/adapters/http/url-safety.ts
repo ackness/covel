@@ -1,3 +1,4 @@
+import { readRuntimeEnv } from "@covel/shared";
 import { isPublicIpAddress } from "./ip-safety.js";
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -15,9 +16,22 @@ function normalizeHost(hostname: string): string {
   return hostname.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
 }
 
+/**
+ * The loopback exception serves local model servers (Ollama and the like) on
+ * the `self` tier, where the server is the player's own machine. On hosted
+ * tiers loopback is the host's internal surface, so these names get no
+ * exception: the literals fail the public-address rule and `localhost` needs
+ * `https` like any other name, then fails the DNS check.
+ */
+function isAllowedLoopbackHost(host: string): boolean {
+  return (
+    LOOPBACK_HOSTNAMES.has(host) && readRuntimeEnv().deploymentTier === "self"
+  );
+}
+
 function isDomainAllowed(hostname: string): boolean {
   const host = normalizeHost(hostname);
-  if (LOOPBACK_HOSTNAMES.has(host)) return true;
+  if (isAllowedLoopbackHost(host)) return true;
   if (BLOCKED_HOSTNAMES.includes(host)) return false;
   // Literal targets bypass socket DNS lookup, so enforce the full policy here.
   if (host.includes(":") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host))
@@ -40,7 +54,7 @@ export function validateBaseUrl(url: string): boolean {
   }
   if (
     parsed.protocol === "http:" &&
-    !LOOPBACK_HOSTNAMES.has(normalizeHost(parsed.hostname))
+    !isAllowedLoopbackHost(normalizeHost(parsed.hostname))
   ) {
     return false;
   }

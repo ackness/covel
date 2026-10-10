@@ -216,4 +216,5 @@ export {
 export {
   withWireRegistrySnapshot,
   replacePluginWires,
+  type WireOwner,
 } from "./wire-lifecycle.js";

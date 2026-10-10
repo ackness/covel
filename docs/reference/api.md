@@ -206,7 +206,6 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-001",
     "type": "start_session",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN",
     "payload": {}
   }'
 ```
@@ -220,7 +219,6 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-002",
     "type": "send_message",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN",
     "payload": { "content": "我环顾四周，观察这个陌生的世界" }
   }'
 ```
@@ -247,7 +245,6 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-003",
     "type": "send_message",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN",
     "payload": { "content": "走向远处的城镇" }
   }'
 ```
@@ -274,11 +271,13 @@ curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
   }'
 ```
 
-### 11. 结束会话
+### 11. 删除会话
 
 ```bash
 curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 ```
+
+这会删除该会话及其全部存档数据（消息、状态、快照等），不可恢复。
 
 ---
 
@@ -731,28 +730,28 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### 配置信息
 
-| 方法 | 路径                           | 描述                                                                                                                                                                                                                                                                   |
-| ---- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET  | `/api/presets`                 | 列出配置的模型预设（`{ items }`）                                                                                                                                                                                                                                      |
-| GET  | `/api/plugins`                 | 从 registry 快照列出 canonical `PluginSummary`；加载失败同样作为 `status: "error"` 的 item 返回                                                                                                                                                                        |
-| GET  | `/api/worlds/:id/plugin-plan`  | 服务端解析世界插件策略、组合包和默认选择，返回 `WorldPluginPlan`；各 `requested` 与 `defaultPluginIds` 只含已安装插件，世界请求但宿主未安装的列在 `missing: [{ pluginId, packId? }]`                                                                                   |
-| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件                                                                                                                                                                                |
-| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                                                                                                                                 |
-| POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                                                                   |
-| GET  | `/api/provider-keys`           | 固定返回 `{ keys, providers }`：桌面 bearer client 的 `keys` 包含原始 provider key，其他请求的 `keys` 为空；`providers` 为动态扫描所有 `*_API_KEY` 得到的 masked availability。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单与 key 掩码属运维信息） |
-| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                                                                                                                            |
-| GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）                                                                                                                                                                                                     |
-| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                                                                                                                        |
-| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                                                                                                                      |
-| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`                                                                                                                                                                                            |
-| GET  | `/api/config/proxy`            | 仅桌面：读取核心出站请求的代理模式与生效状态；返回 `{ mode, url?, effective, systemAvailable }`                                                                                                                                                                        |
-| PUT  | `/api/config/proxy`            | 仅桌面：写入并热应用代理；body `{ mode: "direct"                                                                                                                                                                                                                       | "system" | "http" | "socks", url? }`。HTTP/S 与 SOCKS5 地址支持 URL 内认证信息 |
-| GET  | `/api/app-update/latest`       | 仅桌面：通过当前代理查询 GitHub 最新稳定 Release；返回 `{ version, name, publishedAt }`                                                                                                                                                                                |
-| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                                                                                                                           |
-| POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                                                                                                                           |
-| GET  | `/api/config/raw`              | 列出可在应用内以文本编辑的配置文件：`llm.toml`，桌面模式下还有 `config.toml`；返回 `{ items: [{ name, path, exists, applies }] }`                                                                                                                                      |
-| GET  | `/api/config/raw/:name`        | 读取一个配置文件的文本和 `digest`；文件不存在时 `content` 是起始内容                                                                                                                                                                                                   |
-| PUT  | `/api/config/raw/:name`        | 校验并保存文本；body `{ content, baseDigest }`。`llm.toml` 保存后立即重载                                                                                                                                                                                              |
+| 方法 | 路径                           | 描述                                                                                                                                                                                                                            |
+| ---- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/presets`                 | 列出配置的模型预设（`{ items }`）                                                                                                                                                                                               |
+| GET  | `/api/plugins`                 | 从 registry 快照列出 canonical `PluginSummary`；加载失败同样作为 `status: "error"` 的 item 返回                                                                                                                                 |
+| GET  | `/api/worlds/:id/plugin-plan`  | 服务端解析世界插件策略、组合包和默认选择，返回 `WorldPluginPlan`；各 `requested` 与 `defaultPluginIds` 只含已安装插件，世界请求但宿主未安装的列在 `missing: [{ pluginId, packId? }]`                                            |
+| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件                                                                                                                                         |
+| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                                                                                          |
+| POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                            |
+| GET  | `/api/provider-keys`           | 只返回 `{ providers: { [provider]: { configured: true } } }`：动态扫描所有 `*_API_KEY` 得到的配置状态，不含原始或掩码的密钥内容，桌面客户端也一样。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单属运维信息） |
+| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                                                                                     |
+| GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）                                                                                                                                                              |
+| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                                                                                 |
+| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                                                                               |
+| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`                                                                                                                                                     |
+| GET  | `/api/config/proxy`            | 仅桌面：读取核心出站请求的代理模式与生效状态；返回 `{ mode, url?, effective, systemAvailable }`                                                                                                                                 |
+| PUT  | `/api/config/proxy`            | 仅桌面：写入并热应用代理；body `{ mode: "direct"                                                                                                                                                                                | "system" | "http" | "socks", url? }`。HTTP/S 与 SOCKS5 地址支持 URL 内认证信息 |
+| GET  | `/api/app-update/latest`       | 仅桌面：通过当前代理查询 GitHub 最新稳定 Release；返回 `{ version, name, publishedAt }`                                                                                                                                         |
+| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                                                                                    |
+| POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                                                                                    |
+| GET  | `/api/config/raw`              | 列出可在应用内以文本编辑的配置文件：`llm.toml`，桌面模式下还有 `config.toml`；返回 `{ items: [{ name, path, exists, applies }] }`                                                                                               |
+| GET  | `/api/config/raw/:name`        | 读取一个配置文件的文本和 `digest`；文件不存在时 `content` 是起始内容                                                                                                                                                            |
+| PUT  | `/api/config/raw/:name`        | 校验并保存文本；body `{ content, baseDigest }`。`llm.toml` 保存后立即重载                                                                                                                                                       |
 
 代理 PUT 先准备并验证传输，再原子持久化配置，最后发布到进程内。磁盘写入失败时保留原 dispatcher 与 GET 状态。底层 `prepareOutboundProxy()` 提供 `commit()` / `dispose()`；未提交的传输由调用者释放，`configureOutboundProxy()` 用于立即应用。
 
@@ -2726,7 +2725,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、runtimeModelOverrides）、characters、stateEntries、pluginData、characterSchema、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
-**响应 201（直接返回 `SnapshotRecord`）:**
+**响应 201（`SnapshotRecord` 的玩家可见视图，过滤规则同下方单个快照读取）:**
 
 ```json
 {
@@ -2807,6 +2806,8 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 #### `GET /api/sessions/:id/snapshots/:snapshotId`
 
 按 id 获取单个快照（含完整 `payload`），直接返回 `SnapshotRecord`。快照不存在或不属于该 session 时返回 `404`。
+
+响应是快照的玩家可见视图，与其他读取接口同一规则：`payload.pluginData` 不含隐藏命名空间（`_hidden.*`）和内核记账行，其余行按插件数据 API 的公开形态给出；`payload.runtimeExports` 不含声明 `io.concealed` 的 runtime 的导出；`payload.suspensions` 只给出与 `GET /suspensions` 相同的摘要字段，不含续接上下文（提示词）。存储中的快照保持完整，fork 与恢复直接读存储，不受影响。
 
 #### `POST /api/sessions/:id/fork`
 

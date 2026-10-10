@@ -90,7 +90,7 @@ export default function ({ tool, z }) {
         recap: z
           .string()
           .trim()
-          .min(20)
+          .min(1)
           .max(MAX_RECAP)
           .describe(
             "A 1-3 sentence recap of confirmed facts and stated player intentions, ending at the state where this turn's narrative ends",
@@ -98,7 +98,7 @@ export default function ({ tool, z }) {
         decision: z
           .string()
           .trim()
-          .min(8)
+          .min(1)
           .max(MAX_DECISION)
           .describe(
             "The one question that the end of this turn's narrative puts to the player",

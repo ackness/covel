@@ -97,6 +97,12 @@ Start with exactly one H1: "# <world name>".
 Include setting overview, factions, power system, daily life, and 3 adventure hooks.
 Anchor the lore around one core anomaly or pressure mechanism that makes this world distinctive.
 
+The player reads WORLD.md too. The narrator reads all of it.
+Write what the player must not know yet in a narrator-only block: hidden plotlines, the truth behind a mystery, and how to run the story.
+A narrator-only block starts with the line `<!-- narrator-only -->` and ends with the line `<!-- /narrator-only -->`.
+Each of the two lines must have nothing else on it.
+Keep the H1, the setting overview and the adventure hooks outside the block.
+
 ## WORLD_PACKAGE_YAML
 
 This section carries optional text content that ships with the world package.
@@ -117,40 +123,14 @@ contractData:
     key: <stable ASCII id, equal to value.id>
     value: <one record that satisfies the contract's schema>
 characters:
-  - schemaVersion: 1
-    id: <stable ASCII id>
+  - id: <stable ASCII id>
     name: <display name>
-    role: npc
     type: npc
-    description: <specific role in the current crisis>
-    aliases: [<optional aliases>]
-    tags: [<faction/role tags>]
+    description: <specific role in the current crisis, then how they speak and what they want; two or three sentences>
     attributes:
       faction: <faction>
       role: <social/story role>
       location: <opening location>
-    persona:
-      summary: <dramatic function and contradiction>
-      traits: [<2-4 traits>]
-      goals: [<1-3 goals>]
-      fears: [<1-2 fears>]
-      secrets: [<one actionable secret>]
-      voice: <speech pattern>
-    dialogueExamples:
-      - user: <short prompt>
-        character: <in-character reply>
-    scenarioDefaults:
-      opening: <where/how they enter the opening crisis>
-      location: <location>
-      relationships:
-        <other character id>: <relationship>
-    rules:
-      - id: <character rule id>
-        text: <behavior/evolution boundary>
-        priority: 10
-    instantiate:
-      characterId: <npc-prefixed id>
-      type: npc
 lorebook:
   - id: <stable ASCII id>
     content: <self-contained setting fact>

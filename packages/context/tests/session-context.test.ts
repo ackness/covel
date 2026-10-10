@@ -191,6 +191,33 @@ describe("buildSessionContextSnapshot — world context", () => {
     },
   );
 
+  it.each(["world", "override"])(
+    "gives the model narrator-only lore without its marker lines (%s)",
+    async (source) => {
+      const lore =
+        "The lamp went out.\n\n<!-- narrator-only -->\n\nThe keeper put it out.\n\n<!-- /narrator-only -->\n\nRain.";
+      const store = createMemoryStore();
+      await store.upsertWorld(
+        makeWorld({ lore: source === "world" ? lore : "Original lore" }),
+      );
+      await store.createSession(
+        makeSession(
+          source === "override" ? { metadata: { loreOverride: lore } } : {},
+        ),
+      );
+
+      const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+        locale: "zh-CN",
+        turnNumber: 1,
+        worldId: "w1",
+      });
+
+      expect(snapshot.world.lore).toBe(
+        "The lamp went out.\n\nThe keeper put it out.\n\nRain.",
+      );
+    },
+  );
+
   it("loads world metadata, schema, and lorebook entries into world.*", async () => {
     const store = createMemoryStore();
     const world = makeWorld();

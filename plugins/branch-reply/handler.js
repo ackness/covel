@@ -4,11 +4,13 @@ import {
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
-const TURNS_NAMESPACE = "turns";
+const ACCEPTED_NAMESPACE = "accepted";
 const MESSAGE_NAMESPACE = "message";
 const DEFAULT_COUNT = 3;
 const MAX_COUNT = 6;
 const MAX_VARIANTS = 2;
+// Request-size cap for payload strings and generated variants. The stored
+// narration (candidate[0], the adopted text) is never cut to it.
 const MAX_TEXT_LENGTH = 4_000;
 // Fast text slot for regenerate. Unconfigured slots fall back tag-aware to the
 // first text slot, so this never hardcodes a provider — only a preferred speed.
@@ -98,21 +100,13 @@ async function seedFromNarrative(ctx) {
     () => "original",
     now,
   );
-  const turnRecord = makeTurnRecord({
-    turnId: targetTurnId,
-    baseText,
-    candidates,
-    selectedCandidateId: candidates[0]?.id,
-    status: "ready",
-    runtimeId: narrativeRuntimeId,
-    now,
-  });
   const messageState = makeMessageState({
     turnId: targetTurnId,
     status: "ready",
-    candidateSet: turnRecord,
-    selectedCandidateId: turnRecord.selectedCandidateId,
+    candidates,
+    selectedCandidateId: candidates[0]?.id,
     acceptedCandidateId: undefined,
+    runtimeId: narrativeRuntimeId,
     updatedAt: now,
   });
 
@@ -135,7 +129,6 @@ async function seedFromNarrative(ctx) {
     },
     [
       makePluginDataBatchProposal(ctx, now, [
-        { namespace: TURNS_NAMESPACE, key: targetTurnId, value: turnRecord },
         {
           namespace: MESSAGE_NAMESPACE,
           key: targetTurnId,
@@ -149,9 +142,6 @@ async function seedFromNarrative(ctx) {
 async function createCandidates(ctx, payload) {
   const now = new Date().toISOString();
   const targetTurnId = normalizeTurnId(payload.turnId ?? ctx.turnId);
-  const baseText =
-    normalizeOptionalString(payload.baseText, "baseText") ??
-    normalizeFallbackText(ctx.playerMessage);
   const count = normalizeCount(payload.count);
   const explicitVariants = normalizeStringArray(
     payload.candidates,
@@ -165,6 +155,12 @@ async function createCandidates(ctx, payload) {
   const existing = await readTurnRecord(ctx, targetTurnId);
   const narrativeRuntimeId =
     typeof existing?.runtimeId === "string" ? existing.runtimeId : undefined;
+  // The original narration is candidate[0] of the stored set, so it is not
+  // limited by the request-size cap that applies to `baseText` in a payload.
+  const baseText =
+    normalizeOptionalString(payload.baseText, "baseText") ??
+    existing?.candidates[0]?.text ??
+    normalizeFallbackText(ctx.playerMessage);
 
   // Candidate composition, in priority order:
   //   1. explicit `candidates` payload (programmatic / API) — that array IS the
@@ -191,21 +187,13 @@ async function createCandidates(ctx, payload) {
       payload.selectedCandidateId,
       "selectedCandidateId",
     ) ?? candidates[0]?.id;
-  const turnRecord = makeTurnRecord({
-    turnId: targetTurnId,
-    baseText,
-    candidates,
-    selectedCandidateId: selectCandidateId(candidates, selectedCandidateId),
-    status: "ready",
-    runtimeId: narrativeRuntimeId,
-    now,
-  });
   const messageState = makeMessageState({
     turnId: targetTurnId,
     status: "ready",
-    candidateSet: turnRecord,
-    selectedCandidateId: turnRecord.selectedCandidateId,
+    candidates,
+    selectedCandidateId: selectCandidateId(candidates, selectedCandidateId),
     acceptedCandidateId: undefined,
+    runtimeId: narrativeRuntimeId,
     updatedAt: now,
   });
 
@@ -216,18 +204,27 @@ async function createCandidates(ctx, payload) {
         action: "createCandidates",
         turnId: targetTurnId,
         candidateCount: candidates.length,
-        selectedCandidateId: turnRecord.selectedCandidateId,
+        selectedCandidateId: messageState.selectedCandidateId,
       },
     },
     [
       makePluginDataBatchProposal(ctx, now, [
-        { namespace: TURNS_NAMESPACE, key: targetTurnId, value: turnRecord },
         {
           namespace: MESSAGE_NAMESPACE,
           key: targetTurnId,
           value: messageState,
         },
       ]),
+      // A new candidate set replaces an adopted reply, so prompt history goes
+      // back to the narration the model wrote.
+      ...(existing?.status === "accepted"
+        ? [
+            makeProposal(ctx, now, "plugin.data.delete", {
+              namespace: ACCEPTED_NAMESPACE,
+              key: targetTurnId,
+            }),
+          ]
+        : []),
     ],
   );
 }
@@ -243,8 +240,7 @@ async function acceptCandidate(ctx, payload) {
   if (!existingTurnRecord) {
     throw new Error("branch-reply turn record was not found");
   }
-  const candidateSet = existingTurnRecord;
-  const accepted = candidateSet.candidates.find(
+  const accepted = existingTurnRecord.candidates.find(
     (candidate) => candidate.id === candidateId,
   );
   if (!accepted) {
@@ -254,20 +250,13 @@ async function acceptCandidate(ctx, payload) {
   }
   const acceptedText =
     normalizeOptionalString(payload.text, "text") ?? accepted.text;
-  const nextTurnRecord = {
-    ...candidateSet,
-    selectedCandidateId: candidateId,
-    acceptedCandidateId: candidateId,
-    acceptedText,
-    status: "accepted",
-    updatedAt: now,
-  };
   const messageState = makeMessageState({
     turnId: targetTurnId,
     status: "accepted",
-    candidateSet: nextTurnRecord,
+    candidates: existingTurnRecord.candidates,
     selectedCandidateId: candidateId,
     acceptedCandidateId: candidateId,
+    runtimeId: existingTurnRecord.runtimeId,
     updatedAt: now,
   });
 
@@ -284,14 +273,20 @@ async function acceptCandidate(ctx, payload) {
     [
       makePluginDataBatchProposal(ctx, now, [
         {
-          namespace: TURNS_NAMESPACE,
-          key: targetTurnId,
-          value: nextTurnRecord,
-        },
-        {
           namespace: MESSAGE_NAMESPACE,
           key: targetTurnId,
           value: messageState,
+        },
+        {
+          namespace: ACCEPTED_NAMESPACE,
+          key: targetTurnId,
+          value: {
+            turnId: targetTurnId,
+            text: acceptedText,
+            ...(existingTurnRecord.runtimeId
+              ? { runtimeId: existingTurnRecord.runtimeId }
+              : {}),
+          },
         },
       ]),
     ],
@@ -350,6 +345,10 @@ async function generateVariants(ctx, baseText, requested) {
       presetId: FAST_TEXT_SLOT,
       system,
       prompt,
+      // A cancelled turn stops the call; the ceiling covers `wanted` passages
+      // of the stored length (about 1.5 tokens per character is generous).
+      maxOutputTokens: wanted * Math.ceil(MAX_TEXT_LENGTH * 1.5),
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     return parseVariantText(result?.text, baseText, wanted);
   } catch (err) {
@@ -454,14 +453,13 @@ function selectCandidateId(candidates, requestedId) {
   );
 }
 
-/** Trim, drop empties / over-long / duplicates while preserving order. */
+/** Trim, drop empties / duplicates while preserving order. */
 function dedupeTexts(texts) {
   const seen = new Set();
   const out = [];
   for (const text of texts ?? []) {
     const trimmed = typeof text === "string" ? text.trim() : "";
-    if (!trimmed || seen.has(trimmed) || trimmed.length > MAX_TEXT_LENGTH)
-      continue;
+    if (!trimmed || seen.has(trimmed)) continue;
     seen.add(trimmed);
     out.push(trimmed);
   }
@@ -479,37 +477,13 @@ function toCandidates(turnId, texts, sourceFor, now) {
   }));
 }
 
-function makeTurnRecord({
-  turnId,
-  baseText,
-  candidates,
-  selectedCandidateId,
-  status,
-  runtimeId,
-  now,
-}) {
-  return {
-    schemaVersion: 1,
-    turnId,
-    baseText,
-    candidates,
-    selectedCandidateId,
-    status,
-    // The narrating runtime this turn record projects onto. Consumed by the
-    // prompt-history rewriter to target the narrator's message rather than
-    // branch-reply's own seed message. Omitted when unknown.
-    ...(runtimeId ? { runtimeId } : {}),
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 function makeMessageState({
   turnId,
   status,
-  candidateSet,
+  candidates,
   selectedCandidateId,
   acceptedCandidateId,
+  runtimeId,
   updatedAt,
 }) {
   return {
@@ -519,8 +493,12 @@ function makeMessageState({
     status,
     selectedCandidateId,
     ...(acceptedCandidateId ? { acceptedCandidateId } : {}),
-    candidates: candidateSet.candidates,
-    candidateCount: candidateSet.candidates.length,
+    candidates,
+    candidateCount: candidates.length,
+    // The narrating runtime this record projects onto. Consumed by the
+    // prompt-history rewriter to target the narrator's message rather than
+    // branch-reply's own seed message. Omitted when unknown.
+    ...(runtimeId ? { runtimeId } : {}),
     updatedAt,
   };
 }
@@ -558,7 +536,7 @@ function narrativeFromInputSlot(slot) {
         )
       : undefined;
   return {
-    text: text.slice(0, MAX_TEXT_LENGTH),
+    text,
     ...(runtimeId ? { runtimeId } : {}),
   };
 }
@@ -585,7 +563,7 @@ async function readTurnRecord(ctx, turnId) {
   // ctx.pluginData is the one scoped plugin-data path — same shape for
   // trusted and community runtimes, so no store arity sniffing.
   if (!ctx.pluginData) return undefined;
-  const value = await ctx.pluginData.get(TURNS_NAMESPACE, turnId);
+  const value = await ctx.pluginData.get(MESSAGE_NAMESPACE, turnId);
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = /** @type {Record<string, unknown>} */ (value);
@@ -598,13 +576,7 @@ async function readTurnRecord(ctx, turnId) {
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
     const text =
       typeof candidate.text === "string" ? candidate.text.trim() : "";
-    if (
-      !id ||
-      !text ||
-      id.length > MAX_TEXT_LENGTH ||
-      text.length > MAX_TEXT_LENGTH
-    )
-      return [];
+    if (!id || !text || id.length > MAX_TEXT_LENGTH) return [];
     return [
       {
         ...candidate,

@@ -154,6 +154,48 @@ describe("executeTurn recursiveCall", () => {
     });
   });
 
+  it("keeps the session locale on a nested call that asks for another one", async () => {
+    const caller = manifest("caller");
+    const leaf = manifest("leaf", { trigger: { type: "manual" } });
+    let leafLocale: string | undefined;
+
+    const loaded = new Map<string, LoadedRuntime>([
+      [
+        caller.name,
+        {
+          manifest: caller,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: "leaf" },
+              locale: "ja-JP",
+            } as never);
+            return { outcome: "success", value: { ok: true } };
+          },
+        },
+      ],
+      [
+        leaf.name,
+        {
+          manifest: leaf,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            leafLocale = ctx.locale;
+            return { outcome: "success", value: { ok: true } };
+          },
+        },
+      ],
+    ]);
+
+    await executeTurn({ ...input, locale: "en-US" }, [caller, leaf], {
+      loadRuntime: async (rt) => loaded.get(rt.name),
+      llm: { generate: vi.fn() },
+      emitter: makeEmitterSpy(),
+    });
+
+    expect(leafLocale).toBe("en-US");
+  });
+
   it("enforces the runtime maxRecursionDepth limit", async () => {
     const caller = manifest("caller", { maxRecursionDepth: 0 });
     const leaf = manifest("leaf", { trigger: { type: "manual" } });

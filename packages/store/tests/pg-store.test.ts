@@ -190,8 +190,6 @@ if (pgAvailable) {
   });
 } else {
   describe("PgStore (skipped)", () => {
-    it("skipped — PostgreSQL not available", () => {
-      expect(true).toBe(true);
-    });
+    it.skip("skipped — PostgreSQL not available", () => {});
   });
 }

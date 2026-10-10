@@ -75,6 +75,7 @@ function buildPrompt(
     "- Give one translation for each id. Use the same ids.",
     "- Keep each placeholder as it is: {name}, {{name}}. Do not translate the name in it.",
     "- Keep Markdown marks, line breaks, emoji and leading symbols.",
+    "- Keep a line such as `<!-- narrator-only -->` as it is. It is a marker, not text.",
     "- Keep text in backticks as it is. It is an identifier.",
     "- Translate the meaning. Do not add an explanation and do not remove information.",
     "- A short label stays short.",

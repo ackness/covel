@@ -33,10 +33,12 @@ export default async function itemOp(payload, ctx) {
     return { ok: false, reason: `item "${itemId}" not found` };
   }
 
+  // The summary slot sorts by `updatedAt`, so a panel action counts as a change.
+  const updatedAt = new Date().toISOString();
   const value =
     op === "drop"
-      ? { ...item, quantity: 0, equipped: false, removed: true }
-      : { ...item, equipped: op === "equip" };
+      ? { ...item, quantity: 0, equipped: false, removed: true, updatedAt }
+      : { ...item, equipped: op === "equip", updatedAt };
 
   await ctx.store.setPluginData({ namespace: NAMESPACE, key: itemId, value });
   return { ok: true, op, item: value };

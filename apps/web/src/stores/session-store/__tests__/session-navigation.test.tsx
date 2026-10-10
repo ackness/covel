@@ -109,10 +109,10 @@ beforeEach(() => {
 describe("session navigation lifecycle", () => {
   it("drops plugin data only after a successful delete, even if the active session changes", async () => {
     const { result, ds } = setup();
+    setActiveSession("sess-1");
     loadPluginDataForSession("sess-1", "codex", "message", [
       { key: "old", value: "A" },
     ]);
-    setActiveSession("sess-1");
     const deletion = deferred<undefined>();
     ds.deleteSession.mockReturnValueOnce(deletion.promise);
 
@@ -141,10 +141,10 @@ describe("session navigation lifecycle", () => {
 
   it("keeps plugin data when deleting a session fails", async () => {
     const { result, ds } = setup();
+    setActiveSession("sess-1");
     loadPluginDataForSession("sess-1", "codex", "message", [
       { key: "saved", value: "A" },
     ]);
-    setActiveSession("sess-1");
     ds.deleteSession.mockRejectedValueOnce(new Error("delete failed"));
 
     await expect(

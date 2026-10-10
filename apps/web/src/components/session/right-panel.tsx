@@ -373,7 +373,10 @@ function SessionRightPanel({
                 </h3>
               </div>
             )}
-            <WorldDocumentPanel world={world} />
+            <WorldDocumentPanel
+              world={world}
+              locale={sessionState.session?.locale}
+            />
           </TabsContent>
           <TabsContent value="database" className="p-4 m-0 max-w-full">
             {!barTabs && (

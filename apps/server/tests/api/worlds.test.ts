@@ -470,7 +470,24 @@ describe("world routes", () => {
             }
           : undefined,
     } as PluginRegistry;
-    app = createTestApp(store, pluginRegistry, { worldsDirs: [worldsDir] });
+    // Record every store call so the read-only claim covers any write the
+    // route might make, whatever session id it used.
+    const storeCalls: string[] = [];
+    const recordingStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver) as unknown;
+        if (typeof value !== "function" || typeof prop !== "string") {
+          return value;
+        }
+        return (...args: unknown[]) => {
+          storeCalls.push(prop);
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    });
+    app = createTestApp(recordingStore, pluginRegistry, {
+      worldsDirs: [worldsDir],
+    });
 
     const res = await app.request(
       "/api/worlds/preflight-world/world-data/preflight",
@@ -500,9 +517,11 @@ describe("world routes", () => {
         namespace: "facts",
       },
     ]);
+    expect(storeCalls.length).toBeGreaterThan(0);
     expect(
-      await store.listPluginData("preflight", "world-notes", "facts"),
+      storeCalls.filter((name) => !/^(get|list|has|find)/.test(name)),
     ).toEqual([]);
+    expect(await store.listSessions()).toEqual([]);
   });
 
   it("POST /api/worlds/:id/sync-data dry-runs and applies importer-managed updates", async () => {

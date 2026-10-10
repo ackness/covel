@@ -221,7 +221,7 @@ describe("BrowserVault session commits", () => {
     );
   });
 
-  it("rejects credential-shaped fields before writing", async () => {
+  it("rejects credential-shaped session fields before writing", async () => {
     const secret = checkpoint("session-a", 1, "turn-secret", {
       session: {
         ...checkpoint("session-a", 1, "turn-secret").session,
@@ -231,28 +231,69 @@ describe("BrowserVault session commits", () => {
     await expect(
       vault.applySessionCommit(commit(secret)),
     ).rejects.toBeInstanceOf(BrowserVaultSecretError);
+    await expect(vault.saveCheckpoint(secret)).rejects.toBeInstanceOf(
+      BrowserVaultSecretError,
+    );
     expect(await vault.getLatestCheckpoint("session-a")).toBeNull();
   });
 
-  it("allows narrative character secrets that are ordinary world content", async () => {
-    await expect(
-      vault.upsertWorld({
-        id: "world-with-lore-secrets",
-        name: "World",
-        description: "",
-        metadata: {
-          characterBlueprints: [
-            {
-              schemaVersion: 1,
-              id: "keeper",
-              name: "Keeper",
-              persona: { secrets: ["The lighthouse is still occupied."] },
-            },
-          ],
+  it("stores game content whose fields have credential-like names", async () => {
+    const world = {
+      id: "world-heist",
+      name: "Heist",
+      description: "",
+      metadata: {
+        characterBlueprints: [
+          {
+            schemaVersion: 1,
+            id: "keeper",
+            name: "Keeper",
+            persona: { secrets: ["The lighthouse is still occupied."] },
+            fields: { password: "swordfish" },
+          },
+        ],
+      },
+      createdAt: "2026-08-25T00:00:00.000Z",
+    };
+    await expect(vault.upsertWorld(world)).resolves.toBeUndefined();
+
+    const now = "2026-08-25T00:00:01.000Z";
+    const turn = checkpoint("session-a", 1, "turn-1", {
+      session: {
+        ...checkpoint("session-a", 1, "turn-1").session,
+        worldId: world.id,
+      },
+      world,
+      characters: [
+        {
+          id: "hacker",
+          sessionId: "session-a",
+          name: "Hacker",
+          type: "npc",
+          fields: { password: "swordfish", credentials: ["forged badge"] },
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
         },
-        createdAt: "2026-08-25T00:00:00.000Z",
-      }),
-    ).resolves.toBeUndefined();
+      ],
+      pluginData: [
+        {
+          id: "lock-main",
+          sessionId: "session-a",
+          pluginId: "vault-door",
+          namespace: "locks",
+          key: "main",
+          value: { apiKey: "prop-keycard", authorization: "level 3" },
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    });
+    const result = await vault.applySessionCommit(commit(turn));
+    expect(result.applied).toBe(true);
+    expect(
+      (await vault.getLatestCheckpoint("session-a"))?.pluginData,
+    ).toHaveLength(1);
   });
 });
 

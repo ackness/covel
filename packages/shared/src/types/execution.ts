@@ -104,6 +104,11 @@ export interface DeferredRuntimeJob {
   readonly sourceExecutionId: string;
   readonly sourceExecutionStartedAt: string;
   readonly sourceLogicalTurnId?: string;
+  /**
+   * Turn number of the source execution. The job runs after that execution's
+   * commit has advanced the session clock, so it must not count again.
+   */
+  readonly sourceLogicalTurn?: number;
   readonly pluginVersion?: string;
   readonly upstreamResults: readonly RuntimeResult[];
 }
@@ -117,6 +122,7 @@ export type DetachedStageInput = Pick<
   | "sourceExecutionId"
   | "sourceExecutionStartedAt"
   | "sourceLogicalTurnId"
+  | "sourceLogicalTurn"
   | "upstreamResults"
   | "turnDigest"
 >;
@@ -224,11 +230,18 @@ export interface TurnInput {
  * session — otherwise an approved handler could read another session's context
  * and persist under it, bypassing the hosted session-owner boundary — and
  * reuses the parent `turnId` so its execution artifact settles together with
- * the parent turn.
+ * the parent turn. `locale` and `logicalTurnId` are inherited from the parent
+ * as well: the content locale is fixed when the session is created, and the
+ * logical turn is minted only at the player action entry.
  */
 export type RecursiveCallDelta = Omit<
   Partial<TurnInput>,
-  "sessionId" | "turnId" | "origin" | "parentTurnId"
+  | "sessionId"
+  | "turnId"
+  | "origin"
+  | "parentTurnId"
+  | "locale"
+  | "logicalTurnId"
 >;
 
 /** Pure execution data returned to a nested caller; commit stays with the host. */

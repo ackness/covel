@@ -97,10 +97,15 @@ function mediaRefFromForm(form, prefix) {
   const mime = optionalString(form[`${prefix}Mime`]);
   const size = optionalInteger(form[`${prefix}Size`]);
   if (!id && !mime && size === undefined) return undefined;
+  if (!id || !mime || size === undefined) {
+    throw new Error(
+      `${prefix}Id, ${prefix}Mime and ${prefix}Size must be filled in together`,
+    );
+  }
   return {
-    id: id ?? "",
-    mime: mime ?? "",
-    size: size ?? -1,
+    id,
+    mime,
+    size,
     ...(optionalString(form[`${prefix}Url`])
       ? { url: optionalString(form[`${prefix}Url`]) }
       : {}),

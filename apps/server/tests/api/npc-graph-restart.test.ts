@@ -11,7 +11,7 @@ const context = {
   pluginId: "npc-graph",
   runtimeId: "npc-graph/extractor",
   turnId: "before",
-  turnNumber: 1,
+  logicalTurn: 1,
 };
 const node = (name: string) => ({
   name,
@@ -103,7 +103,7 @@ describe("graph identity across SQLite and allocator restarts", () => {
         {
           ...context,
           turnId: "after",
-          turnNumber: 2,
+          logicalTurn: 2,
           store: createFunctionStoreView(store, context),
         },
       );

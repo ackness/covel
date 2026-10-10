@@ -5,6 +5,7 @@
  */
 
 import {
+  CONCEALED_FAILURE_MESSAGE,
   concealedRuntimeIds,
   concealRuntimeResult,
   type RuntimeResult,
@@ -31,12 +32,18 @@ function isRuntimeResult(value: unknown): value is RuntimeResult {
   );
 }
 
-/** Drop the output of concealed runtimes from an RPC result summary. */
+/** Drop the output and failure reason of concealed runtimes from an RPC result summary. */
 export function concealResultSummaries<
   T extends { readonly runtimeId: string; readonly output: unknown },
 >(results: readonly T[], concealed: ReadonlySet<string>): T[] {
   return results.map((result) =>
-    concealed.has(result.runtimeId) ? { ...result, output: null } : result,
+    concealed.has(result.runtimeId)
+      ? {
+          ...result,
+          output: null,
+          ...("error" in result ? { error: CONCEALED_FAILURE_MESSAGE } : {}),
+        }
+      : result,
   );
 }
 

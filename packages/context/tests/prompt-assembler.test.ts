@@ -374,6 +374,39 @@ describe("prompt-assembler", () => {
     expect(result.messages.length).toBeLessThan(history.length + 2); // +2 = placeholder + current user
   });
 
+  it("keeps the player message when a post-history section has the user role", () => {
+    const history: MessageHistoryRecord[] = [
+      { role: "user", content: "a".repeat(400) },
+      { role: "assistant", content: "b".repeat(400) },
+    ];
+    const result = buildSegmentedContext(
+      baselineParams({
+        manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
+        promptTemplate: "Short system.",
+        messageHistory: history,
+        turnInput: makeTurnInput({ playerMessage: "final player message" }),
+        estimator: mockEstimator,
+        contextBudget: { maxInputTokens: 200, reservedForResponse: 50 },
+        promptSegments: [
+          {
+            id: "reminder",
+            content: "reminder ".repeat(40),
+            position: "post-history",
+            role: "user",
+            audience: "self",
+            volatility: "stable",
+            providerPluginId: "test-rt",
+          },
+        ],
+      }),
+    );
+
+    expect(result.currentTurnUserMessages).toBe(2);
+    expect(result.messages.map((m) => m.content)).toContain(
+      "final player message",
+    );
+  });
+
   // ── Segment 9: Author's Note ──────────────────────────
 
   it("uses the segment assembler through the public buildContext entrypoint", async () => {

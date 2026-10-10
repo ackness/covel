@@ -282,7 +282,7 @@ for (const { provider, model, protocol, baseUrl } of [
       exact: true,
     });
     await create.getByPlaceholder("Provider ID, e.g. openai").fill(provider);
-    await create.getByPlaceholder("Base URL (optional)").fill(baseUrl);
+    await create.getByPlaceholder(/^Base URL \(optional/).fill(baseUrl);
     await create
       .getByRole("textbox", { name: /^Model IDs(?:\s|$)/ })
       .fill("synthetic-chat");

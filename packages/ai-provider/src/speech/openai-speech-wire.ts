@@ -4,7 +4,13 @@ import type {
   SpeechSynthesisParams,
   SpeechSynthesisResult,
 } from "../types.js";
-import { assertSuccess, parseJson, postJson } from "../adapters/http.js";
+import {
+  assertSuccess,
+  MAX_BINARY_RESPONSE_BYTES,
+  parseJson,
+  postJson,
+  readResponseBytes,
+} from "../adapters/http.js";
 
 async function synthesize(
   config: ProviderConfig,
@@ -42,7 +48,7 @@ async function synthesize(
   return {
     audio: {
       mimeType: response.headers.get("content-type") ?? "audio/mpeg",
-      data: new Uint8Array(await response.arrayBuffer()),
+      data: await readResponseBytes(response, MAX_BINARY_RESPONSE_BYTES),
     },
     usage: null,
     warnings: [],

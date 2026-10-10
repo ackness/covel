@@ -11,7 +11,7 @@ export default function ({ tool, z }) {
   return tool({
     name: "list-npc-graph",
     description:
-      "List the NPC nodes and relationship edges already registered in the current session, to help tell which are newly introduced and which are already known. Returns each node's name/type/labels/summary plus the fact of every edge.",
+      "List the NPC nodes and relationship edges already registered in the current session, to help tell which are newly introduced and which are already known. Returns each node's name/type/labels/summary plus the fact of every current edge (most recently changed first).",
     parameters: z.object({
       limit: z
         .number()
@@ -44,7 +44,13 @@ export default function ({ tool, z }) {
         };
       });
 
-      const edges = edgeRows.slice(0, limit).map((row) => {
+      // Superseded versions stay in storage as history; the model needs the
+      // current relationships, newest first when the cap cuts the list.
+      const openEdgeRows = edgeRows
+        .filter((row) => row.value?.invalidAt === undefined)
+        .sort((a, b) => (b.value?.validAt ?? -1) - (a.value?.validAt ?? -1));
+
+      const edges = openEdgeRows.slice(0, limit).map((row) => {
         const value =
           /** @type {{ id: string, source: string, target: string, relation: string, strength: number, fact: string, validAt: number, invalidAt?: number }} */ (
             row.value ?? {}
@@ -63,9 +69,14 @@ export default function ({ tool, z }) {
 
       return {
         nodeCount: nodeRows.length,
-        edgeCount: edgeRows.length,
+        edgeCount: openEdgeRows.length,
         nodes,
         edges,
+        ...(openEdgeRows.length > edges.length
+          ? {
+              edgesTruncated: `Showing the ${edges.length} most recently changed of ${openEdgeRows.length} current edges.`,
+            }
+          : {}),
       };
     },
   });

@@ -1307,6 +1307,27 @@ describe("ai world generation route", () => {
       },
     );
 
+    it("puts the old package back when the record update fails after the swap", async () => {
+      const llm = new SequenceLlm([...CREATED, REVISED]);
+      const created = await generate("server-file", llm);
+      const kept = await store.getWorld(created.id);
+      vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(
+        new Error("store unavailable"),
+      );
+
+      const events = await post("revise-world", {
+        worldId: created.id,
+        instruction: "加一个与对手校时官有关的冒险钩子",
+      }).then(readSseJson);
+
+      expect(events.some((event) => event.type === "done")).toBe(false);
+      expect(await store.getWorld(created.id)).toEqual(kept);
+      expect(
+        await readFile(path.join(worldsDir, created.id, "WORLD.md"), "utf8"),
+      ).toBe(WORLD_MD);
+      expect(await readdir(worldsDir)).toEqual([created.id]);
+    });
+
     it("rewrites the package of a world that has files, and keeps what the request did not touch", async () => {
       const llm = new SequenceLlm([...CREATED, REVISED]);
       const created = await generate("server-file", llm);

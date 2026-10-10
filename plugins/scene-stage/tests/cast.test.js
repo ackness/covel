@@ -286,4 +286,36 @@ describe("scene-stage cast handler", () => {
       "No active NPC selected",
     );
   });
+  it("breaks equal scores in byte order, not by the machine's locale", async () => {
+    const characters = [
+      { id: "npc-1", name: "adam", type: "npc" },
+      { id: "npc-2", name: "Zed", type: "npc" },
+    ];
+    const result = await handler({
+      sessionId: "sess-chat",
+      turnId: "turn-9",
+      pluginId: "scene-stage",
+      runtimeId: "scene-stage/cast",
+      playerMessage: "adam and Zed",
+      store: {
+        async listTurnMessages() {
+          return [];
+        },
+        async getPluginData() {
+          return null;
+        },
+      },
+      world: { characters },
+      completedResults: new Map(),
+      config: {},
+      recursiveCall: async () => {
+        throw new Error("unused");
+      },
+      recursionDepth: 0,
+      userSettings: { activeSpeakerCount: 1 },
+    });
+    expect(getToolContent(result).value.speakers.map((s) => s.name)).toEqual([
+      "Zed",
+    ]);
+  });
 });

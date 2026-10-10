@@ -532,28 +532,21 @@ describe("vector recall (semantic)", () => {
     }
   });
 
-  it("retries a transient embedding provider failure in the same sweep", async () => {
+  it("calls the embedding provider once per sweep and does not retry an abort", async () => {
     let attempts = 0;
-    const flaky: EmbedFn = async (texts) => {
+    const aborted: EmbedFn = async () => {
       attempts += 1;
-      if (attempts === 1) {
-        throw Object.assign(new Error("socket disconnected"), {
-          code: "UND_ERR_SOCKET",
-        });
-      }
-      return texts.map(embedText);
-    };
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const ingestor = createVectorIngestor({ store, embed: flaky });
-
-    try {
-      await expect(ingestor.ingest(sessionId)).resolves.toMatchObject({
-        recall: 3,
+      throw Object.assign(new Error("This operation was aborted"), {
+        name: "AbortError",
+        code: "ABORT_ERR",
       });
-      expect(attempts).toBe(2);
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining("retrying attempt 2"),
-      );
+    };
+    const ingestor = createVectorIngestor({ store, embed: aborted });
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect((await ingestor.ingest(sessionId)).recall).toBe(0);
+      expect(attempts).toBe(1);
     } finally {
       warn.mockRestore();
     }

@@ -116,7 +116,7 @@ describe("update-affinity", () => {
     runtimeId: "affinity",
     locale: "zh-CN",
     messages,
-    turnNumber: 3,
+    logicalTurn: 3,
   };
   let mockStore;
   let updateAffinityTool;

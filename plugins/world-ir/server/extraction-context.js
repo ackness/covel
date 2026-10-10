@@ -34,14 +34,11 @@ export default async function extractionContext(_ctx, payload) {
         {
           role: "user",
           content: JSON.stringify({
-            // The result id is a UUID only the kernel uses.
+            // Only the text: the result id, plugin id and runtime id are
+            // bookkeeping the model has no use for.
             narrative: {
               cardinality: narrative.cardinality,
               value: narrative.value,
-              source: {
-                pluginId: narrative.source?.pluginId,
-                runtimeId: narrative.source?.runtimeId,
-              },
             },
             characters,
             ...(vocabulary.length ? { vocabulary } : {}),

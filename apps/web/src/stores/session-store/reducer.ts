@@ -782,7 +782,22 @@ export function reducer(
       ];
       const nextMap = new Map(state.assetsByTurn);
       nextMap.set(action.turnId, nextBucket);
-      return { ...state, assetsByTurn: nextMap };
+      // A finished asset keeps only its last progress event; the intermediate
+      // ones carry nothing once the asset itself has arrived.
+      const progress = state.assetProgressByTurn.get(action.turnId);
+      const finished = progress?.filter((p) => p.assetId === action.asset.id);
+      if (!progress || !finished || finished.length < 2)
+        return { ...state, assetsByTurn: nextMap };
+      const nextProgress = new Map(state.assetProgressByTurn);
+      nextProgress.set(action.turnId, [
+        ...progress.filter((p) => p.assetId !== action.asset.id),
+        finished[finished.length - 1]!,
+      ]);
+      return {
+        ...state,
+        assetsByTurn: nextMap,
+        assetProgressByTurn: nextProgress,
+      };
     }
     case "ASSET_PROGRESS": {
       const existing = state.assetProgressByTurn.get(action.turnId) ?? [];

@@ -7,7 +7,7 @@ import {
 import { z } from "zod";
 
 import createUpsertQuests from "../../lib/upsert-quests.js";
-import { questUpdatesFromWorldIR } from "../../lib/world-ir.js";
+import { MAX_QUESTS, questUpdatesFromWorldIR } from "../../lib/world-ir.js";
 
 const upsertQuests = createUpsertQuests({
   tool: (definition) => definition,
@@ -26,7 +26,9 @@ export default async function handler(ctx) {
   const known = rows
     .map((row) => row.value?.name)
     .filter((name) => typeof name === "string" && name.trim());
-  const quests = questUpdatesFromWorldIR(ctx.inputs?.worldIR?.value, known);
+  const all = questUpdatesFromWorldIR(ctx.inputs?.worldIR?.value, known);
+  const quests = all.slice(0, MAX_QUESTS);
+  const notRecorded = all.length - quests.length;
   if (!quests.length)
     return {
       outcome: "success",
@@ -37,7 +39,16 @@ export default async function handler(ctx) {
     ctx,
   );
   return withPendingProposals(
-    { outcome: "success", value: getToolContent(result) },
+    {
+      outcome: "success",
+      value: {
+        ...getToolContent(result),
+        ...(notRecorded > 0 && {
+          notRecorded,
+          note: `${notRecorded} quest update(s) were not recorded: a turn records at most ${MAX_QUESTS}.`,
+        }),
+      },
+    },
     getPendingProposals(result),
   );
 }

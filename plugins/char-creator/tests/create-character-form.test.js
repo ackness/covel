@@ -58,6 +58,14 @@ describe("create-character-form schema boundary", () => {
     );
   });
 
+  it("gives the form the id the setup guard reads, whatever the model passed", async () => {
+    const result = await createCharacterForm.execute(
+      { ...params, formId: "hero-sheet" },
+      context,
+    );
+    expect(result.interaction.interactionId).toBe("char-creation");
+  });
+
   it("accepts string-valued select suggestions without weakening numeric or enum validation", async () => {
     await expect(
       createCharacterForm.execute(

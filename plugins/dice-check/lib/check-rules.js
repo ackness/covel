@@ -2,6 +2,10 @@
  * The rules of a dice check, in one place: the roller explains them to the
  * narrative, the guard checks a receipt against them when it is sent, and the
  * recorder writes the result by them.
+ *
+ * The standalone `tabletop-rules` package resolves its own checks with the same
+ * critical rules (a natural 20 succeeds, a natural 1 fails) in
+ * `runtimes/check/handler.js`; it cannot import this file, so change both together.
  */
 
 export const DIFFICULTY_DCS = Object.freeze({

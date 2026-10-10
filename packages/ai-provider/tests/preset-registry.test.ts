@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { DEFAULT_LLM_CONTEXT_WINDOW } from "@covel/shared";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import type { ModelProfile, PresetConfig } from "../src/types.js";
 
@@ -100,6 +101,14 @@ describe("preset-registry", () => {
     expect(() => registry.resolveTextTarget({ presetId: "disabled" })).toThrow(
       "disabled",
     );
+  });
+
+  it("gives a preset without a profile the kernel's default context window", () => {
+    const target = createPresetRegistry({
+      profiles: [],
+      presets: [{ ...presets[1]!, tier: "unlisted" }],
+    }).resolveTextTarget({ presetId: "fallback" });
+    expect(target.profile.contextWindow).toBe(DEFAULT_LLM_CONTEXT_WINDOW);
   });
 
   it("resolves embedding target", () => {

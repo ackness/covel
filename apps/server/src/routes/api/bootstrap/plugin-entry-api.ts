@@ -232,6 +232,7 @@ export function buildEntryApi(
           wires,
           (dispose) => batch.track(dispose),
           (fn) => batch.invoke(fn),
+          pluginTrust === "builtin",
         );
       });
     },

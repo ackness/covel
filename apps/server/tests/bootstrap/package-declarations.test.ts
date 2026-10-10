@@ -370,6 +370,19 @@ describe("package declarations across framework consumers", () => {
     }
   });
 
+  it("treats a reserved plugin id case-insensitively", () => {
+    const bundle = [
+      {
+        relativePath: "package.json",
+        content: Buffer.from('{"name":"@covel/plugin-Narrator"}'),
+      },
+      { relativePath: "PLUGIN.md", content: Buffer.from(root) },
+    ];
+    expect(() => validatePluginBundle(bundle, new Set(["narrator"]))).toThrow(
+      /reserved for a builtin/,
+    );
+  });
+
   it("rejects conflicting package contributions at install and discovery before publishing capabilities", async () => {
     const conflict = child.replace(
       "---\n",

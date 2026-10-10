@@ -28,7 +28,10 @@ function context(values, characters = []) {
     pluginId: "char-creator",
     runtimeId: "char-creator/player-init",
     world: { characterSchema: schema, characters },
-    store: { listPlayerInputs: async () => (values ? [{ values }] : []) },
+    store: {
+      listPlayerInputs: async () =>
+        values ? [{ formId: "char-creation", values }] : [],
+    },
   };
 }
 
@@ -98,5 +101,22 @@ describe("player initialization World Model", () => {
   });
   it("continues to the opening form when no player input exists", async () => {
     expect(await guard(context(null))).toEqual({ skip: false });
+  });
+  it("ignores a submission of another plugin's form", async () => {
+    const ctx = context(null);
+    ctx.store.listPlayerInputs = async () => [
+      { formId: "char-creation", values: { characterName: "Alex" } },
+      { formId: "tabletop-sheet", values: { name: "Someone Else" } },
+    ];
+    const result = await guard(ctx);
+    expect(getPendingProposals(result)).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ name: "Alex" }),
+      }),
+    ]);
+    ctx.store.listPlayerInputs = async () => [
+      { formId: "tabletop-sheet", values: { name: "Someone Else" } },
+    ];
+    expect(await guard(ctx)).toEqual({ skip: false });
   });
 });

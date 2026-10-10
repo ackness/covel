@@ -48,6 +48,7 @@ export default async function (ctx) {
       if (!Number.isSafeInteger(modifier))
         throw new Error("The selected attribute is not numeric");
       const die = ctx.random.int(1, 21);
+      // The same critical rules as `dice-check/lib/check-rules.js`; keep them in step.
       const outcome =
         die === 20
           ? "critical-success"

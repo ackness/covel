@@ -1207,6 +1207,20 @@ describe("Resume Routes", () => {
       expect(suspensions).toHaveLength(2);
     });
 
+    it("omits resolved and claimed suspensions", async () => {
+      await createSuspension(store, { id: "susp-open" });
+      await createSuspension(store, {
+        id: "susp-done",
+        resolvedAt: "2026-09-04T01:02:03.000Z",
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const res = await app.request("/api/sessions/sess-1/suspensions");
+
+      const body = (await res.json()) as { items: { id: string }[] };
+      expect(body.items.map((item) => item.id)).toEqual(["susp-open"]);
+    });
+
     it("returns only the public suspension summary", async () => {
       const createdAt = "2026-09-04T01:02:03.000Z";
       await createSuspension(store, { createdAt });

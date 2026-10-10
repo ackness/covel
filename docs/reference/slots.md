@@ -100,7 +100,7 @@ model    = "glm-5"
 - 一条 `ProtocolDefinition` 写明这个协议的全部差异：适配器（`createAdapter`）、缓存策略、默认能力、`reasoningEffort` 档位到请求字段的转换（`reasoningFields`）、它接受的 `providerOptions` 字段（`providerOptionFields`）、它支持的可选生成参数（`parameters`），以及图像和语音是否必须显式指定 wire（`mediaWire`）。网关和注册表只查这张表，不比较协议 ID。
 - 请求追踪只记录白名单里的请求体字段（`packages/ai-provider/src/adapters/http/request-observation.ts` 的 `MODEL_FIELDS`）。新协议若使用新的顶层字段名，要在那里加上，否则 trace 里看不到。
 - 插件 SDK 不能依赖 `@covel/shared`，自己保留一份内置协议 ID 类型（`PluginProviderProtocol`）；两份不一致时 `packages/shared/src/provider-protocols.ts` 编译失败。
-- **由插件提供一种协议**：不改框架，插件用 `covel.registerWires({ text: [...] })` 注册，模型的 `protocol` 写 `<pluginId>/<wireId>`。见 [plugin-extensions.md § 文本协议 wire](plugin-extensions.md#文本协议-wire)。
+- **由插件提供一种协议**：不改框架，插件用 `covel.registerWires({ text: [...] })` 注册，模型的 `protocol` 写 `<pluginId>/<wireId>`。只有启用了该插件的会话能选用它，否则以配置错误失败；没有会话的请求（如连接测试）可用内置插件的协议，`self` 形态下也可用社区插件的。见 [plugin-extensions.md § 文本协议 wire](plugin-extensions.md#文本协议-wire)。
 
 ## Slot 字段（`[covel.<slot>]`）
 
@@ -110,7 +110,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | ----------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                                                                                                          |
 | `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                                                |
-| `baseUrl`                           | —    | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）。[内置服务商](#内置服务商与协议)可省略，其他服务商必填                                                     |
+| `baseUrl`                           | —    | API 端点（受 SSRF 守卫约束：远端必须 https；loopback 仅在 `self` 形态下允许，可用 http）。[内置服务商](#内置服务商与协议)可省略，其他服务商必填                             |
 | `protocol`                          | —    | 接口协议，取值见[内置服务商与协议](#内置服务商与协议)。缺省用内置服务商自己的协议，其他服务商为 `openai-chat-v1`                                                            |
 | `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`。缺省从 output 模态推断（`audio` 推断为 `speech`，音乐用途须显式写 `music`） |
 | `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                                                        |
@@ -385,7 +385,7 @@ Provider and plugin HTTP helpers cancel rejected response bodies before retrying
 
 `Retry-After` 同时接受整数秒和 HTTP-date；过去的日期立即重试，无效值退回退避策略。文本 / 对象 / 流式 / 评估的 gateway 调用默认共享最多 8 次实际 HTTP 请求和 120 秒总时限。runtime 的一次逻辑调用只创建一次预算，HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`；runtime 执行预算继续按原策略计算，并发排队保留原有的额度补偿；每次实际调用同时受执行预算、逻辑总时限和取消信号约束。排队和退避也计入逻辑总时间，已经输出内容的流仍禁止重试。耗尽返回不可重试的 `REQUEST_BUDGET_EXCEEDED`。调用方可通过 `createLlmRequestBudget` 显式设置更紧或更宽的策略，并在 `GatewayOptions.requestBudget` / `LLMAdapter` 参数中传递。AI 世界创作（生成、修订、翻译）就是这样做的：回答长、有的模型输出慢，所以它按“无响应时间”限时，每次请求传入 30 分钟的显式预算，不受默认 120 秒限制（见 `docs/reference/api.md` 的 `POST /api/ai/generate-world`）。
 
-媒体和 embedding 不自动套用文本预算，保留独立 wire 的时限及轮询策略；例如 DashScope WAN 仍可每 2 秒轮询、最多 300 秒。它们可以显式传入预算，此时所有 HTTP 请求（含轮询）都计数。底层 HTTP helper 只消耗传入的预算。观测数据在原 `transportAttempt` 之外提供可选 `logicalAttempt` 和 `transportRetryReason`（`http-429` / `http-5xx` / `connection`）。
+媒体和 embedding 不自动套用文本预算，保留独立 wire 的时限及轮询策略；例如 DashScope WAN 仍可每 2 秒轮询、最多 300 秒。它们可以显式传入预算，此时所有 HTTP 请求（含轮询）都计数。底层 HTTP helper 只消耗传入的预算。观测数据在原 `transportAttempt` 之外提供可选 `logicalAttempt` 和 `transportRetryReason`（`http-429` / `http-4xx` / `http-5xx` / `connection`；408、409 和由 `x-should-retry` 触发的其他 4xx 记为 `http-4xx`）。
 
 连接被拒绝或在应答前断开（`ECONNREFUSED` / `ECONNRESET` / `EPIPE` / `UND_ERR_SOCKET`）与 429 / 5xx 一样重试：同一套退避、同一个重试上限（两类合计 3 次）、同一份请求预算。重启中的端点（本地代理最常见）片刻后就恢复，不该让一次 runtime 调用直接失败。超时不在其列，流式调用已经输出内容后也不重试。
 

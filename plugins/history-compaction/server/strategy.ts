@@ -65,11 +65,11 @@ const DEFAULT_FOCUS_SECTIONS: readonly I18nText[] = [
 const COMPACTOR_TEXT = {
   mergeSummary: {
     "zh-CN":
-      "请把所选连续摘要合并成一份摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 {{ maxSummaryTokens }} tokens。\n\n<所选历史摘要>\n{{ prior }}\n</所选历史摘要>\n\n<新增对话>\n{{ messages }}\n</新增对话>",
+      "请把所选连续摘要合并成一份摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 {{ maxSummaryTokens }} tokens。\n\n<所选历史摘要>\n{{ prior }}\n</所选历史摘要>",
     "en-US":
-      "Merge only the selected consecutive historical summaries into one summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately {{ maxSummaryTokens }} tokens.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
+      "Merge only the selected consecutive historical summaries into one summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately {{ maxSummaryTokens }} tokens.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>",
     "ru-RU":
-      "Объедини выбранные последовательные исторические резюме в одно резюме. Сохрани все по-прежнему актуальные имена, договорённости, места, отношения, состояния и причинно-следственные связи. Итоговое резюме должно занимать не более примерно {{ maxSummaryTokens }} токенов.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
+      "Объедини выбранные последовательные исторические резюме в одно резюме. Сохрани все по-прежнему актуальные имена, договорённости, места, отношения, состояния и причинно-следственные связи. Итоговое резюме должно занимать не более примерно {{ maxSummaryTokens }} токенов.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>",
   },
   summarize: {
     "zh-CN":

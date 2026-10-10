@@ -111,8 +111,9 @@ export function createConnectPinnedDispatcher(): Agent {
 
 /**
  * Resolve a hostname (or accept an IP literal) and enforce the SSRF policy
- * on every answer: loopback hostnames must resolve to loopback addresses,
- * anything else must resolve to publicly routable addresses only.
+ * on every answer: on the `self` tier loopback hostnames must resolve to
+ * loopback addresses; anything else, and every name on a hosted tier, must
+ * resolve to publicly routable addresses only.
  */
 async function resolveAllowedAddresses(
   rawHostname: string,
@@ -143,7 +144,11 @@ async function resolveAllowedAddresses(
     return addresses;
   }
 
-  const allowLoopback = LOOPBACK_HOSTNAMES.has(hostname);
+  // Loopback is the player's own machine only on the self tier; on a hosted
+  // tier it is the host's internal surface (url-safety applies the same rule).
+  const allowLoopback =
+    LOOPBACK_HOSTNAMES.has(hostname) &&
+    readRuntimeEnv().deploymentTier === "self";
   for (const result of addresses) {
     const allowed = allowLoopback
       ? isLoopbackIpAddress(result.address)

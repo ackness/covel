@@ -252,11 +252,23 @@ export default function ({ tool, z, shortIdBatch }) {
       }
 
       // ── 4. Stage this turn's change summary for the message block ──
+      // One row per turn, so earlier turns keep their block when the player
+      // scrolls back; a second call in the same turn replaces its quests' entries.
       if (changes.length > 0) {
-        writes.push(
-          { namespace: "message", key: "__turnId", value: context.turnId },
-          { namespace: "message", key: "changes", value: changes },
+        const previous = await context.store.getPluginData(
+          "message",
+          context.turnId,
         );
+        const earlier = Array.isArray(previous?.value?.changes)
+          ? previous.value.changes.filter(
+              (entry) => !changes.some((change) => change.id === entry.id),
+            )
+          : [];
+        writes.push({
+          namespace: "message",
+          key: context.turnId,
+          value: { turnId: context.turnId, changes: [...earlier, ...changes] },
+        });
       }
 
       return withPendingProposals(

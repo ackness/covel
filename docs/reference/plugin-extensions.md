@@ -29,6 +29,10 @@ UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，ha
 
 `contributes.hooks` 按 `event` 与 `enforce` 声明允许的 Hook，省略 `enforce` 等同于 `normal`。同一声明可以通过多次 `covel.on()` 注册多个独立 handler；未声明的事件或阶段、以及没有实现的声明仍会使整个 entry 发布失败。
 
+同一事件的 handler 按 `enforce` 分组依次执行：`pre` → `normal` → `post`。组内先执行框架 Hook，再按注册顺序执行插件 Hook；不同插件之间的先后取决于插件的加载顺序，不是可声明的契约。两个插件改写同一份负载时，后执行的 `replace` 覆盖先执行的同名字段，需要确定先后的插件应声明不同的 `enforce`。
+
+`TurnStop` 在一次执行的全部 runtime 结束之后、提交之前触发：此时本次执行的写入还没有落库，也可能在提交时被拒绝。需要在数据落库之后响应的插件使用 `PostStateCommit`。
+
 ## 插件作者类型
 
 外部插件从公开包 `@covel/plugin-handlers-utils` 导入 `PluginAPI` 或 `PluginEntryFactory` 类型，无需安装私有的 runtime/shared workspace 包。`@covel/plugin-handlers-utils/extension-points` 提供扩展点的输入、输出和上下文类型；完整入口类型也可从 `@covel/plugin-handlers-utils/plugin-api` 导入。
@@ -198,13 +202,15 @@ export default function register(covel) {
 }
 ```
 
+- 和图片、语音等 wire 一样，文本 wire 的 `id` 要写进清单的 `contributes.wires`（上例为 `wires: [converse]`）；注册了没声明，或声明了没注册，插件都加载失败。
 - 注册名是 `<pluginId>/<wireId>`（上例为 `acme/converse`）。模型的 `protocol` 写这个名字即可，`llm.toml` 和设置页都认；设置页的协议下拉通过 `GET /api/ai/protocols` 列出已加载插件注册的协议，名称取 `label`。
 - 必须实现 `generateText` 和 `streamText`。`params` 带 `model`、`messages`（含工具调用与工具结果）、`tools`、`responseFormat` 和 `providerRequestMetadata`；流的最后一个事件必须是 `done`。类型见 `@covel/plugin-handlers-utils` 的 `PluginTextWire`。
 - `finishReason` 可以直接返回服务商自己的词，网关统一成 `stop` / `length` / `tool_calls` 等（见 [slots.md](slots.md#连接测试与失败原因) 上文的结束原因说明）。
 - 结构化输出不用单独实现：网关把 JSON Schema 放进 `responseFormat` 并作为指令加入消息，调用 `generateText`，再解析和校验结果。embedding 不走文本 wire。
 - 可选的 `listModels(config, signal)` 返回端点提供的模型 ID，设置页的“从服务读取模型列表”会用它。
 - wire 自己发 HTTP，所以这些请求不出现在 provider 请求追踪里，框架的传输重试和请求预算也不作用于它；`config.signal` 在调用被取消或超时时触发，应传给请求。
-- `config` 里有该用途解析出的地址和密钥。它们只能用于向该地址发请求，不得写入结果、日志或 UI。模型的 `protocol` 指向的插件没有加载时，调用以配置错误失败，不会改用别的协议。
+- `config` 里有该用途解析出的地址和密钥。它们只能用于向该地址发请求，不得写入结果、日志或 UI。模型的 `protocol` 指向的插件没有加载，或没有在当前会话启用时，调用以配置错误失败（错误里写明要启用哪个插件），不会改用别的协议。
+- 哪些请求可以选用这个协议：会话里该插件处于启用状态（社区插件的启用已含玩家授权）。不属于任何会话的请求（连接测试、读取模型列表、生成世界）可以选用内置插件的协议；`self` 形态下只有一个玩家，已加载的社区插件都经他授权，所以也可以选用社区插件的协议；托管形态下社区插件的协议要在已启用它的会话里使用。请求级预设、`llm.toml` 的槽位和 runtime 自己的槽位偏好都按这条判断；设置页的协议下拉仍列出所有已加载插件的协议。
 - 信任边界与媒体 wire 相同：社区插件的服务端代码要玩家授权后才运行，`permissions.http` 声明的来源照常强制。不同的是，文本 wire 会经手选用它的那个用途的全部提示词和回答。
 
 ## 自定义组件与挂载
@@ -275,6 +281,8 @@ const response = await window.covel.invoke("invokePluginAction", {
 扩展输出先经过点的 output schema，再执行权威归属处理与最终 schema 校验；三步均在一次 service 调用的结算边界内。槽位类型不匹配等最终错误记录为一次 `error / output-validation`，然后由点的 `onError` 决定 skip 或 fail-turn，不会先记 success 再补 failure。超时后的迟到结果不追加 success。
 
 具有回合 emitter 的扩展、压缩与 function service 调用使用同一 `plugin.service.completed` 完成事件写入持久 trace，嵌套调用继承 emitter 并携带 parentCallId。事件只包含身份、扩展 point/id/slot、耗时和固定结果分类，不含调用输入、输出、原始错误、凭据或私有 session incarnation。复用既有 TurnEmitter 的 traceId、seq 和重试范围，等待写入尝试完成；存储失败沿用 trace 的尽力记录语义，不改变插件结果，耗时不包含 trace I/O。没有回合 emitter 的 UI 后台投影只保留进程内诊断窗口。
+
+`onError` 为 skip 的点跳过失败或超时的提供者时，服务端日志记录一行 `[plugin-extensions] skipped provider <pluginId>/<extensionId> of <point> for session <sessionId>: <原因>`。trace 事件不含原始错误，作者在这一行查找自己的片段或槽位没有出现的原因。
 
 诊断按当前返回的最近 100 条调用（全进程最多保留 500 条）计算 point/provider 的 total、success、error、timeout、cancelled。缓存命中与同执行并发合并不增加事件或统计；未激活或未批准的提供者在 discovery 被排除，不算调用失败；调用发出后准入失败则保留失败事件。该统计仅代表当前窗口，会随淘汰变化，不是累计用量。
 

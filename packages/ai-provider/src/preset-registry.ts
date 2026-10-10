@@ -1,8 +1,6 @@
+import { DEFAULT_LLM_CONTEXT_WINDOW } from "@covel/shared";
 import type { ModelProfile, PresetConfig, ResolvedTarget } from "./types.js";
 import { ModelConfigurationError } from "./errors.js";
-
-/** Fallback context window size when synthesizing a profile from a preset. */
-const SYNTHETIC_CONTEXT_WINDOW = 64_000;
 
 /**
  * Create a preset registry that resolves preset IDs to model targets.
@@ -131,7 +129,7 @@ export function createPresetRegistry(options: {
           tier: preset!.tier,
           provider: preset!.provider,
           model: preset!.model,
-          contextWindow: SYNTHETIC_CONTEXT_WINDOW,
+          contextWindow: DEFAULT_LLM_CONTEXT_WINDOW,
           latencyClass: "medium",
           costClass: "medium",
           supportedModes: preset!.supportedModes,
@@ -179,7 +177,7 @@ export function createPresetRegistry(options: {
         provider: preset.provider,
         model: preset.model,
         contextWindow:
-          preset.capability?.contextWindow ?? SYNTHETIC_CONTEXT_WINDOW,
+          preset.capability?.contextWindow ?? DEFAULT_LLM_CONTEXT_WINDOW,
         latencyClass: "medium",
         costClass: "medium",
         supportedModes: ["embed"],
@@ -208,7 +206,7 @@ export function createPresetRegistry(options: {
       provider: preset!.provider,
       model: preset!.model,
       contextWindow:
-        preset!.capability?.contextWindow ?? SYNTHETIC_CONTEXT_WINDOW,
+        preset!.capability?.contextWindow ?? DEFAULT_LLM_CONTEXT_WINDOW,
       latencyClass: "medium",
       costClass: "medium",
       supportedModes: ["embed"],

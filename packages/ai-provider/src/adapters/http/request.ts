@@ -93,7 +93,8 @@ export async function postJson(
   const effectiveSignal = scope?.signal ?? signal ?? config.signal;
 
   let transportAttempt = 0;
-  let transportRetryReason: "http-429" | "http-5xx" | "connection" | undefined;
+  let transportRetryReason:
+    "http-429" | "http-4xx" | "http-5xx" | "connection" | undefined;
   const doFetch = async (): Promise<Response> => {
     if (scope)
       assertLlmRequestBudget(scope.budget, {
@@ -192,7 +193,12 @@ export async function postJson(
       // Counted before the request is sent again, so a connection that drops
       // during this retry cannot use the count a second time.
       retries += 1;
-      transportRetryReason = response.status === 429 ? "http-429" : "http-5xx";
+      transportRetryReason =
+        response.status === 429
+          ? "http-429"
+          : response.status >= 500
+            ? "http-5xx"
+            : "http-4xx";
       response = await fetchThroughDrops();
     }
 

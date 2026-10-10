@@ -7,7 +7,11 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { isBlockingWorldRequirement } from "@covel/shared";
+import {
+  isBlockingWorldRequirement,
+  playerVisibleLore,
+  withNarratorOnlyLore,
+} from "@covel/shared";
 import {
   AlertCircle,
   AlertTriangle,
@@ -188,6 +192,22 @@ export function SessionPrepScreen({
 
   const originalLore = text(world.lore);
   const lore = useWorldLore(world.id, originalLore);
+  // The card shows and edits the lore a player may read. The narrator-only
+  // blocks of the world stay in the text that the session starts with.
+  const visibleOriginalLore = useMemo(
+    () => playerVisibleLore(originalLore),
+    [originalLore],
+  );
+  const visibleLore = useMemo(
+    () => playerVisibleLore(lore.value),
+    [lore.value],
+  );
+  const changeVisibleLore = (value: string) =>
+    lore.change(
+      value === visibleOriginalLore
+        ? originalLore
+        : withNarratorOnlyLore(value, originalLore),
+    );
   const loreUnavailable =
     lore.status === "loading" || lore.status === "load-error";
 
@@ -547,10 +567,10 @@ export function SessionPrepScreen({
               <WorldLoreCard
                 expanded={loreExpanded}
                 onToggle={() => setLoreExpanded(!loreExpanded)}
-                loreValue={lore.value}
-                originalLore={originalLore}
+                loreValue={visibleLore}
+                originalLore={visibleOriginalLore}
                 isModified={lore.value !== originalLore}
-                onLoreChange={lore.change}
+                onLoreChange={changeVisibleLore}
                 onResetLore={lore.reset}
                 draftStatus={lore.status}
                 onRetry={lore.retry}

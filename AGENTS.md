@@ -567,7 +567,7 @@ Summary only; the boundaries and their reasons are in `docs/architecture/securit
 Trace chain: `traceId → runId → branchId → turnId → runtimeId → pluginId`. Runtime
 traces live in the DB `trace_events` table (served by `/api/traces/*` and the
 frontend `/debug` page); infrastructure logs go to the console with `[component]`
-prefixes. A runtime declaring `io.concealed: true` has its prompts, replies, tool
+prefixes. A runtime declaring `io.concealed: true` has its failure reason (replaced by a fixed text; the real one goes to the server log), prompts, replies, tool
 arguments, and outputs stripped from traces and the live stream.
 
 ## Testing

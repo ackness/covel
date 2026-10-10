@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   materializeWorldModel,
@@ -12,6 +12,7 @@ import {
   createWorldModelView,
   collectUpstreamWorldProposals,
   memoizeWorldModelReads,
+  overlayWorldModelView,
 } from "../src/function-runtime/world-model-view.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -215,6 +216,27 @@ describe("execution World Model", () => {
     expect(characterReads).toBe(1);
     expect(second.characters).toEqual(first.characters);
     expect(second.characters[0]?.fields).toEqual({ hp: 5 });
+  });
+
+  it("reads characters without copying the world record again", () => {
+    const view = overlayWorldModelView(
+      {
+        characterSchema: null,
+        characters: [],
+        dimensions: {},
+        worldRecord: { id: "world", name: "World", description: "long lore" },
+      } as never,
+      sessionId,
+    );
+    const clone = vi.spyOn(globalThis, "structuredClone");
+    try {
+      expect(view.characters).toEqual([]);
+      expect(view.dimensions).toEqual({});
+      expect(JSON.stringify(clone.mock.calls)).not.toContain("long lore");
+      expect(view.worldRecord).toMatchObject({ description: "long lore" });
+    } finally {
+      clone.mockRestore();
+    }
   });
 
   it("makes upstream schema and character output visible across a single scheduled execution", async () => {

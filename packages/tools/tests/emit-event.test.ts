@@ -58,19 +58,16 @@ describe("emit-event tool", () => {
     ]);
   });
 
-  it("returns a readable error listing known topics for an undeclared topic", async () => {
+  it("fails the call and lists known topics for an undeclared topic", async () => {
     const tool = createEmitEventTool({
       directory: makeDirectory([{ topic: "scene.set" }]),
     });
-    const result = (await tool.execute(
-      { topic: "quest.done", data: {} },
-      ctx,
-    )) as { _text: string };
-    expect(getEmittedEvents(result)).toBeUndefined();
-    expect(getToolContent(result)._text).toContain(
-      'unknown topic "quest.done"',
-    );
-    expect(getToolContent(result)._text).toContain("scene.set");
+    const error = await tool
+      .execute({ topic: "quest.done", data: {} }, ctx)
+      .catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('unknown topic "quest.done"');
+    expect((error as Error).message).toContain("scene.set");
   });
 
   it("rejects an advertise:false internal topic without leaking its name", async () => {
@@ -80,31 +77,23 @@ describe("emit-event tool", () => {
         { topic: "quest.done", advertised: false },
       ]),
     });
-    const result = (await tool.execute(
-      { topic: "quest.done", data: {} },
-      ctx,
-    )) as { _text: string };
-    expect(getEmittedEvents(result)).toBeUndefined();
-    expect(getToolContent(result)._text).toContain(
-      'unknown topic "quest.done"',
-    );
-    expect(getToolContent(result)._text).toContain("scene.set");
+    const error = (await tool
+      .execute({ topic: "quest.done", data: {} }, ctx)
+      .catch((e: unknown) => e)) as Error;
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('unknown topic "quest.done"');
+    expect(error.message).toContain("scene.set");
     // The internal topic must not be echoed back in the available-topics hint.
-    expect(getToolContent(result)._text).not.toContain(
-      "Available topics: quest.done",
-    );
+    expect(error.message).not.toContain("Available topics: quest.done");
   });
 
-  it("returns the schema validation error verbatim so the LLM can retry", async () => {
+  it("fails the call with the schema validation error so the LLM can retry", async () => {
     const tool = createEmitEventTool({
       directory: makeDirectory([{ topic: "scene.set", requires: "location" }]),
     });
-    const result = (await tool.execute(
-      { topic: "scene.set", data: {} },
-      ctx,
-    )) as { _text: string };
-    expect(getEmittedEvents(result)).toBeUndefined();
-    expect(getToolContent(result)._text).toContain("missing field location");
+    await expect(
+      tool.execute({ topic: "scene.set", data: {} }, ctx),
+    ).rejects.toThrow("missing field location");
   });
 
   it("never returns event.emit pending proposals (double-emission guard)", async () => {

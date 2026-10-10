@@ -127,3 +127,29 @@ it("does not release chat tool arguments from a truncated generation", async () 
   // Argument activity is reported; the call itself is never released.
   expect(output).toEqual([{ type: "tool-argument-delta" }]);
 });
+
+it("gives a streamed tool call without an id one from its position", async () => {
+  stub([
+    {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              { index: 0, function: { name: "write", arguments: "{}" } },
+            ],
+          },
+        },
+      ],
+    },
+    { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+  ]);
+  const calls: StreamEvent[] = [];
+  for await (const event of createOpenAiChatAdapter().streamText(
+    { baseUrl: "https://provider.example" },
+    { model: "test", messages: [] },
+  ))
+    if (event.type === "tool-call") calls.push(event);
+  expect(calls).toEqual([
+    { type: "tool-call", id: "call_0", name: "write", arguments: "{}" },
+  ]);
+});

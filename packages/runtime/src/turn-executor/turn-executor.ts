@@ -19,7 +19,11 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
-import { isSetupRuntime, resolveSetupGeneration } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  isSetupRuntime,
+  resolveSetupGeneration,
+} from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
@@ -288,7 +292,10 @@ async function executeTurnImpl(
   // Logical-turn number for this execution (frozen): the count of committed
   // main-loop player turns plus one. Drives scheduled cadence / startTurn and
   // is independent of the raw player-message count `turnNumber`.
-  const logicalTurn = sessionState.completedPlayerTurns + 1;
+  // A detached job keeps the number of the execution that queued it.
+  const logicalTurn =
+    input.detachedStage?.sourceLogicalTurn ??
+    sessionState.completedPlayerTurns + 1;
   const dimensionBarrier = await dimensionExecutionBarrier({
     store: deps.store,
     sessionId: input.sessionId,
@@ -380,7 +387,7 @@ async function executeTurnImpl(
         runtimeIdentities: activeRuntimes,
         sessionId: input.sessionId,
         turnId: input.turnId,
-        locale: input.locale ?? "zh-CN",
+        locale: input.locale ?? DEFAULT_LOCALE,
         world: deps.store
           ? await createWorldModelView(
               deps.worldModelReads ?? deps.store,
@@ -842,6 +849,7 @@ async function executeTurnImpl(
         sourceTurnId: input.turnId,
         sourceExecutionId: executionContext.executionId,
         sourceExecutionStartedAt: executionStartedAt,
+        sourceLogicalTurn: logicalTurn,
         ...(executionContext.logicalTurnId
           ? { sourceLogicalTurnId: executionContext.logicalTurnId }
           : {}),

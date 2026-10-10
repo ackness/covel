@@ -63,6 +63,19 @@ describe("character tool helpers", () => {
     expect(formatFields(null)).toEqual([]);
   });
 
+  it("leaves bookkeeping out of attribute text", () => {
+    const row = {
+      id: "0b6f6a2e-3c1d-4f5a-9b7e-1a2b3c4d5e6f",
+      note: "kept",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(formatFieldValue(row)).toBe('{"note":"kept"}');
+    expect(formatFieldValue([row])).toBe('[{"note":"kept"}]');
+    expect(formatFields({ history: row })).toEqual([
+      '  history: {"note":"kept"}',
+    ]);
+  });
+
   it("sorts by version descending and then updatedAt descending", () => {
     const sorted = sortByFrequencyThenRecency([
       { id: "old-v2", version: 2, updatedAt: "2026-01-01T00:00:00.000Z" },

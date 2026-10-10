@@ -668,20 +668,14 @@ describe("upsert-quests", () => {
     );
 
     // Assert
-    const turnId = await mockStore.getPluginData(
+    const row = await mockStore.getPluginData(
       "sess-1",
       "core-quest",
       "message",
-      "__turnId",
+      "turn-1",
     );
-    expect(turnId.value).toBe("turn-1");
-
-    const changes = await mockStore.getPluginData(
-      "sess-1",
-      "core-quest",
-      "message",
-      "changes",
-    );
+    expect(row.value.turnId).toBe("turn-1");
+    const changes = { value: row.value.changes };
     expect(changes.value).toHaveLength(1);
     expect(changes.value[0]).toMatchObject({
       name: "寻回断魂钩",
@@ -915,6 +909,33 @@ describe("quests from WorldIR", () => {
         }),
       }),
     );
+  });
+
+  it("names the updates beyond the per-turn cap instead of dropping them silently", async () => {
+    const result = await questLog({
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      pluginId: "core-quest",
+      runtimeId: "core-quest/log",
+      logicalTurn: 2,
+      store: {
+        listPluginData: async () => [],
+        getPluginData: async () => null,
+      },
+      inputs: {
+        worldIR: {
+          value: worldIR(
+            Array.from({ length: 7 }, (_, index) =>
+              quest({ quest: `Errand ${index}`, status: "accepted" }),
+            ),
+          ),
+        },
+      },
+    });
+
+    const content = getToolContent(result);
+    expect(content.value).toMatchObject({ created: 5, notRecorded: 2 });
+    expect(content.value.note).toContain("2 quest update(s)");
   });
 
   it("publishes active quests with their open objectives", async () => {

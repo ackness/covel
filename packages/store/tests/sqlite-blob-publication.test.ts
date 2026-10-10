@@ -8,6 +8,25 @@ import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
 import { mediaPath } from "../src/media-store/utils.js";
 
 describe("SQLite blob publication", () => {
+  it("rewrites the file when the row exists but the file is gone", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-blob-repair-"));
+    const store = createSqliteMediaStore(path.join(root, "test.db"), {
+      mediaRoot: path.join(root, "media"),
+    });
+    try {
+      const bytes = new Uint8Array(16).fill(3);
+      const ref = await store.put(bytes, "image/png");
+      fs.rmSync(mediaPath(path.join(root, "media"), ref.id));
+      expect(await store.exists(ref.id)).toBe(false);
+      await store.put(bytes, "image/png");
+      expect(await store.exists(ref.id)).toBe(true);
+      expect(Array.from(await store.get(ref))).toEqual(Array.from(bytes));
+    } finally {
+      await store.close?.();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   for (const failure of ["write", "rename"] as const) {
     it(`cleans failed ${failure} and retries with complete content`, async () => {
       const root = fs.mkdtempSync(

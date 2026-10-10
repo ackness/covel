@@ -122,6 +122,24 @@ describe("sync-codex-entries", () => {
     expect((await stored("codex-azure-peak")).rarity).toBe("rare");
   });
 
+  it("does not append a sentence the entry already holds", async () => {
+    await sync([mountain]);
+    await sync([mountain]);
+    expect((await stored("codex-azure-peak")).content).toBe(mountain.content);
+  });
+
+  it("marks only the latest sync's entries as new", async () => {
+    await sync([mountain]);
+    const second = await sync([{ ...mountain, title: "Jade Pool" }]);
+    expect(second.updated).toEqual([]);
+    expect((await stored("codex-azure-peak")).isNew).toBe(false);
+    expect((await stored("codex-jade-pool")).isNew).toBe(true);
+
+    // Adding to an entry written before is not a discovery either.
+    await sync([{ ...mountain, title: "Jade Pool", content: "水很凉。" }]);
+    expect((await stored("codex-jade-pool")).isNew).toBe(false);
+  });
+
   it("matches titles case-insensitively and keys English titles as words", async () => {
     await sync([{ ...mountain, title: "West Herb Garden" }]);
     const result = await sync([
@@ -166,7 +184,7 @@ describe("sync-codex-entries", () => {
         entries: [
           entry("One"),
           entry("Two"),
-          entry("One"),
+          { ...entry("One"), content: "A second fact." },
           entry("Three"),
           entry("Four"),
         ],
@@ -182,7 +200,7 @@ describe("sync-codex-entries", () => {
       skipped: ["Four"],
     });
     expect((await stored("codex-one")).content).toBe(
-      `${mountain.content}\n\n${mountain.content}`,
+      `${mountain.content}\n\nA second fact.`,
     );
   });
 

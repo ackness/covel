@@ -1,4 +1,8 @@
 import { expect, it } from "vitest";
+import {
+  createPluginRegistry,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
@@ -101,11 +105,16 @@ for (const withCharacter of [false, true]) {
     ).not.toBeNull();
     expect(await store.listPluginDataSessionScope("parent")).toEqual([]);
     const app = new Hono<{
-      Variables: { store: DataStore; sessionLock: SessionLock };
+      Variables: {
+        store: DataStore;
+        sessionLock: SessionLock;
+        pluginRegistry: PluginRegistry;
+      };
     }>();
     const sessionLock = createInProcessSessionLock();
     app.use("*", async (c, next) => {
       c.set("store", store);
+      c.set("pluginRegistry", createPluginRegistry());
       c.set("sessionLock", sessionLock);
       await next();
     });

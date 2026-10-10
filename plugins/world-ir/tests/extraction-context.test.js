@@ -38,7 +38,6 @@ describe("world-ir extraction context", () => {
       narrative: {
         cardinality: "one",
         value: narrative.value,
-        source: { pluginId: "narrator", runtimeId: "narrator" },
       },
       characters: [{ id: "mira", name: "Mira", type: "npc" }],
     });

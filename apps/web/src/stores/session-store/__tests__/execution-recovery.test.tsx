@@ -411,7 +411,9 @@ it("terminal polling retries a failed bridge read without publishing a discontin
   await act(async () => {});
   expect(result.current.messages.map((m) => m.id)).toEqual(["old"]);
   expect(result.current.executionRecovery?.checking).toBe(true);
-  expect(result.current.executionRecovery?.error).toMatch(/offline/);
+  expect(result.current.executionRecovery?.error).toBe(
+    "__i18n:session.reasonHistoryRestoreFailed__",
+  );
   api.listMessagesPage.mockResolvedValue({
     items: [
       {

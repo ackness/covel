@@ -102,6 +102,7 @@ it("keeps the last good override when a higher-priority package fails to load", 
 it("does not choose an arbitrary duplicate id or follow a linked manifest", async () => {
   const store = createMemoryStore();
   const sessionLock = createInProcessSessionLock();
+  const outside = await mkdtemp(path.join(tmpdir(), "covel-world-linked-"));
   try {
     await seedAndReconcileWorlds(store, [root], sessionLock);
     const before = await store.getWorld("healthy");
@@ -117,14 +118,21 @@ it("does not choose an arbitrary duplicate id or follow a linked manifest", asyn
     await rm(duplicate, { recursive: true });
     const linked = path.join(root, "linked");
     await mkdir(linked);
-    await symlink(
-      path.join(root, "healthy/world.yaml"),
-      path.join(linked, "world.yaml"),
+    // The target carries an id no other world has, so only the link rule can
+    // keep it out of the store.
+    const target = path.join(outside, "world.yaml");
+    await writeFile(
+      target,
+      'schemaVersion: "1.0"\nid: linked-world\nname: Linked\nsummary: Linked fixture\ndefaultLocale: en-US\n',
+      "utf8",
     );
+    await symlink(target, path.join(linked, "world.yaml"));
     await rm(path.join(root, "removed"), { recursive: true });
     await seedAndReconcileWorlds(store, [root], sessionLock);
+    expect(await store.getWorld("linked-world")).toBeNull();
     expect(await store.getWorld("removed")).not.toBeNull();
   } finally {
+    await rm(outside, { recursive: true, force: true });
     await store.close();
   }
 });

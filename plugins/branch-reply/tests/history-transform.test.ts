@@ -27,21 +27,11 @@ const baseHistory = [
 ] as const;
 
 describe("applyBranchReplyAcceptedCandidates", () => {
-  it("replaces the matching assistant message with acceptedText", () => {
+  it("replaces the matching assistant message with the accepted text", () => {
     const projected = applyBranchReplyAcceptedCandidates(baseHistory, [
       {
         key: "turn-1",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        value: {
-          schemaVersion: 1,
-          turnId: "turn-1",
-          status: "accepted",
-          acceptedCandidateId: "turn-1-candidate-2",
-          acceptedText: "The accepted branch text.",
-          candidates: [
-            { id: "turn-1-candidate-2", text: "The accepted branch text." },
-          ],
-        },
+        value: { turnId: "turn-1", text: "The accepted branch text." },
       },
     ]);
 
@@ -53,35 +43,19 @@ describe("applyBranchReplyAcceptedCandidates", () => {
     expect(baseHistory[1].content).toBe("The old story text.");
   });
 
-  it("falls back to the accepted candidate text when acceptedText is absent", () => {
+  it("keeps the full text of a long adopted reply", () => {
+    const longText = "A long narration. ".repeat(500).trim();
     const projected = applyBranchReplyAcceptedCandidates(baseHistory, [
-      {
-        key: "turn-1",
-        value: {
-          turnId: "turn-1",
-          status: "accepted",
-          acceptedCandidateId: "turn-1-candidate-3",
-          candidates: [
-            { id: "turn-1-candidate-3", text: "Candidate text fallback." },
-          ],
-        },
-      },
+      { key: "turn-1", value: { turnId: "turn-1", text: longText } },
     ]);
 
-    expect(projected[1]?.content).toBe("Candidate text fallback.");
+    expect(projected[1]?.content).toBe(longText);
   });
 
-  it("keeps history unchanged for ready or malformed branch records", () => {
+  it("keeps history unchanged for malformed accepted rows", () => {
     const projected = applyBranchReplyAcceptedCandidates(baseHistory, [
-      {
-        key: "turn-1",
-        value: {
-          turnId: "turn-1",
-          status: "ready",
-          selectedCandidateId: "turn-1-candidate-1",
-          candidates: [{ id: "turn-1-candidate-1", text: "Draft only." }],
-        },
-      },
+      { key: "turn-1", value: { turnId: "turn-1" } },
+      { key: "turn-2", value: "not an object" },
     ]);
 
     expect(projected).toBe(baseHistory);
@@ -106,8 +80,7 @@ describe("applyBranchReplyAcceptedCandidates", () => {
         value: {
           turnId: "turn-1",
           runtimeId: "chat-mode-narrator",
-          status: "accepted",
-          acceptedText: "Narrator-only branch.",
+          text: "Narrator-only branch.",
         },
       },
     ]);
@@ -159,8 +132,7 @@ describe("applyBranchReplyAcceptedCandidates", () => {
         value: {
           turnId: "turn-1",
           runtimeId: "chat-mode-narrator",
-          status: "accepted",
-          acceptedText: "The accepted branch text.",
+          text: "The accepted branch text.",
         },
       },
     ]);

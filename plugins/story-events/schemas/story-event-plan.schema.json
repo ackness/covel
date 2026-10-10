@@ -7,7 +7,7 @@
   "properties": {
     "events": {
       "type": "array",
-      "maxItems": 3,
+      "maxItems": 2,
       "items": {
         "$ref": "#/$defs/event"
       }

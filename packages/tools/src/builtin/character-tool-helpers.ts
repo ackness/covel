@@ -1,3 +1,4 @@
+import { modelFacingJson } from "@covel/plugin-handlers-utils";
 export {
   mergeSchemaDefaults,
   assertCharacterFields,
@@ -127,14 +128,16 @@ export function formatFieldValue(value: unknown): string {
         typeof v === "number" ||
         typeof v === "boolean",
     );
-    return allPrimitive ? `[${value.join(", ")}]` : JSON.stringify(value);
+    return allPrimitive
+      ? `[${value.join(", ")}]`
+      : JSON.stringify(modelFacingJson(value));
   }
-  return JSON.stringify(value);
+  return JSON.stringify(modelFacingJson(value));
 }
 
 export function formatFields(fields: unknown): string[] {
   if (!fields || typeof fields !== "object") return [];
-  return Object.entries(fields as Record<string, unknown>).map(
+  return Object.entries(modelFacingJson(fields as Record<string, unknown>)).map(
     ([k, v]) => `  ${k}: ${formatFieldValue(v)}`,
   );
 }

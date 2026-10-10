@@ -1,4 +1,7 @@
-import { isDefaultLocale, resolveI18nText } from "@covel/plugin-handlers-utils";
+import {
+  instructionLocaleFor,
+  resolveI18nText,
+} from "@covel/plugin-handlers-utils";
 import { loadDefinitions } from "./definitions.js";
 import {
   buildSystemPrompt,
@@ -9,7 +12,13 @@ import {
   enforceAuthoritativePlayerProfile,
   parseMemoryUpdate,
 } from "./extraction.js";
-import { factKey, factText, recentFacts, withoutRepeats } from "./facts.js";
+import {
+  factKey,
+  factText,
+  nextFactIndex,
+  recentFacts,
+  withoutRepeats,
+} from "./facts.js";
 import { retryTransientProviderCall } from "./provider-retry.js";
 
 const MAX_REPLY_ATTEMPTS = 2;
@@ -30,7 +39,7 @@ export default async function extractMemory(ctx) {
     content: byLabel.get(block.label)?.content ?? "",
   }));
   const locale = ctx.locale ?? digest.locale ?? "zh-CN";
-  const lang = isDefaultLocale(locale) ? "zh" : "en";
+  const lang = instructionLocaleFor(locale);
   const player = ctx.world?.characters.find(
     (character) => character.type === "player",
   );
@@ -124,9 +133,10 @@ export default async function extractMemory(ctx) {
   // facts keep what happened, and memory search reads them.
   const turn = ctx.logicalTurn ?? 0;
   const newFacts = withoutRepeats(extracted.facts, factRows);
+  const firstIndex = nextFactIndex(factRows, turn);
   for (const [index, fact] of newFacts.entries()) {
     ctx.signal.throwIfAborted();
-    await ctx.pluginData.set("facts", factKey(turn, index), {
+    await ctx.pluginData.set("facts", factKey(turn, firstIndex + index), {
       turn,
       text: factText(turn, fact, lang),
     });

@@ -590,41 +590,54 @@ sources:
     expect((rows[0]!.value as { content: string }).content).toBe("闸门锁着。");
   });
 
-  it("a malicious locale cannot escape the descriptor root (path traversal)", async () => {
-    const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
+  it("ignores a locale overlay that is a symlink out of the world root", async () => {
+    const descriptor = `schemaVersion: 1
 sources:
   facts:
     kind: json
     path: data/facts.json
     to: contract:world-notes.facts@1
     key: id
-`,
-      files: {
-        "data/facts.json": JSON.stringify([{ id: "gate", content: "safe" }]),
-      },
-    });
-    const store = await makeStore(["world-notes"]);
+`;
+    const base = JSON.stringify([{ id: "gate", content: "safe" }]);
+    const overlay = JSON.stringify([{ id: "gate", content: "overlay" }]);
+    const contentFor = async (
+      files: Readonly<Record<string, string>>,
+      link?: string,
+    ): Promise<string> => {
+      const { worldsDir, worldRoot, worldId } = await makeWorld({
+        descriptor,
+        files: { "data/facts.json": base, ...files },
+      });
+      if (link) {
+        const outside = await mkdtemp(path.join(tmpdir(), "covel-outside-"));
+        await writeFile(path.join(outside, "facts.en.json"), link);
+        await symlink(
+          path.join(outside, "facts.en.json"),
+          path.join(worldRoot, "data/facts.en.json"),
+        );
+      }
+      const store = await makeStore(["world-notes"]);
+      await importWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        locale: "en-US",
+        preflight: {
+          activePlugins: ["world-notes"],
+          registry: registry({ "world-notes": ["facts"] }),
+        },
+      });
+      const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+      return (rows[0]!.value as { content: string }).content;
+    };
 
-    // Invalid/path-like locale input yields no variant candidates and safely
-    // falls back to the contained declared source.
-    const result = await importWorldDataForSession({
-      store,
-      sessionId: "sess-1",
-      worldId,
-      worldsDirs: [worldsDir],
-      now: NOW,
-      locale: "../../../../etc/passwd",
-      preflight: {
-        activePlugins: ["world-notes"],
-        registry: registry({ "world-notes": ["facts"] }),
-      },
-    });
-
-    expect(result.written).toBe(1);
-    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
-    expect(rows[0]).toBeDefined();
-    expect((rows[0]!.value as { content: string }).content).toBe("safe");
+    // Control: a regular overlay in the same place is applied.
+    expect(await contentFor({ "data/facts.en.json": overlay })).toBe("overlay");
+    // The same file reached through a link leaving the root is not.
+    expect(await contentFor({}, overlay)).toBe("safe");
   });
 
   it("rejects missing plugin schemas during preflight", async () => {

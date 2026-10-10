@@ -55,6 +55,19 @@ describe("inventory item-op rpc", () => {
     ]);
   });
 
+  it("stamps updatedAt so the summary treats the change as recent", async () => {
+    const { ctx, writes } = makeCtx({
+      "item-1": {
+        name: "钩镰",
+        quantity: 1,
+        equipped: false,
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    });
+    await itemOp({ op: "equip", itemId: "item-1" }, ctx);
+    expect(writes[0].value.updatedAt > "2026-08-01T00:00:00.000Z").toBe(true);
+  });
+
   it("unequips an equipped item", async () => {
     // Arrange
     const { ctx, writes } = makeCtx({

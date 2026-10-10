@@ -75,6 +75,17 @@ function summarizeDiagnostics(
   };
 }
 
+/** Usage the provider reported for a reply that was then rejected. */
+function errorUsage(error: unknown): unknown {
+  const details =
+    error && typeof error === "object" && "details" in error
+      ? error.details
+      : undefined;
+  return details && typeof details === "object" && "usage" in details
+    ? details.usage
+    : undefined;
+}
+
 function errorDiagnostics(error: unknown): unknown {
   const details =
     error && typeof error === "object" && "details" in error
@@ -151,8 +162,10 @@ export function withGatewayTrace(
       return result;
     } catch (err) {
       const diagnosticsSummary = summarizeDiagnostics(errorDiagnostics(err));
+      const usage = errorUsage(err);
       await emitter.emit("gateway.failed", {
         ...(diagnosticsSummary ? { diagnosticsSummary } : {}),
+        ...(usage ? { usage } : {}),
         ...ctx,
         method,
         error: summarizeTraceError(err),

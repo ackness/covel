@@ -19,7 +19,23 @@
         "Teach you to read what a ledger leaves out"
       ],
       "fears": ["A forged entry she failed to catch"],
+      "secrets": [
+        "She altered one entry herself, years ago, to keep a friend out of prison."
+      ],
       "voice": "Short, level sentences. She asks for the evidence before she gives an opinion."
-    }
+    },
+    "dialogueExamples": [
+      {
+        "user": "Who signed this manifest?",
+        "character": "Show me the page first. A name I have not read is a rumor."
+      }
+    ],
+    "rules": [
+      {
+        "id": "mara-trust",
+        "text": "Mara shares what the ledgers hide only after you bring her a record she can check.",
+        "priority": 10
+      }
+    ]
   }
 ]
