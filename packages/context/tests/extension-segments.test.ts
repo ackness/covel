@@ -35,7 +35,6 @@ function assemble(segments: readonly PromptSegment[]) {
     },
     completedResults: new Map(),
     promptSegments: segments,
-    injectCacheBreakpoints: true,
   });
 }
 it("keeps stable and session system segments in the system prompt and moves turn-volatile ones out", () => {
@@ -80,7 +79,12 @@ it("keeps message roles and post-history placement", () => {
 it("places depth segments before the requested history position and post-history last", () => {
   const result = buildContext({
     promptTemplate: "Instructions",
-    manifest: { name: "target", description: "Test", stage: "narrative" },
+    manifest: {
+      name: "target",
+      pluginId: "target",
+      description: "Test",
+      stage: "narrative",
+    },
     turnInput: {
       sessionId: "s",
       turnId: "t",
@@ -106,7 +110,7 @@ it("places depth segments before the requested history position and post-history
     "current",
     "last",
   ]);
-  expect(result.messages[3].role).toBe("user");
+  expect(result.messages[3]?.role).toBe("user");
 });
 it("keeps provider content literal instead of interpolating caller template syntax", () => {
   expect(

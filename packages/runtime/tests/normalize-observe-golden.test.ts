@@ -35,11 +35,6 @@ async function loadAllManifests(): Promise<readonly RuntimeManifest[]> {
   return manifests;
 }
 
-function isStageSourceManifest(manifest: RuntimeManifest): boolean {
-  const type = manifest.trigger?.type ?? "auto";
-  return type === "auto" || type === "scheduled";
-}
-
 function specById(
   specs: readonly NormalizedRuntimeSpec[],
 ): ReadonlyMap<string, NormalizedRuntimeSpec> {
@@ -67,15 +62,11 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const manifest of manifests) {
       const spec = normalizeRuntimeManifest(manifest);
       // Stage-less declarations are the UI-only idiom (never scheduled); only
-      // auto/scheduled runtimes with a stage (explicit, or priority-derived
-      // for legacy third-party manifests) enter the pipeline.
-      const expectStage =
-        manifest.stage !== undefined ||
-        (manifest.priority !== undefined && isStageSourceManifest(manifest));
+      // runtimes that declare a stage enter the pipeline.
       expect(
         spec.stage !== undefined,
         `${manifest.name}: stage presence mismatch`,
-      ).toBe(expectStage);
+      ).toBe(manifest.stage !== undefined);
     }
   });
 

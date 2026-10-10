@@ -37,7 +37,7 @@ describe("SlotRegistry (tag-aware)", () => {
     it("should return all image slots", () => {
       const imageSlots = registry.listSlotsByTag("image");
       expect(imageSlots).toHaveLength(1);
-      expect(imageSlots[0].slotId).toBe("dalle");
+      expect(imageSlots[0]!.slotId).toBe("dalle");
     });
 
     it("should return empty array for unknown tag", () => {

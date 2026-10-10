@@ -20,7 +20,7 @@
 │   辅助通道 GET /api/events/stream:                               │
 │     · 命名 SSE 事件（event: <type>\ndata: ...）                   │
 │     · 信封 = ProtocolEvent（id/source/...）                      │
-│     · 客户端 EventSource + addEventListener                       │
+│     · 客户端 fetch 读流，按 event: 头分发                         │
 │     · topic: runtime / state / game / plugin / session / store /  │
 │             system，含 system.connected + 30s system.heartbeat   │
 │             与 lastEventId 重连补放                               │
@@ -31,7 +31,7 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-> 关键差异：`/api/actions` **没有** `event:` 命名头，因此 `EventSource.addEventListener('narrative.delta', …)` 在 actions 流上**永远不会**触发。回合内事件请使用 `apps/web/src/services/api/actions.ts: sendAction` 的 ReadableStream 解析路径，或自行用 `fetch()` 读取 `data:` 行；命名事件订阅只对 `/api/events/stream` 有效。
+> 关键差异：`/api/actions` **没有** `event:` 命名头，因此按 `event:` 头分发的订阅代码（如 `EventSource.addEventListener('narrative.delta', …)`）在 actions 流上**永远不会**触发。回合内事件请使用 `apps/web/src/services/api/actions.ts: sendAction` 的 ReadableStream 解析路径，或自行用 `fetch()` 读取 `data:` 行；命名事件订阅只对 `/api/events/stream` 有效。
 
 ## 宿主执行与提交边界
 
@@ -336,10 +336,10 @@ Provider 图片输入矩阵：
 
 ### SSE 帧格式按通道区分
 
-| 通道                     | 帧形态                                                      | 客户端订阅方式                                                              | 文件                                               |
-| ------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
-| `POST /api/actions`      | data-only（`data: <SseEnvelope JSON>`，**无 `event:` 头**） | `fetch()` + `ReadableStream`，按行扫 `data:` 解 JSON 后看 `envelope.type`   | `apps/web/src/services/api/actions.ts: sendAction` |
-| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`）     | `EventSource` + `addEventListener('<type>', handler)` —— 不监听就被静默丢弃 | `apps/web/src/services/subscription.ts`            |
+| 通道                     | 帧形态                                                      | 客户端订阅方式                                                                                                                         | 文件                                               |
+| ------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `POST /api/actions`      | data-only（`data: <SseEnvelope JSON>`，**无 `event:` 头**） | `fetch()` + `ReadableStream`，按行扫 `data:` 解 JSON 后看 `envelope.type`                                                              | `apps/web/src/services/api/actions.ts: sendAction` |
+| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`）     | `fetch` 读流（`readSseStream`），按 `event:` 头分发 —— 没有处理器的事件被静默丢弃；不能设请求头的客户端才用 `EventSource` + 查询串令牌 | `apps/web/src/services/subscription.ts`            |
 
 `/api/events/stream` 在连接建立时先发一条 `system.connected`，每 30s 发 `system.heartbeat`；带 `lastEventId` 时会先回放 EventBus 缓存中 `seq > lastEventId` 的事件再切到实时。
 
@@ -635,18 +635,18 @@ error.occurred        → executionError
 
 通讯由以下几条**具体**路径承载。通讯由以下几条**具体**路径承载（见「架构总览」的三类划分）：
 
-| 方向            | 真实实现                                                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Command（上行） | REST `POST`，硬编码 `fetch('/api/...')`（`apps/web/src/services/`）                                                                              |
-| 回合内 Event    | `POST /api/actions` 的 data-only SSE，`fetch` + `ReadableStream` 解析（`apps/web/src/services/sse.ts` / `api/actions.ts`，信封 = `SseEnvelope`） |
-| 辅助 Event      | `GET /api/events/stream` 的命名 SSE，`EventSource` + `lastEventId` 重连（`apps/web/src/services/subscription.ts`，信封 = `ProtocolEvent`）       |
-| Query（只读）   | REST `GET`，标准 JSON                                                                                                                            |
+| 方向            | 真实实现                                                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Command（上行） | REST `POST`，硬编码 `fetch('/api/...')`（`apps/web/src/services/`）                                                                               |
+| 回合内 Event    | `POST /api/actions` 的 data-only SSE，`fetch` + `ReadableStream` 解析（`apps/web/src/services/sse.ts` / `api/actions.ts`，信封 = `SseEnvelope`）  |
+| 辅助 Event      | `GET /api/events/stream` 的命名 SSE，`fetch` 读流 + `lastEventId` 查询参数重连（`apps/web/src/services/subscription.ts`，信封 = `ProtocolEvent`） |
+| Query（只读）   | REST `GET`，标准 JSON                                                                                                                             |
 
 唯一真正的部署抽象在**数据层**，不在传输层：`apps/web/src/services/data-service.ts` 的 `DataService` 区分 `local`（浏览器 IndexedDB）与 `remote`（服务器 API）。但它**只覆盖数据 CRUD**——回合执行与上述两条 SSE 流即便在 `local` 模式下也仍然硬连服务器。
 
 ### WebSocket 升级路径
 
-升级到 WebSocket **不是**「替换一个 Transport 实现」那么简单：上行/下行目前直接绑定在上述 `fetch` / `EventSource` 调用点上，需要在服务器与前端两侧分别新增 WS 处理与帧编解码。本文档不再承诺一个不存在的可插拔 transport 层。
+升级到 WebSocket **不是**「替换一个 Transport 实现」那么简单：上行/下行目前直接绑定在上述 `fetch` 调用点上，需要在服务器与前端两侧分别新增 WS 处理与帧编解码。本文档不再承诺一个不存在的可插拔 transport 层。
 
 ## 七、Debug trace events
 

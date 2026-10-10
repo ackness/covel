@@ -46,11 +46,11 @@ describe("provider parameter overrides", () => {
           },
         },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
 
     expect(body.temperature).toBe(0.25);
@@ -89,11 +89,11 @@ describe("provider parameter overrides", () => {
           },
         },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
 
     expect(body.temperature).toBe(0.1);
@@ -130,11 +130,11 @@ describe("provider parameter overrides", () => {
           },
         },
       },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
 
     expect(body.temperature).toBe(0.45);
@@ -181,7 +181,7 @@ describe("provider parameter overrides", () => {
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body.thinking).toEqual({ type: "enabled" });
     expect(body.reasoning_effort).toBe("max");
@@ -219,7 +219,7 @@ describe("provider parameter overrides", () => {
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body.reasoning).toEqual({ effort: "high", summary: "auto" });
     expect(body).not.toHaveProperty("reasoning_effort");
@@ -260,7 +260,7 @@ describe("provider parameter overrides", () => {
     );
 
     const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body.output_config).toEqual({ effort: "max" });
     expect(body).not.toHaveProperty("reasoning_effort");

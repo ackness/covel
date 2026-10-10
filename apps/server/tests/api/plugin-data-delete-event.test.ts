@@ -55,7 +55,7 @@ describe("deletePluginData emits plugin-data.changed", () => {
       return changes?.[0]?.operation === "delete";
     });
     expect(deleteEvents).toHaveLength(1);
-    const payload = deleteEvents[0].payload;
+    const payload = deleteEvents[0]!.payload;
     expect(payload.pluginId).toBe(pluginId);
     const changes = payload.changes as Array<{
       key: string;
@@ -63,9 +63,9 @@ describe("deletePluginData emits plugin-data.changed", () => {
       operation: string;
     }>;
     expect(changes).toHaveLength(1);
-    expect(changes[0].key).toBe("k1");
-    expect(changes[0].namespace).toBe("entries");
-    expect(changes[0].operation).toBe("delete");
+    expect(changes[0]!.key).toBe("k1");
+    expect(changes[0]!.namespace).toBe("entries");
+    expect(changes[0]!.operation).toBe("delete");
   });
 
   it("actually deletes the row from the underlying store", async () => {

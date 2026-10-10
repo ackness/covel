@@ -96,7 +96,7 @@ describe("openai-chat adapter — auto-prefix cache strategy is a no-op", () => 
     await adapter.generateText(
       OPENAI_BASE,
       { model: "gpt-4o-mini", messages: BASE_MESSAGES },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
     const withoutFlag = readPostedBody();
     vi.unstubAllGlobals();
@@ -107,7 +107,7 @@ describe("openai-chat adapter — auto-prefix cache strategy is a no-op", () => 
     await adapter.generateText(
       { ...OPENAI_BASE, cacheStrategy: "auto-prefix" },
       { model: "gpt-4o-mini", messages: BASE_MESSAGES },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
     const withAutoPrefix = readPostedBody();
 
@@ -121,7 +121,7 @@ describe("openai-chat adapter — auto-prefix cache strategy is a no-op", () => 
     await adapter.generateText(
       { ...OPENAI_BASE, cacheStrategy: "auto-prefix" },
       { model: "gpt-4o-mini", messages: BASE_MESSAGES },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = readPostedBody();
@@ -135,7 +135,7 @@ describe("openai-chat adapter — auto-prefix cache strategy is a no-op", () => 
     await adapter.generateText(
       { ...OPENAI_BASE, cacheStrategy: "auto-prefix" },
       { model: "gpt-4o-mini", messages: BASE_MESSAGES },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = readPostedBody();
@@ -153,7 +153,7 @@ describe("openai-chat adapter — auto-prefix cache strategy is a no-op", () => 
     await adapter.generateText(
       { ...OPENAI_BASE, cacheStrategy: "none" },
       { model: "gpt-4o-mini", messages: BASE_MESSAGES },
-      { profile: {} as never, preset: undefined, mode: "text" },
+      { profile: {} as never, preset: null, mode: "text" },
     );
 
     const body = readPostedBody();

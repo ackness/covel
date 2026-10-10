@@ -9,12 +9,33 @@ const TEST_SCOPE = "test-session-incarnation";
 type TestEvaluateInput = Omit<EvaluateInput, "sessionScope"> &
   Partial<Pick<EvaluateInput, "sessionScope">>;
 
-function createRpcApprovalGate(): RpcApprovalGate {
+/** The gate with the session scope defaulted, so each case reads without it. */
+type TestGate = Omit<
+  RpcApprovalGate,
+  "evaluate" | "decide" | "listPending" | "hasGrant"
+> & {
+  evaluate(input: TestEvaluateInput): ReturnType<RpcApprovalGate["evaluate"]>;
+  decide(
+    decision: Parameters<RpcApprovalGate["decide"]>[0],
+    scope?: string,
+  ): ReturnType<RpcApprovalGate["decide"]>;
+  listPending(
+    sessionId: string,
+    scope?: string,
+  ): ReturnType<RpcApprovalGate["listPending"]>;
+  hasGrant(
+    sessionId: string,
+    pluginId: string,
+    action: string,
+    scope?: string,
+  ): boolean;
+};
+
+function createRpcApprovalGate(): TestGate {
   const gate = createStrictRpcApprovalGate();
   return {
     ...gate,
-    evaluate: (input: TestEvaluateInput) =>
-      gate.evaluate({ sessionScope: TEST_SCOPE, ...input }),
+    evaluate: (input) => gate.evaluate({ sessionScope: TEST_SCOPE, ...input }),
     decide: (decision, scope = TEST_SCOPE) => gate.decide(decision, scope),
     listPending: (sessionId, scope = TEST_SCOPE) =>
       gate.listPending(sessionId, scope),
@@ -24,7 +45,7 @@ function createRpcApprovalGate(): RpcApprovalGate {
 }
 
 function grantSession(
-  gate: RpcApprovalGate,
+  gate: TestGate,
   sessionId: string,
   pluginId: string,
   action = "a",
@@ -46,7 +67,7 @@ function grantSession(
 }
 
 function grantOnce(
-  gate: RpcApprovalGate,
+  gate: TestGate,
   sessionId: string,
   pluginId: string,
   action = "a",
@@ -68,7 +89,7 @@ function grantOnce(
 }
 
 function isAllowed(
-  gate: RpcApprovalGate,
+  gate: TestGate,
   sessionId: string,
   pluginId: string,
   action = "a",

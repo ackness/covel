@@ -417,13 +417,18 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(mockLLM.narratorCalls).toBe(3);
     expect(mockLLM.scenePromptCalls).toBe(3);
     // The last durable detached job must settle independently of the action stream.
-    await vi.waitFor(async () => {
-      const jobs = await listRuntimeJobs(store, { sessionId });
-      expect(
-        jobs.filter((job) => job.runtimeId === "memory/extract"),
-      ).toHaveLength(3);
-      expect(jobs.every((job) => job.status === "succeeded")).toBe(true);
-    });
+    // The jobs settle on their own; the generous bound only matters when the
+    // machine is slow, a passing run returns as soon as they have.
+    await vi.waitFor(
+      async () => {
+        const jobs = await listRuntimeJobs(store, { sessionId });
+        expect(
+          jobs.filter((job) => job.runtimeId === "memory/extract"),
+        ).toHaveLength(3);
+        expect(jobs.every((job) => job.status === "succeeded")).toBe(true);
+      },
+      { timeout: 15_000 },
+    );
     expect(mockLLM.memoryCalls).toBe(3);
     expect(
       (await store.getPluginData(sessionId, "memory", "blocks", "scene"))

@@ -108,11 +108,11 @@ describe("character batch idempotency", () => {
     });
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(2);
-    expect(proposals?.[1].payload).toMatchObject({
+    expect(proposals?.[1]!.payload).toMatchObject({
       id: "existing",
       fields: { hp: 9 },
     });
-    expect(proposals?.[1].payload).not.toHaveProperty("description");
+    expect(proposals?.[1]!.payload).not.toHaveProperty("description");
     expect(store.upsertCharacter).not.toHaveBeenCalled();
   });
 

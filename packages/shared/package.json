@@ -30,7 +30,7 @@
     }
   },
   "scripts": {
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run --passWithNoTests",
     "generate:schemas": "tsx scripts/generate-json-schemas.ts",
     "clean": "node ../../scripts/remove-paths.mjs dist"

@@ -108,12 +108,13 @@ export async function seedSession(
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
     },
     id: sessionId,
-    worldId: null,
     status: "active",
+    locale: "en-US",
     completedPlayerTurns: 1,
 
     activePlugins: [],
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
 }
 

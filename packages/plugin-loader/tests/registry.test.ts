@@ -33,7 +33,7 @@ function makeRuntimeManifest(
 ): RuntimeManifest {
   return {
     name,
-    pluginId: name.split("/")[0],
+    pluginId: name.split("/")[0]!,
     description: `Runtime ${name}`,
     stage:
       priority <= 99
@@ -197,6 +197,7 @@ describe("PluginRegistry", () => {
                   namespace: "facts",
                   schemaVersion: 1,
                   schema: "./facts.json",
+                  acceptsWorldData: false,
                 },
               },
             }),
@@ -569,9 +570,9 @@ describe("PluginRegistry", () => {
       const runtimes = registry.getActiveRuntimes("session-1");
 
       expect(runtimes).toHaveLength(3);
-      expect(runtimes[0].name).toBe("high-runtime");
-      expect(runtimes[1].name).toBe("mid-runtime");
-      expect(runtimes[2].name).toBe("low-runtime");
+      expect(runtimes[0]!.name).toBe("high-runtime");
+      expect(runtimes[1]!.name).toBe("mid-runtime");
+      expect(runtimes[2]!.name).toBe("low-runtime");
     });
 
     it("breaks intra-stage ties by name, not priority", () => {

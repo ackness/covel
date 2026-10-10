@@ -143,10 +143,10 @@ describe("session-kernel hook wire-in", () => {
       const results = await pipeline.commitAll(proposals);
 
       // First and third committed; second was aborted
-      expect(results[0].committed).toBe(true);
-      expect(results[1].committed).toBe(false);
-      expect(results[1].error).toContain("pre-state-commit hook aborted");
-      expect(results[2].committed).toBe(true);
+      expect(results[0]!.committed).toBe(true);
+      expect(results[1]!.committed).toBe(false);
+      expect(results[1]!.error).toContain("pre-state-commit hook aborted");
+      expect(results[2]!.committed).toBe(true);
 
       // Only the narrative messages were written
       expect(store.messages).toHaveLength(2);

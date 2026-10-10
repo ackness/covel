@@ -501,9 +501,9 @@ describe("[HIGH] state-patches returns stable IDs", () => {
     };
     expect(patches).toHaveLength(1);
     // ID should NOT be "character.hp.0" (array index pattern)
-    expect(patches[0].id).not.toMatch(/\.\d+$/);
+    expect(patches[0]!.id).not.toMatch(/\.\d+$/);
     // ID should contain a timestamp or be otherwise stable
-    expect(patches[0].createdAt).toBeDefined();
+    expect(patches[0]!.createdAt).toBeDefined();
   });
 });
 

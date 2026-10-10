@@ -45,6 +45,7 @@ async function run(
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: "session-story",
     worldId: "world-story",
     status: "active",
@@ -247,6 +248,7 @@ describe("story completion contract", () => {
       { ...manifest, trigger: { type: "auto" } },
     ] as RuntimeManifest[];
     await store.createSession({
+      locale: "en-US",
       id: "session-story",
       worldId: "world-story",
       status: "active",

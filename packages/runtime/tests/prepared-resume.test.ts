@@ -32,6 +32,7 @@ async function suspendedFixture(nested = false) {
     updatedAt: timestamp,
   });
   const child: RuntimeManifest = {
+    description: "test",
     name: "probe/child",
     pluginId: "probe",
     runtimeType: "function",
@@ -245,6 +246,7 @@ describe("prepared resume host API", () => {
 
 describe("resumed setup runtime", () => {
   const setup: RuntimeManifest = {
+    description: "test",
     name: "probe/setup",
     pluginId: "probe",
     version: "1.0.0",

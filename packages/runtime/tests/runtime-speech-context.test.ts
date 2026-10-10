@@ -34,12 +34,19 @@ function makeMediaStub() {
   };
 
   const listByMetadata = vi.fn(
-    async (_sessionId: string, filter: Record<string, unknown>) =>
-      assets.filter((asset) =>
-        Object.entries(filter).every(
-          ([key, value]) => asset.meta[key] === value,
-        ),
-      ),
+    async (sessionId: string, filter: Record<string, unknown>) =>
+      assets
+        .filter((asset) =>
+          Object.entries(filter).every(
+            ([key, value]) => asset.meta[key] === value,
+          ),
+        )
+        .map((asset) => ({
+          ...asset,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          ownerSessionId: sessionId,
+          ownerPluginId: null,
+        })),
   );
 
   return { assets, media, mediaStore: { listByMetadata } };
@@ -80,7 +87,7 @@ describe("createRuntimeSpeechContext — generate", () => {
     const [, mime, meta] = media.put.mock.calls[0]!;
     expect(mime).toBe("audio/mpeg");
     expect(meta).toMatchObject({ turnId: "t1", pluginId: "tts-plugin" });
-    expect(typeof meta.promptHash).toBe("string");
+    expect(typeof meta!.promptHash).toBe("string");
   });
 
   it("never lets plugin-supplied metadata override framework-injected keys", async () => {
@@ -97,8 +104,8 @@ describe("createRuntimeSpeechContext — generate", () => {
     });
 
     const [, , meta] = media.put.mock.calls[0]!;
-    expect(meta.pluginId).toBe("real-plugin");
-    expect(meta.promptHash).not.toBe("fake");
+    expect(meta!.pluginId).toBe("real-plugin");
+    expect(meta!.promptHash).not.toBe("fake");
   });
 
   it("returns a cached result and skips the gateway for identical params", async () => {

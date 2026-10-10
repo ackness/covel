@@ -160,18 +160,27 @@ describe("createInProcessSessionLock", () => {
 
   it("runs different-session calls concurrently", async () => {
     const lock = createInProcessSessionLock();
-    const start = Date.now();
+    // Every holder waits until all three have entered the lock. A global lock
+    // would never let the second one in, so the test would time out; no clock
+    // is read.
+    let entered = 0;
+    let allEntered!: () => void;
+    const everyoneIn = new Promise<void>((resolve) => {
+      allEntered = resolve;
+    });
+    const hold = async () => {
+      entered += 1;
+      if (entered === 3) allEntered();
+      await everyoneIn;
+    };
 
     await Promise.all([
-      lock.withLock("sess-1", () => new Promise((r) => setTimeout(r, 50))),
-      lock.withLock("sess-2", () => new Promise((r) => setTimeout(r, 50))),
-      lock.withLock("sess-3", () => new Promise((r) => setTimeout(r, 50))),
+      lock.withLock("sess-1", hold),
+      lock.withLock("sess-2", hold),
+      lock.withLock("sess-3", hold),
     ]);
 
-    // Sequential execution would take ≥150ms; concurrent ~50ms. Give a
-    // comfortable ceiling to avoid CI flake while still catching accidental
-    // serialization (e.g. a global lock).
-    expect(Date.now() - start).toBeLessThan(120);
+    expect(entered).toBe(3);
   });
 
   it("releases the slot when fn throws so successors proceed", async () => {

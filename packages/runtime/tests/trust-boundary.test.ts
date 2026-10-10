@@ -222,7 +222,7 @@ describe("PreStateCommit replacement is payload-only", () => {
     };
 
     const [result] = await commit.commitAll([original]);
-    expect(result.committed).toBe(true);
+    expect(result!.committed).toBe(true);
 
     // Payload replacement honoured…
     const rewritten = await store.getPluginData(
@@ -296,12 +296,12 @@ describe("PreSchedule is filter-only", () => {
     expect(result).toHaveLength(1);
     // Same reference as the original — not the hook's mutated copy.
     expect(result[0]).toBe(original[0]);
-    expect(result[0].pluginId).toBe("a");
+    expect(result[0]!.pluginId).toBe("a");
   });
 
   it("still honours a narrowing filter (and the empty set)", async () => {
     const narrowed = await runPreScheduleHook(
-      opts(pipelineReturning([original[1]])),
+      opts(pipelineReturning([original[1]!])),
       { triggered: original },
     );
     expect(narrowed.map((m) => m.name)).toEqual(["b/two"]);

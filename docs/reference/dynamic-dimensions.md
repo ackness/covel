@@ -45,7 +45,7 @@ pre-turn 的 function publisher 不调用模型，发布 Sₙ；本轮 `ctx.worl
 
 world-init 的 post-turn tracker 以本轮 narrative 为必要来源，WorldIR 为可选辅证。没有非空规则时零维护模型调用，也不强制抽取 WorldIR。已有但失败的共享 WorldIR 不能解释成无变化。
 
-tracker 的提示词（`<dimension-rules>`）和 `dimension-rule-get` 给出每个维度的规则、schema 和冻结值。给它看的 schema 里，文本字段的 `maxLength` 是作者所写值的 80%：模型不会数字数，按上限写经常多出几个到几十个字，整次提交被拒后还要再调一次模型；留出余量后，写得略超也仍在作者的上限以内。写入时校验的始终是作者写的上限。`update-dimensions` 每条更新的 `expectedVersion` 由工具取本次执行读到的版本，不由模型填写。
+tracker 的提示词和 `dimension-rule-get` 给出每个维度的规则、schema 和冻结值：规则和 schema 在 system prompt 的 `<dimension-rules>` 里，整局不变；冻结值在回合上下文的 `<dimension-values>` 里（见 [Prompt 结构](prompt-structure.md#记账-runtime-的布局)）。给它看的 schema 里，文本字段的 `maxLength` 是作者所写值的 80%：模型不会数字数，按上限写经常多出几个到几十个字，整次提交被拒后还要再调一次模型；留出余量后，写得略超也仍在作者的上限以内。写入时校验的始终是作者写的上限。`update-dimensions` 每条更新的 `expectedVersion` 由工具取本次执行读到的版本，不由模型填写。
 
 ## 回执、恢复与玩家编辑
 

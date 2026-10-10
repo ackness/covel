@@ -130,7 +130,7 @@ describe("POST /setup/:runtimeId/waive", () => {
     expect(json.state).toMatchObject({ state: "done", resolution: "waived" });
     const session = (await store.getSession("s"))!;
     const mirror = session.setupRuntimes!["plug/setup"];
-    expect(mirror.state).toBe("done");
+    expect(mirror!.state).toBe("done");
     expect(session.setupRuntimes["plug/setup"]).toMatchObject({
       state: "done",
       resolution: "waived",

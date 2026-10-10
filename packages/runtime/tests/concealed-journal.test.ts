@@ -6,7 +6,12 @@ import {
   journalOf,
 } from "../src/execution-journal.js";
 
-const input: TurnInput = { sessionId: "s", turnId: "t", playerMessage: "go" };
+const input: TurnInput = {
+  sessionId: "s",
+  turnId: "t",
+  playerMessage: "go",
+  origin: "player",
+};
 const SECRET = "The steward is the poisoner.";
 const manifest = (concealed: boolean): RuntimeManifest => ({
   pluginId: "plotter",

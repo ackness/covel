@@ -32,6 +32,9 @@
 | **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具                |
 | **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) |
 | initialize-world                      | local   | world-init          | auto-allow | 组合角色属性 schema 与维度声明初始化                                                               |
+| create-character-form                 | local   | char-creator        | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值                  |
+| update-affinity                       | local   | affinity            | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100]     |
+| advance-world-time                    | local   | world-time          | auto-allow | 结算本回合叙事经过的世界时间：提交时长而非日历算术，随机模式省略数量，随故事一并提交               |
 | set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的内部 schema 写入原语                                                          |
 | set-world-dimensions                  | local   | world-init          | auto-allow | 采纳维度声明，不重置会话进度                                                                       |
 | dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                                  |
@@ -676,7 +679,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 **使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
 
-该 tracker 声明 `toolChoice: required`，每次回复都必须调用工具，无变化时提交空批次；它继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册在 12000 字符预算内带上每个角色当前的 `fields`，通常一次模型调用即可同步；超出预算的角色标为 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
+该 tracker 声明 `toolChoice: required`，每次回复都必须调用工具，无变化时提交空批次；它继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册列出每个角色的 id、姓名、类型和 description（session 段，角色新增或改写时才变）；`<character-fields>` 每行一个 id，在 12000 字符预算内带上该角色当前的 `fields`（turn 段），通常一次模型调用即可同步；超出预算的角色那一行写 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
 
 ---
 

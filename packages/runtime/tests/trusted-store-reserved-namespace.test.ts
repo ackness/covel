@@ -37,6 +37,7 @@ async function runTrustedHandler(
 ): Promise<RuntimeResult> {
   const manifest = makeManifest();
   const input: TurnInput = {
+    origin: "player",
     sessionId: SESSION_ID,
     turnId: "turn-1",
     playerMessage: "hello",

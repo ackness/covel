@@ -639,7 +639,7 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns 409 when suspension is already resolved (audit finding 2: idempotency)", async () => {
+    it("returns 409 when suspension is already resolved (idempotency)", async () => {
       await createSuspension(store, { resolvedAt: new Date().toISOString() });
       const app = createTestApp(makeDefaultDeps(store));
 
@@ -1136,7 +1136,7 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(404);
     });
 
-    // Audit 2026-07-16 H-1: this DELETE must enforce the session-owner guard
+    // This DELETE must enforce the session-owner guard
     // on hosted tiers like its sibling routes, not just a sessionId consistency
     // check. Anonymous deletion of another session's suspension is a
     // cross-tenant destructive write.

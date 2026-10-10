@@ -4,6 +4,17 @@ import {
   type ImageGenerationHandlerContext,
   type ImageGenerationPluginConfig,
 } from "../src/image-generation.js";
+import type { ImageGenerationResult } from "../src/types.js";
+
+/** Narrows a result to the success branch, failing the test with the skip reason otherwise. */
+function expectSuccess(
+  result: ImageGenerationResult,
+): Extract<ImageGenerationResult, { outcome: "success" }> {
+  if (result.outcome !== "success") {
+    throw new Error(`expected a successful result, got ${result.outcome}`);
+  }
+  return result;
+}
 
 const config: ImageGenerationPluginConfig = {
   source: "test-image-flow",
@@ -53,7 +64,7 @@ describe("runImageGeneration model availability", () => {
         warnings: [],
         cached: false,
       });
-      const result = await runImageGeneration(ctx, config);
+      const result = expectSuccess(await runImageGeneration(ctx, config));
       const rows = new Map<string, unknown>();
       for (const [, key, value] of set.mock.calls) rows.set(key, value);
       for (const entry of result.effects?.pluginData ?? [])
@@ -64,7 +75,9 @@ describe("runImageGeneration model availability", () => {
           expect.objectContaining({ status: "done" }),
         ),
       );
-      expect(rows.get(result.value?.imageId as string)).toMatchObject({
+      expect(
+        rows.get((result.value as { imageId: string }).imageId),
+      ).toMatchObject({
         imageIndex: 0,
         status: "done",
       });
@@ -85,7 +98,7 @@ describe("runImageGeneration model availability", () => {
     expect(set).not.toHaveBeenCalled();
 
     available.mockReturnValue(true);
-    const result = await runImageGeneration(ctx, config);
+    const result = expectSuccess(await runImageGeneration(ctx, config));
 
     expect(result.outcome).toBe("success");
     expect(generate).toHaveBeenCalledTimes(1);
@@ -112,7 +125,7 @@ describe("runImageGeneration model availability", () => {
     available.mockReturnValue(true);
     generate.mockRejectedValue(new Error("provider failed"));
 
-    const result = await runImageGeneration(ctx, config);
+    const result = expectSuccess(await runImageGeneration(ctx, config));
 
     expect(result.outcome).toBe("success");
     expect(result.value).toMatchObject({

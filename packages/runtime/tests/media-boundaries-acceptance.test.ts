@@ -84,6 +84,7 @@ const CANONICAL_GOOD = { id: goodId, mime: "image/png", size: 100 };
 async function seedPlaying(store: ReturnType<typeof createMemoryStore>) {
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: OUR,
     worldId: "w",
     status: "active",
@@ -142,6 +143,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
     // Bad ref in the manual payload → activation fails.
     const bad = await executeTurn(
       {
+        origin: "player",
         sessionId: OUR,
         turnId: "t1",
         playerMessage: "go",
@@ -157,6 +159,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
     // Good ref with stale size + transient url → success, canonical payload.
     const good = await executeTurn(
       {
+        origin: "player",
         sessionId: OUR,
         turnId: "t2",
         playerMessage: "go",

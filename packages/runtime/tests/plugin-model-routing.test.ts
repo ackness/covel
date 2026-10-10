@@ -105,15 +105,15 @@ protocol = "anthropic-messages-v1"
     model,
     messages: [{ role: "user", content: "hello" }],
   });
-  expect(generateText.mock.calls[0][0]).toMatchObject({
+  expect(generateText.mock.calls[0]![0]).toMatchObject({
     baseUrl: "https://plugin.example/v1",
     apiKey: "request-key",
   });
-  expect(generateText.mock.calls[0][1]).toMatchObject({
+  expect(generateText.mock.calls[0]![1]).toMatchObject({
     model: "plugin-model",
     providerRequestMetadata: { parameterOverrides: { temperature: 0.25 } },
   });
-  expect(generateText.mock.calls[0][2]?.preset?.protocol).toBe(
+  expect(generateText.mock.calls[0]![2]?.preset?.protocol).toBe(
     "anthropic-messages-v1",
   );
   expect(adapter.resolveTarget?.(model)).toEqual({
@@ -132,7 +132,7 @@ protocol = "anthropic-messages-v1"
     model: resolve(manifest, "fast"),
     messages: [{ role: "user", content: "hello" }],
   });
-  expect(generateText.mock.calls[1][1]).toMatchObject({
+  expect(generateText.mock.calls[1]![1]).toMatchObject({
     model: "system-model",
   });
   // Browser bindings retain the original role's parameters and replace plugin preference.
@@ -147,7 +147,7 @@ protocol = "anthropic-messages-v1"
     model,
     messages: [{ role: "user", content: "hello" }],
   });
-  expect(generateText.mock.calls[2][1]).toMatchObject({
+  expect(generateText.mock.calls[2]![1]).toMatchObject({
     model: "system-model",
     providerRequestMetadata: { parameterOverrides: { temperature: 0.7 } },
   });
@@ -156,6 +156,6 @@ protocol = "anthropic-messages-v1"
     modelTargets,
     envApiKeys: { vendor: "server-key" },
   }).generate({ model, messages: [{ role: "user", content: "hello" }] });
-  expect(generateText.mock.calls[3][0].apiKey).toBeUndefined();
+  expect(generateText.mock.calls[3]![0].apiKey).toBeUndefined();
   expect(presetRegistry.listPresets().map((p) => p.id)).toEqual(["system"]);
 });

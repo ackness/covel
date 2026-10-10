@@ -154,6 +154,7 @@ describe("executeTurn main-loop DAG scheduler", () => {
     };
 
     const input: TurnInput = {
+      origin: "player",
       sessionId: "sess-dag",
       turnId: "turn-1",
       playerMessage: "go",

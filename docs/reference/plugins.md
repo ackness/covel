@@ -228,7 +228,7 @@ io:
     recordAs: latest-facts
 ```
 
-普通输入读同一 execution 的已完成上游结果，`select` 为结果值上的 JSON Pointer。跨 execution 读取使用 `scope: committed` 和 `recordAs`。Schema 可以是本地路径或 `contract:<contractId>`；跨提供者契约 schema 在加载时解析。提示词中的绑定位于 `runtime-inputs.<binding>.value`，不要再依赖旧注入标签。 输入绑定名称只匹配显式声明的 schema 和 slot；`constructor`、`toString` 这样的名称不读取 JavaScript 继承属性。
+普通输入读同一 execution 的已完成上游结果，`select` 为结果值上的 JSON Pointer。跨 execution 读取使用 `scope: committed` 和 `recordAs`。Schema 可以是本地路径或 `contract:<contractId>`；跨提供者契约 schema 在加载时解析。提示词中的绑定位于 `runtime-inputs.<binding>.value`，不要再依赖旧注入标签。叙事之后运行的 agent 绑定的若是本回合的故事正文，这个 `value` 是一句指向对话里那条正文消息的话，正文本身不重复（见 [Prompt 结构](prompt-structure.md#本回合正文)）。 输入绑定名称只匹配显式声明的 schema 和 slot；`constructor`、`toString` 这样的名称不读取 JavaScript 继承属性。
 
 CLI 和安装器的静态校验同样检查 `scope: turn` 与 `scope: committed` 的输入：本地 `accepts` 文件必须存在且为有效 JSON，直接引用的 producer runtime 必须存在于同一插件包。`scope: committed` 不允许声明 `select`（包括空字符串），错误定位到 `io.inputs.<binding>.select`；普通 turn 输入仍支持 JSON Pointer。可选外部契约不因此要求 provider 已安装。
 
@@ -353,7 +353,7 @@ namespace 声明 `search` 后，它的记录进入框架的记忆检索（[`memo
 
 目录级 `pnpm validate:plugin <dir>` 与 ZIP 安装共用静态文件和 runtime 检查：引用的 entry、handler、guard、JSON Schema 和 UI 文件必须存在于包内；自动/定时 runtime 必须有 stage；builtin 工具名和插件工具声明、包内 runtime 引用以及根契约依赖必须一致。这些检查不执行插件代码，不能替代启动时的注册一致性检查。
 
-`agent.history.includeSummaries: true` 可让有限 `maxTurns` 窗口继续读取持久摘要；默认仍不带摘要。带窗口的 runtime 不触发共享历史压缩。内置 guide 使用最近两个回合和摘要。
+`agent.history.includeSummaries: true` 可让有限 `maxTurns` 窗口继续读取持久摘要；默认仍不带摘要。带窗口的 runtime 不触发共享历史压缩。内置 guide 使用最近两个回合和摘要；其余内置记账 agent 的窗口是 0 或 1 个回合，取法见 [Prompt 结构](prompt-structure.md#记账-runtime-的布局)。
 
 canonical `PLUGIN.md` / `RUNTIME.md` 的正文和 `contributes.prompt` 固定段必须是 English。只有简体中文有变体：根文件用 `PLUGIN.zh.md`，子 runtime 用 `RUNTIME.zh.md`，其中只写正文和固定段的 `content`，frontmatter 可以为空。结构字段由 canonical 文件决定，变体不能改变契约、工具、stage、超时、提示词段 ID 或位置。简体中文会话读取中文变体，其余语言（包括繁体中文）读取 canonical；其他语言的变体文件不被读取。`COVEL_INSTRUCTION_LOCALE=en|zh` 可以为所有会话固定指令语言。玩家可见的标签（`displayName`、`description`、`label`、`title`、`summary`、`about`）在主清单里写 English，译文放在插件根目录的 `locales/<locale>.yaml`，按清单文件分节、只写译文，可以是任意语言；加载器把它们编译成 locale map。标签文件只能翻译这些字段，写到契约字段或提示词内容上的条目会被忽略，`pnpm validate:plugin` 报为错误；主清单里的内联 locale map 同样报错。同一个文件的 `messages` 一节翻译 UI spec 和代码里的文字（English 原文 → 译文）：界面文字的规则见 [UI 面板](./ui-panels.md#插件-ui-文本规范)，代码用 `translate(ctx, …)` / `labelText(ctx, …)` 读取。格式见 [i18n](./i18n.md#2-本地化插件)。
 

@@ -7,18 +7,16 @@ import { getPendingProposals, shortIdBatch, tool, z } from "@covel/tools";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type {
-  LLMAdapter,
-  LLMRequest,
-  LLMResponse,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import createUpsertNpcGraph from "../../../plugins/npc-graph/tools/upsert-npc-graph.js";
 import ragRetrieverHandler from "../../../plugins/npc-graph/runtimes/rag-retriever/handler.js";
 
 class CapturingLLM implements LLMAdapter {
   readonly systemPrompts: string[] = [];
 
-  async generate(req: LLMRequest): Promise<LLMResponse> {
+  async generate(
+    req: Parameters<LLMAdapter["generate"]>[0],
+  ): Promise<LLMResponse> {
     // The system prompt and the turn context that follows the conversation.
     this.systemPrompts.push(
       req.messages
@@ -77,11 +75,15 @@ async function createMainLoopStore(sessionId: string): Promise<DataStore> {
   return store;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value as Record<string, unknown>;
+}
+
 async function seedNpcGraph(
   store: DataStore,
   sessionId: string,
 ): Promise<void> {
-  const upsert = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
+  const upsert = createUpsertNpcGraph({ tool, z, shortIdBatch });
   const result = await upsert.execute(
     {
       nodes: [
@@ -132,7 +134,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
     async (committedSeed) => {
       const sessionId = "sess-buffered-graph";
       const store = await createMainLoopStore(sessionId);
-      const upsert = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
+      const upsert = createUpsertNpcGraph({ tool, z, shortIdBatch });
       const pending: Proposal[] = [];
       const context = {
         sessionId,
@@ -200,7 +202,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
       const results = await createCommitPipeline(store).commitAll(pending);
       expect(results.every((result) => result.committed)).toBe(true);
       const nodes = await store.listPluginData(sessionId, "npc-graph", "nodes");
-      const alice = nodes.find((row) => row.value.name === "Alice")!;
+      const alice = nodes.find((row) => asRecord(row.value).name === "Alice")!;
       expect(nodes).toHaveLength(3);
       expect(alice.value).toMatchObject({
         summary: "Updated subject.",
@@ -209,8 +211,12 @@ describe("npc-graph core plugin write-read-inject path", () => {
       });
       const edges = await store.listPluginData(sessionId, "npc-graph", "edges");
       expect(edges).toHaveLength(3);
-      expect(edges.filter((row) => row.value.invalidAt === 0)).toHaveLength(1);
-      const current = edges.filter((row) => row.value.invalidAt === undefined);
+      expect(
+        edges.filter((row) => asRecord(row.value).invalidAt === 0),
+      ).toHaveLength(1);
+      const current = edges.filter(
+        (row) => asRecord(row.value).invalidAt === undefined,
+      );
       expect(current).toHaveLength(2);
       const index = await store.getPluginData(
         sessionId,
@@ -230,14 +236,24 @@ describe("npc-graph core plugin write-read-inject path", () => {
           get: async (namespace: string, key: string) =>
             (await store.getPluginData(sessionId, "npc-graph", namespace, key))
               ?.value,
+          // The retriever only reads; a write would be a bug in it.
+          set: async () => {
+            throw new Error("rag-retriever must not write plugin data");
+          },
+          delete: async () => {
+            throw new Error("rag-retriever must not delete plugin data");
+          },
         },
       });
-      expect(recalled.value.edgeCount).toBe(2);
-      expect(recalled.value.npcContext).toContain("Alice also trusts Carol.");
-      expect(recalled.value.npcContext).toContain(
+      const recalledValue = (
+        recalled as { value: { edgeCount: number; npcContext: string } }
+      ).value;
+      expect(recalledValue.edgeCount).toBe(2);
+      expect(recalledValue.npcContext).toContain("Alice also trusts Carol.");
+      expect(recalledValue.npcContext).toContain(
         "Alice now trusts Bob with her plans.",
       );
-      expect(recalled.value.npcContext).not.toContain(
+      expect(recalledValue.npcContext).not.toContain(
         "Alice initially trusts Bob.",
       );
     },

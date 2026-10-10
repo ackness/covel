@@ -35,6 +35,7 @@ import {
   waiveSetup,
   type ExecutionContext,
   type HandlerResult,
+  type JsonValue,
   type RanSetupRuntime,
   type RuntimeActivation,
   type RuntimeManifest,
@@ -85,6 +86,7 @@ async function scheduledRuntimeTriggers(
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: "s",
     worldId: "w",
     status: "active",
@@ -140,16 +142,17 @@ const PLAYER_CTX = (
   logicalTurnId,
 });
 
-function makeRuntime(name: string) {
+function makeRuntime(name: string): RuntimeManifest {
   return {
     name,
     pluginId: name,
+    description: name,
+    stage: "post-turn",
     outputKind: "plugin",
-    outputContract: undefined,
   };
 }
 
-function statePatchResult(field: string, value: unknown) {
+function statePatchResult(field: string, value: JsonValue) {
   return {
     pluginId: "rt-a",
     runtimeId: "rt-a",
@@ -170,6 +173,7 @@ async function seedPlaying(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: "s",
     worldId: "w",
     status: "active",
@@ -192,6 +196,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
     // (schema-gen, priority 40) and a main-loop runtime (player-init, 500)
     // gated on it by the implicit per-plugin session gate.
     await store.createSession({
+      locale: "en-US",
       id: sessionId,
       worldId: "w",
       status: "active",
@@ -235,11 +240,17 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async (ctx: { store: DataStore }) => {
+        handler: async (ctx) => {
           if (m.name === "p/schema-gen") {
             // Buffered domain write → flushed onto the result as a plugin.data
             // proposal (NOT a direct store write), committed by finalize below.
-            await ctx.store.setPluginData({
+            // The kernel hands a function runtime a buffering store; its write
+            // surface is wider than the read-only `FunctionStoreView` type.
+            const buffered = ctx.store as unknown as Pick<
+              DataStore,
+              "setPluginData"
+            >;
+            await buffered.setPluginData({
               id: `${sessionId}:p:world:schema`,
               sessionId,
               pluginId: "p",
@@ -320,7 +331,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
     // ── Execution 2 (playing band): player-init passes the frozen-snapshot gate
     //    (schema-gen's mirror is done) and reads the COMMITTED schema.
     const mainTurn = await executeTurn(
-      { sessionId, turnId: "t2", playerMessage: "again" },
+      { origin: "player", sessionId, turnId: "t2", playerMessage: "again" },
       [schemaGen, playerInit],
       deps,
     );
@@ -342,6 +353,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
     // A playing session that just enabled plug-a (setup never ran → pending)
     // alongside plug-b (no setup runtime).
     await store.createSession({
+      locale: "en-US",
       id: "s2",
       worldId: "w",
       status: "active",
@@ -400,7 +412,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
     };
 
     const result = await executeTurn(
-      { sessionId: "s2", turnId: "t", playerMessage: "go" },
+      { origin: "player", sessionId: "s2", turnId: "t", playerMessage: "go" },
       [aSetup, aMain, bMain],
       deps,
     );
@@ -462,6 +474,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       };
       const result = await executeTurn(
         {
+          origin: "player",
           sessionId: "s",
           turnId: "t",
           playerMessage: "go",
@@ -495,6 +508,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       };
       const result = await executeTurn(
         {
+          origin: "player",
           sessionId: "s",
           turnId: "t",
           playerMessage: "go",
@@ -513,6 +527,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       const store = createMemoryStore();
       const now = new Date().toISOString();
       await store.createSession({
+        locale: "en-US",
         id: "s",
         worldId: "w",
         status: "active",
@@ -548,13 +563,14 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         loadRuntime: async (m): Promise<LoadedRuntime> => ({
           manifest: m,
           promptTemplate: "",
-          handler: async () => ({}),
+          handler: async () => ({ outcome: "success", value: {} }),
         }),
         llm: new NoopLLM(),
         store,
       };
       const result = await executeTurn(
         {
+          origin: "player",
           sessionId: "s",
           turnId: "t",
           playerMessage: "go",
@@ -702,7 +718,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       loadRuntime: async (m): Promise<LoadedRuntime> => ({
         manifest: m,
         promptTemplate: "",
-        handler: async (ctx) => {
+        handler: async (ctx): Promise<HandlerResult> => {
           if (m.name === "c/main") {
             captured = ctx.inputs?.data;
             return { outcome: "success", value: {} };
@@ -717,7 +733,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       store,
     };
     const result = await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "go" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       activeRuntimes,
       deps,
     );
@@ -776,6 +792,7 @@ describe("commit transaction & rollback", () => {
     const setupRuntimeId = "plug/setup";
     const now = new Date().toISOString();
     await store.createSession({
+      locale: "en-US",
       id: sessionId,
       worldId: "w",
       status: "active",
@@ -911,6 +928,7 @@ describe("current snapshot clock", () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      locale: "en-US",
       id: "s",
       worldId: "w",
       status: "active",
@@ -973,6 +991,7 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
     const now = new Date().toISOString();
     const runtimeId = "plug/setup";
     await store.createSession({
+      locale: "en-US",
       id: "s8",
       worldId: "w",
       status: "active",
@@ -1029,12 +1048,12 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
     // Attempt 2 fails → budget exhausted → blocked with reason/attempts/blockedAt.
     await settle([failedAttempt("e2", 1)]);
     mirror = (await store.getSession("s8"))!.setupRuntimes![runtimeId];
-    expect(mirror.state).toBe("blocked");
-    if (mirror.state === "blocked") {
-      expect(mirror.attempts).toBe(2);
-      expect(mirror.generation).toBe(1);
-      expect(mirror.reason).toContain("budget");
-      expect(mirror.blockedAt).toBeTruthy();
+    expect(mirror!.state).toBe("blocked");
+    if (mirror!.state === "blocked") {
+      expect(mirror!.attempts).toBe(2);
+      expect(mirror!.generation).toBe(1);
+      expect(mirror!.reason).toContain("budget");
+      expect(mirror!.blockedAt).toBeTruthy();
     }
     // A blocked setup keeps the session in the setup band (phase never flips).
     expect((await store.getSession("s8"))!.phase).toBe("setup");
@@ -1131,7 +1150,12 @@ describe("function handler result contract", () => {
       store,
     } as unknown as TurnExecutorDeps;
     const result = await executeTurn(
-      { sessionId, turnId: `${sessionId}-t`, playerMessage: "go" },
+      {
+        origin: "player",
+        sessionId,
+        turnId: `${sessionId}-t`,
+        playerMessage: "go",
+      },
       [manifest],
       deps,
     );
@@ -1393,8 +1417,8 @@ describe("accepts validation (static decidable subset + runtime check)", () => {
       loadProducerSchema: async () => ({ type: "string" }),
     });
     expect(allRes.ok).toBe(true);
-    if (allRes.ok && allRes.slots.data.cardinality === "all") {
-      expect(allRes.slots.data.items.map((i) => i.value)).toEqual(["A", "B"]);
+    if (allRes.ok && allRes.slots.data!.cardinality === "all") {
+      expect(allRes.slots.data!.items.map((i) => i.value)).toEqual(["A", "B"]);
     }
   });
 });
@@ -1440,6 +1464,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
     };
     const result = await executeTurn(
       {
+        origin: "player",
         sessionId: "s",
         turnId: "t",
         playerMessage: "go",
@@ -1471,7 +1496,12 @@ describe("activation payload (canonical payload shared by function/agent)", () =
     const assembled = await buildContext({
       promptTemplate: "You roll dice.",
       manifest: rollerAgent,
-      turnInput: { sessionId: "s", turnId: "t", playerMessage: "go" },
+      turnInput: {
+        origin: "player",
+        sessionId: "s",
+        turnId: "t",
+        playerMessage: "go",
+      },
       completedResults: new Map(),
       activation: fnActivation!,
     });
@@ -1496,7 +1526,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
     expect(
       deriveActivation(
         rollerFn,
-        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
         { topic: "roll", data: P },
       ).payload,
     ).toEqual(P);
@@ -1703,7 +1733,7 @@ describe("recordAs export (persistent export revision)", () => {
       // The producer stays in the active set so the provider gate passes, but it
       // is NOT triggered to run — the value comes purely from the frozen export.
       const result = await executeTurn(
-        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
         [producer("cfg"), consumer()],
         deps,
       );
@@ -1738,7 +1768,7 @@ describe("recordAs export (persistent export revision)", () => {
       // p/gen is NOT in the active set — the export exists in the store but its
       // producer is deactivated, so a required consumer skips.
       const result = await executeTurn(
-        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
         [consumer()],
         deps,
       );
@@ -1775,7 +1805,7 @@ describe("recordAs export (persistent export revision)", () => {
         store,
       };
       const result = await executeTurn(
-        { sessionId: "s", turnId: "t", playerMessage: "go" },
+        { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
         [producer("cfg"), consumer({ accepts: true })],
         deps,
       );

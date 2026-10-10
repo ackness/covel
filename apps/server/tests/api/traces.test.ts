@@ -181,7 +181,7 @@ describe("traceRoutes", () => {
       flowId: "flow-1",
       seq: 1,
     });
-    expect(body.events[0].payload.asset).toMatchObject({ ref });
+    expect(body.events[0]!.payload.asset).toMatchObject({ ref });
   });
 
   it("adds stable diagnostics for prompts and failures", async () => {
@@ -259,7 +259,7 @@ describe("traceRoutes", () => {
         }>;
       }>;
     };
-    const [, calling, failed] = body.turns[0].events;
+    const [, calling, failed] = body.turns[0]!.events;
     expect(calling).toMatchObject({
       id: "prompt-event",
       eventOrder: 1,
@@ -283,7 +283,7 @@ describe("traceRoutes", () => {
         },
       },
     });
-    expect(calling.payload.messages).toHaveLength(2);
+    expect(calling!.payload.messages).toHaveLength(2);
     expect(failed).toMatchObject({
       id: "failure-event",
       eventOrder: 2,
@@ -428,7 +428,7 @@ describe("traceRoutes", () => {
     const pageBody = (await pageRes.json()) as {
       turns: Array<{ events: Array<{ eventOrder: number }> }>;
     };
-    expect(pageBody.turns[0].events.map((event) => event.eventOrder)).toEqual([
+    expect(pageBody.turns[0]!.events.map((event) => event.eventOrder)).toEqual([
       0, 1,
     ]);
   });

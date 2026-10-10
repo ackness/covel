@@ -131,7 +131,14 @@ async function harness(options: {
       });
       const body = await response.text();
       expect(response.status, body).toBe(200);
-      return (await store.listTurnResults(sessionId)).at(-1)!;
+      const turn = (await store.listTurnResults(sessionId)).at(-1)!;
+      return {
+        ...turn,
+        runtimeResults: turn.runtimeResults as readonly {
+          readonly runtimeId: string;
+          readonly status: string;
+        }[],
+      };
     },
     session: async () => (await store.getSession(sessionId))!,
     player: async () =>

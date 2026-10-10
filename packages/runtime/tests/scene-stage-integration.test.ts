@@ -159,6 +159,7 @@ describe("scene-stage: scene.set → resolver → stage/current (E → B integra
         }),
       };
       const turnInput: TurnInput = {
+        origin: "player",
         sessionId: SESSION_ID,
         turnId,
         playerMessage: "look around",

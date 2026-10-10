@@ -125,6 +125,11 @@ describe("expectAssetGenerated", () => {
     const asset = expectAssetGenerated({
       turnId: "turn-1",
       sessionId: "sess-test",
+      executionContext: {
+        executionId: "exec-1",
+        origin: "player",
+        countPolicy: "none",
+      },
       runtimeResults: [
         makeRuntimeResult({
           effects: {
@@ -200,7 +205,7 @@ describe("MockLLM", () => {
     await llm.generate({ messages: [{ role: "user", content: "first" }] });
     await llm.generate({ messages: [{ role: "user", content: "second" }] });
     expect(llm.calls).toHaveLength(2);
-    expect(llm.calls[0].messages[0].content).toBe("first");
+    expect(llm.calls[0]?.messages[0]?.content).toBe("first");
   });
 
   it("should accept custom default response", async () => {

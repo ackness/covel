@@ -35,6 +35,7 @@ function makeAgentManifest(
 
 function makeTurnInput(): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-guard",
     turnId: "turn-guard",
     playerMessage: "hi",

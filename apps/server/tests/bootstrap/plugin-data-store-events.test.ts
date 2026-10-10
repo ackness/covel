@@ -301,13 +301,13 @@ describe("wrapStoreWithPluginDataEvents · real SQLite commit pipeline", () => {
     };
 
     const [result] = await pipeline.commitAll([proposal]);
-    expect(result.committed).toBe(true);
+    expect(result!.committed).toBe(true);
 
     const emitted = pluginDataChangedEmits(emit) as Array<{
       payload?: { pluginId?: string };
     }>;
     expect(emitted).toHaveLength(1);
-    expect(emitted[0].payload?.pluginId).toBe("scene-prompts");
+    expect(emitted[0]!.payload?.pluginId).toBe("scene-prompts");
 
     // Data really landed (rules out a phantom event on an empty write).
     const rows = await base.listPluginData(
