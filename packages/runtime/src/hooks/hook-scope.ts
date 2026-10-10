@@ -40,6 +40,12 @@ export interface HookScope {
   readonly settings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  /**
+   * The session's content locale, fixed when the session was created. Every
+   * production entry point sets it; the pipeline hands it to each handler as
+   * `HookContext.locale`.
+   */
+  readonly locale?: string;
 }
 
 const storage = new AsyncLocalStorage<HookScope>();
@@ -58,6 +64,11 @@ export function runWithHookScope<T>(scope: HookScope, fn: () => T): T {
 /** Active plugin ids for the current async context, or undefined if unscoped. */
 export function currentActivePluginIds(): ReadonlySet<string> | undefined {
   return storage.getStore()?.activePluginIds;
+}
+
+/** The session's content locale for the current async context, if scoped. */
+export function currentHookLocale(): string | undefined {
+  return storage.getStore()?.locale;
 }
 
 /** Whether a hook scope is active in the current async context. */

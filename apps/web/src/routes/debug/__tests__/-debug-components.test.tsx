@@ -166,6 +166,7 @@ describe("debug route components", () => {
           optional: [],
           conflicts: [],
           extensions: [],
+          eventTopics: [],
           tags: [],
           tools: [{ id: "append-story", kind: "builtin" }],
           userSettings: [],

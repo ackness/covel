@@ -42,6 +42,7 @@ const fixturePlugin: PluginSummary = {
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   id: "fixture",
   displayName: "Fixture",
   description: "Fixture plugin",

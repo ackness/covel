@@ -13,6 +13,7 @@ import {
   type PluginExtensionDefinition,
   type PluginMessageCatalog,
   isHiddenPluginDataNamespace,
+  pluginDataEntry,
   pluginMessagesFor,
 } from "@covel/shared";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
@@ -248,13 +249,14 @@ export class PluginExtensionHost {
             signal.throwIfAborted();
             const rows = await namespaceRows(pluginId, namespace);
             signal.throwIfAborted();
-            return structuredClone(rows.find((row) => row.key === key));
+            const row = rows.find((candidate) => candidate.key === key);
+            return row ? structuredClone(row.value) : null;
           },
           list: async (namespace) => {
             signal.throwIfAborted();
             const rows = await namespaceRows(pluginId, namespace);
             signal.throwIfAborted();
-            return structuredClone(rows);
+            return structuredClone(rows.map(pluginDataEntry));
           },
         },
       }),

@@ -1,3 +1,5 @@
+import { instructionLocaleFor } from "./instruction-locale.js";
+
 interface ReviewMessage {
   readonly role: "system" | "user" | "assistant" | "tool";
   readonly content:
@@ -24,9 +26,11 @@ type SettingsContext = {
   getOwnSettings?: () => Readonly<Record<string, unknown>>;
   sessionId?: string;
   turnId?: string;
+  locale?: string;
+  pluginId?: string;
   runtimeId?: string;
 };
-type Request = { pluginId: string; messages: readonly ReviewMessage[] };
+type Request = { messages: readonly ReviewMessage[] };
 type Response<T extends ReviewResponse> = Request & {
   response: T;
   correction?: string;
@@ -97,17 +101,11 @@ export function outsideDialogue(text: string): string {
 const personNames = { first: "一", second: "二", third: "三" } as const;
 
 /**
- * Whether the request reads the Chinese prompt body. Every text this review
+ * Whether the session reads the Chinese prompt body. Every text this review
  * adds to the request is in the language of that body.
  */
-function readsChinese(messages: readonly ReviewMessage[]): boolean {
-  return messages.some(
-    (m) =>
-      m.role === "system" &&
-      typeof m.content === "string" &&
-      /输出要求|叙事规则/.test(m.content),
-  );
-}
+const readsChinese = (ctx: SettingsContext): boolean =>
+  instructionLocaleFor(ctx.locale) === "zh";
 
 export function perspectiveError(
   text: string,
@@ -142,11 +140,10 @@ export function createNarrativeReview(pluginId: string) {
     context(
       ctx: SettingsContext,
       payload: {
-        pluginId: string;
         characters?: readonly { name: string; type: string }[];
       },
     ) {
-      if (payload.pluginId === pluginId) {
+      if (ctx.pluginId === pluginId) {
         const player = payload.characters?.find(
           (character) => character.type === "player",
         );
@@ -161,8 +158,8 @@ export function createNarrativeReview(pluginId: string) {
       return { action: "continue" as const };
     },
     prepare(ctx: SettingsContext, payload: Request) {
-      if (payload.pluginId !== pluginId) return { action: "continue" as const };
-      const zh = readsChinese(payload.messages);
+      if (ctx.pluginId !== pluginId) return { action: "continue" as const };
+      const zh = readsChinese(ctx);
       const player = players.get(keyFor(ctx));
       const playerLine = !player
         ? ""
@@ -192,7 +189,7 @@ export function createNarrativeReview(pluginId: string) {
       ctx: SettingsContext,
       payload: Response<T>,
     ) {
-      if (payload.pluginId !== pluginId) return { action: "continue" as const };
+      if (ctx.pluginId !== pluginId) return { action: "continue" as const };
       const response = payload.response;
       // Preparatory prose is not a story and must not seed the final response.
       if (response.toolCalls.some((call) => call.name !== "runtime-done")) {
@@ -202,7 +199,7 @@ export function createNarrativeReview(pluginId: string) {
         };
       }
       const text = response.content ?? "";
-      const zh = readsChinese(payload.messages);
+      const zh = readsChinese(ctx);
       // A reply with no story is nearly always a bare `runtime-done`, so the
       // correction names that tool. "Do not finish with only a tool call" got
       // a story in 8 of 72 replays (gpt-6-luna, both languages); this wording

@@ -145,6 +145,8 @@ export interface FinalizeExecutionArgs {
   readonly activePluginIds?: ReadonlySet<string>;
   /** Frozen operation-start settings shared with execution; otherwise manifest defaults apply. */
   readonly hookSettings?: HookScope["settings"];
+  /** The session's content locale, handed to the commit hooks. */
+  readonly hookLocale?: string;
   /**
    * Caller-specific writes folded into the same transaction, run after every
    * result commits and before `commit_status` settles. Resume uses it for the
@@ -533,6 +535,7 @@ export async function finalizeExecution(
   const scope: HookScope = {
     activePluginIds,
     settings: args.hookSettings ?? buildHookSettings(runtimes, undefined),
+    locale: args.hookLocale,
   };
   return runWithHookScope(scope, async () => {
     // Externally-visible fan-out is buffered while the transaction is open and

@@ -47,6 +47,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "turnIds"
   | "activePluginIds"
   | "hookSettings"
+  | "hookLocale"
   | "sessionClock"
   | "setupRan"
   | "abortReason"
@@ -152,6 +153,7 @@ export async function executeTurn(
     settings: deps.hookScope
       ? snapshotUserSettings(deps.hookScope.settings)
       : buildHookSettings(runtimes, userSettings),
+    locale: deps.hookScope?.locale ?? input.locale,
   };
   const turn = await runTurn(
     { ...input, userSettings },
@@ -251,6 +253,7 @@ export async function executeTurn(
         outputSchemas: captured.outputSchemas,
       }),
       hookSettings: hookScope.settings,
+      hookLocale: hookScope.locale,
     },
   };
 }
@@ -272,6 +275,7 @@ export async function resumeSuspendedRuntime(
     settings: deps.hookScope
       ? snapshotUserSettings(deps.hookScope.settings)
       : buildHookSettings([manifest], userSettings),
+    locale: deps.hookScope?.locale ?? suspension.pendingContinuation.locale,
   };
   const result = await runWithHookScope(hookScope, () =>
     resumeRuntime(
@@ -354,6 +358,7 @@ export async function resumeSuspendedRuntime(
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
       hookSettings: hookScope.settings,
+      hookLocale: hookScope.locale,
     },
   };
 }

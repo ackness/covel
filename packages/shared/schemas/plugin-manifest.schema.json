@@ -1340,7 +1340,7 @@
             },
             "concealed": {
               "type": "boolean",
-              "description": "`true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results."
+              "description": "`true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results, and text it returns is not written to the conversation. Not allowed with `visibility: story`."
             }
           },
           "additionalProperties": false,

@@ -492,7 +492,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 ### emit-event
 
-声明在 `packages/tools/src/builtin/emit-event.ts`。发射一个由某个激活插件在 `events`（见 [plugins.md § Runtime 分组字段](plugins.md#runtime-分组字段)）声明的领域事件。校验和 topic 列举委托给注入的 `EventDirectoryLike`（server 侧实现见 `apps/server/src/routes/api/bootstrap/event-directory.ts`），聚合当前 session 激活插件集的声明。
+声明在 `packages/tools/src/builtin/emit-event.ts`。发射一个由某个激活插件在 `events`（见 [plugins.md § Runtime 分组字段](plugins.md#runtime-分组字段)）声明的领域事件。校验和 topic 列举委托给注入的 `EventDirectoryLike`（server 侧实现见 `apps/server/src/routes/api/bootstrap/event-directory.ts`），聚合当前 session 激活插件集的声明。一个 topic 在一个会话里只有一个声明插件（见 [plugins.md § 会话插件选择](plugins.md#会话插件选择)），所以 payload 总是按这唯一一份 schema 校验。
 
 | 参数  | 类型                    | 必需 | 描述                                                    |
 | ----- | ----------------------- | ---- | ------------------------------------------------------- |

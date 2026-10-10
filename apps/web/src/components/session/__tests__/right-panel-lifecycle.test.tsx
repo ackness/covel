@@ -88,6 +88,7 @@ const plugin = (id: string): SessionPlugin => ({
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   id,
   displayName: id,
   description: id,

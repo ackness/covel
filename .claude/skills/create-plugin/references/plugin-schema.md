@@ -36,7 +36,9 @@ contributes:
 ---
 ```
 
-Declare only registrations actually made by the entry. `contributes.actions` lists RPC IDs; `contributes.commands` lists slash-command descriptors. A command is not an RPC registration. Services, extension point/id pairs, tools, hooks, wires, and form validators must each match their contribution declaration. Settings live in `contributes.settings`; event schemas live in `contributes.events`.
+Declare only registrations actually made by the entry. `contributes.actions` lists RPC IDs; `contributes.commands` lists slash-command descriptors. A command is not an RPC registration. Services, extension point/id pairs, tools, hooks, wires, and form validators must each match their contribution declaration. Settings live in `contributes.settings`; event schemas live in `contributes.events`. A session admits one declarer of an event topic, so prefix a topic with a word of the plugin's own.
+
+A hook handler is `async (ctx, payload) => ({action: "continue"})`. `ctx.locale` is the session's content locale and `ctx.pluginId` / `ctx.runtimeId` name the runtime the event is about; payloads do not repeat them. Events, payloads and results: `docs/reference/hooks.md`.
 
 Every package has one root manifest. For a single runtime, add `runtime: { ... }` there and use the root Markdown body as its agent prompt. For multiple runtimes, omit root `runtime` and create `runtimes/<local-id>/RUNTIME.md`. The executable ID is `<plugin-id>/<local-id>`. Child manifests contain runtime fields only. Paths for package contributions are package-root relative; handler and runtime schema paths are runtime-directory relative.
 
@@ -69,6 +71,6 @@ function:
 
 `io.selfData` contains own-plugin namespace injections, without a `kind` field. `io.payloadSchema` validates invocation payloads. `io.output` supports `contract`, `schema`, and `recordAs`. `io.visibility` is `story`, `plugin`, or `system`.
 
-Agents group settings in `agent`: `model`, `llm`, `tools`, `advertiseEvents`, and `loop`. `agent.loop` holds timeout/step/retry limits and `completion: {require: tool-use|explicit, afterTools: [...]}`. Functions group `handler` and `timeoutMs` in `function`. HTTP allowlists and effect declarations remain runtime-level `permissions` and `effects`. Guard modules use runtime-level `guard`.
+Agents group settings in `agent`: `model`, `llm`, `tools`, `advertiseEvents`, and `loop`. `agent.loop` holds timeout/step/retry limits and `completion: {require: tool-use|explicit, afterTools: [...]}`. An agent writes only through the tools in `agent.tools`: `pluginData`, `statePatches`, notifications or topic events written in its final JSON do nothing. `io.concealed: true` keeps a runtime's prompts, replies and returned text out of traces, the stream and the conversation, and cannot be combined with `visibility: story`. Functions group `handler` and `timeoutMs` in `function`. HTTP allowlists and effect declarations remain runtime-level `permissions` and `effects`. Guard modules use runtime-level `guard`.
 
 Memory policy is plugin behavior: use `memory.block-definitions@1` services and `memory.blocks@1` world data. Compression strategy uses `history.compact@2`; see `docs/reference/extension-points.md` for bounded summary segments and replacement IDs. Do not declare removed root memory policy fields.

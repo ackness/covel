@@ -12,7 +12,7 @@ export default function register(covel) {
   // The committed clock, as one line of the session summary.
   covel.provideExtension("ui.slot@1", "summary", {
     async handler({ previous }, ctx) {
-      const state = (await ctx.pluginData.get("clock", "current"))?.value;
+      const state = await ctx.pluginData.get("clock", "current");
       const definition =
         state?.schemaVersion === 1
           ? worldTimeSchema.safeParse(state.definition)

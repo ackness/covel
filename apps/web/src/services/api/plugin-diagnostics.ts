@@ -38,6 +38,7 @@ const snapshotSchema = z.object({
             "ambiguous-provider",
             "conflict",
             "single-provider-conflict",
+            "event-topic-conflict",
             "default-replaced",
           ]),
           reason: z.string(),

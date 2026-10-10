@@ -187,10 +187,7 @@ describe("the stage.music@1 projection", () => {
       { previous, events },
       {
         pluginData: {
-          get: async (namespace, key) =>
-            data[`${namespace}/${key}`]
-              ? { value: data[`${namespace}/${key}`] }
-              : null,
+          get: async (namespace, key) => data[`${namespace}/${key}`] ?? null,
         },
       },
     );
@@ -252,10 +249,7 @@ describe("the stage.music@1 projection", () => {
         {
           locale,
           pluginData: {
-            get: async (namespace, key) =>
-              data[`${namespace}/${key}`]
-                ? { value: data[`${namespace}/${key}`] }
-                : null,
+            get: async (namespace, key) => data[`${namespace}/${key}`] ?? null,
           },
         },
       );

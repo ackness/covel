@@ -25,6 +25,7 @@ const plugin = {
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   tags: [],
   runtimes: [
     {

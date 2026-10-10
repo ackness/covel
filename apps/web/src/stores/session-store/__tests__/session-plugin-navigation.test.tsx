@@ -47,6 +47,7 @@ const plugin: SessionPlugin = {
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   id: "shared-plugin",
   displayName: "Shared plugin",
   description: "",

@@ -16,6 +16,7 @@ const brokenPlugin: PluginSummary = {
   optional: [],
   conflicts: [],
   extensions: [],
+  eventTopics: [],
   id: "broken-plugin",
   displayName: "Broken plugin",
   description: "",

@@ -44,27 +44,24 @@ describe("narrative perspective review", () => {
   });
   it("leaves other runtimes and dialogue pronouns alone", () => {
     const review = createNarrativeReview("community-story");
-    const ctx = { getOwnSettings: () => ({ narrativePerson: "first" }) };
+    const ctx = {
+      pluginId: "community-story",
+      getOwnSettings: () => ({ narrativePerson: "first" }),
+    };
     const response: LLMResponse = {
       content: "她问：“你要走吗？”我望着海。",
       toolCalls: [],
       finishReason: "stop",
       usage: { inputTokens: 1, outputTokens: 1 },
     };
+    // The runtime's plugin is read from the context, as for every hook event.
     expect(
-      review.prepare(ctx, { pluginId: "another-plugin", messages: [] }),
+      review.prepare({ ...ctx, pluginId: "another-plugin" }, { messages: [] }),
     ).toEqual({ action: "continue" });
-    expect(
-      review.review(ctx, {
-        pluginId: "community-story",
-        messages: [],
-        response,
-      }),
-    ).toEqual({ action: "continue" });
-    const prepared = review.prepare(ctx, {
-      pluginId: "community-story",
-      messages: [],
+    expect(review.review(ctx, { messages: [], response })).toEqual({
+      action: "continue",
     });
+    const prepared = review.prepare(ctx, { messages: [] });
     expect(prepared.replace).not.toHaveProperty("stream");
     expect(prepared.replace?.messages.at(-1)?.content).toContain(
       "first person",
@@ -75,11 +72,11 @@ describe("narrative perspective review", () => {
     const ctx = {
       sessionId: "s",
       turnId: "t",
+      pluginId: "story",
       runtimeId: "story",
       getOwnSettings: () => ({ narrativePerson: "second" }),
     };
     review.context(ctx, {
-      pluginId: "story",
       characters: [{ name: "林潮", type: "player" }],
     });
     const reply = (content: string): LLMResponse => ({
@@ -88,24 +85,18 @@ describe("narrative perspective review", () => {
       finishReason: "stop",
       usage: { inputTokens: 1, outputTokens: 1 },
     });
-    // The marker the review reads: a heading of the Chinese prompt body.
-    const bodies = {
-      zh: [{ role: "system" as const, content: "## 叙事规则" }],
-      en: [{ role: "system" as const, content: "## Narrative rules" }],
-    };
-    const added = (language: "zh" | "en") => {
-      const messages = bodies[language];
+    // The session's content locale decides which prompt body is read. A
+    // locale with no instruction set of its own reads the English one.
+    const added = (locale: string) => {
+      const localized = { ...ctx, locale };
+      const messages: never[] = [];
       const correction = (content: string) =>
-        review.review(ctx, {
-          pluginId: "story",
-          messages,
-          response: reply(content),
-        }).replace?.correction ?? "";
+        review.review(localized, { messages, response: reply(content) }).replace
+          ?.correction ?? "";
       return [
         String(
-          review
-            .prepare(ctx, { pluginId: "story", messages })
-            .replace?.messages.at(-1)?.content,
+          review.prepare(localized, { messages }).replace?.messages.at(-1)
+            ?.content,
         ),
         correction(""),
         correction("<thinking>plan</thinking>"),
@@ -113,7 +104,7 @@ describe("narrative perspective review", () => {
       ];
     };
 
-    const chinese = added("zh");
+    const chinese = added("zh-CN");
     expect(chinese[0]).toContain('玩家角色："林潮"。');
     expect(chinese[1]).toContain("写出正文之前不要调用 `runtime-done`");
     expect(chinese[2]).toContain("只输出游戏内的故事正文");
@@ -122,6 +113,7 @@ describe("narrative perspective review", () => {
     for (const text of chinese)
       expect(text.replace(/`[^`]*`/g, ""), text).not.toMatch(/[A-Za-z]{2,}/);
 
+    expect(added("ja")).toEqual(added("en"));
     const english = added("en");
     expect(english[0]).toContain('Player character: "林潮". ');
     expect(english[1]).toContain(
@@ -143,25 +135,27 @@ describe("narrative perspective review", () => {
       usage: { inputTokens: 1, outputTokens: 1 },
     };
     const result = review.review(
-      {},
-      { pluginId: "community-story", messages: [], response },
+      { pluginId: "community-story" },
+      { messages: [], response },
     );
     expect(result.replace?.response).toEqual({ ...response, content: null });
   });
 
   it("keeps player context isolated between concurrent sessions and clears it after the turn", () => {
     const review = createNarrativeReview("community-story");
-    const a = { sessionId: "a", turnId: "turn", runtimeId: "story" };
+    const a = {
+      sessionId: "a",
+      turnId: "turn",
+      pluginId: "community-story",
+      runtimeId: "story",
+    };
     const b = { ...a, sessionId: "b" };
     for (const [ctx, name] of [
       [a, "Ada"],
       [b, "Lin"],
     ] as const)
-      review.context(ctx, {
-        pluginId: "community-story",
-        characters: [{ name, type: "player" }],
-      });
-    const request = { pluginId: "community-story", messages: [] };
+      review.context(ctx, { characters: [{ name, type: "player" }] });
+    const request = { messages: [] };
     expect(
       review.prepare(a, request).replace?.messages.at(-1)?.content,
     ).toContain('"Ada"');

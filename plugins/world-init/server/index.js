@@ -49,8 +49,8 @@ const messageText = (message) =>
  * settles one model call later, so they are offered only when the rules
  * block lists truncated dimensions.
  */
-function trackerTools(_ctx, payload) {
-  if (payload.runtimeId !== "world-init/dimension-tracker" || !payload.tools)
+function trackerTools(ctx, payload) {
+  if (ctx.runtimeId !== "world-init/dimension-tracker" || !payload.tools)
     return { action: "continue" };
   const system = payload.messages
     .filter((message) => message.role === "system")
