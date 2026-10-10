@@ -4,7 +4,7 @@
     "id": "lin-yuanzhou",
     "name": "Lin Yuanzhou",
     "role": "npc",
-    "description": "A newly minted apprentice of the Tide-Reader Guild — cautious, yet insatiably curious. During his examination he discovered, to his own alarm, a faint sensitivity to the tide-force, and has told no one.",
+    "description": "A newly minted apprentice of the Tide-Reader Guild — cautious, yet insatiably curious. Since his examination he has been preoccupied; ask him and he says he slept badly.",
     "source": "world:mistport",
     "locale": "en-US",
     "aliases": ["Yuanzhou", "Apprentice Lin"],
@@ -13,7 +13,7 @@
       "faction": "Tide-Reader Guild",
       "role": "Apprentice",
       "location": "Upper City · Tide-Reader Guild Tower",
-      "tideSense": "Faint (concealed)",
+      "tideSense": "Unknown",
       "fogRot": 0,
       "fogRotSigns": "None",
       "vitality": 100,
@@ -48,7 +48,8 @@
         "Dragging the player down with him"
       ],
       "secrets": [
-        "He can hear the 'hum' of the Undertow without any relic — clearest of all at ebb tide."
+        "He can hear the 'hum' of the Undertow without any relic — clearest of all at ebb tide.",
+        "At his examination he found that he can faintly sense the tide-force. He has told no one, because the Guild's official position is that the tide-force does not exist."
       ],
       "voice": "Speaks a touch too fast, hides his nerves behind rhetorical questions; drops his voice suddenly when he's serious.",
       "style": "Absently rubs the tide-mark scored into his wrist; when anxious he keeps checking the brightness of his fog-lamp."
@@ -207,7 +208,7 @@
     "id": "iron-meg",
     "name": "Iron Meg",
     "role": "npc",
-    "description": "Second-in-command of the Salt Fangs, past thirty. Her left arm, from the elbow down, was lost to fog-rot in a relic accident — half-translucent now, glowing a faint grey. Cold and hard, but true to her word; she quietly collects relic fragments.",
+    "description": "Second-in-command of the Salt Fangs, past thirty. Her left arm, from the elbow down, was lost to fog-rot in a relic accident — half-translucent now, glowing a faint grey. Cold and hard, but true to her word; she pays far too much for relic fragments for it to be mere business.",
     "source": "world:mistport",
     "locale": "en-US",
     "aliases": ["The Second", "Iron Meg"],
@@ -216,7 +217,7 @@
       "faction": "Salt Fangs",
       "role": "Second-in-command",
       "location": "The Undertow · Hidden Grotto",
-      "tideSense": "Once trained (apprentice, never certified)",
+      "tideSense": "Unknown",
       "fogRot": 38,
       "fogRotSigns": "Left arm translucent below the elbow, glowing grey in damp air",
       "vitality": 88,
@@ -228,7 +229,7 @@
       "combat": 4,
       "permit": false,
       "equipment": ["cloth-wrapped knife", "Salt Chips", "fog-rot glove"],
-      "relics": ["one grey Key fragment (kept secret)"],
+      "relics": ["one relic fragment (origin kept quiet)"],
       "trust": 10,
       "dispositionToPlayer": "Appraising — can be swayed by the rules and sincerity"
     },
@@ -251,7 +252,8 @@
         "Repeating the mistake that cost her the arm"
       ],
       "secrets": [
-        "She was once a Tide-Reader apprentice; the accident that fog-rotted her left arm also took her partner."
+        "She was once a Tide-Reader apprentice; the accident that fog-rotted her left arm also took her partner.",
+        "She is quietly collecting particular relic fragments, as if assembling a key; she already holds one grey Key fragment."
       ],
       "voice": "Few words, short sentences, no filler; when she makes a promise she bites off each word.",
       "style": "Keeps the fog-rotted arm hidden in a long leather glove; seals a deal by rapping the table three times with her right hand."
@@ -306,7 +308,7 @@
     "id": "chen-yuanshan",
     "name": "Chen Yuanshan",
     "role": "npc",
-    "description": "Chair of the Mistport Council, past sixty, a master of statecraft. In public he pushes the Tide-Seal Decree in the name of public safety; in private he sends his own expeditions deep into the Undertow, again and again, in search of the 'Key'.",
+    "description": "Chair of the Mistport Council, past sixty, a master of statecraft. In public he pushes the Tide-Seal Decree in the name of public safety; in private he sends his own expeditions deep into the Undertow, again and again.",
     "source": "world:mistport",
     "locale": "en-US",
     "aliases": ["Councilor Chen", "the Chair"],
@@ -327,7 +329,7 @@
       "combat": 1,
       "permit": true,
       "equipment": ["Council Chair's seal", "private expedition charter"],
-      "relics": ["one dull-grey Key fragment"],
+      "relics": ["one dull-grey fragment (unappraised)"],
       "trust": 5,
       "dispositionToPlayer": "Instrumental appraisal — courts you if you're useful"
     },
@@ -350,7 +352,8 @@
         "Losing his grip on the Council"
       ],
       "secrets": [
-        "The expedition that vanished three years ago was one he sent down; he knows better than anyone that there is a 'thing' below."
+        "The expedition that vanished three years ago was one he sent down; he knows better than anyone that there is a 'thing' below.",
+        "He sends his own expeditions into the Undertow to search for the 'Key'; he holds one dull-grey Key fragment himself."
       ],
       "voice": "Mild, slow, forever offering the other side a way to save face; the hooks in his words only register afterward.",
       "style": "Toys with an unremarkable grey relic fragment as he talks, as though telling a calming rosary."
@@ -405,7 +408,7 @@
     "id": "guildmaster-qi",
     "name": "Old Qi",
     "role": "npc",
-    "description": "Guildmaster of the Tide-Readers, a gentle white-haired scholar who knows the truth of the Riftide and keeps it sealed behind his lips. Before the story opens he leaves a letter and walks into the Undertow at flood tide — and vanishes.",
+    "description": "Guildmaster of the Tide-Readers, a gentle white-haired scholar who understands the Riftide better than anyone living, and has lately taken to wearing gloves. Before the story opens he leaves a letter and walks into the Undertow at flood tide — and vanishes.",
     "source": "world:mistport",
     "locale": "en-US",
     "aliases": ["Guildmaster Qi", "Old Qi"],
@@ -414,12 +417,12 @@
       "faction": "Tide-Reader Guild",
       "role": "Guildmaster",
       "location": "The Undertow (missing)",
-      "tideSense": "Deep (Tide-Warden class, kept secret)",
+      "tideSense": "Unknown",
       "fogRot": 65,
-      "fogRotSigns": "Both hands translucent, fingertips sometimes fraying into mist",
+      "fogRotSigns": "Always wears gloves",
       "vitality": 58,
       "stress": 70,
-      "condition": "Missing; fog-rot worsening, unable to remain long in dry air",
+      "condition": "Missing, whereabouts unknown",
       "tideReading": 5,
       "stealth": 3,
       "diplomacy": 4,
@@ -449,7 +452,8 @@
         "Not lasting long enough to finish what he has to say"
       ],
       "secrets": [
-        "He is in fact a Tide-Warden living under a false name; his fog-rot came from what he 'heard' three years ago, diving the deep alone."
+        "He is in fact a Tide-Warden living under a false name; his fog-rot came from what he 'heard' three years ago, diving the deep alone.",
+        "He knows the truth of the Riftide and keeps it sealed behind his lips; his tide-sense runs as deep as a Tide-Warden's, and his hands are already translucent, the fingertips fraying into mist, which is why he always wears gloves."
       ],
       "voice": "Slow, warm, fond of metaphor, delivering the heaviest words in the lightest way.",
       "style": "Rubs the frayed corner of a well-worn tidal journal as he speaks; his fog-rotted fingertips give off a faint glow."
