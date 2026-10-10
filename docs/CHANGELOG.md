@@ -19,6 +19,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **The settings page reads a service's own model list.** "Read the model list from the service" in the add-provider and add-model dialogs asks the endpoint for its model IDs (`POST /api/ai/models`); a tick adds one, a filter narrows the list, and IDs typed by hand stay.
 - **A failed connection test says what kind of failure it was.** `POST /api/ai/ping` and the model list return `errorKind` (`unreachable`, `timeout`, `auth`, `quota`, `rate_limited`, `not_found`, `bad_request`, `overloaded`, `server`, `refused`, `config`) and the settings page shows what to do about it. A refused connection names the host and port instead of `fetch failed`.
 - **An `llm.toml` slot of a built-in provider needs only `provider` and `model`.** `baseUrl` and `protocol` come from the provider when the slot omits them. For any other provider `protocol` defaults to `openai-chat-v1` and `baseUrl` stays required.
+- **A world can keep notes for the narrator out of the player's view.** In `WORLD.md`, the lines between `<!-- narrator-only -->` and `<!-- /narrator-only -->` go to the model and are not shown in the World tab, on the session preparation screen or on the world page. It keeps spoilers out of sight and is not secrecy: the files and the API hold the whole text. `pnpm validate:world` reports a marker that is not closed. The four bundled worlds use it for hidden plotlines and game-master notes, and world generation writes such parts this way.
+- **Character cards reach the story.** The `character-blueprint` plugin gives the narrative each card's voice, traits, goals, fears, secrets (for the narrator only), relationships, rules and example lines as a prompt segment, for the characters that are in the session, within a budget of 6000 estimated tokens. Before, only the panel read the cards. World generation writes preset characters by default and no longer asks for character fields that had no effect.
 
 ### Changed
 
@@ -32,6 +34,41 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 - **An Anthropic answer cut at the output limit is an error on a call that is not streamed.** The provider's `max_tokens` was read as a normal end there, so a cut answer or cut JSON was kept as complete. Streamed calls already rejected it.
 - **The plugin SDK's protocol type names Gemini.** `PluginProviderConfig.protocol` did not list `google-generative-ai-v1`.
+- **The opening's facts are no longer overwritten.** The opening and the first player turn share turn 1, and the `memory` plugin numbered a turn's facts from 1 both times. New facts now continue after the highest number the turn already has.
+- **A background job reports the turn it belongs to.** A detached runtime runs after its turn has committed, and it then read a turn number one too high: the `memory` plugin dated the facts of turn 1 as turn 2. A job now keeps the turn number of the execution that queued it. Facts that existing sessions already hold keep the number they were written with.
+- **A browser-private game with a field named like a credential can be saved.** The save check rejected the whole checkpoint when game content had a field such as `password`, `credentials` or `apiKey`, and the session then could not run another action. The check now reads the session record only, which is the part framework code writes.
+- **A failed concealed runtime does not show its reason to the player.** For a runtime with `io.concealed: true` the turn stream, traces and result APIs carry a fixed text (the provider and model stay); the real reason goes to the server log.
+- **A refused `emit-event` call is a failed tool call.** An unknown topic or a rejected payload no longer counts toward `requireToolUse` or a finishing tool.
+- **Character text for the model leaves out bookkeeping.** `get-character`, `update-character` and the character text that `memory-search` reads no longer include session IDs, row IDs or timestamps.
+- **The in-memory store rejects a duplicate turn-message ID**, as the SQLite and PostgreSQL stores do.
+- **`GET /api/sessions/:id/suspensions` returns only unresolved suspensions**, as the reference says. The resume route computes its concealed runtimes after it has synchronised the session's plugins.
+- **Desktop settings and key requests time out.** A request to the local server ends after 15 seconds instead of waiting forever when the server stops answering.
+- **Token usage of a rejected structured-output reply appears in traces.**
+- **An embedding call is not retried twice over.** The memory layer no longer adds its own retries to those of the transport, and an aborted call stops at once; the `memory` plugin's extraction does not retry an abort either.
+- **A failed world revision puts the old package back.** When the new package cannot be read back or its record cannot be saved, the previous files return instead of files and record disagreeing.
+- **Reply Variants keeps long narrations whole.** An adopted variant is no longer cut to 4000 characters. The plugin stores each turn's text once and reads only adopted turns when it assembles history.
+- **Bundled plugins.** `inventory` and `core-quest` report the changes they could not record over the per-turn limit; `guide` accepts short Chinese recaps and decisions; `codex` marks only the entries of the latest sync as new; `char-creator` reads only its own form's submission and sets the form's ID itself; a portrait attaches to a character on an exact or `npc-<id>` match only; `list-npc-graph` returns current relationships, newest first.
+- **Plugin data of a session you left is released in the web client.**
+- **The context budget protects the player's message.** A `user`-role section a plugin places after the history no longer takes the protected place of the player's input.
+- **Dimension settlement receipts are pruned.** The 20 newest resolved receipts stay; unresolved ones are never removed.
+- **The API quick start runs as written.** Its action requests no longer carry `locale`, and its last step says that it deletes the session.
+
+### Security
+
+- **Hosted tiers have no loopback exception.** With `DEPLOYMENT_TIER=demo` or `commercial`, a model or plugin request to `localhost`, `127.0.0.1` or `::1` is rejected by both the URL check and the connection check; a player could name such an address in a request-scoped model preset. The exception for local model servers applies on the `self` tier only.
+- **A plugin's text protocol serves only the sessions that enabled the plugin.** A model whose `protocol` names a plugin's wire fails with a configuration error that names the plugin when the session does not have it active. A request with no session may use a builtin plugin's protocol, and on the `self` tier a community plugin's too.
+- **Snapshot responses leave out hidden content.** `GET` and `POST /api/sessions/:id/snapshots` no longer return hidden world data, the exports of concealed runtimes or the prompts of suspensions. The stored snapshot is unchanged, so restore and fork work as before.
+- **Provider responses are read under a size ceiling.** 256 MiB for a JSON or text body and for one streamed event, 50 MiB for audio bytes. A stream has no total limit.
+
+### Documentation
+
+- `docs/reference/ui-panels.md` describes the `__turnId` convention of message blocks; the theme pages state that an imported theme's CSS can load remote resources.
+
+### Upgrade notes
+
+- **Hosted operators with a model server on the same host**: an `llm.toml` endpoint on a loopback address is rejected on `demo` / `commercial`. Use a public `https` name.
+- **A plugin that registers a text protocol declares it.** List the wire's `id` in `contributes.wires`, as for image and speech wires; an undeclared text wire now fails the load.
+- **Reply Variants data of existing development sessions is not carried over.** Earlier turns keep their blocks; an earlier adoption no longer rewrites history until the variant is adopted again.
 
 ## [0.0.49] - 2026-10-09
 

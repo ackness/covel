@@ -206,7 +206,6 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-001",
     "type": "start_session",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN",
     "payload": {}
   }'
 ```
@@ -220,7 +219,6 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-002",
     "type": "send_message",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN",
     "payload": { "content": "我环顾四周，观察这个陌生的世界" }
   }'
 ```
@@ -247,7 +245,6 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-003",
     "type": "send_message",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN",
     "payload": { "content": "走向远处的城镇" }
   }'
 ```
@@ -274,11 +271,13 @@ curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
   }'
 ```
 
-### 11. 结束会话
+### 11. 删除会话
 
 ```bash
 curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 ```
+
+这会删除该会话及其全部存档数据（消息、状态、快照等），不可恢复。
 
 ---
 
@@ -2726,7 +2725,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、runtimeModelOverrides）、characters、stateEntries、pluginData、characterSchema、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
-**响应 201（直接返回 `SnapshotRecord`）:**
+**响应 201（`SnapshotRecord` 的玩家可见视图，过滤规则同下方单个快照读取）:**
 
 ```json
 {
@@ -2807,6 +2806,8 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 #### `GET /api/sessions/:id/snapshots/:snapshotId`
 
 按 id 获取单个快照（含完整 `payload`），直接返回 `SnapshotRecord`。快照不存在或不属于该 session 时返回 `404`。
+
+响应是快照的玩家可见视图，与其他读取接口同一规则：`payload.pluginData` 不含隐藏命名空间（`_hidden.*`）和内核记账行，其余行按插件数据 API 的公开形态给出；`payload.runtimeExports` 不含声明 `io.concealed` 的 runtime 的导出；`payload.suspensions` 只给出与 `GET /suspensions` 相同的摘要字段，不含续接上下文（提示词）。存储中的快照保持完整，fork 与恢复直接读存储，不受影响。
 
 #### `POST /api/sessions/:id/fork`
 

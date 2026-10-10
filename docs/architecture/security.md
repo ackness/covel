@@ -25,8 +25,8 @@ IP literals are checked against the same complete public-address policy as DNS
 answers before transport selection. This also blocks carrier-grade NAT,
 benchmark, documentation, unspecified and multicast ranges, and applies to
 IPv4 embedded in IPv6. Literal connections do not invoke socket DNS lookup;
-they cannot rely on the DNS dispatcher alone. The explicit loopback targets
-below retain their local-server exception.
+they cannot rely on the DNS dispatcher alone. On the `self` tier the explicit
+loopback targets below retain their local-server exception.
 
 IPv6's `2000::/3` allocation is insufficient to establish public reachability.
 The guard also rejects reserved/benchmark IETF protocol space, both `2001:db8::/32`
@@ -34,8 +34,18 @@ and `3fff::/20` documentation ranges, and Teredo/6to4 transition prefixes.
 Specific globally reachable IETF allocations remain allowed. The special-purpose
 classifications follow the [IANA IPv6 registry](https://www.iana.org/assignments/iana-ipv6-special-registry/).
 
-Loopback (`localhost`, `127.0.0.1`, `::1`) bypasses the `https` requirement so
-Ollama-style local servers work in development.
+On the `self` tier (desktop and self-deploy, the default), loopback
+(`localhost`, `127.0.0.1`, `::1`) is allowed and bypasses the `https`
+requirement, so local servers such as Ollama work: the server is the player's
+own machine.
+
+Hosted tiers (`demo` / `commercial`) have no loopback exception. There a player
+can name a model `baseUrl` in a request-scoped preset (`X-Slot-Config`), and the
+server's loopback holds its own internal services. Both checks reject the three
+names — the string check and the connect-time DNS check — for every caller:
+core provider requests, operator `llm.toml` endpoints included, and plugin
+`fetchWithRetry`. A hosted operator reaches a model on the same host through a
+public `https` name.
 
 ### DNS pinning
 
@@ -45,8 +55,33 @@ In direct mode, the core provider requests (`postJson` / `getJson` /
 (`packages/ai-provider/src/plugin-utils.ts`; exposed as `ctx.utils.fetchWithRetry`
 to handlers and `covel.http.fetchWithRetry` to entry modules) resolve DNS through
 a pinning dispatcher (`adapters/http/dns-safety.ts`). Every A/AAAA answer must be
-publicly routable, loopback hostnames must resolve to loopback, and the socket is
-pinned to the validated answer.
+publicly routable, loopback hostnames must resolve to loopback (`self` tier only;
+on a hosted tier they are rejected), and the socket is pinned to the validated
+answer.
+
+### Response size ceiling
+
+The endpoint that answers a provider request can be one a player named, so the
+server does not buffer whatever it sends. Every body the framework reads from a
+core provider request is counted while it is read, and the read is cancelled
+when the count passes a ceiling (`adapters/http/response.ts`, values in
+`adapters/http/constants.ts`); a `Content-Length` above the ceiling fails before
+the first read. The ceilings are safety limits, not quotas, and there is no
+setting for them:
+
+- a JSON or text body — model answers, error bodies, model lists, image answers
+  with base64 images, the model database download: 256 MiB;
+- a binary media body (synthesized audio): 50 MiB, the default limit of media
+  ingest for one asset;
+- one server-sent event of a streamed answer (the text before its blank line):
+  256 MiB. A stream has no limit on its total length; the request budget ends it.
+
+A body over the ceiling fails the call as a provider error that is not retried
+against the same endpoint; a configured backup model is still tried, as after
+any unreadable answer.
+The limit does not cover a response a plugin reads itself: `fetchWithRetry` hands
+the `Response` to plugin code, and a plugin's own wire does its own request.
+`ctx.media.ingestUrl` counts bytes against its `maxBytes`.
 
 ### Desktop proxy modes
 
@@ -97,13 +132,22 @@ holds there.
 
 A model on a loopback address (`localhost`, `127.0.0.1`, `::1`) is ready
 without a key: local services such as Ollama take none. This changes only the
-readiness check; a key that is configured is still sent.
+readiness check; a key that is configured is still sent, and on a hosted tier
+the outbound guard still rejects the request.
 
 A text wire a plugin registers (`covel.registerWires({ text })`) receives the
 resolved endpoint and key of each slot whose `protocol` names it, and the
 prompts and answers of that slot's calls. A slot that does not name the wire
 gives it nothing. The wire is plugin server code, so the rules of
 [Community plugin code](#community-plugin-code) decide whether it runs.
+A request may select the wire only when its session has the providing plugin
+active (the active set already reflects the player's approval of a community
+plugin). A request with no session (connection test, model list, world
+generation) may select the wire of a builtin plugin; on the `self` tier, where
+the one player approved every loaded plugin, it may also select the wire of a
+community plugin, and on a hosted tier it may not. This holds for request-scoped presets, `llm.toml` slots and a runtime's
+own slot preference alike; the call fails with a configuration error that names
+the plugin to enable.
 
 At rest, the desktop app keeps the keys in `<covelHome>/keys.env` as plain
 `KEY=VALUE` lines with mode `0600`, set again on every write (a no-op on

@@ -173,7 +173,7 @@ Function runtime 必须声明 `function.handler`，模块必须默认导出函�
 
 Agent 的 guard 在调用模型前执行。返回 `{ skip: false }` 时照常运行；返回 `{ skip: true, ...fields }` 时不调用模型，结果记为 `skipped`，`skip` 之外的字段就是本 runtime 的输出：声明 `io.output.contract` 时按契约校验，并照常绑定给消费者，`skip` 标记本身不进入校验和绑定。需要在本轮放弃工作时，返回契约允许的最小输出，例如 `story-events/plot` 关闭时返回空计划 `{ skip: true, events: [] }`。
 
-`io.concealed: true` 用于处理隐藏内容的 runtime（例如在剧情中策划隐藏事件的 agent）。框架在写入 trace 和推送实时流之前去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime / 工具名、状态、耗时与用量；`/turns` 和手动 RPC 返回的执行结果也会清空它的输出与工具内容。持久化的执行记录保留完整内容，供重试使用。
+`io.concealed: true` 用于处理隐藏内容的 runtime（例如在剧情中策划隐藏事件的 agent）。框架在写入 trace 和推送实时流之前去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime / 工具名、状态、耗时与用量；`/turns` 和手动 RPC 返回的执行结果也会清空它的输出与工具内容。runtime 失败时，发给玩家的失败原因（回合流、trace、返回的结果）换成固定的通用提示，真实原因只写入服务端控制台日志。持久化的执行记录保留完整内容，供重试使用。
 
 `schedule.needs`、`schedule.after` 与 `io.inputs.*.from.runtime` 中的 runtime ID 只能属于本包（完整 `<pluginId>/<runtimeId>` 或单 runtime 的包 ID），裸字符串依赖也受此限制。跨包引用必须使用公开的版本化 contract；纯 `after` 不会自动激活提供者。
 
@@ -372,20 +372,21 @@ pnpm lint
 
 ## 代表性实现
 
-| 需求                 | 内置示例                                                         |
-| -------------------- | ---------------------------------------------------------------- |
-| 叙事提供者与用户设置 | [narrator](../../plugins/narrator/PLUGIN.md)                     |
-| 本地工具和 UI 消息   | [guide](../../plugins/guide/PLUGIN.md)                           |
-| World Model 初始化   | [world-init](../../plugins/world-init/PLUGIN.md)                 |
-| 角色创建与跟踪       | [char-creator](../../plugins/char-creator/PLUGIN.md)             |
-| 函数运行时与公开输出 | [world-time](../../plugins/world-time/PLUGIN.md)                 |
-| 历史变换扩展         | [branch-reply](../../plugins/branch-reply/PLUGIN.md)             |
-| 状态摘要槽位         | [core-quest](../../plugins/core-quest/PLUGIN.md)                 |
-| 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                         |
-| 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
-| 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)               |
-| 背景音乐调度         | [soundtrack](../../plugins/soundtrack/PLUGIN.md)                 |
-| 隐藏世界数据与策划   | [story-events](../../plugins/story-events/PLUGIN.md)             |
+| 需求                 | 内置示例                                                           |
+| -------------------- | ------------------------------------------------------------------ |
+| 叙事提供者与用户设置 | [narrator](../../plugins/narrator/PLUGIN.md)                       |
+| 本地工具和 UI 消息   | [guide](../../plugins/guide/PLUGIN.md)                             |
+| World Model 初始化   | [world-init](../../plugins/world-init/PLUGIN.md)                   |
+| 角色创建与跟踪       | [char-creator](../../plugins/char-creator/PLUGIN.md)               |
+| 函数运行时与公开输出 | [world-time](../../plugins/world-time/PLUGIN.md)                   |
+| 历史变换扩展         | [branch-reply](../../plugins/branch-reply/PLUGIN.md)               |
+| 状态摘要槽位         | [core-quest](../../plugins/core-quest/PLUGIN.md)                   |
+| 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                           |
+| 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md)   |
+| 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)                 |
+| 背景音乐调度         | [soundtrack](../../plugins/soundtrack/PLUGIN.md)                   |
+| 世界数据进入叙事提示 | [character-blueprint](../../plugins/character-blueprint/PLUGIN.md) |
+| 隐藏世界数据与策划   | [story-events](../../plugins/story-events/PLUGIN.md)               |
 
 ### 保留的数据命名空间
 

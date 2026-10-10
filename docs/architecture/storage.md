@@ -369,12 +369,15 @@ changed content. Hashing new commits completes before their IndexedDB write
 transaction. The sole version-change handler rejects unsupported vaults; it does
 not convert historical digests or write initialization markers.
 
-`BrowserVault` recursively rejects credential-shaped fields such as `apiKey`,
-access/refresh tokens, passwords, private keys, and client secrets before any
-transaction writes. Ordinary domain content whose name happens to be
-`secret`/`secrets` (for example `CharacterBlueprint.persona.secrets`) is not a
-credential and remains persistable. Provider keys continue to travel only in
-request headers.
+Before any transaction writes a checkpoint, `BrowserVault` recursively rejects
+credential-shaped field names in its session record (`metadata` included), such
+as `apiKey`, access/refresh tokens, passwords, private keys, and client secrets.
+The session record is the part framework code writes, so it is where an owner
+token or a provider key could leak in. The check does not read the other
+checkpoint domains or the world record: they hold game content from authors,
+models and plugins, whose field names are unrestricted (a character may have a
+`password` field), and a name-based rejection there would be permanent for that
+session. Provider keys continue to travel only in request headers.
 
 This development-version redesign does not import the removed `covel-browser`
 business schema. Old implementations remain recoverable from Git history.

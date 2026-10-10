@@ -92,6 +92,12 @@ The framework runtime that schedules turns, assembles context, drives LLM tool-c
 
 See: [docs/architecture/flow.md](./architecture/flow.md).
 
+## Narrator-only
+
+A part of `WORLD.md` between the lines `<!-- narrator-only -->` and `<!-- /narrator-only -->`. The model reads it; the World tab, the session-prep screen and the world detail page do not show it. It keeps spoilers out of the player's view and is not secrecy: the world record and the package files hold the whole text. Content that is revealed only when a condition holds is hidden data (`visibility: hidden`), a different mechanism.
+
+See: [docs/reference/world-data.md](./reference/world-data.md).
+
 ## Pack
 
 A named bundle of plugins (`requested` and `recommended` sets, plus tags) that assembles one coherent gameplay style — e.g. `traditional-story`, `dialogue-mode`. Players pick a pack on the session-prep screen to replace the previous pack's plugins in one step, while the world's own requests and the player's manual choices stay; a world can default to one via `pluginPolicy.presetId`. Distinct from **Preset**, which bundles model/slot routing, not plugins.

@@ -100,7 +100,7 @@ model    = "glm-5"
 - 一条 `ProtocolDefinition` 写明这个协议的全部差异：适配器（`createAdapter`）、缓存策略、默认能力、`reasoningEffort` 档位到请求字段的转换（`reasoningFields`）、它接受的 `providerOptions` 字段（`providerOptionFields`）、它支持的可选生成参数（`parameters`），以及图像和语音是否必须显式指定 wire（`mediaWire`）。网关和注册表只查这张表，不比较协议 ID。
 - 请求追踪只记录白名单里的请求体字段（`packages/ai-provider/src/adapters/http/request-observation.ts` 的 `MODEL_FIELDS`）。新协议若使用新的顶层字段名，要在那里加上，否则 trace 里看不到。
 - 插件 SDK 不能依赖 `@covel/shared`，自己保留一份内置协议 ID 类型（`PluginProviderProtocol`）；两份不一致时 `packages/shared/src/provider-protocols.ts` 编译失败。
-- **由插件提供一种协议**：不改框架，插件用 `covel.registerWires({ text: [...] })` 注册，模型的 `protocol` 写 `<pluginId>/<wireId>`。见 [plugin-extensions.md § 文本协议 wire](plugin-extensions.md#文本协议-wire)。
+- **由插件提供一种协议**：不改框架，插件用 `covel.registerWires({ text: [...] })` 注册，模型的 `protocol` 写 `<pluginId>/<wireId>`。只有启用了该插件的会话能选用它，否则以配置错误失败；没有会话的请求（如连接测试）可用内置插件的协议，`self` 形态下也可用社区插件的。见 [plugin-extensions.md § 文本协议 wire](plugin-extensions.md#文本协议-wire)。
 
 ## Slot 字段（`[covel.<slot>]`）
 
@@ -110,7 +110,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | ----------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                                                                                                          |
 | `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                                                |
-| `baseUrl`                           | —    | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）。[内置服务商](#内置服务商与协议)可省略，其他服务商必填                                                     |
+| `baseUrl`                           | —    | API 端点（受 SSRF 守卫约束：远端必须 https；loopback 仅在 `self` 形态下允许，可用 http）。[内置服务商](#内置服务商与协议)可省略，其他服务商必填                             |
 | `protocol`                          | —    | 接口协议，取值见[内置服务商与协议](#内置服务商与协议)。缺省用内置服务商自己的协议，其他服务商为 `openai-chat-v1`                                                            |
 | `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`。缺省从 output 模态推断（`audio` 推断为 `speech`，音乐用途须显式写 `music`） |
 | `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                                                        |

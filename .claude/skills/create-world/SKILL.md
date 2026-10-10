@@ -70,6 +70,7 @@ worlds/<id>/
 - `world.yaml` 第一行写 `# yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json`，编辑器会给出补全和报错。
 - 每个数据文件按第 2 步的写作提示和示例来写。
 - 多个文件提到同一个角色、物品或地点时，使用完全相同的 ID 和名字，并与 `WORLD.md` 一致。
+- 玩家也能读到 `WORLD.md`（右侧“世界”页签）。暗线、谜底和主持指引写在独占一行的 `<!-- narrator-only -->` 与 `<!-- /narrator-only -->` 之间：模型照常读到，玩家看不到。设定、地点、人物介绍和开局留在标记外。各语言版本在同样的位置标记。这只是不剧透，读文件的人仍看得到；见 `docs/reference/world-data.md` 的“只给叙事者的正文”。
 - 角色类型和属性写在 `characterSchema: {types, attributes}`。
 - 所有 ID（world id、source id、记录 id）用 kebab-case 英文。
 - 避免泛化的奇幻套路，追求独特的设定。

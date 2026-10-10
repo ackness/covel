@@ -141,6 +141,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 - **数据源**：当前 session 的 `WorldRecord.lore`（即 `worlds/<id>/WORLD.md`，按 `defaultLocale` 解析 exact locale → script 兼容主语言 → canonical `WORLD.md`），由 `world-seed-loader` 在启动时写入 store。
 - **交互**：以 Markdown 渲染（`@/components/ui/markdown`，`react-markdown` + `remark-gfm`）。`lore` 为空时回退展示 `description`，再为空展示 `worldDocumentEmpty` 文案。
+- **只给叙事者的正文**：`<!-- narrator-only -->` 与 `<!-- /narrator-only -->` 之间的内容不展示（`playerVisibleLore`，`@covel/shared`），整篇都被标记时按 `lore` 为空处理。开局准备页的“世界文档”和世界详情页用同一个函数。这是不剧透的措施，不是保密：`WorldRecord.lore` 仍是整篇正文。写法见 [World Data](world-data.md#只给叙事者的正文narrator-only)。
 - **实现**：`apps/web/src/components/session/world-document-panel.tsx`，在 `right-panel.tsx` 中以 `world` Tab 挂载，由 `game-view.tsx` 注入当前 `world: WorldRecord | null` prop。
 - **隔离规则**：Tab 代码属于框架，仅依赖 `WorldRecord` 公开字段，不感知任何插件 ID。
 
@@ -457,6 +458,8 @@ ui:
 ```
 
 > **Bootstrap 注意（重要）**：`ui.message` block 只有在其声明的 `message` namespace 被写入数据后才会渲染。因此一个**只能由 block 内部按钮触发的纯手动写入者无法自举**——首屏没有数据，block 不出现，按钮也就永远点不到（典型死锁：`branch-reply` 早期即如此完全不显示）。让 block 首次出现的写入必须来自一个**非手动**路径：`scheduled` / `auto` runtime（读取叙事引擎输出后播种）、上游 runtime 的 `plugin.data` 提案，或 world-data 导入。`branch-reply` 用 `trigger: auto`（`stage: post-turn`，叙事引擎之后）播种 candidate[0]，详见 [plugins.md § 代表性实现](./plugins.md#代表性实现)。
+
+**回合绑定（`__turnId`）**：消息块挂在哪一回合，由 `message` namespace 里的 `__turnId` 决定。写法有两种：命名空间级是在 namespace 顶层写 `__turnId`，整个 namespace 作为一个块，每回合覆盖，只保留最近一回合（core-quest 的 `changes` 即如此）；记录级是每回合写一条记录，键为回合 ID，值里带 `__turnId`（或 `turnId`），每回合一块，历史可回看（dice-check 的 `checks`）。渲染时以 `__` 开头的键不进入块的 `state`。恢复重试时，内核（`packages/runtime/src/commit/plugin-message-turn.ts`）会把指向本次执行的 `__turnId` 改写为被恢复的源回合，使卡片归属于被恢复的内容。
 
 ### 表单提交流程
 
