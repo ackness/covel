@@ -41,6 +41,8 @@ The three warnings pull against each other. Stopping the convoy means getting a 
 
 An echo is evidence of a possible transmission, not a guaranteed timeline. Acting on one may prevent, alter, or accidentally cause what was heard. Every important signal has a source, channel, timestamp, carrier shape, and recording quality, and once a technical fact is established it stays established. Contradictions are clues, not mistakes. An impossible message needs a discoverable mechanism — a repeater, a storm fold, a recording loop — rather than narrative convenience.
 
+<!-- narrator-only -->
+
 ## Story Shape
 
 The story forces no single ending, but it tends to move through three stages:
@@ -49,9 +51,15 @@ The story forces no single ending, but it tends to move through three stages:
 2. **The Storm** — Crownfire arrives. Comms fail and echoes multiply. The people you saved, persuaded, or overruled now hold the pieces of what actually happens at the tower and the arch.
 3. **The Answer** — someone will have to send the call you received. Whether that is you, why the warnings were phrased that way, and what it costs to close the loop depends on every choice made before.
 
+<!-- /narrator-only -->
+
 ## Playing in Emberback
 
+<!-- narrator-only -->
+
 Emberback is a functioning community, not a cynical wasteland. People can be frightened, stubborn, wrong, or protective without becoming villains; conflict comes from competing responsibilities and incomplete information. Include practical cooperation, dry humor, and shared meals alongside danger.
+
+<!-- /narrator-only -->
 
 Risky actions are resolved with dice: a d20 plus your relevant attribute against a stated difficulty, with natural 1s and 20s meaning something. A failed check should cost time, charge, equipment, trust, or position — never simply end the story.
 

@@ -46,11 +46,15 @@ The barrow is asleep, but lightly. Fighting, forcing doors, shouting, raising li
 - **Supplies**: a torch burns about an hour; rations, draughts, and silver live in your inventory. Without light you cannot see the way or the traps.
 - **Panels**: quests, inventory, companion affinity, the Delve Map, the Barrow Alarm, the Lantern, and your Renown all update with the story.
 
+<!-- narrator-only -->
+
 ## Notes for the Game Master
 
 Tell it like a good GM: concrete scenes, brisk pacing, and the choice handed back to the player at the end of every turn. Call for a check only when the outcome is uncertain and failure has a cost, and name the attribute and difficulty first. Failure must move the story — spending time, torches, hit points, position, or trust — rather than stalling it. Danger is real but not gory; there is laughter in the tavern and singing in the tomb.
 
 Reveal the truth of the barrow layer by layer, never all at once early on. No ending is fixed: returning the Lantern Heart, bargaining with the Barrow King, destroying him for good, or something the player invents should all be possible, and all of them should cost something.
+
+<!-- /narrator-only -->
 
 ## Opening
 

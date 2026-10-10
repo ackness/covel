@@ -53,7 +53,9 @@ This year, Class 2-B's booth is "Sea Breeze Post," sealing postcards written to 
 - **Haruka Mikoeda**: Student Council President, third year. She is gentle and precise, accustomed to pulling disputes back to procedure with one sentence. She is not a romance mainline character but decides School Festival resource allocation and notices Yuma Shiraishi's wavering behind the rules.
 - **Chihiro Onodera**: Homeroom Teacher of Class 2-B, Japanese Language Teacher, and former Advisor of the Literature Club. She respects student autonomy and understands the realistic pressure schools put on small clubs. She gives players gentle reminders but rarely solves problems for students directly.
 - **Souta Morikawa**: Drummer for the Light Music Club and Kaho's teammate. Outgoing and quick-tongued, he often mistakes others' silence for agreement. He can create comedic misunderstandings and remind players of the pressure Kaho bears in the stage storyline.
-- **Akane Toujou**: Third-year Head Librarian, a taciturn senior, and regular at Umineko Bookstore. She has seen clubs disappear and people desperately trying to keep something alive, so she especially understands quiet companionship. The leader of the "Old Club Building Preservation Movement" seven years ago was her older sister, who has since graduated—she wants to continue guarding this cause. She is a slow-burn senior romance line, progressing almost solely through old issues, saved seats, and shared silence.
+- **Akane Toujou**: Third-year Head Librarian, a taciturn senior, and regular at Umineko Bookstore. She has seen clubs disappear and people desperately trying to keep something alive, so she especially understands quiet companionship. She is a slow-burn senior romance line, progressing almost solely through old issues, saved seats, and shared silence.
+
+<!-- narrator-only -->
 
 ## Hidden Lines & Suspense
 
@@ -64,11 +66,15 @@ This year, Class 2-B's booth is "Sea Breeze Post," sealing postcards written to 
 - Akane Toujou guards the old School Festival special issues in the Library. The title page of the oldest volume reads "Hope we can still be here next year"—words left by her graduated sister during the "Old Club Building Preservation Movement" seven years ago. For her, today's struggle for the Literature Club's survival is the unfinished sequel to that movement.
 - The _Spring Mint_ special issue, News Club reports, Light Music Club stage, Student Council review, Sea Breeze Post letters, and Library old issues will converge in the final week. Players can choose to help certain characters prioritize goals or try to form plans where these lines support each other.
 
+<!-- /narrator-only -->
+
 ## Locations, Rumors & Performance
 
 Class 2-B is suitable for pre-class, breaks, lunch, and after-school duties; the Club Building is suitable for intersections of Literature Club, Light Music Club, and Student Council patrols; the Library is suitable for Akane Toujou, old issues, tutoring, and silences that don't need filling; Sakurazaka Seawall is suitable for walking home together, lingering in the rain, and Kaho's lyrics; Seireki Town Shopping Street is suitable for buying materials, meeting characters' off-campus sides, and handling multi-person meetups. The Student Council Room and Courtyard are important procedural locations, establishing new scene backgrounds upon first visit.
 
 Re-evolvable rumors include "Transfer student invited by both Class President and News Club on day one," "Drinks falling out of the vending machine at sunset reveal who you're thinking of," "Windows lit in the Club Building after 18:00 keep wishes secret," and "Senior Akane only saves window seats for special people." These claims need not have supernatural truths; what matters is who said it first, who believes it, who moves closer or backs away because of it, and whether Rin ultimately chooses to report, suppress the draft, or debunk it.
+
+<!-- narrator-only -->
 
 Visual performance uses five built-in day/night backgrounds as stable anchors: `Class 2-B`, `Club Building`, `Library`, `Sakurazaka Seawall`, `Seireki Town Shopping Street`. Body text can mention Window Seats, Activity Rooms, Practice Rooms, long tables, Vending Machines, or specific shops, but scene states should retain their belonging anchor; update `scene.set` during first opening, location switching, and day/night changes; use `day` before sunset, and `night` after sunset or after the closing broadcast.
 
@@ -81,6 +87,8 @@ This world is suitable as a dialogue mode demonstration. Scenes should place cha
 Each reply should leave options for the player: approach a character, respond to a statement, observe the scene, choose a club action, handle rumors, or advance School Festival tasks. Options should sound like natural speech from the player, not system commands. Branches don't need to cover all possibilities, just provide three to four entry points with emotional differences.
 
 Character expression should maintain teen content scale. Ambiguity comes from completing small tasks together, pauses after dialogue, changes in forms of address, and characters' willingness to expose vulnerability. Physical interactions should be light, short, and respectful of boundaries, such as handing over an umbrella, walking side-by-side, helping carry materials, offering drinks, or briefly stopping in crowded hallways.
+
+<!-- /narrator-only -->
 
 ## Opening Scenario
 

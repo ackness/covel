@@ -45,6 +45,8 @@ The player is not a singular savior named by prophecy, but a new variable capabl
 - **New Tide-Reader apprentice** — the entrance trial left a faint tide-mark on your wrist. Su Yao examined you and Lin Yuanzhou is your peer. You may enter the Guild Tower lawfully, but are expected to obey its sealed archives and appraisal discipline.
 - **Undertow local** — you know the Drawdown Steps, the pier hatch, and fog-lamp hand signs. Qi once appraised a relic for you or your family without charge. Before vanishing, he left Su a note asking for “someone who remembers routes and does not trust maps.” You have no permit, but reach the Salt Fangs and the Congregation more easily.
 
+<!-- narrator-only -->
+
 Whichever your origin, Su finds you on the Main Pier with only half a letter. Its other half, Qi's real route, and the reason the deep withdrawal came early must be assembled from gaps between other people's interests. Lin needs someone to keep his Tide Sense secret; Iron Meg needs Chen stopped from completing the Key first; Grey Falcon needs to know whether his orders were altered; Frost wants proof that the player truly “also hears.” They ask for promises, refuse requests that violate their positions, and change trust and whereabouts when the player keeps faith, lies, suffers, or chooses — they do not wait in place like quest dispensers.
 
 ## Opening Caseboard and State
@@ -78,6 +80,8 @@ The story forces no single ending, but falls naturally into three stages — and
 - Three years ago a Council expedition vanished entirely in the deep Undertow. The lone survivor went mad and can only repeat one line: "It woke up down there." Where is that person held now?
 - Why do Frost's prophecies always come true? Is the fog truly speaking to her — or is someone speaking through her? The first time she saw the player, she said, "You can hear it too, can't you?" What did she mean?
 - Qi never publicly used Tide-Force, so why is he rotting? If not Tide-Force, what else could dissolve a person slowly into the fog?
+
+<!-- /narrator-only -->
 
 ## Opening Scene
 
