@@ -5,6 +5,12 @@ const MAX_BACKOFF_MS = 8000;
 const JITTER_MIN = 0.75;
 const JITTER_MAX = 1.25;
 
+/**
+ * Sends again after the first one, per model target: 4 attempts at most. A
+ * request budget also caps the attempts of the whole call across its fallback
+ * chain (`maxAttempts` in `@covel/shared`'s request budget); change the two
+ * together.
+ */
 export const MAX_RETRIES = 3;
 
 /**

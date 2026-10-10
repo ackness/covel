@@ -189,9 +189,12 @@ export function overlayWorldModelView(
   locale?: string,
 ): WorldModelView {
   const snapshot = structuredClone(base);
+  // No proposal writes the world record, and it holds the whole setting text:
+  // keep it out of the copy that every read of the other properties makes.
+  const { worldRecord: _worldRecord, ...model } = snapshot;
   const current = () => {
     assertLive();
-    return materializeWorldModel(snapshot, pending, sessionId, locale);
+    return materializeWorldModel(model, pending, sessionId, locale);
   };
   return Object.freeze({
     get characters() {

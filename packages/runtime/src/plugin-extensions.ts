@@ -305,7 +305,13 @@ export class PluginExtensionHost {
               } catch (error) {
                 scope.signal.throwIfAborted();
                 if (point.onError === "fail-turn") throw error;
-                // Invocation failures already emit sanitized service diagnostics.
+                // The service diagnostic is sanitized and carries no reason, so
+                // the server log is where an author finds why a provider's
+                // contribution is missing.
+                console.warn(
+                  `[plugin-extensions] skipped provider ${provider.pluginId}/${provider.id} of ${point.id} for session ${scope.sessionId}: ` +
+                    (error instanceof Error ? error.message : String(error)),
+                );
                 continue;
               }
               // Composition belongs to the kernel contract. A broken contract

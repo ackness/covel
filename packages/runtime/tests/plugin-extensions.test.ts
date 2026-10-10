@@ -260,6 +260,7 @@ describe("kernel extension execution", () => {
 
   it("collects independent results and skips invalid output with sanitized diagnostics", async () => {
     const { point, host, execution, events } = fixture("collect");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     host.register(
       "alpha",
       { point: point.id, id: "bad" },
@@ -275,6 +276,12 @@ describe("kernel extension execution", () => {
     ]);
     expect(events.map((event) => event.outcome)).toEqual(["error", "success"]);
     expect(JSON.stringify(events)).not.toContain("secret-invalid-output");
+    // The skip names the provider and the point in the server log.
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain(
+      "skipped provider alpha/bad of test.value@1 for session",
+    );
+    warn.mockRestore();
   });
 
   it("returns undefined for an empty single point and rejects active conflicts", async () => {

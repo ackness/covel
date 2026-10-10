@@ -198,12 +198,16 @@ export async function executeOneRuntime(
       // Execution identity is framework-owned. The public delta type already
       // omits these, but plugin code is untyped JS at runtime — strip them so
       // a handler cannot hop sessions or forge a child turnId that the parent
-      // turn can never settle.
+      // turn can never settle. The content locale is fixed for the session and
+      // the logical turn belongs to the player action, so a nested execution
+      // keeps the parent's values of both.
       const {
         sessionId: _s,
         turnId: _t,
         origin: _o,
         parentTurnId: _p,
+        locale: _l,
+        logicalTurnId: _lt,
         ...delta
       } = rawDelta as Partial<TurnInput>;
 

@@ -66,21 +66,12 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
       return Promise.resolve(query.all() as unknown as Row[]);
     },
 
-    selectFirst<Row>(
+    async selectFirst<Row>(
       table: Table,
       opts?: SelectOpts,
     ): Promise<Row | undefined> {
-      let query = db
-        .select()
-        .from(table as SQLiteTable)
-        .$dynamic();
-      if (opts?.where) query = query.where(opts.where);
-      if (opts?.orderBy && opts.orderBy.length > 0) {
-        query = query.orderBy(...opts.orderBy);
-      }
-      query = query.limit(1);
-      const row = query.get();
-      return Promise.resolve((row ?? undefined) as unknown as Row | undefined);
+      const rows = await this.select<Row>(table, { ...opts, limit: 1 });
+      return rows[0];
     },
 
     insert(

@@ -433,6 +433,8 @@ describe("Gemini native generateContent", () => {
         items: native,
       },
     });
+    // The call without a native id is named by its position.
+    expect(result.toolCalls?.map((c) => c.id)).toEqual(["native-a", "call_1"]);
     expect(request().body.tools).toEqual([
       {
         functionDeclarations: [

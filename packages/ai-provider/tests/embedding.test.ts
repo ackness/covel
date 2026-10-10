@@ -168,6 +168,41 @@ describe("openai-chat adapter: embed format dispatch", () => {
     expect(result.embeddings[0]).toHaveLength(768);
     expect(result.usage.inputTokens).toBe(42);
   });
+
+  function stubData(data: unknown[]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({ data, usage: { prompt_tokens: 1 } }),
+      }),
+    );
+  }
+  const config = { baseUrl: "http://localhost:11434/v1", apiKey: "test" };
+
+  it("puts vectors back in input order by index", async () => {
+    stubData([
+      { embedding: [2], index: 1 },
+      { embedding: [1], index: 0 },
+    ]);
+    const result = await createOpenAiChatAdapter().embed(config, {
+      model: "m",
+      values: ["a", "b"],
+    });
+    expect(result.embeddings).toEqual([[1], [2]]);
+  });
+
+  it("rejects an answer with fewer vectors than inputs", async () => {
+    stubData([{ embedding: [1], index: 0 }]);
+    await expect(
+      createOpenAiChatAdapter().embed(config, {
+        model: "m",
+        values: ["a", "b"],
+      }),
+    ).rejects.toThrow("1 vectors for 2 inputs");
+  });
 });
 
 // ── gateway.embed(): end-to-end with stub adapter ─────────────

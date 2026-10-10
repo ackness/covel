@@ -282,8 +282,6 @@ if (pgVectorAvailable) {
   });
 } else {
   describe("PgStore (pgvector) — skipped", () => {
-    it("skipped — PostgreSQL with pgvector not available", () => {
-      expect(true).toBe(true);
-    });
+    it.skip("skipped — PostgreSQL with pgvector not available", () => {});
   });
 }

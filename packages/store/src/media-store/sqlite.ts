@@ -178,9 +178,27 @@ function initializeSqliteMediaStore(
               });
           };
           const existing = select.get(id) as
-            | { id: string; mime: string; size: number; meta: string | null }
+            | {
+                id: string;
+                mime: string;
+                size: number;
+                path: string;
+                meta: string | null;
+              }
             | undefined;
           if (existing) {
+            // The row survives when the file was deleted or not restored from
+            // a backup; writing the same bytes again repairs it.
+            if (!existsSync(existing.path)) {
+              mkdirSync(dirname(existing.path), { recursive: true });
+              const repairPath = `${existing.path}.${randomUUID()}.tmp`;
+              try {
+                writeFileSync(repairPath, bytes, { flag: "wx" });
+                renameSync(repairPath, existing.path);
+              } finally {
+                rmSync(repairPath, { force: true });
+              }
+            }
             claim();
             return {
               id: existing.id,

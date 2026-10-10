@@ -541,11 +541,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       // Emit accumulated tool calls before done.
       if (toolCallAcc.size > 0) {
         const sorted = [...toolCallAcc.entries()].sort((a, b) => a[0] - b[0]);
-        for (const [, tc] of sorted) {
-          if (!tc.id || !tc.name) continue;
+        for (const [index, tc] of sorted) {
+          if (!tc.name) continue;
           yield {
             type: "tool-call",
-            id: tc.id,
+            // Some compatible gateways leave `id` out of the stream; the AI
+            // SDK makes one up, here it follows the call's position.
+            id: tc.id ?? `call_${index}`,
             name: tc.name,
             arguments: tc.arguments || "{}",
           };
@@ -589,11 +591,19 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
 
-      const data = Array.isArray(payload.data) ? payload.data : [];
+      const data: Array<{ embedding: number[]; index?: number }> =
+        Array.isArray(payload.data) ? payload.data : [];
+      if (data.length !== params.values.length)
+        throw new Error(
+          `openai-chat embeddings returned ${data.length} vectors for ${params.values.length} inputs`,
+        );
+      // A gateway that batches inside may answer out of order; `index` is the
+      // position of the input each vector belongs to.
+      const ordered = data.every((entry) => typeof entry.index === "number")
+        ? [...data].sort((a, b) => a.index! - b.index!)
+        : data;
       return {
-        embeddings: data.map(
-          (entry: { embedding: number[] }) => entry.embedding,
-        ),
+        embeddings: ordered.map((entry) => entry.embedding),
         usage: {
           inputTokens: readTokenCount(
             (payload.usage as Record<string, unknown> | undefined)

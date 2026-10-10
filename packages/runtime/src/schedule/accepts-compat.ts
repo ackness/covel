@@ -172,6 +172,11 @@ export function checkAcceptsCompatibility(
     return "indeterminate";
   }
 
+  // A type union is outside the decidable subset on either side.
+  if (Array.isArray(producer.type) || Array.isArray(accepts.type)) {
+    return "indeterminate";
+  }
+
   // A producer `const` pins the type even when `type` is omitted.
   const pType =
     typeOf(producer) ??
@@ -235,24 +240,43 @@ function numberOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/** One end of a numeric range; `exclusive` when the bound itself is left out. */
+function numericBound(
+  schema: Schema,
+  inclusiveKey: "minimum" | "maximum",
+  exclusiveKey: "exclusiveMinimum" | "exclusiveMaximum",
+): { readonly value: unknown; readonly exclusive: boolean } | undefined {
+  if (schema[inclusiveKey] !== undefined)
+    return { value: schema[inclusiveKey], exclusive: false };
+  if (schema[exclusiveKey] !== undefined)
+    return { value: schema[exclusiveKey], exclusive: true };
+  return undefined;
+}
+
 function compareNumericBounds(
   producer: Schema,
   accepts: Schema,
 ): AcceptsCompatibility {
-  const aMin = accepts.minimum ?? accepts.exclusiveMinimum;
-  const aMax = accepts.maximum ?? accepts.exclusiveMaximum;
-  if (aMin === undefined && aMax === undefined) return "compatible";
-  const pMin = producer.minimum ?? producer.exclusiveMinimum;
-  const pMax = producer.maximum ?? producer.exclusiveMaximum;
-  if (aMin !== undefined) {
-    if (pMin === undefined) return "indeterminate";
-    if (numberOr(pMin, -Infinity) < numberOr(aMin, -Infinity))
-      return "incompatible";
+  const aMin = numericBound(accepts, "minimum", "exclusiveMinimum");
+  const aMax = numericBound(accepts, "maximum", "exclusiveMaximum");
+  if (!aMin && !aMax) return "compatible";
+  const pMin = numericBound(producer, "minimum", "exclusiveMinimum");
+  const pMax = numericBound(producer, "maximum", "exclusiveMaximum");
+  if (aMin) {
+    if (!pMin) return "indeterminate";
+    const p = numberOr(pMin.value, -Infinity);
+    const a = numberOr(aMin.value, -Infinity);
+    // An exclusive producer bound below the accepted one can still hold only
+    // accepted values (integers above 4 are all at least 5).
+    if (p < a) return pMin.exclusive ? "indeterminate" : "incompatible";
+    if (p === a && aMin.exclusive && !pMin.exclusive) return "incompatible";
   }
-  if (aMax !== undefined) {
-    if (pMax === undefined) return "indeterminate";
-    if (numberOr(pMax, Infinity) > numberOr(aMax, Infinity))
-      return "incompatible";
+  if (aMax) {
+    if (!pMax) return "indeterminate";
+    const p = numberOr(pMax.value, Infinity);
+    const a = numberOr(aMax.value, Infinity);
+    if (p > a) return pMax.exclusive ? "indeterminate" : "incompatible";
+    if (p === a && aMax.exclusive && !pMax.exclusive) return "incompatible";
   }
   return "compatible";
 }

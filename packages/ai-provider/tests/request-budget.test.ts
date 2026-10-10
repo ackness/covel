@@ -93,6 +93,25 @@ describe("logical provider request budgets", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("labels a retried 409 as an HTTP 4xx retry", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(409))
+      .mockResolvedValue(response());
+    vi.stubGlobal("fetch", fetch);
+    const observations: LLMProviderRequest[] = [];
+    const call = fixture().gateway.generateText(
+      { messages },
+      { onProviderRequest: (record) => observations.push(record) },
+    );
+    await vi.runAllTimersAsync();
+    await call;
+    expect(observations.map((record) => record.transportRetryReason)).toEqual([
+      undefined,
+      "http-4xx",
+    ]);
+  });
+
   it("returns the last allowed successful attempt", async () => {
     const fetch = vi.fn(async () => response());
     vi.stubGlobal("fetch", fetch);

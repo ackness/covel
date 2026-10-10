@@ -19,7 +19,11 @@ import type {
   TurnInput,
   TurnResult,
 } from "@covel/shared";
-import { isSetupRuntime, resolveSetupGeneration } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  isSetupRuntime,
+  resolveSetupGeneration,
+} from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
@@ -383,7 +387,7 @@ async function executeTurnImpl(
         runtimeIdentities: activeRuntimes,
         sessionId: input.sessionId,
         turnId: input.turnId,
-        locale: input.locale ?? "zh-CN",
+        locale: input.locale ?? DEFAULT_LOCALE,
         world: deps.store
           ? await createWorldModelView(
               deps.worldModelReads ?? deps.store,
