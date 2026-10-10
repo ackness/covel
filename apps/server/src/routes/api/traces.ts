@@ -2,6 +2,7 @@
  * API Trace routes — read-only endpoints for debug trace inspection.
  */
 
+import { compareText } from "@covel/shared";
 import { Hono } from "hono";
 import type { DataStore, TraceEventRecord } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
@@ -34,7 +35,7 @@ function buildTurnSummaries(events: readonly ApiTraceEvent[]) {
   return Array.from(turnMap.entries())
     .map(([turnId, turnEvents]) => {
       const sorted = turnEvents.sort((a, b) =>
-        a.timestamp.localeCompare(b.timestamp),
+        compareText(a.timestamp, b.timestamp),
       );
       // A map entry is created with its first event, so `sorted` is never empty.
       const firstEvt = sorted[0]!;
@@ -53,7 +54,7 @@ function buildTurnSummaries(events: readonly ApiTraceEvent[]) {
         events: sorted,
       };
     })
-    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    .sort((a, b) => compareText(a.startedAt, b.startedAt));
 }
 
 type Env = {

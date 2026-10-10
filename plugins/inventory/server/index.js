@@ -3,6 +3,7 @@
  * item-op RPC action (panel buttons) and the `/bag` command action, and puts
  * what the player carries into the session summary.
  */
+import { compareText } from "@covel/plugin-handlers-utils";
 import { appendSummaryEntries, labelText } from "@covel/plugin-handlers-utils";
 import itemOp from "../rpc/item-op.js";
 import openBag from "../rpc/open-bag.js";
@@ -32,7 +33,7 @@ export default function (covel) {
         .sort(
           (a, b) =>
             Number(b.equipped === true) - Number(a.equipped === true) ||
-            String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")),
+            compareText(String(b.updatedAt ?? ""), String(a.updatedAt ?? "")),
         );
       if (carried.length === 0) return appendSummaryEntries(previous, []);
       return appendSummaryEntries(previous, [

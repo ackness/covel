@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type {
   MediaAssetLookup,
   MediaAssetRecord,
@@ -113,8 +114,7 @@ export function sortAssetRecords(
   assets: readonly MediaAssetRecord[],
 ): MediaAssetRecord[] {
   return [...assets].sort(
-    (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    (a, b) => compareText(a.createdAt, b.createdAt) || compareText(a.id, b.id),
   );
 }
 
@@ -123,8 +123,8 @@ export function sortRefRecords(
 ): MediaRefRecord[] {
   return [...refs].sort(
     (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) ||
-      a.sessionId.localeCompare(b.sessionId) ||
-      a.mediaId.localeCompare(b.mediaId),
+      compareText(a.createdAt, b.createdAt) ||
+      compareText(a.sessionId, b.sessionId) ||
+      compareText(a.mediaId, b.mediaId),
   );
 }

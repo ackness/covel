@@ -1,7 +1,7 @@
 ---
 id: core-quest
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Quest Log
 description: >-
   Automatically registers and advances quests from the narrative so goals,

@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isLocaleMap } from "@covel/shared";
@@ -111,9 +112,7 @@ export async function readMessageCatalogs(
       if (typeof translation === "string") messages[text] = translation;
     catalogs.set(locale, { locale, file, messages });
   }
-  return [...catalogs.values()].sort((a, b) =>
-    a.locale.localeCompare(b.locale),
-  );
+  return [...catalogs.values()].sort((a, b) => compareText(a.locale, b.locale));
 }
 
 /** The catalog key that translates `text` at `property`, if any. */
@@ -204,7 +203,7 @@ async function uiSpecFiles(pluginRoot: string): Promise<string[]> {
     } catch {
       return;
     }
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
       if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
       const full = path.join(directory, entry.name);
       if (entry.isDirectory())
@@ -236,7 +235,7 @@ async function sourceFiles(pluginRoot: string): Promise<string[]> {
     } catch {
       return;
     }
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
       if (entry.name.startsWith(".")) continue;
       const full = path.join(directory, entry.name);
       if (entry.isDirectory()) {

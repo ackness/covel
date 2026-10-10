@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -158,7 +159,7 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
     const services = deps.services.list();
     const plugins = [...deps.registry.getAll().values()]
       .filter((entry) => !pluginId || entry.id === pluginId)
-      .sort((a, b) => a.id.localeCompare(b.id))
+      .sort((a, b) => compareText(a.id, b.id))
       .map((entry): PluginDiagnostic => {
         const plugin = sessionPlugins.get(entry.id)!;
         const available =
@@ -264,7 +265,8 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
       plugins,
       calls,
       extensionCalls: [...counters.values()].sort((a, b) =>
-        `${a.point}/${a.providerPluginId}`.localeCompare(
+        compareText(
+          `${a.point}/${a.providerPluginId}`,
           `${b.point}/${b.providerPluginId}`,
         ),
       ),

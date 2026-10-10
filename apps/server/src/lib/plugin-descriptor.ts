@@ -1,5 +1,6 @@
 /** Canonical projections from one registry entry to public plugin DTOs. */
 
+import { compareText } from "@covel/shared";
 import {
   getPluginTrustInfo,
   pluginDeclarations,
@@ -19,7 +20,7 @@ import {
 import { pluginManifestRecords } from "../routes/misc-api/registry-projection.js";
 
 function uniqueSorted(values: Iterable<string>): string[] {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+  return [...new Set(values)].sort((a, b) => compareText(a, b));
 }
 
 function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {

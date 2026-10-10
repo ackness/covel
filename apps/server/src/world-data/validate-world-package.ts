@@ -7,6 +7,7 @@
  * Nothing is written and no plugin code is executed.
  */
 
+import { compareText } from "@covel/shared";
 import { readFile, readdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -716,7 +717,7 @@ async function unclaimedDataFiles(
       if (error.code === "ENOENT") return [];
       throw error;
     });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
       const file = `${directory}/${entry.name}`;
       if (entry.isDirectory()) {
         await visit(file);

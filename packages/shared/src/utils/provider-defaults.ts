@@ -162,7 +162,7 @@ export function listBuiltinProviderConnections(): Array<
 > {
   return Object.entries(BUILTIN_PROVIDER_CONNECTIONS)
     .map(([id, connection]) => ({ id, ...connection }))
-    .sort((left, right) => left.label.localeCompare(right.label));
+    .sort((left, right) => left.label.localeCompare(right.label, "en"));
 }
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);

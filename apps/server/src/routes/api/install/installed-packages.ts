@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
@@ -40,7 +41,7 @@ export function createInstalledPackageRoutes(kind: "plugin" | "world") {
             };
           }),
       );
-      return c.json({ items: items.sort((a, b) => a.id.localeCompare(b.id)) });
+      return c.json({ items: items.sort((a, b) => compareText(a.id, b.id)) });
     },
   );
 

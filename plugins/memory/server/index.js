@@ -1,3 +1,4 @@
+import { compareText } from "@covel/plugin-handlers-utils";
 import { isDefaultLocale, resolveI18nText } from "@covel/plugin-handlers-utils";
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./blocks.js";
 import { recallFacts } from "./facts.js";
@@ -35,7 +36,7 @@ export default function register(covel) {
           (row) =>
             typeof row.value?.content === "string" && row.value.content.trim(),
         )
-        .sort((a, b) => a.key.localeCompare(b.key))
+        .sort((a, b) => compareText(a.key, b.key))
         .slice(0, 60);
       const maxChars = Math.min(
         2000,
