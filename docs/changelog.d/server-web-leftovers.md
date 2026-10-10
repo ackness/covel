@@ -14,3 +14,7 @@
 ### Documentation
 
 - **The security page states that `resolveSlot` hands a plugin any slot's key.** `ctx.gateway.resolveSlot()` returns credentials for any slot name by design (custom wires need them) and plugin server code is not sandboxed, so approving a community package already means trusting its author with the provider keys; see `docs/architecture/security.md`.
+
+### Added
+
+- **Releases attach a `SHA256SUMS.txt` for the installers.** The release workflow lists the SHA-256 of every `.dmg`, `.zip` and `.exe`, so an unsigned download can be checked against it. See `docs/guide/desktop-packaging.md`.
