@@ -24,7 +24,7 @@
  */
 
 import { Hono } from "hono";
-import { collectMediaRefIds, isEnvTruthy, readEnvString } from "@covel/shared";
+import { isEnvTruthy, readEnvString } from "@covel/shared";
 import type { MediaRef } from "@covel/shared";
 import type { DataStore, MediaLifecyclePolicy, MediaStore } from "@covel/store";
 import {
@@ -38,6 +38,15 @@ import {
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { errorBody } from "../../api-error.js";
+import {
+  DEFAULT_SCAN_LIMIT_PER_SESSION,
+  scanMediaReferences,
+} from "./media-reference-scan.js";
+import {
+  MEDIA_LIBRARY_TOKEN_SCOPE,
+  isMediaLibraryAvailable,
+  registerMediaLibraryRoutes,
+} from "./media-library.js";
 
 /**
  * Module augmentation so `c.get('mediaStore')` / `c.set('mediaStore', ...)`
@@ -212,171 +221,6 @@ function optionalPositiveInteger(value: unknown): number | undefined {
 }
 
 /**
- * Default per-session row scan ceiling. Each row in {messages, plugin-data,
- * runtime-outputs, trace-events, snapshots, turn-results, runtime-results}
- * contributes; once the running total exceeds this, the route refuses to
- * silently truncate (which would risk deleting still-referenced media) and
- * surfaces a 400 limit_exceeded so the operator can either narrow the scope
- * or pass an explicit larger `scanLimit`.
- */
-const DEFAULT_SCAN_LIMIT_PER_SESSION = 1_000;
-
-/** Page size for cleanup scans; keeps each store call below the row ceiling. */
-const CLEANUP_SCAN_PAGE_SIZE = 100;
-
-/** Maximum sessions per kernel batch when iterating large installs. */
-const SESSION_BATCH_SIZE = 50;
-
-/** Threshold above which we batch + log progress. */
-const LARGE_SESSION_INSTALL = 100;
-
-interface BuildProtectedOptions {
-  readonly maxScanRowsPerSession?: number;
-  readonly maxSessions?: number;
-}
-
-interface BuildProtectedResult {
-  readonly protectedIds: Set<string>;
-  readonly scannedSessions: number;
-  readonly limitExceeded: boolean;
-  readonly limitExceededSessionId?: string;
-  readonly limitExceededRowCount?: number;
-}
-
-async function buildProtectedMediaIds(
-  store: DataStore,
-  mediaStore: MediaStore,
-  options: BuildProtectedOptions = {},
-): Promise<BuildProtectedResult> {
-  const protectedIds = new Set<string>();
-  const sessions = await store.listSessions();
-  const liveSessionIds = new Set(sessions.map((session) => session.id));
-
-  for (const asset of await mediaStore.listAssets()) {
-    if (asset.ownerSessionId && liveSessionIds.has(asset.ownerSessionId)) {
-      protectedIds.add(asset.id);
-    }
-  }
-  for (const ref of await mediaStore.listRefs()) {
-    if (liveSessionIds.has(ref.sessionId)) {
-      protectedIds.add(ref.mediaId);
-    }
-  }
-
-  const scan = (value: unknown): void => {
-    for (const id of collectMediaRefIds(value)) protectedIds.add(id);
-  };
-
-  const maxRowsPerSession =
-    options.maxScanRowsPerSession ?? DEFAULT_SCAN_LIMIT_PER_SESSION;
-  const pageSize = Math.max(
-    1,
-    Math.min(CLEANUP_SCAN_PAGE_SIZE, maxRowsPerSession),
-  );
-  const sessionsToScan =
-    options.maxSessions !== undefined
-      ? sessions.slice(0, options.maxSessions)
-      : sessions;
-  const totalSessions = sessionsToScan.length;
-  const shouldBatch = totalSessions > LARGE_SESSION_INSTALL;
-
-  let scannedSessions = 0;
-  for (
-    let batchStart = 0;
-    batchStart < totalSessions;
-    batchStart += SESSION_BATCH_SIZE
-  ) {
-    const batch = sessionsToScan.slice(
-      batchStart,
-      batchStart + SESSION_BATCH_SIZE,
-    );
-    for (const session of batch) {
-      let rowsForSession = 0;
-      const consumeRows = (rows: {
-        readonly length: number;
-      }): BuildProtectedResult | null => {
-        rowsForSession += rows.length;
-        if (rowsForSession <= maxRowsPerSession) return null;
-        return {
-          protectedIds,
-          scannedSessions,
-          limitExceeded: true,
-          limitExceededSessionId: session.id,
-          limitExceededRowCount: rowsForSession,
-        };
-      };
-      const scanRows = (
-        rows: readonly unknown[],
-      ): BuildProtectedResult | null => {
-        const exceeded = consumeRows(rows);
-        if (exceeded) return exceeded;
-        scan(rows);
-        return null;
-      };
-      const scanPaged = async (
-        loader: (pagination: {
-          readonly limit: number;
-          readonly offset: number;
-        }) => Promise<readonly unknown[]>,
-      ): Promise<BuildProtectedResult | null> => {
-        for (let offset = 0; ; offset += pageSize) {
-          const rows = await loader({ limit: pageSize, offset });
-          const exceeded = scanRows(rows);
-          if (exceeded) return exceeded;
-          if (rows.length < pageSize) return null;
-        }
-      };
-
-      let exceeded = await scanPaged((pagination) =>
-        store.listMessages(session.id, pagination),
-      );
-      if (exceeded) return exceeded;
-
-      exceeded = await scanPaged((pagination) =>
-        store.listPluginDataSessionScope(session.id, pagination),
-      );
-      if (exceeded) return exceeded;
-
-      exceeded = await scanPaged((pagination) =>
-        store.listRuntimeOutputs(session.id, pagination),
-      );
-      if (exceeded) return exceeded;
-
-      exceeded = await scanPaged((pagination) =>
-        store.listTraceEvents(session.id, pagination),
-      );
-      if (exceeded) return exceeded;
-
-      const snapshots = await store.listSnapshots(session.id);
-      exceeded = scanRows(snapshots);
-      if (exceeded) return exceeded;
-
-      // Each turn row embeds that execution's full runtime results.
-      exceeded = scanRows(await store.listTurnResults(session.id));
-      if (exceeded) return exceeded;
-
-      scannedSessions += 1;
-    }
-
-    if (shouldBatch) {
-      // Coarse progress signal for large installs. Stays at console.info so
-      // it surfaces in pino's structured stream without triggering the
-      // production no-console-log rule (this is operational telemetry, not
-      // ad-hoc debugging).
-      console.info(
-        `[cleanup] scanned ${scannedSessions}/${totalSessions} sessions`,
-      );
-    }
-  }
-
-  return {
-    protectedIds,
-    scannedSessions,
-    limitExceeded: false,
-  };
-}
-
-/**
  * `POST /api/media/cleanup` — destructive maintenance endpoint.
  *
  * Hardening summary:
@@ -472,7 +316,7 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
   }
 
   try {
-    const scan = await buildProtectedMediaIds(store, mediaStore, {
+    const scan = await scanMediaReferences(store, mediaStore, {
       maxScanRowsPerSession: scanLimit,
     });
     if (scan.limitExceeded) {
@@ -483,7 +327,10 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
         400,
       );
     }
-    const result = await mediaStore.cleanup(scan.protectedIds, policy);
+    const result = await mediaStore.cleanup(
+      new Set(scan.usedBy.keys()),
+      policy,
+    );
     return new Response(JSON.stringify({ ok: true, policy, result }), {
       status: 200,
       headers: { "content-type": "application/json; charset=utf-8" },
@@ -492,6 +339,9 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
     return jsonError("internal", "media cleanup failed", 500);
   }
 });
+
+// Registered before `/:id` so `library` is not read as a media ID.
+registerMediaLibraryRoutes(mediaRoutes);
 
 mediaRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
@@ -540,8 +390,13 @@ mediaRoutes.get("/:id", async (c) => {
     return jsonError("not_found", "media not found", 404);
   }
 
-  let allowed = lookup.ownerSessionId === verdict.sessionId;
-  if (!allowed) {
+  // A library token names no session: it is issued by the media library
+  // listing, which exists only where one player owns every stored asset.
+  const libraryToken = verdict.sessionId === MEDIA_LIBRARY_TOKEN_SCOPE;
+  let allowed = libraryToken
+    ? isMediaLibraryAvailable(c)
+    : lookup.ownerSessionId === verdict.sessionId;
+  if (!allowed && !libraryToken) {
     try {
       allowed = await store.isReferencedBy(id, verdict.sessionId);
     } catch {
