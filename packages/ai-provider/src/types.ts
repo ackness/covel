@@ -10,7 +10,6 @@ import type {
   LLMProviderRequest,
   LLMRequestDefaults,
   LLMUsageSummary,
-  MediaRef,
 } from "@covel/shared";
 import type { ZodType } from "zod";
 import type { ReasoningEffort } from "./reasoning-effort.js";
@@ -313,13 +312,16 @@ export interface TextPart {
   text: string;
 }
 
+/**
+ * An image the model reads, in the shape of the Vercel AI SDK `ImagePart`.
+ * `image` is base64 data, a `data:` URL, or an `http(s)` URL the provider
+ * fetches itself; `mediaType` names the format of base64 data. An adapter
+ * never downloads an image.
+ */
 export interface ImagePart {
   type: "image";
-  /**
-   * Provider adapters use image.url for native vision blocks. When URL
-   * resolution is absent, adapters serialize a text `image_ref` payload.
-   */
-  image: MediaRef;
+  image: string;
+  mediaType?: string;
 }
 
 export type TextMessageContentPart = TextPart | ImagePart;

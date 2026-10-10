@@ -6,8 +6,11 @@
  * `prompt-assembler.ts` so the assembler body focuses on segment composition.
  */
 
-import { instructionLocaleFor } from "@covel/shared";
-import { messageContentFromHistoryRecord } from "./llm-content-parts.js";
+import {
+  instructionLocaleFor,
+  picturesShown,
+  type LLMContentPart,
+} from "@covel/shared";
 import { escapeXmlContent } from "./prompt-internals.js";
 import type {
   LLMMessage,
@@ -32,9 +35,56 @@ export interface RenderedDepthContribution {
 function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
   return {
     role: msg.role as "system" | "user" | "assistant",
-    content: messageContentFromHistoryRecord(msg),
+    content: msg.content,
     ...(msg.name ? { name: msg.name } : {}),
   };
+}
+
+/**
+ * The newest `max` pictures of the history as one user message: a line of
+ * text and the stored picture for each, oldest first. `undefined` when the
+ * history shows none.
+ *
+ * The history itself holds only the note of a picture (the content of its
+ * row), which never changes once written. The images go here, in the part of
+ * the request that is rebuilt every turn, so a picture leaving the newest
+ * `max` does not change a byte of the history before it.
+ */
+export function buildRecentPicturesMessage(
+  messageHistory: readonly MessageHistoryRecord[],
+  max: number,
+  locale?: string,
+): LLMMessage | undefined {
+  if (max <= 0) return undefined;
+  // A compacted row is represented by its summary; so is its picture.
+  const pictures = messageHistory
+    .flatMap((record) =>
+      record.compactedAtTurnId ? [] : picturesShown(record.ui),
+    )
+    .slice(-max);
+  if (pictures.length === 0) return undefined;
+  const zh = instructionLocaleFor(locale) === "zh";
+  const parts: LLMContentPart[] = [
+    {
+      type: "text",
+      text: zh
+        ? "下面是玩家最近看到的图片，从旧到新。它们是故事记录：之后的剧情要和画面一致。"
+        : "The pictures the player was shown most recently follow, oldest first. They are story record: keep what happens next consistent with them.",
+    },
+  ];
+  for (const [index, picture] of pictures.entries()) {
+    const label = zh ? `图片 ${index + 1}` : `Picture ${index + 1}`;
+    parts.push(
+      {
+        type: "text",
+        text: picture.caption
+          ? `${label}${zh ? "：" : ": "}${picture.caption}`
+          : label,
+      },
+      { type: "media", ref: picture.ref },
+    );
+  }
+  return { role: "user", content: parts };
 }
 
 /**

@@ -834,7 +834,8 @@ export interface PluginTextMessage {
     | null
     | readonly (
         | { type: "text"; text: string }
-        | { type: "image"; image: { url?: string; mimeType?: string } }
+        /** Base64 data, a `data:` URL or an `http(s)` URL; `mediaType` is for base64. */
+        | { type: "image"; image: string; mediaType?: string }
       )[];
   /** Calls the assistant made; the tool's answers follow as `tool` messages. */
   toolCalls?: { id: string; name: string; arguments: string }[];

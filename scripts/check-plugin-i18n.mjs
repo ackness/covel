@@ -172,7 +172,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/rpc-defaults/submit-form.ts": 14,
   "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
-  "packages/context/src/message-insertion.ts": 1,
+  "packages/context/src/message-insertion.ts": 3,
   "packages/context/src/prompt-assembler.ts": 2,
   "packages/context/src/prompt-internals.ts": 20,
   "packages/context/src/session-context.ts": 1,
@@ -182,6 +182,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/agent-loop/response-review.ts": 1,
   "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
+  "packages/runtime/src/commit/commit-ui.ts": 2,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
   "packages/runtime/src/retry/retry-common.ts": 3,
   "packages/plugin-handlers-utils/src/dimension-query.ts": 1,

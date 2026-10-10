@@ -219,12 +219,7 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
               { type: "text", text: "Is this that book?" },
               {
                 type: "image",
-                image: {
-                  id: "a".repeat(64),
-                  mime: "image/png",
-                  size: 1234,
-                  url: "https://media.example.com/book.png",
-                },
+                image: "https://media.example.com/book.png",
               },
             ],
           },

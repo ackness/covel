@@ -12,22 +12,26 @@
  * - Deterministic: same inputs always yield the same output.
  */
 
-import { instructionLocaleFor, type ContentPart } from "@covel/shared";
+import { instructionLocaleFor, type LLMContentPart } from "@covel/shared";
+
+/**
+ * Tokens one image is counted as. Providers charge by pixel area: about 770
+ * tokens for a 1024x1024 picture on OpenAI at high detail, about 1,400 on
+ * Anthropic, and up to 1,600 for the largest size either accepts unscaled.
+ */
+export const IMAGE_PART_TOKEN_ESTIMATE = 1_500;
 
 /**
  * Convert a message `content` value (string or content-part array) into the
- * flat text the estimator can consume. Image parts contribute their
- * MediaRef id so the estimate stays stable across runs without pretending
- * image bytes have a token cost.
+ * flat text the estimator can consume. An image contributes a fixed marker;
+ * its cost is added per part by the budget (`IMAGE_PART_TOKEN_ESTIMATE`).
  */
 export function flattenMessageContent(
-  content: string | readonly ContentPart[],
+  content: string | readonly LLMContentPart[],
 ): string {
   if (typeof content === "string") return content;
   return content
-    .map((part) =>
-      part.type === "text" ? part.text : `[image:${part.image.id}]`,
-    )
+    .map((part) => (part.type === "text" ? part.text : "[image]"))
     .join("\n");
 }
 
@@ -155,7 +159,7 @@ export function resolveBudgetOptions(
 function estimateMessageTokens<
   M extends {
     readonly role: string;
-    readonly content: string | readonly ContentPart[];
+    readonly content: string | readonly LLMContentPart[];
   },
 >(message: M, estimator: TokenEstimator): number {
   const extended = message as M & {
@@ -172,8 +176,12 @@ function estimateMessageTokens<
       ? { reasoningContent: extended.reasoningContent }
       : {}),
   };
+  const images = Array.isArray(message.content)
+    ? message.content.filter((part) => part.type !== "text").length
+    : 0;
   return (
     estimator(flattenMessageContent(message.content)) +
+    images * IMAGE_PART_TOKEN_ESTIMATE +
     (Object.keys(auxiliary).length > 0
       ? estimator(JSON.stringify(auxiliary))
       : 0)
@@ -182,7 +190,7 @@ function estimateMessageTokens<
 
 /** Whether a message is the envelope a compaction summary is sent in. */
 export function isCompactedHistoryEnvelope(message: {
-  readonly content: string | readonly ContentPart[];
+  readonly content: string | readonly LLMContentPart[];
 }): boolean {
   return (
     typeof message.content === "string" &&
@@ -241,7 +249,7 @@ function computeProtectStartIndex(
 export function applyBudget<
   M extends {
     readonly role: string;
-    readonly content: string | readonly ContentPart[];
+    readonly content: string | readonly LLMContentPart[];
   },
 >(
   systemPrompt: string,

@@ -413,19 +413,16 @@ export type { InteractionRecordSchema } from "./schemas/interaction-record.js";
 
 // ── Proposal Helpers ─────────────────────────────────────────────
 export {
-  assetGenerateToLLM,
   assetGenerateToView,
-  assetGenerateViewToLLM,
   isAssetGeneratePayload,
   isAssetGenerateView,
+  pictureOf,
+  picturesShown,
 } from "./proposals/asset-generate.js";
 
 export type {
-  AssetGenerateLLMContent,
-  AssetGenerateLLMImagePart,
-  AssetGenerateLLMPart,
-  AssetGenerateLLMTextPart,
   AssetGenerateView,
+  ShownPicture,
 } from "./proposals/asset-generate.js";
 export {
   resolveSessionPlugins,

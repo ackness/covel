@@ -2,30 +2,30 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAnthropicMessagesAdapter } from "../src/adapters/anthropic-messages.js";
 import { createOpenAiChatAdapter } from "../src/adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "../src/adapters/openai-responses.js";
+import { projectRequestBody } from "../src/adapters/http/request-observation.js";
 import type {
   ModelRequestContext,
   PresetConfig,
   TextMessage,
 } from "../src/types.js";
 
-const IMAGE_REF = {
-  id: "a".repeat(64),
-  mime: "image/png",
-  size: 1234,
-  url: "https://cdn.example.test/image.png",
-};
-
-const IMAGE_REF_WITHOUT_URL = {
-  id: "b".repeat(64),
-  mime: "image/png",
-  size: 456,
-};
+const IMAGE_URL = "https://cdn.example.test/image.png";
+// The first bytes of a PNG file, as base64.
+const PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUg==";
 
 const MULTIMODAL_MESSAGE: TextMessage = {
   role: "user",
   content: [
     { type: "text", text: "Inspect this image." },
-    { type: "image", image: IMAGE_REF },
+    { type: "image", image: IMAGE_URL },
+  ],
+};
+
+const INLINE_MESSAGE: TextMessage = {
+  role: "user",
+  content: [
+    { type: "text", text: "Inspect this image." },
+    { type: "image", image: PNG_BASE64, mediaType: "image/png" },
   ],
 };
 
@@ -46,7 +46,8 @@ function stubFetch(payload: unknown): void {
 }
 
 function readRequestBody(): Record<string, unknown> {
-  const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined;
+  const init = vi.mocked(fetch).mock.calls.at(-1)?.[1] as
+    RequestInit | undefined;
   expect(init).toBeDefined();
   return JSON.parse(String(init?.body)) as Record<string, unknown>;
 }
@@ -74,7 +75,7 @@ describe("content part serialization", () => {
         role: "user",
         content: [
           { type: "text", text: "Inspect this image." },
-          { type: "image_url", image_url: { url: IMAGE_REF.url } },
+          { type: "image_url", image_url: { url: IMAGE_URL } },
         ],
       },
     ]);
@@ -98,7 +99,7 @@ describe("content part serialization", () => {
         role: "user",
         content: [
           { type: "input_text", text: "Inspect this image." },
-          { type: "input_image", image_url: IMAGE_REF.url },
+          { type: "input_image", image_url: IMAGE_URL },
         ],
       },
     ]);
@@ -122,13 +123,13 @@ describe("content part serialization", () => {
         role: "user",
         content: [
           { type: "text", text: "Inspect this image." },
-          { type: "image", source: { type: "url", url: IMAGE_REF.url } },
+          { type: "image", source: { type: "url", url: IMAGE_URL } },
         ],
       },
     ]);
   });
 
-  it("downgrades image parts to text descriptors for text-only models (capability fallback)", async () => {
+  it("removes image parts for text-only models (capability fallback)", async () => {
     stubFetch({
       choices: [
         {
@@ -158,20 +159,13 @@ describe("content part serialization", () => {
     const messages = body.messages as Array<{
       content: Array<{ type: string; text: string }>;
     }>;
-    expect(messages).toHaveLength(1);
-    expect(messages[0]!.content).toHaveLength(2);
-    expect(messages[0]!.content[0]).toEqual({
-      type: "text",
-      text: "Inspect this image.",
-    });
-    // Image part is collapsed into a text descriptor — same image_ref shape
-    // adapters use when a URL is missing, so the model still sees the asset id.
-    const downgradedText = messages[0]!.content[1]!.text;
-    expect(messages[0]!.content[1]!.type).toBe("text");
-    expect(JSON.parse(downgradedText)).toMatchObject({
-      type: "image_ref",
-      ref: IMAGE_REF,
-    });
+    // The image is removed; whoever built the request said the same in text.
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "Inspect this image." }],
+      },
+    ]);
   });
 
   it("keeps image parts intact for vision-capable models", async () => {
@@ -205,13 +199,13 @@ describe("content part serialization", () => {
         role: "user",
         content: [
           { type: "text", text: "Inspect this image." },
-          { type: "image_url", image_url: { url: IMAGE_REF.url } },
+          { type: "image_url", image_url: { url: IMAGE_URL } },
         ],
       },
     ]);
   });
 
-  it("keeps string messages unchanged and uses text references for unresolved MediaRef images", async () => {
+  it("sends inline image data in each protocol's own shape", async () => {
     stubFetch({
       choices: [
         {
@@ -221,33 +215,159 @@ describe("content part serialization", () => {
       ],
       usage: { prompt_tokens: 1, completion_tokens: 1 },
     });
-
     await createOpenAiChatAdapter().generateText(
       { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
+      { model: "gpt-4.1-mini", messages: [INLINE_MESSAGE] },
+      { profile: {} as never, preset: null, mode: "text" },
+    );
+    expect(readRequestBody().messages).toEqual([
       {
-        model: "gpt-4.1-mini",
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect this image." },
+          {
+            type: "image_url",
+            image_url: { url: `data:image/png;base64,${PNG_BASE64}` },
+          },
+        ],
+      },
+    ]);
+
+    stubFetch({
+      output_text: "ok",
+      status: "completed",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    await createOpenAiResponsesAdapter().generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "test" },
+      { model: "gpt-4.1-mini", messages: [INLINE_MESSAGE] },
+      { profile: {} as never, preset: null, mode: "text" },
+    );
+    expect(readRequestBody().input).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: "Inspect this image." },
+          {
+            type: "input_image",
+            image_url: `data:image/png;base64,${PNG_BASE64}`,
+          },
+        ],
+      },
+    ]);
+
+    stubFetch({
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    await createAnthropicMessagesAdapter().generateText(
+      { baseUrl: "https://api.anthropic.com/v1", apiKey: "test" },
+      { model: "claude-3-5-sonnet-latest", messages: [INLINE_MESSAGE] },
+      { profile: {} as never, preset: null, mode: "text" },
+    );
+    expect(readRequestBody().messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect this image." },
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/png",
+              data: PNG_BASE64,
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("reads the format of base64 data that names none from its first bytes", async () => {
+    stubFetch({
+      content: [{ type: "text", text: "ok" }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    await createAnthropicMessagesAdapter().generateText(
+      { baseUrl: "https://api.anthropic.com/v1", apiKey: "test" },
+      {
+        model: "claude-3-5-sonnet-latest",
         messages: [
-          { role: "system", content: "You inspect assets." },
           {
             role: "user",
-            content: [{ type: "image", image: IMAGE_REF_WITHOUT_URL }],
+            content: [
+              { type: "image", image: "/9j/4AAQSkZJRg==" },
+              { type: "image", image: "data:image/webp;base64,UklGRg==" },
+            ],
           },
         ],
       },
       { profile: {} as never, preset: null, mode: "text" },
     );
-
-    const body = readRequestBody();
-    expect(body.messages).toMatchObject([
-      { role: "system", content: "You inspect assets." },
-      { role: "user", content: [{ type: "text" }] },
+    expect(readRequestBody().messages).toEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/jpeg",
+              data: "/9j/4AAQSkZJRg==",
+            },
+          },
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/webp",
+              data: "UklGRg==",
+            },
+          },
+        ],
+      },
     ]);
-    const unresolvedText = (
-      body.messages as Array<{ content: Array<{ text: string }> }>
-    )[1]?.content[0]?.text;
-    expect(JSON.parse(unresolvedText!)).toMatchObject({
-      type: "image_ref",
-      ref: IMAGE_REF_WITHOUT_URL,
-    });
+  });
+});
+
+describe("recorded request bodies with inline images", () => {
+  it("records the size of inline image data instead of the data", () => {
+    const data = "A".repeat(8_000);
+    const projected = projectRequestBody(
+      JSON.stringify({
+        model: "m",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Look." },
+              {
+                type: "image_url",
+                image_url: { url: `data:image/png;base64,${data}` },
+              },
+              {
+                type: "image",
+                source: { type: "base64", media_type: "image/png", data },
+              },
+              // Short inline data stays as sent.
+              {
+                type: "image_url",
+                image_url: { url: "data:image/png;base64,AAAA" },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const text = JSON.stringify(projected.body);
+    expect(text).not.toContain(data);
+    expect(text).toContain(
+      "data:image/png;base64,[8000 base64 characters omitted]",
+    );
+    expect(text).toContain('"data":"[8000 base64 characters omitted]"');
+    expect(text).toContain("data:image/png;base64,AAAA");
+    expect(projected.complete).toBe(false);
   });
 });
