@@ -43,6 +43,10 @@ pre-turn 的 function publisher 不调用模型，发布 Sₙ；本轮 `ctx.worl
 
 world-init 的 post-turn tracker 以本轮 narrative 为必要来源，WorldIR 为可选辅证。没有非空规则时零维护模型调用，也不强制抽取 WorldIR。已有但失败的共享 WorldIR 不能解释成无变化。
 
+tracker 还通过可选输入 `world-time-evolution@1` 读取本轮结算之后的世界时钟（`runtime-inputs.worldTime.value`：显示文本 `display`、基础单位 `unit`、开局以来经过的 `elapsedSinceStart` 和本轮经过的 `elapsedThisTurn`，见 [World time](world-time.md#runtime-and-state)）。这条输入让 tracker 排在时间结算之后，读到的是本轮的时钟，不是上一轮的。随时间变化的维度（倒计时、期限、按小时计的消耗）应把规则写成时钟的函数，例如“剩余分钟数等于 180 减去时钟自开局以来走过的分钟数；只要时钟在本回合走动了就重新设定”。这样正文没有提到钟点的回合，面板上的数也和时钟一致；只写“减去正文花掉的时间”的规则，在正文不提时间时不会更新。没有提供该契约的插件、或本轮时间未能结算时，tracker 照常运行，只是没有时钟可读。
+
+模型在“本回合什么都没发生”时倾向于直接提交空结果，倒计时就停在原地。为此 `update-dimensions` 要求模型在 `followsClock` 里列出规则取决于时间的维度；时钟在本轮走动时，列出的维度在 `updates` 里缺一条，这次提交就被拒绝并带回时钟，模型再提交一次（见 [update-dimensions](tools.md#update-dimensions)）。数值仍由模型按规则算出：框架没有“由时钟确定性推导维度值”的声明字段，规则写得越接近一次加减法（“180 减去开局以来的分钟数”），结果越稳定。
+
 tracker 的提示词和 `dimension-rule-get` 给出每个维度的规则、schema 和冻结值：规则和 schema 在 system prompt 的 `<dimension-rules>` 里，整局不变；冻结值在回合上下文的 `<dimension-values>` 里（见 [Prompt 结构](prompt-structure.md#记账-runtime-的布局)）。给它看的 schema 里，文本字段的 `maxLength` 是作者所写值的 80%：模型不会数字数，按上限写经常多出几个到几十个字，整次提交被拒后还要再调一次模型；留出余量后，写得略超也仍在作者的上限以内。写入时校验的始终是作者写的上限。`update-dimensions` 每条更新的 `expectedVersion` 由工具取本次执行读到的版本，不由模型填写。
 
 ## 回执、恢复与玩家编辑

@@ -1,7 +1,7 @@
 ---
 id: world-init
 kind: core
-version: 0.0.35
+version: 0.0.36
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.
@@ -20,6 +20,7 @@ provides:
 optional:
   - narrative-engine@1
   - world-ir-provider@1
+  - world-time-evolution@1
 contracts:
   world.dimensions@1:
     schema: ./schemas/dimension-snapshot.schema.json
