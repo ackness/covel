@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { PluginRuntimeGateway } from "@covel/shared/plugin-runtime";
 
 /**
  * Cache-routing key for one runtime's model requests in one session.
@@ -17,4 +18,22 @@ export function promptCacheKeyFor(
     .update(`${sessionId}\n${runtimeId}`)
     .digest("hex");
   return `covel-${digest.slice(0, 32)}`;
+}
+
+/**
+ * A gateway whose `generateText` calls carry `key`: a function runtime's
+ * calls in one session repeat the runtime's own instructions, and the key
+ * sends them to the machine that holds that prefix. A key a plugin passes
+ * itself is replaced, so a plugin cannot route into another runtime's cache.
+ * Object generation does not take a key.
+ */
+export function withPromptCacheKey(
+  gateway: PluginRuntimeGateway,
+  key: string,
+): PluginRuntimeGateway {
+  return {
+    ...gateway,
+    generateText: (input) =>
+      gateway.generateText({ ...input, promptCacheKey: key }),
+  };
 }

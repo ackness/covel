@@ -44,6 +44,10 @@ import {
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import { withGatewayTrace } from "./gateway-trace.js";
+import {
+  promptCacheKeyFor,
+  withPromptCacheKey,
+} from "../llm/prompt-cache-key.js";
 import { withUtilsTrace } from "./utils-trace.js";
 import { createRuntimeTools } from "./runtime-tools.js";
 import { createPluginRandom } from "./plugin-random.js";
@@ -206,7 +210,10 @@ export async function executeFunctionRuntime({
     });
   }
   const runtimeGateway = deps.gateway
-    ? withDefaultGatewaySignal(deps.gateway, handlerAbort.signal)
+    ? withPromptCacheKey(
+        withDefaultGatewaySignal(deps.gateway, handlerAbort.signal),
+        promptCacheKeyFor(input.sessionId, manifest.name),
+      )
     : undefined;
   const runtimeUtils = deps.utils
     ? withDefaultUtilsSignal(deps.utils, handlerAbort.signal)

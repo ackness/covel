@@ -113,6 +113,7 @@ const openAiOptionFields: ProviderOptionWire = (settings, fields) => {
     ["user", "user"],
     // Not a wire field: the adapters read it and never forward it.
     ["promptCacheKey", "promptCacheKey"],
+    ["lateSystemAsUser", "lateSystemAsUser"],
   ] as const;
   for (const [key, wire] of wireFields) {
     if (settings[key] !== undefined) fields[wire] = settings[key];
