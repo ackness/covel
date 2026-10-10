@@ -305,6 +305,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST   | `/api/worlds/:id/sync-data`             | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
 | POST   | `/api/worlds/:id/translate`             | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）                                                                                                                             |
 | GET    | `/api/worlds/:id/gallery`               | 列出世界包自带的图片（场景、立绘），供世界列表和世界详情在没有会话时展示                                                                                                                |
+| GET    | `/api/media/library`                    | 玩家的媒体库：分页列出已存储的媒体、使用它的会话和可释放的空间（仅 `self` / 桌面端）                                                                                                    |
+| POST   | `/api/media/library/delete`             | 删除玩家选中的媒体，或所有没有会话使用的媒体                                                                                                                                            |
 | GET    | `/api/worlds/:id/gallery/:source/:file` | 读取上一条列表里的一张图片                                                                                                                                                              |
 
 服务端删除世界先在短世界锁内记录删除状态，释放世界锁后逐个执行完整的会话删除流程，包括等待执行写入、生命周期钩子、媒体引用与进程内状态清理，最后删除世界记录和对应文件包。底层 `DataStore.deleteWorld` 仍只删除世界记录；需要级联清理的调用必须经过 API 生命周期流程。
@@ -3585,7 +3587,115 @@ COVEL_MEDIA_CLEANUP_ENABLED=true \
        -d '{"dryRun": false, "maxBytes": 0}'
 ```
 
-> 大型部署（>100 sessions）会自动按 50 个一批迭代并通过 `console.info` 输出 `[cleanup] scanned X/Y sessions` 进度。
+> 大型部署（>100 sessions）会自动按 50 个一批迭代并通过 `console.info` 输出 `[media-scan] scanned X/Y sessions` 进度。
+
+#### `GET /api/media/library`
+
+玩家的媒体库：列出 MediaStore 里保存的图片、音频、视频和其他文件，以及每一项被哪些会话使用。设置里的“已存储的媒体”页面读这个接口。只读，不删除任何内容。
+
+**可用范围：** 只在一个玩家拥有全部数据的部署里可用（`DEPLOYMENT_TIER=self`、桌面端）。`demo` / `commercial`，以及生产环境的浏览器私有档（MemoryStore），媒体在多个所有者之间共享且没有按所有者的索引，一律返回 503 `{ "code": "unavailable" }`，带 operator token 也一样。
+
+**查询参数：**
+
+| 参数        | 说明                                                                                                  |
+| ----------- | ----------------------------------------------------------------------------------------------------- |
+| `kind`      | `image` / `audio` / `video` / `other`，按 MIME 类型过滤；省略为全部                                   |
+| `usage`     | `unused`（没有任何会话使用）或 `in-use`（其余全部）；省略为全部                                       |
+| `limit`     | 每页条数，默认 60，上限 200                                                                           |
+| `offset`    | 起始位置，默认 0；按创建时间从新到旧                                                                  |
+| `refresh`   | `1` 时重新扫描会话，否则复用 30 秒内的上一次扫描                                                      |
+| `scanLimit` | 单个会话的扫描行数上限，默认 200000。超过时扫描不完整（见下），不会把读不完的会话当作“没有引用”来处理 |
+
+**响应（200）：**
+
+```json
+{
+  "items": [
+    {
+      "id": "<sha256>",
+      "mime": "image/png",
+      "kind": "image",
+      "size": 482113,
+      "createdAt": "2026-10-01T10:00:00.000Z",
+      "name": "gate.png",
+      "usage": "used",
+      "usedBy": ["lantern-barrow-1a2b3c4d"],
+      "url": "/api/media/<sha256>?token=<signed>"
+    }
+  ],
+  "total": 132,
+  "offset": 0,
+  "limit": 60,
+  "sessions": [
+    {
+      "id": "lantern-barrow-1a2b3c4d",
+      "worldId": "lantern-barrow",
+      "status": "active",
+      "completedPlayerTurns": 12,
+      "createdAt": "2026-09-30T08:00:00.000Z",
+      "updatedAt": "2026-10-01T10:00:00.000Z"
+    }
+  ],
+  "totals": {
+    "count": 132,
+    "bytes": 91234567,
+    "unusedCount": 40,
+    "unusedBytes": 30123456,
+    "byKind": {
+      "image": { "count": 120, "bytes": 0, "unusedCount": 38, "unusedBytes": 0 }
+    }
+  },
+  "scan": { "complete": true, "scannedAt": "2026-10-10T09:00:00.000Z" }
+}
+```
+
+- `usage`：`used`（至少一个现存会话使用，`usedBy` 列出它们）、`unused`（完整扫描后没有任何使用者）、`held`（没有现存会话使用，但仍被不是现存会话的持有者占用：进行中的世界数据导入，或会话已不存在的遗留引用）、`unknown`（扫描不完整且没找到使用者）。只有 `unused` 计入 `totals.unusedCount` / `unusedBytes`。
+- 什么算“被会话使用”：会话是该资产的所有者、持有显式引用（`media_refs`），或者它的 `messages` / `plugin_data` / `runtime_outputs` / `trace_events` / `snapshots` / `turn_results` 任意一行里出现这个 mediaId。
+- `scan.complete: false` 时带 `incompleteSessionId`：这个会话的行数超过了 `scanLimit`。此时没有任何一项是 `unused`。
+- `totals` 统计整个媒体库，不受 `kind` / `usage` 过滤影响；`sessions` 只含本页条目提到的会话。
+- `url` 是一小时内有效的签名地址，直接用于 `<img>` / `<audio>` / `<video>`。服务器没有缩略图，地址返回的是原文件。
+- 世界包目录里的文件（`worlds/<id>/media`、封面、立绘）不是 MediaStore 内容，不会出现在这里。
+
+#### `POST /api/media/library/delete`
+
+按玩家的选择删除媒体。可用范围同上（其他部署返回 503）。每次请求都重新扫描会话，不使用列表的缓存。
+
+**请求体（三种之一）：**
+
+```json
+{ "ids": ["<sha256>", "<sha256>"] }
+```
+
+```json
+{ "unused": true }
+```
+
+```json
+{ "ids": ["<sha256>"], "force": true }
+```
+
+- `ids`（1 到 1000 个）：只删除其中当前为 `unused` 的；其余原样保留并在 `skipped` 里说明。
+- `unused: true`：删除所有当前为 `unused` 的。
+- `force: true`：只接受恰好一个 id，不管它是否仍被使用都删除，连同所有会话对它的引用。使用它的会话之后在原位置显示“媒体不可用”占位。
+- `scanLimit`（可选）：同列表接口。
+
+**响应（200）：**
+
+```json
+{
+  "deletedIds": ["<sha256>"],
+  "bytesDeleted": 482113,
+  "skipped": [{ "id": "<sha256>", "reason": "in_use" }]
+}
+```
+
+`skipped[].reason`：`in_use`（有会话使用，包括扫描之后才被引用的）、`held`、`not_found`。
+
+| 条件                                  | 行为                                                |
+| ------------------------------------- | --------------------------------------------------- |
+| 部署不提供媒体库                      | 503 `{ "code": "unavailable" }`                     |
+| 请求体不是上面三种之一                | 400 `{ "code": "invalid_request" }`                 |
+| 非 `force` 请求时有会话的行数超过上限 | 409 `{ "code": "scan_incomplete" }`，不删除任何内容 |
 
 ---
 
