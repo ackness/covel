@@ -32,6 +32,9 @@
 | **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具                |
 | **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史与历史摘要(recall) + 长期知识库(archival，含 lorebook/角色/插件声明可检索的数据) |
 | initialize-world                      | local   | world-init          | auto-allow | 组合角色属性 schema 与维度声明初始化                                                               |
+| create-character-form                 | local   | char-creator        | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值                  |
+| update-affinity                       | local   | affinity            | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100]     |
+| advance-world-time                    | local   | world-time          | auto-allow | 结算本回合叙事经过的世界时间：提交时长而非日历算术，随机模式省略数量，随故事一并提交               |
 | set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的内部 schema 写入原语                                                          |
 | set-world-dimensions                  | local   | world-init          | auto-allow | 采纳维度声明，不重置会话进度                                                                       |
 | dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                                  |
