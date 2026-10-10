@@ -360,7 +360,7 @@ describe("upsert-npc-graph", () => {
     expect(getToolContent(list).nodes[0].summary).toMatch(/古老的阵法/);
   });
 
-  it("keeps an existing lastSeenTurn when a re-upsert carries no turnNumber", async () => {
+  it("keeps an existing lastSeenTurn when a re-upsert carries no logicalTurn", async () => {
     const seeded = await executeAndCommit(
       upsertTool,
       {
@@ -368,12 +368,12 @@ describe("upsert-npc-graph", () => {
           { name: "陆沉渊", type: "individual", summary: "青萍宗宗主。" },
         ],
       },
-      { ...ctx, turnNumber: 5 },
+      { ...ctx, logicalTurn: 5 },
       store,
     );
     const nodeId = getToolContent(seeded).nodes.results[0].id;
 
-    // Re-upsert without turnNumber (currentTurn = -1). The node's real
+    // Re-upsert without logicalTurn (currentTurn = -1). The node's real
     // lastSeenTurn must not regress to the "unknown" sentinel.
     await executeAndCommit(
       upsertTool,
@@ -382,7 +382,7 @@ describe("upsert-npc-graph", () => {
           { name: "陆沉渊", type: "individual", summary: "更新后的简介。" },
         ],
       },
-      { ...ctx, turnNumber: undefined },
+      { ...ctx, logicalTurn: undefined },
       store,
     );
 
@@ -466,7 +466,7 @@ describe("upsert-npc-graph", () => {
           },
         ],
       },
-      { ...ctx, turnNumber: 3 },
+      { ...ctx, logicalTurn: 3 },
       store,
     );
   }
@@ -487,7 +487,7 @@ describe("upsert-npc-graph", () => {
           },
         ],
       },
-      { ...ctx, turnNumber: 4 },
+      { ...ctx, logicalTurn: 4 },
       store,
     );
 
@@ -519,7 +519,7 @@ describe("upsert-npc-graph", () => {
           },
         ],
       },
-      { ...ctx, turnNumber: 9 },
+      { ...ctx, logicalTurn: 9 },
       store,
     );
 
@@ -588,7 +588,7 @@ describe("upsert-npc-graph", () => {
     // its batch index at 0, so a turn+index suffix reused the same id for a
     // relation revised in three separate calls of the same turn — the later
     // versions overwrote the earlier rows' provenance.
-    const turn = { ...ctx, turnNumber: 7 };
+    const turn = { ...ctx, logicalTurn: 7 };
     const pending = [];
     const revise = async (strength, fact) => {
       const result = await upsertTool.execute(
@@ -692,7 +692,7 @@ describe("upsert-npc-graph", () => {
           },
         ],
       },
-      { ...ctx, turnNumber: 9 },
+      { ...ctx, logicalTurn: 9 },
       store,
     );
 
@@ -736,7 +736,7 @@ describe("upsert-npc-graph", () => {
         nodes: longNodes,
         edges: [{ ...relation, strength: 0.3, fact: "Guarded cordiality." }],
       },
-      { ...ctx, turnNumber: 4 },
+      { ...ctx, logicalTurn: 4 },
       store,
     );
     const originalId = getToolContent(seeded).edges.results[0].id;
@@ -752,7 +752,7 @@ describe("upsert-npc-graph", () => {
           },
         ],
       },
-      { ...ctx, turnNumber: 11 },
+      { ...ctx, logicalTurn: 11 },
       store,
     );
     const newId = getToolContent(updated).edges.results[0].id;
@@ -823,7 +823,7 @@ describe("upsert-npc-graph", () => {
           },
         ],
       },
-      { ...ctx, turnNumber: 12 },
+      { ...ctx, logicalTurn: 12 },
       store,
     );
 

@@ -75,9 +75,10 @@ export default function ({ tool, z, shortIdBatch }) {
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();
-      // Authoritative logical turn for history stamps; `-1` marks "unknown"
-      // for callers outside a turn (same convention as npc-graph).
-      const turn = context.turnNumber ?? -1;
+      // Logical turn for history stamps, the number every panel shows; `-1`
+      // marks "unknown" for callers outside a turn (same convention as
+      // npc-graph).
+      const turn = context.logicalTurn ?? -1;
 
       // ── 1. Read records including earlier pending writes ──
       const rows = (await context.store.listPluginData("affinity")) ?? [];
