@@ -165,14 +165,21 @@ async function seedSessionData(store: DataStore, sessionId: string) {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+// The fork route's rate limiter outlives one test app. Every test starts at
+// least one window later, so the requests of earlier tests do not count.
+let testClock = Date.now();
+
 describe("Snapshot routes", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
   let store: DataStore;
 
   beforeEach(async () => {
+    testClock += 120_000;
+    vi.useFakeTimers({ toFake: ["Date"], now: testClock });
     store = createMemoryStore();
     await createSession(store);
     await seedSessionData(store, "sess-1");
@@ -516,6 +523,22 @@ describe("Snapshot routes", () => {
         body: JSON.stringify({}),
       });
       expect(res.status).toBe(400);
+    });
+
+    it("limits how often one session can be forked", async () => {
+      const app = createTestApp(store);
+      const fork = () =>
+        app.request("/api/sessions/sess-1/fork", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      for (let i = 0; i < 10; i++) expect((await fork()).status).toBe(400);
+      const limited = await fork();
+      expect(limited.status).toBe(429);
+      expect(((await limited.json()) as { code?: string }).code).toBe(
+        "rate_limit_exceeded",
+      );
     });
 
     it("returns 400 on invalid JSON body", async () => {
