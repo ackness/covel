@@ -1068,12 +1068,14 @@ const runtimeManifestCommonShape = {
         }),
     ])
     .describe(
-      "What the package does. Plain string or a locale map with at least one entry.",
+      "What the package does. Plain string; translations go in locale files.",
     ),
   // Friendly, player-facing name (I18nText). Distinct from `name`, which is
   // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
   displayName: i18nTextLoose
-    .describe("Player-facing name. Plain string or a locale map.")
+    .describe(
+      "Player-facing name. Plain string; translations go in locale files.",
+    )
     .optional(),
   version: z.string().optional(),
   runtimeType: z.enum(["agent", "function"]).optional(),
