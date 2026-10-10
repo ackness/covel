@@ -2,6 +2,7 @@
   {
     "id": "npc-kamishiro-mio",
     "name": "Mio Kamishiro",
+    "aliases": ["Mio", "Class President"],
     "description": "Class President of Class 2-B and Literature Club President; excellent grades, diligent work ethic, habitually hides anxiety beneath politeness and orderliness.",
     "fields": {
       "club": "Literature Club",
@@ -15,6 +16,7 @@
   {
     "id": "npc-asakura-rin",
     "name": "Rin Asakura",
+    "aliases": ["Rin", "Asakura"],
     "description": "News Club Reporter, quick to act, casually flippant in speech, skilled at using jokes to probe people's true reactions.",
     "fields": {
       "club": "News Club",
@@ -28,6 +30,7 @@
   {
     "id": "npc-shiina-kaho",
     "name": "Kaho Shiina",
+    "aliases": ["Kaho", "Shiina"],
     "description": "Guitarist in the Light Music Club, an intuitive doer who seems carefree but is actually very serious about the stage and the people she likes.",
     "fields": {
       "club": "Light Music Club",
@@ -41,6 +44,7 @@
   {
     "id": "npc-shiraishi-yuma",
     "name": "Yuma Shiraishi",
+    "aliases": ["Yuma", "Vice President Shiraishi"],
     "description": "Vice President of the Student Council, calm and rule-abiding, responsible for club registration and School Festival procedures, often misunderstood as lacking Social Obligation.",
     "fields": {
       "club": "Student Council",
@@ -54,6 +58,7 @@
   {
     "id": "npc-mikoeda-haruka",
     "name": "Haruka Mikoeda",
+    "aliases": ["Senpai Haruka", "President"],
     "description": "President of the Student Council, third year. Gentle and precise, she has a habit of using one sentence to bring disputes back to procedure; she makes the final call on resource allocation for the School Festival.",
     "fields": {
       "club": "Student Council",
@@ -67,6 +72,7 @@
   {
     "id": "npc-onodera-chihiro",
     "name": "Chihiro Onodera",
+    "aliases": ["Ms. Onodera", "Ms. Chihiro"],
     "description": "Homeroom Teacher of Class 2-B, Japanese Language teacher, and former Advisor of the Literature Club. She respects student autonomy and gives gentle reminders, but rarely solves problems for students directly.",
     "fields": {
       "club": "Staff · Former Advisor of the Literature Club",
@@ -80,6 +86,7 @@
   {
     "id": "npc-morikawa-souta",
     "name": "Souta Morikawa",
+    "aliases": ["Souta", "Morikawa"],
     "description": "Light Music Club drummer, Kaho's teammate, Class 2-A. Outgoing and quick-tongued, he often mistakes others' silence for agreement; capable of creating comedic misunderstandings, but also reminds the player of Kaho's pressure in the stage storyline.",
     "fields": {
       "club": "Light Music Club",
@@ -93,6 +100,7 @@
   {
     "id": "npc-toujou-akane",
     "name": "Akane Toujou",
+    "aliases": ["Senpai Akane", "Toujou"],
     "description": "A third-year Head Librarian, a quiet senior girl, and a regular at Umineko Bookstore. Having witnessed clubs disappear and people desperately trying to preserve something, she deeply understands the value of quiet companionship.",
     "fields": {
       "club": "Library Committee",
