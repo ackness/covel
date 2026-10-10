@@ -18,7 +18,7 @@ import { traceRoutes } from "../../src/routes/api/traces.js";
 
 type Env = { Variables: { store: DataStore } };
 
-function buildApp(store: DataStore): Hono {
+function buildApp(store: DataStore): Hono<Env> {
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -55,7 +55,7 @@ const ts = (n: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, n)).toISOString();
 
 describe("GET /api/sessions/:id/messages/page", () => {
   let store: DataStore;
-  let app: Hono;
+  let app: Hono<Env>;
 
   beforeEach(async () => {
     store = createMemoryStore();
@@ -136,7 +136,7 @@ describe("GET /api/sessions/:id/messages/page", () => {
 
 describe("GET /api/traces/:sessionId/turns/page", () => {
   let store: DataStore;
-  let app: Hono;
+  let app: Hono<Env>;
 
   beforeEach(async () => {
     store = createMemoryStore();

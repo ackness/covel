@@ -156,6 +156,8 @@ async function seedSessionData(store: DataStore, sessionId: string) {
     sessionId,
     turnId: "turn-1",
     runtimeResults: [{ pluginId: "test-plugin", runtimeId: "test-plugin" }],
+    origin: "player",
+    commitStatus: "committed",
     durationMs: 50,
     createdAt: now,
   });
@@ -970,7 +972,7 @@ describe("Snapshot routes", () => {
         pluginVersion: "1.0.0",
         schemaDigest: "digest",
         resultId: "r-1",
-        value: { audio: ref },
+        value: { audio: { id: ref.id, mime: ref.mime, size: ref.size } },
         committedAt: "2020-01-01T00:00:00.000Z",
       });
 
@@ -1498,7 +1500,12 @@ describe("Auto snapshot", () => {
     const { executeTurn, saveAutoSnapshot } = await import("@covel/runtime");
 
     await executeTurn(
-      { sessionId: "sess-auto", turnId: "turn-auto-1", playerMessage: "hi" },
+      {
+        sessionId: "sess-auto",
+        turnId: "turn-auto-1",
+        origin: "player",
+        playerMessage: "hi",
+      },
       [],
       {
         loadRuntime: async () => undefined,
@@ -1533,7 +1540,12 @@ describe("Auto snapshot", () => {
     const captured = collectEvents(eventBus);
 
     await executeTurn(
-      { sessionId: "sess-auto", turnId: "turn-auto-2", playerMessage: "hi" },
+      {
+        sessionId: "sess-auto",
+        turnId: "turn-auto-2",
+        origin: "player",
+        playerMessage: "hi",
+      },
       [],
       {
         loadRuntime: async () => undefined,

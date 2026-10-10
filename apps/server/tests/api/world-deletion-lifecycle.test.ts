@@ -1,5 +1,13 @@
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createHookPipeline } from "@covel/runtime";
@@ -29,7 +37,7 @@ describe.each(["memory", "sqlite"])(
     let app: Hono;
     let hookPipeline: ReturnType<typeof createHookPipeline>;
     let mediaStore: ReturnType<typeof createMemoryMediaStore>;
-    let clearBrowserWorkspace: ReturnType<typeof vi.fn>;
+    let clearBrowserWorkspace: Mock<(sessionId: string) => void>;
     let sessionLock: ReturnType<typeof createInProcessSessionLock>;
 
     beforeEach(async () => {

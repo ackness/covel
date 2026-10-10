@@ -139,7 +139,7 @@ runtime:
         async (_input: unknown, _options?: GatewayCallOptions) => ({
           text: "ok",
           finishReason: "stop",
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          usage: { inputTokens: 0, outputTokens: 0 },
         }),
       );
       const gateway = {
@@ -148,7 +148,7 @@ runtime:
         generateObject: vi.fn(),
       };
       const modelTargets = new Map<string, PluginLlmModelTarget>();
-      const serverReady = vi.fn(({ model }: { model: string | undefined }) =>
+      const serverReady = vi.fn(({ model }: { model?: string }) =>
         hasServerRuntimeJobCredentials(gateway, model, {}, modelTargets),
       );
       const defaultLlmAdapter = { generate: vi.fn() };
@@ -309,7 +309,7 @@ runtime:
       async (_input: unknown, _options?: GatewayCallOptions) => ({
         text: "ok",
         finishReason: "stop",
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        usage: { inputTokens: 0, outputTokens: 0 },
       }),
     );
     const gateway = {
@@ -318,7 +318,7 @@ runtime:
       generateObject: vi.fn(),
     };
     const modelTargets = new Map<string, PluginLlmModelTarget>();
-    const serverReady = vi.fn(({ model }: { model: string | undefined }) =>
+    const serverReady = vi.fn(({ model }: { model?: string }) =>
       hasServerRuntimeJobCredentials(gateway, model, {}, modelTargets),
     );
     const defaultLlmAdapter = { generate: vi.fn() };

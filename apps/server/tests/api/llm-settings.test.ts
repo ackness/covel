@@ -15,7 +15,13 @@ import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 function setup(options: { failModel?: string } = {}) {
   const requests: Array<{ model: string; metadata?: Record<string, unknown> }> =
     [];
-  const adapter = {
+  const unsupported = async (): Promise<never> => {
+    throw new Error("Not used by this test");
+  };
+  const adapter: ModelProviderAdapter = {
+    generateText: unsupported,
+    generateObject: unsupported,
+    embed: unsupported,
     async *streamText(_config, params) {
       requests.push({
         model: params.model,
@@ -30,7 +36,7 @@ function setup(options: { failModel?: string } = {}) {
         usage: { inputTokens: 1, outputTokens: 1 },
       };
     },
-  } satisfies Partial<ModelProviderAdapter>;
+  };
   const preset: PresetConfig = {
     id: "slot-story",
     name: "Story",
@@ -39,7 +45,12 @@ function setup(options: { failModel?: string } = {}) {
     tier: "medium",
     enabled: true,
     supportedModes: ["text", "stream"],
-    capability: { contextWindow: 65_536, maxOutputTokens: 32_768 },
+    capability: {
+      input: ["text"],
+      output: ["text"],
+      contextWindow: 65_536,
+      maxOutputTokens: 32_768,
+    },
     providerRequestMetadata: {
       privateFlag: "do-not-expose",
       parameterOverrides: {

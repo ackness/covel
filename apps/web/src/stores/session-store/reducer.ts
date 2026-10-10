@@ -1,6 +1,6 @@
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
-import { deepMerge, encodePageCursor } from "@covel/shared";
+import { deepMerge, encodePageCursor, summarizeWorld } from "@covel/shared";
 import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
@@ -219,29 +219,30 @@ export function reducer(
     case "BOOT_ERROR":
       return { ...state, bootError: action.error };
     case "SET_WORLD":
-      return { ...state, world: action.world };
-    case "ADD_WORLD":
+      return { ...state, world: summarizeWorld(action.world) };
+    case "ADD_WORLD": {
+      // A caller may hold the full record; the store keeps the summary.
+      const added = summarizeWorld(action.world);
       return {
         ...state,
-        worlds: state.worlds.some((world) => world.id === action.world.id)
-          ? state.worlds.map((world) =>
-              world.id === action.world.id ? action.world : world,
-            )
-          : [...state.worlds, action.world],
+        worlds: state.worlds.some((world) => world.id === added.id)
+          ? state.worlds.map((world) => (world.id === added.id ? added : world))
+          : [...state.worlds, added],
       };
+    }
     case "REMOVE_WORLD":
       return {
         ...state,
         worlds: state.worlds.filter((w) => w.id !== action.worldId),
       };
-    case "UPDATE_WORLD":
+    case "UPDATE_WORLD": {
+      const updated = summarizeWorld(action.world);
       return {
         ...state,
-        worlds: state.worlds.map((w) =>
-          w.id === action.world.id ? action.world : w,
-        ),
-        world: state.world?.id === action.world.id ? action.world : state.world,
+        worlds: state.worlds.map((w) => (w.id === updated.id ? updated : w)),
+        world: state.world?.id === updated.id ? updated : state.world,
       };
+    }
     case "SET_SESSION": {
       // Reset asset map whenever the session id changes so assets from a
       // previous session never bleed into the new one. Other per-session

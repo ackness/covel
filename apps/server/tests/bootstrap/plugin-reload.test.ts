@@ -706,7 +706,10 @@ describe("plugin generation reload", () => {
         ),
       ).toMatchObject({ replace: { version: 1 } });
       expect(
-        await getSpeechWire(`${f.id}/voice`)!.synthesize({} as never),
+        await getSpeechWire(`${f.id}/voice`)!.synthesize(
+          {} as never,
+          {} as never,
+        ),
       ).toBe(1);
       expect(f.disposed).toEqual([]);
     });
@@ -865,9 +868,12 @@ describe("plugin generation reload", () => {
         .getPluginAction(f.id, "value")!
         .handler({} as never, {} as never),
     ).toBe(1);
-    expect(await getSpeechWire(`${f.id}/voice`)!.synthesize({} as never)).toBe(
-      1,
-    );
+    expect(
+      await getSpeechWire(`${f.id}/voice`)!.synthesize(
+        {} as never,
+        {} as never,
+      ),
+    ).toBe(1);
     expect(f.disposed).toEqual([2]);
   });
 

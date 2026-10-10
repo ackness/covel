@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { createBootstrapPluginRpc } from "../../src/routes/api/bootstrap/plugin-rpc-wiring.js";
+import { emptyRpcStore } from "../helpers/rpc-store.js";
 
 describe("bootstrap plugin RPC locale skeleton", () => {
   async function debugMessage(locale: string): Promise<string> {
@@ -10,7 +11,7 @@ describe("bootstrap plugin RPC locale skeleton", () => {
       { pluginId: "framework", action: "slash-debug", payload: {} },
       {
         sessionId: "sess-locale",
-        store,
+        store: emptyRpcStore(),
         locale,
       },
     );

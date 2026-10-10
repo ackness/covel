@@ -142,6 +142,7 @@ it("uses request embedding settings and keys for probes and detached work withou
       await store.createSession({
         id,
         status: "active",
+        locale: "zh-CN",
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},

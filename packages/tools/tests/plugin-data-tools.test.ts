@@ -4,6 +4,13 @@ import { createPluginDataTools, getPendingProposals } from "../src/index.js";
 import type { ToolExecutionContext, ToolModule } from "../src/types.js";
 import type { Proposal } from "@covel/shared";
 
+interface PluginDataRow {
+  namespace: string;
+  key: string;
+  value: unknown;
+  updatedAt: string;
+}
+
 function createMockStore() {
   return {
     setPluginData: vi.fn(),
@@ -22,7 +29,11 @@ function createMockStore() {
       }),
     ),
     listPluginData: vi.fn(
-      async (_sessionId: string, _pluginId: string, namespace?: string) => [
+      async (
+        _sessionId: string,
+        _pluginId: string,
+        namespace?: string,
+      ): Promise<PluginDataRow[]> => [
         {
           namespace: namespace ?? "entries",
           key: "alpha",

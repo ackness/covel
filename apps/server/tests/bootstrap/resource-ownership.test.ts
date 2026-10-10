@@ -56,6 +56,7 @@ describe("API bootstrap resource ownership", () => {
     vi.mocked(discoverAndRegisterPlugins).mockResolvedValueOnce({
       registry: createPluginRegistry(),
       discoveryMap: new Map(),
+      failedDiscoveryMap: new Map(),
       manifestCache: new Map(),
     });
     const close = vi.fn(async () => {});
@@ -63,6 +64,8 @@ describe("API bootstrap resource ownership", () => {
       close,
       ensurePluginEntry: async () => {},
       hasPendingEntry: () => false,
+      isEntryPublished: () => true,
+      isEntryRetryDeferred: () => false,
       withSnapshot: async (_sessionId, fn) => fn(),
       reload: async (pluginId) => ({ pluginId, generation: "fixture" }),
       watch: () => {},
@@ -165,6 +168,7 @@ describe("API bootstrap resource ownership", () => {
     vi.mocked(discoverAndRegisterPlugins).mockResolvedValueOnce({
       registry: createPluginRegistry(),
       discoveryMap: new Map(),
+      failedDiscoveryMap: new Map(),
       manifestCache: new Map(),
     });
     const store = createMemoryStore();

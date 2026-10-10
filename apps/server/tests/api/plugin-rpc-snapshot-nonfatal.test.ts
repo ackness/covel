@@ -64,7 +64,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
     const loaded: LoadedRuntime = {
       manifest: manifest(),
       promptTemplate: "",
-      handler: async () => ({ ok: true }),
+      handler: async () => ({ outcome: "success", value: { ok: true } }),
     };
     const session = await store.getSession(SESSION_ID);
     if (!session) throw new Error("expected session");
@@ -80,7 +80,8 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
         [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
       ]),
       deps: {
-        loadRuntime: async (m) => (m.name === RUNTIME_ID ? loaded : undefined),
+        loadRuntime: async (m: RuntimeManifest) =>
+          m.name === RUNTIME_ID ? loaded : undefined,
         llm: { generate: vi.fn() },
       } as unknown as Parameters<
         typeof createPluginRpcRuntimeTurnRunner
@@ -148,7 +149,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
           [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
         ]),
         deps: {
-          loadRuntime: async (m) =>
+          loadRuntime: async (m: RuntimeManifest) =>
             m.name === RUNTIME_ID ? loaded : undefined,
           llm: { generate: vi.fn() },
         } as unknown as Parameters<

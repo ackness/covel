@@ -4,6 +4,7 @@ import type {
   SessionRecord,
   StatePatchRecord,
   WorldRecord,
+  WorldSummary,
 } from "../api.js";
 
 export type WorldPatch = WorldPatchRequest;
@@ -38,7 +39,8 @@ export interface DataService {
     operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
   ): Promise<T>;
   // Worlds
-  listWorlds(): Promise<WorldRecord[]>;
+  /** Summaries for the lists; `getWorld` returns the full record. */
+  listWorlds(): Promise<WorldSummary[]>;
   getWorld(id: string): Promise<WorldRecord | null>;
   createWorld(name: string, description: string): Promise<WorldRecord>;
   saveGeneratedWorld(

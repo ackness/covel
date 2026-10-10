@@ -199,7 +199,7 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
           { role: "system", content: "Use remembered facts." },
           {
             role: "assistant",
-            content: null,
+            content: "",
             toolCalls: [
               {
                 id: "recall-1",

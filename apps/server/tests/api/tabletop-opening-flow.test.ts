@@ -15,6 +15,7 @@ import {
   buildTabletopProbeZip,
   tabletopProbeId,
 } from "../helpers/tabletop-package.js";
+import { runtimeResultsOf } from "../helpers/runtime-results.js";
 
 for (const community of [false, true]) {
   for (const hasAbilities of [true, false]) {
@@ -79,7 +80,7 @@ for (const community of [false, true]) {
           const upload = new FormData();
           upload.append(
             "file",
-            new Blob([await buildTabletopProbeZip()]),
+            new Blob([new Uint8Array(await buildTabletopProbeZip())]),
             "tabletop-probe.zip",
           );
           const installed = await boot.app.request("/api/install/plugin", {
@@ -165,7 +166,9 @@ for (const community of [false, true]) {
           const last = (await store.listTurnResults(sessionId)).at(-1)!;
           expect(last.commitStatus, body).toBe("committed");
           expect(
-            last.runtimeResults.filter((result) => result.status === "failed"),
+            runtimeResultsOf(last).filter(
+              (result) => result.status === "failed",
+            ),
           ).toEqual([]);
           return last;
         }

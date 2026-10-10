@@ -11,7 +11,7 @@ import type {
   LLMAdapter,
   LLMResponse,
   LLMToolDefinition,
-} from "@covel/ai-provider";
+} from "@covel/runtime";
 import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";

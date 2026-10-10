@@ -93,18 +93,18 @@ describe("character tool helpers", () => {
   });
 
   it("creates a public snapshot without session-only fields", () => {
-    expect(
-      toSnapshot({
-        id: "char-1",
-        sessionId: "session-1",
-        name: "Mira",
-        type: "npc",
-        fields: { hp: 7 },
-        version: 2,
-        createdAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-02T00:00:00.000Z",
-      }),
-    ).toEqual({
+    // A stored record carries sessionId; a variable avoids the excess-property check.
+    const record = {
+      id: "char-1",
+      sessionId: "session-1",
+      name: "Mira",
+      type: "npc",
+      fields: { hp: 7 },
+      version: 2,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    };
+    expect(toSnapshot(record)).toEqual({
       id: "char-1",
       name: "Mira",
       type: "npc",

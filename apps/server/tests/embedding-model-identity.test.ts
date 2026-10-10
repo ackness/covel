@@ -77,6 +77,7 @@ it("rejects same-dimension model drift after restart for ingestion and both quer
     await store.createSession({
       id: "session",
       status: "active",
+      locale: "zh-CN",
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},

@@ -118,6 +118,7 @@ describe("world translation tooling", () => {
       });
       const descriptor = await loadWorldDataDescriptor({
         worldRoot: worldDir,
+        worldId: path.basename(worldDir),
         worldDataPath: "data/world.data.yaml",
       });
       const source = descriptor.sources.find(
