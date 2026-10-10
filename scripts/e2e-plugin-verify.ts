@@ -2064,13 +2064,32 @@ async function runMain(
   // hook.fired) are reported, not required — hook.fired in particular fires
   // only when an active plugin declares a hook, which the default active set
   // does not. `args.server` already carries the `/api` prefix.
-  const tracesBody = await httpGet<{
+  type TraceWindow = {
+    nextCursor: string | null;
     events: Array<{
       eventOrder: number;
       type: string;
       payload: Record<string, unknown>;
     }>;
-  }>(args.server, `/traces/${encodeURIComponent(session.id)}`);
+  };
+  // One request returns the newest window; a long run reads the older ones
+  // too, and the events get one order across the windows.
+  const tracesBody: TraceWindow = { nextCursor: null, events: [] };
+  for (let cursor: string | null = null; ;) {
+    const window: TraceWindow = await httpGet<TraceWindow>(
+      args.server,
+      `/traces/${encodeURIComponent(session.id)}${
+        cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""
+      }`,
+    );
+    tracesBody.events = [...window.events, ...tracesBody.events];
+    cursor = window.nextCursor;
+    if (!cursor) break;
+  }
+  tracesBody.events = tracesBody.events.map((event, eventOrder) => ({
+    ...event,
+    eventOrder,
+  }));
   state.traces = tracesBody;
   const seenTypes = new Set(tracesBody.events.map((e) => e.type));
 

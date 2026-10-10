@@ -11,6 +11,7 @@
  * parity is a hard contract.
  */
 
+import { compareText } from "@covel/shared";
 import {
   canonicalJobStatus,
   canonicalSetupAttempt,
@@ -70,7 +71,7 @@ export function createLifecycleMethods(state: MemoryState): MemoryStoreMethods {
         .filter((record) => record.sessionId === sessionId)
         .sort(
           (a, b) =>
-            a.completedAt.localeCompare(b.completedAt) ||
+            compareText(a.completedAt, b.completedAt) ||
             compareByteOrder(a.logicalTurnId, b.logicalTurnId),
         );
     },
@@ -130,7 +131,7 @@ export function createLifecycleMethods(state: MemoryState): MemoryStoreMethods {
         )
         .sort(
           (a, b) =>
-            a.startedAt.localeCompare(b.startedAt) ||
+            compareText(a.startedAt, b.startedAt) ||
             compareByteOrder(a.executionId, b.executionId),
         );
     },

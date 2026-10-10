@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { tool, z } from "@covel/tools";
-import register from "../server/index.js";
+import { estimateTokens } from "@covel/plugin-handlers-utils";
+import register, { ROSTER_TOKEN_BUDGET } from "../server/index.js";
 
 function rosterHandler() {
   let handler;
@@ -60,6 +61,41 @@ describe("character roster segments", () => {
       volatility: "turn",
     });
     expect(after[1].content).not.toEqual(before[1].content);
+  });
+
+  it("cuts descriptions for a large cast and keeps every id, name and alias", () => {
+    const cast = (count, description) =>
+      Array.from({ length: count }, (_, index) => ({
+        ...character(`npc-${index}`, {}),
+        aliases: [`alias-${index}`],
+        description,
+      }));
+    const rows = (characters) =>
+      JSON.parse(lines(segments(characters)[0], "existing-characters")[0]);
+    const paragraph =
+      "她在雾港的旧码头长大，说话很慢，从不提起失踪的哥哥。".repeat(8);
+
+    // A small cast keeps whole descriptions.
+    expect(rows(cast(5, paragraph))[4].description).toBe(paragraph);
+
+    // A larger one keeps the start of each, the same length for every row.
+    const shortened = rows(cast(40, paragraph));
+    expect(new Set(shortened.map((row) => row.description))).toEqual(
+      new Set([`${paragraph.slice(0, 120)}...`]),
+    );
+
+    // A cast of two hundred is still named in full, without descriptions.
+    const named = rows(cast(200, paragraph));
+    expect(named).toHaveLength(200);
+    expect(named[199]).toEqual({
+      id: "npc-199",
+      name: "npc-199",
+      aliases: ["alias-199"],
+      type: "npc",
+    });
+    expect(
+      estimateTokens(segments(cast(100, paragraph))[0].content),
+    ).toBeLessThanOrEqual(ROSTER_TOKEN_BUDGET + 20);
   });
 
   it("marks characters past the budget for an on-demand read", () => {

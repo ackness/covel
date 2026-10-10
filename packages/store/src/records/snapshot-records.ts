@@ -174,6 +174,29 @@ export interface SnapshotMetadata {
  * NOTE: Provider API keys are NEVER stored here — they must be supplied
  * again via the `X-Provider-Keys` header on the resume request.
  */
+/**
+ * What a suspension keeps once its resume has committed. The transcript, the
+ * buffered tool calls, proposals, inputs and events were consumed by that
+ * resume; a resolved record stays only so that a repeated resume request and
+ * the session's list of suspensions still find it. Dropping them means the
+ * session, its browser checkpoint and its exports stop carrying one whole
+ * prompt for every question the player has ever answered.
+ */
+export function settledSuspensionContinuation(
+  continuation: SuspensionRecord["pendingContinuation"],
+): SuspensionRecord["pendingContinuation"] {
+  const { executionContext, locale, logicalTurn, turnNumber } = continuation;
+  return {
+    messages: [],
+    toolCallsSoFar: [],
+    pendingProposals: [],
+    executionContext,
+    ...(locale !== undefined ? { locale } : {}),
+    ...(logicalTurn !== undefined ? { logicalTurn } : {}),
+    ...(turnNumber !== undefined ? { turnNumber } : {}),
+  };
+}
+
 export interface SuspensionRecord {
   readonly id: string;
   readonly sessionId: string;
@@ -183,6 +206,10 @@ export interface SuspensionRecord {
   readonly reason: string;
   /** Plain JSON schema object { type, properties, required }. Not a live Zod schema. */
   readonly resumeSchema: unknown;
+  /**
+   * The state the resume continues from. A resolved record holds only what
+   * {@link settledSuspensionContinuation} keeps.
+   */
   readonly pendingContinuation: {
     /** Full LLMMessage[] up to the suspend point. */
     readonly messages: readonly unknown[];

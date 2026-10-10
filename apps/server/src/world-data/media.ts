@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { digestFile, sha256Hex } from "./digest.js";
@@ -63,7 +64,7 @@ export async function collectMediaSourceFiles(
         )
       : source.descriptor.path;
 
-  files.sort((a, b) => a.localeCompare(b));
+  files.sort((a, b) => compareText(a, b));
   let totalBytes = 0;
   const parts: string[] = [];
   const acceptedFiles: string[] = [];

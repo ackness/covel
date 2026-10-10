@@ -1,4 +1,6 @@
+import { compareText } from "@covel/shared";
 import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
+import { settledSuspensionContinuation } from "../records/snapshot-records.js";
 import type { SnapshotMetadata } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 import { assertSessionRecordScope } from "./session-record-scope.js";
@@ -40,6 +42,9 @@ export function createSuspensionMethods(
       if (!existing) return;
       state.suspensions.set(id, {
         ...existing,
+        pendingContinuation: settledSuspensionContinuation(
+          existing.pendingContinuation,
+        ),
         resolvedAt: new Date().toISOString(),
       });
     },
@@ -60,7 +65,7 @@ export function createSuspensionMethods(
       // Map insertion order would otherwise diverge on out-of-order inserts.
       return [...state.suspensions.values()]
         .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        .sort((a, b) => compareText(a.createdAt, b.createdAt));
     },
 
     async deleteSuspension(id) {
@@ -117,7 +122,7 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
     async listSnapshots(sessionId) {
       return [...state.snapshots.values()]
         .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .sort((a, b) => compareText(a.createdAt, b.createdAt))
         .map((r) => structuredClone(r));
     },
 

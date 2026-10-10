@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * In-memory plugin registry — manages plugin lifecycle and lookup.
@@ -313,7 +314,7 @@ export function createPluginRegistry(
             ? pluginDeclarations(entry).map(({ manifest }) => manifest)
             : [];
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareText(a.name, b.name));
     },
 
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {
@@ -336,7 +337,7 @@ export function createPluginRegistry(
       return resolveRuntimeProviders(manifests).sort((a, b) => {
         const ra = stageRank(getRuntimeSpec(a).stage);
         const rb = stageRank(getRuntimeSpec(b).stage);
-        return ra - rb || a.name.localeCompare(b.name);
+        return ra - rb || compareText(a.name, b.name);
       });
     },
   };
@@ -346,7 +347,7 @@ function canonicalSchema(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalSchema).join(",")}]`;
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => compareText(a, b))
       .map(([k, v]) => `${JSON.stringify(k)}:${canonicalSchema(v)}`)
       .join(",")}}`;
   return JSON.stringify(value);

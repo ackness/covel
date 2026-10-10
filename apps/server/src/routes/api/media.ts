@@ -111,6 +111,28 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 /** Scriptable image type — rejected on upload, neutered on read. */
 const SVG_MIME = "image/svg+xml";
 
+/**
+ * The raster type the leading bytes declare, or undefined when they match none
+ * of the formats the player-facing gallery handles. The header alone is client
+ * controlled, so the bytes decide what is stored and served back.
+ */
+export function sniffImageMime(bytes: Uint8Array): string | undefined {
+  const startsWith = (sig: readonly number[], at = 0) =>
+    sig.every((b, i) => bytes[at + i] === b);
+  if (startsWith([0x89, 0x50, 0x4e, 0x47])) return "image/png";
+  if (startsWith([0xff, 0xd8, 0xff])) return "image/jpeg";
+  if (startsWith([0x47, 0x49, 0x46, 0x38])) return "image/gif";
+  if (
+    startsWith([0x52, 0x49, 0x46, 0x46]) &&
+    startsWith([0x57, 0x45, 0x42, 0x50], 8)
+  )
+    return "image/webp";
+  if (startsWith([0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69], 4))
+    return "image/avif";
+  if (startsWith([0x42, 0x4d])) return "image/bmp";
+  return undefined;
+}
+
 function normalizeMimeType(value: string): string {
   // Browsers compare the MIME essence without case or parameter differences.
   return value.split(";", 1)[0]!.trim().toLowerCase();
@@ -171,7 +193,15 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
       400,
     );
   }
-  const ref = await mediaStore.put(bytes, mime);
+  const sniffed = sniffImageMime(bytes);
+  if (!sniffed) {
+    return jsonError(
+      "invalid_request",
+      "the body is not a PNG, JPEG, GIF, WebP, AVIF or BMP image",
+      400,
+    );
+  }
+  const ref = await mediaStore.put(bytes, sniffed);
   return withLockedSessionMutation({
     c,
     store: c.get("store"),

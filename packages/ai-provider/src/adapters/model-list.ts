@@ -31,5 +31,5 @@ export async function fetchModelIds(
     if (typeof id === "string" && id.trim())
       ids.add(id.trim().replace(/^models\//, ""));
   }
-  return [...ids].sort((left, right) => left.localeCompare(right));
+  return [...ids].sort((left, right) => left.localeCompare(right, "en"));
 }

@@ -263,11 +263,23 @@ export function getOutboundProxyStatus(): OutboundProxyStatus {
   };
 }
 
+/**
+ * Set to `true` on `globalThis` by a test run (`vitest.base.ts`) so that a
+ * test's replacement of global `fetch` receives outbound requests. Only code
+ * running in the process can set it: an environment variable such as
+ * `NODE_ENV=test` on a deployed server does not, and that server keeps the
+ * pinned-DNS and proxy dispatchers.
+ */
+export const OUTBOUND_TEST_FETCH_HOOK = Symbol.for(
+  "covel.test.outbound-global-fetch",
+);
+
 function runtimeFetch(): typeof undiciFetch | typeof globalThis.fetch {
-  // Existing unit tests intentionally replace global fetch. Production and
-  // development always use the npm Undici implementation paired with the npm
-  // dispatcher, avoiding Electron's built-in Undici version boundary.
-  return process.env.NODE_ENV === "test" ? globalThis.fetch : undiciFetch;
+  // Everything but a test run uses the npm Undici implementation paired with
+  // the npm dispatcher, avoiding Electron's built-in Undici version boundary.
+  return Reflect.get(globalThis, OUTBOUND_TEST_FETCH_HOOK) === true
+    ? globalThis.fetch
+    : undiciFetch;
 }
 
 /**

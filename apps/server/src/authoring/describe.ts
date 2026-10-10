@@ -6,6 +6,7 @@
  * shows up without an edit to docs, skills or the world generator.
  */
 
+import { compareText } from "@covel/shared";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
@@ -178,9 +179,7 @@ export async function describeAuthoringSurface(
   const locale = options.locale ?? "en-US";
   const contracts: AuthoringContract[] = [];
   const plugins: AuthoringPlugin[] = [];
-  const entries = [...catalogue.getAll()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
+  const entries = [...catalogue.getAll()].sort(([a], [b]) => compareText(a, b));
 
   for (const [pluginId, entry] of entries) {
     const plugin = entry.packageManifest?.plugin;

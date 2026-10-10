@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { i18nTextSchema, type I18nText } from "@covel/shared";
@@ -227,7 +228,7 @@ async function listSourceFiles(
           // `isFile()` is false for a symlink, so a link cannot leave the package.
           .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
           .map((entry) => path.join(resolved, entry.name))
-          .sort((a, b) => a.localeCompare(b))
+          .sort((a, b) => compareText(a, b))
       : resolvedStat.isFile()
         ? [resolved]
         : [];

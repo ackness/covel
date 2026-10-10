@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 /**
  * search-tools — framework-injected tool discovery (deferred tool loading).
  *
@@ -170,7 +171,7 @@ export function rankToolSearchDocs(
     })
     .filter((d) => d.score > 0);
 
-  scored.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+  scored.sort((a, b) => b.score - a.score || compareText(a.key, b.key));
   return scored.slice(0, limit).map((d) => d.key);
 }
 

@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import path from "node:path";
 import type { EffectiveTurnCompletion, I18nText, Stage } from "@covel/shared";
@@ -180,9 +181,9 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
   steps.sort(
     (a, b) =>
       stageRank(a.stage) - stageRank(b.stage) ||
-      a.runtimeId.localeCompare(b.runtimeId),
+      compareText(a.runtimeId, b.runtimeId),
   );
-  plugins.sort((a, b) => a.id.localeCompare(b.id));
+  plugins.sort((a, b) => compareText(a.id, b.id));
 
   return {
     generatedAt: new Date().toISOString(),

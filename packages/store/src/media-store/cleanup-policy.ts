@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type {
   MediaAssetRecord,
   MediaCleanupResult,
@@ -18,8 +19,8 @@ export function cleanupCandidates(
   const kept = (id: string): boolean =>
     protectedSet.has(id) || (onlyIds !== undefined && !onlyIds.has(id));
   const sorted = [...assets].sort((a, b) => {
-    const byCreated = a.createdAt.localeCompare(b.createdAt);
-    return byCreated === 0 ? a.id.localeCompare(b.id) : byCreated;
+    const byCreated = compareText(a.createdAt, b.createdAt);
+    return byCreated === 0 ? compareText(a.id, b.id) : byCreated;
   });
   const idsToDelete = new Set<string>();
   let currentBytes = sorted.reduce((sum, asset) => sum + asset.size, 0);

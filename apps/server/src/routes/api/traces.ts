@@ -2,7 +2,8 @@
  * API Trace routes — read-only endpoints for debug trace inspection.
  */
 
-import { Hono } from "hono";
+import { compareText } from "@covel/shared";
+import { Hono, type Context } from "hono";
 import type { DataStore, TraceEventRecord } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { buildSessionDiscoverySnapshot } from "./discovery.js";
@@ -13,6 +14,12 @@ import { resolveSessionParam } from "./session/session-guard.js";
 
 /** Default per-page event window for the paged turns endpoint. */
 const TRACE_PAGE_EVENT_LIMIT = 400;
+/**
+ * Most events one request to the two unpaged endpoints reads: ten windows of
+ * the paged endpoint's maximum. A trace event holds whole prompts, so reading
+ * every event of a long session at once is what this bounds.
+ */
+export const TRACE_FULL_EVENT_LIMIT = 5_000;
 /** Simple, explainable threshold for slow successful calls/tasks. */
 const SLOW_TRACE_WARNING_MS = 1_000;
 
@@ -34,7 +41,7 @@ function buildTurnSummaries(events: readonly ApiTraceEvent[]) {
   return Array.from(turnMap.entries())
     .map(([turnId, turnEvents]) => {
       const sorted = turnEvents.sort((a, b) =>
-        a.timestamp.localeCompare(b.timestamp),
+        compareText(a.timestamp, b.timestamp),
       );
       // A map entry is created with its first event, so `sorted` is never empty.
       const firstEvt = sorted[0]!;
@@ -53,7 +60,7 @@ function buildTurnSummaries(events: readonly ApiTraceEvent[]) {
         events: sorted,
       };
     })
-    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    .sort((a, b) => compareText(a.startedAt, b.startedAt));
 }
 
 type Env = {
@@ -66,54 +73,75 @@ type Env = {
 
 export const traceRoutes = new Hono<Env>();
 
-// GET /:sessionId — list all trace events for a session
-traceRoutes.get("/:sessionId", rateLimiter({ max: 120 }), async (c) => {
+/**
+ * The newest events of a session, at most {@link TRACE_FULL_EVENT_LIMIT}, or
+ * the ones before `?cursor`. `nextCursor` is set when older events remain.
+ * The discovery snapshot belongs to the session, so only the first request
+ * (no cursor) builds it.
+ */
+async function readTraceWindow(c: Context<Env>, sessionId: string) {
   const store = c.get("store");
+  const cursor = parseCursorQuery(c);
+  if (!cursor.ok) return undefined;
+  const events = await store.listTraceEventsPage(sessionId, {
+    limit: TRACE_FULL_EVENT_LIMIT,
+    before: cursor.before,
+  });
+  const discovery = cursor.before
+    ? undefined
+    : await buildSessionDiscoverySnapshot({
+        isEntryPublished: c.get("isPluginEntryPublished"),
+        store,
+        registry: c.get("pluginRegistry"),
+        sessionId,
+        builtinToolNames: c.get("builtinToolNames"),
+      });
+  return {
+    events,
+    nextCursor: nextCursorFrom(events, TRACE_FULL_EVENT_LIMIT),
+    ...(discovery ? { discovery } : {}),
+  };
+}
+
+function invalidCursor(c: Context<Env>) {
+  return c.json(
+    errorBody("Invalid pagination cursor", { code: "invalid_cursor" }),
+    400,
+  );
+}
+
+// GET /:sessionId — the newest trace events of a session, oldest first
+traceRoutes.get("/:sessionId", rateLimiter({ max: 120 }), async (c) => {
   const sessionId = c.req.param("sessionId");
   // Traces contain full prompts/LLM output — session-existence + owner guard
   // previously this surface skipped the existence check entirely.
   const guard = await resolveSessionParam(c, "sessionId");
   if (!guard.ok) return guard.response;
 
-  const events = await store.listTraceEvents(sessionId);
-  const discovery = await buildSessionDiscoverySnapshot({
-    isEntryPublished: c.get("isPluginEntryPublished"),
-    store,
-    registry: c.get("pluginRegistry"),
-    sessionId,
-    builtinToolNames: c.get("builtinToolNames"),
-  });
-
+  const window = await readTraceWindow(c, sessionId);
+  if (!window) return invalidCursor(c);
+  const { events, ...rest } = window;
   return c.json({
     sessionId,
     count: events.length,
-    discovery,
+    ...rest,
     events: toApiTraceEvents(events),
   });
 });
 
-// GET /:sessionId/turns — trace events grouped by turn
+// GET /:sessionId/turns — the same window grouped by turn
 traceRoutes.get("/:sessionId/turns", rateLimiter({ max: 120 }), async (c) => {
-  const store = c.get("store");
   const sessionId = c.req.param("sessionId");
   const guard = await resolveSessionParam(c, "sessionId");
   if (!guard.ok) return guard.response;
 
-  const events = await store.listTraceEvents(sessionId);
-  const discovery = await buildSessionDiscoverySnapshot({
-    isEntryPublished: c.get("isPluginEntryPublished"),
-    store,
-    registry: c.get("pluginRegistry"),
-    sessionId,
-    builtinToolNames: c.get("builtinToolNames"),
-  });
-
-  const turns = buildTurnSummaries(toApiTraceEvents(events));
-
+  const window = await readTraceWindow(c, sessionId);
+  if (!window) return invalidCursor(c);
+  const { events, ...rest } = window;
   return c.json({
     sessionId,
-    discovery,
-    turns,
+    ...rest,
+    turns: buildTurnSummaries(toApiTraceEvents(events)),
   });
 });
 
@@ -130,12 +158,7 @@ traceRoutes.get(
     const guard = await resolveSessionParam(c, "sessionId");
     if (!guard.ok) return guard.response;
     const cursor = parseCursorQuery(c, TRACE_PAGE_EVENT_LIMIT);
-    if (!cursor.ok) {
-      return c.json(
-        errorBody("Invalid pagination cursor", { code: "invalid_cursor" }),
-        400,
-      );
-    }
+    if (!cursor.ok) return invalidCursor(c);
     const { limit, before } = cursor;
 
     const events = await store.listTraceEventsPage(sessionId, {

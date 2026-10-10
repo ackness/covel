@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { stat } from "node:fs/promises";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type {
@@ -100,9 +101,7 @@ export function conventionsOfPlugins(
   catalogue: Pick<PluginRegistry, "getAll">,
 ): readonly ConventionalSource[] {
   const sources: ConventionalSource[] = [...KERNEL_SOURCES];
-  const entries = [...catalogue.getAll()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
+  const entries = [...catalogue.getAll()].sort(([a], [b]) => compareText(a, b));
   for (const [pluginId, entry] of entries)
     for (const [namespace, declaration] of Object.entries(
       entry.packageManifest?.plugin?.contributes?.data ?? {},

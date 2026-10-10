@@ -258,7 +258,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 ## World Model 与数据边界
 
-角色 schema、角色和世界记录是内核 World Model。`ctx.world.characterSchema`、`ctx.world.characters` 及 `ctx.world.worldRecord` 为只读视图；这些领域的合法上游 proposals 和本 runtime 已缓冲 proposals 对后续读取可见。写入通过 proposals，并在提交时统一校验。`ctx.world.dimensions` 则是提供者发布的公共当前值快照，遵守下方独立的冻结边界。
+角色 schema、角色和世界记录是内核 World Model。`ctx.world.characterSchema`、`ctx.world.characters` 及 `ctx.world.worldRecord` 为只读视图，读到的对象是冻结的（`Object.freeze`，含嵌套对象）：修改它会抛 `TypeError`，要排序或改动先自己复制（`[...ctx.world.characters]`、`structuredClone`）；同一份对象在本次执行缓冲新的写入之前重复返回，循环里逐个查角色不会每次复制整份列表；这些领域的合法上游 proposals 和本 runtime 已缓冲 proposals 对后续读取可见。写入通过 proposals，并在提交时统一校验。`ctx.world.dimensions` 则是提供者发布的公共当前值快照，遵守下方独立的冻结边界。
 
 角色除 `name` 外可以有 `aliases`（同一个人的其他叫法）。插件要把模型写的名字对应到角色时，用 SDK 的 `resolveCharacter(ctx.world.characters, name)`，不要自己比较字符串：它按 ID、名字、别名依次匹配，名字有歧义或不存在时分别返回 `ambiguous` / `missing`（带最相近的角色）。插件按名字保存自己的记录（好感、关系节点、图鉴条目）时，先解析出角色、用它的 `name` 作键，同一个人的两种叫法就不会变成两条记录；`characterNameKey` 给出比较用的归一形式，`mergeCharacterAliases` 合并别名列表。要从一段文字里找出提到了哪些角色（选角、检索），用 `mentionedCharacterIds(text, characters)`：以空格分词的文字要求词边界（`Rin` 不在 `spring` 里），被另一角色更长的名字盖住的命中不算（`会长` 不在 `副会长` 里）。规则见[别名与按名字解析](world-model.md#别名与按名字解析)。
 

@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type { LorebookOwner } from "@covel/shared";
 import { lorebookOwnerKey } from "../common/lorebook-owner.js";
 import { lorebookEntryKey } from "../common/keys.js";
@@ -39,7 +40,7 @@ export function createWorldDataImportLedgerMethods(
       return Array.from(state.worldDataImportLedger.values())
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => {
-          const timeDiff = a.importedAt.localeCompare(b.importedAt);
+          const timeDiff = compareText(a.importedAt, b.importedAt);
           if (timeDiff !== 0) return timeDiff;
           return compareByteOrder(a.id, b.id);
         });

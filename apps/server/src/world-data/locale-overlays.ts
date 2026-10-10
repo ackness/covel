@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -88,7 +89,7 @@ export async function findMisnamedLocaleFiles(
     } catch {
       return;
     }
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
       if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
       const relative = path.join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -163,7 +164,7 @@ export async function findLocaleOverlays(
     });
     if (resolved) found.push({ locale, path: resolved, file });
   }
-  return found.sort((a, b) => a.locale.localeCompare(b.locale));
+  return found.sort((a, b) => compareText(a.locale, b.locale));
 }
 
 /**

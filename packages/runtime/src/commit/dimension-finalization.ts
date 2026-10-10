@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import {
   DIMENSION_CONTRACT,
   DIMENSION_DATA_NAMESPACE,
@@ -283,7 +284,7 @@ async function pruneResolvedReceipts(
       const receipt = dimensionSettlementReceiptSchema.safeParse(row.value);
       return receipt.success && receipt.data.status !== "pending-settlement";
     })
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    .sort((a, b) => compareText(a.createdAt, b.createdAt));
   for (const row of resolved.slice(
     0,
     Math.max(0, resolved.length - RESOLVED_RECEIPTS_KEPT),

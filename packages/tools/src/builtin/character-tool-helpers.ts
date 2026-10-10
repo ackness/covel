@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { modelFacingJson } from "@covel/plugin-handlers-utils";
 export {
   mergeSchemaDefaults,
@@ -174,7 +175,7 @@ export function sortByFrequencyThenRecency<
 >(records: readonly T[]): T[] {
   return [...records].sort((a, b) => {
     if (b.version !== a.version) return b.version - a.version;
-    return b.updatedAt.localeCompare(a.updatedAt);
+    return compareText(b.updatedAt, a.updatedAt);
   });
 }
 

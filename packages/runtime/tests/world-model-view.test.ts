@@ -149,11 +149,20 @@ describe("execution World Model", () => {
     );
     pending.push(character());
     const first = view.characters;
-    (first[0]!.fields as { hp: number }).hp = 100;
+    // A read is a frozen copy: a reader cannot change what the next one sees.
+    expect(() => {
+      (first[0]!.fields as { hp: number }).hp = 100;
+    }).toThrow(TypeError);
     expect(view.characters[0]!.fields).toEqual({ hp: 5 });
+    // The copy is made once and returned until the buffer grows.
+    expect(view.characters).toBe(first);
     const firstSchema = view.characterSchema!;
-    (firstSchema.types as string[]).push("mutated");
+    expect(() => (firstSchema.types as string[]).push("mutated")).toThrow(
+      TypeError,
+    );
     expect(view.characterSchema!.types).toEqual(["merchant"]);
+    pending.push(character());
+    expect(view.characters).not.toBe(first);
     await store.upsertCharacterSchema({
       ...firstSchema,
       version: 100,

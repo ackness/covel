@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   PluginServiceClient,
@@ -249,7 +250,7 @@ export class PluginServiceRegistry {
         ...(description !== undefined ? { description } : {}),
       }))
       .sort((a, b) =>
-        `${a.pluginId}/${a.name}`.localeCompare(`${b.pluginId}/${b.name}`),
+        compareText(`${a.pluginId}/${a.name}`, `${b.pluginId}/${b.name}`),
       );
   }
 
@@ -423,7 +424,7 @@ export class PluginServiceRegistry {
             description,
           }))
           .sort((a, b) =>
-            `${a.pluginId}/${a.name}`.localeCompare(`${b.pluginId}/${b.name}`),
+            compareText(`${a.pluginId}/${a.name}`, `${b.pluginId}/${b.name}`),
           );
       },
       call: async (request, options) => {

@@ -212,7 +212,7 @@ export function useDebugPageData(
     }
   }, [selectedSessionId]);
 
-  // 兜底：拉全量 turn，整体替换并清空游标（展示数据即完整）。
+  // 兜底：一次拉服务端允许的最大窗口并整体替换；更早的事件仍由游标继续加载。
   const loadAll = useCallback(async () => {
     if (!selectedSessionId) return;
     const epoch = ++traceEpoch.current;
@@ -226,7 +226,7 @@ export function useDebugPageData(
       )
         return;
       setTurns(data.turns);
-      setOlderCursor(null);
+      setOlderCursor(data.nextCursor ?? null);
       setTraceDiscovery(data.discovery ?? null);
       expandLatestTurn(data.turns);
     } catch {

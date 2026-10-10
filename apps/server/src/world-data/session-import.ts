@@ -254,13 +254,12 @@ export async function importWorldDataForSession(
     options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
+  const worldMetadata = options.worldId
+    ? (await options.store.getWorld(options.worldId))?.metadata
+    : undefined;
   const prepared = await prepareWorldDataImportForSession({
-    dimensions: options.worldId
-      ? (await options.store.getWorld(options.worldId))?.metadata?.dimensions
-      : undefined,
-    contractData: options.worldId
-      ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
-      : undefined,
+    dimensions: worldMetadata?.dimensions,
+    contractData: worldMetadata?.contractData,
     sessionId: options.sessionId,
     worldId: options.worldId,
     worldsDirs: options.worldsDirs,

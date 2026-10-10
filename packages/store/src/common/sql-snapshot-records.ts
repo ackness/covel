@@ -26,6 +26,7 @@ import type { SnapshotRow, SuspensionRow } from "./mappers/snapshot-mappers.js";
 import { requireSnapshotPayload } from "./mappers/snapshot-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import { SessionRecordScopeConflictError } from "../errors.js";
+import { settledSuspensionContinuation } from "../records/snapshot-records.js";
 import type {
   CursorPageOpts,
   DataStore,
@@ -222,9 +223,20 @@ export function createSqlSnapshotRecords(
     },
 
     async markSuspensionResolved(id: string): Promise<void> {
+      const row = await runner.selectFirst<SuspensionRow>(suspensions, {
+        where: eq(suspensions.id, id),
+      });
+      if (!row) return;
+      const record = toSuspensionRecord(row, json);
+      const { pendingContinuation } = values.suspensionUpdate({
+        ...record,
+        pendingContinuation: settledSuspensionContinuation(
+          record.pendingContinuation,
+        ),
+      });
       await runner.update(
         suspensions,
-        { resolvedAt: new Date().toISOString() },
+        { pendingContinuation, resolvedAt: new Date().toISOString() },
         eq(suspensions.id, id),
       );
     },

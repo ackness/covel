@@ -13,10 +13,11 @@
 import { currentTraceRetention } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 
-type TraceSweepStore = Pick<
+type TraceRetentionStore = Pick<
   DataStore,
-  "listSessions" | "deleteTraceEventsBefore" | "queryTraceEvents"
+  "deleteTraceEventsBefore" | "queryTraceEvents" | "deleteEventsBefore"
 >;
+type TraceSweepStore = TraceRetentionStore & Pick<DataStore, "listSessions">;
 
 /**
  * Delete a session's trace events older than `before`, except those of its
@@ -25,12 +26,18 @@ type TraceSweepStore = Pick<
  * retry of a failed or interrupted turn), so they outlive the retention
  * period: a player who comes back to the session later is still offered the
  * retry. One turn of traces per session is the cost.
+ *
+ * The event trail goes with them. It is the other diagnostic journal: a copy
+ * of every event the bus published, the whole value of each changed plugin
+ * row included. Nothing reads a row of it after the moment it is published
+ * (another pod fetches an oversize event by id), so it has no turn to keep.
  */
 export async function deleteExpiredTraceEvents(
-  store: Pick<DataStore, "deleteTraceEventsBefore" | "queryTraceEvents">,
+  store: TraceRetentionStore,
   sessionId: string,
   before: string,
 ): Promise<void> {
+  await store.deleteEventsBefore(sessionId, before);
   const [started] = await store.queryTraceEvents(sessionId, {
     types: ["turn.started"],
     newestFirst: true,
@@ -55,7 +62,8 @@ export interface TraceSweepOptions {
 }
 
 /**
- * Delete trace events older than the retention in force from every session.
+ * Delete trace events and the event trail older than the retention in force
+ * from every session.
  * Best-effort: a failure logs a warning and never throws. Returns the number
  * of sessions swept (0 when skipped, disabled, or failed).
  */

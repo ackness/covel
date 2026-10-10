@@ -82,7 +82,9 @@ async function mergeCharacterViews(
   store: CharacterStore,
   context: ToolExecutionContext,
 ): Promise<CharacterRecord[]> {
-  if (context.world) return structuredClone([...context.world.characters]);
+  // The view's records are frozen and already carry this execution's
+  // buffered writes; the callers only read them.
+  if (context.world) return [...context.world.characters];
   const stored = await store.listCharacters(context.sessionId);
   return [
     ...overlayCharacters(

@@ -1,3 +1,4 @@
+import { compareText } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import type { PluginDataRecord, StoreTransaction } from "@covel/store";
 import type { SessionLock } from "../../../lib/session-lock.js";
@@ -401,8 +402,8 @@ export async function listAllRuntimeJobs(
     .sort(
       (a, b) =>
         a.sequence - b.sequence ||
-        a.enqueuedAt.localeCompare(b.enqueuedAt) ||
-        a.jobId.localeCompare(b.jobId),
+        compareText(a.enqueuedAt, b.enqueuedAt) ||
+        compareText(a.jobId, b.jobId),
     );
 }
 
@@ -436,8 +437,8 @@ export async function listRuntimeJobs(
     .sort(
       (a, b) =>
         a.sequence - b.sequence ||
-        a.enqueuedAt.localeCompare(b.enqueuedAt) ||
-        a.jobId.localeCompare(b.jobId),
+        compareText(a.enqueuedAt, b.enqueuedAt) ||
+        compareText(a.jobId, b.jobId),
     );
   return args.limit === undefined ? jobs : jobs.slice(0, args.limit);
 }

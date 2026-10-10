@@ -1,7 +1,7 @@
 ---
 id: history-compaction
 kind: core
-version: 0.0.41
+version: 0.0.42
 displayName: History Compaction
 description: Maintains bounded segmented summaries of older conversation history.
 author:
