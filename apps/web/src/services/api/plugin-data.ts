@@ -9,6 +9,20 @@ export interface PluginDataEntry {
   updatedAt: string;
 }
 
+export interface SessionPluginDataEntry extends PluginDataEntry {
+  pluginId: string;
+}
+
+/** Every readable plugin data row of the session's active plugins, in one request. */
+export async function listSessionPluginData(
+  sessionId: string,
+): Promise<SessionPluginDataEntry[]> {
+  const res = await request<{ items: SessionPluginDataEntry[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugin-data`,
+  );
+  return res.items;
+}
+
 /** List all plugin data entries for a given plugin and optional namespace. */
 export async function listPluginData(
   sessionId: string,

@@ -8,10 +8,13 @@ import type {
   SuspensionSummary,
 } from "@covel/shared";
 import { apiListResponseSchema, suspensionSummarySchema } from "@covel/shared";
-import type {
-  BrowserCheckpoint,
-  SessionCommit,
+import {
+  BROWSER_CHECKPOINT_MAX_BYTES,
+  type BrowserCheckpoint,
+  type SessionCommit,
 } from "@covel/store/browser-sync";
+import i18n from "@/i18n";
+import { emitToast } from "@/lib/toast-channel";
 import { isNotFound, request } from "./request.js";
 import { ignoreError } from "../../lib/ignore-error.js";
 import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
@@ -303,6 +306,39 @@ export async function listMessagesPage(
   );
 }
 
+/** The share of the upload limit from which the player is told. */
+const CHECKPOINT_WARNING_SHARE = 0.8;
+const warnedCheckpointSessions = new Set<string>();
+
+/**
+ * Tells the player, once per session and page load, that the session's
+ * checkpoint is close to the largest upload the server accepts. Past that
+ * size every upload is refused and the session cannot go on.
+ */
+export function warnWhenCheckpointNearLimit(
+  sessionId: string,
+  body: string,
+  limitBytes: number = BROWSER_CHECKPOINT_MAX_BYTES,
+): void {
+  const threshold = limitBytes * CHECKPOINT_WARNING_SHARE;
+  // A UTF-16 unit is at most three UTF-8 bytes: most bodies need no count.
+  if (body.length * 3 < threshold || warnedCheckpointSessions.has(sessionId))
+    return;
+  const bytes = new Blob([body]).size;
+  if (bytes < threshold) return;
+  warnedCheckpointSessions.add(sessionId);
+  emitToast(
+    "info",
+    i18n.t("toast.checkpointNearLimit", {
+      percent: Math.floor((bytes / limitBytes) * 100),
+      defaultValue:
+        "This session uses {{percent}}% of the size a browser-stored session can have. At the limit it can no longer be saved; continue the story in a new session soon.",
+    }) as string,
+    undefined,
+    { durationMs: 20_000 },
+  );
+}
+
 /** Hydrate the server's transient MemoryStore from the browser authority. */
 export async function uploadBrowserCheckpoint(
   sessionId: string,
@@ -313,12 +349,11 @@ export async function uploadBrowserCheckpoint(
   unchanged?: boolean;
   reconcileRequired?: boolean;
 }> {
+  const body = JSON.stringify({ checkpoint });
+  warnWhenCheckpointNearLimit(sessionId, body);
   return request(
     `/api/sessions/${encodeURIComponent(sessionId)}/browser-checkpoint`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ checkpoint }),
-    },
+    { method: "PUT", body },
   );
 }
 

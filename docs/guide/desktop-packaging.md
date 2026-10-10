@@ -176,7 +176,7 @@ still lands on two files:
    picks just the distributables (`.dmg` + `.zip` on macOS, `.exe` on
    Windows).
 
-Release CI verifies the unpacked application resources on each platform before uploading only the distributable files. Signature checks are intentionally absent while official builds are unsigned.
+Release CI verifies the unpacked application resources on each platform before uploading only the distributable files. Signature checks are intentionally absent while official builds are unsigned. Instead, the release job writes a `SHA256SUMS.txt` for every `.dmg`, `.zip` and `.exe` and attaches it to the GitHub Release; a player verifies a download with `shasum -a 256 -c SHA256SUMS.txt` (macOS) or `sha256sum -c SHA256SUMS.txt`, and the list covers the files that were uploaded by the build jobs, not a signature of who built them.
 
 After creating a local macOS arm64 unpacked build, the same sidecar smoke can
 check the resources that electron-builder actually copied:
@@ -248,6 +248,7 @@ integration in `apps/desktop/src/main.ts`, and the publishing configuration abov
 - [ ] Complete the [player-flow acceptance checks](./e2e-testing.md#发版前的玩家流程验收) with isolated data and a real model; deterministic tests and startup health alone do not cover playability
 - [ ] Run `pnpm --filter @covel/desktop smoke:restart` in a desktop session to verify the preload version and navigation to the new backend port
 - [ ] Confirm the release notes disclose that macOS and Windows artifacts are unsigned
+- [ ] Confirm the release has `SHA256SUMS.txt` next to the installers
 - [ ] Push the reviewed PR after local checks pass; wait for CI and PostgreSQL integration tests
 - [ ] Run `Build Desktop` manually on the candidate branch with `publish_release=false`; both platform jobs verify staged resources and boot, and Windows also runs the package-installation API regression
 - [ ] Merge the PR, verify `main`, then create and push an annotated `v*` tag on the exact merge commit; tag pushes build and publish the GitHub Release

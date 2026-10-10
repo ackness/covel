@@ -645,8 +645,9 @@ export interface SessionSnapshot {
    */
   readonly messagesCursor?: PageCursor | null;
   /**
-   * Every form, choice or confirmation the player already answered through
-   * the `submit_interaction` action, with the values the server stored. An
+   * The forms, choices and confirmations of the turns in `messages` that the
+   * player already answered through the `submit_interaction` action, with the
+   * values the server stored. Answers to older turns are left out. An
    * entry is written in the transaction that starts the follow-up turn, so
    * each one has a turn. The client marks the matching message blocks as
    * answered from this, so a reload or a second tab shows the same state as

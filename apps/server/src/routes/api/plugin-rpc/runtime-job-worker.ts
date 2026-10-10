@@ -81,6 +81,26 @@ export function parseStagedRuntimeJobPayload(
   } as StagedRuntimeJobPayload;
 }
 
+/**
+ * When the source execution of the session's earliest unfinished job began,
+ * or `undefined` when no job is unfinished. Such a job still reads the
+ * runtime exports as they were at that instant.
+ */
+export async function earliestUnfinishedJobSourceStart(
+  store: Parameters<typeof listRuntimeJobs>[0],
+  sessionId: string,
+): Promise<string | undefined> {
+  let earliest: string | undefined;
+  for (const job of await listRuntimeJobs(store, { sessionId })) {
+    if (TERMINAL_RUNTIME_JOB_STATUSES.has(job.status)) continue;
+    const start = parseStagedRuntimeJobPayload(job.payload)?.descriptor
+      .sourceExecutionStartedAt;
+    if (start !== undefined && (earliest === undefined || start < earliest))
+      earliest = start;
+  }
+  return earliest;
+}
+
 export interface RuntimeJobTriggerEvent {
   readonly topic: string;
   readonly data: Readonly<Record<string, unknown>>;

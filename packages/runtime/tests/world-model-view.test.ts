@@ -162,6 +162,85 @@ describe("execution World Model", () => {
     expect(view.characterSchema!.version).toBe(1);
   });
 
+  it("refuses one alias for two characters of a batch, and a name that is another's alias", () => {
+    const npc = (id: string, name: string, aliases?: string[]) =>
+      proposal("character.upsert", {
+        id,
+        name,
+        type: "npc",
+        ...(aliases ? { aliases } : {}),
+      });
+    expect(() =>
+      materializeWorldModel(
+        base,
+        [npc("a", "Anna", ["the Captain"]), npc("b", "Bram", ["THE captain"])],
+        sessionId,
+      ),
+    ).toThrow(
+      'Alias "THE captain" of Bram [b] is already a name of Anna (aka the Captain) [a]',
+    );
+    expect(() =>
+      materializeWorldModel(
+        base,
+        [npc("a", "Anna", ["Annie"]), npc("b", "annie")],
+        sessionId,
+      ),
+    ).toThrow('Name "annie" of [b] is an alias of Anna (aka Annie) [a]');
+    // Two characters may share a name; a character may repeat its own.
+    expect(
+      materializeWorldModel(
+        base,
+        [npc("a", "Anna", ["Annie"]), npc("b", "Anna"), npc("a", "Anna")],
+        sessionId,
+      ).characters.map((record) => record.id),
+    ).toEqual(["b", "a"]);
+  });
+
+  it("reads a buffer that grew, was replaced, or was emptied as it is now", () => {
+    const write = (id: string, hp: number) =>
+      proposal("character.upsert", {
+        id,
+        name: id,
+        type: "npc",
+        fields: { hp },
+      });
+    const pending: Proposal[] = [write("a", 1)];
+    const view = overlayWorldModelView(
+      { ...base, dimensions: {} },
+      sessionId,
+      pending,
+    );
+    const read = () =>
+      view.characters.map((record) => [
+        record.id,
+        (record.fields as { hp: number }).hp,
+      ]);
+    expect(read()).toEqual([["a", 1]]);
+    pending.push(write("b", 2));
+    expect(read()).toEqual([
+      ["a", 1],
+      ["b", 2],
+    ]);
+    // Same length, another proposal in the last place.
+    pending[1] = write("c", 3);
+    expect(read()).toEqual([
+      ["a", 1],
+      ["c", 3],
+    ]);
+    pending.length = 0;
+    expect(read()).toEqual([]);
+    // A write that is refused is refused again at the next read, and the
+    // model is as before once it has left the buffer.
+    pending.push(
+      write("a", 1),
+      proposal("character.upsert", { id: "d", name: "D", type: "undeclared" }),
+    );
+    expect(read).toThrow("Unknown character type");
+    expect(read).toThrow("Unknown character type");
+    pending.pop();
+    expect(read()).toEqual([["a", 1]]);
+  });
+
   it.each([
     [
       "range",

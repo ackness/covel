@@ -136,11 +136,19 @@ what does not grow with each turn played, plus the conversation itself. All game
 state, messages and the prompt history are complete. Of the execution journals
 it carries the turn results and runtime outputs of the latest 40 executions (a
 retry names a recent turn as its source), the newest revision of each runtime
-export, and the `turn.started` /
+export (while a background job is unfinished, also the revision that was live
+when the earliest such job's source execution began and every later one, since
+the job reads its exports as of that instant), and the `turn.started` /
 `turn.completed` / `turn.failed` trace rows that the execution status is read
 from. The tool-call log, the event trail and every other trace row have no
 reader outside the debug page and stay in the server workspace that produced
 them; the debug page of a private session therefore shows no model calls.
+
+The upload is limited to 64 MiB of JSON (`BROWSER_CHECKPOINT_MAX_BYTES` in
+`@covel/store/browser-sync`), and a session past it cannot go on: the protocol
+has no partial upload. The web client measures the body of each upload and, from
+80% of the limit, tells the player once per session and page load, so the story
+can be continued in a new session before uploads are refused with `413`.
 
 The browser is authoritative in local mode. The server may read API keys from
 request headers and execute a turn, but it must not durably persist the player's

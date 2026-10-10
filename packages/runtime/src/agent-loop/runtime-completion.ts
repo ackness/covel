@@ -18,11 +18,15 @@ export function captureCompletionCalls(
 ): CompletionCalls {
   return [
     ...prior,
-    ...calls.map((call) => ({
-      name: call.name,
-      success: call.success,
-      done: call.name === "runtime-done" && isRuntimeDoneSentinel(call.result),
-    })),
+    // A refused call is neither work done nor a failure left to resolve.
+    ...calls
+      .filter((call) => !call.refused)
+      .map((call) => ({
+        name: call.name,
+        success: call.success,
+        done:
+          call.name === "runtime-done" && isRuntimeDoneSentinel(call.result),
+      })),
   ];
 }
 

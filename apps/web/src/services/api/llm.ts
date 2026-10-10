@@ -3,6 +3,7 @@ import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge.js";
 import {
   buildProviderKeysHeader,
   buildSlotConfigHeaderInternal,
+  rememberServerSlotProviders,
 } from "./model-settings.js";
 import { ApiError, request, requestResponse } from "./request.js";
 import {
@@ -78,7 +79,9 @@ export interface LlmConfigResponse {
 }
 
 export async function fetchLlmConfig(): Promise<LlmConfigResponse> {
-  return request<LlmConfigResponse>("/api/llm-config");
+  const config = await request<LlmConfigResponse>("/api/llm-config");
+  rememberServerSlotProviders(config.slots);
+  return config;
 }
 
 export interface LlmReloadResult {
@@ -315,6 +318,13 @@ export interface PingResult {
   testedTarget?: PingTestedTarget;
 }
 
+/** The saved-config binding a ping target stands for; a role is already in the config. */
+function pingBindings(
+  target: import("@covel/shared").LlmModelBinding | { slot: string },
+): import("@covel/shared").LlmModelBinding[] {
+  return "slot" in target ? [] : [target];
+}
+
 /**
  * Send a minimal "hi" to an explicit model, preset, or role to test connectivity.
  * Local model requests include their definition even when no role uses it.
@@ -327,7 +337,7 @@ export async function pingPreset(
     res = await requestResponse("/api/ai/ping", {
       method: "POST",
       headers: {
-        ...buildProviderKeysHeader(),
+        ...buildProviderKeysHeader({ bindings: pingBindings(target) }),
         ...buildSlotConfigHeaderInternal({
           includeModelRefs:
             "modelRef" in target && target.modelRef ? [target.modelRef] : [],
@@ -376,7 +386,7 @@ export async function listProviderModels(target: {
   try {
     const res = await requestResponse("/api/ai/models", {
       method: "POST",
-      headers: buildProviderKeysHeader(),
+      headers: buildProviderKeysHeader({ providers: [target.provider] }),
       body: JSON.stringify({
         provider: target.provider,
         ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),

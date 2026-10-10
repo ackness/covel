@@ -92,6 +92,7 @@ function setup(): {
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
+  ownClientAddress(app);
   return {
     app,
     store,
@@ -101,6 +102,29 @@ function setup(): {
     pluginRegistry,
     sessionLock,
   };
+}
+
+let nextClient = 0;
+
+/**
+ * The route's rate limiter counts per client address, with one budget per path
+ * and a larger one per route, and lives as long as the module. Give each app an address of its own so one
+ * test's requests do not use up another's budget.
+ */
+function ownClientAddress(app: { request: Hono["request"] }): void {
+  const clientAddress = `10.1.${Math.trunc(nextClient / 250)}.${nextClient % 250}`;
+  nextClient++;
+  const request = app.request.bind(app);
+  app.request = ((
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    env?: unknown,
+  ) =>
+    request(
+      input,
+      init,
+      env ?? { incoming: { socket: { remoteAddress: clientAddress } } },
+    )) as typeof app.request;
 }
 
 async function seedSession(
@@ -794,6 +818,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
       await next();
     });
     app.route("/api/sessions", pluginRpcRoutes);
+    ownClientAddress(app);
     return { app, store, registry, gate, activateCalls: () => activateCount };
   }
 
@@ -1173,6 +1198,7 @@ function setupRuntimeTestEnv(args: {
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
+  ownClientAddress(app);
   return { app, store, pluginRegistry, gate, sessionLock };
 }
 
@@ -1494,6 +1520,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
     app.route("/api/sessions", sessionRoutes);
     app.route("/api/sessions", pluginRpcRoutes);
+    ownClientAddress(app);
     app.route("/api/actions", actionRoutes);
 
     const createSession = await app.request("/api/sessions", {
@@ -2332,6 +2359,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       await next();
     });
     app.route("/api/sessions", pluginRpcRoutes);
+    ownClientAddress(app);
 
     await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
 
@@ -2497,6 +2525,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       await next();
     });
     app.route("/api/sessions", pluginRpcRoutes);
+    ownClientAddress(app);
 
     const now = new Date().toISOString();
     await store.createSession({
@@ -2744,6 +2773,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       await next();
     });
     app.route("/api/sessions", pluginRpcRoutes);
+    ownClientAddress(app);
 
     return { app, store, targetRuntimeId: TARGET, followerRuntimeId: FOLLOWER };
   }

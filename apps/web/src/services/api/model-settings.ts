@@ -62,13 +62,113 @@ export function encodePluginUserSettingsHeader(value: unknown): string {
   return encoded;
 }
 
-export function buildProviderKeysHeader(): Record<string, string> {
+/**
+ * What the server told this client about providers: the provider each server
+ * slot uses and the provider of each server preset. Kept so the key header can
+ * name only the providers a request can reach; until both are known the header
+ * carries every saved key.
+ */
+let serverProviderDirectory: {
+  slotProviders?: Record<string, string>;
+  presetProviders?: Record<string, string>;
+} = {};
+
+export function rememberServerSlotProviders(
+  slots: Record<string, { provider: string }>,
+): void {
+  serverProviderDirectory.slotProviders = Object.fromEntries(
+    Object.entries(slots).map(([slotId, slot]) => [slotId, slot.provider]),
+  );
+}
+
+export function rememberServerPresetProviders(
+  presets: readonly { id: string; provider: string }[],
+): void {
+  serverProviderDirectory.presetProviders = Object.fromEntries(
+    presets.map((preset) => [preset.id, preset.provider]),
+  );
+}
+
+/** Test helper: forget what the server said. */
+export function resetServerProviderDirectory(): void {
+  serverProviderDirectory = {};
+}
+
+/**
+ * Provider IDs whose keys a request can need, or `null` when that is not known
+ * yet (then every key is sent). Roles resolve through the saved binding first
+ * and the server's own provider otherwise; a local model reaches its connection
+ * and that connection's provider family.
+ */
+function referencedProviderIds(
+  extraBindings: readonly SlotConfigEntry[],
+  extraProviders: readonly string[],
+): Set<string> | null {
+  const { slotProviders, presetProviders } = serverProviderDirectory;
+  if (!slotProviders || !presetProviders) return null;
+  const profiles = getProviderProfiles();
+  const customPresets = new Map(
+    flattenProviderProfiles(profiles).map((preset) => [preset.id, preset]),
+  );
+  const families = new Map(
+    profiles.flatMap((profile) =>
+      profile.provider ? [[profile.id, profile.provider] as const] : [],
+    ),
+  );
+  const providers = new Set<string>(extraProviders);
+  const addBinding = (binding: SlotConfigEntry): boolean => {
+    if (binding.modelRef !== undefined) {
+      const preset = customPresets.get(binding.modelRef);
+      if (!preset) return false;
+      providers.add(preset.provider);
+      const family = families.get(preset.provider);
+      if (family) providers.add(family);
+      return true;
+    }
+    if (binding.presetId !== undefined) {
+      const provider = presetProviders[binding.presetId];
+      if (!provider) return false;
+      providers.add(provider);
+      return true;
+    }
+    return false;
+  };
+  for (const binding of extraBindings) if (!addBinding(binding)) return null;
+  const slotConfig = getSlotConfig();
+  for (const slotId of new Set([
+    ...Object.keys(slotProviders),
+    ...Object.keys(slotConfig),
+  ])) {
+    const binding = slotConfig[slotId];
+    if (binding && addBinding(binding)) continue;
+    const serverProvider = slotProviders[slotId];
+    if (serverProvider) providers.add(serverProvider);
+  }
+  return providers;
+}
+
+export interface ProviderKeysHeaderOptions {
+  /** Bindings of a request that names a model outside the saved slot config. */
+  bindings?: readonly SlotConfigEntry[];
+  /** Providers a request names directly (a model list probe). */
+  providers?: readonly string[];
+}
+
+export function buildProviderKeysHeader(
+  options: ProviderKeysHeaderOptions = {},
+): Record<string, string> {
   const headers: Record<string, string> = {};
+  const referenced = referencedProviderIds(
+    options.bindings ?? [],
+    options.providers ?? [],
+  );
   // Request keys are connection-scoped and never embedded in model profiles.
   const keys = Object.fromEntries(
     Object.entries(providerKeysSnapshot()).filter(
       ([name, value]) =>
-        providerKeyToId(name) === name && !isServerManagedSecret(value),
+        providerKeyToId(name) === name &&
+        !isServerManagedSecret(value) &&
+        (referenced === null || referenced.has(name)),
     ),
   );
   if (Object.keys(keys).length > 0) {

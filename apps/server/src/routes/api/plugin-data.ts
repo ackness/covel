@@ -74,6 +74,34 @@ function corePluginWriteError(
   return null;
 }
 
+// GET /session/:id/plugin-data — every readable row of the session's active plugins
+// in one response (the client's full restore). Same row filter and value
+// projection as the per-plugin and per-namespace reads; plugins that are
+// unknown to the registry or inactive in the session are left out.
+pluginDataRoutes.get("/:id/plugin-data", async (c) => {
+  const store = c.get("store");
+  const registry = c.get("pluginRegistry");
+  const sessionId = c.req.param("id");
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const active = new Set(
+    guard.session.activePlugins.filter((id) => registry.get(id)),
+  );
+
+  const records = await store.listPluginDataSessionScope(sessionId);
+  return c.json({
+    items: records
+      .filter((r) => active.has(r.pluginId) && isPublicPluginDataRecord(r))
+      .map((r) => ({
+        pluginId: r.pluginId,
+        namespace: r.namespace,
+        key: r.key,
+        value: publicPluginDataValue(r),
+        updatedAt: r.updatedAt,
+      })),
+  });
+});
+
 // GET /session/:id/plugin-data/:pluginId/_index — list namespaces/keys without values
 pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
   const store = c.get("store");

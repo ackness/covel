@@ -514,9 +514,13 @@ export interface CompactedTurnMessageTag {
 /** Append-only turn-message log. Part of `sql-session-journal-records`. */
 export interface TurnMessageStore {
   appendTurnMessage(record: TurnMessageRecord): Promise<void>;
+  /**
+   * The session's messages, oldest-first. `turnId` keeps only the messages of
+   * that turn: a caller that needs one turn does not load the whole log.
+   */
   listTurnMessages(
     sessionId: string,
-    pagination?: PaginationOpts,
+    options?: PaginationOpts & { readonly turnId?: string },
   ): Promise<TurnMessageRecord[]>;
   /**
    * List only messages NOT yet folded into a compaction summary
