@@ -451,7 +451,7 @@ async function executeTurnImpl(
     },
     { triggered },
   );
-  // F-1 guard: PreSchedule must not be able to drop Pre-Game runtimes —
+  // Guard: PreSchedule must not be able to drop Pre-Game runtimes —
   // removing pregame / schema-gen / player-init would silently break session
   // initialization (no character, schema never written, Pre-Game never
   // completes). While Pre-Game is pending, force-retain any triggered Pre-Game
