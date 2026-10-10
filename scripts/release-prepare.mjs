@@ -26,7 +26,10 @@ function main(argv) {
   const dateFlag = argv.indexOf("--date");
   const date = dateFlag === -1 ? today() : argv[dateFlag + 1];
   const version = argv
-    .find((value, index) => !value.startsWith("--") && index !== dateFlag + 1)
+    .find(
+      (value, index) =>
+        !value.startsWith("--") && (dateFlag === -1 || index !== dateFlag + 1),
+    )
     ?.replace(/^v/, "");
   if (!version) {
     console.error(
