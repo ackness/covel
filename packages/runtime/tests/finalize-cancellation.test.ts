@@ -16,7 +16,14 @@ const execution = {
     origin: "player" as const,
     countPolicy: "none" as const,
   },
-  runtimes: [{ name: "fixture", pluginId: "fixture", outputKind: "plugin" }],
+  runtimes: [
+    {
+      name: "fixture",
+      pluginId: "fixture",
+      description: "fixture",
+      outputKind: "plugin" as const,
+    },
+  ],
   results: [
     {
       pluginId: "fixture",
@@ -42,7 +49,7 @@ it("cancels a blocked commit hook, rolls back earlier writes and skips later pro
   const hookPipeline = createHookPipeline();
   const parent = new AbortController();
   const started = Promise.withResolvers<AbortSignal>();
-  const blocked = Promise.withResolvers<HookResult>();
+  const blocked = Promise.withResolvers<HookResult<unknown>>();
   let calls = 0;
   hookPipeline.register({
     id: "blocked-commit",

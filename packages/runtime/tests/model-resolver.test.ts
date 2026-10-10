@@ -9,6 +9,7 @@ const manifest = (
   overrides: Partial<RuntimeManifest> = {},
 ): RuntimeManifest => ({
   name: "narrator",
+  pluginId: "narrator",
   description: "test",
   stage: "narrative",
   ...overrides,

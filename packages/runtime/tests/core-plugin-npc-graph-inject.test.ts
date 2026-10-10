@@ -228,6 +228,11 @@ describe("npc-graph core plugin write-read-inject path", () => {
         new Set(current.map((row) => row.key)),
       );
       const recalled = await ragRetrieverHandler({
+        sessionId,
+        turnId: "turn-recall",
+        pluginId: "npc-graph",
+        runtimeId: "npc-graph/rag-retriever",
+        store: scopedContext.store,
         playerMessage: "Alice",
         locale: "en-US",
         pluginData: {
@@ -245,9 +250,12 @@ describe("npc-graph core plugin write-read-inject path", () => {
           },
         },
       });
-      const recalledValue = (
-        recalled as { value: { edgeCount: number; npcContext: string } }
-      ).value;
+      if (!("outcome" in recalled) || recalled.outcome !== "success")
+        throw new Error("rag-retriever did not succeed");
+      const recalledValue = recalled.value as {
+        edgeCount: number;
+        npcContext: string;
+      };
       expect(recalledValue.edgeCount).toBe(2);
       expect(recalledValue.npcContext).toContain("Alice also trusts Carol.");
       expect(recalledValue.npcContext).toContain(

@@ -1896,25 +1896,26 @@ describe("processRuntimeResult", () => {
     const store = createMockStore();
     const pipeline = createCommitPipeline(store as any);
 
-    const proposals = [
+    const proposals: Proposal[] = [
       {
         id: crypto.randomUUID(),
-        type: "narrative.append" as const,
+        type: "narrative.append",
         source: { pluginId: "test", runtimeId: "test" },
         turnId: TURN_ID,
         sessionId: SESSION_ID,
         payload: { content: "OK", kind: "story" },
         timestamp: new Date().toISOString(),
       },
+      // Deliberately unknown proposal type.
       {
         id: crypto.randomUUID(),
-        type: "bogus.type" as any,
+        type: "bogus.type",
         source: { pluginId: "test", runtimeId: "test" },
         turnId: TURN_ID,
         sessionId: SESSION_ID,
         payload: {},
         timestamp: new Date().toISOString(),
-      },
+      } as unknown as Proposal,
     ];
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});

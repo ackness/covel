@@ -52,7 +52,7 @@ describe("kernel turn digest", () => {
       ],
       toolCallSummaries: [],
     });
-    live.output!.narrativeOutput = "Mutated afterwards";
+    Object.assign(live.output!, { narrativeOutput: "Mutated afterwards" });
     expect(digest.narrativeText).toBe("Current story");
     expect(Object.isFrozen(digest)).toBe(true);
     expect(Object.isFrozen(digest.toolCallSummaries)).toBe(true);

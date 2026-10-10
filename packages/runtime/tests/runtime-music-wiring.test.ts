@@ -40,8 +40,8 @@ function baseGateway(): PluginRuntimeGateway {
       finishReason: "stop",
       usage: { inputTokens: 0, outputTokens: 0 },
     }),
-    generateObject: async () => ({
-      object: {},
+    generateObject: async <T>() => ({
+      object: {} as T,
       finishReason: "stop",
       usage: { inputTokens: 0, outputTokens: 0 },
     }),
@@ -61,7 +61,11 @@ function gatewayWithMusic(): PluginRuntimeGateway {
 
 type MusicHandle = NonNullable<
   Parameters<
-    NonNullable<Awaited<ReturnType<TurnExecutorDeps["loadRuntime"]>>["handler"]>
+    NonNullable<
+      NonNullable<
+        Awaited<ReturnType<TurnExecutorDeps["loadRuntime"]>>
+      >["handler"]
+    >
   >[0]["music"]
 >;
 

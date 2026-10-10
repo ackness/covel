@@ -13,7 +13,12 @@ import { describe, it, expect, vi } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import type { SuspensionRecord } from "@covel/store";
-import type { Proposal, RuntimeEffects, RuntimeManifest } from "@covel/shared";
+import type {
+  JsonValue,
+  Proposal,
+  RuntimeEffects,
+  RuntimeManifest,
+} from "@covel/shared";
 import { withPendingProposals } from "@covel/tools";
 import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
@@ -48,12 +53,13 @@ function makeResult(
     runtimeId,
     runId: crypto.randomUUID(),
     turnId: TURN_ID,
-    status: "success" as const,
+    status: "success" as "success" | "skipped",
     output,
     effects,
     toolCalls: [] as const,
     durationMs: 1,
     timestamp: new Date().toISOString(),
+    pendingProposals: undefined as readonly Proposal[] | undefined,
   };
 }
 
@@ -82,7 +88,7 @@ function makeSuspension(): SuspensionRecord {
 }
 
 /** A state.patch that commits; assert via `getStateEntry`. */
-function statePatch(field: string, value: unknown): RuntimeEffects {
+function statePatch(field: string, value: JsonValue): RuntimeEffects {
   return { statePatches: [{ table: "stats", field, value }] };
 }
 
@@ -705,8 +711,8 @@ describe("finalizeExecution", () => {
     const now = new Date().toISOString();
     // The trigger ledger records against the session row.
     await store.createSession({
+      locale: "en-US",
       id: SESSION_ID,
-      worldId: null,
       phase: "playing",
       status: "active",
       completedPlayerTurns: 0,

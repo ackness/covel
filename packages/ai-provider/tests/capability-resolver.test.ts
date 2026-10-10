@@ -27,6 +27,9 @@ describe("model identity resolution", () => {
           "gpt-4o-priced": {
             input: ["text"],
             output: ["text"],
+            features: [],
+            contextWindow: 128_000,
+            maxOutputTokens: 16_384,
             mode: "chat",
             litellmProvider: "openai",
             ...pricing,
@@ -48,6 +51,9 @@ describe("model identity resolution", () => {
           "gpt-4o-mini-tts": {
             input: ["text"],
             output: ["audio"],
+            features: [],
+            contextWindow: 0,
+            maxOutputTokens: 0,
             mode: "audio_speech",
             litellmProvider: "openai",
           },

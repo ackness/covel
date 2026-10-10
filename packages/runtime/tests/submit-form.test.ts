@@ -19,6 +19,7 @@ import {
   VALID_TYPES,
 } from "../src/rpc-defaults/submit-form.js";
 import type { RpcHandlerContext } from "../src/rpc/rpc-registry.js";
+import { createRpcHandlerStoreView } from "../src/function-runtime/plugin-handler-helpers.js";
 
 const SESSION = "sess-1";
 const TURN = "turn-1";
@@ -27,7 +28,10 @@ function makeCtx(store: DataStore, locale?: string): RpcHandlerContext {
   return {
     sessionId: SESSION,
     pluginId: "framework",
-    store,
+    store: createRpcHandlerStoreView(store, {
+      sessionId: SESSION,
+      pluginId: "framework",
+    }),
     ...(locale ? { locale } : {}),
   };
 }
@@ -119,6 +123,8 @@ describe("submitFormHandler (Epic A)", () => {
     await seedInteraction(store, {
       interactionId: "defaults",
       type: "form",
+      title: "Defaults",
+      submitLabel: "Submit",
       fields: [
         { type: "text", name: "origin", label: "Origin", defaultValue: "home" },
         {
@@ -151,6 +157,8 @@ describe("submitFormHandler (Epic A)", () => {
       await seedInteraction(store, {
         interactionId: "punctuation",
         type: "form",
+        title: "Punctuation",
+        submitLabel: "Submit",
         fields: [
           {
             type: "text",

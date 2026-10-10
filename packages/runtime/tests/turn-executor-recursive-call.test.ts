@@ -198,15 +198,11 @@ describe("executeTurn recursiveCall", () => {
       ],
     ]);
 
-    await executeTurn(
-      { origin: "player", ...input, locale: "en-US" },
-      [caller, leaf],
-      {
-        loadRuntime: async (rt) => loaded.get(rt.name),
-        llm: { generate: vi.fn() },
-        emitter: makeEmitterSpy(),
-      },
-    );
+    await executeTurn({ ...input, locale: "en-US" }, [caller, leaf], {
+      loadRuntime: async (rt) => loaded.get(rt.name),
+      llm: { generate: vi.fn() },
+      emitter: makeEmitterSpy(),
+    });
 
     expect(leafLocale).toBe("en-US");
   });

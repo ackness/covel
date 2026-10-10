@@ -255,14 +255,6 @@ describe("turn-executor → context budget wiring", () => {
   );
   it.each<[string, Partial<RuntimeManifest>]>([
     ["without declared tools", {}],
-    [
-      "with input.tools",
-      {
-        input: {
-          tools: [{ plugin: "other-plugin", runtime: "other-runtime" }],
-        },
-      },
-    ],
     ["with tools.builtin", { tools: { builtin: ["plugin-data-set"] } }],
     ["with tools.plugin", { tools: { plugin: ["dummy"] } }],
   ])(

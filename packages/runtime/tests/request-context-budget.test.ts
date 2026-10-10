@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyPerCallBudget } from "../src/agent-loop/request-context-budget.js";
 import type { LLMAdapter } from "../src/llm/llm-adapter.js";
+import { buildRetryPolicy } from "../src/retry/retry-common.js";
 
 describe("pre-request budget errors", () => {
   it.each(["input", "output"])(
@@ -27,7 +28,10 @@ describe("pre-request budget errors", () => {
           messages: [{ role: "user", content: "x".repeat(200) }],
           tools: undefined,
           responseFormat: undefined,
-          retryPolicy: { maxRetries: 0 },
+          retryPolicy: buildRetryPolicy({
+            runtimeTimeoutMs: 120_000,
+            maxRetries: 0,
+          }),
           estimator: (value) => value.length,
           contextBudget: { maxInputTokens: 100, reservedForResponse: 40 },
         }),
@@ -65,7 +69,10 @@ describe("response schema budget", () => {
         messages: [{ role: "user", content: "go" }],
         tools: undefined,
         responseFormat,
-        retryPolicy: { maxRetries: 0 },
+        retryPolicy: buildRetryPolicy({
+          runtimeTimeoutMs: 120_000,
+          maxRetries: 0,
+        }),
         estimator: (value) => value.length,
         contextBudget: {
           maxInputTokens: inputLimit + 40,
@@ -101,7 +108,10 @@ describe("markers of a cut request", () => {
         ],
         tools: undefined,
         responseFormat: undefined,
-        retryPolicy: { maxRetries: 0 },
+        retryPolicy: buildRetryPolicy({
+          runtimeTimeoutMs: 120_000,
+          maxRetries: 0,
+        }),
         estimator: (value) => value.length,
         contextBudget: { maxInputTokens: 1_000, reservedForResponse: 100 },
         ...(locale ? { locale } : {}),

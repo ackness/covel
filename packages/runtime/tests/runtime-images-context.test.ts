@@ -7,6 +7,9 @@ interface StoredAsset {
   readonly id: string;
   readonly mime: string;
   readonly size: number;
+  readonly ownerSessionId: string | null;
+  readonly ownerPluginId: string | null;
+  readonly createdAt: string;
   readonly meta: Record<string, unknown>;
 }
 
@@ -24,6 +27,9 @@ function makeMediaStub() {
         n += 1;
         const asset: StoredAsset = {
           id: `media-${n}`,
+          ownerSessionId: null,
+          ownerPluginId: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
           mime,
           size: bytes.byteLength,
           meta: meta ?? {},
@@ -37,6 +43,9 @@ function makeMediaStub() {
         n += 1;
         const asset: StoredAsset = {
           id: `media-${n}`,
+          ownerSessionId: null,
+          ownerPluginId: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
           mime: "image/png",
           size: 1,
           meta: opts?.meta ?? {},

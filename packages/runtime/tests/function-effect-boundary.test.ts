@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
-import type { HandlerResult, RuntimeManifest } from "@covel/shared";
+import type {
+  HandlerResult,
+  RuntimeManifest,
+  RuntimeResult,
+} from "@covel/shared";
 import { createEmitEventTool } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -86,8 +90,9 @@ describe("function business value and effect boundary", () => {
       expect(runFollower).toHaveBeenCalledTimes(publish ? 1 : 0);
       expect(result.effects).toEqual(publish ? effects : undefined);
       const stored = (await store.listTurnResults("effect-session"))[0]!;
-      expect(stored.runtimeResults[0]?.effects).toEqual(result.effects);
-      expect(stored.runtimeResults[0]?.output).toEqual(businessValue);
+      const storedResults = stored.runtimeResults as RuntimeResult[];
+      expect(storedResults[0]?.effects).toEqual(result.effects);
+      expect(storedResults[0]?.output).toEqual(businessValue);
 
       const commit = await finalizeExecution({
         store,

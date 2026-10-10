@@ -89,13 +89,12 @@ describe("operation settings snapshot", () => {
     );
     expect(Object.isFrozen(defaults)).toBe(false);
     defaults.nested.value = "edited";
-    expect(snapshot!.configured.config).toEqual({
+    const config = snapshot?.configured?.config;
+    expect(config).toEqual({
       nested: { value: "original" },
     });
-    expect(Object.isFrozen(snapshot!.configured.config)).toBe(true);
-    expect(
-      Object.isFrozen((snapshot!.configured.config as typeof defaults).nested),
-    ).toBe(true);
+    expect(Object.isFrozen(config)).toBe(true);
+    expect(Object.isFrozen((config as typeof defaults).nested)).toBe(true);
   });
 
   it("isolates concurrent operations through pre/post commit and ignores the caller's unrelated scope", async () => {
@@ -160,8 +159,6 @@ describe("operation settings snapshot", () => {
                     statePatches: [{ table: "stats", field: "hp", value: 1 }],
                   },
                   toolCalls: [],
-                  durationMs: 0,
-                  timestamp: new Date().toISOString(),
                 },
               ],
             });
@@ -459,7 +456,7 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
 
     const playerValues = { tone: "dramatic" };
     let runtimeSettings: unknown;
-    pipeline.register({
+    pipeline.register<{ input: { userSettings: unknown } }>({
       id: "cfg-plugin:PreRuntime:settings",
       event: "PreRuntime",
       pluginId: "cfg-plugin",

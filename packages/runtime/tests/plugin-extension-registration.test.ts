@@ -1,15 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { promptSegmentV1 } from "@covel/shared";
+import type { ExtensionDeclaration } from "@covel/shared";
+import type { ExtensionPointHandler } from "@covel/plugin-handlers-utils";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { PluginExtensionHost } from "../src/plugin-extensions.js";
 import { PluginEntryScope } from "../src/plugin-entry-scope.js";
 import { createExtensionRegistration } from "../src/plugin-extension-registration.js";
 
-const declaration = { point: "prompt.history-transform@1", id: "history" };
-const handler = async (input: unknown) => input;
+const declaration = {
+  point: "prompt.history-transform@1",
+  id: "history",
+} as const;
+const handler: ExtensionPointHandler<"prompt.history-transform@1"> = async (
+  input,
+) => ({ messages: input.messages });
 
 describe("extension declaration publication", () => {
-  function fixture(declarations = [declaration]) {
+  function fixture(
+    declarations: readonly ExtensionDeclaration[] = [declaration],
+  ) {
     const host = new PluginExtensionHost(
       new PluginServiceRegistry({
         list: async () => ["fixture"],
@@ -110,7 +119,13 @@ describe("extension declaration publication", () => {
     const { host, scope, registration } = fixture([
       { point: "unknown.point@1", id: "history" },
     ]);
-    registration.provideExtension("unknown.point@1", "history", { handler });
+    // Deliberately not a kernel point: the registration must reject it.
+    const provideUnknown = registration.provideExtension as (
+      point: string,
+      id: string,
+      definition: { handler: typeof handler },
+    ) => void;
+    provideUnknown("unknown.point@1", "history", { handler });
     registration.validate();
     expect(() => scope.commit()).toThrow("Invalid extension implementation");
     await scope.dispose();

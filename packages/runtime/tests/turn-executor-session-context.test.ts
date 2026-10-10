@@ -18,11 +18,7 @@ import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import type {
-  LLMAdapter,
-  LLMRequest,
-  LLMResponse,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 // ── Fixtures ─────────────────────────────────────────────────────
 
@@ -80,13 +76,17 @@ interface CapturingLLM extends LLMAdapter {
 
 function makeCapturingLLM(): CapturingLLM {
   const captured = { systemPrompts: [] as string[] };
-  const generate = vi.fn(async (req: LLMRequest): Promise<LLMResponse> => {
-    const systemMessage = req.messages.find((m) => m.role === "system");
-    if (systemMessage && typeof systemMessage.content === "string") {
-      captured.systemPrompts.push(systemMessage.content);
-    }
-    return makeResponse('{"narrativeOutput":"ok"}');
-  });
+  const generate = vi.fn(
+    async (
+      req: Parameters<LLMAdapter["generate"]>[0],
+    ): Promise<LLMResponse> => {
+      const systemMessage = req.messages.find((m) => m.role === "system");
+      if (systemMessage && typeof systemMessage.content === "string") {
+        captured.systemPrompts.push(systemMessage.content);
+      }
+      return makeResponse('{"narrativeOutput":"ok"}');
+    },
+  );
   return { generate, captured };
 }
 
@@ -181,7 +181,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       {
         id: "lore",
         sessionId,
-        owner: { kind: "world", worldId: "scan-world" },
+        owner: { kind: "world" },
         keys: ["observatory"],
         content: "The observatory carries an ancient telescope",
         strategy: "selective",

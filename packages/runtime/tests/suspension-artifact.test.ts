@@ -71,6 +71,11 @@ describe("execution suspension artifacts", () => {
     const turn: TurnResult = {
       turnId: "turn",
       sessionId: "session",
+      executionContext: {
+        executionId: "turn",
+        origin: "player",
+        countPolicy: "none",
+      },
       runtimeResults: [top],
       nestedRuntimeResults: [nested],
       durationMs: 1,

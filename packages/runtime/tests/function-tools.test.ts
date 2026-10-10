@@ -9,7 +9,7 @@ import {
   type ToolModule,
 } from "@covel/tools";
 import { z } from "zod";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -45,8 +45,9 @@ async function fixture(
   const runtime = options.runtime ?? manifest;
   const store = createMemoryStore();
   await store.createSession({
+    locale: "en-US",
+    updatedAt: "2026-01-01T00:00:00.000Z",
     id: input.sessionId,
-    worldId: null,
     status: "active",
     phase: options.phase ?? "setup",
     completedPlayerTurns: options.completedPlayerTurns ?? 0,
@@ -54,10 +55,7 @@ async function fixture(
     activePlugins: ["community"],
     createdAt: new Date().toISOString(),
   });
-  const tools = [
-    ...createCharacterTools(store, {}),
-    ...(options.extraTools ?? []),
-  ];
+  const tools = [...createCharacterTools(store), ...(options.extraTools ?? [])];
   const deps = {
     store,
     loadRuntime: async () => ({
@@ -273,7 +271,7 @@ describe("governed function tools", () => {
   });
   it("passes handler cancellation into tools and drops late buffered writes", async () => {
     const controller = new AbortController();
-    const buffer = [];
+    const buffer: Proposal[] = [];
     const command = tool({
       name: "list-characters",
       description: "Fixture",

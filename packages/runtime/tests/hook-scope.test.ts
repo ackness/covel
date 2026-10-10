@@ -5,10 +5,10 @@
  * framework hooks (no pluginId) always fire; with no scope set, all run.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, type Mock } from "vitest";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { runWithHookScope } from "../src/hooks/hook-scope.js";
-import type { HookContext } from "../src/hooks/types.js";
+import type { HookContext, HookHandler } from "../src/hooks/types.js";
 
 const ctx: HookContext = {
   event: "PreRuntime",
@@ -17,7 +17,7 @@ const ctx: HookContext = {
 };
 
 function pipelineWith(
-  handlers: { id: string; pluginId?: string; fn: ReturnType<typeof vi.fn> }[],
+  handlers: { id: string; pluginId?: string; fn: Mock<HookHandler> }[],
 ) {
   const p = createHookPipeline();
   for (const h of handlers) {

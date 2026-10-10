@@ -95,7 +95,7 @@ async function runIngest(options: {
         } catch (cause) {
           error = cause instanceof Error ? cause.message : String(cause);
         }
-        return { ok: true };
+        return { outcome: "success" as const, value: { ok: true } };
       },
     }),
     llm: {

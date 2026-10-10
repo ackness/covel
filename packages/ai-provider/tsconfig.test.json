@@ -6,26 +6,5 @@
     "allowJs": true,
     "lib": ["esnext", "dom"]
   },
-  "include": ["tests"],
-  "exclude": [
-    "tests/capability-resolver.test.ts",
-    "tests/embedding.test.ts",
-    "tests/fixes.test.ts",
-    "tests/gateway-image.test.ts",
-    "tests/gateway-music.test.ts",
-    "tests/gateway-role-policy.test.ts",
-    "tests/gateway-slot-overrides.test.ts",
-    "tests/gateway-speech.test.ts",
-    "tests/gateway-token-budget.test.ts",
-    "tests/openai-images-wire.test.ts",
-    "tests/openai-speech-wires.test.ts",
-    "tests/plugin-utils-dns-safety.test.ts",
-    "tests/preset-registry.test.ts",
-    "tests/provider-failure.test.ts",
-    "tests/reasoning-effort.test.ts",
-    "tests/reasoning-thinking.test.ts",
-    "tests/response-body-limit.test.ts",
-    "tests/slot-overlay-reload.test.ts",
-    "tests/structured-output.test.ts"
-  ]
+  "include": ["tests"]
 }

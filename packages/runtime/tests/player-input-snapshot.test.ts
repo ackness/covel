@@ -52,8 +52,8 @@ describe("source player input snapshot", () => {
     async (hasForm) => {
       const store = createMemoryStore();
       await store.createSession({
+        locale: "en-US",
         id: "session",
-        worldId: null,
         status: "active",
         phase: "playing",
         completedPlayerTurns: 0,

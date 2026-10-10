@@ -481,7 +481,7 @@ describe("HookPipeline", () => {
       );
 
       expect(captured).toHaveLength(1);
-      const { type, payload } = captured[0];
+      const { type, payload } = captured[0]!;
       expect(type).toBe("hook.aborted");
       expect(payload.hookId).toBe("plugin-x:TurnStart:0");
       expect(payload.hookPluginId).toBe("plugin-x");

@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from "vitest";
 import { mirrorSetupDone } from "@covel/shared";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { HandlerResult, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -78,7 +78,10 @@ async function runPregameTurn(
   manifests: readonly RuntimeManifest[],
   handlers: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>,
   options?: {
-    guards?: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>;
+    guards?: Record<
+      string,
+      (ctx: unknown) => Promise<{ skip: boolean; [key: string]: unknown }>
+    >;
     hookPipeline?: HookPipeline;
   },
 ): Promise<{
@@ -232,7 +235,7 @@ describe("Pre-Game completion contract", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async () =>
+        handler: async (): Promise<HandlerResult> =>
           m.name === "pregame"
             ? { outcome: "success", value: {}, completion: "done" }
             : {
@@ -283,7 +286,7 @@ describe("Pre-Game completion contract", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async () => {
+        handler: async (): Promise<HandlerResult> => {
           if (m.name === "narrator") {
             return {
               outcome: "success",

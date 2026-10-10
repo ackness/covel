@@ -12,11 +12,7 @@ import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { attachRuntimeJournal } from "../src/execution-journal.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
-import type {
-  LLMAdapter,
-  LLMMessage,
-  LLMRequest,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMMessage } from "../src/llm/llm-adapter.js";
 
 const now = "2026-10-05T00:00:00.000Z";
 const PRIOR_NARRATIVE = "The king offers a second bargain. Will you take it?";
@@ -99,7 +95,13 @@ async function conversations(
   const seen = new Map<string, readonly LLMMessage[]>();
   const narrative = options.narrative ?? NARRATIVE;
   const { runtimeResults } = await executeTurn(
-    { sessionId: "s", turnId: "t2", playerMessage: "I set it in.", ...input },
+    {
+      origin: "player",
+      sessionId: "s",
+      turnId: "t2",
+      playerMessage: "I set it in.",
+      ...input,
+    },
     manifests,
     {
       store,
@@ -120,7 +122,7 @@ async function conversations(
         ...(options.resolveBudget
           ? { resolveBudget: options.resolveBudget }
           : {}),
-        generate: async (request: LLMRequest) => {
+        generate: async (request: Parameters<LLMAdapter["generate"]>[0]) => {
           const system = String(request.messages[0]?.content ?? "");
           const name = /PROMPT:([\w-]+)/.exec(system)?.[1] ?? "";
           seen.set(name, request.messages.slice(1));

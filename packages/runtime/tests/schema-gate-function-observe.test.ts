@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { JsonValue, RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -51,8 +51,13 @@ function input(sessionId: string): TurnInput {
 function makeDeps(loaded: LoadedRuntime): TurnExecutorDeps {
   return {
     loadRuntime: async () => loaded,
+    llm: {
+      generate: async () => {
+        throw new Error("Function runtimes do not use the LLM");
+      },
+    },
     store: createMemoryStore(),
-  } as TurnExecutorDeps;
+  };
 }
 
 describe("function output schema gate", () => {
@@ -66,7 +71,7 @@ describe("function output schema gate", () => {
   });
 
   it("accepts a value that conforms to the schema", async () => {
-    const returned = { outcome: "success", value: { prompt: "ok" } };
+    const returned = { outcome: "success" as const, value: { prompt: "ok" } };
     const loaded: LoadedRuntime = {
       manifest: manifest({ output: { schema: "./output.schema.json" } }),
       promptTemplate: "",
@@ -87,7 +92,7 @@ describe("function output schema gate", () => {
   });
 
   it("fails with output-schema-invalid when the value violates the schema", async () => {
-    const returned = { outcome: "success", value: { wrong: "shape" } };
+    const returned = { outcome: "success" as const, value: { wrong: "shape" } };
     const loaded: LoadedRuntime = {
       manifest: manifest({ output: { schema: "./output.schema.json" } }),
       promptTemplate: "",
@@ -107,7 +112,7 @@ describe("function output schema gate", () => {
   });
 
   it("skips validation when no output.schema was loaded", async () => {
-    const returned = { outcome: "success", value: { wrong: "shape" } };
+    const returned = { outcome: "success" as const, value: { wrong: "shape" } };
     const loaded: LoadedRuntime = {
       manifest: manifest(),
       promptTemplate: "",
@@ -257,8 +262,9 @@ describe("function output schema gate", () => {
       const sessionId = "sess-contract-commit";
       const store = createMemoryStore();
       await store.createSession({
+        locale: "en-US",
+        updatedAt: "2026-01-01T00:00:00.000Z",
         id: sessionId,
-        worldId: null,
         status: "active",
         phase: "playing",
         completedPlayerTurns: 1,
@@ -276,9 +282,12 @@ describe("function output schema gate", () => {
         outputContractSchema: VALUE_SCHEMA,
         handler: async (ctx) => {
           await ctx.pluginData!.set("notes", "buffered", { text: "buffered" });
+          const value: JsonValue = valid
+            ? { prompt: "ok" }
+            : { wrong: "shape" };
           return {
-            outcome: "success",
-            value: valid ? { prompt: "ok" } : { wrong: "shape" },
+            outcome: "success" as const,
+            value,
             effects: {
               pluginData: [
                 {

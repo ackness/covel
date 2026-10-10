@@ -79,11 +79,13 @@ describe("deriveEffects — builtin tool mapping table", () => {
         tools: { builtin: ["plugin-data-set", "plugin-data-set-batch"] },
         dataSchemas: {
           inventory: {
+            namespace: "inventory",
             schemaVersion: 1,
             acceptsWorldData: false,
             schema: "./s.json",
           },
           quests: {
+            namespace: "quests",
             schemaVersion: 1,
             acceptsWorldData: false,
             schema: "./q.json",
@@ -312,7 +314,6 @@ describe("applyHazardPolicy — stable warn / strict output", () => {
   });
   const narrator = manifest({ name: "p/narrator", outputKind: "story" });
   const group: ScheduledGroup = {
-    stage: "narrative",
     runtimes: [narrator, writerB, writerA], // deliberately unsorted
   };
 
@@ -358,7 +359,6 @@ describe("applyHazardPolicy — stable warn / strict output", () => {
   it("single-runtime and hazard-free groups pass through untouched", () => {
     const solo: ScheduledGroup = { runtimes: [writerA] };
     const clean: ScheduledGroup = {
-      stage: "narrative",
       runtimes: [narrator, writerA],
     };
     const out = applyHazardPolicy([solo, clean], "strict");

@@ -237,7 +237,9 @@ describe("public plugin services", () => {
     const registry = new PluginServiceRegistry({
       list: async () => ["consumer", "provider"],
       ensure: async () => scope,
-      onCallCompleted: (event) => events.push(event),
+      onCallCompleted: (event) => {
+        events.push(event);
+      },
     });
     const client = registry.createClient({
       sessionId: "test",
@@ -474,7 +476,9 @@ describe("public plugin services", () => {
     const registry = new PluginServiceRegistry({
       list: async () => [],
       ensure,
-      onCallCompleted: (event) => events.push(event),
+      onCallCompleted: (event) => {
+        events.push(event);
+      },
     });
     const abort = new AbortController();
     const client = registry.createClient({

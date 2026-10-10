@@ -202,14 +202,10 @@ describe("scheduleByDag", () => {
       mk("codex", 650, {
         input: {
           inject: [
-            {
-              kind: "plugin-data",
-              namespace: "entries",
-              as: "<existing>",
-            } as unknown,
-          ] as RuntimeManifest["input"]["inject"],
+            { kind: "plugin-data", namespace: "entries", as: "<existing>" },
+          ],
         },
-      } as Partial<RuntimeManifest>),
+      }),
     ];
     const { groups } = scheduleByDag(input);
     expect(groups).toHaveLength(1);

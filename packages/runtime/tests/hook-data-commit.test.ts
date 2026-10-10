@@ -220,7 +220,10 @@ describe("Hook data at the commit boundary", () => {
         Object.assign(messages[0]!, { content: "observer write" });
         Object.assign(suspensions[0]!, { reason: "observer write" });
         Object.assign(
-          suspensions[0]!.pendingContinuation.pendingProposals[0]!.payload,
+          (
+            suspensions[0]!.pendingContinuation
+              .pendingProposals[0] as ReturnType<typeof proposal>
+          ).payload,
           { value: "observer write" },
         );
         return { action: "continue" };
@@ -232,8 +235,10 @@ describe("Hook data at the commit boundary", () => {
     expect(collectExecutionJournal(turn)[0]!.content).toBe("original");
     expect(collectExecutionSuspensions(turn)[0]!.reason).toBe("wait");
     expect(
-      collectExecutionSuspensions(turn)[0]!.pendingContinuation
-        .pendingProposals[0]!.payload,
+      (
+        collectExecutionSuspensions(turn)[0]!.pendingContinuation
+          .pendingProposals[0] as ReturnType<typeof proposal>
+      ).payload,
     ).toMatchObject({ value: "original" });
     expect(JSON.stringify(turn)).not.toContain("pendingContinuation");
   });

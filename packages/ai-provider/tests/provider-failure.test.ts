@@ -78,7 +78,14 @@ describe("classifyProviderFailure", () => {
         .kind,
     ).toBe("timeout");
     expect(
-      classifyProviderFailure(new LLMRequestBudgetError("deadline")).kind,
+      classifyProviderFailure(
+        new LLMRequestBudgetError("deadline", {
+          maxAttempts: 1,
+          attempts: 1,
+          deadline: 0,
+          ceiling: 0,
+        }),
+      ).kind,
     ).toBe("timeout");
     expect(
       classifyProviderFailure(

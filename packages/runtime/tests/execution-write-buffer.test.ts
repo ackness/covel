@@ -177,30 +177,19 @@ describe("createTrustedHandlerStore with a write buffer", () => {
     const now = new Date().toISOString();
 
     await trusted.setPluginData({
-      id: "x",
-      sessionId: CTX.sessionId,
-      pluginId: CTX.pluginId,
       namespace: "schema",
       key: "character-attributes",
       value: { version: 1 },
-      createdAt: now,
-      updatedAt: now,
     });
     await trusted.setPluginDataBatch([
       {
-        id: "e1",
-        sessionId: CTX.sessionId,
-        pluginId: CTX.pluginId,
         namespace: "entries",
         key: "geo",
         value: { a: 1 },
-        createdAt: now,
-        updatedAt: now,
       },
     ]);
     await trusted.upsertCharacter({
       id: "char-1",
-      sessionId: CTX.sessionId,
       name: "Player",
       type: "player",
       version: 1,
@@ -239,18 +228,12 @@ describe("createTrustedHandlerStore with a write buffer", () => {
     const now = new Date().toISOString();
 
     await trusted.setPluginData({
-      id: "x",
-      sessionId: CTX.sessionId,
-      pluginId: CTX.pluginId,
       namespace: "schema",
       key: "k",
       value: { hi: true },
-      createdAt: now,
-      updatedAt: now,
     });
     await trusted.upsertCharacter({
       id: "char-1",
-      sessionId: CTX.sessionId,
       name: "Player",
       type: "player",
       version: 1,

@@ -121,7 +121,7 @@ describe("emit-event: tool-loop accumulation + finalize merge into effects.event
             promptTemplate: "",
             handler: async (ctx: FunctionHandlerContext) => {
               followerCalls.push(ctx);
-              return { ok: true };
+              return { outcome: "success", value: { ok: true } };
             },
           };
         }

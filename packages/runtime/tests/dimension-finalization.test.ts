@@ -698,7 +698,10 @@ describe("story gate on the dimension provider", () => {
           handler: async (ctx): Promise<HandlerResult> => {
             if (manifest.outputContract === DIMENSION_CONTRACT) {
               if (providerFails) throw new Error("provider down");
-              return { outcome: "success", value: ctx.world!.dimensions };
+              return {
+                outcome: "success",
+                value: JSON.parse(JSON.stringify(ctx.world!.dimensions)),
+              };
             }
             seen.push(ctx.world?.dimensions.reputation?.value);
             return { outcome: "success", value: { narrativeOutput: "ok" } };
