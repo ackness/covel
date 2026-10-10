@@ -2,7 +2,7 @@ import { getToolContent } from "@covel/plugin-handlers-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPluginDataTools, getPendingProposals } from "../src/index.js";
 import type { ToolExecutionContext, ToolModule } from "../src/types.js";
-import type { Proposal } from "@covel/shared";
+import { MAX_PLUGIN_DATA_VALUE_BYTES, type Proposal } from "@covel/shared";
 
 interface PluginDataRow {
   namespace: string;
@@ -115,6 +115,39 @@ describe("builtin plugin-data tools", () => {
         ctx(),
       ),
     ).rejects.toThrow(/reserved/);
+  });
+
+  it("tells the model the size and the limit of a value that is too large, and queues nothing", async () => {
+    // Multi-byte text: the limit counts UTF-8 bytes, not characters.
+    const value = { log: "记".repeat(MAX_PLUGIN_DATA_VALUE_BYTES / 3) };
+    const bytes = new TextEncoder().encode(JSON.stringify(value)).length;
+    const message = `The value for entries/log is ${bytes} bytes; the limit for one value is ${MAX_PLUGIN_DATA_VALUE_BYTES} bytes. Nothing was written. Store less, or split it across several keys.`;
+
+    await expect(
+      findByName(tools, "plugin-data-set").execute(
+        { namespace: "entries", key: "log", value },
+        ctx(),
+      ),
+    ).rejects.toThrow(message);
+    // One oversized entry refuses the whole batch: it commits as one proposal.
+    await expect(
+      findByName(tools, "plugin-data-set-batch").execute(
+        {
+          items: [
+            { namespace: "entries", key: "small", value: { ok: true } },
+            { namespace: "entries", key: "log", value },
+          ],
+        },
+        ctx(),
+      ),
+    ).rejects.toThrow(message);
+
+    const fits = { log: "x".repeat(MAX_PLUGIN_DATA_VALUE_BYTES - 10) };
+    const result = await findByName(tools, "plugin-data-set").execute(
+      { namespace: "entries", key: "log", value: fits },
+      ctx(),
+    );
+    expect(getPendingProposals(result)).toHaveLength(1);
   });
 
   it("queues one batch proposal for plugin-data-set-batch", async () => {

@@ -32,6 +32,16 @@ export function applyCapabilityFallback(
   context: ModelRequestContext | undefined,
 ): TextMessage[] {
   if (!shouldDowngrade(context)) return messages;
+  return withoutImageParts(messages);
+}
+
+/**
+ * The messages with their image parts removed; the same array when there
+ * are none. A message of images only becomes the text `[image]`.
+ */
+export function withoutImageParts<M extends TextMessage>(
+  messages: readonly M[],
+): M[] {
   let mutated = false;
   const next = messages.map((msg) => {
     const downgraded = downgradeContent(msg.content);
@@ -39,7 +49,7 @@ export function applyCapabilityFallback(
     mutated = true;
     return { ...msg, content: downgraded };
   });
-  return mutated ? next : messages;
+  return mutated ? next : (messages as M[]);
 }
 
 function shouldDowngrade(context: ModelRequestContext | undefined): boolean {

@@ -15,10 +15,6 @@ export {
   collectUpstreamWorldProposals,
 } from "./function-runtime/world-model-view.js";
 // ── Trigger Router ───────────────────────────────────────────────
-export {
-  MAX_PLUGIN_DATA_VALUE_BYTES,
-  pluginDataSizeBytes,
-} from "./commit/plugin-data-limits.js";
 export { shouldTrigger } from "./trigger/trigger.js";
 
 // ── Scheduler ────────────────────────────────────────────────────

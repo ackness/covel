@@ -181,6 +181,22 @@ function createCreateCharacterTool(
       // of a duplicate. The same name with another type stays a new record.
       const existing = await mergeCharacterViews(store, context);
       const nameKey = characterNameKey(params.name);
+      // The player is never an existing character of the world under another
+      // type: returning that character would leave the session without a
+      // player, and a second record with its name makes the name ambiguous.
+      if (params.type === "player") {
+        const owner = existing.find(
+          (c) =>
+            c.type !== "player" &&
+            [c.name, ...(c.aliases ?? [])].some(
+              (name) => characterNameKey(name) === nameKey,
+            ),
+        );
+        if (owner)
+          throw new Error(
+            `"${params.name}" is a name of ${characterLabel(owner)} [${owner.id}] (${owner.type}), a character of this world. The player character needs a name no other character has: ask the player for a different name and create nothing until they give one.`,
+          );
+      }
       const match =
         existing.find(
           (c) => characterNameKey(c.name) === nameKey && c.type === params.type,

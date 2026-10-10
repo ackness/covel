@@ -5,7 +5,7 @@
  * session nobody plays again would stay forever. There is no scheduler, so the
  * sweep runs once at server start (`force`) and then opportunistically after a
  * commit, at most once a day — the same shape as the suspension TTL sweep.
- * It reuses `deleteTraceEventsBefore` per session: that delete follows the
+ * It runs the same per-session delete as a commit: that delete follows the
  * `(session_id, created_at, seq)` index on every backend, and the work stays
  * in small steps with the event loop free in between.
  */
@@ -15,8 +15,32 @@ import type { DataStore } from "@covel/store";
 
 type TraceSweepStore = Pick<
   DataStore,
-  "listSessions" | "deleteTraceEventsBefore"
+  "listSessions" | "deleteTraceEventsBefore" | "queryTraceEvents"
 >;
+
+/**
+ * Delete a session's trace events older than `before`, except those of its
+ * newest turn. The state of that turn is read from its `turn.started`,
+ * `turn.completed` and `turn.failed` rows (the execution status, and the
+ * retry of a failed or interrupted turn), so they outlive the retention
+ * period: a player who comes back to the session later is still offered the
+ * retry. One turn of traces per session is the cost.
+ */
+export async function deleteExpiredTraceEvents(
+  store: Pick<DataStore, "deleteTraceEventsBefore" | "queryTraceEvents">,
+  sessionId: string,
+  before: string,
+): Promise<void> {
+  const [started] = await store.queryTraceEvents(sessionId, {
+    types: ["turn.started"],
+    newestFirst: true,
+    limit: 1,
+  });
+  await store.deleteTraceEventsBefore(
+    sessionId,
+    started && started.createdAt < before ? started.createdAt : before,
+  );
+}
 
 const SWEEP_INTERVAL_MS = 24 * 60 * 60_000;
 
@@ -51,7 +75,7 @@ export async function maybeSweepOldTraces(
     const before = new Date(now - days * 86_400_000).toISOString();
     for (const session of await store.listSessions()) {
       try {
-        await store.deleteTraceEventsBefore(session.id, before);
+        await deleteExpiredTraceEvents(store, session.id, before);
         swept += 1;
       } catch (error) {
         console.warn(

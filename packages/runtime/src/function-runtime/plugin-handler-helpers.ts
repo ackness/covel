@@ -24,7 +24,7 @@ import {
   type WorldModelView,
 } from "@covel/shared";
 import { overlayPluginDataValue } from "@covel/tools";
-import { pluginDataSizeError } from "../commit/plugin-data-limits.js";
+import { pluginDataSizeError } from "@covel/shared";
 import {
   bufferCharacterUpsert,
   bufferPluginData,

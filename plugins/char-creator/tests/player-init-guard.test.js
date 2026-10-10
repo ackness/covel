@@ -69,6 +69,28 @@ describe("player initialization World Model", () => {
     expect(await guard(context(values))).toEqual({ skip: false });
     expect(values.systems).toBe("self-taught");
   });
+  it("offers the form again when the stored name belongs to a character of the world", async () => {
+    const npcs = [
+      {
+        id: "char-tomas-vale",
+        name: "Tomas Vale",
+        aliases: ["Tomas"],
+        type: "npc",
+      },
+    ];
+    // Proposing the player would be refused at commit on every attempt.
+    for (const characterName of ["Tomas", " tomas  VALE "]) {
+      const result = await guard(context({ characterName }, npcs));
+      expect(result).toEqual({ skip: false });
+      expect(getPendingProposals(result)).toEqual([]);
+    }
+    const free = await guard(context({ characterName: "Tom" }, npcs));
+    expect(getPendingProposals(free)).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ name: "Tom", type: "player" }),
+      }),
+    ]);
+  });
   it("creates the player without a default that fails its own attribute type", async () => {
     const ctx = context({ characterName: "Alex" });
     ctx.world.characterSchema = {

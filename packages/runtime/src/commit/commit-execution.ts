@@ -1,6 +1,9 @@
 import type { ExecutionCommitPlan, PreparedExecution } from "../execution.js";
 import { currentTraceRetention } from "@covel/shared";
-import { maybeSweepOldTraces } from "./trace-retention.js";
+import {
+  deleteExpiredTraceEvents,
+  maybeSweepOldTraces,
+} from "./trace-retention.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
@@ -131,7 +134,8 @@ export async function commitExecution(
   const traceRetentionDays = currentTraceRetention().days;
   if (traceRetentionDays > 0) {
     try {
-      await store.deleteTraceEventsBefore(
+      await deleteExpiredTraceEvents(
+        store,
         sessionId,
         new Date(Date.now() - traceRetentionDays * 86_400_000).toISOString(),
       );

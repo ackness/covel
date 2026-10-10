@@ -86,10 +86,14 @@ export interface OperationSpec<TResult> {
    * collapses to one call with no fallback.
    */
   resolveTargets(effectivePresetId: string | undefined): ResolvedTarget[];
-  /** Run the adapter call against a resolved target. */
+  /**
+   * Run the adapter call against a resolved target. `primary` is the first
+   * target of the chain, the one a caller's capability checks were about.
+   */
   execute(
     target: ResolvedTarget,
     resolved: ProviderResolution,
+    primary: ResolvedTarget,
   ): Promise<TResult>;
   /**
    * Map a successful result to its usage summary for lifecycle hooks.
@@ -206,7 +210,7 @@ export function createRunOperation(
             options,
           );
           const result = await awaitLlmRequest(
-            spec.execute(target, resolved),
+            spec.execute(target, resolved, targets[0]!),
             scope?.signal ?? options?.signal,
           );
           await notifySuccess(

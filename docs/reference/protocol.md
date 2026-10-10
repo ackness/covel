@@ -251,7 +251,7 @@ Provider 图片输入矩阵：
 | Gemini native                     | `{ inlineData: { mimeType, data } }`                                | 仅已上传的 Google 文件 URI，转为 `fileData`（需要 `mediaType`）；其他 URL 以 `CONFIG_ERROR` 拒绝 |
 | Gemini OpenAI-compatible endpoint | 跟随 OpenAI Chat 形状                                               | 跟随 OpenAI Chat 形状                                                                            |
 
-目标模型已知只接受文本时（模型表或 `llm.toml` 的 `input` 不含 `image`），请求里的图片 part 在编码前被去掉；一条只有图片的消息换成文本 `[image]`。能力未知的模型不做处理，由服务商决定是否接受。记录到 trace 的请求体里，超过 4,096 字符的内联图片数据换成长度说明，该请求的 `complete` 为 `false`。[Google 原生图片输入说明](https://ai.google.dev/gemini-api/docs/image-understanding) 区分内联数据与文件引用。
+目标模型已知只接受文本时（模型表或 `llm.toml` 的 `input` 不含 `image`），请求里的图片 part 在编码前被去掉；一条只有图片的消息换成文本 `[image]`。能力未知的模型不做处理，由服务商决定是否接受。回退链上有一条例外：用途的首选模型已知接受图片（调用方据此才附图）而本次调用回退到另一个模型时，后者只有在已知接受图片时才收到图片，能力未知的回退模型也只收到文本。判断回退模型能否装下请求时，一张图片按 1,600 token 计，不按它的 base64 长度计。记录到 trace 的请求体里，超过 4,096 字符的内联图片数据换成长度说明，该请求的 `complete` 为 `false`。[Google 原生图片输入说明](https://ai.google.dev/gemini-api/docs/image-understanding) 区分内联数据与文件引用。
 
 ### Gemini 原生文本协议
 

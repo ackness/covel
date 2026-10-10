@@ -22,6 +22,11 @@ import type {
 } from "./evaluation/types.js";
 
 import { AiProviderError } from "./errors.js";
+import {
+  IMAGE_TOKEN_ESTIMATE,
+  messagesForTarget,
+  withoutImageBodies,
+} from "./gateway-fallback-images.js";
 import { readReasoningEffort } from "./reasoning-effort.js";
 import {
   extractReasoningRequestFields,
@@ -263,12 +268,15 @@ export function createGateway(deps: GatewayDependencies) {
         fallbackTag: "text",
         resolveTargets: (presetId) =>
           resolveTextTargets(presetId, options, input.presetId),
-        execute: async (target, resolved) => {
+        execute: async (target, resolved, primary) => {
           metadataTarget ??= metadataTargetIdentity(target, resolved);
           const request = prepareTextMetadata(
             target,
             resolved,
-            input,
+            {
+              ...input,
+              messages: messagesForTarget(input.messages, target, primary),
+            },
             options,
             metadataTarget,
             (initialTarget ??= target),
@@ -280,7 +288,7 @@ export function createGateway(deps: GatewayDependencies) {
             }),
             {
               model: targetModel(target),
-              messages: input.messages,
+              messages: request.messages,
               tools: input.tools,
               defaults: input.defaults,
               responseFormat: input.responseFormat,
@@ -329,12 +337,15 @@ export function createGateway(deps: GatewayDependencies) {
         fallbackTag: "text",
         resolveTargets: (presetId) =>
           resolveTextTargets(presetId, options, input.presetId),
-        execute: async (target, resolved) => {
+        execute: async (target, resolved, primary) => {
           metadataTarget ??= metadataTargetIdentity(target, resolved);
           const request = prepareTextMetadata(
             target,
             resolved,
-            input,
+            {
+              ...input,
+              messages: messagesForTarget(input.messages, target, primary),
+            },
             options,
             metadataTarget,
             (initialTarget ??= target),
@@ -347,7 +358,7 @@ export function createGateway(deps: GatewayDependencies) {
             {
               model: targetModel(target),
               schema: input.schema,
-              messages: input.messages,
+              messages: request.messages,
               providerRequestMetadata: request.metadata,
             },
             textContext(target, resolved, "object"),
@@ -466,7 +477,10 @@ export function createGateway(deps: GatewayDependencies) {
         const request = prepareTextMetadata(
           target,
           resolved,
-          input,
+          {
+            ...input,
+            messages: messagesForTarget(input.messages, target, targets[0]!),
+          },
           options,
           metadataTarget,
           (initialTarget ??= target),
@@ -491,7 +505,7 @@ export function createGateway(deps: GatewayDependencies) {
             }),
             {
               model: targetModel(target),
-              messages: input.messages,
+              messages: request.messages,
               tools: input.tools,
               defaults: input.defaults,
               responseFormat: input.responseFormat,
@@ -1043,7 +1057,12 @@ export function createGateway(deps: GatewayDependencies) {
     options: GatewayOptions | undefined,
     metadataTarget: string,
     initialTarget: ResolvedTarget,
-  ): { metadata: Record<string, unknown>; warnings: LLMProviderWarning[] } {
+  ): {
+    /** The messages this target is sent: see `messagesForTarget`. */
+    messages: TextMessage[];
+    metadata: Record<string, unknown>;
+    warnings: LLMProviderWarning[];
+  } {
     const provider = targetProvider(target);
     const presetOptions = resolveProviderOptions(
       target.preset?.providerOptions,
@@ -1098,17 +1117,22 @@ export function createGateway(deps: GatewayDependencies) {
           target.profile.contextWindow,
         requestedMaxOutputTokens: parameters?.maxOutputTokens,
       });
-      const inputTokens = estimateTokens(
-        JSON.stringify({
-          messages: input.messages,
-          tools: input.tools,
-          responseFormat:
-            input.responseFormat ??
-            (input.schema
-              ? objectResponseFormat(input.schema, provider)
-              : undefined),
-        }),
-      );
+      // An image is not text: its base64 body would count as hundreds of
+      // thousands of tokens and no fallback model would ever fit.
+      const images = withoutImageBodies(input.messages);
+      const inputTokens =
+        images.count * IMAGE_TOKEN_ESTIMATE +
+        estimateTokens(
+          JSON.stringify({
+            messages: images.messages,
+            tools: input.tools,
+            responseFormat:
+              input.responseFormat ??
+              (input.schema
+                ? objectResponseFormat(input.schema, provider)
+                : undefined),
+          }),
+        );
       if (inputTokens + limits.maxOutputTokens > limits.contextWindow) {
         throw new AiProviderError({
           code: "PROVIDER_ERROR",
@@ -1165,7 +1189,7 @@ export function createGateway(deps: GatewayDependencies) {
           "The selected model does not use this reasoning effort setting; the provider default applies.",
       });
     }
-    return { metadata, warnings };
+    return { messages: input.messages, metadata, warnings };
   }
 
   /** Merge abort signal from gateway options into provider config. */

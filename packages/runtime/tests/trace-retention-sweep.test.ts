@@ -88,12 +88,50 @@ describe("maybeSweepOldTraces", () => {
     expect(await ids(store, "a")).toEqual(["a-new"]);
   });
 
+  it("keeps the newest turn's rows, which execution recovery reads", async () => {
+    const store = await seed();
+    const at = (age: number) => new Date(Date.now() - age * DAY).toISOString();
+    const add = (id: string, turnId: string, type: string, age: number) =>
+      store.addTraceEvent({
+        id,
+        sessionId: "a",
+        turnId,
+        traceId: "trace",
+        type,
+        payload: {},
+        createdAt: at(age),
+      });
+    // An earlier turn, then a last turn that failed 50 days ago.
+    await add("first-started", "t1", "turn.started", 60);
+    await add("first-completed", "t1", "turn.completed", 59.9);
+    await add("last-started", "t2", "turn.started", 50);
+    await add("last-call", "t2", "llm.calling", 49.9);
+    await add("last-failed", "t2", "turn.failed", 49.8);
+
+    await maybeSweepOldTraces(store, { force: true });
+
+    expect(await ids(store, "a")).toEqual([
+      "last-started",
+      "last-call",
+      "last-failed",
+      "a-old",
+      "a-new",
+    ]);
+    expect(await ids(store, "b")).toEqual(["b-new"]);
+
+    // The next turn replaces it: its rows are then ordinary old traces.
+    await add("next-started", "t3", "turn.started", 0.5);
+    await maybeSweepOldTraces(store, { force: true });
+    expect(await ids(store, "a")).toEqual(["a-new", "next-started"]);
+  });
+
   it("logs a failing session and still sweeps the others", async () => {
     const store = await seed();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const real = store.deleteTraceEventsBefore.bind(store);
     const flaky = {
       listSessions: () => store.listSessions(),
+      queryTraceEvents: store.queryTraceEvents.bind(store),
       deleteTraceEventsBefore: async (id: string, before: string) => {
         if (id === "a") throw new Error("disk");
         await real(id, before);
