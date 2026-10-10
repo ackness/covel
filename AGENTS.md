@@ -106,6 +106,10 @@ pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, fo
                       # session without model calls: pnpm llm:replay --mode record --upstream <origin>
                       # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff
                       # <a.requests> <b.requests> shows where two runs differ (docs/guide/e2e-plugin-verify.md)
+pnpm prompt:prefix    # per runtime of a recorded session: the size of each turn's first model request, how
+                      # much of it repeats the previous turn's from the start (the part a provider's prompt
+                      # cache can serve), and where the two first differ: pnpm prompt:prefix <covel.db>
+                      # [--session <id>] [--show <runtimeId>] [--json] (docs/reference/prompt-structure.md)
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
 pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]
                       # default target is the user plugin dir; --with-tools scaffolds into plugins/

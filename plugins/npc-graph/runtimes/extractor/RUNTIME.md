@@ -32,7 +32,7 @@ io:
 agent:
   model: plugin
   history:
-    maxTurns: 2
+    maxTurns: 0
   llm:
     reasoningEffort: disabled
     toolChoice: required
@@ -59,8 +59,8 @@ The shared extraction agent has converted this turn's narrative to `contract:wor
 
 The nodes and relations already recorded for this session are injected at the end of the prompt:
 
-- `<existing-npcs>`: existing nodes, one row per node — `- <node id> | <updated-at> | {name, type, summary, ...}`. Compare by **name** to avoid creating duplicates (the tool dedupes by name too).
-- `<existing-relations>`: existing relations, one row per edge — `- <edge id> | <updated-at> | {source, target, relation, strength, fact, validAt, invalidAt?}`. `source`/`target` are node ids; rows carrying `invalidAt` are superseded older versions — ignore them. The `fact` in the summary may be truncated. Use it only to judge whether a relation is already on record. Do not record an unchanged relation again.
+- `<existing-npcs>`: existing nodes, one row per node — `- <node id> | {name, type, summary, ...}`. Compare by **name** to avoid creating duplicates (the tool dedupes by name too).
+- `<existing-relations>`: existing relations, one row per edge — `- <edge id> | {source, target, relation, strength, fact, validAt, invalidAt?}`. `source`/`target` are node ids; rows carrying `invalidAt` are superseded older versions — ignore them. The `fact` in the summary may be truncated. Use it only to judge whether a relation is already on record. Do not record an unchanged relation again.
 
 If a truncated summary leaves a relationship change uncertain, conservatively skip it until later evidence is explicit.
 
