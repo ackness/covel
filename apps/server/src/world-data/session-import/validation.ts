@@ -5,6 +5,10 @@ import {
 import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import { z } from "zod";
 import {
+  MAX_PLUGIN_DATA_VALUE_BYTES,
+  pluginDataSizeBytes,
+} from "@covel/runtime";
+import {
   pluginSchemaUriForTarget,
   resolvePluginSchema,
   validateWorldDataSchemaValue,
@@ -86,6 +90,18 @@ export async function validatePluginDataValue(options: {
   /** The record of the source that `value` is, when it is one. */
   readonly record?: RecordLocation;
 }): Promise<WorldDataDiagnostic | null> {
+  const bytes = pluginDataSizeBytes(options.value);
+  if (bytes > MAX_PLUGIN_DATA_VALUE_BYTES) {
+    const where = options.record
+      ? `${options.record.label} of source "${options.source.id}"`
+      : `worldData source "${options.source.id}" value`;
+    return {
+      level: "error",
+      sourceId: options.source.id,
+      message: `${where} is ${bytes} bytes, over the ${MAX_PLUGIN_DATA_VALUE_BYTES}-byte limit for one plugin-data value (plugin "${options.target.pluginId}" namespace "${options.target.namespace}")`,
+      hint: "Split the record into several records, or drop what no turn reads.",
+    };
+  }
   const schema =
     options.schema?.kind === "plugin" &&
     options.schema.pluginId === options.target.pluginId &&

@@ -2647,7 +2647,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `PUT /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
 
-写入或更新单条插件数据。Value 最大 64KB。
+写入或更新单条插件数据。Value 序列化成 JSON 后最大 256 KiB（UTF-8 字节，与 proposal / handler 写入共用同一上限，见 [tools.md](tools.md)），超出返回 `413` 且不写入。
 
 **请求体:**
 

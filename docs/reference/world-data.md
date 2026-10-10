@@ -156,6 +156,8 @@ ID 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`，且不能是 `__proto__`、`proto
 | 对象   | `properties`、`required`、`additionalProperties`（boolean 或 schema）                       |
 | 本地化 | `x-i18n: true`；`title` 可写 `I18nText`；`x-enumLabels` 为标量枚举成员提供显示名            |
 
+写入 `plugin_data` 的单条记录（一个 key 的值）序列化后不得超过 256 KiB（`MAX_PLUGIN_DATA_VALUE_BYTES`，与运行期写入共用）；超出的记录得到 error 诊断，整个导入失败，不会被截断。需要更多内容时拆成多条记录。
+
 不支持的关键字（包括 `$ref`、远程 schema、表达式与代码）直接拒绝，不会忽略。初值、玩家修改和自动提交共用校验，不做类型强转或默认值填充。共享 JSON 边界限制深度 32、节点数 10,000、UTF-8 序列化体积 256 KiB；维度 map 与 schema 同样接受边界校验，不仅检查单个字段。
 
 名称和说明是面板标签，按界面语言从 `I18nText` 解析；普通值不经过猜测式深度翻译。只有 schema 明确标记 `x-i18n: true` 的节点可以翻译。主文件写默认语言的文本，译文写在[语言文件](#语言文件namelocaleext)里；这些节点和 `updateRule` 在导入会话时按会话的内容语言解析成普通字符串，会话里不保存 locale map（见 [Dynamic Dimensions](./dynamic-dimensions.md)）。例如：

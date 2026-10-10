@@ -9,6 +9,7 @@ import {
   discoverPlugins,
   loadPluginDefinition,
 } from "@covel/plugin-loader";
+import { MAX_PLUGIN_DATA_VALUE_BYTES } from "@covel/runtime";
 import { type DataStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {
@@ -387,6 +388,43 @@ sources:
       ),
     ).toEqual(["gate", "rain"]);
     expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(2);
+  });
+
+  it("rejects a record over the one-value plugin-data limit", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: contract:world-notes.facts@1
+    key: id
+`,
+      files: {
+        "data/facts.json": JSON.stringify([
+          { id: "small", content: "ok" },
+          { id: "huge", content: "x".repeat(MAX_PLUGIN_DATA_VALUE_BYTES) },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    await expect(
+      importWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight: {
+          activePlugins: ["world-notes"],
+          registry: registry({ "world-notes": ["facts"] }),
+        },
+      }),
+    ).rejects.toThrow(/over the 262144-byte limit/);
+    expect(
+      await store.listPluginData("sess-1", "world-notes", "facts"),
+    ).toEqual([]);
   });
 
   it("imports hidden sources into the receiver's reserved hidden namespace", async () => {

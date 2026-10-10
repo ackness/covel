@@ -380,7 +380,7 @@ interface UIRenderPart {
 
 **治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 store 事务。
 
-**单个值的大小上限**: 一个值序列化成 JSON 后不得超过 256 KiB（UTF-8 字节，`MAX_PLUGIN_DATA_VALUE_BYTES`，`packages/runtime/src/commit/plugin-data-limits.ts`）。该上限覆盖 `plugin.data` / `plugin.data.batch` commit handler、`ctx.pluginData.set` 和 RPC handler 的 store view；超出时写入失败，错误写明插件 ID、`namespace/key`、实际字节数和上限，已存的值不变，也不会被截断。内置世界里最大的一条种子记录约 7 KB。需要存更多内容时拆成多个 key，或只保留之后回合会读取的部分。REST `PUT /api/sessions/:id/plugin-data/...` 和世界包导入不受此限制。
+**单个值的大小上限**: 一个值序列化成 JSON 后不得超过 256 KiB（UTF-8 字节，`MAX_PLUGIN_DATA_VALUE_BYTES`，`packages/runtime/src/commit/plugin-data-limits.ts`）。该上限覆盖 `plugin.data` / `plugin.data.batch` commit handler、`ctx.pluginData.set` 和 RPC handler 的 store view；超出时写入失败，错误写明插件 ID、`namespace/key`、实际字节数和上限，已存的值不变，也不会被截断。内置世界里最大的一条种子记录约 7 KB。需要存更多内容时拆成多个 key，或只保留之后回合会读取的部分。REST `PUT /api/sessions/:id/plugin-data/...`（返回 `413`）和世界包导入（该记录得到一条 error 诊断，导入失败、不截断，`pnpm validate:world` 同样报告）使用同一上限。
 
 **保留命名空间**: `_` 前缀的 namespace（`_jobs` legacy 后台任务、`_runtime_jobs` staged detached 作业、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin function runtime / agent guard 经 `createTrustedHandlerStore()` 获得的显式提案写入能力。全部插件 RPC action（包括 builtin）经 `createRpcHandlerStoreView()` 获取按 session/plugin 绑定的即时写入能力；保留 namespace 的读取不受影响。两类插件句柄均不暴露宿主事务、会话生命周期或存储关闭方法。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
 
