@@ -24,6 +24,22 @@ export function factKey(turn, index) {
   return `t${String(turn).padStart(5, "0")}-${index + 1}`;
 }
 
+/**
+ * The index for the first new fact of a turn. The opening and the first player
+ * turn share a turn number, so a turn may already hold facts; counting on from
+ * the highest recorded index keeps the new keys from overwriting them.
+ */
+export function nextFactIndex(rows, turn) {
+  const prefix = factKey(turn, 0).slice(0, -1);
+  let next = 0;
+  for (const row of rows) {
+    if (!row.key.startsWith(prefix)) continue;
+    const index = Number(row.key.slice(prefix.length));
+    if (Number.isInteger(index)) next = Math.max(next, index);
+  }
+  return next;
+}
+
 /** A fact names its turn, so a reader can tell which of two facts is later. */
 export function factText(turn, fact, lang) {
   if (!turn) return fact;

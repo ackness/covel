@@ -86,6 +86,9 @@ Function runtime for Covel-native swipe + regenerate storage. Runs two ways:
 
 ## Behavior
 
-1. Stores candidate sets under `plugin_data[branch-reply][turns][turnId]`
-2. Stores message block state under `plugin_data[branch-reply][message][turnId]`
+1. Stores the candidate set and message block state, one copy of each text, under
+   `plugin_data[branch-reply][message][turnId]`
+2. Stores the adopted text of an adopted turn under
+   `plugin_data[branch-reply][accepted][turnId]`; the prompt-history transform reads
+   only this namespace, and a new candidate set removes the row
 3. Emits proposal-backed writes through `withPendingProposals`

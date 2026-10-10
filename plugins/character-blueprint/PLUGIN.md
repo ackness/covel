@@ -23,6 +23,8 @@ provides:
 entry: ./server/index.js
 contributes:
   extensions:
+    - point: prompt.segment@1
+      id: character-notes
     - point: ui.slot@1
       id: visuals
       slot: character.visual@1
@@ -39,12 +41,20 @@ contributes:
       authoring:
         title: Preset characters
         hint: >-
-          Write one record for each preset character. `role` is a character type
-          the world declares in `characterSchema.types`. Use the world's
-          `characterSchema` attribute IDs as the keys of `attributes`. `persona`
-          holds a summary, traits, goals, fears and `voice`; `voice` says how
-          the character speaks. Keep names identical to the lore.
+          Write one record for each preset character. Give it the `id` of the
+          character's record in the world's characters, with or without the
+          `npc-` prefix: the narrative reads a card only when its character is
+          in the session. `role` is a character type the world declares in
+          `characterSchema.types`. Use the world's `characterSchema` attribute
+          IDs as the keys of `attributes`. The narrative plays the character
+          from `persona` (`summary`, `traits`, `goals`, `fears`, `secrets`,
+          `voice`, `style`), from `rules` (at most three, highest `priority`
+          first), from `dialogueExamples` (at most two) and from
+          `scenarioDefaults.relationships`. `voice` says how the character
+          speaks. A secret is for the narrator, who does not state it before
+          the story reveals it. Keep names identical to the lore.
         example: ./examples/blueprints.json
+        generate: default
         source:
           kind: json
           path: characters/main-cast.json
@@ -91,5 +101,6 @@ character blueprint and can instantiate it as a session character; the
 `presence` runtime stores a character's portrait, sprite, voice, and visual
 variants, which the `character.visual@1` slot projects onto the stage. Both are
 manual function runtimes; world packages fill the same namespaces through
-world data. This root `PLUGIN.md` is metadata only — executable runtimes live
+world data. A `prompt.segment@1` provider gives story runtimes the roleplay
+notes of each card whose character is in the session (`<character-notes>`). This root `PLUGIN.md` is metadata only — executable runtimes live
 under `runtimes/`.

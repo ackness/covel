@@ -145,6 +145,7 @@ export default function ({ tool, z }) {
             tags: mergeTags(prior.tags, entry.tags),
             rarity: higherRarity(prior.rarity ?? "common", entry.rarity),
             updatedAt: now,
+            isNew: created.has(key),
           };
         } else {
           if (created.size >= MAX_NEW_ENTRIES) {
@@ -181,10 +182,18 @@ export default function ({ tool, z }) {
         );
       }
 
+      // Only entries from the latest sync are new: an older entry loses the
+      // marker the next time anything is recorded.
+      const updatedKeys = [...writes.keys()].filter((key) => !created.has(key));
+      for (const row of rows) {
+        if (writes.has(row.key) || row.value?.isNew !== true) continue;
+        writes.set(row.key, { ...row.value, isNew: false });
+      }
+
       return withPendingProposals(
         {
           created: [...created],
-          updated: [...writes.keys()].filter((key) => !created.has(key)),
+          updated: updatedKeys,
           skipped,
           ui,
         },

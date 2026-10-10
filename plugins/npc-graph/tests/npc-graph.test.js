@@ -133,6 +133,16 @@ describe("upsert-npc-graph", () => {
     listTool = bindToolStore(createListNpcGraph({ tool, z }), store);
   });
 
+  // The list tool shows current edges only; superseded versions are read from storage.
+  async function storedEdges() {
+    const rows = await store.listPluginData(
+      ctx.sessionId,
+      ctx.pluginId,
+      "edges",
+    );
+    return rows.map((row) => row.value);
+  }
+
   it("publishes the node and name-based edge schema to the model", () => {
     expect(upsertTool.jsonSchema).toMatchObject({
       type: "object",
@@ -519,11 +529,9 @@ describe("upsert-npc-graph", () => {
       originalId,
     );
 
-    const list = await listTool.execute({}, ctx);
-    const previous = getToolContent(list).edges.find(
-      (e) => e.id === originalId,
-    );
-    const current = getToolContent(list).edges.find((e) => e.id !== originalId);
+    const edges = await storedEdges();
+    const previous = edges.find((e) => e.id === originalId);
+    const current = edges.find((e) => e.id !== originalId);
 
     // The old version is closed at the turn the new fact arrived; the new one
     // opens there. Both timestamps are real turn indices, not row counts.
@@ -536,7 +544,9 @@ describe("upsert-npc-graph", () => {
     // The superseded id is pruned from the adjacency index — a revised relation
     // nets zero index growth (new id in, closed id out) rather than piling up
     // closed ids forever.
-    const aNode = getToolContent(list).nodes.find((n) => n.name === "A");
+    const aNode = getToolContent(await listTool.execute({}, ctx)).nodes.find(
+      (n) => n.name === "A",
+    );
     const idx = await store.getPluginData(
       ctx.sessionId,
       ctx.pluginId,
@@ -545,6 +555,32 @@ describe("upsert-npc-graph", () => {
     );
     expect(idx.value).toContain(current.id);
     expect(idx.value).not.toContain(originalId);
+  });
+
+  it("lists current edges only, most recently changed first, and says when it cuts the list", async () => {
+    const rows = [
+      { id: "e-old", validAt: 1, invalidAt: 5 },
+      { id: "e-a", validAt: 2 },
+      { id: "e-b", validAt: 8 },
+      { id: "e-c", validAt: 4 },
+    ].map((value) => ({
+      sessionId: ctx.sessionId,
+      pluginId: ctx.pluginId,
+      namespace: "edges",
+      key: value.id,
+      value: { ...value, source: "a", target: "b", relation: "R" },
+      updatedAt: "2026-01-01T00:00:00Z",
+    }));
+    await store.setPluginDataBatch(rows);
+
+    const all = getToolContent(await listTool.execute({}, ctx));
+    expect(all.edges.map((e) => e.id)).toEqual(["e-b", "e-c", "e-a"]);
+    expect(all.edgeCount).toBe(3);
+    expect(all.edgesTruncated).toBeUndefined();
+
+    const cut = getToolContent(await listTool.execute({ limit: 2 }, ctx));
+    expect(cut.edges.map((e) => e.id)).toEqual(["e-b", "e-c"]);
+    expect(cut.edgesTruncated).toMatch(/2 most recently changed of 3/);
   });
 
   it("keeps distinct versions when the same relation is revised across calls in one turn", async () => {
@@ -591,10 +627,8 @@ describe("upsert-npc-graph", () => {
     expect(new Set(ids).size).toBe(3);
 
     // Every version persisted: two closed at turn 7, one still open.
-    const list = await listTool.execute({}, ctx);
-    const trustEdges = getToolContent(list).edges.filter(
-      (e) => e.relation === "TRUSTS",
-    );
+    const edges = await storedEdges();
+    const trustEdges = edges.filter((e) => e.relation === "TRUSTS");
     expect(trustEdges).toHaveLength(3);
     expect(trustEdges.filter((e) => e.invalidAt === undefined)).toHaveLength(1);
     expect(trustEdges.find((e) => e.invalidAt === undefined).strength).toBe(
@@ -662,10 +696,8 @@ describe("upsert-npc-graph", () => {
       store,
     );
 
-    const list = await listTool.execute({}, ctx);
-    const trust = getToolContent(list).edges.filter(
-      (e) => e.relation === "TRUSTS",
-    );
+    const edges = await storedEdges();
+    const trust = edges.filter((e) => e.relation === "TRUSTS");
     const open = trust.filter((e) => e.invalidAt === undefined);
     // Exactly one open version survives — the brand-new revision.
     expect(open).toHaveLength(1);
@@ -731,11 +763,9 @@ describe("upsert-npc-graph", () => {
     expect(newId).not.toBe(originalId);
 
     // Both versions coexist: the old one closed for provenance, the new open.
-    const list = await listTool.execute({}, ctx);
-    const previous = getToolContent(list).edges.find(
-      (e) => e.id === originalId,
-    );
-    const current = getToolContent(list).edges.find((e) => e.id === newId);
+    const edges = await storedEdges();
+    const previous = edges.find((e) => e.id === originalId);
+    const current = edges.find((e) => e.id === newId);
     expect(previous).toBeDefined();
     expect(previous.invalidAt).toBe(11);
     expect(current.invalidAt).toBeUndefined();

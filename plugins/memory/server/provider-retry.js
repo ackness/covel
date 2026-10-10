@@ -4,7 +4,6 @@ const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_INITIAL_DELAY_MS = 100;
 
 const TRANSIENT_CODES = new Set([
-  "ABORT_ERR",
   "ECONNABORTED",
   "ECONNREFUSED",
   "ECONNRESET",
@@ -52,6 +51,8 @@ export async function retryTransientProviderCall(run, options = {}) {
 
 export function isTransientProviderError(error) {
   const chain = errorChain(error);
+  // The caller gave up or the deadline passed: retrying would only outlive it.
+  if (chain.some(isAbortError)) return false;
   for (const item of chain) {
     const record = item;
     // AiProviderError exposes the provider adapter's own classification. Honor
@@ -81,6 +82,15 @@ export function isTransientProviderError(error) {
   }
   const statusMatch = message.match(/\bhttp\s+(\d{3})\b/u);
   return statusMatch ? Number(statusMatch[1]) >= 500 : false;
+}
+
+function isAbortError(item) {
+  if (item === null || typeof item !== "object") return false;
+  return (
+    item.name === "AbortError" ||
+    item.name === "TimeoutError" ||
+    item.code === "ABORT_ERR"
+  );
 }
 
 function errorChain(error) {

@@ -393,6 +393,21 @@ describe("memory fact recall and repeats", () => {
   });
 });
 
+describe("memory fact keys", () => {
+  it("keeps the facts of a turn that is extracted twice, as the opening and the first player turn are", async () => {
+    const { ctx, rows, writes } = fixture(
+      '{"new_facts":["The gate closed at midnight."]}',
+    );
+    rows.set("facts/t00001-1", {
+      turn: 1,
+      text: "Turn 1: Mira hid the silver key under the bell tower.",
+    });
+    Object.assign(ctx, { logicalTurn: 1 });
+    await extract(ctx);
+    expect(writes.map((write) => write.key)).toEqual(["t00001-2"]);
+  });
+});
+
 describe("memory extraction prompts", () => {
   const prompts = async (locale: string, narrativeText: string) => {
     const { ctx, rows, gateway } = fixture();

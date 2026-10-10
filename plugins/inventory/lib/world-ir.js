@@ -13,7 +13,8 @@ const OPERATIONS = {
   equip: "equip",
   unequip: "unequip",
 };
-const MAX_CHANGES = 8;
+/** Most changes one ledger call takes; the handler reports the overflow. */
+export const MAX_CHANGES = 8;
 const MAX_TAGS = 5;
 
 /**
@@ -60,5 +61,5 @@ export function inventoryChangesFromWorldIR(worldIR, player) {
     }
     changes.push(change);
   }
-  return changes.slice(0, MAX_CHANGES);
+  return changes;
 }

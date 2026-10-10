@@ -150,15 +150,22 @@ export default async function guard(ctx) {
   }
 }
 
+const CREATION_FORM_ID = "char-creation";
+
 /**
- * Fetch the most recent player_inputs row for this session, or null.
+ * Fetch the most recent character-creation form submission, or null.
  * @param {import("@covel/plugin-handlers-utils").FunctionStoreView} store
  */
 async function latestSubmission(store) {
   try {
     const inputs = await store.listPlayerInputs();
-    if (!Array.isArray(inputs) || inputs.length === 0) return null;
-    return inputs[inputs.length - 1];
+    if (!Array.isArray(inputs)) return null;
+    // Other plugins' forms land in the same list; only this plugin's own form
+    // (create-character-form sets this id) is a character submission.
+    for (let i = inputs.length - 1; i >= 0; i -= 1) {
+      if (inputs[i].formId === CREATION_FORM_ID) return inputs[i];
+    }
+    return null;
   } catch {
     return null;
   }

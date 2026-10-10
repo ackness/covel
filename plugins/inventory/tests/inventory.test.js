@@ -693,6 +693,44 @@ describe("inventory from WorldIR", () => {
     );
   });
 
+  it("names the changes beyond the per-turn cap instead of dropping them silently", async () => {
+    const events = Array.from({ length: 10 }, (_, index) =>
+      change({
+        item: `torch-${index}`,
+        holder: "sess-1-player",
+        operation: "gain",
+      }),
+    );
+    const entities = events.map((_, index) => ({
+      id: `torch-${index}`,
+      type: "item",
+      name: `Torch ${index}`,
+    }));
+    const result = await ledger({
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      pluginId: "inventory",
+      runtimeId: "inventory/ledger",
+      store: {
+        listPluginData: async () => [],
+        getPluginData: async () => null,
+      },
+      world: { characters: [player] },
+      inputs: {
+        worldIR: {
+          value: {
+            ...worldIR(events),
+            entities: [...worldIR([]).entities, ...entities],
+          },
+        },
+      },
+    });
+
+    const content = getToolContent(result);
+    expect(content.value).toMatchObject({ applied: 8, notRecorded: 2 });
+    expect(content.value.note).toContain("2 item change(s)");
+  });
+
   it("publishes carried item names and leaves lost items out", async () => {
     const result = await vocabulary({
       store: {

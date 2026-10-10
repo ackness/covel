@@ -122,6 +122,18 @@ describe("sync-codex-entries", () => {
     expect((await stored("codex-azure-peak")).rarity).toBe("rare");
   });
 
+  it("marks only the latest sync's entries as new", async () => {
+    await sync([mountain]);
+    const second = await sync([{ ...mountain, title: "Jade Pool" }]);
+    expect(second.updated).toEqual([]);
+    expect((await stored("codex-azure-peak")).isNew).toBe(false);
+    expect((await stored("codex-jade-pool")).isNew).toBe(true);
+
+    // Adding to an entry written before is not a discovery either.
+    await sync([{ ...mountain, title: "Jade Pool", content: "水很凉。" }]);
+    expect((await stored("codex-jade-pool")).isNew).toBe(false);
+  });
+
   it("matches titles case-insensitively and keys English titles as words", async () => {
     await sync([{ ...mountain, title: "West Herb Garden" }]);
     const result = await sync([

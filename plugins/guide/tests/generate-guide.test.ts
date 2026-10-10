@@ -95,13 +95,13 @@ describe("generate-guide", () => {
     });
   });
 
-  it("accepts recap and decision at their documented length boundaries", async () => {
+  it("accepts a short Chinese recap and decision and the maximum lengths", async () => {
     const guideTool = createGenerateGuide({ tool, z });
     const minimumResult = await guideTool.execute(
       {
         scene: "边界场景",
-        recap: "前".repeat(20),
-        decision: "问".repeat(8),
+        recap: "前".repeat(5),
+        decision: "进去吗？",
         prompts,
       },
       context,
@@ -143,8 +143,8 @@ describe("generate-guide", () => {
     );
     expect(getToolContent(english).recap.length).toBeGreaterThan(240);
 
-    expect(getToolContent(minimumResult).recap).toHaveLength(20);
-    expect(getToolContent(minimumResult).decision).toHaveLength(8);
+    expect(getToolContent(minimumResult).recap).toHaveLength(5);
+    expect(getToolContent(minimumResult).decision).toHaveLength(4);
     expect(getToolContent(maximumResult).recap).toHaveLength(600);
     expect(getToolContent(maximumResult).decision).toHaveLength(300);
   });
@@ -181,7 +181,7 @@ describe("generate-guide", () => {
     expect(value("prompt2Color")).toBe("green");
   });
 
-  it("rejects recap and decision outside their documented boundaries", async () => {
+  it("rejects an empty recap or decision and one over the maximum", async () => {
     const guideTool = createGenerateGuide({ tool, z });
     const baseParams = {
       scene: "边界场景",
@@ -191,10 +191,7 @@ describe("generate-guide", () => {
     };
 
     await expect(
-      guideTool.execute(
-        { ...baseParams, recap: "短".repeat(19), decision: "短".repeat(7) },
-        context,
-      ),
+      guideTool.execute({ ...baseParams, recap: "  ", decision: "" }, context),
     ).rejects.toMatchObject({
       name: "ToolValidationError",
       details: expect.arrayContaining([
