@@ -265,6 +265,7 @@ export {
   attributeDefinitionSchema,
   characterSchemaSchema,
   worldManifestSchema,
+  WORLD_ACCENT_PATTERN,
   worldDimensionsSchema,
   worldGeographySchema,
   worldFactionSchema,

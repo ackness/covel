@@ -904,6 +904,8 @@ sources:
     after: music
 ```
 
+世界的封面和主题色同样写在 `world.yaml`：`cover` 是一张图片的路径（`media/` 下一层目录里的 `.png` / `.jpg` / `.webp`，例如 `media/gallery/world-cover.webp`），世界卡片、世界详情、准备页和会话背景都用它；`accentColor` 是卡片与标题的强调色，写 `#rrggbb` 或 `oklch(72% 0.12 75)`。两项都可省略：没有 `cover` 时界面用自带的默认背景，没有 `accentColor` 时按世界 ID 派生一个固定的色相。封面不必列在 `media/gallery.json` 里；列了的话，世界详情的图集不再把它重复展示一遍。`pnpm validate:world` 会检查封面文件能否显示，颜色写法不对则按 schema 报错。AI 生成的世界没有图片，所以不带这两项。
+
 世界列表上的音乐是另一回事：`world.yaml` 的 `themeMusic` 写一个音频文件的路径（`media/` 下一层目录里的 `.mp3` / `.wav`，例如 `media/music/theme.mp3`），世界选择页和世界详情在展示这个世界时播放它，不需要任何插件。它通常和曲目表里 `theme: true` 的那首是同一个文件。`pnpm validate:world` 会检查这个文件能否播放。
 
 情绪来自叙事发射的 `music.cue` 事件，场景来自 `scene.set` 事件（由跟踪场景的插件声明）。只想要一首贯穿全局的主题曲时，曲目表里放一首 `theme: true` 的曲目即可，不依赖任何事件。把 `soundtrack` 放进世界的 `pluginPolicy`，玩家启用后才会导入这些数据并播放。

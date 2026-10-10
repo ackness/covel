@@ -52,6 +52,29 @@ describe("validateWorldPackage", () => {
     expect(await validate(await makeWorld({}))).toEqual([]);
   });
 
+  it("rejects a cover the app cannot show and accepts one it can", async () => {
+    const png = "\u0089PNG";
+    const ok = await validate(
+      await makeWorld(
+        { "media/art/front.png": png },
+        `${MANIFEST}cover: media/art/front.png\naccentColor: "#336699"\n`,
+      ),
+    );
+    expect(ok.filter((item) => item.level === "error")).toEqual([]);
+
+    const missing = await validate(
+      await makeWorld({}, `${MANIFEST}cover: media/art/absent.png\n`),
+    );
+    expect(missing).toEqual([
+      expect.objectContaining({ level: "error", code: "cover" }),
+    ]);
+
+    const badColour = await validate(
+      await makeWorld({}, `${MANIFEST}accentColor: red\n`),
+    );
+    expect(badColour.some((item) => item.level === "error")).toBe(true);
+  });
+
   it("checks each character and lorebook record before session creation", async () => {
     const worldDir = await makeWorld(
       {

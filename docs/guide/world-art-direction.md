@@ -68,7 +68,7 @@ pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 
 `emit-presence` 写入默认语言文件；如果有本地化 `presence.*.json`，还需同步媒体引用并保留本地化名称。资源测试覆盖所有这些文件，避免只更新中文图而让英文会话继续引用旧哈希。
 
-当前封面位于 `apps/web/public/visuals/worlds/`，由 `apps/web/src/lib/world-visuals.ts` 选择，不会因为世界包内人物图更新而自动更换。封面与玩法相符且质量合格时可以保留；世界包的导入协议见 [world-data](../reference/world-data.md)，媒体引用见 [media-store](../reference/media-store.md)。
+世界的封面由 `world.yaml` 的 `cover`（图片路径）和 `accentColor` 声明，界面直接展示声明的图，不会因为世界包内人物图更新而自动更换；不声明就用界面默认背景。封面与玩法相符且质量合格时可以保留；世界包的导入协议见 [world-data](../reference/world-data.md)，媒体引用见 [media-store](../reference/media-store.md)。
 
 世界包的图片在玩家进入会话之前就会展示：世界详情页列出全部图片；`showcase` 排法的世界列表把场景图和剧照轮播成全屏背景，把人物图排在简介下方，点开可看原图和介绍；`cards` 排法在封面左下角显示几张头像和图片总数，指针停在封面上时轮播场景图。展示哪些图、叫什么、怎么介绍，由世界包的 `media/gallery.json` 决定（见下方[画廊资料与前端使用](#画廊资料与前端使用)）；没有这份清单时列出公开的 `kind: media` 来源里的图片，按宽高比区分场景与人物。所以这些图片要能单独成立：不放半成品。接口见 [api.md](../reference/api.md) 的 `GET /api/worlds/:id/gallery`。
 
@@ -112,6 +112,6 @@ pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 
 清单还收录逐张复核的 35 张既有素材：Emberback 三张人物像、雾港七张人物像、遥风学园十二张人物像（含四张变体）和十张昼夜场景，以及三个世界的既有首页封面。连同新增的 19 张，四个世界合计 54 条资料。表情、服装和昼夜变体分别介绍，不由神态推断关系或事件。既有图片没有可核实的生成记录时省略 `generation`，不把清单中的创作意图冒充实际生成记录。
 
-既有立绘与场景直接引用原文件。三个既有封面以相同字节复制到各世界的 `media/gallery/world-cover.webp`，对应前端 `apps/web/public/visuals/worlds/<world-id>.webp`，便于世界包独立携带；以后替换封面时须同步这两个文件及画廊校验信息。Emberback 封面的发光波形属于视觉意象；雾港的宣传总览不改变探索时的能见度规则，也不是遗迹路线图。
+既有立绘与场景直接引用原文件。三个既有封面以相同字节复制到各世界的 `media/gallery/world-cover.webp`，并由各世界 `world.yaml` 的 `cover` 指向；以后替换封面时须同步画廊校验信息。Emberback 封面的发光波形属于视觉意象；雾港的宣传总览不改变探索时的能见度规则，也不是遗迹路线图。
 
-新增横幅 PNG 为 `1536x1024`，并附 WebP 版。地图宜 `contain` 完整显示；场景与剧照也优先完整展示，裁切时需保留人物和关键道具。提灯古冢首页使用 `apps/web/public/visuals/worlds/lantern-barrow.webp`，与世界包的 hero WebP 相同，由现有 `world-visuals.ts` 映射选择。画廊图片只在世界列表和世界详情里展示；它们不改变现有 scene-stage 的场景锚点或会话状态。
+新增横幅 PNG 为 `1536x1024`，并附 WebP 版。地图宜 `contain` 完整显示；场景与剧照也优先完整展示，裁切时需保留人物和关键道具。提灯古冢的 `cover` 指向 `media/gallery/lantern-barrow-hero.webp`，即世界包的 hero WebP。画廊图片只在世界列表和世界详情里展示；它们不改变现有 scene-stage 的场景锚点或会话状态。

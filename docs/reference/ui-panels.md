@@ -519,11 +519,11 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 输入直接是 `stage.backdrop@1` 槽位值，符合 `stageBackdropSchema`；`label` 供状态文案展示，不控制回退。
 
-| 档         | 触发                     | 表现                                 |
-| ---------- | ------------------------ | ------------------------------------ |
-| `scene`    | 槽位 `ref` 是 `MediaRef` | 渲染场景图（换图 600ms crossfade）   |
-| `hero`     | 槽位缺失，或无有效 `ref` | 世界头图（`worldVisual().image`）    |
-| `gradient` | 理论兜底                 | 世界 accent 渐变（选择器当前不返回） |
+| 档         | 触发                     | 表现                                                          |
+| ---------- | ------------------------ | ------------------------------------------------------------- |
+| `scene`    | 槽位 `ref` 是 `MediaRef` | 渲染场景图（换图 600ms crossfade）                            |
+| `hero`     | 槽位缺失，或无有效 `ref` | 世界头图（`worldVisual().image`，即 `world.yaml` 的 `cover`） |
+| `gradient` | 理论兜底                 | 世界 accent 渐变（选择器当前不返回）                          |
 
 ### 履历抽屉与表单模态
 

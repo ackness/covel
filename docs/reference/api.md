@@ -1242,7 +1242,9 @@ SSE 已打开后 HTTP 状态保持 200，失败使用既有 `{ type: "error", me
 
 两种情况都只列 PNG / JPEG / WebP，最多 60 张；读不出像素尺寸的文件不列出。没有世界包的世界（只存在数据库或浏览器里）返回空列表。
 
-`world.yaml` 声明了 `themeMusic`、且文件可以播放时（`media/` 下一层目录里的 `.mp3` / `.wav`），响应多一个 `themeMusic: { url, mime }`，地址形状与图片相同，由同一个文件接口返回。
+`world.yaml` 声明了 `cover` 时（`media/` 下一层目录里的图片），同一个文件接口也返回它，地址为 `/api/worlds/:id/gallery/<目录>/<文件名>`；世界记录的 `metadata.cover` 与 `metadata.accentColor` 原样带着这两项声明，不需要先读图集。
+
+`world.yaml` 声明了 `themeMusic'、且文件可以播放时（`media/`下一层目录里的`.mp3`/`.wav`），响应多一个 `themeMusic: { url, mime }`，地址形状与图片相同，由同一个文件接口返回。
 
 ```json
 {

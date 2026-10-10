@@ -18,6 +18,8 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
+cover: media/gallery/lantern-barrow-hero.webp
+accentColor: "oklch(72% 0.12 75)"
 pluginPolicy:
   packs:
     - id: classic-tabletop

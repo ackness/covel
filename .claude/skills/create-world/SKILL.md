@@ -38,6 +38,7 @@ pnpm describe:authoring
 - 按玩法选 `pluginPolicy.presetId`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。
 - 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，就把接收它的插件写进 `pluginPolicy.requested`。
 - 视觉小说世界再声明 `defaultViewMode: stage`。立绘和场景图是渐进增强，没有也能运行。
+- 世界自带封面图时，才在 `world.yaml` 写 `cover: media/<目录>/<文件>`（图片必须存在，校验会查）和 `accentColor`；没有图就两项都不写，界面会用默认背景和按世界 ID 派生的颜色。
 
 成品参考（直接读这些目录，它们随框架同步更新）：
 
