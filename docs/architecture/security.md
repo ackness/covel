@@ -220,6 +220,33 @@ Community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is
 import-gated behind two-phase approval: a `covel:plugin-server-code` grant, then
 the action grant.
 
+### Server settings
+
+A few player settings are carried out by the server (trace retention), so the
+server stores them in its database and a browser writes them through
+`PUT /api/config/server-settings`. This is a second, narrower door beside the
+desktop-only `/api/config/settings`, `/api/config/keys`, `/api/config/proxy`
+and `/api/config/data-root`, which stay behind `COVEL_DESKTOP_REST=1`: a plain
+self-hosted web deployment does not get file, key, proxy or path writes.
+
+- **Who writes.** `DEPLOYMENT_TIER=self` only, the tier where the one player
+  owns the server; the desktop bearer token is required as well when the shell
+  set one. On `demo` / `commercial` the write is refused before the token is
+  looked at, the operator token included: there the values are the operator's
+  and come from the environment, which also wins over a stored value on `self`.
+- **What can be written.** Only a key listed in `SERVER_SETTINGS`
+  (`packages/shared/src/env/server-settings.ts`) and only a value its schema
+  accepts. The list is closed and each value is an enumerated or bounded
+  choice; a key that could name a path, a URL, a host or a credential does not
+  belong in it. An unknown key rejects the whole request.
+- **What can be read.** `GET /api/config/server-settings` is public on every
+  tier and returns the value in force of those keys only. Do not add a setting
+  whose value in force must stay private.
+- **Reach.** The origin check for writes (`origin_not_allowed`) applies as to
+  every other `PUT`. A `self` server that is reachable by other people lets
+  them change these settings, as it lets them use every other route; expose a
+  `self` server only to its owner.
+
 ## Translations from outside a package
 
 `$COVEL_HOME/translations` (`COVEL_USER_TRANSLATIONS_DIR`) holds plugin

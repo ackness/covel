@@ -20,6 +20,7 @@ import {
   createWorldDataImportLedgerMethods,
 } from "./world-data-methods.js";
 import { createWorldMethods } from "./world-methods.js";
+import { createServerSettingMethods } from "./server-setting-methods.js";
 import type { MemoryStore } from "./memory-types.js";
 import type { StoreTransaction } from "../types.js";
 import { createSerializedWriteGate } from "../serialized-write-gate.js";
@@ -36,6 +37,7 @@ export function createMemoryStore(): MemoryStore {
     ...createRuntimeMethods(state),
     ...createPluginDataMethods(state),
     ...createWorldMethods(state),
+    ...createServerSettingMethods(state),
     ...createWorldDataImportLedgerMethods(state),
     ...createLorebookMethods(state),
     ...createSuspensionMethods(state),

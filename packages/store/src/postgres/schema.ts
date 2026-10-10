@@ -65,6 +65,15 @@ export const worlds = pgTable("worlds", {
   updatedAt: text("updated_at"),
 });
 
+// ── Server settings (not session-scoped) ────────────────────────
+
+export const serverSettings = pgTable("server_settings", {
+  key: text("key").primaryKey(),
+  // JSON text, not jsonb: see `common/sql-server-setting-records.ts`.
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 // ── Sessions ────────────────────────────────────────────────────
 
 export const sessions = pgTable("sessions", {

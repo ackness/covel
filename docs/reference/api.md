@@ -136,10 +136,51 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 On `demo` / `commercial`, the public `GET /api/llm-config` retains the model
 catalog used at client startup but omits `source` and load `error`; only the
 operator token unlocks those diagnostics. Public `GET /api/config/info` returns
-`isDesktop: false`, `requiresAuth: true`, null path fields and a read-only
-`traceRetention` (`settable: false`) on those tiers.
+`isDesktop: false`, `requiresAuth: true` and null path fields on those tiers.
 An operator request receives the complete deployment paths. Local `self` and
 desktop discovery retain their existing response.
+
+### Server settings
+
+`GET /api/config/server-settings` answers on every tier, without a token. It
+holds no secret: for each setting the server itself acts on (a registry entry
+with `scope: "server"`, see [`settings-store.md`](./settings-store.md)) it
+returns the value in force, where it comes from and whether a write would
+count.
+
+```json
+{
+  "settings": {
+    "diagnostics.traceRetention": {
+      "value": "30",
+      "source": "default",
+      "settable": true
+    }
+  }
+}
+```
+
+`source` is `env` (the operator's environment variable), `setting` (a stored
+value) or `default`. `settable` is false when the environment fixes the key and
+on every key of a `demo` / `commercial` deployment. `value` under `env` may be
+one the setting does not offer to players (`"14"` for
+`COVEL_TRACE_RETENTION_DAYS=14`).
+
+`PUT /api/config/server-settings` takes `{ "entries": { "<key>": <value> | null } }`,
+stores each value (`null` drops the stored one) and returns the same body as the
+`GET`. It is accepted on `DEPLOYMENT_TIER=self` only, and needs the desktop
+bearer token when the shell set one (`401 desktop_rest_token_invalid`).
+
+| Status | `code`                          | When                                                      |
+| ------ | ------------------------------- | --------------------------------------------------------- |
+| 403    | `server_settings_operator_only` | `demo` / `commercial`, whatever token the caller presents |
+| 400    | `invalid_server_settings_body`  | The body is not `{ entries: object }`                     |
+| 400    | `unknown_server_setting`        | A key is not a server setting (`details.key`)             |
+| 400    | `invalid_server_setting_value`  | A value fails the setting's schema (`details.key`)        |
+| 409    | `server_setting_fixed`          | The environment fixes the key (`details.key`)             |
+
+A request with one refused entry writes nothing. A stored value applies to the
+next commit or sweep; no restart is needed.
 
 Configuration filesystem and file-manager startup failures use the global
 logged error handler: production responses are generic 500 errors. Invalid
@@ -744,7 +785,9 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                                                                                          |
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                            |
 | GET  | `/api/provider-keys`           | 只返回 `{ providers: { [provider]: { configured: true } } }`：动态扫描所有 `*_API_KEY` 得到的配置状态，不含原始或掩码的密钥内容，桌面客户端也一样。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单属运维信息） |
-| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等，以及 `traceRetention: { days, source: env\|setting\|default, settable }`，即生效的 trace 保留天数、来源，以及玩家的设置在此服务器上能否生效）                        |
+| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                                                                                     |
+| GET  | `/api/config/server-settings`  | 所有层级：返回服务端执行的设置（`scope: "server"`）的生效值、来源和能否设置，见上文 Server settings                                                                                                                             |
+| PUT  | `/api/config/server-settings`  | 仅 `self` 层级：保存这些设置；body `{ entries: { [key]: value \| null } }`，按注册表校验                                                                                                                                        |
 | GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）                                                                                                                                                              |
 | PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                                                                                 |
 | GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                                                                               |

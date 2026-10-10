@@ -1,5 +1,9 @@
 import type { ZodType } from "zod";
-import type { I18nText } from "@covel/shared";
+import type {
+  I18nText,
+  ServerSettingInfo,
+  ServerSettingSource,
+} from "@covel/shared";
 import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 
 export type SettingKey = string;
@@ -16,6 +20,15 @@ export type WidgetKind =
   | "textarea"
   | "json"
   | "custom";
+
+/**
+ * Where a setting lives. `client` (the default) is this device: the browser's
+ * localStorage or the desktop `settings.json`. `server` is a setting the
+ * server itself acts on: the server stores it, one value for every browser of
+ * the install, and it has a definition with the same key in `SERVER_SETTINGS`
+ * (`@covel/shared`).
+ */
+export type SettingScope = "client" | "server";
 
 export type SettingGroup = "general" | "llm" | "plugin" | "desktop" | "data";
 
@@ -38,6 +51,8 @@ export interface SettingEntry<T = unknown> {
   readonly max?: number;
   readonly step?: number;
   readonly backend?: SettingBackend;
+  /** Defaults to `client`. See {@link SettingScope}. */
+  readonly scope?: SettingScope;
   /** Secret entries always use the separate keys channel, never ordinary exports. */
   readonly secret?: boolean;
 }
@@ -79,6 +94,33 @@ export interface SettingsBackendAdapter {
   listBackups?(): Promise<readonly string[]>;
   /** The text of one kept copy; null when the name is not one of them. */
   readBackup?(name: string): Promise<string | null>;
+}
+
+/** How the store reaches the server for `scope: "server"` settings. */
+export interface ServerSettingsChannel {
+  /** Every server-scoped setting as the server reports it. */
+  load(): Promise<Readonly<Record<SettingKey, ServerSettingInfo>>>;
+  /**
+   * Store values (`null` drops a stored one) and return the settings as they
+   * are afterwards. Rejects when the server refuses the write.
+   */
+  save(
+    patch: Readonly<Record<SettingKey, unknown>>,
+  ): Promise<Readonly<Record<SettingKey, ServerSettingInfo>>>;
+}
+
+/** What is known about one `scope: "server"` setting. */
+export interface ServerSettingState {
+  /**
+   * `pending` until the server has answered, `unavailable` when it could not
+   * be asked. In both the value is the registered default and not settable.
+   */
+  readonly status: "pending" | "ready" | "unavailable";
+  /** The value in force. It may be one the schema does not offer. */
+  readonly value: unknown;
+  readonly source: ServerSettingSource | undefined;
+  /** False when the operator fixed the value or the server takes no writes. */
+  readonly settable: boolean;
 }
 
 export class SettingsRevisionConflictError extends Error {
@@ -148,6 +190,13 @@ export interface SettingsStoreApi {
   refresh(): Promise<void>;
   /** Reload the independent secret channel without writing or broadcasting keys. */
   refreshSecrets(): Promise<void>;
+  /**
+   * The state of a `scope: "server"` setting, or undefined for any other key.
+   * The same object is returned until the state changes.
+   */
+  serverSetting(key: SettingKey): ServerSettingState | undefined;
+  /** Ask the server for its settings again. */
+  refreshServerSettings(): Promise<void>;
   /**
    * Whether persisted state was read successfully at `init()`. When false the
    * store serves defaults and refuses writes — saving a full snapshot from a
