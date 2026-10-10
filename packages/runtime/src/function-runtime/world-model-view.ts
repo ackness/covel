@@ -9,6 +9,7 @@ import {
   type WorldModelView,
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
+import { deepFreeze } from "../hooks/hook-settings.js";
 
 /** Match commit eligibility, including completed guards that skipped model work. */
 export function collectUpstreamWorldProposals(
@@ -190,8 +191,9 @@ export function overlayWorldModelView(
 ): WorldModelView {
   const snapshot = structuredClone(base);
   // No proposal writes the world record, and it holds the whole setting text:
-  // keep it out of the copy that every read of the other properties makes.
+  // it is frozen once and every read returns that object.
   const { worldRecord: _worldRecord, ...model } = snapshot;
+  const worldRecord = deepFreeze(snapshot.worldRecord);
   // `pending` is the caller's live write buffer. The model with the first
   // `applied.length` of its proposals is kept, so a read validates only what
   // was buffered since the last one. A buffer that is no longer those
@@ -218,19 +220,36 @@ export function overlayWorldModelView(
     applied = next;
     return state;
   };
+  // What a read returns: a frozen copy of one property, made the first time
+  // it is read after the model changed and returned as it is until the next
+  // buffered write. A copy for every read cost 2.4 ms for 200 characters, and
+  // a loop that looks one character up per step paid it per step. Frozen, the
+  // copy cannot be changed by one reader under another.
+  type Readable = "characters" | "characterSchema" | "dimensions";
+  let frozenFor: WorldModelView | undefined;
+  let frozen: { [K in Readable]?: WorldModelView[K] } = {};
+  const read = <K extends Readable>(key: K): WorldModelView[K] => {
+    const model = current();
+    if (frozenFor !== model) {
+      frozenFor = model;
+      frozen = {};
+    }
+    if (!(key in frozen)) frozen[key] = deepFreeze(structuredClone(model[key]));
+    return frozen[key] as WorldModelView[K];
+  };
   return Object.freeze({
     get characters() {
-      return structuredClone(current().characters);
+      return read("characters");
     },
     get characterSchema() {
-      return structuredClone(current().characterSchema);
+      return read("characterSchema");
     },
     get worldRecord() {
       assertLive();
-      return structuredClone(snapshot.worldRecord);
+      return worldRecord;
     },
     get dimensions() {
-      return structuredClone(current().dimensions);
+      return read("dimensions");
     },
     get dimensionProviderPluginId() {
       assertLive();
