@@ -118,12 +118,7 @@ export default function (covel) {
             : [],
         };
       }
-      const rows = await ctx.pluginData.list("dialogue");
-      const latest = [...rows]
-        .sort((a, b) =>
-          String(a.updatedAt ?? "").localeCompare(String(b.updatedAt ?? "")),
-        )
-        .at(-1)?.value;
+      const latest = await ctx.pluginData.get("dialogue", "current");
       return {
         ...(latest?.turnId ? { turnId: latest.turnId } : {}),
         paragraphSpeakers: (latest?.paragraphSpeakers ?? []).map(

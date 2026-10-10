@@ -24,5 +24,5 @@ Dialogue attribution is independent from actor focus. The optional
 for each blank-line-separated narrative paragraph (1-80 entries). The handler
 resolves IDs against session characters and commits `{ schemaVersion: 1,
 turnId, paragraphSpeakers: [{ characterId, displayName } | null] }` under
-`dialogue/<turnId>`. Unknown IDs become `null` with a diagnostic; names are
+`dialogue/current`. Unknown IDs become `null` with a diagnostic; names are
 never guessed from the prose. Dialogue-only events do not clear actor state.

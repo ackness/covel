@@ -9,6 +9,7 @@ import {
   buildStageRecord,
   makeStageProposal,
 } from "../../lib/stage-data.js";
+import { matchScene } from "../../lib/scene-match.js";
 
 /**
  * Resolve the current scene + time of day from a `scene.set` event and
@@ -94,43 +95,4 @@ export default async function handler(ctx) {
  */
 function sceneIdForLocation(location) {
   return `loc-${createHash("sha256").update(location, "utf8").digest("hex").slice(0, 8)}`;
-}
-
-function normalizeLocation(text) {
-  return String(text ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "");
-}
-
-/**
- * Match a location against the world registry: exact name/locationRef
- * equality first, then bidirectional normalized substring.
- *
- * @param {ReadonlyArray<Record<string, unknown>>} scenes
- * @param {string} location
- */
-function matchScene(scenes, location) {
-  const loc = normalizeLocation(location);
-  if (!loc) return null;
-
-  for (const scene of scenes) {
-    if (!scene || typeof scene !== "object") continue;
-    if (
-      normalizeLocation(scene.name) === loc ||
-      normalizeLocation(scene.locationRef) === loc
-    ) {
-      return scene;
-    }
-  }
-  for (const scene of scenes) {
-    if (!scene || typeof scene !== "object") continue;
-    const keys = [scene.name, scene.locationRef]
-      .map(normalizeLocation)
-      .filter(Boolean);
-    if (keys.some((key) => loc.includes(key) || key.includes(loc))) {
-      return scene;
-    }
-  }
-  return null;
 }

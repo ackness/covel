@@ -175,7 +175,7 @@ describe("scene-stage direction handler", () => {
     );
     expect(dialogue.payload).toEqual({
       namespace: "dialogue",
-      key: "turn-1",
+      key: "current",
       value: {
         schemaVersion: 1,
         turnId: "turn-1",
@@ -202,7 +202,7 @@ describe("scene-stage direction handler", () => {
     expect(getToolContent(result).value.diagnostics).toHaveLength(2);
   });
 
-  it("keeps attribution keyed by turn and supports the player as a speaker", async () => {
+  it("names the turn in the attribution and supports the player as a speaker", async () => {
     const ctx = makeCtx([]);
     ctx.turnId = "turn-2";
     ctx.world.characters = [
@@ -212,7 +212,7 @@ describe("scene-stage direction handler", () => {
     ctx.triggerEvent.data.dialogue = { paragraphSpeakers: ["player-1"] };
     const result = await handler(ctx);
     expect(getPendingProposals(result)[0].payload).toMatchObject({
-      key: "turn-2",
+      key: "current",
       value: {
         turnId: "turn-2",
         paragraphSpeakers: [{ characterId: "player-1", displayName: "Alex" }],

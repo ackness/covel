@@ -46,6 +46,25 @@ describe("stage UI projections", () => {
       ),
     ).toEqual({ turnId: "t", paragraphSpeakers: ["Hero", null, null] });
   });
+  it("reads the committed attribution when no direction event is live", async () => {
+    expect(
+      await handlers.get("dialogue")(
+        { events: [] },
+        context({
+          "dialogue/current": {
+            turnId: "t-3",
+            paragraphSpeakers: [
+              { characterId: "session-hero", displayName: "Hero" },
+              null,
+            ],
+          },
+        }),
+      ),
+    ).toEqual({ turnId: "t-3", paragraphSpeakers: ["Hero", null] });
+    expect(await handlers.get("dialogue")({ events: [] }, context({}))).toEqual(
+      { paragraphSpeakers: [] },
+    );
+  });
   it("lets an explicit empty direction clear an earlier cast provider", async () => {
     const value = await handlers.get("direction")(
       {

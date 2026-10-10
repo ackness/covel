@@ -61,7 +61,8 @@ export default async function handler(ctx) {
     ? [
         makeProposal(ctx, new Date().toISOString(), "plugin.data", {
           namespace: "dialogue",
-          key: ctx.turnId,
+          // One row, like the stage's other state: the record names its turn.
+          key: "current",
           value: dialogue,
         }),
       ]
