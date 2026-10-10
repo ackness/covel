@@ -26,7 +26,7 @@
     "test:watch": "vitest",
     "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "clean": "node ../../scripts/remove-paths.mjs dist",
-    "update-model-db": "tsx scripts/update-model-db.ts"
+    "update-model-db": "tsx scripts/update-model-db.ts && vitest run tests/reasoning-characterization.test.ts -u"
   },
   "dependencies": {
     "@covel/shared": "workspace:*",

@@ -9,6 +9,7 @@ import {
   createGateway,
   createModelDatabase,
   setModelDatabase,
+  setReasoningModelOverrides,
   BUNDLED_MODEL_DB_PATH,
 } from "@covel/ai-provider";
 import { readRuntimeEnv } from "@covel/shared";
@@ -166,6 +167,7 @@ export function createAiStack(): AiStack {
     setModelDatabase(modelDb);
     console.log(`[ai-setup] Model database loaded: ${modelDb.count} models`);
   }
+  loadReasoningModelOverrides();
 
   const loaded = loadAiConfig();
 
@@ -266,6 +268,35 @@ export function reloadAiStack(ai: AiStack): AiReloadResult {
  * the desktop app ship with a baseline database but still receive updates
  * without re-releasing the app.
  */
+/**
+ * Read the user's reasoning entries, `COVEL_USER_CONFIG_DIR/reasoning-models.json`:
+ * the levels of models the bundled data does not name yet. A missing file
+ * leaves the bundled data alone; an invalid one is reported and ignored.
+ */
+function loadReasoningModelOverrides(): void {
+  const dir = readRuntimeEnv().userConfigDir;
+  const path = dir ? resolve(dir, "reasoning-models.json") : undefined;
+  let raw: string | undefined;
+  try {
+    raw = path ? readFileSync(path, "utf-8") : undefined;
+  } catch {
+    // No file: only the bundled data applies.
+  }
+  if (raw === undefined) {
+    setReasoningModelOverrides(null);
+    return;
+  }
+  try {
+    setReasoningModelOverrides(JSON.parse(raw));
+    console.log(`[ai-setup] Loaded reasoning model entries from ${path}`);
+  } catch (err) {
+    setReasoningModelOverrides(null);
+    console.warn(
+      `[ai-setup] Ignored ${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 function loadBundledModelDb(): ModelDatabase | null {
   const env = readRuntimeEnv();
   const candidates = [
