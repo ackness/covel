@@ -6,6 +6,11 @@ import { characterSchemaSchema } from "../schemas/world.js";
 import { buildFieldsZodFromSchema } from "../schemas/character-fields.js";
 import { materializeCharacterUpsert } from "./character-upsert.js";
 import {
+  characterLabel,
+  characterNameKey,
+  findCharacterAliasConflict,
+} from "@covel/plugin-handlers-utils";
+import {
   dimensionInitializePayloadSchema,
   materializeDimensionRecords,
 } from "./dimensions.js";
@@ -40,6 +45,7 @@ export const characterUpsertPayloadSchema = z
   .object({
     id: z.string().trim().min(1),
     name: z.string().trim().min(1),
+    aliases: z.array(z.string().trim().min(1)).optional(),
     type: z.string().trim().min(1).optional(),
     description: z.string().optional(),
     fields: z.unknown().optional(),
@@ -48,6 +54,32 @@ export const characterUpsertPayloadSchema = z
     createdAt: z.string().optional(),
   })
   .strict();
+
+/**
+ * One name means one person: no alias of `character` is a name or an alias
+ * of another character, and its name is no alias of another. The message
+ * names the other character, so a model can write there instead.
+ */
+function assertCharacterNamesFree(
+  characters: readonly CharacterRecord[],
+  character: CharacterRecord,
+): void {
+  const conflict = findCharacterAliasConflict(characters, character);
+  if (conflict)
+    throw new Error(
+      `Alias "${conflict.alias}" of ${character.name} [${character.id}] is already a name of ${characterLabel(conflict.owner)} [${conflict.owner.id}]. If they are one person, write to ${conflict.owner.id}; if not, use a different alias.`,
+    );
+  const key = characterNameKey(character.name);
+  const owner = characters.find(
+    (other) =>
+      other.id !== character.id &&
+      (other.aliases ?? []).some((alias) => characterNameKey(alias) === key),
+  );
+  if (owner)
+    throw new Error(
+      `Name "${character.name}" of [${character.id}] is an alias of ${characterLabel(owner)} [${owner.id}]. If they are one person, write to ${owner.id}; if not, use a different name.`,
+    );
+}
 
 export function validateWorldModel(view: WorldModelView): void {
   const allowedTypes = new Set([
@@ -64,6 +96,7 @@ export function validateWorldModel(view: WorldModelView): void {
     if (character.type === "player" && ++players > 1)
       throw new Error("A session may have at most one player character");
     if (fields) fields.parse(character.fields ?? {});
+    assertCharacterNamesFree(view.characters, character);
   }
 }
 
@@ -115,6 +148,9 @@ export function materializeWorldModel(
         sessionId,
         proposal.timestamp,
       );
+      // Checked for the written record first, so the message is about it and
+      // not about the stored character it collides with.
+      assertCharacterNamesFree(state.characters, record);
       state = {
         ...state,
         characters: [

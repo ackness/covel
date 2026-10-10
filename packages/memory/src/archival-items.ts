@@ -1,4 +1,4 @@
-import { modelFacingJson } from "@covel/plugin-handlers-utils";
+import { characterLabel, modelFacingJson } from "@covel/plugin-handlers-utils";
 import type { ArchivalStore } from "./store-contracts.js";
 
 export interface ArchivalItem {
@@ -55,7 +55,7 @@ export async function characterItems(
   const items: ArchivalItem[] = [];
   for (const char of await store.listCharacters(sessionId)) {
     const text =
-      `[${char.type}] ${char.name}: ${char.description ?? ""} ${JSON.stringify(modelFacingJson(char.fields ?? {}))}`.trim();
+      `[${char.type}] ${characterLabel(char)}: ${char.description ?? ""} ${JSON.stringify(modelFacingJson(char.fields ?? {}))}`.trim();
     if (!text) continue;
     items.push({
       vecKey: `character:${char.id}`,

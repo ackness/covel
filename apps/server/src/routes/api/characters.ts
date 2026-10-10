@@ -37,6 +37,7 @@ const characterBodySchema = z.object({
     .string({ error: "name (string) is required" })
     .min(1, "name (string) is required")
     .max(256, "name is too long"),
+  aliases: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
   type: z.string().min(1).max(64).optional(),
   description: z.string().max(65_536).optional(),
   fields: z.record(z.string(), z.unknown()).optional(),
@@ -92,6 +93,7 @@ characterRoutes.post("/:id/characters", async (c) => {
     id: body.id,
     sessionId,
     name: body.name,
+    ...(body.aliases?.length ? { aliases: body.aliases } : {}),
     type: body.type ?? "npc",
     description: body.description,
     fields: body.fields,
@@ -113,6 +115,7 @@ characterRoutes.post("/:id/characters", async (c) => {
     payload: {
       id: record.id,
       name: record.name,
+      ...(record.aliases ? { aliases: record.aliases } : {}),
       type: record.type,
       ...(record.description !== undefined
         ? { description: record.description }

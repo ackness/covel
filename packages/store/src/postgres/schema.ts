@@ -275,6 +275,7 @@ export const characters = pgTable(
     id: text("id").notNull(),
     sessionId: text("session_id").notNull(),
     name: text("name").notNull(),
+    aliases: jsonb("aliases"), // JSON array of strings
     type: text("type").notNull(),
     description: text("description"),
     fields: jsonb("fields"), // JSON

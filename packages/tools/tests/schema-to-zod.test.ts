@@ -168,8 +168,9 @@ describe("buildSessionCharacterWriteTools", () => {
     const schema = createTool!.jsonSchema as Record<string, unknown>;
     const props = schema.properties as Record<string, Record<string, unknown>>;
 
-    // Top-level params: name, type, description, fields
+    // Top-level params: name, aliases, type, description, fields
     expect(Object.keys(props).sort()).toEqual([
+      "aliases",
       "description",
       "fields",
       "name",

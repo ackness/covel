@@ -123,6 +123,15 @@ export type {
 } from "./extension-points.js";
 export { appendSummaryEntries } from "./session-summary.js";
 export { characterSheetSegments } from "./character-sheets.js";
+export {
+  characterLabel,
+  characterNameKey,
+  describeUnresolvedCharacter,
+  findCharacterAliasConflict,
+  mergeCharacterAliases,
+  resolveCharacter,
+} from "./character-names.js";
+export type { CharacterResolution, NamedCharacter } from "./character-names.js";
 
 export {
   createNarrativeReview,

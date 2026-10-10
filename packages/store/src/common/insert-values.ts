@@ -444,6 +444,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         id: record.id,
         sessionId: record.sessionId,
         name: record.name,
+        aliases: json.writeNullableJson(record.aliases),
         type: record.type,
         description: record.description ?? null,
         fields: json.writeNullableJson(record.fields),
@@ -455,6 +456,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
     characterUpdate(record) {
       return {
         name: record.name,
+        aliases: json.writeNullableJson(record.aliases),
         type: record.type,
         description: record.description ?? null,
         fields: json.writeNullableJson(record.fields),

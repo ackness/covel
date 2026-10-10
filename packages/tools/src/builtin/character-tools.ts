@@ -29,6 +29,14 @@ import type {
 } from "@covel/shared";
 import { z } from "zod";
 import { tool } from "../tool.js";
+import {
+  characterLabel,
+  characterNameKey,
+  describeUnresolvedCharacter,
+  findCharacterAliasConflict,
+  mergeCharacterAliases,
+  resolveCharacter,
+} from "@covel/plugin-handlers-utils";
 import type { ToolExecutionContext, ToolModule } from "../types.js";
 import {
   getPendingProposals,
@@ -121,11 +129,33 @@ function makeCharacterUpsertProposal(
 // ── create-character ─────────────────────────────────────────────
 
 const CREATE_DESCRIPTION =
-  "Create a character. A character with the same name and type in this session is not duplicated. `fields` are merged with the world schema defaults; validation warnings are returned.";
+  "Create a character. A name that an existing character of the same type has, or that is an alias of any character, is not created again: the existing character is returned. `fields` are merged with the world schema defaults; validation warnings are returned.";
+
+const ALIASES_DESCRIPTION =
+  "Other names the story uses for this same person: a nickname, a title, the name in another script. Optional";
+
+/**
+ * One name means one person: an alias that another character has as a name
+ * or alias is refused, with the owner named so the model can write there.
+ */
+function assertAliasesFree(
+  all: readonly CharacterRecord[],
+  character: { id: string; name: string; aliases: readonly string[] },
+): void {
+  const conflict = findCharacterAliasConflict(all, character);
+  if (conflict)
+    throw new Error(
+      `"${conflict.alias}" is already a name of ${characterLabel(conflict.owner)} [${conflict.owner.id}]. If ${character.name} is that person, update ${conflict.owner.id} and create nothing; if not, leave this alias out.`,
+    );
+}
 
 function createCharacterParametersSchema(schema?: CharacterSchema) {
   return z.object({
     name: z.string().min(1).describe("Character name"),
+    aliases: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(ALIASES_DESCRIPTION),
     type: characterTypeSchema(schema),
     description: z.string().optional().describe("Short description"),
     fields: buildFieldsZod(null)
@@ -145,16 +175,24 @@ function createCreateCharacterTool(
     execute: async (params, context) => {
       const now = new Date().toISOString();
 
-      // Idempotent: if a character with the same (name, type) already exists in
-      // this session — committed OR buffered earlier in this loop — return it
-      // instead of creating a duplicate.
+      // Idempotent: a character that has this name and type, or any character
+      // that has this name as an alias, already exists in this session —
+      // committed OR buffered earlier in this loop — and is returned instead
+      // of a duplicate. The same name with another type stays a new record.
       const existing = await mergeCharacterViews(store, context);
-      const match = existing.find(
-        (c) => c.name === params.name && c.type === params.type,
-      );
+      const nameKey = characterNameKey(params.name);
+      const match =
+        existing.find(
+          (c) => characterNameKey(c.name) === nameKey && c.type === params.type,
+        ) ??
+        existing.find((c) =>
+          (c.aliases ?? []).some(
+            (alias) => characterNameKey(alias) === nameKey,
+          ),
+        );
       if (match) {
         return {
-          _text: `Character "${match.name}" (${match.type}) already exists as ${match.id}. No new record created. Use update-character to modify it.`,
+          _text: `Character "${characterLabel(match)}" (${match.type}) already exists as ${match.id}. No new record created. Use update-character to modify it.`,
           success: true,
           existed: true,
           characterId: match.id,
@@ -197,6 +235,8 @@ function createCreateCharacterTool(
           ...bufferedCharacterIds(context),
         ]),
       );
+      const aliases = mergeCharacterAliases(params.name, [], params.aliases);
+      assertAliasesFree(existing, { id, name: params.name, aliases });
       // Write buffers into a character.upsert proposal — the commit handler
       // persists the character inside the execution transaction.
       const proposal = makeCharacterUpsertProposal(
@@ -204,6 +244,7 @@ function createCreateCharacterTool(
         {
           id,
           name: params.name,
+          ...(aliases.length > 0 ? { aliases } : {}),
           type: params.type,
           ...(params.description !== undefined
             ? { description: params.description }
@@ -241,11 +282,20 @@ function createCreateCharacterTool(
 // ── update-character ─────────────────────────────────────────────
 
 const UPDATE_DESCRIPTION =
-  "Update a character by id. `description` is replaced, `fields` are shallow-merged, and `version` increases by 1. Send only what changed.";
+  "Update a character by id; its name or an alias also finds it. `description` is replaced, `fields` are shallow-merged, `aliases` are added, and `version` increases by 1. Send only what changed.";
 
 function createUpdateCharacterParametersSchema() {
   return z.object({
-    id: z.string().min(1).describe("Character id"),
+    id: z
+      .string()
+      .min(1)
+      .describe("Character id; the character's name or an alias also works"),
+    aliases: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "Names to add when the story reveals another name of this same person; omit otherwise",
+      ),
     description: z
       .string()
       .optional()
@@ -266,12 +316,25 @@ function createUpdateCharacterTool(
     parameters: createUpdateCharacterParametersSchema(),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
-      const existing = all.find((c) => c.id === params.id);
-      if (!existing) {
+      // No partial match: a write must reach the person named, not the one
+      // whose name happens to contain the same word.
+      const resolution = resolveCharacter(all, params.id);
+      if (resolution.status !== "found") {
         throw new Error(
-          `Character ${params.id} not found in session. It may have been removed or the id is wrong.`,
+          `${describeUnresolvedCharacter(params.id, resolution, all)} Nothing was updated.`,
         );
       }
+      const existing = resolution.character;
+      const addedAliases = mergeCharacterAliases(
+        existing.name,
+        existing.aliases,
+        params.aliases,
+      ).slice(existing.aliases?.length ?? 0);
+      assertAliasesFree(all, {
+        id: existing.id,
+        name: existing.name,
+        aliases: addedAliases,
+      });
 
       const now = new Date().toISOString();
       const prevFields =
@@ -299,6 +362,7 @@ function createUpdateCharacterTool(
         {
           id: existing.id,
           name: existing.name,
+          ...(addedAliases.length > 0 ? { aliases: addedAliases } : {}),
           type: existing.type,
           ...(params.description !== undefined
             ? { description: params.description }
@@ -319,6 +383,8 @@ function createUpdateCharacterTool(
       ) {
         changeLines.push(`  description: updated`);
       }
+      if (addedAliases.length > 0)
+        changeLines.push(`  aliases: + ${addedAliases.join(", ")}`);
       if (params.fields) {
         for (const [k, newVal] of Object.entries(params.fields)) {
           const oldVal = prevFields[k];
@@ -485,7 +551,7 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
   return tool({
     name: "list-characters",
     description:
-      "List every character in this session (session scope, visible to all plugins). Sorted by version, highest first (a higher version means more interaction), then by latest update. Can filter by a type the world schema declares. Returns a compact text list, one line per character: id / name / type / version / short description. Call get-character for full attributes.",
+      "List every character in this session (session scope, visible to all plugins). Sorted by version, highest first (a higher version means more interaction), then by latest update. Can filter by a type the world schema declares. Returns a compact text list, one line per character: id / name with its aliases / type / version / short description. Call get-character for full attributes.",
     parameters: z.object({
       type: z
         .preprocess((value) => {
@@ -524,7 +590,7 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
         : `Characters in session (${sorted.length} total, sorted by frequency then recency):`;
       const lines = sorted.map((c, idx) => {
         const desc = c.description ? ` — ${truncate(c.description, 80)}` : "";
-        return `${idx + 1}. ${c.name} [${c.type}] ${c.id} (v${c.version})${desc}`;
+        return `${idx + 1}. ${characterLabel(c)} [${c.type}] ${c.id} (v${c.version})${desc}`;
       });
 
       return {
@@ -538,36 +604,14 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
 
 // ── get-character ────────────────────────────────────────────────
 
+/** Names listed when nothing is close, as the miss text lists them. */
 const MAX_NAMES_ON_MISS = 30;
-
-/**
- * Resolve a name the way a model writes it: exact, then case-insensitive,
- * then the one character whose name contains the query or is contained in
- * it ("Mina Park" finds "Dr. Mina Park"). Several partial matches come back
- * as candidates, so a miss does not cost a `list-characters` round trip.
- */
-function findCharacterByName<C extends { name: string }>(
-  all: readonly C[],
-  name: string,
-): { match?: C; candidates: readonly C[] } {
-  const exact = all.find((c) => c.name === name);
-  if (exact) return { match: exact, candidates: [] };
-  const query = name.trim().toLowerCase();
-  const same = all.filter((c) => c.name.toLowerCase() === query);
-  if (same.length === 1) return { match: same[0], candidates: [] };
-  const partial = all.filter((c) => {
-    const candidate = c.name.toLowerCase();
-    return candidate.includes(query) || query.includes(candidate);
-  });
-  if (partial.length === 1) return { match: partial[0], candidates: [] };
-  return { candidates: same.length > 1 ? same : partial };
-}
 
 function createGetCharacterTool(store: CharacterStore): ToolModule {
   return tool({
     name: "get-character",
     description:
-      "Get one character's full attributes by id or name (all fields, description, version). Pass id or name. The name need not match exactly: a single name that contains it, or that it contains, also matches. When nothing matches, candidate names are returned, so list-characters is not needed.",
+      "Get one character's full attributes by id, name or alias (all fields, description, version). Pass id or name. The name need not match exactly: a single character whose name or alias contains it, or that it contains, also matches. When nothing matches, the closest known names are returned, so list-characters is not needed.",
     parameters: z
       .object({
         id: z.string().optional().describe("Character id"),
@@ -575,7 +619,7 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
           .string()
           .optional()
           .describe(
-            "Character name; a part of it also works, for example without the title",
+            "Character name or alias; a part of it also works, for example without the title",
           ),
       })
       .refine((v) => Boolean(v.id || v.name), {
@@ -583,30 +627,26 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
       }),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
-      const { match, candidates } = params.id
-        ? { match: all.find((c) => c.id === params.id), candidates: [] }
-        : findCharacterByName(all, params.name!);
-      if (!match) {
-        const lookupKey = params.id ? `id=${params.id}` : `name=${params.name}`;
-        const names = (candidates.length > 0 ? candidates : all)
-          .slice(0, MAX_NAMES_ON_MISS)
-          .map((c) => c.name);
+      const query = (params.id || params.name)!;
+      const resolution = resolveCharacter(all, query, { partial: true });
+      if (resolution.status !== "found") {
         return {
-          _text: [
-            `Character not found (${lookupKey}).`,
-            ...(names.length > 0
-              ? [
-                  `${candidates.length > 0 ? "Did you mean" : "Characters in session"}: ${names.join(", ")}`,
-                ]
-              : []),
-          ].join("\n"),
+          _text: describeUnresolvedCharacter(query, resolution, all),
           found: false,
-          candidates: names,
+          candidates: (resolution.status === "ambiguous"
+            ? resolution.candidates
+            : resolution.closest.length > 0
+              ? resolution.closest
+              : all.slice(0, MAX_NAMES_ON_MISS)
+          ).map((c) => c.name),
         };
       }
+      const match = resolution.character;
 
       const lines: string[] = [];
       lines.push(`Character: ${match.name} [${match.type}] ${match.id}`);
+      if (match.aliases?.length)
+        lines.push(`Also known as: ${match.aliases.join(", ")}`);
       if (match.description) {
         lines.push(`Description: ${match.description}`);
       }

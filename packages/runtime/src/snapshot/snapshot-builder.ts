@@ -86,6 +86,7 @@ export interface SnapshotStore {
     readonly {
       id: string;
       name: string;
+      aliases?: readonly string[];
       type: string;
       description?: string;
       fields?: unknown;
@@ -180,6 +181,7 @@ export async function buildSessionSnapshot(
   const snapshotCharacters: SnapshotCharacter[] = characters.map((c) => ({
     id: c.id,
     name: c.name,
+    ...(c.aliases?.length ? { aliases: c.aliases } : {}),
     type: c.type,
     description: c.description,
     fields: c.fields as Record<string, unknown> | undefined,

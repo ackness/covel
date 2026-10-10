@@ -94,6 +94,23 @@ describe("characterSheetSegments", () => {
     ).toContain('"id": "player-scholar"');
   });
 
+  it("writes a character's aliases once, after its name, and nothing for a character without any", () => {
+    const [segment] = characterSheetSegments(
+      [
+        { ...player, aliases: ["the apprentice"] },
+        { ...npc, aliases: ["Bran", "Old Hale"] },
+        character({ name: "Wren", type: "npc" }),
+      ],
+      { profiles: true },
+    );
+    expect(segment!.content).toContain('"aliases": [\n    "the apprentice"');
+    expect(segment!.content).toContain(
+      "- Brannock (aka Bran, Old Hale) [companion] | A retired soldier.",
+    );
+    expect(segment!.content).toContain("- Wren [npc]");
+    expect(segment!.content.match(/Old Hale/g)).toHaveLength(1);
+  });
+
   it("leaves the profiles out unless asked, and gives no segment without a character to show", () => {
     expect(characterSheetSegments([player, npc])[0]!.content).not.toContain(
       "<character-profiles>",
