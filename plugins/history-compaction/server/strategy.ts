@@ -30,7 +30,21 @@ function resolveLocaleLanguageName(locale: string): string {
     ? (resolveI18nText(definition.label, canonical) ?? definition.code)
     : localeDisplayName(canonical);
 }
-export type CompactorLLMAdapter = SimpleCompletionAdapter<"user">;
+type CompletionRequest = Parameters<
+  SimpleCompletionAdapter<"user">["complete"]
+>[0];
+export interface CompactorLLMAdapter {
+  complete(
+    request: CompletionRequest & {
+      /** Ceiling on the generated summary, from the budget of this call. */
+      maxOutputTokens?: number;
+    },
+  ): Promise<{
+    content: string;
+    /** The model stopped at an output limit; `content` is cut short. */
+    truncated?: boolean;
+  }>;
+}
 export interface CompactionPolicyOptions {
   protectLastNUserTurns?: number;
   protectLastNMessages?: number;
@@ -38,6 +52,18 @@ export interface CompactionPolicyOptions {
 }
 const DEFAULT_PROTECT_LAST_USER_TURNS = 2;
 const DEFAULT_PROTECT_LAST_N_MESSAGES = 5;
+const MIN_OUTPUT_CEILING = 1024;
+
+/**
+ * Output ceiling for a summary of `maxTokens`. The budget is counted with an
+ * estimate and the provider counts with its own tokenizer, and a model that
+ * reasons spends output tokens before the first word, so the ceiling is twice
+ * the budget with a floor. It stops a model that ignores the requested length;
+ * the exact bound is still applied to the text afterwards.
+ */
+export function summaryOutputCeiling(maxTokens: number): number {
+  return Math.max(MIN_OUTPUT_CEILING, maxTokens * 2);
+}
 
 /**
  * Default focus sections used when the caller does not supply any. The actual
@@ -353,10 +379,18 @@ export async function compactHistory(
     const response = await deps.fastSlotLlm.complete({
       systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
+      maxOutputTokens: summaryOutputCeiling(maxTokens),
     });
     if (!response.content.trim())
       throw new HistoryCompactionError(
         "The summary model returned an empty summary",
+      );
+    // Text cut at the ceiling that already fills the budget would be cut to
+    // the budget anyway. Shorter text means the ceiling went elsewhere (a
+    // model that reasons first): the raw history is the better record.
+    if (response.truncated && estimator(response.content.trim()) < maxTokens)
+      throw new HistoryCompactionError(
+        "History summary generation was truncated before it filled its budget",
       );
     const bounded = boundSummaryContent(
       response.content,
@@ -371,7 +405,7 @@ export async function compactHistory(
     return {
       content: bounded.content,
       focusSections: sections,
-      truncated: bounded.truncated,
+      truncated: bounded.truncated || response.truncated === true,
     };
   };
   let fresh = await summarize(toCompact, [], newBudget, focusSections);
