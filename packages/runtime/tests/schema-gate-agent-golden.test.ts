@@ -76,7 +76,12 @@ function makeDeps(
 }
 
 function input(sessionId: string): TurnInput {
-  return { sessionId, turnId: `${sessionId}-turn`, playerMessage: "start" };
+  return {
+    origin: "player",
+    sessionId,
+    turnId: `${sessionId}-turn`,
+    playerMessage: "start",
+  };
 }
 
 describe("agent schema gate (golden)", () => {

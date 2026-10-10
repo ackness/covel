@@ -244,11 +244,11 @@ describe("per-request LLM middleware", () => {
         body: JSON.stringify({ model: "fast" }),
       });
       expect(response.status).toBe(200);
-      expect(calls[0].slotOverrides).toMatchObject({
+      expect(calls[0]!.slotOverrides).toMatchObject({
         parameterOverrides: { fast: { temperature: 0.3 } },
       });
       expect(
-        calls[0].slotOverrides?.parameterOverrides?.fast.maxOutputTokens,
+        calls[0]!.slotOverrides?.parameterOverrides?.fast.maxOutputTokens,
       ).toBeUndefined();
     },
   );
@@ -301,8 +301,8 @@ describe("per-request LLM middleware", () => {
     expect(res.status).toBe(200);
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].presetId).toBe("fast");
-    expect(calls[0].slotOverrides).toMatchObject({
+    expect(calls[0]!.presetId).toBe("fast");
+    expect(calls[0]!.slotOverrides).toMatchObject({
       slotBindings: { fast: { modelRef: "custom_abc" } },
       parameterOverrides: {
         fast: {
@@ -323,8 +323,8 @@ describe("per-request LLM middleware", () => {
     // Request keys and env keys stay separate maps: env keys are
     // origin-gated inside the gateway and must never be pre-merged into
     // the request-key map where they would follow any custom baseUrl.
-    expect(calls[0].apiKeys).toEqual({ vendorX: "sk-vendor-LIVE" });
-    expect(calls[0].envApiKeys).toEqual({ deepseek: "env-only-key" });
+    expect(calls[0]!.apiKeys).toEqual({ vendorX: "sk-vendor-LIVE" });
+    expect(calls[0]!.envApiKeys).toEqual({ deepseek: "env-only-key" });
   });
 
   it("leaves the default adapter in place when no request-scoped headers are present", async () => {
@@ -481,8 +481,8 @@ describe("per-request LLM middleware", () => {
         },
         body: JSON.stringify({ model: "story" }),
       });
-      expect(calls[0].capabilityOverridePolicy).toBe("restrict-only");
-      expect(calls[0].slotOverrides?.capabilityOverrides).toEqual({
+      expect(calls[0]!.capabilityOverridePolicy).toBe("restrict-only");
+      expect(calls[0]!.slotOverrides?.capabilityOverrides).toEqual({
         story: {
           input: ["text"],
           output: ["image"],
@@ -491,7 +491,7 @@ describe("per-request LLM middleware", () => {
         },
       });
       expect(
-        calls[0].slotOverrides?.capabilityOverrides?.story,
+        calls[0]!.slotOverrides?.capabilityOverrides?.story,
       ).not.toHaveProperty("pricing");
 
       process.env.DEPLOYMENT_TIER = "self";
@@ -503,7 +503,7 @@ describe("per-request LLM middleware", () => {
         },
         body: JSON.stringify({ model: "story" }),
       });
-      expect(calls[1].capabilityOverridePolicy).toBe("full");
+      expect(calls[1]!.capabilityOverridePolicy).toBe("full");
     } finally {
       if (previousTier === undefined) delete process.env.DEPLOYMENT_TIER;
       else process.env.DEPLOYMENT_TIER = previousTier;
@@ -596,8 +596,8 @@ describe("per-request LLM middleware", () => {
     expect(calls).toHaveLength(1);
     // The env key must only travel via envApiKeys, where the gateway
     // origin-gates it; the request-key map stays empty.
-    expect(calls[0].apiKeys).toEqual({});
-    expect(calls[0].envApiKeys).toEqual({ openai: "sk-env-SECRET" });
+    expect(calls[0]!.apiKeys).toEqual({});
+    expect(calls[0]!.envApiKeys).toEqual({ openai: "sk-env-SECRET" });
   });
 
   it("rejects invalid model definitions without partially applying the batch", async () => {
@@ -698,7 +698,7 @@ describe("per-request LLM middleware", () => {
     });
     expect(res.status).toBe(200);
 
-    const preset = calls[0].slotOverrides?.customPresets?.[0] as
+    const preset = calls[0]!.slotOverrides?.customPresets?.[0] as
       Record<string, unknown> | undefined;
     expect(preset).toBeDefined();
     expect(preset).not.toHaveProperty("providerRequestMetadata");

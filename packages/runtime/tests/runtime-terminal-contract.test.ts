@@ -20,6 +20,7 @@ describe.each(["agent", "function"] as const)(
       "only publishes a suspension if PostRuntime finishes live (cancel=%s)",
       async (cancel) => {
         const manifest: RuntimeManifest = {
+          description: "test",
           name: "probe/main",
           pluginId: "probe",
           stage: "narrative",
@@ -50,7 +51,12 @@ describe.each(["agent", "function"] as const)(
         eventBus.onEmit((event) => events.push(event));
         try {
           const turn = await executeTurn(
-            { sessionId: "session", turnId: "turn", playerMessage: "Continue" },
+            {
+              origin: "player",
+              sessionId: "session",
+              turnId: "turn",
+              playerMessage: "Continue",
+            },
             [manifest],
             {
               eventBus,
@@ -143,6 +149,7 @@ it.each(["agent", "function", "guard"] as const)(
   "PreRuntime blocks %s before side effects",
   async (kind) => {
     const manifest: RuntimeManifest = {
+      description: "test",
       name: "probe/main",
       pluginId: "probe",
       stage: "narrative",
@@ -171,7 +178,12 @@ it.each(["agent", "function", "guard"] as const)(
     const generate = vi.fn();
     const onRuntimeComplete = vi.fn(async () => {});
     const result = await executeTurn(
-      { sessionId: "session", turnId: "turn", playerMessage: "Continue" },
+      {
+        origin: "player",
+        sessionId: "session",
+        turnId: "turn",
+        playerMessage: "Continue",
+      },
       [manifest],
       {
         hookPipeline,
@@ -205,6 +217,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
         "reports the final result once: %s",
         async (scenario) => {
           const manifest: RuntimeManifest = {
+            description: "test",
             name: "probe/main",
             pluginId: "probe",
             runtimeType,
@@ -339,6 +352,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                 ? (
                     await executeTurn(
                       {
+                        origin: "player",
                         sessionId: "session",
                         turnId: "turn",
                         playerMessage: "Continue",

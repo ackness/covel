@@ -162,6 +162,7 @@ async function runPipeline(worldIrContent: string) {
     ],
   ]);
   const input: TurnInput = {
+    origin: "player",
     sessionId: "session-world-ir",
     turnId: "turn-world-ir",
     playerMessage: "Search the desk.",

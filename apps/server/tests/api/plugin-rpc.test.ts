@@ -787,7 +787,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     };
     expect(body.status).toBe("ok");
     expect(body.result.accepted).toBe(true);
-    expect(body.result.results[0].filledNarrative).toBe("Player name is Aria");
+    expect(body.result.results[0]!.filledNarrative).toBe("Player name is Aria");
   });
 
   it("forwards a choice submission and fills the template with selectedLabel", async () => {
@@ -808,7 +808,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     const body = (await res.json()) as {
       result: { results: Array<{ filledNarrative: string }> };
     };
-    expect(body.result.results[0].filledNarrative).toBe("You chose Attack");
+    expect(body.result.results[0]!.filledNarrative).toBe("You chose Attack");
   });
 
   it("serializes concurrent identical submissions into one player input", async () => {
@@ -864,7 +864,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       result: { results: Array<{ filledNarrative: string }> };
     };
     // Proves plugin-rpc.ts threads session.locale='en-US' into the dispatch ctx.
-    expect(body.result.results[0].filledNarrative).toBe("Result: Confirm");
+    expect(body.result.results[0]!.filledNarrative).toBe("Result: Confirm");
   });
 
   it("confirmation stays 确认 under the default zh-CN session locale", async () => {
@@ -884,7 +884,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     const body = (await res.json()) as {
       result: { results: Array<{ filledNarrative: string }> };
     };
-    expect(body.result.results[0].filledNarrative).toBe("Result: 确认");
+    expect(body.result.results[0]!.filledNarrative).toBe("Result: 确认");
   });
 
   it("processes a batch of form+choice submissions in one request", async () => {
@@ -2756,7 +2756,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     // the worker to run its job.
     expect(followerFinished).toBe(false);
 
-    const followerJob = await waitForJob(store, body.deferredJobs![0].jobId, [
+    const followerJob = await waitForJob(store, body.deferredJobs![0]!.jobId, [
       "succeeded",
     ]);
     expect(followerJob.origin).toMatchObject({
@@ -2771,7 +2771,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     // pipeline so the frontend gallery sees the image.
     const images = await store.listPluginData(SESSION_ID, PLUGIN_ID, "images");
     expect(images).toHaveLength(1);
-    expect((images[0].value as { url: string }).url).toBe(
+    expect((images[0]!.value as { url: string }).url).toBe(
       "https://cdn.test/a sunset.png",
     );
   });

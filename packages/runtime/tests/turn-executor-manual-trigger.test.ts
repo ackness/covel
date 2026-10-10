@@ -134,6 +134,7 @@ describe("executeTurn: manual trigger", () => {
         },
       },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -154,6 +155,7 @@ describe("executeTurn: manual trigger", () => {
       [target],
       { "plug/target": async () => ({ ok: true }) },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "this should NOT be appended",
@@ -176,6 +178,7 @@ describe("executeTurn: manual trigger", () => {
       [target],
       { "plug/target": async () => ({ prompt: "image prompt", ok: true }) },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -206,6 +209,7 @@ describe("executeTurn: manual trigger", () => {
         "plug/chained": async () => ({ ok: true }),
       },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -232,6 +236,7 @@ describe("executeTurn: manual trigger", () => {
       [target],
       { "plug/target": async () => ({ ok: true }) },
       {
+        origin: "player",
         sessionId: "sess-runtime-id",
         turnId: "turn-runtime-id",
         playerMessage: "",
@@ -287,6 +292,7 @@ describe("executeTurn: manual trigger", () => {
         },
       },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -311,6 +317,7 @@ describe("executeTurn: manual trigger", () => {
       [target],
       { "plug/gateway-less": async () => ({ ok: true }) },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -343,6 +350,7 @@ describe("executeTurn: manual trigger", () => {
         },
       },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -414,6 +422,7 @@ describe("executeTurn: manual trigger", () => {
         },
       },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -483,6 +492,7 @@ describe("executeTurn: manual trigger", () => {
       [target],
       { "plug/settings-consumer": async () => ({ ok: true }) },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -512,6 +522,7 @@ describe("executeTurn: manual trigger", () => {
       [target],
       { "plug/no-settings": async () => ({ ok: true }) },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -540,6 +551,7 @@ describe("executeTurn: manual trigger", () => {
       [target],
       { "plug-a/target": async () => ({ ok: true }) },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -582,6 +594,7 @@ describe("executeTurn: manual trigger", () => {
         },
       },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",
@@ -623,6 +636,7 @@ describe("executeTurn: manual trigger", () => {
         },
       },
       {
+        origin: "player",
         sessionId: "sess-1",
         turnId: "turn-1",
         playerMessage: "",

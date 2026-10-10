@@ -564,7 +564,7 @@ describe("Session lifecycle hooks", () => {
     // Transition to ended — one SessionEnd.
     await patch("ended");
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler.mock.calls[0][1]).toMatchObject({
+    expect(handler.mock.calls[0]![1]).toMatchObject({
       sessionId: id,
       reason: "ended",
     });
@@ -628,7 +628,7 @@ describe("Session lifecycle hooks", () => {
     await app.request(`/api/sessions/${id}`, { method: "DELETE" });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler.mock.calls[0][1]).toMatchObject({
+    expect(handler.mock.calls[0]![1]).toMatchObject({
       sessionId: id,
       reason: "deleted",
     });
@@ -973,7 +973,7 @@ describe("Session lifecycle hooks", () => {
     // no second SessionEnd, so a single session never emits two end signals.
     await app.request(`/api/sessions/${id}`, { method: "DELETE" });
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler.mock.calls[0][1]).toMatchObject({
+    expect(handler.mock.calls[0]![1]).toMatchObject({
       sessionId: id,
       reason: "ended",
     });

@@ -40,6 +40,7 @@ describe("function suspension transaction", () => {
         updatedAt: timestamp,
       });
       const producer: RuntimeManifest = {
+        description: "test",
         name: "probe/producer",
         pluginId: "probe",
         runtimeType: "function",
@@ -48,6 +49,7 @@ describe("function suspension transaction", () => {
         output: { recordAs: "config", schema: "./output.json" },
       };
       const consumer: RuntimeManifest = {
+        description: "test",
         name: "probe/consumer",
         pluginId: "probe",
         runtimeType: "function",

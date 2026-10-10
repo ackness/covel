@@ -32,6 +32,7 @@ async function run(
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id: "review",
     status: "active",
     phase: "playing",

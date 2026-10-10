@@ -89,7 +89,7 @@ embeddingFormat = "nemotron-multimodal"
       (p) => p.id === "embed-default",
     );
     expect(embedProfiles).toHaveLength(1);
-    expect(embedProfiles[0].provider).toBe("ollama");
+    expect(embedProfiles[0]!.provider).toBe("ollama");
 
     const nemotronPreset = aiConfig.presets.find(
       (p) => p.id === "slot-embed-multimodal",

@@ -124,7 +124,7 @@ describe("current authoring manifests", () => {
       completeAfterTools: ["save"],
     });
     expect(
-      compileInlineRuntime(parsed)!.manifest.inputs?.upstream.required,
+      compileInlineRuntime(parsed)!.manifest.inputs?.upstream!.required,
     ).toBe(false);
     expect(compileInlineRuntime(parsed)!.manifest.input?.inject).toEqual([
       {

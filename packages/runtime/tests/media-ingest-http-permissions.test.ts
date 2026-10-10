@@ -69,6 +69,7 @@ function fnManifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
 
 function makeTurnInput(runtimeId: string): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-media-perms",
     turnId: "turn-media-perms",
     playerMessage: "",

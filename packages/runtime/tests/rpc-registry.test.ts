@@ -53,7 +53,7 @@ describe("PluginRpcRegistry", () => {
     const entry = registry.getPluginAction("untrusted-plugin", "sneaky-action");
     expect(entry?.trustLevel).toBe("community");
     expect(warnSpy).toHaveBeenCalledOnce();
-    expect(warnSpy.mock.calls[0][0]).toContain("clamping to community");
+    expect(warnSpy.mock.calls[0]![0]).toContain("clamping to community");
     warnSpy.mockRestore();
   });
 
@@ -312,8 +312,8 @@ describe("createRpcHandlerStoreView", () => {
 
     expect(store.getSession).toHaveBeenCalledWith("sess-real");
     expect(store.listTurnMessages).toHaveBeenCalledWith("sess-real");
-    expect(store.savePlayerInput.mock.calls[0][0].sessionId).toBe("sess-real");
-    expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
+    expect(store.savePlayerInput.mock.calls[0]![0].sessionId).toBe("sess-real");
+    expect(store.setPluginData.mock.calls[0]![0]).toMatchObject({
       sessionId: "sess-real",
       pluginId: "plugin-real",
       namespace: "ns",

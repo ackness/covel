@@ -67,14 +67,21 @@ export async function batchRetryFixture() {
         calls.push(name);
         await beforeRun?.(name);
         if (failures.has(name)) throw new Error(`Synthetic ${name} failure`);
-        const handlerStore = ctx.store as DataStore;
+        // The kernel hands the handler a buffering store with a write surface.
+        const storySlot = ctx.inputs?.story;
+        const handlerStore = ctx.store as unknown as Pick<
+          DataStore,
+          "setPluginData"
+        >;
         await handlerStore.setPluginData({
           id: `data-${name}`,
           sessionId,
           pluginId: name,
           namespace: "test",
           key: "result",
-          value: { input: ctx.inputs?.story?.value ?? null },
+          value: {
+            input: storySlot?.cardinality === "one" ? storySlot.value : null,
+          },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
@@ -107,6 +114,7 @@ export async function batchRetryFixture() {
   await store.createSession({
     id: sessionId,
     status: "active",
+    locale: "en-US",
     phase: "playing",
     activePlugins: [...loadedByName.keys()],
     metadata: {
@@ -116,6 +124,7 @@ export async function batchRetryFixture() {
     completedPlayerTurns: 2,
     setupRuntimes: {},
     createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
   });
   await store.saveTurnResult({
     id: "source",

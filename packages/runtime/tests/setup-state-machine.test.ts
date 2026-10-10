@@ -45,6 +45,7 @@ async function setupSession(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    locale: "en-US",
     id,
     worldId: "w",
     status: "active",
@@ -168,7 +169,7 @@ describe("setup attempt ledger", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.state).toBe("failed");
     const mirror = (await store.getSession("s"))!.setupRuntimes!["plug/setup"];
-    expect(mirror.state).toBe("pending");
+    expect(mirror!.state).toBe("pending");
     expect((mirror as { attempts: number }).attempts).toBe(1);
   });
 
@@ -186,7 +187,7 @@ describe("setup attempt ledger", () => {
       });
     }
     const mirror = (await store.getSession("s"))!.setupRuntimes!["plug/setup"];
-    expect(mirror.state).toBe("blocked");
+    expect(mirror!.state).toBe("blocked");
     expect((mirror as { attempts: number }).attempts).toBe(3);
     // A blocked setup keeps the session in the setup band.
     expect((await store.getSession("s"))!.phase).toBe("setup");
@@ -302,7 +303,7 @@ describe("setup session-gate SCC", () => {
     const { consumer, loop, other } = capabilityRuntimes();
     const invoked: string[] = [];
     await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "" },
       [consumer, loop, other],
       {
         loadRuntime: async (m) => ({
@@ -362,7 +363,7 @@ describe("setup session-gate SCC", () => {
       store,
     };
     await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "" },
       [x, y],
       deps,
     );
@@ -383,6 +384,7 @@ describe("main-loop dependency-cycle SCC", () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      locale: "en-US",
       id: "s",
       worldId: "w",
       status: "active",
@@ -445,7 +447,7 @@ describe("main-loop dependency-cycle SCC", () => {
       store,
     };
     const result = await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "go" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [a, b, c],
       deps,
     );
@@ -477,6 +479,7 @@ describe("plugin version mismatch", () => {
     const now = new Date().toISOString();
     // Playing session; the setup runtime is already done at version 1.0.0.
     await store.createSession({
+      locale: "en-US",
       id: "s",
       worldId: "w",
       status: "active",
@@ -513,7 +516,7 @@ describe("plugin version mismatch", () => {
       store,
     };
     const result = await executeTurn(
-      { sessionId: "s", turnId: "t", playerMessage: "go" },
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [setup],
       deps,
     );

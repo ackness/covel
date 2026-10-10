@@ -25,6 +25,7 @@ function fnManifest(name: string): RuntimeManifest {
 
 function makeTurnInput(runtimeId: string): TurnInput {
   return {
+    origin: "player",
     sessionId: "sess-music",
     turnId: "turn-music",
     playerMessage: "",

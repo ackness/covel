@@ -41,6 +41,7 @@ it("enforces the public output contract when an agent resumes", async () => {
 
 function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
   const manifest: RuntimeManifest = {
+    description: "test",
     name: "probe/main",
     pluginId: "probe",
     stage: "narrative",

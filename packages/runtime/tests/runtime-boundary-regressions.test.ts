@@ -19,6 +19,7 @@ import {
 } from "../src/schedule/input-bindings.js";
 
 const base: RuntimeManifest = {
+  description: "test",
   name: "probe/main",
   pluginId: "probe",
   stage: "post-turn",
@@ -35,7 +36,12 @@ const llm: LLMAdapter = {
     usage: { inputTokens: 1, outputTokens: 1 },
   }),
 };
-const input = { sessionId: "session", turnId: "turn", playerMessage: "act" };
+const input: TurnInput = {
+  sessionId: "session",
+  turnId: "turn",
+  playerMessage: "act",
+  origin: "player",
+};
 
 describe("terminal domain boundaries", () => {
   it.each(["text", "reasoning"] as const)(
@@ -194,7 +200,7 @@ describe("terminal domain boundaries", () => {
                 effects: { events: [{ topic: "changed", data: {} }] },
               };
             called();
-            await ctx.pluginData.set("probe", "ran", true);
+            await ctx.pluginData!.set("probe", "ran", true);
             return { outcome: "success", value: {} };
           },
         }),
@@ -363,7 +369,10 @@ describe("canonical function values", () => {
         contractSchemas: { data: schema },
       });
       expect(current.ok).toBe(true);
-      if (current.ok) expect(current.slots.data?.value).toEqual(selected);
+      if (current.ok)
+        expect((current.slots.data as { value: unknown }).value).toEqual(
+          selected,
+        );
       const commit = await finalizeExecution({
         store,
         sessionId: input.sessionId,
@@ -497,7 +506,7 @@ it("fails public contract output-only rewrites before buffered writes can commit
       outputSchema: schema,
       outputContractSchema: schema,
       handler: async (ctx) => {
-        await ctx.pluginData.set("probe", "saved", true);
+        await ctx.pluginData!.set("probe", "saved", true);
         return { outcome: "success", value: 7 };
       },
     }),

@@ -70,17 +70,17 @@ describe("createProgressReporter.report", () => {
     expect(rows).toHaveLength(1);
     const row = rows[0];
     // Identity is injected by the kernel, not by the handler-supplied effect.
-    expect(row.sessionId).toBe(SESSION);
-    expect(row.progressScopeId).toBe(SCOPE);
-    expect(row.pluginId).toBe(PLUGIN);
-    expect(row.runtimeId).toBe(RUNTIME);
+    expect(row!.sessionId).toBe(SESSION);
+    expect(row!.progressScopeId).toBe(SCOPE);
+    expect(row!.pluginId).toBe(PLUGIN);
+    expect(row!.runtimeId).toBe(RUNTIME);
     // Business fields come from the effect.
-    expect(row.jobId).toBe("job-a");
-    expect(row.state).toBe("running");
-    expect(row.progress).toBe(0.4);
-    expect(row.message).toBe("rendering");
-    expect(row.data).toEqual({ frame: 3, nested: { ok: true } });
-    expect(typeof row.createdAt).toBe("string");
+    expect(row!.jobId).toBe("job-a");
+    expect(row!.state).toBe("running");
+    expect(row!.progress).toBe(0.4);
+    expect(row!.message).toBe("rendering");
+    expect(row!.data).toEqual({ frame: 3, nested: { ok: true } });
+    expect(typeof row!.createdAt).toBe("string");
   });
 
   it("injects detached parent correlation without allowing plugin overrides", async () => {
@@ -143,7 +143,7 @@ describe("createProgressReporter.report", () => {
 
     const rows = await h.store.listJobStatus(SESSION, { jobId: "job-a" });
     expect(rows).toHaveLength(1);
-    expect(rows[0].state).toBe("running"); // earlier event wins
+    expect(rows[0]!.state).toBe("running"); // earlier event wins
     // Only the first (accepted) write emitted an SSE event.
     expect(h.jobEvents).toHaveLength(1);
   });
@@ -210,8 +210,8 @@ describe("finalizeJobStatuses", () => {
 
       const rows = await h.store.listJobStatus(SESSION, { jobId: "job-a" });
       expect(rows).toHaveLength(2);
-      expect(rows[1].state).toBe(expectedState);
-      expect(rows[1].sequence).toBe(6); // max committed sequence + 1
+      expect(rows[1]!.state).toBe(expectedState);
+      expect(rows[1]!.sequence).toBe(6); // max committed sequence + 1
     },
   );
 
@@ -230,7 +230,7 @@ describe("finalizeJobStatuses", () => {
 
       const rows = await h.store.listJobStatus(SESSION, { jobId: "job-a" });
       expect(rows).toHaveLength(1); // untouched
-      expect(rows[0].state).toBe(reported);
+      expect(rows[0]!.state).toBe(reported);
     },
   );
 
@@ -266,7 +266,7 @@ describe("finalizeJobStatuses", () => {
     const b = await h.store.listJobStatus(SESSION, { jobId: "job-b" });
     expect(a.at(-1)?.state).toBe("succeeded");
     expect(b).toHaveLength(1); // never reported to finalize → left running
-    expect(b[0].state).toBe("running");
+    expect(b[0]!.state).toBe("running");
   });
 });
 

@@ -81,6 +81,7 @@ describe("executeTurn: output.schema.json", () => {
     };
     const llm = new CapturingLLM();
     const input: TurnInput = {
+      origin: "player",
       sessionId: "sess-schema",
       turnId: "turn-schema",
       playerMessage: "start",
@@ -114,6 +115,7 @@ describe("executeTurn: output.schema.json", () => {
     };
     const llm = new CapturingLLM();
     const input: TurnInput = {
+      origin: "player",
       sessionId: "sess-schema-tools",
       turnId: "turn-schema-tools",
       playerMessage: "start",
@@ -179,6 +181,7 @@ describe("executeTurn: output.schema.json", () => {
 
     const result = await executeTurn(
       {
+        origin: "player",
         sessionId: "sess-schema-tool",
         turnId: "turn-schema-tool",
         playerMessage: "start",
@@ -231,6 +234,7 @@ describe("executeTurn: output.schema.json", () => {
 
     const result = await executeTurn(
       {
+        origin: "player",
         sessionId: "sess-schema-tool-invalid",
         turnId: "turn-schema-tool-invalid",
         playerMessage: "start",
@@ -269,6 +273,7 @@ describe("executeTurn: output.schema.json", () => {
     llm.content =
       '{"scene":{"location":"mistport"},"recent_events":["wrong envelope"]}';
     const input: TurnInput = {
+      origin: "player",
       sessionId: "sess-schema-invalid",
       turnId: "turn-schema-invalid",
       playerMessage: "start",
@@ -321,6 +326,7 @@ describe("executeTurn: output.schema.json", () => {
       "日落渡口。一身旧道袍的少年弟子盘膝坐于石砌渡口的末级台阶上".repeat(20);
     llm.content = fullProse;
     const input: TurnInput = {
+      origin: "player",
       sessionId: "sess-prose",
       turnId: "turn-prose",
       playerMessage: "start",
@@ -381,6 +387,7 @@ describe("executeTurn: output.schema.json", () => {
     const llm = new CapturingLLM();
     llm.content = "plain prose, not JSON";
     const input: TurnInput = {
+      origin: "player",
       sessionId: "sess-malformed-schema",
       turnId: "turn-malformed-schema",
       playerMessage: "start",

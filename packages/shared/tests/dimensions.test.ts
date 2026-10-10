@@ -15,7 +15,11 @@ import {
   worldDimensionsSchema,
   worldManifestSchema,
 } from "../src/index.js";
-import type { DimensionRecord, DimensionValueSchema } from "../src/index.js";
+import type {
+  DimensionRecord,
+  DimensionValueSchema,
+  JsonValue,
+} from "../src/index.js";
 
 const wall = {
   name: "City wall",
@@ -404,7 +408,7 @@ describe("public dimension snapshots and explicit localization", () => {
 });
 
 describe("projectDimensionSnapshot", () => {
-  const entry = (value: unknown) => ({
+  const entry = (value: JsonValue) => ({
     name: "D",
     schema: { type: "string" } as DimensionValueSchema,
     value,

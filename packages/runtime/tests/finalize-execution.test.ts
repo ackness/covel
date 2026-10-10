@@ -13,7 +13,7 @@ import { describe, it, expect } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import type { SuspensionRecord } from "@covel/store";
-import type { Proposal, RuntimeEffects } from "@covel/shared";
+import type { Proposal, RuntimeEffects, RuntimeManifest } from "@covel/shared";
 import { withPendingProposals } from "@covel/tools";
 import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
@@ -25,15 +25,17 @@ const TURN_ID = "turn-finalize";
 
 type ResultOutput = Record<string, unknown>;
 
-interface RuntimeManifestLite {
-  readonly name: string;
-  readonly pluginId: string;
-  readonly outputKind: string;
-  readonly capabilities: readonly string[];
-}
-
-function makeRuntime(name: string, outputKind = "plugin"): RuntimeManifestLite {
-  return { name, pluginId: name, outputKind, outputContract: undefined };
+function makeRuntime(
+  name: string,
+  outputKind: RuntimeManifest["outputKind"] = "plugin",
+): RuntimeManifest {
+  return {
+    name,
+    pluginId: name,
+    description: name,
+    stage: "post-turn",
+    outputKind,
+  };
 }
 
 function makeResult(
@@ -315,7 +317,7 @@ describe("finalizeExecution", () => {
     expect(outcome.status).toBe("failed");
     expect(outcome.events).toHaveLength(0);
     expect(outcome.failedProposals).toHaveLength(1);
-    expect(outcome.failedProposals[0].error).toMatch(
+    expect(outcome.failedProposals[0]!.error).toMatch(
       /table must be a non-empty string/,
     );
 

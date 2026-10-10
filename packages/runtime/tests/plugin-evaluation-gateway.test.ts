@@ -55,7 +55,7 @@ it("threads evaluation role, request credentials, overrides and abort signals th
     expect.objectContaining({ presetId: "intent", state }),
     expect.objectContaining(options),
   );
-  const signal = evaluate.mock.calls[0]![1].signal as AbortSignal;
+  const signal = evaluate.mock.calls[0]![1]!.signal as AbortSignal;
   runtime.abort(new Error("runtime expired"));
   expect(signal.aborted).toBe(true);
   expect(events.map((event) => event.type)).toEqual([

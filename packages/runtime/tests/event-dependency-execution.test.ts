@@ -48,7 +48,12 @@ async function run(
     updatedAt: timestamp,
   });
   const execution = await executeTurn(
-    { sessionId: "session", turnId: "turn", playerMessage: "go" },
+    {
+      origin: "player",
+      sessionId: "session",
+      turnId: "turn",
+      playerMessage: "go",
+    },
     [emitter, ...subscribers],
     {
       store,

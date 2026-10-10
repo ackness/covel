@@ -5,7 +5,7 @@ import {
   type MediaStoreLike,
 } from "../src/function-runtime/runtime-media-context.js";
 
-function pngBytes(extra = 0): Uint8Array {
+function pngBytes(extra = 0): Uint8Array<ArrayBuffer> {
   const header = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
   return new Uint8Array([...header, ...Array.from({ length: extra }, () => 0)]);
 }
@@ -54,6 +54,9 @@ function createStore(): MediaStoreLike & {
     },
     async get(ref) {
       return new Uint8Array(ref.size);
+    },
+    async listByMetadata() {
+      return [];
     },
     async resolveUrl(ref) {
       return `https://media.example.test/${ref.id}`;

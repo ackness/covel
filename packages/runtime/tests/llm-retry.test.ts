@@ -1060,13 +1060,13 @@ describe("callLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[0].payload).toMatchObject({
+    expect(emitter.events[0]!.payload).toMatchObject({
       runtimeId: "narrator/main",
       pluginId: "narrator",
       slot: "default",
       attempt: 0,
     });
-    expect(emitter.events[1].payload).toMatchObject({
+    expect(emitter.events[1]!.payload).toMatchObject({
       text: "hi",
       finishReason: "stop",
       usage: { inputTokens: 10, outputTokens: 5 },
@@ -1103,7 +1103,7 @@ describe("callLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[1].payload).toMatchObject({ finishReason: "error" });
+    expect(emitter.events[1]!.payload).toMatchObject({ finishReason: "error" });
   });
 
   it("keeps the reported usage in the trace of a response cut at the output limit", async () => {
@@ -1225,11 +1225,11 @@ describe("streamLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[0].payload).toMatchObject({
+    expect(emitter.events[0]!.payload).toMatchObject({
       streaming: true,
       attempt: 0,
     });
-    expect(emitter.events[1].payload).toMatchObject({
+    expect(emitter.events[1]!.payload).toMatchObject({
       streaming: true,
       text: "hi",
       finishReason: "stop",
@@ -1274,12 +1274,12 @@ describe("streamLLMWithRetry trace emissions", () => {
       "llm.calling",
       "llm.responded",
     ]);
-    expect(emitter.events[1].payload).toMatchObject({
+    expect(emitter.events[1]!.payload).toMatchObject({
       finishReason: "error",
       streaming: true,
       usage: { inputTokens: 0, outputTokens: 0 },
     });
-    expect(typeof emitter.events[1].payload.error).toBe("string");
+    expect(typeof emitter.events[1]!.payload.error).toBe("string");
   });
 
   it("keeps the reported usage in the trace of a stream cut at the output limit", async () => {

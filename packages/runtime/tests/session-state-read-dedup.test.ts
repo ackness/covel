@@ -79,6 +79,7 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
 
     const state = await loadTurnSessionState({
       input: {
+        origin: "player",
         sessionId: "sess-dedup",
         turnId: "turn-1",
         playerMessage: "hello",
@@ -114,6 +115,7 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
 
     await loadTurnSessionState({
       input: {
+        origin: "player",
         sessionId: "sess-dedup",
         turnId: "turn-1",
         playerMessage: "hello",
@@ -144,6 +146,7 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
 
     const state = await loadTurnSessionState({
       input: {
+        origin: "player",
         sessionId: "sess-dedup",
         turnId: "turn-1",
         playerMessage: "hello",

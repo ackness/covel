@@ -35,7 +35,12 @@ const agentManifest: RuntimeManifest = {
 } as RuntimeManifest;
 
 function input(sessionId: string): TurnInput {
-  return { sessionId, turnId: `${sessionId}-t`, playerMessage: "hi" };
+  return {
+    origin: "player",
+    sessionId,
+    turnId: `${sessionId}-t`,
+    playerMessage: "hi",
+  };
 }
 
 describe("agent structured output", () => {

@@ -18,6 +18,7 @@ const input = {
 };
 
 const asker: RuntimeManifest = {
+  description: "test",
   name: "probe/asker",
   pluginId: "probe",
   runtimeType: "function",
@@ -26,6 +27,7 @@ const asker: RuntimeManifest = {
   trigger: { type: "auto" },
 };
 const memory: RuntimeManifest = {
+  description: "test",
   name: "notes/extract",
   pluginId: "notes",
   runtimeType: "function",

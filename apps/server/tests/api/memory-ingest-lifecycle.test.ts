@@ -139,7 +139,7 @@ it("automatically ingests committed actions and fully rebuilds a fork beyond one
       return input.map(() => new Float32Array([1, 0]));
     });
   await action();
-  await memorySystem.drain();
+  await memorySystem!.drain();
   expect((await vectors()).length).toBeGreaterThan(0);
   for (let i = 0; i < 260; i++) {
     await store.appendTurnMessage({
@@ -192,7 +192,7 @@ it("automatically ingests committed actions and fully rebuilds a fork beyond one
     sessionId: string;
     forkSnapshotId: string;
   };
-  await memorySystem.drain();
+  await memorySystem!.drain();
   expect(ensureEmbeddingLock).toHaveBeenCalledWith(fork.sessionId);
   expect(texts.filter((text) => text.startsWith("history "))).toHaveLength(260);
   expect((await vectors(fork.sessionId)).length).toBeGreaterThan(260);
@@ -256,7 +256,7 @@ it("waits for delayed ingestion before replacing a checkpoint, then rebuilds onl
   expect(deleteSession).not.toHaveBeenCalled();
   release.resolve();
   expect((await replacing).status).toBe(200);
-  await memorySystem.drain();
+  await memorySystem!.drain();
   expect(await vectors()).toHaveLength(1);
   expect((await vectors())[0]?.payload).toContain("new checkpoint corpus");
   const progress = await store.getVectorIndexProgress({
@@ -284,7 +284,7 @@ it("drains delayed ingestion before delete and leaves same-id recreation without
   release.resolve();
   expect((await deleting).status).toBe(200);
   await seed(store);
-  await memorySystem.drain();
+  await memorySystem!.drain();
   expect(
     await store.getVectorIndexProgress({
       sessionId: "session",
@@ -303,7 +303,7 @@ it("does not ingest rolled-back story output or advance its cursor", async () =>
     new Error("synthetic generation failure"),
   );
   await action(false);
-  await memorySystem.drain();
+  await memorySystem!.drain();
   expect(embed).not.toHaveBeenCalled();
   expect(await vectors()).toEqual([]);
   expect(

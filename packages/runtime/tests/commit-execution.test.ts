@@ -48,6 +48,7 @@ async function fixture() {
         },
         runtimes: [
           {
+            description: "test",
             name: "story",
             pluginId: "story",
             outputKind: "story",
@@ -195,7 +196,12 @@ describe("commitExecution lifecycle", () => {
           ...args.execution.commit,
           runtimes: [
             ...args.execution.commit.runtimes,
-            { name: "helper", pluginId: "helper", outputKind: "system" },
+            {
+              description: "test",
+              name: "helper",
+              pluginId: "helper",
+              outputKind: "system",
+            },
           ],
           results: [
             result,

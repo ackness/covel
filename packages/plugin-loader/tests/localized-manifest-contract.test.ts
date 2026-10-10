@@ -243,8 +243,8 @@ runtime:
     const entry = await loadPluginEntryDefinition(discovery, [
       definition.packageManifest,
     ]);
-    expect(entry.staticPromptSegments[0].content).toBe("English");
-    expect(entry.staticPromptVariants?.["zh"]?.[0].content).toBe("中文");
+    expect(entry.staticPromptSegments[0]!.content).toBe("English");
+    expect(entry.staticPromptVariants?.["zh"]?.[0]!.content).toBe("中文");
     await fs.writeFile(path.join(dir, "PLUGIN.zh.md"), "broken after capture");
     expect(
       Object.values(entry.staticPromptVariants ?? {})

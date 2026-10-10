@@ -41,7 +41,7 @@ describe("discoverPluginsMulti — load-path-based source tagging", () => {
       userDir,
     ]);
     expect(results).toHaveLength(1);
-    expect(getPluginTrustInfo(results[0].id, results[0].source)).toEqual({
+    expect(getPluginTrustInfo(results[0]!.id, results[0]!.source)).toEqual({
       source: "community",
       autoLoad: false,
       requiresApproval: true,
@@ -73,10 +73,10 @@ describe("discoverPluginsMulti — load-path-based source tagging", () => {
     const results = await discoverPluginsMulti([bundledDir, userDir]);
 
     expect(results).toHaveLength(1);
-    expect(results[0].source).toBe("community");
-    expect(getPluginTrustInfo(results[0].id, results[0].source).autoLoad).toBe(
-      false,
-    );
+    expect(results[0]!.source).toBe("community");
+    expect(
+      getPluginTrustInfo(results[0]!.id, results[0]!.source).autoLoad,
+    ).toBe(false);
   });
 
   it("keeps the bundled copy on id collision and still tags it builtin", async () => {
@@ -95,8 +95,8 @@ describe("discoverPluginsMulti — load-path-based source tagging", () => {
       ["codex", path.join(bundledDir, "codex"), path.join(userDir, "codex")],
     ]);
     expect(results).toHaveLength(1);
-    expect(results[0].source).toBe("builtin");
-    expect(results[0].rootPath).toBe(path.join(bundledDir, "codex"));
+    expect(results[0]!.source).toBe("builtin");
+    expect(results[0]!.rootPath).toBe(path.join(bundledDir, "codex"));
   });
 });
 

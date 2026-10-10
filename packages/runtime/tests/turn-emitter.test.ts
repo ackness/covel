@@ -2,11 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import {
   createTurnEmitter,
   createNoopTurnEmitter,
+  type TurnEmitterStore,
 } from "../src/trace/turn-emitter.js";
 import type { EventBus } from "@covel/events";
 
 function makeStoreSpy() {
-  return { addTraceEvent: vi.fn(async () => undefined) };
+  return {
+    addTraceEvent: vi.fn(
+      async (_record: Parameters<TurnEmitterStore["addTraceEvent"]>[0]) =>
+        undefined,
+    ),
+  };
 }
 
 function makeBusSpy(): EventBus & {
@@ -14,7 +20,7 @@ function makeBusSpy(): EventBus & {
 } {
   const emitted: Array<{ type: string; payload: unknown }> = [];
   const bus: EventBus = {
-    emit(ev) {
+    emit(ev: { payload: unknown }) {
       emitted.push({
         type: String((ev.payload as Record<string, unknown>)._subType ?? ""),
         payload: ev.payload,
@@ -154,20 +160,20 @@ describe("TurnEmitter", () => {
     await emitter.emit("tool.completed", { toolName: "a" });
 
     expect(store.addTraceEvent).toHaveBeenCalledTimes(2);
-    const first = store.addTraceEvent.mock.calls[0][0];
-    const second = store.addTraceEvent.mock.calls[1][0];
-    expect(first.type).toBe("tool.calling");
-    expect(first.sessionId).toBe("S");
-    expect(first.turnId).toBe("T");
-    expect(first.traceId).toBe("T");
-    expect((first.payload as { seq: number }).seq).toBe(0);
-    expect((second.payload as { seq: number }).seq).toBe(1);
+    const first = store.addTraceEvent.mock.calls[0]![0];
+    const second = store.addTraceEvent.mock.calls[1]![0];
+    expect(first!.type).toBe("tool.calling");
+    expect(first!.sessionId).toBe("S");
+    expect(first!.turnId).toBe("T");
+    expect(first!.traceId).toBe("T");
+    expect((first!.payload as { seq: number }).seq).toBe(0);
+    expect((second!.payload as { seq: number }).seq).toBe(1);
 
     expect(bus.emitted).toHaveLength(2);
-    expect(bus.emitted[0].type).toBe("tool.calling");
-    expect(bus.emitted[1].type).toBe("tool.completed");
+    expect(bus.emitted[0]!.type).toBe("tool.calling");
+    expect(bus.emitted[1]!.type).toBe("tool.completed");
     // flowId defaults to the (fallback) traceId so /api/traces never returns "".
-    expect((first.payload as { flowId?: string }).flowId).toBe("T");
+    expect((first!.payload as { flowId?: string }).flowId).toBe("T");
   });
 
   it("uses the explicit traceId for trace_events and sets payload.flowId = traceId", async () => {
@@ -181,12 +187,12 @@ describe("TurnEmitter", () => {
 
     await emitter.emit("tool.calling", { toolName: "a" });
 
-    const row = store.addTraceEvent.mock.calls[0][0];
+    const row = store.addTraceEvent.mock.calls[0]![0];
     // Persisted traceId is the explicit one (not the turnId fallback), so an
     // SSE envelope built from the same traceId correlates with /api/traces rows.
-    expect(row.traceId).toBe("trace-xyz");
-    expect(row.turnId).toBe("T");
-    expect((row.payload as { flowId?: string }).flowId).toBe("trace-xyz");
+    expect(row!.traceId).toBe("trace-xyz");
+    expect(row!.turnId).toBe("T");
+    expect((row!.payload as { flowId?: string }).flowId).toBe("trace-xyz");
   });
 
   it("tolerates store failure (warns but does not throw)", async () => {
@@ -203,14 +209,14 @@ describe("TurnEmitter", () => {
       turnId: "T",
     });
 
-    await expect(emitter.emit("x", {})).resolves.toBeUndefined();
+    await expect(emitter.emit("x" as never, {})).resolves.toBeUndefined();
     expect(bus.emitted).toHaveLength(1);
   });
 
   it("works with no eventBus (persist-only)", async () => {
     const store = makeStoreSpy();
     const emitter = createTurnEmitter({ store, sessionId: "S", turnId: "T" });
-    await emitter.emit("y", { a: 1 });
+    await emitter.emit("y" as never, { a: 1 });
     expect(store.addTraceEvent).toHaveBeenCalledTimes(1);
   });
 

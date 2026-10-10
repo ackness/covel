@@ -32,6 +32,7 @@ class NoopLLM implements LLMAdapter {
 async function freshActiveStore(sessionId: string): Promise<DataStore> {
   const store = createMemoryStore();
   await store.createSession({
+    locale: "en-US",
     id: sessionId,
     worldId: "w",
     status: "active",
@@ -79,7 +80,12 @@ describe("executeTurn: saveTurnResult invariant", () => {
       store,
     };
     await executeTurn(
-      { sessionId: "sess-happy", turnId: "t-1", playerMessage: "" },
+      {
+        origin: "player",
+        sessionId: "sess-happy",
+        turnId: "t-1",
+        playerMessage: "",
+      },
       [fnManifest("pregame", 10)],
       deps,
     );
@@ -100,7 +106,12 @@ describe("executeTurn: saveTurnResult invariant", () => {
       store,
     };
     await executeTurn(
-      { sessionId: "sess-fail", turnId: "t-1", playerMessage: "" },
+      {
+        origin: "player",
+        sessionId: "sess-fail",
+        turnId: "t-1",
+        playerMessage: "",
+      },
       [fnManifest("pregame", 10)],
       deps,
     );
@@ -125,7 +136,12 @@ describe("executeTurn: saveTurnResult invariant", () => {
       store,
     };
     await executeTurn(
-      { sessionId: "sess-empty", turnId: "t-1", playerMessage: "" },
+      {
+        origin: "player",
+        sessionId: "sess-empty",
+        turnId: "t-1",
+        playerMessage: "",
+      },
       [],
       deps,
     );
@@ -146,7 +162,12 @@ describe("executeTurn: saveTurnResult invariant", () => {
       store,
     };
     await executeTurn(
-      { sessionId: "sess-paused", turnId: "t-1", playerMessage: "" },
+      {
+        origin: "player",
+        sessionId: "sess-paused",
+        turnId: "t-1",
+        playerMessage: "",
+      },
       [fnManifest("pregame", 10)],
       deps,
     );
