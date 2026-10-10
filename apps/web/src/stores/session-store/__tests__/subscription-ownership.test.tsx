@@ -19,6 +19,7 @@ import type { SessionState } from "../types.js";
 const api = vi.hoisted(() => ({
   listSessionPlugins: vi.fn(),
   listPluginData: vi.fn(),
+  listSessionPluginData: vi.fn(),
   getWorld: vi.fn(),
   getSessionView: vi.fn(),
   listMessagesPage: vi.fn(),
@@ -142,6 +143,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.listSessionPlugins.mockResolvedValue(plugins("current"));
   api.listPluginData.mockResolvedValue([]);
+  api.listSessionPluginData.mockResolvedValue([]);
   api.getWorld.mockResolvedValue(world);
   api.getSessionView.mockResolvedValue({
     session,
@@ -448,7 +450,7 @@ function pluginDataChanged(key: string): SubscriptionEvent {
 function expectSnapshotReadsOnly(views: number) {
   expect(api.getSessionView).toHaveBeenCalledTimes(views);
   expect(api.listSessionPlugins).not.toHaveBeenCalled();
-  expect(api.listPluginData).not.toHaveBeenCalled();
+  expect(api.listSessionPluginData).not.toHaveBeenCalled();
   expect(api.getWorld).not.toHaveBeenCalled();
   expect(api.listSuspensions).not.toHaveBeenCalled();
 }
@@ -553,10 +555,7 @@ it("keeps events held by a full recovery through its follow-up snapshot read", a
   });
   // A reconnect reads every slice; the state notice adds one snapshot read.
   expect(api.listSessionPlugins).toHaveBeenCalledOnce();
-  expect(api.listPluginData).toHaveBeenCalledExactlyOnceWith(
-    session.id,
-    "current",
-  );
+  expect(api.listSessionPluginData).toHaveBeenCalledExactlyOnceWith(session.id);
   expect(api.listSuspensions).toHaveBeenCalledOnce();
   expect(api.getWorld).toHaveBeenCalledOnce();
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
@@ -578,7 +577,7 @@ it("reads everything again when a stalled recovery holds too many events", async
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(api.listSessionPlugins).toHaveBeenCalledOnce();
-  expect(api.listPluginData).toHaveBeenCalledOnce();
+  expect(api.listSessionPluginData).toHaveBeenCalledOnce();
   // The held events are dropped; the full read is their replacement.
   expect(options.stateRef.current.pluginMessageData).toEqual({});
 });
@@ -689,8 +688,13 @@ it.each([false, true])(
       runtimeId: "current/background",
       origin: { activation: "manual", sourceTurnId: "rpc-turn" },
     };
-    api.listPluginData.mockResolvedValue([
-      { namespace: "_runtime_jobs", key: "job", value: done },
+    api.listSessionPluginData.mockResolvedValue([
+      {
+        pluginId: "current",
+        namespace: "_runtime_jobs",
+        key: "job",
+        value: done,
+      },
     ]);
     // The job row change is applied as data; its status event alone marks
     // the committed terminal result.

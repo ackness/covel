@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/services/api", () => ({
   getSessionView: vi.fn(),
   getWorld: vi.fn(),
-  listPluginData: vi.fn(),
+  listSessionPluginData: vi.fn(),
   listSessionPlugins: vi.fn(),
   listSuspensions: vi.fn(),
 }));
@@ -104,8 +104,9 @@ describe("rehydrateSessionSideState", () => {
       commands: [],
       items: [sessionPlugin("p1", true), sessionPlugin("off", false)],
     });
-    vi.mocked(api.listPluginData).mockResolvedValue([
+    vi.mocked(api.listSessionPluginData).mockResolvedValue([
       {
+        pluginId: "p1",
         namespace: "stage",
         key: "current",
         value: { scene: "dock" },
@@ -324,8 +325,7 @@ describe("rehydrateSessionSideState", () => {
       ],
     });
 
-    expect(api.listPluginData).toHaveBeenCalledTimes(1);
-    expect(api.listPluginData).toHaveBeenCalledWith("s1", "p1");
+    expect(api.listSessionPluginData).toHaveBeenCalledExactlyOnceWith("s1");
     expect(replaceSessionPluginData).toHaveBeenCalledWith("s1", {
       p1: { stage: { current: { scene: "dock" } } },
     });

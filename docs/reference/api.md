@@ -650,12 +650,16 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 > **接入状态（2026-04-27）**：内置 Web UI 目前使用 GET/list 读取 plugin-data（右侧面板、message UI specs、plugin data store）。PUT/DELETE 是管理/API 写入口，当前内置 Web UI 暂未直接调用；插件 runtime 推荐通过 plugin-data tools、plugin RPC 或 proposal 写入。PUT/DELETE 保持兼容，但若未来收窄攻击面，应先标记 deprecated 或加 admin/debug gate，而不是静默删除。
 
-| 方法   | 路径                                                      | 描述                      |
-| ------ | --------------------------------------------------------- | ------------------------- |
-| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace`      | 列出某 namespace 下的数据 |
-| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据              |
-| PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据             |
-| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                  |
+| 方法   | 路径                                                      | 描述                                                                            |
+| ------ | --------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| GET    | `/api/sessions/:id/plugin-data`                           | 一次列出会话内所有激活插件的可读数据，`items[]` 带 `pluginId`（Web 完整恢复用） |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId`                 | 列出某插件的全部数据                                                            |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace`      | 列出某 namespace 下的数据                                                       |
+| GET    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 获取单条数据                                                                    |
+| PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据                                                                   |
+| DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                                                                        |
+
+会话级列表与按插件、按 namespace 的读取使用同一套可见性规则（`_hidden.*`、内核所有者的行不返回；维度行只返回公开形状）和同样的会话访问校验（托管形态下的 owner token）；它只包含会话已激活且已注册的插件，未激活插件的数据仍可通过按插件的路径读取。
 
 所有 `_` 前缀 namespace 保留给内核领域路径；PUT/DELETE 和通用 plugin-data 工具不能修改 `_dimensions` / `_dimension-settlements`。`_hidden.<namespace>`（`visibility: hidden` 世界数据）不出现在列表、`/state` 与 discovery 中，单条读取返回 404。玩家维度修改走[manual runtime RPC](#维度编辑与待结算恢复)，公共读取使用 session view，不扫描提供者私有规则。
 
