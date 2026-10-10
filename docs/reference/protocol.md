@@ -120,14 +120,14 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 ### 执行生命周期事件
 
-| 事件类型              | 方向 | 描述                                      | 负载                                                                                                                                                                                                                                                                                                                  |
-| --------------------- | ---- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`   | S→C  | 回合执行开始                              | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                    |
-| `runtime.started`     | S→C  | 单个 runtime 开始                         | `{ runtimeId, pluginId, turnId, runId, label }`                                                                                                                                                                                                                                                                       |
-| `runtime.deferred`    | S→C  | staged runtime 已随原始回合提交并转入后台 | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                                                                                                                                                                                                                        |
-| `runtime.completed`   | S→C  | 单个 runtime 完成                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                                                                                                                                                                                                                          |
-| `runtime.failed`      | S→C  | 单个 runtime 失败                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error }`                                                                                                                                                                                                                                                   |
-| `execution.completed` | S→C  | 回合执行终态                              | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`） |
+| 事件类型              | 方向 | 描述                                      | 负载                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------- | ---- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`   | S→C  | 回合执行开始                              | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `runtime.started`     | S→C  | 单个 runtime 开始                         | `{ runtimeId, pluginId, turnId, runId, label }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `runtime.deferred`    | S→C  | staged runtime 已随原始回合提交并转入后台 | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `runtime.completed`   | S→C  | 单个 runtime 完成                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `runtime.failed`      | S→C  | 单个 runtime 失败                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error }`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `execution.completed` | S→C  | 回合执行终态                              | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`）。`resync: true` 仅在 `committed: true` 且该回合提交后的部分事件未能发布时出现：数据已落库，客户端应读取已存状态而不是等待那些事件（订阅流同时收到 `system.reset`，`reason: "publish-failed"`） |
 
 > **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态并按 `committed` 收敛 optimistic 输出）。setup 提交失败时不会启动接力，终态直接返回 `committed: false`。
 
@@ -366,7 +366,7 @@ EventBus 的 `MAX_TRACKED_SESSIONS`（当前 256）是可驱逐回放状态的�
 event: system.reset
 data: {
   "sessionId": "<sessionId>",
-  "reason": "gap" | "epoch-change" | "transport-gap",
+  "reason": "gap" | "epoch-change" | "transport-gap" | "publish-failed",
   "epoch": "<current server epoch>",
   "oldestSeq": <number>,   // 缓存中最旧保留的 seq（无保留时为 0）
   "latestSeq": <number>,   // 本 epoch 已发出的最新 seq（未发过为 0）
@@ -380,6 +380,7 @@ data: {
 - `reason: "epoch-change"` —— 游标 epoch 与当前不符（含驱逐/重启后的换代，及无法解析的旧格式游标）。
 - `reason: "gap"` —— epoch 相符但环形缓存已越过游标（`afterSeq` 早于 `oldestSeq`），或游标 seq 超前于 `latestSeq`。
 - `reason: "transport-gap"` —— 跨 pod transport 检测到真实序号缺口，或已收到的大事件引用无法还原（记录不存在、读取失败或接收端无 store）。每个 `(origin, session, stream)` 从 `seq=1` 开始校验；新 stream 首帧大于 `1`，或接收状态被淘汰后首帧大于 `1`，均会触发缺口处理。失败帧的前序交付完成后、后继交付前，本地 replay 清空并换 epoch，所有已连接客户端收到 reset 后断线重连。
+- `reason: "publish-failed"` —— 提交方已把数据落库，但提交后的事件发布失败（`finalizeExecution` 与会话提交管线在事务提交后逐个执行缓冲的发布，失败不回滚数据）。服务端写入 trace 事件 `commit.fanout.failed`（`{ failedCount, totalCount, errors }`，`forwardToActionStream: false`，`/debug` 可见），随后清空该会话回放状态并换 epoch，已连接的订阅流收到 reset 后重连并完整重读；触发该回合的 `POST /api/actions` 流照常以 `execution.completed` 收尾，并带 `resync: true`。
 
 该帧与 `system.connected` / `system.heartbeat` 一样**不带 `id:` 头**，因此不会污染 `EventSource` 的 `lastEventId`。
 
@@ -416,7 +417,9 @@ Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队�
 >
 > `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
 >
-> `context.pruned`（TurnEmitter）在 prompt 初次组装、`PostContextAssembly` 改写后或 tool loop 某一步的实际请求触发预算硬裁剪时发出，负载为 `{ runtimeId, pluginId, prunedMessageCount }`；同一 runtime 一回合可能出现多次。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「哪一步掉了历史」，玩家侧 action 流不受影响。若受保护尾部、压缩摘要、工具 schema 与响应 schema 本身已经无法装入预算，runtime 会在调用 provider 前显式失败。
+> `context.pruned`（TurnEmitter）在 prompt 初次组装、`PostContextAssembly` 改写后或 tool loop 某一步的实际请求触发预算硬裁剪时发出，负载为 `{ runtimeId, pluginId, prunedMessageCount }`；同一 runtime 一回合可能出现多次。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「哪一步掉了历史」，玩家侧 action 流不受影响。
+>
+> `context.compaction.failed`（TurnEmitter）在历史压缩尝试失败时发出，负载为 `{ pluginId, extensionId, reason, consecutiveFailures }`；`forwardToActionStream: false`。连续失败每满 3 次，同一回合另发一条 `job-status.updated`（`state: "failed"`，`message` 为按会话语言解析的玩家说明），复用执行时间线对失败任务的展示。`commit.fanout.failed` 见 `system.reset` 一节。若受保护尾部、压缩摘要、工具 schema 与响应 schema 本身已经无法装入预算，runtime 会在调用 provider 前显式失败。
 
 ## 二、命令类型（CommandType）
 
@@ -470,6 +473,8 @@ Action的seq、turn/trace身份和负载在入队时快照，已接受帧按队�
 | 命令           | 方法 | 端点                           | 响应                                                                                   |
 | -------------- | ---- | ------------------------------ | -------------------------------------------------------------------------------------- |
 | `input.submit` | POST | `/api/sessions/:id/plugin-rpc` | Action `{ kind: "action", pluginId: "framework", action: "submit-form" }` 的 JSON 响应 |
+
+玩家填的值没有通过校验时，响应是 400 和 `code: "form_rejected"`，`error` 是按会话语言写给玩家的文字。客户端把它显示在表单旁边并保留玩家已填的内容，不进入执行错误状态。表单交互的可选 `notice` 字段显示在字段上方。
 
 ### 插件管理
 

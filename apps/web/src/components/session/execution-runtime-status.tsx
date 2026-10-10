@@ -7,6 +7,7 @@ import {
   RotateCw,
   SkipForward,
   Clock,
+  HelpCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ExecutionStep } from "@/stores/session-store.js";
@@ -23,7 +24,8 @@ export interface RuntimeStatus {
     | "completed"
     | "failed"
     | "skipped"
-    | "suspended";
+    | "suspended"
+    | "unknown";
   detail?: string;
   /** Qualified tool name when status is "tool" (e.g. "init-wizard:emit-character-form"). */
   toolName?: string;
@@ -93,6 +95,8 @@ function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
       return <SkipForward className="w-3 h-3 text-muted-foreground" />;
     case "suspended":
       return <Clock className="w-3 h-3 text-amber-500" />;
+    case "unknown":
+      return <HelpCircle className="w-3 h-3 text-muted-foreground" />;
   }
 }
 
@@ -157,6 +161,11 @@ export function RuntimeChip({
       }
     >
       <StatusIcon status={rt.status} />
+      {rt.status === "unknown" && (
+        <span className="text-[10px] text-muted-foreground">
+          {t("session.statusUnknown")}
+        </span>
+      )}
       <span className="font-medium truncate max-w-30 ui-chip-name">
         {rt.label}
       </span>

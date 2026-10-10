@@ -267,6 +267,34 @@ The limits on it:
   session preparation screen and the installed-package list. The play view
   does not show them. An install preview shows the author's name and no links.
 
+## Page policy and external images
+
+The built main page carries a `Content-Security-Policy` meta tag
+(`apps/web/src/lib/page-csp.ts`, injected by the Vite build; the dev server
+does not get it because Vite needs inline scripts and a hot-reload socket). It
+allows scripts from the page's own origin plus inline scripts, `connect-src`
+to the own origin (plus `blob:` / `data:`), styles and fonts from `https:`, and
+no plugins (`object-src 'none'`), with `base-uri` and `form-action` pinned to
+the own origin. Inline scripts stay allowed because plugin webviews are
+`srcdoc` frames that inherit the page policy and run an inline bridge; remote
+scripts and `eval` are blocked. `style-src` / `font-src` allow `https:` because
+an imported theme's own CSS may load remote stylesheets and fonts. The policy
+sets no `img-src`.
+
+The app ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1) and makes
+no request to a font host at start.
+
+**Markdown images.** Story text and world documents are rendered by one
+component (`apps/web/src/components/ui/markdown.tsx`). An image served by the
+app itself (same origin, the media store, `data:` and `blob:`) loads at once.
+An image on another origin is not requested: the player sees a placeholder
+that names the host, with "Load this image" and "Always load images from this
+host in this world"; the second choice is stored per world in the
+`media.allowedImageHosts` setting. This stops a model from carrying text from
+the conversation out in an image URL and stops an unseen host from learning
+the player's address. Loaded images send no referrer. Plugin webviews and
+json-render panels are not Markdown and keep their own rules.
+
 ## Other server guards
 
 Desktop menu imports open the shared package installer and use the same server validation, archive limits and trust flow as web imports. The old native IPC channels that copied a directory or ZIP directly into resource directories are no longer exposed.

@@ -190,6 +190,12 @@ Add `--no-llm-toml` to check default config and parent-disconnect drain. Smoke
 data stays in temporary directories under desktop staging; app resources and
 user data are read-only.
 
+The packaged web app makes no request to a font host or any other third party
+at launch: its Latin fonts (`@fontsource-variable/*`, about 530 KB of WOFF2,
+SIL OFL 1.1) are bundled in `dist/web/assets`, and the built page carries a
+Content-Security-Policy (`docs/architecture/security.md`). A build that is
+offline at first start therefore paints the same as an online one.
+
 ## Sidecar shutdown
 
 Normal application quit waits for the sidecar to exit before allowing Electron

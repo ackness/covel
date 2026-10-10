@@ -127,6 +127,8 @@ export async function submitInputs(
       {
         method: "POST",
         operatorAuth: true,
+        // A refused form (400) is reported next to the form by the caller.
+        silentStatuses: [400],
         body: JSON.stringify({
           kind: "action",
           pluginId: "framework",

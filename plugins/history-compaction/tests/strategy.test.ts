@@ -50,7 +50,9 @@ async function maybeCompact(
     messages,
     {
       ...deps,
-      compact: (input) => compactHistory(input, { ...deps, loadPrompt }, opts),
+      // The host leaves out a provider that throws, as `onError: "skip"` says.
+      compact: (input) =>
+        compactHistory(input, { ...deps, loadPrompt }, opts).catch(() => null),
     },
     opts,
   );
@@ -611,13 +613,12 @@ describe("maybeCompact", () => {
   });
 
   describe("LLM failure handling", () => {
-    it("returns { compacted: false } and warns when fast LLM throws", async () => {
+    it("returns { compacted: false } when fast LLM throws", async () => {
       const failingLlm: CompactorLLMAdapter = {
         complete: vi.fn(async () => {
           throw new Error("LLM unavailable");
         }),
       };
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
       const messages = makeSimpleHistory(20);
       const deps: CompactorDeps = {
@@ -630,10 +631,86 @@ describe("maybeCompact", () => {
       const result = await maybeCompact("sess-1", "", messages, deps);
 
       expect(result.compacted).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("LLM unavailable"),
-      );
-      warnSpy.mockRestore();
+    });
+
+    describe("reports why an attempt failed", () => {
+      const input = (contextWindow = 1_000) => ({
+        messages: makeSimpleHistory(20),
+        existingSummaries: [],
+        contextWindow,
+        inputWindow: contextWindow,
+        summaryBudget: {
+          maxTokens: 400,
+          maxSegmentTokens: 200,
+          maxSegments: 8,
+        },
+        estimatedTokens: contextWindow,
+        locale: "en-US",
+      });
+      const deps = (llm: CompactorLLMAdapter) => ({
+        fastSlotLlm: llm,
+        estimator,
+        loadPrompt,
+      });
+
+      it("rejects with the model's error when the call fails", async () => {
+        const llm: CompactorLLMAdapter = {
+          complete: vi.fn(async () => {
+            throw new Error("LLM unavailable");
+          }),
+        };
+        await expect(compactHistory(input(), deps(llm))).rejects.toThrow(
+          "LLM unavailable",
+        );
+      });
+
+      it("rejects when the model returns an empty summary", async () => {
+        await expect(
+          compactHistory(input(), deps(makeFastLlm("  "))),
+        ).rejects.toThrow(/empty summary/);
+      });
+
+      it("rejects when no message fits the summary model's input window", async () => {
+        await expect(
+          compactHistory({ ...input(), inputWindow: 50 }, deps(fastSlotLlm)),
+        ).rejects.toThrow(/input window/);
+        expect(fastSlotLlm.complete).not.toHaveBeenCalled();
+      });
+
+      it("rejects when the merge of older segments fails", async () => {
+        const old = (id: string) => ({
+          id,
+          sessionId: "sess-1",
+          turnRangeStart: "turn-1",
+          turnRangeEnd: "turn-1",
+          content: "older summary ".repeat(100),
+          focusSections: [],
+          createdAt: new Date(0).toISOString(),
+        });
+        let calls = 0;
+        const llm: CompactorLLMAdapter = {
+          complete: vi.fn(async () => {
+            if (++calls === 2) throw new Error("merge failed");
+            return { content: "new summary" };
+          }),
+        };
+        await expect(
+          compactHistory(
+            { ...input(), existingSummaries: [old("a"), old("b")] },
+            deps(llm),
+          ),
+        ).rejects.toThrow("merge failed");
+        expect(calls).toBe(2);
+      });
+
+      it("resolves null when there is nothing to compact", async () => {
+        await expect(
+          compactHistory(
+            { ...input(), messages: makeSimpleHistory(2) },
+            deps(fastSlotLlm),
+          ),
+        ).resolves.toBeNull();
+      });
     });
   });
 
@@ -872,7 +949,6 @@ describe("maybeCompact", () => {
         path.join(tmpdir(), "covel-compactor-empty-"),
       );
       loadPrompt = createPromptLoader(emptyRoot);
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
       try {
         const messages = makeSimpleHistory(20);
@@ -889,11 +965,25 @@ describe("maybeCompact", () => {
 
         expect(result.compacted).toBe(false);
         expect(fastSlotLlm.complete).not.toHaveBeenCalled();
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining("Failed to load prompt template"),
-        );
+        await expect(
+          compactHistory(
+            {
+              messages,
+              existingSummaries: [],
+              contextWindow: 1_000,
+              inputWindow: 1_000,
+              summaryBudget: {
+                maxTokens: 400,
+                maxSegmentTokens: 200,
+                maxSegments: 8,
+              },
+              estimatedTokens: 1_000,
+              locale: "zh-CN",
+            },
+            { fastSlotLlm, estimator, loadPrompt },
+          ),
+        ).rejects.toThrow(/prompt template could not be loaded/);
       } finally {
-        warnSpy.mockRestore();
         loadPrompt = createPromptLoader(tmpRoot);
         await rm(emptyRoot, { recursive: true, force: true });
       }

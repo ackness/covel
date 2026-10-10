@@ -22,22 +22,27 @@ import {
  *        flaky on weaker models (e.g. qwen3.5-flash) — they often re-render
  *        the form instead of calling `create-character`. By doing it here
  *        we remove the non-determinism that blocks the whole turn pipeline.
- *   3. No player AND no submission yet → proceed to LLM so it generates
- *      the opening form (Step 1 in PLUGIN.md).
+ *   3. No player AND no usable submission → proceed to LLM so it generates
+ *      the opening form (Step 1 in PLUGIN.md). A submission the world no
+ *      longer accepts lands here too: the form tool offers the form again
+ *      with the earlier answers filled in, so the player is never left with
+ *      an accepted form that cannot become a character.
  *
  * @type {import("@covel/plugin-handlers-utils").PluginAgentGuard}
  */
 export default async function guard(ctx) {
-  const { logger, sessionId, store } = ctx;
+  const { logger, store } = ctx;
 
   const characters = ctx.world?.characters;
   const player = Array.isArray(characters)
     ? characters.find((c) => c.type === "player")
     : null;
+  const schema = ctx.world?.characterSchema ?? null;
   // Ordering alone does not guarantee the schema provider succeeded. Use the
   // execution-local World Model, which includes same-turn schema proposals,
-  // and fail outside the recoverable-error fallback below.
-  if (!player && !ctx.world?.characterSchema) {
+  // and fail outside the recoverable-error fallback below. Once the player
+  // has skipped the failed step no schema will arrive: go on without one.
+  if (!player && !schema && !(await schemaStepSkipped(ctx))) {
     throw new Error(
       "Character schema is not ready. Complete world initialization before creating a player.",
     );
@@ -65,7 +70,27 @@ export default async function guard(ctx) {
           ? /** @type {Record<string, unknown>} */ (submission.values)
           : {};
       const name = pickName(values);
-      if (name) {
+      // Merge declared schema defaults into stored fields so the player
+      // record the model reads (get-character / prompt context) matches
+      // what the character panel shows (the panel overlays defaults at
+      // render time).
+      const sheet = name
+        ? characterFields(stripNameKeys(values), schema)
+        : null;
+      if (sheet?.refused) {
+        // The form was valid when it was shown; the world's attribute types
+        // changed since. Never let an LLM reinterpret the values: offer the
+        // form again and let the player answer under the current types.
+        await logger?.warn?.(
+          "player-init guard: the world no longer accepts the submitted form, offering it again",
+          { fields: sheet.refused },
+        );
+      } else if (name && sheet) {
+        if (sheet.droppedDefaults.length)
+          await logger?.warn?.(
+            "player-init guard: left out attribute defaults that do not match their own type",
+            { attributes: sheet.droppedDefaults },
+          );
         const now = new Date().toISOString();
         // A word id from the name (`char-lin-yao`): models read and write
         // character ids, and a UUID is long and easy to miscopy.
@@ -74,79 +99,107 @@ export default async function guard(ctx) {
           name,
           new Set((characters ?? []).map((character) => character.id)),
         );
-        try {
-          // Merge declared schema defaults into stored fields so the player
-          // record the model reads (get-character / prompt context) matches
-          // what the character panel shows (the panel overlays defaults at
-          // render time). Schema is discovered by its well-known namespace/key,
-          // not by a hardcoded world-data plugin id.
-          const schema = ctx.world?.characterSchema ?? null;
-          const fields = mergeSchemaDefaults(stripNameKeys(values), schema);
-          const character = {
-            id,
-            sessionId,
-            name,
-            type: "player",
-            description: pickDescription(values),
-            fields,
-            version: 1,
-            createdAt: now,
-            updatedAt: now,
-          };
-
-          await logger?.info("player-init guard created submitted player", {
+        const description = pickDescription(values);
+        await logger?.info("player-init guard created submitted player", {
+          playerId: id,
+        });
+        return withPendingProposals(
+          {
+            skip: true,
+            playerExists: true,
             playerId: id,
-          });
-          return withPendingProposals(
-            {
-              skip: true,
-              playerExists: true,
-              playerId: id,
-              playerName: name,
-              narrativeOutput: translate(
-                ctx,
-                "[System] Character {name} created — your adventure is about to begin…",
-                { name },
-              ),
-              preGameDone: true,
-            },
-            [
-              makeProposal(ctx, now, "character.upsert", {
-                id,
-                name,
-                type: "player",
-                description: character.description,
-                fields,
-                version: 1,
-                createdAt: now,
-              }),
-            ],
-          );
-        } catch (err) {
-          // A valid UI submission can still violate the world attribute types.
-          // Preserve it for correction; never let an LLM silently reinterpret it.
-          if (err instanceof CharacterFieldValidationError) {
-            err.message +=
-              " The original form submission is retained for audit. Start a new character-creation session to submit a corrected form; retrying this accepted submission cannot change its values.";
-            throw err;
-          }
-          await logger?.warn?.(
-            "player-init guard: deterministic create-character failed, falling back to LLM",
-            { error: err instanceof Error ? err.message : String(err) },
-          );
-          // Fall through to LLM branch
-        }
+            playerName: name,
+            narrativeOutput: translate(
+              ctx,
+              "[System] Character {name} created — your adventure is about to begin…",
+              { name },
+            ),
+            preGameDone: true,
+          },
+          [
+            makeProposal(ctx, now, "character.upsert", {
+              id,
+              name,
+              type: "player",
+              description,
+              fields: sheet.fields,
+              version: 1,
+              createdAt: now,
+            }),
+          ],
+        );
       }
     }
 
-    // ── Branch 3: nothing submitted yet → let LLM generate the opening form
+    // ── Branch 3: nothing usable submitted → let LLM generate the form
     return { skip: false };
   } catch (err) {
-    if (err instanceof CharacterFieldValidationError) throw err;
     await logger?.warn?.("player-init guard error", {
       error: err instanceof Error ? err.message : String(err),
     });
     return { skip: false, error: String(err) };
+  }
+}
+
+/**
+ * The stored fields for a submission, or the submitted keys the world's
+ * attribute types refuse. A default that fails its own attribute type is the
+ * world's fault, not the player's: it is left out instead of blocking setup.
+ * @param {Record<string, unknown>} submitted
+ * @param {import("@covel/plugin-handlers-utils").CharacterAttributeSchema | null} schema
+ * @returns {{ fields: Record<string, unknown>, droppedDefaults: string[], refused?: undefined } | { refused: string[] }}
+ */
+function characterFields(submitted, schema) {
+  try {
+    return {
+      fields: mergeSchemaDefaults(submitted, schema),
+      droppedDefaults: [],
+    };
+  } catch (err) {
+    if (!(err instanceof CharacterFieldValidationError) || !schema) throw err;
+    const failed = new Set(
+      err.issues.map((issue) => issue.path.split(".")[0] ?? issue.path),
+    );
+    const refused = [...failed].filter((key) => Object.hasOwn(submitted, key));
+    if (refused.length) return { refused };
+    return {
+      fields: mergeSchemaDefaults(submitted, {
+        ...schema,
+        attributes: schema.attributes.filter(
+          (attribute) => !failed.has(attribute.id),
+        ),
+      }),
+      droppedDefaults: [...failed],
+    };
+  }
+}
+
+/**
+ * True when the player skipped a failed setup step and nothing else is still
+ * failing: the schema this runtime waits for will not be produced.
+ * @param {Parameters<import("@covel/plugin-handlers-utils").PluginAgentGuard>[0]} ctx
+ */
+async function schemaStepSkipped(ctx) {
+  try {
+    const session =
+      /** @type {{ setupRuntimes?: Record<string, { state?: string, resolution?: string, lastError?: string }> } | null} */ (
+        await ctx.store.getSession()
+      );
+    const states = Object.entries(session?.setupRuntimes ?? {}).filter(
+      ([runtimeId]) => runtimeId !== ctx.runtimeId,
+    );
+    return (
+      states.some(
+        ([, state]) => state?.state === "done" && state.resolution === "waived",
+      ) &&
+      states.every(
+        ([, state]) =>
+          state?.state === "done" ||
+          (state?.state === "pending" && !state.lastError),
+      )
+    );
+  } catch {
+    return false;
   }
 }
 

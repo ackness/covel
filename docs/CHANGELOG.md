@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 - **A hook knows the session's language.** Every hook context has `locale`, the session's content locale, for the turn, commit and session events alike. A hook that adds text to a prompt picks its language with `instructionLocaleFor(ctx.locale)`; the bundled hooks no longer guess it from the prompt text.
 - **`docs/reference/hooks.md` describes every hook event**: when it fires, its payload, what a handler may return, how failures are handled and what the context holds. A test fails when an event is missing from the page.
+- **Fonts ship with the app, and the app contacts no font host at start.** Inter, Fraunces, Newsreader, Geist and Geist Mono (Latin subset, SIL OFL 1.1, from `@fontsource-variable/*`) are bundled; the render-blocking Google Fonts stylesheet and its preconnects are gone, so the first paint no longer waits for a host that is unreachable in some regions, and the desktop app makes no third-party request at launch. Syne, which no theme used, is dropped. The added files are about 530 KB, loaded only for the faces a theme uses. An imported theme's own remote CSS still loads.
+- **Images from other websites in the story or a world document wait for the player.** Images the app serves itself and `data:` / `blob:` images load as before; an image on another origin shows a placeholder naming the host, with "Load this image" and "Always load images from this host in this world" (kept per world in the settings store). The built page also carries a Content-Security-Policy (`docs/architecture/security.md`).
 - **Memory search no longer depends on an embedding model for good results.** Without an embedding slot, `memory-search` ranks with BM25 instead of counting shared words: a name or an item outweighs a word that every passage holds, and a long passage is not put last for being long. On a synthetic 60-message Chinese session with paragraph-length narration, the first result was the right one for 11 of 12 questions, against 6 before. An embedding slot stays optional and is used when present.
 - **`memory-search` reads the history summaries.** Recall covers the summaries that history compaction wrote as well as the latest 500 messages, so a turn that is older than those messages can still be found. A summary result has the role `summary`.
 - **A plugin can make a data namespace searchable.** `contributes.data.<namespace>.search: { text: <field> }` puts the records of the namespace into `memory-search` (source `archival:plugin_data`) while the plugin is active in the session, and into the vector index when an embedding model is configured. A namespace without the declaration is not read.
@@ -34,6 +36,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Changed
 
+- **The raw Database tab is a developer view.** It no longer sits among the player's tabs, where it showed every public plugin row, narrator-only character secrets included. Turn on "Developer view" in Settings to see it; the `/debug` page is unchanged.
+- **A plugin form validator receives the session's language**: a third argument `{ locale, messages }` to pass to `translate`, so the text a player reads when a form is refused is translated.
 - **A memory block over its limit is shortened by the model.** The `memory` plugin asks for a shorter version of the block and cuts at the end of a sentence only when that fails. Before, the text after the limit was cut off.
 - **`finishReason` has one vocabulary for every protocol.** The model gateway returns `stop`, `length`, `tool_calls`, `content_filter`, `error` or `other`, and keeps the provider's own word in `rawFinishReason`, as the AI SDK does with `unified` and `raw`. A plugin that compared `ctx.gateway` results with a provider's word (`end_turn`, `max_tokens`, `tool_use`) must compare with the unified value. The runtime and world generation read the same table (`unifyFinishReason` in `@covel/shared`) in place of three separate ones.
 - **Transport retries follow the providers' SDKs.** HTTP 408 and 409 are sent again like 429 and 5xx, `x-should-retry` decides when the provider sets it, and `retry-after-ms` is read before `Retry-After`. When the provider asks for a wait of more than 60 seconds, or more than the call has left, the call does not wait: it ends as rate limited and can use a backup model. Before, it waited until its time ran out and ended without a backup.
@@ -42,6 +46,12 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- **A new session can no longer be stranded in setup.** A submitted form with a missing or invalid value is refused with a message in the session's language that names the field, and the form keeps what the player typed. A character form the world's schema refused on every run is offered again with the earlier answers and a note; a schema default that fails its own type is left out instead of blocking. After a model failure, or when the page was closed mid-setup, the main view offers "Retry setup" or "Continue setup", which reruns only the unfinished steps. A stored point-buy allocation that breaks the rules is set aside and the form offered again.
+- **A suspended execution is answered with real controls.** Yes/No buttons, option buttons, a text box or a form built from the schema replace the hand-written JSON, which stays as an "Advanced" path for a suspension that describes nothing.
+- **Loading earlier messages reports a failure**, with a Retry button, instead of doing nothing.
+- **An execution status the client does not know is shown as "Unknown status"**, not as completed.
+- **A failed history compaction is visible.** Each failure is recorded in that turn's trace with its reason (`context.compaction.failed`); after three failures in a row the timeline shows a translated notice that says what to do. The plugin used to swallow every failure.
+- **Events that fail to publish after a commit no longer vanish.** Every other event of the turn is still published, the failure is traced (`commit.fanout.failed`), and subscribers are told to re-read the session.
 - **An Anthropic answer cut at the output limit is an error on a call that is not streamed.** The provider's `max_tokens` was read as a normal end there, so a cut answer or cut JSON was kept as complete. Streamed calls already rejected it.
 - **The plugin SDK's protocol type names Gemini.** `PluginProviderConfig.protocol` did not list `google-generative-ai-v1`.
 - **The opening's facts are no longer overwritten.** The opening and the first player turn share turn 1, and the `memory` plugin numbered a turn's facts from 1 both times. New facts now continue after the highest number the turn already has.
@@ -90,6 +100,9 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Upgrade notes
 
+- **Clients that read a refused `submit-form`**: match on `code: "form_rejected"`; the message text changed and is now translated.
+- **A `history.compact@2` provider reports a failure by throwing.** Returning `null` means "nothing to compact"; a provider that returns `null` on failure still works but its failures stay invisible.
+- **A commit refused for a dimension version conflict** carries `code: "dimension-version-conflict"`; the message no longer starts with that prefix. A pending settlement receipt written before this version with a failed extraction is no longer treated as blocked and settles on the next attempt.
 - **Hosted operators with a model server on the same host**: an `llm.toml` endpoint on a loopback address is rejected on `demo` / `commercial`. Use a public `https` name.
 - **A plugin that registers a text protocol declares it.** List the wire's `id` in `contributes.wires`, as for image and speech wires; an undeclared text wire now fails the load.
 - **Reply Variants data of existing development sessions is not carried over.** Earlier turns keep their blocks; an earlier adoption no longer rewrites history until the variant is adopted again.

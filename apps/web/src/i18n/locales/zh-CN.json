@@ -183,6 +183,10 @@
     "worldLore": "世界文档",
     "worldTab": "世界",
     "worldDocumentEmpty": "暂无世界文档",
+    "externalImageHeld": "来自 {{host}} 的图片尚未加载",
+    "externalImageLoad": "加载此图片",
+    "externalImageAlways": "在此世界中始终加载 {{host}} 的图片",
+    "externalImageBlocked": "图片未显示",
     "database": "数据库",
     "dbTables": "张表",
     "dbVolumes": "共 {{count}} 卷",
@@ -336,10 +340,15 @@
     "composerAwaitingBeginPlaceholder": "先点「开始冒险」，故事开始后再说话",
     "suspensionsBadge": "{{count}} 个等待中",
     "suspensionsTitle": "挂起的执行",
-    "suspensionsDescription": "插件暂停等待外部数据，在下方输入 resume 数据以继续执行。",
+    "suspensionsDescription": "故事正在等你回答，回答后才能继续。",
     "suspensionsEmpty": "没有等待中的执行。",
     "suspensionResumeLabel": "继续执行",
     "suspensionCancelLabel": "放弃",
+    "suspensionConfirmYes": "是",
+    "suspensionConfirmNo": "否",
+    "suspensionAnswerLabel": "你的回答",
+    "suspensionAnswerPlaceholder": "输入你的回答",
+    "suspensionAdvanced": "高级：直接发送原始数据",
     "suspensionResumePlaceholder": "resume 数据（JSON 或文本）",
     "suspensionAgoSeconds": "{{count}} 秒前",
     "suspensionAgoMinutes": "{{count}} 分钟前",
@@ -382,6 +391,8 @@
       "server": "服务端"
     },
     "jumpToLatest": "跳到最新",
+    "loadOlderFailed": "无法加载更早的消息。",
+    "statusUnknown": "未知状态",
     "loadingOlder": "正在加载更早的消息…",
     "startingGame": "创建中…",
     "resuming": "恢复中…",
@@ -409,6 +420,13 @@
     "recoveryRefresh": "检查状态",
     "recoveryStop": "停止任务",
     "recoveryStopFailed": "未能停止任务，请检查状态后再试。",
+    "setupFailedTitle": "开局准备没有完成",
+    "setupFailedDetail": "准备故事的某一步失败了。已完成的部分会保留，重试只会运行未完成的步骤。",
+    "setupRetry": "重试开局准备",
+    "setupUnfinishedTitle": "开局准备尚未完成",
+    "setupUnfinishedDetail": "故事还在准备中。点击继续，会用你已填写的内容运行剩下的步骤。",
+    "setupContinue": "继续开局准备",
+    "setupRetryFailed": "无法重新开始准备，请检查网络后再试。",
     "reasonInterrupted": "此任务在完成前已中断，没有提交结果。此处保留当时的执行记录。",
     "retryTask": "重试此任务",
     "executionHistory": "历史记录",
@@ -818,6 +836,10 @@
         "label": "聊天窗口消息上限",
         "description": "聊天里最多同时保留多少条消息。更早的消息会移出窗口，向上滚动时重新加载。"
       },
+      "developerView": {
+        "label": "开发者视图",
+        "description": "在侧边栏显示原始的“数据库”页签。它会列出插件存下的每一行数据，包括只给叙述者看的内容。"
+      },
       "expandTurnUpdates": {
         "label": "展开本回合更新",
         "description": "在每回合下方直接展开图鉴发现、成就和状态卡片，而不是折叠成一行。"
@@ -844,6 +866,9 @@
       },
       "llmCapabilityOverrides": {
         "label": "能力覆盖"
+      },
+      "mediaAllowedImageHosts": {
+        "label": "各世界允许的图片来源"
       },
       "llmPrepRuntimeBindings": {
         "label": "准备阶段 Runtime 绑定"
@@ -1814,7 +1839,8 @@
     "submittedHint": "已选择",
     "selectPrefix": "选择{{label}}",
     "selectPlaceholder": "请选择...",
-    "requiredMissing": "请填写必填字段"
+    "requiredMissing": "请填写必填字段",
+    "rejected": "请检查表单"
   },
   "interaction": {
     "playerSelected": "你的选择：",

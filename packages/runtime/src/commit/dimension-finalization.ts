@@ -220,7 +220,12 @@ export async function registerDimensionSettlements(args: {
       definitions: settlementDefinitions(records, scope.locale),
       sourceTurnId: result.turnId,
       version: 1,
-      ...(irFailed ? { error: "Shared WorldIR extraction failed" } : {}),
+      ...(irFailed
+        ? {
+            error: "Shared WorldIR extraction failed",
+            blockedBy: "extraction-failed" as const,
+          }
+        : {}),
     };
     const created = await sink.compareAndSetPluginDataBatch(
       sessionId,
@@ -325,9 +330,8 @@ export async function adoptRetryReadSets(args: {
     if (!row) continue;
     const receipt = dimensionSettlementReceiptSchema.parse(row.value);
     if (receipt.status !== "pending-settlement") continue;
-    if (receipt.error === "Shared WorldIR extraction failed" && irFailed)
-      continue;
-    const { error: _error, ...clean } = receipt;
+    if (receipt.blockedBy === "extraction-failed" && irFailed) continue;
+    const { error: _error, blockedBy: _blockedBy, ...clean } = receipt;
     await sink.compareAndSetPluginDataBatch(sessionId, scope.provider, [
       {
         namespace: DIMENSION_SETTLEMENT_NAMESPACE,

@@ -23,6 +23,7 @@ import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { OnboardingWizard } from "@/components/onboarding-wizard.js";
+import { ImageScopeContext } from "@/lib/external-images.js";
 import { isOnboarded } from "@/components/onboarding-wizard/persistence.js";
 import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
 import { ServerStatusOverlay } from "@/components/desktop/server-status-overlay.js";
@@ -295,12 +296,14 @@ function SessionScreen() {
           </div>
         }
       >
-        <GameView
-          key={state.session.id}
-          session={state.session}
-          requestedPanel={panel}
-          onPanelHandled={handlePanelHandled}
-        />
+        <ImageScopeContext.Provider value={state.session.worldId}>
+          <GameView
+            key={state.session.id}
+            session={state.session}
+            requestedPanel={panel}
+            onPanelHandled={handlePanelHandled}
+          />
+        </ImageScopeContext.Provider>
       </Suspense>
     );
   }

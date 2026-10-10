@@ -858,6 +858,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             trace,
             committed,
             commitError,
+            fanOutFailed: outcome.fanOutFailed === true,
             wasPreGamePending,
             queuedRuntimeJobs: committed ? queuedRuntimeJobs : [],
             followerJobs: committed ? followerJobs : [],
@@ -875,6 +876,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         trace,
         committed,
         commitError,
+        fanOutFailed,
         wasPreGamePending,
         queuedRuntimeJobs,
         followerJobs,
@@ -902,7 +904,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         currentRetryScope,
       );
 
-      return { result, committed, commitError, wasPreGamePending };
+      return {
+        result,
+        committed,
+        commitError,
+        fanOutFailed,
+        wasPreGamePending,
+      };
     };
 
     try {
@@ -950,6 +958,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         durationMs: finalRun.result.durationMs,
         committed: finalRun.committed,
         ...(finalRun.commitError ? { error: finalRun.commitError } : {}),
+        // Committed, but the events of some of it were not published: read the
+        // stored state instead of waiting for them.
+        ...(first.fanOutFailed || finalRun.fanOutFailed
+          ? { resync: true }
+          : {}),
         // Surface a turn that was aborted before producing output (e.g. a
         // TurnStart hook that refuses the turn) so the player gets a visible reason
         // instead of a silent empty turn.

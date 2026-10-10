@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
+import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -77,6 +78,7 @@ export function GameView({
     beginAdventure: onBeginAdventure,
     retryRuntime: onRetryRuntime,
     retryInterruptedTurn,
+    resolveSetupRuntime,
     refreshExecutionRecovery,
     abortActiveTurn,
     resetSession: onResetSession,
@@ -523,6 +525,19 @@ export function GameView({
             onRetry={retryInterruptedTurn}
             onRefresh={refreshExecutionRecovery}
             onStop={abortActiveTurn}
+          />
+          <SetupProgressNotice
+            progress={setupProgress({
+              session,
+              messages,
+              submittedBlockIds,
+              executing,
+              recovery: state.executionRecovery,
+            })}
+            onRearm={(runtimeId) =>
+              resolveSetupRuntime(session.id, runtimeId, "retry")
+            }
+            onRun={onBeginAdventure}
           />
           {stageActive ? (
             <StageView

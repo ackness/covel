@@ -284,6 +284,44 @@ describe("kernel extension execution", () => {
     warn.mockRestore();
   });
 
+  it("tells the caller why a provider was skipped", async () => {
+    const { point, host, abort, readPluginData } = fixture("collect");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    host.register(
+      "alpha",
+      { point: point.id, id: "failing" },
+      {
+        handler: () => {
+          throw new Error("fast model unreachable");
+        },
+      },
+    );
+    host.register(
+      "beta",
+      { point: point.id, id: "good" },
+      { handler: (value: typeof input) => ({ value: value.value + 1 }) },
+    );
+    const failures: unknown[] = [];
+    const execution = host.createExecution({
+      sessionId: "session",
+      locale: "en",
+      turnId: "turn",
+      signal: abort.signal,
+      readPluginData,
+      onProviderError: (failure) => failures.push(failure),
+    });
+    await expect(execution.run(point, input)).resolves.toEqual([{ value: 3 }]);
+    expect(failures).toEqual([
+      {
+        pluginId: "alpha",
+        providerId: "failing",
+        point: point.id,
+        error: expect.objectContaining({ message: "fast model unreachable" }),
+      },
+    ]);
+    warn.mockRestore();
+  });
+
   it("returns undefined for an empty single point and rejects active conflicts", async () => {
     const { point, host, execution, active } = fixture("single");
     await expect(execution().run(point, input)).resolves.toBeUndefined();

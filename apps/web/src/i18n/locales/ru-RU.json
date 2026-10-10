@@ -181,6 +181,10 @@
     "worldLore": "Документ мира",
     "worldTab": "Мир",
     "worldDocumentEmpty": "Документ мира отсутствует",
+    "externalImageHeld": "Изображение с {{host}} не загружено",
+    "externalImageLoad": "Загрузить это изображение",
+    "externalImageAlways": "Всегда загружать изображения с {{host}} в этом мире",
+    "externalImageBlocked": "Изображение не показано",
     "database": "База данных",
     "dbTables": "табл.",
     "dbVolumes": "Томов: {{count}}",
@@ -338,10 +342,15 @@
     "composerAwaitingBeginPlaceholder": "Сначала нажмите «Начать приключение» — история должна начаться, прежде чем вы сможете говорить.",
     "suspensionsBadge": "Ожидают: {{count}}",
     "suspensionsTitle": "Приостановленные выполнения",
-    "suspensionsDescription": "Рантаймы ожидают внешние данные. Введите ниже данные для возобновления.",
+    "suspensionsDescription": "История ждёт вашего ответа, чтобы продолжиться.",
     "suspensionsEmpty": "Приостановленных выполнений нет.",
     "suspensionResumeLabel": "Возобновить",
     "suspensionCancelLabel": "Отменить",
+    "suspensionConfirmYes": "Да",
+    "suspensionConfirmNo": "Нет",
+    "suspensionAnswerLabel": "Ваш ответ",
+    "suspensionAnswerPlaceholder": "Введите ваш ответ",
+    "suspensionAdvanced": "Дополнительно: отправить сырые данные",
     "suspensionResumePlaceholder": "данные для возобновления (JSON или текст)",
     "suspensionAgoSeconds": "{{count}} с. назад",
     "suspensionAgoMinutes": "{{count}}м назад",
@@ -384,6 +393,8 @@
       "server": "Сервер"
     },
     "jumpToLatest": "К последним сообщениям",
+    "loadOlderFailed": "Не удалось загрузить предыдущие сообщения.",
+    "statusUnknown": "Неизвестный статус",
     "loadingOlder": "Загрузка предыдущих сообщений…",
     "startingGame": "Создание…",
     "resuming": "Возобновление…",
@@ -411,6 +422,13 @@
     "recoveryRefresh": "Проверить состояние",
     "recoveryStop": "Остановить задачу",
     "recoveryStopFailed": "Не удалось остановить задачу. Проверьте состояние и попробуйте снова.",
+    "setupFailedTitle": "Подготовка не завершена",
+    "setupFailedDetail": "Один из шагов подготовки истории завершился с ошибкой. Уже выполненное сохранено; повтор запустит только незавершённые шаги.",
+    "setupRetry": "Повторить подготовку",
+    "setupUnfinishedTitle": "Подготовка ещё не завершена",
+    "setupUnfinishedDetail": "История ещё готовится. Продолжите, чтобы выполнить оставшиеся шаги с уже введёнными данными.",
+    "setupContinue": "Продолжить подготовку",
+    "setupRetryFailed": "Не удалось перезапустить подготовку. Проверьте соединение и повторите попытку.",
     "reasonInterrupted": "Задача прервалась до завершения и не сохранила результат. Здесь показана история её выполнения.",
     "retryTask": "Повторить задачу",
     "executionHistory": "История",
@@ -820,6 +838,10 @@
         "label": "Ограничение сообщений в окне чата",
         "description": "Сколько сообщений остаётся загруженными в чате. Более старые убираются из окна и загружаются снова при прокрутке вверх."
       },
+      "developerView": {
+        "label": "Режим разработчика",
+        "description": "Показывать в боковой панели вкладку «База данных» с сырыми данными. В ней видны все строки плагинов, включая материалы только для рассказчика."
+      },
       "expandTurnUpdates": {
         "label": "Разворачивать обновления хода",
         "description": "Показывать открытия кодекса, достижения и карточки состояния под каждым ходом развёрнутыми, а не свёрнутыми в одну строку."
@@ -846,6 +868,9 @@
       },
       "llmCapabilityOverrides": {
         "label": "Переопределения возможностей"
+      },
+      "mediaAllowedImageHosts": {
+        "label": "Разрешённые источники изображений по мирам"
       },
       "llmPrepRuntimeBindings": {
         "label": "Привязки среды выполнения на этапе подготовки"
@@ -1816,7 +1841,8 @@
     "submittedHint": "Выбрано",
     "selectPrefix": "Выберите {{label}}",
     "selectPlaceholder": "Выберите...",
-    "requiredMissing": "Заполните обязательные поля"
+    "requiredMissing": "Заполните обязательные поля",
+    "rejected": "Проверьте форму"
   },
   "interaction": {
     "playerSelected": "Вы выбрали:",

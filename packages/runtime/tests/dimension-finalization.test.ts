@@ -371,6 +371,7 @@ for (const [backend, create] of [
       expect(await receipt(store)).toMatchObject({
         status: "pending-settlement",
         error: "Shared WorldIR extraction failed",
+        blockedBy: "extraction-failed",
       });
     });
     it("keeps invalid rule output as pending, never a schema-invalid value", async () => {

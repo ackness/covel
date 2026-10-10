@@ -13,3 +13,4 @@ messages:
   No characters created yet, complete the character creation flow to see them here…: 尚未创建角色，完成角色创建流程后将在此显示……
   All Characters: 所有角色
   "[System] Character {name} created — your adventure is about to begin…": "[系统] 已创建角色 {name}，冒险即将开始……"
+  This world no longer accepts some of your earlier answers. Check the form and submit it again.: 这个世界不再接受你之前填写的部分内容，请检查后重新提交。

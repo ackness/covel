@@ -209,6 +209,66 @@ describe("creation handler", () => {
     expect(retried.value).toMatchObject({ playerId: "char-player-1", rules });
   });
 
+  it("sets aside a stored allocation that breaks the rules and asks again", async () => {
+    const submission = {
+      id: "submission-1",
+      formId: "tabletop-rules-allocation",
+      turnId: "turn-1",
+      values: { tideReading: 5, combat: 9 },
+    };
+    const characters = [{ id: "char-player-1", type: "player", fields: {} }];
+    const { ctx, calls, pluginData } = makeCtx({
+      phase: "setup",
+      characters,
+      playerInputs: [submission],
+      pluginData: new Map([
+        ["setup/rules", rules],
+        ["setup/offered", { formId: "tabletop-rules-allocation" }],
+      ]),
+    });
+    const result = await handler(ctx);
+    expect(result.completion).toBe("pending");
+    expect(calls.updates).toEqual([]);
+    expect(result.effects.interactions).toEqual([
+      expect.objectContaining({
+        interactionId: "tabletop-rules-allocation",
+        notice: "Combat: enter a whole number from 1 to 5",
+      }),
+    ]);
+    // The answer still inside its range stays; the other returns to its base.
+    expect(calls.forms[0].fields.map((field) => field.defaultValue)).toEqual([
+      5, 1,
+    ]);
+
+    // Until the player answers the new form, later runs only wait.
+    const waiting = makeCtx({
+      phase: "setup",
+      characters,
+      playerInputs: [submission],
+      pluginData,
+    });
+    expect((await handler(waiting.ctx)).completion).toBe("pending");
+    expect(waiting.calls.forms).toEqual([]);
+
+    const corrected = makeCtx({
+      phase: "setup",
+      characters,
+      playerInputs: [
+        submission,
+        {
+          ...submission,
+          id: "submission-2",
+          values: { tideReading: 4, combat: 2 },
+        },
+      ],
+      pluginData,
+    });
+    expect((await handler(corrected.ctx)).completion).toBe("done");
+    expect(corrected.calls.updates).toEqual([
+      { id: "char-player-1", fields: { tideReading: 4, combat: 2 } },
+    ]);
+  });
+
   it("skips silently for worlds without allocatable attributes", async () => {
     const { ctx, calls } = makeCtx({
       phase: "setup",
