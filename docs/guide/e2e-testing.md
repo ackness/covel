@@ -76,6 +76,11 @@ spec 分在两个 project：
 单独提供几百个模块，又只有一个进程，worker 再多也会排队等它。同一台机器上，整套从
 6 分钟左右降到 4 分半左右；worker 越多，差距越大。
 
+打包后的页面带内容安全策略（开发服务器没有）。`tests/e2e/page-policy.spec.ts` 在主要
+页面和带插件面板的会话上检查没有任何策略违规；新 spec 想做同样的检查时，在第一次
+导航前调用 `watchPolicyViolations(page)`（`tests/e2e/helpers/page-policy.ts`），结束时
+断言返回的列表为空。
+
 默认测试服务使用独立的临时 `COVEL_HOME`、用户世界和插件目录，进程结束后清理，避免读取或改写玩家的 `~/.covel`。显式设置 `E2E_BASE_URL` 时仍由调用方管理服务和数据目录。
 
 如果你已经启动了服务，显式指定 **Vite** 地址：
