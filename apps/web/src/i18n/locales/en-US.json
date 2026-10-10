@@ -127,6 +127,7 @@
     "commandAccepted": "Command accepted.",
     "commandFailed": "Command failed.",
     "commandCompleted": "{{command}} completed.",
+    "commandsLoading": "Loading commands…",
     "ended": "This session has ended.",
     "game": "Game",
     "events": "Events",
