@@ -8,6 +8,7 @@ export {
   withPendingProposals,
   getEmittedEvents,
   withEmittedEvents,
+  ToolRefusal,
 } from "./result.js";
 export type { ToolExecutionEnvelope, EmittedEvent } from "./result.js";
 
