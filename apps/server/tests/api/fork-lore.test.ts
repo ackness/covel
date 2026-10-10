@@ -3,7 +3,7 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildSessionContextSnapshot } from "@covel/context";
 import {
   exportSessionCheckpoint,
@@ -40,11 +40,17 @@ const parentMetadata = {
   unrelatedMetadata: "parent-only",
 };
 
+// The fork route's rate limiter outlives one test app. Every test starts at
+// least one window later, so the requests of earlier tests do not count.
+let testClock = Date.now();
+
 describe.each(["memory", "sqlite"])("fork lore on %s", (backend) => {
   let store: DataStore;
   let app: Pick<Hono, "request">;
 
   beforeEach(async () => {
+    testClock += 120_000;
+    vi.useFakeTimers({ toFake: ["Date"], now: testClock });
     store =
       backend === "sqlite"
         ? createSqliteStore(":memory:")
@@ -72,6 +78,7 @@ describe.each(["memory", "sqlite"])("fork lore on %s", (backend) => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     await store.close();
   });
 
