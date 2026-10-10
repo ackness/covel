@@ -466,3 +466,37 @@ describe("execution World Model", () => {
     expect(await store.listCharacters(sessionId)).toEqual([]);
   });
 });
+
+describe("a clock-derived dimension in the execution view", () => {
+  it("shows a later runtime the value an earlier runtime derived, twice in a row", () => {
+    const entry = {
+      name: "Countdown",
+      schema: {
+        type: "integer" as const,
+        "x-derive": {
+          source: "clock.elapsedSinceStart" as const,
+          start: 180,
+          perUnit: -1,
+        },
+      },
+      value: 180,
+      version: 1,
+    };
+    const update = (expectedVersion: number, value: number) =>
+      proposal("dimension.update", {
+        updates: [{ id: "storm", expectedVersion, value }],
+      });
+    // The second update is applied to a value that is no longer the one a
+    // session starts with.
+    const view = materializeWorldModel(
+      {
+        ...base,
+        dimensions: { storm: entry },
+        dimensionProviderPluginId: "producer",
+      },
+      [update(1, 170), update(2, 150)],
+      sessionId,
+    );
+    expect(view.dimensions.storm).toMatchObject({ value: 150, version: 3 });
+  });
+});

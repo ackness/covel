@@ -8,6 +8,10 @@ import type {
   WorldDimensionDefinition,
   WorldDimensions,
 } from "./dimension-types.js";
+import {
+  derivedDimensionFields,
+  deriveDimensionValue,
+} from "./dimension-derive.js";
 import { resolveI18nText } from "./i18n.js";
 
 export const DIMENSION_DATA_NAMESPACE = "_dimensions";
@@ -95,6 +99,143 @@ const valueTypeSchema = z.enum([
 ]);
 const countSchema = z.number().int().nonnegative();
 
+const derivationSchema = z
+  .strictObject({
+    source: z
+      .enum(["clock.elapsedSinceStart"])
+      .describe(
+        "What the value is computed from. `clock.elapsedSinceStart` is the time on the world clock since the session began, in the clock's base unit: minutes on a calendar, phases on a phase clock.",
+      ),
+    start: z
+      .number()
+      .describe("The number when the source is 0. Default 0.")
+      .optional(),
+    perUnit: z
+      .number()
+      .describe(
+        "What one unit of the source adds to the number; negative for a countdown. Default 1.",
+      )
+      .optional(),
+    min: z.number().describe("The number never goes below this.").optional(),
+    max: z.number().describe("The number never goes above this.").optional(),
+    ranges: z
+      .array(
+        z.strictObject({
+          from: z
+            .number()
+            .describe("Inclusive lower bound of the number.")
+            .optional(),
+          to: z
+            .number()
+            .describe("Inclusive upper bound of the number.")
+            .optional(),
+          value: z
+            .union([z.string(), z.number(), z.boolean()])
+            .describe("The value of the field while the number is in range."),
+        }),
+      )
+      .min(1)
+      .max(64)
+      .describe(
+        "Turns the number into a label: the first range that holds the number gives the value. The last range has no bounds. Without `ranges` the value is the number itself.",
+      )
+      .optional(),
+  })
+  .superRefine((derivation, ctx) => {
+    if (
+      derivation.min !== undefined &&
+      derivation.max !== undefined &&
+      derivation.min > derivation.max
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["min"],
+        message: "min is above max",
+      });
+    for (const [index, range] of (derivation.ranges ?? []).entries()) {
+      if (
+        range.from !== undefined &&
+        range.to !== undefined &&
+        range.from > range.to
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["ranges", index, "from"],
+          message: "from is above to",
+        });
+    }
+    const last = derivation.ranges?.at(-1);
+    if (last && (last.from !== undefined || last.to !== undefined))
+      ctx.addIssue({
+        code: "custom",
+        path: ["ranges", derivation.ranges!.length - 1],
+        message:
+          "The last range takes every number the ranges before it left: give it no from and no to",
+      });
+  });
+
+/** What is wrong with `x-derive` on this node, by path inside the node. */
+function derivationIssues(
+  node: DimensionValueSchema,
+): readonly { readonly path: (string | number)[]; readonly message: string }[] {
+  const derivation = node["x-derive"];
+  if (!derivation) return [];
+  const issues: { path: (string | number)[]; message: string }[] = [];
+  const add = (path: (string | number)[], message: string) =>
+    issues.push({ path: ["x-derive", ...path], message });
+  const type = node.type;
+  if (
+    typeof type !== "string" ||
+    !["string", "number", "integer", "boolean"].includes(type)
+  ) {
+    add(
+      [],
+      "A derived value needs one type: string, number, integer or boolean",
+    );
+    return issues;
+  }
+  if (node["x-i18n"])
+    add([], "A derived value is not translatable text: remove x-i18n");
+  if (derivation.ranges) {
+    for (const [index, range] of derivation.ranges.entries()) {
+      const fits =
+        matchesType(range.value, type) &&
+        (!node.enum ||
+          node.enum.some((item) => equalJson(item, range.value))) &&
+        (!Object.hasOwn(node, "const") || equalJson(node.const!, range.value));
+      if (!fits)
+        add(
+          ["ranges", index, "value"],
+          `${JSON.stringify(range.value)} is not a value this field allows`,
+        );
+    }
+    return issues;
+  }
+  if (type !== "number" && type !== "integer") {
+    add(["ranges"], `A derived ${type} needs ranges that name its values`);
+    return issues;
+  }
+  // The number can reach any value between the derivation's own bounds, so
+  // those must lie inside what the field accepts.
+  if (
+    node.minimum !== undefined &&
+    (derivation.min === undefined || derivation.min < node.minimum)
+  )
+    add(
+      ["min"],
+      `The field's minimum is ${node.minimum}: set min to it or above`,
+    );
+  if (
+    node.maximum !== undefined &&
+    (derivation.max === undefined || derivation.max > node.maximum)
+  )
+    add(
+      ["max"],
+      `The field's maximum is ${node.maximum}: set max to it or below`,
+    );
+  return issues;
+}
+
 const recursiveValueSchema: z.ZodType<DimensionValueSchema> = z.lazy(() =>
   z
     .strictObject({
@@ -174,8 +315,15 @@ const recursiveValueSchema: z.ZodType<DimensionValueSchema> = z.lazy(() =>
           "Display labels keyed by enum member. A label never replaces the stored value.",
         )
         .optional(),
+      "x-derive": derivationSchema
+        .describe(
+          "Computes this value from the world clock in code, in the turn the clock moves: `start + perUnit * source`, kept inside `min` / `max`, or the label `ranges` gives for that number. No model writes a derived value. Allowed on the value itself or on a property reached through `properties` only.",
+        )
+        .optional(),
     })
     .superRefine((node, ctx) => {
+      for (const issue of derivationIssues(node))
+        ctx.addIssue({ code: "custom", ...issue });
       const labels = node["x-enumLabels"];
       if (!labels) return;
       // Display labels only: every key must name a scalar enum member, so a
@@ -204,12 +352,46 @@ function boundedDimensionInput(value: unknown, ctx: z.RefinementCtx): unknown {
   return value;
 }
 
+/** Schema paths of `x-derive` nodes that have no fixed place in the value. */
+function misplacedDerivations(
+  root: DimensionValueSchema,
+): readonly (readonly string[])[] {
+  const found: (readonly string[])[] = [];
+  const visit = (
+    node: DimensionValueSchema,
+    path: readonly string[],
+    fixed: boolean,
+  ): void => {
+    if (node["x-derive"] && !fixed) found.push(path);
+    // Below a derived node nothing is fixed either: code writes it whole.
+    const inside = fixed && !node["x-derive"];
+    for (const [key, child] of Object.entries(node.properties ?? {}))
+      visit(child, [...path, "properties", key], inside);
+    if (node.items) visit(node.items, [...path, "items"], false);
+    if (typeof node.additionalProperties === "object")
+      visit(
+        node.additionalProperties,
+        [...path, "additionalProperties"],
+        false,
+      );
+  };
+  visit(root, [], true);
+  return found;
+}
+
 // Reject structurally unsatisfiable nodes: a `required` key that is not
 // declared in `properties` can never be satisfied under
 // `additionalProperties: false`, and silently does nothing otherwise.
 // `required` is only meaningful against `properties` in this subset.
 const dimensionValueSchemaRefined = recursiveValueSchema.superRefine(
   (node, ctx) => {
+    for (const path of misplacedDerivations(node))
+      ctx.addIssue({
+        code: "custom",
+        path: [...path, "x-derive"],
+        message:
+          "A derived value must be the dimension value itself or a property reached through properties only, not an array element or a dynamically named record",
+      });
     if (!node.required || node.required.length === 0) return;
     const declared = node.properties ? Object.keys(node.properties) : [];
     for (const key of node.required) {
@@ -385,43 +567,74 @@ export function validateDimensionValue(
   return issues;
 }
 
+// A definition as a record holds it. A record that is rebuilt from a snapshot
+// has the current value in place of the initial one, so what is checked here
+// holds for both.
+const dimensionDefinitionShape: z.ZodType<WorldDimensionDefinition> = z
+  .strictObject({
+    name: textSchema
+      .refine(
+        (name) =>
+          (typeof name === "string" ? [name] : Object.values(name)).some(
+            (text) => text.trim().length > 0,
+          ),
+        { message: "Dimension name must be non-empty" },
+      )
+      .describe("Display name of the dimension."),
+    description: textSchema.describe("What the dimension tracks.").optional(),
+    schema: dimensionValueSchema.describe(
+      "Value schema in the supported JSON Schema subset. Unsupported keywords are rejected.",
+    ),
+    initialValue: dimensionJsonSchema.describe(
+      "Starting value. It must satisfy `schema`.",
+    ),
+    updateRule: textSchema
+      .describe(
+        "Natural-language rule for how the value changes in play. When non-empty, the dimension tracker settles it after each turn. Omit it for static setting.",
+      )
+      .optional(),
+  })
+  .superRefine((definition, ctx) => {
+    for (const issue of validateDimensionValue(
+      definition.schema,
+      definition.initialValue,
+    )) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["initialValue", ...issue.path],
+        message: issue.message,
+      });
+    }
+    if (definition.schema["x-derive"] && definition.updateRule !== undefined)
+      ctx.addIssue({
+        code: "custom",
+        path: ["updateRule"],
+        message:
+          "The whole value is derived, so no rule can change it: remove updateRule",
+      });
+  });
+
+/** A definition as an author declares it. */
 export const worldDimensionDefinitionSchema: z.ZodType<WorldDimensionDefinition> =
-  z
-    .strictObject({
-      name: textSchema
-        .refine(
-          (name) =>
-            (typeof name === "string" ? [name] : Object.values(name)).some(
-              (text) => text.trim().length > 0,
-            ),
-          { message: "Dimension name must be non-empty" },
-        )
-        .describe("Display name of the dimension."),
-      description: textSchema.describe("What the dimension tracks.").optional(),
-      schema: dimensionValueSchema.describe(
-        "Value schema in the supported JSON Schema subset. Unsupported keywords are rejected.",
-      ),
-      initialValue: dimensionJsonSchema.describe(
-        "Starting value. It must satisfy `schema`.",
-      ),
-      updateRule: textSchema
-        .describe(
-          "Natural-language rule for how the value changes in play. When non-empty, the dimension tracker settles it after each turn. Omit it for static setting.",
-        )
-        .optional(),
-    })
-    .superRefine((definition, ctx) => {
-      for (const issue of validateDimensionValue(
-        definition.schema,
-        definition.initialValue,
-      )) {
+  dimensionDefinitionShape.superRefine((definition, ctx) => {
+    // A session starts with the source at 0, and nothing computes a value
+    // before the first turn: the initial value has to be that value.
+    for (const field of derivedDimensionFields(definition.schema)) {
+      const expected = deriveDimensionValue(field.schema, field.derivation, 0);
+      let actual: unknown = definition.initialValue;
+      for (const key of field.path)
+        actual =
+          actual !== null && typeof actual === "object"
+            ? (actual as Record<string, unknown>)[key]
+            : undefined;
+      if (actual !== expected)
         ctx.addIssue({
           code: "custom",
-          path: ["initialValue", ...issue.path],
-          message: issue.message,
+          path: ["initialValue", ...field.path],
+          message: `Must be ${JSON.stringify(expected)}: the value x-derive gives at the start`,
         });
-      }
-    });
+    }
+  });
 
 function boundedDimensionMapInput(
   value: unknown,
@@ -455,7 +668,7 @@ export const dimensionSourceSchema = z.strictObject({
 });
 
 const dimensionRecordShape = z.strictObject({
-  definition: worldDimensionDefinitionSchema,
+  definition: dimensionDefinitionShape,
   value: dimensionJsonSchema,
   version: z.number().int().positive(),
   lastTrackedSource: dimensionSourceSchema.optional(),

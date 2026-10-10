@@ -749,6 +749,60 @@
             ]
           },
           "description": "Display labels keyed by enum member. A label never replaces the stored value."
+        },
+        "x-derive": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": ["clock.elapsedSinceStart"],
+              "description": "What the value is computed from. `clock.elapsedSinceStart` is the time on the world clock since the session began, in the clock's base unit: minutes on a calendar, phases on a phase clock."
+            },
+            "start": {
+              "type": "number",
+              "description": "The number when the source is 0. Default 0."
+            },
+            "perUnit": {
+              "type": "number",
+              "description": "What one unit of the source adds to the number; negative for a countdown. Default 1."
+            },
+            "min": {
+              "type": "number",
+              "description": "The number never goes below this."
+            },
+            "max": {
+              "type": "number",
+              "description": "The number never goes above this."
+            },
+            "ranges": {
+              "minItems": 1,
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "number",
+                    "description": "Inclusive lower bound of the number."
+                  },
+                  "to": {
+                    "type": "number",
+                    "description": "Inclusive upper bound of the number."
+                  },
+                  "value": {
+                    "description": "The value of the field while the number is in range.",
+                    "type": ["string", "number", "boolean"]
+                  }
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              },
+              "description": "Turns the number into a label: the first range that holds the number gives the value. The last range has no bounds. Without `ranges` the value is the number itself."
+            }
+          },
+          "required": ["source"],
+          "additionalProperties": false,
+          "description": "Computes this value from the world clock in code, in the turn the clock moves: `start + perUnit * source`, kept inside `min` / `max`, or the label `ranges` gives for that number. No model writes a derived value. Allowed on the value itself or on a property reached through `properties` only."
         }
       },
       "additionalProperties": false
