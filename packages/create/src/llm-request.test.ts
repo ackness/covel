@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter } from "@covel/shared";
-import { LlmIdleTimeoutError, requestLlmResponse } from "./llm-request.js";
+import {
+  LlmIdleTimeoutError,
+  LlmIncompleteOutputError,
+  requestLlmResponse,
+} from "./llm-request.js";
 
 describe("requestLlmResponse", () => {
   it("rejects a stream that closes without a completion event", async () => {
@@ -99,6 +103,42 @@ describe("requestLlmResponse", () => {
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(cleanup).toHaveBeenCalledOnce();
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("reports the usage of a streamed answer, a cut-off one included", async () => {
+    const answer = (finishReason: string): LLMAdapter => ({
+      async generate() {
+        throw new Error("generate() should not be used when stream() exists");
+      },
+      async *stream() {
+        yield { type: "text-delta", textDelta: "lore" } as const;
+        yield {
+          type: "done",
+          finishReason,
+          usage: { inputTokens: 1200, outputTokens: 340 },
+        } as const;
+      },
+    });
+    const reported: unknown[] = [];
+    const request = (llm: LLMAdapter) =>
+      requestLlmResponse({
+        llm,
+        messages: [],
+        signal: AbortSignal.timeout(5_000),
+        onUsage: (usage) => reported.push(usage),
+      });
+
+    await expect(request(answer("stop"))).resolves.toMatchObject({
+      usage: { inputTokens: 1200, outputTokens: 340 },
+    });
+    // The answer is rejected, and its tokens were still spent.
+    await expect(request(answer("length"))).rejects.toThrow(
+      LlmIncompleteOutputError,
+    );
+    expect(reported).toEqual([
+      { inputTokens: 1200, outputTokens: 340 },
+      { inputTokens: 1200, outputTokens: 340 },
+    ]);
   });
 
   it("preserves complete streamed content and reasoning", async () => {

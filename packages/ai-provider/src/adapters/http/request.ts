@@ -5,6 +5,7 @@ import {
   createLlmRequestScope,
 } from "@covel/shared";
 import type { FormData as UndiciFormData } from "undici";
+import { ProviderBaseUrlError } from "../../errors.js";
 import type { ProviderConfig } from "../../types.js";
 import { outboundFetch } from "../../outbound-network.js";
 import {
@@ -31,10 +32,10 @@ function assertAllowedBaseUrl(
   baseUrl: string | undefined,
 ): asserts baseUrl is string {
   if (!baseUrl) {
-    throw new Error("Provider error: baseUrl is required.");
+    throw new ProviderBaseUrlError("Provider error: baseUrl is required.");
   }
   if (!validateBaseUrl(baseUrl)) {
-    throw new Error(
+    throw new ProviderBaseUrlError(
       `Provider error: baseUrl "${baseUrl}" is not allowed. Only public HTTPS endpoints are permitted (private/internal IPs are blocked).`,
     );
   }

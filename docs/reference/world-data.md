@@ -513,17 +513,17 @@ characterSchema:
 - 语言文件只能翻译主文件里已有的文本。出现主文件没有的 key 或 id、在结构位置写文本、改动数字或布尔值，这一条都会被忽略并报告，主文件的值保留。
 - 没翻译的文本回退到主文件，所以可以逐步翻译。语言文件应只包含匹配用的稳定键和译文，避免复制媒体哈希、路径等会变化的字符串数据。
 - 纯文本列表（例如别名）作为一个整体翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。
-- 文件名里的 `<locale>` 必须是真实语言的标签（`en`、`en-US`、`zh-Hant`）；`items.backup.yaml` 不会被当成语言文件。
+- 文件名里的 `<locale>` 必须是真实语言的标签（`en-US`、`zh-Hant`）；`items.backup.yaml` 不会被当成语言文件。世界包的语言文件（`WORLD.<locale>.md`、`world.<locale>.yaml`、`data/x.<locale>.yaml` 等）按 `supportedLocales` 里写的 locale 原样命名：世界声明了 `en-US`，文件就叫 `….en-US.…`。只写语言的 `….en.…` 不会被读取（也不会按「会话是 `en-US` 就读 `en`」回退）：`pnpm validate:world` 报 `locale-file-name`，服务端加载时在日志里写出文件名和应有的名字，安装或导入社区世界时同样以 400 拒绝并给出同一条说明。世界声明的就是 `fr` 这样的语言时，`….fr.…` 即是准确的名字。会话语言之间的回退（例如 `zh-TW` 会话读 `zh-CN` 版本）发生在世界实际有的版本之间，不受影响。
 
 两种读取方式：
 
-| 文件                                                                                           | 读取方式                                                          | 结果                                                  |
-| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
-| `world.yaml`、维度定义（`dimensionSources` 的文件、`to: world:metadata.dimensions` 的 source） | 所有语言文件一起编译                                              | 文本成为 locale map，世界目录和面板标签按界面语言显示 |
-| 其他结构化 worldData source（JSON / YAML）                                                     | 只合并会话语言的那一份：先精确 locale，再 script 兼容的主语言短键 | 单一语言的数据；会话里不保存 locale map               |
-| `markdown` / `text` / `media`                                                                  | 语言文件整份替换主文件                                            | 同上                                                  |
+| 文件                                                                                           | 读取方式                                                     | 结果                                                  |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------- |
+| `world.yaml`、维度定义（`dimensionSources` 的文件、`to: world:metadata.dimensions` 的 source） | 所有语言文件一起编译                                         | 文本成为 locale map，世界目录和面板标签按界面语言显示 |
+| 其他结构化 worldData source（JSON / YAML）                                                     | 只合并会话语言的那一份：文件名里的 locale 与会话语言完全一致 | 单一语言的数据；会话里不保存 locale map               |
+| `markdown` / `text` / `media`                                                                  | 语言文件整份替换主文件                                       | 同上                                                  |
 
-- 会话语言在创建时确定；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时取 `session.locale`。`zh-Hant-TW` 不会读取 `zh` 的文件。
+- 会话语言在创建时确定；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时取 `session.locale`。会话语言是世界声明的版本，文件名与它逐字对应；`zh-Hant-TW` 不会读取 `zh` 的文件。
 - 语言文件是 source 的一部分：改动任何一份都会改变该 source 的摘要，`sync-data` 能看到。
 - **主文件不再写内联 locale map**（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。此前用内联写法的世界包需要拆成主文件加语言文件；内置的四个世界已经这样迁移。
 - 维度值里只有 schema 标了 `x-i18n: true` 的文本节点可以翻译；翻译其他节点会让该维度校验失败。

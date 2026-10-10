@@ -29,11 +29,13 @@ async function synthesize(
     config,
     "/audio/speech",
     {
-      model: params.model,
-      input: params.text,
+      // A role's metadata may fix the voice or the format its model accepts;
+      // the model and the text belong to the call and come last.
       ...(params.voice ? { voice: params.voice } : {}),
       ...(params.format ? { response_format: params.format } : {}),
       ...extra,
+      model: params.model,
+      input: params.text,
     },
     undefined,
     undefined,

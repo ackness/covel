@@ -1,4 +1,8 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  FormIssue,
+  InteractionSubmitResult,
+} from "@/stores/session-store/types.js";
 import { useTranslation } from "react-i18next";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -179,13 +183,16 @@ export function MessageBlockRenderer({
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
-  ) => Promise<void>;
+  ) => Promise<InteractionSubmitResult>;
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const { upsertInteractionDraft } = useSessionActions();
   const formStateRef = useRef<Record<string, unknown>>({});
+  const fieldsetRef = useRef<HTMLFieldSetElement>(null);
+  // What the server refused on the last submit, shown under the fields.
+  const [issues, setIssues] = useState<readonly FormIssue[]>([]);
   const effectiveSubmitted = submitted;
 
   const initialFormState = useMemo(
@@ -196,23 +203,46 @@ export function MessageBlockRenderer({
   const spec = useMemo(() => {
     const nested = effectiveSubmitted
       ? messageToSpecDisabled(msg, submittedValues)
-      : messageToSpec(msg);
+      : messageToSpec(msg, issues);
     if (!nested) return null;
     try {
       return nestedToFlat(nested);
     } catch {
       return null;
     }
-  }, [msg, effectiveSubmitted, submittedValues]);
+  }, [msg, effectiveSubmitted, submittedValues, issues]);
 
   const handleStateChange = useCallback(
     (changes: Array<{ path: string; value: unknown }>) => {
       for (const { path, value } of changes) {
         formStateRef.current[path] = value;
       }
+      // Editing a field answers its refusal.
+      const edited = changes.flatMap(({ path }) => {
+        const field = path.match(/^\/form\/(.+)$/)?.[1];
+        return field ? [field] : [];
+      });
+      if (edited.length > 0) {
+        setIssues((current) =>
+          current.some((issue) => issue.field && edited.includes(issue.field))
+            ? current.filter(
+                (issue) => !issue.field || !edited.includes(issue.field),
+              )
+            : current,
+        );
+      }
     },
     [],
   );
+
+  // Put the cursor on the first refused field.
+  useEffect(() => {
+    if (issues.some((issue) => issue.field)) {
+      fieldsetRef.current
+        ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+        ?.focus();
+    }
+  }, [issues]);
 
   const readBlockMeta = useCallback(() => {
     const data = (block.data ?? block) as Record<string, unknown>;
@@ -282,7 +312,8 @@ export function MessageBlockRenderer({
         }
 
         if (onSubmitInteraction && turnId) {
-          await onSubmitInteraction(
+          setIssues([]);
+          const result = await onSubmitInteraction(
             msg.id,
             turnId,
             interactionId,
@@ -290,6 +321,7 @@ export function MessageBlockRenderer({
             formValues,
             submitBehavior,
           );
+          if (result) setIssues(result.rejected);
         } else {
           // Fallback: submit-form unavailable -> stringified payload
           onSubmitBlock(msg.id);
@@ -370,6 +402,7 @@ export function MessageBlockRenderer({
   return (
     <fieldset
       key={msg.id}
+      ref={fieldsetRef}
       className={effectiveSubmitted || executing ? "opacity-80" : undefined}
       disabled={effectiveSubmitted || executing}
       aria-disabled={effectiveSubmitted || executing}

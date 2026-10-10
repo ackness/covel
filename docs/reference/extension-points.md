@@ -66,7 +66,9 @@ export default function (covel) {
 
 输入包含 `messages`、`existingSummaries`、`locale`、`estimatedTokens`、`contextWindow`、`inputWindow` 与 `summaryBudget: {maxTokens, maxSegmentTokens, maxSegments}`。`contextWindow` 是 story 与 fast 扣除响应预留后的较小容量，用于触发阈值和摘要总预算；`inputWindow` 是 fast 自身输入容量，摘要请求须装入该容量。
 
-输出为 `null` 或 `{summaries: [{messageIds, replacesSummaryIds, content, focusSections, truncated?}]}`。每段必须覆盖连续未压缩消息前缀或最旧连续摘要段中的一种。宿主校验引用、顺序和预算，在事务中只替换被列出的摘要及其对应消息标记。默认提供者保留稳定分段，超出总预算或八段上限时才合并最旧连续段；单段预算随源文本量和窗口增长。具体预算见[提示词结构](prompt-structure.md)。
+输出为 `null` 或 `{summaries: [{messageIds, replacesSummaryIds, content, focusSections, truncated?}], deferred?: {reason}}`。每段必须覆盖连续未压缩消息前缀或最旧连续摘要段中的一种。宿主校验引用、顺序和预算，在事务中只替换被列出的摘要及其对应消息标记。默认提供者保留稳定分段，超出总预算或八段上限时才合并最旧连续段；单段预算随源文本量和窗口增长。具体预算见[提示词结构](prompt-structure.md)。
+
+新摘要已经生成、但合并旧摘要失败时，提供者不丢弃新摘要：它只返回新摘要并带 `deferred: {reason}`，合并留给之后的回合。宿主照常保存，并把 `reason` 按失败记录（`context.compaction.failed`，计入连续失败次数）；这种情况下摘要总量可以暂时超出预算，上限是预算的两倍（段数和 token 都是），超过后结果被拒绝。
 
 `null` 只表示「没有可压缩的内容」。提供者无法完成一次压缩（模型报错或超时、摘要为空、合并失败、输入装不进窗口）时必须抛出带原因的错误，不要返回 `null`：宿主按 `onError: "skip"` 跳过该提供者，并把原因随回合 trace 记为 `context.compaction.failed`（`/debug` 可见）。每个超过阈值的回合都会重试一次；同一会话连续失败达到 3 次后，玩家会在执行时间线里看到一条已失败的任务，说明故事记忆无法压缩以及可以做什么，之后每再失败 3 次重复一次。成功压缩或一次无失败的运行会清零计数；计数只存在服务进程内，重启后重新累计。
 

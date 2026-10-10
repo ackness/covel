@@ -18,10 +18,18 @@ import type {
   MusicGenerateOutput,
   PluginRuntimeGateway,
 } from "@covel/shared/plugin-runtime";
+import { resolveTargetIdentity } from "./media-cache-key.js";
 
-/** Deterministic key over generation params — identical calls dedupe. */
-function promptHashOf(input: MusicGenerateInput): string {
+/**
+ * Deterministic key over the model and the generation params — identical
+ * calls dedupe, and a role bound to another model composes again.
+ */
+function promptHashOf(
+  input: MusicGenerateInput,
+  target: readonly unknown[] | null,
+): string {
   const canonical = JSON.stringify([
+    target,
     input.presetId ?? "",
     input.prompt,
     input.lyrics ?? "",
@@ -58,7 +66,10 @@ export function createRuntimeMusicContext(
 
     async generate(input: MusicGenerateInput): Promise<MusicGenerateOutput> {
       input.signal?.throwIfAborted();
-      const promptHash = promptHashOf(input);
+      const promptHash = promptHashOf(
+        input,
+        resolveTargetIdentity(gateway, input.presetId ?? "music", "music"),
+      );
 
       // Framework-injected keys are spread last so plugin-supplied
       // `metadata` can never override them. Same write/read contract as

@@ -1,6 +1,5 @@
 import * as api from "@/services/api.js";
 import { ApiError } from "@/services/api/request.js";
-import { emitToast } from "@/lib/toast-channel.js";
 import i18n from "i18next";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { resolvePluginRpcApprovalResponse } from "@/components/session/plugin-rpc-ui.js";
@@ -12,7 +11,12 @@ import {
 } from "./game-state.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
-import type { SessionDispatch, SessionState } from "./types.js";
+import type {
+  FormIssue,
+  InteractionSubmitResult,
+  SessionDispatch,
+  SessionState,
+} from "./types.js";
 import { canRunSessionAction } from "./selectors.js";
 import {
   finalizeActionExecution,
@@ -35,11 +39,34 @@ interface SubmissionDependencies {
   inFlight: Set<string>;
 }
 
-/** Failed validation leaves the form editable; it must never become free text. */
+/** The refusal's issues, or the whole message as one form-level issue. */
+function readFormIssues(error: ApiError): FormIssue[] {
+  const raw = (error.details as { issues?: unknown } | undefined)?.issues;
+  const issues: FormIssue[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const { field, message } = item as Record<string, unknown>;
+      if (typeof message !== "string" || !message) continue;
+      issues.push(
+        typeof field === "string" && field ? { field, message } : { message },
+      );
+    }
+  }
+  return issues.length > 0
+    ? issues
+    : [{ message: error.response?.error ?? error.message }];
+}
+
+/**
+ * Failed validation leaves the form editable; it must never become free text.
+ * A refusal of the values settles with `rejected` so the form can show each
+ * message under its field.
+ */
 export async function submitInteractionBlock(
   deps: SubmissionDependencies,
   submission: Parameters<SessionActions["submitInteraction"]>,
-): Promise<void> {
+): Promise<InteractionSubmitResult> {
   const [blockId, turnId, interactionId, type, values, submitBehavior] =
     submission;
   const { dispatch, sessionIdRef, inFlight } = deps;
@@ -131,11 +158,7 @@ export async function submitInteractionBlock(
     if (error instanceof ApiError && error.code === "form_rejected") {
       // The server wrote this text for the player, in the session's language.
       // Nothing ran and nothing was stored: the form keeps what they typed.
-      emitToast(
-        "error",
-        i18n.t("form.rejected"),
-        error.response?.error ?? error.message,
-      );
+      return { rejected: readFormIssues(error) };
     } else if (!reportWorkspaceSyncError(error, dispatch)) {
       dispatch({
         type: "SET_EXECUTION_ERROR",

@@ -455,6 +455,10 @@ export interface PluginServiceGateway {
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
       | { kind: "url"; url: string; mime: string }
     >;
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: PluginUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
   synthesizeSpeech?(input: {
@@ -465,6 +469,10 @@ export interface PluginServiceGateway {
     signal?: AbortSignal;
   }): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: PluginUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
   composeMusic?(input: {
@@ -477,6 +485,10 @@ export interface PluginServiceGateway {
     signal?: AbortSignal;
   }): Promise<{
     audio: { mimeType: string; data: Uint8Array };
+    /** Tokens the provider reported; absent for a model billed another way. */
+    usage?: PluginUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
   transcribeAudio?(input: {
@@ -588,7 +600,19 @@ export interface PluginRpcOptions {
   readonly trustLevel?: "builtin" | "community";
 }
 /**
- * Returns the text shown to the player when the submitted values are refused.
+ * One reason a form was refused. With a `field` (a field `name` of the form)
+ * the message is shown under that field; without one, or when the form has no
+ * such field, it is about the form as a whole.
+ */
+export interface PluginFormIssue {
+  readonly field?: string;
+  readonly message: string;
+}
+
+/**
+ * Returns the text shown to the player when the submitted values are refused:
+ * a string for the form as a whole, or one or more `{ field, message }` to
+ * place a message under a field. Return `undefined` to accept the values.
  * `context` carries the session's language and the plugin's translations for
  * it; pass it to `translate`.
  */
@@ -596,7 +620,7 @@ export type PluginFormValidator = (
   values: Readonly<Record<string, unknown>>,
   data: unknown,
   context: PluginMessageContext & { readonly locale: string },
-) => string | undefined;
+) => string | PluginFormIssue | readonly PluginFormIssue[] | undefined;
 
 export interface PluginHttp {
   validateBaseUrl(url: string): {

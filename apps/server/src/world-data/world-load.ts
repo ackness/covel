@@ -106,6 +106,15 @@ async function summarizeSource(
     });
   }
 
+  const editions = metadata.supportedLocales;
+  const declaredLocales = [
+    ...new Set([
+      ...(defaultLocale ? [defaultLocale] : []),
+      ...(Array.isArray(editions)
+        ? editions.filter((item): item is string => typeof item === "string")
+        : []),
+    ]),
+  ];
   const isDimensions =
     parsedTarget?.kind === "world-metadata" &&
     parsedTarget.path.join(".") === "dimensions";
@@ -116,7 +125,13 @@ async function summarizeSource(
     source,
     undefined,
     isDimensions
-      ? { overlays: { mode: "compile", baseLocale: defaultLocale } }
+      ? {
+          overlays: {
+            mode: "compile",
+            baseLocale: defaultLocale,
+            declared: declaredLocales,
+          },
+        }
       : {},
   );
   diagnostics.push(...read.diagnostics);
@@ -138,6 +153,7 @@ async function summarizeSource(
       await findLocaleOverlays(
         source.pathOrigin.descriptorRoot,
         source.descriptor.path,
+        declaredLocales,
       )
     ).map(
       async (overlay) =>

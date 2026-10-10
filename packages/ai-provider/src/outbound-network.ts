@@ -1,5 +1,6 @@
 import { ProxyAgent, fetch as undiciFetch, type Dispatcher } from "undici";
 import { createConnectPinnedDispatcher } from "./adapters/http/dns-safety.js";
+import { OutboundFetchError, SsrfPolicyError } from "./errors.js";
 
 export type OutboundProxyMode = "direct" | "system" | "http" | "socks";
 
@@ -269,23 +270,36 @@ function runtimeFetch(): typeof undiciFetch | typeof globalThis.fetch {
   return process.env.NODE_ENV === "test" ? globalThis.fetch : undiciFetch;
 }
 
+/**
+ * Undici reports "no response" as a bare `TypeError("fetch failed")`: it has
+ * no class or code of its own, so this one text is the only mark. The check
+ * runs here, where the platform error is caught, and the rest of the package
+ * reads the typed `OutboundFetchError`.
+ */
+function isPlatformFetchFailure(error: unknown): error is TypeError {
+  return error instanceof TypeError && error.message === "fetch failed";
+}
+
 function actionableFetchError(error: unknown): Error | unknown {
   let cause: unknown = error;
   let detail: Error | undefined;
   let code: string | undefined;
   for (let depth = 0; cause instanceof Error && depth < 6; depth++) {
-    if (cause.message.startsWith("SSRF policy rejected")) return cause;
+    if (cause instanceof SsrfPolicyError) return cause;
     if (depth > 0) detail = cause;
     const candidateCode = (cause as Error & { code?: unknown }).code;
     if (typeof candidateCode === "string" && candidateCode)
       code = candidateCode;
     cause = cause.cause;
   }
-  if (!(error instanceof Error) || !detail) return error;
+  if (!(error instanceof Error)) return error;
   const prefix = code ? `${code}: ` : "";
-  return new Error(`${error.message}: ${prefix}${detail.message}`, {
-    cause: error,
-  });
+  const message = detail
+    ? `${error.message}: ${prefix}${detail.message}`
+    : error.message;
+  if (isPlatformFetchFailure(error))
+    return new OutboundFetchError(message, { cause: error, code });
+  return detail ? new Error(message, { cause: error }) : error;
 }
 
 /** Fetch with an explicitly compatible Undici dispatcher and useful causes. */

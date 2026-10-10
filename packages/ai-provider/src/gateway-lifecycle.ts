@@ -1,4 +1,4 @@
-import { AiProviderError } from "./errors.js";
+import { AiProviderError, OutboundFetchError } from "./errors.js";
 import {
   awaitLlmRequest,
   createLlmRequestScope,
@@ -73,33 +73,6 @@ export function normalizeError(
     });
   }
 
-  if (error instanceof Error) {
-    try {
-      const parsed = JSON.parse(error.message) as {
-        code?: string;
-        provider?: string;
-        retriable?: boolean;
-        statusCode?: number;
-        details?: Record<string, unknown>;
-      };
-      if (parsed.code && parsed.provider) {
-        const detailMsg = parsed.details
-          ? ` — ${typeof parsed.details.message === "string" ? parsed.details.message : JSON.stringify(parsed.details)}`
-          : "";
-        return new AiProviderError({
-          code: parsed.code as AiProviderError["code"],
-          message: `[${parsed.provider}] HTTP ${parsed.statusCode ?? "?"}${detailMsg}`,
-          provider: parsed.provider,
-          retriable: Boolean(parsed.retriable),
-          statusCode: parsed.statusCode,
-          details: parsed.details,
-        });
-      }
-    } catch {
-      // Not a JSON error message.
-    }
-  }
-
   return new AiProviderError({
     code: "PROVIDER_ERROR",
     message: error instanceof Error ? error.message : "Unknown provider error.",
@@ -135,6 +108,9 @@ function isTransientTransportError(error: unknown): boolean {
     // Generic abort/timeout names can represent the caller's whole deadline.
     // Attempt-level timeout retries belong to the owner of that signal;
     // transport timeouts are identified by the explicit codes above.
+    if (cause instanceof OutboundFetchError) return true;
+    // Fallback for a plugin wire that calls the platform `fetch` itself:
+    // Undici's "no response" error has no class or code, only this text.
     if (cause instanceof TypeError && cause.message === "fetch failed") {
       return true;
     }

@@ -35,6 +35,7 @@ import {
   type WorldGenerationPart,
 } from "@covel/shared";
 import type { LLMAdapter } from "@covel/runtime";
+import type { LLMUsageSummary } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { loadSingleWorld } from "../../world-seed-loader.js";
@@ -71,14 +72,49 @@ interface DoneEvent {
   world: unknown;
   /** How the world falls short of the brief; absent when it does not. */
   warnings?: readonly string[];
+  /** Tokens of every model answer of the request; absent when none was reported. */
+  usage?: AuthoringUsage;
 }
 interface ErrorEvent {
   type: "error";
   message: string;
   /** The model stayed silent for the whole idle timeout; a longer one may help. */
   code?: "model_idle_timeout";
+  /** Tokens the failed generation used, when the model reported any. */
+  usage?: AuthoringUsage;
 }
 type GenerateEvent = ProgressEvent | DoneEvent | ErrorEvent;
+
+interface AuthoringUsage {
+  inputTokens: number;
+  outputTokens: number;
+  /** Model answers counted: parts, repeated requests and repairs. */
+  requests: number;
+}
+
+/** Adds up what `createWorld` reports for each model answer. */
+function authoringUsage() {
+  const total: AuthoringUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    requests: 0,
+  };
+  return {
+    add(usage: LLMUsageSummary) {
+      total.inputTokens += usage.inputTokens;
+      total.outputTokens += usage.outputTokens;
+      total.requests += 1;
+    },
+    /** The field of an event; empty when the model reported no tokens. */
+    field(): { usage?: AuthoringUsage } {
+      return total.inputTokens + total.outputTokens > 0
+        ? { usage: { ...total } }
+        : {};
+    },
+    describe: () =>
+      `tokens in=${total.inputTokens} out=${total.outputTokens} requests=${total.requests}`,
+  };
+}
 
 class WorldAuthoringConflictError extends Error {}
 
@@ -348,6 +384,7 @@ aiRoutes.post(
       let generatedWorldDir: string | undefined;
       let activated = false;
       const progress = partProgress(send);
+      const usage = authoringUsage();
       try {
         shutdownSignal?.throwIfAborted();
         await send({ type: "progress", phase: "generating" });
@@ -373,6 +410,7 @@ aiRoutes.post(
             : c.req.raw.signal,
           idleTimeoutMs: idleTimeout.value,
           onProgress: progress.report,
+          onUsage: usage.add,
           logger: {
             info: (...args: unknown[]) => console.log("[createWorld]", ...args),
             warn: (...args: unknown[]) =>
@@ -388,7 +426,7 @@ aiRoutes.post(
         const elapsedMs = Date.now() - startMs;
 
         console.log(
-          `[ai/generate-world] createWorld finished in ${elapsedMs}ms success=${result.success} id=${result.id}`,
+          `[ai/generate-world] createWorld finished in ${elapsedMs}ms success=${result.success} id=${result.id} ${usage.describe()}`,
         );
 
         if (!result.success) {
@@ -402,6 +440,7 @@ aiRoutes.post(
             ...(result.idleTimeout
               ? { code: "model_idle_timeout" as const }
               : {}),
+            ...usage.field(),
           });
           return;
         }
@@ -468,6 +507,7 @@ aiRoutes.post(
           type: "done",
           world: record,
           ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+          ...usage.field(),
         });
       } catch (err) {
         if (c.req.raw.signal.aborted || shutdownSignal?.aborted) throw err;
@@ -621,6 +661,7 @@ aiRoutes.post(
         await stream.writeSSE({ data: JSON.stringify(event) });
       };
       const progress = partProgress(send);
+      const usage = authoringUsage();
       try {
         shutdownSignal?.throwIfAborted();
         await send({ type: "progress", phase: "generating" });
@@ -644,6 +685,7 @@ aiRoutes.post(
           signal,
           idleTimeoutMs: idleTimeout.value,
           onProgress: progress.report,
+          onUsage: usage.add,
           logger: {
             info: (...args: unknown[]) => console.log("[reviseWorld]", ...args),
             warn: (...args: unknown[]) =>
@@ -661,6 +703,7 @@ aiRoutes.post(
             ...(generated.idleTimeout
               ? { code: "model_idle_timeout" as const }
               : {}),
+            ...usage.field(),
           });
           return;
         }
@@ -755,12 +798,13 @@ aiRoutes.post(
                 .get("sessionLock")
                 .withLock(worldOperationLockId(existing.id), save);
         console.log(
-          `[ai/revise-world] world revised: id=${record.id} saveTarget=${saveTarget}`,
+          `[ai/revise-world] world revised: id=${record.id} saveTarget=${saveTarget} ${usage.describe()}`,
         );
         await send({
           type: "done",
           world: record,
           ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+          ...usage.field(),
         });
       } catch (err) {
         if (c.req.raw.signal.aborted || shutdownSignal?.aborted) throw err;

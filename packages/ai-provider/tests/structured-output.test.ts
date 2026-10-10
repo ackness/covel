@@ -93,7 +93,7 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
         messages,
         schema: z.object({ required: z.string() }),
       }),
-    ).rejects.toThrow("SCHEMA_VALIDATION_FAILED");
+    ).rejects.toMatchObject({ code: "SCHEMA_VALIDATION_FAILED" });
   });
 
   it("describes transform inputs and still applies transforms and defaults", async () => {
@@ -126,7 +126,7 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
           count: z.number().refine((value) => value % 2 === 0),
         }),
       }),
-    ).rejects.toThrow("SCHEMA_VALIDATION_FAILED");
+    ).rejects.toMatchObject({ code: "SCHEMA_VALIDATION_FAILED" });
   });
 
   it("rejects unrepresentable input schemas before making a request", async () => {

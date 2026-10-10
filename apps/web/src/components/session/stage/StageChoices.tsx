@@ -4,6 +4,7 @@ import type { StageChoicesModel } from "@covel/shared";
  * suggested replies, and free-text composer in one continuous surface so a
  * player never has to infer what an isolated choice is responding to.
  */
+import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import { clsx } from "clsx";
 import { ChevronDown, Loader2, Send } from "lucide-react";
 import {
@@ -37,7 +38,7 @@ export interface StageChoicesProps {
     type: "form" | "choice" | "confirmation",
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
-  ) => Promise<void>;
+  ) => Promise<InteractionSubmitResult>;
   readonly onSendMessage: (text: string) => void;
 }
 

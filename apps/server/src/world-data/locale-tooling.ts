@@ -521,12 +521,7 @@ async function overlayOf(
   locale: string,
 ): Promise<{ file: string; path: string } | undefined> {
   const overlays = await findLocaleOverlays(worldDir, file);
-  return (
-    overlays.find((overlay) => overlay.locale === locale) ??
-    overlays.find(
-      (overlay) => overlay.locale.split("-")[0] === locale.split("-")[0],
-    )
-  );
+  return overlays.find((overlay) => overlay.locale === locale);
 }
 
 /** What `locale` translates of the world, file by file, and what it lacks. */

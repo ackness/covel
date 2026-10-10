@@ -77,6 +77,25 @@ describe("openai-speech wire", () => {
     expect(body).not.toHaveProperty("parameterOverrides");
   });
 
+  it("lets a role's metadata fix the voice but not the model or the text", async () => {
+    const fn = mockSpeechFetch();
+
+    await openAiSpeechWire.synthesize(config, {
+      model: "tts-1",
+      text: "hello",
+      voice: "alloy",
+      providerRequestMetadata: {
+        voice: "nova",
+        model: "another-model",
+        input: "other words",
+      },
+    });
+
+    expect(
+      JSON.parse((fn.mock.calls[0]![1] as RequestInit).body as string),
+    ).toEqual({ model: "tts-1", input: "hello", voice: "nova" });
+  });
+
   it("throws on non-2xx responses", async () => {
     mockSpeechFetch(400);
 

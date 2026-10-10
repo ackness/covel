@@ -1691,11 +1691,12 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 ```json
 { "error": "turnId is required" }                           // 400
 { "error": "submissions[] is required" }                    // 400
-{ "error": "请填写“姓名”。", "code": "form_rejected" }        // 400
+{ "error": "请填写“姓名”。", "code": "form_rejected",
+  "details": { "issues": [{ "field": "name", "message": "请填写“姓名”。" }] } }  // 400
 { "error": "Session not found: <id>", "code": "session_not_found" }  // 404
 ```
 
-`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。客户端把这段文字显示在表单旁边，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
+`form_rejected` 表示玩家填的值没有通过校验（必填、数字、范围、步长、选项，或来源插件的表单校验器）：`error` 是按会话 locale 写给玩家的文字，用字段的 `label` 指出哪一项、该怎么改；没有任何内容落库，同一张表单可以改正后再次提交。`details.issues` 列出每条拒绝原因 `{ field?, message }`：`field` 是表单字段的 `name`，没有 `field` 的是整张表单的错误；所有出错的字段一次全部列出，`error` 是这些 `message` 用换行连起来的同一段文字。客户端把每条消息显示在对应字段下面并聚焦第一个出错的字段，整张表单的错误显示在字段上方，不把它当成请求失败。没有 `code` 的 400 是客户端不该发出的请求。
 
 **使用说明:**
 
@@ -3223,6 +3224,8 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 - `manifest` 或 `lore` 三次都失败时，整个生成失败。
 - 补充内容或契约数据三次都失败时，世界照常创建，只是没有这一部分，`done` 帧的 `warnings` 说明缺了什么；之后可以用 `revise-world` 补上。
 - 校验完成前不会写入半成品。
+
+`done` 帧带 `usage: { inputTokens, outputTokens, requests }`：这次生成里每一次模型回答的 token 之和，包括重新请求的部分、被截断而没有采用的回答和 lore 修复；`requests` 是计入的回答数。生成失败时，`error` 帧带同样的字段。模型没有报告用量时不带这个字段。服务端日志同时记录这三个数。`revise-world` 相同。
 
 内容校验、模型无输出或输出不完整的诊断仍通过 SSE 报告。未知模型请求异常只将详情写入服务端日志，公开提示检查模型配置或日志；生产环境其他未知异常返回 `Internal server error`。修订冲突保留重新加载提示，发布与恢复同时失败时保留完整备份路径供已授权的操作者恢复。
 

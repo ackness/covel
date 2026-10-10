@@ -120,6 +120,17 @@ export interface PendingInteractionDraft {
   submitBehavior?: { echoFilledNarrative?: boolean };
 }
 
+/** One reason the server refused a form; `field` is the field's `name`. */
+export interface FormIssue {
+  readonly field?: string;
+  readonly message: string;
+}
+
+/** What a form submission settles with: `rejected` when the server refused the values. */
+export type InteractionSubmitResult = {
+  readonly rejected: readonly FormIssue[];
+} | void;
+
 export interface AssetProgressEvent {
   assetId?: string;
   phase: string;

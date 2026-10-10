@@ -293,6 +293,7 @@ export async function executeFunctionRuntime({
             synthesizeSpeech:
               tracedGateway.synthesizeSpeech.bind(tracedGateway),
             transcribeAudio: tracedGateway.transcribeAudio.bind(tracedGateway),
+            resolveSlot: tracedGateway.resolveSlot.bind(tracedGateway),
           },
           deps.mediaStore,
           mediaHandle,

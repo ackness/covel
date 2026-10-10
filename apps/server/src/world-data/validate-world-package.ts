@@ -18,9 +18,7 @@ import { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "@covel/context";
 import {
   DEFAULT_LOCALE,
   estimateTokens,
-  isKnownLocale,
   isValidPluginSetting,
-  localeLanguage,
   applyLocaleOverlay,
   findInlineLocaleMaps,
   narratorLore,
@@ -38,6 +36,8 @@ import {
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   findLocaleOverlays,
+  findMisnamedLocaleFiles,
+  misnamedLocaleMessage,
   readWorldManifestSource,
   type LocaleOverlayFileIssue,
 } from "./locale-overlays.js";
@@ -252,9 +252,6 @@ async function checkThemeMusic(
 }
 
 /** `<name>.<language>.<ext>`: a translation file named with a bare language. */
-const BARE_LANGUAGE_FILE = /^(.+)\.([A-Za-z]{2,3})\.(md|ya?ml|json)$/;
-const MAX_SCANNED_FILES = 5000;
-
 /**
  * A translation file is named with the locale exactly as `supportedLocales`
  * writes it (`WORLD.en-US.md`, `world.en-US.yaml`). A bare language (`.en`)
@@ -265,55 +262,16 @@ async function checkLocaleFileNames(
   worldDir: string,
   manifest: WorldManifestView,
 ): Promise<WorldPackageDiagnostic[]> {
-  const declared = declaredLocales(manifest);
-  const diagnostics: WorldPackageDiagnostic[] = [];
-  let scanned = 0;
-  async function visit(directory: string): Promise<void> {
-    let entries;
-    try {
-      entries = await readdir(path.join(worldDir, directory), {
-        withFileTypes: true,
-      });
-    } catch {
-      return;
-    }
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
-      const relative = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        await visit(relative);
-        continue;
-      }
-      if (!entry.isFile() || ++scanned > MAX_SCANNED_FILES) continue;
-      const match = BARE_LANGUAGE_FILE.exec(entry.name);
-      if (!match) continue;
-      const [, name, tag, extension] = match as unknown as [
-        string,
-        string,
-        string,
-        string,
-      ];
-      if (!isKnownLocale(tag)) continue;
-      const exact = declared.find(
-        (locale) =>
-          locale.toLowerCase() !== tag.toLowerCase() &&
-          localeLanguage(locale) === tag.toLowerCase(),
-      );
-      if (!exact || declared.some((l) => l.toLowerCase() === tag.toLowerCase()))
-        continue;
-      const renamed = path.join(directory, `${name}.${exact}.${extension}`);
-      diagnostics.push({
-        level: "error",
-        code: "locale-file-name",
-        file: relative,
-        locales: [exact],
-        message: `\`${entry.name}\` names its language as "${tag}", but the world declares "${exact}"`,
-        hint: `Rename it to \`${renamed}\`. A translation file uses the locale exactly as \`supportedLocales\` writes it.`,
-      });
-    }
-  }
-  await visit("");
-  return diagnostics;
+  return (
+    await findMisnamedLocaleFiles(worldDir, declaredLocales(manifest))
+  ).map((item) => ({
+    level: "error",
+    code: "locale-file-name",
+    file: item.file,
+    locales: [item.exact],
+    message: misnamedLocaleMessage(item),
+    hint: `Rename it to \`${item.renamed}\`. A translation file uses the locale exactly as \`supportedLocales\` writes it.`,
+  }));
 }
 
 /** The app shows `cover` only when the server can serve the file. */
