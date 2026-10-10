@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+<!-- changelog:legacy-entries: the entries below were written here before fragments existed. `pnpm changelog:release` moves them to the release and removes this comment; after that this section holds no entry. -->
+
+Entries for the next release are in [`changelog.d/`](./changelog.d/README.md), one file per change; do not add lines here. `pnpm changelog:preview` prints them as this section.
+
 ### Breaking
 
 - **The app's page runs no inline script and frames only its own origin.** The page policy is now `script-src 'self'` (it had `'unsafe-inline'`) with `frame-src 'self'`. A self-hosted deployment whose reverse proxy or static host injects an inline `<script>` into the page (an analytics snippet, a banner) must load it from a file on the app's origin instead, or it will not run. The build has a new file, `/plugin-frame.html`, which a static host must serve as that file and not as the single-page fallback; a host that copies `dist/web` whole needs no change. Plugin authors change nothing: a `webview` document keeps inline scripts, inline event attributes and inline styles.

@@ -2,6 +2,10 @@ name: CI
 
 # Verify PRs and main, and reuse the same gates for release packaging.
 #
+# This is the complete gate. The local pre-push hook runs the static gate and
+# only the test suites of the packages a push changed (scripts/check-push.mjs);
+# every suite runs here: `verify` (all but web and server), `web`, `server`.
+#
 # Push is scoped to main deliberately. A `*-dev` branch with an open PR gets
 # two runs of the same commit otherwise — the PR ref and the branch ref hash
 # to different concurrency groups, so neither cancels the other. The PR run
