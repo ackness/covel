@@ -10,8 +10,10 @@
 ├─ 文本 chat completions，OpenAI 完全兼容（Authorization: Bearer + 标准 messages）
 │   └─ 用 ctx.gateway.generateText({ presetId, messages })，框架管一切
 │
-├─ 文本但鉴权头不是 Bearer（api-key、x-api-key、自定义 header）
-│   └─ 自管 wire：ctx.gateway.resolveSlot(...) 取 baseUrl/apiKey/model，自己 fetch
+├─ 文本但请求格式或鉴权头不是内置四种协议的（api-key、x-api-key、自定义 header、原生接口）
+│   └─ 文本 wire：entry 里 covel.registerWires({ text: [...] })，id 写进 contributes.wires，
+│      模型的 protocol 写 <pluginId>/<wireId>（参考 docs/reference/plugin-extensions.md#文本协议-wire）；
+│      只有不是模型对话的调用才自己 fetch
 │
 ├─ 图像生成
 │   └─ 先用 ctx.images.generate（框架 wire：openai-images / dashscope-wan）；
@@ -22,8 +24,11 @@
 │      openai-transcription）；协议不同的 provider 同样走 covel.registerWires()
 │      注册自己的 wire，而不是在 handler 里 fetch。范例：plugins/mimo-tts
 │
+├─ 音乐生成
+│   └─ ctx.music.generate + covel.registerWires({ music: [...] })（框架没有内置的音乐 wire）
+│
 ├─ Embedding / 视频生成
-│   └─ 一定自管 wire（框架没有这两类的 wire 注册表）
+│   └─ 一定自管 wire（框架没有这两类的 wire 注册表；embedding 不走文本 wire）
 │
 ├─ Async submit + poll（DashScope wan2.x、某些视频 API）
 │   └─ 一定自管 wire（框架的 generateText 不会等任务）

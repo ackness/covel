@@ -239,9 +239,9 @@ integration in `apps/desktop/src/main.ts`, and the publishing configuration abov
 
 ## Release checklist
 
-- [ ] Align the root, `apps/*` and `packages/*` manifest versions with the release tag; plugin and world packages may version independently
-- [ ] Run `pnpm changelog:release <version>`: it moves the fragments in `docs/changelog.d/` and any entry under `[Unreleased]` to a `## [<version>] - <date>` section of `docs/CHANGELOG.md` and deletes the fragments. Write the summary paragraph under the heading, and check the `Breaking changes in v<version>` and `Upgrade notes for v<version>` sections that the READMEs link to. A fragment merged later needs a second run before the tag
-- [ ] Sync version badges, Release links, and current-version notices in `README.md` and `README.zh-CN.md`
+- [ ] Run `pnpm release:prepare <version> --dry-run`, then `pnpm release:prepare <version>` on a clean tree. It sets the version in the root, `apps/*` and `packages/*` manifests (plugin and world packages version independently and are left alone), updates the version badge and the source-version line of `README.md` and `README.zh-CN.md`, and runs the changelog assembly below. It refuses a version lower than the current one and a tree with uncommitted changes, and it makes no commit, tag or push. A second run with the same version adds only fragments merged since
+- [ ] The changelog step of `pnpm release:prepare` (`pnpm changelog:release <version>` alone does only this step): it moves the fragments in `docs/changelog.d/` and any entry under `[Unreleased]` to a `## [<version>] - <date>` section of `docs/CHANGELOG.md` and deletes the fragments. Write the summary paragraph under the heading, and check the `Breaking changes in v<version>` and `Upgrade notes for v<version>` sections that the READMEs link to. A fragment merged later needs a second run before the tag
+- [ ] Rewrite the upgrade sentence of the current-version notice in `README.md` and `README.zh-CN.md` (the script changes the badge and "Source version" only and names any line that still carries the earlier version); check Release links
 - [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard/constants.ts` if the tutorial changed
 - [ ] Run local `pnpm check`, `pnpm test`, `pnpm test:pg`, `pnpm e2e` and `pnpm release:preflight` sequentially; fix known failures before pushing
 - [ ] Run `pnpm --filter @covel/desktop build`

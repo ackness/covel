@@ -79,6 +79,10 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
 
 `schemas/note.schema.json` 应验证 `{id,text}`。工具返回的 proposals 进入当前执行缓冲，提交时统一校验和持久化。不要绕过 proposal 管线直接操作宿主事务，也不要把 sessionId/pluginId 作为用户输入交给存储。
 
+agent 只通过 `agent.tools` 里的工具写入。最终 JSON 里的 `statePatches`、`pluginData`、`notifications`、`assetGenerations`、`interactions`、`ui` 和带 `topic` 的事件不会变成 effects：内核把它们去掉，并在服务端日志里写下 runtime 和字段名。需要写数据就给 agent 一个工具（上面的 `save-note`、内置的 `plugin-data-set`、`emit-event`、`create-notification`）并列进 `agent.tools`；`preGameDone` / `completion` 仍用来报告完成。
+
+一个 `plugin.data` 值序列化成 JSON 后最多 256 KiB（见[数据归属](plugin-authoring.md#数据归属)）。
+
 `withPendingProposals(content, proposals)` 始终返回显式对象 `{kind: "covel.tool-result", content, pendingProposals}`，也适用于字符串或冻结的正文。组合工具和测试通过公开 SDK 的 `getToolContent(result)` 读取正文、`getPendingProposals(result)` 读取写入；普通对象展开和 `structuredClone` 会保留两个通道。不要把完整 envelope 当成业务正文。纯读取工具可直接返回正文。
 
 ## 控制历史窗口
@@ -110,6 +114,8 @@ const current = await ctx.store.getPluginData("notes", "current");
 const characters = ctx.world?.characters ?? [];
 ```
 
+`ctx.store.getPluginData` 返回 `{ key, value }` 或 `null`，`listPluginData` 返回这样的行。`ctx.pluginData`（function runtime 里读写，guard 和扩展 handler 里同样的读法）在每种上下文里用同一种读法：`get(namespace, key)` 返回存下的值本身，没有时返回 `null`；`list(namespace)` 返回 `{ key, value, createdAt, updatedAt }`。
+
 这里的 namespace 属于当前插件，会话身份由执行上下文绑定。跨插件共享需要公开服务、输入契约或扩展，不能通过额外 pluginId 参数读取对方私有记录。
 
 需要回看完整故事记录时，按游标分页读取已提交的时间线，包括已被压缩摘要替代的原文：
@@ -127,6 +133,29 @@ await ctx.pluginData.set("progress", "cursor", after ?? null);
 ```
 
 `limit` 默认 100、最大 500。`cursor` 是不透明字符串，指向最后读到的消息（空页时原样返回 `after`），`hasMore` 为 `false` 表示已读到当前末尾。把游标存进自己的 plugin-data，下次执行只读新增部分。
+
+## 表单
+
+要向玩家要结构化输入（建角色、配点），agent 调用内置 `create-form`，function runtime 在 `effects.interactions` 里返回同样形状的 `{ type: "form", interactionId, title, fields, submitLabel }`（SDK 类型 `PluginFormInteraction`）。可选的 `notice` 是字段上方的一行说明，用来告诉玩家为什么又看到这张表单（例如上一次提交没法用），写成会话语言。
+
+表单自带的检查（必填、范围、选项）之外，业务规则放在校验器里：根 `PLUGIN.md` 的 `contributes.forms` 声明名字，表单的 `validation: { name }` 引用它，entry 用 `covel.registerFormValidator` 注册：
+
+```js
+covel.registerFormValidator("point-buy", (values, data, context) => {
+  const issues = [];
+  if (Number(values.strength) > 15) {
+    issues.push({
+      field: "strength",
+      message: translate(context, "Strength is at most 15."),
+    });
+  }
+  return issues.length > 0 ? issues : undefined;
+});
+```
+
+校验器是同步纯函数，第三个参数是会话语言和本插件在该语言下的翻译。返回字符串是整张表单的错误；返回 `{ field, message }` 或它们的数组（`PluginFormIssue`）时，玩家在对应字段下面看到每一条，所有出错的字段一次全部列出。被拒绝的提交返回 `400` 和 `code: "form_rejected"`，不写入任何内容，玩家填的值保留。
+
+同一张表单（同一个 `turnId` 和 `interactionId`）只能回答一次：答案之后已有回合开始时，再次提交返回 `code: "interaction_already_submitted"`。别的标签页或设备重新载入时，`GET /api/sessions/:id/view` 的 `submittedInteractions` 把已回答的表单标为已回答。契约见 [tools.md](../reference/tools.md) 和 [api.md](../reference/api.md)。
 
 ## RPC 与玩家命令
 
