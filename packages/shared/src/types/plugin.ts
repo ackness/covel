@@ -570,7 +570,14 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    * Streaming first-token (TTFB) timeout in ms. Fires when a streaming LLM
    * call is established but emits no text, reasoning or tool-call event
    * before the threshold — typical symptom of a hung provider with a live TCP
-   * socket. Default 120000. Ignored for non-streaming calls.
+   * socket. Ignored for non-streaming calls.
+   *
+   * A value set here is the wait of every attempt. Without one, an attempt
+   * waits at most 120000 and no longer than leaves room, inside what is left
+   * of `timeoutMs`, for the retries `maxRetries` still allows: the last
+   * attempt may wait for all that is left, an earlier one for its equal
+   * share or 60000 when the share is shorter, never more than half. Set it
+   * for a model whose first output takes longer than that.
    */
   readonly firstTokenTimeoutMs?: number;
   /**

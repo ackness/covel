@@ -13,8 +13,9 @@ import type { LLMProviderRequest } from "@covel/shared";
  *
  * Five retry triggers:
  *   - first-token-timeout: streaming call produced no text/tool event before
- *     `firstTokenTimeoutMs` (default 30s) — provider socket alive but model
- *     stuck.
+ *     its first-token wait ended (`firstTokenWaitMs`: `firstTokenTimeoutMs`,
+ *     120s by default, shortened so the retries left still fit into the
+ *     runtime's time) — provider socket alive but model stuck.
  *   - call-timeout: whole call exceeded `callTimeoutMs` (derived from the
  *     runtime budget + retry count) — uses AbortSignal.timeout.
  *   - transient-error: AbortError / timeout / network / 5xx / RATE_LIMITED /
@@ -66,6 +67,7 @@ import {
   computeDeadlineBudget,
   exhaustedError,
   extractMessage,
+  firstTokenWaitMs,
   isOutputTruncated,
   isTransientError,
   isTerminalLlmRequestError,
@@ -539,11 +541,14 @@ export async function streamLLMWithRetry(
         if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
 
         // `callTimeoutMs` is the total limit of a non-streaming call. A stream
-        // reports its progress, so only the runtime deadline bounds the wait
-        // for its first output.
-        const budget = computeDeadlineBudget(
-          Math.min(effectiveDeadline, requestScope.budget.deadline),
-        );
+        // reports its progress, so the first-token guard bounds the wait for
+        // its first output, and the runtime deadline bounds the attempt.
+        const remainingMs = (): number =>
+          computeDeadlineBudget(
+            Math.min(effectiveDeadline, requestScope.budget.deadline),
+          );
+        const budget = remainingMs();
+        const attemptsLeft = policy.maxRetries - attempt + 1;
         // Compose four abort sources into one per-attempt signal:
         //   1. runtime deadline — armed on attempt start, disarmed on first output
         //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first output
@@ -562,16 +567,19 @@ export async function streamLLMWithRetry(
           );
         }, budget);
         const armFirstTokenGuard = () =>
-          setTimeout(() => {
-            if (!firstTokenSeen) {
-              callAborter.abort(
-                new StreamAttemptTimeoutError(
-                  "first-token",
-                  "first-token timeout",
-                ),
-              );
-            }
-          }, policy.firstTokenTimeoutMs);
+          setTimeout(
+            () => {
+              if (!firstTokenSeen) {
+                callAborter.abort(
+                  new StreamAttemptTimeoutError(
+                    "first-token",
+                    "first-token timeout",
+                  ),
+                );
+              }
+            },
+            firstTokenWaitMs(policy, attemptsLeft, remainingMs()),
+          );
         let ttfbHandle = armFirstTokenGuard();
         // A rate-limited or failed transport attempt is followed by a backoff
         // the provider asked for (`retry-after`); the model has not been asked

@@ -255,7 +255,7 @@ export const runtimeAuthoringManifestSchema = z
               .int()
               .positive()
               .describe(
-                "Time limit for the first streamed token in ms. Defaults to 120000.",
+                "Time limit for the first streamed token in ms, the same for every attempt. Without it an attempt waits at most 120000, and no longer than leaves room in `timeoutMs` for the retries still allowed.",
               )
               .optional(),
             idleTimeoutMs: z

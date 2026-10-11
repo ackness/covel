@@ -33,6 +33,7 @@ import type {
   LLMResponse,
   LLMStreamEvent,
 } from "../src/llm/llm-adapter.js";
+import { createLlmRequestBudget } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 
 // ── Mock LLM builders ───────────────────────────────────────────────
@@ -746,6 +747,7 @@ describe("streamLLMWithRetry", () => {
         policy: {
           ...buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 0 }),
           firstTokenTimeoutMs: 50,
+          firstTokenTimeoutFixed: true,
         },
         deadline: Date.now() + 10_000,
       });
@@ -852,6 +854,102 @@ describe("streamLLMWithRetry", () => {
 describe("streamLLMWithRetry silence limits", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  /** A stream that answers `afterMs` after the request was sent. */
+  function answersAfter(afterMs: number): StreamScript {
+    return {
+      events: [
+        { delay: afterMs },
+        { type: "text-delta", textDelta: "ok" },
+        { type: "done", finishReason: "stop" },
+      ],
+    };
+  }
+  /** The limits of a bookkeeping agent: 120 s for the runtime, three retries. */
+  const bookkeeping = { runtimeTimeoutMs: 120_000, maxRetries: 3 } as const;
+
+  it("retries a stream that stalls once inside the runtime's time", async () => {
+    // The provider accepts the request and then sends nothing.
+    const llm = createScriptedStreamLLM([
+      answersAfter(3_600_000),
+      answersAfter(5_000),
+    ]);
+    const onRetry = vi.fn();
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy(bookkeeping),
+      deadline: Date.now() + bookkeeping.runtimeTimeoutMs,
+      onRetry,
+    });
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(llm.attempts).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 1, reason: "first-token-timeout" }),
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    const result = await pending;
+    expect(result.attempt).toBe(1);
+    expect(result.response.content).toBe("ok");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("gives every allowed attempt of a model that never answers a share of the time", async () => {
+    const llm = createScriptedStreamLLM(
+      Array.from({ length: 4 }, () => answersAfter(3_600_000)),
+    );
+    const retriedAt: number[] = [];
+    const startedAt = Date.now();
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy(bookkeeping),
+      deadline: startedAt + bookkeeping.runtimeTimeoutMs,
+      onRetry: () => retriedAt.push(Date.now() - startedAt),
+    });
+    // The last wait ends with the runtime's time, whichever limit reports it.
+    const rejected = expect(pending).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(bookkeeping.runtimeTimeoutMs);
+    await rejected;
+
+    expect(retriedAt).toEqual([60_000, 90_000, 105_000]);
+    expect(llm.attempts).toBe(4);
+  });
+
+  it("waits the whole default for a slow first token when the runtime's time allows it", async () => {
+    // Two attempts in 240 s: each may wait the full 120 s.
+    const llm = createScriptedStreamLLM([answersAfter(110_000)]);
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy({ runtimeTimeoutMs: 240_000 }),
+      deadline: Date.now() + 240_000,
+      // As the agent loop sets it: the call may use the runtime's time.
+      requestBudget: createLlmRequestBudget({ timeoutMs: 240_000 }),
+    });
+    await vi.advanceTimersByTimeAsync(110_000);
+
+    expect((await pending).attempt).toBe(0);
+  });
+
+  it("waits as long as the author's firstTokenTimeoutMs says, whatever the retries left", async () => {
+    const llm = createScriptedStreamLLM([answersAfter(100_000)]);
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy({
+        ...bookkeeping,
+        firstTokenTimeoutMs: 110_000,
+      }),
+      deadline: Date.now() + bookkeeping.runtimeTimeoutMs,
+    });
+    await vi.advanceTimersByTimeAsync(100_000);
+
+    expect((await pending).attempt).toBe(0);
+    expect(llm.attempts).toBe(1);
+  });
 
   /** `chunks` text deltas, `gapMs` apart, then a normal finish. */
   function steadyStream(chunks: number, gapMs: number): StreamScript {
@@ -1114,6 +1212,7 @@ describe("callLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 10_000,
         firstTokenTimeoutMs: 5_000,
+        firstTokenTimeoutFixed: true,
         idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
@@ -1158,6 +1257,7 @@ describe("callLLMWithRetry trace emissions", () => {
           maxRetries: 0,
           callTimeoutMs: 1_000,
           firstTokenTimeoutMs: 1_000,
+          firstTokenTimeoutFixed: true,
           idleTimeoutMs: 30_000,
           loopDetectionThreshold: 3,
         },
@@ -1195,6 +1295,7 @@ describe("callLLMWithRetry trace emissions", () => {
           maxRetries: 0,
           callTimeoutMs: 1_000,
           firstTokenTimeoutMs: 1_000,
+          firstTokenTimeoutFixed: true,
           idleTimeoutMs: 30_000,
           loopDetectionThreshold: 3,
         },
@@ -1234,6 +1335,7 @@ describe("callLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 1_000,
         firstTokenTimeoutMs: 1_000,
+        firstTokenTimeoutFixed: true,
         idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
@@ -1279,6 +1381,7 @@ describe("streamLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 10_000,
         firstTokenTimeoutMs: 5_000,
+        firstTokenTimeoutFixed: true,
         idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
@@ -1329,6 +1432,7 @@ describe("streamLLMWithRetry trace emissions", () => {
           maxRetries: 0,
           callTimeoutMs: 1_000,
           firstTokenTimeoutMs: 1_000,
+          firstTokenTimeoutFixed: true,
           idleTimeoutMs: 30_000,
           loopDetectionThreshold: 3,
         },
@@ -1374,6 +1478,7 @@ describe("streamLLMWithRetry trace emissions", () => {
           maxRetries: 0,
           callTimeoutMs: 1_000,
           firstTokenTimeoutMs: 1_000,
+          firstTokenTimeoutFixed: true,
           idleTimeoutMs: 30_000,
           loopDetectionThreshold: 3,
         },
@@ -1413,6 +1518,7 @@ describe("streamLLMWithRetry trace emissions", () => {
         maxRetries: 0,
         callTimeoutMs: 1_000,
         firstTokenTimeoutMs: 1_000,
+        firstTokenTimeoutFixed: true,
         idleTimeoutMs: 30_000,
         loopDetectionThreshold: 3,
       },
@@ -1435,6 +1541,7 @@ describe("computeAttemptBudget", () => {
     maxRetries: 1,
     callTimeoutMs: 10_000,
     firstTokenTimeoutMs: 30_000,
+    firstTokenTimeoutFixed: true,
     idleTimeoutMs: 30_000,
     loopDetectionThreshold: 3,
   };
@@ -1497,6 +1604,7 @@ describe("thinking stream activity", () => {
         policy: {
           maxRetries: 0,
           firstTokenTimeoutMs: 50,
+          firstTokenTimeoutFixed: true,
           idleTimeoutMs: 30_000,
           callTimeoutMs: 500,
           loopDetectionThreshold: 3,

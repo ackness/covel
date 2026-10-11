@@ -1131,7 +1131,10 @@ const runtimeManifestCommonShape = {
   maxRetries: z.number().int().min(0).max(5).optional(),
   /** Total timeout of one non-streaming LLM call (ms). */
   callTimeoutMs: z.number().int().positive().optional(),
-  /** Streaming first-token (TTFB) timeout (ms). Default 120000. */
+  /**
+   * Streaming first-token (TTFB) timeout (ms). Default: at most 120000,
+   * shortened so the retries left fit into `timeoutMs`.
+   */
   firstTokenTimeoutMs: z.number().int().positive().optional(),
   /** Longest silence of a stream that has started to write (ms). Default 120000. */
   idleTimeoutMs: z.number().int().positive().optional(),

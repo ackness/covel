@@ -115,7 +115,7 @@ tracker 的提示词和 `dimension-rule-get` 给出每个维度的规则、schem
 
 ## 回执、恢复与玩家编辑
 
-host 在叙事提交边界独立登记义务，冻结原 `resultId`、`sourceTurnId`、readVersions，以及带非空 updateRule 的 definitions（静态设定不复制进每张回执）。回执不重复存正文；原文来自该来源的持久 turn artifact。状态为 `pending-settlement`、`settled`、`no-change`、`manual`、`skipped`。失败/未运行/跳过调度不是 no-change；自动失败保留叙事及待结算义务，不破坏其他普通 proposal 的全执行回滚语义。tracker 的模型调用在超时/瞬时错误时自动重试（`maxRetries: 3`；单次调用上限 60 秒、runtime 上限 120 秒，所以卡住不返回的调用只够再试一次，很快返回的失败最多再试三次），仍失败才留下待结算。待结算会挡住之后的回合，所以这里宁可多试。下一次依赖叙事在义务解决前被阻止。已解决的回执每个会话只保留最近 20 条（登记新回执时清理更早的），待结算的回执不会被清理。
+host 在叙事提交边界独立登记义务，冻结原 `resultId`、`sourceTurnId`、readVersions，以及带非空 updateRule 的 definitions（静态设定不复制进每张回执）。回执不重复存正文；原文来自该来源的持久 turn artifact。状态为 `pending-settlement`、`settled`、`no-change`、`manual`、`skipped`。失败/未运行/跳过调度不是 no-change；自动失败保留叙事及待结算义务，不破坏其他普通 proposal 的全执行回滚语义。tracker 的模型调用在超时/瞬时错误时自动重试（`maxRetries: 3`，runtime 上限 120 秒：接了请求却不出字的调用依次最多等 60、30、15、15 秒，见[插件契约](plugins.md)的 `agent.loop`；很快返回的失败最多再试三次），仍失败才留下待结算。待结算会挡住之后的回合，所以这里宁可多试。下一次依赖叙事在义务解决前被阻止。已解决的回执每个会话只保留最近 20 条（登记新回执时清理更早的），待结算的回执不会被清理。
 
 玩家通过 snapshot 受信 recovery metadata 使用既有 runtime RPC：
 

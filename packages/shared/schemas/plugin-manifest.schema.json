@@ -1470,7 +1470,7 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,
-                  "description": "Time limit for the first streamed token in ms. Defaults to 120000."
+                  "description": "Time limit for the first streamed token in ms, the same for every attempt. Without it an attempt waits at most 120000, and no longer than leaves room in `timeoutMs` for the retries still allowed."
                 },
                 "idleTimeoutMs": {
                   "type": "integer",
