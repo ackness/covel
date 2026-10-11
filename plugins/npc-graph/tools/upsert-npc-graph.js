@@ -16,12 +16,9 @@
  *  4. Rewriting edge `sourceName` / `targetName` to node IDs.
  *  5. Versioning edges by (source, target, relation): an unchanged relation is
  *     a no-op, a changed one closes the open version and opens a new one.
- *  6. Maintaining the `index` namespace — adjacency lists keyed by
- *     `by-source:{nodeId}` and `by-target:{nodeId}` for fast k-hop
- *     traversal in the forthcoming retrieval tool.
  *
- * No LLM embedding is performed here — vector storage of edge facts is
- * wired in Phase 3 where the retrieval path lives.
+ * Nodes and edges are the whole stored graph. The retriever builds its
+ * adjacency lists from the edges it reads; no index is stored.
  *
  * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function }} injection
  */
@@ -312,12 +309,6 @@ export default function ({ tool, z, shortIdBatch }) {
       // versioning existed carry no `invalidAt` and therefore read as open —
       // an old session keeps working and simply gets superseded from here on.
       const existingEdgeRows = await readRows("edges");
-      // Edge ids closed this call (superseded or self-healed). Their adjacency
-      // entries are pruned below so a revised relation nets zero index growth
-      // (new id in, old id out) instead of leaving the closed id to accumulate
-      // forever and slow the retriever's per-id lookup.
-      /** @type {Set<string>} */
-      const closedEdgeIds = new Set();
       /** @type {Map<string, any>} */
       const openEdgeByKey = new Map();
       for (const row of existingEdgeRows) {
@@ -346,13 +337,10 @@ export default function ({ tool, z, shortIdBatch }) {
             invalidAt: Math.max(currentTurn, stale.validAt ?? currentTurn),
           },
         });
-        closedEdgeIds.add(stale.id);
       }
 
       /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string; supersedes?: string }>} */
       const edgeResults = [];
-      /** @type {Map<string, { byNode: Map<string, Set<string>> }>} */
-      const adjacencyUpdates = new Map();
 
       for (const incoming of incomingEdges) {
         const src = nodeByName.get(keyOf(incoming.sourceName));
@@ -398,7 +386,6 @@ export default function ({ tool, z, shortIdBatch }) {
               invalidAt: Math.max(currentTurn, openEdge.validAt ?? currentTurn),
             },
           });
-          closedEdgeIds.add(openEdge.id);
         }
         // Every version needs its own id, and neither turn nor batch index
         // guarantees that: tool calls within one turn don't commit between
@@ -441,28 +428,9 @@ export default function ({ tool, z, shortIdBatch }) {
           fact: incoming.fact,
           ...(openEdge ? { supersedes: openEdge.id } : {}),
         });
-
-        // Adjacency index staging
-        stageAdjacency(adjacencyUpdates, `by-source:${src.id}`, edgeId);
-        stageAdjacency(adjacencyUpdates, `by-target:${tgt.id}`, edgeId);
       }
 
-      // ── 5. Load existing index entries for staged keys and merge ──
-      for (const [indexKey, bucket] of adjacencyUpdates) {
-        const existing = await context.store.getPluginData("index", indexKey);
-        /** @type {string[]} */
-        const prev = Array.isArray(existing?.value) ? existing.value : [];
-        const merged = Array.from(
-          new Set([...prev, ...bucket.byNode.get(indexKey)]),
-        ).filter((id) => !closedEdgeIds.has(id));
-        pluginDataWrites.push({
-          namespace: "index",
-          key: indexKey,
-          value: merged,
-        });
-      }
-
-      // ── 6. Persist everything in one batch ──
+      // ── 5. Persist everything in one batch ──
       return withPendingProposals(
         {
           nodes: {
@@ -486,17 +454,4 @@ export default function ({ tool, z, shortIdBatch }) {
       );
     },
   });
-}
-
-/**
- * @param {Map<string, { byNode: Map<string, Set<string>> }>} container
- * @param {string} indexKey
- * @param {string} edgeId
- */
-function stageAdjacency(container, indexKey, edgeId) {
-  const bucket = container.get(indexKey) ?? { byNode: new Map() };
-  const set = bucket.byNode.get(indexKey) ?? new Set();
-  set.add(edgeId);
-  bucket.byNode.set(indexKey, set);
-  container.set(indexKey, bucket);
 }
