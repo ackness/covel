@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { COPY, initialLang, rememberLang, type Lang } from "./copy.js";
 import { Header } from "./components/Header.js";
 import { Hero } from "./components/Hero.js";
-import { Matrix } from "./components/Matrix.js";
+import { Pillars } from "./components/Pillars.js";
 import { CorePlugins } from "./components/CorePlugins.js";
 import { Worlds } from "./components/Worlds.js";
 import { Closing } from "./components/Closing.js";
@@ -32,7 +32,7 @@ export function App() {
       <Header copy={copy} download={download} onToggleLang={toggleLang} />
       <main>
         <Hero copy={copy} download={download} />
-        <Matrix copy={copy} />
+        <Pillars copy={copy} />
         <CorePlugins copy={copy} />
         <Worlds copy={copy} />
       </main>

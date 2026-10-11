@@ -1,3 +1,3 @@
 ### Changed
 
-- **The showcase website tells the plugin story.** The site opens on "Everything is pluggable. Every world is yours." and walks through four chapters (plugins, worlds, ways to play, languages) beside a panel that switches scenes as you scroll and lights up the plugins each mode really runs, taken from the bundled packs. A new section lists the built-in plugins, each with its plugin ID.
+- **The showcase website tells the plugin story.** Its headline reads "Build your own …" and swaps the last words between visual novel, tabletop campaign, epic story and multilingual world. Each swap animates the words letter by letter and carries the subtitle, the colour, the screenshot and a list of the bundled plugins with it, lighting up the ones that mode really runs (taken from the bundled packs). Below, two cards explain the plugin design and world packs. A new section lists the built-in plugins, each with its plugin ID.

@@ -1,21 +1,21 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App.js";
+import { MODE_MS } from "../components/Hero.js";
 import { COPY, LANGS, PLUGIN_IDS } from "../copy.js";
 import { PACKS } from "../packs.js";
 import { detectPlatform, pickDownload } from "../download.js";
 
 beforeEach(() => {
   window.localStorage.clear();
-  vi.stubGlobal(
-    "IntersectionObserver",
-    class {
-      observe() {}
-      disconnect() {}
-    },
-  );
   window.history.replaceState(null, "", "/");
   vi.stubGlobal(
     "matchMedia",
@@ -27,7 +27,6 @@ beforeEach(() => {
         removeEventListener: () => {},
       }) as unknown as MediaQueryList,
   );
-  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
 });
 
 afterEach(() => {
@@ -41,7 +40,7 @@ describe("showcase site", () => {
     window.history.replaceState(null, "", "/?lang=zh");
     render(<App />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
-      COPY.zh.hero.titleA,
+      COPY.zh.hero.lead,
     );
     expect(document.documentElement.lang).toBe("zh-CN");
 
@@ -49,9 +48,37 @@ describe("showcase site", () => {
       screen.getByRole("button", { name: COPY.zh.nav.languageLabel }),
     );
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
-      COPY.en.hero.titleA,
+      COPY.en.hero.lead,
     );
     expect(window.localStorage.getItem("covel-site:lang")).toBe("en");
+  });
+
+  it("cycles the ways to play and lights up each one's plugins", () => {
+    vi.useFakeTimers();
+    try {
+      render(<App />);
+      const selected = () =>
+        screen.getByRole("tab", { selected: true }).textContent;
+      const lit = () =>
+        screen.getByTestId("plugin-rack").querySelectorAll('[data-on="true"]')
+          .length;
+      const [first, second, third] = COPY.en.hero.modes;
+      expect(selected()).toContain(first?.word.replace(/\.$/, ""));
+      expect(lit()).toBe(PACKS.stage.length);
+
+      act(() => vi.advanceTimersByTime(MODE_MS));
+      expect(selected()).toContain(second?.word.replace(/\.$/, ""));
+      expect(lit()).toBe(PACKS.tabletop.length);
+
+      fireEvent.click(
+        screen.getByRole("tab", {
+          name: third?.word.replace(/\.$/, "") ?? "",
+        }),
+      );
+      expect(lit()).toBe(PACKS.story.length);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("has a picture for every world it lists", () => {
@@ -70,11 +97,13 @@ describe("showcase site", () => {
   it("lists the same worlds, steps and plugins in both languages", () => {
     const shape = (lang: (typeof LANGS)[number]) => ({
       worlds: COPY[lang].worlds.list.map((world) => world.id),
-      steps: COPY[lang].matrix.chapters.map((chapter) =>
-        chapter.steps.map((step) => [step.visual, step.points.length]),
-      ),
+      modes: COPY[lang].hero.modes.map((mode) => mode.visual),
+      points: [
+        COPY[lang].pillars.plugin.points.length,
+        COPY[lang].pillars.world.points.length,
+      ],
       plugins: COPY[lang].core.items.map((item) => item.ids),
-      links: COPY[lang].matrix.links.map((link) => link.href),
+      links: COPY[lang].pillars.links.map((link) => link.href),
     });
     expect(shape("zh")).toEqual(shape("en"));
   });

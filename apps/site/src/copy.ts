@@ -17,9 +17,16 @@ export interface Item {
   body: string;
 }
 
-/** What the sticky panel beside a step of the feature matrix shows. */
-export type Visual =
-  "plugin" | "world" | "stage" | "tabletop" | "story" | "languages";
+/** The ways to play the hero cycles through. */
+export type Visual = "stage" | "tabletop" | "story" | "languages";
+
+export interface Mode {
+  visual: Visual;
+  word: string;
+  body: string;
+  /** Describes the screenshot; empty for a scene with no picture. */
+  alt: string;
+}
 
 export interface CorePlugin {
   icon: string;
@@ -28,7 +35,7 @@ export interface CorePlugin {
   body: string;
 }
 
-/** The bundled plugins the matrix panel lights up, in display order. */
+/** The bundled plugins the hero lights up, in display order. */
 export const PLUGIN_IDS = [
   "narrator",
   "chat-mode-narrator",
@@ -51,11 +58,6 @@ export const PLUGIN_IDS = [
 ] as const;
 export type PluginId = (typeof PLUGIN_IDS)[number];
 
-export interface Chapter {
-  title: string;
-  steps: { visual: Visual; points: Item[] }[];
-}
-
 const en = {
   meta: {
     title: "Covel · Everything is pluggable, every world is yours",
@@ -76,112 +78,73 @@ const en = {
   },
   hero: {
     badge: "Open source · Early access",
-    titleA: "Everything is pluggable.",
-    titleB: "Every world is yours.",
-    body: "Plugin-driven · Custom rules · An open-source interactive framework built for multi-agent storytelling and play.",
+    tagline: "Everything is pluggable. Every world is yours.",
+    lead: "Build your own",
+    modes: [
+      {
+        visual: "stage",
+        word: "visual novel.",
+        body: "Character sprites over scene backdrops, typewriter dialogue and replies to pick, with several characters sharing the stage.",
+        alt: "Stage mode in Covel",
+      },
+      {
+        visual: "tabletop",
+        word: "tabletop campaign.",
+        body: "Point-buy at the start, dice checks with a receipt for every roll, quests and inventory. Play freely; the rules make the call.",
+        alt: "Quests, inventory and affinity in a tabletop session",
+      },
+      {
+        visual: "story",
+        word: "epic story.",
+        body: "The story branches on your choices, suggested actions keep it moving, and the world's state follows every turn.",
+        alt: "Story mode in Covel",
+      },
+      {
+        visual: "languages",
+        word: "multilingual world.",
+        body: "An interface in Chinese, English and Russian, worlds with several language editions, and agents that write in the language of the session.",
+        alt: "",
+      },
+    ] satisfies Mode[],
+    modesLabel: "Ways to play",
+    languages: ["简体中文", "English", "Русский"],
     primary: "Download",
     primaryFor: { mac: "Download for macOS", windows: "Download for Windows" },
     otherPlatforms: "Other systems and checksums",
     portable: "Portable version, no install",
     secondary: "View source",
     note: "macOS (Apple silicon) and Windows x64 · MIT licensed",
-    videoLabel: "A Covel session being played",
   },
-  matrix: {
-    eyebrow: "Core features",
-    title: "From plugins to worlds, everything is yours to define.",
-    chapters: [
-      {
-        title: "Plugin-driven to the core",
-        steps: [
-          {
-            visual: "plugin",
-            points: [
-              {
-                title: "Decoupled, plug and play",
-                body: "From tool calls and low-level actions to memory and interface panels, every component in the chain can be plugged in or swapped out.",
-              },
-              {
-                title: "Extend without touching the core",
-                body: "Write or install a plugin to give agents new capabilities and logic, with no changes to the kernel.",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        title: "Worlds and rules, fully customisable",
-        steps: [
-          {
-            visual: "world",
-            points: [
-              {
-                title: "Complete world packs",
-                body: "Build the setting, characters, faction rules and stat systems. Every part of a world is open, readable and yours to change.",
-              },
-              {
-                title: "Persistent state, sandbox play",
-                body: "From a light conversational space to a sandbox with precise rules, the engine runs the world exactly as you set it up.",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        title: "Ways to play, out of the box",
-        steps: [
-          {
-            visual: "stage",
-            points: [
-              {
-                title: "Stage mode",
-                body: "A full-screen visual novel: character sprites over scene backdrops, typewriter dialogue and choices to pick from, with several characters sharing the stage.",
-              },
-            ],
-          },
-          {
-            visual: "tabletop",
-            points: [
-              {
-                title: "TRPG mode",
-                body: "Built for tabletop role-play: point-buy characters, dice checks with visible receipts, quests and inventory. Free-form role-play, with rulings that follow the rules.",
-              },
-            ],
-          },
-          {
-            visual: "story",
-            points: [
-              {
-                title: "Story mode",
-                body: "Classic interactive fiction for long-form play: the story branches on your choices, suggested actions keep you moving, and the world's state follows every turn.",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        title: "Multilingual throughout",
-        steps: [
-          {
-            visual: "languages",
-            points: [
-              {
-                title: "Create across languages",
-                body: "The interface comes in Chinese, English and Russian. Worlds can ship several language editions, agents write in the language of the session, and plugin prompts come in English and Chinese.",
-              },
-            ],
-          },
-        ],
-      },
-    ] satisfies Chapter[],
-    languages: ["简体中文", "English", "Русский"],
-    codeLabel: "plugins/observation/PLUGIN.md",
-    imageAlt: {
-      world: "The world-building agent in Covel",
-      stage: "Stage mode in Covel",
-      tabletop: "Quests, inventory and affinity in a tabletop session",
-      story: "Story mode in Covel",
+  pillars: {
+    eyebrow: "Under the hood",
+    title: "Plugins run the game. You define the world.",
+    plugin: {
+      title: "Plugin-driven to the core",
+      points: [
+        {
+          title: "Decoupled, plug and play",
+          body: "Tools, actions, memory and interface panels are all plugins. Switch any of them on or off per session.",
+        },
+        {
+          title: "Extend without touching the core",
+          body: "Write or install a plugin to give the agents new abilities and rules, with no change to the kernel.",
+        },
+      ] satisfies Item[],
     },
+    world: {
+      title: "Worlds and rules, fully yours",
+      points: [
+        {
+          title: "Complete world packs",
+          body: "Setting, characters, factions, stats, starting items and quests travel in one open package you can read and change.",
+        },
+        {
+          title: "Persistent state, sandbox play",
+          body: "From a light conversation to a sandbox with exact rules, the engine runs the world the way you set it up.",
+        },
+      ],
+    },
+    worldAlt: "The world-building agent in Covel",
     links: [
       { label: "Plugin guide", href: "docs/guide/plugin-authoring.md" },
       { label: "Packaging worlds", href: "docs/guide/collections.md" },
@@ -190,8 +153,6 @@ const en = {
   rack: {
     label: "Plugins on",
     packs: {
-      plugin: "Every bundled plugin",
-      world: "Emberback Relay's own set",
       stage: "Haruka Academy · visual novel",
       tabletop: "Lantern Barrow · classic tabletop",
       story: "Traditional story",
@@ -342,112 +303,73 @@ const zh: Copy = {
   },
   hero: {
     badge: "开源 · 抢先体验",
-    titleA: "一切皆可插拔，",
-    titleB: "每个世界都属于你。",
-    body: "插件驱动 · 规则自定义 · 专为多智能体叙事与演练打造的开源交互框架。",
+    tagline: "一切皆可插拔，每个世界都属于你。",
+    lead: "构建由你定义的",
+    modes: [
+      {
+        visual: "stage",
+        word: "视觉小说舞台",
+        body: "角色立绘叠在场景背景上，打字机式对白和可选回复，多名角色同台登场。",
+        alt: "Covel 的舞台模式",
+      },
+      {
+        visual: "tabletop",
+        word: "跑团冒险",
+        body: "开局配点、掷骰检定，每次判定都有回执，任务与行囊一应俱全。扮演自由，判定照规则来。",
+        alt: "跑团会话里的任务、行囊与好感",
+      },
+      {
+        visual: "story",
+        word: "长篇故事",
+        body: "剧情随你的选择分支，行动建议帮你接上下一步，世界状态逐回合推进。",
+        alt: "Covel 的故事模式",
+      },
+      {
+        visual: "languages",
+        word: "多语言世界",
+        body: "界面支持中、英、俄三种语言，世界可以带多个语言版本，智能体按会话语言写作。",
+        alt: "",
+      },
+    ],
+    modesLabel: "玩法",
+    languages: ["简体中文", "English", "Русский"],
     primary: "下载",
     primaryFor: { mac: "下载 macOS 版", windows: "下载 Windows 版" },
     otherPlatforms: "其他系统和校验文件",
     portable: "便携版（免安装）",
     secondary: "查看源码",
     note: "macOS（Apple 芯片）和 Windows x64 · MIT 许可",
-    videoLabel: "一局 Covel 会话的录屏",
   },
-  matrix: {
-    eyebrow: "核心特性",
-    title: "从插件到世界，一切由你定义。",
-    chapters: [
-      {
-        title: "彻底的插件驱动设计",
-        steps: [
-          {
-            visual: "plugin",
-            points: [
-              {
-                title: "解耦与即插即用",
-                body: "从工具调用、底层动作、记忆机制到交互面板，全链路组件皆为可插拔设计。",
-              },
-              {
-                title: "零侵入扩展",
-                body: "无需改动内核，即可通过开发或引入新插件，为智能体扩展任意外部能力与业务逻辑。",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        title: "深度世界观与规则自定义",
-        steps: [
-          {
-            visual: "world",
-            points: [
-              {
-                title: "全要素世界包",
-                body: "自由构建世界观背景、角色、阵营法则与数值体系，所有世界设定公开透明，支持按需定制。",
-              },
-              {
-                title: "状态持久与沙盒运转",
-                body: "无论是轻度的对话空间，还是规则精密的独立沙盒，世界引擎都会严格按你的设定平稳运转。",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        title: "丰富的开箱即用玩法",
-        steps: [
-          {
-            visual: "stage",
-            points: [
-              {
-                title: "舞台模式（Stage Mode）",
-                body: "全屏视觉小说体验：角色立绘叠在场景背景上，打字机式对白和可选的回复，多名角色同台登场。",
-              },
-            ],
-          },
-          {
-            visual: "tabletop",
-            points: [
-              {
-                title: "跑团生态（TRPG Mode）",
-                body: "专为桌面角色扮演设计：开局配点、掷骰检定和可回看的判定回执，任务与行囊一应俱全。扮演自由，判定照规则来。",
-              },
-            ],
-          },
-          {
-            visual: "story",
-            points: [
-              {
-                title: "故事模式（Story Mode）",
-                body: "经典互动小说：剧情随你的选择分支，行动建议帮你接上下一步，世界状态逐回合推进，适合长篇共创。",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        title: "全链路多语言支持",
-        steps: [
-          {
-            visual: "languages",
-            points: [
-              {
-                title: "跨语言自由创作",
-                body: "界面支持简体中文、英文与俄文；世界可以提供多个语言版本，智能体按会话语言输出，插件提示词提供中英两版。",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-    languages: ["简体中文", "English", "Русский"],
-    codeLabel: "plugins/observation/PLUGIN.md",
-    imageAlt: {
-      world: "Covel 的世界构筑 Agent",
-      stage: "Covel 的舞台模式",
-      tabletop: "跑团会话里的任务、行囊与好感",
-      story: "Covel 的故事模式",
+  pillars: {
+    eyebrow: "底层设计",
+    title: "插件驱动玩法，世界由你定义。",
+    plugin: {
+      title: "彻底的插件驱动设计",
+      points: [
+        {
+          title: "解耦与即插即用",
+          body: "工具、动作、记忆和交互面板全是插件，每个会话都能单独开关。",
+        },
+        {
+          title: "零侵入扩展",
+          body: "不改内核，开发或安装一个插件，就能给智能体加上新能力和新规则。",
+        },
+      ],
     },
+    world: {
+      title: "深度世界观与规则自定义",
+      points: [
+        {
+          title: "全要素世界包",
+          body: "世界观、角色、阵营、数值、初始道具和任务装在一个公开的包里，随时可读可改。",
+        },
+        {
+          title: "状态持久与沙盒运转",
+          body: "从轻度的对话空间到规则精密的沙盒，引擎都按你的设定运转世界。",
+        },
+      ],
+    },
+    worldAlt: "Covel 的世界构筑 Agent",
     links: [
       { label: "插件开发指南", href: "docs/guide/plugin-authoring.md" },
       { label: "世界打包指南", href: "docs/guide/collections.md" },
@@ -456,8 +378,6 @@ const zh: Copy = {
   rack: {
     label: "已启用插件",
     packs: {
-      plugin: "全部内置插件",
-      world: "余烬背中继站 · 世界预设",
       stage: "遥风学园 · 视觉小说",
       tabletop: "提灯古冢 · 经典跑团",
       story: "传统故事模式",
