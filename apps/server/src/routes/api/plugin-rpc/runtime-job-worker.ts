@@ -232,6 +232,14 @@ export class RuntimeJobNoLongerCurrentError extends Error {
   }
 }
 
+/** The lease ran out while every renewal since the last good one failed. */
+class RuntimeJobLeaseLapsedError extends Error {
+  constructor() {
+    super("runtime job owner stopped renewing its lease");
+    this.name = "RuntimeJobLeaseLapsedError";
+  }
+}
+
 class RuntimeJobExecutionTimedOutError extends Error {
   constructor(readonly maxExecutionMs: number) {
     super(`detached runtime job exceeded ${maxExecutionMs}ms execution limit`);
@@ -551,6 +559,20 @@ export function createRuntimeJobWorker(args: {
                 `[runtime-job-worker] lease renewal failed for ${current.jobId}:`,
                 errorMessage(error),
               );
+              // A lease that ran out unrenewed no longer proves ownership:
+              // another worker may already have settled this job as orphaned,
+              // and the commit would be refused. Stop the provider call now.
+              if (
+                current.leaseExpiresAt !== undefined &&
+                Date.now() >= Date.parse(current.leaseExpiresAt)
+              ) {
+                const shouldAbort = !stopRenewing;
+                stopRenewing = true;
+                if (shouldAbort) {
+                  executionAbort.abort(new RuntimeJobLeaseLapsedError());
+                }
+                return;
+              }
               scheduleRenewal();
             }
           })();
@@ -699,18 +721,28 @@ export function createRuntimeJobWorker(args: {
           (error.name === "SessionApprovalScopeChangedError" ||
             error.name === "SessionNotActiveError"));
       const shuttingDown = error instanceof RuntimeJobWorkerClosedError;
+      // The outcome the recovery pass of any worker gives an expired lease.
+      const leaseLapsed = error instanceof RuntimeJobLeaseLapsedError;
       const terminal = await transition(
         current,
         ["claimed", "running", "committing"],
-        shuttingDown ? "cancelled" : stale ? "stale" : "failed",
+        shuttingDown
+          ? "cancelled"
+          : leaseLapsed
+            ? "orphaned"
+            : stale
+              ? "stale"
+              : "failed",
         {
           reason: shuttingDown
             ? "worker-shutdown"
-            : stale
-              ? commitBarrierReached
-                ? "commit-barrier-rejected"
-                : "pre-execution-rejected"
-              : "execution-failed",
+            : leaseLapsed
+              ? "lease-expired"
+              : stale
+                ? commitBarrierReached
+                  ? "commit-barrier-rejected"
+                  : "pre-execution-rejected"
+                : "execution-failed",
           error: errorMessage(error),
         },
       ).catch((transitionError) =>
@@ -719,7 +751,7 @@ export function createRuntimeJobWorker(args: {
           errorMessage(transitionError),
         ),
       );
-      if (terminal === null && !stale && !shuttingDown) {
+      if (terminal === null && !stale && !shuttingDown && !leaseLapsed) {
         console.warn("[runtime-job-worker] completion follow-up failed", {
           sessionId: current.sessionId,
           jobId: current.jobId,

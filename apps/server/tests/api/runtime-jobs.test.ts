@@ -980,6 +980,51 @@ describe.each([
     }
   });
 
+  it("stops the execution when its lease runs out while renewals fail", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await createRuntimeJob(store, job());
+    const swap = store.compareAndSetPluginData.bind(store);
+    let storageDown = false;
+    const intercepted = vi
+      .spyOn(store, "compareAndSetPluginData")
+      .mockImplementation(async (record, revision) => {
+        if (storageDown) throw new Error("storage unreachable");
+        return swap(record, revision);
+      });
+    let aborted: unknown;
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(),
+      leaseMs: 60,
+      execute: (_claimed, control) => {
+        storageDown = true;
+        return new Promise<void>((_resolve, reject) => {
+          control.signal.addEventListener("abort", () => {
+            aborted = control.signal.reason;
+            // Storage answers again once the provider call has been stopped.
+            storageDown = false;
+            reject(control.signal.reason as Error);
+          });
+        });
+      },
+    });
+    try {
+      worker.wake();
+      await vi.waitFor(() => expect(aborted).toBeInstanceOf(Error));
+      expect((aborted as Error).name).toBe("RuntimeJobLeaseLapsedError");
+      await vi.waitFor(async () => {
+        await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+          status: "orphaned",
+          reason: "lease-expired",
+        });
+      });
+    } finally {
+      await worker.close();
+      intercepted.mockRestore();
+    }
+  });
+
   it("claims valid work behind an expired queue head without another wake", async () => {
     await createRuntimeJob(
       store,
