@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* Dark is the default look; a visitor whose system asks for light gets the
+   paper palette, and the toggle in the header overrides either. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans:
+    "Geist Variable", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+    "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-display:
+    "Fraunces Variable", "Songti SC", "Noto Serif SC", "Source Han Serif SC",
+    ui-serif, Georgia, serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+
+  --color-page: var(--page);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-ember: var(--ember);
+}
+
+:root {
+  --page: oklch(98% 0.008 85);
+  --raised: oklch(100% 0 0);
+  --ink: oklch(22% 0.015 260);
+  --muted: oklch(48% 0.015 260);
+  --line: oklch(22% 0.015 260 / 0.12);
+  --accent: oklch(52% 0.11 205);
+  --accent-ink: oklch(99% 0 0);
+  --ember: oklch(62% 0.16 45);
+  --glow: oklch(70% 0.12 205 / 0.22);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --page: oklch(15% 0.012 255);
+  --raised: oklch(19% 0.014 255);
+  --ink: oklch(95% 0.01 85);
+  --muted: oklch(72% 0.015 255);
+  --line: oklch(95% 0.01 85 / 0.1);
+  --accent: oklch(83% 0.09 200);
+  --accent-ink: oklch(18% 0.02 230);
+  --ember: oklch(76% 0.14 55);
+  --glow: oklch(70% 0.12 205 / 0.28);
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Chinese display text reads better a touch looser and never in italics. */
+:lang(zh) .font-display {
+  letter-spacing: 0.02em;
+}
+
+.grain {
+  background-image:
+    radial-gradient(60rem 30rem at 85% -10%, var(--glow), transparent 70%),
+    radial-gradient(
+      40rem 24rem at 0% 20%,
+      oklch(70% 0.14 45 / 0.12),
+      transparent 70%
+    );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

@@ -44,51 +44,33 @@ test.describe("Covel Full Flow", () => {
     expect(data.items.length).toBeGreaterThanOrEqual(1);
   });
 
-  test("landing page loads", async ({ page }) => {
+  test("the root opens the world list", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.locator("h1")).toContainText(
-      /构建世界，\s*运行回合。|Build the world,\s*run the turn\./i,
-    );
-    await expect(page.locator("header a", { hasText: "COVEL" })).toBeVisible();
-
-    await expect(
-      page.getByRole("link", { name: /开始游玩|Start playing/i }).first(),
-    ).toBeVisible();
-    await expect(page.getByText(/插件系统|Plugin System/i)).toBeVisible();
-    await expect(page.getByText(/回合流程|Turn Flow/i)).toBeVisible();
-  });
-
-  test("navigate to studio via Get Started", async ({ page }) => {
-    await page.goto("/");
-
-    const getStarted = page.locator("header a[href='/session']").first();
-    await getStarted.click();
-    await expect(page).toHaveURL(/\/session/);
+    await expect(page).toHaveURL(/\/session$/);
+    await expect(page.getByText(/个世界|worlds/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test("navigation header links work", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/session");
 
-    const sessionLink = page.locator("header a[href='/session']").first();
+    // The primary nav is the top bar or, in rail layouts, the nav rail.
     const debugLink = page
-      .locator("header button", { hasText: /debug|调试/i })
+      .getByRole("button", { name: /^(debug|调试)$/i })
+      .filter({ visible: true })
       .first();
-    await expect(sessionLink).toBeVisible();
     await expect(debugLink).toBeVisible();
-
-    // Session link → /session
-    await sessionLink.click();
-    await expect(page).toHaveURL(/\/session/);
-
-    // Back to home — the brand link sits in the top bar or, in rail layouts,
-    // in the nav rail.
-    await page.getByRole("link", { name: "Covel", exact: true }).click();
-    await expect(page).toHaveURL("/");
 
     // Debug link → /debug
     await debugLink.click();
     await expect(page).toHaveURL(/\/debug/);
+
+    // The brand link returns to the world list. It sits in the top bar or,
+    // in rail layouts, in the nav rail.
+    await page.getByRole("link", { name: "Covel", exact: true }).click();
+    await expect(page).toHaveURL(/\/session/);
   });
 
   test("world select screen loads with worlds", async ({ page }) => {
@@ -123,12 +105,16 @@ test.describe("Covel Full Flow", () => {
   });
 
   test("theme toggle works", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/session");
 
     const html = page.locator("html");
     const initialClass = await html.getAttribute("class");
 
-    const themeToggle = page.locator('header button[data-size="icon"]').first();
+    // The toggle sits in the top bar or, in rail layouts, the nav rail.
+    const themeToggle = page
+      .getByRole("button", { name: /toggle theme|切换主题/i })
+      .filter({ visible: true })
+      .first();
     await expect(themeToggle).toBeVisible();
     await themeToggle.click();
 
@@ -136,8 +122,12 @@ test.describe("Covel Full Flow", () => {
   });
 
   test("language selector switches locale", async ({ page }) => {
-    await page.goto("/");
+    // Inside the app the language is a setting; on a phone the menu dialog
+    // also carries the select.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/session");
 
+    await page.getByRole("button", { name: /primary|主导航/i }).click();
     const localeSelect = page.getByRole("combobox", {
       name: /language|语言/i,
     });
@@ -146,6 +136,5 @@ test.describe("Covel Full Flow", () => {
     await localeSelect.selectOption("en-US");
 
     await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
-    await expect(localeSelect).toHaveValue("en-US");
   });
 });

@@ -162,8 +162,10 @@ bundled `worlds/` and `plugins/`.
 
 ## Monorepo Structure
 
-- `apps/web` (React/Vite client), `apps/server` (Hono API; composes every feature
-  package), `apps/desktop` (Electron shell).
+- `apps/web` (React/Vite client; `/` opens the world list), `apps/server` (Hono
+  API; composes every feature package), `apps/desktop` (Electron shell),
+  `apps/site` (the static showcase website; no workspace dependencies, never
+  bundled into Web or desktop).
   The desktop shell validates persisted window geometry with its direct Zod dependency.
 - `packages/` — framework libraries; responsibilities and consumers are in
   `docs/architecture/packages.md`:

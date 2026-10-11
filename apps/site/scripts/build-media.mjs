@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * build-media — generate the homepage demo assets from a source video or GIF.
+ * build-media — generate the showcase site demo assets from a source video or GIF.
  *
  * Outputs (always overwrites):
- *   apps/web/public/media/demo.mp4    1280-wide H.264, no audio
- *   apps/web/public/media/demo-poster.jpg  first-frame, 1280-wide
+ *   apps/site/public/media/demo.mp4    1280-wide H.264, no audio
+ *   apps/site/public/media/demo-poster.jpg  first-frame, 1280-wide
  *   .assets/images/demo.gif           README-friendly 960-wide gif (palette-tuned)
  *
  * Usage:
- *   pnpm --filter @covel/web build:media                # uses .assets/demo.dev1.mp4 if present, else .assets/images/demo.gif
- *   pnpm --filter @covel/web build:media path/to/clip.mp4
- *   pnpm --filter @covel/web build:media path/to/clip.mp4 --speed 3
+ *   pnpm --filter @covel/site build:media                # uses .assets/demo.dev1.mp4 if present, else .assets/images/demo.gif
+ *   pnpm --filter @covel/site build:media path/to/clip.mp4
+ *   pnpm --filter @covel/site build:media path/to/clip.mp4 --speed 3
  *
  * Flags:
  *   --speed N   speed up output N× (default 1)

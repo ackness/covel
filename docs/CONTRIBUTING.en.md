@@ -43,17 +43,17 @@ Compose uses PostgreSQL 18 with pgvector 0.8.6 and stores the database in `pgdat
 
 `pnpm docker:down` stops containers and preserves data. **`pnpm docker:down-all` deletes the current Compose project's `pgdata18` and `appdata`, including the database, user worlds, and plugins**; use it only after backing up and choosing to reset the entire environment. `db:generate` / `db:studio` are PostgreSQL maintenance tools, not automatic database upgrades; see [database maintenance](./guide/env-registry.md#数据库维护命令).
 
-### Homepage demo media
+### Showcase site demo media
 
-Install FFmpeg first. Run these commands from the repository root to update the homepage video, poster, and README GIF:
+Install FFmpeg first. Run these commands from the repository root to update the showcase site's video, poster, and README GIF:
 
 ```bash
-pnpm --filter @covel/web build:media
+pnpm --filter @covel/site build:media
 # Replace recording.mp4 with an existing source file.
-node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
+node apps/site/scripts/build-media.mjs ./recording.mp4 --speed 3
 ```
 
-The default source search is `.assets/demo.dev1.mp4`, `.assets/demo.dev0.mp4`, then `.assets/images/demo.gif`. A missing explicit path fails immediately. Outputs are `apps/web/public/media/demo.mp4`, `demo-poster.jpg`, and `.assets/images/demo.gif`. Existing assets are replaced only after all conversions finish; conversion failures preserve them and clean up temporary files. An existing output can also be the input. Relative paths passed through `pnpm --filter @covel/web build:media` are relative to `apps/web/`; direct Node invocation uses the current directory.
+The default source search is `.assets/demo.dev1.mp4`, `.assets/demo.dev0.mp4`, then `.assets/images/demo.gif`. A missing explicit path fails immediately. Outputs are `apps/site/public/media/demo.mp4`, `demo-poster.jpg`, and `.assets/images/demo.gif`. Existing assets are replaced only after all conversions finish; conversion failures preserve them and clean up temporary files. An existing output can also be the input. Relative paths passed through `pnpm --filter @covel/site build:media` are relative to `apps/site/`; direct Node invocation uses the current directory.
 
 ## Development conventions
 

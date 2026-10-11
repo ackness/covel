@@ -141,7 +141,6 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 | `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | `dev:pg` 启动前的 TCP 检查目标                         |
 | `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` TCP 检查                        |
 | `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                            |
-| `VITE_ROUTER_DEVTOOLS`                                | `true`                          | 开启 Vite 路由开发工具                                 |
 | `POSTGRES_USER` / `POSTGRES_DB`                       | `covel` / `covel`               | Docker Compose 中 PostgreSQL 的用户名与库名            |
 | `COVEL_DATA_ROOT`                                     | —                               | 桌面端存放 SQLite、世界与日志的数据根目录              |
 | `COVEL_USER_CONFIG_DIR`                               | —                               | 桌面端模型数据库与设置所在的配置目录                   |

@@ -43,17 +43,17 @@ Compose 使用 PostgreSQL 18 + pgvector 0.8.6，数据库存入 `pgdata18` 卷�
 
 `pnpm docker:down` 停止容器并保留数据。**`pnpm docker:down-all` 会删除当前 Compose 项目的 `pgdata18` 和 `appdata`，包括数据库及用户世界、插件**；仅在备份后明确需要清空整套环境时使用。`db:generate` / `db:studio` 是 PostgreSQL 开发维护工具，不是数据库自动升级命令，见[数据库维护](./guide/env-registry.md#数据库维护命令)。
 
-### 首页演示媒体
+### 官网演示媒体
 
-先安装 FFmpeg。以下命令从仓库根运行，会更新首页视频、封面和 README 动图：
+先安装 FFmpeg。以下命令从仓库根运行，会更新官网站点的视频、封面和 README 动图：
 
 ```bash
-pnpm --filter @covel/web build:media
+pnpm --filter @covel/site build:media
 # Replace recording.mp4 with an existing source file.
-node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
+node apps/site/scripts/build-media.mjs ./recording.mp4 --speed 3
 ```
 
-默认依次选择 `.assets/demo.dev1.mp4`、`.assets/demo.dev0.mp4`、`.assets/images/demo.gif`；显式路径不存在时直接报错。输出为 `apps/web/public/media/demo.mp4`、`demo-poster.jpg` 和 `.assets/images/demo.gif`。全部转换完成后才替换现有素材，转换失败会保留原素材并清理临时文件；输入可以是现有输出文件。通过 `pnpm --filter @covel/web build:media` 传入的相对路径以 `apps/web/` 为基准，直接调用 Node 时以当前目录为基准。
+默认依次选择 `.assets/demo.dev1.mp4`、`.assets/demo.dev0.mp4`、`.assets/images/demo.gif`；显式路径不存在时直接报错。输出为 `apps/site/public/media/demo.mp4`、`demo-poster.jpg` 和 `.assets/images/demo.gif`。全部转换完成后才替换现有素材，转换失败会保留原素材并清理临时文件；输入可以是现有输出文件。通过 `pnpm --filter @covel/site build:media` 传入的相对路径以 `apps/site/` 为基准，直接调用 Node 时以当前目录为基准。
 
 ## 开发规范
 
