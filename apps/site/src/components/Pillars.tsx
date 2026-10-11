@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import type { Copy, Item } from "../copy.js";
-import { repoFile } from "../links.js";
+import { asset, repoFile } from "../links.js";
 import { container, SectionHeading } from "./ui.js";
 
 // The zero-code example from docs/guide/plugin-authoring-zero-code.md, cut to
@@ -110,7 +110,7 @@ export function Pillars({ copy }: { copy: Copy }) {
             points={pillars.world.points}
           >
             <img
-              src="/screens/world-package-builder.webp"
+              src={asset("screens/world-package-builder.webp")}
               alt={pillars.worldAlt}
               loading="lazy"
               className="h-full w-full object-cover object-top transition duration-700 group-hover:scale-[1.02]"

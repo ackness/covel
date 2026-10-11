@@ -1,7 +1,7 @@
 import type { Copy } from "../copy.js";
 import type { DownloadLinks } from "../download.js";
 import { DownloadButtons } from "./DownloadButtons.js";
-import { CHANGELOG_URL, DOCS_URL, REPO_URL } from "../links.js";
+import { asset, CHANGELOG_URL, DOCS_URL, REPO_URL } from "../links.js";
 import { container } from "./ui.js";
 
 export function Closing({
@@ -37,7 +37,11 @@ export function Closing({
           className={`${container} flex flex-col gap-6 text-sm text-muted sm:flex-row sm:items-center sm:justify-between`}
         >
           <div className="flex items-center gap-2.5">
-            <img src="/icon.png" alt="" className="h-6 w-6 rounded-md" />
+            <img
+              src={asset("icon.png")}
+              alt=""
+              className="h-6 w-6 rounded-md"
+            />
             <span>{copy.footer.license}</span>
           </div>
           <nav className="flex gap-6" aria-label="Footer">
