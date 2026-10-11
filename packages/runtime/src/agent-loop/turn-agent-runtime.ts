@@ -12,12 +12,15 @@ import type {
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { buildContext } from "@covel/context";
+import { buildContext, selectPromptSegments } from "@covel/context";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
-import { runPostContextAssemblyHook } from "../hooks/wire-helpers.js";
+import {
+  runPostContextAssemblyHook,
+  type IncludedPromptSegment,
+} from "../hooks/wire-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { agentInputSlots } from "./runtime-input-slots.js";
@@ -165,6 +168,7 @@ export async function executeAgentRuntime({
   // This text is history from the next turn on, so the same filter applies.
   const visibleStory = filterRuntimeHistory(executionStory, manifest.name);
 
+  let includedSegments: readonly IncludedPromptSegment[] = [];
   const assembleContext = async () => {
     const promptSegments =
       (
@@ -173,6 +177,12 @@ export async function executeAgentRuntime({
           playerMessage: input.playerMessage,
         })
       )?.flat() ?? [];
+    includedSegments = selectPromptSegments(promptSegments, manifest).map(
+      (segment) => ({
+        pluginId: segment.providerPluginId ?? "",
+        id: segment.id,
+      }),
+    );
     const visibleHistory = filterRuntimeHistory(
       effectiveMessageHistory,
       manifest.name,
@@ -263,6 +273,7 @@ export async function executeAgentRuntime({
         ({ id, name, type, description }) =>
           Object.freeze({ id, name, type, description }),
       ),
+      promptSegments: includedSegments,
     },
   );
 
@@ -296,6 +307,7 @@ export async function executeAgentRuntime({
       : {}),
     loaded,
     inputSlots: resolvedInputSlots,
+    promptSegments: includedSegments,
     deps,
     maxSteps,
     timeoutMs,

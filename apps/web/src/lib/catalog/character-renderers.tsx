@@ -107,7 +107,7 @@ export const SceneCastList: ComponentRenderer = () => {
   if (speakers.length === 0) {
     return (
       <div className="ui-band-quiet px-3 py-4 text-[11px] leading-relaxed text-muted-foreground">
-        {t("sceneCast.empty", "No one is on stage in this scene yet.")}
+        {t("sceneCast.empty", "No characters are on stage in this scene yet.")}
       </div>
     );
   }

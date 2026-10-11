@@ -54,12 +54,9 @@ export interface AssembledContext {
    */
   readonly currentTurnUserMessages: number;
   /**
-   * Set when the budget pass had to drop history to fit the slot's input
-   * window. Callers surface it as a trace signal so a turn that silently lost
-   * context is visible in /debug. Absent when no budget was configured.
+   * Messages the budget pass dropped to fit the slot's input window (0 when
+   * nothing was pruned). Absent when no budget was configured.
    */
-  readonly budgetExceeded?: boolean;
-  /** Messages dropped by the budget pass (0 when nothing was pruned). */
   readonly prunedMessageCount?: number;
 }
 

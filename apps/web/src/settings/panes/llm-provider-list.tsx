@@ -31,7 +31,10 @@ export function ProviderList({
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={t("settings.searchProviders", "Search")}
+            placeholder={t(
+              "settings.searchProviders",
+              "Search providers or models",
+            )}
             className="w-full border border-border bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
           />
         </div>

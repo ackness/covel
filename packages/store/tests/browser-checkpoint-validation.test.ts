@@ -423,7 +423,7 @@ describe("checkpoint record validation", () => {
     await store.createSession(checkpoint.session);
     const suspension = checkpoint.suspensions[0]!;
     await store.saveSuspension(suspension);
-    expect(await store.claimSuspension(suspension.id)).toBe(true);
+    expect(await store.claimSuspension(suspension.id)).not.toBeNull();
     const exported = await exportSessionCheckpoint(store, sessionId, {
       revision: 1,
       actionId: "claimed-suspension",

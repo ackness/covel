@@ -18,7 +18,7 @@ import {
  *  3. Second upsert on the same name merges instead of duplicating
  *  4. Edges resolve sourceName/targetName to node IDs
  *  5. Duplicate edges (same source/target/relation) are skipped
- *  6. Adjacency index `by-source` / `by-target` is maintained
+ *  6. Only node and edge rows are stored (no adjacency index)
  *  7. list-npc-graph returns compact summaries
  *  8. Orphan-endpoint edges are flagged, not crashed
  */
@@ -471,7 +471,7 @@ describe("upsert-npc-graph", () => {
     expect(row.value.lastSeenTurn).toBe(5);
   });
 
-  it("resolves edge sourceName/targetName to node IDs and persists the adjacency index", async () => {
+  it("resolves edge sourceName/targetName to node IDs and stores no index rows", async () => {
     const out = await executeAndCommit(
       upsertTool,
       {
@@ -498,21 +498,13 @@ describe("upsert-npc-graph", () => {
     const edgeRow = getToolContent(out).edges.results[0];
     expect(edgeRow.id).toMatch(/^edge-/);
 
-    // Adjacency index must include the new edge
-    const bySource = await store.getPluginData(
-      ctx.sessionId,
-      ctx.pluginId,
-      "index",
-      `by-source:${edgeRow.source}`,
-    );
-    const byTarget = await store.getPluginData(
-      ctx.sessionId,
-      ctx.pluginId,
-      "index",
-      `by-target:${edgeRow.target}`,
-    );
-    expect(bySource?.value).toContain(edgeRow.id);
-    expect(byTarget?.value).toContain(edgeRow.id);
+    // Nodes and edges are the whole stored graph: the retriever builds its
+    // adjacency from the edges, so the tool writes nothing else.
+    const rows = await store.listPluginData(ctx.sessionId, ctx.pluginId);
+    expect([...new Set(rows.map((row) => row.namespace))].sort()).toEqual([
+      "edges",
+      "nodes",
+    ]);
   });
 
   /** Seed A —TRUSTS→ B at strength 0.5 on turn 3. */
@@ -616,21 +608,6 @@ describe("upsert-npc-graph", () => {
     expect(current.invalidAt).toBeUndefined();
     expect(current.validAt).toBe(9);
     expect(current.strength).toBe(-0.4);
-
-    // The superseded id is pruned from the adjacency index — a revised relation
-    // nets zero index growth (new id in, closed id out) rather than piling up
-    // closed ids forever.
-    const aNode = getToolContent(await listTool.execute({}, ctx)).nodes.find(
-      (n) => n.name === "A",
-    );
-    const idx = await store.getPluginData(
-      ctx.sessionId,
-      ctx.pluginId,
-      "index",
-      `by-source:${aNode.id}`,
-    );
-    expect(idx.value).toContain(current.id);
-    expect(idx.value).not.toContain(originalId);
   });
 
   it("lists current edges only, most recently changed first, and says when it cuts the list", async () => {

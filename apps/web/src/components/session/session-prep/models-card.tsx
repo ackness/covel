@@ -59,7 +59,7 @@ export function ModelsCard({
             onClick={onOpenSettings}
           >
             <KeyRound className="w-3.5 h-3.5 mr-1.5" />
-            {t("session.configureKeys", "Configure API Keys & Presets")}
+            {t("session.configureKeys", "Configure Providers & Models")}
           </Button>
         </CardContent>
       )}

@@ -7,6 +7,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { runCli, validateNewLocale } from "./add-locale.mjs";
 import {
+  findFallbackMismatches,
+  flattenCatalogText,
+} from "./check-fallback-text.mjs";
+import {
   canonicalizeCatalogLocale,
   checkLocaleCatalogs,
 } from "./check-locale-catalogs.mjs";
@@ -74,6 +78,33 @@ test("catalog checker accepts and requires locale-specific plural categories", (
       );
     },
   );
+});
+
+test("fallback check reports text that differs from the English catalog", () => {
+  const english = flattenCatalogText({
+    world: { save: "Save world", quote: 'Delete "{{name}}"?' },
+  });
+  const source = [
+    't("world.save", "Save world");',
+    "t(",
+    '  "world.save",',
+    '  "Save",',
+    ");",
+    't("world.save", { count, defaultValue: "Save the world" });',
+    't("world.quote", \'Delete "{{name}}"?\');',
+    't("world.unknown", "Not in the catalog");',
+    't("world.save", label);',
+  ].join("\n");
+
+  assert.deepEqual(findFallbackMismatches(source, english), [
+    { key: "world.save", line: 2, actual: "Save", expected: "Save world" },
+    {
+      key: "world.save",
+      line: 6,
+      actual: "Save the world",
+      expected: "Save world",
+    },
+  ]);
 });
 
 test("catalog checker still rejects unrelated extra keys", () => {

@@ -51,7 +51,7 @@ function emitPluginRpcAcceptedJob(t: Translate, jobId: string): void {
       count: 1,
       ids: jobId,
       defaultValue:
-        "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
+        "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
     }),
   );
 }
@@ -66,7 +66,7 @@ function emitPluginRpcDeferredJobs(
       count: jobs.length,
       ids: formatJobIdList(jobs),
       defaultValue:
-        "Submitted {{count}} background job(s): {{ids}}. Waiting for completion...",
+        "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
     }),
   );
 }
@@ -251,7 +251,7 @@ export async function resolvePluginRpcApprovalResponse(params: {
       "error",
       params.t("plugin.approval.unexpectedRequired", {
         defaultValue:
-          "Still got approval-required after grant - please check the approval backend",
+          "Still got approval-required after grant — please check the approval backend",
       }),
     );
     return null;

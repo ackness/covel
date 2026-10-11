@@ -56,7 +56,7 @@ export function MaxOutputTokensCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-medium">
-            {t("settings.maxOutputTokens", "Max output tokens")}
+            {t("settings.maxOutputTokens", "Max Output Tokens")}
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
             {t(
@@ -94,7 +94,7 @@ export function MaxOutputTokensCard({
       </div>
       <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
         <input
-          aria-label={t("settings.maxOutputTokens", "Max output tokens")}
+          aria-label={t("settings.maxOutputTokens", "Max Output Tokens")}
           type="number"
           min={1}
           max={1_000_000}

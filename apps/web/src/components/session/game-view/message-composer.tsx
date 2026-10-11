@@ -210,7 +210,7 @@ export function MessageComposer({
               aria-label={
                 executing
                   ? t("session.steerSend", "interject")
-                  : t("session.inputKbdHint", "send")
+                  : t("session.inputKbdHint", "to send")
               }
               className="ui-composer-submit shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-(--rule-color) text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
             >

@@ -51,12 +51,18 @@ export function createSuspensionMethods(
 
     async claimSuspension(id) {
       const existing = state.suspensions.get(id);
-      if (!existing) return false;
-      if (existing.resolvedAt) return false;
-      state.suspensions.set(id, {
-        ...existing,
-        resolvedAt: `claimed:${new Date().toISOString()}`,
-      });
+      if (!existing) return null;
+      if (existing.resolvedAt) return null;
+      const claim = `claimed:${new Date().toISOString()}`;
+      state.suspensions.set(id, { ...existing, resolvedAt: claim });
+      return claim;
+    },
+
+    async releaseSuspensionClaim(id, claim) {
+      const existing = state.suspensions.get(id);
+      if (!existing || existing.resolvedAt !== claim) return false;
+      const { resolvedAt: _claim, ...unclaimed } = existing;
+      state.suspensions.set(id, unclaimed);
       return true;
     },
 

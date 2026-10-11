@@ -272,7 +272,7 @@ Provider 图片输入矩阵：
 | `timed_out`           | 排队超过 `maxQueueMs`，或 runtime 执行超过 `maxExecutionMs`（执行返回后等待 session lock 提交的时间不计入）；迟到执行不能再进入 committing                                                                              |
 | `cancelled`           | 控制面取消终态；不能转回 active 或接受迟到结果                                                                                                                                                                          |
 | `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果                                                                                                        |
-| `orphaned`            | 在途 owner 停止续租且 lease 过期                                                                                                                                                                                        |
+| `orphaned`            | 在途 owner 停止续租且 lease 过期；owner 自己连续续租失败直到 lease 过期时，会立即中止正在进行的执行并落此状态                                                                                                           |
 
 启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。终态作业每个 session runtime 只保留最近 20 条，worker 在对账时删除更早的记录。作业描述符只为该 runtime 声明依赖的上游保留完整输出，其余上游只保留身份与状态，且不复制工具调用记录。`_runtime_jobs` 不进入 snapshot/fork payload，写入由框架控制；现有插件 store 的保留 namespace 读取合同仍适用。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
 

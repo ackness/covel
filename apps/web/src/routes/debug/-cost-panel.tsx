@@ -541,7 +541,7 @@ export function CostPanel({
           />
           {cost.pricedTokens > 0 && (
             <StatCard
-              label={t("debugger.cost.estCost", "Est. cost (USD)")}
+              label={t("debugger.cost.estCost", "Est. settlement (USD)")}
               value={`${cost.unpricedTokens > 0 ? "≥ " : "≈ "}$${cost.usd.toFixed(4)}`}
             />
           )}
@@ -549,7 +549,7 @@ export function CostPanel({
         <p className="ui-meta text-xs text-muted-foreground/70">
           {t(
             "debugger.cost.note",
-            "Token sums from llm.responded / gateway.responded. USD cost estimated from model-db prices; usage without a model id or price is excluded (cost shown as a lower bound).",
+            "Token usage comes from llm.responded / gateway.responded. Estimated settlement applies each provider's price multiplier to model reference prices; usage without a model or price is excluded, so the result may be a lower bound.",
           )}
         </p>
         {(model.totalCachedInput > 0 || model.totalCacheWriteInput > 0) && (
@@ -588,7 +588,7 @@ export function CostPanel({
                   <span className="font-mono tabular-nums text-muted-foreground shrink-0">
                     {fmt(m.inputTokens)} → {fmt(m.outputTokens)} · {m.calls}× ·{" "}
                     {m.cachedInputTokens > 0 || m.cacheWriteInputTokens > 0
-                      ? `${t("debugger.cost.cache", "cache")} ${fmt(m.cachedInputTokens)}/${fmt(m.cacheWriteInputTokens)} · `
+                      ? `${t("debugger.cost.cache", "Cache read / write")} ${fmt(m.cachedInputTokens)}/${fmt(m.cacheWriteInputTokens)} · `
                       : ""}
                     {price
                       ? `${estimate.unpricedTokens > 0 ? "≥ " : "≈ "}$${estimate.usd.toFixed(4)}${multiplier !== 1 ? ` (×${multiplier})` : ""}`

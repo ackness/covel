@@ -285,7 +285,7 @@ function ProviderPriceMultiplierField({
         <div className="text-[10px] leading-relaxed text-muted-foreground">
           {t(
             "settings.priceMultiplierHint",
-            "Estimated settlement = official reference price × multiplier.",
+            "Estimated settlement = official reference price × multiplier. The default multiplier is 1.",
           )}
         </div>
       </div>

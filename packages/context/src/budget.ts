@@ -105,8 +105,12 @@ export interface BudgetResult<M> {
   readonly totalTokens: number;
   /** How many messages were dropped (not counting the placeholder). */
   readonly prunedMessageCount: number;
-  /** Whether pruning had to be triggered. */
-  readonly budgetExceeded: boolean;
+  /**
+   * The request is still over the cap: nothing more could be dropped. A
+   * request that was pruned and now fits has `overBudget: false` and
+   * `prunedMessageCount > 0`.
+   */
+  readonly overBudget: boolean;
 }
 
 const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
@@ -243,7 +247,7 @@ function computeProtectStartIndex(
  * inserted at the start of the remaining list.
  *
  * Messages in the protect window are never dropped — even if the budget
- * still can't be satisfied. In that case `budgetExceeded: true` is returned
+ * still can't be satisfied. In that case `overBudget: true` is returned
  * and the protected tail is left intact (the caller decides how to react).
  */
 export function applyBudget<
@@ -275,7 +279,7 @@ export function applyBudget<
       messages,
       totalTokens: total,
       prunedMessageCount: 0,
-      budgetExceeded: false,
+      overBudget: false,
     };
   }
 
@@ -360,7 +364,7 @@ export function applyBudget<
       messages,
       totalTokens: total,
       prunedMessageCount: 0,
-      budgetExceeded: true,
+      overBudget: true,
     };
   }
 
@@ -383,6 +387,6 @@ export function applyBudget<
     messages: [placeholder, ...survivors],
     totalTokens: total,
     prunedMessageCount,
-    budgetExceeded: true,
+    overBudget: total > budgetCap,
   };
 }

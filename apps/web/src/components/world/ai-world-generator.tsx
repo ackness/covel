@@ -335,13 +335,16 @@ export function AiWorldGenerator({
               </p>
               <p className="font-mono text-[10px] text-muted-foreground">
                 {isWorking
-                  ? t("world.aiAgentWorking", "Working on your package")
-                  : t("world.aiAgentReady", "Ready to plan")}
+                  ? t(
+                      "world.aiAgentWorking",
+                      "Orchestrating your world package",
+                    )
+                  : t("world.aiAgentReady", "Waiting for a creative brief")}
               </p>
             </div>
           </div>
           <span className="ui-eyebrow shrink-0 text-primary">
-            {t("world.aiCreate", "AI generate")}
+            {t("world.aiCreate", "AI Create World")}
           </span>
         </div>
 
@@ -350,13 +353,13 @@ export function AiWorldGenerator({
             <DialogTitle className="font-display text-2xl leading-tight font-bold tracking-tight md:text-3xl">
               {t(
                 "world.aiCreateTitle",
-                "Build a playable world, not a blank shell.",
+                "Turn one idea into a world ready to play.",
               )}
             </DialogTitle>
             <DialogDescription className="max-w-3xl text-sm leading-relaxed font-light text-muted-foreground">
               {t(
                 "world.aiCreateDesc",
-                "Give the agent a direction, then decide which authored content should ship with the world.",
+                "Give the agent a direction, then decide which characters, rules, knowledge, and long-term memory ship in the world package.",
               )}
             </DialogDescription>
           </DialogHeader>
@@ -368,7 +371,7 @@ export function AiWorldGenerator({
                 <p className="text-xs leading-relaxed text-foreground/85">
                   {t(
                     "world.aiAgentGreeting",
-                    "Tell me the core fantasy. I will turn it into a coherent setting, opening pressure, cast, rules, and reusable world knowledge.",
+                    "Tell me the world's core fantasy. I will expand it into a coherent setting, opening pressure, character relationships, durable rules, and reusable knowledge.",
                   )}
                 </p>
               </div>
@@ -379,7 +382,7 @@ export function AiWorldGenerator({
                     htmlFor="world-prompt"
                     className="ui-eyebrow text-muted-foreground"
                   >
-                    {t("world.aiPromptLabel", "Creative direction")}
+                    {t("world.aiPromptLabel", "Core Direction")}
                   </Label>
                   <span className="font-mono text-[10px] text-muted-foreground/70">
                     {prompt.length}/4000
@@ -390,7 +393,7 @@ export function AiWorldGenerator({
                   className="flex min-h-44 w-full resize-none rounded-(--radius-control) border border-border bg-background px-4 py-3 text-sm leading-relaxed placeholder:text-muted-foreground/60 focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder={t(
                     "world.aiPromptPlaceholderFull",
-                    "A floating archipelago where every island entrusts its future to a different oracle…",
+                    "Describe your world, e.g.: A steampunk sky city whose inhabitants trade between islands in the clouds using airships...",
                   )}
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
@@ -402,7 +405,7 @@ export function AiWorldGenerator({
               {phase === "idle" && !prompt && examplePrompts.length > 0 && (
                 <div className="space-y-2">
                   <span className="ui-eyebrow text-muted-foreground">
-                    {t("world.aiExamples", "Try these")}
+                    {t("world.aiExamples", "Try these for inspiration:")}
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {examplePrompts.map((example, index) => (
@@ -464,7 +467,7 @@ export function AiWorldGenerator({
             <p className="hidden max-w-xl text-[11px] leading-relaxed text-muted-foreground sm:block">
               {t(
                 "world.aiPortableHint",
-                "Text package content remains available in server, database, and browser storage modes.",
+                "Text content such as characters, rules, and lore stays available in file, database, and browser-local worlds.",
               )}
             </p>
             <div className="ml-auto flex items-center gap-2">
@@ -497,7 +500,7 @@ export function AiWorldGenerator({
                     className="px-5"
                   >
                     <Sparkles className="mr-1.5 h-4 w-4" />
-                    {t("world.aiGenerate", "Create package")}
+                    {t("world.aiGenerate", "Start Building")}
                   </Button>
                 </>
               )}

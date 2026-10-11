@@ -81,7 +81,6 @@ describe("buildContext — budget pruning", () => {
 
     const ctx = buildContext(params);
 
-    expect(ctx.budgetExceeded).toBe(true);
     expect(ctx.prunedMessageCount).toBeGreaterThan(0);
   });
 

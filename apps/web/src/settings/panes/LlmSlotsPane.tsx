@@ -295,13 +295,13 @@ export function LlmSlotsPane() {
               <div className="text-xs font-medium">
                 {t(
                   "settings.runtimeSlotsDiscovered",
-                  "Runtime-requested slots",
+                  "Plugin-declared model roles",
                 )}
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 {t(
                   "settings.runtimeSlotsDiscoveredHint",
-                  "These slot names were discovered from active plugin runtimes and image-provider settings. Add or bind presets here so plugins can resolve them.",
+                  "These model roles come from loaded plugins and their saved settings. Assign an appropriate provider and model to each one.",
                 )}
               </p>
             </div>

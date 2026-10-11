@@ -1,7 +1,7 @@
 ---
 id: world-init
 kind: core
-version: 0.0.37
+version: 0.0.38
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.

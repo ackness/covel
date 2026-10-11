@@ -186,7 +186,7 @@ export function registerPersistenceStoreSuites(
       it("never deletes claimed (in-flight) suspensions even when old", async () => {
         const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
         await store.saveSuspension(old);
-        expect(await store.claimSuspension(old.id)).toBe(true);
+        expect(await store.claimSuspension(old.id)).not.toBeNull();
 
         const deleted = await store.deleteExpiredSuspensions(CUTOFF);
 
@@ -210,9 +210,9 @@ export function registerPersistenceStoreSuites(
 
         expect(await store.releaseStaleSuspensionClaims(between)).toBe(1);
 
-        expect(await store.claimSuspension(stale.id)).toBe(true);
-        expect(await store.claimSuspension(live.id)).toBe(false);
-        expect(await store.claimSuspension(resolved.id)).toBe(false);
+        expect(await store.claimSuspension(stale.id)).not.toBeNull();
+        expect(await store.claimSuspension(live.id)).toBeNull();
+        expect(await store.claimSuspension(resolved.id)).toBeNull();
       });
 
       it("never deletes successfully-resolved suspensions even when old", async () => {
@@ -713,41 +713,92 @@ export function registerPersistenceStoreSuites(
   });
 
   describe("claimSuspension", () => {
-    it("returns true on first claim and atomically sets resolvedAt", async () => {
+    it("returns the claim marker on first claim and atomically sets resolvedAt", async () => {
       const suspension = makeSuspension({ sessionId: "sess-claim-ok" });
       await store.saveSuspension(suspension);
 
-      const firstClaim = await store.claimSuspension(suspension.id);
-      expect(firstClaim).toBe(true);
+      const claim = await store.claimSuspension(suspension.id);
+      expect(claim).toMatch(/^claimed:/);
 
       const afterClaim = await store.getSuspension(suspension.id);
-      expect(afterClaim).not.toBeNull();
-      expect(afterClaim!.resolvedAt).toBeTruthy();
+      expect(afterClaim!.resolvedAt).toBe(claim);
     });
 
-    it("returns false on a subsequent claim (already claimed)", async () => {
+    it("returns null on a subsequent claim (already claimed)", async () => {
       const suspension = makeSuspension({ sessionId: "sess-claim-conflict" });
       await store.saveSuspension(suspension);
 
-      const firstClaim = await store.claimSuspension(suspension.id);
-      expect(firstClaim).toBe(true);
-
-      const secondClaim = await store.claimSuspension(suspension.id);
-      expect(secondClaim).toBe(false);
+      expect(await store.claimSuspension(suspension.id)).not.toBeNull();
+      expect(await store.claimSuspension(suspension.id)).toBeNull();
     });
 
-    it("returns false for a non-existent suspension id", async () => {
-      const result = await store.claimSuspension("claim-nonexistent-id");
-      expect(result).toBe(false);
+    it("returns null for a non-existent suspension id", async () => {
+      expect(await store.claimSuspension("claim-nonexistent-id")).toBeNull();
     });
 
-    it("returns false when the suspension was already resolved via markSuspensionResolved", async () => {
+    it("returns null when the suspension was already resolved via markSuspensionResolved", async () => {
       const suspension = makeSuspension({ sessionId: "sess-claim-resolved" });
       await store.saveSuspension(suspension);
       await store.markSuspensionResolved(suspension.id);
 
-      const claimed = await store.claimSuspension(suspension.id);
-      expect(claimed).toBe(false);
+      expect(await store.claimSuspension(suspension.id)).toBeNull();
+    });
+  });
+
+  describe("releaseSuspensionClaim", () => {
+    it("makes the suspension claimable again for the claim's owner", async () => {
+      const suspension = makeSuspension({ sessionId: "sess-release-own" });
+      await store.saveSuspension(suspension);
+      const claim = (await store.claimSuspension(suspension.id))!;
+
+      expect(await store.releaseSuspensionClaim(suspension.id, claim)).toBe(
+        true,
+      );
+      expect(
+        (await store.getSuspension(suspension.id))!.resolvedAt,
+      ).toBeUndefined();
+      expect(await store.claimSuspension(suspension.id)).not.toBeNull();
+    });
+
+    it("leaves a resolved suspension resolved", async () => {
+      const suspension = makeSuspension({ sessionId: "sess-release-done" });
+      await store.saveSuspension(suspension);
+      const claim = (await store.claimSuspension(suspension.id))!;
+      await store.markSuspensionResolved(suspension.id);
+      const resolvedAt = (await store.getSuspension(suspension.id))!.resolvedAt;
+
+      expect(await store.releaseSuspensionClaim(suspension.id, claim)).toBe(
+        false,
+      );
+      expect((await store.getSuspension(suspension.id))!.resolvedAt).toBe(
+        resolvedAt,
+      );
+      expect(await store.claimSuspension(suspension.id)).toBeNull();
+    });
+
+    it("leaves a claim that another resume took after a stale release", async () => {
+      const suspension = makeSuspension({ sessionId: "sess-release-other" });
+      await store.saveSuspension(suspension);
+      const stale = "claimed:2000-01-01T00:00:00.000Z";
+      await store.saveSuspension({ ...suspension, resolvedAt: stale });
+      expect(
+        await store.releaseStaleSuspensionClaims("2001-01-01T00:00:00.000Z"),
+      ).toBe(1);
+      const live = (await store.claimSuspension(suspension.id))!;
+
+      expect(await store.releaseSuspensionClaim(suspension.id, stale)).toBe(
+        false,
+      );
+      expect((await store.getSuspension(suspension.id))!.resolvedAt).toBe(live);
+    });
+
+    it("returns false for a suspension that no longer exists", async () => {
+      expect(
+        await store.releaseSuspensionClaim(
+          "release-nonexistent-id",
+          "claimed:x",
+        ),
+      ).toBe(false);
     });
   });
 }

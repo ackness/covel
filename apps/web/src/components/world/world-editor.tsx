@@ -178,7 +178,7 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
   const blocked =
     problems &&
     (Object.keys(problems.tabs).length > 0
-      ? t("world.fixMarkedFields", "Fix the marked fields, then save again.")
+      ? t("world.fixMarkedFields", "Fix the marked fields before saving.")
       : problems.other[0]);
 
   // The JSON editor replaced the definitions, which is a new load: the tabs
