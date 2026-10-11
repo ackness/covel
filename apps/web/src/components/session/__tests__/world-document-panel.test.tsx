@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invalidateAllWorldRecords,
   primeWorldRecord,
@@ -27,6 +27,11 @@ function renderPanel(
   return render(<WorldDocumentPanel locale={locale} world={summary} />);
 }
 
+// The panel loads its Markdown renderer on first use and shows the source text
+// until then. Load it first, so a test waits for a render, not for an import.
+beforeAll(async () => {
+  await Promise.all([import("react-markdown"), import("remark-gfm")]);
+});
 beforeEach(() => invalidateAllWorldRecords());
 
 describe("WorldDocumentPanel", () => {
