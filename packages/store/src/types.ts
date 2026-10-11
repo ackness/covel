@@ -674,22 +674,27 @@ export interface SuspensionStore {
   /**
    * Atomically claim an unresolved suspension.
    *
-   * Returns `true` iff the suspension existed, was previously unresolved, and
-   * is now marked as in-progress (`resolvedAt` set to a sentinel such as
-   * `"claimed:<iso>"`). Returns `false` if the suspension does not exist or
-   * was already claimed/resolved.
+   * Returns the claim marker (`"claimed:<iso>"`, now the record's
+   * `resolvedAt`) when the suspension existed and was unresolved. Returns
+   * `null` if the suspension does not exist or was already claimed/resolved.
    *
    * Used by the resume route to guarantee exactly-once execution of a
    * suspended runtime even under concurrent resume requests
-   * (audit 2026-04-20 finding 2). Callers should treat a `false` return as
+   * (audit 2026-04-20 finding 2). Callers should treat a `null` return as
    * "409 Conflict" and abandon the request.
    *
    * On successful completion of the resume pipeline, the caller overwrites
    * the claim sentinel via `markSuspensionResolved(id)`. On failure, the
-   * caller should release the claim (re-issue `saveSuspension` with
-   * `resolvedAt` unset) — see resume route for the policy.
+   * caller releases its claim with `releaseSuspensionClaim(id, claim)`.
    */
-  claimSuspension(id: string): Promise<boolean>;
+  claimSuspension(id: string): Promise<string | null>;
+  /**
+   * Make a suspension claimable again, only while `claim` (the marker
+   * `claimSuspension` returned) is still what the record holds. Returns
+   * `false` and changes nothing when the record is gone, was resolved, or was
+   * released by the stale-claim sweep and claimed again by another resume.
+   */
+  releaseSuspensionClaim(id: string, claim: string): Promise<boolean>;
   /**
    * Global maintenance sweep of stale suspensions.
    *

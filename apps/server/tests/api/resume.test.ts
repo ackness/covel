@@ -328,6 +328,46 @@ describe("Resume Routes", () => {
       },
     );
 
+    it("does not release a claim that another resume took after the stale-claim sweep", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      await createSuspension(store);
+      let otherClaim: string | null = null;
+      // While this resume is in flight the sweep releases its claim as stale
+      // and a second resume claims the suspension. Then this resume fails.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const prepare = vi.fn(async () => {
+        vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
+        await store.releaseStaleSuspensionClaims(
+          new Date(Date.now() - 60 * 60_000).toISOString(),
+        );
+        otherClaim = await store.claimSuspension("susp-1");
+        throw new Error("first resume failed");
+      });
+      const app = createTestApp(
+        makeDefaultDeps(store, { prepareToolsForSession: prepare }),
+      );
+
+      let response: Response;
+      try {
+        response = await app.request(
+          "/api/sessions/sess-1/suspensions/susp-1/resume",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: { name: "Alice" } }),
+          },
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(response.status).toBe(500);
+      expect(otherClaim).toMatch(/^claimed:/);
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBe(
+        otherClaim,
+      );
+    });
+
     it("uses the server-configured adapter when X-Provider-Keys is missing", async () => {
       const app = createTestApp(makeDefaultDeps(store));
       await createSuspension(store);

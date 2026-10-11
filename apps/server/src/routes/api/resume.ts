@@ -67,11 +67,7 @@ import {
   okBody,
   parseJsonBody,
 } from "../../api-error.js";
-import {
-  resolveSessionParam,
-  SESSION_DELETION_PENDING_KEY,
-  sessionIncarnationIdentity,
-} from "./session/session-guard.js";
+import { resolveSessionParam } from "./session/session-guard.js";
 import {
   readLockedSession,
   withLockedSessionMutation,
@@ -111,7 +107,6 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   const sessionId = c.req.param("id");
   const suspensionId = c.req.param("suspensionId");
   const store = c.get("store");
-  const sessionLock = c.get("sessionLock");
   const decodedUserSettings = decodePluginUserSettingsHeader(
     c.req.header("X-Plugin-User-Settings"),
   );
@@ -164,31 +159,15 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   const eventBus = c.get("eventBus");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
-  let claimAcquired = false;
+  // The marker this request wrote when it claimed the suspension. Releasing
+  // compares it: after the stale-claim sweep gave the suspension to another
+  // resume, this request must not reopen that resume's claim or its result.
+  let ownClaim: string | undefined;
   const releaseClaim = async (): Promise<void> => {
-    if (!claimAcquired) return;
+    if (ownClaim === undefined) return;
     try {
-      await sessionLock.withLock(sessionId, async () => {
-        const liveSession = await store.getSession(sessionId);
-        if (
-          !liveSession ||
-          sessionIncarnationIdentity(liveSession) !==
-            sessionIncarnationIdentity(guard.session) ||
-          liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
-        ) {
-          return;
-        }
-        const current = await store.getSuspension(suspensionId);
-        if (
-          !current ||
-          current.sessionId !== sessionId ||
-          !current.resolvedAt
-        ) {
-          return;
-        }
-        await store.saveSuspension({ ...current, resolvedAt: undefined });
-      });
-      claimAcquired = false;
+      await store.releaseSuspensionClaim(suspensionId, ownClaim);
+      ownClaim = undefined;
     } catch (releaseErr) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -283,10 +262,10 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         // suspension abandonment. This closes the delete/claim race.
         c.get("requestWork")?.signal.throwIfAborted();
         const claimed = await store.claimSuspension(suspensionId);
-        if (!claimed) {
+        if (claimed === null) {
           return c.json(errorBody("Suspension already resolved"), 409);
         }
-        claimAcquired = true;
+        ownClaim = claimed;
 
         // Refresh per-session character-tool overrides only after the live
         // incarnation and activation set have been accepted.
@@ -371,7 +350,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           },
           mediaStore: resumeDeps.mediaStore,
           onFinalized: (outcome) => {
-            if (outcome.status === "committed") claimAcquired = false;
+            if (outcome.status === "committed") ownClaim = undefined;
           },
           store,
           execution,
