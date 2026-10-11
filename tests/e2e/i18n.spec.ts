@@ -11,7 +11,7 @@ import {
  * Covers:
  *   1. unified settings storage drives initial language on load
  *   2. empty settings storage falls back to registry default
- *   3. header selector supports a third locale and persists across reload
+ *   3. the menu's selector supports a third locale and persists across reload
  */
 
 test.describe.configure({ mode: "serial" });
@@ -23,11 +23,7 @@ test.describe("Locale preference", () => {
     await seedBrowserSettings(page, {
       "ui.locale": "en-US",
     });
-    await page.goto("/");
-
-    await expect(
-      page.getByRole("link", { name: /start playing/i }).first(),
-    ).toBeVisible();
+    await page.goto("/session");
 
     const html = page.locator("html");
     await expect(html).toHaveAttribute("lang", "en-US");
@@ -54,14 +50,20 @@ test.describe("Locale preference", () => {
     await context.close();
   });
 
-  test("header selector supports a third locale and persists across reload", async ({
+  test("menu selector supports a third locale and persists across reload", async ({
     page,
   }) => {
     await seedBrowserSettings(page, {
       "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "zh-CN",
     });
-    await page.goto("/");
+    // The language select sits in the menu dialog on a phone; inside the app
+    // it is otherwise a setting.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/session");
+    const openMenu = () =>
+      page.getByRole("button", { name: /primary|主导航|основное/i }).click();
+    await openMenu();
 
     const localeSelect = page.getByRole("combobox", {
       name: /language|语言|язык/i,
@@ -75,6 +77,7 @@ test.describe("Locale preference", () => {
     // Force a fresh document — the stored locale should survive
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "ru-RU");
+    await openMenu();
     await expect(localeSelect).toHaveValue("ru-RU");
   });
 });

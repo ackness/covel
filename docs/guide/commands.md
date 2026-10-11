@@ -10,6 +10,8 @@ command and fix this page in the same change.
 
 ```bash
 pnpm dev:electron     # desktop shell in development
+pnpm --filter @covel/site dev    # the showcase website (apps/site) on port 5174
+pnpm --filter @covel/site build  # its static build → apps/site/dist/
 pnpm build            # all Turbo build targets
 pnpm build:electron   # production desktop installer → release/
 pnpm format           # Prettier

@@ -5,7 +5,6 @@ import {
   useLocation,
   useNavigate,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -82,13 +81,9 @@ function RootLayout() {
   const navigate = useNavigate();
   const isSessionRoute = location.pathname.startsWith("/session");
   const isDebugRoute = location.pathname.startsWith("/debug");
-  const isSession = isSessionRoute || isDebugRoute;
-  // The rail is app chrome. The landing page keeps the top bar in every
-  // layout: it carries the brand and the way in.
-  const railNav = layoutNav === "rail" && isSession;
+  const railNav = layoutNav === "rail";
   const headerRef = useRef<HTMLElement>(null);
   useWindowControlsColors(headerRef, railNav);
-  const showRouterDevtools = !isSessionRoute && !isDebugRoute;
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
   // so flipping tabs preserves what the user is inspecting. /session has stale-
@@ -186,15 +181,15 @@ function RootLayout() {
 
   const brand = (
     <Link
-      to="/"
-      className={`ui-brand-title ui-title flex shrink-0 items-center gap-2 tracking-tight ${isSession ? "text-lg" : "text-2xl"}`}
+      to="/session"
+      className="ui-brand-title ui-title flex shrink-0 items-center gap-2 tracking-tight text-lg"
       style={isElectron ? noDragStyle : undefined}
     >
       <img
         src="/icon.png"
         alt=""
         aria-hidden="true"
-        className={`rounded-md object-cover ${isSession ? "h-6 w-6" : "h-8 w-8"}`}
+        className="h-6 w-6 rounded-md object-cover"
         draggable={false}
       />
       <span>Covel</span>
@@ -235,7 +230,7 @@ function RootLayout() {
             style={isElectron ? dragStyle : undefined}
           >
             <Link
-              to="/"
+              to="/session"
               aria-label="Covel"
               className="mb-3 block"
               style={isElectron ? noDragStyle : undefined}
@@ -312,7 +307,7 @@ function RootLayout() {
           )}
           <header
             ref={headerRef}
-            className={`ui-app-header ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"} ${railNav ? "lg:hidden" : ""}`}
+            className={`ui-app-header ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all h-12 ${railNav ? "lg:hidden" : ""}`}
             style={isElectron ? dragStyle : undefined}
           >
             <div
@@ -359,33 +354,9 @@ function RootLayout() {
                 style={isElectron ? noDragStyle : undefined}
               >
                 <ThemeToggle />
-                {/* Inside the app the language is a setting (General). The
-                    landing page has no way into Settings, so it keeps the
-                    select. */}
-                {!isSession && (
-                  <label className="hidden lg:block">
-                    <span className="sr-only">
-                      {t("onboarding.language", "Language")}
-                    </span>
-                    {languageSelect(
-                      "h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary",
-                    )}
-                  </label>
-                )}
-                {!isSession && (
-                  <Button
-                    variant="default"
-                    asChild
-                    className="hidden lg:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
-                  >
-                    <Link to="/session">
-                      {t("nav.getStarted", "Get Started")}
-                    </Link>
-                  </Button>
-                )}
-                {/* The desktop nav and the language select are both `lg:`
-                    only, so on a phone this dialog is the ONLY way to reach
-                    worlds / session / plugins / debug or switch language. */}
+                {/* The desktop nav is `lg:` only, so on a phone this dialog
+                    is the ONLY way to reach worlds / session / plugins /
+                    debug or switch language (elsewhere it is a setting). */}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -445,11 +416,6 @@ function RootLayout() {
           </nav>
         </DialogContent>
       </Dialog>
-      {import.meta.env.DEV &&
-        showRouterDevtools &&
-        import.meta.env.VITE_ROUTER_DEVTOOLS !== "false" && (
-          <TanStackRouterDevtools position="bottom-right" />
-        )}
     </>
   );
 }

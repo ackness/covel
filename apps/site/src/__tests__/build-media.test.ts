@@ -21,8 +21,8 @@ describe("build-media script", () => {
 
   beforeEach(() => {
     root = mkdtempSync(path.join(os.tmpdir(), "covel-build-media-"));
-    const scriptsDir = path.join(root, "apps/web/scripts");
-    mediaDir = path.join(root, "apps/web/public/media");
+    const scriptsDir = path.join(root, "apps/site/scripts");
+    mediaDir = path.join(root, "apps/site/public/media");
     mkdirSync(scriptsDir, { recursive: true });
     mkdirSync(mediaDir, { recursive: true });
     mkdirSync(path.join(root, ".assets/images"), { recursive: true });
@@ -85,7 +85,7 @@ syncBuiltinESMExports();
     );
   }
 
-  it.for<string[]>([[], ["apps/web/public/media/demo.mp4"]])(
+  it.for<string[]>([[], ["apps/site/public/media/demo.mp4"]])(
     "converts an existing output used as input: %j",
     async (args, { signal }) => {
       const result = await run(signal, args);

@@ -28,16 +28,12 @@ async function storedEntries(page: Page) {
   );
 }
 
-test("first visit starts from the landing page, explains preparation and can be reopened after reload", async ({
+test("first visit starts on the world list, explains preparation and can be reopened after reload", async ({
   page,
 }) => {
   await firstVisit(page);
   await page.goto("/");
-  await expect(page.getByTestId("onboarding-wizard")).toHaveCount(0);
-  await page
-    .getByRole("link", { name: /Start Playing/i })
-    .first()
-    .click();
+  await expect(page).toHaveURL(/\/session$/);
   const guide = page.getByTestId("onboarding-wizard");
   await expect(guide).toBeVisible();
   await guide.getByRole("button", { name: "Start the guide" }).click();

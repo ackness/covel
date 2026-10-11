@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <meta name="color-scheme" content="dark light" />
+    <script>
+      // Set before first paint so the page never flashes the wrong palette.
+      (function () {
+        var theme;
+        try {
+          theme = localStorage.getItem("covel-site:theme");
+        } catch (e) {}
+        if (theme !== "light" && theme !== "dark") {
+          theme = matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark";
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <title>Covel · An AI game master with a good memory</title>
+    <meta
+      name="description"
+      content="Covel is a free, open-source AI role-playing game. It runs on your own computer with your own model key, rolls real dice, and remembers what you did."
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

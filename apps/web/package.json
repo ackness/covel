@@ -13,7 +13,6 @@
     "lint": "tsc --noEmit && node ./scripts/check-tailwind-canonical.mjs",
     "lint:tailwind": "node ./scripts/check-tailwind-canonical.mjs",
     "check:i18n": "node --import tsx ./scripts/check-no-chinese-literal.mjs && node --import tsx --test ./scripts/locale-tools.test.mjs",
-    "build:media": "node ./scripts/build-media.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -57,7 +56,6 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
-    "@tanstack/react-router-devtools": "^1.167.2",
     "@tanstack/router-cli": "1.167.38",
     "@tanstack/router-plugin": "1.168.40",
     "@testing-library/dom": "^10.4.2",

@@ -18,13 +18,4 @@ export const WEB_ENV_VARS = [
     description:
       "Vite dev proxy target port override; defaults to SERVER_PORT, then 3001.",
   },
-  {
-    name: "VITE_ROUTER_DEVTOOLS",
-    group: "web",
-    type: "boolean",
-    status: "active",
-    defaultValue: "true",
-    description:
-      "Toggles the TanStack Router devtools floating button in dev. Defaults on; set to false to hide.",
-  },
 ] as const satisfies readonly EnvVarDefinition[];
