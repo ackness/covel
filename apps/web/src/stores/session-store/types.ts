@@ -296,6 +296,14 @@ export type SessionAction =
   | { type: "SET_EXECUTING"; value: boolean }
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
   | { type: "SET_EXECUTION_RECOVERY"; recovery: ExecutionRecovery | null }
+  // What a status read saw. It never decides `hydrating`: the restore that
+  // set it may have finished while the read was on its way.
+  | {
+      type: "OBSERVE_EXECUTION_STATUS";
+      sessionId: string;
+      status?: SessionExecutionStatus;
+      error?: string;
+    }
   // Player abort terminal state: drop the uncommitted streaming placeholder
   // message(s) — the server never commits partial narrative on abort, so
   // keeping them would show text that vanishes on refresh (audit A-04).

@@ -204,6 +204,27 @@ export function reducer(
             }
           : {}),
       };
+    case "OBSERVE_EXECUTION_STATUS": {
+      const current = state.executionRecovery;
+      if (current?.sessionId !== action.sessionId) return state;
+      const { error: previousError, ...rest } = current;
+      const error =
+        action.error ?? (current.hydrating ? previousError : undefined);
+      const recovery = {
+        ...rest,
+        status: action.status ?? current.status,
+        checking: !action.status,
+        ...(error ? { error } : {}),
+      };
+      return {
+        ...state,
+        executionRecovery: recovery,
+        executing:
+          recovery.hydrating ||
+          recovery.checking ||
+          recovery.status?.state === "running",
+      };
+    }
     case "BOOT_SUCCESS":
       return {
         ...state,

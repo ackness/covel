@@ -134,31 +134,15 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
           );
         }
         if (!isCurrent()) return;
-        dispatch({
-          type: "SET_EXECUTION_RECOVERY",
-          recovery: {
-            sessionId,
-            status,
-            hydrating,
-            checking: false,
-            ...(hydrating && stateRef.current.executionRecovery?.error
-              ? { error: stateRef.current.executionRecovery.error }
-              : {}),
-          },
-        });
+        dispatch({ type: "OBSERVE_EXECUTION_STATUS", sessionId, status });
         if (hydrating || status.state === "running")
           timer = setTimeout(() => void poll(), 3000);
       } catch (error) {
         if (!isCurrent()) return;
         dispatch({
-          type: "SET_EXECUTION_RECOVERY",
-          recovery: {
-            sessionId,
-            status: stateRef.current.executionRecovery?.status ?? null,
-            hydrating,
-            checking: true,
-            error: error instanceof Error ? error.message : String(error),
-          },
+          type: "OBSERVE_EXECUTION_STATUS",
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
         });
         timer = setTimeout(() => void poll(), 3000);
       }

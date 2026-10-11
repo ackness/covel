@@ -115,6 +115,57 @@ afterEach(() => {
 });
 
 describe("read-only execution recovery", () => {
+  it("leaves restoring when the restore finishes while a status read is on its way", async () => {
+    let answer!: (status: { state: "idle" }) => void;
+    const read = new Promise<{ state: "idle" }>((resolve) => {
+      answer = resolve;
+    });
+    api.getSessionExecution.mockReturnValue(read);
+    const { result } = renderHook(() => {
+      const [state, dispatch] = useReducer(reducer, {
+        ...initialState,
+        session,
+        executing: true,
+        executionRecovery: {
+          sessionId: "s",
+          status: null,
+          hydrating: true,
+          checking: true,
+        },
+      } as SessionState);
+      const stateRef = useRef(state);
+      stateRef.current = state;
+      useExecutionRecovery({
+        state,
+        dispatch,
+        stateRef,
+        sessionIdRef: useRef<string | null>("s"),
+        sessionGenerationRef: useRef(0),
+        deltaBufferRef: useRef(new Map()),
+        deltaRafRef: useRef<number | null>(null),
+        workspace,
+      });
+      return { state, dispatch };
+    });
+    await waitFor(() => expect(api.getSessionExecution).toHaveBeenCalledOnce());
+    // The restore publishes its result and the read answers before React
+    // renders again, so the read still holds the values it started with.
+    await act(async () => {
+      result.current.dispatch({
+        type: "SET_EXECUTION_RECOVERY",
+        recovery: {
+          sessionId: "s",
+          status: { state: "idle" },
+          hydrating: false,
+          checking: false,
+        },
+      });
+      answer({ state: "idle" });
+      await read;
+    });
+    expect(result.current.state.executionRecovery?.hydrating).toBe(false);
+    expect(result.current.state.executing).toBe(false);
+  });
   it("does not unlock a recovered active task when an old stream closes", () => {
     const state = {
       ...initialState,
