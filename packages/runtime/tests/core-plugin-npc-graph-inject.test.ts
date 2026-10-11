@@ -218,15 +218,10 @@ describe("npc-graph core plugin write-read-inject path", () => {
         (row) => asRecord(row.value).invalidAt === undefined,
       );
       expect(current).toHaveLength(2);
-      const index = await store.getPluginData(
-        sessionId,
-        "npc-graph",
-        "index",
-        `by-source:${alice.key}`,
-      );
-      expect(new Set(index!.value as string[])).toEqual(
-        new Set(current.map((row) => row.key)),
-      );
+      // The retriever builds the adjacency from the edges; no index is stored.
+      expect(
+        await store.listPluginData(sessionId, "npc-graph", "index"),
+      ).toEqual([]);
       const recalled = await ragRetrieverHandler({
         sessionId,
         turnId: "turn-recall",
