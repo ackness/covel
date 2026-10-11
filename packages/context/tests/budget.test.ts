@@ -57,7 +57,7 @@ describe("applyBudget", () => {
 
     expect(result.messages).toEqual(messages);
     expect(result.prunedMessageCount).toBe(0);
-    expect(result.budgetExceeded).toBe(false);
+    expect(result.overBudget).toBe(false);
     expect(result.totalTokens).toBe(10 + 10 + 10 + 10);
   });
 
@@ -71,7 +71,7 @@ describe("applyBudget", () => {
 
     expect(result.messages).toEqual([]);
     expect(result.prunedMessageCount).toBe(0);
-    expect(result.budgetExceeded).toBe(false);
+    expect(result.overBudget).toBe(false);
     expect(result.totalTokens).toBe(10);
   });
 
@@ -112,7 +112,7 @@ describe("applyBudget", () => {
     // After pruning we must be <= 70 total tokens.
     // The prune marker counts toward the hard limit, so all six pruneable
     // messages are dropped: 10 system + 40 protected + ~15 marker <= 70.
-    expect(result.budgetExceeded).toBe(true);
+    expect(result.overBudget).toBe(false);
     expect(result.prunedMessageCount).toBe(6);
     expect(result.messages[0]!.role).toBe("system");
     expect(result.messages[0]!.content).toMatch(
@@ -154,7 +154,7 @@ describe("applyBudget", () => {
     expect(protectedTail).toEqual(messages.slice(6, 8));
     expect(result.messages).not.toContain(messages[4]);
     expect(result.messages).not.toContain(messages[5]);
-    expect(result.budgetExceeded).toBe(true);
+    expect(result.overBudget).toBe(false);
     expect(result.prunedMessageCount).toBe(6);
   });
 
@@ -180,7 +180,7 @@ describe("applyBudget", () => {
     expect(result.prunedMessageCount).toBe(2);
   });
 
-  it("returns budgetExceeded when protected tail alone exceeds budget", () => {
+  it("reports overBudget when the protected tail alone exceeds the budget", () => {
     const systemPrompt = "";
     // Single huge user message, way over budget.
     const messages: TestMessage[] = [
@@ -196,7 +196,7 @@ describe("applyBudget", () => {
     // Protected (only user msg is in protect window).
     expect(result.messages).toEqual(messages);
     expect(result.prunedMessageCount).toBe(0);
-    expect(result.budgetExceeded).toBe(true);
+    expect(result.overBudget).toBe(true);
   });
 
   it("does nothing when fewer user messages than protectLastUserTurns", () => {
@@ -216,7 +216,7 @@ describe("applyBudget", () => {
     // Only 1 user message exists but we want 2 protected → entire list protected.
     expect(result.messages).toEqual(messages);
     expect(result.prunedMessageCount).toBe(0);
-    expect(result.budgetExceeded).toBe(true);
+    expect(result.overBudget).toBe(true);
   });
 
   it("honors reservedForResponse in effective cap", () => {
@@ -245,7 +245,7 @@ describe("applyBudget", () => {
       estimator: mockEstimator,
     });
 
-    expect(result.budgetExceeded).toBe(true);
+    expect(result.overBudget).toBe(true);
     expect(result.prunedMessageCount).toBe(6);
     // 4 survivors + 1 placeholder = 5.
     expect(result.messages.length).toBe(5);
@@ -282,7 +282,7 @@ describe("applyBudget", () => {
 
     expect(result.messages).toEqual(messages);
     expect(result.prunedMessageCount).toBe(0);
-    expect(result.budgetExceeded).toBe(false);
+    expect(result.overBudget).toBe(false);
     expect(result.totalTokens).toBe(50);
   });
 
@@ -312,7 +312,7 @@ describe("applyBudget", () => {
     });
 
     expect(result.prunedMessageCount).toBe(2);
-    expect(result.budgetExceeded).toBe(true);
+    expect(result.overBudget).toBe(true);
     const placeholderTokens = mockEstimator(result.messages[0]!.content);
     expect(result.totalTokens).toBe(50 + placeholderTokens);
   });
