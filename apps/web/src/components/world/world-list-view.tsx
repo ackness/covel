@@ -179,7 +179,7 @@ export function WorldListView(props: WorldListViewProps) {
             <p className="mt-4 text-sm md:text-base text-muted-foreground font-light leading-relaxed max-w-xl">
               {t(
                 "session.worldSelectDesc",
-                "Each world is a self-contained setting with its own tone, characters, and ruleset.",
+                "Each world is a self-contained setting — its own tone, characters, and ruleset. Pick one to begin.",
               )}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
@@ -211,19 +211,19 @@ export function WorldListView(props: WorldListViewProps) {
             <HeaderAction
               icon={Wand2}
               accent
-              title={t("world.aiCreate", "AI generate")}
+              title={t("world.aiCreate", "AI Create World")}
               detail={t(
                 "session.aiCreateTeaser",
-                "Spin up a brand new world from a one-line idea.",
+                "Build setting, cast, rules, and lore with a worldsmith agent.",
               )}
               onClick={onOpenGenerator}
             />
             <HeaderAction
               icon={Plug}
-              title={t("session.configureKeys", "API keys & presets")}
+              title={t("session.configureKeys", "Configure Providers & Models")}
               detail={
                 primarySlotLabel ??
-                t("session.noModelsConfigured", "No model configured")
+                t("session.noModelsConfigured", "No models configured")
               }
               warn={!primarySlotLabel}
               onClick={onOpenSettings}
@@ -307,7 +307,7 @@ export function WorldListView(props: WorldListViewProps) {
                 onClick={onOpenGenerator}
               >
                 <Wand2 className="w-3.5 h-3.5 mr-1.5" />
-                {t("world.aiCreate", "AI create")}
+                {t("world.aiCreate", "AI Create World")}
               </Button>
               <Button
                 variant="outline"

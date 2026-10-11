@@ -160,7 +160,7 @@ export function WorldGenerationStatus({
       <div className="flex items-center gap-3 rounded-(--radius-control) border border-emerald-500/30 bg-emerald-500/10 p-4">
         <Check className="h-4 w-4 shrink-0 text-emerald-500" />
         <p className="text-sm font-medium text-emerald-500">
-          {doneLabel ?? t("world.aiDone", "World is ready!")}
+          {doneLabel ?? t("world.aiDone", "World created successfully!")}
         </p>
       </div>
     );
@@ -169,7 +169,7 @@ export function WorldGenerationStatus({
   if (!isWorking) return null;
   const labels = {
     generating: t("world.aiStepAuthoring", "Authoring"),
-    validating: t("world.aiStepReviewing", "Reviewing"),
+    validating: t("world.aiStepReviewing", "Consistency check"),
     saving: t("world.aiStepPackaging", "Packaging"),
   };
   const currentIndex = PHASE_ORDER.indexOf(
@@ -185,10 +185,10 @@ export function WorldGenerationStatus({
         <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
         <p className="text-sm font-medium">
           {phase === "generating"
-            ? t("world.aiGenerating", "AI is shaping the world…")
+            ? t("world.aiGenerating", "AI is building the world...")
             : phase === "validating"
-              ? t("world.aiValidating", "Validating world data…")
-              : t("world.aiSaving", "Saving the world…")}
+              ? t("world.aiValidating", "Validating world data...")
+              : t("world.aiSaving", "Saving world...")}
         </p>
       </div>
       {parts.length > 0 && <PartList parts={parts} t={t} />}

@@ -155,7 +155,7 @@ export function PluginSelectionCard({
         })}
       >
         <Puzzle className="w-4 h-4" />
-        {t("session.plugins", "Plugins & Runtimes")}
+        {t("session.plugins", "Loaded Plugins")}
         <Badge variant="secondary" className="text-xs ml-1">
           {selectedPluginIds.length}/{plugins.length}
         </Badge>
@@ -232,7 +232,10 @@ export function PluginSelectionCard({
 
           {pluginPlanLoading && (
             <p className="text-xs text-muted-foreground">
-              {t("session.pluginPlanLoading", "Resolving world plugin plan...")}
+              {t(
+                "session.pluginPlanLoading",
+                "Loading the plugin execution plan…",
+              )}
             </p>
           )}
         </CardContent>

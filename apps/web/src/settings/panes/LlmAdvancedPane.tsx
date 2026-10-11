@@ -412,7 +412,7 @@ function ParameterCard({
           value={definition.defaultValue.toFixed(decimals)}
         />
         <ValueCell
-          label={t("settings.currentValue", "Current")}
+          label={t("settings.currentValue", "Effective")}
           value={effective.toFixed(decimals)}
           active={override !== undefined}
         />

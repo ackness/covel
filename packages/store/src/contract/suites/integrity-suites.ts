@@ -1,17 +1,26 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { registerSessionRecordScopeSuites } from "./session-record-scope-suites.js";
+import {
+  SESSION_SCOPED_TABLES,
+  type SessionScopedMemoryKey,
+} from "../../table-registry.js";
 import type { DataStore } from "../../types.js";
+import { supportsVector } from "../../vector-store.js";
 import {
   id,
   makeCharacter,
   makeEvent,
   makeInteractionRecord,
+  makeJobStatus,
+  makeLogicalTurnCompletion,
   makeLorebookEntry,
   makeMessage,
   makePlayerInput,
+  makeRuntimeExport,
   makeRuntimeOutput,
   makeSession,
   makeSessionSummary,
+  makeSetupAttempt,
   makeSnapshot,
   makeStateChange,
   makeStateEntry,
@@ -25,6 +34,208 @@ import {
   ts,
 } from "../test-fixtures.js";
 
+/** Writes one row of a session-scoped kind and counts that kind's rows. */
+interface CascadeProbe {
+  /** "unsupported" when this backend cannot hold the kind. */
+  seed(store: DataStore, sessionId: string): Promise<void | "unsupported">;
+  count(store: DataStore, sessionId: string): Promise<number>;
+}
+
+const VECTOR_PROGRESS_SCOPE = { pluginId: "plugin-1", namespace: "recall" };
+
+const CASCADE_PROBES: Readonly<Record<SessionScopedMemoryKey, CascadeProbe>> = {
+  vectorIndexProgress: {
+    async seed(store, sessionId) {
+      if (!supportsVector(store)) return "unsupported";
+      const session = await store.getSession(sessionId);
+      await store.commitVectorIndexBatch({
+        ...VECTOR_PROGRESS_SCOPE,
+        sessionId,
+        value: "progress",
+        expectedValue: null,
+        expectedSessionCreatedAt: session!.createdAt,
+      });
+      return undefined;
+    },
+    async count(store, sessionId) {
+      if (!supportsVector(store)) return 0;
+      const value = await store.getVectorIndexProgress({
+        ...VECTOR_PROGRESS_SCOPE,
+        sessionId,
+      });
+      return value === null ? 0 : 1;
+    },
+  },
+  turnResults: {
+    seed: (store, sessionId) =>
+      store.saveTurnResult(makeTurnResult({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listTurnResults(sessionId)).length,
+  },
+  toolCalls: {
+    seed: (store, sessionId) => store.saveToolCall(makeToolCall({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listToolCalls(sessionId)).length,
+  },
+  stateSchemas: {
+    seed: (store, sessionId) =>
+      store.saveStateSchema(makeStateSchema({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listStateSchemas(sessionId)).length,
+  },
+  stateEntries: {
+    seed: (store, sessionId) =>
+      store.upsertStateEntry(makeStateEntry({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listStateEntries(sessionId, makeStateEntry().tableName))
+        .length,
+  },
+  stateChanges: {
+    seed: (store, sessionId) =>
+      store.addStateChange(makeStateChange({ sessionId })),
+    count: async (store, sessionId) => {
+      const { tableName, fieldName } = makeStateChange();
+      return (await store.listStateChanges(sessionId, tableName, fieldName))
+        .length;
+    },
+  },
+  events: {
+    seed: (store, sessionId) => store.saveEvent(makeEvent({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listEvents(sessionId)).length,
+  },
+  messages: {
+    seed: (store, sessionId) => store.addMessage(makeMessage({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listMessages(sessionId)).length,
+  },
+  characterSchemas: {
+    seed: (store, sessionId) =>
+      store.upsertCharacterSchema({
+        sessionId,
+        version: 1,
+        types: ["npc"],
+        attributes: [],
+        createdAt: ts(),
+        updatedAt: ts(),
+      }),
+    count: async (store, sessionId) =>
+      (await store.getCharacterSchema(sessionId)) === null ? 0 : 1,
+  },
+  characters: {
+    seed: (store, sessionId) =>
+      store.upsertCharacter(makeCharacter({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listCharacters(sessionId)).length,
+  },
+  pluginData: {
+    seed: (store, sessionId) =>
+      store.setPluginData({
+        id: id(),
+        sessionId,
+        pluginId: "plugin-1",
+        namespace: "ns",
+        key: "k",
+        value: { v: 1 },
+        createdAt: ts(),
+        updatedAt: ts(),
+      }),
+    count: async (store, sessionId) =>
+      (await store.listPluginData(sessionId, "plugin-1")).length,
+  },
+  worldDataImportLedger: {
+    seed: (store, sessionId) =>
+      store.saveWorldDataImportLedgerBatch([
+        makeWorldDataImportLedger({ sessionId }),
+      ]),
+    count: async (store, sessionId) =>
+      (await store.listWorldDataImportLedger(sessionId)).length,
+  },
+  traceEvents: {
+    seed: (store, sessionId) =>
+      store.addTraceEvent(makeTraceEvent({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listTraceEvents(sessionId)).length,
+  },
+  runtimeOutputs: {
+    seed: (store, sessionId) =>
+      store.saveRuntimeOutput(makeRuntimeOutput({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listRuntimeOutputs(sessionId)).length,
+  },
+  interactionRecords: {
+    seed: (store, sessionId) =>
+      store.saveInteractionRecord(makeInteractionRecord({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listInteractionRecords(sessionId)).length,
+  },
+  turnMessages: {
+    seed: (store, sessionId) =>
+      store.appendTurnMessage(makeTurnMessage({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listTurnMessages(sessionId)).length,
+  },
+  playerInputs: {
+    seed: (store, sessionId) =>
+      store.savePlayerInput(makePlayerInput({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listPlayerInputs(sessionId)).length,
+  },
+  lorebookEntries: {
+    seed: (store, sessionId) =>
+      store.upsertLorebookEntries([makeLorebookEntry({ sessionId })]),
+    count: async (store, sessionId) =>
+      (await store.listSessionLorebookEntries(sessionId)).length,
+  },
+  sessionSummaries: {
+    seed: (store, sessionId) =>
+      store.saveSessionSummary(makeSessionSummary({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listSessionSummaries(sessionId)).length,
+  },
+  suspensions: {
+    seed: (store, sessionId) =>
+      store.saveSuspension(makeSuspension({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listSuspensions(sessionId)).length,
+  },
+  snapshots: {
+    seed: (store, sessionId) => store.saveSnapshot(makeSnapshot({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listSnapshots(sessionId)).length,
+  },
+  logicalTurnLedger: {
+    seed: async (store, sessionId) => {
+      await store.insertLogicalTurnCompletion(
+        makeLogicalTurnCompletion({ sessionId }),
+      );
+    },
+    count: async (store, sessionId) =>
+      (await store.listLogicalTurnCompletions(sessionId)).length,
+  },
+  setupAttempts: {
+    seed: async (store, sessionId) => {
+      await store.insertSetupAttempt(makeSetupAttempt({ sessionId }));
+    },
+    count: async (store, sessionId) =>
+      (await store.listSetupAttempts(sessionId)).length,
+  },
+  jobStatus: {
+    seed: async (store, sessionId) => {
+      await store.appendJobStatus(makeJobStatus({ sessionId }));
+    },
+    count: async (store, sessionId) =>
+      (await store.listJobStatus(sessionId)).length,
+  },
+  runtimeExports: {
+    seed: async (store, sessionId) => {
+      await store.appendRuntimeExport(makeRuntimeExport({ sessionId }));
+    },
+    count: async (store, sessionId) =>
+      (await store.listRuntimeExports(sessionId)).length,
+  },
+};
+
 export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
   registerSessionRecordScopeSuites(getStore);
   let store: DataStore;
@@ -34,85 +245,32 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("deleteSession cascade", () => {
-    it("removes all session-scoped rows across every collection", async () => {
-      const sessionId = "sess-cascade";
-      const otherId = "sess-cascade-keep";
+    // One case per registered kind, generated from the registry: a kind added
+    // to the registry without a probe in `CASCADE_PROBES` does not compile.
+    it.each(
+      SESSION_SCOPED_TABLES.map((entry) => [entry.table, entry] as const),
+    )(
+      "removes the session's %s rows and keeps another session's",
+      async (_table, entry) => {
+        const probe = CASCADE_PROBES[entry.memoryKey];
+        const sessionId = `sess-cascade-${entry.table}`;
+        const otherId = `sess-cascade-keep-${entry.table}`;
+        await store.createSession(makeSession({ id: sessionId }));
+        await store.createSession(makeSession({ id: otherId }));
 
-      // Seed target session across every known child collection.
-      await store.createSession(makeSession({ id: sessionId }));
-      await store.createSession(makeSession({ id: otherId }));
+        if ((await probe.seed(store, sessionId)) === "unsupported") return;
+        await probe.seed(store, otherId);
+        expect(await probe.count(store, sessionId)).toBe(1);
+        expect(await probe.count(store, otherId)).toBe(1);
 
-      await store.saveTurnResult(makeTurnResult({ sessionId }));
-      await store.saveToolCall(makeToolCall({ sessionId }));
-      await store.saveStateSchema(makeStateSchema({ sessionId }));
-      await store.upsertStateEntry(makeStateEntry({ sessionId }));
-      await store.addStateChange(makeStateChange({ sessionId }));
-      await store.saveEvent(makeEvent({ sessionId }));
-      await store.addMessage(makeMessage({ sessionId }));
-      await store.upsertCharacter(makeCharacter({ sessionId }));
-      await store.addTraceEvent(makeTraceEvent({ sessionId }));
-      await store.saveRuntimeOutput(makeRuntimeOutput({ sessionId }));
-      await store.saveInteractionRecord(makeInteractionRecord({ sessionId }));
-      await store.appendTurnMessage(makeTurnMessage({ sessionId }));
-      await store.savePlayerInput(makePlayerInput({ sessionId }));
-      await store.saveWorldDataImportLedgerBatch([
-        makeWorldDataImportLedger({ sessionId }),
-      ]);
-      await store.upsertLorebookEntries([makeLorebookEntry({ sessionId })]);
-      await store.saveSessionSummary(makeSessionSummary({ sessionId }));
-      await store.saveSuspension(makeSuspension({ sessionId }));
-      await store.saveSnapshot(makeSnapshot({ sessionId }));
-      await store.setPluginData({
-        id: id(),
-        sessionId,
-        pluginId: "plugin-1",
-        namespace: "ns",
-        key: "k",
-        value: { v: 1 },
-        createdAt: ts(),
-        updatedAt: ts(),
-      });
+        await store.deleteSession(sessionId);
 
-      // Seed a parallel session to prove the cascade is scoped.
-      await store.saveTurnResult(makeTurnResult({ sessionId: otherId }));
-      await store.saveSuspension(makeSuspension({ sessionId: otherId }));
-      await store.upsertLorebookEntries([
-        makeLorebookEntry({ sessionId: otherId }),
-      ]);
-
-      // Cascade.
-      await store.deleteSession(sessionId);
-
-      // Target session: every collection empty.
-      expect(await store.getSession(sessionId)).toBeNull();
-      expect(await store.listTurnResults(sessionId)).toHaveLength(0);
-      expect(await store.listToolCalls(sessionId)).toHaveLength(0);
-      expect(await store.listStateSchemas(sessionId)).toHaveLength(0);
-      expect(await store.listStateEntries(sessionId, "stats")).toHaveLength(0);
-      expect(
-        await store.listStateChanges(sessionId, "stats", "hp"),
-      ).toHaveLength(0);
-      expect(await store.listEvents(sessionId)).toHaveLength(0);
-      expect(await store.listMessages(sessionId)).toHaveLength(0);
-      expect(await store.listCharacters(sessionId)).toHaveLength(0);
-      expect(await store.listTraceEvents(sessionId)).toHaveLength(0);
-      expect(await store.listRuntimeOutputs(sessionId)).toHaveLength(0);
-      expect(await store.listInteractionRecords(sessionId)).toHaveLength(0);
-      expect(await store.listTurnMessages(sessionId)).toHaveLength(0);
-      expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
-      expect(await store.listWorldDataImportLedger(sessionId)).toHaveLength(0);
-      expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(0);
-      expect(await store.listSessionSummaries(sessionId)).toHaveLength(0);
-      expect(await store.listSuspensions(sessionId)).toHaveLength(0);
-      expect(await store.listSnapshots(sessionId)).toHaveLength(0);
-      expect(await store.listPluginData(sessionId, "plugin-1")).toHaveLength(0);
-
-      // Parallel session untouched.
-      expect(await store.getSession(otherId)).not.toBeNull();
-      expect(await store.listTurnResults(otherId)).toHaveLength(1);
-      expect(await store.listSuspensions(otherId)).toHaveLength(1);
-      expect(await store.listSessionLorebookEntries(otherId)).toHaveLength(1);
-    });
+        expect(await store.getSession(sessionId)).toBeNull();
+        expect(await probe.count(store, sessionId)).toBe(0);
+        expect(await store.getSession(otherId)).not.toBeNull();
+        expect(await probe.count(store, otherId)).toBe(1);
+      },
+    );
   });
 
   describe("withTransaction (scoped transactions)", () => {

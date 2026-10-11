@@ -182,7 +182,7 @@ export function LeftPanel({
           {/* ── Models ── */}
           <div className="ui-panel-section border-b border-border space-y-3">
             <h3 className="ui-eyebrow text-xs">
-              {t("session.activeModels", "Models")}
+              {t("session.activeModels", "Active Models")}
             </h3>
             <ActiveModelSlots slots={resolvedSlots} variant="compact" />
           </div>
@@ -190,7 +190,7 @@ export function LeftPanel({
           {/* ── Plugins ── */}
           <div className="ui-panel-section border-b border-border space-y-3">
             <h3 className="ui-eyebrow text-xs flex items-center justify-between">
-              <span>{t("session.plugins", "Plugins")}</span>
+              <span>{t("session.plugins", "Loaded Plugins")}</span>
               {sessionPlugins.length > 0 && (
                 <span className="ml-1 font-normal text-muted-foreground">
                   {sessionPlugins.filter((plugin) => plugin.active).length}/

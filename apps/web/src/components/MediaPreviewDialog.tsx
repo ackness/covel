@@ -89,7 +89,7 @@ export function MediaPreviewDialog({
                 }
               >
                 <Download className="mr-1 h-3 w-3" />{" "}
-                {t("coreImage.panel.downloadImage", "Download")}
+                {t("coreImage.panel.downloadImage", "Download image")}
               </Button>
               <DialogClose asChild>
                 <Button

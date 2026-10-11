@@ -292,7 +292,7 @@ export function ChatMessages({
                     <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                     <div>
                       <p className="font-medium text-destructive">
-                        {t("common.error", "Error")}
+                        {t("common.error", "Something went wrong")}
                       </p>
                       {resolved !== executionError ? (
                         <p className="text-destructive">{resolved}</p>

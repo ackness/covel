@@ -286,7 +286,7 @@ export function ExecutionTimeline({
                   >
                     {t("session.executionFailures", {
                       count: failures.length,
-                      defaultValue: "{{count}} failed",
+                      defaultValue: "Failed: {{count}}",
                     })}
                   </span>
                 )}

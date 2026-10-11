@@ -60,10 +60,10 @@ export function ReloadOverlay() {
     >
       <Loader2 className="w-6 h-6 text-primary animate-spin" />
       <div className="text-sm font-medium">
-        {state.message ?? t("reload.reloading", "Reloading server…")}
+        {state.message ?? t("reload.reloading", "Restarting server…")}
       </div>
       <div className="text-xs text-muted-foreground">
-        {t("reload.reloadingHint", "This takes a few seconds.")}
+        {t("reload.reloadingHint", "Usually takes a few seconds.")}
       </div>
     </div>
   );

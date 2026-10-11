@@ -555,7 +555,6 @@ function finalizeSegmentedContext(
       messages: result.messages,
       turnContext,
       currentTurnUserMessages,
-      budgetExceeded: result.budgetExceeded,
       prunedMessageCount: result.prunedMessageCount,
     };
   }

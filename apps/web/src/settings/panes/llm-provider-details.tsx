@@ -48,7 +48,7 @@ export function ProviderDetails({
   const isBuiltinDefault = serverConfig?.kind === "builtin";
   const serverLabel = isBuiltinDefault
     ? t("settings.builtinDefault")
-    : t("settings.fromLlmToml", "llm.toml");
+    : t("settings.fromLlmToml", "From llm.toml");
   const localProfile = provider.localProfile;
   const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
   const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
@@ -146,7 +146,7 @@ export function ProviderDetails({
             <p className="mt-0.5 text-[10px] text-muted-foreground">
               {t(
                 "settings.providerModelsHint",
-                "All models below share this provider connection and price multiplier.",
+                "Models share the provider key and price multiplier. Each model shows its effective protocol and endpoint.",
               )}
             </p>
           </div>
@@ -455,7 +455,7 @@ function ModelCapabilitySummary({
         <span>{t("settings.modalOutEvaluation")}</span>
       )}
       {supportsImage && (
-        <span>{t("settings.modalInImage", "Image input")}</span>
+        <span>{t("settings.modalInImage", "Image Input")}</span>
       )}
       {capability?.contextWindow && (
         <span>{capability.contextWindow.toLocaleString()} ctx</span>

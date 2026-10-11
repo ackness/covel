@@ -19,6 +19,8 @@ export {
   resolveFrameworkCompletion,
 } from "./context-builder.js";
 
+export { selectPromptSegments } from "./extension-segments.js";
+
 // ── Token Budget ────────────────────────────────────────────────
 export {
   DEFAULT_PROTECT_LAST_USER_TURNS,

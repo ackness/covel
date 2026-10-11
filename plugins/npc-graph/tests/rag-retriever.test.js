@@ -8,7 +8,7 @@
  *   1. Empty graph short-circuits to empty context
  *   2. Player message that matches no node returns empty context
  *   3. Player message naming a node returns its 1-hop facts
- *   4. 2-hop expansion follows the adjacency index
+ *   4. 2-hop expansion follows the edges
  *   5. Markdown formatting includes the strength sign and relation
  *   6. Aliases are matched case-insensitively
  */
@@ -188,43 +188,6 @@ async function seedSmallChain(store) {
         validAt: 2,
         evidenceTurnIds: ["turn-2"],
       },
-    },
-    // Adjacency index
-    {
-      ...baseRecord,
-      namespace: "index",
-      key: "by-source:npc-alice",
-      value: ["edge-1"],
-    },
-    {
-      ...baseRecord,
-      namespace: "index",
-      key: "by-target:npc-bob",
-      value: ["edge-1"],
-    },
-    {
-      ...baseRecord,
-      namespace: "index",
-      key: "by-source:npc-bob",
-      value: ["edge-2"],
-    },
-    {
-      ...baseRecord,
-      namespace: "index",
-      key: "by-target:npc-charlie",
-      value: ["edge-2"],
-    },
-    {
-      ...baseRecord,
-      namespace: "index",
-      key: "by-source:npc-charlie",
-      value: ["edge-3"],
-    },
-    {
-      ...baseRecord,
-      namespace: "index",
-      key: "by-target:npc-dave",
-      value: ["edge-3"],
     },
   ]);
 }

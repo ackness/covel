@@ -92,6 +92,7 @@ export type SqlSnapshotRecords = Pick<
   | "getSuspension"
   | "markSuspensionResolved"
   | "claimSuspension"
+  | "releaseSuspensionClaim"
   | "listSuspensions"
   | "deleteSuspension"
   | "deleteExpiredSuspensions"
@@ -241,13 +242,23 @@ export function createSqlSnapshotRecords(
       );
     },
 
-    async claimSuspension(id: string): Promise<boolean> {
+    async claimSuspension(id: string): Promise<string | null> {
       // Atomic compare-and-swap: a single serialized UPDATE per dialect means
       // two concurrent claims cannot both observe an affected count of 1.
+      const claim = `claimed:${new Date().toISOString()}`;
       const affected = await runner.updateReturningCount(
         suspensions,
-        { resolvedAt: `claimed:${new Date().toISOString()}` },
+        { resolvedAt: claim },
         and(eq(suspensions.id, id), isNull(suspensions.resolvedAt)),
+      );
+      return affected === 1 ? claim : null;
+    },
+
+    async releaseSuspensionClaim(id: string, claim: string): Promise<boolean> {
+      const affected = await runner.updateReturningCount(
+        suspensions,
+        { resolvedAt: null },
+        and(eq(suspensions.id, id), eq(suspensions.resolvedAt, claim)),
       );
       return affected === 1;
     },

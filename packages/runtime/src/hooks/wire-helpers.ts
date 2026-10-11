@@ -365,6 +365,18 @@ export interface AssembledContextView {
     readonly type: string;
     readonly description?: string;
   }[];
+  /** The `prompt.segment@1` segments this runtime's prompt was built with. */
+  readonly promptSegments?: readonly IncludedPromptSegment[];
+}
+
+/**
+ * One `prompt.segment@1` segment that is part of a runtime's prompt: the
+ * plugin that provided it and the `id` that plugin gave it. A hook reads it to
+ * learn what its own plugin put in the prompt without searching the text.
+ */
+export interface IncludedPromptSegment {
+  readonly pluginId: string;
+  readonly id: string;
 }
 
 /**
@@ -392,6 +404,7 @@ export async function runPostContextAssemblyHook(
     promptTemplate: assembled.promptTemplate,
     inputSlots: assembled.inputSlots,
     characters: assembled.characters,
+    promptSegments: assembled.promptSegments,
   };
   const hookResult = await runHook(opts, "PostContextAssembly", payload, {
     pluginId: opts.pluginId,
@@ -410,6 +423,7 @@ export async function runPostContextAssemblyHook(
       promptTemplate: assembled.promptTemplate,
       inputSlots: assembled.inputSlots,
       characters: assembled.characters,
+      promptSegments: assembled.promptSegments,
     };
   }
   return assembled;
@@ -428,6 +442,11 @@ export interface PreLLMCallRequest {
   readonly tools: readonly LLMToolDefinition[] | undefined;
   /** A validating plugin may buffer output until its response check passes. */
   readonly stream?: false;
+  /**
+   * The `prompt.segment@1` segments the runtime's prompt was built with.
+   * Absent on the calls of a resumed run, which is not assembled again.
+   */
+  readonly promptSegments?: readonly IncludedPromptSegment[];
 }
 
 export async function runPreLLMCallHook(
@@ -447,6 +466,7 @@ export async function runPreLLMCallHook(
       model: replace.model ?? request.model,
       tools: replace.tools ?? request.tools,
       stream: replace.stream === false ? false : request.stream,
+      promptSegments: request.promptSegments,
     };
   }
   return request;

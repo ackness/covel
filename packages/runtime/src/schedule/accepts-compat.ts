@@ -362,14 +362,15 @@ function compareObjects(
       if (!(key in aProps)) return "incompatible";
     }
   }
-  // Recurse into shared properties.
+  // Recurse into the properties accepts constrains.
   const aProps = (accepts.properties as Record<string, Schema>) ?? {};
   for (const key of Object.keys(aProps)) {
-    if (key in pProps) {
-      const nested = checkAcceptsCompatibility(pProps[key]!, aProps[key]!);
-      if (nested === "incompatible") return "incompatible";
-      if (nested === "indeterminate") return "indeterminate";
-    }
+    // A producer that declares no schema for the key and forbids undeclared
+    // keys never sends it. Otherwise it may send any value under that key.
+    if (!(key in pProps) && producer.additionalProperties === false) continue;
+    const nested = checkAcceptsCompatibility(pProps[key] ?? {}, aProps[key]!);
+    if (nested === "incompatible") return "incompatible";
+    if (nested === "indeterminate") return "indeterminate";
   }
   return "compatible";
 }
