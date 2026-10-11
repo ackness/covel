@@ -1,9 +1,16 @@
-import { ArrowRight, Download } from "lucide-react";
 import type { Copy } from "../copy.js";
-import { CHANGELOG_URL, DOCS_URL, RELEASES_URL, REPO_URL } from "../links.js";
-import { container, primaryButton, secondaryButton } from "./ui.js";
+import type { DownloadLinks } from "../download.js";
+import { DownloadButtons } from "./DownloadButtons.js";
+import { CHANGELOG_URL, DOCS_URL, REPO_URL } from "../links.js";
+import { container } from "./ui.js";
 
-export function Closing({ copy }: { copy: Copy }) {
+export function Closing({
+  copy,
+  download,
+}: {
+  copy: Copy;
+  download: DownloadLinks;
+}) {
   return (
     <>
       <section
@@ -21,16 +28,7 @@ export function Closing({ copy }: { copy: Copy }) {
             <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted sm:text-lg">
               {copy.cta.body}
             </p>
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <a href={RELEASES_URL} className={primaryButton}>
-                <Download className="h-4 w-4" />
-                {copy.hero.primary}
-              </a>
-              <a href={REPO_URL} className={secondaryButton}>
-                {copy.hero.secondary}
-                <ArrowRight className="h-4 w-4" />
-              </a>
-            </div>
+            <DownloadButtons copy={copy} download={download} />
           </div>
         </div>
       </section>

@@ -4,7 +4,7 @@
 
 ### Added
 
-- **A separate showcase website.** `apps/site` is a static site with new sections and copy in English and Chinese, a light and a dark theme, and the four bundled worlds. Run it with `pnpm --filter @covel/site dev`; `pnpm --filter @covel/site build` writes `apps/site/dist/`. The demo media script moved with it: `pnpm --filter @covel/site build:media`.
+- **A separate showcase website.** `apps/site` is a static site with new sections and copy in English and Chinese, a light and a dark theme, and the four bundled worlds. Its download button gives a macOS or Windows visitor the installer from the latest release, with the Windows portable build beside it. Run it with `pnpm --filter @covel/site dev`; `pnpm --filter @covel/site build` writes `apps/site/dist/`. The demo media script moved with it: `pnpm --filter @covel/site build:media`.
 
 ### Removed
 

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App.js";
 import { COPY, LANGS } from "../copy.js";
+import { detectPlatform, pickDownload } from "../download.js";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -66,5 +67,63 @@ describe("showcase site", () => {
       links: COPY[lang].creators.links.map((link) => link.href),
     });
     expect(shape("zh")).toEqual(shape("en"));
+  });
+});
+
+describe("download links", () => {
+  const assets = [
+    "Covel-electron-0.0.50-mac-arm64.dmg",
+    "Covel-electron-0.0.50-mac-arm64.zip",
+    "Covel-electron-0.0.50-win-x64-portable.exe",
+    "Covel-electron-0.0.50-win-x64.exe",
+    "SHA256SUMS.txt",
+  ].map((name) => ({ name, browser_download_url: `https://dl/${name}` }));
+
+  it("picks the installer, and on Windows the portable build too", () => {
+    expect(pickDownload(assets, "mac")).toEqual({
+      href: "https://dl/Covel-electron-0.0.50-mac-arm64.dmg",
+      platform: "mac",
+    });
+    expect(pickDownload(assets, "windows")).toEqual({
+      href: "https://dl/Covel-electron-0.0.50-win-x64.exe",
+      platform: "windows",
+      portable: "https://dl/Covel-electron-0.0.50-win-x64-portable.exe",
+    });
+    expect(pickDownload(assets.slice(0, 2), "windows")).toBeUndefined();
+  });
+
+  it("recognises desktop systems and leaves phones to the release page", () => {
+    const mac =
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+    const win = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+    const iphone =
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15";
+    expect(detectPlatform({ userAgent: mac })).toBe("mac");
+    expect(detectPlatform({ userAgent: win })).toBe("windows");
+    expect(detectPlatform({ userAgent: iphone })).toBeUndefined();
+    expect(detectPlatform({ userAgent: "X11; Linux x86_64" })).toBeUndefined();
+  });
+
+  it("links the visitor's installer once the latest release is known", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ assets }) }),
+    );
+    render(<App />);
+    const [button] = await screen.findAllByRole("link", {
+      name: COPY.en.hero.primaryFor.windows,
+    });
+    expect(button?.getAttribute("href")).toBe(
+      "https://dl/Covel-electron-0.0.50-win-x64.exe",
+    );
+    const [portable] = screen.getAllByRole("link", {
+      name: COPY.en.hero.portable,
+    });
+    expect(portable?.getAttribute("href")).toBe(
+      "https://dl/Covel-electron-0.0.50-win-x64-portable.exe",
+    );
   });
 });

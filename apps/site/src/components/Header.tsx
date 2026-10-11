@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import type { Copy } from "../copy.js";
-import { RELEASES_URL } from "../links.js";
+import type { DownloadLinks } from "../download.js";
 import { container } from "./ui.js";
 
 type Theme = "light" | "dark";
@@ -13,9 +13,11 @@ function currentTheme(): Theme {
 
 export function Header({
   copy,
+  download,
   onToggleLang,
 }: {
   copy: Copy;
+  download: DownloadLinks;
   onToggleLang: () => void;
 }) {
   const [theme, setTheme] = useState<Theme>(currentTheme);
@@ -98,7 +100,7 @@ export function Header({
             )}
           </button>
           <a
-            href={RELEASES_URL}
+            href={download.href}
             className="ml-2 hidden h-9 items-center rounded-full bg-ink px-4 text-sm font-medium text-page transition hover:opacity-90 sm:inline-flex"
           >
             {copy.nav.download}
@@ -133,7 +135,7 @@ export function Header({
               {link.label}
             </a>
           ))}
-          <a href={RELEASES_URL} className="py-3 text-base text-accent">
+          <a href={download.href} className="py-3 text-base text-accent">
             {copy.nav.download}
           </a>
         </nav>

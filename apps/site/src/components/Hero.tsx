@@ -1,11 +1,18 @@
 import { useEffect, useRef } from "react";
-import { ArrowRight, Download } from "lucide-react";
 import type { Copy } from "../copy.js";
-import { RELEASES_URL, REPO_URL } from "../links.js";
-import { container, primaryButton, secondaryButton } from "./ui.js";
+import type { DownloadLinks } from "../download.js";
+import { DownloadButtons } from "./DownloadButtons.js";
+import { REPO_URL } from "../links.js";
+import { container } from "./ui.js";
 import { version } from "../../package.json";
 
-export function Hero({ copy }: { copy: Copy }) {
+export function Hero({
+  copy,
+  download,
+}: {
+  copy: Copy;
+  download: DownloadLinks;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // A visitor who asked for reduced motion gets the poster frame only.
@@ -46,16 +53,7 @@ export function Hero({ copy }: { copy: Copy }) {
           <p className="mx-auto mt-7 max-w-2xl text-base leading-relaxed text-pretty text-muted sm:text-lg">
             {copy.hero.body}
           </p>
-          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <a href={RELEASES_URL} className={primaryButton}>
-              <Download className="h-4 w-4" />
-              {copy.hero.primary}
-            </a>
-            <a href={REPO_URL} className={secondaryButton}>
-              {copy.hero.secondary}
-              <ArrowRight className="h-4 w-4" />
-            </a>
-          </div>
+          <DownloadButtons copy={copy} download={download} />
           <p className="mt-5 text-xs text-muted">{copy.hero.note}</p>
         </div>
 

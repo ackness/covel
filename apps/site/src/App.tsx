@@ -7,10 +7,12 @@ import { Worlds } from "./components/Worlds.js";
 import { Features } from "./components/Features.js";
 import { Creators } from "./components/Creators.js";
 import { Closing } from "./components/Closing.js";
+import { useDownload } from "./download.js";
 
 export function App() {
   const [lang, setLang] = useState<Lang>(initialLang);
   const copy = COPY[lang];
+  const download = useDownload();
 
   useEffect(() => {
     document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
@@ -28,15 +30,15 @@ export function App() {
 
   return (
     <div className="min-h-dvh overflow-x-clip">
-      <Header copy={copy} onToggleLang={toggleLang} />
+      <Header copy={copy} download={download} onToggleLang={toggleLang} />
       <main>
-        <Hero copy={copy} />
+        <Hero copy={copy} download={download} />
         <Play copy={copy} />
         <Worlds copy={copy} />
         <Features copy={copy} />
         <Creators copy={copy} />
       </main>
-      <Closing copy={copy} />
+      <Closing copy={copy} download={download} />
     </div>
   );
 }
