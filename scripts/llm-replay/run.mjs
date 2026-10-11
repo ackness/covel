@@ -154,9 +154,12 @@ const waitForHealth = async (url, child, timeoutMs = 120_000) => {
   throw new Error(`the test server did not answer ${url} in ${timeoutMs} ms`);
 };
 
+// A child killed by a signal has a null exitCode and a signalCode; its "exit"
+// event has already fired by then, so waiting for it would never return.
 const exited = (child) =>
   new Promise((done) => {
     if (child.exitCode !== null) done(child.exitCode);
+    else if (child.signalCode !== null) done(1);
     else child.once("exit", (code) => done(code ?? 1));
   });
 

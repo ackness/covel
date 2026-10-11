@@ -1,0 +1,68 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:8dc2698f383d632fb2b103aa518b026a6b43da68c40ea8fe361a9e54ecb1f1eb",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "sync-characters（本回合无角色状态变化）",
+        "toolCalls": [
+          {
+            "name": "sync-characters",
+            "arguments": "{\"creates\": [], \"updates\": []}",
+            "id": "call_00_X7V4SgnCPWSjNUjTrOIw1232"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3828,
+          "completion_tokens": 68,
+          "total_tokens": 3896
+        }
+      },
+      "recordedTimings": {
+        "ttftMs": 2944,
+        "interChunkDelaysMs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "totalDurationMs": 2944
+      },
+      "metadata": {
+        "systemHash": "15fb6b6d",
+        "toolsHash": "d273592b"
+      }
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:12a75b1f5882d55972fe4661eeab1297891ec4f70fc5f7ef361d5fe9195cc25e",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"amount\": 0, \"unit\": \"phase\", \"reason\": \"三人在酒馆内继续同一段交谈，分享判断与下一步打算，未离开当前时辰。\"}",
+            "id": "call_00_5L26TF6BPFDITrEDL1H82667"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2051,
+          "completion_tokens": 90,
+          "total_tokens": 2141
+        }
+      },
+      "recordedTimings": {
+        "ttftMs": 2827,
+        "interChunkDelaysMs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "totalDurationMs": 2827
+      },
+      "metadata": {
+        "systemHash": "57506c2f",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}

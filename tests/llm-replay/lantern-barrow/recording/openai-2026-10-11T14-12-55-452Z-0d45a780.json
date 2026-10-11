@@ -1,0 +1,87 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:ad049fbe753a92d0a592e8191e833579f43b528df5d41b696f034f001ebcab71",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"reason\": \"三人在酒馆内压低声音交换警觉观察与去向判断，仍在同一段对话内，未离开当前时辰。\", \"amount\": 0, \"unit\": \"phase\"}",
+            "id": "call_00_se51lI1FmOGqDf62ESPy9423"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2115,
+          "completion_tokens": 94,
+          "total_tokens": 2209
+        }
+      },
+      "recordedTimings": {
+        "ttftMs": 2715,
+        "interChunkDelaysMs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "totalDurationMs": 2716
+      },
+      "metadata": {
+        "systemHash": "233fe450",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:460135197f2a9a63190ca626f8ac8af80e0fd8085364dfff5df756a2b31ce42b",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-dimensions",
+            "arguments": "{\"followsClock\": [], \"updates\": []}",
+            "id": "call_00_b9M1jZnvIDoqeziMVPAZ9916"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 57,
+          "total_tokens": 4804
+        }
+      },
+      "recordedTimings": {
+        "ttftMs": 2785,
+        "interChunkDelaysMs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "totalDurationMs": 2785
+      },
+      "metadata": {
+        "systemHash": "46d41c82",
+        "toolsHash": "2a7f6aca"
+      }
+    }
+  ]
+}

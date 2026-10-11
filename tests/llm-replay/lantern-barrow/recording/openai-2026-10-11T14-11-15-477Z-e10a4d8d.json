@@ -1,0 +1,98 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:d8f8df52779a419d523fc48d855e8fa95ddf8aa78ab9b14f8a411717085fe841",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"amount\": 0, \"unit\": \"phase\", \"reason\": \"玩家只在酒馆内环视四周、翻看铭文册并与雷恩、布兰诺克交谈，全程仍在同一段对话中，未离开当前时辰。\"}",
+            "id": "call_00_qU9GGRqAsrvwGq3kCDXz1102"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2179,
+          "completion_tokens": 105,
+          "total_tokens": 2284
+        }
+      },
+      "recordedTimings": {
+        "ttftMs": 3357,
+        "interChunkDelaysMs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "totalDurationMs": 3358
+      },
+      "metadata": {
+        "systemHash": "8d6d4bf4",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}

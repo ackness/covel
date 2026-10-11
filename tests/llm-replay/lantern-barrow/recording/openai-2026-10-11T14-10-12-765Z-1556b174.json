@@ -1,0 +1,97 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:139b2bc3a383041425cce2c54f47d1022ebacbc7599863016d28011a0021680d",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"reason\": \"玩家在酒馆内向梅瑞尔问价、听布兰诺克与修女雷恩搭话，全程是一段短对话，未离开当前时辰。\", \"amount\": 0, \"unit\": \"phase\"}",
+            "id": "call_00_jRhR6NQaI3QqSkY93NnC0579"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2080,
+          "completion_tokens": 104,
+          "total_tokens": 2184
+        }
+      },
+      "recordedTimings": {
+        "ttftMs": 2972,
+        "interChunkDelaysMs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "totalDurationMs": 2972
+      },
+      "metadata": {
+        "systemHash": "2c503287",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}
