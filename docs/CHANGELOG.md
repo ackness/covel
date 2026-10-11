@@ -271,6 +271,7 @@ Not verified for this release: no session was played in the desktop app (a local
 - **A pending dimension settlement is retried before the next turn.** The next player action first runs the recovery that the Retry button of the pending-settlement notice runs. The turn is refused only when that fails too, and the message now says what to press. Rule: `docs/reference/dynamic-dimensions.md`.
 - **Memory asks for its update as JSON, and a reply it cannot read is on record.** `memory/extract` passes the shape of its update as `responseFormat`, and writes the start and the end of an unreadable reply to the log (the trace keeps no reply text).
 - **A reloaded session no longer stays on "Restoring the save".** When the saved view arrived at the same moment as the answer of the execution status check, the check put the session back into its restoring state and repeated that every three seconds, so the stage or the chat never appeared until the player reloaded again.
+- **Three Chinese characters are readable in the Stage style's titles.** The bundled display font draws U+56DE, U+5703 and U+5704 as solid squares; titles now take them from the next font in the list.
 
 ### Security
 
