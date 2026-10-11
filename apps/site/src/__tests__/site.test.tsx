@@ -3,11 +3,19 @@ import path from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App.js";
-import { COPY, LANGS } from "../copy.js";
+import { COPY, LANGS, PLUGIN_IDS } from "../copy.js";
+import { PACKS } from "../packs.js";
 import { detectPlatform, pickDownload } from "../download.js";
 
 beforeEach(() => {
   window.localStorage.clear();
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   window.history.replaceState(null, "", "/");
   vi.stubGlobal(
     "matchMedia",
@@ -59,14 +67,28 @@ describe("showcase site", () => {
     }
   });
 
-  it("lists the same worlds, steps and features in both languages", () => {
+  it("lists the same worlds, steps and plugins in both languages", () => {
     const shape = (lang: (typeof LANGS)[number]) => ({
       worlds: COPY[lang].worlds.list.map((world) => world.id),
-      steps: COPY[lang].play.steps.length,
-      features: COPY[lang].features.items.length,
-      links: COPY[lang].creators.links.map((link) => link.href),
+      steps: COPY[lang].matrix.chapters.map((chapter) =>
+        chapter.steps.map((step) => [step.visual, step.points.length]),
+      ),
+      plugins: COPY[lang].core.items.map((item) => item.ids),
+      links: COPY[lang].matrix.links.map((link) => link.href),
     });
     expect(shape("zh")).toEqual(shape("en"));
+  });
+
+  it("only lights up plugins the repository ships", () => {
+    const plugins = path.join(import.meta.dirname, "../../../../plugins");
+    const named = [
+      ...PLUGIN_IDS,
+      ...Object.values(PACKS).flat(),
+      ...COPY.en.core.items.flatMap((item) => item.ids.split(" · ")),
+    ];
+    for (const id of new Set(named)) {
+      expect(existsSync(path.join(plugins, id, "PLUGIN.md")), id).toBe(true);
+    }
   });
 });
 
