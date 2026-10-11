@@ -115,6 +115,7 @@ vendor/
 tmp/
 *.png
 !apps/web/public/icon.png
+!apps/site/public/icon.png
 !apps/desktop/resources/icon.png
 # World character portraits and scene backdrops are tracked assets (generated once, reused).
 !worlds/**/media/portraits/*.png
