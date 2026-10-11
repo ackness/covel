@@ -32,6 +32,7 @@
 | 配置环境变量                          | [`env-registry.md`](./env-registry.md)                                         | `packages/shared/src/env/registry.ts`                                                          |
 | 做主题包                              | [`themes.md`](./themes.md)                                                     | [`../reference/theme-packages.md`](../reference/theme-packages.md)                             |
 | 写外部 Agent skill                    | [`skills.md`](./skills.md)                                                     | `.claude/skills/`                                                                              |
+| 查命令和 git hook / CI 范围           | [`commands.md`](./commands.md)                                                 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                                                     |
 | 做浏览器 E2E                          | [`e2e-testing.md`](./e2e-testing.md)                                           | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                                               |
 
 ## Writing Rules

@@ -69,7 +69,6 @@
     "validate:world": "node --import tsx scripts/validate-release-worlds.ts",
     "validate:collection": "node --import tsx scripts/validate-collection.ts",
     "pack:collection": "pnpm --filter @covel/server exec tsx scripts/pack-collection.ts",
-    "check:env": "node ./scripts/check-production-env.mjs",
     "create-plugin": "node scripts/create-plugin.js",
     "create-collection": "node scripts/create-collection.js",
     "release:prepare": "node ./scripts/release-prepare.mjs",

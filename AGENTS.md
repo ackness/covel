@@ -54,6 +54,7 @@ Guides (`docs/guide/`) — task walkthroughs:
 - Testing: `e2e-testing.md` (Playwright and the pre-release playthrough), `e2e-plugin-verify.md` (real-LLM harness)
 - How to write a prompt body (contract zone, voice zone, vocabulary): `prompt-style.md`
 - Environment variables: `env-registry.md`
+- Less common root scripts, git hooks and CI scope: `commands.md`
 - Desktop config and packaging: `desktop-config.md`, `desktop-packaging.md`
 - Themes: `themes.md`; agent skills: `skills.md`
 
@@ -87,7 +88,6 @@ pnpm dev              # web (5173) + server (3001), SqliteStore (./data/covel.db
 pnpm dev:web          # web only
 pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
-pnpm dev:electron     # desktop shell in development
 pnpm stop             # kill stray dev/turbo processes
 pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails), package boundaries, deps:check,
                       # plugin manifests, schema reference, prompt variants, i18n, changelog fragments,
@@ -96,69 +96,25 @@ pnpm lint             # tsc --noEmit for the FULL workspace (not one package), t
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:docs        # the tests that read documentation; all a documentation-only change needs after pnpm check
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
-pnpm test:coverage:runtime  # @covel/runtime tests with coverage; fails under the floor in its vitest.config.ts (CI runs it)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
-pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isolated home
-pnpm e2e:verify       # API-driven real-LLM plugin harness against a running server (its keys come from .env.llm
-                      # or the environment); uses the configured models, --slot overrides the story slot
-pnpm e2e:replay       # replay the scripted sessions recorded under tests/llm-replay/ without a model, each on a
-                      # test server of its own; --record --upstream <origin> [session] records them again after
-                      # a world, plugin, prompt or model change (docs/guide/e2e-plugin-verify.md)
-pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, for repeating a scripted
-                      # session without model calls: pnpm llm:replay --mode record --upstream <origin>
-                      # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff
-                      # <a.requests> <b.requests> shows where two runs differ (docs/guide/e2e-plugin-verify.md)
-pnpm prompt:prefix    # per runtime of a recorded session: the size of each turn's first model request, how
-                      # much of it repeats the previous turn's from the start (the part a provider's prompt
-                      # cache can serve), and where the two first differ: pnpm prompt:prefix <covel.db>
-                      # [--session <id>] [--show <runtimeId>] [--json] (docs/reference/prompt-structure.md)
-pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
-pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name> [-t dir] [-r a:function,b:agent]
-                      # default target is the user plugin dir; --with-tools scaffolds into plugins/
-pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
-                      # from the Zod schemas; run after changing an author-facing schema field
-pnpm describe:authoring  # what a world may contain for the scanned plugins: files, data contracts
-                      # with the path each file goes to and an example, plugin IDs and settings
-                      # (--json, --check validates plugin examples, --plugins <dir>)
+pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name>; --with-tools scaffolds into plugins/
 pnpm validate:plugin  # validate PLUGIN.md / RUNTIME.md and locale files; a plugin DIR also gets
                       # cross-runtime checks, a check that PLUGIN.md and package.json state one
                       # version, and a line with the languages it has text in
 pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, every seed record):
                       # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>
-pnpm validate:collection  # static check of a covel-collection.yaml directory (docs/guide/collections.md)
-pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [dir]
-pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]
-pnpm test:plugin-lifecycle  # install, authorize, run, and remove a community ZIP through the real API
-pnpm test:tabletop-plugin   # the same for tabletop-rules packed under a different plugin ID
-pnpm pack:test-plugin       # write the ZIPs those tests use to test-results/ (also pack:tabletop-plugin)
-pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool definitions are English;
-                      # Chinese text in framework source only in recorded files; every label and
-                      # text of a bundled plugin has a current Chinese translation;
-                      # every t() fallback in web code equals the en-US catalog text
-pnpm i18n             # translation tooling for a plugin or world directory: status, extract,
-                      # translate (configured model; --to <dir> keeps a plugin's translation
-                      # outside its package), lock (docs/reference/i18n.md)
-pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt
-                      # (pnpm prompts:lock records a pair after both languages changed); it also prints
-                      # style and structure warnings, which do not fail it (docs/guide/prompt-style.md)
-pnpm check:boundaries # workspace public entry points, declared deps, package direction
-pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
-pnpm analyze          # Fallow report: dead code, duplication, complexity; exits non-zero
-                      # while findings remain, so it is a report, not a gate
+pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
+                      # from the Zod schemas; run after changing an author-facing schema field
 pnpm check:push       # what the pre-push hook runs, on the committed HEAD: install, pnpm check, the tests of
-                      # the packages changed since origin/main with their dependents, pnpm e2e --list;
-                      # --full runs every suite, --base <ref> measures from another branch
+                      # the packages changed since origin/main with their dependents, pnpm e2e --list
 pnpm changelog:preview  # print [Unreleased] as the next release will have it, from docs/changelog.d/
-pnpm changelog:release  # at release: pnpm changelog:release <version> [--date YYYY-MM-DD] moves the
-                      # fragments into docs/CHANGELOG.md and deletes them (docs/changelog.d/README.md)
-pnpm release:prepare  # pnpm release:prepare <version> [--dry-run] [--date YYYY-MM-DD]: sets the version in
-                      # the root, apps/* and packages/* manifests and both README badges, then runs the
-                      # changelog assembly; refuses a lower version or a dirty tree; no commit or tag
-pnpm format           # Prettier
-pnpm build            # all Turbo build targets
-pnpm build:electron   # production desktop installer → release/
-pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/prompt structure
 ```
+
+Less common commands are in [`docs/guide/commands.md`](docs/guide/commands.md):
+Electron and Docker, coverage, real-LLM verify and record/replay (`e2e:verify`,
+`e2e:replay`, `llm:replay`, `prompt:prefix`), `test:runtime`, plugin ZIP lifecycle
+tests, `describe:authoring`, collections, `i18n`, the individual `check:*` commands,
+and the release scripts (`changelog:release`, `release:prepare`, `release:preflight`).
 
 Before pushing, run `pnpm check` and the tests of the packages you changed
 (`pnpm --filter <pkg> test`) — `pnpm lint` alone misses the dependency, manifest,
@@ -167,47 +123,18 @@ push that follows it sends without running them again. Add `pnpm test:pg` for
 store or database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows. CI runs
 every suite; `pnpm test` runs them all locally.
 
-Every command in the block above is expected to run as written. A command shown
-in `docs/`, a template, or a skill must be one that actually runs: when a root
-script, its arguments, or a scaffold's output changes, re-run the documented
-sequence and fix every page that shows it.
+Every command shown in this file, in `docs/`, a template, or a skill must be one
+that actually runs: when a root script, its arguments, or a scaffold's output
+changes, re-run the documented sequence and fix every page that shows it.
 
-Git hooks: pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint (rules in
-`.oxlintrc.jsonc`, the same `--deny-warnings` as `pnpm check`), and the full
-`pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs what the push can
-break, in a clean checkout of each pushed tip: install, `pnpm check`, the tests of
-the packages changed since the remote's main branch with the packages that depend
-on them, and `pnpm e2e --list` (`pnpm check:push` runs the same check on HEAD).
-A suite that reads files outside its package runs when its `$TURBO_ROOT$` inputs in
-`turbo.json` name a changed file, so keep those inputs true. Every suite runs when
-the change touches the lockfile, `turbo.json`, `vitest.base.ts`, the root
-`package.json` / `tsconfig.json`, or a root file no rule accounts for
-(`scripts/lib/push-scope.mjs`), on a push to `main` or of a tag, when the remote's
-main branch is unknown, and on request (`COVEL_PUSH_CHECK=full git push`,
-`pnpm check:push --full`). The checkout uses the Turbo cache the worktrees share,
-so a task already run on the same tracked inputs replays. A commit that passed is
-remembered for 12 hours and is not checked again when its push is repeated. CI
-(`.github/workflows/ci.yml`) runs everything: check, every test suite and the
-build, with Web unit tests, server tests with the runtime coverage floor,
-PostgreSQL integration, and browser smoke in parallel jobs; see
-`docs/CONTRIBUTING.md`.
+Git hooks (pre-commit, the opt-in pre-push from `pnpm hooks:install`), which suites
+a push runs, and the short path for documentation-only changes (`pnpm check` +
+`pnpm test:docs`; a test that reads documentation must be named in the root
+`test:docs` script) are in `docs/guide/commands.md#git-hooks-and-ci-scope`.
 
-A change that touches only documentation takes a short path in both places: the
-hook and `.github/workflows/docs.yml` run `pnpm check` and `pnpm test:docs`, and
-`ci.yml` does not run. Documentation is `docs/**`, a root-level `*.md`, any
-`README.md` / `README.*.md`, a nested `AGENTS.md` / `CLAUDE.md`,
-`.claude/skills/**`, `.assets/**`, `LICENSE`, and the issue and pull request
-templates (`scripts/lib/change-scope.mjs`). Markdown that a loader reads
-(`PLUGIN.md`, `RUNTIME.md`, `WORLD.md`, the files under `prompts/`) is source. A
-changelog fragment is documentation. A test that reads documentation must be named
-in the root `test:docs` script; `scripts/tests/change-scope.test.mjs` fails
-otherwise.
-
-Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`.
-Keep `tailwind-lint` read-only: v0.12.1 can treat ordinary TypeScript identifiers
-as classes and corrupt them through `--fix`. Canonical numeric Tailwind utilities
-depend on the default `--spacing` scale; audit fixed-layout geometry before
-overriding that token globally.
+Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`;
+keep `tailwind-lint` read-only, because `--fix` can corrupt TypeScript identifiers
+(`docs/guide/commands.md#tailwind-diagnostics`).
 
 ## Config Files
 

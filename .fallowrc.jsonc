@@ -28,8 +28,11 @@
   ],
   // Desktop depends on Web to order and stage its build, without a source import.
   // The font packages are read through url() in apps/web/src/styles/fonts.css, which fallow does not follow.
+  // yaml is a root devDependency of the repo tooling, but the authoring CLI scripts/generate-scenes.mjs is an entry above,
+  // so fallow counts it as production code.
   "ignoreDependencies": [
     "@covel/web",
+    "yaml",
     "@fontsource-variable/fraunces",
     "@fontsource-variable/geist",
     "@fontsource-variable/geist-mono",
