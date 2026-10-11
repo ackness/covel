@@ -1,9 +1,6 @@
 {
   "id": "lifecycle-probe-panel",
-  "label": {
-    "zh": "生命周期测试",
-    "en": "Lifecycle Probe"
-  },
+  "label": "Lifecycle Probe",
   "icon": "flask-conical",
   "alwaysRender": true,
   "dataSource": {
@@ -18,25 +15,22 @@
       {
         "component": "Button",
         "props": {
-          "label": {
-            "zh": "查看状态",
-            "en": "Show status"
-          }
+          "label": "Show status"
         },
         "on": {
           "click": {
             "action": "invokeCommand",
-            "params": { "command": "probe", "args": {} }
+            "params": {
+              "command": "probe",
+              "args": {}
+            }
           }
         }
       },
       {
         "component": "Button",
         "props": {
-          "label": {
-            "zh": "写入记录",
-            "en": "Write note"
-          }
+          "label": "Write note"
         },
         "on": {
           "click": {
@@ -50,10 +44,7 @@
       {
         "component": "Button",
         "props": {
-          "label": {
-            "zh": "运行后台任务",
-            "en": "Run background job"
-          }
+          "label": "Run background job"
         },
         "on": {
           "click": {
@@ -67,10 +58,7 @@
       {
         "component": "Button",
         "props": {
-          "label": {
-            "zh": "调用 Agent",
-            "en": "Run agent"
-          }
+          "label": "Run agent"
         },
         "on": {
           "click": {

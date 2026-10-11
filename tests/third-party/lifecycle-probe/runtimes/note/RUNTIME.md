@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 写入确定性测试记录
-  en: Write a deterministic test record
+description: Write a deterministic test record
 schedule:
   trigger:
     type: manual

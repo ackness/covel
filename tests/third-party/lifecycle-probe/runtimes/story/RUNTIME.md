@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 生成固定测试叙事
-  en: Produce a deterministic test story
+description: Produce a deterministic test story
 schedule:
   stage: narrative
   trigger:

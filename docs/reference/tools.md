@@ -940,7 +940,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 文本工具接收非空 `prompt: string`；结构化工具接收至少一个字段的 `prompt: Record<string, unknown>`，由工具负责序列化。两者都要求 `composition: "single-scene" | "comic-strip"`。
 
-工具把规范化后的 `{ prompt, promptMode, composition }` 写入 `plugin_data[prompts]`，并通过 `withEmittedEvents` 发射插件自己的固定 topic。模型不再生成 `{ topic, data }` 事件信封，因此不能漏写或写空 topic；runtime output schema 只校验工具产生的可信结果。两个 prompt-generator 都是 `execution: background`，并以对应工具的 `completeAfterTools` 在一次成功提交后结束，后续 image-generator follower 继续在后台执行。
+工具把规范化后的 `{ prompt, promptMode, composition }` 写入 `plugin_data[prompts]`，并通过 `withEmittedEvents` 发射插件自己的固定 topic。模型不再生成 `{ topic, data }` 事件信封，因此不能漏写或写空 topic；runtime output schema 只校验工具产生的可信结果。两个 prompt-generator 都是手动触发的 agent，声明 `schedule.manual.execution: background`，并以 `agent.loop.completion.afterTools` 列出的对应工具在一次成功提交后结束，后续 image-generator follower 继续在后台执行。
 
 ---
 

@@ -1,8 +1,6 @@
 ---
 type: agent
-description:
-  zh: 为测试叙事生成回复卡
-  en: Generate reply cards for the test story
+description: Generate reply cards for the test story
 schedule:
   stage: post-turn
   trigger:

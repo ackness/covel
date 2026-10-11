@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.commands[name=probe].description": "f85378363199f161",
+      "PLUGIN.md#contributes.settings[key=count].label": "1f913979b4cceb85",
+      "PLUGIN.md#contributes.settings[key=enabled].label": "0fa96b204af3497e",
+      "PLUGIN.md#contributes.settings[key=label].label": "f63c2795d7b48bd1",
+      "PLUGIN.md#contributes.settings[key=voice].label": "ebc8c556d398ec6e",
+      "PLUGIN.md#description": "b9f92216c0567e2b",
+      "PLUGIN.md#displayName": "85493125dd7d1a0a",
+      "runtimes/agent/RUNTIME.md#description": "0d29fdde2560bd4b",
+      "runtimes/background/RUNTIME.md#description": "cc4e65274ce6452e",
+      "runtimes/cards/RUNTIME.md#description": "d6998bd857a8a5a4",
+      "runtimes/note/RUNTIME.md#description": "e9c3ee2a67c67e35",
+      "runtimes/story/RUNTIME.md#description": "e8a907aa5e0cd052"
+    }
+  }
+}
