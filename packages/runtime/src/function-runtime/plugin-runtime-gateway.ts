@@ -67,6 +67,7 @@ export interface FullGatewayLike {
       presetId?: string;
       messages: Array<{ role: string; content: string | null }>;
       defaults?: import("@covel/shared").LLMRequestDefaults;
+      responseFormat?: import("@covel/shared").LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
       providerOptions?: Readonly<
         Record<string, Readonly<Record<string, unknown>>>
@@ -268,6 +269,9 @@ export function createPluginRuntimeGateway(
           ...(input.presetId ? { presetId: input.presetId } : {}),
           messages,
           ...(input.defaults ? { defaults: input.defaults } : {}),
+          ...(input.responseFormat
+            ? { responseFormat: input.responseFormat }
+            : {}),
           ...(input.providerOptions
             ? { providerOptions: input.providerOptions }
             : {}),

@@ -156,6 +156,8 @@ const value = await ctx.services.call(
 
 - 已支持的模型能力：复用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`。Evaluation 使用 `ctx.gateway.evaluate({ presetId, state, questions, signal })`，支持 Boolean、Choice、Score。
 - 自行拼装长提示词时，`ctx.gateway.resolveSlot({ presetId })?.limits` 给出 gateway 对该 slot 实际采用的 `{ contextWindow, maxOutputTokens }`；模型未声明上下文窗口时省略，不把框架兜底值当作真实上限。`generateText` / `generateObject` 可传 `maxOutputTokens` 作为单次调用上限，只能低于玩家为该 slot 配置的输出预算，不能提高它。
+- 需要 JSON 回复时给 `generateText` 传 `responseFormat: { type: "json_schema", schema }`：有 JSON 模式的协议会启用它，schema 同时作为指令加入消息。返回的 `text` 仍是文本，插件自己解析并校验含义；回复读不出来时用 `ctx.logger.warn` 留下有长度上限的摘录，trace 不保存回复正文。
+- `ctx.logger` 的 `warn` / `error` 除写入本会话的 `_logs` 环外，还会写一行到服务器日志（`[plugin-log] <runtimeId>: <message> <meta>`，`meta` 截到 2000 字符），运维不用翻会话数据就能看到。`debug` / `info` 只进 `_logs`。
 - 新供应商使用既有 wire：只配置 provider、base URL、模型和用途，无须改插件或框架。
 - 新 wire 或新的返回形式：服务内部用 `ctx.gateway.resolveSlot` 取得本次请求的模型配置，再用 `ctx.utils.validateBaseUrl` / `fetchWithRetry` 实现协议，定义自己的输入输出 schema。结果通过服务契约提供给其他插件。密钥只留在服务端，不写入结果、日志或 UI。
 - 图片、语音、转写和音乐需要复用统一媒体管线时，继续使用 `covel.registerWires`。媒体落库仍通过现有媒体接口。

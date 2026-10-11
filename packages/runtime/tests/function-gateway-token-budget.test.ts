@@ -62,12 +62,13 @@ function setup(capacity: number | undefined, requested: number | undefined) {
           },
         },
   );
-  const sentMaxTokens = () =>
+  const sentBody = () =>
     JSON.parse(
       (fetch.mock.calls as unknown as Array<[string, RequestInit]>)[0]![1]
         .body as string,
-    ).max_tokens;
-  return { gateway, sentMaxTokens };
+    ) as { max_tokens: number; system?: unknown };
+  const sentMaxTokens = () => sentBody().max_tokens;
+  return { gateway, sentMaxTokens, sentBody };
 }
 
 describe("function plugin output budget", () => {
@@ -104,6 +105,21 @@ describe("function plugin output budget", () => {
       expect(sentMaxTokens()).toBe(expected);
     },
   );
+
+  it("carries a plugin's response format to the provider request", async () => {
+    const { gateway, sentBody } = setup(8192, undefined);
+    await gateway.generateText({
+      presetId: "fast",
+      prompt: "Synthetic rewrite",
+      responseFormat: {
+        type: "json_schema",
+        schema: { type: "object", properties: { scene: { type: "string" } } },
+      },
+    });
+    expect(JSON.stringify(sentBody().system)).toContain(
+      '<response-format>{\\"type\\":\\"object\\"',
+    );
+  });
 
   it("reports the limits the gateway will apply to the slot", () => {
     const { gateway } = setup(65_536, 32_768);

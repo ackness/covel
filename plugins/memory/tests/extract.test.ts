@@ -166,6 +166,36 @@ describe("memory plugin extraction", () => {
     expect(writes.map((write) => write.key)).toEqual(["scene"]);
   });
 
+  it("asks for JSON of its own blocks and logs a reply that cannot be read", async () => {
+    const { ctx, gateway } = fixture();
+    const warn = vi.fn(async () => {});
+    const unreadable = `{"scene":"She said "wait"${" and waited".repeat(200)}"}`;
+    gateway.generateText.mockImplementation(async () => ({
+      text: unreadable,
+      finishReason: "stop",
+    }));
+    await expect(extract({ ...ctx, logger: { warn } })).rejects.toThrow(
+      "invalid JSON",
+    );
+    const request = gateway.generateText.mock.calls[0]![0] as unknown as {
+      responseFormat: { schema: { properties: Record<string, unknown> } };
+    };
+    expect(request.responseFormat.schema.properties).toMatchObject({
+      scene: { type: "string" },
+      new_facts: { type: "array" },
+    });
+    // Both attempts are on record, each with the two ends of the reply.
+    expect(warn).toHaveBeenCalledTimes(2);
+    const [, meta] = warn.mock.calls[1] as unknown as [
+      string,
+      { attempt: number; replyChars: number; reply: string },
+    ];
+    expect(meta).toMatchObject({ attempt: 2, replyChars: unreadable.length });
+    expect(meta.reply.length).toBeLessThan(1000);
+    expect(meta.reply.startsWith('{"scene":"She said "wait"')).toBe(true);
+    expect(meta.reply.endsWith('waited"}')).toBe(true);
+  });
+
   it("leaves retrying a failed provider call to the gateway", async () => {
     const { ctx, writes, gateway } = fixture();
     gateway.generateText.mockRejectedValue(

@@ -284,6 +284,29 @@ function parseBlockUpdates(raw, validLabels) {
   return parseMemoryUpdate(raw, validLabels).blocks;
 }
 
+/**
+ * The shape of a memory update, for the provider's JSON mode: every block is
+ * optional text and the facts are a short list. It makes the reply JSON;
+ * `parseMemoryUpdate` still decides what a reply means.
+ */
+function memoryUpdateSchema(blocks) {
+  return {
+    title: "memory_update",
+    type: "object",
+    properties: {
+      ...Object.fromEntries(
+        blocks.map((block) => [block.label, { type: "string" }]),
+      ),
+      [NEW_FACTS_KEY]: {
+        type: "array",
+        items: { type: "string" },
+        maxItems: MAX_FACTS_PER_TURN,
+      },
+    },
+    additionalProperties: false,
+  };
+}
+
 /** Block updates and new facts of one reply. Facts that cannot be read are left out; they never fail the blocks. */
 function parseMemoryUpdate(raw, validLabels) {
   const result = new Map();
@@ -384,5 +407,6 @@ export {
   cutAtSentence,
   parseBlockUpdates,
   parseMemoryUpdate,
+  memoryUpdateSchema,
   NEW_FACTS_KEY,
 };

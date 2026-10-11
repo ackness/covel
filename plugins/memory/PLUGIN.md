@@ -1,7 +1,7 @@
 ---
 id: memory
 kind: core
-version: 0.0.37
+version: 0.0.38
 displayName: Story Memory
 description: >-
   Shows what the story remembers, including plot, scene, relationships, and hero

@@ -366,6 +366,15 @@ export interface PluginServiceGateway {
       readonly reasoningEffort?: "disabled";
       readonly toolChoice?: "required" | { readonly name: string };
     };
+    /**
+     * Ask for a JSON reply of this shape (a JSON Schema). The provider's JSON
+     * mode is used where it has one, and the schema is added to the
+     * instructions. `text` is still text: parse it and check what it says.
+     */
+    readonly responseFormat?: {
+      readonly type: "json_schema";
+      readonly schema: Readonly<Record<string, unknown>>;
+    };
     /** Output ceiling for this call; never raises the slot's configured budget. */
     readonly maxOutputTokens?: number;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
