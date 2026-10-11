@@ -5,3 +5,4 @@
 ### Fixed
 
 - **A model that accepts a request and then sends nothing no longer uses up an agent's whole time.** The first-token wait was 120 seconds, the same as the `timeoutMs` of the bookkeeping agents, so the retry that `maxRetries` allows was reported at the moment the runtime timed out and never ran. The wait is now bounded as described above, so a stream that stalls once is repeated and the runtime succeeds.
+- **A text call of a function runtime that gets no answer is sent again.** `ctx.gateway.generateText`, `generateObject` and `evaluate` are not streamed, so a request the provider accepted and never answered held the handler until `function.timeoutMs` (or the limit of its detached job) ended it. The host now gives up such a call after half of the time the runtime has left, at least 60 seconds, and sends it once more. A runtime with 60 seconds or less makes one attempt as before. Rule: `docs/reference/plugins.md`.

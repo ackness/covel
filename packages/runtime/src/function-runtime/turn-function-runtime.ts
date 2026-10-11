@@ -59,6 +59,7 @@ import {
 } from "../turn-executor/turn-control.js";
 import {
   withDefaultGatewaySignal,
+  withStalledCallRetry,
   withDefaultUtilsSignal,
 } from "./runtime-abort-boundaries.js";
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
@@ -268,10 +269,18 @@ export async function executeFunctionRuntime({
   // through and no function.*/gateway.* events are emitted. Built before
   // imagesHandle so image generation is traced too (withGatewayTrace forwards
   // generateImage only when the source gateway has one).
-  const tracedGateway =
+  const observedGateway =
     runtimeGateway && deps.emitter
       ? withGatewayTrace(runtimeGateway, deps.emitter, helperCtx)
       : runtimeGateway;
+  // Outside the trace, so a call that stalled and its second attempt are two
+  // traced calls.
+  const tracedGateway = observedGateway
+    ? withStalledCallRetry(observedGateway, {
+        deadline: startTime + timeoutMs,
+        runtimeId: manifest.name,
+      })
+    : undefined;
   // ctx.images only when both halves of the pipeline are wired: a gateway
   // that actually exposes generateImage (older test/embedder gateways don't)
   // and a mediaStore to persist through. Either missing → undefined, so
