@@ -7,6 +7,9 @@
    ZCOOL XiaoWei — SIL Open Font License 1.1, see
    public/fonts/zcool-xiaowei/OFL.txt. One weight (400); a theme using
    it for titles must not ask for bold, or the browser synthesises one.
+   The file draws 回, 圃 and 圄 (U+56DE, U+5703, U+5704) as solid
+   squares: their inner outlines run the same way as the outer one.
+   The range below leaves those three to the next family in the stack.
    ───────────────────────────────────────────────────────────────── */
 
 @font-face {
@@ -16,6 +19,7 @@
   font-display: swap;
   src: url("/fonts/zcool-xiaowei/zcool-xiaowei-chinese-simplified-400-normal.woff2")
     format("woff2");
+  unicode-range: U+0-56DD, U+56DF-5702, U+5705-10FFFF;
 }
 
 /* ─────────────────────────────────────────────────────────────────
