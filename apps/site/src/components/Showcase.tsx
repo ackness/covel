@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { PLUGIN_IDS, type Copy, type Visual } from "../copy.js";
+import { asset } from "../links.js";
 import { PACKS } from "../packs.js";
 
 const SCREENS: Record<Exclude<Visual, "languages">, string> = {
-  stage: "/screens/stage-mode.webp",
-  tabletop: "/screens/rpg-systems.webp",
-  story: "/screens/text-mode.webp",
+  stage: asset("screens/stage-mode.webp"),
+  tabletop: asset("screens/rpg-systems.webp"),
+  story: asset("screens/text-mode.webp"),
 };
 
 const GREETINGS = ["你好，旅人。", "Hello, traveller.", "Здравствуй, путник."];

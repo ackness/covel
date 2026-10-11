@@ -7,3 +7,11 @@ export const CHANGELOG_URL = `${REPO_URL}/blob/main/docs/CHANGELOG.md`;
 export function repoFile(path: string): string {
   return `${REPO_URL}/blob/main/${path}`;
 }
+
+/**
+ * A file in `public/`, such as `screens/text-mode.webp`, under the base path
+ * the site is built for (`SITE_BASE`, `/covel/` on GitHub Pages).
+ */
+export function asset(path: string): string {
+  return `${import.meta.env.BASE_URL}${path}`;
+}

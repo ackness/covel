@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import type { Copy } from "../copy.js";
 import type { DownloadLinks } from "../download.js";
-import { DOCS_URL } from "../links.js";
+import { asset, DOCS_URL } from "../links.js";
 import { container } from "./ui.js";
 
 type Theme = "light" | "dark";
@@ -63,7 +63,7 @@ export function Header({
     >
       <div className={`${container} flex h-16 items-center gap-6`}>
         <a href="#top" className="flex items-center gap-2.5">
-          <img src="/icon.png" alt="" className="h-7 w-7 rounded-lg" />
+          <img src={asset("icon.png")} alt="" className="h-7 w-7 rounded-lg" />
           <span className="font-display text-xl font-semibold tracking-tight">
             Covel
           </span>

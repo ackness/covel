@@ -144,6 +144,10 @@ PR、main 和发布复用同一份 CI 检查，pre-push hook 省去的内容都�
 
 记录实际覆盖的平台与流程；构建通过不等于完成该平台的交互试玩。Release notes 必须说明当前产物未签名，macOS 产物也未公证。
 
+### 官网部署
+
+[`site.yml`](../.github/workflows/site.yml) 构建官网 `apps/site`：PR 只构建，推送到 `main`（改动 `apps/site/`、锁文件或该工作流时）或在 Actions 页面手动触发时还会发布到 GitHub Pages。仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。
+
 ### 模型资料快照
 
 内置的 LiteLLM 模型表（`packages/ai-provider/data/model-db.json`，由 `model-db-source.json` 固定到具体提交）决定未在 `llm.toml` 或设置中填写上限的模型的上下文窗口、输出上限与价格。[`update-model-db.yml`](../.github/workflows/update-model-db.yml) 每周一把它固定到 LiteLLM 最新修改模型表的提交，重新生成快照和各模型名称得到哪些思考档位的记录（`tests/__snapshots__/reasoning-characterization.snap.txt`）并跑 `@covel/ai-provider` 测试，然后在 `chore/update-model-db` 分支开启或刷新 PR，不直接推送 `main`；也可在 Actions 页面手动触发。用默认 `GITHUB_TOKEN` 开的 PR 不会触发其他 workflow：配置可开 PR 的 `MODEL_DB_PR_TOKEN` secret 才会自动跑 CI，否则关闭再重开 PR 即可。默认 token 还需要在仓库设置中开启 “Allow GitHub Actions to create and approve pull requests”。手动更新运行 `pnpm --filter @covel/ai-provider update-model-db`。模型表只说明模型是否会思考；它支持哪些档位是人工维护的数据，刷新不会改动，见[档位数据](reference/slots.md#档位数据)。

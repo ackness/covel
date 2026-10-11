@@ -11,6 +11,10 @@ pnpm --filter @covel/site build   # static files in apps/site/dist/
 pnpm --filter @covel/site test
 ```
 
+- `.github/workflows/site.yml` publishes the site on GitHub Pages at
+  `https://ackness.github.io/covel/` (see `docs/CONTRIBUTING.en.md`). Vite's
+  `base` comes from `SITE_BASE`, so refer to a file in `public/` through
+  `asset()` from `src/links.ts`, never as `/name`.
 - All text is in `src/copy.ts`, once in English and once in Chinese. The
   Chinese table has the English table's type, so a missing line fails `tsc`.
   The page picks `?lang=`, then the visitor's earlier choice, then the

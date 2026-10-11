@@ -1,4 +1,5 @@
 import type { Copy } from "../copy.js";
+import { asset } from "../links.js";
 import { container, SectionHeading } from "./ui.js";
 
 export function Worlds({ copy }: { copy: Copy }) {
@@ -23,7 +24,7 @@ export function Worlds({ copy }: { copy: Copy }) {
               className="group relative isolate flex aspect-4/3 flex-col justify-end overflow-hidden rounded-2xl border border-line p-6 sm:aspect-3/2 sm:p-7"
             >
               <img
-                src={`/worlds/${world.id}.webp`}
+                src={asset(`worlds/${world.id}.webp`)}
                 alt=""
                 width={960}
                 height={640}
