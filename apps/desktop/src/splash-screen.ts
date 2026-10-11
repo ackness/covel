@@ -25,6 +25,10 @@ export function buildSplashHtml(): string {
     body { background: #fafafa; color: #09090b; }
     .brand { color: #18181b !important; }
     #status { color: #52525b !important; }
+    .dot { background: #71717a !important; }
+    .error-title { color: #dc2626 !important; }
+    .error-msg { color: #52525b !important; }
+    .error-hint { color: #3f3f46 !important; }
     .btn { background: #f4f4f5 !important; border-color: #e4e4e7 !important; color: #18181b !important; }
     .btn:hover { background: #e4e4e7 !important; }
     #log-viewer { background: #f4f4f5 !important; border-color: #e4e4e7 !important; }
