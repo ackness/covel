@@ -1,10 +1,57 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import type { Copy } from "../copy.js";
 import type { DownloadLinks } from "../download.js";
 import { DownloadButtons } from "./DownloadButtons.js";
 import { REPO_URL } from "../links.js";
+import { Showcase } from "./Showcase.js";
 import { container } from "./ui.js";
 import { version } from "../../package.json";
+
+/** How long each way to play stays on screen before the next one. */
+export const MODE_MS = 3600;
+
+/**
+ * Stacks every word in one grid cell so the line keeps the width of the
+ * longest and nothing below it jumps. The active word's letters rise into
+ * place one after another while the previous word's letters drift up and
+ * blur away.
+ */
+function RotatingWord({
+  words,
+  active,
+  previous,
+}: {
+  words: readonly string[];
+  active: number;
+  previous: number;
+}) {
+  return (
+    <span className="grid justify-items-center">
+      {words.map((word, index) => {
+        const state =
+          index === active ? "in" : index === previous ? "out" : "wait";
+        return (
+          <span
+            key={word}
+            aria-hidden={state !== "in"}
+            className="mode-word col-start-1 row-start-1"
+            data-state={state}
+          >
+            {Array.from(word).map((letter, at) => (
+              <span
+                key={at}
+                className="mode-letter"
+                style={{ transitionDelay: `${at * 35}ms` }}
+              >
+                {letter === " " ? " " : letter}
+              </span>
+            ))}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 export function Hero({
   copy,
@@ -13,26 +60,48 @@ export function Hero({
   copy: Copy;
   download: DownloadLinks;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const modes = copy.hero.modes;
+  const [active, setActive] = useState(0);
+  const [previous, setPrevious] = useState(-1);
+  const [paused, setPaused] = useState(false);
+  const [still, setStill] = useState(false);
 
-  // A visitor who asked for reduced motion gets the poster frame only.
+  // A visitor who asked for reduced motion picks a mode by hand.
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => {
-      if (query.matches) video.pause();
-      else void video.play().catch(() => undefined);
-    };
+    const apply = () => setStill(query.matches);
     apply();
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
   }, []);
 
+  const show = (index: number) => {
+    if (index === active) return;
+    setPrevious(active);
+    setActive(index);
+  };
+
+  useEffect(() => {
+    if (paused || still) return;
+    const timer = window.setTimeout(
+      () => show((active + 1) % modes.length),
+      MODE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [active, paused, still, modes.length]);
+
+  const mode = modes[active] ?? modes[0];
+  if (!mode) return null;
+
   return (
-    <section id="top" className="grain relative" aria-labelledby="hero-title">
-      <div className={`${container} pt-16 pb-20 sm:pt-24 lg:pt-28`}>
-        <div className="mx-auto max-w-3xl text-center">
+    <section
+      id="top"
+      className="grain relative"
+      aria-labelledby="hero-title"
+      data-mode={mode.visual}
+    >
+      <div className={`${container} pt-14 pb-20 sm:pt-20 lg:pt-24`}>
+        <div className="mx-auto max-w-4xl text-center">
           <a
             href={`${REPO_URL}/releases`}
             className="inline-flex items-center gap-2 rounded-full border border-line bg-raised/60 px-3 py-1 text-xs text-muted backdrop-blur transition hover:text-ink"
@@ -41,42 +110,81 @@ export function Hero({
             {copy.hero.badge}
             <span className="font-mono text-ink">v{version}</span>
           </a>
+          <p className="mt-6 font-mono text-xs tracking-[0.2em] text-muted uppercase sm:text-sm">
+            {copy.hero.tagline}
+          </p>
           <h1
             id="hero-title"
-            className="mt-7 font-display text-[2.6rem] leading-[1.08] font-semibold tracking-tight text-balance sm:text-6xl lg:text-7xl"
+            className="mt-4 font-display text-[2.4rem] leading-[1.1] font-semibold tracking-tight text-balance sm:text-6xl lg:text-7xl"
           >
-            <span className="block">{copy.hero.titleA}</span>
-            <span className="block bg-linear-to-r from-accent to-ember bg-clip-text text-transparent">
-              {copy.hero.titleB}
+            <span className="block">{copy.hero.lead}</span>
+            <span className="sr-only">{mode.word}</span>
+            <span aria-hidden className="block">
+              <RotatingWord
+                words={modes.map((item) => item.word)}
+                active={active}
+                previous={previous}
+              />
             </span>
           </h1>
-          <p className="mx-auto mt-7 max-w-2xl text-base leading-relaxed text-pretty text-muted sm:text-lg">
-            {copy.hero.body}
-          </p>
+          <div className="mx-auto mt-6 grid max-w-2xl">
+            {modes.map((item, index) => (
+              <p
+                key={item.visual}
+                aria-hidden={index !== active}
+                className={`col-start-1 row-start-1 text-base leading-relaxed text-pretty text-muted transition-[opacity,translate,filter] duration-700 sm:text-lg ${
+                  index === active
+                    ? "translate-y-0 opacity-100 blur-0 delay-200"
+                    : "pointer-events-none translate-y-2 opacity-0 blur-[2px]"
+                }`}
+              >
+                {item.body}
+              </p>
+            ))}
+          </div>
+          <div
+            role="tablist"
+            aria-label={copy.hero.modesLabel}
+            className="mt-7 grid grid-cols-2 gap-1 rounded-3xl border border-line bg-raised/60 p-1 backdrop-blur sm:inline-flex sm:rounded-full"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+          >
+            {modes.map((item, index) => (
+              <button
+                key={item.visual}
+                type="button"
+                role="tab"
+                aria-selected={index === active}
+                onClick={() => show(index)}
+                className={`relative overflow-hidden rounded-full px-3.5 py-1.5 text-xs transition sm:text-sm ${
+                  index === active
+                    ? "bg-ink/8 text-ink"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {item.word.replace(/\.$/, "")}
+                {index === active && !paused && !still ? (
+                  <span
+                    key={active}
+                    aria-hidden
+                    className="absolute inset-x-3 bottom-0.5 h-px origin-left bg-(--mode)"
+                    style={{
+                      animation: `fill ${MODE_MS}ms linear forwards`,
+                    }}
+                  />
+                ) : null}
+              </button>
+            ))}
+          </div>
           <DownloadButtons copy={copy} download={download} />
           <p className="mt-5 text-xs text-muted">{copy.hero.note}</p>
         </div>
-
-        <figure className="relative mx-auto mt-16 max-w-5xl">
-          <div
-            aria-hidden
-            className="absolute -inset-x-10 -top-10 -bottom-6 -z-10 rounded-[3rem] bg-accent/20 blur-3xl"
-          />
-          <div className="overflow-hidden rounded-2xl border border-line bg-raised shadow-2xl shadow-black/30">
-            <video
-              ref={videoRef}
-              className="block aspect-[1152/720] h-auto w-full bg-black"
-              src="/media/demo.mp4"
-              poster="/media/demo-poster.jpg"
-              width={1152}
-              height={720}
-              muted
-              loop
-              playsInline
-              aria-label={copy.hero.videoLabel}
-            />
-          </div>
-        </figure>
+        <div
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
+          <Showcase copy={copy} visual={mode.visual} />
+        </div>
       </div>
     </section>
   );

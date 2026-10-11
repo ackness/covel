@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import type { Copy } from "../copy.js";
 import type { DownloadLinks } from "../download.js";
+import { DOCS_URL } from "../links.js";
 import { container } from "./ui.js";
 
 type Theme = "light" | "dark";
@@ -43,10 +44,10 @@ export function Header({
   };
 
   const links = [
-    { href: "#play", label: copy.nav.play },
-    { href: "#worlds", label: copy.nav.worlds },
     { href: "#features", label: copy.nav.features },
-    { href: "#creators", label: copy.nav.creators },
+    { href: "#plugins", label: copy.nav.plugins },
+    { href: "#worlds", label: copy.nav.worlds },
+    { href: DOCS_URL, label: copy.nav.docs },
   ];
 
   const iconButton =

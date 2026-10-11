@@ -17,17 +17,58 @@ export interface Item {
   body: string;
 }
 
+/** The ways to play the hero cycles through. */
+export type Visual = "stage" | "tabletop" | "story" | "languages";
+
+export interface Mode {
+  visual: Visual;
+  word: string;
+  body: string;
+  /** Describes the screenshot; empty for a scene with no picture. */
+  alt: string;
+}
+
+export interface CorePlugin {
+  icon: string;
+  ids: string;
+  title: string;
+  body: string;
+}
+
+/** The bundled plugins the hero lights up, in display order. */
+export const PLUGIN_IDS = [
+  "narrator",
+  "chat-mode-narrator",
+  "scene-stage",
+  "character-blueprint",
+  "branch-reply",
+  "tabletop-rules",
+  "dice-check",
+  "core-quest",
+  "inventory",
+  "affinity",
+  "npc-graph",
+  "codex",
+  "story-events",
+  "guide",
+  "living-world-rules",
+  "memory",
+  "world-time",
+  "soundtrack",
+] as const;
+export type PluginId = (typeof PLUGIN_IDS)[number];
+
 const en = {
   meta: {
-    title: "Covel · An AI game master with a good memory",
+    title: "Covel · Everything is pluggable, every world is yours",
     description:
-      "Covel is a free, open-source AI role-playing game. It runs on your own computer with your own model key, rolls real dice, and remembers what you did.",
+      "Covel is a plugin-driven, open-source interactive framework for multi-agent storytelling: stage, TRPG and story modes, multilingual, with every plugin and world customisable.",
   },
   nav: {
-    play: "Getting started",
+    features: "Features",
+    plugins: "Plugins",
     worlds: "Worlds",
-    features: "Why Covel",
-    creators: "Plugins",
+    docs: "Docs",
     download: "Download",
     language: "中文",
     languageLabel: "切换到中文",
@@ -36,40 +77,167 @@ const en = {
     toDark: "Use the dark theme",
   },
   hero: {
-    badge: "Open source · Still early",
-    titleA: "An AI game master",
-    titleB: "with a good memory.",
-    body: "The clue you asked about in Mistport, the promise you made at Haruka Academy, every roll you made under the barrow: it remembers all of it. Covel is free and open source, and it runs on your own computer with your own model key.",
+    badge: "Open source · Early access",
+    tagline: "Everything is pluggable. Every world is yours.",
+    lead: "Build your own",
+    modes: [
+      {
+        visual: "stage",
+        word: "visual novel.",
+        body: "Character sprites over scene backdrops, typewriter dialogue and replies to pick, with several characters sharing the stage.",
+        alt: "Stage mode in Covel",
+      },
+      {
+        visual: "tabletop",
+        word: "tabletop campaign.",
+        body: "Point-buy at the start, dice checks with a receipt for every roll, quests and inventory. Play freely; the rules make the call.",
+        alt: "Quests, inventory and affinity in a tabletop session",
+      },
+      {
+        visual: "story",
+        word: "epic story.",
+        body: "The story branches on your choices, suggested actions keep it moving, and the world's state follows every turn.",
+        alt: "Story mode in Covel",
+      },
+      {
+        visual: "languages",
+        word: "multilingual world.",
+        body: "An interface in Chinese, English and Russian, worlds with several language editions, and agents that write in the language of the session.",
+        alt: "",
+      },
+    ] satisfies Mode[],
+    modesLabel: "Ways to play",
+    languages: ["简体中文", "English", "Русский"],
     primary: "Download",
     primaryFor: { mac: "Download for macOS", windows: "Download for Windows" },
     otherPlatforms: "Other systems and checksums",
     portable: "Portable version, no install",
-    secondary: "Source on GitHub",
+    secondary: "View source",
     note: "macOS (Apple silicon) and Windows x64 · MIT licensed",
-    videoLabel: "A Covel session being played",
   },
-  play: {
-    eyebrow: "Getting started",
-    title: "Getting a game going",
-    steps: [
+  pillars: {
+    eyebrow: "Under the hood",
+    title: "Plugins run the game. You define the world.",
+    plugin: {
+      title: "Plugin-driven to the core",
+      points: [
+        {
+          title: "Decoupled, plug and play",
+          body: "Tools, actions, memory and interface panels are all plugins. Switch any of them on or off per session.",
+        },
+        {
+          title: "Extend without touching the core",
+          body: "Write or install a plugin to give the agents new abilities and rules, with no change to the kernel.",
+        },
+      ] satisfies Item[],
+    },
+    world: {
+      title: "Worlds and rules, fully yours",
+      points: [
+        {
+          title: "Complete world packs",
+          body: "Setting, characters, factions, stats, starting items and quests travel in one open package you can read and change.",
+        },
+        {
+          title: "Persistent state, sandbox play",
+          body: "From a light conversation to a sandbox with exact rules, the engine runs the world the way you set it up.",
+        },
+      ],
+    },
+    worldAlt: "The world-building agent in Covel",
+    links: [
+      { label: "Plugin guide", href: "docs/guide/plugin-authoring.md" },
+      { label: "Packaging worlds", href: "docs/guide/collections.md" },
+    ],
+  },
+  rack: {
+    label: "Plugins on",
+    packs: {
+      stage: "Haruka Academy · visual novel",
+      tabletop: "Lantern Barrow · classic tabletop",
+      story: "Traditional story",
+      languages: "Every bundled plugin",
+    } satisfies Record<Visual, string>,
+    names: {
+      narrator: "Narrator",
+      "chat-mode-narrator": "Dialogue narrator",
+      "scene-stage": "Scene stage",
+      "character-blueprint": "Character profiles",
+      "branch-reply": "Reply variants",
+      "tabletop-rules": "Tabletop rules",
+      "dice-check": "Dice checks",
+      "core-quest": "Quest log",
+      inventory: "Inventory",
+      affinity: "Affinity",
+      "npc-graph": "Relationships",
+      codex: "Codex",
+      "story-events": "Hidden events",
+      guide: "Action suggestions",
+      "living-world-rules": "World rules",
+      memory: "Story memory",
+      "world-time": "World time",
+      soundtrack: "Soundtrack",
+    } satisfies Record<PluginId, string>,
+  },
+  core: {
+    eyebrow: "Built-in plugins",
+    title: "A full RPG kit, every piece replaceable.",
+    body: "Covel's kernel hard-codes no gameplay. Even the built-in features ship as ordinary plugins, so you can extend them, override them, or swap them out entirely.",
+    items: [
       {
-        title: "Pick a world",
-        body: "Start with one of the four that come with it. Go to Mistport if you want a case to crack, or Haruka Academy if you want a crush.",
+        icon: "🎲",
+        ids: "tabletop-rules · dice-check",
+        title: "Rules and dice checks",
+        body: "Point-buy at the start, attribute checks against dice pools, and a receipt for every roll. The engine rolls the dice and the rules decide, not the model's guess.",
       },
       {
-        title: "Add a model key",
-        body: "OpenAI, Anthropic, DeepSeek or Qwen. You can give the storytelling and the bookkeeping to two different models, so the expensive one only does the part that needs it.",
+        icon: "🎒",
+        ids: "inventory",
+        title: "Inventory",
+        body: "Records every item gained, lost or equipped in the story, with a bag panel always one click away. Worlds can set the starting gear.",
       },
       {
-        title: "Say what you do",
-        body: "Type it the way you'd say it: “I put the key fragment on the table and watch his face.” When a roll is called for, it rolls first and tells the story after.",
+        icon: "📜",
+        ids: "core-quest",
+        title: "Quest log",
+        body: "Registers and advances quests straight from the narrative, so goals, progress and rewards stay in view.",
       },
-    ] satisfies Item[],
+      {
+        icon: "❤️",
+        ids: "affinity · npc-graph",
+        title: "Affinity and relationships",
+        body: "Scores and tiers for how each character feels about you, plus a graph of who knows whom, so people stay consistent when they come back.",
+      },
+      {
+        icon: "📚",
+        ids: "codex",
+        title: "Codex",
+        body: "Collects the places, people, items and rumours you discover, and fills in as you explore.",
+      },
+      {
+        icon: "🕯️",
+        ids: "story-events",
+        title: "Hidden events",
+        body: "Events the world's author hides stay out of the prompt and out of sight until their conditions are met, then hand the narrator its cue.",
+      },
+      {
+        icon: "🎙️",
+        ids: "narrator",
+        title: "Narrator",
+        body: "First, second or third person, your choice, with the story streamed as it is written.",
+      },
+      {
+        icon: "🎵",
+        ids: "soundtrack",
+        title: "Soundtrack",
+        body: "Plays the music a world ships and follows the scene and the mood of the story.",
+      },
+    ] satisfies CorePlugin[],
   },
   worlds: {
-    eyebrow: "Worlds",
-    title: "Four to start with",
-    body: "We wrote these ourselves, with character portraits and scene art. When you want something else, describe a world in a sentence, let Covel draft it, and edit from there.",
+    eyebrow: "Built-in worlds",
+    title: "Four worlds, ready to explore.",
+    body: "All original, with character portraits and scene art, and each comes with the set of plugins that suits it best.",
     list: [
       {
         id: "mistport",
@@ -101,50 +269,9 @@ const en = {
       },
     ] satisfies WorldCopy[],
   },
-  features: {
-    eyebrow: "Why Covel",
-    title: "What it does that a chatbot doesn't",
-    items: [
-      {
-        title: "NPCs hold grudges",
-        body: "After each turn it writes down who did what to whom. Someone you crossed will remember it the next time you meet.",
-      },
-      {
-        title: "The dice don't cheat",
-        body: "Checks are real rolls. The result is settled before the model tells the story, and you can scroll back to see every number.",
-      },
-      {
-        title: "It can turn into a visual novel",
-        body: "Stage mode puts up the backdrop, the portraits and a dialogue box, much like a galgame.",
-      },
-      {
-        title: "Your saves stay on your machine",
-        body: "Sessions are stored locally, and your model key is saved only on your device. There's no account to sign up for.",
-      },
-      {
-        title: "When something's off, you can look",
-        body: "If the model suddenly goes off the rails, open the debugger. Every call is there, with what went in and what came back.",
-      },
-      {
-        title: "Chinese, English, Russian",
-        body: "The interface comes in three languages, and every bundled world has a Chinese and an English edition.",
-      },
-    ] satisfies Item[],
-  },
-  creators: {
-    eyebrow: "Plugins",
-    title: "Don't like a rule? Write your own.",
-    body: "The narrator, the dice, the quests and the inventory are all plugins, built on the same interface you'd use. The simplest plugin is a single PLUGIN.md: a few lines on when it runs, then what to tell the model. Add some JavaScript where you need actual arithmetic.",
-    links: [
-      { label: "Writing plugins", href: "docs/guide/plugin-authoring.md" },
-      { label: "Packaging a world", href: "docs/guide/collections.md" },
-      { label: "What happens in a turn", href: "docs/architecture/flow.md" },
-    ],
-    fileLabel: "plugins/observation/PLUGIN.md",
-  },
   cta: {
-    title: "Go pick a world.",
-    body: "Download it, add your key, and write your first line.",
+    title: "Your story starts here.",
+    body: "Download Covel, connect a model, and choose a world.",
   },
   footer: {
     license: "MIT licensed · Covel contributors",
@@ -158,15 +285,15 @@ export type Copy = typeof en;
 
 const zh: Copy = {
   meta: {
-    title: "Covel · 一个记性很好的 AI 跑团主持人",
+    title: "Covel · 一切皆可插拔，每个世界都属于你",
     description:
-      "Covel 是免费开源的 AI 文字角色扮演游戏。装在你自己的电脑上，用你自己的模型密钥，骰子是真掷的，你做过的事它都记得。",
+      "Covel 是插件驱动的开源交互框架，专为多智能体叙事与演练打造：舞台、跑团与故事模式，全链路多语言，所有插件与世界皆可自定义。",
   },
   nav: {
-    play: "怎么开始",
+    features: "特性",
+    plugins: "插件",
     worlds: "世界",
-    features: "有什么不同",
-    creators: "插件",
+    docs: "文档",
     download: "下载",
     language: "EN",
     languageLabel: "Switch to English",
@@ -175,40 +302,167 @@ const zh: Copy = {
     toDark: "切换到深色主题",
   },
   hero: {
-    badge: "开源 · 还在早期",
-    titleA: "一个记性很好的",
-    titleB: "AI 跑团主持人。",
-    body: "你在雾港问过的线索，在学园许下的约定，在古冢里掷出的每一次骰子，它都记着。Covel 免费、开源，装在你自己的电脑上，用你自己的模型密钥。",
+    badge: "开源 · 抢先体验",
+    tagline: "一切皆可插拔，每个世界都属于你。",
+    lead: "构建由你定义的",
+    modes: [
+      {
+        visual: "stage",
+        word: "视觉小说舞台",
+        body: "角色立绘叠在场景背景上，打字机式对白和可选回复，多名角色同台登场。",
+        alt: "Covel 的舞台模式",
+      },
+      {
+        visual: "tabletop",
+        word: "跑团冒险",
+        body: "开局配点、掷骰检定，每次判定都有回执，任务与行囊一应俱全。扮演自由，判定照规则来。",
+        alt: "跑团会话里的任务、行囊与好感",
+      },
+      {
+        visual: "story",
+        word: "长篇故事",
+        body: "剧情随你的选择分支，行动建议帮你接上下一步，世界状态逐回合推进。",
+        alt: "Covel 的故事模式",
+      },
+      {
+        visual: "languages",
+        word: "多语言世界",
+        body: "界面支持中、英、俄三种语言，世界可以带多个语言版本，智能体按会话语言写作。",
+        alt: "",
+      },
+    ],
+    modesLabel: "玩法",
+    languages: ["简体中文", "English", "Русский"],
     primary: "下载",
     primaryFor: { mac: "下载 macOS 版", windows: "下载 Windows 版" },
     otherPlatforms: "其他系统和校验文件",
     portable: "便携版（免安装）",
-    secondary: "GitHub 源码",
+    secondary: "查看源码",
     note: "macOS（Apple 芯片）和 Windows x64 · MIT 许可",
-    videoLabel: "一局 Covel 会话的录屏",
   },
-  play: {
-    eyebrow: "怎么开始",
-    title: "开一局要做的事",
-    steps: [
+  pillars: {
+    eyebrow: "底层设计",
+    title: "插件驱动玩法，世界由你定义。",
+    plugin: {
+      title: "彻底的插件驱动设计",
+      points: [
+        {
+          title: "解耦与即插即用",
+          body: "工具、动作、记忆和交互面板全是插件，每个会话都能单独开关。",
+        },
+        {
+          title: "零侵入扩展",
+          body: "不改内核，开发或安装一个插件，就能给智能体加上新能力和新规则。",
+        },
+      ],
+    },
+    world: {
+      title: "深度世界观与规则自定义",
+      points: [
+        {
+          title: "全要素世界包",
+          body: "世界观、角色、阵营、数值、初始道具和任务装在一个公开的包里，随时可读可改。",
+        },
+        {
+          title: "状态持久与沙盒运转",
+          body: "从轻度的对话空间到规则精密的沙盒，引擎都按你的设定运转世界。",
+        },
+      ],
+    },
+    worldAlt: "Covel 的世界构筑 Agent",
+    links: [
+      { label: "插件开发指南", href: "docs/guide/plugin-authoring.md" },
+      { label: "世界打包指南", href: "docs/guide/collections.md" },
+    ],
+  },
+  rack: {
+    label: "已启用插件",
+    packs: {
+      stage: "遥风学园 · 视觉小说",
+      tabletop: "提灯古冢 · 经典跑团",
+      story: "传统故事模式",
+      languages: "全部内置插件",
+    },
+    names: {
+      narrator: "叙事",
+      "chat-mode-narrator": "对话叙事",
+      "scene-stage": "场景舞台",
+      "character-blueprint": "角色资料",
+      "branch-reply": "回复变体",
+      "tabletop-rules": "跑团规则",
+      "dice-check": "骰子判定",
+      "core-quest": "任务日志",
+      inventory: "行囊",
+      affinity: "好感度",
+      "npc-graph": "关系图谱",
+      codex: "设定图鉴",
+      "story-events": "隐藏事件",
+      guide: "行动建议",
+      "living-world-rules": "世界规则",
+      memory: "故事记忆",
+      "world-time": "世界时间",
+      soundtrack: "配乐",
+    },
+  },
+  core: {
+    eyebrow: "内置核心插件",
+    title: "整套 RPG 机制开箱即用，每一件都能换。",
+    body: "Covel 的内核不硬编码任何玩法。连内置能力也以标准插件提供，你可以扩展、覆盖，或者整个替换掉。",
+    items: [
       {
-        title: "选个世界",
-        body: "先从内置的四个里挑一个。想查案就去雾港，想谈恋爱就去遥风学园。",
+        icon: "🎲",
+        ids: "tabletop-rules · dice-check",
+        title: "规则与骰点检定",
+        body: "开局点数购制、按骰池结算的属性检定，每次掷骰都留有回执。骰子由引擎来掷，结果按规则判定，不靠模型临场发挥。",
       },
       {
-        title: "填上模型密钥",
-        body: "OpenAI、Anthropic、DeepSeek、通义千问都行。讲故事和记账可以交给两个模型，贵的那个只用在要紧的地方。",
+        icon: "🎒",
+        ids: "inventory",
+        title: "行囊与道具",
+        body: "记下剧情里每一次获得、失去和换装，背包面板随时可查。世界包可以预设初始装备。",
       },
       {
-        title: "说你要做什么",
-        body: "像平时说话那样写，比如“我把钥匙碎片放到桌上，看他什么反应”。需要掷骰的时候，它先掷，再往下讲。",
+        icon: "📜",
+        ids: "core-quest",
+        title: "任务日志",
+        body: "从叙事中自动登记并推进任务，目标、进度和奖励一目了然。",
+      },
+      {
+        icon: "❤️",
+        ids: "affinity · npc-graph",
+        title: "好感与关系链",
+        body: "记录每个角色对你的好感分值、等级和近期变化，再用关系图谱记住谁认识谁，角色再次登场时前后一致。",
+      },
+      {
+        icon: "📚",
+        ids: "codex",
+        title: "设定图鉴",
+        body: "自动收录你发现的地点、人物、物品与传闻，随探索一点点展开。",
+      },
+      {
+        icon: "🕯️",
+        ids: "story-events",
+        title: "隐藏事件",
+        body: "世界作者埋下的暗线在条件满足前不进提示词、也不出现在玩家眼前；条件达成的那一回合，交给叙事接手。",
+      },
+      {
+        icon: "🎙️",
+        ids: "narrator",
+        title: "叙事引擎",
+        body: "第一、第二、第三人称随你选，正文边写边流式呈现。",
+      },
+      {
+        icon: "🎵",
+        ids: "soundtrack",
+        title: "配乐",
+        body: "播放世界自带的背景音乐，跟着场景和故事情绪切换。",
       },
     ],
   },
   worlds: {
-    eyebrow: "世界",
-    title: "先玩这四个",
-    body: "都是我们自己写的，带角色立绘和场景图。想换口味的话，用一句话描述你想要的世界，让 Covel 先起个草稿，你再慢慢改。",
+    eyebrow: "内置世界",
+    title: "四个世界，即刻启程。",
+    body: "全部原创，配有角色立绘与场景插画，每个世界都预设了最适合它的插件组合。",
     list: [
       {
         id: "mistport",
@@ -240,50 +494,9 @@ const zh: Copy = {
       },
     ],
   },
-  features: {
-    eyebrow: "有什么不同",
-    title: "和聊天机器人不一样的地方",
-    items: [
-      {
-        title: "NPC 会记仇",
-        body: "每回合结束，它会把谁对谁做了什么记下来。你得罪过的人，下次见面态度就不一样了。",
-      },
-      {
-        title: "骰子不作弊",
-        body: "检定是真掷的。点数先定下来，模型再照着讲，往回翻能看到每一次掷了几点。",
-      },
-      {
-        title: "能切成视觉小说",
-        body: "打开舞台模式，背景、立绘和对话框就出来了，玩起来跟 galgame 差不多。",
-      },
-      {
-        title: "存档在你自己电脑上",
-        body: "会话存在本地，模型密钥也只保存在你的设备上。不用注册账号。",
-      },
-      {
-        title: "出了怪事能查",
-        body: "模型突然开始胡说的时候，打开调试页看看：每次调用发了什么、回了什么，都在那里。",
-      },
-      {
-        title: "中文、英文、俄文",
-        body: "界面有三种语言，内置的世界都有中英两个版本。",
-      },
-    ],
-  },
-  creators: {
-    eyebrow: "插件",
-    title: "不喜欢某条规则？自己写一个。",
-    body: "叙事、骰子、任务、背包都是插件，用的就是你能用的那套接口。最简单的插件只有一个 PLUGIN.md：开头几行写它什么时候跑，下面写给模型的话。真要算数的地方，再补一段 JavaScript。",
-    links: [
-      { label: "写插件", href: "docs/guide/plugin-authoring.md" },
-      { label: "打包一个世界", href: "docs/guide/collections.md" },
-      { label: "一个回合里发生了什么", href: "docs/architecture/flow.md" },
-    ],
-    fileLabel: "plugins/observation/PLUGIN.md",
-  },
   cta: {
-    title: "去挑个世界吧。",
-    body: "下载、装好、填上密钥，然后写下你的第一句话。",
+    title: "你的故事，从这里开始。",
+    body: "下载 Covel，接入模型，选择一个世界。",
   },
   footer: {
     license: "MIT 许可 · Covel 贡献者",
