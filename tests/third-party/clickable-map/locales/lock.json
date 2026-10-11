@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#description": "2f281effc4b37c11",
+      "PLUGIN.md#displayName": "0aba4a0db2568e5a",
+      "runtimes/chart/RUNTIME.md#description": "9bed99bad355be2a",
+      "runtimes/travel/RUNTIME.md#description": "150b79b23ab66676"
+    }
+  }
+}

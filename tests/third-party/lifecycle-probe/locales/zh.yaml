@@ -1,0 +1,33 @@
+# Chinese text of this test plugin.
+PLUGIN.md:
+  displayName: "插件生命周期测试"
+  description: "独立第三方测试包，验证安装、审批、运行和卸载。"
+  contributes:
+    commands:
+      - name: probe
+        description: "查看插件测试状态"
+    settings:
+      - key: voice
+        label: "测试风格"
+      - key: label
+        label: "记录前缀"
+      - key: count
+        label: "测试数值"
+      - key: enabled
+        label: "启用记录"
+runtimes/agent/RUNTIME.md:
+  description: "通过本地工具写入测试记录"
+runtimes/background/RUNTIME.md:
+  description: "后台写入测试记录"
+runtimes/cards/RUNTIME.md:
+  description: "为测试叙事生成回复卡"
+runtimes/note/RUNTIME.md:
+  description: "写入确定性测试记录"
+runtimes/story/RUNTIME.md:
+  description: "生成固定测试叙事"
+messages:
+  Lifecycle Probe: "生命周期测试"
+  Show status: "查看状态"
+  Write note: "写入记录"
+  Run background job: "运行后台任务"
+  Run agent: "调用 Agent"

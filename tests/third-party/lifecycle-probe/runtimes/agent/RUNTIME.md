@@ -1,8 +1,6 @@
 ---
 type: agent
-description:
-  zh: 通过本地工具写入测试记录
-  en: Write a test record through an agent tool call
+description: Write a test record through an agent tool call
 schedule:
   trigger:
     type: manual

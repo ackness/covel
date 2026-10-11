@@ -1,0 +1,10 @@
+# Chinese text of this test plugin.
+PLUGIN.md:
+  displayName: "可点击地图"
+  description: "示例插件：一张自己绘制的地图，点地点就走过去。"
+runtimes/chart/RUNTIME.md:
+  description: "第一次打开地图时写入初始地图"
+runtimes/travel/RUNTIME.md:
+  description: "玩家在地图上选了地点后移动过去"
+messages:
+  Map: "地图"

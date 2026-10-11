@@ -12,7 +12,7 @@ Main checkout:
 
 Community checkout (`covel-plugins`, https://github.com/covel-ai/covel-plugins):
 
-- `examples/story-note`: declared context hook with no store access; installed ID is `example-story-note`.
+- `examples/story-note`: declared context hook with no store access; plugin ID is `story-note`.
 - `examples/notes-workbench`: RPC action + slash command, scoped data writes, optional service discovery.
 - `examples/note-format-clean` and `note-format-outline`: `examples.note-format@1` service providers.
 - `examples/jev-choice-demo`: required `scene-prompts@1`/`narrative-engine@1` inputs and an evaluation service.
