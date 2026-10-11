@@ -45,10 +45,10 @@ const READ_TOOLS = new Set([
   "dimension-rule-get",
 ]);
 
-const messageText = (message) =>
-  typeof message.content === "string"
-    ? message.content
-    : JSON.stringify(message.content);
+// The rules segment has one id when every rule is in it and another when it
+// lists truncated dimensions, so the hook below reads the id and not the text.
+const COMPLETE_RULES_SEGMENT = "dimension-rules";
+const TRUNCATED_RULES_SEGMENT = "dimension-rules-truncated";
 
 /**
  * The tracker's prompt carries every rule, schema, and value that fits the
@@ -59,15 +59,12 @@ const messageText = (message) =>
 function trackerTools(ctx, payload) {
   if (ctx.runtimeId !== "world-init/dimension-tracker" || !payload.tools)
     return { action: "continue" };
-  const system = payload.messages
-    .filter((message) => message.role === "system")
-    .map(messageText)
-    .join("\n");
-  if (
-    !system.includes("<dimension-rules>") ||
-    Object.values(TRUNCATED_HEADING).some((heading) => system.includes(heading))
-  )
-    return { action: "continue" };
+  const complete = payload.promptSegments?.some(
+    (segment) =>
+      segment.pluginId === "world-init" &&
+      segment.id === COMPLETE_RULES_SEGMENT,
+  );
+  if (!complete) return { action: "continue" };
   return {
     action: "continue",
     replace: {
@@ -197,7 +194,9 @@ export default function (covel) {
       ];
       return [
         {
-          id: "dimension-rules",
+          id: truncated.length
+            ? TRUNCATED_RULES_SEGMENT
+            : COMPLETE_RULES_SEGMENT,
           content: `<dimension-rules>\n${sections.join("\n")}\n${inPromptLanguage(ctx.locale, RULES_ARE_DATA)}\n</dimension-rules>`,
           position: "system",
           audience: "self",

@@ -43,6 +43,7 @@ import {
   runPreToolUseHook,
   runPostToolUseHook,
   runPreLLMCallHook,
+  type IncludedPromptSegment,
 } from "../hooks/wire-helpers.js";
 import { createResponseReviewer } from "./response-review.js";
 import {
@@ -118,6 +119,8 @@ export interface RunAgentToolLoopOptions {
   readonly logicalTurn?: number;
   readonly loaded: LoadedRuntime;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
+  /** Passed to `PreLLMCall` hooks. Omitted on resume: nothing is assembled. */
+  readonly promptSegments?: readonly IncludedPromptSegment[];
   readonly deps: AgentLoopDeps;
   readonly maxSteps: number;
   readonly timeoutMs: number;
@@ -175,6 +178,7 @@ async function runAgentToolLoopWithinBudget(
     logicalTurn,
     loaded,
     inputSlots,
+    promptSegments,
     deps,
     maxSteps,
     timeoutMs,
@@ -339,6 +343,7 @@ async function runAgentToolLoopWithinBudget(
       messages,
       model: effectiveModel,
       tools: activeToolDefs,
+      ...(promptSegments ? { promptSegments } : {}),
     });
     // Pictures go only to a model known to read images. The hook may have
     // chosen another model, so the decision is made for this call.

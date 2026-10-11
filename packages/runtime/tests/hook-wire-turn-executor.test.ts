@@ -949,6 +949,60 @@ describe("Turn executor hook wire-in", () => {
       expect(sent.some((m) => m.content === "INJECTED_BY_HOOK")).toBe(true);
     });
 
+    it("names the prompt segments the runtime's prompt was built with", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const seen: Record<string, unknown> = {};
+      for (const event of ["PostContextAssembly", "PreLLMCall"] as const) {
+        pipeline.register({
+          id: `global:${event}:segments`,
+          event,
+          handler: async (_ctx, payload) => {
+            seen[event] = (
+              payload as { promptSegments?: unknown }
+            ).promptSegments;
+            return { action: "continue" };
+          },
+        });
+      }
+      const segment = (
+        providerPluginId: string,
+        id: string,
+        audience: string,
+      ) => ({
+        id,
+        content: `<${id}>`,
+        position: "system",
+        audience,
+        volatility: "session",
+        providerPluginId,
+      });
+      const deps = await makeDeps(llm, pipeline);
+      await executeTurn(makeTurnInput(), [makeManifest()], {
+        ...deps,
+        extensionExecution: {
+          run: async (point: { id: string }, input: unknown) =>
+            point.id === "prompt.segment@1"
+              ? [
+                  [
+                    segment("test-plugin", "own-rules", "self"),
+                    segment("other", "shared", "all"),
+                    // Another plugin's own segment is not part of this prompt.
+                    segment("other", "private", "self"),
+                  ],
+                ]
+              : input,
+        } as unknown as TurnExecutorDeps["extensionExecution"],
+      });
+
+      const included = [
+        { pluginId: "other", id: "shared" },
+        { pluginId: "test-plugin", id: "own-rules" },
+      ];
+      expect(seen.PostContextAssembly).toEqual(included);
+      expect(seen.PreLLMCall).toEqual(included);
+    });
+
     it("overrides the model on the LLM request", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();

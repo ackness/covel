@@ -150,7 +150,9 @@ Payload: `{ manifest, input }`: the runtime's manifest and the turn input.
 
 Fires once for an agent runtime, after its context is assembled and before its first model call.
 
-Payload: `{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters? }`. `outputKind` is `story`, `plugin` or `system`. `promptTemplate` is the runtime's prompt body before rendering. `inputSlots` holds the resolved `io.inputs` values. `characters` lists the session's characters (`id`, `name`, `type`, `description`).
+Payload: `{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, promptSegments? }`. `outputKind` is `story`, `plugin` or `system`. `promptTemplate` is the runtime's prompt body before rendering. `inputSlots` holds the resolved `io.inputs` values. `characters` lists the session's characters (`id`, `name`, `type`, `description`). `promptSegments` lists the [`prompt.segment@1`](./extension-points.md) segments this runtime's prompt was built with, each as `{ pluginId, id }`: the plugin that provided the segment and the `id` it gave it. Segments whose `audience` leaves this runtime out are not listed.
+
+To learn what your own plugin put in the prompt, read `promptSegments` and do not search the prompt text: give a segment a different `id` for each state the hook must tell apart. The bundled `world-init` names its rules segment `dimension-rules` when every rule fits and `dimension-rules-truncated` when some are cut, and its `PreLLMCall` handler offers the read tools only for the second.
 
 `replace.systemPrompt` and `replace.messages` are honoured. The framework's own opening of the system prompt (the runtime frame, the output-language directive and the completion contract) is put back in front of a replaced system prompt, so a handler does not have to carry it over.
 
@@ -158,7 +160,7 @@ Payload: `{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, c
 
 Fires before every model call of an agent runtime, the calls after tool results included.
 
-Payload: `{ messages, model, tools, stream? }`.
+Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. It is absent on the calls of a run that was resumed from a suspension, because a resumed run is not assembled again.
 
 `replace.messages`, `replace.model` and `replace.tools` change this call only; the runtime's own transcript is not changed. `replace.stream: false` makes the call unstreamed. `abort` means "no change".
 

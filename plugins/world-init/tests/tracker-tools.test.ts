@@ -33,39 +33,50 @@ const tools = [
 ].map((name) => ({ name }));
 // The runtime an event is about is in the hook context.
 const tracker = { runtimeId: "world-init/dimension-tracker" };
-const call = (system: string) => ({
-  messages: [{ role: "system", content: system }],
+// The hook reads which segments the prompt was built with, not its text.
+const call = (...segmentIds: string[]) => ({
+  messages: [{ role: "system", content: "any text" }],
   tools,
+  promptSegments: segmentIds.map((id) => ({ pluginId: "world-init", id })),
 });
 
 describe("dimension tracker tools", () => {
   const hook = trackerHook();
 
   it("withholds the read tools when every rule is in the prompt", () => {
-    const result = hook(
-      tracker,
-      call('<dimension-rules>\n<dimension id="a">…'),
-    );
+    const result = hook(tracker, call("dimension-rules", "dimension-values"));
     expect(result.replace?.tools?.map((tool) => tool.name)).toEqual([
       "update-dimensions",
       "runtime-done",
     ]);
   });
 
-  it("keeps them when the rules block lists truncated dimensions", () => {
-    const system =
-      "<dimension-rules>\nTruncated (read with dimension-rule-get and world-dimension-get before settling these):\nb (v1): …";
-    expect(hook(tracker, call(system))).toEqual({ action: "continue" });
+  it("keeps them when the rules segment lists truncated dimensions", () => {
+    expect(
+      hook(tracker, call("dimension-rules-truncated", "dimension-values")),
+    ).toEqual({ action: "continue" });
   });
 
-  it("keeps them for the heading of a Chinese prompt too", () => {
-    const system =
-      "<dimension-rules>\n已截断（结算这些维度之前，先用 dimension-rule-get 和 world-dimension-get 读取）：\nb (v1): …";
-    expect(hook(tracker, call(system))).toEqual({ action: "continue" });
+  it("keeps them when the prompt has no rules segment", () => {
+    expect(hook(tracker, call())).toEqual({ action: "continue" });
+    // A resumed run is not assembled again and names no segments.
+    expect(
+      hook(tracker, { messages: [], tools, promptSegments: undefined }),
+    ).toEqual({ action: "continue" });
+  });
+
+  it("does not take another plugin's segment for its own", () => {
+    expect(
+      hook(tracker, {
+        messages: [],
+        tools,
+        promptSegments: [{ pluginId: "other", id: "dimension-rules" }],
+      }),
+    ).toEqual({ action: "continue" });
   });
 
   it("leaves other runtimes alone", () => {
-    expect(hook({ runtimeId: "narrator" }, call("<dimension-rules>"))).toEqual({
+    expect(hook({ runtimeId: "narrator" }, call("dimension-rules"))).toEqual({
       action: "continue",
     });
   });
@@ -161,6 +172,12 @@ describe("dimension prompt segments", () => {
       ["dimension-rules", "session"],
       ["dimension-values", "turn"],
     ]);
+    // Rules that do not all fit give the segment the id the tool hook reads.
+    const overBudget = (await handlers.get("dimension-rules")!(
+      {},
+      { locale: "en-US", pluginData: { list: async () => rows }, world: {} },
+    )) as Array<Segment & { id: string }>;
+    expect(overBudget[0]!.id).toBe("dimension-rules-truncated");
     expect(first[0]).toEqual(next[0]);
     expect(first[0]!.content).toContain(
       "rule: Completed commissions add five.",
