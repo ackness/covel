@@ -60,7 +60,7 @@ export function ProviderDialog({
           <DialogDescription>
             {t(
               "settings.addProviderHint",
-              "Configure the connection once and add one or more model IDs.",
+              "Configure the provider connection once and add one or more model IDs.",
             )}
           </DialogDescription>
         </DialogHeader>
@@ -245,7 +245,7 @@ export function ModelDialog({
             <Plus className="h-3.5 w-3.5" />
             {t("settings.addModelsCount", {
               count,
-              defaultValue: "Add {{count}} model(s)",
+              defaultValue: "Add {{count}} models",
             })}
           </Button>
         </fieldset>

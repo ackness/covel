@@ -101,7 +101,7 @@ export function WorldCreationOptions({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="ui-eyebrow text-primary">
-            {t("world.aiPackageTitle", "World package plan")}
+            {t("world.aiPackageTitle", "World Package Plan")}
           </p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {t(
@@ -117,7 +117,7 @@ export function WorldCreationOptions({
 
       <div className="mt-4">
         <p className="ui-eyebrow text-muted-foreground">
-          {t("world.aiExperienceLabel", "Player experience")}
+          {t("world.aiExperienceLabel", "Player Experience")}
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           {EXPERIENCE_OPTIONS.map((option) => {
@@ -155,7 +155,7 @@ export function WorldCreationOptions({
 
       <div className="mt-4">
         <p className="ui-eyebrow text-muted-foreground">
-          {t("world.aiContentLabel", "Package supplements")}
+          {t("world.aiContentLabel", "Package Supplements")}
         </p>
         <div className="mt-2 space-y-1.5">
           {CONTENT_OPTIONS.map((option) => (
@@ -175,7 +175,7 @@ export function WorldCreationOptions({
       {pluginContent.length > 0 && (
         <div className="mt-4">
           <p className="ui-eyebrow text-muted-foreground">
-            {t("world.aiPluginContentLabel", "Plugin content")}
+            {t("world.aiPluginContentLabel", "Plugin Content")}
           </p>
           <div className="mt-2 space-y-1.5">
             {pluginContent.map((item) => (
@@ -199,7 +199,7 @@ export function WorldCreationOptions({
             htmlFor="world-additional-instructions"
             className="ui-eyebrow text-muted-foreground"
           >
-            {t("world.aiAdditionalLabel", "Author notes")}
+            {t("world.aiAdditionalLabel", "Author Notes")}
           </label>
           <span className="font-mono text-[10px] text-muted-foreground/70">
             {additionalInstructions.length}/2000

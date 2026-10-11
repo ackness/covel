@@ -178,7 +178,7 @@ export function WorldCard({
               <button
                 type="button"
                 onClick={(e) => onViewDetails(e, world.id)}
-                aria-label={t("world.viewDetails", "View details")}
+                aria-label={t("world.viewDetails", "View Details")}
                 className="ui-btn ui-btn-quiet h-10 w-10 border-white/16 bg-black/20 p-0 text-white/82 hover:bg-white/12 hover:text-white md:h-8 md:w-8"
               >
                 <Eye className="w-3.5 h-3.5" />

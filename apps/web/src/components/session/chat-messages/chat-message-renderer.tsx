@@ -117,7 +117,7 @@ export function ChatMessageRenderer({
     >
       {showSourceBadge && (
         <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-          {msg.runtimeId ?? t("session.assistant", "assistant")}
+          {msg.runtimeId ?? t("session.assistant", "Assistant")}
           {msg.kind && msg.kind !== "story" && (
             <span className="ml-1.5 opacity-60">· {msg.kind}</span>
           )}

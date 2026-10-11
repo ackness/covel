@@ -46,7 +46,7 @@ export function WorldDataPreflightPanel({
                 })
               : t("session.worldDataPreflight.ready", {
                   count: result?.planned ?? 0,
-                  defaultValue: "{{count}} item(s)",
+                  defaultValue: "{{count}} item(s) will be imported",
                 });
 
   return (

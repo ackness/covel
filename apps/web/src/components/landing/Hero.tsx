@@ -115,16 +115,16 @@ export function Hero() {
             id="hero-heading"
             className="font-display text-[clamp(2.75rem,9vw,8rem)] lg:text-9xl font-bold tracking-tight leading-[0.92] mb-6 md:mb-8 wrap-break-word"
           >
-            {t("home.heroLine1", "Stories")}
+            {t("home.heroLine1", "Build the world,")}
             <br />
             <span className="text-muted-foreground italic font-light">
-              {t("home.heroLine2", "that listen.")}
+              {t("home.heroLine2", "run the turn.")}
             </span>
           </h1>
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-xl font-light leading-relaxed mb-8 md:mb-10">
             {t(
               "home.heroBody",
-              "Covel routes every turn through plugins you can swap, inspect, and replace — from the trigger that fires to the words you read.",
+              "Covel is a plugin-based framework for building and running text RPGs. World data, rules, character state, and narrative flow can each live in their own module, or ship together as one playable product.",
             )}
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -155,7 +155,7 @@ export function Hero() {
           <p className="ui-eyebrow text-muted-foreground max-w-xs hidden md:block">
             {t(
               "home.heroFootnote",
-              "Trigger → Context → LLM → Tool loop → Proposal → Commit → Render. Scroll to follow a single turn.",
+              "One kernel for play, debugging, and extension.",
             )}
           </p>
           <div className="flex items-center gap-2 text-muted-foreground animate-bounce-slow ml-auto">

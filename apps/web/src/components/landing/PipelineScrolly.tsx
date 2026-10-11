@@ -104,7 +104,7 @@ export function PipelineScrolly({ scrollRoot }: Props) {
       <div className="max-w-350 mx-auto px-6 md:px-10 py-20 md:py-28">
         <header className="max-w-3xl mb-16 md:mb-24">
           <span className="ui-eyebrow text-muted-foreground">
-            {t("home.pipeline.eyebrow", "One turn, six stations")}
+            {t("home.pipeline.eyebrow", "Turn pipeline")}
           </span>
           <h2
             id="pipeline-heading"
@@ -112,13 +112,13 @@ export function PipelineScrolly({ scrollRoot }: Props) {
           >
             {t(
               "home.pipeline.title",
-              "What happens between your message and the next paragraph.",
+              "One execution path you can inspect and extend.",
             )}
           </h2>
           <p className="mt-6 text-lg text-muted-foreground font-light leading-relaxed">
             {t(
               "home.pipeline.subtitle",
-              "Each turn passes through a fixed pipeline. Plugins plug in at every station; the kernel never improvises.",
+              "Once player input arrives, the system routes runtimes, assembles context, executes plugins, then writes the result back into state and UI.",
             )}
           </p>
         </header>

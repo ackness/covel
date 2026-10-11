@@ -346,7 +346,7 @@ export function WorldShowcase({
             className="ui-btn ui-world-glass h-10 px-3.5"
           >
             <Wand2 className="h-3.5 w-3.5" />
-            {t("world.aiCreate", "AI generate")}
+            {t("world.aiCreate", "AI Create World")}
           </button>
           <button
             type="button"
@@ -355,7 +355,7 @@ export function WorldShowcase({
             title={primarySlotLabel ?? undefined}
           >
             <Plug className="h-3.5 w-3.5" />
-            {t("session.configureKeys", "API keys & presets")}
+            {t("session.configureKeys", "Configure Providers & Models")}
           </button>
           {onOpenAllSettings && (
             <button
@@ -426,7 +426,7 @@ export function WorldShowcase({
                 className="ui-btn ui-world-glass h-12 px-5 text-[15px]"
               >
                 <Eye className="h-4 w-4" />
-                {t("world.viewDetails", "View details")}
+                {t("world.viewDetails", "View Details")}
               </button>
               {isWorldDeletable(selected) && (
                 <button

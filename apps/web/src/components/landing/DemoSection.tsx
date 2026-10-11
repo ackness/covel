@@ -31,18 +31,18 @@ export function DemoSection() {
       <div className="max-w-350 mx-auto px-6 md:px-10 py-20 md:py-28">
         <header className="max-w-3xl mb-12">
           <span className="ui-eyebrow text-muted-foreground">
-            {t("home.demo.eyebrow", "See it run")}
+            {t("home.demo.eyebrow", "Product UI")}
           </span>
           <h2
             id="demo-heading"
             className="font-display text-4xl md:text-6xl font-bold tracking-tight mt-4 leading-[1.05]"
           >
-            {t("home.demo.title", "A real session, no marketing magic.")}
+            {t("home.demo.title", "The landing page shows the real workspace.")}
           </h2>
           <p className="mt-6 text-lg text-muted-foreground font-light leading-relaxed">
             {t(
               "home.demo.subtitle",
-              "Streaming narrative, plugin panels reacting in real time, model slot routing — the actual app, captured live.",
+              "The center pane runs the session, side panels host plugins, and world plus model configuration stays in the same interface.",
             )}
           </p>
         </header>

@@ -89,7 +89,7 @@ export function ServerStatusOverlay() {
           <p id={hintId} className="text-sm text-muted-foreground">
             {t(
               "serverStatus.downHint",
-              "Covel cannot reach its local server. Turns that already finished are saved. Restart the server to continue.",
+              "Covel cannot reach its local server. Completed turns are saved. Restart the server to continue.",
             )}
           </p>
           {restartError && (

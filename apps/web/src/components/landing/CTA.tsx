@@ -26,16 +26,16 @@ export function CTA() {
         >
           <div className="md:col-span-7">
             <span className="ui-eyebrow text-muted-foreground">
-              {t("home.cta.eyebrow", "Three doors")}
+              {t("home.cta.eyebrow", "Next step")}
             </span>
             <h2
               id="cta-heading"
               className="font-display text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mt-6 leading-[0.95]"
             >
-              {t("home.cta.line1", "Pick a world.")}
+              {t("home.cta.line1", "Start a session,")}
               <br />
               <span className="text-muted-foreground italic font-light">
-                {t("home.cta.line2", "Or build one.")}
+                {t("home.cta.line2", "or start a project.")}
               </span>
             </h2>
           </div>
@@ -43,10 +43,10 @@ export function CTA() {
           <ul className="md:col-span-5 flex flex-col gap-px bg-border border border-border rounded-(--radius-card) overflow-hidden">
             <Door
               to="/session"
-              label={t("home.cta.playLabel", "Just play")}
+              label={t("home.cta.playLabel", "Start playing")}
               body={t(
                 "home.cta.playBody",
-                "Pick a bundled world and dive in. No setup beyond a model key.",
+                "Choose a world, configure a model, and open a session.",
               )}
               cta={t("home.cta.playAction", "Open Studio")}
               kind="internal"
@@ -56,17 +56,17 @@ export function CTA() {
               label={t("home.cta.authorLabel", "Author a plugin")}
               body={t(
                 "home.cta.authorBody",
-                "PLUGIN.md + a manifest. The kernel discovers the rest.",
+                "Start with PLUGIN.md and a manifest, then connect your rules, tools, and panels into the product.",
               )}
               cta={t("home.cta.authorAction", "Read the guide")}
               kind="external"
             />
             <Door
               href={REPO_URL}
-              label={t("home.cta.contribLabel", "Read the source")}
+              label={t("home.cta.contribLabel", "Read the architecture")}
               body={t(
                 "home.cta.contribBody",
-                "13 packages, 8 plugins, fully open. Audit, fork, contribute.",
+                "The repo is split by package and plugin, with clear entry points for product work and deeper integration.",
               )}
               cta={t("home.cta.contribAction", "Browse repo")}
               kind="external"

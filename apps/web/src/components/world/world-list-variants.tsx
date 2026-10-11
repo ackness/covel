@@ -172,8 +172,8 @@ export function WorldTileCard({
             <button
               type="button"
               onClick={(e) => onViewDetails(e, world.id)}
-              aria-label={t("world.viewDetails", "View details")}
-              title={t("world.viewDetails", "View details")}
+              aria-label={t("world.viewDetails", "View Details")}
+              title={t("world.viewDetails", "View Details")}
               className="ui-btn ui-btn-quiet h-10 w-10 p-0 text-muted-foreground md:h-8 md:w-8"
             >
               <Eye className="h-3.5 w-3.5" />
@@ -331,7 +331,7 @@ export function WorldRowItem({
             className="ui-btn ui-btn-quiet h-10 px-3 text-muted-foreground md:h-9"
           >
             <Eye className="h-3.5 w-3.5" />
-            {t("world.viewDetails", "View details")}
+            {t("world.viewDetails", "View Details")}
           </button>
           {isWorldDeletable(world) && (
             <button

@@ -196,7 +196,7 @@ export function WorldSelectScreen({
       title: t("world.deleteConfirmTitle", "Delete world?"),
       message: t(
         "world.deleteConfirmDesc",
-        'This will permanently delete "{{name}}". This action cannot be undone.',
+        'This will permanently delete "{{name}}" and all of its session data. This action cannot be undone.',
         { name: world ? text(world.name) : worldId },
       ),
       confirmLabel: t("world.deleteConfirmAction", "Delete"),
@@ -272,7 +272,7 @@ export function WorldSelectScreen({
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-(--radius-card) border border-(--rule-color) bg-muted/30 px-4 py-3">
             <div className="min-w-0">
               <p className="ui-meta text-[9px] text-muted-foreground">
-                {t("world.localeMismatchInterface", "Interface")}
+                {t("world.localeMismatchInterface", "Current interface")}
               </p>
               <p className="mt-1 truncate text-sm font-medium">
                 {localeName(activeLocale)}

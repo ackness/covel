@@ -25,7 +25,7 @@ export function WorldDocumentPanel({ world, locale }: WorldDocumentPanelProps) {
   if (!world) {
     return (
       <div className="flex items-center justify-center h-20 text-muted-foreground text-xs">
-        {t("session.worldDocumentEmpty", "No world loaded")}
+        {t("session.worldDocumentEmpty", "No world document")}
       </div>
     );
   }

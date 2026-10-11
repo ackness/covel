@@ -9,6 +9,10 @@
  *   - files in the WHITELIST (locales, data models, tests)
  *   - any line ending in `// i18n-allow` escape hatch
  *
+ * It also requires every literal `t()` key to exist in each catalog, every
+ * English fallback in a `t()` call to equal the en-US catalog text, and the
+ * catalogs to have one shape.
+ *
  * Exit code:
  *   0 — no findings
  *   1 — CJK literal detected (prints file:line:col + offending content)
@@ -18,6 +22,10 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  findFallbackMismatches,
+  flattenCatalogText,
+} from "./check-fallback-text.mjs";
 import { checkLocaleCatalogs } from "./check-locale-catalogs.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -302,6 +310,20 @@ function main() {
     console.error(
       `${where}: i18n key "${key}" is not defined in ${missing.join(", ")}`,
     );
+  }
+
+  const english = flattenCatalogText(
+    JSON.parse(readFileSync(resolve(LOCALES_ROOT, "en-US.json"), "utf8")),
+  );
+  for (const file of files) {
+    const source = stripComments(readFileSync(file, "utf8"));
+    for (const problem of findFallbackMismatches(source, english)) {
+      total += 1;
+      // eslint-disable-next-line no-console
+      console.error(
+        `${relative(WEB_ROOT, file)}:${problem.line}: fallback text of "${problem.key}" differs from en-US.json\n  code:    ${JSON.stringify(problem.actual)}\n  catalog: ${JSON.stringify(problem.expected)}`,
+      );
+    }
   }
 
   const catalogProblems = checkLocaleCatalogs(LOCALES_ROOT);

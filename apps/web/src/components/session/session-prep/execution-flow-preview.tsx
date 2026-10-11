@@ -32,12 +32,12 @@ export function ExecutionFlowPreview({
           className="text-xs text-muted-foreground/70 leading-snug"
           title={t(
             "session.executionFlowTitle",
-            "Plugins run stage by stage each turn: setup, then pre-turn, narrative, and post-turn.",
+            "This is a stage preview. Consult the turn trace for actual execution.",
           )}
         >
           {t(
             "session.executionFlowHint",
-            "Turn order — earlier stages run first.",
+            "Tasks grouped by stage. Dependencies determine scheduling within a stage; independent tasks may run in parallel.",
           )}
         </p>
       </div>

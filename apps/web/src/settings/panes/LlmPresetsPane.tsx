@@ -334,7 +334,7 @@ export function LlmPresetsPane() {
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             {t(
               "settings.providerCatalogHint",
-              "Choose a provider, configure its connection once, then maintain all of its model IDs in one list.",
+              "Choose a provider, configure its connection once, then maintain all of its models in one list.",
             )}
           </p>
         </div>
@@ -406,7 +406,7 @@ export function LlmPresetsPane() {
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
               <Server className="h-6 w-6" />
               <p className="text-xs">
-                {t("settings.noProvidersTitle", "No providers configured")}
+                {t("settings.noProvidersTitle", "No providers registered yet")}
               </p>
             </div>
           )}

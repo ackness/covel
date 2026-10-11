@@ -101,7 +101,7 @@ function emitHttpErrorToast(url: string, status: number, body: string): void {
 
 function emitNetworkErrorToast(url: string, err: unknown): void {
   const short = i18n.t("toast.networkError", {
-    defaultValue: "Network error - check your connection",
+    defaultValue: "Network error — check your connection",
   }) as string;
   const detail = `${url}\n${err instanceof Error ? err.message : String(err)}`;
   emitToast("error", short, detail);
