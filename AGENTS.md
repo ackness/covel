@@ -133,7 +133,8 @@ pnpm test:tabletop-plugin   # the same for tabletop-rules packed under a differe
 pnpm pack:test-plugin       # write the ZIPs those tests use to test-results/ (also pack:tabletop-plugin)
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool definitions are English;
                       # Chinese text in framework source only in recorded files; every label and
-                      # text of a bundled plugin has a current Chinese translation
+                      # text of a bundled plugin has a current Chinese translation;
+                      # every t() fallback in web code equals the en-US catalog text
 pnpm i18n             # translation tooling for a plugin or world directory: status, extract,
                       # translate (configured model; --to <dir> keeps a plugin's translation
                       # outside its package), lock (docs/reference/i18n.md)
