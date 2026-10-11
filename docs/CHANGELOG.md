@@ -270,6 +270,7 @@ Not verified for this release: no session was played in the desktop app (a local
 - **A failed extraction no longer stops the next turn.** When the shared extraction of a turn failed, the dimension settlement of that turn was held as pending even though the tracker had settled it from the narrative, and every later turn was refused until the player pressed Retry. The tracker's settlement now stands.
 - **A pending dimension settlement is retried before the next turn.** The next player action first runs the recovery that the Retry button of the pending-settlement notice runs. The turn is refused only when that fails too, and the message now says what to press. Rule: `docs/reference/dynamic-dimensions.md`.
 - **Memory asks for its update as JSON, and a reply it cannot read is on record.** `memory/extract` passes the shape of its update as `responseFormat`, and writes the start and the end of an unreadable reply to the log (the trace keeps no reply text).
+- **A reloaded session no longer stays on "Restoring the save".** When the saved view arrived at the same moment as the answer of the execution status check, the check put the session back into its restoring state and repeated that every three seconds, so the stage or the chat never appeared until the player reloaded again.
 
 ### Security
 
