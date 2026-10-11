@@ -365,16 +365,23 @@ for (const [backend, create] of [
         ).toBeUndefined();
       },
     );
-    it("cannot turn failed shared extraction into a no-change receipt", async () => {
+    it("settles from the narrative when the shared extraction failed", async () => {
+      // The extraction is supporting evidence. A retry never had it either,
+      // so holding the settlement back only stopped the next turn.
       const store = await setup(create);
       expect(
-        (await finalize(store, tracked(), { irStatus: "failed" })).status,
+        (await finalize(store, tracked(3), { irStatus: "failed" })).status,
       ).toBe("committed");
-      expect(await receipt(store)).toMatchObject({
-        status: "pending-settlement",
-        error: "Shared WorldIR extraction failed",
-        blockedBy: "extraction-failed",
-      });
+      expect(await receipt(store)).toMatchObject({ status: "settled" });
+      expect(await record(store)).toMatchObject({ value: 3 });
+      expect(
+        await dimensionExecutionBarrier({
+          store,
+          sessionId: "s",
+          runtimes,
+          willNarrate: true,
+        }),
+      ).toBeUndefined();
     });
     it("keeps invalid rule output as pending, never a schema-invalid value", async () => {
       const store = await setup(create);

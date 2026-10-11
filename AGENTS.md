@@ -499,8 +499,9 @@ handling, and supported backend differences — those are not version compatibil
 - Declare `io.visibility` and the contracts a runtime provides or consumes. Agent
   limits live in `agent.loop`: `timeoutMs`, `callTimeoutMs` (a call that is not
   streamed), `maxRetries` (default 1), `firstTokenTimeoutMs` and `idleTimeoutMs`
-  (a streamed call; default 120s each), `loopDetection` (default 3); a function's
-  limit is `function.timeoutMs`.
+  (a streamed call; 120s by default, and the default first-token wait of an
+  attempt is shortened so the retries left fit into `timeoutMs`),
+  `loopDetection` (default 3); a function's limit is `function.timeoutMs`.
 - `pnpm validate:plugin plugins/<id>` is static and never executes `entry`; real
   registration of bundled plugins is asserted by
   `apps/server/tests/bootstrap/builtin-plugin-entries.test.ts`.

@@ -688,8 +688,6 @@ export async function finalizeExecution(
                 sink,
                 sessionId,
                 scope: dimensions,
-                runtimes,
-                results,
                 proposals: updates,
               });
             await commitBatch(updates);

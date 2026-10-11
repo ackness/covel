@@ -402,6 +402,30 @@ function pluginLogThreshold(): number {
 const LOGS_NAMESPACE = "_logs";
 const MAX_LOG_ENTRIES = 200;
 const LOG_EVICTION_INTERVAL = 20;
+/** Longest `meta` a warning or error carries into the server log. */
+const SERVER_LOG_META_CHARS = 2_000;
+
+/**
+ * A plugin's warning or error also goes to the server log. The `_logs` ring
+ * belongs to one session and is read through the store; an operator who
+ * looks for why a runtime failed reads the server log first.
+ */
+function mirrorToServerLog(
+  level: "warn" | "error",
+  runtimeId: string,
+  message: string,
+  meta: Record<string, unknown> | undefined,
+): void {
+  let detail = "";
+  if (meta && Object.keys(meta).length > 0) {
+    try {
+      detail = ` ${JSON.stringify(meta).slice(0, SERVER_LOG_META_CHARS)}`;
+    } catch {
+      // A value that cannot be serialized is left out of the line.
+    }
+  }
+  console[level](`[plugin-log] ${runtimeId}: ${message}${detail}`);
+}
 
 /**
  * Build a per-runtime logger that appends rows to the plugin's `_logs`
@@ -410,6 +434,7 @@ const LOG_EVICTION_INTERVAL = 20;
  * rows are evicted so a chatty plugin can't balloon the table. The ring is
  * checked on a logger's first write and every `LOG_EVICTION_INTERVAL` writes
  * after, so a log line costs one write instead of a full namespace read.
+ * Warnings and errors are also written to the server log.
  */
 export function createPluginLogger(
   store: DataStore,
@@ -423,6 +448,8 @@ export function createPluginLogger(
     meta: Record<string, unknown> | undefined,
   ): Promise<void> {
     if (LOG_LEVELS.indexOf(level) < threshold) return;
+    if (level === "warn" || level === "error")
+      mirrorToServerLog(level, ctx.runtimeId, String(message), meta);
     const now = new Date();
     const nowMs = now.getTime();
     const nowIso = now.toISOString();

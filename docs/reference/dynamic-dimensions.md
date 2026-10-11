@@ -115,7 +115,9 @@ tracker 的提示词和 `dimension-rule-get` 给出每个维度的规则、schem
 
 ## 回执、恢复与玩家编辑
 
-host 在叙事提交边界独立登记义务，冻结原 `resultId`、`sourceTurnId`、readVersions，以及带非空 updateRule 的 definitions（静态设定不复制进每张回执）。回执不重复存正文；原文来自该来源的持久 turn artifact。状态为 `pending-settlement`、`settled`、`no-change`、`manual`、`skipped`。失败/未运行/跳过调度不是 no-change；自动失败保留叙事及待结算义务，不破坏其他普通 proposal 的全执行回滚语义。tracker 的模型调用在超时/瞬时错误时自动重试（`maxRetries: 3`；单次调用上限 60 秒、runtime 上限 120 秒，所以卡住不返回的调用只够再试一次，很快返回的失败最多再试三次），仍失败才留下待结算。待结算会挡住之后的回合，所以这里宁可多试。下一次依赖叙事在义务解决前被阻止。已解决的回执每个会话只保留最近 20 条（登记新回执时清理更早的），待结算的回执不会被清理。
+host 在叙事提交边界独立登记义务，冻结原 `resultId`、`sourceTurnId`、readVersions，以及带非空 updateRule 的 definitions（静态设定不复制进每张回执）。回执不重复存正文；原文来自该来源的持久 turn artifact。状态为 `pending-settlement`、`settled`、`no-change`、`manual`、`skipped`。失败/未运行/跳过调度不是 no-change；自动失败保留叙事及待结算义务，不破坏其他普通 proposal 的全执行回滚语义。tracker 的模型调用在超时/瞬时错误时自动重试（`maxRetries: 3`，runtime 上限 120 秒：接了请求却不出字的调用依次最多等 60、30、15、15 秒，见[插件契约](plugins.md)的 `agent.loop`；很快返回的失败最多再试三次），仍失败才留下待结算。待结算会挡住之后的回合，所以这里宁可多试。同一回合里别的抽取 runtime 失败不影响结算：tracker 只凭叙事原文就能结算，它成功提交的更新照常生效。
+
+待结算不会让玩家卡在原地：下一个玩家动作（`POST /api/actions`，`retry_runtime` / `retry_failed_runtimes` 除外）开始前，host 先替玩家做一次与面板“重试”相同的恢复，即用原回合已提交的结果作种子，手动运行 `dimensionRecovery.trackerRuntimeId` 指向的 tracker。按来源回合从早到晚逐条处理，结果写入服务器日志（`[dimension-settlement]`）。这次重试成功，回合照常进行；仍失败才阻止这一回合，错误文字告诉玩家在待结算提示里按“重试”或“跳过”后再发送。提供方是社区插件时不自动重试（手动运行需要玩家授权），只走面板。已解决的回执每个会话只保留最近 20 条（登记新回执时清理更早的），待结算的回执不会被清理。
 
 玩家通过 snapshot 受信 recovery metadata 使用既有 runtime RPC：
 

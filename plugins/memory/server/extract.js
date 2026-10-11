@@ -10,6 +10,7 @@ import {
   buildShortenPrompt,
   cutAtSentence,
   enforceAuthoritativePlayerProfile,
+  memoryUpdateSchema,
   parseMemoryUpdate,
 } from "./extraction.js";
 import {
@@ -22,6 +23,16 @@ import {
 
 const MAX_REPLY_ATTEMPTS = 2;
 const DEFAULT_BLOCK_CHARS = 2000;
+/** How much of a reply that cannot be read is kept in the log, from each end. */
+const UNREADABLE_REPLY_HEAD_CHARS = 600;
+const UNREADABLE_REPLY_TAIL_CHARS = 300;
+
+/** The start and the end of a reply, enough to see why it did not parse. */
+function replyExcerpt(text) {
+  if (text.length <= UNREADABLE_REPLY_HEAD_CHARS + UNREADABLE_REPLY_TAIL_CHARS)
+    return text;
+  return `${text.slice(0, UNREADABLE_REPLY_HEAD_CHARS)} … ${text.slice(-UNREADABLE_REPLY_TAIL_CHARS)}`;
+}
 
 /** One scheduler-owned attempt; proposals commit with the detached job receipt. */
 export default async function extractMemory(ctx) {
@@ -84,6 +95,12 @@ export default async function extractMemory(ctx) {
     const response = await ctx.gateway.generateText({
       presetId: "memory",
       defaults: { reasoningEffort: "disabled" },
+      // A provider's JSON mode escapes what free text may not, such as a
+      // quotation mark copied from dialogue into a block.
+      responseFormat: {
+        type: "json_schema",
+        schema: memoryUpdateSchema(definitions),
+      },
       system: buildSystemPrompt(definitions, lang, locale),
       prompt,
       signal: ctx.signal,
@@ -92,6 +109,15 @@ export default async function extractMemory(ctx) {
     try {
       extracted = parseMemoryUpdate(response.text, labels);
     } catch (error) {
+      // The trace keeps no reply text, so this line is the only record of
+      // what the model sent.
+      await ctx.logger?.warn?.("memory update reply could not be read", {
+        attempt,
+        reason: error instanceof Error ? error.message : String(error),
+        finishReason: response.finishReason,
+        replyChars: response.text.length,
+        reply: replyExcerpt(response.text),
+      });
       if (attempt >= MAX_REPLY_ATTEMPTS) throw error;
     }
   }

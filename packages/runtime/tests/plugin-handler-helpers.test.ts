@@ -5,7 +5,7 @@
  * diagnostics without bypassing the pluginId scope.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import {
@@ -130,6 +130,29 @@ describe("createPluginLogger", () => {
     const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_logs");
     const levels = rows.map((r) => (r.value as { level: string }).level).sort();
     expect(levels).toEqual(["debug", "error", "info", "warn"]);
+  });
+
+  it("writes warnings and errors to the server log too, with bounded detail", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const logger = createPluginLogger(store, ctx);
+      await logger.info("quiet");
+      await logger.warn("reply could not be read", { reply: "x".repeat(5000) });
+      await logger.error("gave up");
+      expect(warn).toHaveBeenCalledTimes(1);
+      const line = warn.mock.calls[0]![0] as string;
+      expect(line).toContain(
+        `[plugin-log] ${RUNTIME_ID}: reply could not be read`,
+      );
+      expect(line.length).toBeLessThan(2200);
+      expect(error.mock.calls[0]![0]).toBe(
+        `[plugin-log] ${RUNTIME_ID}: gave up`,
+      );
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 
   it("omits the meta field when no metadata is provided", async () => {

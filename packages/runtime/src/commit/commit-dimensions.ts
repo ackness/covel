@@ -133,19 +133,14 @@ export function createDimensionCommitHandlers(
     if (receipt && receipt.status !== "pending-settlement")
       return { committed: true };
 
-    // A new pending message replaces the old one, and with it any hold on the
-    // receipt unless the caller restates that hold.
+    // A new pending message replaces the old one.
     const pending = async (
       message: string,
-      opts: { readonly code?: string; readonly blocked?: boolean } = {},
+      opts: { readonly code?: string } = {},
     ): Promise<CommitResult> => {
       if (!receipt) return commitError(message, opts.code);
-      const { blockedBy: _released, ...rest } = receipt;
       const updated = {
-        ...rest,
-        ...(opts.blocked && receipt.blockedBy
-          ? { blockedBy: receipt.blockedBy }
-          : {}),
+        ...receipt,
         error: message,
         version: receipt.version + 1,
       };
@@ -180,14 +175,6 @@ export function createDimensionCommitHandlers(
     };
     try {
       if (payload && !payload.success) return pending(payload.error.message);
-      if (
-        receipt?.blockedBy === "extraction-failed" &&
-        payload?.data?.settlement !== "manual" &&
-        payload?.data?.settlement !== "skipped"
-      )
-        return pending(receipt.error ?? "Shared WorldIR extraction failed", {
-          blocked: true,
-        });
       if (payload?.success && receipt) {
         if (
           !dimensionsJsonEqual(

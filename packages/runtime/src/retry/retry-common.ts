@@ -21,8 +21,14 @@ export interface RetryPolicy {
   readonly maxRetries: number;
   /** Per-call total timeout in ms. */
   readonly callTimeoutMs: number;
-  /** Streaming first-token timeout in ms. */
+  /**
+   * Longest wait for the first output of a streamed call, in ms. The wait of
+   * one attempt is shorter when the runtime's remaining time has to cover
+   * later attempts too; see {@link firstTokenWaitMs}.
+   */
   readonly firstTokenTimeoutMs: number;
+  /** The author set `firstTokenTimeoutMs`: every attempt waits exactly that long. */
+  readonly firstTokenTimeoutFixed: boolean;
   /** Longest silence of a stream that has started to write, in ms. */
   readonly idleTimeoutMs: number;
   /** Tool-loop threshold (0 disables detection). */
@@ -39,6 +45,12 @@ const MIN_CALL_TIMEOUT_MS = 5_000;
 
 /** Minimum per-attempt budget floor (ms). */
 const MIN_ATTEMPT_BUDGET_MS = 1_000;
+/**
+ * What an attempt that can be repeated may wait for a silent model when its
+ * equal share of the remaining time is shorter. Most models that answer at
+ * all start within this time.
+ */
+const STALL_WAIT_FLOOR_MS = 60_000;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -88,9 +100,47 @@ export function buildRetryPolicy(input: {
     maxRetries,
     callTimeoutMs,
     firstTokenTimeoutMs,
+    firstTokenTimeoutFixed: input.firstTokenTimeoutMs !== undefined,
     idleTimeoutMs,
     loopDetectionThreshold,
   };
+}
+
+/**
+ * How long one attempt may wait for a model that sends nothing, so that the
+ * attempts after it still fit into `remainingMs`.
+ *
+ * The last attempt may use all that is left. An earlier one gets its equal
+ * share, or {@link STALL_WAIT_FLOOR_MS} when the share is shorter, but never
+ * more than half of what is left: a stalled attempt always leaves room for
+ * the next one. With 120s and four attempts the waits are 60s, 30s, 15s, 15s.
+ */
+export function stallWaitMs(remainingMs: number, attemptsLeft: number): number {
+  if (attemptsLeft <= 1) return remainingMs;
+  return Math.max(
+    remainingMs / attemptsLeft,
+    Math.min(STALL_WAIT_FLOOR_MS, remainingMs / 2),
+  );
+}
+
+/**
+ * The first-token wait of one streamed attempt. A value the author set is
+ * used as written. The default is the policy's limit, shortened to what
+ * {@link stallWaitMs} leaves for the attempts that may follow.
+ */
+export function firstTokenWaitMs(
+  policy: RetryPolicy,
+  attemptsLeft: number,
+  remainingMs: number,
+): number {
+  if (policy.firstTokenTimeoutFixed) return policy.firstTokenTimeoutMs;
+  return Math.max(
+    MIN_ATTEMPT_BUDGET_MS,
+    Math.min(
+      policy.firstTokenTimeoutMs,
+      Math.floor(stallWaitMs(remainingMs, attemptsLeft)),
+    ),
+  );
 }
 
 // ── Error classification ────────────────────────────────────────────

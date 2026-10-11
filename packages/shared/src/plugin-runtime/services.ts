@@ -45,6 +45,12 @@ export interface PluginRuntimeGateway {
       readonly content: string;
     }[];
     readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
+    /**
+     * Ask for a JSON reply of this shape. The provider's JSON mode is used
+     * where it has one and the schema is added to the instructions; `text`
+     * is still text, and the caller parses and checks it.
+     */
+    readonly responseFormat?: import("../types/llm-adapter.js").LLMResponseFormat;
     /** Output ceiling for this call; never raises the slot's configured budget. */
     readonly maxOutputTokens?: number;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
