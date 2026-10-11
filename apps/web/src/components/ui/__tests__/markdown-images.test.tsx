@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ImageScopeContext } from "@/lib/external-images.js";
 import { Markdown } from "../markdown.js";
@@ -16,6 +24,11 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+// The renderer is loaded on first use. Load it first, so a test waits for a
+// render, not for an import.
+beforeAll(async () => {
+  await Promise.all([import("react-markdown"), import("remark-gfm")]);
+});
 beforeEach(() => {
   settings.value = {};
   settings.set.mockReset();
