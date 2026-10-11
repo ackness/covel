@@ -285,7 +285,7 @@ Lorebook 使用 owner 与 id 的复合身份，owner 为 world、plugin 或 play
 
 写入使用 `dimension.initialize` / `dimension.update` 领域 proposal；只有受信属主可写，更新带 `expectedVersion` 并整批 CAS。普通 `plugin.data`、batch、delete 或 action RPC store 写入不能触碰 `_dimensions` / `_dimension-settlements`。维护工具的来源及读取版本集由框架获取，模型只提交新值；没有变化也调用 `update-dimensions({updates: []})`，不能以 runtime 成功推断已结算。
 
-自动维护失败或未运行保留 `pending-settlement` 回执，下一次叙事前须解决。恢复元数据由 `session.world-context@1` 提供并经 host 验证：editor 为 manual runtime RPC，重试直接调用 tracker 加 `retryFromTurnId`。普通手改不自动解决源回合义务，已终结回执不重复补算。完整状态与接口见 [World Model](world-model.md#回合时序与结算回执)和 [API](api.md#维度编辑与待结算恢复)。
+自动维护失败或未运行保留 `pending-settlement` 回执，下一次叙事前须解决；下一个玩家动作开始前 host 会先自动重试一次，仍失败才阻止并提示玩家。恢复元数据由 `session.world-context@1` 提供并经 host 验证：editor 为 manual runtime RPC，重试直接调用 tracker 加 `retryFromTurnId`。普通手改不自动解决源回合义务，已终结回执不重复补算。完整状态与接口见 [World Model](world-model.md#回合时序与结算回执)和 [API](api.md#维度编辑与待结算恢复)。
 
 > **BREAKING CHANGE**：旧九类 raw dimension 格式和旧副本读取移除。世界作者使用[统一 definition](world-data.md#动态世界维度dimensions)，开发世界、会话与快照需重建。这里不提供 #97 的隐藏事件触发层，也不改变角色、背包、好感或时间的权威属主。
 

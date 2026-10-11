@@ -368,7 +368,8 @@ describe("E2E: Narrator game flow", () => {
     const body = (await res.json()) as { status: string };
     expect(body.status).toBe("ok");
   });
-  it("recovers one original dimension source through real RPC without advancing or settling twice", async () => {
+  /** A playing session with one dimension, and a way to send a turn. */
+  async function startDimensionSession() {
     const created = await (
       await app.request("/api/sessions", {
         method: "POST",
@@ -411,6 +412,10 @@ describe("E2E: Narrator game flow", () => {
           }),
         }),
       );
+    return { id, send };
+  }
+  it("recovers one original dimension source through real RPC without advancing or settling twice", async () => {
+    const { id, send } = await startDimensionSession();
     const events = await send("dimension-source");
     const receiptRow = (
       await store.listPluginData(
@@ -520,6 +525,36 @@ describe("E2E: Narrator game flow", () => {
       expect(view.dimensions.study).toMatchObject({ value: 1, version: 2 });
       expect(view.dimensions.study).not.toHaveProperty("initialValue");
       expect(view.dimensions.study).not.toHaveProperty("updateRule");
+    } finally {
+      mockLLM.dimensionUpdates = undefined;
+    }
+  });
+  it("retries a pending dimension settlement before the next turn and then plays it", async () => {
+    const { id, send } = await startDimensionSession();
+    const receipts = async () =>
+      (
+        await store.listPluginData(
+          id,
+          "world-init",
+          DIMENSION_SETTLEMENT_NAMESPACE,
+        )
+      ).map((row) => (row.value as { status: string }).status);
+    await send("dimension-source");
+    expect(await receipts()).toEqual(["pending-settlement"]);
+
+    // The model still gives the tracker nothing to settle with: the retry
+    // fails, and the turn is refused with what the player can do.
+    const refused = await send("dimension-still-pending");
+    expect((await store.getSession(id))?.completedPlayerTurns).toBe(1);
+    expect(JSON.stringify(refused)).toContain("Use Retry in the pending");
+
+    // The model answers again: the same message now settles the old turn
+    // first and then runs as turn two.
+    mockLLM.dimensionUpdates = [];
+    try {
+      await send("dimension-recovered");
+      expect((await store.getSession(id))?.completedPlayerTurns).toBe(2);
+      expect((await receipts()).sort()).toEqual(["no-change", "no-change"]);
     } finally {
       mockLLM.dimensionUpdates = undefined;
     }

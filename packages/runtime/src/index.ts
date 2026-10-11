@@ -72,6 +72,7 @@ export {
   isTurnAbortedError,
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
+export { pendingDimensionSettlements } from "./turn-executor/dimension-barrier.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 

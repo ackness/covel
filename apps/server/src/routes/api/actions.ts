@@ -81,6 +81,7 @@ import {
 import { checkSessionOwner } from "./session/session-guard.js";
 import { readLockedSession } from "./session/locked-mutation.js";
 import { validateActionRequest } from "./actions/request.js";
+import { retryPendingDimensionSettlements } from "./actions/dimension-settlement-retry.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { preflightFormApprovals } from "./plugin-rpc/form-approvals.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
@@ -1004,6 +1005,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     };
 
     try {
+      // A settlement an earlier turn left pending would refuse this turn:
+      // try it again first, as the player would from the notice.
+      if (!isRuntimeRetry)
+        await retryPendingDimensionSettlements(c, {
+          session,
+          playerSettings: decodedUserSettings.settings,
+        });
       const first = await runTurnOnce({
         turnId,
         playerMessage,

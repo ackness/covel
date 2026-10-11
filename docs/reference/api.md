@@ -1949,7 +1949,7 @@ editor 的 payload 为 `{updates, resultId?, resolution?}`：最多 64 项，`id
 
 服务端从已持久化的原 turn artifact 绑定 narrative 与上游 seed，不信任客户端正文或来源号；种子只作上下文，不重复提交。普通 manual 不获得叙事输入，editor 不递归调用 tracker，已终结来源不再次结算。旧计划或读版本已过期时保留 pending，必须明确人工处理/跳过或符合来源边界的重试，不能自动 rebase。
 
-版本冲突没有最后写入获胜：editor 前检可在 runtime `output` 返回 `{applied:false,code:"dimension-version-conflict",currentVersions}`；提交阶段冲突的 RPC 返回 `409 {error,code:"dimension-version-conflict",details:{currentVersions}}`。客户端须读取 `GET /api/sessions/:id/view` 刷新、核对值及回执后再提交，不以 `status:"ok"` 或 `submitted:true` 证明修改已落库。自动维护的结算拒绝可以保留已提交叙事和 `pending-settlement`，同样需要检查回执。五态意义见 [World Model](world-model.md#回合时序与结算回执)。
+版本冲突没有最后写入获胜：editor 前检可在 runtime `output` 返回 `{applied:false,code:"dimension-version-conflict",currentVersions}`；提交阶段冲突的 RPC 返回 `409 {error,code:"dimension-version-conflict",details:{currentVersions}}`。客户端须读取 `GET /api/sessions/:id/view` 刷新、核对值及回执后再提交，不以 `status:"ok"` 或 `submitted:true` 证明修改已落库。自动维护的结算拒绝可以保留已提交叙事和 `pending-settlement`，同样需要检查回执。存在待结算回执时，`POST /api/actions` 在开始回合前先自动重试一次（见[动态维度](dynamic-dimensions.md)）；仍未结算则该回合以 `abortReason` 结束，文字说明玩家可用的操作。五态意义见 [World Model](world-model.md#回合时序与结算回执)。
 
 **图像/媒体生成输出:**
 

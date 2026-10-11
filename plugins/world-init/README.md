@@ -16,7 +16,7 @@
 ## 数据与行为
 
 - 维度声明来自世界包（开放自定义 ID，`{name, description?, schema, initialValue, updateRule?}`）；当前值保存在受保护的 `_dimensions` namespace，会话级、版本化，经 `dimension.initialize`/`dimension.update` proposal + 批量 CAS 写入，冲突不覆盖。
-- 结算回执（pending-settlement/settled/no-change/manual/skipped）持久化在 `_dimension-settlements`；失败不冒充无变化，未结算义务会阻止下一次依赖叙事。
+- 结算回执（pending-settlement/settled/no-change/manual/skipped）持久化在 `_dimension-settlements`；失败不冒充无变化；下一个玩家动作前宿主会自动重试一次未结算义务，仍失败才阻止下一次依赖叙事。
 - `session.world-context@1` 发布公共维度快照；`prompt.segment@1` 发布预算投影与规则提示；`world-dimension-get`/`world-dimension-list` 是框架内建只读查询，任意插件可读当前值（不含 updateRule/initialValue）。
 - 提供会话上下文加载使用的 `world-data-provider` 能力；作者声明与世界包初值不回写、不被运行时覆盖。
 

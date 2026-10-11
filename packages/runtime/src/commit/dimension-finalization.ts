@@ -124,26 +124,6 @@ export async function bindDimensionProvider(args: {
   };
 }
 
-/** A producer that RAN and failed marks the receipt; an absent one does not. */
-function sharedExtractionFailed(
-  runtimes: readonly DimensionRuntime[],
-  results: readonly DimensionFinalizationResult[],
-): boolean {
-  // IR is optional corroboration, never the settlement owner. A producer that
-  // was skipped, not scheduled, or simply absent from this execution does not
-  // poison the obligation — the tracker can still settle from the
-  // authoritative narrative alone, and a later retry with a successful IR run
-  // must be able to clear the flag.
-  return runtimes
-    .filter((runtime) => runtime.outputContract === "world-ir-provider@1")
-    .some((producer) =>
-      results.some(
-        (result) =>
-          result.runtimeId === producer.name && result.status === "failed",
-      ),
-    );
-}
-
 /**
  * Register the settlement obligation of every narrative in this execution.
  *
@@ -202,7 +182,6 @@ export async function registerDimensionSettlements(args: {
   const kinds = new Map(
     runtimes.map((runtime) => [runtime.name, runtime.outputKind]),
   );
-  const irFailed = sharedExtractionFailed(runtimes, results);
   const now = new Date().toISOString();
   for (const result of results) {
     if (kinds.get(result.runtimeId) !== "story" || result.status !== "success")
@@ -221,12 +200,6 @@ export async function registerDimensionSettlements(args: {
       definitions: settlementDefinitions(records, scope.locale),
       sourceTurnId: result.turnId,
       version: 1,
-      ...(irFailed
-        ? {
-            error: "Shared WorldIR extraction failed",
-            blockedBy: "extraction-failed" as const,
-          }
-        : {}),
     };
     const created = await sink.compareAndSetPluginDataBatch(
       sessionId,
@@ -307,12 +280,9 @@ export async function adoptRetryReadSets(args: {
   readonly sink: StoreTransaction;
   readonly sessionId: string;
   readonly scope: DimensionSettlementScope;
-  readonly runtimes: readonly DimensionRuntime[];
-  readonly results: readonly DimensionFinalizationResult[];
   readonly proposals: readonly Proposal[];
 }): Promise<void> {
   const { sink, sessionId, scope } = args;
-  const irFailed = sharedExtractionFailed(args.runtimes, args.results);
   const now = new Date().toISOString();
   for (const proposal of args.proposals) {
     const source = settlementSourceOf(proposal);
@@ -331,8 +301,7 @@ export async function adoptRetryReadSets(args: {
     if (!row) continue;
     const receipt = dimensionSettlementReceiptSchema.parse(row.value);
     if (receipt.status !== "pending-settlement") continue;
-    if (receipt.blockedBy === "extraction-failed" && irFailed) continue;
-    const { error: _error, blockedBy: _blockedBy, ...clean } = receipt;
+    const { error: _error, ...clean } = receipt;
     await sink.compareAndSetPluginDataBatch(sessionId, scope.provider, [
       {
         namespace: DIMENSION_SETTLEMENT_NAMESPACE,
