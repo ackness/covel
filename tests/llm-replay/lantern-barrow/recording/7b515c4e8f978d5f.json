@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:7b515c4e8f978d5f40a9c484b61033291c197369bee07abc28e65da6fb6b0aeb",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"amount\": 0, \"unit\": \"phase\", \"reason\": \"酒馆内的一次短对话与告示交涉，仍停留在同一个夜晚时辰内。\"}",
+            "id": "call_00_rhe3PfoyyMaACgcfTXgA7531"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2098,
+          "completion_tokens": 87,
+          "total_tokens": 2185
+        }
+      },
+      "metadata": {
+        "systemHash": "2c503287",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}

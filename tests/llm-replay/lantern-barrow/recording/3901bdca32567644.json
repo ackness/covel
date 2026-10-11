@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:3901bdca3256764437783bb62bc30062bd95de31cef9d47efbf803f9c821569c",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "generate-guide",
+            "arguments": "{\"scene\": \"歪角鹿酒馆・赏金条件\", \"recap\": \"你为赏金告示进了歪角鹿酒馆，酒馆里的人因你而安静下来。村长阿尔多斯・潘恩当面开出三十枚银币，条件是把守灯人伊索德带回来，并强调“灯是修会该管的”。靠窗的少女指出灯灭了三天不是油的问题，铭文要灯心先回到灯里；角落的老兵说伊索德进的是个笼子。麦酒端在你面前，你的手在抖。\", \"decision\": \"村长的条件摆上桌面，你先接哪一头？\", \"prompts\": [{\"text\": \"先答应村长，但要他先付一半定金，并说出伊索德最后出现的位置\", \"kind\": \"social\"}, {\"text\": \"问靠窗的少女：那页灯纹铭文从哪来的，能不能给我看\", \"kind\": \"ask\"}, {\"text\": \"坐到擦剑的老兵对面，问他凭什么说那是个笼子\", \"kind\": \"social\"}, {\"text\": \"推门出去，趁夜先到古冢外的灯屋看一趟现场\", \"kind\": \"act\"}]}",
+            "id": "call_00_Y4DoF8kOPEusya6YwBQ40138"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2678,
+          "completion_tokens": 321,
+          "total_tokens": 2999
+        }
+      },
+      "metadata": {
+        "systemHash": "222d9770",
+        "toolsHash": "ae89d990"
+      }
+    }
+  ]
+}

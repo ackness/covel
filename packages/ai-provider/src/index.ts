@@ -91,6 +91,12 @@ export { BUNDLED_MODEL_DB_PATH } from "./bundled-resources.js";
 // Config
 export { loadLlmConfig, parseLlmConfig } from "./config/llm-loader.js";
 export {
+  BUILTIN_LLM_PROVIDER,
+  builtinLlmProvider,
+  builtinLlmToml,
+  type BuiltinLlmSettings,
+} from "./config/builtin-llm.js";
+export {
   providerProtocolSchema,
   llmConfigSchema,
   type LlmConfig,

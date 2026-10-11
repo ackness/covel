@@ -141,7 +141,8 @@ keep `tailwind-lint` read-only, because `--fix` can corrupt TypeScript identifie
 Dev-time files, copied from `*.example` — never commit them:
 
 - `.env` — infrastructure (`STORE_BACKEND`, `DATABASE_URL`, `SERVER_PORT`, `COVEL_WORLDS_DIR`, …)
-- `llm.toml` — slot routing (`[covel.<slot>]`). Missing → built-in DeepSeek `story` slot.
+- `llm.toml` — slot routing (`[covel.<slot>]`). Missing → built-in `story` slot: DeepSeek, or the
+  OpenAI-compatible endpoint in `DEFAULT_BASE_URL` / `DEFAULT_MODEL` with `DEFAULT_API_KEY`.
 - `.env.llm` — provider API keys. The dev server loads `.env` + `.env.llm` from the repo root.
 
 Every variable is declared in `packages/shared/src/env/registry.ts` and documented

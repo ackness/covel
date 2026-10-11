@@ -1,0 +1,33 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:a588f37856d75640a2105649e029a5e60ba2f2023e0eedafc33abe50bde08a4a",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "submit-world-facts",
+            "arguments": "{\"summary\": \"玩家队伍在旅店中拼凑线索：雷恩的册子显示灯心是被从灯盏底部取出的，批注并非她所写；梅瑞尔只肯提供学者现付房钱的账目。玩家追问布兰诺克二十年前小队的事，他交出一截缠红绳的短铁钉作为回答，梅瑞尔认出那是伊索德小屋门上的钉子，布兰诺克随即起身走向门口。\", \"entities\": [{\"id\": \"雷恩册子\", \"type\": \"item\", \"name\": \"雷恩的册子\", \"description\": \"雷恩随身携带的一本册子，翻开的折角页画着灯盏底部结构图，旁有一行不是学者体、也非雷恩所写的新墨批注。\", \"attributes\": {\"holder\": \"雷恩修女\", \"content\": \"灯盏底部结构图与后人添写的批注\"}}, {\"id\": \"短铁钉\", \"type\": \"item\", \"name\": \"缠红绳的短铁钉\", \"description\": \"布兰诺克从靴筒侧面抽出交给玩家的一截短铁钉，钉身上缠着褪色红绳，梅瑞尔认出是伊索德小屋门上的门钉。\", \"attributes\": {\"holder\": \"e2e测试角色\"}}], \"relations\": [{\"id\": \"布兰诺克交出钉子\", \"type\": \"TRUSTS\", \"from\": \"布兰诺克-黑尔\", \"to\": \"e2e测试角色\", \"description\": \"布兰诺克以交出贴身铁钉的方式回应玩家对二十年前小队的追问。\", \"attributes\": {\"strength\": \"初生\", \"basis\": \"以物代答\"}}], \"events\": [{\"id\": \"布兰诺克-gain-nail\", \"type\": \"inventory_change\", \"participantIds\": [\"布兰诺克-黑尔\"], \"description\": \"布兰诺克从靴筒侧面抽出缠红绳的短铁钉。\", \"attributes\": {\"item\": \"短铁钉\", \"holder\": \"布兰诺克-黑尔\", \"operation\": \"lose\", \"quantity\": 1}}, {\"id\": \"玩家-gain-nail\", \"type\": \"inventory_change\", \"participantIds\": [\"e2e测试角色\", \"布兰诺克-黑尔\"], \"description\": \"布兰诺克把缠红绳的短铁钉放在玩家面前的台面上交给玩家。\", \"attributes\": {\"item\": \"短铁钉\", \"holder\": \"e2e测试角色\", \"giver\": \"布兰诺克-黑尔\", \"operation\": \"gain\", \"quantity\": 1}}, {\"id\": \"梅瑞尔-认出钉子\", \"type\": \"interaction\", \"participantIds\": [\"梅瑞尔-沃斯\", \"e2e测试角色\"], \"description\": \"梅瑞尔认出铁钉是伊索德小屋门上的，并说明她门上从不挂锁、总挂一盏灯。\", \"attributes\": {\"speaker\": \"梅瑞尔-沃斯\", \"topic\": \"伊索德小屋门钉\"}, {\"id\": \"布兰诺克-离席\", \"type\": \"movement\", \"participantIds\": [\"布兰诺克-黑尔\"], \"description\": \"布兰诺克拉起斗篷往门口走了一步，说若伊索德真进了古冢，门上早已不挂灯。\", \"attributes\": {\"from\": \"旅店吧台前\", \"direction\": \"走向门口\", \"status\": \"停步未出门\"}}, {\"id\": \"玩家追问小队\", \"type\": \"interaction\", \"participantIds\": [\"e2e测试角色\", \"布兰诺克-黑尔\"], \"description\": \"玩家问布兰诺克二十年前那支小队的事——四人中只有他出来，另一个被调子困在里头的是谁。\", \"attributes\": {\"asker\": \"e2e测试角色\", \"respondent\": \"布兰诺克-黑尔\", \"response\": \"未口头作答，以铁钉代答\"}}], \"statements\": [{\"id\": \"灯心取出方式\", \"type\": \"discovery\", \"content\": \"册子上灯盏底部结构图旁的一行批注指出，灯心是被从灯盏底下取出来的；该批注墨色比正文新，不是学者体，也非雷恩所写。\", \"subjectIds\": [\"雷恩册子\", \"雷恩修女\"], \"attributes\": {\"source\": \"雷恩的册子折角页批注\"}}, {\"id\": \"学者房钱账目\", \"type\": \"discovery\", \"content\": \"学者退房那天房钱现付，多给了半枚银币，说‘算明天的’；账上再无其他记录，梅瑞尔不知道他去向。\", \"subjectIds\": [\"梅瑞尔-沃斯\"], \"attributes\": {\"account\": \"现金付清，多付半枚银币\"}}, {\"id\": \"门钉与挂灯\", \"type\": \"lore\", \"content\": \"伊索德小屋的门从不上锁，门钉上总挂一盏灯。\", \"subjectIds\": [\"守灯人伊索德\", \"短铁钉\"], \"attributes\": {\"custom\": \"门上不锁，挂灯为记\"}}]}",
+            "id": "call_00_sIFwc7g5wBE2z58rpr5t7593"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3722,
+          "completion_tokens": 1,
+          "total_tokens": 3723,
+          "prompt_tokens_details": {
+            "cached_tokens": 3722
+          }
+        }
+      },
+      "metadata": {
+        "systemHash": "f9f69e3a",
+        "toolsHash": "8768d054"
+      }
+    }
+  ]
+}

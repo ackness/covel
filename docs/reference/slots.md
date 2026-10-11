@@ -1,6 +1,6 @@
 # 模型用途（Slot）配置
 
-Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途”。`llm.toml` 里每个 `[covel.<slot>]` 小节定义一个具名用途，插件任务按 slot 名或 tag 解析到具体服务商和模型。开发环境读仓库根 `llm.toml`，桌面端读 `~/.covel/llm.toml`（设置内可热重载）。`llm.toml` 缺失时，服务器使用内置的 DeepSeek `story` 用途和 `deepseek-v4-flash`。
+Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途”。`llm.toml` 里每个 `[covel.<slot>]` 小节定义一个具名用途，插件任务按 slot 名或 tag 解析到具体服务商和模型。开发环境读仓库根 `llm.toml`，桌面端读 `~/.covel/llm.toml`（设置内可热重载）。`llm.toml` 缺失时，服务器使用内置的 `story` 用途：默认是 DeepSeek 和 `deepseek-v4-flash`；设置了 `DEFAULT_BASE_URL` 时改指这个 OpenAI 兼容端点，服务商名为 `default`，密钥读 `DEFAULT_API_KEY`，模型读 `DEFAULT_MODEL`（未设置仍是 `deepseek-v4-flash`）。没有 DeepSeek 密钥的环境（例如云端测试）用这三个变量即可换成任意一家服务商，不必写 `llm.toml`。
 
 评估模型使用 `output = ["evaluation"]`、`tag = "evaluation"` 和 `gateway.evaluate()`。TypeSafe、OpenRouter 和 Vercel 的评估模型使用各自的原生协议，配置与能力边界见 [模型评估](evaluation.md)。
 

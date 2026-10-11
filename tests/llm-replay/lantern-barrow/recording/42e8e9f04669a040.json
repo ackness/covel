@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:42e8e9f04669a0407114cf506099f418b58a5217e8e3a2a2a28277d29b307e27",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "submit-world-facts",
+            "arguments": "{\"summary\": \"在酒馆中，布兰诺克给出三条关于古冢的判断并承诺若被选就陪玩家进入墓中，条件是墓里听见唱自己名字的声音不能答应；雷恩修女自报身份并给出灯心的铭文推论，还透露一个月前王都学者退房后曾在村长家待了两个时辰。梅瑞尔承认账本由她记录，并给玩家倒了一杯清水。\", \"entities\": [{\"id\": \"rain-sister\", \"type\": \"character\", \"name\": \"雷恩\", \"description\": \"修会派来查灯的修女，路上走了五天；自称能听见唱名字的歌声，掌握灯心铭文的知识。\", \"attributes\": {\"affiliation\": \"修会\"}}, {\"id\": \"merrill-tavern\", \"type\": \"location\", \"name\": \"梅瑞尔的酒馆\", \"description\": \"玩家与布兰诺克、雷恩会面的酒馆，梅瑞尔在此经营并记录账本。\", \"attributes\": {}}, {\"id\": \"grave-mound\", \"type\": \"location\", \"name\": \"古冢\", \"description\": \"青铜墓门紧闭的坟墓，伊索德已进去三天，二十年前布兰诺克曾从这里爬出。\", \"attributes\": {}}, {\"id\": \"lamp-wick\", \"type\": \"item\", \"name\": \"灯心\", \"description\": \"造灯时被封在灯盏底下、给亡者的东西；灯心离位会导致亡者的名字被唱出来。\", \"attributes\": {\"status\": \"不在原位\"}}, {\"id\": \"walled-lamp-stead\", \"type\": \"item\", \"name\": \"灯盏\", \"description\": \"古冢山顶熄灭的灯，灯心本被封在其底下。\", \"attributes\": {\"status\": \"已熄灭\"}}, {\"id\": \"capital-scholar\", \"type\": \"character\", \"name\": \"王都来的学者\", \"description\": \"一个月前从酒馆退房，退房当天去村长家待了两个时辰的人。\", \"attributes\": {}}, {\"id\": \"village-head\", \"type\": \"character\", \"name\": \"村长\", \"description\": \"一个月前接待过王都来学者两个时辰的村长。\", \"attributes\": {}}], \"relations\": [{\"id\": \"bran-agrees-guard\", \"type\": \"CONDITIONAL_PROTECTION\", \"from\": \"布兰诺克-黑尔\", \"to\": \"e2e测试角色\", \"description\": \"布兰诺克提出若玩家选他同行，他就陪玩家进墓，条件是听见唱名字的声音不得答应。\", \"attributes\": {\"condition\": \"墓中听见唱自己名字的声音不能答应\", \"status\": \"提议未确认\"}}, {\"id\": \"merrill-keeps-ledger\", \"type\": \"KEEPS_RECORDS_FOR\", \"from\": \"梅瑞尔-沃斯\", \"to\": \"merrill-tavern\", \"description\": \"梅瑞尔承认酒馆的旧账由她记录。\", \"attributes\": {\"object\": \"账本\"}}], \"events\": [{\"id\": \"bran-three-judgments\", \"type\": \"interaction\", \"participantIds\": [\"布兰诺克-黑尔\", \"e2e测试角色\"], \"description\": \"布兰诺克向玩家给出三条判断，并提出以不答应唱名之声为条件的同行提议。\", \"attributes\": {\"offer\": \"陪同进入古冢\", \"judgments\": [\"墓门从里面打开，有人在等\", \"墓里的东西暂时还够不着外面\", \"墓里不要点多余的灯\"]}}, {\"id\": \"rain-reveals-identity\", \"type\": \"interaction\", \"participantIds\": [\"rain-sister\", \"e2e测试角色\", \"布兰诺克-黑尔\"], \"description\": \"雷恩自报是修会派来查灯的修女，讲述路上听见唱名字的歌声，并给出灯心铭文的推论。\", \"attributes\": {\"travel\": \"路上五天，晚到三天\"}}, {\"id\": \"rain-reveals-scholar\", \"type\": \"interaction\", \"participantIds\": [\"rain-sister\", \"e2e测试角色\"], \"description\": \"雷恩透露一个月前一位王都来的学者退房当天在王都村长家待了两个时辰。\", \"attributes\": {}}, {\"id\": \"merrill-offers-water\", \"type\": \"interaction\", \"participantIds\": [\"梅瑞尔-沃斯\", \"e2e测试角色\"], \"description\": \"梅瑞尔承认账本由她记，并给玩家推来一杯清水。\", \"attributes\": {}}], \"statements\": [{\"id\": \"wick-removal-effect\", \"type\": \"lore\", \"content\": \"铭文记载灯心在造灯时就被封在灯盏底下，是给亡者的东西；灯心离了灯，亡者的名字就会被唱出来，沼泽边的羊与磨坊主女儿听见的歌声都源于此。\", \"subjectIds\": [\"lamp-wick\", \"walled-lamp-stead\"], \"attributes\": {}}, {\"id\": \"singing-names-warning\", \"type\": \"rule\", \"content\": \"在古冢中若听见有声音唱自己的名字，绝不能答应。\", \"subjectIds\": [\"grave-mound\"], \"attributes\": {}}, {\"id\": \"scholar-village-visit\", \"type\": \"discovery\", \"content\": \"雷恩查阅酒馆旧账得知：一个月前一名王都来的学者在退房当天去村长家待了两个时辰。\", \"subjectIds\": [\"capital-scholar\", \"village-head\"], \"attributes\": {}}, {\"id\": \"sheep-in-marsh\", \"type\": \"discovery\", \"content\": \"村里丢的羊都在沼泽边被发现，说明墓里的东西暂时还够不到外面。\", \"subjectIds\": [\"grave-mound\"], \"attributes\": {}}]}",
+            "id": "call_00_6MBExrzqtS1eWV0yzoog2877"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3992,
+          "completion_tokens": 1369,
+          "total_tokens": 5361
+        }
+      },
+      "metadata": {
+        "systemHash": "f9f69e3a",
+        "toolsHash": "8768d054"
+      }
+    }
+  ]
+}

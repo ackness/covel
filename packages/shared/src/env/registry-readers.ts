@@ -209,6 +209,10 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
       source,
     ),
     llmToml: readEnvString("COVEL_LLM_TOML", undefined, source),
+    builtinLlm: {
+      baseUrl: readEnvString("DEFAULT_BASE_URL", undefined, source),
+      model: readEnvString("DEFAULT_MODEL", undefined, source),
+    },
     pluginsDir: readEnvString("COVEL_PLUGINS_DIR", undefined, source),
     userPluginsDir: readEnvString("COVEL_USER_PLUGINS_DIR", undefined, source),
     worldsDir: readEnvString("COVEL_WORLDS_DIR", undefined, source),

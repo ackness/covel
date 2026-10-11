@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:ee44841104c7d84e824f4f7774543f7154348088cd0aaaa0828b3bf37c9645c9",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "upsert-npc-graph",
+            "arguments": "{\"nodes\": [{\"name\": \"雷恩\", \"type\": \"individual\", \"summary\": \"修会派来查灯的修女，路上走了五天、晚到三天；夜里听见唱名字的歌声并听了一整夜，掌握灯心的铭文知识，并查出王都学者退房当天在村长家待了两个时辰。\", \"aliases\": [\"雷恩修女\", \"修女雷恩\"], \"labels\": [\"修会\", \"知情者\"], \"attributes\": {\"身份\": \"修会派来查灯的修女\", \"所属\": \"修会\", \"行程\": \"路上五天，晚到三天\", \"能力\": \"掌握灯心铭文的知识，能听见唱名字的歌声\"}}, {\"name\": \"王都来的学者\", \"type\": \"individual\", \"summary\": \"一个月前从梅瑞尔酒馆退房、当天去村长家待了两个时辰的王都学者，其行程与灯心失位、伊索德入墓在时间上相扣。\", \"aliases\": [\"王都学者\", \"学者\"], \"labels\": [\"学者\", \"知情者\"], \"attributes\": {\"来历\": \"王都\", \"行动\": \"退房当天在村长家待了两个时辰\"}}, {\"name\": \"梅瑞尔・沃斯\", \"type\": \"individual\", \"summary\": \"酒馆吧台后的女人，承认酒馆旧账由她记录；给玩家推来一块旧布和一杯清水而非酒，对村长与学者之事保持沉默旁观。\", \"aliases\": [\"梅瑞尔\"], \"labels\": [\"酒馆女招待\", \"记账者\"], \"attributes\": {\"身份\": \"酒馆吧台看顾者\", \"职责\": \"记录酒馆旧账\"}}, {\"name\": \"布兰诺克・黑尔\", \"type\": \"individual\", \"summary\": \"酒馆角落擦剑的老兵，二十年前曾从古冢爬出，给出三条古冢判断并提出若被选中就陪玩家进墓，条件是墓中听见唱自己名字的声音绝不能答应。\", \"aliases\": [\"布兰诺克\", \"布兰\", \"老黑尔\"], \"labels\": [\"老兵\", \"知情者\"], \"attributes\": {\"经历\": \"二十年前曾从古冢中爬出\", \"同伴\": \"当年的小队四人中已有人被唱名\"}}], \"edges\": [{\"sourceName\": \"雷恩\", \"targetName\": \"王都来的学者\", \"relation\": \"KNOWS_ABOUT\", \"strength\": 0, \"fact\": \"雷恩查阅酒馆旧账，查出一个月前一名王都来的学者在退房当天去村长家待了两个时辰。\"}, {\"sourceName\": \"梅瑞尔・沃斯\", \"targetName\": \"王都来的学者\", \"relation\": \"KNOWS_ABOUT\", \"strength\": 0, \"fact\": \"梅瑞尔承认酒馆旧账由她记录，因此她知道一个月前王都学者退房及当天的行踪。\"}, {\"sourceName\": \"梅瑞尔・沃斯\", \"targetName\": \"雷恩\", \"relation\": \"COOPERATES_WITH\", \"strength\": 0.2, \"fact\": \"梅瑞尔当众承认账本由她记，等于替雷恩从旧账里查出的学者行踪作证。\"}, {\"sourceName\": \"布兰诺克・黑尔\", \"targetName\": \"雷恩\", \"relation\": \"RESPECTS\", \"strength\": 0.3, \"fact\": \"布兰诺克在听到雷恩讲述夜里听见唱名字的歌声后接受了她的说法，并转而向玩家加重口气确认墓中绝不能答应的警告。\"}, {\"sourceName\": \"布兰诺克・黑尔\", \"targetName\": \"NPC-BRANNOC-HALE\", \"relation\": \"KNOWS_ABOUT\", \"strength\": 0, \"fact\": \"布兰诺克自述二十年前曾从古冢中爬出，那次同行的小队四人中有一人的名字至今被他记得。\"}]}",
+            "id": "call_00_uXylIeun9BUpi0MiiasA4447"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 5567,
+          "completion_tokens": 915,
+          "total_tokens": 6482
+        }
+      },
+      "metadata": {
+        "systemHash": "34b75852",
+        "toolsHash": "fab78c23"
+      }
+    }
+  ]
+}

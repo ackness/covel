@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:83dc2cfede7911daca64b7719990974b9270a669f43853db3cbd8a79ce3c50f3",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-affinity",
+            "arguments": "{\"changes\": [{\"name\": \"阿尔多斯・潘恩\", \"delta\": 2, \"reason\": \"你当众接下了他三十枚银币的委托，他暂时把你算作可用的人\"}, {\"name\": \"梅瑞尔・沃斯\", \"delta\": 2, \"reason\": \"你在她的酒馆里付了账、喝了她的酒，还替她挡下了那阵冷场\"}]}",
+            "id": "call_00_ASkGZ4QdWk8pOazdcnDQ2856"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 3465,
+          "completion_tokens": 125,
+          "total_tokens": 3590
+        }
+      },
+      "metadata": {
+        "systemHash": "a9db5926",
+        "toolsHash": "681c9917"
+      }
+    }
+  ]
+}

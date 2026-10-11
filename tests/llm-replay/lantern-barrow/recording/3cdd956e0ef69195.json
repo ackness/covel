@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:3cdd956e0ef6919551faca4efbeeedd6f871dc2ac61c85d93beb966f48015de9",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"amount\": 0, \"unit\": \"phase\", \"direction\": \"forward\", \"reason\": \"酒馆内围绕册子、铁钉与伊索德的对话仍在同一夜晚时辰内发生，时间未推进。\"}",
+            "id": "call_00_uZImHtYWMlBDYxJzaBeZ2930"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 2140,
+          "completion_tokens": 110,
+          "total_tokens": 2250
+        }
+      },
+      "metadata": {
+        "systemHash": "37e06fa7",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}
