@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import {
+  builtinLlmProvider,
+  builtinLlmToml,
   loadLlmConfig,
   parseLlmConfig,
   createProviderRegistry,
@@ -26,22 +28,16 @@ import type {
  * Built-in fallback LLM config used when no llm.toml is present.
  *
  * The desktop app must boot even if the user has never touched Settings.
- * This defines a single `story` slot pointing at DeepSeek, which all
- * plugin runtimes (model: "story" and model: "plugin") will resolve to
- * via the gateway's first-slot fallback. Users override this by writing
- * their own llm.toml via the Settings UI.
+ * This defines a single `story` slot, which all plugin runtimes resolve to
+ * via the gateway's first-slot fallback: DeepSeek by default, or the
+ * endpoint in DEFAULT_BASE_URL / DEFAULT_MODEL (`builtinLlmToml`).
+ * Users override this by writing their own llm.toml via the Settings UI.
  *
- * Note: no API keys live here. The user still must provide
- * DEEPSEEK_API_KEY (via .env.llm or the Settings UI → X-Provider-Keys)
- * before the slot can actually be called.
+ * Note: no API keys live here. The user still must provide the provider's
+ * key (DEEPSEEK_API_KEY or DEFAULT_API_KEY, via .env.llm or the Settings
+ * UI → X-Provider-Keys) before the slot can actually be called.
  */
-const DEFAULT_LLM_TOML = `
-[covel.story]
-provider = "deepseek"
-model    = "deepseek-v4-flash"
-baseUrl  = "https://api.deepseek.com"
-protocol = "openai-chat-v1"
-`;
+const builtinSettings = () => readRuntimeEnv().builtinLlm;
 
 /**
  * File seeded when the desktop user opens an llm.toml that does not exist yet.
@@ -54,14 +50,14 @@ export const LLM_TOML_STARTER = `# Covel LLM configuration.
 # API keys never go in this file: set them in Settings or keys.env.
 # After editing, use Settings -> Models -> Reload config to apply.
 # Field reference: llm.toml.example in the Covel repository.
-${DEFAULT_LLM_TOML}`;
+${builtinLlmToml(builtinSettings())}`;
 
 /**
  * Initialize AI provider stack.
  *
  * Resolution order:
  *   1. `llm.toml` (COVEL_LLM_TOML override, else ./llm.toml in cwd)
- *   2. Built-in DEFAULT_LLM_TOML — deepseek "story" slot, always available
+ *   2. Built-in `builtinLlmToml` "story" slot, always available
  *
  * We never throw on missing config. The desktop app can boot with nothing
  * configured; persistent llm.toml edits stay user-managed in the desktop
@@ -84,7 +80,7 @@ interface LoadedAiConfig {
  *
  * Resolution order:
  *   1. `llm.toml` (COVEL_LLM_TOML override, else ./llm.toml in cwd)
- *   2. Built-in DEFAULT_LLM_TOML — deepseek "story" slot, always available
+ *   2. Built-in `builtinLlmToml` "story" slot, always available
  *
  * Never throws. A parse failure of a present file is reported via `error`
  * so the UI can tell the user *why* their slots vanished instead of
@@ -133,10 +129,10 @@ function loadAiConfig(
 
   if (!error || context === "startup")
     console.log(
-      `[ai-setup] Using built-in default LLM config (deepseek/story). ` +
+      `[ai-setup] Using built-in default LLM config (${builtinLlmProvider(env.builtinLlm)}/story). ` +
         `Override by editing ${llmTomlPath}.`,
     );
-  const fallback = parseLlmConfig(DEFAULT_LLM_TOML);
+  const fallback = parseLlmConfig(builtinLlmToml(env.builtinLlm));
   return {
     config: fallback.aiConfig,
     llmConfig: fallback.llmConfig,

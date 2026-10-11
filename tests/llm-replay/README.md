@@ -14,9 +14,16 @@ a request is not in the recording.
 After a change to a world, plugin, prompt or `llm.toml`, record the session
 again and commit `recording/` with the change:
 
+Recording sends every new request to the OpenAI-compatible endpoint you set
+in the environment or `.env.llm`; any provider works:
+
 ```bash
-pnpm e2e:replay --record --upstream https://api.deepseek.com lantern-barrow
+DEFAULT_BASE_URL=https://api.example.com   # the origin, without /v1
+DEFAULT_API_KEY=sk-...
+pnpm e2e:replay --record lantern-barrow
 ```
 
-The key is read from the environment or `.env.llm` under the provider's name
-(`DEEPSEEK_API_KEY`). Details: `docs/guide/e2e-plugin-verify.md`.
+`--upstream <origin>` overrides `DEFAULT_BASE_URL`. The key is read under
+the provider's name in `llm.toml` (`default` → `DEFAULT_API_KEY`); the
+model is the one `llm.toml` names, so a gateway must serve it. Details:
+`docs/guide/e2e-plugin-verify.md`.

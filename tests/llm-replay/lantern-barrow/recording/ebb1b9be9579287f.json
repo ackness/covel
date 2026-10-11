@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:ebb1b9be9579287ffa3bdd1670c10576ec959be2ec7c8dc39e7f5d64c06e8dab",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "sync-characters",
+            "arguments": "{\"creates\": [], \"updates\": []}",
+            "id": "call_00_WZijeCLng1Rrh203VyvA0995"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 4251,
+          "completion_tokens": 57,
+          "total_tokens": 4308
+        }
+      },
+      "metadata": {
+        "systemHash": "3b2b5f72",
+        "toolsHash": "d273592b"
+      }
+    }
+  ]
+}

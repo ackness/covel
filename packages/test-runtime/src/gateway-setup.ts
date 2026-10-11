@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   BUNDLED_MODEL_DB_PATH,
+  builtinLlmToml,
   createGateway,
   createModelDatabase,
   createPresetRegistry,
@@ -39,14 +40,6 @@ import {
   readRuntimeEnv,
 } from "@covel/shared";
 import type { RunRuntimeDebugOptions } from "./types.js";
-
-const DEFAULT_LLM_TOML = `
-[covel.story]
-provider = "deepseek"
-model    = "deepseek-chat"
-baseUrl  = "https://api.deepseek.com"
-protocol = "openai-chat-v1"
-`;
 
 export const PLUGIN_UTILS: PluginRuntimeUtils = {
   validateBaseUrl: validateBaseUrlForPlugin,
@@ -184,7 +177,9 @@ export function makeLiveAdapters(): {
       loaded = null;
     }
   }
-  config = loaded?.aiConfig ?? parseLlmConfig(DEFAULT_LLM_TOML).aiConfig;
+  config =
+    loaded?.aiConfig ??
+    parseLlmConfig(builtinLlmToml(readRuntimeEnv().builtinLlm)).aiConfig;
 
   const providerRegistry = createProviderRegistry({
     providerDefaults: config.providers,

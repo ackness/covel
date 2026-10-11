@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:19fed6818d8e8208a0023e9809f0785b8398619b95037444a34dc20b3af9b639",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "sync-codex-entries",
+            "arguments": "{\"entries\": [{\"title\": \"修女雷恩\", \"category\": \"character\", \"content\": \"修会派来查灯的修女，从修会出发走了五天路，晚到三天。她自称在路上的一夜里听见有人唱歌，唱的调子她不认得，但能听出那是在唱名字，她一直听到天亮。她掌握灯心铭文的知识，判定灯熄与灯心离位有关。\", \"tags\": [\"修会\", \"修女\", \"歌声\", \"灯\"], \"rarity\": \"uncommon\"}, {\"title\": \"唱名之声\", \"category\": \"lore\", \"content\": \"夜里在沼泽一带可听见的歌声，调子陌生，内容是在唱人的名字。灯心离位后亡者的名字就会被唱出来；布兰诺克警告，在古冢中若听见唱自己名字的声音，绝不能答应。\", \"tags\": [\"歌声\", \"古冢\", \"亡者\", \"禁忌\"], \"rarity\": \"rare\"}, {\"title\": \"王都来的学者\", \"category\": \"character\", \"content\": \"一个月前在梅瑞尔的酒馆登记住宿、随后退房离开的王都来客。雷恩查阅酒馆旧账发现，他在退房当天去村长家待了两个时辰。身份与来意尚不明确。\", \"tags\": [\"学者\", \"王都\", \"酒馆旧账\", \"村长\"], \"rarity\": \"uncommon\"}]}",
+            "id": "call_00_xJFX3eADPs4wEyhwE7Bf8124"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 5894,
+          "completion_tokens": 344,
+          "total_tokens": 6238
+        }
+      },
+      "metadata": {
+        "systemHash": "cd06eb51",
+        "toolsHash": "0e4470b3"
+      }
+    }
+  ]
+}

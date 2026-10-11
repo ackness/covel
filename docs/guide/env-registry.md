@@ -120,35 +120,37 @@ v0.0.42 的插件扩展契约调整不提供旧开发数据自动升级。完整
 
 以下变量同样属于当前 `registry.ts` 契约，但不需要在上面的运行说明中展开：
 
-| 变量                                                  | 默认值 / 状态                   | 用途                                                   |
-| ----------------------------------------------------- | ------------------------------- | ------------------------------------------------------ |
-| `NODE_ENV`                                            | `development`                   | Node 运行模式（`development` / `production` / `test`） |
-| `SERVE_STATIC` / `STATIC_DIR`                         | `false` / `./web-dist`          | 让 server 托管指定目录中的 SPA                         |
-| `CORS_ORIGIN`                                         | —                               | 允许的 HTTP origin 列表                                |
-| `ENABLE_DEBUG_PAGE`                                   | `false`                         | 开启生产环境 debug/internal 路由                       |
-| `RATE_LIMIT_RPM`                                      | `60`                            | 默认每 IP 每分钟限流额度                               |
-| `TRUSTED_PROXY_IPS`                                   | —                               | 允许信任转发 IP 头的代理地址列表                       |
-| `COVEL_MEDIA_TOKEN_SECRET`                            | 生产环境必填                    | 签发媒体短期访问 token 的 HMAC secret                  |
-| `COVEL_INSTALL_API_ENABLED`                           | `false`                         | 无桌面 bearer token 时显式开启插件/世界文件变更接口    |
-| `COVEL_APP_VERSION`                                   | 对应应用的 `package.json`       | 覆盖桌面 preload 和服务端 health 中的框架版本          |
-| `COVEL_LOG_QUIET_PATHS`                               | `/api/health`                   | 逗号分隔的静默请求路径                                 |
-| `MEDIA_BACKEND` / `MEDIA_ROOT`                        | `mirror` / —                    | 媒体存储后端及文件根目录                               |
-| `VECTOR_BACKEND`                                      | `embedded`                      | 向量能力（`embedded` / `none` / `external`）           |
-| `COVEL_LLM_RETRY_DISABLED`                            | `false`                         | 设为 `1` 时关闭 provider HTTP 重试                     |
-| `COVEL_TRACE_TRUNCATE`                                | `false` / `planned`             | 计划中的 trace payload 截断开关，当前不可依赖          |
-| `E2E_BASE_URL` / `E2E_MODEL_SLOT`                     | `http://127.0.0.1:5181` / `e2e` | Playwright 外部环境覆盖地址及插件验证脚本 slot         |
-| `COVEL_RANDOM_SEED`                                   | —                               | 仅测试服务端：插件的 `ctx.random` 每次运行给出相同的数 |
-| `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | `dev:pg` 启动前的 TCP 检查目标                         |
-| `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` TCP 检查                        |
-| `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                            |
-| `POSTGRES_USER` / `POSTGRES_DB`                       | `covel` / `covel`               | Docker Compose 中 PostgreSQL 的用户名与库名            |
-| `COVEL_DATA_ROOT`                                     | —                               | 桌面端存放 SQLite、世界与日志的数据根目录              |
-| `COVEL_USER_CONFIG_DIR`                               | —                               | 桌面端模型数据库与设置所在的配置目录                   |
-| `COVEL_LOGS_DIR`                                      | —                               | 桌面端日志目录（设置页显示）                           |
-| `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES`       | `10` / `10`                     | 桌面端日志轮转的单文件上限与保留个数                   |
-| `COVEL_SERVER_LOG_FILE`                               | —                               | 覆盖 server 复制 stdout/stderr 的文件，空串关闭        |
-| `COVEL_MODEL_DB_PATH`                                 | —                               | 覆盖模型数据库 JSON 的路径                             |
-| `COVEL_PROMPTS_DIR`                                   | —                               | 覆盖提示词模板根目录                                   |
+| 变量                                                  | 默认值 / 状态                   | 用途                                                                                                                        |
+| ----------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                                            | `development`                   | Node 运行模式（`development` / `production` / `test`）                                                                      |
+| `SERVE_STATIC` / `STATIC_DIR`                         | `false` / `./web-dist`          | 让 server 托管指定目录中的 SPA                                                                                              |
+| `CORS_ORIGIN`                                         | —                               | 允许的 HTTP origin 列表                                                                                                     |
+| `ENABLE_DEBUG_PAGE`                                   | `false`                         | 开启生产环境 debug/internal 路由                                                                                            |
+| `RATE_LIMIT_RPM`                                      | `60`                            | 默认每 IP 每分钟限流额度                                                                                                    |
+| `TRUSTED_PROXY_IPS`                                   | —                               | 允许信任转发 IP 头的代理地址列表                                                                                            |
+| `COVEL_MEDIA_TOKEN_SECRET`                            | 生产环境必填                    | 签发媒体短期访问 token 的 HMAC secret                                                                                       |
+| `COVEL_INSTALL_API_ENABLED`                           | `false`                         | 无桌面 bearer token 时显式开启插件/世界文件变更接口                                                                         |
+| `COVEL_APP_VERSION`                                   | 对应应用的 `package.json`       | 覆盖桌面 preload 和服务端 health 中的框架版本                                                                               |
+| `COVEL_LOG_QUIET_PATHS`                               | `/api/health`                   | 逗号分隔的静默请求路径                                                                                                      |
+| `MEDIA_BACKEND` / `MEDIA_ROOT`                        | `mirror` / —                    | 媒体存储后端及文件根目录                                                                                                    |
+| `VECTOR_BACKEND`                                      | `embedded`                      | 向量能力（`embedded` / `none` / `external`）                                                                                |
+| `COVEL_LLM_RETRY_DISABLED`                            | `false`                         | 设为 `1` 时关闭 provider HTTP 重试                                                                                          |
+| `DEFAULT_BASE_URL` / `DEFAULT_MODEL`              | — / `deepseek-v4-flash`         | 没有 `llm.toml` 时，内置 `story` 用途改指这个 OpenAI 兼容端点和模型（服务商 `default`）；`e2e:replay --record` 也向它录制 |
+| `DEFAULT_API_KEY`                                   | —                               | `default` 服务商的密钥：上面的内置用途和 `tests/llm-replay/` 的会话都用它                                                 |
+| `COVEL_TRACE_TRUNCATE`                                | `false` / `planned`             | 计划中的 trace payload 截断开关，当前不可依赖                                                                               |
+| `E2E_BASE_URL` / `E2E_MODEL_SLOT`                     | `http://127.0.0.1:5181` / `e2e` | Playwright 外部环境覆盖地址及插件验证脚本 slot                                                                              |
+| `COVEL_RANDOM_SEED`                                   | —                               | 仅测试服务端：插件的 `ctx.random` 每次运行给出相同的数                                                                      |
+| `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | `dev:pg` 启动前的 TCP 检查目标                                                                                              |
+| `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` TCP 检查                                                                                             |
+| `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                                                                                                 |
+| `POSTGRES_USER` / `POSTGRES_DB`                       | `covel` / `covel`               | Docker Compose 中 PostgreSQL 的用户名与库名                                                                                 |
+| `COVEL_DATA_ROOT`                                     | —                               | 桌面端存放 SQLite、世界与日志的数据根目录                                                                                   |
+| `COVEL_USER_CONFIG_DIR`                               | —                               | 桌面端模型数据库与设置所在的配置目录                                                                                        |
+| `COVEL_LOGS_DIR`                                      | —                               | 桌面端日志目录（设置页显示）                                                                                                |
+| `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES`       | `10` / `10`                     | 桌面端日志轮转的单文件上限与保留个数                                                                                        |
+| `COVEL_SERVER_LOG_FILE`                               | —                               | 覆盖 server 复制 stdout/stderr 的文件，空串关闭                                                                             |
+| `COVEL_MODEL_DB_PATH`                                 | —                               | 覆盖模型数据库 JSON 的路径                                                                                                  |
+| `COVEL_PROMPTS_DIR`                                   | —                               | 覆盖提示词模板根目录                                                                                                        |
 
 `LIVE_LLM_ENABLED`、`BASE_URL`、`SESSION_ID` 属于测试或
 截图脚本专用变量；`CSC_LINK`、`CSC_KEY_PASSWORD`、`WIN_CSC_TIMESTAMP_SERVER`、

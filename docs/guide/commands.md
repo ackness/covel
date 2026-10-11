@@ -31,8 +31,9 @@ pnpm e2e:extensions   # Playwright acceptance for a community plugin in an isola
 pnpm e2e:verify       # API-driven real-LLM plugin harness against a running server (its keys come from .env.llm
                       # or the environment); uses the configured models, --slot overrides the story slot
 pnpm e2e:replay       # replay the scripted sessions recorded under tests/llm-replay/ without a model, each on a
-                      # test server of its own; --record --upstream <origin> [session] records them again after
-                      # a world, plugin, prompt or model change (docs/guide/e2e-plugin-verify.md)
+                      # test server of its own; --record [session] records them again after a world, plugin,
+                      # prompt or model change, against DEFAULT_BASE_URL with DEFAULT_API_KEY (or
+                      # --upstream <origin>) (docs/guide/e2e-plugin-verify.md)
 pnpm llm:replay       # record-and-replay proxy in front of a model endpoint, for repeating a scripted
                       # session without model calls: pnpm llm:replay --mode record --upstream <origin>
                       # --fixtures <dir>, then --mode replay --fixtures <dir>; pnpm llm:replay:diff

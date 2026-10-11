@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:a59aa6544178d3c4edcdaa82a7fbbfe3feaec50c7a7a090487121d8cefbd5081",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "upsert-npc-graph",
+            "arguments": "{\"nodes\": [{\"name\": \"布兰诺克・黑尔\", \"type\": \"individual\", \"aliases\": [\"布兰诺克\", \"老兵\"], \"labels\": [\"酒客\", \"知情者\"], \"summary\": \"酒馆角落擦剑的老兵，主动让玩家有话直问；他认为伊索德进的是个笼子，对提灯古冢有所了解。\", \"attributes\": {\"身份\": \"酒馆里的老兵\", \"剑鞘皮绳\": \"鞘口皮绳是新换的，颜色比鞘身深\"}}, {\"name\": \"梅瑞尔・沃斯\", \"type\": \"individual\", \"aliases\": [\"梅瑞尔\"], \"labels\": [\"酒馆女招待\"], \"summary\": \"酒馆吧台后的女人，照看吧台；吧台台面上有七道她伸手可及的刀尖刻痕，钱匣里银币分成高低两堆。\", \"attributes\": {\"身份\": \"酒馆吧台看顾者\", \"特征\": \"吧台七道刻痕、银币分高低两堆\"}}, {\"name\": \"阿尔多斯・潘恩\", \"type\": \"individual\", \"aliases\": [\"村长\", \"潘恩\", \"阿尔多斯\"], \"labels\": [\"村长\", \"委托人\"], \"summary\": \"村长，以三十枚银币委托玩家带回守灯人伊索德；本回合他说灯是修会该管的事，说这话时目光飘向门外黑处，而他进屋前曾在雨中站过一阵（伞面干、伞尖沾泥）。\", \"attributes\": {\"role\": \"村长\", \"可疑细节\": \"称灯属修会所管时目光飘向门外；伞面干而伞尖沾泥，似在雨中站过\"}}]}",
+            "id": "call_00_c1UFDTSHgl6OrpdKYiON7634"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 4469,
+          "completion_tokens": 414,
+          "total_tokens": 4883
+        }
+      },
+      "metadata": {
+        "systemHash": "d38ade38",
+        "toolsHash": "fab78c23"
+      }
+    }
+  ]
+}

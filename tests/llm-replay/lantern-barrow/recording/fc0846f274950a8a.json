@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:fc0846f274950a8a43d855aff462f7212a1adb4e9baaaf1686fce28155884766",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-dimensions",
+            "arguments": "{\"followsClock\": [], \"updates\": [{\"id\": \"delveMap\", \"changes\": [{\"path\": \"bronze-doors.status\", \"value\": \"rumored\"}, {\"path\": \"hall-of-lamps.status\", \"value\": \"rumored\"}], \"reason\": \"开场时只是看到告示与听闻墓门洞开、千灯廊的传闻，未亲自进入查看，故条目保持“只听说过”，本回合无实际状态变化。\"}]}",
+            "id": "call_00_ia7x4wqESIb8sZEcd2FK9957"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 4135,
+          "completion_tokens": 147,
+          "total_tokens": 4282
+        }
+      },
+      "metadata": {
+        "systemHash": "201c9a28",
+        "toolsHash": "2a7f6aca"
+      }
+    }
+  ]
+}

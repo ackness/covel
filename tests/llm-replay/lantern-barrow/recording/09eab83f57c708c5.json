@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:09eab83f57c708c56f3539eaecc3fcb8ed9997430184261aaef3e394a4d2fded",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "upsert-npc-graph",
+            "arguments": "{\"nodes\": [{\"name\": \"E2E测试角色\", \"type\": \"individual\", \"aliases\": [], \"labels\": [\"冒险者\"], \"summary\": \"玩家角色，在旅店中追问布兰诺克二十年前小队的往事，收下了那截缠红绳的短铁钉。\", \"attributes\": {}}], \"edges\": [{\"sourceName\": \"布兰诺克・黑尔\", \"targetName\": \"E2E测试角色\", \"relation\": \"TRUSTS\", \"strength\": 0.4, \"fact\": \"布兰诺克以交出贴身收藏的缠红绳短铁钉的方式，回应玩家对二十年前小队往事的追问，等于把线索托付给玩家。\"}, {\"sourceName\": \"梅瑞尔・沃斯\", \"targetName\": \"守灯人伊索德\", \"relation\": \"KNOWS_ABOUT\", \"strength\": 0.2, \"fact\": \"梅瑞尔认出布兰诺克交出的铁钉是伊索德小屋门上的，并说明伊索德的门从不上锁、门钉上总挂一盏灯。\"}, {\"sourceName\": \"布兰诺克・黑尔\", \"targetName\": \"守灯人伊索德\", \"relation\": \"KNOWS_ABOUT\", \"strength\": 0.3, \"fact\": \"布兰诺克随身携带伊索德小屋门上的短铁钉，并断言若伊索德真进了古冢，她门上早已不挂灯。\"}]}",
+            "id": "call_00_i3YeqpkF8RSsyUT6fue18340"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 5859,
+          "completion_tokens": 376,
+          "total_tokens": 6235
+        }
+      },
+      "metadata": {
+        "systemHash": "967c4daf",
+        "toolsHash": "fab78c23"
+      }
+    }
+  ]
+}

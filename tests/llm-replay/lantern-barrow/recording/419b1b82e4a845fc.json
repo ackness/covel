@@ -1,0 +1,33 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:419b1b82e4a845fc010a6aa8ae2d2a7e33197a70341cae6aef54dfb4875ddcba",
+        "model": "deepseek-v4.1-flash",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-dimensions",
+            "arguments": "{\"followsClock\": [], \"updates\": [{\"id\": \"delveMap\", \"changes\": [{\"path\": \"ysolde-cottage\", \"value\": {\"room\": \"伊索德小屋\", \"status\": \"rumored\", \"note\": \"门从不上锁，门钉上总挂一盏灯；布兰诺克交出的缠红绳铁钉正是这门上的门钉。\"}}], \"reason\": \"叙事中由梅瑞尔明确得知守灯人伊索德的具名住所，玩家尚未前往，记为只听说过。\"}, {\"id\": \"lantern\", \"reason\": \"本回合未发生灯心、古灯或守灯人状态的实质变化，维持 traced / dark / found。\"}]}",
+            "id": "call_00_ZH74PxvVAFc7FZGtVW5u4595"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 5267,
+          "completion_tokens": 201,
+          "total_tokens": 5468,
+          "prompt_tokens_details": {
+            "cached_tokens": 3200
+          }
+        }
+      },
+      "metadata": {
+        "systemHash": "b06609f2",
+        "toolsHash": "2a7f6aca"
+      }
+    }
+  ]
+}

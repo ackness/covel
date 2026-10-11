@@ -3,7 +3,7 @@
 //
 //   pnpm e2e:replay                    every recorded session
 //   pnpm e2e:replay lantern-barrow     one of them
-//   pnpm e2e:replay --record --upstream https://api.deepseek.com lantern-barrow
+//   pnpm e2e:replay --record lantern-barrow
 //
 // For each session this starts the replay proxy (replay-proxy.mjs), a test
 // server of its own (a new SQLite database, its own home directory, the
@@ -14,10 +14,12 @@
 //
 // replay: every request must be in `recording/`; the run fails otherwise.
 // record: a request in `recording/` is answered from it, any other goes to
-//         `--upstream` (the endpoint's origin, without `/v1`) and is recorded.
+//         the upstream endpoint and is recorded. The endpoint is `--upstream`,
+//         else DEFAULT_BASE_URL (its origin; a trailing `/v1` is dropped).
 //         The key comes from the environment or `.env.llm`, under the name
-//         of the provider in the session's `llm.toml`. When the session ran
-//         to its end, a recorded answer that no request used is removed.
+//         of the provider in the session's `llm.toml` (`default` →
+//         DEFAULT_API_KEY). When the session ran to its end, a recorded
+//         answer that no request used is removed.
 //
 // `--verbose` prints the session's output as it runs. Logs, the server log
 // and the keyed requests (for `pnpm llm:replay:diff`) are written to
@@ -64,17 +66,33 @@ const { values, positionals } = parseArgs({
   },
 });
 const usage = `usage: pnpm e2e:replay [session ...] [--verbose]
-       pnpm e2e:replay --record --upstream <origin> [session ...]
+       pnpm e2e:replay --record [--upstream <origin>] [session ...]
 sessions: ${listSessions(SESSIONS).join(", ") || "(none)"}`;
 if (values.help) {
   console.log(usage);
   process.exit(0);
 }
-if (values.record !== Boolean(values.upstream)) {
-  console.error(`--record and --upstream go together\n${usage}`);
+const MODE = values.record ? "record" : "replay";
+const ENV_LLM = join(ROOT, ".env.llm");
+const envLlm = existsSync(ENV_LLM)
+  ? parseEnv(readFileSync(ENV_LLM, "utf8"))
+  : {};
+const fromEnv = (name) => process.env[name] || envLlm[name];
+
+if (values.upstream && MODE === "replay") {
+  console.error(`--upstream records: add --record\n${usage}`);
   process.exit(2);
 }
-const MODE = values.record ? "record" : "replay";
+// The endpoint's origin: the provider path (`/v1`) comes from the request.
+const UPSTREAM = (values.upstream || fromEnv("DEFAULT_BASE_URL") || "")
+  .replace(/\/+$/, "")
+  .replace(/\/v1$/, "");
+if (MODE === "record" && !UPSTREAM) {
+  console.error(
+    `recording needs --upstream <origin> or DEFAULT_BASE_URL in the environment or .env.llm\n${usage}`,
+  );
+  process.exit(2);
+}
 
 // Server settings that a developer's shell may hold and that would change
 // what the test server does or where it writes.
@@ -96,6 +114,8 @@ const SERVER_SETTINGS = new Set([
   "VECTOR_BACKEND",
   "LIVE_LLM_ENABLED",
   "TZ",
+  "DEFAULT_BASE_URL",
+  "DEFAULT_MODEL",
 ]);
 const cleanEnv = () =>
   Object.fromEntries(
@@ -111,14 +131,10 @@ const providerKeys = (providers) => {
   if (MODE === "replay")
     // The server sends a key with every request; the proxy does not read it.
     return Object.fromEntries(providers.map((p) => [apiKeyName(p), "replay"]));
-  const envFile = join(ROOT, ".env.llm");
-  const fromFile = existsSync(envFile)
-    ? parseEnv(readFileSync(envFile, "utf8"))
-    : {};
   const keys = {};
   for (const provider of providers) {
     const name = apiKeyName(provider);
-    const key = process.env[name] || fromFile[name];
+    const key = fromEnv(name);
     if (!key)
       throw new Error(`recording needs ${name} in the environment or .env.llm`);
     keys[name] = key;
@@ -154,9 +170,12 @@ const waitForHealth = async (url, child, timeoutMs = 120_000) => {
   throw new Error(`the test server did not answer ${url} in ${timeoutMs} ms`);
 };
 
+// A child killed by a signal has a null exitCode and a signalCode; its "exit"
+// event has already fired by then, so waiting for it would never return.
 const exited = (child) =>
   new Promise((done) => {
     if (child.exitCode !== null) done(child.exitCode);
+    else if (child.signalCode !== null) done(1);
     else child.once("exit", (code) => done(code ?? 1));
   });
 
@@ -183,7 +202,7 @@ const runSession = async (name) => {
   if (MODE === "replay" && recorded.size === 0)
     return {
       ok: false,
-      line: `not recorded yet: pnpm e2e:replay --record --upstream <origin> ${name}`,
+      line: `not recorded yet: pnpm e2e:replay --record ${name}`,
     };
 
   const requestsDir = join(out, `${MODE}.requests`);
@@ -198,7 +217,7 @@ const runSession = async (name) => {
   const proxy = await startReplayProxy({
     mode: MODE,
     fixtures: recording,
-    upstream: values.upstream,
+    upstream: UPSTREAM,
     requestsDir,
     port: 0,
     logLevel: values.verbose ? "warn" : "error",
