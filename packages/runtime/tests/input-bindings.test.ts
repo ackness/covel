@@ -294,6 +294,44 @@ describe("checkAcceptsCompatibility (decidable subset)", () => {
   });
 });
 
+describe("checkAcceptsCompatibility (properties the producer leaves open)", () => {
+  const accepts = {
+    type: "object",
+    properties: { mood: { type: "string", enum: ["calm", "tense"] } },
+  };
+
+  it("cannot decide a constrained property the producer does not declare", () => {
+    expect(
+      checkAcceptsCompatibility(
+        { type: "object", properties: { text: { type: "string" } } },
+        accepts,
+      ),
+    ).toBe("indeterminate");
+  });
+
+  it("is compatible when the producer never sends the property", () => {
+    expect(
+      checkAcceptsCompatibility(
+        {
+          type: "object",
+          properties: { text: { type: "string" } },
+          additionalProperties: false,
+        },
+        accepts,
+      ),
+    ).toBe("compatible");
+  });
+
+  it("is compatible when accepts puts no constraint on the property", () => {
+    expect(
+      checkAcceptsCompatibility(
+        { type: "object", properties: {} },
+        { type: "object", properties: { note: { description: "anything" } } },
+      ),
+    ).toBe("compatible");
+  });
+});
+
 describe("resolveInputBindings — cardinality & providers", () => {
   const consumerOne = rt("c/main", {
     inputs: { data: { from: { capability: "prov" }, required: true } },
