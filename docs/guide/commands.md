@@ -101,12 +101,18 @@ The full release checklist is in [`desktop-packaging.md`](./desktop-packaging.md
 
 ## Git hooks and CI scope
 
-Pre-commit (`.pre-commit-config.yaml`) runs Prettier, Oxlint (rules in
-`.oxlintrc.jsonc`, the same `--deny-warnings` as `pnpm check`), and the full
-`pnpm lint`. `pnpm hooks:install` adds a pre-push hook that runs what the push can
-break, in a clean checkout of each pushed tip: install, `pnpm check`, the tests of
-the packages changed since the remote's main branch with the packages that depend
-on them, and `pnpm e2e --list` (`pnpm check:push` runs the same check on HEAD).
+Pre-commit (`.pre-commit-config.yaml`) runs Prettier and Oxlint (rules in
+`.oxlintrc.jsonc`, the same `--deny-warnings` as `pnpm check`) on the changed
+files. It runs no type check: `pnpm check` does. `pnpm hooks:install` adds a
+pre-push hook that runs the static gate in a clean checkout of each pushed tip:
+install, then `pnpm check`. It runs no test suite, because CI runs every suite on
+the pull request in parallel jobs and `main` takes changes through pull requests
+only.
+
+`pnpm check:push` checks HEAD the same way and adds what the change can break:
+the tests of the packages changed since the remote's main branch with the
+packages that depend on them, and `pnpm e2e --list`.
+`COVEL_PUSH_CHECK=affected git push` makes the hook do the same.
 
 A suite that reads files outside its package runs when its `$TURBO_ROOT$` inputs in
 `turbo.json` name a changed file, so keep those inputs true. Every suite runs when
@@ -122,6 +128,13 @@ CI (`.github/workflows/ci.yml`) runs everything: check, every test suite and the
 build, with Web unit tests, server tests with the runtime coverage floor,
 PostgreSQL integration, and browser smoke in parallel jobs; see
 [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
+`main` accepts changes through pull requests only (the `Protect main` ruleset:
+no direct push, force push or deletion). CI, Docs and Site each run only for the
+paths they cover, so `.github/workflows/gate.yml` adds the one check every pull
+request has, `All checks pass`: it waits for every other check of the head
+commit and fails when one fails. After re-running a failed check, re-run that
+job too.
 
 ### Documentation-only changes
 

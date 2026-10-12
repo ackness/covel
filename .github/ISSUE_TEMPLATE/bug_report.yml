@@ -1,0 +1,92 @@
+name: Bug report · 缺陷报告
+description: Report a reproducible bug / 报告一个可复现的缺陷
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in either language. A problem inside a community plugin or world belongs in that package's own repository.
+        可以使用任一语言。社区插件或社区世界内部的问题，请提到对应包的仓库。
+  - type: input
+    id: version
+    attributes:
+      label: Covel version / 版本
+      description: A release such as v0.0.50, or a commit SHA when running from source. / 发布版本，或源码运行时的提交 SHA。
+      placeholder: v0.0.50
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: How you run it / 运行方式
+      options:
+        - Desktop, macOS arm64 / 桌面版 macOS arm64
+        - Desktop, Windows x64 / 桌面版 Windows x64
+        - Source (pnpm dev) / 源码运行
+        - Docker
+        - Other / 其他
+    validations:
+      required: true
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Storage / 存储
+      options:
+        - Desktop default (SQLite) / 桌面版默认（SQLite）
+        - sqlite
+        - pg
+        - memory
+        - Not sure / 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: World, play pack, plugins and models / 世界、玩法组合、插件与模型
+      description: |
+        The world and play pack, the community plugins installed (name and version, or "none"), the provider and model of each model role, and the Node.js version when running from source.
+        世界与玩法组合、已安装的社区插件（名称与版本，或“无”）、各模型用途的服务商与模型；源码运行时再写 Node.js 版本。
+      placeholder: |
+        Mistport + traditional story
+        Community plugins: none
+        story: deepseek / deepseek-flash
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 期望结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 实际结果
+      description: What happened, and whether it happens every time. / 实际看到什么，是否每次都出现。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots / 相关日志与截图
+      description: |
+        Remove API keys and personal content before pasting.
+        - Desktop: Settings → Desktop → "Open logs folder" (default ~/.covel/data/logs/: server.log, desktop.log)
+        - Source: the terminal output of `pnpm dev`
+        - A failed turn: open /debug, find the turn in the Trace Inspector, and attach the failing runtime or event
+
+        粘贴前请去掉 API key 和个人内容。
+        - 桌面版：设置 → 桌面 → “打开日志目录”（默认 ~/.covel/data/logs/：server.log、desktop.log）
+        - 源码运行：`pnpm dev` 的终端输出
+        - 某个回合出错：打开 /debug，在 Trace Inspector 中找到该回合，附上出错的 runtime 或事件

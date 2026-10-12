@@ -105,8 +105,9 @@ pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, eve
                       # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>
 pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
                       # from the Zod schemas; run after changing an author-facing schema field
-pnpm check:push       # what the pre-push hook runs, on the committed HEAD: install, pnpm check, the tests of
-                      # the packages changed since origin/main with their dependents, pnpm e2e --list
+pnpm check:push       # on the committed HEAD, in a clean checkout: install, pnpm check, the tests of the
+                      # packages changed since origin/main with their dependents, pnpm e2e --list.
+                      # The pre-push hook runs only the first two; CI runs every suite on the pull request
 pnpm changelog:preview  # print [Unreleased] as the next release will have it, from docs/changelog.d/
 ```
 
@@ -118,8 +119,9 @@ and the release scripts (`changelog:release`, `release:prepare`, `release:prefli
 
 Before pushing, run `pnpm check` and the tests of the packages you changed
 (`pnpm --filter <pkg> test`) — `pnpm lint` alone misses the dependency, manifest,
-i18n, and workflow gates. `pnpm check:push` does both in a clean checkout, and the
-push that follows it sends without running them again. Add `pnpm test:pg` for
+i18n, and workflow gates, and neither Git hook runs a test. `pnpm check:push` does
+both in a clean checkout, and the push that follows it sends without running them
+again. Add `pnpm test:pg` for
 store or database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows. CI runs
 every suite; `pnpm test` runs them all locally.
 
@@ -127,8 +129,9 @@ Every command shown in this file, in `docs/`, a template, or a skill must be one
 that actually runs: when a root script, its arguments, or a scaffold's output
 changes, re-run the documented sequence and fix every page that shows it.
 
-Git hooks (pre-commit, the opt-in pre-push from `pnpm hooks:install`), which suites
-a push runs, and the short path for documentation-only changes (`pnpm check` +
+Git hooks (pre-commit formats and lints the changed files; the opt-in pre-push
+from `pnpm hooks:install` runs the static gate), which suites `pnpm check:push`
+runs, and the short path for documentation-only changes (`pnpm check` +
 `pnpm test:docs`; a test that reads documentation must be named in the root
 `test:docs` script) are in `docs/guide/commands.md#git-hooks-and-ci-scope`.
 

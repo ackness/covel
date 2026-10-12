@@ -25,12 +25,12 @@
 ## Verification / 验证方式
 
 <!-- Tick what actually ran and note what was skipped and why. The pre-push hook covers
-     `pnpm check`, the tests of the packages this branch changed (with their dependents),
-     and `pnpm e2e --list` in a clean checkout (for a documentation-only push: `pnpm check`
-     and `pnpm test:docs`). CI runs every suite.
-     只勾选真正跑过的项，没跑的写明原因。pre-push hook 会在干净检出里跑 `pnpm check`、
-     本分支改动的包及依赖它们的包的测试，以及 `pnpm e2e --list`
-     （只改文档的推送：`pnpm check` 和 `pnpm test:docs`）。全部测试由 CI 运行。 -->
+     `pnpm check` in a clean checkout (for a documentation-only push it adds `pnpm test:docs`).
+     It runs no test suite: `pnpm check:push` runs the tests of the packages this branch
+     changed, and CI runs every suite.
+     只勾选真正跑过的项，没跑的写明原因。pre-push hook 只在干净检出里跑 `pnpm check`
+     （只改文档的推送再加 `pnpm test:docs`），不跑测试套件：`pnpm check:push` 跑本分支
+     改动的包的测试，全部测试由 CI 运行。 -->
 
 - [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, changelog fragments, workflows -->
 - [ ] Tests of the changed packages (`pnpm check:push`, or `pnpm --filter <pkg> test`) / 改动包的测试

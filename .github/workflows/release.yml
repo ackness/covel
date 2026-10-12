@@ -271,6 +271,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
 
@@ -313,6 +315,14 @@ jobs:
           set -euo pipefail
           sha256sum -- *.dmg *.zip *.exe > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      # A signed statement that these files were built by this workflow run
+      # from this commit. `gh attestation verify <file> --repo ackness/covel`
+      # checks a download against it.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: release/electron/SHA256SUMS.txt
 
       # action-gh-release updates an existing release for the immutable tag;
       # do not delete a valid release before all new assets are ready.

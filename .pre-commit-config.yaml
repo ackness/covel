@@ -62,9 +62,3 @@ repos:
           - ts
           - tsx
           - yaml
-      - id: pnpm-lint
-        name: pnpm lint
-        entry: mise exec -- node scripts/run-with-project-node.mjs pnpm lint
-        language: system
-        pass_filenames: false
-        types_or: [ts, tsx, javascript, jsx]

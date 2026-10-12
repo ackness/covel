@@ -4,10 +4,13 @@ import {
   expectedCommands,
   fixture,
   git,
+  staticCommands,
 } from "./helpers/check-push-fixture.mjs";
 
-// Which test suites a push runs, and when a commit is not checked again.
-// The rules for single files are in push-scope.test.mjs.
+// Which test suites a check runs, and when a commit is not checked again. The
+// hook runs the static gate alone; `COVEL_PUSH_CHECK=affected` gives it the
+// selection a manual check uses. The rules for single files are in
+// push-scope.test.mjs.
 
 /** A workspace of three packages; `b` depends on `a` only in its manifest. */
 function workspace(probe) {
@@ -35,6 +38,8 @@ function workspace(probe) {
   return main;
 }
 
+const affectedRun = { env: { COVEL_PUSH_CHECK: "affected" } };
+
 function pushTopic(probe, commit, options) {
   return probe.run(
     ["--pre-push", "origin", "url"],
@@ -43,13 +48,27 @@ function pushTopic(probe, commit, options) {
   );
 }
 
-test("a push runs the tests of the packages it changed, measured from the remote's main branch", (t) => {
+test("a push of code to a branch runs the static gate and leaves the tests to CI", (t) => {
+  const probe = fixture(t);
+  workspace(probe);
+  const tip = probe.commitFiles({ "packages/a/src/index.ts": "one\n" }, "a");
+  const result = pushTopic(probe, tip);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    staticCommands,
+  );
+  assert.match(result.stdout, /Ran: the static gate\./);
+  assert.match(result.stdout, /Left to CI: every test suite/);
+});
+
+test("a push asked for the affected tests runs those of the packages it changed, measured from the remote's main branch", (t) => {
   const probe = fixture(t);
   workspace(probe);
   probe.commitFiles({ "packages/a/src/index.ts": "one\n" }, "first");
   // The second commit alone touches another package; both are measured.
   const tip = probe.commitFiles({ "worlds/w/world.yaml": "id: w\n" }, "world");
-  const result = pushTopic(probe, tip);
+  const result = pushTopic(probe, tip, affectedRun);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ args }) => args),
@@ -64,7 +83,7 @@ test("a push runs the tests of the packages it changed, measured from the remote
   assert.match(result.stdout, /Left to CI: the other test suites/);
 });
 
-test("a push that changes what every package reads runs every test suite", (t) => {
+test("an affected run that changes what every package reads runs every test suite", (t) => {
   // One file of each kind; push-scope.test.mjs lists the rest.
   for (const file of ["vitest.base.ts", "packs/builtin.yaml"]) {
     const probe = fixture(t);
@@ -73,7 +92,7 @@ test("a push that changes what every package reads runs every test suite", (t) =
       { "packages/a/src/index.ts": "one\n", [file]: "{}\n" },
       file,
     );
-    const result = pushTopic(probe, tip);
+    const result = pushTopic(probe, tip, affectedRun);
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(
       probe.calls().map(({ args }) => args),
@@ -146,7 +165,7 @@ test("documentation pushed with code adds the tests that read documentation, and
     { "scripts/tool.mjs": "export {};\n", "docs/guide/page.md": "text\n" },
     "script and page",
   );
-  const result = pushTopic(probe, tip);
+  const result = pushTopic(probe, tip, affectedRun);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ args }) => args),
@@ -166,7 +185,7 @@ test("a commit that passed is not checked again when its push is repeated", (t) 
   const first = pushTopic(probe, tip);
   assert.equal(first.status, 0, first.stderr);
   const ran = probe.calls().length;
-  assert.equal(ran, 4);
+  assert.equal(ran, staticCommands.length);
 
   // The connection closed while the hook ran; the push is sent again.
   const again = pushTopic(probe, tip);
@@ -175,7 +194,7 @@ test("a commit that passed is not checked again when its push is repeated", (t) 
   assert.match(again.stdout, /passed its checks .* not run again/);
   assert.match(again.stdout, /Left to CI/);
 
-  // The affected tests do not stand for a run of every suite.
+  // The static gate does not stand for a run of every suite.
   const main = probe.run(
     ["--pre-push", "origin", "url"],
     `refs/heads/main ${tip} refs/heads/main ${"0".repeat(tip.length)}\n`,
@@ -186,7 +205,10 @@ test("a commit that passed is not checked again when its push is repeated", (t) 
   // A newer commit is checked.
   const next = probe.commitFiles({ "packages/a/src/index.ts": "two\n" }, "a2");
   assert.equal(pushTopic(probe, next).status, 0);
-  assert.equal(probe.calls().length, ran + expectedCommands.length + 4);
+  assert.equal(
+    probe.calls().length,
+    ran + expectedCommands.length + staticCommands.length,
+  );
 });
 
 test("a manual check lets the push that follows send at once, and a failed check does not", (t) => {
@@ -195,10 +217,11 @@ test("a manual check lets the push that follows send at once, and a failed check
   const tip = probe.commitFiles({ "packages/a/src/index.ts": "one\n" }, "a");
   assert.notEqual(probe.run([], "", { failOn: "check" }).status, 0);
   assert.equal(pushTopic(probe, tip).status, 0);
-  assert.equal(probe.calls().length, 2 + 4);
+  assert.equal(probe.calls().length, 2 + staticCommands.length);
 
   const next = probe.commitFiles({ "packages/a/src/index.ts": "two\n" }, "a2");
   assert.equal(probe.run().status, 0);
   assert.equal(pushTopic(probe, next).status, 0);
-  assert.equal(probe.calls().length, 2 + 4 + 4);
+  // The manual check ran more than the push needs.
+  assert.equal(probe.calls().length, 2 + staticCommands.length + 4);
 });
