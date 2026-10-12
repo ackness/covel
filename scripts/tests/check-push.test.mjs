@@ -7,6 +7,7 @@ import {
   expectedCommands,
   fixture,
   git,
+  staticCommands,
 } from "./helpers/check-push-fixture.mjs";
 
 test("manual check validates committed HEAD in a clean temporary checkout", (t) => {
@@ -67,7 +68,7 @@ test("pre-push validates the pushed SHA rather than newer local HEAD", (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ value }) => value),
-    Array(4).fill("pushed"),
+    Array(2).fill("pushed"),
   );
 });
 
@@ -89,7 +90,7 @@ test("pre-push skips deleted and unchanged refs and deduplicates pushed commits"
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ args }) => args),
-    expectedCommands,
+    staticCommands,
   );
 });
 
@@ -105,7 +106,7 @@ test("pre-push validates each distinct changed commit", (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ value }) => value),
-    [...Array(4).fill("first"), ...Array(4).fill("second")],
+    [...Array(2).fill("first"), ...Array(2).fill("second")],
   );
 });
 
@@ -162,7 +163,7 @@ test("a push that adds only documentation skips the test suites that cannot chan
   );
 });
 
-test("a push that adds documentation and code runs every check", (t) => {
+test("a push that adds documentation and code is checked as code", (t) => {
   const probe = fixture(t);
   const base = probe.commit("base");
   probe.commitFiles({ "docs/guide/page.md": "text\n" }, "docs");
@@ -178,7 +179,7 @@ test("a push that adds documentation and code runs every check", (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ args }) => args),
-    expectedCommands,
+    staticCommands,
   );
 });
 
@@ -198,7 +199,7 @@ test("a new branch is measured from the remote's main branch", (t) => {
   );
 });
 
-test("a new branch runs every check when the remote's main branch is unknown", (t) => {
+test("a new branch is checked as code when the remote's main branch is unknown", (t) => {
   const probe = fixture(t);
   probe.commit("main");
   const docs = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
@@ -210,12 +211,11 @@ test("a new branch runs every check when the remote's main branch is unknown", (
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ args }) => args),
-    expectedCommands,
+    staticCommands,
   );
-  assert.match(result.stdout, /Running every test suite: .*unknown/);
 });
 
-test("a commit that adds code to one of its refs runs every check", (t) => {
+test("a commit that adds code to one of its refs is checked as code", (t) => {
   const probe = fixture(t);
   const base = probe.commit("base");
   const code = probe.commit("code");
@@ -227,7 +227,7 @@ test("a commit that adds code to one of its refs runs every check", (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     probe.calls().map(({ args }) => args),
-    expectedCommands,
+    staticCommands,
   );
 });
 
