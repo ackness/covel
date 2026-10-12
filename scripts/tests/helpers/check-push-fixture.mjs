@@ -131,6 +131,9 @@ export const expectedCommands = [
   ["e2e", "--list"],
 ];
 
+/** What the hook runs for a push of code to a branch. */
+export const staticCommands = [["install", "--frozen-lockfile"], ["check"]];
+
 export const docsCommands = [
   ["install", "--frozen-lockfile"],
   ["check"],

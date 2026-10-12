@@ -35,6 +35,11 @@ delete env.NODE_ENV;
 // suite there; `pnpm check:push --full` does the same by hand.
 const wantsFullRun =
   process.argv.includes("--full") || env.COVEL_PUSH_CHECK === "full";
+// The hook runs the static gate alone: CI runs every suite on the pull
+// request, in parallel jobs, and a pull request is the only way into the main
+// branch. `COVEL_PUSH_CHECK=affected` makes the hook test the changed
+// packages too, as `pnpm check:push` does by hand.
+const wantsAffectedRun = env.COVEL_PUSH_CHECK === "affected";
 const fullRunHint =
   "COVEL_PUSH_CHECK=full or pnpm check:push --full runs them here";
 
@@ -244,7 +249,7 @@ const verifiedFile = path.resolve(
   git(["rev-parse", "--git-path", "covel-push-verified.json"]),
 );
 const VERIFIED_FOR_MS = 12 * 60 * 60 * 1000;
-const LEVELS = ["docs", "affected", "full"];
+const LEVELS = ["static", "docs", "affected", "full"];
 
 function readVerified() {
   try {
@@ -284,7 +289,7 @@ function recordVerified(commit, result) {
 
 /** Runs the checks for one pushed commit and returns what ran, in words. */
 function verifyCommit(pushed) {
-  const { commit, docsOnly } = pushed;
+  const { commit, docsOnly, staticOnly } = pushed;
   const scratch = mkdtempSync(path.join(os.tmpdir(), "covel-push-"));
   const checkout = path.join(scratch, "checkout");
   try {
@@ -307,6 +312,10 @@ function verifyCommit(pushed) {
       ran = "the static gate and the tests that read documentation";
       left = "nothing this push can change";
       level = "docs";
+    } else if (staticOnly) {
+      ran = "the static gate";
+      left = `every test suite (pnpm check:push runs the changed packages' here), PostgreSQL integration, browser smoke, the build`;
+      level = "static";
     } else {
       const scope = affectedTests(checkout, pushed);
       if (scope.full) {
@@ -370,11 +379,17 @@ try {
       ];
   let result;
   for (const pushed of commits) {
+    // A push to a branch runs the static gate; a tag or the main branch still
+    // runs every suite, and so does a requested full run.
+    pushed.staticOnly =
+      fromHook && !pushed.docsOnly && !pushed.fullRun && !wantsAffectedRun;
     const needed = pushed.docsOnly
       ? "docs"
       : pushed.fullRun
         ? "full"
-        : "affected";
+        : pushed.staticOnly
+          ? "static"
+          : "affected";
     // A run by hand or a requested full run always runs.
     const earlier =
       fromHook && !wantsFullRun && verifiedEarlier(pushed.commit, needed);
