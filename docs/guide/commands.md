@@ -123,6 +123,13 @@ build, with Web unit tests, server tests with the runtime coverage floor,
 PostgreSQL integration, and browser smoke in parallel jobs; see
 [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
+`main` accepts changes through pull requests only (the `Protect main` ruleset:
+no direct push, force push or deletion). CI, Docs and Site each run only for the
+paths they cover, so `.github/workflows/gate.yml` adds the one check every pull
+request has, `All checks pass`: it waits for every other check of the head
+commit and fails when one fails. After re-running a failed check, re-run that
+job too.
+
 ### Documentation-only changes
 
 A change that touches only documentation takes a short path in both places: the
