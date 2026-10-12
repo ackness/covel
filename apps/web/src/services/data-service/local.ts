@@ -102,12 +102,9 @@ function humanSessionId(): string {
     "wood",
     "glow",
   ];
-  const [first = 0, second = 0, third = 0] = crypto.getRandomValues(
-    new Uint8Array(3),
-  );
-  const pick = (arr: string[], byte: number) => arr[byte % arr.length];
+  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
   const hex = crypto.randomUUID().slice(0, 8);
-  return `${pick(words, first)}-${pick(nouns, second)}-${pick(words, third)}-${hex}`;
+  return `${pick(words)}-${pick(nouns)}-${pick(words)}-${hex}`;
 }
 
 function jsonCheckpoint(checkpoint: BrowserCheckpoint): BrowserCheckpoint {
