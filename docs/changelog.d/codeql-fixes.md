@@ -1,5 +1,0 @@
-### Security
-
-- **A base URL with a long run of slashes no longer holds the server.** The trailing-slash trim of a provider base URL took time quadratic in the length of a run of slashes that did not end the URL, and a base URL can arrive in a request's model settings (16,000 slashes cost about half a second per request). Every such trim in the model gateway, the evaluation adapter and the embedding lock is now linear.
-- **A prompt body cannot stall prompt assembly with `{{` and whitespace.** `{{` followed by a few thousand spaces or tabs and no `}}` took the template interpolation tens of seconds, in the kernel (`interpolateTemplate`) and in the author SDK (`interpolate`). Both now scan the template in linear time and fill exactly the same `{{ path }}` variables as before.
-- **`pnpm i18n` cannot be made to write into `Object.prototype`.** A manifest key named `__proto__` in the plugin being translated led the label writer (`writePluginTranslations`) out of the locale file's section; a label whose place holds `__proto__`, `constructor` or `prototype` is now skipped.
