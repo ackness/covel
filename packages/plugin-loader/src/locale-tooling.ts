@@ -168,10 +168,11 @@ function setAt(
   text: string,
 ): void {
   // A manifest key with one of these names would lead out of the section and
-  // into `Object.prototype`; no label has such a place.
-  for (const step of steps)
-    if (step === "__proto__" || step === "constructor" || step === "prototype")
-      return;
+  // into `Object.prototype`; no label has such a place. Checked for the whole
+  // path first, so a refused label leaves no empty object behind.
+  const leavesSection = (step: LabelStep) =>
+    step === "__proto__" || step === "constructor" || step === "prototype";
+  if (steps.some(leavesSection)) return;
   let current: unknown = section;
   steps.forEach((step, index) => {
     const last = index === steps.length - 1;
@@ -179,6 +180,14 @@ function setAt(
     const empty = () =>
       next !== undefined && typeof next !== "string" ? [] : {};
     if (typeof step === "string") {
+      // The same check where the key is used: a static analyser follows it
+      // here and not through the loop above.
+      if (
+        step === "__proto__" ||
+        step === "constructor" ||
+        step === "prototype"
+      )
+        return;
       const object = current as Record<string, unknown>;
       if (last) object[step] = text;
       else {
