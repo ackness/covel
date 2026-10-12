@@ -6,6 +6,8 @@ Thanks for considering contributing! This document outlines the process for cont
 
 > Root README: [`../README.md`](../README.md).
 
+Everyone taking part in the project follows the [Code of Conduct](../CODE_OF_CONDUCT.md).
+
 ## Development environment
 
 - Node.js 26.x

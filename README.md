@@ -215,6 +215,6 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 
 ## Contributing & license
 
-Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first. Releases are tag-driven: pushing `v*` builds and publishes the macOS and Windows installers via [GitHub Actions](./.github/workflows/release.yml).
+Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) and the [Code of Conduct](./CODE_OF_CONDUCT.md) first. Releases are tag-driven: pushing `v*` builds and publishes the macOS and Windows installers via [GitHub Actions](./.github/workflows/release.yml).
 
 [MIT](./LICENSE) © 2026 Covel Contributors
