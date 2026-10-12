@@ -176,6 +176,10 @@ describe("download links", () => {
     expect(portable?.getAttribute("href")).toBe(
       "https://dl/Covel-electron-0.0.50-win-x64-portable.exe",
     );
+    expect(
+      screen.getAllByText(COPY.en.hero.openHelp.windows.summary).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/xattr/)).toBeNull();
   });
 
   it("tells a macOS visitor how to open the unsigned app", async () => {
@@ -191,7 +195,7 @@ describe("download links", () => {
       name: COPY.en.hero.primaryFor.mac,
     });
     expect(
-      screen.getAllByText(COPY.en.hero.macHelp.summary).length,
+      screen.getAllByText(COPY.en.hero.openHelp.mac.summary).length,
     ).toBeGreaterThan(0);
     expect(
       screen.getAllByText(

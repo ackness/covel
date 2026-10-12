@@ -112,9 +112,15 @@ const en = {
     primaryFor: { mac: "Download for macOS", windows: "Download for Windows" },
     otherPlatforms: "Other systems and checksums",
     portable: "Portable version, no install",
-    macHelp: {
-      summary: "macOS says the app is damaged?",
-      body: "The app is not damaged. The build is not signed or notarized, so macOS blocks an app that a browser downloaded. Click Cancel, move Covel to Applications, then run this in Terminal and open the app again:",
+    openHelp: {
+      mac: {
+        summary: "macOS says the app is damaged?",
+        body: "The app is not damaged. The build is not signed or notarized, so macOS blocks an app that a browser downloaded. Click Cancel, move Covel to Applications, then run this in Terminal and open the app again:",
+      },
+      windows: {
+        summary: "Windows protected your PC?",
+        body: "The installer is not signed, so Microsoft Defender SmartScreen stops it the first time. Click “More info”, then “Run anyway”. If the browser holds the download back, choose “Keep” in its download list first.",
+      },
     },
     secondary: "View source",
     note: "macOS (Apple silicon) and Windows x64 · MIT licensed",
@@ -341,9 +347,15 @@ const zh: Copy = {
     primaryFor: { mac: "下载 macOS 版", windows: "下载 Windows 版" },
     otherPlatforms: "其他系统和校验文件",
     portable: "便携版（免安装）",
-    macHelp: {
-      summary: "macOS 提示“已损坏，无法打开”？",
-      body: "应用没有损坏。安装包没有签名和公证，macOS 会拦截浏览器下载的应用。点“取消”，把 Covel 拖进“应用程序”，在终端运行下面这行，再重新打开：",
+    openHelp: {
+      mac: {
+        summary: "macOS 提示“已损坏，无法打开”？",
+        body: "应用没有损坏。安装包没有签名和公证，macOS 会拦截浏览器下载的应用。点“取消”，把 Covel 拖进“应用程序”，在终端运行下面这行，再重新打开：",
+      },
+      windows: {
+        summary: "Windows 提示“已保护你的电脑”？",
+        body: "安装包没有签名，Microsoft Defender SmartScreen 第一次运行时会拦截。点“更多信息”，再点“仍要运行”。如果浏览器拦下了下载，先在下载列表里选择“保留”。",
+      },
     },
     secondary: "查看源码",
     note: "macOS（Apple 芯片）和 Windows x64 · MIT 许可",

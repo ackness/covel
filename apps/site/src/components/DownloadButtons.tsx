@@ -4,8 +4,8 @@ import type { DownloadLinks } from "../download.js";
 import { RELEASES_URL, REPO_URL } from "../links.js";
 import { primaryButton, secondaryButton } from "./ui.js";
 
-// The macOS build is unsigned and not notarized: Gatekeeper reports a
-// downloaded copy as damaged until its quarantine attribute is removed.
+// Neither build is signed. macOS reports a downloaded copy as damaged until
+// its quarantine attribute is removed; Windows SmartScreen needs two clicks.
 const MAC_QUARANTINE_COMMAND =
   "xattr -dr com.apple.quarantine /Applications/Covel.app";
 
@@ -45,17 +45,19 @@ export function DownloadButtons({
           </a>
         </p>
       ) : null}
-      {download.platform === "mac" ? (
+      {download.platform ? (
         <details className="max-w-md text-xs text-muted">
           <summary className={`cursor-pointer ${smallLink}`}>
-            {copy.hero.macHelp.summary}
+            {copy.hero.openHelp[download.platform].summary}
           </summary>
           <p className="mt-2 text-left leading-relaxed">
-            {copy.hero.macHelp.body}
+            {copy.hero.openHelp[download.platform].body}
           </p>
-          <code className="mt-2 block overflow-x-auto rounded-md border border-current/20 px-3 py-2 text-left font-mono whitespace-nowrap select-all">
-            {MAC_QUARANTINE_COMMAND}
-          </code>
+          {download.platform === "mac" ? (
+            <code className="mt-2 block overflow-x-auto rounded-md border border-current/20 px-3 py-2 text-left font-mono whitespace-nowrap select-all">
+              {MAC_QUARANTINE_COMMAND}
+            </code>
+          ) : null}
         </details>
       ) : null}
     </div>
