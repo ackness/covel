@@ -25,13 +25,13 @@ describe("build-media script", () => {
     mediaDir = path.join(root, "apps/site/public/media");
     mkdirSync(scriptsDir, { recursive: true });
     mkdirSync(mediaDir, { recursive: true });
-    mkdirSync(path.join(root, ".assets/images"), { recursive: true });
+    mkdirSync(path.join(root, ".assets"), { recursive: true });
     script = path.join(scriptsDir, "build-media.mjs");
     cpSync(
       path.resolve(import.meta.dirname, "../../scripts/build-media.mjs"),
       script,
     );
-    writeFileSync(path.join(root, ".assets/images/demo.gif"), "original gif");
+    writeFileSync(path.join(root, ".assets/demo.dev1.mp4"), "recording");
     writeFileSync(path.join(mediaDir, "demo.mp4"), "original video");
     writeFileSync(path.join(mediaDir, "demo-poster.jpg"), "original poster");
     preloader = path.join(root, "mock-ffmpeg.mjs");
@@ -86,14 +86,14 @@ syncBuiltinESMExports();
   }
 
   it.for<string[]>([[], ["apps/site/public/media/demo.mp4"]])(
-    "converts an existing output used as input: %j",
+    "converts the default recording, or an existing output used as input: %j",
     async (args, { signal }) => {
       const result = await run(signal, args);
       expect(result.status, result.stderr).toBe(0);
-      expect(
-        readFileSync(path.join(root, ".assets/images/demo.gif"), "utf8"),
-      ).toBe("converted asset");
       expect(readFileSync(path.join(mediaDir, "demo.mp4"), "utf8")).toBe(
+        "converted asset",
+      );
+      expect(readFileSync(path.join(mediaDir, "demo-poster.jpg"), "utf8")).toBe(
         "converted asset",
       );
       expect(readdirSync(mediaDir).sort()).toEqual([
@@ -106,10 +106,7 @@ syncBuiltinESMExports();
   it("preserves existing assets if a later conversion fails", async ({
     signal,
   }) => {
-    expect((await run(signal, [], "4")).status).toBe(1);
-    expect(
-      readFileSync(path.join(root, ".assets/images/demo.gif"), "utf8"),
-    ).toBe("original gif");
+    expect((await run(signal, [], "2")).status).toBe(1);
     expect(readFileSync(path.join(mediaDir, "demo.mp4"), "utf8")).toBe(
       "original video",
     );

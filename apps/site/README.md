@@ -27,4 +27,4 @@ pnpm --filter @covel/site test
 - The four world pictures in `public/worlds/` are 960-wide copies of each bundled
   world's `cover`. Refresh one after its world's cover changes.
 - `public/media/` holds the demo video and poster. `pnpm --filter @covel/site
-build:media` regenerates them and the README GIF (`docs/CONTRIBUTING.en.md`).
+build:media` regenerates them (`docs/CONTRIBUTING.en.md`).

@@ -5,17 +5,15 @@
  * Outputs (always overwrites):
  *   apps/site/public/media/demo.mp4    1280-wide H.264, no audio
  *   apps/site/public/media/demo-poster.jpg  first-frame, 1280-wide
- *   .assets/images/demo.gif           README-friendly 960-wide gif (palette-tuned)
  *
  * Usage:
- *   pnpm --filter @covel/site build:media                # uses .assets/demo.dev1.mp4 if present, else .assets/images/demo.gif
+ *   pnpm --filter @covel/site build:media                # uses .assets/demo.dev1.mp4, else .assets/demo.dev0.mp4
  *   pnpm --filter @covel/site build:media path/to/clip.mp4
  *   pnpm --filter @covel/site build:media path/to/clip.mp4 --speed 3
  *
  * Flags:
  *   --speed N   speed up output N× (default 1)
  *   --width N   output mp4 width (default 1280)
- *   --gif-width N  output gif width (default 960)
  *
  * Requires ffmpeg in PATH.
  */
@@ -28,13 +26,12 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = resolve(HERE, "../../..");
 const PUBLIC_MEDIA = resolve(HERE, "../public/media");
-const README_GIF = resolve(REPO_ROOT, ".assets/images/demo.gif");
 
 const args = process.argv.slice(2);
 const flag = (name, def) => {
@@ -43,7 +40,6 @@ const flag = (name, def) => {
 };
 const SPEED = Number(flag("--speed", "1")) || 1;
 const WIDTH = Number(flag("--width", "1280")) || 1280;
-const GIF_WIDTH = Number(flag("--gif-width", "960")) || 960;
 
 // First positional non-flag is the source path
 const positional = args.filter(
@@ -56,7 +52,6 @@ const candidates = sourceArg
   : [
       resolve(REPO_ROOT, ".assets/demo.dev1.mp4"),
       resolve(REPO_ROOT, ".assets/demo.dev0.mp4"),
-      resolve(REPO_ROOT, ".assets/images/demo.gif"),
     ];
 
 const source = candidates.find((p) => existsSync(p));
@@ -69,17 +64,14 @@ if (!source) {
 
 mkdirSync(PUBLIC_MEDIA, { recursive: true });
 
-// Stage every conversion before replacing assets: a fallback source may itself
-// be one of the outputs, and ffmpeg cannot edit files in place.
+// Stage every conversion before replacing assets: the source may itself be
+// one of the outputs, and ffmpeg cannot edit files in place.
 const stagingDir = mkdtempSync(resolve(PUBLIC_MEDIA, ".build-media-"));
 const outVideo = resolve(stagingDir, "demo.mp4");
 const outPoster = resolve(stagingDir, "demo-poster.jpg");
-const outGif = resolve(stagingDir, "demo.gif");
 
 console.log(`[build-media] source: ${source}`);
-console.log(
-  `[build-media] speed:  ${SPEED}×, width: ${WIDTH}, gif width: ${GIF_WIDTH}`,
-);
+console.log(`[build-media] speed:  ${SPEED}×, width: ${WIDTH}`);
 
 try {
   // 1) MP4 — speed-up via setpts (no audio: -an)
@@ -121,34 +113,9 @@ try {
     outPoster,
   ]);
 
-  // 3) README gif — two-pass with palette for sharper colors at small size
-  const palette = resolve(stagingDir, "palette.png");
-  const gifVf = `fps=15,scale=${GIF_WIDTH}:-2:flags=lanczos${speedFilter}`;
-
-  run("ffmpeg", [
-    "-y",
-    "-i",
-    source,
-    "-vf",
-    `${gifVf},palettegen=stats_mode=diff`,
-    palette,
-  ]);
-  run("ffmpeg", [
-    "-y",
-    "-i",
-    source,
-    "-i",
-    palette,
-    "-lavfi",
-    `${gifVf} [v]; [v][1:v] paletteuse=dither=bayer:bayer_scale=4`,
-    outGif,
-  ]);
-
-  mkdirSync(dirname(README_GIF), { recursive: true });
   for (const [sourcePath, targetPath] of [
     [outVideo, resolve(PUBLIC_MEDIA, "demo.mp4")],
     [outPoster, resolve(PUBLIC_MEDIA, "demo-poster.jpg")],
-    [outGif, README_GIF],
   ]) {
     renameSync(sourcePath, targetPath);
     report(basename(targetPath), targetPath);
