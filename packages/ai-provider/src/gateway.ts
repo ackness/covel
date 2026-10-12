@@ -8,6 +8,7 @@ import {
   estimateTokens,
   getProviderProtocolDescriptor,
   resolveLlmTokenLimits,
+  trimTrailingSlashes,
   type LLMResponseFormat,
   type LLMRequestDefaults,
   type LLMProviderWarning,
@@ -652,8 +653,9 @@ export function createGateway(deps: GatewayDependencies) {
           const expected = input.expectedConfiguration;
           if (
             expected &&
-            ((resolved.config.baseUrl?.replace(/\/+$/, "") ?? undefined) !==
-              expected.baseUrl ||
+            ((typeof resolved.config.baseUrl === "string"
+              ? trimTrailingSlashes(resolved.config.baseUrl)
+              : undefined) !== expected.baseUrl ||
               resolved.protocol !== expected.protocol ||
               (target.preset?.embeddingFormat ?? "openai") !==
                 (expected.embeddingFormat ?? "openai"))

@@ -98,6 +98,30 @@ describe("interpolateTemplate", () => {
     });
     expect(result).toBe("works");
   });
+
+  it("should fill what the earlier expression matched, and nothing else", () => {
+    const variables = { a: "A", "{a": "B" };
+    const cases: [string, string][] = [
+      ["{{a}} and {{  a\n}}", "A and A"],
+      // The first `}` after `{{` ends the name: these are not variables.
+      ["{{}} {{a}b}} {{a} }", "{{}} {{a}b}} {{a} }"],
+      // A name may start with a brace; a blank name renders empty.
+      ["{{{a}} {{ }}", "B "],
+      ["{{ a", "{{ a"],
+    ];
+    for (const [template, expected] of cases)
+      expect(interpolateTemplate(template, variables)).toBe(expected);
+  });
+
+  it("should stay fast on an unclosed variable with a long run of whitespace", () => {
+    // Cubic with the earlier expression: 4,000 tabs took half a minute.
+    const template = `{{${"\t".repeat(200_000)}`;
+    expect(interpolateTemplate(`{{a}}${template}`, { a: "A" })).toBe(
+      `A${template}`,
+    );
+    const braces = "{".repeat(200_000);
+    expect(interpolateTemplate(braces, {})).toBe(braces);
+  });
 });
 
 // ── buildInjectBlocks ───────────────────────────────────────────

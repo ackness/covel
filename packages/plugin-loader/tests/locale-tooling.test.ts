@@ -119,6 +119,26 @@ contributes:
     expect(status.messages.missing).toEqual([]);
   });
 
+  it("does not write through a manifest key named __proto__", async () => {
+    await write(
+      "PLUGIN.md",
+      "---\nid: demo\ndisplayName: Inventory\n__proto__:\n  title: Polluted\n---\n",
+    );
+    const units = await pluginLabelUnits(dir);
+    expect(units.map((unit) => unit.pointer)).toContain("__proto__.title");
+    try {
+      await writePluginTranslations(dir, "zh", {
+        labels: units.map((unit) => ({ unit, text: "译文" })),
+      });
+      expect(({} as Record<string, unknown>).title).toBeUndefined();
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).title;
+    }
+    expect(
+      await fs.readFile(path.join(dir, "locales/zh.yaml"), "utf-8"),
+    ).toContain("displayName: 译文");
+  });
+
   it("marks a label translation stale when its English text changes", async () => {
     await write(
       "locales/zh.yaml",

@@ -94,19 +94,36 @@ export function interpolateTemplate(
   variables: Readonly<Record<string, unknown>>,
 ): string {
   const ranges = taggedRanges(template);
-  return template.replace(
-    /\{\{\s*([^}]+?)\s*\}\}/g,
-    (_match, path: string, offset: number) => {
-      const value = resolvePath(variables, path.trim());
-      if (value === undefined || value === null) {
-        return "";
-      }
-      const text = renderTemplateValue(value);
-      return ranges.some(([from, to]) => offset >= from && offset < to)
-        ? escapeXmlContent(text)
-        : text;
-    },
-  );
+  // A scan, not `/\{\{\s*([^}]+?)\s*\}\}/g`: that expression matches the same
+  // text, but takes cubic time on `{{` followed by a long run of whitespace,
+  // and a prompt body comes from a plugin package. `interpolate` in
+  // `@covel/plugin-handlers-utils` has the same scan.
+  let out = "";
+  let copied = 0;
+  let from = 0;
+  for (;;) {
+    const open = template.indexOf("{{", from);
+    if (open < 0) break;
+    const close = template.indexOf("}", open + 2);
+    if (close < 0) break;
+    if (close === open + 2 || template[close + 1] !== "}") {
+      // Not a variable, and none can start before this `}`.
+      from = close + 1;
+      continue;
+    }
+    out += template.slice(copied, open);
+    copied = from = close + 2;
+    const value = resolvePath(
+      variables,
+      template.slice(open + 2, close).trim(),
+    );
+    if (value === undefined || value === null) continue;
+    const text = renderTemplateValue(value);
+    out += ranges.some(([start, end]) => open >= start && open < end)
+      ? escapeXmlContent(text)
+      : text;
+  }
+  return out + template.slice(copied);
 }
 
 function renderTemplateValue(value: unknown): string {

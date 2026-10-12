@@ -6,6 +6,7 @@ import type {
   EmbeddingModelIdentity,
   VectorTarget,
 } from "@covel/store";
+import { trimTrailingSlashes } from "@covel/shared";
 import { supportsVector } from "@covel/store/vector";
 import type { AiStack } from "./ai-setup.js";
 import { getRequestLlmOptions } from "./request-llm-context.js";
@@ -20,7 +21,10 @@ function embeddingRole(options: GatewayOptions): string | undefined {
 
 /** Pin the effective vector space, including endpoint and encoding, without storing credentials. */
 export function embeddingModelIdentity(target: ResolvedSlotConfig): string {
-  const endpoint = target.baseUrl?.replace(/\/+$/, "") ?? null;
+  const endpoint =
+    typeof target.baseUrl === "string"
+      ? trimTrailingSlashes(target.baseUrl)
+      : null;
   const routing = JSON.stringify([
     target.provider,
     target.model,
@@ -43,7 +47,7 @@ function resolveEmbedding(
 
 function embeddingConfiguration(target: ResolvedSlotConfig) {
   return {
-    ...(target.baseUrl ? { baseUrl: target.baseUrl.replace(/\/+$/, "") } : {}),
+    ...(target.baseUrl ? { baseUrl: trimTrailingSlashes(target.baseUrl) } : {}),
     protocol: target.protocol,
     embeddingFormat: target.metadata?.embeddingFormat,
   };

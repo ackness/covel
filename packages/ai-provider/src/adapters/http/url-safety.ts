@@ -1,4 +1,4 @@
-import { readRuntimeEnv } from "@covel/shared";
+import { readRuntimeEnv, trimTrailingSlashes } from "@covel/shared";
 import { isPublicIpAddress } from "./ip-safety.js";
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -74,7 +74,7 @@ export function buildProviderUrl(baseUrl: string, path: string): string {
     );
   }
 
-  let base = baseUrl.replace(/\/+$/, "");
+  let base = trimTrailingSlashes(baseUrl);
   let p = path.startsWith("/") ? path : `/${path}`;
 
   if (p.startsWith("/api/")) {

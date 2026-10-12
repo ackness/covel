@@ -167,6 +167,11 @@ function setAt(
   steps: readonly LabelStep[],
   text: string,
 ): void {
+  // A manifest key with one of these names would lead out of the section and
+  // into `Object.prototype`; no label has such a place.
+  for (const step of steps)
+    if (step === "__proto__" || step === "constructor" || step === "prototype")
+      return;
   let current: unknown = section;
   steps.forEach((step, index) => {
     const last = index === steps.length - 1;
