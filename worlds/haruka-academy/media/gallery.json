@@ -57,7 +57,7 @@
         "tool": "built-in-imagegen",
         "prompt": "Transform the reference portrait into a wholesome anime visual-novel story CG, EXACTLY 1536x1024 landscape. Preserve KAMISHIRO MIO's exact reference identity and costume: seventeen-year-old high-school girl, neat shoulder-length dark navy hair with full bangs, violet eyes, gentle face, navy SAILOR uniform with white piping and tiny white chest motif, blue-bound book and club papers. Keep soft refined cel shading and pastel seaside-school spring palette. New scene in the literature club's modest third-floor wooden room: Mio seated at a shared worktable, three-quarter upper body, carefully sliding a stack of manuscript pages toward an EMPTY nearby chair just outside frame, one hand holding a pencil, shy relieved little smile as she looks toward the unseen listener. No player body or identity shown. Blank undecipherable manuscript markings, blue anthology binder, clips, warm afternoon light through an open window, blue sea beyond rooftops, soft curtain and blurred old-journal shelves. Teen-appropriate, modest, everyday collaboration with no romantic outcome, no confession, no sexualization. Expressive eyes and naturally posed hands, spacious narrative composition, subtle warm light volume, no text or watermark.",
         "referenceImages": [
-          "worlds/haruka-academy/media/portraits/kamishiro-mio.png"
+          "worlds/haruka-academy/media/portraits/kamishiro-mio.webp"
         ]
       },
       "sha256": "10fdb465ab39d83ec6fd1d035ce4d2c40117534468840f5bde0e81b282cbf534",
@@ -66,7 +66,7 @@
     {
       "id": "kamishiro-mio",
       "kind": "portrait",
-      "filename": "portraits/kamishiro-mio.png",
+      "filename": "portraits/kamishiro-mio.webp",
       "width": 1024,
       "height": 1536,
       "name": "神代澪",
@@ -84,13 +84,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "7e4a79f587fad0ab5a270753eaaa9adbca717bef87fdcc5e0b0b015a902d17ad",
-      "bytes": 1762716
+      "sha256": "aa4224a86bb477f3ce74bb0eee838a6ace6837b6baa10f84be82db1526e17c4b",
+      "bytes": 141662
     },
     {
       "id": "asakura-rin",
       "kind": "portrait",
-      "filename": "portraits/asakura-rin.png",
+      "filename": "portraits/asakura-rin.webp",
       "width": 1024,
       "height": 1536,
       "name": "朝仓凛",
@@ -106,13 +106,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "fa1c262efac737ef9396a7f53575ba8f1ac436cce4299bf873985e039e4e6428",
-      "bytes": 1614490
+      "sha256": "e35ba3fc0eb68c7954b4d7e454faf16200100b6bf0e313ca200553213dda9fbb",
+      "bytes": 174484
     },
     {
       "id": "shiina-kaho",
       "kind": "portrait",
-      "filename": "portraits/shiina-kaho.png",
+      "filename": "portraits/shiina-kaho.webp",
       "width": 1024,
       "height": 1536,
       "name": "椎名夏帆",
@@ -128,13 +128,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "cea32612bf3a6f4bdb9606a9a355be6ead2be376bc9e130c2f4a1125137ebdd0",
-      "bytes": 2016291
+      "sha256": "45b807886b84bc0c3eeafee6533840b83db34be6a5c1eee85d5296d86fba66df",
+      "bytes": 255342
     },
     {
       "id": "shiraishi-yuma",
       "kind": "portrait",
-      "filename": "portraits/shiraishi-yuma.png",
+      "filename": "portraits/shiraishi-yuma.webp",
       "width": 1024,
       "height": 1536,
       "name": "白石悠真",
@@ -150,13 +150,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "f29fafe08ba49bf11def357717b7a2ab068cde0b0d54bdef9dff2160120c753e",
-      "bytes": 1563869
+      "sha256": "74ce6b82bf137ebdc7b9eef35e92e2de75fb96c2d4ae90c3daaf0a56d44bd3e4",
+      "bytes": 112232
     },
     {
       "id": "mikoeda-haruka",
       "kind": "portrait",
-      "filename": "portraits/mikoeda-haruka.png",
+      "filename": "portraits/mikoeda-haruka.webp",
       "width": 1024,
       "height": 1536,
       "name": "三枝遥",
@@ -172,13 +172,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "bf3d46bd363b60ec0fee2e65dcc7f43d8011d95072bc898543be84eca5960323",
-      "bytes": 1855873
+      "sha256": "3304df5d71a1911895df6ed4d89020e40124158fc952d852cb2fb15777c9f17b",
+      "bytes": 167652
     },
     {
       "id": "onodera-chihiro",
       "kind": "portrait",
-      "filename": "portraits/onodera-chihiro.png",
+      "filename": "portraits/onodera-chihiro.webp",
       "width": 1024,
       "height": 1536,
       "name": "小野寺千寻",
@@ -196,13 +196,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "9206fc58d24a1248ae5ecac7f9c81a93de19d8d4bf1c5b0dece2cf99ae595300",
-      "bytes": 1278629
+      "sha256": "267245954aeeac6d825fc5d5652c46f8715e469b424e0a3336944805cd2147a4",
+      "bytes": 174902
     },
     {
       "id": "morikawa-souta",
       "kind": "portrait",
-      "filename": "portraits/morikawa-souta.png",
+      "filename": "portraits/morikawa-souta.webp",
       "width": 1024,
       "height": 1536,
       "name": "森川奏太",
@@ -218,13 +218,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "73a655634481f3fc35181ebcbbc3b00532094975151d0468555509d712a3ff0c",
-      "bytes": 1082914
+      "sha256": "e875024177010d639e79ab5759b3df4c19cf7c00ff4d67e62f598a58039d45ca",
+      "bytes": 152416
     },
     {
       "id": "toujou-akane",
       "kind": "portrait",
-      "filename": "portraits/toujou-akane.png",
+      "filename": "portraits/toujou-akane.webp",
       "width": 1024,
       "height": 1536,
       "name": "东条茜",
@@ -242,13 +242,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "d85cdeb1032eb4545bbc43e5b576caf5b097589fad3a13af67f7616699104cd3",
-      "bytes": 1956927
+      "sha256": "f7b87fabc9590239fdca4fb606e210cad63951e224e4fe6836e594704c339d3c",
+      "bytes": 181850
     },
     {
       "id": "asakura-rin-uniform-serious",
       "kind": "portrait",
-      "filename": "portraits/asakura-rin-uniform-serious.png",
+      "filename": "portraits/asakura-rin-uniform-serious.webp",
       "width": 1024,
       "height": 1536,
       "name": "朝仓凛・认真倾听",
@@ -264,13 +264,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "47d91cfa5e2fdaaad7f174940fc71ea19e34e29544554c6c67f60edd879c9f9f",
-      "bytes": 1110625
+      "sha256": "36bf9dbe6ef0f8317710950b35011a02c7afc3a0a7dc9f8bbc5b2dc370e3f427",
+      "bytes": 178646
     },
     {
       "id": "shiina-kaho-uniform-concerned",
       "kind": "portrait",
-      "filename": "portraits/shiina-kaho-uniform-concerned.png",
+      "filename": "portraits/shiina-kaho-uniform-concerned.webp",
       "width": 1024,
       "height": 1536,
       "name": "椎名夏帆・心事浮现",
@@ -286,13 +286,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "7caa650f7f73b5b5dc2c94e74b1f83bfa7eaedc96c6019a3196b12b885dc5e9b",
-      "bytes": 1515926
+      "sha256": "49c8e50bdc659d652a070b9ab697c060cdbc9b67cad36f9096a0bf0aa06edd50",
+      "bytes": 236302
     },
     {
       "id": "onodera-chihiro-casual-gentle",
       "kind": "portrait",
-      "filename": "portraits/onodera-chihiro-casual-gentle.png",
+      "filename": "portraits/onodera-chihiro-casual-gentle.webp",
       "width": 1024,
       "height": 1536,
       "name": "小野寺千寻・便装与书",
@@ -310,13 +310,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "df243ad65d8244c9bfb280867e44f62717201cd7d6f0193c14543a24869f8a31",
-      "bytes": 1135796
+      "sha256": "5e6354645d55b1d853f326606fc14c8d59c94a174346f36b8c654d9cf6917433",
+      "bytes": 163794
     },
     {
       "id": "morikawa-souta-rehearsal-focused",
       "kind": "portrait",
-      "filename": "portraits/morikawa-souta-rehearsal-focused.png",
+      "filename": "portraits/morikawa-souta-rehearsal-focused.webp",
       "width": 1024,
       "height": 1536,
       "name": "森川奏太・排练准备",
@@ -334,13 +334,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "87d50ab6da7007ce9c38db9d1cfa290336e399732297e59e3e3dbeb89a4415c6",
-      "bytes": 1112509
+      "sha256": "bed44340883f50d41685dbc0a2d28eb3b3aa790a9164c48b01a41d6234fb6e40",
+      "bytes": 144236
     },
     {
       "id": "classroom-2b-day",
       "kind": "scene",
-      "filename": "scenes/classroom-2b-day.png",
+      "filename": "scenes/classroom-2b-day.webp",
       "width": 1536,
       "height": 1024,
       "name": "二年 B 组・日景",
@@ -353,13 +353,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "8ca6cdab672c6c710f2d324f8f0e0b72c9d00aee2a3c81efbc6e51cfcd071e14",
-      "bytes": 2058733
+      "sha256": "b639569984c72334e646bd236861027aadb2b2c72a7cd1c32c7a43d1d0770db9",
+      "bytes": 253996
     },
     {
       "id": "classroom-2b-night",
       "kind": "scene",
-      "filename": "scenes/classroom-2b-night.png",
+      "filename": "scenes/classroom-2b-night.webp",
       "width": 1536,
       "height": 1024,
       "name": "二年 B 组・夜景",
@@ -372,13 +372,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "5529cfe99fbc8719d21a196496c546a393ad42a75453bfa9192368a2e2851266",
-      "bytes": 2069719
+      "sha256": "86d5908f300cc35f9f90391be6b824e8ce07832077e794b8317d2b50ce06b123",
+      "bytes": 251332
     },
     {
       "id": "club-building-day",
       "kind": "scene",
-      "filename": "scenes/club-building-day.png",
+      "filename": "scenes/club-building-day.webp",
       "width": 1536,
       "height": 1024,
       "name": "社团楼・日景",
@@ -391,13 +391,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "3d8112afa2799893e32d6f26eddc8dfbea03f7eed7efe83c9d75ee002049d7d4",
-      "bytes": 3000566
+      "sha256": "3032c2483b1b9b6885f6c0ccdeca47f8b2d1b10605b975e2aa1fbed8d2501091",
+      "bytes": 536734
     },
     {
       "id": "club-building-night",
       "kind": "scene",
-      "filename": "scenes/club-building-night.png",
+      "filename": "scenes/club-building-night.webp",
       "width": 1536,
       "height": 1024,
       "name": "社团楼・夜景",
@@ -410,13 +410,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "d63df0d1fbe4e35d95ac83443046ada7b2f1ec69ab2e995893a1296be55cb9e5",
-      "bytes": 2725502
+      "sha256": "466407bbf99b7087777b243ab217a31df0f6e05da33bcec7dcf6aacf2f2baaef",
+      "bytes": 430966
     },
     {
       "id": "library-day",
       "kind": "scene",
-      "filename": "scenes/library-day.png",
+      "filename": "scenes/library-day.webp",
       "width": 1536,
       "height": 1024,
       "name": "图书馆・日景",
@@ -429,13 +429,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "9ef922475fb1b9468f11101667c55e89fbf1a74ddad2a38b1c741e0814968306",
-      "bytes": 2166805
+      "sha256": "ed38ac3ac5d5ed428817253bd248bdeb5eb2fb1db13f59fc247339690c969319",
+      "bytes": 255518
     },
     {
       "id": "library-night",
       "kind": "scene",
-      "filename": "scenes/library-night.png",
+      "filename": "scenes/library-night.webp",
       "width": 1536,
       "height": 1024,
       "name": "图书馆・夜景",
@@ -448,13 +448,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "1a914047379e58bc6f794ef378665248f0f96f18a5b9ae8c382c5a148b8ac1fc",
-      "bytes": 2051413
+      "sha256": "f0d97e415b709091145ee33865cdcddc55c1a705f00fae889d22f93c5602958c",
+      "bytes": 252916
     },
     {
       "id": "sakurazaka-seawall-day",
       "kind": "scene",
-      "filename": "scenes/sakurazaka-seawall-day.png",
+      "filename": "scenes/sakurazaka-seawall-day.webp",
       "width": 1536,
       "height": 1024,
       "name": "樱坂海堤・日景",
@@ -467,13 +467,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "bae8cfef39cc1828e5760eb8415249eb1271141f486987aa2fc6470a5ba2da9a",
-      "bytes": 2890422
+      "sha256": "ad266637cccf257bf4deac49e4def22691367f03158ef069f07a856e376ff5eb",
+      "bytes": 507940
     },
     {
       "id": "sakurazaka-seawall-night",
       "kind": "scene",
-      "filename": "scenes/sakurazaka-seawall-night.png",
+      "filename": "scenes/sakurazaka-seawall-night.webp",
       "width": 1536,
       "height": 1024,
       "name": "樱坂海堤・夜景",
@@ -486,13 +486,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "a74d1c28220702709d928677806f77fa14324178fe581157ba1d8fb78bd6c7a1",
-      "bytes": 2767836
+      "sha256": "f5306dc64f8464f494a590546d52e9df71343f00407867f324120342f6040106",
+      "bytes": 448056
     },
     {
       "id": "shopping-street-day",
       "kind": "scene",
-      "filename": "scenes/shopping-street-day.png",
+      "filename": "scenes/shopping-street-day.webp",
       "width": 1536,
       "height": 1024,
       "name": "青砾町商店街・日景",
@@ -507,13 +507,13 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "cefeb995d808110fb6b808631f3f9a2de31aa347e4825cab1281b83c137e89f2",
-      "bytes": 2533967
+      "sha256": "41abc7f1fdda8be386ce31bfa16e265c0d17c48c403971e10e50d14dd11b85e3",
+      "bytes": 364734
     },
     {
       "id": "shopping-street-night",
       "kind": "scene",
-      "filename": "scenes/shopping-street-night.png",
+      "filename": "scenes/shopping-street-night.webp",
       "width": 1536,
       "height": 1024,
       "name": "青砾町商店街・夜景",
@@ -528,8 +528,8 @@
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
       "sourceRefs": ["WORLD.md", "media/scenes.json"],
-      "sha256": "6bccfeafc5459ee329369cf0d357d97192e7506288355bfc7bbb520e5af7d605",
-      "bytes": 2502114
+      "sha256": "9823c330ff3803e8fd155145b33ba27a54b88e29d39eb2c555742e4990de2b7f",
+      "bytes": 372550
     },
     {
       "id": "world-cover",

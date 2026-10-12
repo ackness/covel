@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { detachStagingHardlinks } from "./staging-files.mjs";
+import { detachStagingHardlinks, isGalleryOriginal } from "./staging-files.mjs";
 
 test("staging cache restores cannot overwrite workspace files or the package store", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-stage-links-"));
@@ -35,4 +35,26 @@ test("staging cache restores cannot overwrite workspace files or the package sto
   fs.writeFileSync(binary, Buffer.from([42]));
   assert.equal(fs.readFileSync(source, "utf8"), "edited workspace");
   assert.deepEqual(fs.readFileSync(sharedBinary), Buffer.from([0, 1, 255]));
+});
+
+test("only a gallery PNG with a WebP beside it is left out of the package", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-stage-gallery-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const gallery = path.join(root, "worlds", "demo", "media", "gallery");
+  const portraits = path.join(root, "worlds", "demo", "media", "portraits");
+  fs.mkdirSync(gallery, { recursive: true });
+  fs.mkdirSync(portraits, { recursive: true });
+  for (const file of [
+    path.join(gallery, "map.png"),
+    path.join(gallery, "map.webp"),
+    path.join(gallery, "only-png.png"),
+    path.join(portraits, "hero.png"),
+    path.join(portraits, "hero.webp"),
+  ])
+    fs.writeFileSync(file, "x");
+
+  assert.equal(isGalleryOriginal(path.join(gallery, "map.png")), true);
+  assert.equal(isGalleryOriginal(path.join(gallery, "map.webp")), false);
+  assert.equal(isGalleryOriginal(path.join(gallery, "only-png.png")), false);
+  assert.equal(isGalleryOriginal(path.join(portraits, "hero.png")), false);
 });

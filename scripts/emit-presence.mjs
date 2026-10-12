@@ -2,7 +2,7 @@
 /**
  * emit-presence.mjs — build worlds/<world>/media/presence.json from generated portraits.
  *
- * Scans worlds/<world>/media/portraits/, content-addresses each PNG with sha256
+ * Scans worlds/<world>/media/portraits/, content-addresses each picture with sha256
  * (the same hash the media store assigns on import, packages/store media-store
  * utils.sha256), maps filename → characterId via portraits.json, and writes
  * character-blueprint `presence` records that point avatar + sprite at the image.
@@ -13,7 +13,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { assertPortraitPng } from "./lib/png-image-validation.mjs";
+import { inspectWorldImage } from "./lib/webp-image.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const world = process.argv[2];
@@ -38,14 +38,19 @@ for (const c of manifest.characters) {
       missing.push(filename);
       return null;
     }
-    assertPortraitPng(bytes, {
-      size: manifest.defaults?.size ?? "1024x1536",
-      background: manifest.style?.background,
-      label: filename,
-    });
+    const image = inspectWorldImage(bytes, filename);
+    const size = manifest.defaults?.size ?? "1024x1536";
+    if (`${image.width}x${image.height}` !== size)
+      throw new Error(
+        `${filename} has ${image.width}x${image.height}; expected ${size}`,
+      );
+    if (manifest.style?.background === "transparent" && !image.hasTransparency)
+      throw new Error(
+        `${filename} has no alpha channel; expected transparency`,
+      );
     return {
       id: createHash("sha256").update(bytes).digest("hex"),
-      mime: "image/png",
+      mime: image.mime,
       size: bytes.length,
     };
   };

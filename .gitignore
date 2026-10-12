@@ -117,9 +117,8 @@ tmp/
 !apps/web/public/icon.png
 !apps/site/public/icon.png
 !apps/desktop/resources/icon.png
-# World character portraits and scene backdrops are tracked assets (generated once, reused).
-!worlds/**/media/portraits/*.png
-!worlds/**/media/scenes/*.png
+# World portraits and scenes are tracked as WebP. A PNG there is a working file;
+# only the gallery keeps its PNG originals, and packaging leaves them out.
 !worlds/**/media/gallery/*.png
 .playwright-mcp/
 # Local git worktrees for parallel agents

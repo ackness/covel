@@ -4,7 +4,7 @@
 
 - 机器清单（脚本直接读）：`worlds/emberback/media/portraits.json` · `worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json` · `worlds/lantern-barrow/media/portraits.json`
 - 每张新图的提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`，`negative` 作为负向提示。共享前后缀减少风格漂移；同角色变体仍需以批准图为编辑参考，锁定身份和取景。
-- 清单中的 `characterId` 写实例化后的角色 ID，统一为 `npc-<角色卡 id>`（如 `npc-lin-yuanzhou`、`npc-tomas-reed`）。角色卡未声明 `instantiate.characterId` 时就按这个规则实例化；`characters/characters.json` 里的角色记录也用同一个 ID。文件名通常使用角色卡 `id` 的 `<id>.png`。
+- 清单中的 `characterId` 写实例化后的角色 ID，统一为 `npc-<角色卡 id>`（如 `npc-lin-yuanzhou`、`npc-tomas-reed`）。角色卡未声明 `instantiate.characterId` 时就按这个规则实例化；`characters/characters.json` 里的角色记录也用同一个 ID。文件名通常使用角色卡 `id` 的 `<id>.webp`。
 
 场景背景的清单、日/夜变体与生成流程见 [场景背景生成指南](./world-scenes.md)。
 
@@ -62,9 +62,9 @@ pnpm exec tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 pnpm exec tsx scripts/generate-portraits.mjs haruka-academy --only shiina-kaho:uniform-concerned --force
 ```
 
-流程：读该世界 `portraits.json` → 展开每个角色的默认图和可选 `variants[]` → 逐图合成 `prefix+subject+suffix` → **并发** POST → PNG 存到 `worlds/<world>/media/portraits/<filename>`。已存在文件默认跳过，失败直接重跑（只补缺的）。`--only <character-id>` 会包含该角色全部变体；`--only <character-id>:<variant-id>` 只生成一个变体。
+流程：读该世界 `portraits.json` → 展开每个角色的默认图和可选 `variants[]` → 逐图合成 `prefix+subject+suffix` → **并发** POST → 用 `cwebp` 编码为 WebP，存到 `worlds/<world>/media/portraits/<filename>`（本机需装有 libwebp）。已存在文件默认跳过，失败直接重跑（只补缺的）。`--only <character-id>` 会包含该角色全部变体；`--only <character-id>:<variant-id>` 只生成一个变体。
 
-默认参数（可在 `portraits.json` 的 `defaults` 调）：`size 1024x1536`（竖构图立绘）、`quality medium`、`png`。
+默认参数（可在 `portraits.json` 的 `defaults` 调）：`size 1024x1536`（竖构图立绘）、`quality medium`；模型输出 PNG，入库的是 WebP（有损画质 90，透明通道无损）。
 
 ## 接入 character-blueprint（已接线）
 
@@ -83,7 +83,7 @@ node scripts/emit-presence.mjs emberback
 
 > ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。脚本只写默认语言文件；如有 `presence.en-US.json`，须同步媒体引用、保留英文显示名称，并运行世界资源测试。
 
-四个世界都已把 `character-blueprint` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
+四个世界都已把 `character-blueprint` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 WebP 纳入版本库，随世界包分发；该目录下的 PNG 被 `.gitignore` 忽略，只是本地工作文件，启动应用前要删掉，否则会和 WebP 一起被导入。
 
 ## 复用与重生成
 

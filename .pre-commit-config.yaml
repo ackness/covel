@@ -24,7 +24,7 @@ repos:
       - id: check-shebang-scripts-are-executable
         exclude: ^\.claude/
       - id: check-added-large-files
-        # 3 MB: covers tracked world character portraits (~1.7–2.4 MB PNGs)
+        # 3 MB: far above any tracked asset (world portraits and scenes are WebP)
         # while still catching accidental large blobs (videos, dumps, bundles).
         args: [--maxkb=3072]
         exclude: ^worlds/[^/]+/media/gallery/[^/]+\.png$

@@ -11,21 +11,21 @@
   "defaults": {
     "size": "1024x1536",
     "quality": "medium",
-    "mime": "image/png"
+    "mime": "image/webp"
   },
   "characters": [
     {
       "id": "kamishiro-mio",
       "characterId": "npc-kamishiro-mio",
       "name": "神代澪",
-      "filename": "kamishiro-mio.png",
+      "filename": "kamishiro-mio.webp",
       "subject": "a gentle reserved seventeen-year-old girl, the class representative and literature-club president, neat navy Japanese sailor school uniform, tidy shoulder-length dark hair, holding a stack of club papers and a book to her chest, a soft slightly worried but kind smile"
     },
     {
       "id": "asakura-rin",
       "characterId": "npc-asakura-rin",
       "name": "朝仓凛",
-      "filename": "asakura-rin.png",
+      "filename": "asakura-rin.webp",
       "subject": "a lively bright teenage girl, a school news-club reporter, the same school uniform with a small press armband, short reddish bobbed hair, holding a little notebook and a compact camera, a playful teasing wink and grin",
       "visual": {
         "id": "uniform-playful",
@@ -36,7 +36,7 @@
       "variants": [
         {
           "id": "uniform-serious",
-          "filename": "asakura-rin-uniform-serious.png",
+          "filename": "asakura-rin-uniform-serious.webp",
           "outfit": "uniform",
           "expression": "serious",
           "pose": "default",
@@ -48,7 +48,7 @@
       "id": "shiina-kaho",
       "characterId": "npc-shiina-kaho",
       "name": "椎名夏帆",
-      "filename": "shiina-kaho.png",
+      "filename": "shiina-kaho.webp",
       "subject": "a breezy easygoing teenage girl, a light-music-club guitarist, school uniform worn a little loosely with a soft cardigan, light wavy hair, an acoustic guitar slung on a strap, a casual confident relaxed grin",
       "visual": {
         "id": "uniform-relaxed",
@@ -59,7 +59,7 @@
       "variants": [
         {
           "id": "uniform-concerned",
-          "filename": "shiina-kaho-uniform-concerned.png",
+          "filename": "shiina-kaho-uniform-concerned.webp",
           "outfit": "uniform",
           "expression": "concerned",
           "pose": "guitar",
@@ -71,21 +71,21 @@
       "id": "shiraishi-yuma",
       "characterId": "npc-shiraishi-yuma",
       "name": "白石悠真",
-      "filename": "shiraishi-yuma.png",
+      "filename": "shiraishi-yuma.webp",
       "subject": "a cool composed teenage boy, the student-council vice-president, a crisp tidy school blazer uniform, neat dark hair, thin-framed glasses, holding a clipboard, a reserved measured calm expression"
     },
     {
       "id": "mikoeda-haruka",
       "characterId": "npc-mikoeda-haruka",
       "name": "三枝遥",
-      "filename": "mikoeda-haruka.png",
+      "filename": "mikoeda-haruka.webp",
       "subject": "a warm precise third-year girl, the student-council president, a neat uniform with a council badge, long well-kept dark hair, holding a schedule binder, a gentle reassuring senpai smile"
     },
     {
       "id": "onodera-chihiro",
       "characterId": "npc-onodera-chihiro",
       "name": "小野寺千寻",
-      "filename": "onodera-chihiro.png",
+      "filename": "onodera-chihiro.webp",
       "subject": "a gentle adult homeroom and language teacher in her late twenties, distinct from the teenage students, honey-brown hair in a loose low bun, warm brown eyes, a beige cardigan over a cream blouse and navy professional skirt, holding a piece of chalk and an open worn olive-green paperback, a patient unhurried smile, relaxed upright teaching posture, no school ribbon or student badge",
       "visual": {
         "id": "teacher-warm",
@@ -96,7 +96,7 @@
       "variants": [
         {
           "id": "casual-gentle",
-          "filename": "onodera-chihiro-casual-gentle.png",
+          "filename": "onodera-chihiro-casual-gentle.webp",
           "outfit": "casual",
           "expression": "gentle",
           "pose": "book",
@@ -108,7 +108,7 @@
       "id": "morikawa-souta",
       "characterId": "npc-morikawa-souta",
       "name": "森川奏太",
-      "filename": "morikawa-souta.png",
+      "filename": "morikawa-souta.webp",
       "subject": "an outgoing cheerful teenage boy, a band drummer, school uniform with sleeves rolled up, short spiky hair, a pair of drumsticks twirled in one hand, a big friendly open grin",
       "visual": {
         "id": "uniform-cheerful",
@@ -119,7 +119,7 @@
       "variants": [
         {
           "id": "rehearsal-focused",
-          "filename": "morikawa-souta-rehearsal-focused.png",
+          "filename": "morikawa-souta-rehearsal-focused.webp",
           "outfit": "rehearsal",
           "expression": "focused",
           "pose": "drumsticks",
@@ -131,7 +131,7 @@
       "id": "toujou-akane",
       "characterId": "npc-toujou-akane",
       "name": "东条茜",
-      "filename": "toujou-akane.png",
+      "filename": "toujou-akane.webp",
       "subject": "a quiet melancholy third-year girl, on the library committee, a neat uniform, long straight dark hair, holding a hardcover book with a small pressed flower as a bookmark, a soft distant gaze and a faint gentle senpai air"
     }
   ]

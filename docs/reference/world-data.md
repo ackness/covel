@@ -762,7 +762,7 @@ sources:
 sources:
   portraits:
     kind: media
-    path: media/portraits # 一层目录，放 <id>.png
+    path: media/portraits # 一层目录，放 <id>.webp
     to: media
     indexTo: contract:character.portrait-assets@1
     key: filename
@@ -787,12 +787,12 @@ sources:
     "displayName": "神代澪",
     "avatar": {
       "id": "0000000000000000000000000000000000000000000000000000000000000000",
-      "mime": "image/png",
+      "mime": "image/webp",
       "size": 2155557
     },
     "sprite": {
       "id": "0000000000000000000000000000000000000000000000000000000000000000",
-      "mime": "image/png",
+      "mime": "image/webp",
       "size": 2155557
     },
     "visuals": {
@@ -805,7 +805,7 @@ sources:
           "pose": "default",
           "sprite": {
             "id": "0000000000000000000000000000000000000000000000000000000000000000",
-            "mime": "image/png",
+            "mime": "image/webp",
             "size": 2155557
           },
           "stage": { "scale": 1, "offsetX": 0, "offsetY": 0 }
@@ -828,13 +828,13 @@ preflight 要求对应 contract 的 schema 和接收声明已注册。`character
 
 世界包的预制背景通过 `stage.scene-assets@1` / `stage.scenes@1` 导入，使用已有图片无需配置图像模型。启用 `scene-stage` 的自动补图后，缺图时才调用该插件 `modelPresetId` 指向的图像用途。安装社区插画插件不会替它选择模型，见[图像生成](image-generation.md)。
 
-场景背景（教室、社团楼、海堤这类地点插画，日/夜各一张）与立绘同一套图片管线，但清单结构不同：作者手编 `media/scenes.json`，脚本按清单批量生成 PNG、再由 `scripts/emit-scenes.mjs` 生成内容寻址的 `scenes.registry.json`。
+场景背景（教室、社团楼、海堤这类地点插画，日/夜各一张）与立绘同一套图片管线，但清单结构不同：作者手编 `media/scenes.json`，脚本按清单批量生成 WebP、再由 `scripts/emit-scenes.mjs` 生成内容寻址的 `scenes.registry.json`。
 
 `media/scenes.json` 字段：
 
 | 字段           | 说明                                                                                                                                                                                                                                               |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | 场景机器键，也是文件名前缀（`<id>-day.png` / `<id>-night.png`）。                                                                                                                                                                                  |
+| `id`           | 场景机器键，也是文件名前缀（`<id>-day.webp` / `<id>-night.webp`）。                                                                                                                                                                                |
 | `name`         | 场景显示名。                                                                                                                                                                                                                                       |
 | `locationRef`  | 对应作者定义的地点名；一张背景对应多个地点时用 `/` 分隔（`图书馆/二楼窗边长桌/旧刊架`），每一段都是这个场景的一个名字。内置 geography 模板的声明路径为 `geography.initialValue.regions[].name` 或其 `landmarks[].name`；这不是框架要求的维度结构。 |
 | `subject`      | 英文画面描述（日图），composes 为 `style.prefix + subject + style.suffix`。                                                                                                                                                                        |
@@ -848,7 +848,7 @@ preflight 要求对应 contract 的 schema 和接收声明已注册。`character
 
 所以名字要写成叙事会用的说法，并避免让两个场景共用同一个短片段。
 
-world 包用一条 media source 把生成好的 PNG 导入媒体库（沿用 portraits 的 `kind: media` 机制，按 sha256 内容寻址），再用第二条 json source 导入注册表。**两条都不可省**，且 media source 必须带 `key` + `indexTo`（否则字节不落库，见上方 media source 说明）：
+world 包用一条 media source 把生成好的 WebP 导入媒体库（沿用 portraits 的 `kind: media` 机制，按 sha256 内容寻址），再用第二条 json source 导入注册表。**两条都不可省**，且 media source 必须带 `key` + `indexTo`（否则字节不落库，见上方 media source 说明）：
 
 ```yaml
 sources:

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 
 import { ensureElectronBinary } from "./ensure-electron.mjs";
-import { detachStagingHardlinks } from "./staging-files.mjs";
+import { detachStagingHardlinks, isGalleryOriginal } from "./staging-files.mjs";
 import { compileStagedServer } from "./compile-server.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -383,6 +383,7 @@ for (const entry of sideCarResources) {
       // Top-level `_` dirs are non-content conventions (plugins/_archive,
       // worlds/_archive): never loaded at runtime, dead weight in the app.
       if (base.startsWith("_") && path.dirname(source) === src) return false;
+      if (entry === "worlds" && isGalleryOriginal(source)) return false;
       return true;
     },
   });
