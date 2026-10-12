@@ -7,11 +7,11 @@
 [![Version](https://img.shields.io/badge/version-v0.0.50-8b5cf6)](./docs/CHANGELOG.md#0050---2026-10-11)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
 
-[![Covel 舞台模式 —— 在 covel.cc 观看演示](./.assets/images/readme/stage-mode.png)](https://covel.cc/)
+[![Covel 演示：世界列表、会话与舞台模式 —— 更多内容见 covel.cc](./.assets/images/demo.gif)](https://covel.cc/)
 
-**[▶ 在 covel.cc 观看演示](https://covel.cc/)**
+**[▶ 在 covel.cc 观看完整演示](https://covel.cc/)**
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 

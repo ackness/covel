@@ -57,6 +57,17 @@ node apps/site/scripts/build-media.mjs ./recording.mp4 --speed 3
 
 默认依次选择 `.assets/demo.dev1.mp4`、`.assets/demo.dev0.mp4`；显式路径不存在时直接报错。输出为 `apps/site/public/media/demo.mp4` 和 `demo-poster.jpg`。全部转换完成后才替换现有素材，转换失败会保留原素材并清理临时文件；输入可以是现有输出文件。通过 `pnpm --filter @covel/site build:media` 传入的相对路径以 `apps/site/` 为基准，直接调用 Node 时以当前目录为基准。
 
+README 的动图（`.assets/images/demo.gif`）单独用一段短录屏制作，不超过 6 MiB：宽 800 像素、每秒 10 帧、128 色调色板、不抖动。
+
+```bash
+# Replace recording.mp4 with the source file.
+vf="fps=10,scale=800:-2:flags=lanczos"
+ffmpeg -y -i recording.mp4 -vf "$vf,palettegen=stats_mode=diff:max_colors=128" palette.png
+ffmpeg -y -i recording.mp4 -i palette.png -lavfi "$vf [v]; [v][1:v] paletteuse=dither=none:diff_mode=rectangle" .assets/images/demo.gif
+rm palette.png
+git add -f .assets/images/demo.gif   # .assets/ is ignored
+```
+
 ## 开发规范
 
 ### 代码风格

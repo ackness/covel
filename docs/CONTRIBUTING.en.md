@@ -57,6 +57,17 @@ node apps/site/scripts/build-media.mjs ./recording.mp4 --speed 3
 
 The default source search is `.assets/demo.dev1.mp4`, then `.assets/demo.dev0.mp4`. A missing explicit path fails immediately. Outputs are `apps/site/public/media/demo.mp4` and `demo-poster.jpg`. Existing assets are replaced only after all conversions finish; conversion failures preserve them and clean up temporary files. An existing output can also be the input. Relative paths passed through `pnpm --filter @covel/site build:media` are relative to `apps/site/`; direct Node invocation uses the current directory.
 
+The README GIF (`.assets/images/demo.gif`) is made separately, from a short recording, and stays under 6 MiB: 800 pixels wide, 10 frames a second, a 128-colour palette without dithering.
+
+```bash
+# Replace recording.mp4 with the source file.
+vf="fps=10,scale=800:-2:flags=lanczos"
+ffmpeg -y -i recording.mp4 -vf "$vf,palettegen=stats_mode=diff:max_colors=128" palette.png
+ffmpeg -y -i recording.mp4 -i palette.png -lavfi "$vf [v]; [v][1:v] paletteuse=dither=none:diff_mode=rectangle" .assets/images/demo.gif
+rm palette.png
+git add -f .assets/images/demo.gif   # .assets/ is ignored
+```
+
 ## Development conventions
 
 ### Code style
