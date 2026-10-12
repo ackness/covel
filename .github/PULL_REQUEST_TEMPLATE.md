@@ -57,4 +57,4 @@
 - [ ] A changelog fragment `docs/changelog.d/<slug>.md` for user-visible changes; `docs/CHANGELOG.md` is not edited / 用户可见的改动已新增 `docs/changelog.d/<slug>.md`，不直接改 `docs/CHANGELOG.md`
 - [ ] `AGENTS.md` updated if packages, root scripts, or conventions changed / 包结构、根脚本或约定有变化时已更新 `AGENTS.md`
 
-<!-- New assets: 3 MiB per file; worlds/*/media/gallery/*.png originals: 4 MiB. Prefer WebP for display. -->
+<!-- New assets: 3 MiB per file; worlds/*/media/gallery/*.png originals: 4 MiB, each with a WebP of the same name. Portraits and scenes are WebP only. -->

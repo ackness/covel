@@ -4,14 +4,14 @@
     "characterId": "npc-kamishiro-mio",
     "displayName": "神代澪",
     "avatar": {
-      "id": "7e4a79f587fad0ab5a270753eaaa9adbca717bef87fdcc5e0b0b015a902d17ad",
-      "mime": "image/png",
-      "size": 1762716
+      "id": "aa4224a86bb477f3ce74bb0eee838a6ace6837b6baa10f84be82db1526e17c4b",
+      "mime": "image/webp",
+      "size": 141662
     },
     "sprite": {
-      "id": "7e4a79f587fad0ab5a270753eaaa9adbca717bef87fdcc5e0b0b015a902d17ad",
-      "mime": "image/png",
-      "size": 1762716
+      "id": "aa4224a86bb477f3ce74bb0eee838a6ace6837b6baa10f84be82db1526e17c4b",
+      "mime": "image/webp",
+      "size": 141662
     },
     "visuals": {
       "defaultVariant": "default",
@@ -22,9 +22,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "7e4a79f587fad0ab5a270753eaaa9adbca717bef87fdcc5e0b0b015a902d17ad",
-            "mime": "image/png",
-            "size": 1762716
+            "id": "aa4224a86bb477f3ce74bb0eee838a6ace6837b6baa10f84be82db1526e17c4b",
+            "mime": "image/webp",
+            "size": 141662
           }
         }
       ]
@@ -35,14 +35,14 @@
     "characterId": "npc-asakura-rin",
     "displayName": "朝仓凛",
     "avatar": {
-      "id": "fa1c262efac737ef9396a7f53575ba8f1ac436cce4299bf873985e039e4e6428",
-      "mime": "image/png",
-      "size": 1614490
+      "id": "e35ba3fc0eb68c7954b4d7e454faf16200100b6bf0e313ca200553213dda9fbb",
+      "mime": "image/webp",
+      "size": 174484
     },
     "sprite": {
-      "id": "fa1c262efac737ef9396a7f53575ba8f1ac436cce4299bf873985e039e4e6428",
-      "mime": "image/png",
-      "size": 1614490
+      "id": "e35ba3fc0eb68c7954b4d7e454faf16200100b6bf0e313ca200553213dda9fbb",
+      "mime": "image/webp",
+      "size": 174484
     },
     "visuals": {
       "defaultVariant": "uniform-playful",
@@ -53,9 +53,9 @@
           "expression": "playful",
           "pose": "default",
           "sprite": {
-            "id": "fa1c262efac737ef9396a7f53575ba8f1ac436cce4299bf873985e039e4e6428",
-            "mime": "image/png",
-            "size": 1614490
+            "id": "e35ba3fc0eb68c7954b4d7e454faf16200100b6bf0e313ca200553213dda9fbb",
+            "mime": "image/webp",
+            "size": 174484
           }
         },
         {
@@ -64,9 +64,9 @@
           "expression": "serious",
           "pose": "default",
           "sprite": {
-            "id": "47d91cfa5e2fdaaad7f174940fc71ea19e34e29544554c6c67f60edd879c9f9f",
-            "mime": "image/png",
-            "size": 1110625
+            "id": "36bf9dbe6ef0f8317710950b35011a02c7afc3a0a7dc9f8bbc5b2dc370e3f427",
+            "mime": "image/webp",
+            "size": 178646
           }
         }
       ]
@@ -77,14 +77,14 @@
     "characterId": "npc-shiina-kaho",
     "displayName": "椎名夏帆",
     "avatar": {
-      "id": "cea32612bf3a6f4bdb9606a9a355be6ead2be376bc9e130c2f4a1125137ebdd0",
-      "mime": "image/png",
-      "size": 2016291
+      "id": "45b807886b84bc0c3eeafee6533840b83db34be6a5c1eee85d5296d86fba66df",
+      "mime": "image/webp",
+      "size": 255342
     },
     "sprite": {
-      "id": "cea32612bf3a6f4bdb9606a9a355be6ead2be376bc9e130c2f4a1125137ebdd0",
-      "mime": "image/png",
-      "size": 2016291
+      "id": "45b807886b84bc0c3eeafee6533840b83db34be6a5c1eee85d5296d86fba66df",
+      "mime": "image/webp",
+      "size": 255342
     },
     "visuals": {
       "defaultVariant": "uniform-relaxed",
@@ -95,9 +95,9 @@
           "expression": "relaxed",
           "pose": "guitar",
           "sprite": {
-            "id": "cea32612bf3a6f4bdb9606a9a355be6ead2be376bc9e130c2f4a1125137ebdd0",
-            "mime": "image/png",
-            "size": 2016291
+            "id": "45b807886b84bc0c3eeafee6533840b83db34be6a5c1eee85d5296d86fba66df",
+            "mime": "image/webp",
+            "size": 255342
           }
         },
         {
@@ -106,9 +106,9 @@
           "expression": "concerned",
           "pose": "guitar",
           "sprite": {
-            "id": "7caa650f7f73b5b5dc2c94e74b1f83bfa7eaedc96c6019a3196b12b885dc5e9b",
-            "mime": "image/png",
-            "size": 1515926
+            "id": "49c8e50bdc659d652a070b9ab697c060cdbc9b67cad36f9096a0bf0aa06edd50",
+            "mime": "image/webp",
+            "size": 236302
           }
         }
       ]
@@ -119,14 +119,14 @@
     "characterId": "npc-shiraishi-yuma",
     "displayName": "白石悠真",
     "avatar": {
-      "id": "f29fafe08ba49bf11def357717b7a2ab068cde0b0d54bdef9dff2160120c753e",
-      "mime": "image/png",
-      "size": 1563869
+      "id": "74ce6b82bf137ebdc7b9eef35e92e2de75fb96c2d4ae90c3daaf0a56d44bd3e4",
+      "mime": "image/webp",
+      "size": 112232
     },
     "sprite": {
-      "id": "f29fafe08ba49bf11def357717b7a2ab068cde0b0d54bdef9dff2160120c753e",
-      "mime": "image/png",
-      "size": 1563869
+      "id": "74ce6b82bf137ebdc7b9eef35e92e2de75fb96c2d4ae90c3daaf0a56d44bd3e4",
+      "mime": "image/webp",
+      "size": 112232
     },
     "visuals": {
       "defaultVariant": "default",
@@ -137,9 +137,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "f29fafe08ba49bf11def357717b7a2ab068cde0b0d54bdef9dff2160120c753e",
-            "mime": "image/png",
-            "size": 1563869
+            "id": "74ce6b82bf137ebdc7b9eef35e92e2de75fb96c2d4ae90c3daaf0a56d44bd3e4",
+            "mime": "image/webp",
+            "size": 112232
           }
         }
       ]
@@ -150,14 +150,14 @@
     "characterId": "npc-mikoeda-haruka",
     "displayName": "三枝遥",
     "avatar": {
-      "id": "bf3d46bd363b60ec0fee2e65dcc7f43d8011d95072bc898543be84eca5960323",
-      "mime": "image/png",
-      "size": 1855873
+      "id": "3304df5d71a1911895df6ed4d89020e40124158fc952d852cb2fb15777c9f17b",
+      "mime": "image/webp",
+      "size": 167652
     },
     "sprite": {
-      "id": "bf3d46bd363b60ec0fee2e65dcc7f43d8011d95072bc898543be84eca5960323",
-      "mime": "image/png",
-      "size": 1855873
+      "id": "3304df5d71a1911895df6ed4d89020e40124158fc952d852cb2fb15777c9f17b",
+      "mime": "image/webp",
+      "size": 167652
     },
     "visuals": {
       "defaultVariant": "default",
@@ -168,9 +168,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "bf3d46bd363b60ec0fee2e65dcc7f43d8011d95072bc898543be84eca5960323",
-            "mime": "image/png",
-            "size": 1855873
+            "id": "3304df5d71a1911895df6ed4d89020e40124158fc952d852cb2fb15777c9f17b",
+            "mime": "image/webp",
+            "size": 167652
           }
         }
       ]
@@ -181,14 +181,14 @@
     "characterId": "npc-onodera-chihiro",
     "displayName": "小野寺千寻",
     "avatar": {
-      "id": "9206fc58d24a1248ae5ecac7f9c81a93de19d8d4bf1c5b0dece2cf99ae595300",
-      "mime": "image/png",
-      "size": 1278629
+      "id": "267245954aeeac6d825fc5d5652c46f8715e469b424e0a3336944805cd2147a4",
+      "mime": "image/webp",
+      "size": 174902
     },
     "sprite": {
-      "id": "9206fc58d24a1248ae5ecac7f9c81a93de19d8d4bf1c5b0dece2cf99ae595300",
-      "mime": "image/png",
-      "size": 1278629
+      "id": "267245954aeeac6d825fc5d5652c46f8715e469b424e0a3336944805cd2147a4",
+      "mime": "image/webp",
+      "size": 174902
     },
     "visuals": {
       "defaultVariant": "teacher-warm",
@@ -199,9 +199,9 @@
           "expression": "warm",
           "pose": "book",
           "sprite": {
-            "id": "9206fc58d24a1248ae5ecac7f9c81a93de19d8d4bf1c5b0dece2cf99ae595300",
-            "mime": "image/png",
-            "size": 1278629
+            "id": "267245954aeeac6d825fc5d5652c46f8715e469b424e0a3336944805cd2147a4",
+            "mime": "image/webp",
+            "size": 174902
           }
         },
         {
@@ -210,9 +210,9 @@
           "expression": "gentle",
           "pose": "book",
           "sprite": {
-            "id": "df243ad65d8244c9bfb280867e44f62717201cd7d6f0193c14543a24869f8a31",
-            "mime": "image/png",
-            "size": 1135796
+            "id": "5e6354645d55b1d853f326606fc14c8d59c94a174346f36b8c654d9cf6917433",
+            "mime": "image/webp",
+            "size": 163794
           }
         }
       ]
@@ -223,14 +223,14 @@
     "characterId": "npc-morikawa-souta",
     "displayName": "森川奏太",
     "avatar": {
-      "id": "73a655634481f3fc35181ebcbbc3b00532094975151d0468555509d712a3ff0c",
-      "mime": "image/png",
-      "size": 1082914
+      "id": "e875024177010d639e79ab5759b3df4c19cf7c00ff4d67e62f598a58039d45ca",
+      "mime": "image/webp",
+      "size": 152416
     },
     "sprite": {
-      "id": "73a655634481f3fc35181ebcbbc3b00532094975151d0468555509d712a3ff0c",
-      "mime": "image/png",
-      "size": 1082914
+      "id": "e875024177010d639e79ab5759b3df4c19cf7c00ff4d67e62f598a58039d45ca",
+      "mime": "image/webp",
+      "size": 152416
     },
     "visuals": {
       "defaultVariant": "uniform-cheerful",
@@ -241,9 +241,9 @@
           "expression": "cheerful",
           "pose": "drumsticks",
           "sprite": {
-            "id": "73a655634481f3fc35181ebcbbc3b00532094975151d0468555509d712a3ff0c",
-            "mime": "image/png",
-            "size": 1082914
+            "id": "e875024177010d639e79ab5759b3df4c19cf7c00ff4d67e62f598a58039d45ca",
+            "mime": "image/webp",
+            "size": 152416
           }
         },
         {
@@ -252,9 +252,9 @@
           "expression": "focused",
           "pose": "drumsticks",
           "sprite": {
-            "id": "87d50ab6da7007ce9c38db9d1cfa290336e399732297e59e3e3dbeb89a4415c6",
-            "mime": "image/png",
-            "size": 1112509
+            "id": "bed44340883f50d41685dbc0a2d28eb3b3aa790a9164c48b01a41d6234fb6e40",
+            "mime": "image/webp",
+            "size": 144236
           }
         }
       ]
@@ -265,14 +265,14 @@
     "characterId": "npc-toujou-akane",
     "displayName": "东条茜",
     "avatar": {
-      "id": "d85cdeb1032eb4545bbc43e5b576caf5b097589fad3a13af67f7616699104cd3",
-      "mime": "image/png",
-      "size": 1956927
+      "id": "f7b87fabc9590239fdca4fb606e210cad63951e224e4fe6836e594704c339d3c",
+      "mime": "image/webp",
+      "size": 181850
     },
     "sprite": {
-      "id": "d85cdeb1032eb4545bbc43e5b576caf5b097589fad3a13af67f7616699104cd3",
-      "mime": "image/png",
-      "size": 1956927
+      "id": "f7b87fabc9590239fdca4fb606e210cad63951e224e4fe6836e594704c339d3c",
+      "mime": "image/webp",
+      "size": 181850
     },
     "visuals": {
       "defaultVariant": "default",
@@ -283,9 +283,9 @@
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "d85cdeb1032eb4545bbc43e5b576caf5b097589fad3a13af67f7616699104cd3",
-            "mime": "image/png",
-            "size": 1956927
+            "id": "f7b87fabc9590239fdca4fb606e210cad63951e224e4fe6836e594704c339d3c",
+            "mime": "image/webp",
+            "size": 181850
           }
         }
       ]

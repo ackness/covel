@@ -56,7 +56,7 @@
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Transform reference portrait into a cinematic investigative story still EXACTLY 1536x1024 landscape. Preserve SU YAO's exact reference identity: adult woman in twenties, black hair pinned in the same loose bun, pale face, serious thoughtful eyes, navy-black high-collared guild coat with aged-bronze embroidery and her round tide-stone appraisal mirror. Same realistic painterly fog-noir style, cold grey teal and restrained rust. New scene: a guild appraisal workroom, waist-up seated at a worn worktable beside a misted window, examining a small dull stone-and-metal relic fragment on a folded cloth through the mirror held carefully in one hand; other hand rests next to handwritten notes with no readable text. A small shielded cold tide-stone lamp softly lights mirror and knuckles, no flame and no bright beams. Her face shows careful professional concentration with subtle worry; normal opaque healthy skin. Near shelves hold plain boxes and practical measuring tools, background softly lost in grey light. One character only; recognizable portrait face, natural hands, atmospheric dimensional depth. No revealed relic power, no plot resolution, no monster, no modern machinery, no readable text, no watermark.",
-        "referenceImages": ["worlds/mistport/media/portraits/su-yao.png"]
+        "referenceImages": ["worlds/mistport/media/portraits/su-yao.webp"]
       },
       "sha256": "3d89ddd46dc49f7b17e6c7c00616ba994866561a5d9534a827e1487e5e58f014",
       "bytes": 1996409
@@ -64,7 +64,7 @@
     {
       "id": "lin-yuanzhou",
       "kind": "portrait",
-      "filename": "portraits/lin-yuanzhou.png",
+      "filename": "portraits/lin-yuanzhou.webp",
       "width": 1024,
       "height": 1536,
       "name": "林远舟",
@@ -80,13 +80,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "7bed93ea92e4027a406451d33c29eb0b994947777ae1a41e91e8a4da3e92f8a7",
-      "bytes": 1936301
+      "sha256": "ad8a24c76858d1ccf214bc663dcfcf0be2b46a1c052aaf9dbcc8f5bebb47e9c9",
+      "bytes": 152084
     },
     {
       "id": "su-yao",
       "kind": "portrait",
-      "filename": "portraits/su-yao.png",
+      "filename": "portraits/su-yao.webp",
       "width": 1024,
       "height": 1536,
       "name": "苏窈",
@@ -102,13 +102,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "eae573d02102206f93e1d95d146125e32df4087a5a61886b8a1f6ea0590aaea2",
-      "bytes": 1917619
+      "sha256": "c698e0744ff8de7a19e3a9dd82c33b3c4bd902f7696b85aa248f4d654ed202f2",
+      "bytes": 158260
     },
     {
       "id": "iron-meg",
       "kind": "portrait",
-      "filename": "portraits/iron-meg.png",
+      "filename": "portraits/iron-meg.webp",
       "width": 1024,
       "height": 1536,
       "name": "铁姑",
@@ -126,13 +126,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "dad541591e17f1c74cb0c80f3e8481fbd994755d2c53ad9b2b7764d606d86649",
-      "bytes": 1882755
+      "sha256": "bdeabc070385dcfec7c0da926a5b49bfa080242414ecaf81db4437b9ab352c9e",
+      "bytes": 166246
     },
     {
       "id": "chen-yuanshan",
       "kind": "portrait",
-      "filename": "portraits/chen-yuanshan.png",
+      "filename": "portraits/chen-yuanshan.webp",
       "width": 1024,
       "height": 1536,
       "name": "陈远山",
@@ -150,13 +150,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "5046ddc9d403d6eefcc925b6ea52ee55a94dcfcbcba149df8510a93ed6cfa8e7",
-      "bytes": 2162377
+      "sha256": "375692ca74391ad000fbf08dfbbe786ebdd691a3bf198ba552be6cb443eeb7f2",
+      "bytes": 197090
     },
     {
       "id": "guildmaster-qi",
       "kind": "portrait",
-      "filename": "portraits/guildmaster-qi.png",
+      "filename": "portraits/guildmaster-qi.webp",
       "width": 1024,
       "height": 1536,
       "name": "齐老",
@@ -174,13 +174,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "8bade496fccca17df7309d0612941be7acb2eee48f58dc1bd8ea47798f40795b",
-      "bytes": 2156193
+      "sha256": "38905b4b343d3276ed52af52dd5edd5f2df3470a88126382e3eff4934ec6dfaa",
+      "bytes": 218796
     },
     {
       "id": "xiao-shuang",
       "kind": "portrait",
-      "filename": "portraits/xiao-shuang.png",
+      "filename": "portraits/xiao-shuang.webp",
       "width": 1024,
       "height": 1536,
       "name": "小霜",
@@ -198,13 +198,13 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "337e128f41ce0706341e77a4c7697215e30530cbfcb6fffbe69484f62d0ba82b",
-      "bytes": 1758592
+      "sha256": "3887c840b25bf081c442ca68f3ba57ede23b1f612621407a6a9606e8e4f2dc7d",
+      "bytes": 115784
     },
     {
       "id": "grey-falcon",
       "kind": "portrait",
-      "filename": "portraits/grey-falcon.png",
+      "filename": "portraits/grey-falcon.webp",
       "width": 1024,
       "height": 1536,
       "name": "灰隼",
@@ -220,8 +220,8 @@
         "characters/main-cast.json",
         "media/portraits.json"
       ],
-      "sha256": "9065bb88378a2983145f748d0c939c3f6000123f038abe106767f0e97ad2290c",
-      "bytes": 1912042
+      "sha256": "57af7b53ac21176093e5667482613aa316e243918896bfb228dc75c9f1b00e8d",
+      "bytes": 160188
     },
     {
       "id": "world-cover",

@@ -4,7 +4,7 @@
 
 - 机器清单（脚本直接读）：`worlds/haruka-academy/media/scenes.json`
 - 每张图的最终提示词 = `style.prefix` + 该场景 `subject`（夜图优先用 `subjectNight`，缺省回退 `subject`）+ `style.suffix`（+ 夜图追加 `style.nightSuffix`），`negative` 作为负向提示。
-- 文件名规则：`<id>-day.png` / `<id>-night.png`，落在 `worlds/<world>/media/scenes/`。
+- 文件名规则：`<id>-day.webp` / `<id>-night.webp`，落在 `worlds/<world>/media/scenes/`。
 
 美术定位和空间不变量见 [世界美术方向](./world-art-direction.md)。这里的昼夜方案服务学园舞台模式；雾港应优先按潮位设计场景，Emberback 应按地理明暗侧和风暴/设备状态设计，不能机械套用地球昼夜。
 
@@ -70,7 +70,7 @@ node scripts/emit-scenes.mjs haruka-academy
 
 ## 接入插件
 
-`data/world.data.yaml` 里有两个相关 source：`scenes`（`kind: media, to: media, indexTo: contract:stage.scene-assets@1, key: filename`）把 `media/scenes/*.png` 按 sha256 导入媒体库并写入接收插件的资产索引；`scenesRegistry`（`kind: json, schema: contract:stage.scenes@1, to: contract:stage.scenes@1, key: registryId`）把 `scenes.registry.json` 的 `sceneId → { day, night } MediaRef` 映射导入接收插件的场景 namespace。内置 `scene-stage/resolver` 在 `scene.set` 事件到达时消费它；世界包不绑定这个插件 ID。
+`data/world.data.yaml` 里有两个相关 source：`scenes`（`kind: media, to: media, indexTo: contract:stage.scene-assets@1, key: filename`）把 `media/scenes/*.webp` 按 sha256 导入媒体库并写入接收插件的资产索引；`scenesRegistry`（`kind: json, schema: contract:stage.scenes@1, to: contract:stage.scenes@1, key: registryId`）把 `scenes.registry.json` 的 `sceneId → { day, night } MediaRef` 映射导入接收插件的场景 namespace。内置 `scene-stage/resolver` 在 `scene.set` 事件到达时消费它；世界包不绑定这个插件 ID。
 
 ## 复用与重生成
 

@@ -4,7 +4,7 @@
  * generated scene backgrounds.
  *
  * Resolves expected filenames from scenes.json and probes
- * worlds/<world>/media/scenes/, content-addresses each PNG with sha256
+ * worlds/<world>/media/scenes/, content-addresses each picture (WebP, else PNG) with sha256
  * (the media store assigns the same hash on import), and maps
  * sceneId → { day, night } MediaRefs via scenes.json. Scenes missing the DAY
  * image are skipped with a warning (day is the base variant); a missing
@@ -29,24 +29,32 @@ const manifest = JSON.parse(
   await readFile(path.join(mediaDir, "scenes.json"), "utf-8"),
 );
 
-async function refOf(filename) {
-  try {
-    const bytes = await readFile(path.join(mediaDir, "scenes", filename));
-    return {
-      id: createHash("sha256").update(bytes).digest("hex"),
-      mime: "image/png",
-      size: bytes.length,
-    };
-  } catch (err) {
-    if (err?.code === "ENOENT") return null;
-    throw err; // permission/IO errors are real failures, not "missing" — surface them
+async function refOf(name) {
+  for (const [extension, mime] of [
+    ["webp", "image/webp"],
+    ["png", "image/png"],
+  ]) {
+    try {
+      const bytes = await readFile(
+        path.join(mediaDir, "scenes", `${name}.${extension}`),
+      );
+      return {
+        id: createHash("sha256").update(bytes).digest("hex"),
+        mime,
+        size: bytes.length,
+      };
+    } catch (err) {
+      // permission/IO errors are real failures, not "missing" — surface them
+      if (err?.code !== "ENOENT") throw err;
+    }
   }
+  return null;
 }
 
 const scenes = [];
 const skipped = [];
 for (const s of manifest.scenes ?? []) {
-  const day = await refOf(`${s.id}-day.png`);
+  const day = await refOf(`${s.id}-day`);
   if (!day) {
     skipped.push(s.id);
     continue;
@@ -56,7 +64,7 @@ for (const s of manifest.scenes ?? []) {
     name: s.name,
     ...(s.locationRef ? { locationRef: s.locationRef } : {}),
     day,
-    night: await refOf(`${s.id}-night.png`),
+    night: await refOf(`${s.id}-night`),
   });
 }
 

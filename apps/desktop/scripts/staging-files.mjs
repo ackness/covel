@@ -25,3 +25,15 @@ export function detachStagingHardlinks(directory) {
   }
   return detached;
 }
+
+/**
+ * A gallery PNG that has a WebP of the same name beside it. The app shows the
+ * WebP (`webFilename` in `media/gallery.json`); the PNG is the original the
+ * repository keeps, and no code reads it.
+ */
+export function isGalleryOriginal(file) {
+  return (
+    /[\\/]media[\\/]gallery[\\/][^\\/]+\.png$/i.test(file) &&
+    fs.existsSync(file.replace(/\.png$/i, ".webp"))
+  );
+}

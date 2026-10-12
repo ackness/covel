@@ -9,7 +9,9 @@
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
 
-![Covel demo — one full session at 6× speed](./.assets/images/demo.gif)
+[![Covel in stage mode — watch the demo at covel.cc](./.assets/images/readme/stage-mode.png)](https://covel.cc/)
+
+**[▶ Watch the demo at covel.cc](https://covel.cc/)**
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 

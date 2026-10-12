@@ -26,7 +26,7 @@ After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each ne
 
 The root `.pre-commit-config.yaml` defines commit checks. Install pre-commit and run `pre-commit install` to enable them, or run `pre-commit run --all-files` manually. Oxlint is pinned in the root `devDependencies` and `pnpm-lock.yaml`. Like Prettier and type checks, it uses the project toolchain through `mise exec` without creating a separate Node environment. `scripts/run-with-project-node.mjs` prepends the selected Node directory to the child PATH so CLI shims and subsequent commands use the same version. Existing hooks read the updated configuration automatically; no global cache cleanup is needed. Oxlint rules live in the root `.oxlintrc.jsonc`, with one line of reason for each rule that is off. The hook checks the changed files and `pnpm check` checks the whole repository, both with `--deny-warnings`, so a warning fails the check.
 
-New files are limited to 3 MiB by default. World gallery originals at `worlds/*/media/gallery/*.png` have a separate 4 MiB limit to preserve lossless 1536×1024 images. Prefer their WebP versions for display.
+New files are limited to 3 MiB by default. World gallery originals at `worlds/*/media/gallery/*.png` have a separate 4 MiB limit to preserve lossless 1536×1024 images; each needs a WebP of the same name beside it, and the installers and the Docker image carry only the WebP. World portraits and scenes are tracked as WebP only (see [`guide/world-art-direction.md`](./guide/world-art-direction.md)).
 
 ### PostgreSQL 18 development environment
 
@@ -47,7 +47,7 @@ Compose uses PostgreSQL 18 with pgvector 0.8.6 and stores the database in `pgdat
 
 ### Showcase site demo media
 
-Install FFmpeg first. Run these commands from the repository root to update the showcase site's video, poster, and README GIF:
+Install FFmpeg first. Run these commands from the repository root to update the showcase site's video and poster:
 
 ```bash
 pnpm --filter @covel/site build:media
@@ -55,7 +55,7 @@ pnpm --filter @covel/site build:media
 node apps/site/scripts/build-media.mjs ./recording.mp4 --speed 3
 ```
 
-The default source search is `.assets/demo.dev1.mp4`, `.assets/demo.dev0.mp4`, then `.assets/images/demo.gif`. A missing explicit path fails immediately. Outputs are `apps/site/public/media/demo.mp4`, `demo-poster.jpg`, and `.assets/images/demo.gif`. Existing assets are replaced only after all conversions finish; conversion failures preserve them and clean up temporary files. An existing output can also be the input. Relative paths passed through `pnpm --filter @covel/site build:media` are relative to `apps/site/`; direct Node invocation uses the current directory.
+The default source search is `.assets/demo.dev1.mp4`, then `.assets/demo.dev0.mp4`. A missing explicit path fails immediately. Outputs are `apps/site/public/media/demo.mp4` and `demo-poster.jpg`. Existing assets are replaced only after all conversions finish; conversion failures preserve them and clean up temporary files. An existing output can also be the input. Relative paths passed through `pnpm --filter @covel/site build:media` are relative to `apps/site/`; direct Node invocation uses the current directory.
 
 ## Development conventions
 

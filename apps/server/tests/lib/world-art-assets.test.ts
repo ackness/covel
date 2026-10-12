@@ -4,7 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { applyLocaleOverlay } from "@covel/shared";
 import { describe, expect, it } from "vitest";
-import { inspectPng } from "../../../../scripts/lib/png-image-validation.mjs";
+import { inspectWebp } from "../../../../scripts/lib/webp-image.mjs";
 
 interface MediaRef {
   id: string;
@@ -44,12 +44,12 @@ async function readJson<T>(filename: string): Promise<T> {
 
 async function imageRef(filename: string, size: string, transparent = false) {
   const bytes = await readFile(filename);
-  const image = inspectPng(bytes);
+  const image = inspectWebp(bytes);
   expect(`${image.width}x${image.height}`, filename).toBe(size);
   if (transparent) expect(image.hasTransparency, filename).toBe(true);
   return {
     id: createHash("sha256").update(bytes).digest("hex"),
-    mime: "image/png",
+    mime: "image/webp",
     size: bytes.length,
   };
 }
@@ -166,7 +166,7 @@ describe.each(worlds)("shipped art: %s", (world) => {
           const filename = path.join(
             mediaDir,
             "scenes",
-            `${scene.id}-${variant}.png`,
+            `${scene.id}-${variant}.webp`,
           );
           if (variant === "night" && !existsSync(filename)) {
             expect(entry.night).toBeNull();
@@ -177,6 +177,35 @@ describe.each(worlds)("shipped art: %s", (world) => {
           );
         }
       }
+    },
+  );
+
+  // Desktop staging and .dockerignore leave `media/gallery/*.png` out of what
+  // ships, so the gallery must show each of them through a WebP beside it.
+  const galleryDir = path.join(mediaDir, "gallery");
+  it.skipIf(!existsSync(galleryDir))(
+    "shows every gallery PNG through a WebP of the same name",
+    async () => {
+      const manifest = await readJson<{
+        images: Array<{ filename: string; webFilename?: string }>;
+      }>(path.join(mediaDir, "gallery.json"));
+      const originals = (await readdir(galleryDir)).filter((name) =>
+        name.endsWith(".png"),
+      );
+      for (const original of originals) {
+        const web = original.replace(/\.png$/, ".webp");
+        expect(existsSync(path.join(galleryDir, web)), original).toBe(true);
+        expect(
+          manifest.images.find(
+            (image) => image.filename === `gallery/${original}`,
+          )?.webFilename,
+          original,
+        ).toBe(`gallery/${web}`);
+      }
+      for (const image of manifest.images)
+        expect(image.webFilename ?? image.filename, image.filename).not.toMatch(
+          /\.png$/,
+        );
     },
   );
 });

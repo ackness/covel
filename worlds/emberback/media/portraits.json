@@ -10,35 +10,35 @@
   "defaults": {
     "size": "1024x1536",
     "quality": "medium",
-    "mime": "image/png"
+    "mime": "image/webp"
   },
   "characters": [
     {
       "id": "tomas-reed",
       "characterId": "npc-tomas-reed",
       "name": "Tomas Reed",
-      "filename": "tomas-reed.png",
+      "filename": "tomas-reed.webp",
       "subject": "a weathered Latino man in his late fifties, lean build, silver-streaked dark hair, short practical beard, calm brown eyes and approachable dry humor, cream and cobalt mechanic coveralls with rolled sleeves, mustard utility harness, ceramic shoulder plates, compact analog field radio, holding a slim signal probe and an enamel coffee mug, inside a lived-in Emberback signal workshop carved into a rust-red ridge, layered cream ceramic wall panels, cobalt analog consoles, worn workbench edges, cable conduits, and a distant sunlit relay mast visible through a narrow opening"
     },
     {
       "id": "june-okafor",
       "characterId": "npc-june-okafor",
       "name": "June Okafor",
-      "filename": "june-okafor.png",
+      "filename": "june-okafor.webp",
       "subject": "a dark-skinned Black woman in her early thirties, athletic build, short natural curls, lively intelligent eyes and a broad confident grin, teal sun jacket, ochre utility trousers, cream ceramic heat guards, coral scarf streaming to one side, amber goggles on her forehead, navigation tablet under one arm and crawler keys raised in one hand, at an open-sided Sunrunner crawler staging yard on a rust-red ridge, partially seen solar crawler, low charging gantry, distant relay dishes, layered mesas, pale-cyan horizon, diagonal awning shadows, and windblown dust ribbons echoing the scarf's motion"
     },
     {
       "id": "mina-park",
       "characterId": "npc-mina-park",
       "name": "Dr. Mina Park",
-      "filename": "mina-park.png",
+      "filename": "mina-park.webp",
       "subject": "an East Asian woman in her early forties, compact build, chin-length black hair tucked behind one ear, observant eyes and a reserved skeptical expression, mustard insulated field coat with cream panels, dark teal base layer, rust-red utility sash, lightweight ice-dust boots, holding a portable spectrum analyzer and narrow sample case, on a high Nightglass observation platform with cream ceramic deck panels, dark teal rails, slim sensor vanes, a distant relay tower above rust-red terrain, cobalt Crownfire clouds, a narrow amber-white horizon, and subtle luminous atmospheric bands suggesting anomalous radio echoes"
     },
     {
       "id": "priya-nair",
       "characterId": "npc-priya-nair",
       "name": "Priya Nair",
-      "filename": "priya-nair.png",
+      "filename": "priya-nair.webp",
       "subject": "Create a NEW full-body character portrait for Emberback Relay, 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single forty-five-year-old South Asian female lead medic Priya Nair, medium-brown skin, practical mature face, graying dark hair tied back with reading glasses pushed into it. Rolled cream sleeves, grey clinic vest, cobalt work trousers, practical shoes; a compact battery tester on a lanyard at chest, holding a slim medical chart with no readable text. Quiet, level, dryly compassionate gaze, solid grounded working stance. Background is an eight-bed clinic's modest service alcove: repaired cream ceramic panels, cool medicine cabinet, reserve battery with analog meter, soft warm light. No visible patients or other people. Complete head-to-boots body, head y=70, soles y=1480, centered, same full-length scale as matching Emberback cast. Restrained foreground-midground-background depth, lower-contrast environment, face and signature tester readable. Optimistic community life under resource pressure, no neon cyberpunk, no spaceship, no fantasy, no bulky armor, no text or watermark. OPAQUE environmental portrait.",
       "generation": {
         "tool": "built-in-imagegen",
@@ -49,7 +49,7 @@
       "id": "eli-varga",
       "characterId": "npc-eli-varga",
       "name": "Eli Varga",
-      "filename": "eli-varga.png",
+      "filename": "eli-varga.webp",
       "subject": "Create a NEW full-body character portrait for Emberback Relay, EXACTLY 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single nineteen-year-old ADULT male signal operator Eli Varga, slight natural adult build, unruly dark blond hair, alert anxious grey eyes, pale face with a few freckles, earnest intelligent expression. Oversized cream-and-cobalt cooperative work jacket, ochre utility trousers and practical boots, old over-ear communications headphones around neck, ink-stained fingers holding a small frequency notebook at waist with no readable text. Slightly hesitant posture as though about to report something important. Background: warm rust-red basalt-walled operations alcove, repaired cobalt analog radio receivers, reel-to-reel recorder, cream ceramic electrical panels, coils of functional cable, softer and lower contrast than character. Complete head-to-boots body, head y=70 soles y=1480, centered, same full-length scale as matching Emberback cast. Clear face silhouette, believable contact shadow and dimensional depth. No people other than Eli, no screens full of text, no cyberpunk, no military costume, no space suit, no watermark. OPAQUE environmental portrait.",
       "generation": {
         "tool": "built-in-imagegen",

@@ -5,7 +5,7 @@
  * Reads worlds/<world>/media/scenes.json; every scene yields TWO tasks:
  *   day   : style.prefix + subject + style.suffix
  *   night : style.prefix + (subjectNight || subject) + style.suffix + style.nightSuffix
- * Files land in worlds/<world>/media/scenes/<id>-day.png / <id>-night.png.
+ * Files land in worlds/<world>/media/scenes/<id>-day.webp / <id>-night.webp.
  *
  * Provider config comes from COVEL_LLM_TOML or $COVEL_HOME/llm.toml
  * (default ~/.covel/llm.toml), selected via --slot. See
@@ -26,6 +26,7 @@ import {
   resolveImageWire,
   reportResults,
 } from "./lib/image-gen-common.mjs";
+import { encodeWebp } from "./lib/webp-image.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const DEFAULT_SLOT = "gpt-image-2";
@@ -93,7 +94,7 @@ function sceneTasks(manifest, args) {
       tasks.push({
         scene,
         variant,
-        filename: `${scene.id}-${variant}.png`,
+        filename: `${scene.id}-${variant}.webp`,
         prompt: buildScenePrompt(manifest.style ?? {}, scene, variant),
       });
     }
@@ -144,7 +145,7 @@ async function scaffold(args) {
           "people, character, figure, text, caption, watermark, logo, frame",
         nightSuffix: ", at night, moonlight, warm artificial lights",
       },
-      defaults: { size: "1536x1024", quality: "medium", mime: "image/png" },
+      defaults: { size: "1536x1024", quality: "medium", mime: "image/webp" },
       scenes: [],
     };
   }
@@ -258,9 +259,10 @@ async function main() {
         quality,
         background: style.background,
       });
-      await writeFile(path.join(outDir, t.filename), bytes);
+      const webp = await encodeWebp(bytes);
+      await writeFile(path.join(outDir, t.filename), webp);
       console.log(
-        `  ✅ ${t.scene.id} [${t.variant}] (${t.filename}) ${(bytes.length / 1024).toFixed(0)} KB · ${((Date.now() - t0) / 1000).toFixed(1)}s`,
+        `  ✅ ${t.scene.id} [${t.variant}] (${t.filename}) ${(webp.length / 1024).toFixed(0)} KB · ${((Date.now() - t0) / 1000).toFixed(1)}s`,
       );
       return { id: t.filename, status: "ok" };
     } catch (err) {

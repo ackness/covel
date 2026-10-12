@@ -26,7 +26,7 @@ pnpm dev                       # 同时启动前端与后端
 
 提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier、类型检查一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。Oxlint 的规则在根目录 `.oxlintrc.jsonc`，关闭的规则各有一行说明；hook 检查改动的文件，`pnpm check` 检查整个仓库，两处都带 `--deny-warnings`，所以警告也会让检查失败。
 
-新增文件默认上限为 3 MiB；世界画廊原图 `worlds/*/media/gallery/*.png` 单独允许 4 MiB，以保留 1536×1024 图片的无损质量。展示时优先使用配套 WebP。
+新增文件默认上限为 3 MiB；世界画廊原图 `worlds/*/media/gallery/*.png` 单独允许 4 MiB，以保留 1536×1024 图片的无损质量；每张原图旁要有同名 WebP 展示版，安装包和 Docker 镜像只带 WebP。世界立绘和场景只以 WebP 入库（见 [`guide/world-art-direction.md`](./guide/world-art-direction.md)）。
 
 ### PostgreSQL 18 开发环境
 
@@ -47,7 +47,7 @@ Compose 使用 PostgreSQL 18 + pgvector 0.8.6，数据库存入 `pgdata18` 卷�
 
 ### 官网演示媒体
 
-先安装 FFmpeg。以下命令从仓库根运行，会更新官网站点的视频、封面和 README 动图：
+先安装 FFmpeg。以下命令从仓库根运行，会更新官网站点的视频和封面：
 
 ```bash
 pnpm --filter @covel/site build:media
@@ -55,7 +55,7 @@ pnpm --filter @covel/site build:media
 node apps/site/scripts/build-media.mjs ./recording.mp4 --speed 3
 ```
 
-默认依次选择 `.assets/demo.dev1.mp4`、`.assets/demo.dev0.mp4`、`.assets/images/demo.gif`；显式路径不存在时直接报错。输出为 `apps/site/public/media/demo.mp4`、`demo-poster.jpg` 和 `.assets/images/demo.gif`。全部转换完成后才替换现有素材，转换失败会保留原素材并清理临时文件；输入可以是现有输出文件。通过 `pnpm --filter @covel/site build:media` 传入的相对路径以 `apps/site/` 为基准，直接调用 Node 时以当前目录为基准。
+默认依次选择 `.assets/demo.dev1.mp4`、`.assets/demo.dev0.mp4`；显式路径不存在时直接报错。输出为 `apps/site/public/media/demo.mp4` 和 `demo-poster.jpg`。全部转换完成后才替换现有素材，转换失败会保留原素材并清理临时文件；输入可以是现有输出文件。通过 `pnpm --filter @covel/site build:media` 传入的相对路径以 `apps/site/` 为基准，直接调用 Node 时以当前目录为基准。
 
 ## 开发规范
 

@@ -6,8 +6,8 @@
  * style.prefix + character.subject + style.suffix, and generates through
  * the framework's image wire (packages/ai-provider/src/image/wire-registry.ts
  * — same wire the openai-image-gen / dashscope-image-gen plugins use, no
- * hand-rolled HTTP here). Saves PNGs to
- * worlds/<world>/media/portraits/<filename>.
+ * hand-rolled HTTP here). Encodes each picture as WebP (needs `cwebp`) and
+ * saves it to worlds/<world>/media/portraits/<filename>.
  *
  * Provider config is NOT hardcoded here — it is read from a slot in
  * COVEL_LLM_TOML or $COVEL_HOME/llm.toml (default ~/.covel/llm.toml).
@@ -33,6 +33,7 @@ import {
   reportResults,
 } from "./lib/image-gen-common.mjs";
 import { assertPortraitPng } from "./lib/png-image-validation.mjs";
+import { encodeWebp } from "./lib/webp-image.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const DEFAULT_SLOT = "gpt-image-2";
@@ -66,9 +67,11 @@ function parseArgs(argv) {
 }
 
 // --chroma: providers that reject the background=transparent parameter draw a
-// flat pure-green backdrop instead; strip it locally afterwards, e.g.
+// flat pure-green backdrop instead. The picture is then saved as a PNG beside
+// the target; strip the backdrop locally and encode the result, e.g.
 //   magick sprite.png -alpha set -fuzz 12% -fill none \
 //     -draw 'color 0,0 floodfill' ... (see docs/guide/world-portraits.md)
+//   node scripts/encode-world-webp.mjs sprite.png
 const CHROMA_PROMPT =
   ", standing against a solid uniform flat pure green (#00FF00) chroma-key backdrop filling the entire background, no background scenery, no shadow on the backdrop";
 
@@ -193,9 +196,16 @@ async function main() {
         background: args.chroma ? undefined : style.background,
         label: c.filename,
       });
-      await writeFile(path.join(outDir, c.filename), bytes);
+      // The provider returns a PNG. A `.webp` target is encoded; a chroma
+      // picture stays a PNG until its backdrop is stripped.
+      const encode = /\.webp$/i.test(c.filename) && !args.chroma;
+      const filename = args.chroma
+        ? c.filename.replace(/\.webp$/i, ".png")
+        : c.filename;
+      const saved = encode ? await encodeWebp(bytes) : bytes;
+      await writeFile(path.join(outDir, filename), saved);
       console.log(
-        `  ✅ ${c.name} (${c.filename}) ${(bytes.length / 1024).toFixed(0)} KB · ${((Date.now() - t0) / 1000).toFixed(1)}s`,
+        `  ✅ ${c.name} (${filename}) ${(saved.length / 1024).toFixed(0)} KB · ${((Date.now() - t0) / 1000).toFixed(1)}s`,
       );
       return { id: c.id, status: "ok" };
     } catch (err) {

@@ -11,7 +11,7 @@
   "defaults": {
     "size": "1536x1024",
     "quality": "medium",
-    "mime": "image/png"
+    "mime": "image/webp"
   },
   "scenes": [
     {

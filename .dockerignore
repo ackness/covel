@@ -52,6 +52,9 @@ output
 # ── Docker itself (context is repo root; Dockerfile is read out-of-band) ──
 docker
 
+# ── Gallery originals: the app shows the WebP beside each PNG ───
+worlds/*/media/gallery/*.png
+
 # ── Server-only image doesn't need migrations snapshots ─────────
 apps/server/drizzle
 
