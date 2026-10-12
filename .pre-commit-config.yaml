@@ -27,11 +27,15 @@ repos:
         # 3 MB: far above any tracked asset (world portraits and scenes are WebP)
         # while still catching accidental large blobs (videos, dumps, bundles).
         args: [--maxkb=3072]
-        exclude: ^worlds/[^/]+/media/gallery/[^/]+\.png$
+        exclude: ^(worlds/[^/]+/media/gallery/[^/]+\.png|\.assets/images/demo\.gif)$
       - id: check-added-large-files
         name: check gallery PNG size
         files: ^worlds/[^/]+/media/gallery/[^/]+\.png$
         args: [--maxkb=4096]
+      - id: check-added-large-files
+        name: check README demo GIF size
+        files: ^\.assets/images/demo\.gif$
+        args: [--maxkb=6144]
 
   - repo: local
     hooks:
