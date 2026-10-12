@@ -3,6 +3,7 @@ import {
   assertLlmRequestBudget,
   awaitLlmRequest,
   createLlmRequestScope,
+  trimTrailingSlashes,
 } from "@covel/shared";
 import type { FormData as UndiciFormData } from "undici";
 import { ProviderBaseUrlError } from "../../errors.js";
@@ -81,7 +82,7 @@ export async function postJson(
       : (() => {
           const endpoint = new URL(config.baseUrl);
           endpoint.pathname =
-            endpoint.pathname.replace(/\/+$/, "") + path.append;
+            trimTrailingSlashes(endpoint.pathname) + path.append;
           return endpoint.toString();
         })();
   const serializedBody = JSON.stringify(body);

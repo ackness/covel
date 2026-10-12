@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { trimTrailingSlashes } from "@covel/shared";
 import type { ModelProviderAdapter } from "./adapter.js";
 import type { ProviderConfig, ModelRequestContext } from "../types.js";
 import type {
@@ -188,18 +189,20 @@ export function createEvaluationAdapter(
       path = "/decisions";
       if (baseUrl) {
         const url = new URL(baseUrl);
-        url.pathname = url.pathname
-          .replace(/\/+$/, "")
-          .replace(/\/decisions$/, "");
+        url.pathname = trimTrailingSlashes(url.pathname).replace(
+          /\/decisions$/,
+          "",
+        );
         baseUrl = url.toString();
       }
     } else if (baseUrl && protocol === "typesafe-systemone-v1") {
       // A base that already includes the endpoint stays idempotent — without
       // this strip, buildProviderUrl would append `/v1/systemone` again.
       const url = new URL(baseUrl);
-      url.pathname = url.pathname
-        .replace(/\/+$/, "")
-        .replace(/\/(?:v1\/)?systemone$/, "");
+      url.pathname = trimTrailingSlashes(url.pathname).replace(
+        /\/(?:v1\/)?systemone$/,
+        "",
+      );
       baseUrl = url.toString();
     } else if (baseUrl) {
       const url = new URL(baseUrl);
@@ -209,7 +212,7 @@ export function createEvaluationAdapter(
       // Accept the shared chat base or the evaluation API base, preserving
       // proxy prefixes. Strip the eval endpoint itself first so a base that
       // already points at it does not get the path appended twice.
-      let pathname = url.pathname.replace(/\/+$/, "");
+      let pathname = trimTrailingSlashes(url.pathname);
       if (pathname.endsWith(evalPath)) {
         pathname = pathname.slice(0, -evalPath.length);
       }

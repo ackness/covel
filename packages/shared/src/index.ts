@@ -223,6 +223,7 @@ export {
   getBuiltinProviderConnection,
   isLoopbackBaseUrl,
   listBuiltinProviderConnections,
+  trimTrailingSlashes,
 } from "./utils/provider-defaults.js";
 export type { BuiltinProviderConnection } from "./utils/provider-defaults.js";
 

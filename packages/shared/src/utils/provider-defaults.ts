@@ -179,3 +179,14 @@ export function isLoopbackBaseUrl(baseUrl: string | undefined): boolean {
     return false;
   }
 }
+
+/**
+ * A base URL or path without its trailing slashes. A loop, not `/\/+$/`: on a
+ * long run of slashes that does not end the text, the expression takes time
+ * quadratic in its length, and a base URL can come from a request.
+ */
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  return value.slice(0, end);
+}

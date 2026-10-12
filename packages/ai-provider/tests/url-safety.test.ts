@@ -193,6 +193,15 @@ describe("buildProviderUrl", () => {
     ).toBe("https://api.openai.com/v1/chat/completions");
   });
 
+  it("stays fast on a long run of slashes that does not end the base URL", () => {
+    // Quadratic with `/\/+$/`: a base URL from a request header could hold
+    // the server for seconds.
+    const base = `https://api.example.com/${"/".repeat(300_000)}x/v1`;
+    expect(buildProviderUrl(base, "/chat/completions")).toBe(
+      `${base}/chat/completions`,
+    );
+  });
+
   it("dedupes a provider /api/v1 prefix present in both base and path", () => {
     expect(
       buildProviderUrl(
