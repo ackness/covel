@@ -319,18 +319,22 @@ jobs:
         run: pnpm e2e --list
 
       # The browser download is cached by Playwright version (from the
-      # lockfile). The system packages are not part of it and are installed on
-      # every run.
+      # lockfile) and runner image (ImageOS, e.g. ubuntu24), because Playwright
+      # downloads a build per distribution release and ubuntu-latest moves to a
+      # new release. The system packages are not part of it and are installed
+      # on every run.
       - name: Read Playwright version
         id: playwright
-        run: echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Chromium
         id: chromium-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Chromium
         if: steps.chromium-cache.outputs.cache-hit != 'true'
