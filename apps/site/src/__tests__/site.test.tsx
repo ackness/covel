@@ -177,4 +177,26 @@ describe("download links", () => {
       "https://dl/Covel-electron-0.0.50-win-x64-portable.exe",
     );
   });
+
+  it("tells a macOS visitor how to open the unsigned app", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ assets }) }),
+    );
+    render(<App />);
+    await screen.findAllByRole("link", {
+      name: COPY.en.hero.primaryFor.mac,
+    });
+    expect(
+      screen.getAllByText(COPY.en.hero.macHelp.summary).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(
+        "xattr -dr com.apple.quarantine /Applications/Covel.app",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
 });

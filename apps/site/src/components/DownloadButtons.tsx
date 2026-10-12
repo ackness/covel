@@ -4,6 +4,11 @@ import type { DownloadLinks } from "../download.js";
 import { RELEASES_URL, REPO_URL } from "../links.js";
 import { primaryButton, secondaryButton } from "./ui.js";
 
+// The macOS build is unsigned and not notarized: Gatekeeper reports a
+// downloaded copy as damaged until its quarantine attribute is removed.
+const MAC_QUARANTINE_COMMAND =
+  "xattr -dr com.apple.quarantine /Applications/Covel.app";
+
 export function DownloadButtons({
   copy,
   download,
@@ -39,6 +44,19 @@ export function DownloadButtons({
             {copy.hero.otherPlatforms}
           </a>
         </p>
+      ) : null}
+      {download.platform === "mac" ? (
+        <details className="max-w-md text-xs text-muted">
+          <summary className={`cursor-pointer ${smallLink}`}>
+            {copy.hero.macHelp.summary}
+          </summary>
+          <p className="mt-2 text-left leading-relaxed">
+            {copy.hero.macHelp.body}
+          </p>
+          <code className="mt-2 block overflow-x-auto rounded-md border border-current/20 px-3 py-2 text-left font-mono whitespace-nowrap select-all">
+            {MAC_QUARANTINE_COMMAND}
+          </code>
+        </details>
       ) : null}
     </div>
   );
