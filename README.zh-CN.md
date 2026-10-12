@@ -213,6 +213,6 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 
 ## 贡献与许可
 
-欢迎 Issue 和 PR —— 请先阅读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md)。发布由 Git 标签驱动：推送 `v*` 标签即由 [GitHub Actions](./.github/workflows/release.yml) 构建并发布 macOS 与 Windows 安装包。
+欢迎 Issue 和 PR —— 请先阅读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md) 和[行为准则](./CODE_OF_CONDUCT.md)。发布由 Git 标签驱动：推送 `v*` 标签即由 [GitHub Actions](./.github/workflows/release.yml) 构建并发布 macOS 与 Windows 安装包。
 
 [MIT](./LICENSE) © 2026 Covel Contributors

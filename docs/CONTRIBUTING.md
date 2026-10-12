@@ -6,6 +6,8 @@
 
 > 根目录 README 见 [`../README.md`](../README.md)。
 
+参与本项目的每个人都遵守[行为准则](../CODE_OF_CONDUCT.md)（英文）。
+
 ## 开发环境
 
 - Node.js 26.x
