@@ -6,6 +6,45 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 Entries for the next release are in [`changelog.d/`](./changelog.d/README.md), one file per change; do not add lines here. `pnpm changelog:preview` prints them as this section.
 
+## [0.0.51] - 2026-10-12
+
+This release makes the download smaller and moves the showcase page out of the app. The app now opens on the world list; the showcase is a separate static website. Bundled portraits and scenes ship as WebP, which takes about 95 MB off the files that go into the installers and the Docker image. Without an `llm.toml`, the built-in model can be pointed at any OpenAI-compatible provider with `DEFAULT_*` variables. Three faults a static analysis found are fixed, and release installers carry a build provenance attestation. There is no breaking change: a database created by v0.0.50 works as it is. Read the [upgrade notes](#upgrade-notes-for-v0051) before installing. macOS Apple Silicon and Windows x64 binaries are unsigned; the macOS build is not notarized.
+
+Verified for this release: a session was started and played by hand in the development build. Not verified: the size saving is computed from the packaged files, not measured on a built installer; the art generation scripts were not run against an image provider after the change to WebP; the attestation step runs for the first time in this release's workflow; nobody played a session in the Windows build (it is built and packaged by the release workflow).
+
+### Added
+
+- **Point the built-in model at any provider with `DEFAULT_*` variables.** Without an `llm.toml`, the server and the runtime test harness used a DeepSeek `story` slot that nothing could change. Setting `DEFAULT_BASE_URL` (an OpenAI-compatible endpoint), `DEFAULT_MODEL` and `DEFAULT_API_KEY` now sends that slot to your own provider; left unset, it stays DeepSeek. The recorded sessions under `tests/llm-replay/` use the same variables: `pnpm e2e:replay --record` records from `DEFAULT_BASE_URL` with `DEFAULT_API_KEY`, and `--upstream` is optional.
+- **A separate showcase website.** `apps/site` is a static site with new sections and copy in English and Chinese, a light and a dark theme, and the four bundled worlds. Its download button gives a macOS or Windows visitor the installer from the latest release, with the Windows portable build beside it. Run it with `pnpm --filter @covel/site dev`; `pnpm --filter @covel/site build` writes `apps/site/dist/`. The demo media script moved with it: `pnpm --filter @covel/site build:media`.
+- **The showcase website is published on GitHub Pages.** A push to `main` that changes `apps/site` builds it and deploys it to `https://ackness.github.io/covel/` (`.github/workflows/site.yml`); pull requests only build it. The build follows the Pages base path, so a custom domain works without changes.
+
+### Changed
+
+- **The showcase website tells the plugin story.** Its headline reads "Build your own …" and swaps the last words between visual novel, tabletop campaign, epic story and multilingual world. Each swap animates the words letter by letter and carries the subtitle, the colour, the screenshot and a list of the bundled plugins with it, lighting up the ones that mode really runs (taken from the bundled packs). Below, two cards explain the plugin design and world packs. A new section lists the built-in plugins, each with its plugin ID.
+- **The app opens on the world list.** `/` in the web app and the desktop shell now goes straight to the world list, and the Covel logo leads there too. The showcase page that used to sit at `/` is gone from the app, along with its video and images, so the desktop package no longer ships them.
+- **The installers and the Docker image are about 95 MB smaller.** The portraits and scenes of the bundled worlds ship as WebP (lossy colour at quality 90, lossless alpha) instead of PNG, 77 MB down to 10 MB, and the PNG originals of gallery pictures stay in the repository without being packaged; the gallery already showed their WebP versions. `scripts/generate-portraits.mjs` and `scripts/generate-scenes.mjs` now write WebP and need `cwebp` (libwebp) on PATH; `scripts/encode-world-webp.mjs` converts a picture made elsewhere. Rules: `docs/guide/world-art-direction.md`.
+
+### Removed
+
+- **`VITE_ROUTER_DEVTOOLS`.** The TanStack Router devtools showed only on the old showcase page, so the button and its variable are removed.
+
+### Fixed
+
+- **`pnpm e2e:replay` no longer hangs after a session.** When the test server was stopped by a signal, the command waited forever for it to exit.
+- **The showcase website shows the Covel icon.** The header, footer and browser tab pointed at an `icon.png` the site never shipped; `apps/site/public/` now has it.
+- **The desktop startup screen is readable in light mode when startup fails.** With the system in light mode, the error message and hint were drawn in near-white text on the light background, and the error title and the spinner's centre dot were faint. They now use dark colours in light mode.
+
+### Security
+
+- **A base URL with a long run of slashes no longer holds the server.** The trailing-slash trim of a provider base URL took time quadratic in the length of a run of slashes that did not end the URL, and a base URL can arrive in a request's model settings (16,000 slashes cost about half a second per request). Every such trim in the model gateway, the evaluation adapter and the embedding lock is now linear.
+- **A prompt body cannot stall prompt assembly with `{{` and whitespace.** `{{` followed by a few thousand spaces or tabs and no `}}` took the template interpolation tens of seconds, in the kernel (`interpolateTemplate`) and in the author SDK (`interpolate`). Both now scan the template in linear time and fill exactly the same `{{ path }}` variables as before.
+- **`pnpm i18n` cannot be made to write into `Object.prototype`.** A manifest key named `__proto__` in the plugin being translated led the label writer (`writePluginTranslations`) out of the locale file's section; a label whose place holds `__proto__`, `constructor` or `prototype` is now skipped.
+- **Release installers carry a build provenance attestation.** `gh attestation verify <file> --repo ackness/covel` confirms that a downloaded `.dmg`, `.zip` or `.exe` was built by this repository's release workflow, and from which commit. The installers stay unsigned; `SHA256SUMS.txt` is unchanged. Details: `docs/guide/desktop-packaging.md`.
+
+### Upgrade notes for v0.0.51
+
+- **A session started before this version keeps the pictures it imported.** A new session imports the WebP files. A world of your own that ships PNG portraits or scenes still works: PNG remains an accepted format, and the `emit-presence` / `emit-scenes` scripts read both.
+
 ## [0.0.50] - 2026-10-11
 
 This release makes long sessions cheaper and safer to run and gives characters aliases. Prompts keep a stable prefix that a provider's cache can serve, per-turn reads no longer grow with the length of a session, a form answer and its follow-up turn are one request, plugin HTML runs on its own origin, and start-up refuses a mistyped backend or a second process on one SQLite file. A world can declare a dimension value as derived from its clock, and the value is then computed in code instead of by a model. **Development data is not carried over: an SQLite or PostgreSQL database created by an earlier version must be recreated**, because the `characters` table has a new column and the server never alters a table. Read the [breaking changes](#breaking-changes-in-v0050) and the [upgrade notes](#upgrade-notes-for-v0050) before installing. macOS Apple Silicon and Windows x64 binaries are unsigned; the macOS build is not notarized.
