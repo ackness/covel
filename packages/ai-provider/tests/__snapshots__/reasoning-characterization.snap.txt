@@ -1,8 +1,8 @@
-# 4606 models; levels: provider-default disabled automatic none minimal low medium high xhigh max
+# 4175 models; levels: provider-default disabled automatic none minimal low medium high xhigh max
 
 # Offered levels and the fields each level sends, per provider and protocol
 
-## fields 12053068 (175 models, e.g. alibaba/unknown-model)
+## fields 12053068 (168 models, e.g. alibaba/unknown-model)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -48,7 +48,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 264adbd5 (8 models, e.g. aihubmix/gemini-3-flash-preview)
+## fields 264adbd5 (7 models, e.g. aihubmix/gemini-3-flash-preview)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=high [minimal low medium high]
@@ -101,7 +101,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 398fb602 (2 models, e.g. openrouter/qwen/qwen3.8-27b:free)
+## fields 398fb602 (1 models, e.g. qwen3.8-plus)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=- [disabled automatic]
@@ -142,7 +142,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 3e731a43 (43 models, e.g. grok-4.20)
+## fields 3e731a43 (41 models, e.g. grok-4.20)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: xai default=high [low medium high xhigh]
@@ -191,7 +191,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 48046c0e (72 models, e.g. azure/eu/gpt-5)
+## fields 48046c0e (61 models, e.g. azure/eu/gpt-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [minimal low medium high]
@@ -240,7 +240,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 50665211 (65 models, e.g. azure/eu/o1-2024-12-17)
+## fields 50665211 (55 models, e.g. azure/eu/o1-2024-12-17)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [low medium high]
@@ -286,7 +286,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 5242c02e (36 models, e.g. dashscope/qwen3-next-80b-a3b-thinking)
+## fields 5242c02e (29 models, e.g. dashscope/qwen3-next-80b-a3b-thinking)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=automatic [automatic]
@@ -327,7 +327,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: automatic (<model> cannot disable thinking; using its lowest supported setting (automatic).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 5a3dba94 (59 models, e.g. azure/eu/gpt-6-astra)
+## fields 5a3dba94 (54 models, e.g. azure/apac/gpt-6.1-sol)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=- [none minimal low medium high xhigh max]
@@ -385,7 +385,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 68735238 (32 models, e.g. azure/eu/gpt-5.1)
+## fields 68735238 (27 models, e.g. azure/eu/gpt-5.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=none [none low medium high]
@@ -434,7 +434,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 6d9eda33 (10 models, e.g. deepinfra/google/gemini-2.5-pro)
+## fields 6d9eda33 (7 models, e.g. deepinfra/google/gemini-2.5-pro)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=- [low(1024) medium(8192) high(24576)]
@@ -528,7 +528,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: automatic (<model> cannot disable thinking; using its lowest supported setting (automatic).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 70282732 (28 models, e.g. aihubmix/qwen3.8-flash)
+## fields 70282732 (22 models, e.g. aihubmix/qwen3.8-flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=xhigh [disabled automatic low medium xhigh]
@@ -572,7 +572,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7242c71e (187 models, e.g. aihubmix/gpt-5.3-codex)
+## fields 7242c71e (161 models, e.g. aihubmix/gpt-5.3-codex)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=medium [none minimal low medium high xhigh]
@@ -627,7 +627,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 75cb1551 (6 models, e.g. gemini-3-pro)
+## fields 75cb1551 (5 models, e.g. gemini-3-pro)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=high [low high]
@@ -672,7 +672,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 79863098 (6 models, e.g. azure/eu/gpt-5-pro)
+## fields 79863098 (5 models, e.g. azure/eu/gpt-5-pro)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=high [high]
@@ -712,7 +712,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: high (<model> cannot disable thinking; using its lowest supported setting (high).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7af22a68 (436 models, e.g. aihubmix/claude-haiku-4-5)
+## fields 7af22a68 (399 models, e.g. aihubmix/claude-haiku-4-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -749,7 +749,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7cd6eaf6 (158 models, e.g. DeepSeek-V4-Flash)
+## fields 7cd6eaf6 (144 models, e.g. DeepSeek-V4-Flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: deepseek default=high [disabled high max]
@@ -795,7 +795,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 7d8e3822 (74 models, e.g. aihubmix/claude-fable-5)
+## fields 7d8e3822 (73 models, e.g. aihubmix/claude-fable-5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [low medium high xhigh max]
@@ -896,7 +896,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8a7ba322 (60 models, e.g. aihubmix/grok-4-20-non-reasoning)
+## fields 8a7ba322 (54 models, e.g. aihubmix/grok-4-20-non-reasoning)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: xai default=high [low medium high]
@@ -942,7 +942,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 8adf87b9 (15 models, e.g. deepinfra/google/gemini-2.5-flash)
+## fields 8adf87b9 (13 models, e.g. deepinfra/google/gemini-2.5-flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=- [none(0) low(1024) medium(8192) high(24576)]
@@ -996,7 +996,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9186288e (33 models, e.g. aihubmix/qwen3.6-max-preview)
+## fields 9186288e (24 models, e.g. aihubmix/qwen3.6-max-preview)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=- [disabled automatic low(2048) medium(8192) high(16384)]
@@ -1040,7 +1040,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 92eae6cd (6 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
+## fields 92eae6cd (5 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=xhigh [automatic low medium xhigh]
@@ -1084,7 +1084,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: automatic (<model> cannot disable thinking; using its lowest supported setting (automatic).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 94a111ce (232 models, e.g. aihubmix/qwen3-coder-next)
+## fields 94a111ce (208 models, e.g. aihubmix/qwen3-coder-next)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: qwen default=- [disabled automatic]
@@ -1125,7 +1125,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 97e18daf (1980 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
+## fields 97e18daf (1783 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
 provider custom:
   (no protocol)
     profile: none
@@ -1404,7 +1404,7 @@ provider dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9a276813 (575 models, e.g. 1024-x-1024/gpt-image-1.5)
+## fields 9a276813 (537 models, e.g. 1024-x-1024/gpt-image-1.5)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -1450,7 +1450,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields 9f8e939c (49 models, e.g. aihubmix/grok-build-0.1)
+## fields 9f8e939c (47 models, e.g. aihubmix/grok-build-0.1)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -1496,7 +1496,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: nothing (Reasoning controls for <model> are unknown; the runtime default was omitted.)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields ae431ad8 (8 models, e.g. aihubmix/gemini-3.1-pro-preview)
+## fields ae431ad8 (7 models, e.g. aihubmix/gemini-3.1-pro-preview)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=high [low medium high]
@@ -1598,7 +1598,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields cb2d68dd (72 models, e.g. aihubmix/claude-opus-4-8-think)
+## fields cb2d68dd (70 models, e.g. aihubmix/claude-opus-4-8-think)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: anthropic default=high [disabled low medium high xhigh max]
@@ -1653,7 +1653,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: disabled
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields d08f0d07 (13 models, e.g. deepinfra/google/gemini-3.5-flash)
+## fields d08f0d07 (11 models, e.g. deepinfra/google/gemini-3.5-flash)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=medium [minimal low medium high]
@@ -1755,7 +1755,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: low (<model> cannot disable thinking; using its lowest supported setting (low).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields dfc0340c (7 models, e.g. azure/eu/gpt-5.1-codex-max)
+## fields dfc0340c (5 models, e.g. azure/eu/gpt-5.1-codex-max)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: openai default=none [none low medium high xhigh]
@@ -1807,7 +1807,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: none
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields e6790487 (16 models, e.g. aihubmix/gemini-3.5-flash-lite)
+## fields e6790487 (13 models, e.g. aihubmix/gemini-3.5-flash-lite)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: google default=minimal [minimal low medium high]
@@ -1860,7 +1860,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off: minimal (<model> cannot disable thinking; using its lowest supported setting (minimal).)
     provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {}
 
-## fields e7f5c7af (93 models, e.g. azure_ai/FW-DeepSeek-V3.2)
+## fields e7f5c7af (89 models, e.g. azure_ai/FW-DeepSeek-V3.2)
 provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   (no protocol)
     profile: none
@@ -1960,7 +1960,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 0b2308d5 (9 models, e.g. global.xai.grok-4.6)
+## bodies 0b2308d5 (8 models, e.g. global.xai.grok-4.6)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2041,7 +2041,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 11f00057 (150 models, e.g. ai21.j2-mid-v1)
+## bodies 11f00057 (154 models, e.g. ai21.j2-mid-v1)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2112,7 +2112,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 1b5a78cb (82 models, e.g. aihubmix/deepseek-v4-flash)
+## bodies 1b5a78cb (74 models, e.g. aihubmix/deepseek-v4-flash)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default,automatic,none,minimal,low,medium,xhigh: {"max_tokens":1000,"temperature":0.7,"top_p":0.9}
@@ -2133,7 +2133,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 1edb4060 (1159 models, e.g. 1024-x-1024/gpt-image-1.5)
+## bodies 1edb4060 (1063 models, e.g. 1024-x-1024/gpt-image-1.5)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2178,7 +2178,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 2789b834 (41 models, e.g. azure/eu/gpt-5)
+## bodies 2789b834 (30 models, e.g. azure/eu/gpt-5)
   openai-chat-v1
     runtime default off,minimal: {"max_completion_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2234,7 +2234,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingBudget":8192},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingBudget":24576},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies 29b7b224 (63 models, e.g. aihubmix/gemini-3.7-flash)
+## bodies 29b7b224 (58 models, e.g. aihubmix/gemini-3.7-flash)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2256,7 +2256,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 29f44933 (11 models, e.g. global.openai.gpt-6-astra)
+## bodies 29f44933 (10 models, e.g. global.openai.gpt-6-astra)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2317,7 +2317,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 2c52eb91 (9 models, e.g. aihubmix/claude-fable-5)
+## bodies 2c52eb91 (8 models, e.g. aihubmix/claude-fable-5)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2423,7 +2423,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"medium"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"high"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies 48429573 (224 models, e.g. aihubmix/qwen3-coder-next)
+## bodies 48429573 (200 models, e.g. aihubmix/qwen3-coder-next)
   openai-chat-v1
     runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2463,24 +2463,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 52bed383 (1 models, e.g. openrouter/qwen/qwen3.8-27b:free)
-  openai-chat-v1
-    runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    automatic: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-  openai-responses-v1
-    runtime default off,disabled: {"max_output_tokens":1000,"reasoning":{"effort":"none"},"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-    provider-default: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
-    automatic,none,minimal,low,medium,high,xhigh,max: {"include":["reasoning.encrypted_content"],"max_output_tokens":1000,"store":false,"temperature":0.7,"tool_choice":"required","top_p":0.9}
-  anthropic-messages-v1
-    runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-    provider-default: {"max_tokens":1000,"temperature":0.7,"top_k":40,"top_p":0.9}
-    automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":{"type":"any"},"top_k":40,"top_p":0.9}
-  google-generative-ai-v1
-    runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
-
-## bodies 54c17182 (26 models, e.g. aihubmix/qwen3.6-max-preview)
+## bodies 54c17182 (17 models, e.g. aihubmix/qwen3.6-max-preview)
   openai-chat-v1
     runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2548,7 +2531,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     medium: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingBudget":8192},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingBudget":24576},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies 56aa525f (141 models, e.g. aihubmix/gpt-5.3-codex)
+## bodies 56aa525f (115 models, e.g. aihubmix/gpt-5.3-codex)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2579,7 +2562,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 5feb3e82 (35 models, e.g. dashscope/qwen3-next-80b-a3b-thinking)
+## bodies 5feb3e82 (28 models, e.g. dashscope/qwen3-next-80b-a3b-thinking)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2594,7 +2577,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 6007d524 (17 models, e.g. azure/eu/o1-2024-12-17)
+## bodies 6007d524 (15 models, e.g. azure/eu/o1-2024-12-17)
   openai-chat-v1
     runtime default off,low: {"max_completion_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2616,7 +2599,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 60a25f63 (4 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
+## bodies 60a25f63 (3 models, e.g. aihubmix/qwen3.8-2.4t-a95b)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,high,max: {"enable_thinking":true,"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2723,7 +2706,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 6df581a7 (8 models, e.g. deepinfra/google/gemini-2.5-flash)
+## bodies 6df581a7 (6 models, e.g. deepinfra/google/gemini-2.5-flash)
   openai-chat-v1
     runtime default off,none: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2749,7 +2732,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 7c4c748f (31 models, e.g. azure/eu/o3-2025-04-16)
+## bodies 7c4c748f (23 models, e.g. azure/eu/o3-2025-04-16)
   openai-chat-v1
     runtime default off,low: {"max_completion_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2790,7 +2773,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies 8fcef879 (6 models, e.g. azure/eu/gpt-5.1-codex-max)
+## bodies 8fcef879 (4 models, e.g. azure/eu/gpt-5.1-codex-max)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2818,7 +2801,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies 98325674 (41 models, e.g. oci/xai.grok-4.20)
+## bodies 98325674 (39 models, e.g. oci/xai.grok-4.20)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2843,7 +2826,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies a3294578 (36 models, e.g. aihubmix/claude-opus-4-8-think)
+## bodies a3294578 (34 models, e.g. aihubmix/claude-opus-4-8-think)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2874,7 +2857,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies a9f48ec6 (8 models, e.g. openrouter/anthropic/claude-fable-5:batch)
+## bodies a9f48ec6 (5 models, e.g. vertex_ai/claude-fable-5@default)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2954,7 +2937,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies bda9263a (161 models, e.g. anthropic.claude-instant-v1)
+## bodies bda9263a (172 models, e.g. anthropic.claude-haiku-5-5)
   openai-chat-v1
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -2968,7 +2951,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies c9071d93 (49 models, e.g. aihubmix/gemini-3-flash-preview)
+## bodies c9071d93 (43 models, e.g. aihubmix/gemini-3-flash-preview)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3046,7 +3029,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies d0026c49 (27 models, e.g. azure/eu/gpt-5.1)
+## bodies d0026c49 (22 models, e.g. azure/eu/gpt-5.1)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3158,7 +3141,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     disabled,automatic,none,minimal,medium,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     high: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"thinkingConfig":{"thinkingLevel":"high"},"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
 
-## bodies d94899fc (4 models, e.g. openrouter/google/gemini-3-pro-preview)
+## bodies d94899fc (3 models, e.g. perplexity/google/gemini-3-pro-preview)
   openai-chat-v1
     runtime default off,low: {"max_tokens":1000,"reasoning_effort":"low","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3177,7 +3160,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies dd197f64 (4 models, e.g. azure/eu/gpt-5-pro)
+## bodies dd197f64 (3 models, e.g. azure/eu/gpt-5-pro)
   openai-chat-v1
     runtime default off,high: {"max_completion_tokens":1000,"reasoning_effort":"high","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3221,7 +3204,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies ddcbad0a (38 models, e.g. azure/eu/gpt-6-astra)
+## bodies ddcbad0a (34 models, e.g. azure/apac/gpt-6.1-sol)
   openai-chat-v1
     runtime default off,none: {"max_completion_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_completion_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3274,7 +3257,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies e543bd67 (24 models, e.g. aihubmix/qwen3.8-flash)
+## bodies e543bd67 (18 models, e.g. aihubmix/qwen3.8-flash)
   openai-chat-v1
     runtime default off,disabled: {"enable_thinking":false,"max_tokens":1000,"reasoning_effort":"none","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3352,7 +3335,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies f20e29e6 (1830 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
+## bodies f20e29e6 (1629 models, e.g. 1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0)
   openai-chat-v1
     runtime default off,automatic: {"max_tokens":1000,"temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3387,7 +3370,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
   google-generative-ai-v1
     runtime default off,provider-default,disabled,automatic,none,minimal,low,medium,high,xhigh,max: no request
 
-## bodies f250f9bc (13 models, e.g. aihubmix/gemini-3.1-pro-preview)
+## bodies f250f9bc (9 models, e.g. aihubmix/gemini-3.1-pro-preview)
   openai-chat-v1
     runtime default off,minimal: {"max_tokens":1000,"reasoning_effort":"minimal","temperature":0.7,"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3433,7 +3416,7 @@ provider custom,openai,anthropic,deepseek,google,xai,dashscope:
     runtime default off,disabled,automatic,none,minimal,low,medium,high,xhigh,max: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}
     provider-default: {"generationConfig":{"maxOutputTokens":1000,"temperature":0.7,"topK":40,"topP":0.9},"toolConfig":{"functionCallingConfig":{"mode":"AUTO"}}}
 
-## bodies f830728e (67 models, e.g. azure_ai/deepseek-r1)
+## bodies f830728e (61 models, e.g. azure_ai/deepseek-r1)
   openai-chat-v1
     runtime default off,disabled: {"max_tokens":1000,"temperature":0.7,"thinking":{"type":"disabled"},"tool_choice":"required","top_p":0.9}
     provider-default: {"max_tokens":1000,"temperature":0.7,"tool_choice":"auto","top_p":0.9}
@@ -3640,6 +3623,7 @@ amazon-nova/nova-lite-v1	97e18daf	f20e29e6
 amazon-nova/nova-micro-v1	97e18daf	f20e29e6
 amazon-nova/nova-premier-v1	97e18daf	f20e29e6
 amazon-nova/nova-pro-v1	97e18daf	f20e29e6
+amazon.nova-2-5-sonic	97e18daf	11f00057
 amazon.nova-2-lite-v1:0	97e18daf	f20e29e6
 amazon.nova-2-multimodal-embeddings-v1:0	97e18daf	f20e29e6
 amazon.nova-2-pro-preview-20251202-v1:0	97e18daf	f20e29e6
@@ -3647,6 +3631,7 @@ amazon.nova-2-sonic-v1:0	97e18daf	f20e29e6
 amazon.nova-canvas-v1:0	97e18daf	f20e29e6
 amazon.nova-lite-v1:0	97e18daf	f20e29e6
 amazon.nova-micro-v1:0	97e18daf	f20e29e6
+amazon.nova-premier-v1:0	97e18daf	f20e29e6
 amazon.nova-pro-v1:0	97e18daf	f20e29e6
 amazon.rerank-v1:0	97e18daf	f20e29e6
 amazon.titan-embed-g1-text-02	97e18daf	11f00057
@@ -3669,6 +3654,7 @@ anthropic.claude-fable-5	7d8e3822	b1731b06
 anthropic.claude-fable-5-1	7d8e3822	46fba062
 anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
 anthropic.claude-haiku-4-5@20251001	7af22a68	1edb4060
+anthropic.claude-haiku-5-5	7af22a68	bda9263a
 anthropic.claude-instant-v1	7af22a68	bda9263a
 anthropic.claude-mythos-5-1	7d8e3822	46fba062
 anthropic.claude-mythos-preview	7af22a68	bda9263a
@@ -3709,6 +3695,7 @@ apac.amazon.nova-micro-v1:0	97e18daf	f20e29e6
 apac.amazon.nova-pro-v1:0	97e18daf	f20e29e6
 apac.anthropic.claude-fable-5	7d8e3822	b1731b06
 apac.anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+apac.anthropic.claude-haiku-5-5	7af22a68	bda9263a
 apac.anthropic.claude-mythos-preview	7af22a68	bda9263a
 apac.anthropic.claude-opus-4-7	cb2d68dd	0c062668
 apac.anthropic.claude-opus-4-8	cb2d68dd	0c062668
@@ -3724,6 +3711,7 @@ assemblyai/best	97e18daf	f20e29e6
 assemblyai/nano	97e18daf	f20e29e6
 au.anthropic.claude-fable-5	7d8e3822	b1731b06
 au.anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+au.anthropic.claude-haiku-5-5	7af22a68	bda9263a
 au.anthropic.claude-mythos-preview	7af22a68	bda9263a
 au.anthropic.claude-opus-4-6-v1	aeebecb0	6543a34c
 au.anthropic.claude-opus-4-7	cb2d68dd	0c062668
@@ -3739,6 +3727,7 @@ aws_polly/long-form	97e18daf	f20e29e6
 aws_polly/neural	97e18daf	f20e29e6
 aws_polly/standard	97e18daf	f20e29e6
 azure/ada	97e18daf	f20e29e6
+azure/apac/gpt-6.1-sol	5a3dba94	ddcbad0a
 azure/chat-latest	97e18daf	f20e29e6
 azure/codex-mini	97e18daf	f20e29e6
 azure/command-r-plus	97e18daf	f20e29e6
@@ -3790,6 +3779,7 @@ azure/eu/gpt-5.6-terra	7242c71e	56aa525f
 azure/eu/gpt-6-astra	5a3dba94	ddcbad0a
 azure/eu/gpt-6-luna	5a3dba94	ddcbad0a
 azure/eu/gpt-6-sol	5a3dba94	ddcbad0a
+azure/eu/gpt-6.1-sol	5a3dba94	ddcbad0a
 azure/eu/o1-2024-12-17	50665211	6007d524
 azure/eu/o1-mini	50665211	6007d524
 azure/eu/o1-mini-2024-09-12	50665211	6007d524
@@ -3952,6 +3942,7 @@ azure/medium/1536-x-1024/gpt-image-1	9a276813	1edb4060
 azure/medium/1536-x-1024/gpt-image-1-mini	9a276813	1edb4060
 azure/mistral-large-2402	97e18daf	f20e29e6
 azure/mistral-large-latest	97e18daf	f20e29e6
+azure/model-router	97e18daf	f20e29e6
 azure/o1	50665211	6007d524
 azure/o1-2024-12-17	50665211	6007d524
 azure/o1-mini	50665211	6007d524
@@ -4033,6 +4024,7 @@ azure/us/gpt-5.6-terra	7242c71e	56aa525f
 azure/us/gpt-6-astra	5a3dba94	ddcbad0a
 azure/us/gpt-6-luna	5a3dba94	ddcbad0a
 azure/us/gpt-6-sol	5a3dba94	ddcbad0a
+azure/us/gpt-6.1-sol	5a3dba94	ddcbad0a
 azure/us/gpt-chat-latest	9a276813	1edb4060
 azure/us/o1-2024-12-17	50665211	6007d524
 azure/us/o1-mini	50665211	6007d524
@@ -4045,8 +4037,11 @@ azure/us/o4-mini-2025-04-16	50665211	7c4c748f
 azure/us/text-embedding-3-large	97e18daf	f20e29e6
 azure/us/text-embedding-3-small	97e18daf	f20e29e6
 azure/us/text-embedding-ada-002	97e18daf	f20e29e6
+azure/whisper	97e18daf	f20e29e6
 azure/whisper-1	97e18daf	f20e29e6
 azure_ai/Codestral-2501	97e18daf	f20e29e6
+azure_ai/Cohere-Embed-V5-Fast	97e18daf	f20e29e6
+azure_ai/Cohere-Embed-V5-Pro	97e18daf	f20e29e6
 azure_ai/Cohere-command-a-plus-05-2026	97e18daf	f20e29e6
 azure_ai/Cohere-embed-v3-english	97e18daf	f20e29e6
 azure_ai/Cohere-embed-v3-multilingual	97e18daf	f20e29e6
@@ -4088,6 +4083,7 @@ azure_ai/MAI-Image-2.6-Flash	97e18daf	f20e29e6
 azure_ai/MAI-Thinking-1	97e18daf	f20e29e6
 azure_ai/Meta-Llama-3-70B-Instruct	97e18daf	f20e29e6
 azure_ai/Meta-Llama-3.1-70B-Instruct	97e18daf	f20e29e6
+azure_ai/Microsoft-Decision-1	97e18daf	f20e29e6
 azure_ai/Phi-3-medium-128k-instruct	97e18daf	f20e29e6
 azure_ai/Phi-3-medium-4k-instruct	97e18daf	f20e29e6
 azure_ai/Phi-3-mini-128k-instruct	97e18daf	f20e29e6
@@ -4105,6 +4101,7 @@ azure_ai/Phi-4-reasoning	97e18daf	f20e29e6
 azure_ai/claude-fable-5	7d8e3822	2c52eb91
 azure_ai/claude-fable-5-1	7d8e3822	cbb882e7
 azure_ai/claude-haiku-4-5	7af22a68	1edb4060
+azure_ai/claude-haiku-5-5	7af22a68	1edb4060
 azure_ai/claude-opus-4-5	890864de	ccbf4d97
 azure_ai/claude-opus-4-6	aeebecb0	dd588f9f
 azure_ai/claude-opus-4-7	cb2d68dd	a3294578
@@ -4164,6 +4161,7 @@ azure_ai/grok-4-fast-non-reasoning	8a7ba322	29b7b224
 azure_ai/grok-4-fast-reasoning	8a7ba322	29b7b224
 azure_ai/grok-4.3	8a7ba322	29b7b224
 azure_ai/grok-4.6	8a7ba322	29b7b224
+azure_ai/grok-4.7	8a7ba322	29b7b224
 azure_ai/grok-code-fast-1	9f8e939c	1edb4060
 azure_ai/jais-30b-chat	97e18daf	f20e29e6
 azure_ai/jamba-instruct	97e18daf	f20e29e6
@@ -4337,6 +4335,7 @@ bedrock/us-gov-east-1/amazon.titan-text-lite-v1	97e18daf	f20e29e6
 bedrock/us-gov-east-1/amazon.titan-text-premier-v1:0	97e18daf	f20e29e6
 bedrock/us-gov-east-1/anthropic.claude-fable-5-1	7d8e3822	cbb882e7
 bedrock/us-gov-east-1/anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+bedrock/us-gov-east-1/anthropic.claude-haiku-5-5	7af22a68	1edb4060
 bedrock/us-gov-east-1/anthropic.claude-opus-4-8	cb2d68dd	a3294578
 bedrock/us-gov-east-1/anthropic.claude-opus-5	cb2d68dd	a3294578
 bedrock/us-gov-east-1/anthropic.claude-opus-5-5	7d8e3822	cbb882e7
@@ -4363,6 +4362,7 @@ bedrock/us-gov-west-1/amazon.titan-text-lite-v1	97e18daf	f20e29e6
 bedrock/us-gov-west-1/amazon.titan-text-premier-v1:0	97e18daf	f20e29e6
 bedrock/us-gov-west-1/anthropic.claude-fable-5-1	7d8e3822	cbb882e7
 bedrock/us-gov-west-1/anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+bedrock/us-gov-west-1/anthropic.claude-haiku-5-5	7af22a68	1edb4060
 bedrock/us-gov-west-1/anthropic.claude-opus-4-8	cb2d68dd	a3294578
 bedrock/us-gov-west-1/anthropic.claude-opus-5	cb2d68dd	a3294578
 bedrock/us-gov-west-1/anthropic.claude-opus-5-5	7d8e3822	cbb882e7
@@ -4401,6 +4401,7 @@ bedrock/us-west-2/qwen.qwen3-coder-next	94a111ce	48429573
 bedrock/us-west-2/zai.glm-5	97e18daf	f20e29e6
 bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0	7af22a68	1edb4060
 bedrock_mantle/anthropic.claude-haiku-4-5	7af22a68	1edb4060
+bedrock_mantle/anthropic.claude-haiku-5-5	7af22a68	1edb4060
 bedrock_mantle/anthropic.claude-opus-5-5	7d8e3822	cbb882e7
 bedrock_mantle/anthropic.claude-sonnet-5-5	7d8e3822	cbb882e7
 bedrock_mantle/deepseek.v3.1	e7f5c7af	1edb4060
@@ -4433,6 +4434,7 @@ bedrock_mantle/us-gov-east-1/openai.gpt-5.4	7242c71e	6c82226f
 bedrock_mantle/us-gov-east-1/openai.gpt-oss-120b	9a276813	1edb4060
 bedrock_mantle/us-gov-east-1/openai.gpt-oss-20b	9a276813	1edb4060
 bedrock_mantle/us-gov-east-1/xai.grok-4.6	8a7ba322	29b7b224
+bedrock_mantle/us-gov-west-1/anthropic.claude-haiku-5-5	7af22a68	1edb4060
 bedrock_mantle/us-gov-west-1/anthropic.claude-opus-5-5	7d8e3822	cbb882e7
 bedrock_mantle/us-gov-west-1/anthropic.claude-sonnet-5-5	7d8e3822	cbb882e7
 bedrock_mantle/us-gov-west-1/google.gemma-4-26b-a4b	97e18daf	f20e29e6
@@ -4485,6 +4487,11 @@ chatgpt/gpt-5.5	7242c71e	56aa525f
 chatgpt/gpt-5.6-luna	7242c71e	56aa525f
 chatgpt/gpt-5.6-sol	7242c71e	56aa525f
 chatgpt/gpt-5.6-terra	7242c71e	56aa525f
+chatgpt/gpt-6-astra	5a3dba94	ddcbad0a
+chatgpt/gpt-6-luna	5a3dba94	ddcbad0a
+chatgpt/gpt-6-sol	5a3dba94	ddcbad0a
+chatgpt/gpt-6.1-sol	5a3dba94	ddcbad0a
+chatgpt/gpt-rosalind-discovery	9a276813	1edb4060
 claude-3-5-haiku-20241022	7af22a68	bda9263a
 claude-3-5-haiku-latest	7af22a68	bda9263a
 claude-3-5-sonnet-20241022	7af22a68	bda9263a
@@ -4501,6 +4508,7 @@ claude-fable-5.1	7d8e3822	46fba062
 claude-haiku-4-5	7af22a68	bda9263a
 claude-haiku-4-5-20251001	7af22a68	bda9263a
 claude-haiku-5	7af22a68	bda9263a
+claude-haiku-5-5	7af22a68	bda9263a
 claude-mythos-5	7d8e3822	b1731b06
 claude-mythos-5-1	7d8e3822	46fba062
 claude-mythos-preview	7af22a68	bda9263a
@@ -4645,6 +4653,7 @@ dashscope/qwen3.8-flash	70282732	e543bd67
 dashscope/qwen3.8-max	70282732	e543bd67
 dashscope/qwen3.8-omni-flash	70282732	e543bd67
 dashscope/qwq-plus	97e18daf	f20e29e6
+databricks/ai_decide	97e18daf	f20e29e6
 databricks/databricks-bge-large-en	97e18daf	f20e29e6
 databricks/databricks-claude-fable-5	7d8e3822	2c52eb91
 databricks/databricks-claude-fable-5-1	7d8e3822	cbb882e7
@@ -4704,6 +4713,7 @@ databricks/databricks-kimi-k3	97e18daf	f20e29e6
 databricks/databricks-llama-4-maverick	97e18daf	f20e29e6
 databricks/databricks-meta-llama-3-1-8b-instruct	97e18daf	f20e29e6
 databricks/databricks-meta-llama-3-3-70b-instruct	97e18daf	f20e29e6
+databricks/databricks-openjev-qwen35-4b	94a111ce	48429573
 databricks/databricks-qwen3-embedding-0-6b	94a111ce	48429573
 databricks/databricks-qwen3-next-80b-a3b-instruct	94a111ce	48429573
 databricks/databricks-qwen35-122b-a10b	94a111ce	48429573
@@ -4941,6 +4951,7 @@ eu.anthropic.claude-3-opus-20240229-v1:0	7af22a68	1edb4060
 eu.anthropic.claude-fable-5	7d8e3822	b1731b06
 eu.anthropic.claude-fable-5-1	7d8e3822	46fba062
 eu.anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+eu.anthropic.claude-haiku-5-5	7af22a68	bda9263a
 eu.anthropic.claude-opus-4-1-20250805-v1:0	7af22a68	1edb4060
 eu.anthropic.claude-opus-4-20250514-v1:0	7af22a68	1edb4060
 eu.anthropic.claude-opus-4-5-20251101-v1:0	890864de	ccbf4d97
@@ -5185,7 +5196,6 @@ fireworks-ai-embedding-up-to-150m	97e18daf	11f00057
 fireworks-ai-moe-up-to-56b	97e18daf	11f00057
 fireworks-ai-up-to-4b	97e18daf	11f00057
 fireworks_ai/WhereIsAI/UAE-Large-V1	97e18daf	f20e29e6
-fireworks_ai/accounts/fireworks/models/	97e18daf	f20e29e6
 fireworks_ai/accounts/fireworks/models/SSD-1B	97e18daf	f20e29e6
 fireworks_ai/accounts/fireworks/models/chronos-hermes-13b-v2	97e18daf	f20e29e6
 fireworks_ai/accounts/fireworks/models/code-llama-13b	97e18daf	f20e29e6
@@ -5597,6 +5607,7 @@ gemini-flash-latest	7af22a68	bda9263a
 gemini-flash-lite-latest	7af22a68	bda9263a
 gemini-live-2.5-flash-native-audio	7af22a68	bda9263a
 gemini-live-2.5-flash-preview-native-audio-09-2025	7af22a68	bda9263a
+gemini-nano-banana-2.1	7af22a68	bda9263a
 gemini-omni-flash-preview	7af22a68	bda9263a
 gemini-pro-latest	7af22a68	bda9263a
 gemini-robotics-er-1.5-preview	7af22a68	bda9263a
@@ -5648,6 +5659,7 @@ gemini/gemini-flash-lite-latest	7af22a68	1edb4060
 gemini/gemini-gemma-2-27b-it	7af22a68	1edb4060
 gemini/gemini-gemma-2-9b-it	7af22a68	1edb4060
 gemini/gemini-live-2.5-flash-preview-native-audio-09-2025	7af22a68	1edb4060
+gemini/gemini-nano-banana-2.1	7af22a68	1edb4060
 gemini/gemini-omni-1.1-flash	7af22a68	1edb4060
 gemini/gemini-omni-flash-preview	7af22a68	1edb4060
 gemini/gemini-pro-latest	7af22a68	1edb4060
@@ -5678,12 +5690,18 @@ gigachat/GigaChat-2	97e18daf	f20e29e6
 gigachat/GigaChat-2-Max	97e18daf	f20e29e6
 gigachat/GigaChat-2-Pro	97e18daf	f20e29e6
 gigachat/GigaEmbeddings-3B-2025-09	97e18daf	f20e29e6
+github_copilot/claude-fable-5	7d8e3822	2c52eb91
+github_copilot/claude-fable-5.1	7d8e3822	cbb882e7
 github_copilot/claude-haiku-4.5	7af22a68	1edb4060
-github_copilot/claude-opus-4.5	7af22a68	1edb4060
-github_copilot/claude-opus-4.6-fast	7af22a68	1edb4060
-github_copilot/claude-opus-41	7af22a68	1edb4060
-github_copilot/claude-sonnet-4	7af22a68	1edb4060
-github_copilot/claude-sonnet-4.5	7af22a68	1edb4060
+github_copilot/claude-haiku-5.5	7af22a68	1edb4060
+github_copilot/claude-opus-4.8	7af22a68	1edb4060
+github_copilot/claude-opus-4.8-fast	7af22a68	1edb4060
+github_copilot/claude-opus-5	cb2d68dd	a3294578
+github_copilot/claude-opus-5.5	7d8e3822	cbb882e7
+github_copilot/claude-sonnet-5	cb2d68dd	a3294578
+github_copilot/claude-sonnet-5.5	7d8e3822	cbb882e7
+github_copilot/gemini-3.7-flash	d0fa1e3c	29b7b224
+github_copilot/gemini-3.8-flash	d0fa1e3c	29b7b224
 github_copilot/gpt-3.5-turbo	9a276813	1edb4060
 github_copilot/gpt-3.5-turbo-0613	9a276813	1edb4060
 github_copilot/gpt-4	9a276813	1edb4060
@@ -5698,14 +5716,20 @@ github_copilot/gpt-4o-2024-08-06	9a276813	1edb4060
 github_copilot/gpt-4o-2024-11-20	9a276813	1edb4060
 github_copilot/gpt-4o-mini	9a276813	1edb4060
 github_copilot/gpt-4o-mini-2024-07-18	9a276813	1edb4060
-github_copilot/gpt-5	48046c0e	2789b834
 github_copilot/gpt-5-mini	48046c0e	2789b834
-github_copilot/gpt-5.1	68735238	d0026c49
-github_copilot/gpt-5.1-codex-max	dfc0340c	8fcef879
-github_copilot/gpt-5.2	7242c71e	56aa525f
 github_copilot/gpt-5.3-codex	7242c71e	56aa525f
-github_copilot/mai-code-1-flash	97e18daf	f20e29e6
-github_copilot/mai-code-1-flash-internal	97e18daf	f20e29e6
+github_copilot/gpt-5.4	7242c71e	56aa525f
+github_copilot/gpt-5.4-mini	7242c71e	56aa525f
+github_copilot/gpt-5.5	7242c71e	56aa525f
+github_copilot/gpt-5.6-luna	7242c71e	56aa525f
+github_copilot/gpt-5.6-sol	7242c71e	56aa525f
+github_copilot/gpt-5.6-terra	7242c71e	56aa525f
+github_copilot/gpt-6-astra	5a3dba94	ddcbad0a
+github_copilot/gpt-6-luna	5a3dba94	ddcbad0a
+github_copilot/gpt-6-sol	5a3dba94	ddcbad0a
+github_copilot/gpt-6.1-sol	5a3dba94	ddcbad0a
+github_copilot/kimi-k3	97e18daf	f20e29e6
+github_copilot/mai-code-1.1-flash	97e18daf	f20e29e6
 github_copilot/text-embedding-3-small	97e18daf	f20e29e6
 github_copilot/text-embedding-3-small-inference	97e18daf	f20e29e6
 github_copilot/text-embedding-ada-002	97e18daf	f20e29e6
@@ -5715,6 +5739,7 @@ global.amazon.nova-2-lite-v1:0	97e18daf	f20e29e6
 global.anthropic.claude-fable-5	7d8e3822	b1731b06
 global.anthropic.claude-fable-5-1	7d8e3822	46fba062
 global.anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+global.anthropic.claude-haiku-5-5	7af22a68	bda9263a
 global.anthropic.claude-mythos-5-1	7d8e3822	46fba062
 global.anthropic.claude-opus-4-5-20251101-v1:0	890864de	ccbf4d97
 global.anthropic.claude-opus-4-6-v1	aeebecb0	6543a34c
@@ -5739,8 +5764,10 @@ global.openai.gpt-6-luna	5a3dba94	29f44933
 global.openai.gpt-6-sol	5a3dba94	29f44933
 global.openai.gpt-6.1-sol	5a3dba94	29f44933
 global.twelvelabs.pegasus-1-2-v1:0	97e18daf	f20e29e6
+global.twelvelabs.pegasus-1-5-v1:0	97e18daf	f20e29e6
 global.xai.grok-4.6	8a7ba322	0b2308d5
 global.xai.grok-4.7	8a7ba322	0b2308d5
+global.zai.glm-5.3	97e18daf	11f00057
 gmi/MiniMaxAI/MiniMax-M2.1	9f8e939c	1edb4060
 gmi/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8	94a111ce	48429573
 gmi/anthropic/claude-opus-4	7af22a68	1edb4060
@@ -5882,6 +5909,7 @@ gpt-realtime-mini	9a276813	bda9263a
 gpt-realtime-mini-2025-12-15	9a276813	bda9263a
 gpt-realtime-translate	9a276813	bda9263a
 gpt-realtime-whisper	9a276813	bda9263a
+gpt-rosalind-discovery	9a276813	bda9263a
 gpt-rosalind-research	9a276813	bda9263a
 gpt-transcribe	9a276813	bda9263a
 gradient_ai/alibaba-qwen3-32b	94a111ce	48429573
@@ -5946,6 +5974,7 @@ hyperbolic/meta-llama/Meta-Llama-3.1-405B-Instruct	97e18daf	f20e29e6
 hyperbolic/meta-llama/Meta-Llama-3.1-70B-Instruct	97e18daf	f20e29e6
 hyperbolic/meta-llama/Meta-Llama-3.1-8B-Instruct	97e18daf	f20e29e6
 hyperbolic/moonshotai/Kimi-K2-Instruct	97e18daf	f20e29e6
+in.moonshotai.kimi-k3	97e18daf	11f00057
 inception/mercury-2	97e18daf	f20e29e6
 inception/mercury-2.5	97e18daf	f20e29e6
 j2-light	97e18daf	11f00057
@@ -5965,6 +5994,7 @@ jev-latest	97e18daf	11f00057
 jev-preview	97e18daf	11f00057
 jina-reranker-v2-base-multilingual	97e18daf	11f00057
 jp.anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+jp.anthropic.claude-haiku-5-5	7af22a68	bda9263a
 jp.anthropic.claude-opus-4-7	cb2d68dd	0c062668
 jp.anthropic.claude-opus-4-8	cb2d68dd	0c062668
 jp.anthropic.claude-opus-5	cb2d68dd	0c062668
@@ -6089,6 +6119,7 @@ meta_llama/Llama-3.3-70B-Instruct	97e18daf	f20e29e6
 meta_llama/Llama-3.3-8B-Instruct	97e18daf	f20e29e6
 meta_llama/Llama-4-Maverick-17B-128E-Instruct-FP8	97e18daf	f20e29e6
 meta_llama/Llama-4-Scout-17B-16E-Instruct-FP8	97e18daf	f20e29e6
+microsoft_365_copilot/chat	97e18daf	f20e29e6
 minimax.minimax-m2	97e18daf	11f00057
 minimax.minimax-m2.1	97e18daf	11f00057
 minimax.minimax-m2.5	97e18daf	11f00057
@@ -6150,6 +6181,8 @@ mistral/mistral-embed	97e18daf	f20e29e6
 mistral/mistral-embed-2312	97e18daf	f20e29e6
 mistral/mistral-large-2512	97e18daf	f20e29e6
 mistral/mistral-large-3	97e18daf	f20e29e6
+mistral/mistral-large-4	97e18daf	f20e29e6
+mistral/mistral-large-4-0	97e18daf	f20e29e6
 mistral/mistral-large-latest	97e18daf	f20e29e6
 mistral/mistral-medium	97e18daf	f20e29e6
 mistral/mistral-medium-2604	97e18daf	f20e29e6
@@ -6523,7 +6556,6 @@ omni-moderation-2024-09-26	97e18daf	11f00057
 omni-moderation-latest	97e18daf	11f00057
 openai.gpt-6-luna	5a3dba94	29f44933
 openai.gpt-6-sol	5a3dba94	29f44933
-openai.gpt-6.1-sol	5a3dba94	29f44933
 openai.gpt-oss-120b-1:0	9a276813	1edb4060
 openai.gpt-oss-20b-1:0	9a276813	1edb4060
 openai.gpt-oss-safeguard-120b	9a276813	bda9263a
@@ -6535,496 +6567,6 @@ openai/sora-2	9a276813	1edb4060
 openai/sora-2-pro	9a276813	1edb4060
 openai/sora-2-pro-high-res	9a276813	1edb4060
 openai/unknown-model	9a276813	1edb4060
-openrouter/aion-labs/aion-2.0	97e18daf	f20e29e6
-openrouter/aion-labs/aion-3.0	97e18daf	f20e29e6
-openrouter/aion-labs/aion-3.0-mini	97e18daf	f20e29e6
-openrouter/aion-labs/aion-3.5	97e18daf	f20e29e6
-openrouter/aion-labs/aion-3.5-mini	97e18daf	f20e29e6
-openrouter/aion-labs/aion-rp-llama-3.1-8b	97e18daf	f20e29e6
-openrouter/amazon/nova-2-lite-v1	97e18daf	f20e29e6
-openrouter/amazon/nova-lite-v1	97e18daf	f20e29e6
-openrouter/amazon/nova-micro-v1	97e18daf	f20e29e6
-openrouter/amazon/nova-premier-v1	97e18daf	f20e29e6
-openrouter/amazon/nova-pro-v1	97e18daf	f20e29e6
-openrouter/anthracite-org/magnum-v4-72b	97e18daf	f20e29e6
-openrouter/anthropic/claude-3-haiku	7af22a68	1edb4060
-openrouter/anthropic/claude-3.5-sonnet	7af22a68	1edb4060
-openrouter/anthropic/claude-3.7-sonnet	7af22a68	1edb4060
-openrouter/anthropic/claude-fable-5	7d8e3822	2c52eb91
-openrouter/anthropic/claude-fable-5.1	7d8e3822	cbb882e7
-openrouter/anthropic/claude-fable-5.1:batch	7d8e3822	2c52eb91
-openrouter/anthropic/claude-fable-5:batch	7af22a68	a9f48ec6
-openrouter/anthropic/claude-haiku-4.5	7af22a68	1edb4060
-openrouter/anthropic/claude-haiku-4.5:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.1	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.1:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.5	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.5:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.6	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.6:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.7	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.7:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.8	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-4.8:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-opus-5	cb2d68dd	a3294578
-openrouter/anthropic/claude-opus-5.5	7d8e3822	cbb882e7
-openrouter/anthropic/claude-opus-5.5:batch	cb2d68dd	a3294578
-openrouter/anthropic/claude-opus-5:batch	7af22a68	a9f48ec6
-openrouter/anthropic/claude-sonnet-4	7af22a68	1edb4060
-openrouter/anthropic/claude-sonnet-4.5	7af22a68	1edb4060
-openrouter/anthropic/claude-sonnet-4.5:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-sonnet-4.6	7af22a68	1edb4060
-openrouter/anthropic/claude-sonnet-4.6:batch	7af22a68	1edb4060
-openrouter/anthropic/claude-sonnet-5	cb2d68dd	a3294578
-openrouter/anthropic/claude-sonnet-5.5	7d8e3822	cbb882e7
-openrouter/anthropic/claude-sonnet-5.5:batch	cb2d68dd	a3294578
-openrouter/anthropic/claude-sonnet-5:batch	7af22a68	a9f48ec6
-openrouter/apodex/apodex-1.1-mini:free	97e18daf	f20e29e6
-openrouter/arcee-ai/trinity-large-thinking	97e18daf	f20e29e6
-openrouter/baidu/ernie-4.5-vl-424b-a47b	97e18daf	f20e29e6
-openrouter/bytedance-seed/seed-1.6	97e18daf	f20e29e6
-openrouter/bytedance-seed/seed-1.6-flash	97e18daf	f20e29e6
-openrouter/bytedance-seed/seed-2-1-turbo	97e18daf	f20e29e6
-openrouter/bytedance-seed/seed-2.0-code	97e18daf	f20e29e6
-openrouter/bytedance-seed/seed-2.0-lite	97e18daf	f20e29e6
-openrouter/bytedance-seed/seed-2.0-mini	97e18daf	f20e29e6
-openrouter/bytedance/ui-tars-1.5-7b	97e18daf	f20e29e6
-openrouter/cognitivecomputations/dolphin-mistral-24b-venice-edition	97e18daf	f20e29e6
-openrouter/cohere/command-a	97e18daf	f20e29e6
-openrouter/cohere/command-a-plus	97e18daf	f20e29e6
-openrouter/cohere/command-r-08-2024	97e18daf	f20e29e6
-openrouter/cohere/command-r-plus-08-2024	97e18daf	f20e29e6
-openrouter/cohere/command-r7b-12-2024	97e18daf	f20e29e6
-openrouter/cohere/north-mini-code:free	97e18daf	f20e29e6
-openrouter/deepseek/deepseek-chat	7cd6eaf6	f830728e
-openrouter/deepseek/deepseek-chat-v3-0324	7cd6eaf6	f830728e
-openrouter/deepseek/deepseek-chat-v3.1	7cd6eaf6	f830728e
-openrouter/deepseek/deepseek-r1	7cd6eaf6	f830728e
-openrouter/deepseek/deepseek-r1-0528	7cd6eaf6	f830728e
-openrouter/deepseek/deepseek-r1-distill-llama-70b	7cd6eaf6	f830728e
-openrouter/deepseek/deepseek-v3.1-terminus	e7f5c7af	1edb4060
-openrouter/deepseek/deepseek-v3.2	e7f5c7af	1edb4060
-openrouter/deepseek/deepseek-v3.2-exp	e7f5c7af	1edb4060
-openrouter/deepseek/deepseek-v4-flash	7cd6eaf6	1b5a78cb
-openrouter/deepseek/deepseek-v4-flash-0731	7cd6eaf6	1b5a78cb
-openrouter/deepseek/deepseek-v4-flash-vision-exp	7cd6eaf6	1b5a78cb
-openrouter/deepseek/deepseek-v4-pro	7cd6eaf6	1b5a78cb
-openrouter/deepseek/deepseek-v4-pro-0813	7cd6eaf6	1b5a78cb
-openrouter/deepseek/deepseek-v4.1-flash	7cd6eaf6	1b5a78cb
-openrouter/deepseek/deepseek-v4.1-flash:batch	7cd6eaf6	1b5a78cb
-openrouter/dots-studio/dots-3-note-preview:free	97e18daf	f20e29e6
-openrouter/fireworks/ember-1	97e18daf	f20e29e6
-openrouter/google/gemini-2.5-flash	8adf87b9	6df581a7
-openrouter/google/gemini-2.5-flash-image	7af22a68	1edb4060
-openrouter/google/gemini-2.5-flash-lite	8adf87b9	6df581a7
-openrouter/google/gemini-2.5-flash-lite:batch	7af22a68	1edb4060
-openrouter/google/gemini-2.5-flash:batch	7af22a68	1edb4060
-openrouter/google/gemini-2.5-pro	6d9eda33	f250f9bc
-openrouter/google/gemini-2.5-pro-preview	6d9eda33	f250f9bc
-openrouter/google/gemini-2.5-pro-preview-05-06	6d9eda33	f250f9bc
-openrouter/google/gemini-2.5-pro:batch	7af22a68	1edb4060
-openrouter/google/gemini-3-flash-preview	264adbd5	c9071d93
-openrouter/google/gemini-3-flash-preview:batch	7af22a68	1edb4060
-openrouter/google/gemini-3-pro-image	7af22a68	1edb4060
-openrouter/google/gemini-3-pro-image-preview	7af22a68	1edb4060
-openrouter/google/gemini-3-pro-preview	75cb1551	d94899fc
-openrouter/google/gemini-3.1-flash-image	7af22a68	1edb4060
-openrouter/google/gemini-3.1-flash-image-preview	7af22a68	1edb4060
-openrouter/google/gemini-3.1-flash-lite	e6790487	c9071d93
-openrouter/google/gemini-3.1-flash-lite-image	7af22a68	1edb4060
-openrouter/google/gemini-3.1-flash-lite-preview	e6790487	c9071d93
-openrouter/google/gemini-3.1-flash-lite:batch	7af22a68	1edb4060
-openrouter/google/gemini-3.1-pro-preview	ae431ad8	f250f9bc
-openrouter/google/gemini-3.1-pro-preview-customtools	7af22a68	1edb4060
-openrouter/google/gemini-3.1-pro-preview:batch	7af22a68	1edb4060
-openrouter/google/gemini-3.5-flash	d08f0d07	c9071d93
-openrouter/google/gemini-3.5-flash-lite	e6790487	c9071d93
-openrouter/google/gemini-3.5-flash-lite:batch	7af22a68	1edb4060
-openrouter/google/gemini-3.5-flash:batch	7af22a68	1edb4060
-openrouter/google/gemini-3.6-flash	d08f0d07	c9071d93
-openrouter/google/gemini-3.6-flash:batch	7af22a68	1edb4060
-openrouter/google/gemini-3.7-flash	d0fa1e3c	29b7b224
-openrouter/google/gemini-3.7-flash:batch	7af22a68	1edb4060
-openrouter/google/gemini-3.8-flash	d0fa1e3c	29b7b224
-openrouter/google/gemini-3.8-flash:batch	7af22a68	1edb4060
-openrouter/google/gemma-2-27b-it	7af22a68	1edb4060
-openrouter/google/gemma-3-12b-it	7af22a68	1edb4060
-openrouter/google/gemma-3-27b-it	7af22a68	1edb4060
-openrouter/google/gemma-3-4b-it	7af22a68	1edb4060
-openrouter/google/gemma-4-26b-a4b-it	7af22a68	1edb4060
-openrouter/google/gemma-4-26b-a4b-it:free	7af22a68	1edb4060
-openrouter/google/gemma-4-31b-it	7af22a68	1edb4060
-openrouter/google/gemma-4-31b-it:free	7af22a68	1edb4060
-openrouter/gryphe/mythomax-l2-13b	97e18daf	f20e29e6
-openrouter/ibm-granite/granite-4.0-h-micro	97e18daf	f20e29e6
-openrouter/ibm-granite/granite-4.2-8b	97e18daf	f20e29e6
-openrouter/inception/mercury-2	97e18daf	f20e29e6
-openrouter/inception/mercury-2.5	97e18daf	f20e29e6
-openrouter/inclusionai/ling-3.0-flash	97e18daf	f20e29e6
-openrouter/inclusionai/ling-3.0-flash-fin	97e18daf	f20e29e6
-openrouter/inclusionai/ling-3.0-flash-fin:free	97e18daf	f20e29e6
-openrouter/inclusionai/ling-3.0-flash-sante:free	97e18daf	f20e29e6
-openrouter/inclusionai/ling-3.0-flash-vl	97e18daf	f20e29e6
-openrouter/inclusionai/ling-3.0-flash-vl:free	97e18daf	f20e29e6
-openrouter/inclusionai/ling-3.1-flash	97e18daf	f20e29e6
-openrouter/inference-net/schematron-v2-small	97e18daf	f20e29e6
-openrouter/inference-net/schematron-v2-turbo	97e18daf	f20e29e6
-openrouter/kwaipilot/kat-coder-pro-v2.5	97e18daf	f20e29e6
-openrouter/liquid/lfm-2.5-2.6b:free	97e18daf	f20e29e6
-openrouter/mancer/weaver	97e18daf	f20e29e6
-openrouter/meituan/longcat-2.0	97e18daf	f20e29e6
-openrouter/meta-llama/llama-3-70b-instruct	97e18daf	f20e29e6
-openrouter/meta-llama/llama-3.1-70b-instruct	97e18daf	f20e29e6
-openrouter/meta-llama/llama-3.1-8b-instruct	97e18daf	f20e29e6
-openrouter/meta-llama/llama-3.2-1b-instruct	97e18daf	f20e29e6
-openrouter/meta-llama/llama-3.2-3b-instruct	97e18daf	f20e29e6
-openrouter/meta-llama/llama-3.3-70b-instruct	97e18daf	f20e29e6
-openrouter/meta-llama/llama-4-maverick	97e18daf	f20e29e6
-openrouter/meta-llama/llama-4-scout	97e18daf	f20e29e6
-openrouter/meta-llama/llama-guard-4-12b	97e18daf	f20e29e6
-openrouter/meta/muse-glimmer-30b	97e18daf	f20e29e6
-openrouter/meta/muse-spark-1.1	97e18daf	f20e29e6
-openrouter/meta/muse-spark-1.2	97e18daf	f20e29e6
-openrouter/meta/muse-spark-1.2-contributor	97e18daf	f20e29e6
-openrouter/meta/muse-spark-1.3	97e18daf	f20e29e6
-openrouter/meta/muse-spark-1.3-contributor	97e18daf	f20e29e6
-openrouter/microsoft/phi-4	97e18daf	f20e29e6
-openrouter/microsoft/wizardlm-2-8x22b	97e18daf	f20e29e6
-openrouter/minimax/minimax-01	97e18daf	f20e29e6
-openrouter/minimax/minimax-m1	97e18daf	f20e29e6
-openrouter/minimax/minimax-m2	97e18daf	f20e29e6
-openrouter/minimax/minimax-m2-her	97e18daf	f20e29e6
-openrouter/minimax/minimax-m2.1	97e18daf	f20e29e6
-openrouter/minimax/minimax-m2.5	97e18daf	f20e29e6
-openrouter/minimax/minimax-m2.7	97e18daf	f20e29e6
-openrouter/minimax/minimax-m2.7:free	97e18daf	f20e29e6
-openrouter/minimax/minimax-m3	97e18daf	f20e29e6
-openrouter/minimax/minimax-m3:free	97e18daf	f20e29e6
-openrouter/mistralai/codestral-2508	97e18daf	f20e29e6
-openrouter/mistralai/codestral-2508:batch	97e18daf	f20e29e6
-openrouter/mistralai/devstral-2512	97e18daf	f20e29e6
-openrouter/mistralai/ministral-14b-2512	97e18daf	f20e29e6
-openrouter/mistralai/ministral-3b-2512	97e18daf	f20e29e6
-openrouter/mistralai/ministral-8b-2512	97e18daf	f20e29e6
-openrouter/mistralai/ministral-8b-2512:batch	97e18daf	f20e29e6
-openrouter/mistralai/mistral-7b-instruct	97e18daf	f20e29e6
-openrouter/mistralai/mistral-large	97e18daf	f20e29e6
-openrouter/mistralai/mistral-large-2407	97e18daf	f20e29e6
-openrouter/mistralai/mistral-large-2512	97e18daf	f20e29e6
-openrouter/mistralai/mistral-large-2512:batch	97e18daf	f20e29e6
-openrouter/mistralai/mistral-medium-3	97e18daf	f20e29e6
-openrouter/mistralai/mistral-medium-3-5	97e18daf	f20e29e6
-openrouter/mistralai/mistral-medium-3-5:batch	97e18daf	f20e29e6
-openrouter/mistralai/mistral-medium-3.1	97e18daf	f20e29e6
-openrouter/mistralai/mistral-medium-3.1:batch	97e18daf	f20e29e6
-openrouter/mistralai/mistral-nemo	97e18daf	f20e29e6
-openrouter/mistralai/mistral-saba	97e18daf	f20e29e6
-openrouter/mistralai/mistral-small-24b-instruct-2501	97e18daf	f20e29e6
-openrouter/mistralai/mistral-small-2603	97e18daf	f20e29e6
-openrouter/mistralai/mistral-small-2603:batch	97e18daf	f20e29e6
-openrouter/mistralai/mistral-small-3.1-24b-instruct	97e18daf	f20e29e6
-openrouter/mistralai/mistral-small-3.2-24b-instruct	97e18daf	f20e29e6
-openrouter/mistralai/mixtral-8x22b-instruct	97e18daf	f20e29e6
-openrouter/mistralai/voxtral-small-24b-2507	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k2	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k2-0905	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k2-thinking	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k2.5	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k2.6	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k2.7-code	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k3	97e18daf	f20e29e6
-openrouter/moonshotai/kimi-k3:batch	97e18daf	f20e29e6
-openrouter/morph/morph-v3-fast	97e18daf	f20e29e6
-openrouter/morph/morph-v3-large	97e18daf	f20e29e6
-openrouter/nex-agi/nex-n2.5-mini	97e18daf	f20e29e6
-openrouter/nex-agi/nex-n2.5-mini:free	97e18daf	f20e29e6
-openrouter/nex-agi/nex-n2.5-pro	97e18daf	f20e29e6
-openrouter/nex-agi/nex-n2.5-pro:free	97e18daf	f20e29e6
-openrouter/nousresearch/hermes-3-llama-3.1-405b	97e18daf	f20e29e6
-openrouter/nousresearch/hermes-3-llama-3.1-70b	97e18daf	f20e29e6
-openrouter/nousresearch/hermes-4-405b	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3-nano-30b-a3b	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3-super-120b-a12b	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3-super-120b-a12b:free	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3-ultra-550b-a55b	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3.5-content-safety	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3.5-content-safety:free	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3.5-lightning	97e18daf	f20e29e6
-openrouter/nvidia/nemotron-3.5-lightning:free	97e18daf	f20e29e6
-openrouter/openai/gpt-3.5-turbo	9a276813	1edb4060
-openrouter/openai/gpt-3.5-turbo-0613	9a276813	1edb4060
-openrouter/openai/gpt-3.5-turbo-16k	9a276813	1edb4060
-openrouter/openai/gpt-3.5-turbo-instruct	9a276813	1edb4060
-openrouter/openai/gpt-3.5-turbo:batch	9a276813	1edb4060
-openrouter/openai/gpt-4	9a276813	1edb4060
-openrouter/openai/gpt-4-turbo	9a276813	1edb4060
-openrouter/openai/gpt-4-turbo-preview	9a276813	1edb4060
-openrouter/openai/gpt-4-turbo:batch	9a276813	1edb4060
-openrouter/openai/gpt-4.1	9a276813	1edb4060
-openrouter/openai/gpt-4.1-mini	9a276813	1edb4060
-openrouter/openai/gpt-4.1-mini:batch	9a276813	1edb4060
-openrouter/openai/gpt-4.1-nano	9a276813	1edb4060
-openrouter/openai/gpt-4.1-nano:batch	9a276813	1edb4060
-openrouter/openai/gpt-4.1:batch	9a276813	1edb4060
-openrouter/openai/gpt-4o	9a276813	1edb4060
-openrouter/openai/gpt-4o-2024-05-13	9a276813	1edb4060
-openrouter/openai/gpt-4o-2024-08-06	9a276813	1edb4060
-openrouter/openai/gpt-4o-2024-11-20	9a276813	1edb4060
-openrouter/openai/gpt-4o-mini	9a276813	1edb4060
-openrouter/openai/gpt-4o-mini-2024-07-18	9a276813	1edb4060
-openrouter/openai/gpt-4o-mini:batch	9a276813	1edb4060
-openrouter/openai/gpt-4o:batch	9a276813	1edb4060
-openrouter/openai/gpt-5	48046c0e	2789b834
-openrouter/openai/gpt-5-chat	48046c0e	2789b834
-openrouter/openai/gpt-5-codex	48046c0e	2789b834
-openrouter/openai/gpt-5-image	48046c0e	2789b834
-openrouter/openai/gpt-5-image-mini	48046c0e	2789b834
-openrouter/openai/gpt-5-mini	48046c0e	2789b834
-openrouter/openai/gpt-5-mini:batch	48046c0e	2789b834
-openrouter/openai/gpt-5-nano	48046c0e	2789b834
-openrouter/openai/gpt-5-nano:batch	48046c0e	2789b834
-openrouter/openai/gpt-5-pro	79863098	dd197f64
-openrouter/openai/gpt-5-pro:batch	48046c0e	2789b834
-openrouter/openai/gpt-5.1	68735238	d0026c49
-openrouter/openai/gpt-5.1-codex	68735238	d0026c49
-openrouter/openai/gpt-5.1-codex-max	dfc0340c	8fcef879
-openrouter/openai/gpt-5.1-codex-mini	68735238	d0026c49
-openrouter/openai/gpt-5.1:batch	68735238	d0026c49
-openrouter/openai/gpt-5.2	7242c71e	56aa525f
-openrouter/openai/gpt-5.2-chat	7242c71e	56aa525f
-openrouter/openai/gpt-5.2-codex	7242c71e	56aa525f
-openrouter/openai/gpt-5.2-pro	7242c71e	56aa525f
-openrouter/openai/gpt-5.2-pro:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.2:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.3-codex	7242c71e	56aa525f
-openrouter/openai/gpt-5.4	7242c71e	56aa525f
-openrouter/openai/gpt-5.4-image-2	7242c71e	56aa525f
-openrouter/openai/gpt-5.4-mini	7242c71e	56aa525f
-openrouter/openai/gpt-5.4-mini:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.4-nano	7242c71e	56aa525f
-openrouter/openai/gpt-5.4-nano:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.4-pro	7242c71e	56aa525f
-openrouter/openai/gpt-5.4-pro:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.4:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.5	7242c71e	56aa525f
-openrouter/openai/gpt-5.5-pro	7242c71e	56aa525f
-openrouter/openai/gpt-5.5-pro:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.5:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-luna	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-luna-pro	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-luna-pro:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-luna:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-sol	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-sol-pro	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-sol-pro:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-sol:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-terra	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-terra-pro	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-terra-pro:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5.6-terra:batch	7242c71e	56aa525f
-openrouter/openai/gpt-5:batch	48046c0e	2789b834
-openrouter/openai/gpt-6-astra	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-astra-pro	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-astra-pro:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-astra:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-luna	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-luna-pro	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-luna-pro:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-luna:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-sol	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-sol-pro	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-sol-pro:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6-sol:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6.1-sol	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6.1-sol-pro	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6.1-sol-pro:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-6.1-sol:batch	5a3dba94	ddcbad0a
-openrouter/openai/gpt-audio	9a276813	1edb4060
-openrouter/openai/gpt-audio-mini	9a276813	1edb4060
-openrouter/openai/gpt-chat-latest	9a276813	1edb4060
-openrouter/openai/gpt-image-2	9a276813	1edb4060
-openrouter/openai/gpt-image-2.5-flare	9a276813	1edb4060
-openrouter/openai/gpt-image-2.5-sunburst	9a276813	1edb4060
-openrouter/openai/gpt-oss-120b	9a276813	1edb4060
-openrouter/openai/gpt-oss-120b:batch	9a276813	1edb4060
-openrouter/openai/gpt-oss-20b	9a276813	1edb4060
-openrouter/openai/gpt-oss-20b:batch	9a276813	1edb4060
-openrouter/openai/gpt-oss-safeguard-20b	9a276813	1edb4060
-openrouter/openai/o1	50665211	6007d524
-openrouter/openai/o1-pro	50665211	6007d524
-openrouter/openai/o3	50665211	7c4c748f
-openrouter/openai/o3-mini	50665211	7c4c748f
-openrouter/openai/o3-mini-high	50665211	7c4c748f
-openrouter/openai/o3-mini:batch	50665211	7c4c748f
-openrouter/openai/o3-pro	50665211	7c4c748f
-openrouter/openai/o3:batch	9a276813	1edb4060
-openrouter/openai/o4-mini	50665211	7c4c748f
-openrouter/openai/o4-mini-high	50665211	7c4c748f
-openrouter/openai/o4-mini:batch	50665211	7c4c748f
-openrouter/openrouter/auto	97e18daf	f20e29e6
-openrouter/openrouter/bodybuilder	97e18daf	f20e29e6
-openrouter/openrouter/free	97e18daf	f20e29e6
-openrouter/perceptron/perceptron-mk1	97e18daf	f20e29e6
-openrouter/perceptron/perceptron-mk1.5	97e18daf	f20e29e6
-openrouter/perplexity/sonar	97e18daf	f20e29e6
-openrouter/perplexity/sonar-deep-research	97e18daf	f20e29e6
-openrouter/perplexity/sonar-pro	97e18daf	f20e29e6
-openrouter/perplexity/sonar-pro-search	97e18daf	f20e29e6
-openrouter/perplexity/sonar-reasoning-pro	97e18daf	f20e29e6
-openrouter/poolside/laguna-s-2.1	97e18daf	f20e29e6
-openrouter/poolside/laguna-s-2.1:free	97e18daf	f20e29e6
-openrouter/poolside/laguna-xs-2.1	97e18daf	f20e29e6
-openrouter/poolside/laguna-xs-2.1:free	97e18daf	f20e29e6
-openrouter/prism-ml/ternary-bonsai-2-27b	97e18daf	f20e29e6
-openrouter/qwen/qwen-2.5-72b-instruct	12053068	1edb4060
-openrouter/qwen/qwen-2.5-7b-instruct	12053068	1edb4060
-openrouter/qwen/qwen-2.5-coder-32b-instruct	12053068	1edb4060
-openrouter/qwen/qwen-plus	12053068	1edb4060
-openrouter/qwen/qwen-plus-2025-07-28	12053068	1edb4060
-openrouter/qwen/qwen-vl-plus	12053068	1edb4060
-openrouter/qwen/qwen2.5-vl-72b-instruct	12053068	1edb4060
-openrouter/qwen/qwen3-14b	94a111ce	48429573
-openrouter/qwen/qwen3-235b-a22b	94a111ce	48429573
-openrouter/qwen/qwen3-235b-a22b-2507	94a111ce	48429573
-openrouter/qwen/qwen3-235b-a22b-thinking-2507	5242c02e	5feb3e82
-openrouter/qwen/qwen3-30b-a3b	94a111ce	48429573
-openrouter/qwen/qwen3-30b-a3b-instruct-2507	94a111ce	48429573
-openrouter/qwen/qwen3-30b-a3b-thinking-2507	5242c02e	5feb3e82
-openrouter/qwen/qwen3-32b	94a111ce	48429573
-openrouter/qwen/qwen3-8b	94a111ce	48429573
-openrouter/qwen/qwen3-coder	94a111ce	48429573
-openrouter/qwen/qwen3-coder-30b-a3b-instruct	94a111ce	48429573
-openrouter/qwen/qwen3-coder-flash	94a111ce	48429573
-openrouter/qwen/qwen3-coder-next	94a111ce	48429573
-openrouter/qwen/qwen3-coder-plus	94a111ce	48429573
-openrouter/qwen/qwen3-max	94a111ce	48429573
-openrouter/qwen/qwen3-max-thinking	5242c02e	5feb3e82
-openrouter/qwen/qwen3-next-80b-a3b-instruct	94a111ce	48429573
-openrouter/qwen/qwen3-next-80b-a3b-thinking	5242c02e	5feb3e82
-openrouter/qwen/qwen3-vl-235b-a22b-instruct	94a111ce	48429573
-openrouter/qwen/qwen3-vl-235b-a22b-thinking	5242c02e	5feb3e82
-openrouter/qwen/qwen3-vl-30b-a3b-instruct	94a111ce	48429573
-openrouter/qwen/qwen3-vl-30b-a3b-thinking	5242c02e	5feb3e82
-openrouter/qwen/qwen3-vl-32b-instruct	94a111ce	48429573
-openrouter/qwen/qwen3-vl-8b-instruct	94a111ce	48429573
-openrouter/qwen/qwen3-vl-8b-thinking	5242c02e	5feb3e82
-openrouter/qwen/qwen3.5-122b-a10b	94a111ce	48429573
-openrouter/qwen/qwen3.5-27b	94a111ce	48429573
-openrouter/qwen/qwen3.5-35b-a3b	94a111ce	48429573
-openrouter/qwen/qwen3.5-397b-a17b	94a111ce	48429573
-openrouter/qwen/qwen3.5-9b	94a111ce	48429573
-openrouter/qwen/qwen3.5-flash-02-23	9186288e	54c17182
-openrouter/qwen/qwen3.5-plus-02-15	9186288e	54c17182
-openrouter/qwen/qwen3.5-plus-20260420	9186288e	54c17182
-openrouter/qwen/qwen3.6-27b	94a111ce	48429573
-openrouter/qwen/qwen3.6-35b-a3b	94a111ce	48429573
-openrouter/qwen/qwen3.6-flash	9186288e	54c17182
-openrouter/qwen/qwen3.6-max-preview	9186288e	54c17182
-openrouter/qwen/qwen3.6-plus	9186288e	54c17182
-openrouter/qwen/qwen3.7-flash	9186288e	54c17182
-openrouter/qwen/qwen3.7-max	9186288e	54c17182
-openrouter/qwen/qwen3.7-plus	9186288e	54c17182
-openrouter/qwen/qwen3.8-2.4t-a95b	92eae6cd	60a25f63
-openrouter/qwen/qwen3.8-27b	70282732	e543bd67
-openrouter/qwen/qwen3.8-27b:free	398fb602	52bed383
-openrouter/qwen/qwen3.8-flash	70282732	e543bd67
-openrouter/qwen/qwen3.8-max	70282732	e543bd67
-openrouter/qwen/qwen3.8-max-0902	70282732	e543bd67
-openrouter/qwen/qwen3.8-max-prime	70282732	e543bd67
-openrouter/qwen/qwen3.8-omni-flash	70282732	e543bd67
-openrouter/rekaai/reka-edge	97e18daf	f20e29e6
-openrouter/rekaai/reka-flash-3	97e18daf	f20e29e6
-openrouter/relace/relace-apply-3	97e18daf	f20e29e6
-openrouter/relace/relace-search	97e18daf	f20e29e6
-openrouter/sakana/fugu-max	97e18daf	f20e29e6
-openrouter/sakana/fugu-ultra	97e18daf	f20e29e6
-openrouter/sakana/fugu-ultra-v2	97e18daf	f20e29e6
-openrouter/sakana/sakana-namazu	97e18daf	f20e29e6
-openrouter/sao10k/l3-lunaris-8b	97e18daf	f20e29e6
-openrouter/sao10k/l3.1-euryale-70b	97e18daf	f20e29e6
-openrouter/sao10k/l3.3-euryale-70b	97e18daf	f20e29e6
-openrouter/stealth/space-bunny-alpha	97e18daf	f20e29e6
-openrouter/stepfun/step-3.5-flash	97e18daf	f20e29e6
-openrouter/stepfun/step-3.7-flash	97e18daf	f20e29e6
-openrouter/switchpoint/router	97e18daf	f20e29e6
-openrouter/tencent/hunyuan-a13b-instruct	97e18daf	f20e29e6
-openrouter/tencent/hy-mt2-1.8b	97e18daf	f20e29e6
-openrouter/tencent/hy-mt2-30b-a3b	97e18daf	f20e29e6
-openrouter/tencent/hy-mt2-7b	97e18daf	f20e29e6
-openrouter/tencent/hy3	97e18daf	f20e29e6
-openrouter/tencent/hy3-preview	97e18daf	f20e29e6
-openrouter/tencent/hy4-preview	97e18daf	f20e29e6
-openrouter/thedrummer/cydonia-24b-v4.1	97e18daf	f20e29e6
-openrouter/thedrummer/skyfall-36b-v2	97e18daf	f20e29e6
-openrouter/thedrummer/unslopnemo-12b	97e18daf	f20e29e6
-openrouter/thinkingmachines/inkling	97e18daf	f20e29e6
-openrouter/thinkingmachines/inkling-small	97e18daf	f20e29e6
-openrouter/thinkingmachines/inkling-small:free	97e18daf	f20e29e6
-openrouter/thinkingmachines/inkling:free	97e18daf	f20e29e6
-openrouter/typesafe/jev-1.13	97e18daf	f20e29e6
-openrouter/typesafe/jev-router	97e18daf	f20e29e6
-openrouter/unbiased/pareto	97e18daf	f20e29e6
-openrouter/unbiased/pareto-26.10-preview	97e18daf	f20e29e6
-openrouter/undi95/remm-slerp-l2-13b	97e18daf	f20e29e6
-openrouter/upstage/solar-mini4	97e18daf	f20e29e6
-openrouter/upstage/solar-pro-3	97e18daf	f20e29e6
-openrouter/upstage/solar-pro4	97e18daf	f20e29e6
-openrouter/writer/palmyra-x5	97e18daf	f20e29e6
-openrouter/x-ai/grok-4	8a7ba322	29b7b224
-openrouter/x-ai/grok-4.20	3e731a43	98325674
-openrouter/x-ai/grok-4.20-multi-agent	3e731a43	98325674
-openrouter/x-ai/grok-4.3	8a7ba322	29b7b224
-openrouter/x-ai/grok-4.3:batch	8a7ba322	29b7b224
-openrouter/x-ai/grok-4.5	8a7ba322	29b7b224
-openrouter/x-ai/grok-4.6	8a7ba322	29b7b224
-openrouter/x-ai/grok-4.7	8a7ba322	29b7b224
-openrouter/x-ai/grok-build-0.1	9f8e939c	1edb4060
-openrouter/xiaomi/mimo-v2-flash	97e18daf	f20e29e6
-openrouter/xiaomi/mimo-v2.5	97e18daf	f20e29e6
-openrouter/xiaomi/mimo-v2.5-pro	97e18daf	f20e29e6
-openrouter/xiaomi/mimo-v2.6-flash	97e18daf	f20e29e6
-openrouter/xiaomi/mimo-v2.6-pro	97e18daf	f20e29e6
-openrouter/xiaomi/mimo-v2.6-pro-ultraspeed	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.5	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.5-air	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.5v	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.6	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.6:exacto	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.6v	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.7	97e18daf	f20e29e6
-openrouter/z-ai/glm-4.7-flash	97e18daf	f20e29e6
-openrouter/z-ai/glm-5	97e18daf	f20e29e6
-openrouter/z-ai/glm-5-turbo	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.1	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.2	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.2:free	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.3	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.3-flash	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.3-flash:batch	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.3-flashx	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.3-prime	97e18daf	f20e29e6
-openrouter/z-ai/glm-5.3:batch	97e18daf	f20e29e6
-openrouter/z-ai/glm-5v-turbo	97e18daf	f20e29e6
-openrouter/~anthropic/claude-fable-latest	7af22a68	1edb4060
-openrouter/~anthropic/claude-haiku-latest	7af22a68	1edb4060
-openrouter/~anthropic/claude-opus-latest	7af22a68	1edb4060
-openrouter/~anthropic/claude-sonnet-latest	7af22a68	1edb4060
-openrouter/~deepseek/deepseek-flash-latest	7cd6eaf6	1b5a78cb
-openrouter/~deepseek/deepseek-pro-latest	e7f5c7af	1edb4060
-openrouter/~deepseek/deepseek-v4-flash-latest	7cd6eaf6	1b5a78cb
-openrouter/~google/gemini-flash-latest	7af22a68	1edb4060
-openrouter/~google/gemini-pro-latest	7af22a68	1edb4060
-openrouter/~moonshotai/kimi-latest	97e18daf	f20e29e6
-openrouter/~openai/gpt-astra-latest	9a276813	1edb4060
-openrouter/~openai/gpt-luna-latest	9a276813	1edb4060
-openrouter/~openai/gpt-mini-latest	9a276813	1edb4060
-openrouter/~openai/gpt-sol-latest	9a276813	1edb4060
-openrouter/~openai/gpt-terra-latest	9a276813	1edb4060
-openrouter/~x-ai/grok-latest	9f8e939c	1edb4060
-openrouter/~z-ai/glm-flash-latest	97e18daf	f20e29e6
-openrouter/~z-ai/glm-latest	97e18daf	f20e29e6
 ovhcloud/DeepSeek-R1-Distill-Llama-70B	7cd6eaf6	f830728e
 ovhcloud/Llama-3.1-8B-Instruct	97e18daf	f20e29e6
 ovhcloud/Meta-Llama-3_1-70B-Instruct	97e18daf	f20e29e6
@@ -7040,12 +6582,6 @@ ovhcloud/gpt-oss-120b	9a276813	1edb4060
 ovhcloud/gpt-oss-20b	9a276813	1edb4060
 ovhcloud/llava-v1.6-mistral-7b-hf	97e18daf	f20e29e6
 ovhcloud/mamba-codestral-7B-v0.1	97e18daf	f20e29e6
-palm/chat-bison	97e18daf	f20e29e6
-palm/chat-bison-001	97e18daf	f20e29e6
-palm/text-bison	97e18daf	f20e29e6
-palm/text-bison-001	97e18daf	f20e29e6
-palm/text-bison-safety-off	97e18daf	f20e29e6
-palm/text-bison-safety-recitation-off	97e18daf	f20e29e6
 parallel_ai/search	97e18daf	f20e29e6
 parallel_ai/search-fast	97e18daf	f20e29e6
 parallel_ai/search-pro	97e18daf	f20e29e6
@@ -7053,6 +6589,7 @@ parallel_ai/search-turbo	97e18daf	f20e29e6
 perplexity/anthropic/claude-fable-5	7d8e3822	2c52eb91
 perplexity/anthropic/claude-fable-5-1	7d8e3822	cbb882e7
 perplexity/anthropic/claude-haiku-4-5	7af22a68	1edb4060
+perplexity/anthropic/claude-haiku-5-5	7af22a68	1edb4060
 perplexity/anthropic/claude-opus-4-5	890864de	ccbf4d97
 perplexity/anthropic/claude-opus-4-6	aeebecb0	dd588f9f
 perplexity/anthropic/claude-opus-4-7	cb2d68dd	a3294578
@@ -7083,8 +6620,10 @@ perplexity/mistral-7b-instruct	97e18daf	f20e29e6
 perplexity/mixtral-8x7b-instruct	97e18daf	f20e29e6
 perplexity/openai/gpt-5	48046c0e	2789b834
 perplexity/openai/gpt-5-mini	48046c0e	2789b834
+perplexity/openai/gpt-5-nano	48046c0e	2789b834
 perplexity/openai/gpt-5.1	68735238	d0026c49
 perplexity/openai/gpt-5.2	7242c71e	56aa525f
+perplexity/openai/gpt-5.3-codex	7242c71e	56aa525f
 perplexity/openai/gpt-5.4	7242c71e	56aa525f
 perplexity/openai/gpt-5.4-mini	7242c71e	56aa525f
 perplexity/openai/gpt-5.4-nano	7242c71e	56aa525f
@@ -7092,10 +6631,12 @@ perplexity/openai/gpt-5.5	7242c71e	56aa525f
 perplexity/openai/gpt-5.6-luna	7242c71e	56aa525f
 perplexity/openai/gpt-5.6-sol	7242c71e	56aa525f
 perplexity/openai/gpt-5.6-terra	7242c71e	56aa525f
+perplexity/openai/gpt-6-astra	5a3dba94	ddcbad0a
 perplexity/openai/gpt-6-luna	5a3dba94	ddcbad0a
 perplexity/openai/gpt-6-sol	5a3dba94	ddcbad0a
 perplexity/openai/gpt-6.1-sol	5a3dba94	ddcbad0a
 perplexity/perplexity/deepseek-v4-flash-0731	7cd6eaf6	1b5a78cb
+perplexity/perplexity/deepseek-v4-pro-0813	7cd6eaf6	1b5a78cb
 perplexity/perplexity/glm-5.2	97e18daf	f20e29e6
 perplexity/perplexity/glm-5.3	97e18daf	f20e29e6
 perplexity/perplexity/glm-5.3-flash	97e18daf	f20e29e6
@@ -7381,6 +6922,11 @@ sambanova/MiniMax-M2.7	97e18daf	f20e29e6
 sambanova/gemma-4-31B-it	97e18daf	f20e29e6
 sambanova/gpt-oss-120b	9a276813	1edb4060
 sarvam/sarvam-m	97e18daf	f20e29e6
+scaledown/classify	97e18daf	f20e29e6
+scaledown/compress	97e18daf	f20e29e6
+scaledown/decisions	97e18daf	f20e29e6
+scaledown/extract	97e18daf	f20e29e6
+scaledown/summarize	97e18daf	f20e29e6
 scaleway/BAAI/bge-multilingual-gemma2	97e18daf	f20e29e6
 scaleway/deepseek-v4-flash-0731	7cd6eaf6	1b5a78cb
 scaleway/glm-5.2	97e18daf	f20e29e6
@@ -7561,7 +7107,6 @@ together_ai/Qwen/Qwen3.8-Flash	70282732	e543bd67
 together_ai/Salesforce/Llama-Rank-V1	97e18daf	f20e29e6
 together_ai/arcee-ai/trinity-mini	97e18daf	f20e29e6
 together_ai/arize-ai/qwen-2-1.5b-instruct	12053068	1edb4060
-together_ai/baai/bge-base-en-v1.5	97e18daf	f20e29e6
 together_ai/deepseek-ai/DeepSeek-R1-0528	7cd6eaf6	f830728e
 together_ai/deepseek-ai/DeepSeek-R1-Distill-Llama-70B	7cd6eaf6	f830728e
 together_ai/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B	7cd6eaf6	f830728e
@@ -7620,11 +7165,13 @@ tts-1-hd-1106	97e18daf	11f00057
 twelvelabs.marengo-embed-2-7-v1:0	97e18daf	f20e29e6
 twelvelabs.marengo-embed-3-0-v1:0	97e18daf	f20e29e6
 twelvelabs.pegasus-1-2-v1:0	97e18daf	f20e29e6
+twelvelabs.pegasus-1-5-v1:0	97e18daf	f20e29e6
 typesafe/jev-1.13.0	97e18daf	f20e29e6
 typesafe/jev-latest	97e18daf	f20e29e6
 typesafe/jev-preview	97e18daf	f20e29e6
 unknown-model	97e18daf	11f00057
 us-gov.anthropic.claude-fable-5-1	7d8e3822	46fba062
+us-gov.anthropic.claude-haiku-5-5	7af22a68	bda9263a
 us-gov.anthropic.claude-opus-4-8	cb2d68dd	0c062668
 us-gov.anthropic.claude-opus-5	cb2d68dd	0c062668
 us-gov.anthropic.claude-opus-5-5	7d8e3822	46fba062
@@ -7652,6 +7199,7 @@ us.anthropic.claude-3-opus-20240229-v1:0	7af22a68	1edb4060
 us.anthropic.claude-fable-5	7d8e3822	b1731b06
 us.anthropic.claude-fable-5-1	7d8e3822	46fba062
 us.anthropic.claude-haiku-4-5-20251001-v1:0	7af22a68	1edb4060
+us.anthropic.claude-haiku-5-5	7af22a68	bda9263a
 us.anthropic.claude-mythos-5	7d8e3822	b1731b06
 us.anthropic.claude-mythos-5-1	7d8e3822	46fba062
 us.anthropic.claude-mythos-preview	7af22a68	bda9263a
@@ -7696,10 +7244,12 @@ us.openai.gpt-6.1-sol	5a3dba94	29f44933
 us.twelvelabs.marengo-embed-2-7-v1:0	97e18daf	f20e29e6
 us.twelvelabs.marengo-embed-3-0-v1:0	97e18daf	f20e29e6
 us.twelvelabs.pegasus-1-2-v1:0	97e18daf	f20e29e6
+us.twelvelabs.pegasus-1-5-v1:0	97e18daf	f20e29e6
 us.writer.palmyra-x4-v1:0	97e18daf	f20e29e6
 us.writer.palmyra-x5-v1:0	97e18daf	f20e29e6
 us.xai.grok-4.6	8a7ba322	0b2308d5
 us.xai.grok-4.7	8a7ba322	0b2308d5
+us.zai.glm-5.3	97e18daf	11f00057
 v0/v0-1.0-md	97e18daf	f20e29e6
 v0/v0-1.5-lg	97e18daf	f20e29e6
 v0/v0-1.5-md	97e18daf	f20e29e6
@@ -7821,6 +7371,8 @@ vertex_ai/claude-fable-5-1@default	7d8e3822	2c52eb91
 vertex_ai/claude-fable-5@default	7af22a68	a9f48ec6
 vertex_ai/claude-haiku-4-5	7af22a68	1edb4060
 vertex_ai/claude-haiku-4-5@20251001	7af22a68	1edb4060
+vertex_ai/claude-haiku-5-5	7af22a68	1edb4060
+vertex_ai/claude-haiku-5-5@default	7af22a68	1edb4060
 vertex_ai/claude-opus-4-5	890864de	ccbf4d97
 vertex_ai/claude-opus-4-5@20251101	7af22a68	1edb4060
 vertex_ai/claude-opus-4-6	aeebecb0	dd588f9f
@@ -7886,6 +7438,7 @@ vertex_ai/gemini-3.8-flash-tts	7af22a68	1edb4060
 vertex_ai/gemini-3.8-live	7af22a68	1edb4060
 vertex_ai/gemini-embedding-2	7af22a68	1edb4060
 vertex_ai/gemini-embedding-2-preview	7af22a68	1edb4060
+vertex_ai/gemini-nano-banana-2.1	7af22a68	1edb4060
 vertex_ai/gemini-omni-1.1-flash	7af22a68	1edb4060
 vertex_ai/gemini-omni-1.1-flash-preview	7af22a68	1edb4060
 vertex_ai/gemma-4-26b-a4b-it	97e18daf	f20e29e6
@@ -8055,7 +7608,6 @@ whisper-1	97e18daf	11f00057
 writer.palmyra-vision-7b	97e18daf	11f00057
 writer.palmyra-x4-v1:0	97e18daf	f20e29e6
 writer.palmyra-x5-v1:0	97e18daf	f20e29e6
-xai.grok-4.7	8a7ba322	0b2308d5
 xai/grok-4	8a7ba322	29b7b224
 xai/grok-4.20	3e731a43	98325674
 xai/grok-4.20-0309	3e731a43	98325674
