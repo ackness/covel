@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/badge/version-v0.0.50-8b5cf6)](./docs/CHANGELOG.md#0050---2026-10-11)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
 
 [![Covel demo: the world list, a session and stage mode — more at covel.cc](./.assets/images/demo.gif)](https://covel.cc/)
 
