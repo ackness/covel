@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Wand2 } from "lucide-react";
 import { worldEditionLocales, type WorldGenerationPart } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import * as api from "@/services/api.js";
+import { ApiError } from "@/services/api/request.js";
 import type { GenerateWorldError, WorldRecord } from "@/services/api.js";
 import { getDataService, getStorageMode } from "@/services/data-service.js";
 import {
@@ -20,6 +22,27 @@ export function isWorldRevisable(world: WorldRecord): boolean {
 }
 
 const MAX_LENGTH = 2000;
+
+/**
+ * The refusal for a package that a person has put files into or edited, in
+ * the player's language and with the files named. Null for any other error.
+ */
+function modifiedPackageMessage(err: Error, t: TFunction): string | null {
+  if (!(err instanceof ApiError) || err.code !== "world_package_modified")
+    return null;
+  const details = err.details as
+    { added?: unknown; changed?: unknown } | undefined;
+  const files = [details?.added, details?.changed].flatMap((list) =>
+    Array.isArray(list)
+      ? list.filter((file): file is string => typeof file === "string")
+      : [],
+  );
+  return t(
+    "world.revisePackageModified",
+    "Files in this world's folder were added or changed by hand: {{files}}. A revision rewrites the whole folder and would lose them, so nothing was changed. Edit the world's files directly, or undo those changes first.",
+    { files: files.join(", ") },
+  );
+}
 
 interface WorldRevisePanelProps {
   world: WorldRecord;
@@ -100,10 +123,10 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
             }
           })();
       },
-      (err) => fail(err.message),
+      (err) => fail(modifiedPackageMessage(err, t) ?? err.message),
       local ? { world: expectedWorld } : undefined,
     );
-  }, [instruction, onRevised, working, world]);
+  }, [instruction, onRevised, t, working, world]);
 
   return (
     <section

@@ -1,11 +1,10 @@
-import type { MediaStore } from "@covel/shared";
 import postgres, { type JSONValue, type Sql } from "postgres";
 import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-store-mappers.js";
+import type { MediaRefRecord, MediaStore } from "@covel/shared";
 import {
-  claimedMediaIds,
   finalizeMediaCleanupResult,
+  planMediaCleanup,
 } from "./cleanup-result.js";
-import { cleanupCandidates } from "./cleanup-policy.js";
 import type { PgMediaStoreOptions } from "./types.js";
 import {
   filterAssetsByMetadata,
@@ -314,12 +313,26 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
 
     async cleanup(protectedIds, policy) {
       const inventory = await this.listAssets();
-      const { result, idsToDelete } = cleanupCandidates(
+      const { result, idsToDelete, expiredRefs } = planMediaCleanup(
         inventory,
-        claimedMediaIds(protectedIds, inventory, await this.listRefs()),
+        await this.listRefs(),
+        protectedIds,
         policy,
       );
       if (!policy?.dryRun) {
+        const releasedRefs: MediaRefRecord[] = [];
+        for (const ref of expiredRefs) {
+          // Matches the creation time too: only the row the plan saw is
+          // released.
+          const rows = await sql<{ media_id: string }[]>`
+            DELETE FROM media_refs
+            WHERE media_id = ${ref.mediaId}
+              AND session_id = ${ref.sessionId}
+              AND created_at = ${ref.createdAt}
+            RETURNING media_id
+          `;
+          if (rows.length > 0) releasedRefs.push(ref);
+        }
         const deletedIds: string[] = [];
         for (const id of idsToDelete) {
           const deleted = await sql.begin(async (tx) => {
@@ -337,7 +350,12 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
           });
           if (deleted) deletedIds.push(id);
         }
-        return finalizeMediaCleanupResult(result, inventory, deletedIds);
+        return finalizeMediaCleanupResult(
+          result,
+          inventory,
+          deletedIds,
+          releasedRefs,
+        );
       }
       return result;
     },

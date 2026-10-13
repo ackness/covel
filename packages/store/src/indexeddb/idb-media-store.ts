@@ -1,10 +1,9 @@
-import type { MediaStore } from "@covel/shared";
+import type { MediaRefRecord, MediaStore } from "@covel/shared";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { filterAssetsByMetadata } from "../media-store/filter.js";
-import { cleanupCandidates } from "../media-store/cleanup-policy.js";
 import {
-  claimedMediaIds,
   finalizeMediaCleanupResult,
+  planMediaCleanup,
 } from "../media-store/cleanup-result.js";
 import {
   cloneMeta,
@@ -290,24 +289,38 @@ export async function createIndexedDbMediaStore(
       const assets = sortAssetRecords(
         (await db.getAll(STORE_ASSETS)).map(toAssetRecord),
       );
-      const { result, idsToDelete } = cleanupCandidates(
+      const { result, idsToDelete, expiredRefs } = planMediaCleanup(
         assets,
-        claimedMediaIds(
-          protectedIds,
-          assets,
-          (await db.getAll(STORE_REFS)).map(toRefRecord),
-        ),
+        (await db.getAll(STORE_REFS)).map(toRefRecord),
+        protectedIds,
         policy,
       );
 
       if (!policy.dryRun) {
+        const releasedRefs: MediaRefRecord[] = [];
+        for (const ref of expiredRefs) {
+          // Release the row the plan saw, not one recorded since.
+          const tx = db.transaction(STORE_REFS, "readwrite");
+          const key = refKey(ref.mediaId, ref.sessionId);
+          const current = await tx.store.get(key);
+          if (current && toRefRecord(current).createdAt === ref.createdAt) {
+            await tx.store.delete(key);
+            releasedRefs.push(ref);
+          }
+          await tx.done;
+        }
         const deletedIds: string[] = [];
         for (const id of idsToDelete) {
           // The ownership/ref check and delete share the same native transaction
           // as addRef/recordOwnership, closing the inventory-to-delete window.
           if (await deleteAssetIfUnreferenced(id)) deletedIds.push(id);
         }
-        return finalizeMediaCleanupResult(result, assets, deletedIds);
+        return finalizeMediaCleanupResult(
+          result,
+          assets,
+          deletedIds,
+          releasedRefs,
+        );
       }
 
       return result;

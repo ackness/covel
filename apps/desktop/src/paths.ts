@@ -60,8 +60,17 @@ function userKeysEnvPath(): string {
   return path.join(covelHome(), "keys.env");
 }
 
-function userSettingsJsonPath(): string {
+export function userSettingsJsonPath(): string {
   return path.join(covelHome(), "settings.json");
+}
+
+/**
+ * The player's choice to copy the data to a new data root, kept until the
+ * next start carries it out (see `data-root-copy.ts`). It lives in the config
+ * root because the data root is what it is about to change.
+ */
+export function dataRootCopyRecordPath(): string {
+  return path.join(covelHome(), "data-root-copy.json");
 }
 
 export function userPluginsDir(): string {
@@ -85,8 +94,10 @@ function readConfig(): DesktopConfig {
  * Where user data lives. Defaults to `<covelHome>/data` but can be
  * redirected via `[paths] data_root` in `config.toml` — useful when the
  * SQLite file grows large and the user wants it on an external drive.
+ * Read from the file at every call: the running sidecar keeps the root that
+ * `ensureUserPaths` returned at startup.
  */
-function dataRoot(): string {
+export function configuredDataRoot(): string {
   const cfg = readConfig();
   const custom = cfg.paths?.data_root;
   if (custom && custom.trim()) {
@@ -96,19 +107,19 @@ function dataRoot(): string {
 }
 
 function userDbPath(): string {
-  return path.join(dataRoot(), "covel.db");
+  return path.join(configuredDataRoot(), "covel.db");
 }
 
 export function userWorldsDir(): string {
-  return path.join(dataRoot(), "worlds");
+  return path.join(configuredDataRoot(), "worlds");
 }
 
 function userLogsDir(): string {
-  return path.join(dataRoot(), "logs");
+  return path.join(configuredDataRoot(), "logs");
 }
 
 export function userServerPortFile(): string {
-  return path.join(dataRoot(), "server.port");
+  return path.join(configuredDataRoot(), "server.port");
 }
 
 function logRotationConfig(): { maxSizeMb: number; maxFiles: number } {
@@ -255,7 +266,7 @@ export function ensureUserPaths(): ResolvedPaths {
     console.warn("[paths] Could not tighten config.toml permissions:", err);
   }
 
-  const data = dataRoot();
+  const data = configuredDataRoot();
   const dirs = [userPluginsDir(), data, userWorldsDir(), userLogsDir()];
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });

@@ -87,6 +87,92 @@ describe("manifest authoring CLI", () => {
     },
   );
 
+  async function uiFixture(view: unknown) {
+    const root = await fixture({
+      contributes: { ui: { right: ["./ui/panel.json"] } },
+    });
+    await mkdir(path.join(root, "ui"), { recursive: true });
+    await writeFile(
+      path.join(root, "ui/panel.json"),
+      JSON.stringify({ id: "panel", label: "Panel", view }),
+    );
+    return root;
+  }
+  const list = (repeat: unknown, text: unknown) => ({
+    component: "Stack",
+    children: [
+      {
+        component: "Stack",
+        repeat,
+        children: [{ component: "Text", props: { text } }],
+      },
+    ],
+  });
+
+  it("accepts a UI spec of known components with both repeat forms", async () => {
+    const result = await validate(
+      await uiFixture({
+        component: "Stack",
+        repeat: { statePath: "/entries", key: "key" },
+        children: [
+          {
+            component: "Card",
+            slots: {
+              content: [
+                {
+                  type: "Stack",
+                  repeat: { statePath: { $item: "tags" } },
+                  children: [
+                    { component: "Text", props: { text: { $item: "" } } },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it.each([
+    [
+      "an unknown component",
+      { component: "Stack", children: [{ component: "Kard" }] },
+      "view.children[0].component: unknown component Kard; use a component name from docs/reference/ui-components.md",
+    ],
+    [
+      "a $state repeat path",
+      list({ statePath: { $state: "/entries" } }, "x"),
+      'view.children[0].repeat.statePath: must be an absolute state path string such as "/entries", or { "$item": "field" } inside another repeat',
+    ],
+    [
+      "a repeat path that is not absolute",
+      list({ statePath: "entries" }, "x"),
+      "view.children[0].repeat.statePath: must be an absolute state path string",
+    ],
+    [
+      "an $item field with a leading slash",
+      list({ statePath: "/entries" }, { $item: "/key" }),
+      'view.children[0].children[0].props.text.$item: "/key" must not start with a slash; write the item\'s field name ("key")',
+    ],
+  ])("rejects a UI spec with %s", async (_name, view, message) => {
+    const result = await validate(await uiFixture(view));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `PLUGIN.md: contributes.ui.right: ./ui/panel.json: ${message}`,
+    );
+  });
+
+  it("rejects a UI spec that declares neither view nor webview", async () => {
+    const result = await validate(await uiFixture(undefined));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "./ui/panel.json: view: a UI spec declares either view or webview",
+    );
+  });
+
   it.each([
     "name",
     "stage",
@@ -113,7 +199,10 @@ describe("manifest authoring CLI", () => {
       path.join(root, "server/index.js"),
       "export default () => {};",
     );
-    await writeFile(path.join(root, "ui/panel.json"), "{}");
+    await writeFile(
+      path.join(root, "ui/panel.json"),
+      JSON.stringify({ view: { component: "Stack" } }),
+    );
     await mkdir(path.join(root, "locales"));
     await writeFile(
       path.join(root, "locales/zh.yaml"),
@@ -232,5 +321,35 @@ describe("manifest authoring CLI", () => {
     );
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toContain("✗");
+  });
+});
+
+describe("package.json of a plugin", () => {
+  // Without `"type": "module"` Node reads the package's `.js` files as
+  // CommonJS: an `import` in them fails and the development reload misses them.
+  it.each([
+    { packageJson: { name: "probe" }, found: "no type" },
+    { packageJson: { name: "probe", type: "commonjs" }, found: '"commonjs"' },
+  ])("is refused when it declares $found", async ({ packageJson, found }) => {
+    const root = await fixture({ runtime });
+    await writeFile(
+      path.join(root, "package.json"),
+      JSON.stringify(packageJson),
+    );
+    const result = await validate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `package.json must declare "type": "module" (found ${found})`,
+    );
+  });
+
+  it("is accepted when it declares the ESM type", async () => {
+    const root = await fixture({ runtime });
+    await writeFile(
+      path.join(root, "package.json"),
+      JSON.stringify({ name: "probe", type: "module" }),
+    );
+    const result = await validate(root);
+    expect(result.status, result.stderr).toBe(0);
   });
 });

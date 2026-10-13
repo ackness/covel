@@ -1,12 +1,46 @@
-# World time
+# 世界时间
 
-世界内时间是世界定义的领域状态，与框架的玩家回合计数、真实时间戳相互独立。倒流故事时间不会倒退 `completedPlayerTurns`，也不会改变记忆检索和审计的逻辑回合顺序。
+世界时间是故事里的时间：现在是哪一天、几点，或者处在哪个时段。这一页说明世界作者怎样定义自己的历法和时间流动方式，以及插件怎样读取时钟。
+
+世界作者看 Definition 一节。写插件的人再看 Runtime and state 一节。
+
+世界时间和另外两种“时间”互不相干：
+
+- **玩家回合数**：框架用来计数的回合。故事时间倒流，回合数不会倒退，记忆检索和审计仍然按回合的先后顺序。
+- **真实时间**：现实世界的时间戳。
 
 ## Definition
 
-世界包通过公开数据契约 `world.time-definition@1` 声明时间。`world-time` 插件拥有定义 schema、历法和演进逻辑；框架只负责通用契约导入、调度、输入绑定和事务。其他实现可通过相同契约接收世界数据，无须沿用插件 ID 或 namespace。
+世界包用一个文件声明时间。把它放在 `data/time.yaml`，就会被自动读取。
 
-在 `world.data.yaml` 中声明：
+```yaml
+id: world
+definition:
+  kind: calendar
+  name: 学园时间
+  calendar:
+    era: 学园历
+    months:
+      - { name: 春月, days: 30 }
+      - { name: 夏月, days: 31 }
+    hoursPerDay: 24
+    minutesPerHour: 60
+    periods:
+      - { startHour: 0, name: 深夜 }
+      - { startHour: 6, name: 早晨 }
+      - { startHour: 12, name: 午后 }
+      - { startHour: 18, name: 晚间 }
+  initial: { year: 1, month: 1, day: 8, hour: 8, minute: 20 }
+  evolution:
+    mode: forward
+    defaultStep: 5
+    maxStep: 1440
+    prompt: 对话通常几分钟，睡眠或明确的次日转场应跨日。回忆不改变当前日期。
+```
+
+文件的内容是 `{ id: world, definition: ... }`：`id` 固定写 `world`，`definition` 是时间的定义。
+
+世界用了 descriptor（`data/world.data.yaml`）时，要在里面列出这个文件：
 
 ```yaml
 schemaVersion: 1
@@ -19,11 +53,15 @@ sources:
     key: id
 ```
 
-`data/time.yaml` 的记录为 `{ id: world, definition: ... }`。导入写入接收插件的 `definitions/world`；JSON Schema 位于 `plugins/world-time/schemas/time-definition.schema.json`，从同目录插件的 `schema.js` 生成。字段结构由导入器校验，跨字段历法约束由插件在使用定义时校验。世界维度不再接受 `time`；已有开发世界需重建为契约数据文件，不提供旧字段兼容读取。
+> [!NOTE]
+> 时间不是世界维度。把 `time` 写进 `dimensions` 不被接受；请改成上面的数据文件。改了之后，原来的开发世界需要重新创建。
 
-AI 世界生成使用调用方提供的公开数据 schema，在 `WORLD_PACKAGE_YAML.contractData` 产生 `{ contract, key, value }`；`key` 与 `value.id` 一致。文件保存生成契约数据源，store-only 和 return-only 保存 `metadata.contractData`，浏览器同步后仍走同一导入校验和接收者解析。生成器不内置时间 schema。
+### 两种时间模型
 
-两种时间模型：
+`kind` 选一种：
+
+- `calendar`：有年月日和钟点的历法。
+- `phases`：只有按顺序循环的几个时段，没有精确的钟点。
 
 | 字段     | `calendar`                                                                | `phases`                                               |
 | -------- | ------------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -34,19 +72,28 @@ AI 世界生成使用调用方提供的公开数据 schema，在 `WORLD_PACKAGE_
 | 基础单位 | 该历法的一分钟                                                            | 一个时段                                               |
 | 工具单位 | `minute`、`hour`、`day`                                                   | `phase`、`cycle`                                       |
 
-`calendar.weekdays` 可定义一周的任意名称与长度，同时用 `initial.weekday`（从 0 开始）锚定初始星期；正向与逆向跨日都会确定性更新星期，不依赖现实公历。
+“基础单位”是这个时钟最小的一格。下面 `evolution` 里的步长都用它来数。
 
-月份可以有不同天数；年、日和时钟通过整数运算转换，支持跨年倒流。这里没有现实闰年、时区和天文换算。十二时辰等粗粒度历法可以直接使用十二个 `phases`，无需把它们伪装成分钟。
+补充：
 
-`evolution` 字段：
+- **星期**：`calendar.weekdays` 可以定义一周里每天的名字，名字和天数都随意。同时用 `initial.weekday`（从 0 开始）说明开局是星期几。往前和往后跨日时，星期都会跟着算，不依赖现实的公历。
+- 各个月可以有不同的天数。年、日和钟点都用整数换算，时间倒流跨年也没问题。
+- 这里没有现实世界的闰年、时区和天文换算。
+- 十二时辰这类粗粒度的历法，可以直接写十二个 `phases`，不必假装成分钟。
 
-- `mode`：`forward`（默认正向策略）、`backward`（倒流）、`bidirectional`（按叙事选择方向）、`random`（在世界范围内随机跳转）。必须显式声明。
-- `defaultStep`：无明确耗时证据时建议的基础单位跨度，允许 0。
-- `maxStep`：每轮可移动的最大绝对基础单位跨度，是工具强制校验的上限。
-- `prompt`：世界作者的演进指导，可使用 i18n 文本。例如对话、睡眠、旅行分别如何计时，回忆是否影响当前世界。
-- `randomRange: {min, max}`：random 模式必填，基础单位的有符号闭区间，绝对值不能超过 maxStep。由代码依据回合标识抽样，模型不生成随机数。
+### 时间怎样流动（`evolution`）
 
-粗粒度倒流示例：
+| 字段          | 说明                                                                                                                 |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `mode`        | 必须明确写出。`forward`（向前）、`backward`（倒流）、`bidirectional`（按叙事决定方向）、`random`（在范围内随机跳转） |
+| `defaultStep` | 正文没有明确说明花了多久时，建议走多少个基础单位。可以是 0                                                           |
+| `maxStep`     | 每回合最多移动多少个基础单位（不分方向）。这是工具强制检查的上限                                                     |
+| `prompt`      | 作者给模型的计时说明，可以翻译。例如对话、睡眠、旅行各算多久，回忆会不会影响当前时间                                 |
+| `randomRange` | `{min, max}`，`random` 模式必填。带正负号的闭区间，单位是基础单位，绝对值不能超过 `maxStep`                          |
+
+`random` 模式下，跳多少由代码决定，模型不生成随机数。同一个回合重算，得到的结果相同。
+
+粗粒度倒流的例子：
 
 ```yaml
 id: world
@@ -63,7 +110,7 @@ definition:
     prompt: 每轮向更早的梦境阶段移动；同一瞬间的连续对话可保持时间不变。
 ```
 
-将 evolution 替换为下面的定义即可随机双向跳转：
+把 `evolution` 换成下面这样，时间就会随机向前或向后跳：
 
 ```yaml
 evolution:
@@ -74,16 +121,58 @@ evolution:
   prompt: 时间可能前进、停滞或倒流；人物保留经历，环境遵循新的阶段。
 ```
 
-内置学园世界展示 calendar，雾港展示潮汐 phases。未声明时间的世界使用通用世界历：12 个 30 天月、每天 24 小时、每小时 60 分钟，起点 1 年 1 月 1 日 08:00，默认前进 10 分钟。它不声称是公历。
+### 没有声明时间的世界
+
+没有 `data/time.yaml` 的世界使用一个通用的世界历：
+
+- 12 个月，每月 30 天；每天 24 小时，每小时 60 分钟。
+- 从 1 年 1 月 1 日 08:00 开始。
+- 默认每回合前进 10 分钟。
+
+它不是公历。
+
+### 可以参考的内置世界
+
+| 世界                    | 模型       | 看点                         |
+| ----------------------- | ---------- | ---------------------------- |
+| `worlds/haruka-academy` | `calendar` | 十二个月、星期、一天四个时段 |
+| `worlds/emberback`      | `calendar` | 配合倒计时维度               |
+| `worlds/mistport`       | `phases`   | 用潮汐做时段                 |
+| `worlds/lantern-barrow` | `phases`   | 地城探索的时段               |
+
+### 给插件作者和工具开发者
+
+- 时间定义是一份公开的数据契约 `world.time-definition@1`。内置的 `world-time` 插件拥有定义的 schema、历法和推进逻辑。框架只负责通用的部分：导入数据、安排运行顺序、传递输入和事务。
+- 别的插件可以用同一个契约接收世界数据，不需要沿用 `world-time` 的插件 ID 或 namespace。
+- 导入后，定义写进接收插件的 `definitions/world`。
+- JSON Schema 在 `plugins/world-time/schemas/time-definition.schema.json`，由同目录的 `schema.js` 生成。
+- 字段的结构在导入时校验。跨字段的历法约束（例如 `defaultStep` 不能超过 `maxStep`）由插件在使用定义时校验。
+- AI 生成世界时，生成器自己不带时间的 schema，使用调用方提供的公开数据 schema。它在 `WORLD_PACKAGE_YAML.contractData` 里产生 `{ contract, key, value }`，其中 `key` 与 `value.id` 一致。保存成文件时写成数据文件；只存数据库或只返回结果时保存在 `metadata.contractData`。浏览器同步之后仍然走同样的导入校验，由同样的规则找到接收的插件。
 
 ## Runtime and state
 
-内置 `world-time` 是 core-plugin，包含两个 runtime：
+内置的 `world-time` 是核心插件，有两个 runtime：
 
-1. `world-time/context`（pre-turn function）读取会话时钟或世界初值，发布 `world-time-context@1` 契约输出。初值和本地化显示更新通过 proposal 暂存。导入定义面板在首次叙事前即显示规则；未导入定义时显示默认历法说明。
-2. `world-time/advance`（post-turn agent）通过 required inputs 读取本轮成功叙事和时间起点，调用 `advance-world-time`。模型只提议跨度/方向，插件完成历法运算和策略校验。单位取自 `currentTime.value.units`；amount 为 0 时任何单位都接受（零时长与单位无关），非零时长用了该时钟没有的单位会被拒绝，错误信息列出可用单位。工具成功即结束；默认 20 步工具预算、超时和循环检测仍有效。
+1. **`world-time/context`**（回合开始时运行，不调用模型）：读取这局游戏的时钟；还没有时钟时读世界定义的初值。它把结果发布为契约 `world-time-context@1`。初值和按语言显示的文本通过 proposal 保存。
+   - 导入了定义的世界，第一次叙事之前面板就显示规则。
+   - 没有导入定义时，面板显示默认历法的说明。
+2. **`world-time/advance`**（叙事之后运行，调用模型）：读取本回合成功的叙事和时间起点，然后调用工具 `advance-world-time`。
+   - 模型只提议“走多久、往哪个方向”。历法运算和规则检查由插件完成。
+   - 单位取自 `currentTime.value.units`。
+   - 时长为 0 时任何单位都接受，因为零时长和单位无关。
+   - 时长不为 0 却用了这个时钟没有的单位，会被拒绝，错误信息列出可用的单位。
+   - 工具成功就结束。默认的 20 步工具预算、超时和循环检测仍然有效。
 
-`world-time/advance` 的输出是公开契约 `world-time-evolution@1`：本轮结算之后的时钟。它与上面的 `world-time-context@1` 是同一个时钟的两个时刻，前者是本轮的终点，后者是本轮的起点。输出包含结算后的 `definition`、`tick`、`display`、`lastDelta`、`reason`，以及给其他 runtime 读取的 `summary`：
+### 本回合结束时的时钟
+
+`world-time/advance` 的输出是公开契约 `world-time-evolution@1`：本回合结算**之后**的时钟。它和上面的 `world-time-context@1` 是同一个时钟的两个时刻：
+
+| 契约                     | 时刻         |
+| ------------------------ | ------------ |
+| `world-time-context@1`   | 本回合的起点 |
+| `world-time-evolution@1` | 本回合的终点 |
+
+输出包含结算后的 `definition`、`tick`、`display`、`lastDelta`、`reason`，以及专门给其他 runtime 读取的 `summary`：
 
 | `summary` 字段      | 含义                                                                 |
 | ------------------- | -------------------------------------------------------------------- |
@@ -92,7 +181,7 @@ evolution:
 | `elapsedSinceStart` | 当前刻度减去世界定义的 `initial`，即开局以来经过的基础单位数         |
 | `elapsedThisTurn`   | 本轮移动的基础单位数（即 `lastDelta`）；时间倒流时两个计数都可为负数 |
 
-需要按本轮结束时间记账的 post-turn runtime 用可选输入读取它。这条绑定同时是同阶段的排序边，所以消费者在时间结算之后运行，读到的是本轮的值；`scope: committed` 或 pre-turn 的 `world-time-context@1` 读到的都是上一轮结束时的值。
+需要按“本回合结束时的时间”记账的 runtime（在叙事之后运行），用一个可选输入读取它：
 
 ```yaml
 io:
@@ -103,9 +192,16 @@ io:
       required: false
 ```
 
-根 `PLUGIN.md` 的 `optional` 要列出 `world-time-evolution@1`。时间没有结算时（模型调用失败，或递归子叙事由外层结算，此时输出只有 `reason`），这个槽位不存在，消费者照常运行。内置的 `world-init/dimension-tracker` 和 `world-init/dimension-clock` 就是这样读取时钟的：前者让模型按时间结算规则，后者不调用模型，按 `elapsedSinceStart` 计算世界声明为 `x-derive` 的维度字段（倒计时、阶段），见 [动态世界维度](dynamic-dimensions.md#由时钟推导的字段)。
+- 根 `PLUGIN.md` 的 `optional` 要列出 `world-time-evolution@1`。
+- 这个输入同时决定了顺序：读取它的 runtime 排在时间结算之后，所以读到的是本回合的值。
+- 用 `scope: committed` 读，或者在回合开始时读 `world-time-context@1`，得到的都是上一回合结束时的值。
+- 时间没有结算时，这个输入不存在，读取它的 runtime 照常运行。两种情况会这样：模型调用失败；或者这是一次递归的子叙事，时间由外层结算（这时输出只有 `reason`）。
 
-叙事插件的 `RUNTIME.md` 接入：
+内置的 `world-init/dimension-tracker` 和 `world-init/dimension-clock` 就是这样读取时钟的。前者让模型按时间结算规则；后者不调用模型，按 `elapsedSinceStart` 计算世界声明为 `x-derive` 的维度字段（倒计时、阶段），见[动态世界维度](./dynamic-dimensions.md#由时钟推导的字段)。
+
+### 叙事怎样读取时间
+
+叙事插件在 `RUNTIME.md` 里这样接入：
 
 ```yaml
 io:
@@ -115,10 +211,35 @@ io:
       required: false
 ```
 
-`worldTime.value` 包含 `definition`、整数 `tick`、`display`、该时钟可用的时长单位 `units`（calendar 为 `minute`/`hour`/`day`，phases 为 `phase`/`cycle`，第一个是基础单位），以及 calendar 的年月日时分或 phases 的 cycle/phase。它是本轮起点。叙事遵循世界的 prompt，明确耗时/转场；post-turn 阶段再结算结束时间。旧记忆和历史叙事不能覆盖该起点。`scene` 记忆仅描述氛围，当前日期和时刻由结构化时钟维护。
+`worldTime.value` 是本回合的**起点**，包含：
 
-状态存放在插件的 `clock/current` 行，随普通会话数据进入快照、检查点和分支。定义在首次提交时复制到会话，后续世界编辑或定义重新导入不会重置已有时钟；读档不因全局世界文件变化而重解释旧刻度。`lastTurnId` 防止同轮重复工具调用，`lastDelta` 和 `reason` 记录本次变化。所有写入都经过已有 proposal 事务；叙事失败、提案提交失败均回滚时间。递归子叙事不独立结算。
+- `definition`：时间定义；
+- `tick`：整数刻度；
+- `display`：显示文本；
+- `units`：这个时钟可用的时长单位。calendar 是 `minute` / `hour` / `day`，phases 是 `phase` / `cycle`，第一个是基础单位；
+- calendar 的年月日时分，或 phases 的 `cycle` / `phase`。
 
-输入 `/time` 调用插件声明的 `world-time:time` 命令，直接展示当前已提交的时钟。它使用会话 locale 格式化存档中的时间定义，不读取后来修改的世界初值，不调用模型、不生成叙事、不推进玩家回合或时钟；随机模式也不会重新抽样。尚无时钟记录时返回明确提示，命令本身不初始化状态。RPC 返回 `{ ok, message, data }`，`data.initialized` 区分未记录与已记录；已记录时还包含结构化时钟和最近演进信息。命令执行遵循已有的插件命令发现、参数校验和审计链路。
+叙事按世界的 `prompt` 写，明确写出花了多久、有没有转场。回合结束后再结算结束时间。旧的记忆和以前的叙事不能覆盖这个起点。`scene` 记忆只描述氛围；当前的日期和时刻由时钟维护。
 
-模型提取失败会保留起点并报告 runtime 失败；不会把默认步长伪装成从剧情确认的耗时。再次生成和人工恢复仍遵循框架的运行时恢复语义。舞台 `timeOfDay` 的自动替换不属于当前契约：潮汐、梦境或倒流阶段未必能映射为 day/night，展示插件需要明确的世界映射规则后再消费。
+### 时钟存在哪里
+
+- 时钟保存在插件的 `clock/current` 这一条数据里，和普通的会话数据一样进入快照、存档点和分支。
+- 定义在第一次保存时复制进会话。之后编辑世界或重新导入定义，不会重置已有的时钟。读档时也不会因为世界文件变了而重新解释旧的刻度。
+- `lastTurnId` 防止同一回合里重复调用工具；`lastDelta` 和 `reason` 记录这一次的变化。
+- 所有写入都走 proposal。叙事失败或保存失败时，时间一起回滚。
+- 递归的子叙事不单独结算时间。
+
+### `/time` 命令
+
+玩家输入 `/time`，会调用插件声明的命令 `world-time:time`，直接显示当前已保存的时钟。
+
+- 它用会话的语言和存档里的时间定义来显示，不读后来修改过的世界初值。
+- 它不调用模型，不生成叙事，不推进玩家回合，也不推进时钟。随机模式下也不会重新抽一次。
+- 还没有时钟记录时，返回一条明确的提示。命令本身不会初始化时钟。
+- RPC 返回 `{ ok, message, data }`。`data.initialized` 区分“还没有记录”和“已有记录”；已有记录时还包含结构化的时钟和最近一次的变化。
+- 命令的发现、参数校验和审计与其他插件命令相同。
+
+### 失败与边界
+
+- 模型没能给出时长时，时钟留在起点，并报告这个 runtime 失败。不会把默认步长当成“从剧情里确认的时长”。重新生成和人工恢复按框架通用的 runtime 恢复方式进行。
+- 舞台的 `timeOfDay`（白天 / 夜晚）不会根据世界时间自动切换。潮汐、梦境或倒流的阶段未必能对应到白天和夜晚；展示用的插件需要世界给出明确的对应规则之后，才能使用它。

@@ -486,6 +486,74 @@ export function runMediaStoreContractTests(
       expect(await store.isReferencedBy(ref.id, "sess-new-ref")).toBe(true);
     });
 
+    it("cleanup expires abandoned prefixed refs past the age threshold and keeps every other claim", async () => {
+      const store = await createStore();
+      const hour = 60 * 60 * 1000;
+      const abandoned = "world-data-import:abandoned";
+      const orphan = await store.put(PNG, "image/png", undefined, {
+        sessionId: abandoned,
+      });
+      const shared = await store.put(OTHER, "image/png", undefined, {
+        sessionId: abandoned,
+      });
+      await store.addRef(shared.id, "sess-A");
+      const other = await store.put(new Uint8Array([9, 9, 9]), "image/png");
+      await store.addRef(other.id, "other-holder:1");
+      const expireRefs = {
+        sessionIdPrefix: "world-data-import:",
+        maxAgeMs: 24 * hour,
+      };
+
+      // Without the policy field, and before the threshold, nothing expires.
+      for (const policy of [
+        { maxAgeMs: 0, now: new Date(Date.now() + 25 * hour) },
+        { maxAgeMs: 0, expireRefs, now: new Date(Date.now() + 23 * hour) },
+      ]) {
+        const kept = await store.cleanup(new Set(), policy);
+        expect(kept.expiredRefs).toEqual([]);
+        expect(kept.deletedIds).toEqual([]);
+      }
+      expect(await store.listRefs()).toHaveLength(4);
+
+      const policy = {
+        maxAgeMs: 0,
+        expireRefs,
+        now: new Date(Date.now() + 25 * hour),
+      };
+      const expired = [
+        expect.objectContaining({ mediaId: orphan.id, sessionId: abandoned }),
+        expect.objectContaining({ mediaId: shared.id, sessionId: abandoned }),
+      ];
+      const dryRun = await store.cleanup(new Set(), {
+        ...policy,
+        dryRun: true,
+      });
+      expect(dryRun.expiredRefs).toHaveLength(2);
+      expect(dryRun.expiredRefs).toEqual(expect.arrayContaining(expired));
+      expect(dryRun.deletedIds).toEqual([orphan.id]);
+      expect(await store.listRefs()).toHaveLength(4);
+      expect(await store.exists(orphan.id)).toBe(true);
+
+      const result = await store.cleanup(new Set(), policy);
+      expect(result.expiredRefs).toHaveLength(2);
+      expect(result.expiredRefs).toEqual(expect.arrayContaining(expired));
+      expect(result.deletedIds).toEqual([orphan.id]);
+      expect(await store.exists(orphan.id)).toBe(false);
+      expect(await store.exists(shared.id)).toBe(true);
+      expect(await store.exists(other.id)).toBe(true);
+      expect(
+        (await store.listRefs()).map((ref) => ref.sessionId).sort(),
+      ).toEqual(["other-holder:1", "sess-A"]);
+
+      // A prefix without a colon could name a session and is refused.
+      await expect(
+        store.cleanup(new Set(), {
+          expireRefs: { sessionIdPrefix: "sess-", maxAgeMs: 0 },
+        }),
+      ).rejects.toThrow(/colon/);
+      expect(await store.isReferencedBy(shared.id, "sess-A")).toBe(true);
+    });
+
     it("isReferencedBy returns true purely from ownership when no addRef ran", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");

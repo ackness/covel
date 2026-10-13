@@ -1,0 +1,1122 @@
+# 回合管线：架构与执行流程
+
+这一页讲 Covel 怎样把玩家的一句话变成一段故事：一个回合从头到尾经过哪些步骤，数据写到哪里，画面怎样更新。想改框架本身，或者想弄清一个问题出在哪一层，先读这一页。只是做世界或写插件，不需要读它。
+
+前面是一段不带术语的走读，后面各节是细节。字段的完整契约在[参考](../reference/index.md)里，这里只讲各部分怎样连起来。
+
+## 先看一遍：玩家按下发送之后
+
+先认识四个词，后面一直用：
+
+- **插件**：一个文件夹，里面写着玩法。讲故事的、记笔记的、掷骰子的，都是插件。
+- **runtime**：插件里一段可以运行的东西。它要么是一段写给模型的提示词（`agent`），要么是一个 JS 函数（`function`）。一个插件可以有零个、一个或几个 runtime。
+- **内核（Kernel）**：框架里负责安排的部分。它决定这一回合运行哪些 runtime、按什么顺序、给它们看什么、结果怎样保存。它不懂任何具体玩法。
+- **提案（Proposal）**：runtime 想保存的一条内容，例如“追加这段正文”“把这个角色的生命值改成 12”。runtime 只能提出，由内核检查后统一写入。
+
+玩家输入“我去探索沼泽”并按下发送，接下来发生这些事：
+
+1. **前端发出请求。** 浏览器把这句话发到 `POST /api/actions`。这个连接不会马上关掉，服务端沿着它一条一条地推送事件（这种方式叫 SSE），前端收到一条就更新一点画面。
+2. **服务端排队。** 同一个会话同一时刻只做一件事。服务端先等上一回合留下的、声明了“下一回合必须读到”的后台工作做完，再给会话上锁。
+3. **定住本回合用的插件。** 回合开始时用的是哪一版插件、哪些工具，到回合结束都不变。中途热更新了插件，也要等下一回合才生效。
+4. **挑出这一回合要运行的 runtime。** 每个 runtime 都写了自己什么时候运行：每回合、每隔几回合、某个事件发生时，或者只在被点名时。内核照着这些声明挑。
+5. **按四个阶段依次运行。** `pre-turn`（准备材料）→ `narrative`（写正文）→ `post-turn`（整理这一回合发生了什么）→ `audit`（检查）。前一个阶段全部结束，后一个才开始。同一个阶段里互不依赖的 runtime 同时运行。
+6. **运行一个 runtime。** 内核先检查它需要的东西齐不齐，再准备它能看到的内容：世界设定、历史对话、上游 runtime 的结果、玩家这句话。`agent` 把这些交给模型，模型可以调用工具，直到给出最终结果；`function` 直接运行函数。
+7. **结果变成提案。** 正文、表单、状态变化、插件自己的数据，都先变成提案。这时还没有任何东西写进数据库。
+8. **一次写入。** 内核检查全部提案，在一个数据库事务里写入。玩家的输入、对话记录和会话的回合数也在同一个事务里。要么全部写成功，要么全部不写。
+9. **通知前端。** 写入成功后，服务端推送事件：正文、要填的表单、变化的面板数据。前端据此更新消息区和右侧面板。
+10. **收尾。** 最后一条事件是 `execution.completed`，其中的 `committed` 说明这一回合有没有真正保存。耗时的收尾工作（例如整理记忆）可以转到后台去做，玩家不用等。
+
+开局稍有不同。新会话先处在“准备阶段”（`setup`）：只运行准备用的 runtime，例如生成角色表单。全部准备完成后，会话才进入“游玩阶段”（`playing`），开始上面这种四阶段的回合。
+
+下面各节把每一步展开。
+
+## 一、系统全景
+
+三个部分：前端（`apps/web`）、服务端（`apps/server`，基于 Hono）、存储（`DataStore`）。插件和世界包是服务端启动时加载的文件。
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Covel 全景架构                                 │
+│                                                                             │
+│  ┌──────────────┐    SSE/HTTP     ┌──────────────────────────────────────┐  │
+│  │   Frontend    │ ◄─────────────► │            Server (Hono)             │  │
+│  │  (apps/web)   │                │                                      │  │
+│  │              │                │  ┌────────────────────────────────┐   │  │
+│  │ json-render  │                │  │       Turn Executor            │   │  │
+│  │ catalog      │                │  │  ┌──────────────────────────┐  │   │  │
+│  │ pluginData   │                │  │  │    Stage Scheduler       │  │   │  │
+│  │ SSE client   │                │  │  │ setup→pre-turn→narrative │  │   │  │
+│  └──────────────┘                │  │  │ →post-turn→audit + DAG   │  │   │  │
+│                                  │  │  │                         │  │   │  │
+│  ┌──────────────┐                │  │  └──────────────────────────┘  │   │  │
+│  │   Plugins     │                │  │           │                    │   │  │
+│  │  PLUGIN.md    │────加载────────►│  │     ┌─────▼──────┐            │   │  │
+│  │  tools/*.js   │                │  │     │ LLM Gateway │            │   │  │
+│  │  ui/*.json    │                │  │     └─────┬──────┘            │   │  │
+│  └──────────────┘                │  │           │                    │   │  │
+│                                  │  │     ┌─────▼──────┐            │   │  │
+│  ┌──────────────┐                │  │     │ Tool Loop   │            │   │  │
+│  │   Worlds      │                │  │     └─────┬──────┘            │   │  │
+│  │  world.yaml   │────加载────────►│  │           │                    │   │  │
+│  │  WORLD.md     │                │  │     ┌─────▼──────┐            │   │  │
+│  └──────────────┘                │  │     │Session Kernel│            │   │  │
+│                                  │  │     │ (Proposal →  │            │   │  │
+│                                  │  │     │  Commit)     │            │   │  │
+│                                  │  │     └─────┬──────┘            │   │  │
+│                                  │  └───────────┼────────────────────┘   │  │
+│                                  │              │                        │  │
+│                                  │  ┌───────────▼────────────────────┐   │  │
+│                                  │  │        DataStore               │   │  │
+│                                  │  │  sessions │ messages │ plugin  │   │  │
+│                                  │  │  results  │ characters│ data   │   │  │
+│                                  │  └────────────────────────────────┘   │  │
+│                                  └──────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+图里的几个名字：
+
+| 名字            | 做什么                                                   |
+| --------------- | -------------------------------------------------------- |
+| Turn Executor   | 执行一个回合：挑 runtime、排顺序、逐个运行               |
+| Stage Scheduler | 按阶段排顺序。DAG 指“谁依赖谁”的关系图                   |
+| LLM Gateway     | 调用模型的统一出口                                       |
+| Tool Loop       | 模型调用工具、读结果、再决定下一步的循环                 |
+| Session Kernel  | 把结果变成提案，检查后写入                               |
+| DataStore       | 存储接口，后端可以是内存、SQLite 或 PostgreSQL           |
+| json-render     | 前端用 JSON 描述界面的渲染方式，插件的面板和表单都由它画 |
+
+## 二、生命周期状态机
+
+### 2.1 会话生命周期
+
+一个会话当前处在什么状态，由四个字段说明。客户端和存档直接读它们，没有别的来源：
+
+| 字段                   | 取值                          | 含义                                             |
+| ---------------------- | ----------------------------- | ------------------------------------------------ |
+| `status`               | `active` / `paused` / `ended` | 会话是否在进行                                   |
+| `phase`                | `setup` / `playing`           | 准备阶段还是游玩阶段，决定运行哪些阶段的 runtime |
+| `completedPlayerTurns` | 整数                          | 已经保存的玩家回合数                             |
+| `setupRuntimes`        | 每个准备 runtime 一条状态     | `pending` / `done` / `blocked`                   |
+
+这四个字段只有当前这一种形式，不接受也不回填旧的时钟字段。
+
+```mermaid
+stateDiagram-v2
+    [*] --> Setup: createSession()\n phase='setup'
+
+    state Setup {
+        direction LR
+        [*] --> RunningSetupStage
+        RunningSetupStage --> RunningSetupStage: 玩家多次提交 /\n setupRuntimes 镜像逐个记 done
+        RunningSetupStage --> AllSetupDone: 所有 setup runtime\n 已成功报告完成
+        AllSetupDone --> [*]
+    }
+
+    Setup --> Playing: setup 提交事务翻转 phase setup → playing\n completedPlayerTurns 保持 0
+
+    state Playing {
+        direction LR
+        [*] --> WaitingForInput
+        WaitingForInput --> ExecutingTurn: POST /api/actions
+        ExecutingTurn --> WaitingForInput: execution.completed\n committed=true|false
+    }
+
+    Playing --> Paused: pauseSession()\n status='paused'
+    Paused --> Playing: resumeSession()\n status='active'
+    Playing --> Ended: endSession()\n status='ended'
+    Paused --> Ended: endSession()
+    Ended --> [*]
+```
+
+**业务真值** = `(status, phase, completedPlayerTurns, setupRuntimes)`。下面按状态分别说明。
+
+#### 准备阶段（Setup）
+
+条件：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime。
+
+一个准备 runtime 用明确的信号报告“我做完了”，三种之一：
+
+- function 返回 `outcome: "success"` 加 `completion: "done"`；
+- agent 输出 `preGameDone: true`；
+- guard（runtime 运行前的检查函数）返回 `{ skip: true }`。
+
+内核把结果记进 `setupRuntimes`。玩家可以多次提交表单或消息来推进，例如 `char-creator` 的表单经 `submit_interaction` 提交。
+
+失败时的规则：
+
+- 失败但还有重试次数：保持 `pending`，记下 `lastError`。再发一次 `start_session` 只重跑没完成的 runtime，不新建会话，也不记录玩家消息。
+- 重试次数（`maxTriggerCount`）用完不算完成：该 runtime 变成 `blocked`，会话停在准备阶段，等玩家重试或豁免。框架不会跳过坏掉的准备步骤继续往下走。`blocked` 的 runtime 要先经 `retry` 端点解封。
+- 读取已保存表单的准备 runtime，不能因为同一份提交每次都失败。提交无法使用时，要把它作废并重新发出表单（带 `notice` 和上次的值），否则会话会永远停在准备阶段。
+- 挂起的准备 runtime 在恢复（resume）后给出完成信号时，`done` 状态和 `phase` 的切换随恢复的那次提交一起写入。
+
+准备 runtime 之间可以用 `needs(scope: session)` 声明依赖，它读的是已经保存的 `done` 状态：
+
+- 目标已完成：依赖直接满足。
+- 目标是 `blocked` 或不在本会话启用的插件里：留给玩家处理。
+- 契约依赖写 `cardinality: one`：只要有一个提供者已完成、被阻塞或能先完成，就不算成环。写 `all`：等每个待完成的提供者。
+- 只有任何顺序都无法放行的成员，才在执行前标为 `blocked`，原因是 `setup-session-cycle`。
+
+#### 从准备进入游玩
+
+- **切换时机。** 所有准备 runtime 都报告完成后，内核在准备阶段的提交事务里把 `phase` 从 `'setup'` 改成 `'playing'`。这个事务里 `completedPlayerTurns` 仍是 0。提交失败时，`phase` 的切换和 `setupRuntimes` 一起回滚。
+- **没有单独的通知。** `phase` 切换不推送独立的 SSE 事件，也没有对应的提案类型。客户端从会话响应或快照读出当前的 `phase`、`completedPlayerTurns` 和 `setupRuntimes`。
+- **紧接着写开场（Setup completion followup）。** 最后一个准备输入（例如角色表单）提交后，`/api/actions` 的同一个请求先提交准备阶段，再用新的 `turnId` 和独立的事务马上运行一次主循环。玩家因此直接看到第一段正式叙事。同一条 SSE 流、trace 和快照覆盖这两次执行。
+- **开场不计回合数。** 这次接力执行的 `origin` 是 `continuation`，不计入 `completedPlayerTurns`。它保持 0，直到第一条主循环玩家消息提交后才变成 1。所以开场叙事和第一回合共用 `logicalTurn = 1`，`startTurn` 和 `interval` 都按这个数计算。
+
+#### 逻辑回合数
+
+`logicalTurn` 在执行开始时定住，原样传给 function handler 和它的 `ctx.tools.call` 调用，两处是同一个值，工具那一侧不重新计算。
+
+- 已完成 7 个玩家回合时，它是 8。
+- 初始准备阶段和开场接力都是 1。
+- 不提供执行时钟的独立薄宿主，可以省略工具上下文里的这个可选字段。
+
+#### 游玩阶段（Playing）
+
+条件：`status === 'active' && phase === 'playing'`。每次 `POST /api/actions` 触发一轮完整的回合，按 `pre-turn → narrative → post-turn → audit` 四个阶段依次运行，阶段之间有严格的屏障。
+
+`completedPlayerTurns` 只统计已提交的玩家回合。每次执行都在 `turn_results` 里有自己的一行，`origin` 是下面之一：
+
+| `origin`       | 是什么                      | 计入回合数 |
+| -------------- | --------------------------- | ---------- |
+| `player`       | 玩家发消息触发的回合        | 是         |
+| `continuation` | 准备完成后的开场接力        | 否         |
+| `manual`       | 插件 RPC 点名运行的 runtime | 否         |
+| `background`   | 后台执行                    | 否         |
+| `recursive`    | 嵌套的 `recursiveCall`      | 否         |
+| `resume`       | 挂起后的恢复                | 否         |
+
+多次执行共用一个逻辑回合时，只计一次。
+
+#### 暂停与结束（Paused / Ended）
+
+`status === 'paused' | 'ended'` 时，调度器直接返回空，`/api/actions` 被服务端拒绝。暂停的会话可以用 `resumeSession()` 恢复，结束是终态。
+
+#### 提交的原子边界
+
+同一个会话的这些事情由同一把会话锁（session lock）排成一队，不会交叉：玩家输入、runtime 执行、提案提交、对话执行日志（玩家和 runtime 的 `TurnMessage`）、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）、挂起记录（suspension artifact）和自动快照。
+
+其中这些在同一个 `finalizeExecution` 事务里一起提交或一起回滚：执行日志、提案、会话时钟、挂起记录。
+
+要记住的细节：
+
+- **唯一的例外**是准备 runtime 的尝试次数。它在事务之后更新 `setupRuntimes` 里的计数，回滚的尝试也消耗次数，但它不切换 `phase`。
+- `turn.suspended` 只在提交之后发出。
+- 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
+- `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
+- 提交之后的事件发布逐个独立进行，任何一个失败都不回滚已经写入的数据。失败时宿主记一条 `commit.fanout.failed` trace，让该会话的订阅流收到 `system.reset`（`reason: "publish-failed"`）后完整重读，并在 `execution.completed` 上带 `resync: true`。
+
+#### 把事件送到客户端不拖住回合
+
+向客户端投递事件，不负责“业务是否完成”：
+
+- `onFinalized` 确认结果已经持久保存后，把事件放进一个有上限的队列。runtime 的增量和生命周期事件同样只入队。这些回调不等 SSE 的网络写入。
+- 提案、日志、时钟的事务和自动快照仍在原来的会话锁内完成。事件信封的身份和 `seq` 在这次执行持有锁的时候取得。
+- 最后把队列发完这一步在锁外进行。连接慢到超时或断开，不改变已提交的内容，不重跑模型，也不会让只读恢复把成功的执行当成可重试的失败。
+
+#### 后台运行的 RPC / event runtime
+
+声明 `schedule.manual.execution: background` 的 runtime，不占着会话锁运行。这类 runtime 通常是几分钟的外部调用，例如出图或手动 TTS。持锁运行会让玩家的下一条消息一直排队；PostgreSQL 部署下还会撞上获取锁的 30 秒上限。
+
+它的运行方式：
+
+- 它包括两种：被一次执行带起、延后运行的 follower，以及后台模式的 manual 触发。
+- 作为持久的作业排进 `_runtime_jobs`，`origin.activation` 是 `manual` 或 `event`。follower 在触发它的那次执行的提交事务里入队。
+- 作业 worker 认领后，把 handler 跑在会话锁**外**。只有 `processTurnResults`（finalize 事务加自动快照）进锁。作业的终态和它写入的数据在同一个事务里提交。
+
+为什么这样是安全的：
+
+- 这条路径不写会话时钟：不传 `sessionClock`，并且 `completedPlayerTurns` 只数 `origin: "player"`。
+- 写入先进缓冲区（writeBuffer），最后汇入同一个提交事务，不在执行中零散落库。
+- 它不追加对话消息。
+- 同一个 runtime 的并发执行由 `<sessionId>::<runtimeId>` 作业锁排成一队。handler 里“是否已经生成过”这类先查后做的逻辑因此不会重复执行，否则会重复计费。
+- 提交前在锁内重新读会话状态。玩家中途暂停或结束了会话，结果就被丢弃，不写入。
+
+#### 回合里转到后台的 runtime（staged detached）
+
+`schedule.completion.mode: detached` 是另一件事，和上面的 `execution` 互不影响。它只对通过安全检查的 `post-turn` / `audit` function 叶节点（没有别的 runtime 等它结果的 runtime）生效。完整过程见下面的 2.3 节，要点是：
+
+- 调度器在原来那一层开始时冻结上游结果。只有该 runtime 声明依赖的上游保留输出，其余只留身份和状态。
+- 作业描述随原始回合的提案、日志、会话时钟一起原子写入 `_runtime_jobs`。提交后立刻发 `runtime.deferred`，玩家的回合就此结束。
+- worker 用 CAS（“值没被别人改过才写入”的原子操作）抢租约（lease）认领作业。执行时不持主会话锁，同一个 runtime 一次只跑一个。
+- 进入提交前，作业必须从 `running` 用 CAS 改到 `committing`，并在会话锁内重新核对会话和插件是否还是原来那一份、版本，以及实际产生的 effects。
+- 取消、超时、过期（stale）或租约失效，都会让迟到的结果无法提交。
+
+### 2.2 单轮 Turn Pipeline
+
+下图是一次执行的全过程。走读里的第 2 到第 10 步对应图里从上到下的方框。
+
+```mermaid
+flowchart TB
+    In(["POST /api/actions<br/>玩家输入 / 开始游戏"]) --> Settle["等待 before-next-execution 作业<br/>锁外等待，锁内重查"]
+    Settle --> Capture["冻结 registry / extension generation<br/>加载 canonical 历史并投影"]
+    Capture --> Exec[executeTurn]
+    Exec --> StartEvt["SSE: execution.started"]
+    StartEvt --> Hook1[TurnStart hook]
+    Hook1 --> Filter["selectTriggeredRuntimes<br/>manual: 按名字匹配（绕过 shouldTrigger）<br/>setup runtime: 按 setupRuntimes 镜像取 pending<br/>其余: shouldTrigger（auto / scheduled / event<br/>+ startTurn / maxTriggerCount / cooldownTurns）"]
+    Filter --> PreSched["PreSchedule hook<br/>(可收窄本回合 runtime 集)"]
+    PreSched --> Band{"phase?"}
+    Band -->|setup| SetupBand["setup stage<br/>DAG（needs / after / inputs）"]
+    Band -->|playing| MainBand["主循环<br/>pre-turn → narrative → post-turn → audit<br/>stage 间严格屏障，stage 内 DAG"]
+
+    SetupBand --> Group
+    MainBand --> Group
+
+    subgraph Group["每个 DAG 层级组（同组并行，跨组串行；name 做并列 tiebreak）"]
+      direction TB
+      Gate["框架依赖 / 输入 / 权限检查"] --> G3["PreRuntime hook"]
+      G3 --> G1["guard? (agent runtime)"]
+      G1 --> G2["SSE: runtime.started"]
+      G2 --> RT{"runtimeType"}
+      RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，分别保存 output / effects / completion"]
+      F1 --> G6
+      RT -->|agent| G4["buildContext<br/>runtime 正文 + prompt.segment 扩展段<br/>+ typed inputs + 投影历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
+      G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse"]
+      G5 -->|拆分 agent 协议| G6["RuntimeResult: output / effects / completion"]
+      G6 --> G7["PostRuntime hook"]
+      G7 --> Final["校验故事输出 / 超时 / 父级取消"]
+      Final --> G8["唯一终态 + turnId / runId<br/>runtime.completed / runtime.failed / runtime.skipped"]
+    end
+
+    Group --> Commit["effects + story 输出 → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
+    Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted"]
+    SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
+    PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
+    PreGameTick -->|否| Keep["保持 phase 不变"]
+    Advance --> End["SSE: execution.completed"]
+    Keep --> End
+```
+
+图里带 hook 字样的方框（`TurnStart`、`PreRuntime`、`PreLLMCall` 等）是插件可以挂上处理函数的时机，完整清单见 [Hook 参考](../reference/hooks.md)。
+
+**Stage 分带**（`packages/runtime/src/turn-executor/scheduling.ts` + `packages/runtime/src/schedule/` 硬性约束）：
+
+| phase       | 可调度 stage                               | 语义                                                                                                                                                                                      |
+| ----------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'setup'`   | `setup`                                    | 游戏初始化，例如 `pregame`、`world-init/schema-gen`、`char-creator/player-init`。顺序完全由声明的边决定：`schema-gen` 用 `schedule.after: [pregame]` 保证 `pregame → schema-gen` 先后运行 |
+| `'playing'` | `pre-turn → narrative → post-turn → audit` | 每回合依次运行四个阶段，见下面的规则                                                                                                                                                      |
+
+主循环的排序规则：
+
+- 阶段之间有严格的屏障：上一个阶段全部有了结果（成功、失败或跳过），才进入下一个。
+- 同一个阶段里，顺序由 `needs`、`after` 和 `inputs` 绑定推导出的依赖图决定。
+- 互不依赖的 runtime 并行；并列时用 `name` 做稳定的先后。
+- 依赖成环的 runtime 和它的下游，本回合记为 `skipped: dependency-cycle`，不会退回成任意顺序执行。
+
+**Proposal 类型**（全部过 commit chain，源自 `packages/shared/src/types/proposal.ts` 的 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete`、`character.schema.set`、`character.upsert`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
+
+**插件依赖与提供者选择**：一个会话启用哪些插件，由四样东西算出来：玩家明确的 `requested` / `excluded`、授权状态、core 声明、带版本的 `provides` / `requires`。
+
+- 明确排除对 core 插件也有效。
+- 缺少依赖时，先选唯一的普通提供者，再考虑唯一的默认提供者。
+- 玩家明确换掉默认提供者，这一步在冲突检测之前处理。
+- `conflicts` 冲突，或两个插件争同一个只允许一个提供者的扩展点（single），这个组合会被拒绝。
+- 普通的输出契约可以有多个提供者，消费者用 `cardinality: one | all` 说明自己要一个还是全部。
+- 启用和停用之后的明确选择保存在 `session.metadata.pluginSelection`。推荐列表本身不会自动启用插件。
+
+进入触发和排序之前，`resolveRuntimeProviders` 按编译后的 `outputContract` / `defaultProvider` 去掉已经被替代的默认 runtime。社区插件的服务端代码和 runtime 授权仍然单独校验，批准状态不由依赖声明授予。框架不按具体的插件 ID 分支。
+
+**失败任务恢复**：
+
+- 单项和批量重试都创建新的执行 ID，并把原来的故事回合保留为 `sourceTurnId`。
+- 可以当作上游“种子”的只有两种：来源回合和已提交的重试里成功的非目标结果；guard 明确返回 `skip: true` 的输出。
+- 因为依赖失败而产生的 skipped 不满足依赖。
+- 种子不会重复提交。重试不重写已完成的正文，不增加玩家回合数。
+- 插件消息在提交时关联原来的故事锚点。舞台的快捷回复和刷新后的恢复使用同一条归属规则。
+
+### 2.3 Staged Runtime 后台流水线
+
+有些收尾工作不该让玩家等，例如回合结束后整理记忆。runtime 声明 `schedule.completion.mode: detached` 后，回合照常提交并结束，这个 runtime 变成一个后台作业稍后运行。
+
+```mermaid
+flowchart LR
+    DAG["post-turn / audit DAG level"] --> Plan{"schedule.completion: detached<br/>且 function + 安全叶节点?"}
+    Plan -->|否| Foreground["保留前台执行<br/>不安全声明产生 diagnostic"]
+    Plan -->|是| Freeze["冻结 upstream RuntimeResult[]<br/>execution / model / settings / plugin version"]
+    Foreground --> Tx["finalizeExecution transaction"]
+    Freeze --> Tx
+    Tx -->|commit| Queued["_runtime_jobs: queued<br/>runtime.deferred"]
+    Tx -->|rollback| None["无 job / 无 deferred 事件"]
+    Queued --> Claim["CAS claim + renewable lease"]
+    Claim --> Run["background execution<br/>同 runtime serial"]
+    Run --> Guard["running -> committing CAS<br/>session lock + incarnation/effect guard"]
+    Guard -->|pass| Success["同一事务：领域提交 + succeeded/result"]
+    Guard -->|reject| Terminal["failed / timed_out / cancelled<br/>stale / orphaned"]
+    Success --> Status["job-status.updated<br/>data.originTurnId"]
+    Terminal --> Status
+```
+
+**哪些 runtime 可以转后台。** 它必须声明 effects。框架允许的是互相隔离的写入：assets/media、本插件非保留的 plugin-data、UI 和 HTTP effects。提交前会再次核对实际产生的提案。出现下面任何一种情况，调度器把它留在前台运行，并发出 diagnostic：
+
+- 有前台的消费者在等它的结果；
+- 用 `recordAs` 导出结果；
+- 输出事件；
+- 直接修改角色、状态或交互。
+
+**时间限制。**
+
+| 字段             | 从什么时候算起       | 限制什么                |
+| ---------------- | -------------------- | ----------------------- |
+| `maxQueueMs`     | `enqueuedAt`（入队） | 等待被认领的时间        |
+| `maxExecutionMs` | 进入 `running`       | 到 runtime 执行返回为止 |
+
+- 执行返回之后，等会话锁来提交的时间不计入 `maxExecutionMs`。一个因为等待超时而放行的玩家回合，可能持锁几分钟。
+- 等锁期间租约照常续期。已经被取消或超时的作业，仍然过不了 `running → committing` 的 CAS。
+- 这两个字段不代替 runtime 自己的 `timeoutMs`。
+
+**worker 怎样取作业。**
+
+- 默认最多同时运行 4 个不同的 runtime，按会话轮流取队列。同一个 `(session, plugin, runtime)` 只允许有一个进行中的作业。
+- 入队、重试、恢复、等待屏障和作业结束，都按会话唤醒 worker。平时它只认领被唤醒的会话的队列。
+- 启动时、不带会话的唤醒，以及每 30 秒一次的维护轮，会扫描全部会话。其他进程排入的作业也由此接走。
+
+**重启之后。**
+
+| 作业的状态                         | 结果                         |
+| ---------------------------------- | ---------------------------- |
+| `queued`，没过排队期限，从未被认领 | 继续执行                     |
+| 排队超时                           | 变为 `timed_out`，不自动重放 |
+| 执行中，租约已过期                 | 变为 `orphaned`，不自动重放  |
+
+玩家明确重试时，创建新的 jobId。
+
+**提交时的保证。**
+
+- worker 进入提交屏障前，先停掉自己的续租。`extraInTx` 在领域提交事务内完成作业的“成功”CAS。
+- 业务失败、完成 CAS 失败、事务末尾失败，都会回滚领域写入和作业的成功状态。
+- 成功事件在事务外发布。事件丢了，可以从已持久化的终态补齐，不重跑任务。
+- worker 首次唤醒时和之后每 30 秒扫描一次过期的租约，扫描失败 1 秒后重试。维护不受执行槽位已满的影响。
+- `committing` 状态的作业必须先不阻塞地拿到同一把提交锁，锁忙时留到下一轮。
+- 关闭时停止后续调度，并等待进行中的扫描和锁回调。
+
+### 2.4 下一次执行前的 settle 屏障
+
+有的后台工作必须在下一回合开始前做完，因为下一回合要读它的结果。这类 `post-turn` / `audit` function 可以声明 `schedule.completion.settle: before-next-execution` 和 `maxSettleWaitMs`。
+
+- 这类任务可以读取自己的 plugin-data，由 worker 按来源任务的顺序一个一个处理。
+- 输入里的 `turn-digest@1` 是内核冻结的来源回合摘要，不需要绑定某个叙事插件。
+- `memory/extract` 用这个机制更新自己的记忆块。
+
+等待的过程：
+
+1. 玩家动作、RPC、恢复和修改会话的入口，先查询还没做完的持久作业，在主会话锁**外**唤醒 worker 并等待。
+2. 拿到锁之后再查一次，避免在“检查”和“上锁”之间新排入的任务被漏掉。
+3. worker 提交时始终使用原来的会话锁，不进入自己的等待屏障。
+4. 到了最早的等待期限仍未结束，记录 `execution.settle-timeout`，然后允许新的执行继续。
+
+> [!IMPORTANT]
+> 等待超时不代表后台任务已经成功，也不代表它被取消。新的执行持有会话锁期间，已经执行完的后台任务排在它后面提交，这段等待不计入 `maxExecutionMs`。
+
+通过屏障之后，才定住本次执行使用的版本：registry、工具、服务、hook 和扩展的注册。
+
+- 热重载发布了新版本，不改变已经开始的执行。
+- 授权被撤销是例外，它仍然按实时状态检查。
+- 嵌套调用沿用已经准入的执行，不在持锁时重复等待。
+
+## 三、消息翻译层（玩家 ↔ LLM Agent）
+
+这是框架最核心的部分。玩家发来的是一句自然语言，模型收到的是一份有结构的提示词；模型返回的是有结构的输出，玩家看到的是渲染好的界面。中间的转换由框架完成。
+
+### 3.1 输入方向：玩家 → LLM
+
+负责组装提示词的部分叫 Context Builder。它把固定不变的内容放在前面，把每回合变化的内容放在后面。
+
+```
+玩家输入                      框架翻译层                         LLM 收到的
+─────────                    ────────                         ──────────
+
+"我去探索沼泽"     ──►    Context Builder     ──►    System Prompt（逐回合不变）:
+                          │                          │  你是主叙事生成器...
+                          │ 1. 加载 PLUGIN.md         │  <world-lore>九州・云梦泽...</world-lore>
+                          │    (agent 指令)           │
+                          │                          │  History:
+                          │ 2. 注入世界观              │  ...此前的回合...
+                          │    {{ world.lore }}       │
+                          │                          │  回合上下文（每回合重发）:
+                          │ 3. 注入消息历史            │  <runtime-inputs>...</runtime-inputs>
+                          │    (append-only store)    │  <world-dimensions>...</world-dimensions>
+                          │                          │  <player-character>
+                          │ 4. 注入本回合数据          │    名字: 陆青云, 灵根: 水灵根...
+                          │    上游输出、角色卡、      │  </player-character>
+                          │    回合级提示段            │
+                          │                          │  [user] 我去探索沼泽
+                          │ 5. 语言约束               │
+                          │    "用中文回复"            │  Tools available:
+                          │                          │  (根据 manifest.tools 注入)
+```
+
+提示词各段的精确顺序见 [Prompt 结构](../reference/prompt-structure.md)。
+
+### 3.2 输出方向：LLM → 玩家
+
+模型的输出先变成提案，提交后变成事件，前端按事件渲染。
+
+```
+LLM 返回                     框架翻译层                        玩家看到的
+────────                    ────────                         ──────────
+
+narrativeOutput:    ──►    Session Kernel      ──►    ┌─────────────────┐
+"沼泽的雾气..."              │                         │  叙事文本         │
+                            │ normalizeOutput()        │  (Prose 组件)    │
+interactions:       ──►     │ → Proposal[]      ──►    ├─────────────────┤
+create-form / form          │                         │  角色创建表单    │
+                            │ commitAll()              │  (Form 组件)     │
+state.patch:        ──►     │ → SessionEvent[]  ──►    ├─────────────────┤
+plugin_data 写入      ──►    │ SSE emit()               │  插件消息面 /    │
+                            │                         │  右侧面板         │
+                            │                  ──►    ├─────────────────┤
+                            │                         │  状态更新        │
+                                                      └─────────────────┘
+
+                            每个 SessionEvent 通过 SSE 推送到前端
+                            MessageList 渲染 turn messages
+                            MessagePluginSurface / RightPanel 渲染 plugin surfaces
+```
+
+### 3.3 翻译细节：Tool 调用链
+
+模型想做一件确定的事（例如保存图鉴条目）时，它调用一个工具。框架找到工具、检查权限、执行，再把结果交还给模型。
+
+```
+LLM 决定调用工具                框架处理                        结果
+──────────────               ────────                       ──────
+
+LLM: "调用 sync-           ToolExecutor:
+      codex-entries"       1. findTool(name, context)
+      { entries: [...] }      ├─ builtin? → 直接访问
+                              └─ local? → 检查 pluginToolAccess
+                                          (声明了才能用)
+                           2. approval.check()
+                              ├─ builtin → auto-allow
+                              └─ local → allow (或需审批)
+                           3. tool.execute(params, context)
+                              ├─ 工具逻辑执行
+                              ├─ 生成领域 proposal / execution-local 写入
+                              ├─ commit 成功后发布数据事件 ──► SSE → surface 更新
+                              └─ 返回结构化结果或 `_text`
+                           4. 结果序列化为 tool message
+                              → `_text` 优先作为 LLM 可读文本
+                              → 结构化结果保留给 trace / commit / 调试
+                           5. LLM 看到结果，决定是否继续调用
+
+                           Tool Loop 按完成契约、预算和取消条件收敛
+```
+
+**怎样才算做完。** 模型说“我说完了”（`finishReason: stop`）本身不能证明一个有结构的任务成功。runtime 用下面的声明说明什么才算完成：
+
+| 声明                        | 含义                                                                  |
+| --------------------------- | --------------------------------------------------------------------- |
+| `requireToolUse`            | 必须有一次成功的工具执行                                              |
+| `completeAfterTools`        | 指定的终结工具成功，并且这一批里没有未解决的工具错误，就可以结束      |
+| `requireExplicitCompletion` | 用于允许“没有变化”的任务：必须有真实的写入，或明确调用 `runtime-done` |
+
+- 只写正文，或者把工具调用写成一段 JSON 文本，都不算写入。
+- 错误的结果不能变成有结构的成功。
+- function runtime 可以通过声明过的 `ctx.tools.call()` 走同样的工具、权限、参数校验和事务边界。
+- 社区 handler 使用 `ctx.pluginData`，拿不到完整的可写 store。
+
+**输出审查在执行工具之前。** 插件可以在 `PreLLMCall` 里要求先缓冲输出，再在 `PostLLMResponse` 里拒绝草稿并给出纠正要求。
+
+- 最多纠正两次，并且仍然受原来的预算限制。
+- 两个内置叙事插件用它检查 `narrativePerson`：默认第二人称，允许第一或第三人称，对白保留各自的视角。
+- 它们在检查通过后一次显示整段正文。框架仍然支持其他插件流式输出。
+- 这是有限的文本检查，不保证所有剧情推断都正确。
+
+## 四、插件设计
+
+### 4.1 插件结构
+
+```text
+plugins/my-plugin/
+  PLUGIN.md                  包身份、contracts、contributes；可内联一个 runtime
+  PLUGIN.zh.md               正文与固定提示段的中文变体（canonical 为 English）
+  runtimes/extract/
+    RUNTIME.md               独立 runtime 配置与正文
+    RUNTIME.zh.md            runtime 正文的中文变体
+  server/index.js            声明过的 tools/actions/services/extensions 等注册
+  server/extract.js          function handler
+  schemas/                   输入、输出和 namespace JSON Schema
+  ui/                        json-render specs
+  package.json
+```
+
+**根清单 `PLUGIN.md`** 描述整个包：
+
+| 字段                                               | 作用                                                   |
+| -------------------------------------------------- | ------------------------------------------------------ |
+| `id`、`kind`                                       | 包是谁                                                 |
+| `provides` / `requires` / `optional` / `conflicts` | 它提供、需要、可选使用、不能共存的契约                 |
+| `contracts`                                        | 契约的 schema                                          |
+| `contributes`                                      | 它带来的工具、RPC actions、服务、扩展、设置、数据和 UI |
+
+- `contributes.commands` 是斜杠命令的元数据，它的 action 必须同时声明在 `contributes.actions` 里。
+- `entry` 模块里实际注册的东西，必须和根清单一致。
+
+**runtime 的写法**固定分成几组：`schedule`、`io`、`agent` 或 `function`，另有 `guard`、`effects`、`permissions`。
+
+- 正文属于这个 runtime。
+- 两种组织方式只能选一种：在根文件里内联一个 runtime，或者用 `runtimes/*/RUNTIME.md`。
+- `agent.tools` 和 `function.tools` 都是工具白名单。
+- `io.output.contract` 必须是所属的包提供的契约。同一个包里，不能有两个 runtime 声明同一个输出契约。
+
+**包级字段只写在根文件里**，不从子 runtime 合并。
+
+- 不接受的写法：平铺的 frontmatter、子目录里的 `PLUGIN.md`、专用的记忆或提示字段。
+- 跨 runtime 的固定指令写在根的 `contributes.prompt`；动态内容通过 `prompt.segment@1` 提供。
+- 用不接受的写法做出的开发数据需要重新创建。
+
+完整字段见[插件参考](../reference/plugins.md)。
+
+### 4.2 插件间通信
+
+插件之间通过带版本的契约和宿主提供的能力协作。一个插件不能读取另一个插件的私有 namespace。
+
+| 需求             | 接口                                                  | 边界                                                                      |
+| ---------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| 本轮上游输出     | `io.inputs`，`from: { contract: narrative-engine@1 }` | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。 |
+| 强依赖与顺序     | `schedule.needs` / `schedule.after`                   | needs 排序并门控；after 只排序。turn 输入绑定也形成 DAG 边。              |
+| 已提交导出       | `io.inputs` 的 `scope: committed`                     | 读取显式导出，不扫描其他插件存储。                                        |
+| 查询业务能力     | `ctx.services.discover/call`                          | 使用 service contract 与 provider 身份，不绑定私有表。                    |
+| 提示词、历史、UI | 声明并注册 extension point                            | collect、pipeline 或 single 决定组合方式和竞争规则。                      |
+| 世界角色         | 只读 `ctx.world` 与领域 proposal                      | schema 和角色由内核验证、提交；插件没有角色镜像。                         |
+
+例子：一个 `post-turn` 的 runtime 想读本回合的正文。
+
+```yaml
+io:
+  inputs:
+    narrative:
+      from: { contract: narrative-engine@1, cardinality: one }
+      scope: turn
+      select: /narrativeOutput
+      required: true
+```
+
+- 阶段屏障保证 `narrative` 阶段结束后才运行 `post-turn`。
+- 同一个阶段里，互不依赖的 runtime 并行，输入和声明的依赖决定先后。
+- 缺少 `required` 的输入，消费者不运行。
+- 可选输入要明确写 `required: false`，这样一个暂时缺席的提供者不会变成必需的依赖。
+
+**runtime 读到的数据是哪一刻的。**
+
+- 领域读视图包含三部分：已提交的 CharacterSchema 和 Characters、已校验的上游提案、本 runtime 待提交的写入。所以工具写完之后马上读，读到的是刚写的内容。
+- 扩展提供者看到的 world 和 plugin-data，在这次执行创建时冻结。这样同一个扩展在并行的 runtime 里不会看到不同的内容。
+
+### 4.3 插件触发决策树
+
+内核怎样决定一个 runtime 这一回合运行不运行：
+
+```
+        selectTriggeredRuntimes（packages/runtime/src/turn-executor/scheduling.ts）
+                              │
+                    ┌─────────┴──────────┐
+                    │ manual 触发？       │ ← plugin-rpc 显式点名 = 触发决策本身，
+                    │ → 按 name 匹配入选  │    绕过 shouldTrigger 及其全部门控
+                    └─────────┬──────────┘
+                              │ 非 manual
+                    ┌─────────┴──────────┐
+                    │ setup runtime？     │ ← 按 setupRuntimes 镜像取 pending，
+                    │ → done/blocked 不跑 │    同样绕过 shouldTrigger
+                    └─────────┬──────────┘
+                              │ 主循环 runtime
+                shouldTrigger(manifest, context)
+              （packages/runtime/src/trigger/trigger.ts，
+                回合内事件 fan-out 复用同一函数）
+                              │
+                    ┌─────────┴──────────┐
+                    │ startTurn?         │ ← 逻辑回合数 < startTurn？
+                    │ maxTriggerCount?   │ ← 超过 session 最大次数？（trigger 台账）
+                    │ cooldownTurns?     │ ← 冷却中？（trigger 台账）
+                    └─────────┬──────────┘
+                              │ 通过
+                    ┌─────────┴──────────┐
+                    │   trigger.type     │
+                    ├────────────────────┤
+                    │ auto    → true     │
+                    │ scheduled → 逻辑回合 % interval == 0 │
+                    │ event   → topic in pendingEvents  │
+                    └────────────────────┘
+
+  trigger 枚举就是 auto / manual / scheduled / event 四种，
+  其余取值的 manifest 在加载时被 loader 拒绝，不进入触发决策。
+```
+
+用一句话说每种触发方式：
+
+| `trigger.type` | 什么时候运行                                 |
+| -------------- | -------------------------------------------- |
+| `auto`         | 每回合                                       |
+| `scheduled`    | 逻辑回合数能被 `interval` 整除的回合         |
+| `event`        | 它订阅的事件在待处理事件里                   |
+| `manual`       | 只在被 plugin-rpc 点名时，不看上面的任何门槛 |
+
+## 五、前端交互设计
+
+### 5.1 渲染管线
+
+前端收到 SSE 事件后，先把它变成消息或数据，再交给渲染层。渲染层是 json-render：界面用 JSON 描述，由一组固定的组件（catalog）画出来。
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                       前端渲染管线                                │
+│                                                                  │
+│  SSE 事件                  消息转换层                 渲染层       │
+│  ──────────               ────────                 ──────        │
+│                                                                  │
+│  narrative.delta    ──►  appendDelta()      ──►  Prose           │
+│  narrative.completed ──► addMessage(story)  ──►  组件            │
+│                                                                  │
+│  interaction.requested ──► addMessage(block) ──► messageToSpec() │
+│                                                  │               │
+│                                                  ▼               │
+│                                            nestedToFlat()        │
+│                                                  │               │
+│                                                  ▼               │
+│                                            ┌─────────────┐      │
+│                                            │  Renderer    │      │
+│                                            │ (json-render)│      │
+│                                            │              │      │
+│                                            │ catalog:     │      │
+│                                            │  Prose       │      │
+│                                            │  Form        │      │
+│                                            │  Button      │      │
+│                                            │  EntryCard   │      │
+│                                            │  Alert       │      │
+│                                            │  ...50个组件  │      │
+│                                            └─────────────┘      │
+│                                                                  │
+│  plugin-data.changed ──► pluginData store  ──► MessagePluginSurface │
+│                          更新 namespace         + RightPanel         │
+│                                                  json-render        │
+│                                                  Renderer           │
+│                                                                  │
+│  execution.started  ──►  executionSteps[]  ──►  进度条           │
+│  runtime.completed  ──►                                          │
+│  (无 phase.changed 事件) ── 状态标签由前端基于会话字段            │
+│           (status + phase + completedPlayerTurns) 计算，无服务端推送 │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+组件清单见 [UI 组件](../reference/ui-components.md)。
+
+> [!IMPORTANT]
+> `narrative.delta` 只有启用了流式输出的 runtime 才发。当前的内置叙事插件先缓冲并审查正文，所以客户端不能指望每回合都收到 delta。
+>
+> 只有 `execution.completed.committed` 或已提交的记录，才能确认本回合已经保存。单个 runtime 的成功事件不是整个回合的提交凭据。
+
+### 5.2 插件面板数据流
+
+一个工具写入插件数据之后，右侧面板怎样自动更新。下面以图鉴插件 `codex` 为例。
+
+```
+  插件工具执行                     服务端                      前端
+  ────────────                   ──────                     ──────
+
+  sync-codex-entries
+  params: { entries: [...] }
+        │
+        ▼
+  withPendingProposals()       ──► execution write buffer
+        │                          (plugin.data / plugin.data.batch)
+        ▼
+  turn finalizer transaction  ──► 原子写入 plugin_data 表
+        │                          (sessionId, pluginId,
+        │                           namespace, key, value)
+        │
+        ▼
+  eventBus.emit({              ──► SSE /events/stream
+    topic: "plugin",                或 /actions 流
+    _subType: "plugin-data.changed",
+    payload: {
+      pluginId: "codex",
+      changes: [{
+        namespace: "entries",
+        key: "codex-fire-magic",
+        value: { title: "火焰魔法", ... },
+        operation: "set"
+      }]
+    }
+  })
+        │
+        ▼                          ──► 前端 SSE handler
+                                       │
+                                       ▼
+                                  applyChanges(pluginId, changes)
+                                       │
+                                       ▼
+                                  pluginData["codex"]["entries"]["codex-fire-magic"]
+                                  = { title: "火焰魔法", ... }
+                                       │
+                                       ▼
+                                  useSyncExternalStore → notify listeners
+                                       │
+                                       ▼
+                                  PluginPanel re-render
+                                       │
+                                       ▼
+                                  JSONUIProvider state={pluginData}
+                                  Renderer spec={codex-panel.json}
+                                       │
+                                       ▼
+                                  SearchInput + FilterBar + CardList
+                                  (自动显示新的图鉴条目)
+```
+
+三个要点：工具只是把写入放进缓冲区；数据在回合的提交事务里才真正写入；事件在写入之后才发出，前端收到后面板自动重画。
+
+### 5.3 表单交互完整流程
+
+以开局的角色创建表单为例，从发出表单到玩家提交、再到进入第一段叙事。
+
+```
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                    角色创建表单流程                               │
+  │                                                                 │
+  │  首次执行 (phase === 'setup'，只运行 setup stage):              │
+  │  ┌────────────────────────────────────────────────────────────┐ │
+  │  │ pregame               → 初始化会话级元数据             │ │
+  │  │ world-init/schema-gen → 初始化角色 schema/维度声明        │ │
+  │  │   (schema-gen 的 after: [pregame] 保证两者串行；           │ │
+  │  │    narrative / post-turn stage 的 runtime 在 setup 阶段    │ │
+  │  │    不会被调度——后续 setup 子轮继续派发剩余 runtime)         │ │
+  │  └────────────────────────────────────────────────────────────┘ │
+  │  ┌────────────────────────────────────────────────────────────┐ │
+  │  │ 随后的 setup 子轮：char-creator/player-init →          │ │
+  │  │   开场引导 + create-form 表单                          │ │
+  │  │   (同为 stage: setup，turn-scoped needs 依赖            │ │
+  │  │    pregame + world-init/schema-gen)                    │ │
+  │  └────────────────────────────────────────────────────────────┘ │
+  │                          │                                      │
+  │                          ▼ SSE: interaction.requested           │
+  │                                                                 │
+  │  前端:                                                          │
+  │  ┌────────────────────────────────────────────────────────────┐ │
+  │  │ messageToSpec(block) → formToSpec(data)                    │ │
+  │  │   → FormHeader + FormField[] + SubmitButton                │ │
+  │  │   → json-render Renderer 渲染为交互表单                    │ │
+  │  │                                                            │ │
+  │  │ 玩家填写：陆青云 / 水灵根 / 渔民之子 / 灵识敏锐            │ │
+  │  │                                                            │ │
+  │  │ 点击提交 → submitInteraction():                            │ │
+  │  │   POST /api/actions                                        │ │
+  │  │     { type: "submit_interaction",                          │ │
+  │  │       payload: { turnId, submissions: [...] } }             │ │
+  │  │                                                            │ │
+  │  │   服务端在会话锁内一次完成:                                │ │
+  │  │   ├─ 定位已提交交互、来源插件、字段与跨字段校验             │ │
+  │  │   ├─ 填充 {{characterName}} → "陆青云"                      │ │
+  │  │   ├─ 生成叙事文本（自然语言，非 JSON）                      │ │
+  │  │   ├─ 一个事务保存 player_inputs 与后续回合的 turn.started   │ │
+  │  │   └─ SSE: interaction.submitted，随后运行后续回合           │ │
+  │  │                                                            │ │
+  │  │   后续回合由 char-creator 的 guard 运行：                   │ │
+  │  │   生成 character.upsert + plugin.data proposals            │ │
+  │  │   （guard 用 `preGameDone: true` 登记完成；集齐后           │ │
+  │  │    Kernel 在提交事务内把 phase 翻到 'playing'，             │ │
+  │  │    无 phase.changed SSE 推送）                             │ │
+  │  │                                                            │ │
+  │  │   同一请求完成 setup 并补跑 main-loop followup              │ │
+  │  │      → narrator + guide + codex                            │ │
+  │  └────────────────────────────────────────────────────────────┘ │
+  └─────────────────────────────────────────────────────────────────┘
+```
+
+服务端对提交的检查：
+
+- `number` / `integer` 字段保持数值类型。`min` / `max` / `step` 和插件注册的纯表单校验器，在服务端再检查一次。
+- 一个批次全部通过才写入。失败时表单保留，玩家可以继续改。
+- 社区插件的校验器在服务端重启后，需要重新授权来源插件；批准之后重发原来的提交。
+- `tabletop-rules` 是使用这些公共接口的可选配点插件，不是内核里的特殊路径。
+
+## 六、数据存储设计
+
+### 6.1 存储层次
+
+所有服务端的读写都经过 `DataStore` 接口。下面是它管理的表，按用途分组。
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        DataStore 接口                            │
+│                                                                 │
+│  会话级                                                         │
+│  ├── sessions          会话记录 (id, worldId, status, phase,    │
+│  │                                 completedPlayerTurns,        │
+│  │                                 setupRuntimes, plugins)      │
+│  ├── turn_results      每次执行的产物（含全部 runtime 结果）     │
+│  ├── tool_calls        工具调用审计日志                          │
+│  ├── trace_events      追踪事件（调试用）                        │
+│  │                                                              │
+│  消息级                                                         │
+│  ├── turn_messages     追加式消息历史 (system/user/assistant/tool)│
+│  ├── player_inputs     玩家表单/选择提交记录                     │
+│  │                                                              │
+│  游戏数据                                                       │
+│  ├── character_schemas  会话角色类型与属性定义、version          │
+│  ├── characters        角色记录 (name, type, fields)             │
+│  ├── lorebook_entries  世界 / 玩家 / 插件 owner 的世界书条目     │
+│  ├── state_schemas     动态状态表 schema                        │
+│  ├── state_entries     状态键值对                                │
+│  ├── state_changes     状态变更历史                              │
+│  ├── events            业务事件（append-only）                   │
+│  │                                                              │
+│  插件数据                                                       │
+│  └── plugin_data       插件持久化 KV (sessionId+pluginId+ns+key) │
+│      └── _runtime_jobs staged detached 作业真值（不进 snapshot）│
+│  │                                                              │
+│  世界级                                                         │
+│  ├── worlds            世界包记录 (name, lore, dimensions)       │
+│                                                                 │
+│  后端实现:                                                      │
+│  ├── MemoryStore      → 内存（开发/测试）                        │
+│  ├── PgStore          → PostgreSQL（生产）                       │
+│  └── SqliteStore      → SQLite（轻量部署）                       │
+└─────────────────────────────────────────────────────────────────┘
+
+浏览器私有模式不实现 DataStore：Dexie BrowserVault 保存完整版本化
+checkpoint，服务端 MemoryStore 只作为单次执行的临时工作区。
+```
+
+后端由 `STORE_BACKEND=memory|sqlite|pg` 选择，默认是 `sqlite`。三种后端的差别和浏览器存档见[存储](./storage.md)。
+
+### 6.2 数据所有权与导入
+
+**插件数据。** `plugin_data` 的内部主键是 `(sessionId, pluginId, namespace, key)`。
+
+- 插件拿到的读写接口已经绑定了会话和它自己的身份：读用 `getPluginData(namespace, key)` / `listPluginData(namespace)`，写只能写本插件的记录。
+- UI 绑定和 action 的目标同样不能指定别的插件的身份。
+
+**角色。** 角色模型是内核管理的一等数据。
+
+- `CharacterSchema` 保存开放的角色类型和属性定义，角色记录按这份 schema 校验。`player` 始终只有一个。
+- `character.schema.set` 由内核增加版本，并校验已有的角色。`character.upsert` 使用同一个校验器。
+- 插件不在自己的私有数据里保存世界 schema 或角色的副本。
+
+**世界书（Lorebook）。** 条目用 `(sessionId, owner, id)` 标识。
+
+- owner 是 world、player 或某个 plugin，所以相同的 id 可以属于不同的所有者。
+- 普通的 HTTP 世界书编辑只写 player owner。
+- 快照和 checkpoint 带着角色 schema 和带 owner 的世界书。不带这些内容的旧开发存档需要重建。
+
+**世界包带来的数据。** 世界包声明每份数据属于哪个带版本的 contract；插件用 `contributes.data.<namespace>.accepts` 声明自己接收哪种。
+
+- 框架校验 contract 和 namespace 的 schema，把数据分发给匹配的、已启用的消费者。
+- 框架不认识蓝图、立绘或规则插件的具体 ID，也不写某个插件的私有包装。
+- 世界级的 characterSchema、lore 和 metadata 是领域导入；业务数据由接收的插件自己解释。
+- 例如：`character.blueprints@1` 承载原始的蓝图记录，`memory.blocks@1` 承载 `{ id: "world", blocks: [...] }` 定义。
+
+**动态维度。** 世界包声明一张开放的维度定义表，每个会话由唯一的提供者管理当前值。捆绑的 `world-init` 是这样做的：
+
+- 在 `pre-turn` 发布 `world.dimensions@1` 冻结快照，通过只允许一个提供者的扩展点 `session.world-context@1` 提供公共读取。
+- 在 `post-turn` 绑定叙事来源做结算。值和回执用批量 CAS 在同一个事务里提交。
+- 它不合并 `entries`，不退回到 metadata 的初值，不向 constant lorebook 双写。
+- 待处理（pending）的义务要在下一次叙事前解决。
+
+参见[世界数据参考](../reference/world-data.md#动态世界维度dimensions)与 [World Model](../reference/world-model.md#动态维度快照)。
+
+### 6.3 消息历史模型
+
+对话历史存在 `turn_messages` 里。它只追加，不修改，是历史的权威来源。发给模型的历史是从它“投影”出来的：经过过滤、摘要替换和长度预算，原表不变。
+
+```
+turn_messages (canonical 追加式执行日志):
+
+  ┌────────┬──────────┬────────────┬──────────────────────────────┐
+  │ turnId │ source   │ role       │ content                      │
+  ├────────┼──────────┼────────────┼──────────────────────────────┤
+  │ turn-1 │ system   │ system     │ [世界观摘要]                  │
+  │ turn-1 │ player   │ user       │ (空 - 首轮无输入)             │
+  │ turn-1 │ runtime  │ assistant  │ 午后的坊市弥漫着灵植的甜香... │
+  │ turn-1 │ runtime  │ assistant  │ [角色创建叙事]                │
+  │ turn-1 │ player-input│ user    │ [narrativeTemplate 填充结果]  │
+  │ turn-2 │ player   │ user       │ 我决定跟师姐去探查灵脉       │
+  │ turn-2 │ runtime  │ assistant  │ 清晨，你在老槐树下等到了...   │
+  │ turn-2 │ tool     │ tool       │ {"entries":[...]}             │
+  └────────┴──────────┴────────────┴──────────────────────────────┘
+
+  runtime 行只把 narrativeOutput / content 文本写入 content，并携带表单
+  （pendingInput）与 UI 附件。结构化输出保留在 turn_results；既无文本也
+  无附件的运行（如 codex 只写结构化条目）不写 runtime 行。
+
+  trigger 台账（kernel 所有的 plugin data，owner `__kernel:triggers`）
+  按 runtime 记录已提交的运行次数和最后一次运行时的
+  completedPlayerTurns，随 finalize 事务写入，回滚的执行不计数。
+  maxTriggerCount / cooldownTurns 读它，不数 runtime 行，也不受压缩影响。
+  从未运行过的 runtime 不受 cooldownTurns 阻止，首次提交后才开始计算冷却；
+  冷却值超过 999 也遵循此规则。
+
+  canonical 未压缩后缀
+    → prompt.history-transform@1 投影
+    → runtime 历史过滤与 summary substitution
+    → prompt.segment@1 + 世界书 + 当前玩家输入
+    → token budget → LLM messages[]
+
+  玩家消息计数读取 canonical 日志，trigger 历史读取台账；prompt 投影不改写它们。
+  history.compact@2 生成摘要，框架原子保存摘要与压缩标记。
+
+  注意：玩家输入只以 `user` 角色追加一行（叙事模板填充结果），
+  框架不为 player-input 生成合成的 `assistant` 镜像消息。
+```
+
+### 6.4 Observability — TurnEmitter
+
+一个回合里发生了什么，通过一个很小的抽象 `TurnEmitter`（`packages/runtime/src/trace/turn-emitter.ts`）发出去。调用一次 `emit(type, payload)` 会做两件事：
+
+- 往 `trace_events` 表写一行；
+- 通过全局的 `EventBus` 广播，`/actions` 的 SSE 路由再把它转发给连着的客户端。
+
+它发的事件包括：
+
+- `tool.calling` / `tool.completed` / `tool.failed`
+- `llm.calling` / `llm.responded`
+- `message.completed`
+- `block.emitted`
+- `state.patch.applied`
+- `hook.fired` / `hook.rewrote` / `hook.aborted`
+
+runtime 的生命周期事件（`turn.started`、`turn.completed`、`runtime.started`、`runtime.completed`、`runtime.failed`）仍由 `TraceRecorder` 写入，两套机制并存。
+
+流式的叙事增量不保存。每个 runtime 只保存最终的那条 `message.completed`，这样表不会膨胀。
+
+事件的完整 payload 见[协议参考](../reference/protocol.md)的“转发的运行时内部事件”一节。
+
+## 七、完整游戏流程时序图
+
+从打开页面到进入主循环的完整过程。图里的 Turn 2+ 指进入游玩阶段之后的每一个回合。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Player as 玩家
+    participant Web as 前端 (apps/web)
+    participant Server as 服务端 (Hono)
+    participant Kernel as TurnExecutor + Kernel
+    participant Plugin as Runtime (插件)
+    participant LLM as LLM / Tool
+
+    Player->>Web: 打开页面
+    Web->>Server: GET /api/worlds / /api/plugins / /api/ui-specs
+    Server-->>Web: 世界列表 + 包清单 + UI 面板声明
+    Player->>Web: 选择世界
+    Web->>Server: GET /api/worlds/:id/plugin-plan
+    Server-->>Web: 服务端解析后的组合包、约束与默认插件集合
+    Player->>Web: 调整插件 + 点击"开始冒险"
+    Web->>Server: POST /api/sessions (新 session, phase='setup')
+    Web->>Server: POST /api/actions { type: 'start_session' }
+    Server-->>Web: SSE: execution.started
+
+    rect rgb(240, 248, 255)
+    Note over Server,Plugin: 首次执行 · setup stage (phase === 'setup')
+    loop 每个 setup runtime (DAG: needs / after / inputs)
+        Server-->>Web: SSE: runtime.started
+        alt function runtime
+            Kernel->>Plugin: handler(ctx)
+            Plugin-->>Kernel: HandlerResult<br/>(outcome / value / effects / completion)
+        else agent runtime
+            Kernel->>Plugin: guard / buildContext
+            Plugin->>LLM: generate() + tool loop
+            LLM-->>Plugin: tool 结果 / finishReason=stop
+            Plugin-->>Kernel: RuntimeOutput<br/>(narrativeOutput / interactions / preGameDone)
+        end
+        Kernel-->>Web: SSE: narrative.delta (仅流式 runtime)
+        Kernel-->>Web: SSE: narrative.completed
+        Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
+        Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
+    end
+    Kernel->>Server: 登记 setupRuntimes 完成镜像；未集齐则 phase 保持 'setup'
+    end
+    Server-->>Web: SSE: execution.completed
+    Note over Web: 渲染叙事 (Prose) + 表单 (Form)<br/>pluginData 更新 → 右侧面板 + 消息面板
+
+    Player->>Web: 填写并提交角色创建表单
+    Web->>Server: POST /api/actions { type: 'submit_interaction', turnId, submissions }
+    Note over Server: 会话锁内校验回答，一个事务保存回答与 turn.started
+    Server-->>Web: SSE: interaction.submitted (已存的值 + filledNarrative 玩家消息)
+
+    Note over Server,Plugin: setup 可能多次迭代；<br/>所有 setup runtime 的完成信号成功提交后<br/>setup 事务把 phase 翻到 'playing'，completedPlayerTurns 保持 0
+    Server-->>Web: SSE: setup execution.started (turnId A)
+    Note over Server,Plugin: setup 提交成功后，同一请求以 turnId B 自动接力主循环；<br/>接力不计数，completedPlayerTurns 仍为 0；<br/>第一条玩家消息提交后才 0 → 1
+    Server-->>Web: SSE: main-loop execution.started (turnId B)
+
+    rect rgb(245, 255, 240)
+    Note over Server,Plugin: Turn 2+ · 主循环 (phase === 'playing'，pre-turn → narrative → post-turn → audit)
+    loop 每个主循环 runtime (stage 间屏障串行 / stage 内 DAG 并行)
+        Server-->>Web: SSE: runtime.started
+        alt function runtime
+            Kernel->>Plugin: handler(ctx)
+            Plugin-->>Kernel: HandlerResult → output / effects / completion
+        else agent runtime
+            Plugin->>LLM: buildContext + generate + tool loop
+            Plugin-->>Kernel: Agent 协议 → output / effects / completion
+        end
+        Note over Kernel: 仅显式 effects 与 story 叙事生成 Proposal[]，统一提交
+        Kernel-->>Web: SSE: narrative.delta / narrative.completed
+        Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
+        Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
+        Kernel-->>Web: SSE: state.changed / event.emitted
+        Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
+    end
+    end
+
+    opt 某个 runtime 挂起
+        Server-->>Web: SSE: turn.suspended
+        Player->>Web: 提供 resume 输入
+        Web->>Server: POST /api/sessions/:id/suspensions/:suspensionId/resume
+        Server-->>Web: SSE: turn.resumed
+    end
+
+    Server-->>Web: SSE: execution.completed
+    Note over Web: 渲染叙事 + 图鉴/引导面板更新；pluginData 增量合并
+    Player->>Web: 点击引导建议 / 输入下一条消息 → 重复 Turn 2+ 流程
+
+    Note over Server,Web: 已退役事件：phase.changed / phase.transition（不再发出；phase 翻转不单独推送）
+```
+
+## 八、Package 职责与依赖
+
+每个包负责什么、谁依赖谁、宿主怎样把它们组合起来，见 [packages.md](./packages.md)。和一个回合直接相关的是这五个：
+
+| 包                     | 在一个回合里做什么                   |
+| ---------------------- | ------------------------------------ |
+| `@covel/plugin-loader` | 启动时发现并加载插件                 |
+| `@covel/runtime`       | 执行回合：触发、排序、工具循环、提交 |
+| `@covel/context`       | 组装提示词                           |
+| `@covel/store`         | 保存提交的结果                       |
+| `@covel/events`        | 把提交后的事件推给 SSE               |
+
+## 九、设计约束与原则
+
+为什么这样设计，见[设计原则](./design-principles.md)。下面是三张速查表。
+
+### 框架-插件隔离
+
+```
+  ✅ 框架代码中禁止出现具体插件 ID
+  ✅ 插件通过版本化 contracts 和 extension points 被发现
+  ✅ 工具通过注入获得依赖（不是 import）
+  ✅ UI 通过 json-render spec 声明（不是 React 组件）
+  ✅ 数据通过 pluginData namespace 隔离（不是共享 state key）
+  ✅ 删除任何插件不会导致框架报错
+```
+
+### 数据所有权
+
+```
+  框架拥有:  session, character schema, characters, messages, state, lorebook ownership
+  插件拥有:  plugin_data (按 pluginId 隔离)
+  世界拥有:  worlds, lore, dimensions
+  玩家拥有:  player inputs, form submissions
+```
+
+### 通信协议
+
+```
+  前端 → 服务端:  HTTP POST (JSON)
+  服务端 → 前端:  SSE (ProtocolEvent)
+  服务端 → LLM:   LLM Provider Protocol (OpenAI/Anthropic/etc.)
+  插件 → 框架:    Tool return values + Proposal pattern
+  框架 → 插件:    Context injection (template variables)
+  插件 → 前端:    plugin-data.changed SSE events
+  前端 → 插件:    UI Actions → plugin-rpc (invokeRuntime / invokePluginAction / invokeCommand / emitEvent)
+```

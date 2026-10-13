@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { GeneratedWorld } from "./types.js";
 import {
   WorldPackageRecoveryError,
+  recordGeneratedWorldFiles,
   writeWorldPackage,
 } from "./world-writer.js";
 
@@ -56,10 +57,14 @@ it.each([false, true])(
   async (rollback) => {
     directory = await mkdtemp(path.join(tmpdir(), "covel-world-recovery-"));
     await writeWorldPackage(directory, { ...world, lore: "original" });
+    // A file the app wrote after the package, as a translation is.
     await writeFile(
       path.join(directory, world.id, "extra.txt"),
       "original extra",
     );
+    await recordGeneratedWorldFiles(path.join(directory, world.id), [
+      "extra.txt",
+    ]);
     faults.publication = true;
     faults.rollback = rollback;
     const error = await writeWorldPackage(directory, world, {

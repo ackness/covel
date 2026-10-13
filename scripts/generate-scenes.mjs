@@ -26,7 +26,7 @@ import {
   resolveImageWire,
   reportResults,
 } from "./lib/image-gen-common.mjs";
-import { encodeWebp } from "./lib/webp-image.mjs";
+import { assertWebpEncoder, encodeWebp } from "./lib/webp-image.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const DEFAULT_SLOT = "gpt-image-2";
@@ -239,6 +239,9 @@ async function main() {
       todo.push(t);
     }
   }
+
+  // Every request below is paid for, so the encoder is checked first.
+  if (todo.length > 0) await assertWebpEncoder();
 
   console.log(
     `world=${args.world} slot=${args.slot} (provider=${slot.provider}, wire=${wireId}) model=${model} size=${size} quality=${quality} concurrency=${args.concurrency}`,

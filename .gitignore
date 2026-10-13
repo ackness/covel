@@ -36,6 +36,7 @@ node_modules/
 .turbo/
 .fallow/
 node-compile-cache/
+apps/docs/.vitepress/cache/
 
 # ── Build output ────────────────────────────────────────────────
 dist/

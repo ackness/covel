@@ -41,6 +41,11 @@ contributes:
           kind: json
           path: data/tabletop-rules.json
           key: id
+        references:
+          - path: attributes[].id
+            to: character-attribute
+            type: number
+            within: [base, max]
   forms:
     - point-buy
 ---

@@ -1,23 +1,35 @@
-# Theme Package Reference
+# 主题包
 
-这份文档描述 Covel 主题包的正式契约。面向两类读者：
+主题包决定 Covel 界面的样子：颜色、字体、圆角，以及导航和面板怎么摆。这一页是主题包的正式契约，列出它的文件格式、每个字段、可以覆盖的变量和可以用的类名。
+
+它面向两类读者：
 
 - 想稳定分发主题包的高级玩家
 - 维护 Covel 前端主题系统的开发者
+
+想一步步做出第一个主题，先看[做一个主题](../recipes/themes.md)。
+
+本页会反复用到三个词：
+
+- **token**：主题可以改的一个 CSS 变量，例如 `--color-background`。
+- **hook**：框架放在界面元素上的固定类名，例如 `.ui-composer`。主题用它给某一块单独写样式。
+- **布局**：结构上的选择，例如导航在顶部还是左侧。
 
 ## 1. 主题系统入口
 
 主题系统由这几部分组成：
 
-- 运行时注册表：`apps/web/src/theme-system/registry.ts`
-- 运行时样式注入：`apps/web/src/theme-system/runtime.ts`
-- 导入解析：`apps/web/src/theme-system/validate.ts`
-- 持久化：`apps/web/src/theme-system/storage.ts`
-- 内置主题包：`apps/web/src/themes/builtins/*`
-- 布局预设（见 §3.1）：`layout.ts`（预设表、校验、发布到 `<html>`）· `use-theme-layout.ts`（组件读取当前布局）· 结构样式 `apps/web/src/styles/layout.css`
-- 外观工作室（见 §9）：token 覆盖 `overrides.ts` · 可编辑 token 清单 `token-schema.ts` · 另存为主题 `theme-export.ts` · 颜色工具 `color.ts`
+| 部分                | 位置                                                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 运行时注册表        | `apps/web/src/theme-system/registry.ts`                                                                                            |
+| 运行时样式注入      | `apps/web/src/theme-system/runtime.ts`                                                                                             |
+| 导入解析            | `apps/web/src/theme-system/validate.ts`                                                                                            |
+| 持久化              | `apps/web/src/theme-system/storage.ts`                                                                                             |
+| 内置主题包          | `apps/web/src/themes/builtins/*`                                                                                                   |
+| 布局预设（见 §3.1） | `layout.ts`（预设表、校验、发布到 `<html>`）· `use-theme-layout.ts`（组件读取当前布局）· 结构样式 `apps/web/src/styles/layout.css` |
+| 外观工作室（见 §9） | token 覆盖 `overrides.ts` · 可编辑 token 清单 `token-schema.ts` · 另存为主题 `theme-export.ts` · 颜色工具 `color.ts`               |
 
-当前运行时主题切换入口是：
+当前主题和布局写在 `<html>` 元素上。切换主题就是改这些属性：
 
 ```html
 <html
@@ -35,16 +47,18 @@
 
 其中：
 
-- `ui.appearance` 持久化主题包 ID，并应用为 `data-theme`；默认值是 `stage`（舞台）；已保存的主题选择保持不变
-- 主题包的 `layout` 解析后写入 `data-layout` 及各选项属性（见 §3.1）；没有单独的布局设置项，布局随主题包切换
-- `ui.scheme` 持久化颜色模式，并应用为 `data-scheme` 与 Tailwind 兼容的 `.dark`
-- 主题包的 `schemes` 决定可用颜色模式；只支持单一模式的主题会自动把 `ui.scheme` 对齐到可用值
+- `ui.appearance` 这个设置保存主题包的 ID，并写成 `data-theme`。默认值是 `stage`（舞台）。已经保存的主题选择保持不变。
+- 主题包的 `layout` 解析之后，写成 `data-layout` 和各个选项属性（见 §3.1）。没有单独的布局设置项：布局跟着主题包切换。
+- `ui.scheme` 保存颜色模式（明 / 暗），并写成 `data-scheme` 和 Tailwind 兼容的 `.dark` 类。
+- 主题包的 `schemes` 决定它支持哪些颜色模式。只支持一种模式的主题会自动把 `ui.scheme` 改成它支持的那个值。
 
 ## 2. 支持的导入格式
 
+主题包可以是一个 CSS 文件，也可以是一个 JSON 文件。
+
 ### 2.1 CSS 文件
 
-运行时会从 CSS 中解析 `data-theme` 选择器：
+运行时从 CSS 里找 `data-theme` 选择器，从中读出主题 ID：
 
 ```css
 html[data-theme="ember"] {
@@ -58,10 +72,10 @@ html[data-theme="ember"].dark {
 
 解析规则：
 
-- 必须至少出现一个 `html[data-theme="..."]` 选择器
-- 一个 CSS 文件只能声明一个主题 ID
-- 只有同一个主题 ID 的选择器包含 `.dark` 时，运行时才会把 `schemes` 视为 `["light", "dark"]`
-- 其他 `.dark` 选择器不会影响主题模式推断
+- 至少要出现一个 `html[data-theme="..."]` 选择器。
+- 一个 CSS 文件只能声明一个主题 ID。
+- 只有这个主题 ID 的选择器带了 `.dark`，运行时才认为它的 `schemes` 是 `["light", "dark"]`。
+- 其他的 `.dark` 选择器不影响颜色模式的推断。
 
 ### 2.2 JSON 文件
 
@@ -84,9 +98,12 @@ JSON 结构：
 }
 ```
 
-CSS 文件没有地方声明 `layout`，按 CSS 导入的主题使用 `classic` 布局。需要其他布局时使用 JSON 格式。
+CSS 文件里没有地方声明 `layout`，所以按 CSS 导入的主题使用 `classic` 布局。需要其他布局时用 JSON 格式。
 
-> **信任边界**：导入的主题 CSS 按原样应用。导入校验会拒绝 `@import`，但不过滤 `url(...)`（背景图、`@font-face` 字体等），所以主题可以让客户端向任意外部地址发请求。只导入来源可信的主题包。这是主题作者的选择：内置字体不再从网络加载，但导入主题自带的远程 CSS 与字体仍会被加载（主页面的 Content-Security-Policy 为此放行 `https:` 的样式与字体来源）。
+> [!WARNING]
+> **只导入来源可信的主题包。** 导入的主题 CSS 按原样应用。导入校验会拒绝 `@import`，但不过滤 `url(...)`（背景图、`@font-face` 字体等），所以一个主题可以让客户端向任意外部地址发请求。
+>
+> 这是主题作者的选择：内置字体不从网络加载，但导入的主题自带的远程 CSS 和字体仍然会被加载。主页面的 Content-Security-Policy 为此放行了 `https:` 的样式和字体来源。
 
 ## 3. JSON 字段契约
 
@@ -94,7 +111,7 @@ CSS 文件没有地方声明 `layout`，按 CSS 导入的主题使用 `classic` 
 | ------------- | ---------------------------------- | ---------------------------------------------- |
 | `id`          | `string`                           | 主题 ID，匹配 `/^[a-z0-9][a-z0-9-]{1,47}$/`    |
 | `label`       | `string \| Record<string, string>` | 显示名称                                       |
-| `schemes`     | `("light" \| "dark")[]`            | 支持的颜色模式                                 |
+| `schemes`     | `("light" \| "dark")[]`            | 支持的颜色模式；省略时为 `["light", "dark"]`   |
 | `description` | `string \| Record<string, string>` | 可选说明                                       |
 | `layout`      | `ThemeLayoutSpec`                  | 可选布局声明，见 §3.1；省略时为 `classic`      |
 | `group`       | `string`                           | 可选分组 ID，格式同 `id`，见 §3.2              |
@@ -103,7 +120,15 @@ CSS 文件没有地方声明 `layout`，按 CSS 导入的主题使用 `classic` 
 
 ### 3.1 布局预设（`layout`）
 
-token 和语义 hook 只能改外观。导航放在哪、右侧面板页签长什么样、会话如何使用世界美术、世界列表怎么排、每回合的结果放在哪，这些是结构，由主题包的 `layout` 声明：先选一个预设，再按需覆盖单个选项。
+token 和 hook 只能改外观。下面这些是结构，由主题包的 `layout` 声明：
+
+- 导航放在哪；
+- 右侧面板的页签长什么样；
+- 会话怎样使用世界的美术；
+- 世界列表怎么排；
+- 每回合的结果放在哪。
+
+写法是先选一个预设，再按需要覆盖单个选项：
 
 ```ts
 interface ThemeLayoutSpec {
@@ -116,6 +141,8 @@ interface ThemeLayoutSpec {
 }
 ```
 
+每个选项的取值：
+
 | 选项        | 取值       | 效果                                                                                |
 | ----------- | ---------- | ----------------------------------------------------------------------------------- |
 | `nav`       | `top`      | 顶部导航条                                                                          |
@@ -127,12 +154,14 @@ interface ThemeLayoutSpec {
 |             | `banner`   | 世界图作为章节横幅放在第一条消息上方，随历史一起滚动                                |
 |             | `none`     | 不显示世界图                                                                        |
 | `worldList` | `covers`   | 整卡封面的世界卡片（两列）                                                          |
-|             | `cards`    | 上图下文的卡片（三列），顶部有「继续上次的冒险」和搜索框；封面悬停轮播场景图        |
+|             | `cards`    | 上图下文的卡片（三列），顶部有“继续上次的冒险”和搜索框；封面悬停轮播场景图          |
 |             | `list`     | 一行一个世界的阅读列表                                                              |
 |             | `showcase` | 选中世界的封面和场景图轮播铺满全屏，立绘排在简介下方，其他世界排成缩略图条          |
 | `turnNotes` | `fold`     | 每回合的只读结果（检定、状态变化、新发现）折叠在正文下方                            |
 |             | `inline`   | 最新一回合的结果默认展开，更早的仍然折叠                                            |
 |             | `margin`   | 结果放在正文旁的页边栏；会话区不够宽时退回正文下方                                  |
+
+每个预设对应的选项：
 
 | 预设      | `nav`  | `panelTabs` | `backdrop` | `worldList` | `turnNotes` |
 | --------- | ------ | ----------- | ---------- | ----------- | ----------- |
@@ -143,21 +172,27 @@ interface ThemeLayoutSpec {
 
 规则：
 
-- 取值是封闭枚举，对象不允许未知键。JSON 导入时 `layout` 不合法会整体拒绝该主题包；已存储的主题包里不合法的 `layout` 会被丢弃并回退到 `classic`。
-- 框架的结构样式按**选项**属性匹配（如 `html[data-backdrop="scene"]`），不按主题 ID 或预设名。覆盖了单个选项的自定义主题包同样得到对应结构。
-- 组件通过 `useThemeLayout()` 读取当前布局；新增一个结构选项需要同时改 `layout.ts` 的枚举与预设表、消费它的组件，以及本节表格。
-- 「另存为主题包」会带上来源主题的 `layout`。
+- **取值是固定的。** 只能用上表列出的值，对象里不允许出现不认识的键。JSON 导入时 `layout` 不合法，整个主题包被拒绝。已经存下来的主题包里不合法的 `layout` 会被丢弃，回到 `classic`。
+- **结构样式认选项，不认主题。** 框架的结构样式按**选项**属性匹配（例如 `html[data-backdrop="scene"]`），不按主题 ID，也不按预设名。所以只覆盖了一个选项的自定义主题包，同样得到对应的结构。
+- **给开发者。** 组件通过 `useThemeLayout()` 读取当前布局。新增一个结构选项，需要同时改三处：`layout.ts` 的枚举和预设表、使用它的组件、本节的表格。
+- **另存为主题包**会带上来源主题的 `layout`。
 
 ### 3.2 风格与配色分组（`group`）
 
-设置里的「风格方案」按 `group` 把主题包归成卡片：同一个 `group` 的主题包是一个风格，各成员是这个风格下的配色。没有声明 `group` 的主题包自成一个风格（分组 ID 就是它自己的 `id`）。
+设置里的“风格方案”按 `group` 把主题包归成卡片。`group` 相同的主题包是同一个风格，每个成员是这个风格下的一种配色。没有声明 `group` 的主题包自成一个风格，分组 ID 就是它自己的 `id`。
 
-- 每个成员仍是完整、可独立选择的主题包；`ui.appearance` 存的始终是主题包 ID，没有单独的「配色」设置项。
-- 卡片名称取第一个声明了 `groupLabel` 的成员；都没有声明时取 `id` 与分组 ID 相同的那个成员的 `label`，再没有则取第一个成员的 `label`。内置主题排在前面，导入的主题包无法改掉内置分组的名称。
-- 配色的名称是成员自己的 `label`；`id` 与分组 ID 相同的成员显示为「默认」。
-- 卡片的缩略图、说明和布局取当前选中的成员，未选中时取第一个成员。框架不要求同组成员布局一致，但同组混用不同布局会让玩家困惑。
-- 「另存为主题包」会把新主题包归入来源主题的分组，作为该风格下的一个新配色。
-- 给某个风格加配色：导入一个 `group` 指向该风格的主题包即可，例如 `"group": "panel"`。
+- **每个成员仍是完整的主题包**，可以单独选中。`ui.appearance` 存的始终是主题包 ID，没有单独的“配色”设置项。
+- **卡片的名字**按这个顺序取：
+  1. 第一个声明了 `groupLabel` 的成员；
+  2. 都没有声明时，`id` 和分组 ID 相同的那个成员的 `label`；
+  3. 再没有，第一个成员的 `label`。
+
+  内置主题排在前面，所以导入的主题包改不掉内置分组的名字。
+
+- **配色的名字**是成员自己的 `label`。`id` 和分组 ID 相同的成员显示为“默认”。
+- **卡片的缩略图、说明和布局**取当前选中的成员；都没选中时取第一个成员。框架不要求同组成员的布局一致，但同组混用不同的布局会让玩家困惑。
+- **另存为主题包**会把新主题包归入来源主题的分组，作为这个风格下的一种新配色。
+- **给某个风格加配色**：导入一个 `group` 指向这个风格的主题包即可，例如 `"group": "panel"`。
 
 ## 4. 内置主题包结构
 
@@ -188,9 +223,11 @@ apps/web/src/themes/builtins/
     theme.css
 ```
 
-`panel`（面板）、`book`（书卷）、`stage`（舞台）是三套「风格方案」，各自声明一个同名布局预设，是写带布局主题包的参考实现。`paper` / `modern` / `abyss` / `aurora` 使用 `classic` 布局，并声明 `"group": "classic"`，在设置里合成一个「经典」风格的四种配色。
+- `panel`（面板）、`book`（书卷）、`stage`（舞台）是三套“风格方案”。它们各自声明一个同名的布局预设，是写带布局的主题包时的参考实现。
+- `paper` / `modern` / `abyss` / `aurora` 使用 `classic` 布局，并声明 `"group": "classic"`。在设置里，它们合成一个“经典”风格的四种配色。
+- `aurora` 是效果的参考实现：玻璃拟态、流光、消息入场动画，以及 §6.6 的状态驱动特效。想写一个“花哨”的主题，直接照它写。
 
-`aurora` 是效果参考实现：玻璃拟态、通过 `transform` 旋转静态渐变图层实现的流光、消息入场动画、以及 §6.6 的状态驱动特效。渐变图层按视口对角线加模糊留白确定尺寸，旋转时覆盖横竖屏；避免逐帧修改渐变角度，从而减少滚动期间的重复栅格化。要写"花哨"主题时直接抄它。
+`aurora` 的流光是这样做的：用 `transform` 旋转一个静态的渐变图层。图层的尺寸按视口对角线加上模糊的留白来定，所以旋转时横屏竖屏都盖得住。它不逐帧修改渐变的角度，这样滚动时浏览器不必反复重新绘制。
 
 `manifest.json` 结构：
 
@@ -214,7 +251,7 @@ apps/web/src/themes/builtins/
 
 ## 5. 共享 token 契约
 
-主题包最核心的职责是覆盖语义 token。
+主题包最核心的工作是覆盖语义 token。下面按类别列出全部 token。
 
 ### 5.1 颜色 token
 
@@ -241,7 +278,7 @@ apps/web/src/themes/builtins/
 ### 5.2 表面 token
 
 - `--surface-page`
-- `--surface-session`：游戏中央面板底色，未设置时回退到 `--surface-page`；可用半透明色让底层主题流光透出。
+- `--surface-session`：游戏中央面板的底色。没有设置时用 `--surface-page`。可以用半透明色，让底层的主题流光透出来。
 - `--surface-rail`
 - `--surface-inset`
 - `--surface-elevated`
@@ -290,13 +327,20 @@ apps/web/src/themes/builtins/
 
 ### 5.5 字体与排版 token
 
-中文字体默认用系统自带的（如 `"PingFang SC"`、`"Microsoft YaHei"`、`"Songti SC"`）。应用不从字体服务加载中文网络字体：它们体积大，会在加载过程中让整页文字反复重排，字体服务不可达时还会拖慢首屏。
+先说可以用哪些字体：
 
-随应用打包了拉丁字体 `"Inter"`、`"Fraunces"`、`"Newsreader"`、`"Geist"` 和 `"Geist Mono"`（SIL OFL 1.1，来自 `@fontsource-variable/*` 包；字体声明在 `apps/web/src/styles/fonts.css`）。只打包拉丁子集和内置主题用到的样式（Fraunces、Newsreader 含 400 斜体；字重为可变轴），首屏不向任何字体服务发请求，离线和桌面端表现一致。字体用 `font-display: block`：本地文件几毫秒即可就绪，不会出现先用后备字体、再换字体的整页重排。主题包可以直接在字体栈里写这些名字。
+- **中文字体用系统自带的**，例如 `"PingFang SC"`、`"Microsoft YaHei"`、`"Songti SC"`。应用不从字体服务加载中文网络字体：它们体积大，加载过程中会让整页文字反复重排，字体服务连不上时还会拖慢首屏。
+- **随应用打包的拉丁字体**：`"Inter"`、`"Fraunces"`、`"Newsreader"`、`"Geist"` 和 `"Geist Mono"`。主题包可以直接在字体栈里写这些名字。
+- **随应用打包的一款中文标题字体**：`"ZCOOL XiaoWei"`（站酷小薇）。主题包可以直接在字体栈里写这个名字，但不要给它设粗体，因为它只有 400 一个字重。
+- **主题包不能 `@import`。** 所以字体栈里其余的中文字体都应该是系统字体，并以通用族名（`sans-serif` / `serif`）结尾。
 
-随应用打包了一款标题字体 `"ZCOOL XiaoWei"`（站酷小薇，OFL 1.1；文件在 `apps/web/public/fonts/zcool-xiaowei/`，字体声明在 `apps/web/src/styles/fonts.css`）。它只有 400 一个字重，只在有主题用到这个字体族时才会被读取，`stage` 用它做标题。主题包可以直接在字体栈里写这个名字，但不要给它设粗体。
+打包字体的细节：
 
-主题包不能 `@import`，所以字体栈里其余的中文字体都应是系统字体，并以通用族名（`sans-serif` / `serif`）收尾。
+- 拉丁字体：SIL OFL 1.1，来自 `@fontsource-variable/*` 包，字体声明在 `apps/web/src/styles/fonts.css`。只打包了拉丁子集和内置主题用到的样式（Fraunces、Newsreader 含 400 斜体；字重是可变轴）。首屏不向任何字体服务发请求，离线和桌面端的表现一致。
+- 这些字体用 `font-display: block`。本地文件几毫秒就能就绪，所以不会出现先用后备字体、再换字体的整页重排。
+- `"ZCOOL XiaoWei"`：OFL 1.1，文件在 `apps/web/public/fonts/zcool-xiaowei/`，字体声明在 `apps/web/src/styles/fonts.css`。只有当某个主题用到这个字体族时它才会被读取。`stage` 用它做标题。
+
+token 列表：
 
 - `--font-sans`
 - `--font-display`
@@ -316,7 +360,7 @@ apps/web/src/themes/builtins/
 - `--title-font-weight`
 - `--title-letter-spacing`
 - `--title-text-transform`
-- `--story-color`（叙事正文颜色，默认跟随 `--color-foreground`；外观设置按明暗模式分别保存）
+- `--story-color`（叙事正文的颜色，默认跟随 `--color-foreground`；外观设置按明暗模式分别保存）
 - `--story-font-family`
 - `--story-font-size`
 - `--story-line-height`
@@ -328,7 +372,12 @@ apps/web/src/themes/builtins/
 - `--meta-letter-spacing`
 - `--meta-text-transform`
 
-Markdown 的正文、标题、强调和引用使用主题文字色，链接和行内代码使用主题主色；叙事区域的正文、标题、强调和引用使用 `--story-color`。叙事 Markdown 的字号、行高、字重、字距和栏宽由 `--story-*` 控制。样式位于 `apps/web/src/styles/narrative.css`，使用不分层的规则覆盖 Typography 的 `utilities` 默认值。
+这些 token 作用在哪：
+
+- 普通 Markdown 的正文、标题、强调和引用用主题的文字色；链接和行内代码用主题的主色。
+- 叙事区域的正文、标题、强调和引用用 `--story-color`。
+- 叙事 Markdown 的字号、行高、字重、字距和栏宽由 `--story-*` 控制。
+- 样式在 `apps/web/src/styles/narrative.css`。它用不分层的规则来覆盖 Typography 在 `utilities` 层里的默认值。
 
 ### 5.6 阴影 token
 
@@ -338,21 +387,41 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 
 ## 6. 共享语义 hook 契约
 
+下面是框架放在界面元素上的类名。主题可以用它们给某一块单独写样式。
+
 ### 6.1 结构层
 
-- `.ui-app-header`：顶部导航条
-- `.ui-nav-rail`：`nav: "rail"` 时的左侧导航栏
-- `.ui-nav-item`：导航项（两种导航共用，当前项带 `aria-current="page"`）
-- `.ui-session-header`：会话顶部工具条；其中 `.ui-session-title` 是标题（`backdrop: "scene"` 且有场景名时是场景名，否则是世界名），`.ui-view-switch` 是「文本 / 舞台」切换（选中项带 `data-state="on"`），`.ui-session-action` 是返回、设置、更多、面板开关这些按钮，`.ui-menu-item` 是「更多」菜单里的条目
-- `.ui-session-thumb`：工具条里世界名前的世界缩略图。默认隐藏，主题用 `display: block` 打开并给出尺寸
-- `.ui-panel-status`：`panelTabs: "bar"` 时右侧面板页签下方的玩家状态条；`.ui-panel-status-name` 是玩家名，`.ui-panel-status-title` 是状态条的标题（「手记」），默认隐藏，主题用 `display: block` 打开
-- `.ui-panel-tabbar` / `.ui-panel-tab` / `.ui-panel-tab-icon`：`panelTabs: "bar"` 时右侧面板的页签条、页签和页签图标（当前页签带 `data-state="active"`）。页签放不下时页签条末尾出现 `.ui-panel-tab-menu` 按钮，点开是全部页签的网格
-- `.ui-scroll-fade`：放不下而横向滚动的条（页签条、世界缩略图条）。被截断的一侧渐隐，由 `data-fade-start` / `data-fade-end` 标出是哪一侧
+| hook                                                        | 是什么                                                                                                              |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `.ui-app-header`                                            | 顶部导航条                                                                                                          |
+| `.ui-nav-rail`                                              | `nav: "rail"` 时的左侧导航栏                                                                                        |
+| `.ui-nav-item`                                              | 导航项。两种导航共用，当前项带 `aria-current="page"`                                                                |
+| `.ui-session-header`                                        | 会话顶部工具条，里面的类名见下                                                                                      |
+| `.ui-session-thumb`                                         | 工具条里世界名前面的世界缩略图。默认隐藏，主题用 `display: block` 打开并给出尺寸                                    |
+| `.ui-panel-status`                                          | `panelTabs: "bar"` 时，右侧面板页签下方的玩家状态条，里面的类名见下                                                 |
+| `.ui-panel-tabbar` / `.ui-panel-tab` / `.ui-panel-tab-icon` | `panelTabs: "bar"` 时右侧面板的页签条、页签和页签图标。当前页签带 `data-state="active"`                             |
+| `.ui-panel-tab-menu`                                        | 页签放不下时，页签条末尾出现的按钮。点开是全部页签的网格                                                            |
+| `.ui-scroll-fade`                                           | 放不下而横向滚动的条（页签条、世界缩略图条）。被截断的一侧渐隐，由 `data-fade-start` / `data-fade-end` 标出是哪一侧 |
+
+没有额外说明的 hook：
+
 - `.ui-panel-header`
 - `.ui-panel-section`
 - `.ui-panel-footer`
 - `.ui-rule`
 - `.ui-outline-rail`
+
+`.ui-session-header` 里面：
+
+- `.ui-session-title`：标题。`backdrop: "scene"` 且有场景名时是场景名，否则是世界名。
+- `.ui-view-switch`：“文本 / 舞台”切换。选中项带 `data-state="on"`。
+- `.ui-session-action`：返回、设置、更多、面板开关这些按钮。
+- `.ui-menu-item`：“更多”菜单里的条目。
+
+`.ui-panel-status` 里面：
+
+- `.ui-panel-status-name`：玩家名。
+- `.ui-panel-status-title`：状态条的标题（“手记”）。默认隐藏，主题用 `display: block` 打开。
 
 ### 6.2 排版层
 
@@ -374,29 +443,53 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 
 ### 6.4 会话体验
 
+| hook                                                                                                                                | 是什么                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `.ui-session-backdrop`                                                                                                              | 中央面板顶部的世界装饰图和渐隐层。可以加一层静态遮罩，让它融进半透明的底色                             |
+| `.ui-session-scene-scrim`                                                                                                           | `backdrop: "scene"` 时盖在场景图上的暗化层                                                             |
+| `.ui-scene-hud`                                                                                                                     | `backdrop: "scene"` 时叠在场景图左下角的在场角色和玩家状态，里面的类名见下                             |
+| `.ui-chapter-banner`                                                                                                                | `backdrop: "banner"` 时第一条消息上方的章节横幅；`.ui-chapter-banner-scrim` 是图上的暗化层             |
+| `.ui-status-meters`                                                                                                                 | 玩家状态量表。面板状态条和场景 HUD 共用；量表本身沿用 `.ui-meter-track` / `.ui-meter-fill`             |
+| `.ui-status-items` / `.ui-status-item`                                                                                              | 玩家随身物品的列表和单个物品标签。同样两处共用                                                         |
+| `.ui-panel-dialog`                                                                                                                  | 插件面板“放大”后的大对话框                                                                             |
+| `.ui-summary`                                                                                                                       | 状态摘要的“标签—内容”列表：没有范围的数值属性，以及插件提供的 `session.summary@1` 条目。里面的类名见下 |
+| `.ui-turn-updates`                                                                                                                  | 每回合只读结果的折叠块（`<details>`，展开时带 `[open]`）。`turnNotes: "margin"` 时它就是页边批注       |
+| `.ui-choice-list` / `.ui-choice`                                                                                                    | 给玩家选的选项（插件用 `ChoiceList` / `Choice` 组件声明），里面的类名见下                              |
+| `.ui-story-surface`                                                                                                                 | 消息流、待发送区和输入框的共同容器。`backdrop: "scene"` 时它就是右侧的故事栏，底色取 `--surface-story` |
+| `.ui-message-row`                                                                                                                   | 带 `data-role="user" \| "assistant"`                                                                   |
+| `.ui-message-role`                                                                                                                  | 消息上方的角色标签（“玩家” / “助手”）。主题可以隐藏它，或改成行内标记                                  |
+| `.ui-composer`                                                                                                                      | 输入区外层                                                                                             |
+| `.ui-world-heading`、`.ui-world-enter`、`.ui-world-tag`、`.ui-world-tile`、`.ui-world-row`、`.ui-world-showcase`、`.ui-world-thumb` | 世界选择页各种排法的标题、主按钮（进入或继续）、标签和条目                                             |
+| `.ui-world-continue`、`.ui-world-search`                                                                                            | `worldList: "cards"` 时列表上方的“继续上次的冒险”横幅和搜索框                                          |
+
+没有额外说明的 hook：
+
 - `.ui-session-column`
-- `.ui-session-backdrop`：中央面板顶部的世界装饰图和渐隐层；可加静态遮罩使其融入半透明底色。
-- `.ui-session-scene-scrim`：`backdrop: "scene"` 时盖在场景图上的暗化层
-- `.ui-scene-hud`：`backdrop: "scene"` 时叠在场景图左下的在场角色与玩家状态；`.ui-scene-card` 是其中每块半透明底板，`.ui-scene-cast[data-focused="true"]` 是当前焦点角色，`.ui-scene-speaking` 是「正在说话」标记
-- `.ui-chapter-banner`：`backdrop: "banner"` 时第一条消息上方的章节横幅；`.ui-chapter-banner-scrim` 是图上的暗化层
-- `.ui-status-meters`：玩家状态量表（面板状态条与场景 HUD 共用），量表本身沿用 `.ui-meter-track` / `.ui-meter-fill`
-- `.ui-status-items` / `.ui-status-item`：玩家随身物品的列表和单个物品标签（同样两处共用）
-- `.ui-panel-dialog`：插件面板「放大」后的大对话框
-- `.ui-summary`：状态摘要的「标签—内容」列表（无范围的数值属性和插件提供的 `session.summary@1` 条目）；`.ui-summary-label` 是标签，`.ui-summary-value` 是内容，带 `data-tone="info" | "success" | "warning" | "danger"`
-- `.ui-turn-updates`：每回合只读结果的折叠块（`<details>`，展开时带 `[open]`）；`turnNotes: "margin"` 时它就是页边批注
-- `.ui-choice-list` / `.ui-choice`：供玩家选择的选项（插件用 `ChoiceList` / `Choice` 组件声明）。`.ui-choice` 是一个按钮，选中带 `data-selected="true"`，里面依次是 `.ui-choice-index`（序号，默认隐藏；内容是 CSS 计数器 `ui-choice`，主题可以改成汉字数字或键帽）、`.ui-choice-content`（含 `.ui-choice-title` 和 `.ui-choice-body`）、`.ui-choice-eyebrow`（标签，`data-tone` 在 `.ui-choice` 上）。选项下方带次要动作时，外面多一层 `.ui-choice-row`，动作在 `.ui-choice-actions` 里。舞台视图决策面板里的选项另带 `.ui-stage-choice-item`（入场动画与焦点环）
-- `.ui-story-surface`：消息流、待发送区和输入框的共同容器；`backdrop: "scene"` 时就是右侧的故事栏，底色取 `--surface-story`
-- `.ui-message-row`：带 `data-role="user" | "assistant"`
-- `.ui-message-role`：消息上方的角色标签（「玩家」/「助手」），主题可隐藏或改成行内标记
 - `.ui-player-message-row`
 - `.ui-message-player`
 - `.ui-message-assistant`
-- `.ui-composer`：输入区外层
 - `.ui-composer-frame`
 - `.ui-composer-input`
 - `.ui-composer-submit`
-- `.ui-world-heading`、`.ui-world-enter`、`.ui-world-tag`、`.ui-world-tile`、`.ui-world-row`、`.ui-world-showcase`、`.ui-world-thumb`：世界选择页各排法的标题、主按钮（进入或继续）、标签和条目
-- `.ui-world-continue`、`.ui-world-search`：`worldList: "cards"` 时列表上方的「继续上次的冒险」横幅和搜索框
+
+`.ui-scene-hud` 里面：
+
+- `.ui-scene-card`：每一块半透明的底板。
+- `.ui-scene-cast[data-focused="true"]`：当前焦点角色。
+- `.ui-scene-speaking`：“正在说话”标记。
+
+`.ui-summary` 里面：
+
+- `.ui-summary-label`：标签。
+- `.ui-summary-value`：内容，带 `data-tone="info" | "success" | "warning" | "danger"`。
+
+`.ui-choice` 是一个按钮，选中时带 `data-selected="true"`。它里面依次是：
+
+- `.ui-choice-index`：序号，默认隐藏。内容是 CSS 计数器 `ui-choice`，主题可以把它改成汉字数字或键帽。
+- `.ui-choice-content`：含 `.ui-choice-title` 和 `.ui-choice-body`。
+- `.ui-choice-eyebrow`：标签。它的 `data-tone` 写在 `.ui-choice` 上。
+
+选项下方带次要动作时，外面多一层 `.ui-choice-row`，动作在 `.ui-choice-actions` 里。舞台视图决策面板里的选项另外带 `.ui-stage-choice-item`（入场动画和焦点环）。
 
 ### 6.5 细节效果
 
@@ -407,7 +500,7 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 
 ### 6.6 状态属性（状态驱动特效）
 
-除了类名，框架还把当前回合状态写在 `<html>` 上，让纯 CSS 能对游戏正在发生的事做出反应：
+除了类名，框架还把当前回合的状态写在 `<html>` 上。这样纯 CSS 就能对游戏里正在发生的事做出反应：
 
 | 属性           | 取值                                       | 含义                 |
 | -------------- | ------------------------------------------ | -------------------- |
@@ -417,9 +510,9 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 | `data-scheme`  | `light` / `dark`                           | 当前明暗模式         |
 | `data-layout`  | 布局预设名                                 | 当前主题的布局预设   |
 
-布局的各选项另有 `data-nav`、`data-panel-tabs`、`data-backdrop`、`data-world-list`、`data-turn-notes`（取值见 §3.1）。
+布局的各个选项另有 `data-nav`、`data-panel-tabs`、`data-backdrop`、`data-world-list`、`data-turn-notes`，取值见 §3.1。
 
-`waiting` 优先于 `executing`：回合还开着，但内核在等玩家操作（表单、选择），这才是值得高亮的状态。
+`waiting` 优先于 `executing`：回合还开着，但内核在等玩家操作（表单、选择）。这才是值得高亮的状态。
 
 ```css
 /* AI 正在生成时，输入框呼吸 */
@@ -428,11 +521,12 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 }
 ```
 
-这些属性由框架自身发布，只覆盖内核知道的状态。插件专属状态（场景、情绪、战斗）需要一条按 capability 声明的通道，框架不会硬编码插件 ID，目前尚未开放。
+> [!NOTE]
+> 这些属性由框架自己发布，只覆盖内核知道的状态。插件专属的状态（场景、情绪、战斗）目前不能用来驱动主题：框架不会写死插件 ID，这需要一条按能力声明的通道，现在还没有开放。
 
 ## 7. 运行时行为
 
-导入主题时，运行时流程是：
+导入主题时，运行时按这个顺序做：
 
 1. 读取文件内容
 2. 解析主题 ID 和 CSS
@@ -445,36 +539,67 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 
 ## 8. 持久化行为
 
-自定义主题保存在 `ui.customThemes` 设置项中。每条记录包含：
+自定义主题保存在 `ui.customThemes` 这个设置项里。每条记录包含：
 
 - `id`
 - `label`
 - `cssText`
 - `schemes`
 - `description`
+- `layout`
+- `group`
+- `groupLabel`
 - `importedAt`
 - `fileName`
 
-运行时会把这些记录恢复为 `ThemeDefinition`，并与内置主题一起排序和注册。
+运行时把这些记录恢复成 `ThemeDefinition`，和内置主题一起排序、注册。
 
 ## 9. 外观工作室（token 覆盖 / 另存为主题）
 
-玩家不写 CSS 也能改外观：设置 → 外观提供逐 token 的控件（`token-schema.ts` 的 `TOKEN_GROUPS` 定义哪些 token 可编辑、用什么控件、有哪些预设值，包括字体栈 `FONT_STACKS` 与氛围底纹 `AMBIENCE_PRESETS`）。
+玩家不写 CSS 也能改外观。“设置 → 外观”为每个可调的 token 提供一个控件。哪些 token 可以改、用什么控件、有哪些预设值，由 `token-schema.ts` 的 `TOKEN_GROUPS` 定义，其中包括字体栈 `FONT_STACKS` 和氛围底纹 `AMBIENCE_PRESETS`。
 
-- **存储**：覆盖值存在设置项 `ui.appearanceTokens`，形状为 `{ shared, light, dark }`——**颜色按明暗模式分开存，尺寸 / 字体 / 圆角在两种模式间共享**。单个值上限 2048 字符（防止粘贴 data-URL 撑爆 localStorage 配额、连累其它设置）。
-- **生效方式**：`applyTokenOverrides()` 把 `{...shared, ...当前 scheme}` 作为**内联 style 写到 `<html>`**，优先于主题包的普通声明；源主题的 `!important` 声明仍可压过覆盖，因此可调 token 应避免使用 `!important`。上一轮写入但本轮已移除的属性会被显式清掉，不留孤儿。非法 CSS 值由 CSSOM 直接丢弃——失败即回落到主题自己的值。
-- **基线读取**：`readTokenDefaults()` 临时撤下覆盖读出主题原值，再在同一同步块里恢复，所以控件能显示「未覆盖时是什么」且浏览器不会画出中间态。
-- **另存为主题**：`theme-export.ts` 的 `buildThemeCss()` 接收当前主题定义，将源 CSS 的作用域重绑定到新 ID，再追加完整 token 快照。伪元素、渐变、媒体查询、回合状态和 `@layer` 顺序全部保留；源 CSS 的 `!important` 优先级不变。`theme-css-derive.ts` 只替换选择器和动画标识符，不通过 CSSOM 重新序列化，因此不会丢弃当前浏览器尚未支持的规则。动画定义、`animation` / `animation-name` 及其引用的自定义属性同步使用新主题独立的动画名。再次另存时只替换生成的尾部快照，不累积源规则或动画名称前缀。源 CSS 与最终产物均走导入校验，产物不依赖原主题 ID，可以按 §8 导出、删除原主题后重新导入。`slugifyThemeId()` / `ensureThemeId()` 生成不冲突的主题 ID。
+**覆盖值存在哪。**
 
-覆盖是**全局的、不按主题分桶**（`ui.appearanceTokens` 只有 `shared` / `light` / `dark` 三个桶）：换主题后同一批覆盖继续叠加在新主题之上。想回到主题原貌需显式清除覆盖（`clearOverrides` / 逐项 `clearTokenOverride`）。写入前经 `isAdjustableToken` 过滤——只有 `TOKEN_GROUPS` 声明过的 token 能被覆盖，任意 CSS 变量无法经此通道注入。
+- 存在设置项 `ui.appearanceTokens` 里，形状是 `{ shared, light, dark }`。
+- **颜色按明暗模式分开存；尺寸、字体、圆角在两种模式之间共用。**
+- 单个值最长 2048 个字符。这是为了防止有人粘贴 data-URL 撑爆 localStorage 的配额，连累其他设置。
 
-外观微调和重置等待真实持久化结果：保存失败时显示错误，撤销本次失败草稿与预览，恢复已保存值；更晚发起的编辑不被旧失败回调撤销。提交正常返回但被忽略（例如空的长度输入）时，也按实际保存值重绘预览；旧提交完成不覆盖后来编辑。覆盖订阅的回滚重绘也会保留仍待提交的新预览。关闭面板或切换明暗模式时仍提交原模式的待保存编辑，但迟到回调不会重绘新面板或新模式。
+**覆盖是全局的，不按主题分开存。** `ui.appearanceTokens` 只有 `shared` / `light` / `dark` 三个桶。换主题之后，同一批覆盖继续叠在新主题上。想回到主题原来的样子，需要明确清除覆盖（`clearOverrides`，或逐项 `clearTokenOverride`）。
 
-主题库应用、导入和另存为主题都等待 `ui.appearance` 持久化；失败不继续清覆盖、清名称或报告完整成功。已保存的自定义主题记录可以保留，主题记录、选择与覆盖之间不提供跨步骤自动回滚事务。
+**覆盖怎样生效。**
+
+- `applyTokenOverrides()` 把 `{...shared, ...当前 scheme}` 作为**内联 style 写到 `<html>` 上**，所以它优先于主题包的普通声明。
+- 源主题里带 `!important` 的声明仍然能压过覆盖。因此可调的 token 应该避免使用 `!important`。
+- 上一轮写入、这一轮已经移除的属性会被明确清掉，不留残余。
+- 不合法的 CSS 值由浏览器（CSSOM）直接丢弃，结果就是回到主题自己的值。
+- 写入之前经过 `isAdjustableToken` 过滤：只有 `TOKEN_GROUPS` 声明过的 token 能被覆盖。任意的 CSS 变量不能通过这条通道注入。
+
+**控件怎样知道“没覆盖时是什么”。** `readTokenDefaults()` 临时撤下覆盖，读出主题的原值，再在同一个同步块里恢复。所以控件能显示原值，浏览器也不会画出中间的状态。
+
+**另存为主题。** `theme-export.ts` 的 `buildThemeCss()` 接收当前的主题定义，把源 CSS 的作用域改绑到新的 ID 上，再在末尾追加一份完整的 token 快照。
+
+- 伪元素、渐变、媒体查询、回合状态和 `@layer` 的顺序全部保留。源 CSS 里 `!important` 的优先级不变。
+- `theme-css-derive.ts` 只替换选择器和动画标识符，不经过 CSSOM 重新序列化。所以当前浏览器还不支持的规则不会被丢掉。
+- 动画定义、`animation` / `animation-name`，以及引用它们的自定义属性，一起改用新主题自己的动画名。
+- 再次另存时，只替换末尾那份生成的快照，不会越存越多地累积源规则或动画名前缀。
+- 源 CSS 和最终产物都要通过导入校验。产物不依赖原主题的 ID：可以按 §8 导出，删掉原主题后重新导入。
+- `slugifyThemeId()` / `ensureThemeId()` 生成不冲突的主题 ID。
+
+**保存失败时。** 外观微调和重置都等待真实的持久化结果：
+
+- 保存失败时显示错误，撤销这一次失败的草稿和预览，恢复已保存的值。在它之后才发起的编辑不会被旧的失败回调撤销。
+- 提交正常返回、但实际被忽略时（例如长度输入是空的），也按实际保存的值重新画预览。旧的提交完成时，不覆盖后来的编辑。
+- 覆盖订阅引起的回滚重绘，同样保留还在等待提交的新预览。
+- 关闭面板或切换明暗模式时，仍然会提交原模式下还没保存的编辑。但迟到的回调不会重绘新的面板或新的模式。
+
+主题库里的“应用”、导入和另存为主题，都等 `ui.appearance` 持久化完成：
+
+- 失败时不会继续清覆盖、清名称，也不会报告“完全成功”。
+- 已经保存的自定义主题记录可以保留。主题记录、选择和覆盖这三步之间，没有跨步骤的自动回滚。
 
 ## 10. 兼容性建议
 
-想获得稳定兼容性的主题包，推荐遵守这组策略：
+想让主题包长期稳定可用，推荐这样做：
 
 - 优先覆盖 token
 - 局部视觉差异使用 `.ui-*` hook
@@ -484,7 +609,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 
 ## 10. 参考示例
 
-内置主题可以作为实际参考：
+内置主题可以当作实际的参考：
 
 - `apps/web/src/themes/builtins/modern/theme.css`
 - `apps/web/src/themes/builtins/paper/theme.css`

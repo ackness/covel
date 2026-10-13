@@ -3,7 +3,7 @@
 Project instructions for Claude Code live in [`AGENTS.md`](./AGENTS.md), shared
 with every other coding agent so the rules cannot drift. Edit that file, not this
 one. Nested directories follow the same pattern: a directory-level `AGENTS.md`
-holds the rules and a sibling `CLAUDE.md` imports it (see `docs/v2/`).
+holds the rules and a sibling `CLAUDE.md` imports it (see `docs/`).
 
 The import below brings in the whole guide. When a change touches one of these,
 update the matching section there rather than adding notes here:

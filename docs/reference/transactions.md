@@ -1,9 +1,12 @@
-# Store Transactions
+# 事务
 
-> Covel's `DataStore` interface exposes a single scoped transaction contract —
-> `withTransaction(fn)` — that every backend must honor. This document captures
-> the contract, the per-backend implementation strategy, and how the kernel uses
-> transactional commits required by every DataStore backend.
+这一页说明 Covel 怎样保证“一批写入要么全部生效，要么全部不生效”。它面向改存储后端、改回合提交流程，或者排查“为什么这次写入没有保存”的开发者。写插件不需要读这一页：插件的写入都走 proposal，由内核提交。
+
+要点只有三条：
+
+- 存储接口 `DataStore` 只有一种事务：`withTransaction(fn)`。每个后端都必须实现它。
+- 一次执行（一个回合、一次手动运行、一次后台作业）的全部写入放进一个事务里提交。
+- 三个后端（Memory、SQLite、PostgreSQL）对外的行为相同，并发方式不同。
 
 ## Contract
 
@@ -33,60 +36,41 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
 };
 ```
 
+用法很简单：把要一起成败的写入放进 `fn`，并且都通过 `fn` 收到的 `tx` 来写。savepoint 是事务里的一个“可以单独撤销的小段”。
+
 ### Rules
 
-1. **Atomic on resolve / throw.** When `fn` resolves, every write made through
-   the `tx` view is committed together. When `fn` throws, all of them roll back
-   and the error re-throws to the caller.
-2. **Rollback restores observable state.** After a rolled-back transaction every
-   read method returns the same result it would have returned immediately before
-   the transaction started. Records that existed before are preserved with their
-   original identity; mutations from inside the transaction are discarded.
-3. **No shared handle.** The tx scope is bound to the single `fn` invocation, so
-   the outer store is never left in a "transaction active" state — a failed
-   transaction never strands the store.
-4. **Writes outside a transaction auto-commit.** Calling any write method
-   without a surrounding `withTransaction` is immediately durable.
-5. **Nesting is rejected** on every backend (see below). Use `tx.savepoint`
-   for a nested rollback scope: SQLite issues `SAVEPOINT` / `ROLLBACK TO` on the
-   single connection, PostgreSQL opens a Drizzle nested transaction (a savepoint
-   on the reserved connection), and MemoryStore keeps one lazy snapshot per open
-   savepoint level.
+1. **`fn` 正常返回就全部提交，抛错就全部回滚。** 通过 `tx` 做的写入一起提交。`fn` 抛错时全部撤销，错误原样抛给调用方。
+2. **回滚恢复可观察的状态。** 事务回滚之后，每个读方法返回的结果，和事务开始前那一刻相同。之前就有的记录保留原来的身份；事务里做的修改被丢弃。
+3. **没有共享的句柄。** 事务的范围只绑定这一次 `fn` 调用。外层的 store 不会停在“事务进行中”的状态，失败的事务不会把 store 卡住。
+4. **事务之外的写入立即生效。** 不在 `withTransaction` 里调用的写方法，写完就是持久的。
+5. **不允许嵌套。** 每个后端都拒绝在事务里再开事务（见[下文](#nesting-is-rejected-on-every-backend)）。需要一段可以单独回滚的范围时，用 `tx.savepoint`：
+   - SQLite 在唯一的连接上执行 `SAVEPOINT` / `ROLLBACK TO`。
+   - PostgreSQL 打开 Drizzle 的嵌套事务，也就是保留连接上的一个 savepoint。
+   - MemoryStore 为每一层打开的 savepoint 保留一份惰性快照。
 
-Ordinary `addMessage` inserts reject an occupied global message ID, including
-when another session owns it. Rejection never updates the original row. If the
-error escapes the transaction callback, earlier writes roll back; a failed
-savepoint rolls back only its own writes. The distinct `commitPlayerInputMessage`
-API retains its explicit idempotent adoption contract.
+**消息 ID 不能重复。** 普通的 `addMessage` 插入会拒绝一个已被占用的全局消息 ID，即使占用它的是另一个会话。拒绝不会改动原来那一行。错误逃出事务回调时，之前的写入回滚；失败的 savepoint 只回滚它自己的写入。另一个接口 `commitPlayerInputMessage` 保留它明确的“幂等接管”约定。
 
-A same-owner snapshot refresh updates its capture time and payload in the same
-write and follows the surrounding transaction's commit or rollback. It does not
-change the snapshot ID or weaken cross-session ownership rejection.
+**快照刷新。** 同一个属主刷新快照时，采集时间和内容在同一次写入里更新，并跟随外层事务的提交或回滚。它不改变快照 ID，也不放松对跨会话归属的拒绝。
 
-Snapshot, suspension, and world-data import ledger IDs have one session owner.
-Upserting an existing ID for another session throws
-`SessionRecordScopeConflictError` on every backend without changing the original
-record. SQL backends enforce ownership in the atomic conflict update, including
-concurrent first inserts. A ledger batch with any ownership conflict rolls back
-the entire batch; the error also rolls back a surrounding store transaction.
+**一个 ID 只属于一个会话。** 快照、挂起记录（suspension）和世界数据导入账本的 ID 各自只有一个会话属主。
 
-History compaction through `history.compact@2` uses one transaction for selective
-summary deletion, replacement-summary insertion, source-message tagging, and
-retagging of messages belonging to replaced summaries. `deleteSessionSummaries`
-accepts an optional summary-ID list; `retagCompactedTurnMessages` accepts an
-optional source-summary-ID list. An empty list changes no rows, and omitting the
-list selects all summaries or all compacted messages in that session. The
-compactor always passes explicit IDs, preserves retained segments, and checks
-that summaries did not change while the provider generated its result. Replacing
-an old prefix retains its earliest summary ID and timestamp, preserving the
-ordering used when only uncompacted raw history is loaded. Original source text
-remains stored. Failure of any write rolls back the whole replacement.
+- 用另一个会话的名义 upsert 一个已有的 ID，在每个后端上都抛 `SessionRecordScopeConflictError`，原记录不变。
+- SQL 后端在原子的冲突更新里检查归属，并发的首次插入也一样。
+- 账本批量写入里只要有一条归属冲突，整批回滚。这个错误也会让外层的 store 事务回滚。
+
+**历史压缩是一个事务。** 通过 `history.compact@2` 做的历史压缩，在一个事务里完成四件事：有选择地删除摘要、插入替换的摘要、给源消息打标记、给属于被替换摘要的消息重新打标记。
+
+- `deleteSessionSummaries` 接受可选的摘要 ID 列表；`retagCompactedTurnMessages` 接受可选的源摘要 ID 列表。
+- 空列表不改任何行。省略列表表示选中这个会话的全部摘要，或全部已压缩的消息。
+- 压缩器总是传明确的 ID，保留不动的段，并检查提供者生成结果的这段时间里摘要有没有变化。
+- 替换一段旧前缀时，保留它最早的摘要 ID 和时间戳。这样只加载“未压缩的原始历史”时用到的排序不变。
+- 源消息的原文仍然保存着。
+- 任何一次写入失败，整个替换回滚。
 
 ### Contract tests
 
-`packages/store/src/contract/store-contract.ts` runs the shared behavioral
-suite (`contract/suites/integrity-suites.ts`, `withTransaction` group) that every
-backend must pass:
+`packages/store/src/contract/store-contract.ts` 运行所有后端共用的行为测试（`contract/suites/integrity-suites.ts` 的 `withTransaction` 组）。每个后端都必须通过：
 
 - `commits all writes when the callback resolves`
 - `rolls back all writes and rethrows when the callback throws`
@@ -99,12 +83,11 @@ backend must pass:
 - `rejects a nested withTransaction with a clear error instead of deadlocking`
 - `recovers and accepts a fresh withTransaction after a nested rejection`
 
-Any new store backend MUST pass this suite.
+新增的存储后端**必须**通过这套测试。
 
 ## Versioned plugin-data batch CAS
 
-Versioned domain records use a host-owned `PluginDataStore` primitive, available
-on both root `DataStore` and transaction-bound views:
+带版本的领域记录用一个由宿主持有的 `PluginDataStore` 原语来写。CAS（compare-and-set）的意思是“先比对版本，全部对得上才写”。根 `DataStore` 和事务内的视图上都有这个方法：
 
 ```ts
 compareAndSetPluginDataBatch(
@@ -120,384 +103,344 @@ compareAndSetPluginDataBatch(
 ): Promise<boolean>;
 ```
 
-`expectedVersion: null` requires absence; a positive integer must exactly match
-the existing JSON record's `value.version`. All comparisons succeed before any
-row changes. A conflict returns `false` with no writes; invalid or duplicate
-(namespace, key) entries and infrastructure failures throw. An enclosing
-transaction still owns rollback of every other write. This is not a new table,
-a generic JSON merge API, or a permission to write another plugin's partition.
+- `expectedVersion: null` 要求这条记录不存在。正整数必须和现有 JSON 记录的 `value.version` 完全相等。
+- 所有比对都通过之后，才改动任何一行。
+- 有冲突时返回 `false`，什么都不写。
+- 条目无效、`(namespace, key)` 重复，或者基础设施故障，会抛错。
+- 外层事务仍然负责回滚其他所有写入。
+- 它不是一张新表，不是通用的 JSON 合并 API，也不是写其他插件分区的许可。
 
-Every backend requires an existing parent session, including for an empty batch
-used as a write barrier. A missing or deleted session throws
-`SessionNotFoundError` (`code: session_not_found`) without creating orphan rows.
+每个后端都要求父会话存在，即使是用作写屏障的空批次。会话不存在或已删除时，抛 `SessionNotFoundError`（`code: session_not_found`），不会留下没有归属的行。
 
-- Memory compares and replaces the batch under its serialized store boundary.
-- SQLite uses `BEGIN IMMEDIATE` when it owns the transaction; a caller's
-  transaction is reused, not nested.
-- PostgreSQL acquires the parent session row with `FOR UPDATE` inside the
-  transaction before comparisons and writes. The lock remains held through
-  the caller's ledger/receipt writes; a read followed by ordinary upsert, or
-  an in-process session lock alone, is not CAS.
-- BrowserVault keeps its existing atomic checkpoint/revision contract, not an
-  IndexedDB implementation of `DataStore`. Checkpoints retain adopted
-  dimension records, versions, source references and settlement receipts.
+各后端的做法：
 
-Dimension initialization, updates and imports use this primitive. The shared
-schema/value validator runs again at the commit boundary; generic
-`plugin.data`/batch/delete paths cannot write `_dimensions` or
-`_dimension-settlements`. All read versions, including evaluated dimensions
-whose values do not change, must still match before a successful settlement.
+- **Memory**：在它串行化的 store 边界里比对并替换整批。
+- **SQLite**：自己持有事务时用 `BEGIN IMMEDIATE`。调用方已经开了事务时复用它，不嵌套。
+- **PostgreSQL**：在事务里先用 `FOR UPDATE` 锁住父会话行，再比对和写入。这把锁一直持有到调用方写完账本和回执。“先读再普通 upsert”，或者只靠进程内的会话锁，都不算 CAS。
+- **BrowserVault**：保留它现有的原子 checkpoint / revision 约定，不是 `DataStore` 的 IndexedDB 实现。checkpoint 里保留已采用的维度记录、版本、来源引用和结算回执。
+
+维度的初始化、更新和导入都使用这个原语。
+
+- 共享的 schema / value 校验器在提交边界再运行一次。
+- 通用的 `plugin.data`、batch、delete 路径不能写 `_dimensions` 或 `_dimension-settlements`。
+- 所有读过的版本都必须仍然匹配，结算才算成功。评估过但值没有变化的维度也包括在内。
 
 ### Dimension settlement and execution atomicity
 
-The host registers an obligation in the committed narrative's transaction,
-using the authoritative result ID and logical turn number. Frozen definitions
-and read versions live in the receipt; narrative text is read from the source
-turn artifact rather than copied into every receipt. Updated values and the
-success receipt commit in one CAS batch/transaction. Explicit `no-change` also
-validates the read set and writes a receipt; it is not inferred from a missing
-tool call or a successful runtime.
+**登记义务。** 宿主在已提交叙事的那个事务里登记一项结算义务，使用权威的 result ID 和逻辑回合号。
 
-Initialization has one write path: its own `dimension.initialize` proposal. It
-passes `PreStateCommit` like any other proposal and commits inside the
-savepoint of the runtime that proposed it, so a veto writes nothing, a rewrite
-writes the rewritten definition, and a runtime that is dropped takes its
-initialization with it. Before any runtime commits, `finalizeExecution` only
-binds the session to its dimension provider. Receipts freeze the committed
-records: they are registered where a provider runtime first needs one (before
-its first settlement update) and once more after the last runtime. A receipt
-registered inside a savepoint that rolls back is registered again from what did
-commit, and no receipt is registered when no committed dimension has a rule.
+- 冻结的定义和读取时的版本保存在回执里。
+- 叙事正文从源回合的 artifact 读取，不复制到每张回执里。
+- 更新后的值和成功回执在同一个 CAS 批次（同一个事务）里提交。
+- 明确的 `no-change` 同样校验读取集并写一张回执。它不能从“没有工具调用”或“runtime 成功了”推断出来。
 
-A rejected tracked plan can retain the story with an explicit
-`pending-settlement` domain result: it writes no values and no success receipt.
-This does **not** change how `finalizeExecution` treats a `committed:false`
-proposal: it drops the runtime that proposed it when the execution has a
-committed story, and rolls back the whole execution otherwise. Ordinary manual
-version conflicts remain write rejection; infrastructure errors still throw
-and roll back. Notifications are published only after durable commit. The next
-narrative is blocked until the pending source is retried, explicitly marked
-`manual`, or explicitly `skipped`; a plain value edit does not resolve it.
+**初始化只有一条写入路径**：它自己的 `dimension.initialize` proposal。
 
-Receipts and adopted definitions/values follow existing snapshot, fork and
-browser checkpoint paths. Terminal sources are not settled again after restore
-or retry. See [World Model](world-model.md#回合时序与结算回执) for the five states
-and [API](api.md#维度编辑与待结算恢复) for editor/tracker RPC boundaries. Old raw
-dimension worlds and development sessions/checkpoints must be recreated; no
-legacy read or dimension-to-lorebook double write is maintained.
+- 它和其他 proposal 一样经过 `PreStateCommit`，并在提出它的 runtime 的 savepoint 里提交。
+- 所以：被否决就什么都不写；被改写就写入改写后的定义；runtime 被丢弃时，它的初始化也一起丢弃。
+- 在任何 runtime 提交之前，`finalizeExecution` 只把会话绑定到它的维度提供者。
+
+**回执冻结已提交的记录。**
+
+- 回执在提供者 runtime 第一次需要它的地方登记（它的第一次结算更新之前），最后一个 runtime 之后再登记一次。
+- 在一个回滚了的 savepoint 里登记的回执，会根据真正提交的内容重新登记。
+- 没有任何已提交的维度带规则时，不登记回执。
+
+**计划被拒绝时。** 被拒绝的跟踪计划可以保留故事，并留下一个明确的 `pending-settlement` 领域结果：不写任何值，也不写成功回执。
+
+- 这**不**改变 `finalizeExecution` 对待 `committed:false` proposal 的方式：执行里有已提交的故事时，丢弃提出它的那个 runtime；否则回滚整个执行。
+- 普通的手动版本冲突仍然是写入被拒绝。基础设施错误仍然抛出并回滚。
+- 通知只在持久提交之后发布。
+- 下一次叙事被阻止，直到待结算的来源被重试、被明确标记为 `manual`，或被明确标记为 `skipped`。单纯改一个值不能解决它。
+
+**快照和恢复。** 回执和已采用的定义 / 值沿用现有的快照、fork 和浏览器 checkpoint 路径。已经终结的来源在恢复或重试之后不会再结算一次。五种状态见 [World Model](./world-model.md#回合时序与结算回执)，editor / tracker RPC 的边界见 [API](./api.md#维度编辑与待结算恢复)。
+
+> [!NOTE]
+> 旧的 raw dimension 世界，以及开发期的会话和 checkpoint 必须重建。没有旧格式读取，也没有“维度到 lorebook”的双写。
 
 ## Backend implementations
 
-An execution veto or cancellation captured in the prepared commit plan rejects
-finalization before the domain transaction. Caller `extraInTx` writes, buffered
-proposals, journal entries, suspensions, exports, snapshots, and successful
-completion events are suppressed. Previously recorded execution history is
-settled as failed; already durable client input remains outside this boundary.
+先说两条对所有后端都成立的提交前提。
 
-Story completion is a commit precondition: a failed `outputKind: story` runtime,
-a successful story result without non-empty sanitized `narrativeOutput`, or a
-story the executor held back because the dimension provider failed in the same
-execution (`dimension-snapshot-unavailable`) rejects execution finalization
-before any buffered proposals, journal messages, or player-turn counters
-commit. A story skipped for any other reason (its guard, a declared gate) does
-not reject the execution. Already durable client messages remain outside
-this transaction. A story runtime is not offered `runtime-done`; a model that
-calls it from habit is first asked for the narrative with the remaining bounded
-model steps; an empty result becomes a failed runtime. This
-does not retry or reverse external tool side effects. Optional system extractors
-can still fail after a valid story; their failure does not discard the story.
+**否决或取消。** 准备好的提交计划里记录了执行被否决或被取消时，最终提交在进入领域事务之前就被拒绝。
+
+- 调用方的 `extraInTx` 写入、缓冲的 proposals、journal 条目、suspension、exports、快照和成功的完成事件都不发生。
+- 之前已经记录的执行历史结算为 failed。
+- 已经持久化的客户端输入不在这条边界之内。
+
+**故事必须完成。** 故事完成是提交的前提。下面三种情况会在任何缓冲的 proposal、journal 消息或玩家回合计数提交之前，拒绝整次执行的提交：
+
+- `outputKind: story` 的 runtime 失败了。
+- story 的结果成功了，但清理后的 `narrativeOutput` 为空。
+- 维度提供者在同一次执行里失败，执行器因此扣住了故事（`dimension-snapshot-unavailable`）。
+
+相关的规则：
+
+- 故事因为其他原因被跳过（它的 guard，或声明的门控）时，不拒绝执行。
+- 已经持久化的客户端消息不在这个事务里。
+- story runtime 不会被提供 `runtime-done`。模型出于习惯调用它时，框架先用剩下的有限步数向它要叙事；结果仍然为空，就算 runtime 失败。
+- 这不会重试或撤销外部工具已经产生的副作用。
+- 可选的系统提取器在一段有效的故事之后仍然可能失败。它们的失败不会丢弃故事。
 
 ### MemoryStore
 
-Two-phase snapshot using a **shallow reference copy** of each collection
-(`new Map(value)` / `[...value]`), not a deep clone. The transaction lazily
-captures each collection on its first write, using the method-to-collection
-mapping in `WRITE_METHOD_TOUCHES`. Unknown mutators conservatively capture all
-collections. On rollback it restores the captured collections in place so
-that any existing references the caller is holding stay valid. On commit it simply
-discards the shadow.
+用两阶段快照实现。快照是每个集合的**浅引用拷贝**（`new Map(value)` / `[...value]`），不是深拷贝。
 
-- File: `packages/store/src/memory/transaction-methods.ts`
-- Invariant: correctness relies on records being treated as **immutable** —
-  mutations must replace the record (new object), never mutate in place. This
-  is why an O(row-count) reference copy is safe. A deep clone is unnecessary
-  under the never-mutate-in-place contract and is substantially more expensive.
+- 事务在第一次写某个集合时才惰性地拍下它。哪个方法碰哪个集合，由 `WRITE_METHOD_TOUCHES` 里的映射决定。不认识的写方法保守地拍下全部集合。
+- 回滚时把拍下的集合原地恢复，所以调用方手里已有的引用仍然有效。
+- 提交时直接丢弃影子拷贝。
+- 文件：`packages/store/src/memory/transaction-methods.ts`
+
+> [!IMPORTANT]
+> 正确性依赖于记录被当作**不可变**的：修改必须替换记录（新对象），不能原地改。所以 O(行数) 的引用拷贝是安全的。在“不原地修改”的约定下，深拷贝没有必要，而且贵得多。
 
 ### SqliteStore
 
-Direct SQL: `sqlite.exec('BEGIN')` / `'COMMIT'` / `'ROLLBACK'`. The store is one
-synchronous `node:sqlite` connection, so `withTransaction` **serializes** concurrent
-calls through a promise chain — each runs its full BEGIN…COMMIT before the next
-starts, so neither loses writes.
+直接执行 SQL：`sqlite.exec('BEGIN')` / `'COMMIT'` / `'ROLLBACK'`。
 
-- File: `packages/store/src/sqlite/sqlite-transactions.ts`
+- store 是一个同步的 `node:sqlite` 连接。所以 `withTransaction` 用一条 promise 链把并发的调用**串行化**：每个调用跑完自己完整的 BEGIN…COMMIT，下一个才开始。谁的写入都不会丢。
+- 文件：`packages/store/src/sqlite/sqlite-transactions.ts`
 
 ### PgStore
 
-`postgres.js` is a connection pool, so a bare `unsafe('BEGIN')` does not bind to a
-specific connection. `withTransaction` uses Drizzle's native
-`db.transaction(async (tx) => …)`, which reserves a dedicated pooled connection
-for the callback and issues BEGIN/COMMIT/ROLLBACK correctly. The tx-scoped store
-view routes every write to that connection, so concurrent `withTransaction` calls
-run on independent connections — true parallel transactions.
+`postgres.js` 是连接池。裸的 `unsafe('BEGIN')` 不会绑定到某一个具体的连接上。
 
-- File: `packages/store/src/postgres/pg-store.ts`
+- `withTransaction` 使用 Drizzle 原生的 `db.transaction(async (tx) => …)`。它为回调保留一个专用的池内连接，并正确地发出 BEGIN / COMMIT / ROLLBACK。
+- 事务范围内的 store 视图把每次写入都发到这个连接上。所以并发的 `withTransaction` 调用跑在各自独立的连接上，是真正并行的事务。
+- 文件：`packages/store/src/postgres/pg-store.ts`
 
 ### Cross-backend semantics (read before adopting)
 
-The three backends honor the same observable contract (atomic commit / rollback,
-nested-call rejection) but differ in concurrency and isolation:
+三个后端遵守同一份可观察的约定（原子提交 / 回滚，拒绝嵌套），但并发和隔离方式不同：
 
-| Backend                       | Concurrency model                                                                                                                   | Concurrent root operation during a callback                                                                                    |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                            | Reads observe their database snapshot; writes stay on their own connection and are not folded in.                              |
-| **SqliteStore / MemoryStore** | **Single connection / live state.** Transactions and every root read/write share one promise queue (**serialized operation gate**). | **Queued until the transaction settles** — no dirty read and no folded write. Operations issued through `tx` still run inline. |
+| 后端                          | 并发模型                                                                                         | 回调进行期间，根 store 上的并发操作                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| **PgStore**                   | 每次调用跑在**自己的池内连接**上（Drizzle `db.transaction`），是真正并行的事务。                 | 读操作看到的是各自的数据库快照；写操作留在各自的连接上，不会被并进这个事务。               |
+| **SqliteStore / MemoryStore** | **单个连接 / 单份实时状态。** 事务和根 store 的每次读写共用一个 promise 队列（**串行操作门**）。 | **排队，直到事务结束**：没有脏读，写入也不会被并进事务。通过 `tx` 发出的操作仍然就地执行。 |
 
-> **Serialized operation gate (SQLite / Memory).** One connection/live state
-> means a transaction cannot isolate by itself: a write issued elsewhere while
-> a transaction is open used to land inside it, while an outside read could see
-> data that was later rolled back. The session lock orders writes belonging to one session's turn, but
-> it is per-session and some routes hold no session lock at all (world imports,
-> character edits, settings), so a write from another session could vanish.
-> `packages/store/src/serialized-write-gate.ts` puts transactions and all root
-> store operations on **one queue**: outside reads/writes wait for the
-> transaction; operations through the `tx` scope run
-> inline (it belongs to that transaction, and queueing it would deadlock).
-> Inside vs outside is decided by `AsyncLocalStorage`, so a genuinely concurrent
-> caller that starts while a transaction is suspended at an `await` is not
-> mistaken for a nested one.
->
-> **The gate is per-connection, not per-store.** Everything that mutates
-> through one `node:sqlite` handle shares a single gate, resolved via
-> `getConnectionWriteGate(db)` in `sqlite/shared-connection.ts`: the `DataStore`
-> methods, the optional sqlite-vec capability (`VECTOR_WRITE_METHODS`), and the
-> mirror MediaStore that deliberately reuses the same connection
-> (`MEDIA_WRITE_METHODS`). Before this, only the `DataStore` methods were gated,
-> so a vector or media write issued from another session still joined an open
-> transaction and disappeared on its rollback.
->
-> Statements were already serialized — `node:sqlite` is synchronous — but the
-> gate is held for a transaction's whole callback, including its awaits. Keep
-> transaction bodies to store work: the execution finalizer runs plugin
-> `PreStateCommit` hooks before opening its transaction for this reason. **Per-transaction connections (as PgStore has) remain
-> the long-term answer for real concurrency**; the gate closes the correctness
-> gap without a store-connection rearchitecture. Regression coverage:
-> `packages/store/tests/serialized-write-gate.test.ts`.
+#### 串行操作门（SQLite / Memory）
+
+只有一个连接或一份实时状态时，事务自己做不到隔离。没有这道门，事务打开期间别处发出的写入会落进这个事务，外面的读操作也可能看到之后被回滚的数据。
+
+会话锁只给同一个会话的回合写入排序。它是按会话的，而且有些路由根本不持有会话锁（世界导入、角色编辑、设置）。所以另一个会话的写入可能凭空消失。
+
+`packages/store/src/serialized-write-gate.ts` 把事务和根 store 的全部操作放进**同一个队列**：
+
+- 事务外面的读写等事务结束。
+- 通过 `tx` 范围发出的操作就地执行。它属于这个事务，让它排队会造成死锁。
+- “里面还是外面”由 `AsyncLocalStorage` 判断。所以一个真正并发的调用方，即使在事务停在某个 `await` 时开始，也不会被误认为是嵌套调用。
+
+**这道门按连接设，不按 store 设。** 所有通过同一个 `node:sqlite` 句柄做修改的代码共用一道门，由 `sqlite/shared-connection.ts` 里的 `getConnectionWriteGate(db)` 取得。共用它的有：
+
+- `DataStore` 的方法；
+- 可选的 sqlite-vec 能力（`VECTOR_WRITE_METHODS`）；
+- 有意复用同一个连接的镜像 MediaStore（`MEDIA_WRITE_METHODS`）。
+
+如果向量或媒体的写入不经过这道门，另一个会话发出的这类写入会并进一个打开的事务，并随它的回滚一起消失。
+
+**事务体里只做存储工作。** 语句本来就是串行的（`node:sqlite` 是同步的），但这道门在事务的整个回调期间都被持有，包括其中的 `await`。出于这个原因，执行的最终提交先运行插件的 `PreStateCommit` hooks，再打开事务。
+
+**每个事务一个连接（像 PgStore 那样）仍然是真正并发的长期答案。** 这道门在不重做存储连接结构的前提下，补上了正确性的缺口。回归测试：`packages/store/tests/serialized-write-gate.test.ts`。
 
 ### Vector index initialization and transfer
 
-A registered vector model guarantees its physical table exists. PostgreSQL initializes the registry row, optional vector extension, table, and indexes in one transaction, then publishes the in-process cache after commit. An advisory transaction lock serializes initialization across processes. SQLite uses an immediate transaction and reads model state directly so outer rollbacks cannot leave stale caches. Existing broken development registries must be recreated.
+**初始化。** 注册了的向量模型保证它的物理表存在。
 
-Snapshots, forks, and browser checkpoint transfers exclude the reserved `__kernel:vector` partition. Its ingest cursors and hashes describe a local physical index, not transferable session data. Both producers and importers apply this rule; rebuilt sessions re-index their messages and lore. Ordinary plugin data with the same namespace names is retained.
+- PostgreSQL 在一个事务里初始化注册表行、可选的 vector 扩展、表和索引，提交之后才发布进程内的缓存。一把 advisory 事务锁让多个进程的初始化排队。
+- SQLite 使用 immediate 事务，并直接读取模型状态。所以外层的回滚不会留下过期的缓存。
+- 已经损坏的开发期注册表必须重建。
 
-The server's shared commit entry point schedules best-effort ingestion only after
-`commitExecution` reports a durable commit. Player, manual, resumed, and detached
-executions use that entry point. Fork and browser checkpoint replacement also
-schedule ingestion. Bootstrap establishes the configured embedding model lock
-inside the ingestion lease before reading the corpus. A scheduled run continues
-through bounded provider batches until the current corpus is indexed; short or
-failed embeddings leave unfinished progress for a later run.
+**不随会话转移。** 快照、fork 和浏览器 checkpoint 的传输都不包含保留的 `__kernel:vector` 分区。
 
-Ingestion uses its own per-session lock (advisory across PostgreSQL hosts), never
-the turn lock. Lifecycle replacement and deletion acquire locks in this order:
-session, world when needed, ingestion, then storage transaction. They wait for
-all delayed vectors, cursor updates, hash updates, and archival deletions before
-replacing or deleting state, including checkpoints that retain `createdAt`.
-Ordinary turns can commit while embeddings run; the ingestor coalesces another
-pass to observe those commits. Shutdown drains tracked memory tasks before
-closing storage. Embedding failures do not change the committed turn outcome.
+- 它的摄取游标和哈希描述的是本机的一份物理索引，不是可以转移的会话数据。
+- 导出方和导入方都执行这条规则。重建出来的会话重新索引自己的消息和 lore。
+- 名字相同的普通插件数据 namespace 照常保留。
 
-Fork preserves character IDs because every backend keys characters by
-`(sessionId, id)`. Copied plugin references and the child's snapshot therefore
-identify the same characters as the child store.
+**什么时候摄取。**
+
+- 服务端共享的提交入口只在 `commitExecution` 报告已经持久提交之后，才安排尽力而为的摄取。玩家回合、手动执行、恢复的执行和后台（detached）执行都走这个入口。
+- fork 和浏览器 checkpoint 替换之后也安排摄取。
+- 启动（bootstrap）时，先在摄取租约里确立配置的 embedding 模型锁，再读取语料。
+- 一次已安排的运行按有界的服务商批次持续进行，直到当前语料索引完。返回数量不足或失败的 embedding 把未完成的进度留给下一次运行。
+
+**锁。**
+
+- 摄取使用它自己的按会话的锁（跨 PostgreSQL 主机时是 advisory 锁），从不使用回合锁。
+- 生命周期里的替换和删除按这个顺序取锁：会话 → 需要时的世界 → 摄取 → 存储事务。
+- 它们等所有延迟的向量、游标更新、哈希更新和归档删除完成，再替换或删除状态。保留 `createdAt` 的 checkpoint 也一样。
+- embedding 运行期间，普通回合可以照常提交。摄取器会合并出下一趟来读到这些提交。
+- 关闭时先排空被跟踪的记忆任务，再关闭存储。
+- embedding 失败不改变已提交回合的结果。
+
+**fork 保留角色 ID。** 每个后端都用 `(sessionId, id)` 作角色的键。所以复制过去的插件引用和子会话的快照，指向的角色和子会话 store 里的相同。
 
 ### MediaStore transaction and concurrency fixes
 
-Media lifecycle mutations use per-resource atomicity alongside the DataStore
-transactions:
+媒体的生命周期修改，在 DataStore 事务之外，另有按资源的原子性：
 
-- SQLite/local-fs cleanup performs its final owner/reference check and asset
-  deletion inside `BEGIN IMMEDIATE`. Its MediaStore shares the DataStore
-  connection gate, so a concurrent transaction cannot absorb or lose a media
-  write on rollback. Cleanup reports only assets actually deleted.
-- PostgreSQL `put`, ownership, reference, deletion, and cleanup operations use
-  a transaction-scoped advisory lock keyed by content id. This serializes
-  first-writer-wins and reference/deletion races across processes; cleanup also
-  uses `NOT EXISTS` in the guarded delete.
-- IndexedDB MediaStore keeps ownership and reference updates atomic in its
-  object-store transactions. It is a media backend only; browser game-state
-  persistence is handled by BrowserVault below, not by an IndexedDB DataStore.
+- **SQLite / local-fs**：清理时，最后一次属主 / 引用检查和资源删除放在 `BEGIN IMMEDIATE` 里完成。它的 MediaStore 共用 DataStore 的连接门，所以并发的事务不会在回滚时吸收或弄丢一次媒体写入。清理只报告真正删除了的资源。
+- **PostgreSQL**：`put`、归属、引用、删除和清理操作使用以内容 ID 为键的事务级 advisory 锁。它让“先写者胜”以及引用和删除之间的竞争在多个进程之间排队。清理还在带保护的删除语句里使用 `NOT EXISTS`。
+- **IndexedDB MediaStore**：在它的 object-store 事务里保持归属和引用更新的原子性。它只是一个媒体后端。浏览器里游戏状态的持久化由下面的 [BrowserVault](#browservault-transactions) 负责，不是一个 IndexedDB 版的 DataStore。
 
 ### Nesting is rejected on every backend
 
-Calling `withTransaction` from inside another `withTransaction` callback is a
-programming error and is **rejected synchronously with a clear error** on all
-three backends:
+在一个 `withTransaction` 的回调里再调用 `withTransaction` 是编程错误。三个后端都**同步地拒绝它，并给出清楚的错误**：
 
-- **Serialized backends (SQLite / Memory):** the inner call would
-  queue behind the outer transaction _on the serialization chain_ — and the
-  outer call is awaiting the inner — a permanent **deadlock**. The guard turns
-  that silent hang into an immediate rejection.
-- **PgStore:** nesting would not deadlock (independent connection), but the
-  inner call would run as a **separate, non-atomic transaction** — an outer
-  rollback would not undo the inner commit. It is rejected anyway, for a uniform
-  contract and to prevent that silent atomicity surprise.
+- **串行的后端（SQLite / Memory）**：内层调用会在串行链上排到外层事务的后面，而外层又在等内层。这是永久的**死锁**。守卫把这种无声的卡死变成一次立即的拒绝。
+- **PgStore**：嵌套不会死锁（连接是独立的），但内层调用会作为一个**单独的、不具原子性的事务**运行：外层回滚撤销不了内层的提交。为了约定统一，也为了避免这种无声的意外，同样拒绝。
 
-The error message: `"<Store>: nested withTransaction is not supported on the
+错误信息：`"<Store>: nested withTransaction is not supported on the
 <backend> backend; <reason>. Flatten the nested call, or perform the inner
 writes directly through the outer callback's tx scope."`
 
 #### How nesting is detected
 
-- **SqliteStore / MemoryStore / PgStore (Node):** an `AsyncLocalStorage` scope
-  (`packages/store/src/tx-nesting-guard.ts`) marks the running callback's async
-  context. `isNested()` — checked synchronously when a new `withTransaction` is
-  entered — returns `true` only for a re-entrant (nested) call and `false` for an
-  independent concurrent caller, so legitimate concurrency is never misflagged.
-  The shared error builder lives in `packages/store/src/tx-nesting-error.ts`.
-  The AsyncLocalStorage guard is Node-only because all `DataStore` backends run
-  on the server.
+SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
+
+- 一个 `AsyncLocalStorage` 作用域（`packages/store/src/tx-nesting-guard.ts`）标记正在运行的回调的异步上下文。
+- 进入新的 `withTransaction` 时同步检查 `isNested()`。只有重入（嵌套）的调用返回 `true`；独立的并发调用方返回 `false`。所以正当的并发不会被误报。
+- 共用的错误构造函数在 `packages/store/src/tx-nesting-error.ts`。
+- 这个守卫只在 Node 上有，因为所有 `DataStore` 后端都运行在服务端。
 
 ## BrowserVault transactions
 
-Browser-private persistence is deliberately outside `DataStore`. Dexie owns
-the IndexedDB transaction and schema lifecycle in
-`apps/web/src/services/storage/browser-vault.ts`:
+浏览器私有的持久化有意放在 `DataStore` 之外。IndexedDB 的事务和 schema 生命周期由 Dexie 管理，代码在 `apps/web/src/services/storage/browser-vault.ts`。
 
-- a checkpoint and its compact action-idempotency row commit in one `rw`
-  transaction;
-- only the latest full checkpoint is retained;
-- deleting a browser world atomically removes its associated checkpoints,
-  commit metadata and pending commits; owned session mirrors are cleaned up
-  best-effort, without deleting the shared server world;
-- world edits and local checkpoint writes use the current browser world record,
-  so an older session checkpoint cannot undo a saved edit;
-- `baseRevision`, `revision`, and `actionId` reject stale or divergent writes;
-- browser checkpoint upload/download operations are serialized by
-  `LocalDataService`. It owns durable pending-commit recovery before hydration
-  or staging a different action. A missing transient session clears the pending
-  marker and allows rebuilding from the browser checkpoint; other errors retain
-  the marker and block newer commits;
-- checkpoint export reads runtime results once per session using
-  `listRuntimeResults(sessionId)`. Omitting `turnId` returns all session rows,
-  including interrupted executions without a turn-result row; passing `turnId`
-  retains the existing per-turn filter on every backend;
-- the transient server workspace uses `MemoryStore.withTransaction` when a
-  checkpoint replaces a session;
-- checkpoint imports validate every record's structure and session scope,
-  including snapshot payloads, before entering the write transaction;
-- trusted fork copies use `rebindSnapshotPayloadSession` to bind nested state
-  to the child session; exports normalize legacy fork payloads before wire
-  validation. External checkpoint input is never rebound to bypass ownership
-  checks;
-- `replaceSessionFromCheckpoint` preserves global worlds by default. Callers
-  must explicitly opt into `writeWorld` after independently authorizing global
-  writes; session ownership alone does not authorize a shared-world update;
-- upload and commit routes recheck owner, incarnation and deletion status
-  under the session lock before using revision or idempotency caches. Cache
-  entries belong to one incarnation and are discarded after same-id recreation.
+**写入。**
 
-This is a synchronization contract, not an attempt to reproduce the full
-server transaction API in the browser.
+- 一份 checkpoint 和它那条紧凑的“动作幂等”记录在同一个 `rw` 事务里提交。
+- 只保留最新的一份完整 checkpoint。
+- `baseRevision`、`revision` 和 `actionId` 用来拒绝过期的或走岔了的写入。
+- 世界编辑和本地 checkpoint 写入使用当前的浏览器世界记录。所以一份较旧的会话 checkpoint 不能撤销一次已保存的编辑。
+
+**删除。** 删除一个浏览器世界时，原子地移除它关联的 checkpoints、提交元数据和待定提交。它拥有的会话镜像尽力清理，不会删除服务端共享的世界。
+
+**上传和下载。**
+
+- 浏览器 checkpoint 的上传和下载由 `LocalDataService` 串行化。在补水（hydration）或暂存另一个动作之前，它负责恢复持久化的待定提交。
+- 临时会话不存在时，清除待定标记，并允许从浏览器 checkpoint 重建。其他错误保留标记，并阻止更新的提交。
+- checkpoint 导出用 `listRuntimeResults(sessionId)` 对每个会话只读一次 runtime 结果。省略 `turnId` 返回会话的全部行，包括被中断、没有 turn-result 行的执行；传入 `turnId` 时，每个后端上都保留原有的按回合过滤。
+- 上传和提交路由在使用 revision 或幂等缓存之前，在会话锁内重新检查属主、incarnation 和删除状态。缓存条目属于一个 incarnation；同一个 ID 被重新创建之后，旧条目被丢弃。
+
+**导入和替换。**
+
+- 用 checkpoint 替换一个会话时，临时的服务端工作区使用 `MemoryStore.withTransaction`。
+- checkpoint 导入在进入写事务之前，校验每条记录的结构和会话范围，包括快照的内容。
+- 受信的 fork 复制用 `rebindSnapshotPayloadSession` 把嵌套的状态绑定到子会话。导出在做传输校验之前，先规范化旧的 fork 内容。外部的 checkpoint 输入永远不会被重新绑定来绕过归属检查。
+- `replaceSessionFromCheckpoint` 默认保留全局的世界。调用方必须先独立地授权全局写入，再明确选择 `writeWorld`。只拥有会话，并不授权更新共享的世界。
+
+这是一份同步约定，不是要在浏览器里重现完整的服务端事务 API。
 
 ## Kernel integration
 
-两层事务边界：
+事务边界有两层：
 
-- `commitAll`（`packages/runtime/src/commit/session-commit-pipeline.ts`）把
-  **单个 runtime** 的 proposal chain 提交进一个 `withTransaction` 回调。它仍是
-  最底层的提交原语。
-- `finalizeExecution`（`packages/runtime/src/commit/finalize-execution.ts`）把
-  **整个 execution**——顶层结果加上拍平后的嵌套 `recursiveCall` 结果——的所有
-  runtime 一起包进 **一个** `withTransaction`。三个提交拥有方
-  （`actions.ts` / `plugin-rpc/runtime-turn.ts` / `resume.ts`）将公开执行入口返回的
-  `{ result, commit }` 整体交给 `commitExecution({ execution, ... })`。提交计划捕获执行时
-  的 schema、Hook 设置、journal、suspension 和嵌套结果；宿主不再重新加载 schema 或
-  手工组装这些字段。缺失已声明导出的 schema 使整次事务失败。
-  `commitExecution`
-  进入这个边界，再由同一宿主入口协调通知、快照和记忆调度。
+- **`commitAll`**（`packages/runtime/src/commit/session-commit-pipeline.ts`）把**单个 runtime** 的一串 proposal 提交进一个 `withTransaction` 回调。它是最底层的提交原语。
+- **`finalizeExecution`**（`packages/runtime/src/commit/finalize-execution.ts`）把**整个 execution** 的所有 runtime 一起包进**一个** `withTransaction`。“整个 execution”指顶层结果，加上拍平后的嵌套 `recursiveCall` 结果。
 
-`start_session` 带 `loreOverride` 时，服务端先把它写进会话 metadata，再进入回合事务，所以它不属于回合事务：随后的回合失败不会撤销这次写入。这是有意的，使后续回合和其他实例看到同一份世界背景快照。
+谁来调用：
 
-`/api/actions` 的 `onFinalized` 仅依据durable outcome结算宿主标记并入观察队列，不等待SSE消费；自动snapshot仍在同一session lock内执行。写入错误、队列溢出、观察截止与锁外drain失败不能把committed artifact改成failed，不能开放同turn恢复重放，也不能重试模型。恢复以durable artifact和只读execution/session端点为准，而不是是否收到最后一帧。
+- 三个提交拥有方（`actions.ts`、`plugin-rpc/runtime-turn.ts`、`resume.ts`）把公开执行入口返回的 `{ result, commit }` 整体交给 `commitExecution({ execution, ... })`。
+- 提交计划记录了执行时的 schema、Hook 设置、journal、suspension 和嵌套结果。宿主不再重新加载 schema，也不手工组装这些字段。
+- 已声明的导出缺少 schema 时，整次事务失败。
+- `commitExecution` 进入这条边界，再由同一个宿主入口协调通知、快照和记忆调度。
 
-> **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
-> `recursiveCall` 结果）聚合进单一事务：
->
-> - **叙事优先的失败边界**——领域写入抛出的 store 错误使整回合回滚。handler 校验失败返回
->   的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）在本次执
->   行有成功的 story 结果时，只回滚提出它的那个可选 runtime：每个非 story、非 setup
->   的 runtime 在自己的 savepoint 内提交，被拒绝时只撤销它自己的写入，叙事与其他
->   runtime 照常提交，`FinalizeExecutionOutcome` 以 `committed` 返回并在
->   `failedProposals` / `isolatedRuntimes`（`{ runtimeId, error }`）中列出被丢弃的部分
->   （主回合以 `proposal.failed` 与该 runtime 的 `runtime.failed` SSE 告知）。没有 story
->   的执行（manual、background、detached、setup）仍是整体原子：任一 proposal 失败即整体
->   回滚，作业不会为未落库的写入报告成功。结果里无法变成 proposal 的 effect 条目
->   （`effects.ui[].parts`、`effects.interactions`、`effects.notifications`、`effects.statePatches` 中的非对象，以及后三个通道的非数组内容）
->   同样算作该 runtime 被拒绝的写入，按上述边界处理，不会以异常拖垮整回合；function
->   runtime 在 handler 返回时就以 `output-schema-invalid` 失败。
-> - **导出发布的独立失败边界**——每个 `recordAs` export 的读取、序号分配与追加放在一个 savepoint 中。单个 export 的存储失败先回滚该 savepoint，再记录诊断并继续其他 export 与领域提交；PostgreSQL 不会把已捕获的 SQL 错误留在 aborted transaction 中。缺失声明 schema 和公共输出契约校验失败仍在正常执行校验边界处理。
-> - **只有上游真正提交，下游才提交**——结果按执行顺序提交，被丢弃 runtime 的硬依赖方
->   一并丢弃（`commit/commit-dependencies.ts`）：turn 作用域的 `needs` 目标、必填
->   `inputs` 来源，以及触发事件的全部发出者都被丢弃的事件订阅者。`after` 与
->   `required: false` 的输入只表达顺序或尽力读取，不级联；`cardinality: one` 的能力依赖
->   在另有提供者提交成功时仍满足。story 或 setup runtime 的硬上游被丢弃时整回合回滚。
->   `extraInTx` 的第二个参数给出被丢弃的 runtime，主回合据此不排入依赖它们的 detached
->   作业与后台事件 follower；仍排入的 detached 作业在冻结的 turn digest 与上游结果中把被丢弃的 runtime 记为 `failed`。
-> - **PreStateCommit 在事务外运行**：finalize 先完成规范化、守卫和 PreStateCommit
->   Hook，再开启事务，事务内只做写入；`createCommitPipeline().commitAll` 同理。Hook
->   不读取存储状态，提前运行不改变语义，但插件 Hook 的等待不再占用 SQLite / Memory
->   的串行门。
-> - **玩家停止与提交共享边界**：`finalizeExecution` 接受可选 `signal`，在事务开始、结果处理及返回前检查取消，并传递到每个提案的 `PreStateCommit` Hook。取消会立即结束 Hook 等待、停止后续提案并整体回滚。主回合传入玩家控制信号；即使剧情已生成、取消发生在后处理或提交 Hook 中，事务仍整体回滚。数据库已提交后的通知和 `PostStateCommit` Hook 不继承这个取消信号，按自身超时完成收尾。
-> - **对话 execution journal 共享提交命运**：当前玩家输入与非 manual runtime 的
->   `TurnMessage` 在执行期只缓存在内存 journal；所有 proposal 通过后才由
->   `finalizeExecution` 在同一事务中 append。回滚执行不会进入后续 Prompt、trigger
->   统计或 compaction。`actions.ts` 同时通过 `extraInTx` 提交 REST messages 镜像与
->   player InteractionRecord，刷新和观测面也不会保留回滚输入。manual/background 路径
->   继续遵循各自不追加对话历史的合同。
-> - `turn_results.commit_status` 在同一事务内于成功时结算为 `committed`；回滚时在
->   事务外幂等结算为 `failed`。嵌套 recursiveCall 复用顶层 `turnId`，因此顶层的
->   `[turnId]` 一次结算即覆盖所有嵌套行。`committed` 结算同时把被丢弃 runtime 在
->   `runtimeResults` 中的记录改为 `failed` 并写入原因，历史、重试与刷新看到的都是
->   实际保存的结果；它们上报的 job 也收尾为 `failed`。和其他失败的 runtime 一样，被丢弃的
->   runtime 不写入对话日志（文本、交互与 UI 卡片），也不计入触发台账
->   （`maxTriggerCount` / `cooldownTurns`）。
-> - **完成屏障仍被扣留**：任一失败时 `turn.completed`、回合后记忆摄入、auto-snapshot
->   都不触发，每个失败 proposal 发出 `proposal.failed` 事件，回合对客户端呈现为可见
->   的未完成态而非"成功但状态缺失"。
-> - **外部可见的 fan-out**（emitter 事件 + PostStateCommit hook）在事务开启期间缓冲，
->   仅在 COMMIT 之后按序 flush；回滚连缓冲一并丢弃，客户端绝不会看到已回滚写入的
->   "committed" 事件。
-> - resume 通过 `extraInTx` 把助手回合消息与 suspension resolved 标记折叠进同一事务，
->   任一失败连同 proposal 一起回滚，claim 释放后可重试。resolved 标记同时清掉这条
->   suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用与 proposal、输入），
->   只留执行标识、语言和回合号；回滚时这些内容随事务恢复。
-> - **会话时钟写入进同一事务（调度重构 W3b，2026-07-22）**：玩家路径（`actions.ts`）
->   通过 `sessionClock` 参数把逻辑回合计数（`completedPlayerTurns` 的 logical-turn
->   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
->   镜像）折叠进 proposal 提交后、`commit_status` 结算前的同一事务（
->   `commit/session-clock.ts` 的 `applySessionClockTx`）。API 与 snapshot 直接保存
->   current-only 时钟字段。整回合回滚时（story 或 setup 失败，或没有 story 的执行中
->   任一 proposal 失败）计数、phase、setup 镜像都不推进，ledger 不写入；只丢弃可选
->   runtime 的提交照常推进时钟。manual / background finalize 不传 `sessionClock`，
->   时钟不动。resume 传入：同一逻辑回合最后一个 suspension 恢复时计数一次；被恢复的
->   是 setup runtime 且报告完成时，`done` 镜像与（全部 setup 完成时的）phase 翻转
->   随这次提交写入，attempt 账本沿用挂起时的那次尝试。
-> - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入，
->   因而不会与同一 session 的 turn 穿插，PG 多进程部署也由同一分布式锁键串行化。
-> - **交互回答与后续回合**：`submit_interaction` action 在回合的 session lock 内校验回答并
->   确认它还没有被回答过，再用一个 store transaction 写入批量 player input 和后续回合的
->   `turn.started`。回答落库与回合开始因此同成同败：重复提交在锁内看到已有回答而被拒绝，
->   不会出现回答已保存而回合没有开始的状态。回合自身的结果仍由 `finalizeExecution` 提交；
->   它失败时回答保留，回合经现有重试再跑。
->
-> **必需事务**：`finalizeExecution` 要求完整 DataStore，直接调用 `withTransaction`，
-> 不提供无事务回合提交的降级。底层 `commitAll` 接收到 `StoreTransaction` 视图时不再开
-> 嵌套事务，而是复用调用方的事务；这个分支不代表完整 DataStore 可以省略事务实现。
->
-> 注意 fork（`snapshots.ts`）仍是独立的会话重建事务：它重放快照、**不提交任何
-> proposal**，因此不经 `finalizeExecution`——两者共享"一个 `withTransaction` 包住整个
-> 写入序列"的模式，但属于不同关注点。
+**`loreOverride` 不在回合事务里。** `start_session` 带 `loreOverride` 时，服务端先把它写进会话 metadata，再进入回合事务。所以随后的回合失败不会撤销这次写入。这是有意的：后续回合和其他实例看到的是同一份世界背景快照。
+
+**`/api/actions` 的收尾。** `onFinalized` 只根据持久化的结果（durable outcome）结算宿主标记，并把它放进观察队列，不等 SSE 被消费。自动 snapshot 仍然在同一把 session lock 里执行。
+
+- 写入错误、队列溢出、观察截止和锁外 drain 失败，都不能把已提交的 artifact 改成 failed，不能开放同一回合的恢复重放，也不能重试模型。
+- 恢复以持久化的 artifact 和只读的 execution / session 端点为准，不看是否收到了最后一帧。
+
+### 回合级单事务
+
+`finalizeExecution` 把整回合所有 runtime（含嵌套 `recursiveCall` 结果）聚合进单一事务。下面逐条说明它的行为。
+
+**叙事优先的失败边界。**
+
+- 领域写入抛出的 store 错误，使整回合回滚。
+- handler 校验失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch），在本次执行有成功的 story 结果时，只回滚提出它的那个可选 runtime。
+- 做法：每个非 story、非 setup 的 runtime 在自己的 savepoint 里提交。被拒绝时只撤销它自己的写入，叙事和其他 runtime 照常提交。
+- 这时 `FinalizeExecutionOutcome` 以 `committed` 返回，并在 `failedProposals` / `isolatedRuntimes`（`{ runtimeId, error }`）里列出被丢弃的部分。主回合用 `proposal.failed` 和该 runtime 的 `runtime.failed` SSE 告知客户端。
+- 没有 story 的执行（manual、background、detached、setup）仍然是整体原子的：任何一个 proposal 失败就整体回滚。作业不会为没有落库的写入报告成功。
+- 结果里无法变成 proposal 的 effect 条目，同样算作该 runtime 被拒绝的写入，按上面的边界处理，不会以异常拖垮整回合。这类条目是：`effects.ui[].parts`、`effects.interactions`、`effects.notifications`、`effects.statePatches` 里不是对象的条目，以及后三个通道里不是数组的内容。function runtime 在 handler 返回时就以 `output-schema-invalid` 失败。
+
+**导出发布有独立的失败边界。**
+
+- 每个 `recordAs` export 的读取、序号分配和追加放在一个 savepoint 里。
+- 单个 export 的存储失败先回滚这个 savepoint，再记录诊断，然后继续其他 export 和领域提交。这样 PostgreSQL 不会把一个已被捕获的 SQL 错误留在中止的事务里。
+- 缺少声明的 schema，以及公共输出契约校验失败，仍然在正常的执行校验边界处理。
+
+**只有上游真正提交，下游才提交。** 结果按执行顺序提交。被丢弃 runtime 的硬依赖方一起丢弃（`commit/commit-dependencies.ts`）。
+
+| 关系                                              | 上游被丢弃时                     |
+| ------------------------------------------------- | -------------------------------- |
+| turn 作用域的 `needs` 目标                        | 下游一起丢弃                     |
+| 必填 `inputs` 的来源                              | 下游一起丢弃                     |
+| 事件订阅者，触发它的事件的全部发出者都被丢弃      | 订阅者一起丢弃                   |
+| `after`、`required: false` 的输入                 | 不级联，它们只表达顺序或尽力读取 |
+| `cardinality: one` 的能力依赖，另有提供者提交成功 | 仍然满足                         |
+| story 或 setup runtime 的硬上游                   | 整回合回滚                       |
+
+`extraInTx` 的第二个参数给出被丢弃的 runtime。主回合据此不排入依赖它们的 detached 作业和后台事件 follower。仍然排入的 detached 作业，在冻结的 turn digest 和上游结果里把被丢弃的 runtime 记为 `failed`。
+
+**PreStateCommit 在事务外运行。**
+
+- finalize 先完成规范化、守卫和 PreStateCommit Hook，再开启事务。事务里只做写入。`createCommitPipeline().commitAll` 同理。
+- Hook 不读取存储状态，提前运行不改变语义。好处是插件 Hook 的等待不再占用 SQLite / Memory 的串行门。
+
+**玩家停止和提交共用一条边界。**
+
+- `finalizeExecution` 接受可选的 `signal`。它在事务开始、处理结果和返回之前检查取消，并把信号传给每个提案的 `PreStateCommit` Hook。
+- 取消会立即结束 Hook 的等待，停止后续的提案，并整体回滚。
+- 主回合传入玩家的控制信号。即使剧情已经生成，取消发生在后处理或提交 Hook 里，事务仍然整体回滚。
+- 数据库已经提交之后的通知和 `PostStateCommit` Hook 不继承这个取消信号，按自己的超时完成收尾。
+
+**对话日志和提交同成败。**
+
+- 当前玩家输入，以及非 manual runtime 的 `TurnMessage`，在执行期间只缓存在内存里的 journal。所有 proposal 通过之后，才由 `finalizeExecution` 在同一个事务里 append。
+- 回滚了的执行不会进入后续的 Prompt、trigger 统计或 compaction。
+- `actions.ts` 同时通过 `extraInTx` 提交 REST messages 镜像和 player InteractionRecord。所以刷新页面和观测面也不会留下已回滚的输入。
+- manual / background 路径继续遵守各自“不追加对话历史”的约定。
+
+**`commit_status` 的结算。**
+
+- 成功时，`turn_results.commit_status` 在同一个事务里结算为 `committed`。回滚时，在事务外幂等地结算为 `failed`。
+- 嵌套的 recursiveCall 复用顶层的 `turnId`。所以对顶层 `[turnId]` 的一次结算就覆盖了所有嵌套的行。
+- `committed` 结算同时把被丢弃 runtime 在 `runtimeResults` 里的记录改成 `failed`，并写入原因。历史、重试和刷新看到的都是实际保存的结果。它们上报的 job 也收尾为 `failed`。
+- 和其他失败的 runtime 一样，被丢弃的 runtime 不写入对话日志（文本、交互和 UI 卡片），也不计入触发台账（`maxTriggerCount` / `cooldownTurns`）。
+
+**完成屏障仍被扣留。** 任何一处失败时，`turn.completed`、回合后的记忆摄入和 auto-snapshot 都不触发。每个失败的 proposal 发出一个 `proposal.failed` 事件。回合对客户端呈现为可见的未完成状态，而不是“成功但状态缺失”。
+
+**外部可见的通知在 COMMIT 之后才发。** 外部可见的 fan-out（emitter 事件加 PostStateCommit hook）在事务打开期间缓冲，COMMIT 之后才按顺序发出。回滚时连缓冲一起丢弃。客户端绝不会看到已回滚写入的 “committed” 事件。
+
+**resume。**
+
+- resume 通过 `extraInTx` 把助手的回合消息和 suspension 的 resolved 标记放进同一个事务。任何一处失败，连同 proposal 一起回滚；claim 释放之后可以重试。
+- resolved 标记同时清掉这条 suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用和 proposal、输入），只留执行标识、语言和回合号。回滚时这些内容随事务恢复。
+
+**会话时钟写入进同一事务。**
+
+- 玩家路径（`actions.ts`）通过 `sessionClock` 参数，把两件事放进“proposal 提交之后、`commit_status` 结算之前”的同一个事务（`commit/session-clock.ts` 的 `applySessionClockTx`）：
+  - 逻辑回合计数：`completedPlayerTurns` 通过 logical-turn ledger 幂等地推进。
+  - setup 阶段的翻转：`phase: setup → playing`，以及 `setupRuntimes` 镜像。
+- API 和 snapshot 直接保存当前的（current-only）时钟字段。
+- 整回合回滚时（story 或 setup 失败，或者没有 story 的执行里任何一个 proposal 失败），计数、phase 和 setup 镜像都不推进，ledger 不写入。
+- 只丢弃可选 runtime 的提交，照常推进时钟。
+- manual / background 的 finalize 不传 `sessionClock`，时钟不动。
+- resume 会传入。同一个逻辑回合的最后一个 suspension 恢复时计数一次。被恢复的是 setup runtime 并且它报告完成时，`done` 镜像和（全部 setup 都完成时的）phase 翻转随这次提交写入；attempt 账本沿用挂起时的那次尝试。
+
+**Action 级 plugin-rpc 的锁边界。** action handler 在 session lock 里完成读、校验和写入。所以它不会和同一个 session 的回合穿插。PG 多进程部署也由同一个分布式锁键串行化。
+
+**交互回答和后续回合。**
+
+- `submit_interaction` action 在回合的 session lock 里校验回答，并确认它还没有被回答过。然后用一个 store 事务写入批量的 player input 和后续回合的 `turn.started`。
+- 所以回答落库和回合开始同成同败。重复提交在锁里看到已有的回答而被拒绝，不会出现“回答已保存而回合没有开始”的状态。
+- 回合自己的结果仍然由 `finalizeExecution` 提交。它失败时回答保留，回合经现有的重试再跑。
+
+**必需事务。** `finalizeExecution` 要求完整的 DataStore，直接调用 `withTransaction`，没有“无事务提交回合”的降级。底层的 `commitAll` 收到 `StoreTransaction` 视图时不再开嵌套事务，而是复用调用方的事务。这个分支不代表完整的 DataStore 可以省略事务实现。
+
+**fork 是另一回事。** fork（`snapshots.ts`）是独立的会话重建事务：它重放快照，**不提交任何 proposal**，所以不经过 `finalizeExecution`。两者共用“一个 `withTransaction` 包住整个写入序列”的模式，但是不同的关注点。
 
 ```ts
 // finalizeExecution: normalization, guards and PreStateCommit run first.
@@ -549,117 +492,135 @@ await store.withTransaction(async (tx) => {
 
 ## World Data import
 
-Session creation with `worldData` uses the same `DataStore` transaction
-contract. The server builds and validates the import plan first, then wraps
-the session row plus importer-managed writes in one transaction:
+带 `worldData` 创建会话时，使用同一份 `DataStore` 事务约定。服务端先构建并校验导入计划，再把会话行和由导入器管理的写入包进一个事务：
 
 - `sessions`
 - `plugin_data`
 - `lorebook`
 - `characters`
-- media index rows stored in `plugin_data`
+- 保存在 `plugin_data` 里的媒体索引行
 - `world_data_import_ledger`
 
-`world_data_import_ledger` records provenance for every importer-managed
-session row: target, plugin id, namespace, key, source digest, value hash,
-schema ref, source id, and managed flag. `/api/worlds/:id/sync-data` uses
-that ledger for dry-run, hash-based conflict detection, and explicit
-`force` sync. Dimension declarations also enter the ledger, including inline
-and external declarations and stored worlds. An unchanged declaration preserves
-progress; a new declaration initializes its value. Changing or removing a
-record that has evolved or been edited, or has pending settlement, produces a
-conflict. `force` does not bypass those dimension protections or migrate values
-to a new schema. Apply rechecks ledger hashes and record versions in its
-transaction; conflicts preserve the existing definition/value/version. A row in
-conflict is reported and left alone; it does not hold back the other rows of
-the sync.
+导入开始规划任何写入之前，先解析语言覆盖文件。source 的 `localeArrayKeys` 给出嵌套列表的身份字段（排在 `key` 和 `id` 之后），所以作者调整了列表顺序，译文记录仍然对得上。sync 也一样。
 
-Media bytes live in `MediaStore`, which has a separate lifecycle from
-`DataStore`. World-data import validates media during preflight, writes the
-media object and a unique temporary reference atomically before the session-store
-media index row, and rolls back the `DataStore` transaction on failure. The
-reference protects unpublished bytes from concurrent GC. Finalization establishes
-session claims before releasing the temporary reference; failed preparation or
-publication releases only that attempt's temporary references. Sync deletion of
-importer-managed media index rows removes only the current session's explicit
-media ref. Lifecycle GC reclaims bytes after all ownership/ref claims are gone.
-Temporary-reference release failures are logged without masking the import
-outcome. Crashes may leave conservative pins that require operator cleanup;
-there is no automatic expiry or schema migration. If semantic data has committed
-but media finalization fails, temporary references remain to protect that data;
-creation rollback only releases them after the session deletion succeeds.
+### 导入账本
+
+`world_data_import_ledger` 为导入器管理的每一行会话数据记录来源：target、plugin id、namespace、key、source digest、value hash、schema ref、source id 和 managed 标记。
+
+`/api/worlds/:id/sync-data` 用这份账本做三件事：dry-run、基于哈希的冲突检测，以及明确的 `force` 同步。
+
+维度声明也进入账本，包括内联的、外部的声明，以及已保存的世界。
+
+| 情况                                               | 结果                                    |
+| -------------------------------------------------- | --------------------------------------- |
+| 声明没有变化                                       | 保留进度                                |
+| 新增一条声明                                       | 初始化它的值                            |
+| 修改或删除一条已经演化过、被手改过或有待结算的记录 | 产生冲突                                |
+| 对上面的冲突使用 `force`                           | 不绕过这些保护，也不把值迁移到新 schema |
+
+- apply 在自己的事务里重新检查账本哈希和记录版本。冲突时保留现有的定义、值和版本。
+- 有冲突的行被报告出来并保持原样。它不会挡住这次同步里的其他行。
+
+### 媒体
+
+媒体的字节存在 `MediaStore` 里。它的生命周期和 `DataStore` 分开。
+
+- 世界数据导入在预检阶段校验媒体。
+- 写媒体对象时，原子地同时建立一条唯一的临时引用，然后才写会话 store 里的媒体索引行。失败时回滚 `DataStore` 事务。
+- 临时引用保护还没有发布的字节不被并发的 GC 回收。
+- 收尾（finalization）先建立会话的归属声明（claims），再释放临时引用。准备或发布失败时，只释放这一次尝试的临时引用。
+- sync 删除导入器管理的媒体索引行时，只移除当前会话那条明确的媒体引用。所有归属和引用声明都消失之后，生命周期 GC 才回收字节。
+- 释放临时引用失败会记日志，不会掩盖导入本身的结果。
+- 进程崩溃可能留下一条固定引用（pin）。它在创建满 24 小时后过期，由 `POST /api/media/cleanup` 释放（见 [媒体存储](./media-store.md#世界数据导入时的临时引用)）。
+- 语义数据已经提交、但媒体收尾失败时，临时引用保留着以保护这些数据。创建回滚只有在会话删除成功之后才释放它们。
 
 ### Observability
 
-Transactional commits produce the same `trace_events` as non-transactional
-commits (proposal apply, commit success/failure). The trace does not currently
-add a dedicated transaction-mode field; inspect the active store backend when
-debugging whether a run used transactions.
+事务性的提交产生的 `trace_events` 和非事务性的提交相同（proposal apply、提交成功或失败）。trace 里目前没有专门的“事务模式”字段。排查某次运行是否用了事务时，请看当前使用的存储后端。
 
 ## Schema changes
 
-Table + index DDL is derived from the Drizzle schema
-(`packages/store/src/{sqlite,postgres}/schema.ts`) via
-`packages/store/src/common/ddl-codegen.ts`, using `CREATE TABLE IF NOT EXISTS`.
-During early development the stores do not migrate old data: a database made by
-an earlier build boots only when its tables already match, and a change to a
-table, a constraint or an index that old rows do not satisfy is listed under
-Breaking in `docs/CHANGELOG.md` with the development data to recreate. At start
-the stores delete retired tables and retired plugin-data namespaces; that is a
-removal, not a conversion.
+表和索引的 DDL 由 Drizzle schema（`packages/store/src/{sqlite,postgres}/schema.ts`）经 `packages/store/src/common/ddl-codegen.ts` 生成，使用 `CREATE TABLE IF NOT EXISTS`。
+
+- 早期开发阶段，store 不迁移旧数据。更早的构建创建的数据库，只有在它的表已经和当前一致时才能启动。
+- 对表、约束或索引的改动，如果旧的行不满足，会列在 `docs/CHANGELOG.md` 的 Breaking 下面，并说明要重建哪些开发数据。
+- 启动时，store 会删除已退役的表和已退役的 plugin-data namespace。这是删除，不是转换。
 
 ## References
 
-- Contract type: `packages/store/src/types.ts` (`DataStore` interface)
-- Contract tests: `packages/store/src/contract/store-contract.ts` and `packages/store/src/contract/suites/`
-- `withTransaction` nesting guard: `packages/store/src/tx-nesting-guard.ts` (Node-only AsyncLocalStorage) and `packages/store/src/tx-nesting-error.ts` (browser-safe error builder)
-- Kernel commit path: `packages/runtime/src/commit/session-commit-pipeline.ts`, `packages/runtime/src/commit/session-commit-handlers.ts`
-- MediaStore schema: [`media-store.md`](./media-store.md)
+- 约定的类型：`packages/store/src/types.ts`（`DataStore` 接口）
+- 约定测试：`packages/store/src/contract/store-contract.ts` 和 `packages/store/src/contract/suites/`
+- `withTransaction` 嵌套守卫：`packages/store/src/tx-nesting-guard.ts`（只在 Node 上，AsyncLocalStorage）和 `packages/store/src/tx-nesting-error.ts`（浏览器里也安全的错误构造函数）
+- 内核提交路径：`packages/runtime/src/commit/session-commit-pipeline.ts`、`packages/runtime/src/commit/session-commit-handlers.ts`
+- MediaStore schema：[`media-store.md`](./media-store.md)
 
 ## World data 写入的一致性边界
 
-- **`POST /worlds/:id/sync-dimensions`** — 只同步维度账本与受保护 `_dimensions` 记录，在 **SessionLock + store transaction** 中重新验证并应用；不重建 `entries` 或 Lorebook。已演化/手改或待结算的维度保持原样并列在冲突报告里，其余维度照常写入；存储异常整体回滚并返回 500。
-- **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑，新扫描将改动报为正常 conflict；普通领域可显式 `force`，维度的已演化/待结算保护不因此解除。维度使用 batch CAS 并持有会话写屏障；路由同时持 SessionLock，挡住回合并发写。
-- **媒体与 DataStore 分属不同生命周期**。session create 和 sync 在语义事务前准备媒体，`put` 原子建立本次导入专属临时引用。发布成功先建立 session claims 再释放临时引用；提交前失败只释放本次临时引用，无归属字节交给 GC，不强制删除内容。提交后 finalization 失败则保留保护，创建回滚成功删除会话后才可释放。兼容调用入口若在 DataStore 事务内 materialize，也遵守同一引用规则。进程崩溃可能留下无自动过期的临时引用，需确认导入已停止后人工清理。
-- **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。
+- **`POST /worlds/:id/sync-dimensions`** 只同步维度账本和受保护的 `_dimensions` 记录。它在 **SessionLock + store transaction** 里重新验证并应用，不重建 `entries` 或 Lorebook。已经演化、被手改或有待结算的维度保持原样，并列在冲突报告里；其余维度照常写入。存储异常时整体回滚，返回 500。
+- **`POST /worlds/:id/sync-data`** 的冲突扫描在事务外进行，因为它要读文件系统里的世界包。所以 apply 事务里会对每个要覆盖的目标**重读 hash 做 CAS**：扫描之后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑一次，新的扫描会把这次改动报为正常的 conflict。普通领域可以明确 `force`；维度的“已演化 / 待结算”保护不因此解除。维度使用 batch CAS，并持有会话写屏障；路由同时持有 SessionLock，挡住回合的并发写。
+- **媒体和 DataStore 的生命周期不同。**
+  - session create 和 sync 在语义事务之前准备媒体。`put` 原子地建立本次导入专属的临时引用。
+  - 发布成功：先建立 session claims，再释放临时引用。
+  - 提交前失败：只释放本次的临时引用。没有归属的字节交给 GC，不强制删除内容。
+  - 提交后 finalization 失败：保留保护。创建回滚成功删除会话之后，才可以释放。
+  - 兼容的调用入口如果在 DataStore 事务里 materialize，也遵守同一条引用规则。
+  - 进程崩溃可能留下临时引用。它在创建满 24 小时后过期，由媒体清理接口释放。
+- **Compactor** 的 summary 写入和 message tag 在同一个事务里。只写 summary 会产生孤儿：`message-insertion` 会把它当 system message 发出，而没打 tag 的原始历史仍然注入，形成两份上下文。
 
-记忆抽取使用通用 detached runtime 作业。故事提交事务同时保存 `turn-digest@1` 和作业记录，凭据仅保留在进程内交接表；登记后事务失败必须清理对应凭据。Worker 将插件块的 proposal 与作业完成回执放在同一事务里提交。
+### 记忆抽取作业
 
-`completion.settle: before-next-execution` 在下一次执行入口等待这些作业。等待时不持 SessionLock，取得锁后再次检查；超过声明的等待预算会记录 trace 并继续。取消请求只中止等待。相同 session/runtime 的作业按源回合顺序处理，失败和超时作为终态放行，显式重试不会覆盖更新的源回合作业。进程崩溃后已 claim 的抽取不自动重放，避免重复调用和旧内容覆盖。
+记忆抽取使用通用的 detached runtime 作业。
 
-原请求服务优先，其次使用可用的服务端配置；只有请求头凭据的部署由后续授权请求补交服务。队列与快照不保存 API key。凭据表是进程内状态，不提供跨实例原请求优先保证。服务关闭停止 claim、取消尚未进入提交的任务，并等待 worker 持有的存储操作释放；已进入提交的事务允许完成。这不保证所有记忆提取成功排空。向量摄取仍是独立路径。
+- 故事提交的事务同时保存 `turn-digest@1` 和作业记录。凭据只保留在进程内的交接表里；登记之后事务失败时，必须清理对应的凭据。
+- Worker 把插件块的 proposal 和作业的完成回执放在同一个事务里提交。
+
+`completion.settle: before-next-execution` 让下一次执行在入口处等这些作业。
+
+- 等待时不持有 SessionLock。取得锁之后再检查一次。
+- 超过声明的等待预算时，记录 trace 并继续。
+- 取消请求只中止等待。
+- 相同 session / runtime 的作业按源回合的顺序处理。失败和超时作为终态放行。
+- 显式重试不会覆盖更新的源回合的作业。
+- 进程崩溃之后，已经 claim 的抽取不自动重放，避免重复调用和旧内容覆盖新内容。
+
+凭据和关闭：
+
+- 优先使用原请求带来的服务，其次使用可用的服务端配置。只有请求头凭据的部署，由后续的授权请求补交服务。
+- 队列和快照不保存 API key。
+- 凭据表是进程内的状态，不提供跨实例的“原请求优先”保证。
+- 服务关闭时停止 claim，取消还没有进入提交的任务，并等 worker 持有的存储操作释放。已经进入提交的事务允许完成。
+- 这不保证所有记忆提取都成功排空。向量摄取仍然是独立的路径。
 
 ## Derived vector-index progress
 
-Embedding ingestion uses bounded batches and caps each input text. An explicit content-local rejection is bisected until the offending entry is isolated; that entry advances the cursor without a vector so later entries can proceed. Authentication, unknown and transient failures do not permanently skip entries. Archive replacements remove stale vectors even when the new content cannot be embedded.
+**摄取怎样处理失败。**
 
-`VectorStoreCapability` exposes `getVectorIndexProgress(scope)` and
-`commitVectorIndexBatch(input)` for atomic vector and index-progress writes.
-Scope is `(sessionId, pluginId, namespace)`. Updates require both the previously
-read serialized value (`null` means absent) and `expectedSessionCreatedAt`.
-A batch may include `deletes` (namespace/key pairs) and `upserts`
-(namespace/key/embedding/payload), scoped to the same session and plugin. The
-progress namespace identifies the cursor or hash map; each vector mutation names
-its own data namespace. Deletes run before upserts, and all mutations commit with
-the new progress value. A CAS conflict returns `false` without changing vectors
-or progress; a stale or missing session incarnation or any invalid mutation
-throws and rolls back the entire batch.
-PostgreSQL holds the parent session row with `FOR KEY SHARE`, while SQLite uses
-an immediate transaction and Memory uses its serialized store boundary. These
-operations do not run on the `StoreTransaction` business-data view.
+- embedding 摄取使用有界的批次，并限制每段输入文本的长度。
+- 明确针对某段内容的拒绝，会被对半拆分，直到找出出问题的那一条。这一条不带向量地推进游标，后面的条目可以继续。
+- 鉴权失败、未知错误和临时错误不会永久跳过条目。
+- 归档内容被替换时，即使新内容无法 embedding，旧向量也会被移除。
 
-Progress belongs to `vector_index_progress`, not `plugin_data`. Session cascade
-deletion clears it in the same transaction as the session; rolling back that
-cascade restores it. Snapshot/checkpoint export omits it by construction, so
-restored or forked sessions rebuild indexes from their own source rows.
+**原子的批次写入。** `VectorStoreCapability` 提供 `getVectorIndexProgress(scope)` 和 `commitVectorIndexBatch(input)`，用来原子地写入向量和索引进度。
 
-`deleteVectors` optionally accepts `key` to remove one entry within the selected
-scope and `expectedSessionCreatedAt` to reject stale asynchronous deletions.
-Ingestion reads all archival sources and completes embedding before submitting
-the corresponding deletes, upserts, and progress as one batch. An older sweep
-cannot overwrite the vectors owned by a newer progress value. Optional
-cross-process ingestion locks reduce duplicate embedding work; correctness does
-not depend on them. Embedding provider calls never run inside the index commit
-transaction or a business-data transaction.
+- scope 是 `(sessionId, pluginId, namespace)`。
+- 更新要求两样东西：之前读到的序列化值（`null` 表示不存在），以及 `expectedSessionCreatedAt`。
+- 一个批次可以包含 `deletes`（namespace / key 对）和 `upserts`（namespace / key / embedding / payload），范围限定在同一个会话和插件。
+- 进度的 namespace 标识游标或哈希表。每一次向量修改各自写明它的数据 namespace。
+- 先执行删除，再执行 upsert。所有修改和新的进度值一起提交。
+- CAS 冲突返回 `false`，向量和进度都不变。
+- 会话 incarnation 过期或不存在，或者任何一条修改无效，会抛错并回滚整个批次。
 
-World-data import and sync resolve locale overlays before planning any writes. Source `localeArrayKeys` provide nested list identities (after `key` and `id`), so translated records keep their association when the authored list is reordered.
+各后端：PostgreSQL 用 `FOR KEY SHARE` 持有父会话行；SQLite 使用 immediate 事务；Memory 使用它串行化的 store 边界。这些操作不在 `StoreTransaction` 的业务数据视图上运行。
+
+**进度存在哪里。** 进度属于 `vector_index_progress`，不属于 `plugin_data`。
+
+- 会话的级联删除在同一个事务里清掉它；回滚这次级联会恢复它。
+- 快照和 checkpoint 的导出从结构上就不包含它。所以恢复或 fork 出来的会话从自己的源数据行重建索引。
+
+**删除和并发。**
+
+- `deleteVectors` 可选地接受 `key`，用来移除所选范围里的一条；也可选地接受 `expectedSessionCreatedAt`，用来拒绝过期的异步删除。
+- 摄取先读取全部归档来源并完成 embedding，再把对应的删除、upsert 和进度作为一个批次提交。
+- 较旧的一趟扫描不能覆盖由较新的进度值拥有的向量。
+- 可选的跨进程摄取锁可以减少重复的 embedding 工作，但正确性不依赖它。
+- 对 embedding 服务商的调用从不在索引提交事务里运行，也不在业务数据事务里运行。

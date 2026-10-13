@@ -323,7 +323,7 @@ const pluginPolicySchema = z
 // present, `world-init`'s guard writes this verbatim and skips the LLM
 // schema-gen entirely. Mirrors `AttributeDefinition` in
 // types/character-schema.ts; `name` / `description` accept i18n records.
-const attributeFieldTypeSchema = z.enum([
+export const attributeFieldTypeSchema = z.enum([
   "string",
   "number",
   "boolean",

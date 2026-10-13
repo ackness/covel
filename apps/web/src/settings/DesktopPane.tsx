@@ -174,7 +174,7 @@ export function DesktopPane() {
         const entered = window.prompt(
           t(
             "settings.desktopDataDirPrompt",
-            "Enter an absolute path for the new data directory:\n\nExamples:\n  /Users/me/Documents/covel\n  /Volumes/External/covel-data\n\nChanging this will not move existing data — the new location starts fresh.",
+            "Enter an absolute path for the new data directory:\n\nExamples:\n  /Users/me/Documents/covel\n  /Volumes/External/covel-data\n\nNothing is copied or moved. The new location starts empty unless it already holds Covel data, and your current data stays where it is.",
           ),
           info?.dataRoot ?? "",
         );
@@ -183,7 +183,20 @@ export function DesktopPane() {
       }
       const picked = await pickDataDir(manualPath);
       if (picked) {
-        setToast(t("settings.desktopDataRootSet", { path: picked }));
+        // One message per outcome: what the restart does with the data, and
+        // where the current data stays.
+        const values = { path: picked.path, old: info?.dataRoot ?? "" };
+        setToast(
+          picked.mode === "copy"
+            ? t("settings.desktopDataRootCopyPending", values)
+            : picked.mode === "existing"
+              ? t("settings.desktopDataRootSetExisting", values)
+              : picked.mode === "unchanged"
+                ? t("settings.desktopDataRootUnchanged", values)
+                : picked.mode === "manual"
+                  ? t("settings.desktopDataRootSetManual", values)
+                  : t("settings.desktopDataRootSetEmpty", values),
+        );
         await refreshInfo();
       }
     } catch (err) {
@@ -197,7 +210,7 @@ export function DesktopPane() {
       );
     } finally {
       setBusy(null);
-      setTimeout(() => setToast(null), 5000);
+      setTimeout(() => setToast(null), 15000);
     }
   }
 

@@ -42,6 +42,7 @@ describe("media cleanup policy", () => {
         bytesRetained: 10,
         protectedIds: ["protected"],
         deletedIds: ["old", "recent", "older", "newest"],
+        expiredRefs: [],
       },
     });
     expect(assets.map((record) => record.id)).toEqual([

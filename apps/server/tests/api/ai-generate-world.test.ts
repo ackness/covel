@@ -13,7 +13,14 @@ import {
 } from "../../src/world-data/session-import.js";
 import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
-import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
@@ -1565,6 +1572,105 @@ describe("ai world generation route", () => {
           code: "world_not_revisable",
         });
       }
+    });
+
+    it.each([
+      ["a file a person added", "media/keeper.png", "added"],
+      ["a generated file a person edited", "WORLD.md", "changed"],
+    ] as const)(
+      "does not rewrite a generated package with %s",
+      async (_case, file, kind) => {
+        const llm = new SequenceLlm([...CREATED, REVISED]);
+        const created = await generate("server-file", llm);
+        const dir = path.join(worldsDir, created.id);
+        await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+        await writeFile(path.join(dir, file), "made by hand");
+        const kept = await store.getWorld(created.id);
+
+        const response = await post("revise-world", {
+          worldId: created.id,
+          instruction: "加一个派系",
+        });
+
+        expect(response.status).toBe(409);
+        const body = (await response.json()) as {
+          error: string;
+          code: string;
+          details: { added: string[]; changed: string[] };
+        };
+        expect(body.code).toBe("world_package_modified");
+        expect(body.error).toContain(file);
+        expect(body.details).toEqual({
+          added: [],
+          changed: [],
+          [kind]: [file],
+        });
+        // The model was not asked, and the person's work is as it was.
+        expect(llm.requests).toHaveLength(CREATED.length);
+        expect(await readFile(path.join(dir, file), "utf8")).toBe(
+          "made by hand",
+        );
+        expect(await store.getWorld(created.id)).toEqual(kept);
+      },
+    );
+
+    it("does not rewrite a package that changes while the model writes", async () => {
+      const created = await generate(
+        "server-file",
+        new SequenceLlm([...CREATED, REVISED]),
+      );
+      const dir = path.join(worldsDir, created.id);
+      const kept = await store.getWorld(created.id);
+      // The file arrives after the request was accepted, before the swap.
+      const stored = store.getWorld.bind(store);
+      vi.spyOn(store, "getWorld").mockImplementation(async (id) => {
+        const world = await stored(id);
+        if (vi.mocked(store.getWorld).mock.calls.length === 2)
+          await writeFile(path.join(dir, "notes.txt"), "made by hand");
+        return world;
+      });
+
+      const events = await readSseJson(
+        await post("revise-world", {
+          worldId: created.id,
+          instruction: "加一个派系",
+        }),
+      );
+
+      expect(events.some((event) => event.type === "done")).toBe(false);
+      expect(
+        String(events.find((event) => event.type === "error")?.message),
+      ).toContain("notes.txt");
+      expect(await readFile(path.join(dir, "notes.txt"), "utf8")).toBe(
+        "made by hand",
+      );
+      expect(await readFile(path.join(dir, "WORLD.md"), "utf8")).toBe(WORLD_MD);
+      expect(await stored(created.id)).toEqual(kept);
+      expect(await readdir(worldsDir)).toEqual([created.id]);
+    });
+
+    it("does not rewrite a package whose marker has no file list", async () => {
+      const llm = new SequenceLlm([...CREATED, REVISED]);
+      const created = await generate("server-file", llm);
+      const dir = path.join(worldsDir, created.id);
+      // What a build before the file list wrote.
+      await writeFile(
+        path.join(dir, ".covel-generated.json"),
+        `${JSON.stringify({ schemaVersion: 1 })}\n`,
+      );
+
+      const response = await post("revise-world", {
+        worldId: created.id,
+        instruction: "加一个派系",
+      });
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "world_not_revisable",
+      });
+      expect(llm.requests).toHaveLength(CREATED.length);
+      // Loaded from disk again, the world is no longer offered for revision.
+      expect((await loadSingleWorld(dir))?.metadata?.generated).toBeUndefined();
     });
 
     it("knows a generated package again after the world is loaded from disk", async () => {

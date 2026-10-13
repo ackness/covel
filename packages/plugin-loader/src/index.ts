@@ -18,6 +18,10 @@ export {
   resolveRuntimePrompt,
   loadPluginUi,
 } from "./load.js";
+export {
+  reloadGenerationUrl,
+  trackReloadGeneration,
+} from "./reload-generation.js";
 export type { PluginDefinition } from "./load.js";
 export { validatePluginLabels } from "./locale-labels.js";
 export { readMessageCatalogs } from "./locale-messages.js";
@@ -107,6 +111,7 @@ export { contractReferenceDiagnostics } from "./contract-diagnostics.js";
 export { compileRuntimeManifest } from "./compile-manifest.js";
 
 export {
+  packageModuleTypeProblem,
   validatePluginFiles,
   validateRuntimeDeclarations,
 } from "./static-validation.js";

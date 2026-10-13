@@ -199,7 +199,7 @@ export interface HazardPolicyResult {
  * Resolve the operator's effects hazard policy. Default `warn` (today's
  * behaviour: diagnostics only, keep running in parallel); `strict` splits
  * conflicting pairs into serial sub-levels. Registered in
- * docs/guide/env-registry.md.
+ * docs/reference/env-registry.md.
  */
 export function resolveEffectsPolicy(
   env: Record<string, string | undefined> = process.env,

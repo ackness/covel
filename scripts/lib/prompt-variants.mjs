@@ -167,7 +167,7 @@ export function checkPromptVariants({
 
   const problems = [];
   // Style of the English contract zone, and structure the two languages do
-  // not share. They do not fail the check: see docs/guide/prompt-style.md.
+  // not share. They do not fail the check: see docs/plugins/prompt-style.md.
   const warnings = [];
   const pairs = {};
 

@@ -1,6 +1,6 @@
 {
   "world": "mistport",
-  "note": "Fog-noir character cards for investigation, uneasy trust and costly exploration. Preserve approved face identities; do not homogenize the cast into anime or glamorous heroes. Faction, profession and fog-rot stage must agree with the character cards. Edits use the current portrait as the identity reference. See docs/guide/world-art-direction.md and docs/guide/world-art-prompts.json.",
+  "note": "Fog-noir character cards for investigation, uneasy trust and costly exploration. Preserve approved face identities; do not homogenize the cast into anime or glamorous heroes. Faction, profession and fog-rot stage must agree with the character cards. Edits use the current portrait as the identity reference. See docs/worlds/art-direction.md and docs/world-art-prompts.json.",
   "style": {
     "direction": "dark-fantasy fog-noir, painterly semi-realistic",
     "prefix": "Character portrait, dark-fantasy fog-noir illustration, painterly semi-realistic rendering, cold desaturated palette of greys, teal and rust, dense grey-white sea fog with nearby harbor silhouettes fading into it and no distinct sky, low-key cinematic lighting with soft diffuse face separation, weathered gothic harbor atmosphere, half-body bust, three-quarter view, ",

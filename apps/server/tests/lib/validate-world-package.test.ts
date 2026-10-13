@@ -642,4 +642,134 @@ sources:
       }),
     ]);
   }, 30_000);
+
+  it("checks the attributes a plugin's data names against the world's characterSchema", async () => {
+    const schema = `${MANIFEST}characterSchema:
+  attributes:
+    - { id: might, name: Might, type: number, min: 0, max: 5, category: abilities }
+    - { id: wits, name: Wits, type: number, min: 0, max: 5, category: abilities }
+    - { id: calling, name: Calling, type: string, category: bio }
+`;
+    const rules = (attributes: unknown[]) => ({
+      "data/tabletop-rules.json": JSON.stringify({
+        id: "creation",
+        budget: 2,
+        attributes,
+      }),
+    });
+    const references = async (attributes: unknown[], manifest = schema) =>
+      (await validate(await makeWorld(rules(attributes), manifest))).filter(
+        (item) => item.code === "attribute-reference",
+      );
+
+    expect(
+      await references([
+        { id: "might", label: "Might", base: 1, max: 4 },
+        { id: "wits", label: "Wits", base: 0, max: 5 },
+      ]),
+    ).toEqual([]);
+
+    expect(
+      await references([
+        { id: "might", label: "Might", base: 1, max: 4 },
+        { id: "wit", label: "Wits", base: 1, max: 4 },
+        { id: "calling", label: "Calling", base: 1, max: 4 },
+        { id: "wits", label: "Wits", base: -1, max: 6 },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        level: "error",
+        file: "data/tabletop-rules.json",
+        pointer: "attributes[1].id",
+        message: expect.stringContaining('"wit" is not an attribute'),
+        hint: expect.stringContaining("might, wits."),
+      }),
+      expect.objectContaining({
+        level: "error",
+        pointer: "attributes[2].id",
+        message: expect.stringContaining('"calling" has type string'),
+      }),
+      expect.objectContaining({
+        level: "error",
+        pointer: "attributes[3].base",
+        message: expect.stringContaining("below the `min` (0)"),
+      }),
+      expect.objectContaining({
+        level: "error",
+        pointer: "attributes[3].max",
+        message: expect.stringContaining("above the `max` (5)"),
+      }),
+    ]);
+
+    // Without a characterSchema the attributes are generated in the session.
+    expect(
+      await references(
+        [{ id: "anything", label: "Anything", base: 1, max: 4 }],
+        MANIFEST,
+      ),
+    ).toEqual([]);
+  });
+
+  it("warns about a record field that no model reads because it looks like a write time", async () => {
+    const schema = `${MANIFEST}characterSchema:
+  attributes:
+    - { id: diedAt, name: Died, type: string, category: bio }
+    - { id: diedOn, name: Died, type: string, category: bio }
+    - { id: lookedAt, name: Looked at, type: string, category: bio }
+`;
+    const character = (id: string, fields: Record<string, string>) => ({
+      id,
+      name: id,
+      type: "npc",
+      fields,
+    });
+    const hidden = async (characters: unknown[]) =>
+      (
+        await validate(
+          await makeWorld(
+            { "characters/characters.json": JSON.stringify(characters) },
+            schema,
+          ),
+        )
+      ).filter((item) => item.code === "model-hidden-field");
+
+    expect(
+      await hidden([
+        character("maud", { diedOn: "1943-06-01T08:00:00Z" }),
+        character("wren", { diedAt: "the morning of 1 June 1943" }),
+        character("ysolde", { lookedAt: "the bronze door" }),
+      ]),
+    ).toEqual([]);
+
+    expect(
+      await hidden([
+        character("maud", { diedOn: "1943-06-01T08:00:00Z" }),
+        character("wren", { diedAt: "1943-06-01T08:00:00Z" }),
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        file: "characters/characters.json",
+        pointer: "[1].fields.diedAt",
+        message: expect.stringContaining('record [1] (id "wren"): `diedAt`'),
+        hint: expect.stringContaining("rename the field"),
+      }),
+    ]);
+
+    // An ID that is a UUID is left out too; a readable one stays.
+    expect(
+      await hidden([
+        character("maud", {}),
+        character("0b9f6c0e-3d1a-4a7e-9c55-1f2e3d4c5b6a", {}),
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        file: "characters/characters.json",
+        pointer: "[1].id",
+        message: expect.stringContaining("`id` holds a UUID"),
+        hint: expect.stringContaining("npc-lin-yao"),
+      }),
+    ]);
+  });
 });

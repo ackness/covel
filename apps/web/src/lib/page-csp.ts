@@ -12,7 +12,7 @@
  * - `style-src` keeps `'unsafe-inline'`: React `style` props, the theme
  *   system's injected rules and imported theme CSS all need it. `style-src` /
  *   `font-src` allow https because an imported theme's own CSS may load remote
- *   stylesheets and fonts (documented in docs/guide/themes.md).
+ *   stylesheets and fonts (documented in docs/recipes/themes.md).
  * - `connect-src` is the app's own origin: every API call and the SSE stream
  *   are same-origin, and media is fetched through signed same-origin URLs.
  * - `img-src` is deliberately absent. Images the player allowed on a host must

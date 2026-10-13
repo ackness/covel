@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Render the author-facing JSON Schemas in `packages/shared/schemas/` as
- * Markdown field tables under `docs/reference/schema/`.
+ * Markdown field tables under `docs/reference/schema/`, and the same pages
+ * under `docs/en/reference/schema/` for the English edition.
  *
  * The Zod schemas are the only place a field is described. They are exported
  * to JSON Schema by `pnpm --filter @covel/shared generate:schemas`; this script
@@ -260,7 +261,7 @@ async function build() {
   const files = new Map();
   for (const { page, root } of pages)
     files.set(page.page, renderPage(page, root));
-  files.set("README.md", renderIndex(pages));
+  files.set("index.md", renderIndex(pages));
   for (const [name, content] of files)
     files.set(
       name,
@@ -272,14 +273,34 @@ async function build() {
 const check = process.argv.includes("--check");
 const files = await build();
 const stale = [];
-for (const [name, content] of files) {
-  const target = path.join(outDir, name);
-  const current = await readFile(target, "utf8").catch(() => undefined);
-  if (current === content) continue;
-  stale.push(path.relative(repoRoot, target));
-  if (!check) {
-    await mkdir(outDir, { recursive: true });
-    await writeFile(target, content);
+// The pages are English, so the English edition of the documentation
+// (`docs/en/`) gets the same pages, one directory deeper.
+const editions = [
+  { dir: outDir, text: (content) => content },
+  {
+    dir: path.join(repoRoot, "docs/en/reference/schema"),
+    text: (content) =>
+      content.replaceAll(
+        "../../../packages/shared/schemas/",
+        "../../../../packages/shared/schemas/",
+      ),
+  },
+];
+for (const edition of editions) {
+  for (const [name, generated] of files) {
+    // Formatted again: a longer link changes the width of a table column.
+    const content = await prettier.format(edition.text(generated), {
+      ...(await prettier.resolveConfig(edition.dir)),
+      parser: "markdown",
+    });
+    const target = path.join(edition.dir, name);
+    const current = await readFile(target, "utf8").catch(() => undefined);
+    if (current === content) continue;
+    stale.push(path.relative(repoRoot, target));
+    if (!check) {
+      await mkdir(edition.dir, { recursive: true });
+      await writeFile(target, content);
+    }
   }
 }
 
@@ -291,6 +312,6 @@ if (check && stale.length > 0) {
 }
 console.log(
   check
-    ? `[schema-reference] ${files.size} pages are up to date`
-    : `[schema-reference] ${stale.length} of ${files.size} pages written`,
+    ? `[schema-reference] ${files.size} pages are up to date in ${editions.length} editions`
+    : `[schema-reference] ${stale.length} of ${files.size * editions.length} pages written`,
 );

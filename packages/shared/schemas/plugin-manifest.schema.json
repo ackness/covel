@@ -778,6 +778,51 @@
                     "additionalProperties": false,
                     "description": "The world data source an author declares to supply this content."
                   },
+                  "references": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?(?:\\.[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?)*$",
+                          "description": "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list.",
+                          "examples": ["attributes[].id"]
+                        },
+                        "to": {
+                          "type": "string",
+                          "enum": ["character-attribute"],
+                          "description": "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`."
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "string",
+                            "number",
+                            "boolean",
+                            "enum",
+                            "array",
+                            "object",
+                            "map"
+                          ],
+                          "description": "Value type the named attribute must have."
+                        },
+                        "within": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                          },
+                          "description": "Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute."
+                        }
+                      },
+                      "required": ["path", "to"],
+                      "additionalProperties": false
+                    },
+                    "description": "Values in each record that name something of the world. `pnpm validate:world` reports a value that names nothing, or the wrong kind of thing, before a session starts."
+                  },
                   "generate": {
                     "type": "string",
                     "enum": ["offer", "default"],

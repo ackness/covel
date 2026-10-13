@@ -1,0 +1,256 @@
+# 术语表
+
+这一页给 Covel 文档、代码和界面里用到的词下定义。同一个东西在不同地方叫法不一致时（例如界面写“模型用途”，代码写 slot），以这一页为准：改别处，不改这里。
+
+条目按英文字母排序。每条先用一两句话说清楚它是什么，再给出详细页面。
+
+## Terms in Chinese
+
+一个英文术语只对应一个中文说法。中文文档、界面文字和中文提示词（`*.zh.md`）都用这张表里的说法。
+
+| Term                  | 中文         | 说明                                                                                  |
+| --------------------- | ------------ | ------------------------------------------------------------------------------------- |
+| Alias                 | 别名         | 同一个角色的另一个名字（`aliases`）。不是字段或 ID 的兼容名。                         |
+| Binding               | 绑定         |                                                                                       |
+| Capability            | 能力标签     | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
+| Collection            | 合集         |                                                                                       |
+| Contract              | 契约         | 带版本号的 ID，例如 `narrative-engine@1`。                                            |
+| Credits               | 作者信息     | 一个包的 `author`、`license` 和 `homepage` 字段。                                     |
+| Kernel                | 内核         |                                                                                       |
+| Pack                  | 玩法包       |                                                                                       |
+| PluginType            | 插件类型     |                                                                                       |
+| Preset                | 预设         |                                                                                       |
+| Proposal              | 提案         |                                                                                       |
+| Provider              | 提供商       |                                                                                       |
+| Runtime               | runtime      | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。                                |
+| Runtime manifest      | runtime 清单 |                                                                                       |
+| Segment               | 提示词段     |                                                                                       |
+| Server-scoped setting | 服务端设置   | `scope: "server"` 的设置；其余的是本设备设置。                                        |
+| Session               | 会话         |                                                                                       |
+| Slot                  | 槽位         | 设置界面里叫“模型用途”。                                                              |
+| Trigger mode          | 触发模式     |                                                                                       |
+| Turn                  | 回合         | “This turn” 是“本回合”。                                                              |
+| World                 | 世界         | 世界的安装包叫“世界包”。                                                              |
+
+## Prompt vocabulary
+
+提示词正文里，描述 runtime 读什么、写什么时用的词。一个东西只用一个词：用了 `turn` 就不再写 `round`，用了 `record` 就不再写 `row`。写法见[提示词写法](../plugins/prompt-style.md)。
+
+| Term             | 中文     | 意思                                                | 不要用这些词来指它                |
+| ---------------- | -------- | --------------------------------------------------- | --------------------------------- |
+| turn             | 回合     | 玩家的一条消息，以及各个 runtime 为它做的全部事情   | round                             |
+| narrative        | 叙事     | 叙事 runtime 在本回合写出的故事正文                 | story text, prose, the output     |
+| player           | 玩家     | 玩游戏的人                                          | user                              |
+| player character | 玩家角色 | 玩家控制的角色                                      | protagonist, hero, PC             |
+| NPC              | NPC      | 不由玩家控制的角色                                  |                                   |
+| character        | 角色     | 玩家角色或 NPC                                      |                                   |
+| tool             | 工具     | runtime 可以调用的一个函数                          | function, API                     |
+| call             | 调用     | 使用一次工具                                        | invoke, run, trigger              |
+| record           | 记录     | 插件数据里存下的一项                                | row, object                       |
+| entry            | 条目     | 玩家读到的列表里的一项，例如图鉴条目                | item（item 指行囊里的物品）       |
+| item             | 物品     | 角色随身带的东西                                    |                                   |
+| dimension        | 维度     | 由世界定义、随故事变化的一项世界状态                | attribute（attribute 是角色的）   |
+| attribute        | 属性     | 角色的一个数字或文字字段                            | stat                              |
+| world rule       | 世界规则 | 提示词里带着的一条世界规则                          | lore entry                        |
+| quest            | 任务     | 故事交给玩家的一个目标                              | mission, task                     |
+| event            | 事件     | 叙事里发生的一件事，或者 runtime 之间传递的一个信号 |                                   |
+| check            | 判定     | 用骰子对抗一个难度                                  | test, roll（roll 指掷一颗骰子）   |
+| scene            | 场景     | 叙事此刻所在的地点和时间                            |                                   |
+| inject           | 注入     | 框架把一块数据放进提示词                            | insert, provide                   |
+| block            | 区块     | 提示词里带标签的一段，例如 `<existing-quests>`      | section（section 指一个标题小节） |
+
+## Alias
+
+同一个角色的另一个名字：绰号、专指某个人的头衔，或者用另一种文字写的名字。角色记录把它们放在 `aliases` 里，和 `name` 并列。
+
+在一局游戏里，一个名字或别名只指向一个角色。`resolveCharacter` 可以把 ID、名字或别名解析成角色；如果两个角色用了同一个名字，它会报告有歧义。
+
+详见：[世界模型](./world-model.md#别名与按名字解析)。
+
+## Binding
+
+一条数据通路：一个 runtime 说“我要读另一个 runtime 的结果”。它写在 `io.inputs.<名字>` 里。
+
+- 同一个包内，按 runtime ID 找到上游；跨包时，按带版本的契约找。
+- 可以用 JSON Pointer（RFC 6901）只取结果里的一部分。
+- 取到的值会按 `accepts` 校验，再连同它的来源一起交给 `ctx.inputs` 或 agent 的提示词。
+- 写 `scope: committed` 时，读的是之前某次执行已经保存下来的结果，而不是本次执行的。
+
+详见：[插件字段参考](./plugins.md)、[回合管线](../internals/flow.md)、`packages/shared/src/types/runtime-scheduling.ts`。
+
+## Collection
+
+一份清单（`covel-collection.yaml`），列出要一起安装的世界和插件，也可以包含别的仓库里按提交固定的包。
+
+它只在安装时起作用。装下来的仍是普通的插件和世界，各自单独更新和卸载。它和 **Pack** 不同：Pack 是在已经装好的插件里做选择。
+
+详见：[合集](../ship/collections.md)、[插件安装](./plugin-installation.md)。
+
+## Contract
+
+一个带版本号的 ID，例如 `narrative-engine@1`，用来说明一个插件提供什么能力，或者需要什么能力。
+
+- 根 `PLUGIN.md` 用 `provides`、`requires`、`optional`、`conflicts` 列出契约。
+- runtime 用 `io.output.contract` 发布一个契约，用 `from: { contract }` 读取一个契约。
+- 内核按契约找提供者，从不写死某个插件 ID。所以提供同一个契约的插件可以互相替换。
+- 只支持当前版本。不兼容的改动要换一个新 ID（`@2`）。
+
+详见：[插件字段参考](./plugins.md)，以及根目录 `AGENTS.md` 的 “Framework ↔ Plugin Isolation Rule”。
+
+## Credits
+
+插件、世界或合集清单里可选的 `author`、`license`、`homepage` 字段：谁做了这个包，去哪里找到他们。作者信息里还可以带一段简短的话（`about`）和几个带名字的 `https` 链接。
+
+它只用于展示，在开始游戏之前显示。框架不根据它做任何判断；玩家确认了第三方链接提示之后，链接才会打开。
+
+详见：[作者信息](./plugins.md#作者信息)、[安全边界](../internals/security.md#package-credits-and-author-links)。
+
+## Extension point
+
+内核定义的一个带版本的接入点，由插件来实现，例如 `prompt.segment@1` 或 `ui.slot@1`。
+
+插件在 `contributes.extensions` 里声明自己要实现哪个，再用 `covel.provideExtension()` 注册。一个接入点有多个实现时怎样合并，由它的模式决定：`single`（只取一个）、`collect`（全部收集）或 `pipeline`（依次处理）。
+
+它和插件的 **Contract** 不同：Contract 是一个插件定义、给别的插件用的。
+
+详见：[扩展点](./extension-points.md)、[插件扩展与通信](./plugin-extensions.md)。
+
+## Kernel
+
+框架的核心：它安排回合、组装提示词、驱动模型调用工具、校验提案，并把结果保存下来。`plugins/` 目录之外的代码（`packages/`、`apps/server/src/`、`apps/web/src/`）都属于内核。
+
+详见：[回合管线](../internals/flow.md)。
+
+## Narrator-only
+
+`WORLD.md` 里夹在 `<!-- narrator-only -->` 和 `<!-- /narrator-only -->` 两行之间的部分。模型会读到它；“世界”页签、开局准备页和世界详情页不显示它。
+
+它的作用是不向玩家剧透，并不是保密：世界记录和包里的文件都保存着全文。满足条件才揭示的内容是另一种机制，叫隐藏数据（`visibility: hidden`）。
+
+详见：[世界数据](./world-data.md)。
+
+## Pack
+
+一组起了名字的插件（`requested` 和 `recommended` 两个集合，加上标签），合起来构成一种玩法，例如 `traditional-story`、`dialogue-mode`。
+
+玩家在开局准备页选一个玩法包，就一步换掉上一个玩法包带来的插件；世界自己要求的插件和玩家手动选的插件保持不变。世界可以用 `pluginPolicy.presetId` 指定默认的玩法包。
+
+它和 **Preset** 不同：Preset 打包的是模型的选择，不是插件。
+
+详见：`packs/builtin.yaml`、`apps/server/src/config/plugin-packs.ts`、[插件字段参考](./plugins.md)、[世界数据](./world-data.md)。
+
+## Plugin kind and source
+
+描述一个插件有两个互不相干的角度。
+
+- **kind**：根 `PLUGIN.md` 里的字段，有两个值。`core` 的插件会加入每一局游戏，除非玩家明确排除；`plugin` 的插件要选了才启用。加载器把它编译成内部的 `pluginType`（`core-plugin` 或 `plugin`）。
+- **来源**（`builtin` 或 `community`）：由插件所在的目录决定，不看清单，也不看名字。它决定插件是否自动加载、工具怎样审批，以及服务端代码是否需要玩家授权。
+
+官方维护、但从仓库之外安装的插件，来源仍然是 `community`。
+
+详见：[插件字段参考](./plugins.md)、[插件安装](./plugin-installation.md)、[工具](./tools.md)。
+
+## Preset
+
+内部使用的一份模型方案，包含服务商、端点、协议和一个原样传递的模型 ID。
+
+设置界面展示的是更直观的“服务商 → 模型”层级，只在发出请求时才把界面里定义的模型编译成预设。用户不直接管理预设。
+
+详见：`packages/settings/src/`。
+
+## Proposal
+
+插件提出的一次写入请求。内核校验通过后才真正写入，插件从不直接写数据库。
+
+提案的类型只在一处定义：`ProposalPayloadMap`（`packages/shared/src/types/proposal.ts`）。目前有：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`character.schema.set`、`dimension.initialize`、`dimension.update`、`lorebook.upsert`。
+
+详见：[事务](./transactions.md)、[回合管线](../internals/flow.md)。
+
+## Provider
+
+一个具体的模型服务：文本、图像或向量（OpenAI、Anthropic、DeepSeek、阿里云百炼等）。用哪个服务商由槽位的路由决定，通过 AI 网关调用，插件代码从不直接调用它。
+
+详见：`packages/ai-provider/`、[插件字段参考](./plugins.md)。
+
+## Runtime
+
+插件里真正被执行的单元。有两种：
+
+- `agent`：由模型驱动，把 `RUNTIME.md`（或根清单里内联的 runtime）的正文当作系统提示词。
+- `function`：一个纯 JavaScript 处理函数。
+
+一个插件包可以有多个 runtime，各有自己的触发方式、阶段和依赖关系。
+
+详见：[写插件要知道的规则](../plugins/essentials.md)、[插件字段参考](./plugins.md)。
+
+## Runtime manifest
+
+加载器把作者写的 runtime 编译成的内部执行结构。作者写的 runtime 可以是根 `PLUGIN.md` 里内联的 `runtime`，也可以是 `runtimes/<id>/RUNTIME.md`。
+
+- 作者写的是分组字段：`type`、`schedule`、`io`、`agent`、`function`、`guard`、`effects`、`permissions`。
+- 编译出的 `RuntimeManifest` 带有 `pluginId`、`name`（即 runtimeId）、`trigger`、调度信息（`stage`、`needs`、`after`、`inputs`）、`outputKind`、`outputContract`、`model` 和 `permissions`。
+
+内部字段不是作者格式，不能照抄进 `PLUGIN.md`。
+
+详见：[插件字段参考](./plugins.md)、[写插件要知道的规则](../plugins/essentials.md)。
+
+## Segment
+
+组装好的提示词里的一段（提示词结构规范把提示词分成 10 段）。段和缓存有关：稳定的段（世界观、插件提示词）会带上 `cache_control` 标记，让服务商一侧的提示词缓存可以跨回合复用。
+
+详见：[提示词结构](./prompt-structure.md)。
+
+## Server-scoped setting
+
+由服务端自己执行的玩家设置，例如诊断记录保留多久。设置项在注册时声明 `scope: "server"`；服务端把值存进自己的数据库，同一个安装里的所有浏览器共用一个值，并且只有 `self` 部署允许玩家修改。
+
+其余的设置都属于客户端：它们是某一台设备的偏好。
+
+详见：[设置存储](./settings-store.md)。
+
+## Session
+
+一位玩家正在进行的一局游戏。它的 ID 形如 `{worldId}-{uuid8}`，固定属于一个世界，有自己的回合计数、启用的插件、快照和事件。
+
+详见：[HTTP API](./api.md)、[事务](./transactions.md)。
+
+## Slot
+
+选模型用的一个具名路由键（`story`、`plugin`、`memory`、`image` 等），在设置界面里叫**模型用途**。
+
+插件清单里只写槽位的名字；`llm.toml` 或保存下来的“服务商/模型”设置把它绑定到具体的模型。备用模型只在同一类输出之内选择：图像请求不会落到文本模型上。
+
+详见：[模型用途](./slots.md)、`llm.toml.example`。
+
+## Trigger mode
+
+一个 runtime 怎样决定这个回合要不要运行：`auto`、`scheduled`、`manual` 或 `event`。只有这四种，清单里写了别的值会在加载时被拒绝。
+
+它和两样东西配合使用：
+
+- `stage`：`auto` / `scheduled` 的 runtime 属于哪个阶段。`event` / `manual` 的 runtime 不写阶段。
+- `scheduled` 的子字段：`interval`、`cooldownTurns`、`maxTriggerCount`、`startTurn`。
+
+详见：[插件字段参考](./plugins.md)。
+
+## Turn
+
+会话循环走一圈：玩家输入 → 决定触发哪些 runtime → 按阶段执行（一个阶段全部完成后才进入下一个，阶段内按依赖顺序）→ 校验提案 → 提交 → 通过 SSE 推送给界面。
+
+每次执行有一个不透明的 `turnId`。已提交的玩家回合会让 `completedPlayerTurns` 这个只增不减的计数前进，每个逻辑回合最多一次。走哪一组阶段由 `session.phase` 决定：`setup` 运行 setup 阶段，`playing` 运行 `pre-turn → narrative → post-turn → audit`。
+
+详见：[回合管线](../internals/flow.md)、[SSE 协议](./protocol.md)。
+
+## World
+
+一个内容包（`worlds/<id>/`），里面有 `world.yaml`、`WORLD.md`，以及可选的数据来源（`data/world.data.yaml` 等），用来提供维度、角色设定、规则、场景和媒体索引。
+
+服务端启动时从两个地方加载世界：内置目录 `COVEL_WORLDS_DIR`，和用户世界目录（`COVEL_USER_WORLDS_DIR`，没有设置时是 `<COVEL_HOME>/worlds`，默认的 home 是 `~/.covel`）。一个世界可以开很多局游戏。加载过程见[启动加载与收敛](./world-data.md#启动加载与收敛seed--reconcile)。
+
+详见：[世界数据](./world-data.md)。
+
+## Related
+
+- **pluginId 和 runtimeId 的区别**：见根目录 `AGENTS.md` 的 “Identity model”。
+- **插件来源**：见上面的 “Plugin kind and source”，以及[工具](./tools.md)。
+- **这里没有收录的词**：`Branch`、`Snapshot`、`PluginData`、`CharacterRecord`、`Lorebook`，见[事务](./transactions.md)。

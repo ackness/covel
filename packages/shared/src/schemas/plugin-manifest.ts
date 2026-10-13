@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { packageCreditFields } from "./package-info.js";
+import { attributeFieldTypeSchema } from "./world.js";
 import {
   contractIdSchema,
   runtimeAuthoringManifestSchema,
@@ -18,6 +19,10 @@ import {
   worldProjectionMapSchema,
 } from "./plugin-schemas.js";
 const shape = runtimeManifestInputSchema.shape;
+
+/** `attributes[].id`: field names, `[]` after one that holds a list. */
+const DATA_REFERENCE_PATH =
+  /^[A-Za-z_][A-Za-z0-9_]*(?:\[\])?(?:\.[A-Za-z_][A-Za-z0-9_]*(?:\[\])?)*$/;
 
 /**
  * What a world author needs in order to supply one kind of world data. It
@@ -102,6 +107,42 @@ const dataAuthoringSchema = z
       })
       .describe(
         "The world data source an author declares to supply this content.",
+      )
+      .optional(),
+    references: z
+      .array(
+        z.strictObject({
+          path: z
+            .string()
+            .regex(DATA_REFERENCE_PATH, {
+              message:
+                "path must be field names joined by `.`, with `[]` after a field that holds a list (`attributes[].id`)",
+            })
+            .meta({
+              description:
+                "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list.",
+              examples: ["attributes[].id"],
+            }),
+          to: z
+            .enum(["character-attribute"])
+            .describe(
+              "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`.",
+            ),
+          type: attributeFieldTypeSchema
+            .describe("Value type the named attribute must have.")
+            .optional(),
+          within: z
+            .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
+            .min(1)
+            .describe(
+              "Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute.",
+            )
+            .optional(),
+        }),
+      )
+      .min(1)
+      .describe(
+        "Values in each record that name something of the world. `pnpm validate:world` reports a value that names nothing, or the wrong kind of thing, before a session starts.",
       )
       .optional(),
     generate: z

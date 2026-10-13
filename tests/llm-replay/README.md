@@ -26,4 +26,4 @@ pnpm e2e:replay --record lantern-barrow
 `--upstream <origin>` overrides `DEFAULT_BASE_URL`. The key is read under
 the provider's name in `llm.toml` (`default` → `DEFAULT_API_KEY`); the
 model is the one `llm.toml` names, so a gateway must serve it. Details:
-`docs/guide/e2e-plugin-verify.md`.
+`docs/ship/real-model.md`.

@@ -15,11 +15,11 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Source version: v0.0.51**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Each release attaches a `SHA256SUMS.txt` to check a download against. v0.0.51 has no breaking change, and a database created by v0.0.50 works as it is; read the [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0051) before upgrading. **A database created by v0.0.49 or earlier does not work with v0.0.50 or later (character reads and writes fail) and must be recreated**; sessions are not migrated. Upgrades from earlier versions follow the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050), the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/guide/upgrade-0.0.42.en.md). Back up affected storage before upgrading; development data is not automatically migrated.
+> **Source version: v0.0.51**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Each release attaches a `SHA256SUMS.txt` to check a download against. v0.0.51 has no breaking change, and a database created by v0.0.50 works as it is; read the [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0051) before upgrading. **A database created by v0.0.49 or earlier does not work with v0.0.50 or later (character reads and writes fail) and must be recreated**; sessions are not migrated. Upgrades from earlier versions follow the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050), the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md). Back up affected storage before upgrading; development data is not automatically migrated.
 
 ## Highlights
 
-- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops come from the world pack's scene art; a location without one shows the world image. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](docs/reference/image-generation.md).
+- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops come from the world pack's scene art; a location without one shows the world image. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](./docs/reference/image-generation.md).
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
 - 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
 - 🧩 **Plugins stay replaceable** — the kernel resolves versioned contracts and declared output visibility; framework code does not branch on concrete plugin IDs.
@@ -45,7 +45,7 @@ Worlds declare their default (`defaultViewMode: stage`); you can switch any time
 | ![Panel scheme](./.assets/images/readme/style-panel.png) |   ![Book scheme](./.assets/images/readme/style-book.png)   |      ![Stage scheme](./.assets/images/readme/style-stage.png)      |
 | App-like: icon rail, tagged option cards, a status strip | Reading-first: serif prose, numbered options, margin notes | Scene-first: full-bleed art, the cast on stage, key-capped options |
 
-A style scheme changes structure as well as colour — where navigation sits, how options are drawn, what the session does with world art. Pick one in **Settings → Appearance**; the earlier themes live on as colourways of a fourth, Classic. Schemes are theme packages, so you can save your own or import someone else's ([guide](./docs/guide/themes.md)). Plugin UI follows whichever scheme is active without knowing about it.
+A style scheme changes structure as well as colour — where navigation sits, how options are drawn, what the session does with world art. Pick one in **Settings → Appearance**; the earlier themes live on as colourways of a fourth, Classic. Schemes are theme packages, so you can save your own or import someone else's ([guide](./docs/recipes/themes.md)). Plugin UI follows whichever scheme is active without knowing about it.
 
 ## How the pieces fit together
 
@@ -84,8 +84,8 @@ The two layouts cannot be mixed. Packages containing only entry code, hooks, UI,
 The kernel connects these pieces through contracts, typed extension points, and public UI slots. Narrators, image providers, stage directors, and rules systems can be replaced without framework branches for a particular plugin ID.
 
 Author and validate extensions as independent community packages, including installation, approval,
-restart and removal. See [plugin testing](./docs/guide/plugin-testing.md) and the
-[player-flow checks](./docs/guide/e2e-testing.md#发版前的玩家流程验收). Framework releases share one version;
+restart and removal. See [plugin testing](./docs/plugins/testing.md) and the
+[player-flow checks](./docs/internals/e2e-testing.md#发版前的玩家流程验收). Framework releases share one version;
 plugins and world packs may use their own versions.
 
 ## World packs make a setting playable
@@ -156,14 +156,14 @@ Download the **macOS Apple Silicon (macOS 13+)** or **Windows x64** build from [
 
 You can skip the guide to browse worlds, but configure a model before generating a story. Reopen **Getting started guide** from world selection at any time. Complete any character creation or opening choices before entering actions to advance the story.
 
-Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs). If `config.toml` redirects `data_root`, that separate directory also holds data. See the [desktop config guide](./docs/guide/desktop-config.en.md) and [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) before upgrading.
+Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs). If `config.toml` redirects `data_root`, that separate directory also holds data. See the [desktop config guide](./docs/en/reference/desktop-config.md) and [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) before upgrading.
 
 ### Get plugins and worlds
 
 - **[Plugin directory](https://github.com/covel-ai/covel-plugins)** — official image-generation and TTS plugins, the Jev demo, authoring examples, and a separate community list.
 - **[World directory](https://github.com/covel-ai/covel-worlds)** — official world examples and a separate community list of playable settings.
 
-Both directories open in English and link to Chinese and other available translations. In **Settings → Install & manage**, paste a repository or package-directory GitHub URL, preview the plugins and worlds found there, tick what to install, and confirm the risks once. The selection installs as a unit, plugins first, so a world arrives together with the plugins it needs; a [collection](./docs/guide/collections.md) manifest lets an author list such a set, including packages in other repositories. Downloads use your configured proxy. Plugins require a backend restart and session authorization; newly installed worlds are available immediately.
+Both directories open in English and link to Chinese and other available translations. In **Settings → Install & manage**, paste a repository or package-directory GitHub URL, preview the plugins and worlds found there, tick what to install, and confirm the risks once. The selection installs as a unit, plugins first, so a world arrives together with the plugins it needs; a [collection](./docs/ship/collections.md) manifest lets an author list such a set, including packages in other repositories. Downloads use your configured proxy. Plugins require a backend restart and session authorization; newly installed worlds are available immediately.
 
 Use **Check for updates** beside an installed package to review changes. Confirmed updates take effect after backend restart; local edits block replacement. See the [plugin installation guide](./docs/reference/plugin-installation.md) and [world installation guide](./docs/reference/world-installation.md).
 
@@ -177,7 +177,7 @@ cp .env.llm.example .env.llm        # provider API keys
 pnpm dev                            # web :5173 + server :3001 (SQLite)
 ```
 
-Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal use, you can configure a connection, endpoint, model, and key entirely in Settings; `.env.llm` is optional. UI selections override the project `llm.toml` without modifying it. Browser settings and keys stay in this browser; Electron uses personal files under `~/.covel`. SQLite and PostgreSQL store instance-owned sessions. The default Docker profile is a personal instance bound to loopback, not a public multi-player service. Docker setup, in-memory browser checkpoints, and precedence: [env registry](./docs/guide/env-registry.md).
+Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal use, you can configure a connection, endpoint, model, and key entirely in Settings; `.env.llm` is optional. UI selections override the project `llm.toml` without modifying it. Browser settings and keys stay in this browser; Electron uses personal files under `~/.covel`. SQLite and PostgreSQL store instance-owned sessions. The default Docker profile is a personal instance bound to loopback, not a public multi-player service. Docker setup, in-memory browser checkpoints, and precedence: [env registry](./docs/reference/env-registry.md).
 
 ## Worlds in the box
 
@@ -201,10 +201,10 @@ Share your work by submitting a directory-entry PR to [covel-plugins](https://gi
 
 ## Develop
 
-- [Plugin authoring guide](./docs/guide/plugin-authoring.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
-- [Design principles](./docs/architecture/design-principles.md) — what belongs in the kernel and what belongs in a plugin
-- [Architecture & turn pipeline](./docs/architecture/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
-- [World data](./docs/reference/world-data.md) and [collections](./docs/guide/collections.md) — author a world pack and ship it with its plugins
+- [Plugin authoring guide](./docs/plugins/essentials.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
+- [Design principles](./docs/internals/design-principles.md) — what belongs in the kernel and what belongs in a plugin
+- [Architecture & turn pipeline](./docs/internals/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
+- [World data](./docs/reference/world-data.md) and [collections](./docs/ship/collections.md) — author a world pack and ship it with its plugins
 - Reference: [plugin contract](./docs/reference/plugins.md) · [extension points](./docs/reference/extension-points.md) · [tools](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle. Repo layout and package list → [`AGENTS.md`](./AGENTS.md#monorepo-structure).

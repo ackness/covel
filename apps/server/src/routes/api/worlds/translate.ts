@@ -9,6 +9,10 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
 import {
+  inspectGeneratedWorldPackage,
+  recordGeneratedWorldFiles,
+} from "@covel/create";
+import {
   WORLD_EDITIONS_KEY,
   readRuntimeEnv,
   canonicalizeLocale,
@@ -247,12 +251,20 @@ worldTranslateRoutes.post(
             )
               return undefined;
             signal.throwIfAborted();
-            await writeWorldTranslations(
+            // A generated package that holds only the app's files stays
+            // one: the files written here join the list in its marker.
+            const pristine =
+              (await inspectGeneratedWorldPackage(packagePath)).state ===
+              "pristine";
+            const written = await writeWorldTranslations(
               packagePath,
               locale,
               result.translations,
             );
+            if (pristine) await recordGeneratedWorldFiles(packagePath, written);
             await declareWorldEdition(packagePath, locale);
+            if (pristine)
+              await recordGeneratedWorldFiles(packagePath, ["world.yaml"]);
             const loaded = await loadSingleWorld(packagePath);
             if (!loaded)
               throw new Error(

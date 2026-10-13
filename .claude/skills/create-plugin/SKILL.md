@@ -6,9 +6,9 @@ description: Create or update installable Covel plugins using the current groupe
 # Create a Covel plugin
 
 Contracts live in `docs/`, kept in sync with the code: manifest fields in
-`docs/reference/plugins.md`, authoring in `docs/guide/plugin-authoring.md`, UI
+`docs/reference/plugins.md`, authoring in `docs/plugins/essentials.md`, UI
 components in `docs/reference/ui-components.md`, model slots in
-`docs/reference/slots.md`, testing in `docs/guide/plugin-testing.md`. The
+`docs/reference/slots.md`, testing in `docs/plugins/testing.md`. The
 references in this skill are agent-oriented guides; when they disagree with the
 docs or the schemas, the docs and schemas win.
 
@@ -59,7 +59,7 @@ and a bundled plugin needs a Chinese translation for every UI text. The
 Simplified Chinese prompt is `PLUGIN.zh.md` / `RUNTIME.zh.md` with an empty
 frontmatter; a bundled plugin must ship it for every prompt a model reads, then
 run `pnpm prompts:lock`. No other language has a prompt file. See
-`docs/reference/i18n.md`. Write the body as `docs/guide/prompt-style.md` says:
+`docs/reference/i18n.md`. Write the body as `docs/plugins/prompt-style.md` says:
 short imperative sentences, one term for one thing, each rule once, `must` /
 `must not` / `can`, and tone or examples under a `## Voice` heading.
 

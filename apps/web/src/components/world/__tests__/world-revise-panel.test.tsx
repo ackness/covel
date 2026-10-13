@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { GenerateWorldEvent, WorldRecord } from "@/services/api.js";
+import { ApiError } from "@/services/api/request.js";
 
 const api = vi.hoisted(() => ({ reviseWorld: vi.fn() }));
 const dataService = vi.hoisted(() => ({ saveGeneratedWorld: vi.fn() }));
@@ -174,5 +175,40 @@ describe("WorldRevisePanel", () => {
         }) as HTMLTextAreaElement
       ).value,
     ).toBe("  add a rival  ");
+  });
+
+  it("names the files a person added when the package cannot be rewritten", async () => {
+    api.reviseWorld.mockImplementation(
+      (
+        _id: string,
+        _text: string,
+        _next: unknown,
+        onError: (err: Error) => void,
+      ) => {
+        onError(
+          new ApiError(
+            409,
+            "/api/ai/revise-world",
+            JSON.stringify({
+              error: "World package has files that were added by hand",
+              code: "world_package_modified",
+              details: { added: ["media/keeper.png"], changed: ["WORLD.md"] },
+            }),
+          ),
+        );
+        return new AbortController();
+      },
+    );
+    render(<WorldRevisePanel world={world} onRevised={vi.fn()} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "What to change" }), {
+      target: { value: "add a rival" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply the change" }));
+
+    expect(
+      await screen.findByText(
+        /added or changed by hand: media\/keeper\.png, WORLD\.md\./,
+      ),
+    ).toBeTruthy();
   });
 });

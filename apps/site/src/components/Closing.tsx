@@ -45,7 +45,10 @@ export function Closing({
             <span>{copy.footer.license}</span>
           </div>
           <nav className="flex gap-6" aria-label="Footer">
-            <a className="transition hover:text-ink" href={DOCS_URL}>
+            <a
+              className="transition hover:text-ink"
+              href={`${DOCS_URL}${copy.meta.docsPath}`}
+            >
               {copy.footer.docs}
             </a>
             <a className="transition hover:text-ink" href={CHANGELOG_URL}>

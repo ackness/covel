@@ -367,7 +367,7 @@ pnpm e2e:verify \
   --plugins my-plugin
 ```
 
-Artifacts 写到 `debugs/e2e-logs/`，包含 prompt、LLM raw response、runtime results、proposals、commit 结果。详细参数看 `docs/guide/e2e-plugin-verify.md`。
+Artifacts 写到 `debugs/e2e-logs/`，包含 prompt、LLM raw response、runtime results、proposals、commit 结果。详细参数看 `docs/ship/real-model.md`。
 
 ---
 

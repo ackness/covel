@@ -377,10 +377,25 @@ describe("POST /api/install/plugin", () => {
     );
   });
 
+  it("refuses a package whose package.json is not ESM", async () => {
+    const app = createTestApp();
+    const zip = await buildZip({
+      "package.json": JSON.stringify({ name: "cjs-plugin" }),
+      "PLUGIN.md":
+        "---\nid: cjs-plugin\nkind: plugin\ndescription: CommonJS fixture\n---\n",
+    });
+    const res = await postZip(app, "/api/install/plugin", zip);
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain(
+      'package.json must declare \\"type\\": \\"module\\"',
+    );
+    expect(await dirExists(path.join(pluginsDir, "cjs-plugin"))).toBe(false);
+  });
+
   it("accepts a multi-runtime layout with a required root PLUGIN.md", async () => {
     const app = createTestApp();
     const zip = await buildZip({
-      "package.json": JSON.stringify({ name: "multi-plugin" }),
+      "package.json": JSON.stringify({ name: "multi-plugin", type: "module" }),
       "PLUGIN.md":
         "---\nid: multi-plugin\nkind: plugin\ndescription: Multi runtime fixture\n---\n",
       "runtimes/a/RUNTIME.md":

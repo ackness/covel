@@ -412,7 +412,12 @@ export type {
 } from "./handler-result.js";
 
 export { shortId, shortIdBatch, wordId, wordSlug } from "./short-id.js";
-export { modelFacingJson } from "./model-facing.js";
+export {
+  modelFacingJson,
+  modelHiddenPaths,
+  type ModelHiddenPath,
+  type ModelHiddenReason,
+} from "./model-facing.js";
 
 export { labelText, translate } from "./messages.js";
 export type {

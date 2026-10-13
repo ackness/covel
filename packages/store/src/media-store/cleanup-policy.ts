@@ -80,6 +80,7 @@ export function cleanupCandidates(
       bytesRetained: totalBytes - bytesDeleted,
       protectedIds: [...protectedSet].sort(),
       deletedIds,
+      expiredRefs: [],
     },
   };
 }

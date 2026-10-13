@@ -29,7 +29,7 @@ test("documentation is what people and agents read, wherever it lives", () => {
     "README.md",
     "README.zh-CN.md",
     "AGENTS.md",
-    "docs/v2/AGENTS.md",
+    "docs/AGENTS.md",
     "packages/store/CLAUDE.md",
     "plugins/narrator/README.md",
     "worlds/mistport/README.zh-CN.md",

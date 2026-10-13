@@ -110,9 +110,10 @@ describe("desktop bridge REST helpers", () => {
   it("updates data root through the desktop config REST endpoint", async () => {
     const fetchMock = mockFetch(new Response("{}", { status: 200 }));
 
-    await expect(pickDataDir("/tmp/covel-data")).resolves.toBe(
-      "/tmp/covel-data",
-    );
+    await expect(pickDataDir("/tmp/covel-data")).resolves.toEqual({
+      path: "/tmp/covel-data",
+      mode: "manual",
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/config/data-root",
@@ -167,7 +168,7 @@ describe("desktop bridge REST helpers", () => {
   });
 
   it("prefers Electron IPC over REST fetches", async () => {
-    const invoke = vi.fn(async () => ({ path: "/ipc-data" }));
+    const invoke = vi.fn(async () => ({ path: "/ipc-data", mode: "copy" }));
     window.covelIpc = {
       isDesktop: true,
       platform: "darwin",
@@ -181,7 +182,10 @@ describe("desktop bridge REST helpers", () => {
     const fetchMock = mockFetch(new Response("{}", { status: 200 }));
 
     await openConfigDir();
-    await expect(pickDataDir()).resolves.toBe("/ipc-data");
+    await expect(pickDataDir()).resolves.toEqual({
+      path: "/ipc-data",
+      mode: "copy",
+    });
 
     expect(invoke).toHaveBeenCalledWith("covel:open-config-dir");
     expect(invoke).toHaveBeenCalledWith("covel:pick-data-dir");

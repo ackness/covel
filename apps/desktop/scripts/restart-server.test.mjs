@@ -37,6 +37,8 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     export const patchKeysEnv = () => {};
     export const loadKeysEnv = () => {};
     export const writeDataRoot = () => {};
+    export const configuredDataRoot = () => "";
+    export const dataRootCopyRecordPath = () => "";
     export const setDesktopLocaleFromSettings = () => {};
     export const t = (value) => value;
     export const isSettingsEntries = () => true;

@@ -1,6 +1,6 @@
 {
   "world": "haruka-academy",
-  "note": "Five authored day/night anchors. Approved day images define the camera and layout. Create night variants by editing their day reference; standalone text-to-image generations do not preserve geometry. Change only lighting, not architecture, season or weather. See docs/guide/world-art-direction.md and docs/guide/world-art-prompts.json.",
+  "note": "Five authored day/night anchors. Approved day images define the camera and layout. Create night variants by editing their day reference; standalone text-to-image generations do not preserve geometry. Change only lighting, not architecture, season or weather. See docs/worlds/art-direction.md and docs/world-art-prompts.json.",
   "style": {
     "direction": "anime visual-novel background art, painterly cel-shaded scenery, pastel spring palette, seaside Japanese high-school slice-of-life mood",
     "prefix": "Visual novel background art, clean anime scenery style, soft cel-shaded painterly rendering, gentle pastel spring palette, seaside Japanese high-school slice-of-life mood, no people, no characters, ",

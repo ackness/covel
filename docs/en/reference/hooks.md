@@ -1,0 +1,279 @@
+# Hooks
+
+A hook is a piece of plugin code. The kernel calls it at fixed moments: when a session starts or ends, when a turn starts or ends, before and after a runtime runs, before and after each model call, before and after each tool call, and before and after each write is committed. This page lists all 16 events, and what each one gives its handler and what the handler can return. Plugin authors who write hooks need it.
+
+A hook does only one of three things:
+
+- **Intercept**: block the operation.
+- **Rewrite**: change what the operation receives or what it returns.
+- **Observe**: only watch, without changing anything. Use this for logging and cleanup.
+
+A hook does not hold gameplay. A gameplay rule belongs in a runtime or a tool.
+
+> [!NOTE]
+> Event names are defined in only one place: `HOOK_EVENTS` (`packages/shared/src/types/hooks.ts`). How each event runs is written in `HOOK_SEMANTICS` and `GUARD_HOOK_EVENTS` (`packages/runtime/src/hooks/types.ts`). The payloads are built in `packages/runtime/src/hooks/wire-helpers.ts`. If this page and those tables disagree, `packages/runtime/tests/hooks-reference-doc.test.ts` fails.
+
+## Declaring and registering
+
+There are two steps. The root `PLUGIN.md` lists the events you use, and the `entry` module registers the handlers. The two must match, or the plugin fails to load. One declaration can correspond to several handlers. Each handler is added with one call to `covel.on()`.
+
+```yaml
+entry: ./server/index.js
+contributes:
+  hooks:
+    - event: PreToolUse
+      enforce: normal
+```
+
+```js
+export default function (covel) {
+  covel.on("PreToolUse", async (ctx, payload) => {
+    if (ctx.runtimeId !== "my-plugin/tracker") return { action: "continue" };
+    if (payload.toolCall.name !== "delete-note") return { action: "continue" };
+    return { action: "abort", reason: "This runtime may not delete notes." };
+  });
+}
+```
+
+The `options` for `covel.on(event, handler, options?)` have three items:
+
+| Option      | Meaning                                                                                                                                              |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `match`     | `(payload) => boolean`. The handler runs only when this returns `true`. It receives its own separate copy of the payload.                            |
+| `timeoutMs` | The time limit for one call of the handler. The default is 5000 milliseconds.                                                                        |
+| `enforce`   | The ordering group: `pre`, `normal` (the default), or `post`. It must match the group declared in `contributes.hooks`. The ordering rules are below. |
+
+The handlers for one event run group by group: `pre`, then `normal`, then `post`. Inside one group, the framework's own hooks run first, followed by plugin handlers, in registration order. The order between two plugins is not something you can rely on.
+
+When a hook runs:
+
+- The plugin is enabled in this session.
+- For a community plugin, the player must also have approved its server code in this session. If it has not been approved, the handler is skipped.
+
+## The handler
+
+```ts
+type Handler = (ctx: PluginHookContext, payload: Payload) => Promise<Result>;
+```
+
+A handler receives two arguments: the context `ctx` and the payload `payload`. It returns a result that tells the kernel whether to continue, rewrite, or stop.
+
+### Context
+
+Every handler for every event receives a context with the same shape.
+
+| Field             | Value                                                                                                                                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event`           | The event name.                                                                                                                                                                                                              |
+| `sessionId`       | The session.                                                                                                                                                                                                                 |
+| `turnId`          | The execution this event belongs to. It is an empty string for `SessionStart` and `SessionEnd`.                                                                                                                              |
+| `locale`          | The session's content language, set when the session is created. A hook uses it when it adds text itself: `instructionLocaleFor(ctx.locale)` gives the language of the prompt body (`en` or `zh`).                           |
+| `pluginId`        | The plugin of the runtime the event is about. It is not the plugin that registered the handler. Only events whose scope is `runtime` (see the table below) have this field. The others do not.                               |
+| `runtimeId`       | The runtime the event is about, for example `world-init/dimension-tracker`. It appears together with `pluginId`, and it is absent together with it. For the two commit events, it is the runtime that produced the proposal. |
+| `activePluginIds` | The plugins enabled in the session.                                                                                                                                                                                          |
+| `getOwnSettings`  | Returns the resolved settings of the plugin that owns the handler (the manifest defaults, the world presets, and the values the player filled in). Read-only. Usage: `ctx.getOwnSettings?.() ?? {}`.                         |
+| `signal`          | An `AbortSignal`. It fires when this execution is cancelled, or when the handler goes over its time limit. Pass it to any call that might wait.                                                                              |
+
+A runtime's identity is only in the context. The payload does not repeat `pluginId` or `runtimeId`, so a line such as `ctx.runtimeId === "..."` applies to every event.
+
+### Payload
+
+The payload is a private copy. Changing it directly has no effect. To change the content, put the change in the `replace` of the returned value.
+
+### Result
+
+| Return value                             | Effect                                                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ action: "continue" }`, or no value    | Nothing changes.                                                                                                                                              |
+| `{ action: "continue", replace: {...} }` | Rewrite. `replace` overwrites fields on the payload, and the next handler receives the merged payload. Each event recognizes only the fields it lists itself. |
+| `{ action: "abort", reason }`            | Intercept. On events that can be intercepted, the operation is blocked, and `reason` is reported. On other events, it is the same as "nothing changes".       |
+
+## How an event runs
+
+The event tables below use two English terms to describe how a handler runs:
+
+- **sequential**: the handlers run one after another, in order. The `replace` of one is passed to the next. One `abort` ends the whole chain.
+- **parallel**: the handlers run at the same time. The event has already happened, so a changed return value cannot change anything. These events are for logging and cleanup.
+
+Events whose Guard column says `yes` are the "events that can be intercepted".
+
+If a handler throws an error, times out, or returns a result in the wrong format, that counts as a failure of that handler. What happens next depends on the event:
+
+- **Events that can be intercepted**: a failure is treated as `abort`. A broken rule cannot let through an operation that it was supposed to block.
+- **Other events**: the handler is skipped. Any rewrites made by earlier handlers are kept, and the failure is recorded in the trace (`hook.error`).
+
+## Events
+
+The "Scope" column says what the event is about: `session` (the whole session), `turn` (one execution), or `runtime` (one runtime). For events with scope `runtime`, `ctx.pluginId` and `ctx.runtimeId` are that runtime.
+
+The table is in the order the kernel actually fires the events.
+
+| Event                 | Scope   | How it runs | Guard | What the handler can do                               |
+| --------------------- | ------- | ----------- | ----- | ----------------------------------------------------- |
+| `SessionStart`        | session | parallel    | no    | Observe                                               |
+| `TurnStart`           | turn    | sequential  | yes   | Stop this turn                                        |
+| `PreCompaction`       | turn    | sequential  | yes   | Stop the history compression for this turn            |
+| `PostCompaction`      | turn    | parallel    | no    | Observe                                               |
+| `PreSchedule`         | turn    | sequential  | no    | Remove or reorder the runtimes selected for this turn |
+| `PreRuntime`          | runtime | sequential  | yes   | Stop this runtime (recorded as skipped)               |
+| `PostContextAssembly` | runtime | sequential  | no    | Rewrite the system prompt and the history             |
+| `PreLLMCall`          | runtime | sequential  | no    | Rewrite one call's messages, model, and tools         |
+| `PostLLMResponse`     | runtime | sequential  | no    | Rewrite the reply, or ask the model to correct it     |
+| `PostRuntime`         | runtime | sequential  | no    | Rewrite the runtime's result                          |
+| `PreToolUse`          | runtime | sequential  | yes   | Stop the tool call, or rewrite its name or arguments  |
+| `PostToolUse`         | runtime | sequential  | no    | Rewrite the tool result, or end the tool loop         |
+| `PreStateCommit`      | runtime | sequential  | yes   | Stop one proposal, or rewrite its payload             |
+| `PostStateCommit`     | runtime | parallel    | no    | Observe                                               |
+| `TurnStop`            | turn    | parallel    | no    | Observe                                               |
+| `SessionEnd`          | session | parallel    | no    | Observe                                               |
+
+Each event has its own section below, which describes in order: when it fires, what the payload holds, and what the return value does.
+
+### `SessionStart`
+
+Fires once, after the new session and the world data it imports have been saved. At this point the session already exists, so the handler cannot prevent it from being created.
+
+Payload: `{ sessionId, worldId? }`.
+
+### `TurnStart`
+
+Fires at the start of each execution, before any runtime is selected. A player turn, a manual run, and a background job each count as one execution.
+
+Payload: `{ playerMessage, activeRuntimes }`. `activeRuntimes` is the list of runtime IDs for this session.
+
+`abort` ends this execution, and no runtime runs. `reason` is returned to the client as the reason the turn was stopped.
+
+### `PreCompaction`
+
+Fires before history compression, and only on turns that need compression.
+
+Payload: `{ messageCount }`, the number of stored messages that can be compressed.
+
+`abort` keeps this turn's history as it is.
+
+### `PostCompaction`
+
+Fires after a compression attempt. Compression that was stopped by `PreCompaction` does not fire it.
+
+Payload: `{ compacted, summaryId? }`.
+
+### `PreSchedule`
+
+Fires after the runtimes to run have been selected, and before their order is set.
+
+Payload: `{ triggered }`, the list of manifests of the runtimes selected for this execution.
+
+`replace.triggered` can shrink this set or reorder it:
+
+- Entries match the selected runtimes by `name`. Entries that were not selected are dropped.
+- The kernel always uses its own manifest objects. So a handler cannot add a runtime, and it cannot change a manifest.
+- `replace: { triggered: [] }` means nothing is scheduled.
+- `abort` is the same as "nothing changes".
+
+### `PreRuntime`
+
+Fires once before a runtime starts, before its guard, its agent loop, or its function handler.
+
+Payload: `{ manifest, input }`, the manifest of this runtime and the turn input.
+
+`abort` skips this runtime. Its result status is `skipped`, with the reason. This event does not read `replace`.
+
+### `PostContextAssembly`
+
+Fires once for an agent runtime, after its context has been assembled and before the first model call.
+
+Payload: `{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, promptSegments? }`.
+
+| Field            | Contents                                                                                                                                                                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `outputKind`     | `story`, `plugin`, or `system`.                                                                                                                                                                                                                                               |
+| `promptTemplate` | The prompt body of this runtime, as it is before rendering.                                                                                                                                                                                                                   |
+| `inputSlots`     | The resolved `io.inputs` values.                                                                                                                                                                                                                                              |
+| `characters`     | The characters in the session (`id`, `name`, `type`, `description`).                                                                                                                                                                                                          |
+| `promptSegments` | The [`prompt.segment@1`](./extension-points.md) fragments used in this runtime's prompt. Each entry is `{ pluginId, id }`: the plugin that provides the fragment, and the `id` it gave the fragment. Fragments whose `audience` does not include this runtime are not listed. |
+
+To find out what your plugin put into the prompt, read `promptSegments`. Do not search the prompt text. When a hook needs to tell several states apart, give each state's fragment a different `id`. The built-in `world-init` is an example. When all the rules fit, its rule fragment is called `dimension-rules`. When some rules were cut off, it is called `dimension-rules-truncated`. Its `PreLLMCall` handler provides the read tool only in the second case.
+
+`replace.systemPrompt` and `replace.messages` take effect. Content the framework writes at the start of the system prompt (the runtime framework notes, the output language instruction, and the completion convention) is placed again in front of the replaced system prompt. The handler does not need to include it.
+
+### `PreLLMCall`
+
+Fires before each model call of an agent runtime. This includes calls made after tool results.
+
+Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. A run resumed from a suspended state does not assemble its context again, so its calls do not have this field.
+
+- `replace.messages`, `replace.model`, and `replace.tools` change only this one call. The runtime's own conversation record is not changed.
+- `replace.stream: false` makes this call not stream.
+- `abort` is the same as "nothing changes".
+
+### `PostLLMResponse`
+
+Fires after each model reply, before the tool calls in the reply are run.
+
+Payload: `{ response, messages }`, the reply, and the messages actually sent.
+
+- `replace.response` replaces the reply.
+- `replace.correction` (a non-empty string) sends this draft back: its tool calls are not run, and this text is sent to the model as a correction request, so the model answers again. If a correction is requested a third time in one run, the runtime fails.
+
+### `PostRuntime`
+
+Fires once after a runtime finishes, whatever state it finishes in.
+
+Payload: `{ result }`, the `RuntimeResult`.
+
+`replace.result` replaces the result. The kernel does these things with the replaced result:
+
+- It keeps the original result's `pluginId`, `runtimeId`, `runId`, and `turnId`, and the suspension fields of a suspended result.
+- If the handler changed `output` but did not change `canonicalValue`, the kernel discards the old `canonicalValue`. This way, the values other runtimes read do not disagree with the rewritten output.
+- It then checks again against the runtime's `output.schema`. A function runtime checks `canonicalValue`. An agent checks `output` when a hook changed `output`. If the check fails, the runtime fails with `output-schema-invalid`, and nothing is committed.
+
+### `PreToolUse`
+
+Fires before each tool call of an agent runtime.
+
+Payload: `{ toolCall: { id, name, arguments } }`, where `arguments` is a JSON string.
+
+- `abort` skips this call, and `reason` is sent back to the model as the tool's error.
+- `replace.toolCall` can change `name` or `arguments`. `id` stays the same.
+
+### `PostToolUse`
+
+Fires after each tool call that was actually executed.
+
+Payload: `{ toolCall, result }`.
+
+- `replace.result` replaces the result the model reads.
+- `replace.terminate: true` ends the tool loop after this result is recorded.
+
+### `PreStateCommit`
+
+Fires once for each proposal of an execution, before it is committed. `ctx.pluginId` and `ctx.runtimeId` are the source of this proposal.
+
+Payload: `{ proposal }`.
+
+- `abort` rejects this proposal, with the reason.
+- `replace.proposal.payload` replaces the payload. The proposal's type, source, and ID stay the same.
+
+### `PostStateCommit`
+
+Fires after a proposal is committed. To do something after the data is actually written, use this event.
+
+Payload: `{ proposal, result }`.
+
+### `TurnStop`
+
+Fires when an execution has finished running all of its runtimes. At this point the writes are not yet committed, and they can still be rejected at commit time.
+
+Payload: `{ runtimeResults, durationMs }`.
+
+### `SessionEnd`
+
+Fires when a session is ended or deleted.
+
+Payload: `{ sessionId, reason }`, where `reason` is `ended` or `deleted`.
+
+## Limits
+
+- A hook has no write path of its own. It can change state only through its return value. A plugin's data is written by its runtimes and tools.
+- A handler cannot depend on the order of other plugins' handlers. Its own `enforce` group is the exception.
+- For a runtime that declares `io.concealed`, the prompt and the reply do not appear in the trace or the live stream. However, the hooks of enabled plugins still receive them in the payload. A community plugin's hooks run only after the player has approved its server code.

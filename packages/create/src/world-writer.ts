@@ -8,7 +8,18 @@
  * another source has.
  */
 
-import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  readlink,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import { canonicalizeLocale, validateWorldManifest } from "@covel/shared";
@@ -21,13 +32,183 @@ import type {
 const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
 
 /**
- * A file that says this package was written by the generator. Such a
- * package holds nothing but what the generator writes, so it can be written
- * again from a revised world. A package made by hand or installed from
- * elsewhere may hold media, extra sources and translations that a rewrite
- * would lose: it has no marker and is never rewritten.
+ * A file that says this package was written by the generator, and lists each
+ * file the app wrote with a hash of its content. While the package holds
+ * exactly those files it can be written again from a revised world. A file
+ * that is not in the list, or whose content differs from its hash, is a
+ * person's work that a rewrite would lose: such a package is not rewritten.
+ * A package made by hand or installed from elsewhere has no marker.
  */
 export const GENERATED_WORLD_MARKER = ".covel-generated.json";
+
+const GENERATED_WORLD_MARKER_VERSION = 2;
+
+/** What the marker file holds: package path (with `/`) to SHA-256 of the file. */
+export interface GeneratedWorldMarker {
+  readonly schemaVersion: typeof GENERATED_WORLD_MARKER_VERSION;
+  readonly files: Readonly<Record<string, string>>;
+}
+
+/**
+ * Whether the app may rewrite a package:
+ * - `unmarked`: not written by the generator (no marker, or one without the
+ *   file list).
+ * - `pristine`: every file is one the app wrote, unchanged.
+ * - `modified`: `added` files are not in the marker's list and `changed`
+ *   ones differ from what the app wrote. A listed file that is gone is
+ *   neither: a rewrite loses nothing of it.
+ */
+export type GeneratedWorldPackageState =
+  | { readonly state: "unmarked" }
+  | { readonly state: "pristine" }
+  | {
+      readonly state: "modified";
+      readonly added: readonly string[];
+      readonly changed: readonly string[];
+    };
+
+/** A rewrite was refused: the package holds a person's files or edits. */
+export class WorldPackageModifiedError extends Error {
+  constructor(
+    readonly added: readonly string[],
+    readonly changed: readonly string[],
+  ) {
+    const files = [...added, ...changed];
+    super(
+      `World package has files that were added or changed by hand: ${files
+        .slice(0, 5)
+        .join(
+          ", ",
+        )}${files.length > 5 ? ` and ${files.length - 5} more` : ""}. Revising would rewrite the whole package and lose them; edit the files of the package instead, or undo those changes first`,
+    );
+    this.name = "WorldPackageModifiedError";
+  }
+}
+
+/** Files a desktop leaves in a folder that is opened; nobody's work. */
+const OS_FILES = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
+
+/** Every file of a package but the marker, as package paths with `/`. */
+async function packageFilePaths(worldDir: string): Promise<string[]> {
+  const entries = await readdir(worldDir, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  return entries
+    .filter((entry) => !entry.isDirectory() && !OS_FILES.has(entry.name))
+    .map((entry) =>
+      path
+        .relative(worldDir, path.join(entry.parentPath, entry.name))
+        .split(path.sep)
+        .join("/"),
+    )
+    .filter((file) => file !== GENERATED_WORLD_MARKER)
+    .sort();
+}
+
+/** A link is hashed by its target path: what it points at is not followed. */
+async function fileHash(worldDir: string, file: string): Promise<string> {
+  const full = path.join(worldDir, file);
+  const content = (await lstat(full)).isSymbolicLink()
+    ? `link:${await readlink(full)}`
+    : await readFile(full);
+  return createHash("sha256").update(content).digest("hex");
+}
+
+async function writeMarker(
+  worldDir: string,
+  files: Readonly<Record<string, string>>,
+): Promise<void> {
+  const marker: GeneratedWorldMarker = {
+    schemaVersion: GENERATED_WORLD_MARKER_VERSION,
+    files: Object.fromEntries(
+      Object.entries(files).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    ),
+  };
+  await writeFile(
+    path.join(worldDir, GENERATED_WORLD_MARKER),
+    `${JSON.stringify(marker, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+/**
+ * The marker of a generated package, or `null` for a package without one. A
+ * marker that is not in the current form (no file list) counts as none:
+ * nothing says which files of that package the generator wrote.
+ */
+export async function readGeneratedWorldMarker(
+  worldDir: string,
+): Promise<GeneratedWorldMarker | null> {
+  let value: unknown;
+  try {
+    value = JSON.parse(
+      await readFile(path.join(worldDir, GENERATED_WORLD_MARKER), "utf8"),
+    );
+  } catch (error) {
+    if (
+      error instanceof SyntaxError ||
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    )
+      return null;
+    throw error;
+  }
+  if (!value || typeof value !== "object") return null;
+  const { schemaVersion, files } = value as Record<string, unknown>;
+  if (
+    schemaVersion !== GENERATED_WORLD_MARKER_VERSION ||
+    !files ||
+    typeof files !== "object" ||
+    Array.isArray(files) ||
+    !Object.values(files).every((hash) => typeof hash === "string")
+  )
+    return null;
+  return {
+    schemaVersion: GENERATED_WORLD_MARKER_VERSION,
+    files: files as Record<string, string>,
+  };
+}
+
+/** Compare a package with the files its marker lists. */
+export async function inspectGeneratedWorldPackage(
+  worldDir: string,
+): Promise<GeneratedWorldPackageState> {
+  const marker = await readGeneratedWorldMarker(worldDir);
+  if (!marker) return { state: "unmarked" };
+  const added: string[] = [];
+  const changed: string[] = [];
+  for (const file of await packageFilePaths(worldDir)) {
+    const recorded = Object.hasOwn(marker.files, file)
+      ? marker.files[file]
+      : undefined;
+    if (recorded === undefined) added.push(file);
+    else if (recorded !== (await fileHash(worldDir, file))) changed.push(file);
+  }
+  return added.length === 0 && changed.length === 0
+    ? { state: "pristine" }
+    : { state: "modified", added, changed };
+}
+
+/**
+ * Add files that the app itself wrote into a generated package (a
+ * translation, say) to the marker's list, with their content as it is now.
+ * Call it only for a package that was `pristine` before the write: it would
+ * take a person's edit of such a file for the app's own. Does nothing for a
+ * package without a marker.
+ */
+export async function recordGeneratedWorldFiles(
+  worldDir: string,
+  files: readonly string[],
+): Promise<void> {
+  const marker = await readGeneratedWorldMarker(worldDir);
+  if (!marker) return;
+  const recorded = { ...marker.files };
+  for (const file of files) {
+    const key = path.posix.normalize(file.replaceAll("\\", "/"));
+    recorded[key] = await fileHash(worldDir, key);
+  }
+  await writeMarker(worldDir, recorded);
+}
 
 /** Publication and restoration both failed; the complete old package remains. */
 export class WorldPackageRecoveryError extends AggregateError {
@@ -91,8 +272,10 @@ function fileKey(file: string): string {
 export interface WriteWorldPackageOptions {
   /**
    * `replace` writes over the package of the same id, for a revised world.
-   * The old directory is kept until the new one is in place, so a failure
-   * leaves the old package as it was.
+   * Only a generated package that holds nothing but what the app wrote is
+   * replaced: one with a person's files or edits is refused with a
+   * `WorldPackageModifiedError`. The old directory is kept until the new one
+   * is in place, so a failure leaves the old package as it was.
    */
   readonly replace?: boolean;
   /**
@@ -144,11 +327,6 @@ export async function writeWorldPackage(
       packageContent,
       options.dataContracts,
     );
-    await writeFile(
-      path.join(staging, GENERATED_WORLD_MARKER),
-      `${JSON.stringify({ schemaVersion: 1 })}\n`,
-      "utf8",
-    );
     // The main file is in the world's own language. A `WORLD.<locale>.md`
     // is a translation, and a new world has none.
     await writeFile(path.join(staging, "WORLD.md"), lore, "utf8");
@@ -157,7 +335,21 @@ export async function writeWorldPackage(
       stringifyYaml(manifest, { lineWidth: 0 }),
       "utf8",
     );
+    // Every file of the package is written by now; the marker lists them all.
+    const written: Record<string, string> = {};
+    for (const file of await packageFilePaths(staging))
+      written[file] = await fileHash(staging, file);
+    await writeMarker(staging, written);
     if (options.replace) {
+      // Checked last, just before the swap: the model ran for a while, and a
+      // person may have put a file into the package in that time.
+      const current = await inspectGeneratedWorldPackage(finalDir);
+      if (current.state === "unmarked")
+        throw new Error(
+          `World package was not written by the generator: ${id}`,
+        );
+      if (current.state === "modified")
+        throw new WorldPackageModifiedError(current.added, current.changed);
       const previous = await mkdtemp(path.join(outputDir, ".covel-replaced-"));
       const kept = path.join(previous, "package");
       await rename(finalDir, kept);

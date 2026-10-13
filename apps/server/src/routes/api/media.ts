@@ -42,6 +42,7 @@ import {
   DEFAULT_SCAN_LIMIT_PER_SESSION,
   scanMediaReferences,
 } from "./media-reference-scan.js";
+import { WORLD_DATA_IMPORT_REF_PREFIX } from "../../world-data/session-import/media-handling.js";
 import {
   MEDIA_LIBRARY_TOKEN_SCOPE,
   isMediaLibraryAvailable,
@@ -218,6 +219,14 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
   });
 });
 
+/**
+ * Age after which a cleanup run releases the temporary reference of a
+ * world-data import. An import holds its references for one request, so one
+ * this old was left by a crash or a failed release. Fixed, and far above any
+ * import's duration, so a run never takes a reference an import still needs.
+ */
+export const ABANDONED_IMPORT_REF_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 interface CleanupRequestBody {
   readonly dryRun?: unknown;
   readonly maxBytes?: unknown;
@@ -263,7 +272,10 @@ function optionalPositiveInteger(value: unknown): number | undefined {
  *   4. Single-flight wrapper prevents two cleanup runs from racing each
  *      other (the protected-id scan is expensive; concurrent runs would
  *      double the load and risk inconsistent inventories).
- *   5. Per-session row-scan cap (`scanLimit`, default 1_000) refuses to
+ *   5. Temporary references of world-data imports older than
+ *      {@link ABANDONED_IMPORT_REF_MAX_AGE_MS} are released (reported only
+ *      in a dry run); younger ones keep protecting their bytes.
+ *   6. Per-session row-scan cap (`scanLimit`, default 1_000) refuses to
  *      silently truncate. Operators may raise it explicitly, but the
  *      route never quietly skips rows — that would risk deleting still-
  *      referenced media.
@@ -312,6 +324,10 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
     const dryRun = optionalBoolean(body.dryRun) ?? true;
     policy = {
       dryRun,
+      expireRefs: {
+        sessionIdPrefix: WORLD_DATA_IMPORT_REF_PREFIX,
+        maxAgeMs: ABANDONED_IMPORT_REF_MAX_AGE_MS,
+      },
       ...(body.maxAgeMs === undefined
         ? {}
         : { maxAgeMs: optionalNonNegativeNumber(body.maxAgeMs) }),

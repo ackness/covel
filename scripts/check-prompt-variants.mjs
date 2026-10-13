@@ -27,7 +27,7 @@ const templates = checkPromptVariants({
 problems.push(...templates.problems);
 warnings.push(...templates.warnings);
 
-// Style and structure findings are advice (docs/guide/prompt-style.md).
+// Style and structure findings are advice (docs/plugins/prompt-style.md).
 if (warnings.length > 0 && !write)
   console.warn(
     `[prompt-variants] ${warnings.length} style warning(s):\n${warnings.map((line) => `  - ${line}`).join("\n")}`,

@@ -1,12 +1,21 @@
-# Hooks
+# Hook
 
-A hook is plugin code that the kernel calls at a fixed point of a session, a turn, a runtime, a model call, a tool call or a commit. A hook guards (stops the operation), rewrites (changes what the operation receives or returns) or audits (observes). It carries no gameplay logic: a mechanic belongs in a runtime or a tool.
+Hook 是一段插件代码。内核在固定的时刻调用它：会话开始或结束、回合开始或结束、某个 runtime 运行前后、每次模型调用前后、每次工具调用前后、每条写入提交前后。本页列出全部 16 个事件，以及每个事件给 handler 什么、handler 可以返回什么。写 Hook 的插件作者需要它。
 
-The event names are defined once, in `HOOK_EVENTS` (`packages/shared/src/types/hooks.ts`). How each event runs is in `HOOK_SEMANTICS` and `GUARD_HOOK_EVENTS` (`packages/runtime/src/hooks/types.ts`), and the payloads are built in `packages/runtime/src/hooks/wire-helpers.ts`. `packages/runtime/tests/hooks-reference-doc.test.ts` fails when this page and those tables disagree.
+一个 Hook 只做三件事之一：
+
+- **拦截**：阻止这次操作。
+- **改写**：改变这次操作收到的内容或返回的结果。
+- **旁观**：只看，不改，用来记录和清理。
+
+Hook 不写玩法。一条玩法规则应该放在 runtime 或工具里。
+
+> [!NOTE]
+> 事件名只在一处定义：`HOOK_EVENTS`（`packages/shared/src/types/hooks.ts`）。每个事件怎么运行写在 `HOOK_SEMANTICS` 和 `GUARD_HOOK_EVENTS`（`packages/runtime/src/hooks/types.ts`），负载在 `packages/runtime/src/hooks/wire-helpers.ts` 里构造。本页和这些表对不上时，`packages/runtime/tests/hooks-reference-doc.test.ts` 会失败。
 
 ## Declaring and registering
 
-The root `PLUGIN.md` lists each event, and the `entry` module registers the handler. The two must match, or the plugin fails to load. One declaration can have several handlers: call `covel.on()` once for each.
+分两步：根 `PLUGIN.md` 列出要用的事件，`entry` 模块注册 handler。两边必须一致，否则插件加载失败。一条声明可以对应多个 handler，每个 handler 调用一次 `covel.on()`。
 
 ```yaml
 entry: ./server/index.js
@@ -26,15 +35,20 @@ export default function (covel) {
 }
 ```
 
-`covel.on(event, handler, options?)` takes these options:
+`covel.on(event, handler, options?)` 的 `options` 有三项：
 
-| Option      | Meaning                                                                                                                                                                                                                                                                 |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `match`     | `(payload) => boolean`. The handler runs only when it returns `true`. It receives its own copy of the payload.                                                                                                                                                          |
-| `timeoutMs` | Time limit of one call of the handler. Default 5000.                                                                                                                                                                                                                    |
-| `enforce`   | `pre`, `normal` (default) or `post`: the ordering group, which must be the one declared in `contributes.hooks`. Within a group the framework's own hooks run first, then plugin handlers in the order of registration; the order between two plugins is not a contract. |
+| 选项        | 含义                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `match`     | `(payload) => boolean`。返回 `true` 时 handler 才运行。它拿到的是负载的一份独立副本。                   |
+| `timeoutMs` | handler 一次调用的时间上限，默认 5000 毫秒。                                                            |
+| `enforce`   | 排序分组：`pre`、`normal`（默认）或 `post`。必须和 `contributes.hooks` 里声明的分组相同。顺序规则见下。 |
 
-A hook of a plugin runs only in a session where the plugin is active. A hook of a community plugin also needs the player's approval of the plugin's server code for that session; without it the handler is skipped.
+同一个事件的 handler 按分组依次运行：`pre` → `normal` → `post`。同一组内，框架自己的 Hook 先运行，然后是插件的 handler，按注册顺序。两个插件之间谁先谁后不是可以依赖的约定。
+
+Hook 什么时候会运行：
+
+- 插件在这个会话里处于启用状态。
+- 社区插件还需要玩家在这个会话里批准过它的服务端代码。没有批准时 handler 被跳过。
 
 ## The handler
 
@@ -42,188 +56,224 @@ A hook of a plugin runs only in a session where the plugin is active. A hook of 
 type Handler = (ctx: PluginHookContext, payload: Payload) => Promise<Result>;
 ```
 
+handler 收到两个参数：上下文 `ctx` 和负载 `payload`。它返回一个结果，告诉内核继续、改写还是中止。
+
 ### Context
 
-Every handler of every event receives the same context shape.
+所有事件的所有 handler 收到同一种形状的上下文。
 
-| Field             | Value                                                                                                                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `event`           | The event name.                                                                                                                                                                                  |
-| `sessionId`       | The session.                                                                                                                                                                                     |
-| `turnId`          | The execution the event belongs to. An empty string for `SessionStart` and `SessionEnd`.                                                                                                         |
-| `locale`          | The session's content locale, fixed when the session was created. Use it for text the hook adds: `instructionLocaleFor(ctx.locale)` gives the language of the prompt body (`en` or `zh`).        |
-| `pluginId`        | The plugin of the runtime the event is about. It is not the plugin that registered the handler. Present for the events marked "runtime" in the table below, absent for the others.               |
-| `runtimeId`       | The runtime the event is about, for example `world-init/dimension-tracker`. Present and absent together with `pluginId`. For the two commit events it is the runtime that produced the proposal. |
-| `activePluginIds` | The plugins that are active in the session.                                                                                                                                                      |
-| `getOwnSettings`  | Returns the resolved settings of the handler's own plugin (manifest defaults, world presets and the player's values), frozen. Call it as `ctx.getOwnSettings?.() ?? {}`.                         |
-| `signal`          | An `AbortSignal` that fires when the execution is cancelled or the handler's time limit passes. Hand it to any call that can wait.                                                               |
+| 字段              | 值                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event`           | 事件名。                                                                                                                                          |
+| `sessionId`       | 会话。                                                                                                                                            |
+| `turnId`          | 事件所属的那次执行。`SessionStart` 和 `SessionEnd` 时是空字符串。                                                                                 |
+| `locale`          | 会话的内容语言，创建会话时就定下。Hook 自己添加文字时用它：`instructionLocaleFor(ctx.locale)` 给出提示词正文的语言（`en` 或 `zh`）。              |
+| `pluginId`        | 事件说的是哪个 runtime，这里就是那个 runtime 所属的插件。它不是注册 handler 的插件。下表里范围为 `runtime` 的事件才有这个字段，其余事件没有。     |
+| `runtimeId`       | 事件说的是哪个 runtime，例如 `world-init/dimension-tracker`。和 `pluginId` 同时出现、同时缺席。两个提交事件里，它是产生那条 proposal 的 runtime。 |
+| `activePluginIds` | 会话里启用的插件。                                                                                                                                |
+| `getOwnSettings`  | 返回 handler 所属插件解析后的设置（清单默认值、世界预设、玩家填的值），只读。写法：`ctx.getOwnSettings?.() ?? {}`。                               |
+| `signal`          | 一个 `AbortSignal`。这次执行被取消，或 handler 超过时间上限时，它会触发。把它传给任何可能等待的调用。                                             |
 
-The runtime's identity is in the context only. No payload repeats `pluginId` or `runtimeId`, so one check (`ctx.runtimeId === "..."`) works for every event.
+runtime 的身份只在上下文里。负载不会重复 `pluginId` 或 `runtimeId`，所以一句 `ctx.runtimeId === "..."` 对每个事件都适用。
 
 ### Payload
 
-The payload is a private copy. Changing it in place has no effect: return the change in `replace`.
+负载是一份私有副本。直接修改它没有任何效果。要改内容，把改动放在返回值的 `replace` 里。
 
 ### Result
 
-| Result                                   | Effect                                                                                                                                                              |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `{ action: "continue" }`, or no value    | Nothing changes.                                                                                                                                                    |
-| `{ action: "continue", replace: {...} }` | A rewrite. `replace` is merged over the payload field by field, and the next handler receives the merged payload. Each event honours only the fields listed for it. |
-| `{ action: "abort", reason }`            | A guard. On a guard event the operation is stopped and `reason` is reported. On any other event it means "no change".                                               |
+| 返回值                                   | 效果                                                                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `{ action: "continue" }`，或不返回值     | 什么都不变。                                                                                            |
+| `{ action: "continue", replace: {...} }` | 改写。`replace` 按字段覆盖到负载上，下一个 handler 收到合并后的负载。每个事件只认它自己列出的那些字段。 |
+| `{ action: "abort", reason }`            | 拦截。在可以拦截的事件上，操作被阻止，`reason` 会被报告出来。在其他事件上，它等于“什么都不变”。         |
 
 ## How an event runs
 
-- **sequential**: handlers run one after another in order. A `replace` reaches the next handler. An `abort` ends the chain.
-- **parallel**: handlers run at the same time. The event has already happened, so a result changes nothing: these events are for auditing and cleanup.
+下面的事件表用两个英文词说明 handler 怎么运行：
 
-A handler that throws, exceeds its time limit or returns a malformed result is a failed handler. On a **guard** event a failed handler counts as `abort`: a broken policy must not let the guarded operation through. On every other event a failed handler is skipped, the replacements of the handlers before it are kept, and the failure is recorded in the trace (`hook.error`).
+- **sequential**（依次）：handler 一个接一个按顺序运行。前一个的 `replace` 会传给下一个。一个 `abort` 结束整条链。
+- **parallel**（同时）：handler 同时运行。事情已经发生了，所以返回值改变不了任何东西。这类事件用来记录和清理。
+
+表里的 Guard 列写 `yes` 的事件是“可以拦截的事件”。
+
+handler 抛出异常、超时或返回了格式不对的结果，都算这个 handler 失败。失败之后怎么办，取决于事件：
+
+- **可以拦截的事件**：失败按 `abort` 处理。一条坏掉的规则不能让它本该拦住的操作通过。
+- **其他事件**：跳过这个 handler，它之前的 handler 做出的改写保留，失败记入 trace（`hook.error`）。
 
 ## Events
 
-"Scope" says what the event is about. For a runtime event, `ctx.pluginId` and `ctx.runtimeId` name that runtime.
+“范围”一列说明事件是关于什么的：`session`（整个会话）、`turn`（一次执行）、`runtime`（一个 runtime）。范围为 `runtime` 的事件里，`ctx.pluginId` 和 `ctx.runtimeId` 就是那个 runtime。
 
-| Event                 | Scope   | Runs       | Guard | A handler may                                        |
-| --------------------- | ------- | ---------- | ----- | ---------------------------------------------------- |
-| `SessionStart`        | session | parallel   | no    | audit                                                |
-| `TurnStart`           | turn    | sequential | yes   | abort the turn                                       |
-| `PreCompaction`       | turn    | sequential | yes   | abort this turn's history compaction                 |
-| `PostCompaction`      | turn    | parallel   | no    | audit                                                |
-| `PreSchedule`         | turn    | sequential | no    | drop or reorder the runtimes selected for the turn   |
-| `PreRuntime`          | runtime | sequential | yes   | abort the runtime (it is recorded as skipped)        |
-| `PostContextAssembly` | runtime | sequential | no    | rewrite the system prompt and the history            |
-| `PreLLMCall`          | runtime | sequential | no    | rewrite the messages, model and tools of one call    |
-| `PostLLMResponse`     | runtime | sequential | no    | rewrite the response or ask for a correction         |
-| `PostRuntime`         | runtime | sequential | no    | rewrite the runtime's result                         |
-| `PreToolUse`          | runtime | sequential | yes   | abort the tool call or rewrite its name or arguments |
-| `PostToolUse`         | runtime | sequential | no    | rewrite the tool result or end the tool loop         |
-| `PreStateCommit`      | runtime | sequential | yes   | abort a proposal or rewrite its payload              |
-| `PostStateCommit`     | runtime | parallel   | no    | audit                                                |
-| `TurnStop`            | turn    | parallel   | no    | audit                                                |
-| `SessionEnd`          | session | parallel   | no    | audit                                                |
+表按内核实际触发的先后排列。
+
+| 事件                  | 范围    | 运行方式   | Guard | handler 可以做什么                    |
+| --------------------- | ------- | ---------- | ----- | ------------------------------------- |
+| `SessionStart`        | session | parallel   | no    | 旁观                                  |
+| `TurnStart`           | turn    | sequential | yes   | 中止这个回合                          |
+| `PreCompaction`       | turn    | sequential | yes   | 中止这个回合的历史压缩                |
+| `PostCompaction`      | turn    | parallel   | no    | 旁观                                  |
+| `PreSchedule`         | turn    | sequential | no    | 去掉或重排这个回合选中的 runtime      |
+| `PreRuntime`          | runtime | sequential | yes   | 中止这个 runtime（记为 skipped）      |
+| `PostContextAssembly` | runtime | sequential | no    | 改写系统提示词和历史                  |
+| `PreLLMCall`          | runtime | sequential | no    | 改写一次调用的消息、模型和工具        |
+| `PostLLMResponse`     | runtime | sequential | no    | 改写回答，或要求模型改正              |
+| `PostRuntime`         | runtime | sequential | no    | 改写 runtime 的结果                   |
+| `PreToolUse`          | runtime | sequential | yes   | 中止工具调用，或改写它的名字、参数    |
+| `PostToolUse`         | runtime | sequential | no    | 改写工具结果，或结束工具循环          |
+| `PreStateCommit`      | runtime | sequential | yes   | 中止一条 proposal，或改写它的 payload |
+| `PostStateCommit`     | runtime | parallel   | no    | 旁观                                  |
+| `TurnStop`            | turn    | parallel   | no    | 旁观                                  |
+| `SessionEnd`          | session | parallel   | no    | 旁观                                  |
+
+下面每个事件一节，依次写：什么时候触发、负载里有什么、返回值有什么效果。
 
 ### `SessionStart`
 
-Fires once, after a new session and its imported world data are stored. The session exists already, so a handler cannot stop its creation.
+新会话和它导入的世界数据存好之后触发，只有一次。这时会话已经存在，handler 不能阻止它被创建。
 
-Payload: `{ sessionId, worldId? }`.
+负载：`{ sessionId, worldId? }`。
 
 ### `TurnStart`
 
-Fires at the start of every execution (a player turn, a manual run, a background job), before any runtime is selected.
+每次执行开始时触发，在选出任何 runtime 之前。玩家回合、手动运行、后台任务都算一次执行。
 
-Payload: `{ playerMessage, activeRuntimes }`, where `activeRuntimes` is the list of runtime IDs of the session.
+负载：`{ playerMessage, activeRuntimes }`。`activeRuntimes` 是这个会话的 runtime ID 列表。
 
-`abort` ends the execution with no runtime run; the reason is returned to the client as the turn's abort reason.
+`abort` 结束这次执行，不运行任何 runtime。`reason` 作为这个回合的中止原因返回给客户端。
 
 ### `PreCompaction`
 
-Fires before history compaction, in a turn where compaction is due.
+历史压缩之前触发，只在需要压缩的回合。
 
-Payload: `{ messageCount }`: the number of stored messages that can be compacted.
+负载：`{ messageCount }`，即可以被压缩的已存消息条数。
 
-`abort` leaves the history as it is for this turn.
+`abort` 让这个回合的历史保持原样。
 
 ### `PostCompaction`
 
-Fires after a compaction attempt that `PreCompaction` did not stop.
+一次压缩尝试之后触发。被 `PreCompaction` 拦下的压缩不触发它。
 
-Payload: `{ compacted, summaryId? }`.
+负载：`{ compacted, summaryId? }`。
 
 ### `PreSchedule`
 
-Fires after trigger selection and before scheduling.
+选出要运行的 runtime 之后、排定顺序之前触发。
 
-Payload: `{ triggered }`: the manifests of the runtimes selected for this execution.
+负载：`{ triggered }`，即这次执行选中的 runtime 的清单。
 
-`replace.triggered` narrows or reorders the set. Entries are matched to the selected runtimes by `name`; an entry that was not selected is dropped, and the kernel keeps its own manifest objects, so a handler cannot add a runtime or change a manifest. `replace: { triggered: [] }` schedules nothing. `abort` means "no change".
+`replace.triggered` 可以缩小或重排这个集合：
+
+- 条目按 `name` 和选中的 runtime 对应。没被选中的条目会被丢掉。
+- 内核始终使用自己的清单对象，所以 handler 加不了 runtime，也改不了清单。
+- `replace: { triggered: [] }` 表示什么都不调度。
+- `abort` 等于“什么都不变”。
 
 ### `PreRuntime`
 
-Fires once before a runtime's guard, agent loop or function handler.
+一个 runtime 开始前触发一次，在它的 guard、agent 循环或函数 handler 之前。
 
-Payload: `{ manifest, input }`: the runtime's manifest and the turn input.
+负载：`{ manifest, input }`，即这个 runtime 的清单和回合输入。
 
-`abort` skips the runtime: its result has the status `skipped` and the reason. `replace` is not read.
+`abort` 跳过这个 runtime：它的结果状态是 `skipped`，带上原因。这个事件不读 `replace`。
 
 ### `PostContextAssembly`
 
-Fires once for an agent runtime, after its context is assembled and before its first model call.
+对 agent runtime 触发一次：它的上下文组装好之后、第一次模型调用之前。
 
-Payload: `{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, promptSegments? }`. `outputKind` is `story`, `plugin` or `system`. `promptTemplate` is the runtime's prompt body before rendering. `inputSlots` holds the resolved `io.inputs` values. `characters` lists the session's characters (`id`, `name`, `type`, `description`). `promptSegments` lists the [`prompt.segment@1`](./extension-points.md) segments this runtime's prompt was built with, each as `{ pluginId, id }`: the plugin that provided the segment and the `id` it gave it. Segments whose `audience` leaves this runtime out are not listed.
+负载：`{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, characters?, promptSegments? }`。
 
-To learn what your own plugin put in the prompt, read `promptSegments` and do not search the prompt text: give a segment a different `id` for each state the hook must tell apart. The bundled `world-init` names its rules segment `dimension-rules` when every rule fits and `dimension-rules-truncated` when some are cut, and its `PreLLMCall` handler offers the read tools only for the second.
+| 字段             | 内容                                                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `outputKind`     | `story`、`plugin` 或 `system`。                                                                                                                                                                |
+| `promptTemplate` | 这个 runtime 的提示词正文，渲染之前的样子。                                                                                                                                                    |
+| `inputSlots`     | 解析后的 `io.inputs` 值。                                                                                                                                                                      |
+| `characters`     | 会话里的角色（`id`、`name`、`type`、`description`）。                                                                                                                                          |
+| `promptSegments` | 这个 runtime 的提示词用到的 [`prompt.segment@1`](./extension-points.md) 片段，每条是 `{ pluginId, id }`：提供片段的插件，以及它给片段起的 `id`。`audience` 没有包含这个 runtime 的片段不列出。 |
 
-`replace.systemPrompt` and `replace.messages` are honoured. The framework's own opening of the system prompt (the runtime frame, the output-language directive and the completion contract) is put back in front of a replaced system prompt, so a handler does not have to carry it over.
+想知道自己的插件往提示词里放了什么，读 `promptSegments`，不要去搜提示词文本。Hook 需要区分几种状态时，给每种状态的片段起不同的 `id`。内置的 `world-init` 是例子：规则全部放得下时，它的规则片段叫 `dimension-rules`；有规则被截掉时叫 `dimension-rules-truncated`。它的 `PreLLMCall` handler 只在第二种情况下才提供读取工具。
+
+`replace.systemPrompt` 和 `replace.messages` 有效。框架自己写在系统提示词开头的内容（runtime 框架说明、输出语言指令、完成约定）会被重新放到替换后的系统提示词前面，handler 不用自己带上它们。
 
 ### `PreLLMCall`
 
-Fires before every model call of an agent runtime, the calls after tool results included.
+agent runtime 的每次模型调用之前触发，包括工具结果之后的调用。
 
-Payload: `{ messages, model, tools, stream?, promptSegments? }`. `promptSegments` is the same list as in `PostContextAssembly`. It is absent on the calls of a run that was resumed from a suspension, because a resumed run is not assembled again.
+负载：`{ messages, model, tools, stream?, promptSegments? }`。`promptSegments` 和 `PostContextAssembly` 里的是同一份列表。从挂起中恢复的运行不会重新组装上下文，所以它的调用里没有这个字段。
 
-`replace.messages`, `replace.model` and `replace.tools` change this call only; the runtime's own transcript is not changed. `replace.stream: false` makes the call unstreamed. `abort` means "no change".
+- `replace.messages`、`replace.model`、`replace.tools` 只改这一次调用，runtime 自己的对话记录不变。
+- `replace.stream: false` 让这次调用不走流式。
+- `abort` 等于“什么都不变”。
 
 ### `PostLLMResponse`
 
-Fires after every model response, before its tool calls are run.
+每次模型回答之后触发，在执行回答里的工具调用之前。
 
-Payload: `{ response, messages }`: the response and the exact messages that were sent.
+负载：`{ response, messages }`，即回答，以及实际发出去的消息。
 
-`replace.response` replaces the response. `replace.correction` (a non-empty string) rejects the draft: its tool calls are not run, the text is sent to the model as a correction, and the model answers again. A third correction in one run fails the runtime.
+- `replace.response` 替换回答。
+- `replace.correction`（非空字符串）退回这份草稿：其中的工具调用不执行，这段文字作为改正要求发给模型，模型重新回答。一次运行里第三次要求改正时，runtime 失败。
 
 ### `PostRuntime`
 
-Fires once after a runtime finished, with any status.
+一个 runtime 结束后触发一次，不论它以什么状态结束。
 
-Payload: `{ result }`: the `RuntimeResult`.
+负载：`{ result }`，即 `RuntimeResult`。
 
-`replace.result` replaces the result. The kernel keeps `pluginId`, `runtimeId`, `runId` and `turnId` of the original, and the suspension fields of a suspended result. When a handler changes `output` and leaves `canonicalValue` as it was, the kernel discards the old `canonicalValue`, so the value other runtimes read cannot disagree with the rewritten output. The rewritten result is checked against the runtime's `output.schema` again: a function runtime's `canonicalValue`, and an agent's `output` when the hook changed it. A mismatch fails the runtime with `output-schema-invalid` and commits nothing.
+`replace.result` 替换结果。内核对替换后的结果做这几件事：
+
+- 保留原结果的 `pluginId`、`runtimeId`、`runId`、`turnId`，以及挂起结果的挂起字段。
+- handler 改了 `output` 却没动 `canonicalValue` 时，内核丢掉旧的 `canonicalValue`。这样其他 runtime 读到的值不会和改写后的输出对不上。
+- 再按 runtime 的 `output.schema` 检查一遍：函数 runtime 检查 `canonicalValue`，agent 在 Hook 改了 `output` 时检查 `output`。不符合时 runtime 以 `output-schema-invalid` 失败，什么都不提交。
 
 ### `PreToolUse`
 
-Fires before every tool call of an agent runtime.
+agent runtime 的每次工具调用之前触发。
 
-Payload: `{ toolCall: { id, name, arguments } }`, with `arguments` as a JSON string.
+负载：`{ toolCall: { id, name, arguments } }`，`arguments` 是 JSON 字符串。
 
-`abort` skips the call; the reason goes back to the model as the tool's error. `replace.toolCall` changes `name` or `arguments`; `id` is kept.
+- `abort` 跳过这次调用，`reason` 作为工具的错误回给模型。
+- `replace.toolCall` 可以改 `name` 或 `arguments`，`id` 保持不变。
 
 ### `PostToolUse`
 
-Fires after every tool call that ran.
+每次实际执行过的工具调用之后触发。
 
-Payload: `{ toolCall, result }`.
+负载：`{ toolCall, result }`。
 
-`replace.result` replaces the result the model reads. `replace.terminate: true` ends the tool loop after this result is recorded.
+- `replace.result` 替换模型读到的结果。
+- `replace.terminate: true` 在记下这条结果之后结束工具循环。
 
 ### `PreStateCommit`
 
-Fires once for each proposal of an execution, before it is committed. `ctx.pluginId` and `ctx.runtimeId` are the proposal's source.
+一次执行的每条 proposal 在提交之前各触发一次。`ctx.pluginId` 和 `ctx.runtimeId` 是这条 proposal 的来源。
 
-Payload: `{ proposal }`.
+负载：`{ proposal }`。
 
-`abort` rejects the proposal with the reason. `replace.proposal.payload` replaces the payload; the type, the source and the IDs of the proposal are kept.
+- `abort` 拒绝这条 proposal，带上原因。
+- `replace.proposal.payload` 替换 payload。proposal 的类型、来源和 ID 保持不变。
 
 ### `PostStateCommit`
 
-Fires after a proposal was committed.
+一条 proposal 提交之后触发。要在数据真正写入之后做事，用这个事件。
 
-Payload: `{ proposal, result }`.
+负载：`{ proposal, result }`。
 
 ### `TurnStop`
 
-Fires when an execution finished running its runtimes.
+一次执行运行完它的全部 runtime 时触发。这时写入还没有提交，之后仍可能在提交时被拒绝。
 
-Payload: `{ runtimeResults, durationMs }`.
+负载：`{ runtimeResults, durationMs }`。
 
 ### `SessionEnd`
 
-Fires when a session is ended or deleted.
+会话被结束或被删除时触发。
 
-Payload: `{ sessionId, reason }`, where `reason` is `ended` or `deleted`.
+负载：`{ sessionId, reason }`，`reason` 是 `ended` 或 `deleted`。
 
 ## Limits
 
-- A hook has no write path of its own. It changes state only through what it returns; a plugin's data is written by its runtimes and tools.
-- A handler must not depend on the order of other plugins' handlers, apart from its `enforce` group.
-- `io.concealed` runtimes have their prompts and replies removed from traces and the live stream, but a hook of an active plugin still receives them in its payload. A community hook runs only after the player approved the plugin's server code.
+- Hook 没有自己的写入途径。它只能通过返回值改变状态。插件的数据由它的 runtime 和工具写入。
+- handler 不能依赖其他插件 handler 的先后顺序，自己的 `enforce` 分组除外。
+- 声明了 `io.concealed` 的 runtime，提示词和回答不会出现在 trace 和实时流里。但已启用插件的 Hook 仍然会在负载里收到它们。社区插件的 Hook 只有在玩家批准了它的服务端代码之后才运行。

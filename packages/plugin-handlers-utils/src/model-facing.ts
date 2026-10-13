@@ -30,6 +30,11 @@ function isBookkeeping(name: string, value: unknown): boolean {
       ? value.length > 0 && value.every(isUuid)
       : isUuid(value);
   }
+  return isBookkeepingTime(name, value);
+}
+
+/** The time branch of the rule: `updatedAt` or `timestamp` with an ISO time. */
+function isBookkeepingTime(name: string, value: unknown): boolean {
   return (
     (name === "timestamp" || name.endsWith("At")) &&
     typeof value === "string" &&
@@ -49,4 +54,35 @@ export function modelFacingJson<T>(value: T): T {
       .filter(([name, item]) => !isBookkeeping(name, item))
       .map(([name, item]) => [name, modelFacingJson(item)]),
   ) as T;
+}
+
+/** Why `modelFacingJson` leaves a property out. */
+export type ModelHiddenReason = "time" | "uuid";
+
+export interface ModelHiddenPath {
+  /** Where the property is: `fields.diedAt`, `[2].timestamp`, `[0].id`. */
+  path: string;
+  /** `time`: it reads as the time a row was written. `uuid`: an ID that is a UUID. */
+  reason: ModelHiddenReason;
+}
+
+/**
+ * The properties that `modelFacingJson` leaves out of a value, with the
+ * reason. An author who stored a date of the story as `diedAt`, or gave a
+ * record a UUID for its `id`, learns from this list that no model reads it.
+ * `sessionId` is not listed: authored data has no use for one.
+ */
+export function modelHiddenPaths(value: unknown, at = ""): ModelHiddenPath[] {
+  if (Array.isArray(value))
+    return value.flatMap((item, index) =>
+      modelHiddenPaths(item, `${at}[${index}]`),
+    );
+  if (value === null || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([name, item]) => {
+    const path = at ? `${at}.${name}` : name;
+    if (isBookkeepingTime(name, item)) return [{ path, reason: "time" }];
+    // A property that is left out hides what is under it.
+    if (!isBookkeeping(name, item)) return modelHiddenPaths(item, path);
+    return name === "sessionId" ? [] : [{ path, reason: "uuid" }];
+  });
 }
