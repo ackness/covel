@@ -63,6 +63,63 @@ function repositoryLink(href: string, relativePath: string): string | null {
 }
 
 /**
+ * How the search box splits text into terms. It splits at spaces and
+ * punctuation by default, which gives words in English and whole clauses in
+ * Chinese, so a clause was found only by the characters it starts with
+ * (`世界` found `世界包是什么`, `世界包` or `包是` found nothing).
+ *
+ * Both functions are sent to the browser as source text with the site data,
+ * so each must stand alone (no names from this file) and be written as a
+ * `function` expression, which is what its source text can be read back as.
+ */
+const searchTokens = {
+  /**
+   * Index terms. A Chinese run is indexed from every character on, each piece
+   * cut at four characters (`世界包是什么` gives `世界包是`, `界包是什`,
+   * `包是什么`, `是什么`, `什么`, `么`), so the prefix match finds any piece
+   * of up to four characters.
+   */
+  index: function (text: string): string[] {
+    const run =
+      /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu;
+    const terms: string[] = [];
+    let rest = 0;
+    const words = (part: string) =>
+      terms.push(...part.split(/[\n\r\p{Z}\p{P}]+/u).filter(Boolean));
+    for (const match of text.matchAll(run)) {
+      words(text.slice(rest, match.index));
+      const chars = [...match[0]];
+      for (let start = 0; start < chars.length; start++)
+        terms.push(chars.slice(start, start + 4).join(""));
+      rest = match.index + match[0].length;
+    }
+    words(text.slice(rest));
+    return terms;
+  },
+  /**
+   * Query terms. A Chinese run of up to four characters is one term; a longer
+   * one is cut into pieces of four, since the index holds nothing longer.
+   */
+  query: function (text: string): string[] {
+    const run =
+      /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu;
+    const terms: string[] = [];
+    let rest = 0;
+    const words = (part: string) =>
+      terms.push(...part.split(/[\n\r\p{Z}\p{P}]+/u).filter(Boolean));
+    for (const match of text.matchAll(run)) {
+      words(text.slice(rest, match.index));
+      const chars = [...match[0]];
+      for (let start = 0; start < chars.length; start += 4)
+        terms.push(chars.slice(start, start + 4).join(""));
+      rest = match.index + match[0].length;
+    }
+    words(text.slice(rest));
+    return terms;
+  },
+};
+
+/**
  * Heading anchors as GitHub makes them: lower case, spaces to hyphens, and
  * every other character that is not a letter, a digit, `-` or `_` removed.
  * With the default slugs `## POST /api/actions` would be `post-api-actions`
@@ -538,6 +595,10 @@ export default defineConfig({
     search: {
       provider: "local",
       options: {
+        miniSearch: {
+          options: { tokenize: searchTokens.index },
+          searchOptions: { tokenize: searchTokens.query },
+        },
         locales: {
           root: {
             translations: {
