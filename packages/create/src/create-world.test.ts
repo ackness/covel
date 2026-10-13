@@ -17,7 +17,10 @@ import type {
   WorldGenerationPart,
 } from "@covel/shared";
 import { createWorld } from "./create-world.js";
-import { writeWorldPackage } from "./world-writer.js";
+import {
+  recordGeneratedWorldFiles,
+  writeWorldPackage,
+} from "./world-writer.js";
 import { buildWorldPrompt } from "./prompts.js";
 
 const WORLD_YAML = `schemaVersion: "1.0"
@@ -1337,8 +1340,12 @@ describe("writeWorldPackage replace", () => {
 
   it("writes a revised world over the package of the same id", async () => {
     await writeWorldPackage(tmp, await generate(WORLD_LORE));
-    // A file the first package had and the revised one does not write.
+    // A file the app added to the first package (a translation) and the
+    // revised one does not write.
     await writeFile(path.join(tmp, "test-world", "WORLD.en.md"), "old");
+    await recordGeneratedWorldFiles(path.join(tmp, "test-world"), [
+      "WORLD.en.md",
+    ]);
 
     const revised = await generate(`${WORLD_LORE}\n4. 新的钩子。`);
     await expect(writeWorldPackage(tmp, revised)).rejects.toThrow(

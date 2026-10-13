@@ -333,27 +333,51 @@ export async function setDesktopProxyConfig(input: {
 }
 
 /**
+ * What a restart does after the data directory was changed:
+ * - `copy`: the desktop app copies the current data to the new location at
+ *   its next start, then switches to it.
+ * - `empty`: the new location holds no Covel data and nothing is copied.
+ * - `existing`: the new location already holds Covel data and is used as it is.
+ * - `unchanged`: the directory in use was picked again.
+ * - `manual`: set over REST, which never copies and does not look inside the
+ *   new location.
+ */
+export type DataDirChangeMode =
+  "copy" | "empty" | "existing" | "unchanged" | "manual";
+
+export interface DataDirChange {
+  readonly path: string;
+  readonly mode: DataDirChangeMode;
+}
+
+/**
  * Set the data_root path in `~/.covel/config.toml`.
  *
- * - Electron: native folder picker via IPC (returns picked path or null if cancelled).
+ * - Electron: native folder picker via IPC, followed by a native question
+ *   about the existing data (returns null if cancelled).
  * - REST desktop (self-host with ~/.covel): caller must supply an absolute
  *   path argument; the browser has no native folder picker and the UI must
  *   present a text input + example path.
  */
-export async function pickDataDir(manualPath?: string): Promise<string | null> {
+export async function pickDataDir(
+  manualPath?: string,
+): Promise<DataDirChange | null> {
   const ipc = getCovelIpc();
   if (ipc) {
-    const result = await ipc.invoke<{ path: string | null }>(
-      "covel:pick-data-dir",
-    );
-    return result?.path ?? null;
+    const result = await ipc.invoke<{
+      path: string | null;
+      mode?: DataDirChangeMode;
+    }>("covel:pick-data-dir");
+    return result?.path
+      ? { path: result.path, mode: result.mode ?? "empty" }
+      : null;
   }
   if (!manualPath) return null;
   await desktopConfigRequest("/api/config/data-root", {
     method: "PUT",
     body: { path: manualPath },
   });
-  return manualPath;
+  return { path: manualPath, mode: "manual" };
 }
 
 type RestartResult =

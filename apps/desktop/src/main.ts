@@ -13,7 +13,14 @@
  *   8. Clean up on quit
  */
 
-import { app, BrowserWindow, Menu, session } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Menu,
+  session,
+  type MessageBoxOptions,
+} from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -21,13 +28,22 @@ import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import {
+  configuredDataRoot,
+  dataRootCopyRecordPath,
   ensureUserPaths,
   isDev,
   resolveProjectRoot,
   resolveServerEntry,
   resolveTsx,
   userServerPortFile,
+  userSettingsJsonPath,
+  writeDataRoot,
 } from "./paths.js";
+import {
+  applyPendingDataRootCopy,
+  readPendingDataRootCopy,
+  type DataRootCopyOutcome,
+} from "./data-root-copy.js";
 import { loadChildEnvironment } from "./env-files.js";
 import {
   fetchJsonWithTimeout,
@@ -284,6 +300,82 @@ async function clearStaleOriginStorage(port: number): Promise<void> {
       `Could not clear earlier page storage: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+// ── Data root copy ──────────────────────────────────────────────
+
+/**
+ * True when a sidecar still answers on the port recorded in `root`: one that
+ * outlived a crashed app keeps the database open. The single-instance lock
+ * already rules out a second running app.
+ */
+async function sidecarStillRunning(root: string): Promise<boolean> {
+  const port = readPreviousPort(path.join(root, "server.port"));
+  if (port === undefined) return false;
+  try {
+    return (
+      await fetchWithTimeout(`http://127.0.0.1:${port}/api/health`, 1_500)
+    ).ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Copy the data to the directory the player picked in Settings, when they
+ * asked for it. This runs before `ensureUserPaths` resolves the data root and
+ * long before the sidecar opens the database. The splash is up meanwhile: a
+ * large database takes a while.
+ */
+async function copyDataToNewRoot(): Promise<DataRootCopyOutcome> {
+  const recordFile = dataRootCopyRecordPath();
+  // A development shell starts no sidecar and may share this home with an
+  // installed app that has the database open, so it never copies.
+  if (isDev || !readPendingDataRootCopy(recordFile)) return { kind: "none" };
+  initDesktopI18n(userSettingsJsonPath(), app.getLocale());
+  const win = createMainWindow();
+  const splashLoaded = new Promise<void>((resolve) => {
+    win.webContents.once("did-finish-load", () => resolve());
+    win.webContents.once("did-fail-load", () => resolve());
+  });
+  loadSplashInto(win);
+  await splashLoaded;
+  if (!win.isDestroyed()) {
+    win.webContents.send("covel:startup:progress", {
+      label: t("startup.status.copyingData"),
+    });
+  }
+  return applyPendingDataRootCopy({
+    recordFile,
+    currentRoot: configuredDataRoot(),
+    databaseInUse: sidecarStillRunning,
+    switchRoot: writeDataRoot,
+  });
+}
+
+/** Tell the player what became of the copy they asked for. */
+function showDataRootCopyOutcome(outcome: DataRootCopyOutcome): void {
+  if (outcome.kind === "none" || outcome.kind === "switched") return;
+  const { from, to } = outcome;
+  const reason =
+    outcome.kind !== "failed"
+      ? ""
+      : outcome.reason === "error"
+        ? (outcome.error ?? "")
+        : t(`dataCopy.reason.${outcome.reason}`, { to });
+  const options: MessageBoxOptions = {
+    type: outcome.kind === "failed" ? "error" : "info",
+    message: t(`dataCopy.${outcome.kind}.message`),
+    detail: t(`dataCopy.${outcome.kind}.detail`, { from, to, reason }),
+    buttons: [t("dialog.ok")],
+    noLink: true,
+  };
+  const win = getMainWindow();
+  void (
+    win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options)
+  ).catch((error: unknown) => {
+    writeLog("warn", "Could not show the data copy result:", error);
+  });
 }
 
 async function startServer(
@@ -545,7 +637,8 @@ let pendingRetrySignal: RetrySignal | null = null;
 async function productionStartup(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<void> {
-  const win = createMainWindow();
+  // The data copy before this may have opened the window already.
+  const win = getMainWindow() ?? createMainWindow();
   loadSplashInto(win);
 
   const attemptStart = async (): Promise<void> => {
@@ -637,9 +730,25 @@ if (!ownsInstance) app.quit();
 
 app.whenReady().then(async () => {
   if (quitting || !ownsInstance) return;
+  // First of all: this decides which data root the rest of the start uses.
+  let dataRootCopy: DataRootCopyOutcome;
+  try {
+    dataRootCopy = await copyDataToNewRoot();
+  } catch (err) {
+    // Reading or clearing the record failed; start on the data root as it is.
+    console.warn("[data-root] could not process the pending copy:", err);
+    dataRootCopy = { kind: "none" };
+  }
+  if (quitting) return;
   const paths = ensureUserPaths();
   initDesktopI18n(paths.userSettingsJsonPath, app.getLocale());
   initPersistentLog(paths.logsDir, paths.logRotation, app.getVersion());
+  if (dataRootCopy.kind !== "none") {
+    writeLog(
+      dataRootCopy.kind === "failed" ? "error" : "info",
+      `data root copy: ${JSON.stringify(dataRootCopy)}`,
+    );
+  }
   // Before the sidecar or the window reads settings.json. The locale above
   // was still read from the old file, so this launch keeps its language.
   let archivedSettings: string | null = null;
@@ -689,6 +798,7 @@ app.whenReady().then(async () => {
     },
   });
   Menu.setApplicationMenu(buildAppMenu());
+  showDataRootCopyOutcome(dataRootCopy);
 
   try {
     if (isDev) {

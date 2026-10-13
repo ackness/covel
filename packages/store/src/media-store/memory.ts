@@ -1,9 +1,8 @@
 import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
 import {
-  claimedMediaIds,
   finalizeMediaCleanupResult,
+  planMediaCleanup,
 } from "./cleanup-result.js";
-import { cleanupCandidates } from "./cleanup-policy.js";
 import {
   bytesToReadableStream,
   filterAssetsByMetadata,
@@ -188,13 +187,22 @@ export function createMemoryMediaStore(): MediaStore {
 
     async cleanup(protectedIds, policy) {
       const inventory = await this.listAssets();
-      const { result, idsToDelete } = cleanupCandidates(
+      const { result, idsToDelete, expiredRefs } = planMediaCleanup(
         inventory,
-        claimedMediaIds(protectedIds, inventory, await this.listRefs()),
+        await this.listRefs(),
+        protectedIds,
         policy,
       );
       const deletedIds: string[] = [];
       if (!policy?.dryRun) {
+        const releasedRefs = expiredRefs.filter((ref) => {
+          // Release the row the plan saw, not one recorded since.
+          const key = `${ref.sessionId}\u0000${ref.mediaId}`;
+          if (refRows.get(key)?.createdAt !== ref.createdAt) return false;
+          refs.get(ref.sessionId)?.delete(ref.mediaId);
+          refRows.delete(key);
+          return true;
+        });
         for (const id of idsToDelete) {
           // Revalidate synchronously with deletion. MemoryMedia mutations do no
           // asynchronous work after entry, so ownership/ref creation cannot
@@ -206,7 +214,12 @@ export function createMemoryMediaStore(): MediaStore {
           await this.delete(id);
           deletedIds.push(id);
         }
-        return finalizeMediaCleanupResult(result, inventory, deletedIds);
+        return finalizeMediaCleanupResult(
+          result,
+          inventory,
+          deletedIds,
+          releasedRefs,
+        );
       }
       return result;
     },

@@ -1,6 +1,7 @@
 import { FRAMEWORK_TOOL_NAMES } from "@covel/shared";
 import path from "node:path";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
+import { validateUiSpecStructure } from "./ui-spec.js";
 
 /** Shared by discovery, author validation and installation; no code is imported. */
 export function validateRuntimeDeclarations(
@@ -110,8 +111,8 @@ export function validatePluginFiles(
     field: string,
     reference: string | undefined,
     json = false,
-  ): void => {
-    if (!reference || reference.startsWith("contract:")) return;
+  ): unknown => {
+    if (!reference || reference.startsWith("contract:")) return undefined;
     if (!source)
       throw new Error(
         `Static validation requires the source path for ${field}`,
@@ -128,7 +129,7 @@ export function validatePluginFiles(
       );
     try {
       const content = readFile(resolved);
-      if (json) JSON.parse(content);
+      return json ? (JSON.parse(content) as unknown) : undefined;
     } catch (error) {
       throw new Error(
         `${source}: ${field}: cannot read ${reference}: ${error instanceof Error ? error.message : String(error)}; include a valid file at this path`,
@@ -154,13 +155,19 @@ export function validatePluginFiles(
       true,
     );
   for (const [slot, paths] of Object.entries(plugin.contributes?.ui ?? {}))
-    for (const reference of paths ?? [])
-      file(
-        packageManifest.sourcePath,
-        `contributes.ui.${slot}`,
-        reference,
-        reference.endsWith(".json"),
-      );
+    for (const reference of paths ?? []) {
+      const field = `contributes.ui.${slot}`;
+      const json = reference.endsWith(".json");
+      const spec = file(packageManifest.sourcePath, field, reference, json);
+      if (!json) continue;
+      try {
+        validateUiSpecStructure(spec);
+      } catch (error) {
+        throw new Error(
+          `${packageManifest.sourcePath}: ${field}: ${reference}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   for (const parsed of manifests) {
     const runtime = parsed.manifest;
     const type = runtime.trigger?.type ?? "auto";
@@ -220,4 +227,21 @@ export function validatePluginFiles(
           );
       }
   }
+}
+
+/**
+ * A plugin package is ESM: its `package.json` says `"type": "module"`. Without
+ * it Node reads the package's `.js` files as CommonJS, which the host loads
+ * through another path: an `import` in them fails, and the development reload
+ * never picks up a change. Returns what is wrong, or undefined.
+ */
+export function packageModuleTypeProblem(packageJson: {
+  type?: unknown;
+}): string | undefined {
+  if (packageJson.type === "module") return undefined;
+  return `package.json must declare "type": "module" (found ${
+    packageJson.type === undefined
+      ? "no type"
+      : JSON.stringify(packageJson.type)
+  }); a plugin package is ESM`;
 }

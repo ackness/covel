@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import { ToolRegistry } from "@covel/tools";
@@ -9,6 +10,7 @@ import {
   createPluginRegistry,
   loadPluginDefinition,
   loadPluginSummary,
+  reloadGenerationUrl,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import {
@@ -843,6 +845,34 @@ describe("plugin generation reload", () => {
         }),
       ).rejects.toThrow("revoked");
     });
+  });
+
+  it("tracks a reloaded generation so that its relative imports inside the plugin directory reload too", async () => {
+    // Vitest evaluates fixture modules itself, so Node's resolve hook never
+    // runs here; packages/plugin-loader/tests/reload-generation.test.ts runs
+    // the real module graph. This asserts that reload opts its generation in.
+    const f = await fixture();
+    const root = await fs.realpath(f.root);
+    const versioned = (generation: string, target: string) => {
+      const parent = pathToFileURL(path.join(root, "entry.mjs"));
+      parent.searchParams.set("generation", generation);
+      return reloadGenerationUrl(
+        "./lib/shared.mjs",
+        parent.href,
+        pathToFileURL(target).href,
+      );
+    };
+    const inside = path.join(root, "lib", "shared.mjs");
+    // The generation of the first activation is never versioned.
+    expect(versioned("initial", inside)).toBeUndefined();
+    await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2));
+    const { generation } = await f.manager.reload(f.id, "session");
+    const expected = pathToFileURL(inside);
+    expected.searchParams.set("generation", generation);
+    expect(versioned(generation, inside)).toBe(expected.href);
+    expect(
+      versioned(generation, path.join(root, "..", "outside.mjs")),
+    ).toBeUndefined();
   });
 
   it("restores every registry after a staged publication fails", async () => {

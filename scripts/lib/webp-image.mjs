@@ -13,6 +13,27 @@ const run = promisify(execFile);
  */
 const CWEBP_ARGS = ["-quiet", "-q", "90", "-alpha_q", "100", "-m", "6"];
 
+const CWEBP_MISSING =
+  "cwebp is not installed; install libwebp (`brew install webp`, `apt install webp`)";
+
+/**
+ * Fail before any picture is requested when `cwebp` cannot run. A generator
+ * asks the provider for a picture first and encodes it second: without this
+ * check a missing encoder is found only after the picture is paid for, and
+ * the picture is lost.
+ *
+ * @param {string} [program] the encoder to probe; tests pass a missing one
+ */
+export async function assertWebpEncoder(program = "cwebp") {
+  try {
+    await run(program, ["-version"]);
+  } catch (error) {
+    if (error?.code === "ENOENT")
+      throw new Error(CWEBP_MISSING, { cause: error });
+    throw error;
+  }
+}
+
 /**
  * Encode a PNG as the WebP a world package ships. Needs the `cwebp` program
  * (libwebp) on PATH; this keeps an image codec out of the dependencies.
@@ -30,10 +51,7 @@ export async function encodeWebp(png) {
       await run("cwebp", [...CWEBP_ARGS, "-sharp_yuv", input, "-o", output]);
     } catch (error) {
       if (error?.code === "ENOENT")
-        throw new Error(
-          "cwebp is not installed; install libwebp (`brew install webp`, `apt install webp`)",
-          { cause: error },
-        );
+        throw new Error(CWEBP_MISSING, { cause: error });
       throw error;
     }
     return await readFile(output);

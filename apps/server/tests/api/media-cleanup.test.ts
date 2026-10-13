@@ -15,7 +15,7 @@
  * surface explicitly.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   type DataStore,
@@ -23,7 +23,10 @@ import {
   type SessionRecord,
 } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
-import { mediaRoutes } from "../../src/routes/api/media.js";
+import {
+  ABANDONED_IMPORT_REF_MAX_AGE_MS,
+  mediaRoutes,
+} from "../../src/routes/api/media.js";
 
 function makeSession(id: string, worldId = "world-1"): SessionRecord {
   const now = new Date().toISOString();
@@ -215,6 +218,99 @@ describe("POST /api/media/cleanup gate", () => {
     expect(body.result.deleted).toBe(1);
     expect(body.result.deletedIds).toEqual([ref.id]);
     expect(await mediaStore.exists(ref.id)).toBe(false);
+  });
+
+  it("releases import references older than the threshold and keeps younger ones", async () => {
+    process.env.COVEL_MEDIA_CLEANUP_ENABLED = "true";
+    const dataStore = createMemoryStore();
+    await dataStore.createSession(makeSession("sess-A"));
+    const mediaStore = createMemoryMediaStore();
+    const now = Date.now();
+    const putPinned = async (byte: number, holder: string, ageMs: number) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now - ageMs);
+      try {
+        return await mediaStore.put(
+          new Uint8Array([byte, byte]),
+          "image/png",
+          undefined,
+          { sessionId: `world-data-import:${holder}` },
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    const old = ABANDONED_IMPORT_REF_MAX_AGE_MS + 60_000;
+    const abandoned = await putPinned(1, "crashed", old);
+    // An import that committed its index and crashed before finalization.
+    const committed = await putPinned(2, "committed", old);
+    await dataStore.setPluginData({
+      id: "pd-hero",
+      sessionId: "sess-A",
+      pluginId: "portraits",
+      namespace: "media",
+      key: "hero",
+      value: { ref: committed },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const running = await putPinned(
+      3,
+      "running",
+      ABANDONED_IMPORT_REF_MAX_AGE_MS - 60_000,
+    );
+
+    const app = createTestApp(mediaStore, dataStore);
+    const run = async (dryRun: boolean) => {
+      const res = await app.request("/api/media/cleanup", {
+        method: "POST",
+        body: JSON.stringify({ dryRun, maxAgeMs: 0 }),
+        headers: {
+          "content-type": "application/json",
+          ...(dryRun ? {} : { "x-confirm-cleanup": "yes" }),
+        },
+      });
+      expect(res.status).toBe(200);
+      return (await res.json()) as {
+        policy: { expireRefs: { sessionIdPrefix: string; maxAgeMs: number } };
+        result: {
+          deletedIds: string[];
+          expiredRefs: { mediaId: string; sessionId: string }[];
+        };
+      };
+    };
+    const expired = [
+      { mediaId: abandoned.id, sessionId: "world-data-import:crashed" },
+      { mediaId: committed.id, sessionId: "world-data-import:committed" },
+    ];
+
+    const plan = await run(true);
+    expect(plan.policy.expireRefs).toEqual({
+      sessionIdPrefix: "world-data-import:",
+      maxAgeMs: ABANDONED_IMPORT_REF_MAX_AGE_MS,
+    });
+    expect(
+      plan.result.expiredRefs.map(({ mediaId, sessionId }) => ({
+        mediaId,
+        sessionId,
+      })),
+    ).toEqual(expect.arrayContaining(expired));
+    expect(plan.result.expiredRefs).toHaveLength(2);
+    expect(plan.result.deletedIds).toEqual([abandoned.id]);
+    expect(await mediaStore.listRefs()).toHaveLength(3);
+
+    const result = await run(false);
+    expect(result.result.expiredRefs).toHaveLength(2);
+    expect(result.result.deletedIds).toEqual([abandoned.id]);
+    expect(await mediaStore.exists(abandoned.id)).toBe(false);
+    expect(await mediaStore.exists(committed.id)).toBe(true);
+    expect(await mediaStore.exists(running.id)).toBe(true);
+    expect(await mediaStore.listRefs()).toEqual([
+      expect.objectContaining({
+        mediaId: running.id,
+        sessionId: "world-data-import:running",
+      }),
+    ]);
   });
 
   it("returns 400 limit_exceeded when scanLimit is below scanned row count", async () => {

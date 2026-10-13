@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { modelFacingJson } from "../src/model-facing.js";
+import { modelFacingJson, modelHiddenPaths } from "../src/model-facing.js";
 
 describe("modelFacingJson", () => {
   it("leaves out the session ID, UUID-valued IDs and times, at every depth", () => {
@@ -52,5 +52,34 @@ describe("modelFacingJson", () => {
     );
     expect(modelFacingJson(null)).toBeNull();
     expect(modelFacingJson([1, "a", null])).toEqual([1, "a", null]);
+  });
+});
+
+describe("modelHiddenPaths", () => {
+  it("names exactly the properties that modelFacingJson leaves out, with the reason", () => {
+    const uuid = "0b9f6c0e-3d1a-4a7e-9c55-1f2e3d4c5b6a";
+    const record = {
+      id: "npc-lin-yao",
+      date: "1943-06-01T08:00:00Z",
+      lookedAt: "the bronze door",
+      fields: { diedAt: "1943-06-01T08:00:00Z", mentorId: uuid },
+      log: [{ note: "kept" }, { timestamp: "2026-10-06T08:51:22Z" }],
+      allies: [{ id: uuid, name: "Mara" }],
+      sessionId: "any",
+    };
+    expect(modelHiddenPaths(record)).toEqual([
+      { path: "fields.diedAt", reason: "time" },
+      { path: "fields.mentorId", reason: "uuid" },
+      { path: "log[1].timestamp", reason: "time" },
+      { path: "allies[0].id", reason: "uuid" },
+    ]);
+    expect(modelFacingJson(record)).toEqual({
+      id: "npc-lin-yao",
+      date: "1943-06-01T08:00:00Z",
+      lookedAt: "the bronze door",
+      fields: {},
+      log: [{ note: "kept" }, {}],
+      allies: [{ name: "Mara" }],
+    });
   });
 });

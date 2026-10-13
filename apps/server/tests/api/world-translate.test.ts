@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
+import { inspectGeneratedWorldPackage, writeWorldPackage } from "@covel/create";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import type { DataStore, WorldRecord } from "@covel/store";
@@ -295,6 +296,60 @@ describe("POST /api/worlds/:id/translate", () => {
       code: "world_already_translated",
     });
     expect(llm.calls).toBe(calls);
+  });
+
+  it("leaves a generated package one that can still be revised", async () => {
+    await writeWorldPackage(userWorlds, {
+      id: "made-here",
+      manifest: {
+        schemaVersion: "1.0",
+        id: "made-here",
+        name: "Ash Harbor",
+        summary: "A port that burns every winter.",
+        version: "0.1.0",
+        defaultLocale: "en-US",
+        supportedLocales: ["en-US"],
+        pluginPolicy: { requested: [], recommended: [] },
+      },
+      locale: "en-US",
+      lore: "# Ash Harbor\n\nThe harbor burns every winter.\n",
+      packageContent: { characters: [], lorebook: [], rules: [] },
+      warnings: [],
+    });
+    const dir = path.join(userWorlds, "made-here");
+    await store.createWorld((await loadSingleWorld(dir, { source: "file" }))!);
+
+    const events = await readSse(
+      await translate("made-here", { locale: "ja-JP" }),
+    );
+
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+    // The language files and the changed manifest are the app's own work.
+    expect(await readFile(path.join(dir, "WORLD.ja-JP.md"), "utf8")).toContain(
+      "【",
+    );
+    expect(await inspectGeneratedWorldPackage(dir)).toEqual({
+      state: "pristine",
+    });
+  });
+
+  it("does not take a person's files for the app's own when it translates", async () => {
+    const dir = await writeWorld(userWorlds, "edited-here");
+    // A generated package that a person has since edited by hand.
+    await writeFile(
+      path.join(dir, ".covel-generated.json"),
+      JSON.stringify({ schemaVersion: 2, files: {} }),
+    );
+
+    const events = await readSse(
+      await translate("edited-here", { locale: "ja-JP" }),
+    );
+
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+    expect(await inspectGeneratedWorldPackage(dir)).toMatchObject({
+      state: "modified",
+      added: expect.arrayContaining(["WORLD.md", "world.yaml"]),
+    });
   });
 
   it("adds translated lore without reverting an edited default edition", async () => {

@@ -3,7 +3,12 @@ export {
   turnDigestSchema,
 } from "./schemas/execution-snapshots.js";
 export * from "./extension-points/index.js";
-export { modelFacingJson } from "@covel/plugin-handlers-utils";
+export {
+  modelFacingJson,
+  modelHiddenPaths,
+  type ModelHiddenPath,
+  type ModelHiddenReason,
+} from "@covel/plugin-handlers-utils";
 export {
   characterLabel,
   characterNameKey,

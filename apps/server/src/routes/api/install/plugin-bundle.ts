@@ -1,6 +1,7 @@
 import path from "node:path";
 import { parse } from "yaml";
 import {
+  packageModuleTypeProblem,
   parsePluginMd,
   validatePluginFiles,
   compileInlineRuntime,
@@ -175,7 +176,7 @@ export function validatePluginBundle(
       entries
         .find((entry) => entry.relativePath === "package.json")!
         .content.toString("utf8"),
-    ) as { version?: string };
+    ) as { version?: string; type?: unknown };
     if (
       root.plugin.version &&
       packaged.version &&
@@ -184,6 +185,8 @@ export function validatePluginBundle(
       throw new Error(
         "PLUGIN.md and package.json must declare the same version",
       );
+    const moduleProblem = packageModuleTypeProblem(packaged);
+    if (moduleProblem) throw new Error(moduleProblem);
     // Localizations may change presentation only; identity and code declarations
     // are reconciled against the canonical document before installation.
     for (const entry of entries) {

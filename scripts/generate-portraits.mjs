@@ -33,7 +33,7 @@ import {
   reportResults,
 } from "./lib/image-gen-common.mjs";
 import { assertPortraitPng } from "./lib/png-image-validation.mjs";
-import { encodeWebp } from "./lib/webp-image.mjs";
+import { assertWebpEncoder, encodeWebp } from "./lib/webp-image.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const DEFAULT_SLOT = "gpt-image-2";
@@ -70,7 +70,7 @@ function parseArgs(argv) {
 // flat pure-green backdrop instead. The picture is then saved as a PNG beside
 // the target; strip the backdrop locally and encode the result, e.g.
 //   magick sprite.png -alpha set -fuzz 12% -fill none \
-//     -draw 'color 0,0 floodfill' ... (see docs/guide/world-portraits.md)
+//     -draw 'color 0,0 floodfill' ... (see docs/worlds/portraits.md)
 //   node scripts/encode-world-webp.mjs sprite.png
 const CHROMA_PROMPT =
   ", standing against a solid uniform flat pure green (#00FF00) chroma-key backdrop filling the entire background, no background scenery, no shadow on the backdrop";
@@ -170,6 +170,10 @@ async function main() {
       todo.push(c);
     }
   }
+
+  // Every request below is paid for, so the encoder is checked first.
+  if (!args.chroma && todo.some((c) => /\.webp$/i.test(c.filename)))
+    await assertWebpEncoder();
 
   console.log(
     `world=${args.world} slot=${args.slot} (provider=${slot.provider}, wire=${wireId}) model=${model} size=${size} quality=${quality} concurrency=${args.concurrency}`,

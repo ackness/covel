@@ -34,6 +34,7 @@ import {
   loadPluginEntryDefinition,
   pluginDeclarations,
   loadPluginDefinition,
+  trackReloadGeneration,
   type PluginEntryDefinition,
   type ParsedRuntimeMd,
   type PluginDiscoveryResult,
@@ -587,6 +588,9 @@ export async function createBootstrapPluginEntries(
         }
         return { pluginId, generation };
       }
+      // The modules that entry, handlers and guards import relatively reload
+      // with them; without this they would keep the code of the first import.
+      trackReloadGeneration(generation, next.discovery.rootPath);
       const batch = await prepareEntry(
         pluginId,
         next.entryDefinition,

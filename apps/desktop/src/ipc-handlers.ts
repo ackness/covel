@@ -1,7 +1,18 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { loadKeysEnv, patchKeysEnv } from "./env-files.js";
 import { writeLog } from "./logging.js";
-import { writeDataRoot, type ensureUserPaths } from "./paths.js";
+import {
+  configuredDataRoot,
+  dataRootCopyRecordPath,
+  writeDataRoot,
+  type ensureUserPaths,
+} from "./paths.js";
+import {
+  clearPendingDataRootCopy,
+  planDataRootSwitch,
+  sameDataRoot,
+  writePendingDataRootCopy,
+} from "./data-root-copy.js";
 import {
   buildAppMenu,
   getMainWindow,
@@ -212,19 +223,80 @@ export function registerDesktopIpcHandlers({
     if (colors && win) setTitleBarColors(win, colors);
   });
 
-  // Pick a directory for the next data_root. Does NOT move data — that's
-  // deliberate per the "drop-old-data" UX contract; app restart starts fresh
-  // in the new location.
+  // Pick a directory for the next data_root. Nothing is copied here: the
+  // sidecar has the database open. When the player asks for a copy, the
+  // choice is recorded and the next start copies before it spawns the sidecar
+  // (`applyPendingDataRootCopy`); `data_root` changes only after that copy.
+  // `mode` tells the settings page what will happen at the restart.
   ipcMain.handle("covel:pick-data-dir", async (event) => {
     if (!isTrustedSender(event, "covel:pick-data-dir")) return { path: null };
+    const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog({
       title: t("dialog.dataDir.title"),
       properties: ["openDirectory", "createDirectory"],
       defaultPath: paths.dataRoot,
     });
-    if (result.canceled || !result.filePaths[0]) return { path: null };
-    writeDataRoot(result.filePaths[0]);
-    return { path: result.filePaths[0] };
+    const target = result.filePaths[0];
+    if (result.canceled || !target) return { path: null };
+
+    const from = paths.dataRoot;
+    const ask = async (
+      key: "copy" | "existing" | "noCopy",
+      buttons: readonly string[],
+    ): Promise<number> => {
+      const options: Electron.MessageBoxOptions = {
+        type: "question",
+        message: t(`dialog.dataDir.${key}.message`),
+        detail: t(`dialog.dataDir.${key}.detail`, { from, to: target }),
+        buttons: [...buttons, t("dialog.cancel")],
+        defaultId: 0,
+        cancelId: buttons.length,
+        noLink: true,
+      };
+      const answer = win
+        ? await dialog.showMessageBox(win, options)
+        : await dialog.showMessageBox(options);
+      return answer.response;
+    };
+
+    // A development shell starts no sidecar and may share this home with an
+    // installed app that has the database open, so it never copies.
+    const found = planDataRootSwitch(from, target);
+    const plan = found === "copy" && isDev ? "nested" : found;
+    const recordFile = dataRootCopyRecordPath();
+    if (plan === "same") {
+      // The root in use was picked again: drop a switch not yet applied.
+      clearPendingDataRootCopy(recordFile);
+      if (!sameDataRoot(configuredDataRoot(), from)) writeDataRoot(from);
+      return { path: target, mode: "unchanged" };
+    }
+    let mode: "copy" | "empty" | "existing" = "empty";
+    if (plan === "copy") {
+      const choice = await ask("copy", [
+        t("dialog.dataDir.copy.copy"),
+        t("dialog.dataDir.startEmpty"),
+      ]);
+      if (choice > 1) return { path: null };
+      if (choice === 0) mode = "copy";
+    } else if (plan === "destination-has-data") {
+      if ((await ask("existing", [t("dialog.dataDir.existing.use")])) !== 0)
+        return { path: null };
+      mode = "existing";
+    } else if (plan === "nested") {
+      if ((await ask("noCopy", [t("dialog.dataDir.startEmpty")])) !== 0)
+        return { path: null };
+    }
+
+    if (mode === "copy") {
+      // The copy starts from the root in use. Undo an earlier switch that no
+      // restart has applied yet, or the next start would discard the record.
+      if (!sameDataRoot(configuredDataRoot(), from)) writeDataRoot(from);
+      writePendingDataRootCopy(recordFile, { from, to: target });
+    } else {
+      clearPendingDataRootCopy(recordFile);
+      writeDataRoot(target);
+    }
+    return { path: target, mode };
   });
 
   // API keys — plain `KEY=VALUE` lines at ~/.covel/keys.env, mode 600. No

@@ -18,7 +18,9 @@ import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
 import {
   createWorld,
+  inspectGeneratedWorldPackage,
   writeWorldPackage,
+  WorldPackageModifiedError,
   WorldPackageRecoveryError,
   type GeneratedWorldPackageContent,
 } from "@covel/create";
@@ -119,7 +121,10 @@ function authoringUsage() {
 class WorldAuthoringConflictError extends Error {}
 
 function logAuthoringError(route: string, error: unknown): void {
-  if (error instanceof WorldAuthoringConflictError)
+  if (
+    error instanceof WorldAuthoringConflictError ||
+    error instanceof WorldPackageModifiedError
+  )
     console.warn(`[ai/${route}] conflict:`, error.message);
   else console.error(`[ai/${route}] unexpected error:`, error);
 }
@@ -127,6 +132,7 @@ function logAuthoringError(route: string, error: unknown): void {
 function authoringErrorMessage(error: unknown): string {
   if (
     error instanceof WorldAuthoringConflictError ||
+    error instanceof WorldPackageModifiedError ||
     error instanceof WorldPackageRecoveryError ||
     readRuntimeEnv().nodeEnv !== "production"
   )
@@ -532,7 +538,9 @@ const REVISION_MAX_LENGTH = 2000;
  * Where a world that the app may rewrite lives. Only a world the generator
  * made is rewritten (`metadata.generated`; for a package on disk that is the
  * marker file in it): a package made by hand or installed holds media and
- * sources that a rewrite would lose.
+ * sources that a rewrite would lose. A generated package that a person has
+ * since put files into or edited is refused for the same reason, by the
+ * marker's file list.
  */
 function revisableTarget(record: WorldRecord): SaveTarget | null {
   if (record.metadata?.generated !== true) return null;
@@ -649,6 +657,31 @@ aiRoutes.post(
     const env = readRuntimeEnv();
     const worldsDir = resolveUserResourceDirs(env).worlds;
     const worldDir = path.join(worldsDir, existing.id);
+    if (saveTarget === "server-file") {
+      // Refused before the model runs. The writer checks again at the swap.
+      const state = await inspectGeneratedWorldPackage(worldDir);
+      if (state.state === "unmarked") {
+        return c.json(
+          errorBody(
+            "Only a world created in the app can be revised; edit the files of a world package instead",
+            { code: "world_not_revisable" },
+          ),
+          409,
+        );
+      }
+      if (state.state === "modified") {
+        return c.json(
+          errorBody(
+            new WorldPackageModifiedError(state.added, state.changed).message,
+            {
+              code: "world_package_modified",
+              details: { added: state.added, changed: state.changed },
+            },
+          ),
+          409,
+        );
+      }
+    }
     const packageIdentity =
       saveTarget === "server-file" ? await stat(worldDir) : undefined;
     const dataContracts = await worldGenerationDataContracts(

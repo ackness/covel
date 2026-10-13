@@ -69,6 +69,19 @@ export interface MediaLifecyclePolicy {
    * asset is kept whatever the other fields say.
    */
   readonly onlyIds?: readonly string[];
+  /**
+   * Also release references that their holder left behind. A reference
+   * expires when its session ID starts with `sessionIdPrefix` and it was
+   * created no later than `now - maxAgeMs`. The prefix must contain a colon,
+   * which no session ID has, so a session's own reference never matches.
+   * Absent: no reference expires.
+   */
+  readonly expireRefs?: MediaRefExpiryPolicy;
+}
+
+export interface MediaRefExpiryPolicy {
+  readonly sessionIdPrefix: string;
+  readonly maxAgeMs: number;
 }
 
 export interface MediaCleanupResult {
@@ -81,6 +94,11 @@ export interface MediaCleanupResult {
   readonly bytesRetained: number;
   readonly protectedIds: readonly string[];
   readonly deletedIds: readonly string[];
+  /**
+   * References released under `expireRefs`: the ones a dry run would
+   * release, or the ones a real run did. Empty without that policy field.
+   */
+  readonly expiredRefs: readonly MediaRefRecord[];
 }
 
 export interface MediaStore {

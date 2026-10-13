@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
-import { validatePluginFiles } from "../src/static-validation.js";
+import {
+  packageModuleTypeProblem,
+  validatePluginFiles,
+} from "../src/static-validation.js";
 /** Statically validate current-format packages; never execute plugin entries. */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -75,16 +78,21 @@ export async function runValidateManifest(
       // The installer shows the version in package.json and the host uses the
       // one in PLUGIN.md. A package that states both must state one version.
       const declared = definition.packageManifest.plugin.version;
-      const packaged = await fs
+      const packageJson = await fs
         .readFile(path.join(rootPath, "package.json"), "utf-8")
         .then(
-          (content) => (JSON.parse(content) as { version?: unknown }).version,
+          (content) =>
+            JSON.parse(content) as { version?: unknown; type?: unknown },
           () => undefined,
         );
+      const packaged = packageJson?.version;
       if (declared && typeof packaged === "string" && declared !== packaged)
         throw new Error(
           `${rootPath}: PLUGIN.md version ${declared} differs from package.json version ${packaged}`,
         );
+      const moduleProblem =
+        packageJson && packageModuleTypeProblem(packageJson);
+      if (moduleProblem) throw new Error(`${rootPath}: ${moduleProblem}`);
       const labelProblems = await validatePluginLabels(rootPath);
       if (labelProblems.length > 0)
         throw new Error(

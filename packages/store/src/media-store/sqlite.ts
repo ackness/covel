@@ -29,10 +29,9 @@ import { pathToFileURL } from "node:url";
 import { createTables } from "../sqlite/sqlite-store-mappers.js";
 import type { SqliteMediaStoreOptions } from "./types.js";
 import {
-  claimedMediaIds,
   finalizeMediaCleanupResult,
+  planMediaCleanup,
 } from "./cleanup-result.js";
-import { cleanupCandidates } from "./cleanup-policy.js";
 import {
   filterAssetsByMetadata,
   mediaPath,
@@ -151,6 +150,13 @@ function initializeSqliteMediaStore(
     DELETE FROM media_refs
     WHERE media_id = @mediaId
       AND session_id = @sessionId
+  `);
+  // Matches the creation time too: only the row a cleanup plan saw is released.
+  const removeExpiredRef = sqlite.prepare(`
+    DELETE FROM media_refs
+    WHERE media_id = @mediaId
+      AND session_id = @sessionId
+      AND created_at = @createdAt
   `);
   const removeSessionRefs = sqlite.prepare(
     "DELETE FROM media_refs WHERE session_id = ?",
@@ -424,12 +430,21 @@ function initializeSqliteMediaStore(
           "SQLite media cleanup must run outside an existing SQL transaction",
         );
       const inventory = await this.listAssets();
-      const { result, idsToDelete } = cleanupCandidates(
+      const { result, idsToDelete, expiredRefs } = planMediaCleanup(
         inventory,
-        claimedMediaIds(protectedIds, inventory, await this.listRefs()),
+        await this.listRefs(),
+        protectedIds,
         policy,
       );
       if (!policy?.dryRun) {
+        const releasedRefs = expiredRefs.filter(
+          (ref) =>
+            removeExpiredRef.run({
+              mediaId: ref.mediaId,
+              sessionId: ref.sessionId,
+              createdAt: ref.createdAt,
+            }).changes > 0,
+        );
         const deletedIds: string[] = [];
         for (const id of idsToDelete) {
           // BEGIN IMMEDIATE excludes another process's addRef/ownership write
@@ -438,7 +453,12 @@ function initializeSqliteMediaStore(
           if (path === null) continue;
           deletedIds.push(id);
         }
-        return finalizeMediaCleanupResult(result, inventory, deletedIds);
+        return finalizeMediaCleanupResult(
+          result,
+          inventory,
+          deletedIds,
+          releasedRefs,
+        );
       }
       return result;
     },

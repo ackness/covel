@@ -15,7 +15,7 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
-import { GENERATED_WORLD_MARKER } from "@covel/create";
+import { readGeneratedWorldMarker } from "@covel/create";
 import { worldRecordFromManifest } from "./world-data/world-record.js";
 import { readReceipt } from "./routes/api/install/package-files.js";
 import type { SessionLock } from "./lib/session-lock.js";
@@ -279,8 +279,9 @@ export async function loadSingleWorld(
         : {}),
       source: options?.source ?? (packageReceipt ? "generated-file" : "file"),
       ...(options?.storage ? { storage: options.storage } : {}),
-      // Written by the world generator: the app may rewrite this package.
-      ...((await fileExists(path.join(worldDir, GENERATED_WORLD_MARKER)))
+      // Written by the world generator: the app may rewrite this package
+      // while it holds only the files the marker lists.
+      ...((await readGeneratedWorldMarker(worldDir))
         ? { generated: true }
         : {}),
       dimensions:

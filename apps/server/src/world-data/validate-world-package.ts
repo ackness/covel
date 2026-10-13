@@ -36,6 +36,10 @@ import {
 } from "./conventions.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
+  checkWorldRecords,
+  type ReferencedAttribute,
+} from "./record-checks.js";
+import {
   findLocaleOverlays,
   findMisnamedLocaleFiles,
   misnamedLocaleMessage,
@@ -71,6 +75,8 @@ export interface WorldPackageDiagnostic {
     | "locale-script"
     | "edition-incomplete"
     | "data-file-unused"
+    | "attribute-reference"
+    | "model-hidden-field"
     | "inline-locale-map"
     | "prompt-size"
     | "theme-music"
@@ -116,6 +122,9 @@ interface WorldManifestView {
   readonly dimensionSources?: Readonly<Record<string, string>>;
   readonly themeMusic?: string;
   readonly cover?: string;
+  readonly characterSchema?: {
+    readonly attributes: readonly ReferencedAttribute[];
+  };
   readonly pluginPolicy?: {
     readonly presetId?: string;
     readonly requested?: readonly string[];
@@ -920,6 +929,14 @@ async function checkWorldData(
 
   diagnostics.push(
     ...(await checkLocaleFiles(worldDir, manifest, descriptor.sources)),
+  );
+  diagnostics.push(
+    ...(await checkWorldRecords({
+      worldDir,
+      sources: descriptor.sources,
+      catalogue,
+      attributes: manifest.characterSchema?.attributes,
+    })),
   );
   return diagnostics;
 }

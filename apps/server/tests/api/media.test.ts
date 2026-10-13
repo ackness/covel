@@ -197,6 +197,7 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
         bytesRetained: totalBytes - bytesDeleted,
         protectedIds: [...protectedIds].sort(),
         deletedIds: idsToDelete,
+        expiredRefs: [],
       };
     },
     async openReadStream(ref) {
