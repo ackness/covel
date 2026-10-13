@@ -70,7 +70,7 @@ contributes:
         hint: >-
           Do not write this file by hand. It maps characters to portrait files
           by content hash. Generate the portraits first, then generate this
-          file; see docs/guide/world-portraits.md.
+          file; see docs/worlds/portraits.md.
         source:
           kind: json
           path: media/presence.json

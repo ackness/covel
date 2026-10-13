@@ -3,7 +3,7 @@ import type { Copy, Item } from "../copy.js";
 import { asset, repoFile } from "../links.js";
 import { container, SectionHeading } from "./ui.js";
 
-// The zero-code example from docs/guide/plugin-authoring-zero-code.md, cut to
+// The zero-code example from docs/plugins/prompt-only.md, cut to
 // the lines that show what a plugin declares.
 const MANIFEST: readonly (readonly [string, string?])[] = [
   ["---", "muted"],

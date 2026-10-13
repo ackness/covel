@@ -60,6 +60,8 @@ export type PluginId = (typeof PLUGIN_IDS)[number];
 
 const en = {
   meta: {
+    /** Where this language's edition starts under the documentation site. */
+    docsPath: "en/",
     title: "Covel · Everything is pluggable, every world is yours",
     description:
       "Covel is a plugin-driven, open-source interactive framework for multi-agent storytelling: stage, TRPG and story modes, multilingual, with every plugin and world customisable.",
@@ -156,8 +158,8 @@ const en = {
     },
     worldAlt: "The world-building agent in Covel",
     links: [
-      { label: "Plugin guide", href: "docs/guide/plugin-authoring.md" },
-      { label: "Packaging worlds", href: "docs/guide/collections.md" },
+      { label: "Plugin guide", href: "docs/plugins/essentials.md" },
+      { label: "Packaging worlds", href: "docs/ship/collections.md" },
     ],
   },
   rack: {
@@ -295,6 +297,7 @@ export type Copy = typeof en;
 
 const zh: Copy = {
   meta: {
+    docsPath: "",
     title: "Covel · 一切皆可插拔，每个世界都属于你",
     description:
       "Covel 是插件驱动的开源交互框架，专为多智能体叙事与演练打造：舞台、跑团与故事模式，全链路多语言，所有插件与世界皆可自定义。",
@@ -391,8 +394,8 @@ const zh: Copy = {
     },
     worldAlt: "Covel 的世界构筑 Agent",
     links: [
-      { label: "插件开发指南", href: "docs/guide/plugin-authoring.md" },
-      { label: "世界打包指南", href: "docs/guide/collections.md" },
+      { label: "插件开发指南", href: "docs/plugins/essentials.md" },
+      { label: "世界打包指南", href: "docs/ship/collections.md" },
     ],
   },
   rack: {

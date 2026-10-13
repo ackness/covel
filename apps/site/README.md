@@ -15,6 +15,9 @@ pnpm --filter @covel/site test
   `https://ackness.github.io/covel/` (see `docs/CONTRIBUTING.en.md`). Vite's
   `base` comes from `SITE_BASE`, so refer to a file in `public/` through
   `asset()` from `src/links.ts`, never as `/name`.
+- The "Docs" links open the documentation site (`apps/docs`), which the
+  workflow publishes under `docs/` of this site. In development they point at
+  its dev server on port 5175 (`DOCS_URL` in `src/links.ts`).
 - All text is in `src/copy.ts`, once in English and once in Chinese. The
   Chinese table has the English table's type, so a missing line fails `tsc`.
   The page picks `?lang=`, then the visitor's earlier choice, then the

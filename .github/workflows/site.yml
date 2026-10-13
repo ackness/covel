@@ -1,12 +1,16 @@
 name: Site
 
-# Builds the showcase website (apps/site) and publishes it on GitHub Pages.
+# Builds the showcase website (apps/site) with the documentation site
+# (apps/docs, pages in docs) under its `docs/` path, and publishes both on
+# GitHub Pages.
 # A pull request only builds it; a push to main, or a manual run, also deploys.
 # Pages must use "GitHub Actions" as its source (Settings > Pages).
 on:
   pull_request:
     paths:
       - "apps/site/**"
+      - "apps/docs/**"
+      - "docs/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/site.yml"
   push:
@@ -14,6 +18,8 @@ on:
       - main
     paths:
       - "apps/site/**"
+      - "apps/docs/**"
+      - "docs/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/site.yml"
   workflow_dispatch:
@@ -52,7 +58,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The path Pages serves the site under: `/covel/` on
+      # Both builds read SITE_BASE, the path Pages serves the site under: `/covel/` on
       # ackness.github.io, `/` once a custom domain is set. A pull request
       # cannot read the Pages settings, so it builds for `/covel/`.
       - name: Configure Pages
@@ -63,7 +69,10 @@ jobs:
       - name: Build
         env:
           SITE_BASE: ${{ github.event_name == 'pull_request' && '/covel/' || format('{0}/', steps.pages.outputs.base_path) }}
-        run: pnpm --filter @covel/site build
+        run: |
+          pnpm --filter @covel/site build
+          pnpm --filter @covel/docs build
+          cp -R apps/docs/dist apps/site/dist/docs
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

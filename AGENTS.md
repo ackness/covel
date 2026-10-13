@@ -17,24 +17,29 @@ as Web or Electron desktop (`pnpm build:electron`).
 
 ## Documentation
 
-`docs/` is the source of truth; this file only points at it. Consult the matching
-page before any non-trivial change. When a page disagrees with code or tests, the
-code is the current fact — fix the page in the same change. `docs/README.md` has a
-Search Map from common questions to code paths, and `docs/glossary.md` arbitrates
-terminology.
+`docs/` is the source of truth; this file only points at it. It is the
+reader-facing documentation, built into the documentation site by `apps/docs`,
+and has its own `AGENTS.md` with the writing rules (short, plain prose; verified
+commands; one page per contract). Consult the matching page before any
+non-trivial change. When a page disagrees with code or tests, the code is the
+current fact — fix the page in the same change. The Chinese pages are the
+source and `docs/en/` is their English translation, page for page.
+`docs/README.md` lists every
+page, `docs/README.md` has a Search Map from common questions to code paths, and
+`docs/reference/glossary.md` arbitrates terminology.
 
-Architecture (`docs/architecture/`) — why, and how modules connect:
+Reader chapters (`docs/`) — task walkthroughs, in the order a reader meets the product:
 
-- Turn pipeline, background jobs, end-to-end data flow: `flow.md`
-- Kernel vs plugin rulings: `design-principles.md`
-- Package responsibilities and host composition: `packages.md`
-- Storage profiles and contracts: `storage.md`
-- Security boundaries (SSRF/DNS pinning, key binding, hosted auth): `security.md`
-- Deliberate limits and their upgrade triggers: `technical-debt.md`
+- `start/` — install, connect a model, first session, install packages, data and upgrade, run from source
+- `builtin/` — what ships with Covel: gameplay packs, the bundled plugins by theme, the app's own features
+- `worlds/` — what a world package is, `first-world.md`, world art (`art-direction.md`, `portraits.md`, `scenes.md`)
+- `plugins/` — `first-plugin.md`, `prompt-only.md`, `local-code.md`, `advanced.md`, `ui.md`, `essentials.md` (the rules every author needs), `prompt-style.md` (contract zone, voice zone, vocabulary), `testing.md`
+- `ship/` — `test.md`, `package.md`, `real-model.md` (real-LLM harness), `publish.md`, `collections.md`
+- `recipes/` — `starting-content.md`, `point-buy.md`, `themes.md`
 
 Reference (`docs/reference/`) — authoritative contracts:
 
-- Plugin manifest, runtime fields, session plugin selection: `plugins.md`
+- Plugin manifest, runtime fields, session plugin selection: `plugins.md`; generated field tables: `schema/`
 - Extension points and plugin-to-plugin communication: `extension-points.md`, `plugin-extensions.md`
 - Hook events, payloads, results and the handler context: `hooks.md`
 - Tools and approval policy: `tools.md`
@@ -45,24 +50,24 @@ Reference (`docs/reference/`) — authoritative contracts:
 - Model slots, evaluation models, image generation, media store: `slots.md`, `evaluation.md`, `image-generation.md`, `media-store.md`
 - Right-panel tabs and json-render UI: `ui-panels.md`, `ui-components.md`
 - i18n, settings store, theme packages: `i18n.md`, `settings-store.md`, `theme-packages.md`
+- Environment variables: `env-registry.md`; desktop config: `desktop-config.md`; terms: `glossary.md`
 
-Guides (`docs/guide/`) — task walkthroughs:
+Internals (`docs/internals/`) — why, how modules connect, and how to work on the framework:
 
-- Plugin authoring: `plugin-authoring.md` (start here; `-zero-code`, `-agent`, `-advanced` variants), `plugin-ui-runtime-guidelines.md`, `plugin-testing.md`
-- Shipping worlds with their plugins: `collections.md`
-- World art: `world-art-direction.md`, `world-portraits.md`, `world-scenes.md`
-- Testing: `e2e-testing.md` (Playwright and the pre-release playthrough), `e2e-plugin-verify.md` (real-LLM harness)
-- How to write a prompt body (contract zone, voice zone, vocabulary): `prompt-style.md`
-- Environment variables: `env-registry.md`
+- Turn pipeline, background jobs, end-to-end data flow: `flow.md`
+- Kernel vs plugin rulings: `design-principles.md`
+- Package responsibilities and host composition: `packages.md`
+- Storage profiles and contracts: `storage.md`
+- Security boundaries (SSRF/DNS pinning, key binding, hosted auth): `security.md`
+- Deliberate limits and their upgrade triggers: `technical-debt.md`
 - Less common root scripts, git hooks and CI scope: `commands.md`
-- Desktop config and packaging: `desktop-config.md`, `desktop-packaging.md`
-- Themes: `themes.md`; agent skills: `skills.md`
+- Playwright and the pre-release playthrough: `e2e-testing.md`; desktop packaging and release: `desktop-packaging.md`
+- Agent skills: `skills.md`
 
 Also: `README.md` / `docs/README.md` (intro, quick start), `docs/CONTRIBUTING.md`
 (contributing, CI, release), `docs/CHANGELOG.md` (pending entries are the files in
-`docs/changelog.d/`; `pnpm changelog:preview` prints them), `docs/DOCS_STRATEGY.md`
-(information architecture), and `docs/v2/` (the reading-path rewrite in progress;
-it has its own `AGENTS.md`).
+`docs/changelog.d/`; `pnpm changelog:preview` prints them) and
+`docs/DOCS_STRATEGY.md` (information architecture).
 
 Keep durable user/developer documentation (guides, contracts, architecture) in
 `docs/`. Put task plans, audits, implementation logs, temporary analysis, and
@@ -71,10 +76,11 @@ handoff notes under the gitignored `devs/docs/`. Do not create top-level `audits
 logs, dumps) go under the gitignored `debugs/`, never the repo root.
 
 `docs/` holds no plans: once a plan is implemented, move its stable conclusions
-into the matching page and delete the plan. A new page must be reachable from
-`docs/README.md` or its directory's `README.md`, and a renamed heading must keep
-its inbound `#anchor` links working. `docs/architecture/technical-debt.md` mirrors
-the `ponytail:` markers in source — update it when adding or removing one.
+into the matching page and delete the plan. A new page must be in the `sidebar`
+of `apps/docs/.vitepress/config.ts` and in `docs/README.md`, and a renamed
+heading must keep its inbound `#anchor` links working (the site makes anchors the
+way GitHub does). `docs/internals/technical-debt.md` mirrors the `ponytail:`
+markers in source — update it when adding or removing one.
 
 ## Commands
 
@@ -111,7 +117,7 @@ pnpm check:push       # on the committed HEAD, in a clean checkout: install, pnp
 pnpm changelog:preview  # print [Unreleased] as the next release will have it, from docs/changelog.d/
 ```
 
-Less common commands are in [`docs/guide/commands.md`](docs/guide/commands.md):
+Less common commands are in [`docs/internals/commands.md`](./docs/internals/commands.md):
 Electron and Docker, coverage, real-LLM verify and record/replay (`e2e:verify`,
 `e2e:replay`, `llm:replay`, `prompt:prefix`), `test:runtime`, plugin ZIP lifecycle
 tests, `describe:authoring`, collections, `i18n`, the individual `check:*` commands,
@@ -133,11 +139,11 @@ Git hooks (pre-commit formats and lints the changed files; the opt-in pre-push
 from `pnpm hooks:install` runs the static gate), which suites `pnpm check:push`
 runs, and the short path for documentation-only changes (`pnpm check` +
 `pnpm test:docs`; a test that reads documentation must be named in the root
-`test:docs` script) are in `docs/guide/commands.md#git-hooks-and-ci-scope`.
+`test:docs` script) are in `docs/internals/commands.md#git-hooks-and-ci-scope`.
 
 Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`;
 keep `tailwind-lint` read-only, because `--fix` can corrupt TypeScript identifiers
-(`docs/guide/commands.md#tailwind-diagnostics`).
+(`docs/internals/commands.md#tailwind-diagnostics`).
 
 ## Config Files
 
@@ -149,7 +155,7 @@ Dev-time files, copied from `*.example` — never commit them:
 - `.env.llm` — provider API keys. The dev server loads `.env` + `.env.llm` from the repo root.
 
 Every variable is declared in `packages/shared/src/env/registry.ts` and documented
-in `docs/guide/env-registry.md`.
+in `docs/reference/env-registry.md`.
 
 Desktop files live under `<covelHome>/` (typically `~/.covel/`): `config.toml`
 (paths, logs, proxy), `llm.toml` (hot-reloaded from Settings), `keys.env` (mode
@@ -169,10 +175,12 @@ bundled `worlds/` and `plugins/`.
 - `apps/web` (React/Vite client; `/` opens the world list), `apps/server` (Hono
   API; composes every feature package), `apps/desktop` (Electron shell),
   `apps/site` (the static showcase website; no workspace dependencies, never
-  bundled into Web or desktop).
+  bundled into Web or desktop), `apps/docs` (the VitePress documentation site;
+  its pages are `docs/`, and it is published under `docs/` of the showcase
+  site).
   The desktop shell validates persisted window geometry with its direct Zod dependency.
 - `packages/` — framework libraries; responsibilities and consumers are in
-  `docs/architecture/packages.md`:
+  `docs/internals/packages.md`. In brief:
   - `plugin-handlers-utils` — the public plugin-author SDK (`PluginAPI`, handler,
     proposal, and tool-result contracts; `/dimensions` serves dimension
     providers and `/prompts` loads plugin-owned templates in Node)
@@ -236,9 +244,10 @@ consumers avoid browser/Electron code. Exact edges live in each `package.json`;
 
 ## Coding Style
 
-Follow Prettier (two spaces, double quotes, semicolons). `camelCase` values and
-functions, `PascalCase` types and React components, kebab-case module names. Avoid
-bare `any`; validate external input with Zod. 400 and 800 lines are file-size
+Formatting is Prettier's defaults (two spaces, double quotes, semicolons); the
+pre-commit hook formats the changed files and `pnpm format` formats everything.
+`camelCase` values and functions, `PascalCase` types and React components,
+kebab-case module names. Avoid bare `any`; validate external input with Zod. 400 and 800 lines are file-size
 review guidelines, not hard limits — split a file only when its responsibilities or
 maintenance cost justify it.
 
@@ -252,7 +261,7 @@ the one above it shows that the index is in range.
 
 First-class execution primitives are **Runtime, Tool, Hook, Context, Proposal**; a
 plugin package is only the distribution unit. Full walkthrough:
-`docs/architecture/flow.md`.
+`docs/internals/flow.md`.
 
 ```
 Input/Event → settle barrier → freeze registry generation → Trigger Router
@@ -469,7 +478,8 @@ sessions. Rules: `docs/reference/i18n.md`.
 A change to framework-visible surface area must update the matching doc in the same
 PR; a missing sync means an incomplete PR.
 
-- Add/modify/remove a bundled plugin; change `PLUGIN.md` / `RUNTIME.md` fields → `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md`
+- Add/modify/remove a bundled plugin, its player settings or its panels → `docs/builtin/` (the page of its theme and the tables of `index.md`)
+- Add/modify/remove a bundled plugin; change `PLUGIN.md` / `RUNTIME.md` fields → `docs/reference/plugins.md` + the guides under `docs/plugins/`
 - Add/change an extension point, service contract, or plugin API method → `docs/reference/extension-points.md` + `docs/reference/plugin-extensions.md`
 - Add/change a hook event, its payload, what a handler may return, or the hook context → `docs/reference/hooks.md`
 - Add/modify/remove a tool; approval/source gate → `docs/reference/tools.md`
@@ -480,17 +490,19 @@ PR; a missing sync means an incomplete PR.
 - Add/change `contributes.data` or a data contract → `docs/reference/plugins.md` + `docs/reference/world-data.md`
 - Add/change world package `worldData`, import/sync rules → `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`
 - Change the World Model (characters, dimensions, lorebook) → `docs/reference/world-model.md`
-- Change plugin/world install, update, or collections → `docs/reference/plugin-installation.md` / `world-installation.md` + `docs/guide/collections.md`
+- Change plugin/world install, update, or collections → `docs/reference/plugin-installation.md` / `world-installation.md` + `docs/ship/collections.md`
 - Add/change an RPC action / framework default → `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`
 - Add/change approval flow / trust level → `docs/reference/api.md` + `docs/reference/protocol.md`
-- Add/change an environment variable → `packages/shared/src/env/registry.ts` + `docs/guide/env-registry.md`
-- Change a security boundary → `docs/architecture/security.md`
-- Change package structure, deps, root scripts → `AGENTS.md` (Commands, Monorepo Structure) + `docs/architecture/packages.md` + every page that shows the command
-- Change the plugin scaffold (`scripts/create-plugin.js`, `templates/`) → the template READMEs + `docs/guide/plugin-authoring.md` + `docs/guide/plugin-testing.md` + `.claude/skills/create-plugin/`
+- Add/change an environment variable → `packages/shared/src/env/registry.ts` + `docs/reference/env-registry.md`
+- Change a security boundary → `docs/internals/security.md`
+- Change package structure, deps, root scripts → `AGENTS.md` (Commands, Monorepo Structure) + `docs/internals/packages.md` + every page that shows the command
+- Change the plugin scaffold (`scripts/create-plugin.js`, `templates/`) → the template READMEs + `docs/plugins/essentials.md` + `docs/plugins/testing.md` + `.claude/skills/create-plugin/`
+- Add, move or remove a page under `docs/` → the `sidebar` in `apps/docs/.vitepress/config.ts` + `docs/README.md`, then `pnpm --filter @covel/docs build`
 - Change CI workflows, git hooks, or the pre-push verification steps → `docs/CONTRIBUTING.md` + `docs/CONTRIBUTING.en.md` + `.github/PULL_REQUEST_TEMPLATE.md`
-- Introduce or rename a term → `docs/glossary.md`
+- Introduce or rename a term → `docs/reference/glossary.md`
 - Any user-visible change → a changelog fragment: a new file `docs/changelog.d/<slug>.md` with the entries under `### <Section>` headings (`docs/changelog.d/README.md`). Do not edit `docs/CHANGELOG.md`; `pnpm changelog:release` writes it at release
-- Edit a page that has an `.en.md` sibling, or `README.md` / `README.zh-CN.md` → update both in the same PR
+- Edit a page under `docs/` → make the same change in its English page under `docs/en/` (same relative path)
+- Edit `docs/CONTRIBUTING.md` or `README.md` → update `docs/CONTRIBUTING.en.md` / `README.zh-CN.md` in the same PR
 
 ## State & Persistence
 
@@ -501,10 +513,8 @@ Branch, Snapshot, State, Event, Record, Character, PluginData**.
   selects the server `DataStore`: `MemoryStore`, `SqliteStore`, or `PgStore`. The
   browser-private profile persists checkpoints in the Dexie `BrowserVault` and
   hydrates an ephemeral `MemoryStore`; it is not a `DataStore` backend. Contract:
-  `docs/architecture/storage.md`.
-- Each SQL backend keeps a thin `*-store.ts` factory plus focused modules: schema
-  and DDL, mappers/values, and per-surface CRUD/runtime/session/snapshot/state/world
-  files. Tables are defined in `packages/store/src/{sqlite,postgres}/schema.ts`.
+  `docs/internals/storage.md` (it also describes how each SQL backend's files
+  are split).
 - `sessions.runtime_model_overrides` stores only `runtimeId → slot` names. An
   explicit runtime selection (this map included) wins, then the request's UI slot
   binding, then the plugin's own preference, then the `llm.toml` default; a
@@ -517,7 +527,7 @@ Branch, Snapshot, State, Event, Record, Character, PluginData**.
 
 ## Security
 
-Summary only; the boundaries and their reasons are in `docs/architecture/security.md`.
+Summary only; the boundaries and their reasons are in `docs/internals/security.md`.
 
 - The outbound SSRF guard is open by default (any public `https` host, no allowlist
   env) and pins DNS. Plugin `fetchWithRetry` always stays on the strict direct path.
@@ -556,7 +566,7 @@ arguments, and outputs stripped from traces and the live stream.
 - Every `DataStore` backend must pass the shared contract suite
   (`packages/store/src/contract/store-contract.ts` + `contract/suites/`).
 - Plugin tests use `@covel/plugin-test-utils` (`MockLLM`,
-  `makeManualFunctionContext`, `makeTurnInput`, …); see `docs/guide/plugin-testing.md`.
+  `makeManualFunctionContext`, `makeTurnInput`, …); see `docs/plugins/testing.md`.
   New plugin behaviour should cover normal output, invalid input, data ownership,
   and that a failed execution commits no partial proposals.
 - A Vitest run uses a temp directory of its own, removed when the process exits
@@ -581,7 +591,7 @@ the rationale, breaking changes and the development data they invalidate, the
 checks that actually ran plus what was not verified, related context, and the
 documentation sync. Mark breaking changes with a `BREAKING CHANGE:` footer.
 
-Releases follow the checklist in `docs/guide/desktop-packaging.md`: the root,
+Releases follow the checklist in `docs/internals/desktop-packaging.md`: the root,
 `apps/*`, and `packages/*` versions must match the `v*` tag, while plugins and
 worlds version independently; pushing the tag triggers
 `.github/workflows/release.yml`.
@@ -590,9 +600,9 @@ worlds version independently; pushing the tag triggers
 
 Project skills live in `.claude/skills/` (`create-plugin`, `create-world`,
 `covel-static-turn-audit`, `covel-readonly-audit` — the two audit skills only on
-explicit request); see `docs/guide/skills.md`. Skill references link to
+explicit request); see `docs/internals/skills.md`. Skill references link to
 `docs/reference/` instead of copying contract tables.
 
 Directory-specific rules live in nested `AGENTS.md` files (e.g.
-`docs/v2/AGENTS.md`). Claude Code does not read `AGENTS.md` on its own, so every
+`docs/AGENTS.md`). Claude Code does not read `AGENTS.md` on its own, so every
 nested `AGENTS.md` gets a sibling `CLAUDE.md` that imports it.

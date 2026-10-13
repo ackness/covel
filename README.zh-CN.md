@@ -15,11 +15,11 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前源码版本：v0.0.51**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.51 没有破坏性变更，v0.0.50 创建的数据库可以直接使用；升级前请阅读[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)。**v0.0.49 及更早版本创建的数据库不能用于 v0.0.50 及之后的版本（角色读写会失败），必须重建**，会话不会迁移。更早版本需遵循 [v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/guide/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。
+> **当前源码版本：v0.0.51**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；每个发布附带 `SHA256SUMS.txt`，可用来核对下载文件。v0.0.51 没有破坏性变更，v0.0.50 创建的数据库可以直接使用；升级前请阅读[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0051)。**v0.0.49 及更早版本创建的数据库不能用于 v0.0.50 及之后的版本（角色读写会失败），必须重建**，会话不会迁移。更早版本需遵循 [v0.0.50 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0050)与[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0050)、[v0.0.49 升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0049)与 [v0.0.48 破坏性变更说明](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048)；从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)。升级前请保留完整备份，开发数据不会自动迁移。
 
 ## 亮点
 
-- 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。背景来自世界包的场景图；没有对应场景图的地点显示世界主图。社区生图插件提供独立的剧情插画与画廊流程，见[图像生成](docs/reference/image-generation.md)。
+- 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。背景来自世界包的场景图；没有对应场景图的地点显示世界主图。社区生图插件提供独立的剧情插画与画廊流程，见[图像生成](./docs/reference/image-generation.md)。
 - ⚙️ **可组合的插件 runtime** —— 在一条能力驱动的管线中组合 LLM agent、确定性函数、UI 面板、数据 schema、事件和生命周期 hook。
 - 🎲 **内置 RPG 玩法** —— 预掷骰判定（可视化回执）、自动跟踪的任务日志、玩家可直接操作的行囊、逐 NPC 好感度。全部是可选插件；世界包可以预置任务、开局装备与初始好感。
 - 🧩 **插件保持可替换** —— 内核通过版本化契约和声明的输出可见性发现能力，框架代码不按具体插件 ID 分支。
@@ -45,7 +45,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | ![面板方案](./.assets/images/readme/style-panel.png) | ![书卷方案](./.assets/images/readme/style-book.png) | ![舞台方案](./.assets/images/readme/style-stage.png) |
 |      应用式：图标导航、带标签的选项卡片、状态条      |       阅读优先：宋体正文、编号选项、页边批注        |       场景优先：场景图铺满、在场角色、键帽选项       |
 
-风格方案改的不只是配色，还有结构：导航放在哪、选项怎么画、会话怎样使用世界美术。在**设置 → 外观**里选一套；原来的几套主题成了第四种风格「经典」下的配色。方案就是主题包，可以另存为自己的，也可以导入别人的（[指南](./docs/guide/themes.md)）。插件界面不需要知道当前是哪套方案，会自动跟随。
+风格方案改的不只是配色，还有结构：导航放在哪、选项怎么画、会话怎样使用世界美术。在**设置 → 外观**里选一套；原来的几套主题成了第四种风格「经典」下的配色。方案就是主题包，可以另存为自己的，也可以导入别人的（[指南](./docs/recipes/themes.md)）。插件界面不需要知道当前是哪套方案，会自动跟随。
 
 ## 三层怎样配合
 
@@ -83,8 +83,8 @@ plugins/npc-graph/
 
 内核通过契约、类型化扩展点和公共 UI 槽位连接这些模块。叙事者、图像服务商、舞台导演或规则系统都能被替换，无需在框架里为某个插件 ID 添加特例。
 
-扩展应按独立 community 包开发并验证安装、授权、重启和卸载，见[插件测试](./docs/guide/plugin-testing.md)与
-[玩家流程验收](./docs/guide/e2e-testing.md#发版前的玩家流程验收)。框架统一版本，插件和世界包可独立维护版本。
+扩展应按独立 community 包开发并验证安装、授权、重启和卸载，见[插件测试](./docs/plugins/testing.md)与
+[玩家流程验收](./docs/internals/e2e-testing.md#发版前的玩家流程验收)。框架统一版本，插件和世界包可独立维护版本。
 
 ## 世界包让设定真正可玩
 
@@ -154,14 +154,14 @@ worlds/my-world/data/rules/core.ja.yaml
 
 可以先跳过引导浏览世界，但生成剧情前需要完成模型配置；以后可在世界选择页点击“新手引导”重看。游戏可能先要求创建角色或完成开场选择，之后再输入行动推进故事。
 
-配置、密钥、SQLite、自定义世界和日志默认都在 `~/.covel/`；如果 `config.toml` 重定向了 `data_root`，数据也会位于那个独立目录。升级前请阅读[桌面配置指南](./docs/guide/desktop-config.md)和[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
+配置、密钥、SQLite、自定义世界和日志默认都在 `~/.covel/`；如果 `config.toml` 重定向了 `data_root`，数据也会位于那个独立目录。升级前请阅读[桌面配置指南](./docs/reference/desktop-config.md)和[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
 
 ### 获取插件与世界包
 
 - **[插件目录](https://github.com/covel-ai/covel-plugins)** —— 官方生图、TTS 插件、Jev Demo 与开发示例，社区插件单独收录。
 - **[世界目录](https://github.com/covel-ai/covel-worlds)** —— 官方世界示例与社区世界列表，方便发现新的故事设定。
 
-两个目录默认展示英文，并提供中文及其他已有译文的快速链接。在 **设置 → 安装与管理** 粘贴 GitHub 仓库或资源包目录链接，预览其中的插件和世界包，勾选要安装的内容并一次确认风险。所选内容作为一个整体安装（先插件后世界），世界包和它需要的插件可以一起装好；作者也可以用[合集](./docs/guide/collections.md)清单列出这样一组内容，包括其他仓库里的包。下载遵循已配置的代理。插件安装后需要重启后端并在会话中授权；新安装的世界包立即可用。
+两个目录默认展示英文，并提供中文及其他已有译文的快速链接。在 **设置 → 安装与管理** 粘贴 GitHub 仓库或资源包目录链接，预览其中的插件和世界包，勾选要安装的内容并一次确认风险。所选内容作为一个整体安装（先插件后世界），世界包和它需要的插件可以一起装好；作者也可以用[合集](./docs/ship/collections.md)清单列出这样一组内容，包括其他仓库里的包。下载遵循已配置的代理。插件安装后需要重启后端并在会话中授权；新安装的世界包立即可用。
 
 点击已安装资源包旁的 **检查更新** 可查看变化，确认的更新在重启后端后生效；本地修改会阻止覆盖。详见[插件安装说明](./docs/reference/plugin-installation.md)和[世界包安装说明](./docs/reference/world-installation.md)。
 
@@ -175,7 +175,7 @@ cp .env.llm.example .env.llm        # provider API 密钥
 pnpm dev                            # web :5173 + server :3001（SQLite）
 ```
 
-打开 <http://localhost:5173>，调试工具在 `/debug`。个人使用可直接在设置里填写连接地址、模型和密钥，`.env.llm` 可不创建；网页选择覆盖项目 `llm.toml`，不回写文件。浏览器设置和密钥属于当前浏览器，Electron 使用 `~/.covel` 下的个人文件。SQLite / PostgreSQL 保存的是实例存档。Docker 默认也是仅绑定回环地址的个人实例，不作为公开多人服务。Docker 启动、浏览器存档和配置优先级见[环境变量注册表](./docs/guide/env-registry.md)。
+打开 <http://localhost:5173>，调试工具在 `/debug`。个人使用可直接在设置里填写连接地址、模型和密钥，`.env.llm` 可不创建；网页选择覆盖项目 `llm.toml`，不回写文件。浏览器设置和密钥属于当前浏览器，Electron 使用 `~/.covel` 下的个人文件。SQLite / PostgreSQL 保存的是实例存档。Docker 默认也是仅绑定回环地址的个人实例，不作为公开多人服务。Docker 启动、浏览器存档和配置优先级见[环境变量注册表](./docs/reference/env-registry.md)。
 
 ## 内置世界
 
@@ -199,10 +199,10 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 
 ## 开发
 
-- [插件编写指南](./docs/guide/plugin-authoring.md) —— 从这里开始；[`plugins/`](./plugins/) 下的内置插件都是可运行的参考
-- [设计原则](./docs/architecture/design-principles.md) —— 什么该进内核，什么该交给插件
-- [架构与回合管线](./docs/architecture/flow.md) —— 一个回合如何流经触发 → 调度 → runtime → 提交
-- [世界数据](./docs/reference/world-data.md)与[合集](./docs/guide/collections.md) —— 编写世界包，并连同配套插件一起发布
+- [插件编写指南](./docs/plugins/essentials.md) —— 从这里开始；[`plugins/`](./plugins/) 下的内置插件都是可运行的参考
+- [设计原则](./docs/internals/design-principles.md) —— 什么该进内核，什么该交给插件
+- [架构与回合管线](./docs/internals/flow.md) —— 一个回合如何流经触发 → 调度 → runtime → 提交
+- [世界数据](./docs/reference/world-data.md)与[合集](./docs/ship/collections.md) —— 编写世界包，并连同配套插件一起发布
 - 参考：[插件契约](./docs/reference/plugins.md) · [扩展点](./docs/reference/extension-points.md) · [工具](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [完整文档索引](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle。仓库布局与包清单 → [`AGENTS.md`](./AGENTS.md#monorepo-structure)。

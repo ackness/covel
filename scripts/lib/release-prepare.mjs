@@ -1,5 +1,5 @@
 /**
- * The manual steps of the release checklist (docs/guide/desktop-packaging.md):
+ * The manual steps of the release checklist (docs/internals/desktop-packaging.md):
  * the framework version in the root, `apps/*` and `packages/*` manifests, the
  * version badge of both READMEs, and the changelog assembly. Plugins and worlds
  * version independently and are left alone.

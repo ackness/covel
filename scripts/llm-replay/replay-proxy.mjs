@@ -11,7 +11,7 @@
 // that run after the narrative end with the same user message, so one would
 // get another's answer. The key here is a digest of the whole request.
 //
-// Docs: docs/guide/e2e-plugin-verify.md
+// Docs: docs/ship/real-model.md
 import { createHash } from "node:crypto";
 import {
   existsSync,

@@ -1,6 +1,6 @@
 {
   "world": "haruka-academy",
-  "note": "Soft anime ensemble for dialogue and relationship play. Keep approved faces, hair colors, uniform silhouettes and signature props. Expression variants must edit the matching default portrait, preserving pose, framing and true alpha. The teacher is an adult; teen-appropriate describes content, not every character age. See docs/guide/world-art-direction.md.",
+  "note": "Soft anime ensemble for dialogue and relationship play. Keep approved faces, hair colors, uniform silhouettes and signature props. Expression variants must edit the matching default portrait, preserving pose, framing and true alpha. The teacher is an adult; teen-appropriate describes content, not every character age. See docs/worlds/art-direction.md.",
   "style": {
     "direction": "anime visual-novel character sprite (GalGame tachi-e), soft cel-shading",
     "background": "transparent",

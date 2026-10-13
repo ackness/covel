@@ -21,7 +21,7 @@
 // `pnpm e2e:replay` (run.mjs) starts this proxy, a test server and the
 // scripted session in one command, for the sessions under tests/llm-replay/.
 //
-// Docs: docs/guide/e2e-plugin-verify.md
+// Docs: docs/ship/real-model.md
 import { writeFileSync } from "node:fs";
 import { startReplayProxy } from "./replay-proxy.mjs";
 

@@ -7,7 +7,7 @@
  * It refuses a version below the current one and a dirty working tree, and
  * makes no commit, tag or push. A second run with the same version only adds
  * changelog fragments merged since. The checklist is in
- * docs/guide/desktop-packaging.md.
+ * docs/internals/desktop-packaging.md.
  */
 import { execFileSync } from "node:child_process";
 import path from "node:path";

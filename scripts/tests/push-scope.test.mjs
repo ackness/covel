@@ -128,7 +128,7 @@ test("documentation asks for the tests that read it, except the changelog", () =
     docs: true,
   });
   // A guide page is also an input of the suite that runs its examples.
-  assert.deepEqual(select("docs/guide/plugin-authoring.md"), {
+  assert.deepEqual(select("docs/plugins/essentials.md"), {
     full: false,
     filters: ["@covel/plugin-loader"],
     docs: true,

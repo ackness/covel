@@ -60,7 +60,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 取证要点：核对事件的身份、顺序、去重键、会话归属和终态。追到订阅的创建和释放、异步回调、历史补偿各自的具体写入点。服务端发出了正确的事件，不能证明 store 消费得正确。浏览器私有存储的内部实现归 A4，本专项只查 store 怎么使用它。
 
-契约文档：`docs/reference/protocol.md`、`docs/architecture/storage.md`
+契约文档：`docs/reference/protocol.md`、`docs/internals/storage.md`
 
 ## A2 前端界面
 
@@ -92,7 +92,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 取证要点：找齐每把锁的获取者、持有范围和全部释放出口。区分 HTTP 断连、SSE 断连和执行取消。外部请求从参数来源追到校验和实际发出请求的实现；不通过真的发请求来验证边界。出站请求防护层自身的实现归 A12，本专项查服务端各处是否都经过它。恢复和后台作业的路由归 A11，安装路由归 A12，媒体路由归 A10。
 
-契约文档：`docs/reference/api.md`、`docs/reference/protocol.md`、`docs/architecture/security.md`
+契约文档：`docs/reference/api.md`、`docs/reference/protocol.md`、`docs/internals/security.md`
 
 ## A4 存储
 
@@ -111,7 +111,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 浏览器私有存储（BrowserVault、IndexedDB、浏览器同步）不是第四种 `DataStore` 后端，不放进后端差异表。它按自己的检查点契约单独审：本专项读它的内部实现，H7 再把恢复路径连起来。向量存储的检索语义由 A9 主责，媒体存储由 A10 主责，本专项只提供存储层的证据。
 
-契约文档：`docs/architecture/storage.md`、`docs/reference/transactions.md`
+契约文档：`docs/internals/storage.md`、`docs/reference/transactions.md`
 
 ## A5 模型网关
 
@@ -128,13 +128,13 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 取证要点：从调用方一路到网关和 provider adapter，列出每一层重试、最大尝试次数、取消如何传递、用量在哪里聚合。区分一次逻辑调用和它包含的多次物理尝试。静态算出的最坏次数只是已证实条件下的上界，不能折算成实际费用。图像、语音、音乐的调用归 A10，出站请求防护归 A12，本专项只管文本模型的调用链。
 
-契约文档：`docs/reference/slots.md`、`docs/reference/prompt-structure.md`、`docs/architecture/flow.md`
+契约文档：`docs/reference/slots.md`、`docs/reference/prompt-structure.md`、`docs/internals/flow.md`
 
 ## A6 插件开发体验
 
 本专项拆成两个子任务，各有一个负责人和一个记录文件，编号分别用 A6a 和 A6b。只查插件和框架之间的契约，不评价各个插件的玩法设计。
 
-契约文档（两个子任务共用）：`docs/guide/plugin-authoring.md`、`docs/reference/plugins.md`、`docs/reference/extension-points.md`、`docs/reference/plugin-extensions.md`、`docs/reference/plugin-installation.md`
+契约文档（两个子任务共用）：`docs/plugins/essentials.md`、`docs/reference/plugins.md`、`docs/reference/extension-points.md`、`docs/reference/plugin-extensions.md`、`docs/reference/plugin-installation.md`
 
 ### A6a 加载器与 SDK
 
@@ -195,7 +195,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 取证要点：分清三组容易混淆的事：工具查找和工具授权；工具返回成功和 proposal 提交成功；函数的 promise 超时和底层工作真正停止。追到执行身份、事务边界，以及超时之后仍然能触达的副作用入口。挂起、恢复和后台作业归 A11。
 
-契约文档：`docs/architecture/flow.md`、`docs/reference/tools.md`、`docs/reference/plugins.md`、`docs/reference/transactions.md`、`docs/reference/prompt-structure.md`
+契约文档：`docs/internals/flow.md`、`docs/reference/tools.md`、`docs/reference/plugins.md`、`docs/reference/transactions.md`、`docs/reference/prompt-structure.md`
 
 ## A9 桌面端等
 
@@ -212,7 +212,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 取证要点：桌面、设置、记忆、向量、事件总线五个子域分别给出覆盖结论。每项资源都要找到创建者、释放者，以及它归属于哪个会话或窗口。配置里声明了隔离或过滤，不等于消费方完整地执行了它。关键词检索和向量检索要用同一套过滤条件对照。桌面自动更新归 A12。
 
-契约文档：`docs/guide/desktop-config.md`、`docs/architecture/security.md`、`docs/reference/settings-store.md`、`docs/architecture/packages.md`、`docs/reference/protocol.md`
+契约文档：`docs/reference/desktop-config.md`、`docs/internals/security.md`、`docs/reference/settings-store.md`、`docs/internals/packages.md`、`docs/reference/protocol.md`
 
 ## A10 媒体管线
 
@@ -231,7 +231,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 取证要点：从插件调用媒体生成的入口，一路追到 wire、网关、媒体存储和前端展示。区分三个时点：字节已写入、所有权已登记、引用已建立，逐个查它们之间失败会留下什么。媒体存储有自己的契约，不并入 `DataStore` 的后端差异表。
 
-契约文档：`docs/reference/image-generation.md`、`docs/reference/media-store.md`、`docs/reference/slots.md`、`docs/architecture/security.md`
+契约文档：`docs/reference/image-generation.md`、`docs/reference/media-store.md`、`docs/reference/slots.md`、`docs/internals/security.md`
 
 ## A11 挂起、恢复与后台作业
 
@@ -251,7 +251,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 取证要点：区分三种“停下”：玩家取消、执行挂起、进程退出。挂起和作业都要找到持久化的那条记录。本专项能证明的是静态可见的恢复逻辑：重启后会运行哪段扫描代码、它覆盖哪些状态。进程真的被杀掉之后的行为只能列为待验证。
 
-契约文档：`docs/architecture/flow.md`、`docs/reference/tools.md`、`docs/reference/api.md`、`docs/reference/protocol.md`、`docs/reference/transactions.md`、`docs/architecture/technical-debt.md`
+契约文档：`docs/internals/flow.md`、`docs/reference/tools.md`、`docs/reference/api.md`、`docs/reference/protocol.md`、`docs/reference/transactions.md`、`docs/internals/technical-debt.md`
 
 ## A12 安装与信任边界
 
@@ -273,7 +273,7 @@ A10 到 A12 各是一条跨层的链路。它们单独成为专项，是因为�
 
 和相邻专项的分工：A6a 查作者契约，A7 查世界包的内容，A3 查服务端路由的认证和授权；本专项查包怎么进到机器上、进来之后被信任到什么程度。
 
-契约文档：`docs/reference/plugin-installation.md`、`docs/reference/world-installation.md`、`docs/guide/collections.md`、`docs/architecture/security.md`、`docs/guide/desktop-packaging.md`
+契约文档：`docs/reference/plugin-installation.md`、`docs/reference/world-installation.md`、`docs/ship/collections.md`、`docs/internals/security.md`、`docs/internals/desktop-packaging.md`
 
 ## 附表责任
 

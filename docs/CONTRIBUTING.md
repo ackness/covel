@@ -26,7 +26,7 @@ pnpm dev                       # 同时启动前端与后端
 
 提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier 一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。Oxlint 的规则在根目录 `.oxlintrc.jsonc`，关闭的规则各有一行说明；hook 检查改动的文件，`pnpm check` 检查整个仓库，两处都带 `--deny-warnings`，所以警告也会让检查失败。提交 hook 不做类型检查；类型检查在 `pnpm check`、pre-push hook 和 CI 里运行。
 
-新增文件默认上限为 3 MiB；世界画廊原图 `worlds/*/media/gallery/*.png` 单独允许 4 MiB，以保留 1536×1024 图片的无损质量；每张原图旁要有同名 WebP 展示版，安装包和 Docker 镜像只带 WebP。世界立绘和场景只以 WebP 入库（见 [`guide/world-art-direction.md`](./guide/world-art-direction.md)）。
+新增文件默认上限为 3 MiB；世界画廊原图 `worlds/*/media/gallery/*.png` 单独允许 4 MiB，以保留 1536×1024 图片的无损质量；每张原图旁要有同名 WebP 展示版，安装包和 Docker 镜像只带 WebP。世界立绘和场景只以 WebP 入库（见 [`guide/world-art-direction.md`](./worlds/art-direction.md)）。
 
 ### PostgreSQL 18 开发环境
 
@@ -37,13 +37,13 @@ pnpm db:up
 pnpm dev:pg                    # PostgreSQL-backed API server
 ```
 
-首次初始化时先确认数据库已就绪，再运行 `dev:pg`；可用 `docker compose -f docker/docker-compose.yml --env-file .env ps postgres` 查看 `healthy` 状态。需要前端时，在另一个终端运行 `pnpm dev:web`。`dev:pg` 先读取根 `.env` 做连接预检，默认检查 `DATABASE_URL` 的 host/port；未设置 URL 时使用 `127.0.0.1:POSTGRES_PORT`。更换端口时同步更新 URL；完整覆盖规则见[环境变量说明](./guide/env-registry.md#加载路径与环境差异)。
+首次初始化时先确认数据库已就绪，再运行 `dev:pg`；可用 `docker compose -f docker/docker-compose.yml --env-file .env ps postgres` 查看 `healthy` 状态。需要前端时，在另一个终端运行 `pnpm dev:web`。`dev:pg` 先读取根 `.env` 做连接预检，默认检查 `DATABASE_URL` 的 host/port；未设置 URL 时使用 `127.0.0.1:POSTGRES_PORT`。更换端口时同步更新 URL；完整覆盖规则见[环境变量说明](./reference/env-registry.md#加载路径与环境差异)。
 
 Compose 使用 PostgreSQL 18 + pgvector 0.8.6，数据库存入 `pgdata18` 卷。旧 PG17 `pgdata` 卷不会被挂载、自动迁移或删除。
 
-`pnpm docker:build` 会构建并启动**数据库和应用**，应用采用 `commercial` 配置，还需在 `.env` 设置 `COVEL_DESKTOP_REST_TOKEN`、`COVEL_MEDIA_TOKEN_SECRET` 和 `CORS_ORIGIN`，并准备根 `llm.toml`。`appdata` 卷持久化安装及生成的用户世界与插件；模型配置仍从宿主机只读挂载。详见[Docker 配置](./guide/env-registry.md#docker-compose)。
+`pnpm docker:build` 会构建并启动**数据库和应用**，应用采用 `commercial` 配置，还需在 `.env` 设置 `COVEL_DESKTOP_REST_TOKEN`、`COVEL_MEDIA_TOKEN_SECRET` 和 `CORS_ORIGIN`，并准备根 `llm.toml`。`appdata` 卷持久化安装及生成的用户世界与插件；模型配置仍从宿主机只读挂载。详见[Docker 配置](./reference/env-registry.md#docker-compose)。
 
-`pnpm docker:down` 停止容器并保留数据。**`pnpm docker:down-all` 会删除当前 Compose 项目的 `pgdata18` 和 `appdata`，包括数据库及用户世界、插件**；仅在备份后明确需要清空整套环境时使用。`db:generate` / `db:studio` 是 PostgreSQL 开发维护工具，不是数据库自动升级命令，见[数据库维护](./guide/env-registry.md#数据库维护命令)。
+`pnpm docker:down` 停止容器并保留数据。**`pnpm docker:down-all` 会删除当前 Compose 项目的 `pgdata18` 和 `appdata`，包括数据库及用户世界、插件**；仅在备份后明确需要清空整套环境时使用。`db:generate` / `db:studio` 是 PostgreSQL 开发维护工具，不是数据库自动升级命令，见[数据库维护](./reference/env-registry.md#数据库维护命令)。
 
 ### 官网演示媒体
 
@@ -147,10 +147,10 @@ PR、main 和发布复用同一份 CI 检查，pre-push hook 省去的内容都�
 
 ## Release Process
 
-发布检查的唯一操作清单是[桌面打包指南](./guide/desktop-packaging.md#release-checklist)。按以下顺序执行：
+发布检查的唯一操作清单是[桌面打包指南](./internals/desktop-packaging.md#release-checklist)。按以下顺序执行：
 
 1. 在开发分支准备版本、CHANGELOG 和文档。`pnpm release:prepare <version>`（先加 `--dry-run` 看结果）设置根目录、`apps/*` 与 `packages/*` 的版本和 README 版本徽章，并把 `docs/changelog.d/` 里的片段写入 `docs/CHANGELOG.md` 的该版本小节、删除片段；它要求工作区干净，不提交。版本摘要段落和 README 的升级说明手写。根目录、`apps/*` 与 `packages/*` 的版本匹配目标 tag；插件和世界包可以独立版本化。
-2. 先顺序完成本地 `pnpm check`、`pnpm test`、`pnpm test:pg`、UI/E2E 检查和 `pnpm release:preflight`，再用隔离数据完成[真实模型玩家流程](./guide/e2e-testing.md#发版前的玩家流程验收)。
+2. 先顺序完成本地 `pnpm check`、`pnpm test`、`pnpm test:pg`、UI/E2E 检查和 `pnpm release:preflight`，再用隔离数据完成[真实模型玩家流程](./internals/e2e-testing.md#发版前的玩家流程验收)。
 3. 本地通过后推送 PR，等待 CI / PostgreSQL 集成，以及候选分支的 `Build Desktop` dry run（`publish_release=false`）通过。
 4. 合并 PR，确认 `main` 的检查和准确提交，再在该提交创建并推送 annotated `v*` tag。
 5. [发布工作流](../.github/workflows/release.yml) 校验不可变提交、框架版本和发布说明，构建并验证 macOS arm64 / Windows x64 产物后发布 GitHub Release。下载产物复核版本、摘要、启动和插件生命周期。
@@ -159,15 +159,15 @@ PR、main 和发布复用同一份 CI 检查，pre-push hook 省去的内容都�
 
 ### 官网部署
 
-[`site.yml`](../.github/workflows/site.yml) 构建官网 `apps/site`：PR 只构建，推送到 `main`（改动 `apps/site/`、锁文件或该工作流时）或在 Actions 页面手动触发时还会发布到 GitHub Pages。仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。
+[`site.yml`](../.github/workflows/site.yml) 构建官网 `apps/site` 和文档站 `apps/docs`（页面在 `docs/`），并把文档站放在官网的 `docs/` 路径下一起发布：PR 只构建，推送到 `main`（改动 `apps/site/`、`apps/docs/`、`docs/`、锁文件或该工作流时）或在 Actions 页面手动触发时还会发布到 GitHub Pages。仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`；文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。
 
 ### 模型资料快照
 
-内置的 LiteLLM 模型表（`packages/ai-provider/data/model-db.json`，由 `model-db-source.json` 固定到具体提交）决定未在 `llm.toml` 或设置中填写上限的模型的上下文窗口、输出上限与价格。[`update-model-db.yml`](../.github/workflows/update-model-db.yml) 每周一把它固定到 LiteLLM 最新修改模型表的提交，重新生成快照和各模型名称得到哪些思考档位的记录（`tests/__snapshots__/reasoning-characterization.snap.txt`）并跑 `@covel/ai-provider` 测试，然后在 `chore/update-model-db` 分支开启或刷新 PR，不直接推送 `main`；也可在 Actions 页面手动触发。用默认 `GITHUB_TOKEN` 开的 PR 不会触发其他 workflow：配置可开 PR 的 `MODEL_DB_PR_TOKEN` secret 才会自动跑 CI，否则关闭再重开 PR 即可。默认 token 还需要在仓库设置中开启 “Allow GitHub Actions to create and approve pull requests”。手动更新运行 `pnpm --filter @covel/ai-provider update-model-db`。模型表只说明模型是否会思考；它支持哪些档位是人工维护的数据，刷新不会改动，见[档位数据](reference/slots.md#档位数据)。
+内置的 LiteLLM 模型表（`packages/ai-provider/data/model-db.json`，由 `model-db-source.json` 固定到具体提交）决定未在 `llm.toml` 或设置中填写上限的模型的上下文窗口、输出上限与价格。[`update-model-db.yml`](../.github/workflows/update-model-db.yml) 每周一把它固定到 LiteLLM 最新修改模型表的提交，重新生成快照和各模型名称得到哪些思考档位的记录（`tests/__snapshots__/reasoning-characterization.snap.txt`）并跑 `@covel/ai-provider` 测试，然后在 `chore/update-model-db` 分支开启或刷新 PR，不直接推送 `main`；也可在 Actions 页面手动触发。用默认 `GITHUB_TOKEN` 开的 PR 不会触发其他 workflow：配置可开 PR 的 `MODEL_DB_PR_TOKEN` secret 才会自动跑 CI，否则关闭再重开 PR 即可。默认 token 还需要在仓库设置中开启 “Allow GitHub Actions to create and approve pull requests”。手动更新运行 `pnpm --filter @covel/ai-provider update-model-db`。模型表只说明模型是否会思考；它支持哪些档位是人工维护的数据，刷新不会改动，见[档位数据](./reference/slots.md#档位数据)。
 
 ### 代码签名
 
-当前正式发布有意使用 unsigned 产物，不需要平台签名凭据。发布说明必须披露这一点，并说明首次启动可能触发 macOS Gatekeeper 或 Windows SmartScreen 提示。未来启用签名时，需要同时更新 electron-builder 配置与发布工作流；本地签名配置见 [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)。
+当前正式发布有意使用 unsigned 产物，不需要平台签名凭据。发布说明必须披露这一点，并说明首次启动可能触发 macOS Gatekeeper 或 Windows SmartScreen 提示。未来启用签名时，需要同时更新 electron-builder 配置与发布工作流；本地签名配置见 [`guide/desktop-packaging.md`](./internals/desktop-packaging.md)。
 
 ## 报告问题
 

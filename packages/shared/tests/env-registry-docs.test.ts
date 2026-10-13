@@ -5,7 +5,7 @@ import { COVEL_ENV_REGISTRY } from "../src/env/registry.js";
 
 const GUIDE = path.resolve(
   import.meta.dirname,
-  "../../../docs/guide/env-registry.md",
+  "../../../docs/reference/env-registry.md",
 );
 
 describe("environment variable guide", () => {
@@ -14,6 +14,6 @@ describe("environment variable guide", () => {
     const missing = COVEL_ENV_REGISTRY.map((def) => def.name).filter(
       (name) => !guide.includes(name),
     );
-    expect(missing, "add these to docs/guide/env-registry.md").toEqual([]);
+    expect(missing, "add these to docs/reference/env-registry.md").toEqual([]);
   });
 });

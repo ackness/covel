@@ -4,13 +4,13 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import { runValidateManifest } from "../scripts/run-validate-manifest.js";
 
-const guidesRoot = path.resolve(import.meta.dirname, "../../../docs/guide");
+const guidesRoot = path.resolve(import.meta.dirname, "../../../docs/plugins");
 
 it.each([
-  { guide: "plugin-authoring.md", id: "my-plugin", multiRuntime: false },
-  { guide: "plugin-authoring-agent.md", id: "notebook", multiRuntime: false },
+  { guide: "essentials.md", id: "my-plugin", multiRuntime: false },
+  { guide: "local-code.md", id: "notebook", multiRuntime: false },
   {
-    guide: "plugin-authoring-advanced.md",
+    guide: "advanced.md",
     id: "fact-index",
     multiRuntime: true,
   },
@@ -37,7 +37,7 @@ it.each([
       await write("README.md", "Guide package fixture.");
       // The guides describe these support files separately. Manifest references
       // still use the exact paths and declarations extracted from the document.
-      if (guide === "plugin-authoring-agent.md") {
+      if (guide === "local-code.md") {
         await write("server/index.js", "export default () => {};\n");
         await write(
           "schemas/note.schema.json",

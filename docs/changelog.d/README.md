@@ -13,7 +13,7 @@ Create `docs/changelog.d/<slug>.md`. The slug is lower-case letters, digits and 
 
 ### Added
 
-- **Trace retention is a player setting.** Settings → General has "Keep diagnostic traces" (7 / 30 / 90 days or keep everything). Precedence: `docs/guide/env-registry.md`.
+- **Trace retention is a player setting.** Settings → General has "Keep diagnostic traces" (7 / 30 / 90 days or keep everything). Precedence: `docs/reference/env-registry.md`.
 ```
 
 The sections, in the order a release lists them:

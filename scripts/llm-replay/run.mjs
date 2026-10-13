@@ -25,7 +25,7 @@
 // and the keyed requests (for `pnpm llm:replay:diff`) are written to
 // debugs/llm-replay/<session>/.
 //
-// Docs: docs/guide/e2e-plugin-verify.md
+// Docs: docs/ship/real-model.md
 import { createServer } from "node:net";
 import {
   createWriteStream,

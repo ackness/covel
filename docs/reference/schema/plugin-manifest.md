@@ -162,14 +162,15 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*.authoring`
 
-| Field      | Type                     | Required | Description                                                                                                                                                                                                           |
-| ---------- | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`    | text                     | yes      | Author-facing name of this content. Plain string; translations go in locale files. Example: `"Starting quests"`.                                                                                                      |
-| `summary`  | text                     | no       | One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string; translations go in locale files.                                                           |
-| `hint`     | string                   | no       | How to write good records: what to include, limits, and links to other content. Read by authors and by generators.                                                                                                    |
-| `example`  | string                   | no       | Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema.                                                                                          |
-| `source`   | object                   | no       | The world data source an author declares to supply this content.                                                                                                                                                      |
-| `generate` | `"offer"` or `"default"` | no       | Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`. |
+| Field        | Type                     | Required | Description                                                                                                                                                                                                           |
+| ------------ | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`      | text                     | yes      | Author-facing name of this content. Plain string; translations go in locale files. Example: `"Starting quests"`.                                                                                                      |
+| `summary`    | text                     | no       | One player-facing sentence about this content. Shown where a player chooses what a generated world includes. Plain string; translations go in locale files.                                                           |
+| `hint`       | string                   | no       | How to write good records: what to include, limits, and links to other content. Read by authors and by generators.                                                                                                    |
+| `example`    | string                   | no       | Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema.                                                                                          |
+| `source`     | object                   | no       | The world data source an author declares to supply this content.                                                                                                                                                      |
+| `references` | list of object           | no       | Values in each record that name something of the world. `pnpm validate:world` reports a value that names nothing, or the wrong kind of thing, before a session starts.                                                |
+| `generate`   | `"offer"` or `"default"` | no       | Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`. |
 
 ## `contributes.data.*.authoring.source`
 
@@ -181,6 +182,15 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `localeArrayKeys` | list of string                    | no       | Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered. |
 | `visibility`      | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.                                                                    |
 | `lorebook`        | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                                                                                   |
+
+## `contributes.data.*.authoring.references[]`
+
+| Field    | Type                                                                                      | Required | Description                                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`   | string                                                                                    | yes      | Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. Example: `"attributes[].id"`. |
+| `to`     | `"character-attribute"`                                                                   | yes      | What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`.                            |
+| `type`   | `"string"` or `"number"` or `"boolean"` or `"enum"` or `"array"` or `"object"` or `"map"` | no       | Value type the named attribute must have.                                                                                                          |
+| `within` | list of string                                                                            | no       | Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute.                                          |
 
 ## `contributes.data.*.search`
 

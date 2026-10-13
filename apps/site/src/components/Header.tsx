@@ -47,7 +47,7 @@ export function Header({
     { href: "#features", label: copy.nav.features },
     { href: "#plugins", label: copy.nav.plugins },
     { href: "#worlds", label: copy.nav.worlds },
-    { href: DOCS_URL, label: copy.nav.docs },
+    { href: `${DOCS_URL}${copy.meta.docsPath}`, label: copy.nav.docs },
   ];
 
   const iconButton =

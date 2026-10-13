@@ -44,8 +44,8 @@ model    = "deepseek-flash"
 baseUrl  = "https://api.deepseek.com"
 protocol = "openai-chat-v1"
 # deepseek-flash currently selects DeepSeek V4.1 Flash.
-# Omit thinking controls to use the provider's defaults.
-# thinking = { type = "enabled" }
+# Omit reasoningEffort to use the provider's default.
+# reasoningEffort = "disabled"
 
 [covel.utility]
 provider = "dashscope"

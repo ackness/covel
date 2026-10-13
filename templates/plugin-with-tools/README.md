@@ -27,7 +27,7 @@
 
 ## 参考
 
-- [docs/guide/plugin-authoring.md](../../docs/guide/plugin-authoring.md) —— 插件作者指南
+- [docs/plugins/essentials.md](../../docs/plugins/essentials.md) —— 插件作者指南
 - [docs/reference/plugins.md](../../docs/reference/plugins.md) —— `PLUGIN.md` / `RUNTIME.md` 字段全表
 - [docs/reference/tools.md](../../docs/reference/tools.md) —— 工具契约与审批策略
-- [docs/guide/plugin-testing.md](../../docs/guide/plugin-testing.md) —— 插件测试
+- [docs/plugins/testing.md](../../docs/plugins/testing.md) —— 插件测试

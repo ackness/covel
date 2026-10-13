@@ -111,7 +111,7 @@ contributes:
         hint: >-
           Do not write this file by hand. It maps scenes to background files by
           content hash. Generate the scene images first, then generate this
-          file; see docs/guide/world-scenes.md.
+          file; see docs/worlds/scenes.md.
         source:
           kind: json
           path: media/scenes.registry.json

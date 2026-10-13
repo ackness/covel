@@ -1,14 +1,26 @@
-# MediaStore
+# 媒体存储
 
-`MediaStore` persists generated images, audio, video, and files behind a content-addressed `MediaRef`.
+`MediaStore` 是 Covel 保存媒体文件的地方：生成的图片、音频、视频和其他文件。存进去的每个文件得到一个 `MediaRef`，之后消息、插件数据和界面都只保存这个引用，不保存文件内容。
+
+这一页讲它的接口、几种存储方式、谁有权读一个文件、文件什么时候可以删除，以及玩家在设置里看到的媒体库。它适合写存储后端、写生成媒体的插件，或者运维一台服务器的人。
+
+两个贯穿全页的词：
+
+- **归属（owner）**：第一个存下这个文件的会话。
+- **引用（ref）**：另一个会话声明“我也要用这个文件”。
 
 ## Contract
 
-Every backend implements:
+每个后端都实现下面的接口：
 
 ```ts
 interface MediaStore {
-  put(blob: Uint8Array | Blob, mime: string, meta?: object): Promise<MediaRef>;
+  put(
+    blob: Uint8Array | Blob,
+    mime: string,
+    meta?: object,
+    initialRef?: { sessionId: string; pluginId?: string },
+  ): Promise<MediaRef>;
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
   resolveUrl(ref: MediaRef): Promise<string>;
@@ -21,6 +33,7 @@ interface MediaStore {
   ): Promise<void>;
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
   removeRef(id: string, sessionId: string): Promise<void>;
+  releaseSession(sessionId: string): Promise<void>;
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
   listAssets(): Promise<readonly MediaAssetRecord[]>;
   listByMetadata(
@@ -37,286 +50,330 @@ interface MediaStore {
 }
 ```
 
-`put()` computes a SHA-256 id from the bytes and deduplicates repeated content. The first stored metadata wins for duplicate content.
+类型定义在 `packages/shared/src/types/media.ts`。
 
-Metadata JSON removes U+0000 on all four backends without mutating the caller's
-object. Keys that would collide after cleaning are rejected before publication.
-Binary bytes, including zero bytes, remain unchanged and determine the digest.
+**文件 ID 就是内容的哈希**
+
+- `put()` 用文件内容算出 SHA-256 作为 ID。内容相同的文件只存一份。
+- 重复存入相同内容时，保留第一次存的元数据。
+
+**元数据里的 U+0000**
+
+- 四种后端在保存元数据 JSON 时都会去掉 U+0000 字符，但不会改动调用方传进来的对象。
+- 清理之后会重名的键，在文件公开之前就被拒绝。
+- 文件本身的字节不动，包括值为 0 的字节。ID 由原始字节决定。
+
+**`releaseSession(sessionId)`** 在会话被删除时使用：它一次清掉这个会话的归属和引用，文件的字节和其他会话的引用保留。
 
 ## HTTP content safety
 
-`POST /api/media` accepts image uploads and normalizes the MIME type/subtype to
-lowercase without parameters before storing it. SVG uploads are rejected because
-SVG can execute scripts when opened on the application origin. MIME comparison is
-case-insensitive and ignores parameters, so `image/SVG+xml; charset=utf-8` is also
-rejected.
+**上传：`POST /api/media`**
 
-Uploads authorize the same session record used to capture its immutable
-incarnation. Before binding ownership and references, the session lock rechecks
-the owner, incarnation, active status, and deletion marker. A concurrent owner
-change is rejected with `401`; an incarnation change or inactive/deleting session
-returns `409`. Bytes stored before rejection remain unbound and eligible for GC.
+- 只接受图片（`image/*`）。
+- 保存之前，把 MIME 类型整理成小写、不带参数的形式。
+- 拒绝 SVG。原因：SVG 在应用自己的域名下打开时可以执行脚本。
+- 比较 MIME 类型时不分大小写，也忽略参数。所以 `image/SVG+xml; charset=utf-8` 同样被拒绝。
 
-`GET /api/media/:id` applies `Content-Disposition: attachment` and
-`Content-Security-Policy: sandbox` to stored SVG assets, including historical or
-producer-written MIME values with mixed casing or parameters. Both ordinary
-responses and `304` cache revalidation responses carry these protections.
+**上传时的会话检查**
+
+上传使用同一条会话记录来鉴权，并记下它的“代次”（incarnation，同一个 ID 的会话每次重建都会变）。在登记归属和引用之前，服务端在会话锁里再检查一遍：归属者、代次、是否处于 active 状态、是否正在删除。
+
+| 情况                                     | 结果                         |
+| ---------------------------------------- | ---------------------------- |
+| 这期间归属者变了                         | `401`                        |
+| 代次变了，或者会话不再 active / 正在删除 | `409`                        |
+| 被拒绝之前已经存下的字节                 | 没有归属，之后可以被清理回收 |
+
+**读取：`GET /api/media/:id`**
+
+对保存下来的 SVG 文件，响应带上 `Content-Disposition: attachment` 和 `Content-Security-Policy: sandbox`。
+
+- 历史数据或生成方写入的 MIME 值大小写混杂、带参数时，同样适用。
+- 普通响应和 `304` 缓存复核响应都带这两个头。
 
 ## Backends
 
-The Web render-blob cache is separate from the `MediaStore` backend. Web media
-resolution authorizes the session before consulting this cache. Cache records are validated;
-malformed or mismatched entries fall back to verified network bytes. Concurrent
-writes retain the first record using one IndexedDB transaction. Write/delete
-completion follows transaction completion, and cache failures emit diagnostics
-without turning successfully downloaded media into a rendering failure.
+| 后端                | 工厂函数                                        | 字节存在哪里                                          | `openReadStream()`                      |
+| ------------------- | ----------------------------------------------- | ----------------------------------------------------- | --------------------------------------- |
+| Memory              | `createMemoryMediaStore()`                      | 进程内存                                              | 有（一次给出整块）                      |
+| SQLite/local-fs     | `createSqliteMediaStore(dbPath, { mediaRoot })` | 本地文件，路径是 `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | 有（真正的流式读取）                    |
+| PostgreSQL          | `createPgMediaStore(databaseUrl)`               | `media_assets.body` 列，类型 `bytea`                  | **没有**，见下面的“PG streaming caveat” |
+| IndexedDB（网页端） | `createIndexedDbMediaStore({ dbName })`         | 浏览器 IndexedDB 的 Blob 存储                         | 有（`Blob.stream()`）                   |
 
-Render-cache and app-KV operations share one browser connection per page. Failed
-opens and closed handles can be retried by a later operation; version changes
-release the old handle. A blocked open returns a failure promptly and abandons
-its eventual upgrade/connection. Until that native request settles, later calls
-reuse its failure instead of queuing another blocked open. Cache diagnostics
-exclude raw exception details and signed URLs. Invalid-record eviction rechecks the current record before
-deleting, preserving another tab's valid replacement.
+### 浏览器里的显示缓存
 
-| Backend         | Factory                                         | Byte storage                                           | `openReadStream()`          |
-| --------------- | ----------------------------------------------- | ------------------------------------------------------ | --------------------------- |
-| Memory          | `createMemoryMediaStore()`                      | Process memory                                         | yes (single chunk)          |
-| SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files under `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | yes (true streaming)        |
-| PostgreSQL      | `createPgMediaStore(databaseUrl)`               | `media_assets.body` as `bytea`                         | **no** — see "PG streaming" |
-| IndexedDB (web) | `createIndexedDbMediaStore({ dbName })`         | Browser IDB Blob store                                 | yes (Blob.stream())         |
+网页端另有一份“渲染用的 blob 缓存”。它和 `MediaStore` 后端是两回事。
+
+- 网页端解析媒体时，先确认会话有权读取，再查这份缓存。
+- 缓存记录会被校验。格式不对或对不上的记录被忽略，改用经过校验的网络字节。
+- 并发写入时保留第一条记录，用一个 IndexedDB 事务完成。写入和删除以事务完成为准。
+- 缓存出错只产生诊断信息，不会让已经成功下载的媒体显示失败。
+
+连接的规则：
+
+- 显示缓存和应用的键值存储在每个页面里共用一个浏览器连接。
+- 打开失败或句柄已关闭时，之后的操作可以重试。数据库版本变化时释放旧句柄。
+- 打开被阻塞时立即返回失败，并放弃它最终的升级和连接。在那个原生请求结束之前，后面的调用直接复用这次失败，不再排队发起另一个被阻塞的打开。
+- 缓存诊断不包含原始异常细节和签名 URL。
+- 清除无效记录之前会再检查一次当前记录，不会删掉另一个标签页刚写入的有效记录。
 
 ### PG streaming caveat
 
-`createPgMediaStore` intentionally does **not** implement `openReadStream`. The `bytea` column type forces the entire blob into memory before the driver can hand it back, so a "streaming" wrapper would just buffer the whole asset and add no value over the eager `get()` path. The route layer in `apps/server/src/routes/api/media.ts` already gates on `typeof store.openReadStream === 'function'` and falls back to `get()` automatically — no caller change is required.
+`createPgMediaStore` 有意不实现 `openReadStream`。
 
-If you store media larger than a few MiB on PostgreSQL, consider moving bytes to
-SQLite local-fs (`createSqliteMediaStore`) and keeping PG for the rest of the
-kernel state.
+- `bytea` 列会让驱动先把整个文件读进内存，再交给调用方。包一层“流式”只是把整个文件缓冲一遍，比直接 `get()` 没有任何好处。
+- `apps/server/src/routes/api/media.ts` 的路由层已经判断 `typeof store.openReadStream === 'function'`，没有时自动改用 `get()`。调用方不需要改动。
+
+> [!TIP]
+> 如果在 PostgreSQL 上保存大于几 MiB 的媒体，可以考虑把字节放到 SQLite local-fs（`createSqliteMediaStore`），内核的其他状态仍然留在 PG。
 
 ## Media Wire Registries (image / speech / transcription / music)
 
-Media _generation_ (as opposed to storage) routes through pluggable wire
-registries in `@covel/ai-provider` (`packages/ai-provider/src/image/wire-registry.ts`,
-`packages/ai-provider/src/speech/wire-registry.ts`), upstream of `MediaStore` —
-generated bytes land in `MediaStore` via `ctx.images.generate()` /
-`ctx.speech.generate()` / `ctx.music.generate()` only after a wire produces
-them.
+这一节讲的是媒体的**生成**，不是保存。生成走 `@covel/ai-provider` 里可插拔的 wire 注册表（`packages/ai-provider/src/image/wire-registry.ts`、`packages/ai-provider/src/speech/wire-registry.ts`），位于 `MediaStore` 的上游。wire 产出字节之后，`ctx.images.generate()` / `ctx.speech.generate()` / `ctx.music.generate()` 才把它们存进 `MediaStore`。
 
-- Each wire implements one provider's request/response shape. Builtin wires:
-  `openai-images` (default, `DEFAULT_IMAGE_WIRE`) and `dashscope-wan` for image;
-  `openai-speech` (TTS, `POST /audio/speech`) and `openai-transcription`
-  (STT, `POST /audio/transcriptions`) for speech. Music
-  (`packages/ai-provider/src/music/wire-registry.ts`) has no builtin wire:
-  providers share no request format, so a plugin registers one. A wire whose
-  provider answers with a job polls inside `compose` and returns the audio.
-- Wire selection is per-slot: `llm.toml` `[covel.<slot>].providerRequestMetadata`
-  keys `imageWire` / `speechWire` / `transcriptionWire` / `musicWire` set the
-  wire id; unset values fall back to the builtin defaults, and `musicWire` has
-  none, so an unset one is a configuration error. An unknown id throws at generation
-  time rather than silently falling back. See [slots.md](./slots.md).
-- Plugins register additional wires from their `entry` module via
-  `covel.registerWires({ image?, speech?, transcription?, music?, text? })` (ids auto-namespaced
-  `<pluginId>/<wireId>`; trust-gated loading) — see
-  [plugin-extensions.md § 模型与新协议](plugin-extensions.md#模型与新协议).
-  Bundled code can also call `registerImageWire` / `registerSpeechWire` /
-  `registerTranscriptionWire` directly — open string ids, not enums.
+一个 wire 实现一家服务商的请求和回答格式。
+
+| 类型     | 内置 wire                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------------ |
+| 图像     | `openai-images`（默认，`DEFAULT_IMAGE_WIRE`）、`dashscope-wan`                                         |
+| 语音合成 | `openai-speech`（TTS，`POST /audio/speech`）                                                           |
+| 语音转写 | `openai-transcription`（STT，`POST /audio/transcriptions`）                                            |
+| 音乐     | 没有内置 wire（`packages/ai-provider/src/music/wire-registry.ts`）。各家没有共同的请求格式，由插件注册 |
+
+服务商用“任务”回答的 wire，在 `compose` 里自己轮询，最后返回音频。
+
+**选择 wire**
+
+- 每个用途各选各的：`llm.toml` 里 `[covel.<slot>].providerRequestMetadata` 的 `imageWire` / `speechWire` / `transcriptionWire` / `musicWire` 写 wire ID。
+- 没写时使用内置的默认值。`musicWire` 没有默认值，不写就是配置错误。
+- 不认识的 ID 在生成时抛错，不会悄悄换成别的 wire。
+
+见 [slots.md](./slots.md)。
+
+**注册 wire**
+
+- 插件在 `entry` 模块里调用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })`。ID 自动加上前缀，成为 `<pluginId>/<wireId>`；是否加载受信任级别控制。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
+- 随框架打包的代码也可以直接调用 `registerImageWire` / `registerSpeechWire` / `registerTranscriptionWire`。ID 是任意字符串，不是枚举。
 
 ## Metadata Conventions & Querying
 
-`put()`, `ctx.media.put()`, and `ctx.images.generate()` all accept a free-form `meta` object stored alongside each asset. Two kinds of keys live in that object:
+`put()`、`ctx.media.put()` 和 `ctx.images.generate()` 都接受一个自由格式的 `meta` 对象，和文件一起保存。里面有两类键：
 
-- **Business keys** — plugin-defined, describe what the image _is_: `kind` (`scene-background` / `character-sprite` / `illustration` / …), `sceneId` or `characterId`, `variant` (`day` / `night` / …). The framework never reads these; they exist purely for the querying plugin's own convention.
-- **Framework keys** — `pluginId` and `promptHash`, injected automatically by `ctx.images.generate()` (`packages/runtime/src/function-runtime/runtime-images-context.ts`) and `ctx.speech.generate()` (`runtime-speech-context.ts`). They are spread onto `meta` **after** the caller-supplied `metadata`, so a plugin can never override them.
+- **业务键**：插件自己定义，描述这张图“是什么”。例如 `kind`（`scene-background` / `character-sprite` / `illustration` / …）、`sceneId` 或 `characterId`、`variant`（`day` / `night` / …）。框架从不读取它们，它们只服务于查询它们的那个插件自己的约定。
+- **框架键**：`pluginId` 和 `promptHash`。由 `ctx.images.generate()`（`packages/runtime/src/function-runtime/runtime-images-context.ts`）和 `ctx.speech.generate()`（`runtime-speech-context.ts`）自动写入。它们在调用方给的 `metadata` **之后**写入，所以插件无法覆盖它们。
 
 ### `listByMetadata(sessionId, filter)`
 
-Returns assets owned by `sessionId` whose `meta` contains every key/value in `filter` — an exact, shallow subset match, one shared implementation (`filterAssetsByMetadata` in `packages/store/src/media-store/filter.ts`) reused by all four MediaStore backends. A `filter` value of `undefined` matches both a missing key and a key explicitly stored as `undefined` (`meta[k] === v` — both sides read `undefined`). Only primitive values (string/number/boolean/`null`) compare meaningfully; objects and arrays never match because `===` on them is reference equality. Result sets are expected to stay small — per-session media volume is tens of records, so this is a full scan (`ponytail:` comment in `filter.ts` — push down to SQL when volume outgrows that). `filter.ts` is kept free of Node built-ins (unlike `utils.ts`) because the explicit browser MediaStore imports it.
+返回 `sessionId` 拥有的、并且 `meta` 包含 `filter` 里每一对键值的文件。
+
+- 匹配方式是精确、浅层的子集匹配。四种后端共用一个实现：`packages/store/src/media-store/filter.ts` 的 `filterAssetsByMetadata`。
+- `filter` 里某个值是 `undefined` 时，既匹配“没有这个键”，也匹配“这个键明确存成了 `undefined`”（比较用的是 `meta[k] === v`，两边都读到 `undefined`）。
+- 只有基本类型的值（string / number / boolean / `null`）比较才有意义。对象和数组永远不匹配，因为 `===` 比较的是引用。
+- 结果集预期很小：每个会话的媒体只有几十条，所以这里做的是全表扫描。`filter.ts` 里有 `ponytail:` 注释：数据量超出这个规模时，要下推到 SQL。
+- `filter.ts` 不使用 Node 内置模块（和 `utils.ts` 不同），因为浏览器端的 MediaStore 也会导入它。
 
 ### `promptHash` idempotency
 
-`ctx.images.generate()` derives `promptHash` deterministically from the generation parameters (`prompt`, `negativePrompt`, `size`, `quality`, `n`, `background`) and the resolved provider, model, protocol, endpoint and canonical wire metadata. It resolves the current image binding before cache lookup; rebinding the same role to another model or wire invalidates the cache. API keys, authentication headers, business `metadata`, and `signal` are excluded. `ctx.speech.generate()` uses the same model identity with (`presetId`, `text`, `voice`, `format`), and `ctx.music.generate()` with (`presetId`, `prompt`, `lyrics`, `instrumental`, `durationSeconds`, `format`): a line or a piece made by one model is not served after the role is bound to another, and is served again when the role returns to the first model. Speech and music serve one stored asset as the cached result. Before calling the gateway it queries `listByMetadata(sessionId, { promptHash, pluginId })`; if at least `n` matching assets already exist (speech: 1), it returns those refs with `cached: true` and skips the provider call entirely. Two calls with the same prompt but different `metadata` therefore dedupe to the same cached asset — the metadata stamped on disk is whatever the **first** call supplied, each returned cached ref carries the current call's business metadata while the persisted asset retains the first call's metadata. A partial hit (fewer than `n` existing assets, e.g. one image failed to persist on a prior call) is **not** served as cached — it regenerates the full batch rather than silently handing back fewer images than requested.
+`promptHash` 让“同样的请求不生成第二次”。
+
+**它由什么算出来**
+
+| 调用                    | 参与计算的内容                                                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.images.generate()` | 生成参数（`prompt`、`negativePrompt`、`size`、`quality`、`n`、`background`），加上解析出的服务商、模型、协议、端点和规范化的 wire 元数据 |
+| `ctx.speech.generate()` | 同样的模型身份，加上 `presetId`、`text`、`voice`、`format`                                                                               |
+| `ctx.music.generate()`  | 同样的模型身份，加上 `presetId`、`prompt`、`lyrics`、`instrumental`、`durationSeconds`、`format`                                         |
+
+- 不参与计算的：API 密钥、认证头、业务 `metadata` 和 `signal`。
+- `ctx.images.generate()` 在查缓存之前先解析当前的图像绑定。把同一个用途改绑到另一个模型或 wire，缓存就失效。
+- 语音和音乐同理：一个模型做出的一句话或一段音乐，在用途绑定到另一个模型之后不会再被返回；用途改回第一个模型时又可以返回。
+
+**怎样命中**
+
+1. 调用 gateway 之前，先查 `listByMetadata(sessionId, { promptHash, pluginId })`。
+2. 已经有至少 `n` 个匹配的文件时（语音和音乐是 1 个），直接返回这些引用，带 `cached: true`，完全跳过对服务商的调用。
+
+**要注意的两点**
+
+- 提示词相同、`metadata` 不同的两次调用，会命中同一个缓存文件。磁盘上保存的是**第一次**调用给的元数据；返回的每个缓存引用带的是这一次调用的业务元数据。
+- 只命中一部分（已有文件少于 `n`，例如上次有一张图没存成功）**不算**命中。这时重新生成整批，而不是悄悄少给几张。
 
 ## Ownership
 
-SQLite/local-file `put()` writes complete bytes to an exclusive temporary file in the target directory, atomically renames it to the content path, then registers metadata. A retry replaces an orphan final file without metadata rather than trusting its existence; failed writes remove their temporary file. The file write and the read in `get()` are asynchronous, so a large picture does not hold up other sessions; only the metadata row waits for the database write queue, and that step writes the file itself if a deletion removed it in between.
+**SQLite / 本地文件的写入**
 
-`recordOwnership()` sets the first owner for an asset (first-writer-wins; a second call with a different `sessionId` does not overwrite it). `addRef()` grants another session read access for fork and snapshot flows; `removeRef()` idempotently removes one session's explicit ref (does not delete bytes or ownership metadata). `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row. `ctx.media.put()` and `ctx.media.ingestUrl()` record ownership and the session's reference after the bytes are stored; when the runtime or guard that called them was aborted or timed out meanwhile, the call rejects and records neither, and the unowned bytes are left to media cleanup.
+- `put()` 先把完整的字节写到目标目录里的一个独占临时文件，再原子地改名到内容路径，最后登记元数据。
+- 重试时，如果发现一个“有文件、没有元数据”的孤儿文件，会替换它，不会因为文件存在就信任它。写入失败会删掉自己的临时文件。
+- 写文件和 `get()` 里的读文件都是异步的，所以一张大图不会拖住其他会话。只有元数据那一行要排数据库的写队列；如果这期间文件被一次删除清掉了，这一步会重新把文件写上。
 
-`GET /api/sessions/:id/media-token` requires the session owner credential on
-hosted tiers and in production with MemoryStore, including the `self`
-browser-private profile. An operator credential can authorize the request as
-with other session routes. The session must also own or reference the requested
-asset before the server issues a signed media URL.
+**归属和引用**
 
-`POST /api/media` accepts `image/*` MIME types and rejects `image/svg+xml`.
-MIME type checks ignore case, surrounding whitespace, and parameters; accepted
-uploads store the lowercase type without parameters. Reads apply the same
-normalization before checking historical asset metadata: SVG assets are always
-served with `Content-Disposition: attachment` and `Content-Security-Policy:
-sandbox`, on both buffered and streaming responses. The stored MIME parameters
-remain available in the read response's `Content-Type`.
+| 方法                | 作用                                                                      |
+| ------------------- | ------------------------------------------------------------------------- |
+| `recordOwnership()` | 给文件设置第一个归属者。先到先得：第二次用不同的 `sessionId` 调用不会覆盖 |
+| `addRef()`          | 给另一个会话读取权限，用于 fork 和快照                                    |
+| `removeRef()`       | 移除一个会话的引用。可以重复调用；不删除字节，也不动归属                  |
+| `isReferencedBy()`  | 归属者会话，或者有一条引用记录的会话，返回 true                           |
 
-`delete()` removes every inbound ref before the asset. SQL backends perform both
-steps in one transaction; in particular, a second SQLite process cannot insert
-a ref between the ref cleanup and asset deletion.
+`ctx.media.put()` 和 `ctx.media.ingestUrl()` 在字节存好之后登记归属和本会话的引用。如果调用它们的 runtime 或 guard 在这期间被中止或超时，这次调用被拒绝，两样都不登记。没有归属的字节留给媒体清理去回收。
 
-`addRef()` is **idempotent on `(sessionId, mediaId)`** — the `media_refs` UNIQUE constraint ignores `plugin_id` (which is recorded as first-source metadata only). This is the safe behaviour because SQL `UNIQUE` treats every `NULL` as distinct, so a constraint that includes a nullable `plugin_id` would silently allow unbounded duplicate rows when callers passed `undefined`. The new key shape matches Memory and IndexedDB, which use `(sessionId, mediaId)` as their map key.
+**`addRef()` 按 `(sessionId, mediaId)` 幂等**
 
-Only the current `(session_id, media_id)` constraint is supported. Recreate
-development databases that use the former media-reference shape; the framework
-does not migrate or automatically delete old rows.
+`media_refs` 的 UNIQUE 约束不包含 `plugin_id`，它只作为“最先来源”的说明被记录下来。这样做是安全的：SQL 的 `UNIQUE` 把每个 `NULL` 都当成不同的值，如果约束里包含可以为空的 `plugin_id`，调用方传 `undefined` 时就会悄悄产生无数条重复记录。这个键的形状和 Memory、IndexedDB 一致，它们也用 `(sessionId, mediaId)` 作为 map 的键。
 
-`put(bytes, mime, meta?, initialRef?)` can create an initial reference in the
-same critical section/transaction that publishes the bytes, including when the
-content already exists. It does not assign ownership. The reference follows the
-usual `(sessionId, mediaId)` first-writer-wins rule and is visible to cleanup
-before `put` returns.
+> [!WARNING]
+> 只支持当前的 `(session_id, media_id)` 约束。使用旧的媒体引用结构的开发数据库需要重建，框架不迁移也不自动删除旧记录。
 
-World-data preparation uses this operation to pin bytes under a unique
-`world-data-import:<uuid>` reference. The colon is outside the accepted user
-session-ID alphabet. Each import attempt therefore owns separate temporary
-references even when concurrent attempts target the same session and content.
-Finalization establishes the real session's ownership/ref before releasing the
-temporary references. Preparation, semantic-write, duplicate-session, and world
-admission failures release only the current attempt's temporary references;
-they never force-delete shared content or release an existing session's claims.
-Unclaimed bytes are then eligible for lifecycle GC. If a newly created session
-fails media finalization, creation deletes that session and releases its claims
-under the session lifecycle lock. Sync removes explicit references after commit
-and leaves ownership/byte reclamation to lifecycle GC.
+**`delete()`**
 
-If semantic data has committed but finalization fails, the temporary reference
-remains until permanent claims can be recovered. Session creation releases it
-after a successful rollback; a failed rollback also retains the pin.
-Temporary-reference release is best-effort and logs failures without changing
-the import outcome. A process crash or release failure can leave a temporary
-reference behind; cleanup conservatively retains its bytes. These references
-have no automatic expiry. An operator must establish that the import is no
-longer active before manually removing an abandoned temporary reference. No
-persistent schema change or development-data recreation is required.
+`delete()` 先移除指向这个文件的所有引用，再删除文件。SQL 后端把两步放在一个事务里。特别是，另一个 SQLite 进程不可能在“清引用”和“删文件”之间插入一条新引用。
+
+**签名 URL：`GET /api/sessions/:id/media-token`**
+
+- 在托管部署（`demo` / `commercial`）下，以及生产环境使用 MemoryStore 时（包括 `self` 的浏览器私有模式），需要会话归属者的凭据。
+- 和其他会话路由一样，运维凭据也可以授权这个请求。
+- 会话还必须拥有或引用了要读的文件，服务端才签发媒体 URL。
+
+**上传和读取时的 MIME 规则**
+
+- `POST /api/media` 接受 `image/*`，拒绝 `image/svg+xml`。
+- 检查 MIME 类型时忽略大小写、两端的空白和参数。接受的上传保存成小写、不带参数的类型。
+- 读取时，对历史文件的元数据也先做同样的整理：SVG 文件总是带 `Content-Disposition: attachment` 和 `Content-Security-Policy: sandbox`，缓冲响应和流式响应都一样。
+- 保存下来的 MIME 参数仍然出现在读取响应的 `Content-Type` 里。
+
+### 存入时同时建立引用
+
+`put(bytes, mime, meta?, initialRef?)` 可以在公开字节的同一个临界区或事务里，建立一条初始引用。内容已经存在时也一样。
+
+- 它不设置归属。
+- 这条引用遵循通常的 `(sessionId, mediaId)` 先到先得规则。
+- `put` 返回之前，清理就已经能看到这条引用。
+
+### 世界数据导入时的临时引用
+
+准备世界数据时，用上面这个操作把字节“钉住”，引用名是唯一的 `world-data-import:<uuid>`。冒号不在用户会话 ID 允许的字符里，所以它不会和真实会话重名。
+
+- 每次导入尝试有自己的临时引用。即使几次并发的尝试针对同一个会话、同一份内容，也互不影响。
+- 收尾时，先给真实会话建立归属和引用，再释放临时引用。
+- 准备、语义写入、会话重复和世界准入失败时，只释放本次尝试的临时引用。它们不会强制删除共享的内容，也不会释放已有会话的声明。之后没人声明的字节可以被生命周期清理回收。
+- 新建的会话在媒体收尾时失败的话，创建流程会在会话生命周期锁里删除这个会话并释放它的声明。
+- 同步（sync）在提交之后移除明确的引用，归属和字节的回收留给生命周期清理。
+
+出问题时：
+
+- 语义数据已经提交、但收尾失败时，临时引用保留，直到永久的声明可以恢复。会话创建在回滚成功之后释放它；回滚失败也保留它。
+- 释放临时引用是尽力而为的。失败只记日志，不改变导入的结果。
+- 进程崩溃或释放失败可能留下一条临时引用。在它过期之前，清理会保留它的字节。
+
+> [!NOTE]
+> 被遗弃的临时引用在创建满 24 小时后过期。过期的引用只由 `POST /api/media/cleanup` 释放：演练在 `expiredRefs` 里列出它们，真正的清理移除它们。没有定时任务会做这件事，媒体库的删除也不会。
+>
+> 一次导入只在一个请求里持有它的临时引用，远远短于 24 小时，所以清理不会拿走一次还在进行的导入的引用。这个时限是固定的，不能通过请求或环境变量修改。
 
 ## Pictures sent to the story model
 
-The kernel reads image bytes for one purpose besides serving them to the player: a story agent whose model accepts image input receives the newest pictures of its session as inline base64 image parts ([prompt structure](./prompt-structure.md#展示过的图片)). The read stays inside the same boundary as a player read:
+除了给玩家显示之外，内核只为一个目的读取图片字节：故事 agent 的模型接受图片输入时，它会收到本会话最新的图片，作为内联的 base64 图片（见 [Prompt 结构参考](./prompt-structure.md#展示过的图片)）。这次读取和玩家读取受同样的限制：
 
-- The agent loop holds only `MediaRef`s until the model call. It calls `lookup()` for the stored MIME type and size, `isReferencedBy(id, sessionId)` for the session's right to the asset, then `get()`. An asset the session neither owns nor references is not sent.
-- Only `image/png`, `image/jpeg`, `image/webp` and `image/gif` are sent, and only up to 3,750,000 raw bytes each. A picture over the limit is left out; the kernel does not resize.
-- The provider layer receives bytes and never a location: no media URL, signed token, file path or `MediaRef.url` enters a prompt, and the provider layer fetches nothing. A failed read logs a warning and the call goes on without that picture.
-- Traces keep the length of the inline data, not the data.
+- agent 循环在调用模型之前只持有 `MediaRef`。它依次调用 `lookup()` 取得保存的 MIME 类型和大小，调用 `isReferencedBy(id, sessionId)` 确认会话有权读，然后才 `get()`。会话既不拥有也没有引用的文件不会被发送。
+- 只发送 `image/png`、`image/jpeg`、`image/webp` 和 `image/gif`，每张最多 3,750,000 个原始字节。超过上限的图片被略过，内核不会缩放图片。
+- provider 层收到的是字节，从来不是位置：媒体 URL、签名令牌、文件路径和 `MediaRef.url` 都不会进入提示词，provider 层也不去下载任何东西。读取失败时记一条警告，这次调用不带那张图片继续进行。
+- trace 里保存的是内联数据的长度，不是数据本身。
 
 ## Lifecycle Cleanup
 
-The SQLite media factory owns its shared connection reference until construction
-succeeds. Initialization failure releases only that reference, preserves other
-owners and rethrows the original error. After success, the returned store's
-`close()` owns release; the connection closes when its last owner releases it.
+**SQLite 连接的归属**
 
-The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler integration. The route scans live sessions, messages, plugin data, runtime outputs, trace events, snapshots, turn results, `MediaStore.listAssets()`, and `MediaStore.listRefs()` with the shared `collectMediaRefIds()` scanner, then passes the protected id set into `MediaStore.cleanup()`.
+SQLite 媒体工厂在构造成功之前，自己持有共享连接的引用。初始化失败时只释放这一个引用，保留其他持有者，并重新抛出原始错误。成功之后，由返回的 store 的 `close()` 负责释放。最后一个持有者释放时，连接才关闭。
 
-`protectedIds` is a planning snapshot, not the final deletion authority. Cleanup
-also includes every current ownership/ref claim in its plan, including temporary
-import references, so dry runs report pinned assets as protected. Every
-backend rechecks the asset's current owner and reference rows in the same
-critical section/transaction as deletion (PG advisory transaction lock +
-`NOT EXISTS`, SQLite `BEGIN IMMEDIATE`, IndexedDB two-store `readwrite`, Memory
-synchronous map check). A reference or owner created after the route scan
-therefore retains the asset; the returned cleanup counters/ids are reconciled
-to what was actually deleted rather than the stale plan.
+**清理接口：`POST /api/media/cleanup`**
 
-SQLite keeps its `BEGIN IMMEDIATE` lock through removal of the content file,
-preventing a concurrent same-digest `put()` from recreating bytes before an old
-deletion finishes. An unlink failure rolls back metadata and reference removal.
-Physical `delete()` and non-dry-run `cleanup()` must run outside an existing SQL
-transaction; they reject before changing metadata or refs when the shared
-connection already has one open. Callers run them after their DataStore
-transaction settles. A filesystem unlink cannot be undone by an outer SQL
-rollback. This restriction does not apply to `put()` or a cleanup dry run, which
-may use the shared connection inside a DataStore transaction.
+框架提供这个接口，用于手动清理和接入定时任务。
 
-The endpoint is unavailable in `commercial` deployments. In `demo`, it
-requires the configured operator bearer token before feature-flag or policy
-evaluation; `self` keeps the local single-user behavior.
+1. 路由用共享的 `collectMediaRefIds()` 扫描：现存的会话、消息、插件数据、runtime 输出、trace 事件、快照、回合结果，以及 `MediaStore.listAssets()` 和 `MediaStore.listRefs()`。
+2. 把得到的“受保护 ID 集合”传给 `MediaStore.cleanup()`。
 
-Cleanup policy fields:
+使用这个接口的条件：
 
-| Field             | Meaning                                                                       |
-| ----------------- | ----------------------------------------------------------------------------- |
-| `dryRun`          | Defaults to `true`; returns the deletion plan while keeping bytes in place    |
-| `maxAgeMs`        | Deletes unprotected assets created at or before `now - maxAgeMs`              |
-| `maxBytes`        | Deletes oldest unprotected assets until total stored bytes fit the cap        |
-| `keepRecentBytes` | Keeps the newest unprotected byte budget and selects older unprotected assets |
+| 条件                                                | 不满足时                     |
+| --------------------------------------------------- | ---------------------------- |
+| 部署不是 `commercial`                               | `503 unavailable`            |
+| `demo` 部署带上配置的运维 bearer 令牌               | 在读取开关和策略之前就被拒绝 |
+| 设置了 `COVEL_MEDIA_CLEANUP_ENABLED=true`           | `403`，接口默认关闭          |
+| `dryRun: false` 时带请求头 `X-Confirm-Cleanup: yes` | `400`                        |
 
-`onlyIds` (store contract only; the cleanup endpoint does not accept it) limits a
-policy to the listed assets: every other asset is kept whatever the other fields
-say. The media library deletes with `{ maxBytes: 0, onlyIds }`, so a deletion can
-reach only the assets it names, and each of them still passes the owner and
-reference check above.
+`self` 部署保持本机单用户的行为，不需要令牌。每个会话扫描的行数有上限（`scanLimit`，默认 1,000）。超过时接口拒绝执行，不会悄悄只扫一部分。
 
-An empty policy returns an inventory-style dry run with zero selected deletions. Desktop and web media reads use the same authoritative store metadata, with browser cache entries validated against the `MediaRef` before serving.
+**`protectedIds` 只是计划，不是最后的裁决**
+
+- 清理的计划里还包括当前所有的归属和引用声明，包括导入时还没过期的临时引用。所以演练（dry run）会把被钉住的文件报告为受保护。
+- 每个后端在删除的同一个临界区或事务里，再检查一次文件当前的归属和引用：PG 用 advisory 事务锁加 `NOT EXISTS`，SQLite 用 `BEGIN IMMEDIATE`，IndexedDB 用跨两个 store 的 `readwrite` 事务，Memory 同步检查 map。
+- 所以在路由扫描之后才建立的引用或归属，仍然能保住文件。返回的清理计数和 ID 以实际删除的为准，不是照抄过时的计划。
+
+**SQLite 的额外规则**
+
+- SQLite 持有 `BEGIN IMMEDIATE` 锁，一直到内容文件删除完成。这样一次并发的、内容相同的 `put()` 不可能在旧的删除结束之前把字节重新建出来。
+- 删除文件（unlink）失败时，元数据和引用的移除一起回滚。
+- 实际的 `delete()` 和非演练的 `cleanup()` 必须在已有的 SQL 事务之外运行。共享连接上已经开着一个事务时，它们在改动元数据或引用之前就拒绝执行。调用方要等自己的 DataStore 事务结束之后再调用它们。原因：文件系统的 unlink 没法被外层的 SQL 回滚撤销。
+- 这个限制不适用于 `put()` 和清理的演练，它们可以在 DataStore 事务里使用共享连接。
+
+**清理策略的字段**
+
+| 字段              | 含义                                                               |
+| ----------------- | ------------------------------------------------------------------ |
+| `dryRun`          | 默认 `true`：只返回删除计划，字节原样保留                          |
+| `maxAgeMs`        | 删除创建时间不晚于 `now - maxAgeMs` 的、不受保护的文件             |
+| `maxBytes`        | 从最旧的开始删除不受保护的文件，直到保存的总字节数不超过这个上限   |
+| `keepRecentBytes` | 保留最新的、这么多字节的不受保护文件，更旧的不受保护文件被选中删除 |
+
+- 空的策略返回一份清单式的演练结果，选中的删除数量为零。
+- `expireRefs: { sessionIdPrefix, maxAgeMs }` 只存在于 store 的接口里。它让清理同时释放被遗弃的引用：会话 ID 以 `sessionIdPrefix` 开头、并且创建时间不晚于 `now - maxAgeMs` 的引用。前缀必须包含冒号，否则调用被拒绝：会话 ID 里没有冒号，所以真实会话的引用永远不会匹配。清理接口总是传 `world-data-import:` 和 24 小时。释放的引用列在结果的 `expiredRefs` 里；它不再保护文件，但文件是否删除仍然由其他字段和其他声明决定。
+- `onlyIds` 只存在于 store 的接口里，清理接口不接受它。它把策略限制在列出的文件上：其他文件不管别的字段怎么写都保留。媒体库用 `{ maxBytes: 0, onlyIds }` 删除，所以一次删除只能碰到它点名的文件，而且每个文件仍然要通过上面的归属和引用检查。
+
+桌面端和网页端读取媒体时使用同一份权威的 store 元数据。浏览器缓存里的条目先对照 `MediaRef` 校验，再用来显示。
 
 ## Media library
 
-A player sees and deletes stored media in Settings → Stored media, served by
-`GET /api/media/library` and `POST /api/media/library/delete`
-([api.md](./api.md)). Nothing is deleted without a confirmed action there, and
-`POST /api/media/cleanup` stays the operator's tool.
+玩家在 **设置 → 已存储的媒体** 里查看和删除保存的媒体。它由 `GET /api/media/library` 和 `POST /api/media/library/delete` 提供（见 [api.md](./api.md)）。不在那里确认，就不会删除任何东西。`POST /api/media/cleanup` 仍然是运维用的工具。
 
-**What counts as used.** One scan
-(`apps/server/src/routes/api/media-reference-scan.ts`, shared with the cleanup
-endpoint) builds, for every media ID, the set of current sessions that use it. A
-session uses an asset when at least one of these holds:
+**什么算“在用”。** 一次扫描（`apps/server/src/routes/api/media-reference-scan.ts`，和清理接口共用）为每个媒体 ID 算出“当前有哪些会话在用它”。下面任意一条成立，就算这个会话在用这个文件：
 
-- it is the asset's owner (`recordOwnership`);
-- it holds an explicit reference (`addRef`, a `media_refs` row);
-- the ID appears as a `MediaRef` anywhere in the session's `messages`,
-  `plugin_data`, `runtime_outputs`, `trace_events`, `snapshots` or
-  `turn_results` rows.
+- 它是文件的归属者（`recordOwnership`）；
+- 它持有一条明确的引用（`addRef`，即 `media_refs` 里的一行）；
+- 这个 ID 作为 `MediaRef` 出现在该会话的 `messages`、`plugin_data`、`runtime_outputs`、`trace_events`、`snapshots` 或 `turn_results` 的任何一行里。
 
-An asset is **unused** only when a complete scan finds no such session and
-nothing else claims it. An asset whose owner or reference is not a current
-session is **held**: the temporary `world-data-import:<uuid>` reference of an
-import in progress, or a claim that outlived its session. A scan is incomplete
-when one session has more rows than the ceiling (200,000 for the library; the
-`scanLimit` parameter changes it); then an asset without a known user is
-**unknown**, nothing is unused, and deletion of unused media is refused with
-`409 scan_incomplete`. A session that could not be read is never treated as a
-session without references.
+由此得到四种状态：
 
-**World media.** Files in a world package (`worlds/<id>/media`, covers,
-portraits) are not in the MediaStore; the library neither lists nor deletes
-them. World data with `to: media` copies bytes into the MediaStore when a session
-is created, and every session of that world claims the same content-addressed
-asset: the first as owner and by reference, each later one by reference.
-Deleting a session releases that session's claims only, so the asset stays used
-until the last session of the world that holds it is gone. A world with no
-session needs no copy: the next session imports the file from the package again.
+| 状态                 | 含义                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 在用                 | 至少有一个当前的会话在用它                                                                                        |
+| **未使用**（unused） | 一次完整的扫描没有找到这样的会话，也没有别的东西声明它                                                            |
+| **被占用**（held）   | 它的归属者或引用不是一个当前的会话：正在进行的导入的临时引用 `world-data-import:<uuid>`，或者比会话活得更久的声明 |
+| **未知**（unknown）  | 扫描不完整，而这个文件没有找到已知的使用者                                                                        |
 
-**Cost.** A listing scans every row of every session once, then answers page,
-filter and total requests from that result for 30 seconds (`refresh=1` scans
-again). Each deletion request scans again and drops the cached result. The
-listing carries no bytes: each item has a signed URL, valid for one hour, whose
-token names the scope `media-library:` instead of a session (the colon is outside
-the session-ID alphabet), and `GET /api/media/:id` accepts that scope only where
-the library is available. The server has no thumbnails, so a picture's URL
-returns the original; the page shows 48 items at a time, lazy-loads pictures and
-loads audio and video only when the player starts them.
+扫描什么时候不完整：某个会话的行数超过上限（媒体库是 200,000，可以用 `scanLimit` 参数修改）。这时没有任何文件算“未使用”，删除未使用媒体的请求以 `409 scan_incomplete` 被拒绝。读不出来的会话，永远不会被当成“没有引用的会话”。
 
-**Deleting.** Unused media goes through `MediaStore.cleanup()` with `onlyIds`,
-so every backend checks the asset's owner and references again in the critical
-section that deletes it; an asset a session claimed after the scan is kept and
-reported as skipped. An asset that is used, held or unknown is deleted only by a
-request with `force` that names exactly one ID; `delete()` then removes it with
-every reference to it. The sessions that used it keep their rows: where the
-picture or sound was, the interface shows a "media unavailable" placeholder, and
-a plugin that asks for the same generation again gets a new asset.
+**世界里的媒体。** 世界包里的文件（`worlds/<id>/media`、封面、立绘）不在 MediaStore 里，媒体库既不列出也不删除它们。
 
-**Access.** The library exists only where one player owns everything the server
-stores: `DEPLOYMENT_TIER=self` and the desktop app. On `demo` and `commercial`,
-and on the browser-private profile (a production server on MemoryStore), the
-MediaStore holds media of several owners and has no per-owner index, so both
-routes answer `503 unavailable`, with or without the operator token.
+- 带 `to: media` 的世界数据，会在创建会话时把字节复制进 MediaStore。
+- 这个世界的每个会话都声明同一个按内容寻址的文件：第一个会话既是归属者又有引用，之后的每个会话只有引用。
+- 删除一个会话只释放这个会话的声明。所以这个文件一直算在用，直到这个世界里持有它的最后一个会话被删掉。
+- 一个没有任何会话的世界不需要这份副本：下一个会话会从世界包里重新导入文件。
+
+**成本。**
+
+- 一次列表请求把每个会话的每一行扫描一遍，之后 30 秒内的翻页、筛选和统计都用这次的结果回答。`refresh=1` 会重新扫描。
+- 每次删除请求都重新扫描，并丢掉缓存的结果。
+- 列表里不带字节。每一项有一个签名 URL，有效期一小时。它的令牌写的范围是 `media-library:`，不是某个会话（冒号不在会话 ID 允许的字符里）。`GET /api/media/:id` 只在媒体库可用的部署里接受这个范围。
+- 服务端没有缩略图，所以图片的 URL 返回的是原图。页面一次显示 48 项，图片懒加载，音频和视频只在玩家点开时才加载。
+
+**删除。**
+
+- 未使用的媒体通过带 `onlyIds` 的 `MediaStore.cleanup()` 删除。所以每个后端都会在删除它的临界区里，再检查一遍它的归属和引用。扫描之后才被某个会话声明的文件会保留，并报告为“已跳过”。
+- 在用、被占用或未知的文件，只能用带 `force`、并且只点名一个 ID 的请求删除。这时 `delete()` 把它和指向它的所有引用一起移除。
+- 用过它的会话保留自己的记录。原来放图片或声音的地方，界面显示“媒体不可用”的占位。插件再次请求同样的生成时，会得到一个新的文件。
+
+**访问。** 媒体库只在“服务器保存的一切都属于同一个玩家”的地方存在：`DEPLOYMENT_TIER=self` 和桌面版。在 `demo` 和 `commercial` 部署下，以及在浏览器私有模式下（生产服务器使用 MemoryStore），MediaStore 里有多个归属者的媒体，又没有按归属者的索引。所以这两个路由都返回 `503 unavailable`，带不带运维令牌都一样。
 
 ## Tests
 
-The shared contract lives in `packages/store/src/contract/media-store-contract.ts`. Current coverage runs against Memory, SQLite/local-fs, IndexedDB (via `fake-indexeddb`), and PostgreSQL when `DATABASE_URL` points at a reachable database (`packages/store/tests/media-store.test.ts`).
+共用的契约测试在 `packages/store/src/contract/media-store-contract.ts`。目前的覆盖范围：Memory、SQLite/local-fs、IndexedDB（通过 `fake-indexeddb`），以及 `DATABASE_URL` 指向一个可以连上的数据库时的 PostgreSQL（`packages/store/tests/media-store.test.ts`）。

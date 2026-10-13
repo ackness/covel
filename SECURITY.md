@@ -17,7 +17,7 @@ a hosted tier), the steps to reproduce, and what an attacker gains.
 ## Scope
 
 The boundaries Covel enforces, and the reason for each, are in
-[`docs/architecture/security.md`](docs/architecture/security.md). A way around
+[`docs/internals/security.md`](./docs/internals/security.md). A way around
 one of them is a vulnerability. Examples:
 
 - code of a community plugin runs before the player approved it;
@@ -32,7 +32,7 @@ Not a vulnerability in Covel:
 - What an approved community plugin does with the server's privileges. Plugin
   server code is not sandboxed, and approving a package means trusting its
   author; see
-  [Community plugin code](docs/architecture/security.md#community-plugin-code).
+  [Community plugin code](./docs/internals/security.md#community-plugin-code).
 - A fault in a third-party plugin or world. Report it to its author, or in the
   [plugin directory](https://github.com/covel-ai/covel-plugins) or
   [world directory](https://github.com/covel-ai/covel-worlds).

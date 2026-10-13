@@ -14,7 +14,7 @@
 const VOICE_HEADING = /^(voice|examples?)\b/i;
 
 /**
- * Words the prompt vocabulary replaces (docs/glossary.md): one thing has one
+ * Words the prompt vocabulary replaces (docs/reference/glossary.md): one thing has one
  * name in every prompt body.
  */
 const VOCABULARY = [

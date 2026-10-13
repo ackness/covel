@@ -13,7 +13,7 @@ Three rules shape the method:
 - **Work from the outside in.** Plugins state what they assume; the kernel must make each assumption true. Start at the plugins and carry every assumption inward until code discharges it or nothing does.
 - **A finding is a counterexample.** It is a concrete sequence of states and outcomes that ends in a broken property, with a line of code behind every step.
 
-The pipeline is not copied here. `docs/architecture/flow.md` and `docs/architecture/design-principles.md` state what the framework promises, the manifests state what plugins assume, and the code states what happens. Identifiers below are search anchors; when one no longer matches, find its successor through the Search Map in `docs/README.md`.
+The pipeline is not copied here. `docs/internals/flow.md` and `docs/internals/design-principles.md` state what the framework promises, the manifests state what plugins assume, and the code states what happens. Identifiers below are search anchors; when one no longer matches, find its successor through the Search Map in `docs/README.md`.
 
 ## Operating Rules
 
@@ -55,7 +55,7 @@ When the user asks for a diagram or an overview, add `map.html` to the report fo
 
 Confirm or infer: the target tree, the world and plugin set to reason about (default: one bundled world with the set its `pluginPolicy` and pack resolve to), the layers in scope (default: all four), and any focus the user named.
 
-Read `flow.md`, `design-principles.md`, `docs/glossary.md`, `docs/reference/plugins.md`, and `docs/architecture/technical-debt.md` — a limit recorded there is not a finding. Earlier audits under `devs/audits/` and `devs/docs/audits/` are leads: re-check each against current code, and do not re-report what the user deferred.
+Read `flow.md`, `design-principles.md`, `docs/reference/glossary.md`, `docs/reference/plugins.md`, and `docs/internals/technical-debt.md` — a limit recorded there is not a finding. Earlier audits under `devs/audits/` and `devs/docs/audits/` are leads: re-check each against current code, and do not re-report what the user deferred.
 
 ### 2. Fix The Model
 

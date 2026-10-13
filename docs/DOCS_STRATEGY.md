@@ -12,42 +12,35 @@
 
 ## Information Architecture
 
-| Section              | Purpose                                      | Source of truth                       |
-| -------------------- | -------------------------------------------- | ------------------------------------- |
-| `docs/README.md`     | 文档总入口和搜索地图                         | 当前文档树                            |
-| `docs/guide/`        | 任务型教程                                   | reference + 示例插件                  |
-| `docs/reference/`    | 权威契约                                     | schema、types、routes、runtime、tests |
-| `docs/architecture/` | 模块边界和设计原因                           | 实现代码 + 历史决策                   |
-| `docs/glossary.md`   | 统一术语                                     | reference 页面                        |
-| `docs/v2/`           | 按读者目标组织的新入口与逐章迁移             | 已验证教程 + 当前 reference 契约      |
-| `devs/docs/`         | 任务计划、审查、实施日志、临时分析与交接材料 | 稳定结论提炼后迁入正式 `docs/` 分类   |
+全部文档在 `docs/`，按读者接触产品的顺序分章。`apps/docs` 用 VitePress 把它构建成文档站，发布在官网的 `docs/` 路径下。
+
+| 位置              | 回答的问题                         | 以什么为准                            |
+| ----------------- | ---------------------------------- | ------------------------------------- |
+| `docs/README.md`  | 从哪里开始，代码入口在哪           | 当前文档树                            |
+| `docs/start/`     | 怎样从安装走到一局能继续的游戏     | 应用的实际界面和行为                  |
+| `docs/worlds/`    | 怎样把一份设定做成可玩的世界       | 参考页 + 内置世界                     |
+| `docs/plugins/`   | 怎样把一个需求做成独立的扩展       | 参考页 + 脚手架和内置插件             |
+| `docs/ship/`      | 怎样证明别人安装后也能用           | 安装接口和测试工具的实际行为          |
+| `docs/recipes/`   | 已有基础后，怎样完成一个具体需求   | 参考页 + 内置实现                     |
+| `docs/reference/` | 字段、默认值和报错是什么           | schema、types、routes、runtime、tests |
+| `docs/internals/` | 它为什么这样执行，怎样参与开发     | 实现代码 + 设计决定                   |
+| `devs/docs/`      | 任务计划、审查、实施日志、临时分析 | 稳定结论提炼后写进 `docs/`            |
 
 ## Authoring Rules
 
-- `guide/` 页面回答“怎么做”，第一页就给适用场景、前置条件和最小可运行路径；步骤必须说明预期结果，并为常见失败给出定位入口。
-- `reference/` 页面回答“合法值是什么”，字段表必须列出枚举、默认值、阶段和代码来源；面向外部调用的契约至少给一个可复制的规范示例，并说明错误、权限、事务或兼容性边界。
-- `architecture/` 页面回答“为什么这样设计”，必须包含模块边界和失败模式。
-- 命令默认从仓库根目录执行，除非页面明确写出工作目录。示例中的命令、字段和返回值必须能从当前脚本、schema、实现或测试验证；不要用尚未实现的理想 API 代替现状。
-- 教程不能停在目录或字段罗列。读者完成页面后应得到一个可观察结果，例如通过校验、看到 API 响应、加载插件、生成 artifact 或定位到明确错误。
-- 涉及密钥、付费 provider、外部写入或数据删除的步骤必须在执行前标出影响，并提供 dry-run、测试环境或备份路径（如果当前工具支持）。
-- 开发过程资料统一放在 `devs/docs/`；落地后只把面向用户或开发者的稳定结论提炼到 `docs/guide/`、`docs/reference/` 或 `docs/architecture/`。
-- 新增文档要从 `docs/README.md` 或对应目录 `README.md` 可达。
+完整的写作规则在 [`AGENTS.md`](./AGENTS.md)。要点：
+
+- **说人话。** 句子短，一句一个意思。先说读者做什么、看到什么，再给内部概念起名字。一个术语只在需要时引入，用一句大白话解释，不用读者没见过的术语去解释另一个术语。
+- **教程给出结果。** 开头写清读者最后会得到什么、需要先准备什么。每个会运行东西的步骤都给出预期结果，页尾有一张“出了问题怎么办”的表。
+- **命令真的跑过。** 页面上的命令、字段、默认值和界面文字，都要能在当前的脚本、schema、实现或界面词典里核对到。不把计划中的行为写成已有功能。
+- **一个规则只在一页里定义。** 字段表和限制放在 `reference/`，教程链接过去，不重复一份。
+- **涉及花钱和删数据的步骤要先提醒。** 调用付费模型、对外写入、删除数据之前，标出影响，并给出试运行、测试环境或备份的办法。
+- 开发过程资料放在 `devs/docs/`，落地后只把稳定的结论写进 `docs/`。
+- 新增页面要加进文档站的侧边栏和 [`README.md`](./README.md) 的页面清单。
 
 ## Languages
 
-A page has one authoritative language; a language sibling is optional, not required.
-
-- A page written in English needs no Chinese sibling, and a Chinese page needs no English one. The existing `.en.md` siblings (`CONTRIBUTING`, `desktop-config`, `upgrade-0.0.42`, `settings-store`) were added because a reader outside the Chinese-speaking audience needs that page first (contribution, install, upgrade); they are not a rule that every page has one.
-- A page that has a sibling is updated together with it (`AGENTS.md`, "Documentation sync").
-- New pages are written in English (`AGENTS.md`: documentation is English), and a sibling is added only for a page a first-time reader must read before anything else.
-- `docs/reference/hooks.md` is English only. It was written new, in English, and has no Chinese sibling because its readers are plugin authors, who work against English SDK types and code. The Chinese guides link to it. If a Chinese edition is wanted, translate it together with the reference pages around it, so a Chinese reader does not meet one English page between Chinese ones.
-
-## Gradual v2 migration
-
-新方向见 [`v2/README.md`](./v2/README.md)：游玩 → 创建世界 → 开发插件 → 验证与分发，
-辅以任务示例、契约参考和原理说明。开发 Agent 与人类作者使用同一套接口、教程和验收标准。
-
-当前先维护准确的现有文档，再逐个完成 v2 的可执行任务教程；不批量复制旧页面，也不在
-新入口中把待重写章节当作已完成内容。一个契约只有一个权威页面，迁移完成后更新入口并
-保留旧链接的到达路径。文档维护指令放在 `docs/v2/AGENTS.md`；未来的开发 skills 引用教程，
-不另建一份 API 规范。临时迁移审计、执行计划与测试日志仍放在 `devs/docs/`。
+- The documentation is written in Simplified Chinese. Those pages are the source.
+- `docs/en/` is the English edition: one translated page per Chinese page at the same relative path, published under `/docs/en/` with a language switch in the site header. A change to a Chinese page is made in its English page in the same pull request (`docs/AGENTS.md`, "The English edition").
+- `docs/CONTRIBUTING.md` has `docs/CONTRIBUTING.en.md` beside it, and the root `README.md` (English) has `README.zh-CN.md`; each pair is updated together.
+- The changelog is English only.

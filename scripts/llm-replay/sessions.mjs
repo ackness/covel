@@ -5,7 +5,7 @@
 //   recording/     one answer per request, named after the request digest
 //
 // run.mjs plays them through the replay proxy. Docs:
-// docs/guide/e2e-plugin-verify.md
+// docs/ship/real-model.md
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 

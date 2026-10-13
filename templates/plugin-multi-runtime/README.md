@@ -23,7 +23,7 @@
 cp -r {{pluginName}}/ ~/.covel/plugins/
 ```
 
-用户目录中的插件属于 `community` 来源：重启后会被发现并出现在插件列表里，但服务端代码（entry、handler、guard）只有在玩家进入会话并授权之后才会执行，授权不跨后端重启保留。源码开发模式（`pnpm dev`）会监听这个目录，修改 entry、handler 或 guard 后自动热重载；改动它们相对导入的依赖模块时需要重启服务。
+用户目录中的插件属于 `community` 来源：重启后会被发现并出现在插件列表里，但服务端代码（entry、handler、guard）只有在玩家进入会话并授权之后才会执行，授权不跨后端重启保留。源码开发模式（`pnpm dev`）会监听这个目录：改清单、界面文件或译文，插件直接重新加载；改已经运行过的代码文件（entry、handler、guard 和它们导入的模块），后端会自己重启一次，之后要重新授权。
 
 ## 测试
 
@@ -59,12 +59,12 @@ pnpm test:runtime -- {{pluginName}} --pretty
 
 ## 参考
 
-- [docs/guide/plugin-authoring.md](https://github.com/AcKnEsS/covel/blob/main/docs/guide/plugin-authoring.md) —— 插件作者指南
+- [docs/plugins/essentials.md](https://github.com/AcKnEsS/covel/blob/main/docs/plugins/essentials.md) —— 插件作者指南
 - [docs/reference/plugins.md](https://github.com/AcKnEsS/covel/blob/main/docs/reference/plugins.md) —— `PLUGIN.md` / `RUNTIME.md` 字段全表
 - [docs/reference/plugin-extensions.md](https://github.com/AcKnEsS/covel/blob/main/docs/reference/plugin-extensions.md) —— 插件之间的通信方式与热重载
 - [docs/reference/ui-components.md](https://github.com/AcKnEsS/covel/blob/main/docs/reference/ui-components.md) —— UI 组件目录
-- [docs/guide/plugin-testing.md](https://github.com/AcKnEsS/covel/blob/main/docs/guide/plugin-testing.md) —— 插件测试
-- [docs/guide/collections.md](https://github.com/AcKnEsS/covel/blob/main/docs/guide/collections.md) —— 把世界和配套插件一起发布
+- [docs/plugins/testing.md](https://github.com/AcKnEsS/covel/blob/main/docs/plugins/testing.md) —— 插件测试
+- [docs/ship/collections.md](https://github.com/AcKnEsS/covel/blob/main/docs/ship/collections.md) —— 把世界和配套插件一起发布
 
 发布给安装器的目录必须自包含，不携带 workspace 运行时依赖；需要的 SDK helpers 在发布前打包。
 
