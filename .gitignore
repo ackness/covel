@@ -117,6 +117,7 @@ tmp/
 *.png
 !apps/web/public/icon.png
 !apps/site/public/icon.png
+!docs/public/icon.png
 !apps/desktop/resources/icon.png
 # World portraits and scenes are tracked as WebP. A PNG there is a working file;
 # only the gallery keeps its PNG originals, and packaging leaves them out.
