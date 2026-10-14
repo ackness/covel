@@ -4,10 +4,10 @@
  * Each world package has:
  *   world.yaml  — manifest (id, name, summary, dimensions, tags, …)
  *   WORLD.md    — default lore (fallback)
- *   WORLD.zh.md — Chinese lore (optional, locale-specific)
- *   WORLD.en-US.md — English lore (optional, locale-specific)
+ *   WORLD.en-US.md — English lore (optional, locale-specific; the locale is
+ *                    written exactly as the world's supportedLocales writes it)
  *
- * Lore resolution: WORLD.<locale-prefix>.md → WORLD.md → empty string
+ * Lore resolution: WORLD.<defaultLocale>.md → WORLD.md → empty string
  *
  * External dimension files:
  *   world.yaml `dimensionSources` maps dimension keys to relative file paths.
