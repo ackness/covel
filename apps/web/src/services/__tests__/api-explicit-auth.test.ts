@@ -58,6 +58,43 @@ afterEach(() => {
 });
 
 describe("explicit session auth on indirect routes", () => {
+  it("parses resume approvals and sends session and operator credentials", async () => {
+    await api.storeSessionToken("sess-1", "owner-secret");
+    api.storeOperatorToken("operator-secret");
+    const approval = {
+      status: "approval-required",
+      approvalId: "approval-1",
+      pending: {
+        sessionId: "sess-1",
+        pluginId: "external",
+        action: "runtime:external/run",
+      },
+    };
+    const success = {
+      result: { runtimeId: "external/run", status: "success" },
+      events: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ...okJson(approval), status: 202 })
+      .mockResolvedValueOnce(okJson(success))
+      .mockResolvedValueOnce({ ...okJson({ result: {} }), status: 202 });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      api.resumeSuspension("sess-1", "susp-1", { name: "Ada" }),
+    ).resolves.toEqual(approval);
+    expect(headersAt(fetchMock).get("X-Session-Token")).toBe("owner-secret");
+    expect(headersAt(fetchMock).get("Authorization")).toBe(
+      "Bearer operator-secret",
+    );
+    await expect(api.resumeSuspension("sess-1", "susp-1", {})).resolves.toEqual(
+      success,
+    );
+    await expect(
+      api.resumeSuspension("sess-1", "susp-1", {}),
+    ).rejects.toThrow();
+  });
+
   it("retries an action only after each exact approval and preserves its request id", async () => {
     const pending = (action: string) => ({
       ...okJson({
@@ -311,5 +348,36 @@ describe("operator auth on hosted administration routes", () => {
     expect(headersAt(fetchMock, 5).get("Content-Type")).toBeNull();
     expect(fetchMock.mock.calls[5]?.[1]?.body).toBeInstanceOf(FormData);
     expect(await api.getSessionToken("sess-1")).toBe("owner-secret");
+  });
+});
+
+describe("world-data notices of a new session", () => {
+  it("keeps them for the game screen to read once", async () => {
+    const notice = {
+      level: "warning",
+      sourceId: "facts",
+      message: 'No active receiver for data contract "notes@1"; source skipped',
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          okJson({
+            id: "sess-notices",
+            ownerToken: "owner-secret",
+            incarnation: "synthetic-incarnation",
+            worldId: "world-1",
+            worldDataNotices: [notice],
+          }),
+        )
+        .mockResolvedValueOnce(
+          okJson({ id: "sess-notices", incarnation: "synthetic-incarnation" }),
+        ),
+    );
+    const session = await api.createSession("world-1", "sess-notices");
+    expect(session).not.toHaveProperty("worldDataNotices");
+    expect(api.takeCreatedWorldDataNotices("sess-notices")).toEqual([notice]);
+    expect(api.takeCreatedWorldDataNotices("sess-notices")).toEqual([]);
   });
 });

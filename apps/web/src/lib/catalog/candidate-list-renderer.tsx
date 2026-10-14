@@ -34,16 +34,16 @@ export const CandidateList: ComponentRenderer = ({ element }) => {
     const content = String(resolvePath(row, data!.contentField) ?? "");
     return id && content ? [{ id, content, row }] : [];
   });
-  const title =
-    resolve(props.title) ||
-    t("branchReply.replyCandidates", "Reply candidates");
+  const title = resolve(props.title) || t("catalog.candidateList.title");
   const draftLabel =
-    resolve(props.draftLabel) || t("branchReply.draft", "Draft");
-  const sendLabel = resolve(props.sendLabel) || t("branchReply.send", "Send");
+    resolve(props.draftLabel) || t("catalog.candidateList.draft", "Draft");
+  const sendLabel =
+    resolve(props.sendLabel) || t("catalog.candidateList.send", "Send");
   const acceptLabel =
-    resolve(props.acceptLabel) || t("branchReply.accept", "Accept");
+    resolve(props.acceptLabel) || t("catalog.candidateList.accept", "Accept");
   const regenerateLabel =
-    resolve(props.regenerateLabel) || t("branchReply.regenerate", "Regenerate");
+    resolve(props.regenerateLabel) ||
+    t("catalog.candidateList.regenerate", "Regenerate");
 
   if (candidates.length === 0) return null;
 
@@ -120,8 +120,8 @@ export const CandidateList: ComponentRenderer = ({ element }) => {
       {variants.length === 0 && (
         <p className="text-[11px] italic text-muted-foreground">
           {t(
-            "branchReply.regenerateHint",
-            "Tap Regenerate for alternative phrasings of this reply.",
+            "catalog.candidateList.regenerateHint",
+            "Generate another set of candidates.",
           )}
         </p>
       )}

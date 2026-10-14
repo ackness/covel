@@ -23,6 +23,7 @@ import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
+  releaseUnusedSessionMediaRefs,
   releaseWorldDataMediaRefs,
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
@@ -653,7 +654,20 @@ export async function syncWorldDataForSession(
   const dryRun = options.dryRun === true;
   const prepared =
     options.prepared ?? (await prepareWorldDataSyncForSession(options));
-  const { diagnostics, plan } = prepared;
+  const { diagnostics } = prepared;
+  // A sync for some receivers touches only their rows and ledger entries;
+  // everything else in the session is left as it is.
+  const receivers = options.receivers;
+  const forReceivers = (pluginId: string | undefined) =>
+    !receivers || (pluginId !== undefined && receivers.includes(pluginId));
+  const plan = receivers
+    ? {
+        ...prepared.plan,
+        writes: prepared.plan.writes.filter((write) =>
+          forReceivers("pluginId" in write ? write.pluginId : undefined),
+        ),
+      }
+    : prepared.plan;
   if (
     !prepared.imported ||
     !options.worldId ||
@@ -688,6 +702,7 @@ export async function syncWorldDataForSession(
     (ledger) =>
       ledger.managed &&
       ledger.sourceWorldId === worldId &&
+      forReceivers(ledger.pluginId) &&
       (!dimensionOnly || ledger.namespace === DIMENSION_DATA_NAMESPACE),
   );
   const ledgerByKey = new Map(
@@ -1002,13 +1017,12 @@ export async function syncWorldDataForSession(
     // Release references after commit. Ownership/bytes remain for lifecycle GC;
     // content-addressed media can be claimed by another session concurrently.
     if (options.mediaStore && pendingMediaUnrefs.length > 0) {
-      for (const mediaId of pendingMediaUnrefs) {
-        try {
-          await options.mediaStore.removeRef(mediaId, options.sessionId);
-        } catch {
-          // Continue finalizing the remaining unrefs.
-        }
-      }
+      await releaseUnusedSessionMediaRefs({
+        store: options.store,
+        mediaStore: options.mediaStore,
+        sessionId: options.sessionId,
+        mediaIds: pendingMediaUnrefs,
+      });
     }
 
     if (mediaRefs.length > 0) {
