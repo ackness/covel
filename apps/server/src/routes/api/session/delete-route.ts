@@ -71,6 +71,20 @@ export async function deleteSessionWithLifecycle(
     c.get("clearCompactionFailures")?.(id);
     c.get("clearBrowserWorkspace")?.(id);
   };
+  // Runs once the row is gone. Media claims go only now, so a DELETE that
+  // fails leaves a session that can still read its own media.
+  const finishDeletion = async (): Promise<void> => {
+    try {
+      await c.get("mediaStore")?.releaseSession(id);
+    } catch (error) {
+      // The media library shows the leftover claims as held.
+      console.warn(
+        "[sessions] failed to release media claims of a deleted session:",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    await clearProcessLocalState();
+  };
 
   const prepared = await withSettledSessionLock(c, id, async () => {
     const lockedGuard = await resolveSessionById(c, id);
@@ -256,12 +270,11 @@ export async function deleteSessionWithLifecycle(
       }
 
       try {
-        await c.get("mediaStore")?.releaseSession(id);
         await withMemoryIngestLock(c, id, () => store.deleteSession(id));
       } catch (error) {
         const live = await store.getSession(id);
         if (!live) {
-          await clearProcessLocalState();
+          await finishDeletion();
           return c.json(okBody());
         }
         if (
@@ -290,7 +303,7 @@ export async function deleteSessionWithLifecycle(
         throw error;
       }
 
-      await clearProcessLocalState();
+      await finishDeletion();
       return c.json(okBody());
     });
   };

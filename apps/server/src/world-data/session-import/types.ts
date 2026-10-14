@@ -224,6 +224,12 @@ export interface SyncWorldDataForSessionOptions {
   readonly deferMediaFinalize?: boolean;
   /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
   readonly locale?: string;
+  /**
+   * Sync only the rows of these plugins: their planned writes and their
+   * ledger entries. A receiver that joins a running session gets its data
+   * without touching what the others hold.
+   */
+  readonly receivers?: readonly string[];
 }
 
 export interface SyncWorldDataForSessionResult {

@@ -5,20 +5,27 @@
   "shortLabel": "Codex",
   "icon": "book-open",
   "groupOrder": 700,
-  "dataSource": { "namespace": "entries" },
+  "dataSource": {
+    "namespace": "entries"
+  },
   "emptyState": {
     "message": "No codex entries yet. They will appear as the story continues…"
   },
   "view": {
     "component": "FilterContainer",
     "props": {
-      "items": { "$state": "/entries" },
+      "items": {
+        "$state": "/entries"
+      },
       "searchPlaceholder": "Search entries…",
       "searchFields": ["value/title", "value/content", "value/tags"],
       "filterField": "value/category",
       "showCounts": true,
       "filterTabs": [
-        { "value": "all", "label": "All" },
+        {
+          "value": "all",
+          "label": "All"
+        },
         {
           "value": "monster",
           "label": "Monsters",
@@ -70,7 +77,66 @@
       },
       "itemLiteralProps": {
         "collapsible": true,
-        "defaultExpanded": false
+        "defaultExpanded": false,
+        "categoryOptions": [
+          {
+            "value": "monster",
+            "label": "Monsters",
+            "icon": "skull",
+            "color": "red"
+          },
+          {
+            "value": "item",
+            "label": "Items",
+            "icon": "gem",
+            "color": "amber"
+          },
+          {
+            "value": "location",
+            "label": "Locations",
+            "icon": "map-pin",
+            "color": "blue"
+          },
+          {
+            "value": "lore",
+            "label": "Lore",
+            "icon": "scroll-text",
+            "color": "purple"
+          },
+          {
+            "value": "character",
+            "label": "Characters",
+            "icon": "users",
+            "color": "green"
+          },
+          {
+            "value": "skill",
+            "label": "Skills",
+            "icon": "sparkles",
+            "color": "cyan"
+          }
+        ],
+        "rarityOptions": [
+          {
+            "value": "common",
+            "tone": "muted"
+          },
+          {
+            "value": "uncommon",
+            "tone": "info",
+            "color": "blue"
+          },
+          {
+            "value": "rare",
+            "tone": "info",
+            "color": "purple"
+          },
+          {
+            "value": "legendary",
+            "tone": "warning",
+            "color": "amber"
+          }
+        ]
       },
       "footer": "{{count}} entries collected",
       "emptyMessage": "No matching entries"

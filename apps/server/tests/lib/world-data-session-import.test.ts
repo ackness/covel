@@ -21,6 +21,8 @@ import {
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
+import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
 import { conventionsOfPlugins } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
@@ -286,6 +288,31 @@ describe("world data session importer", () => {
       },
     });
   });
+
+  it.each(["emberback", "haruka-academy", "lantern-barrow", "mistport"])(
+    "starts %s with the narrative-only pack",
+    async (worldId) => {
+      const registry = await builtinPluginRegistry();
+      const pack = BUILTIN_PLUGIN_PACKS.find(
+        (item) => item.id === "narrative-only",
+      )!;
+      const activePlugins = resolveSessionPluginPlan(pack.requested, registry, {
+        excluded: pack.excluded,
+        authorized: [...registry.getAll().keys()],
+      }).active;
+      expect(activePlugins).toContain("narrator");
+      const result = await preflightWorldDataForSession({
+        sessionId: "preview",
+        worldId,
+        worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+        now: NOW,
+        preflight: { registry, activePlugins },
+      });
+      expect(
+        result.diagnostics.filter((item) => item.level === "error"),
+      ).toEqual([]);
+    },
+  );
 
   it("skips time data with a warning when its receiver is disabled", async () => {
     const registry = await builtinPluginRegistry();
@@ -2016,6 +2043,174 @@ sources: {}
     expect(
       (await mediaStore.listRefs()).filter((ref) => ref.mediaId === mediaId),
     ).not.toContainEqual(expect.objectContaining({ sessionId: "sess-a" }));
+  });
+
+  it("sync keeps the reference of a picture the session's history still shows (F-165)", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+      files: { "media/portraits/mio.png": "png-ish" },
+    });
+    const store = createMemoryStore();
+    await addSession(store, "sess-a", ["character-presence"], worldId);
+    await addSession(store, "sess-b", ["character-presence"], worldId);
+    const mediaStore = createMemoryMediaStore();
+    const preflight = {
+      activePlugins: ["character-presence"],
+      registry: registry({ "character-presence": ["assets"] }),
+    };
+    for (const sessionId of ["sess-a", "sess-b"]) {
+      await importWorldDataForSession({
+        store,
+        mediaStore,
+        sessionId,
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight,
+      });
+    }
+    const row = await store.getPluginData(
+      "sess-b",
+      "character-presence",
+      "assets",
+      "mio.png",
+    );
+    if (!row) throw new Error("expected the imported portrait row");
+    const ref = (
+      row.value as { ref: { id: string; mime: string; size: number } }
+    ).ref;
+    // sess-b only references the asset (sess-a owns it) and showed it once.
+    await store.addMessage({
+      id: "shown-portrait",
+      sessionId: "sess-b",
+      role: "assistant",
+      content: "Mio waves.",
+      metadata: { block: { image: ref } },
+      createdAt: NOW,
+    });
+    await writeFile(
+      path.join(worldRoot, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources: {}
+`,
+    );
+
+    const sync = await syncWorldDataForSession({
+      store,
+      mediaStore,
+      sessionId: "sess-b",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      dryRun: false,
+      preflight,
+    });
+
+    expect(sync).toMatchObject({ imported: true, deleted: 1 });
+    expect(
+      await store.getPluginData(
+        "sess-b",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeNull();
+    expect((await mediaStore.lookup(ref.id))?.ownerSessionId).toBe("sess-a");
+    expect(await mediaStore.isReferencedBy(ref.id, "sess-b")).toBe(true);
+  });
+
+  it("sync keeps the reference another index row with identical bytes still needs (F-165)", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+  extras:
+    kind: media
+    path: media/extras
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "same-bytes",
+        "media/extras/mio-copy.png": "same-bytes",
+      },
+    });
+    const store = createMemoryStore();
+    await addSession(store, "sess-a", ["character-presence"], worldId);
+    await addSession(store, "sess-b", ["character-presence"], worldId);
+    const mediaStore = createMemoryMediaStore();
+    const preflight = {
+      activePlugins: ["character-presence"],
+      registry: registry({ "character-presence": ["assets"] }),
+    };
+    for (const sessionId of ["sess-a", "sess-b"]) {
+      await importWorldDataForSession({
+        store,
+        mediaStore,
+        sessionId,
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight,
+      });
+    }
+    const kept = await store.getPluginData(
+      "sess-b",
+      "character-presence",
+      "assets",
+      "mio.png",
+    );
+    if (!kept) throw new Error("expected the imported portrait row");
+    const mediaId = (kept.value as { ref: { id: string } }).ref.id;
+    // A later version drops the second source; its file had the same bytes.
+    await writeFile(
+      path.join(worldRoot, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+    );
+
+    const sync = await syncWorldDataForSession({
+      store,
+      mediaStore,
+      sessionId: "sess-b",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      dryRun: false,
+      preflight,
+    });
+
+    expect(sync).toMatchObject({ imported: true, deleted: 1, upserted: 0 });
+    expect(
+      await store.getPluginData(
+        "sess-b",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeTruthy();
+    expect(await mediaStore.isReferencedBy(mediaId, "sess-b")).toBe(true);
   });
 
   it("keeps media undeleted when a delete-sync transaction aborts", async () => {

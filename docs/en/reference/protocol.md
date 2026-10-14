@@ -649,6 +649,7 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 
 - After the web app gets a reset or reconnects, it refetches, checking revisions: the session snapshot, the plugin list, the data for every enabled plugin, unresolved suspensions, and the world. Live events that arrive during this are buffered first, and replayed afterwards.
 - The streamed placeholder is replaced with the saved final narrative for the same `turnId/runtimeId` only when the access generation and execution ownership still match. The external text of that placeholder and its pending fragments are removed. A new, healthy POST stream still owns its own live output.
+- After an error or stream loss, only authoritative recovery confirming a failed or interrupted turn without matching saved prose moves the displayed text to an “Unsaved” area and clears its placeholder and streaming buffers. This local copy lasts until leaving the session and never enters story history, stage content or plugin data. A retry appears beside it when recovery supplies an action. Unknown network state does not enable retry; saved prose still replaces placeholders as above. Player aborts and normal `committed: false` keep their existing removal behavior.
 - If the most recent window of the recovered snapshot does not join up with the history already loaded, the client first fills in older messages through the existing message pagination endpoint, read-only, up to the old anchor, and then merges and publishes. It does not delete the old window, and it does not resend the action.
 
 **For hosts that embed `@covel/events`**
@@ -983,6 +984,8 @@ The client shows the approval one stage at a time, and retries the original requ
 A batch of answers in `submit_interaction` can involve several source plugins, and there is no limit on the number of stages. Only when the server-code authorization for every source is complete are the answers validated and saved atomically.
 
 **Framework default actions:** see the "Framework default actions" section in [api.md](./api.md#post-apisessionsidplugin-rpc).
+
+Resuming a suspended runtime also requests each missing grant. The client releases its session queue while asking for approval. Switching sessions or denying approval stops retries and leaves the suspension pending. See the [resume endpoint](./api.md#post-apisessionsidsuspensionssuspensionidresume).
 
 ### RPC Approval
 

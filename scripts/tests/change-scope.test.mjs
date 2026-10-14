@@ -85,9 +85,10 @@ test("the workflows and the pre-push hook agree on what documentation is", () =>
 });
 
 test("pnpm test:docs runs every test that reads documentation", () => {
-  // A call that builds or opens a path inside docs/ or the agent skills.
+  // A call that builds or opens docs, an agent skill, or a reader-facing
+  // README/agent instruction file (also documentation-only in CI).
   const readsDocs =
-    /(?:resolve|join|new URL|readFile(?:Sync)?|readdir(?:Sync)?)\([^)]*["'`][^"'`\n]*(?:\bdocs\/|\.claude\/skills)/;
+    /(?:resolve|join|new URL|readFile(?:Sync)?|readdir(?:Sync)?)\([^)]*["'`][^"'`\n]*(?:\bdocs\/|\.claude\/skills|\bREADME(?:\.[\w-]+)?\.md|\b(?:AGENTS|CLAUDE)\.md)/;
   const isTest = /\.(?:test|spec|selfcheck)\.[cm]?[jt]sx?$/;
   const reading = [];
   for (const group of ["apps", "packages", "plugins"]) {
