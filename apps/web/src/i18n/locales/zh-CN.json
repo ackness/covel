@@ -1663,7 +1663,7 @@
       "allowSelected": "授权所选",
       "notNow": "暂不授权"
     },
-    "unavailable": "本存档有插件现在无法运行：{{plugins}}。游戏照常进行，只是少了它们的功能；打开插件列表可以看到原因。",
+    "unavailable": "本存档有插件没有运行，游戏照常进行：",
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
@@ -1689,7 +1689,22 @@
     "invalidPanelSpecDetail": "面板定义无效：{{label}}（{{reason}}）",
     "rpc": {
       "failed": "插件任务失败，请重试。"
-    }
+    },
+    "off": {
+      "needsProvider": "{{plugin}} 已停用：它需要 {{contract}}。打开 {{providers}} 就能用。",
+      "noProvider": "{{plugin}} 已停用：它需要 {{contract}}，但没有已安装的插件提供它。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
+      "notInstalled": "{{plugin}} 没有安装，或者加载失败。",
+      "conflict": "{{plugin}} 和本存档的另一个插件冲突。",
+      "other": "{{plugin}} 现在无法运行，打开插件列表可以看到原因。",
+      "turnOn": "打开 {{plugin}}"
+    },
+    "noStory": {
+      "title": "没有开启叙事插件",
+      "detail": "回合不会产生故事：开启的插件里没有负责叙事的。",
+      "enable": "打开 {{plugins}} 就能得到故事。",
+      "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
+    },
+    "dependentsOff": "下面这些插件需要的东西被关掉了，开局后它们会停用："
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
