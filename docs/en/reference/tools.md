@@ -42,15 +42,12 @@ There are two kinds of tool:
 | create-character-form                 | local    | char-creator        | auto-allow      | Create the opening character form. It collects only the character name and the declared string and enum attributes. Numeric and composite attributes keep their defaults                             |
 | update-affinity                       | local    | affinity            | auto-allow      | Apply this turn's affinity changes between the player and NPCs in one batch. An unknown name starts at 0. Scores add up across turns and are limited to [-100, 100]                                  |
 | advance-world-time                    | local    | world-time          | auto-allow      | Settle the world time that passes in this turn's narrative. Submits a duration, not calendar math. In random mode the amount is left out. Submitted together with the story                          |
-| set-world-schema                      | local    | world-init          | auto-allow      | The internal schema write primitive for `initialize-world`                                                                                                                                           |
-| set-world-dimensions                  | local    | world-init          | auto-allow      | Adopt the dimension declarations without resetting session progress                                                                                                                                  |
 | dimension-rule-get                    | local    | world-init          | auto-allow      | During maintenance, read private rules or value schemas with paging                                                                                                                                  |
 | update-dimensions                     | local    | world-init          | auto-allow      | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed                                                                         |
 | submit-world-facts                    | local    | world-ir            | auto-allow      | Submit and validate a complete `contract:world-ir@1` as function calling arguments                                                                                                                   |
 | sync-codex-entries                    | local    | codex               | auto-allow      | Submit this turn's codex changes at once. Creates or adds to entries by title                                                                                                                        |
 | generate-guide                        | local    | guide               | auto-allow      | Write a plot summary, the current decisions, and quick replies in the player's voice, atomically                                                                                                     |
 | upsert-npc-graph                      | local    | npc-graph           | auto-allow      | Write NPC nodes and relationship edges in one batch. Refers to nodes by name. The tool removes duplicates and assigns short IDs                                                                      |
-| list-npc-graph                        | local    | npc-graph           | auto-allow      | A compatibility read tool. The current extractor already injects the graph through the prompt, so it is not declared to the model                                                                    |
 | plan-story-events                     | local    | story-events        | auto-allow      | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet                                                                    |
 | submit-dashscope-text-prompt          | local    | dashscope-image-gen | auto-allow      | Submit a text scene prompt and emit the fixed DashScope image event                                                                                                                                  |
 | submit-dashscope-structured-prompt    | local    | dashscope-image-gen | auto-allow      | Submit a structured scene prompt and emit the fixed DashScope image event                                                                                                                            |
@@ -1079,6 +1076,9 @@ These are the tools that plugins bring with them. The implementation files are u
 - A persistent write returns `withPendingProposals(...)`, so the commit flow saves it to the database.
 - Use plugin tools to wrap the plugin's own data schema and batch write logic.
 
+<a id="set-world-schema"></a>
+<a id="set-world-dimensions"></a>
+
 ### initialize-world
 
 **Owner**: world-init (`plugins/world-init/tools/initialize-world.js`)
@@ -1090,30 +1090,6 @@ At the start of a game, it does two things at once: it sets the character attrib
 | `types`       | string[]        |          | Default `["npc", "companion"]`                                                                                        |
 | `attributes`  | AttributeDef[]  | ✓        | At least 15 items, covering `stats` / `bio` / `abilities` / `equipment` / `social`                                    |
 | `definitions` | WorldDimensions |          | A generated definition map can be given when the author declared none. It is not used when the world has declarations |
-
-**Output**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
-
-Whose dimension definitions are used:
-
-- When the world's author has declared dimensions, the author's definitions are used. The `definitions` the model also gives are not used, and the call still succeeds. The reason it does not reject them: the prompt cannot tell the model whether the world has declarations, so rejecting would only add one extra model call at the start of every game.
-- Only a world that has setting text and no declarations uses the definitions the model generates.
-- The tool does not turn resource structures into character fields, and it does not turn them into constant lorebook entries.
-
-`worldSchema` is also the runtime output of `world-init/schema-gen`. It is passed to `char-creator/player-init` in the same setup execution. This way, the downstream runtime does not have to read storage that has not been committed yet.
-
-This runtime declares `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` and `io.output.schema`. So the model needs to generate the tool arguments only once. After the tool succeeds, the framework checks the result directly against the output schema and ends.
-
-**Used by**: `world-init/schema-gen`
-
-### set-world-schema
-
-**Owner**: world-init (`plugins/world-init/tools/set-world-schema.js`)
-
-Define the character types and attributes of the world. It returns one `character.schema.set` proposal, which is written to the session's World Model. The payload is `{types,attributes}`, and the kernel increments the version. It does not write to the plugin's private schema namespace.
-
-| Argument   | Type           | Required | Description                                           |
-| ---------- | -------------- | -------- | ----------------------------------------------------- |
-| attributes | AttributeDef[] | ✓        | Array of character attribute definitions (at least 1) |
 
 **AttributeDef**:
 
@@ -1131,20 +1107,19 @@ Define the character types and attributes of the world. It returns one `characte
 | valueType    | enum           |          | Value type of a `map` (`string` / `number` / `boolean`)               |
 | description  | I18nText       |          | Description of the attribute (a string, or a locale → string record)  |
 
-**Output**: `{ success, attributeCount, categories, worldSchema }`
+**Output**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
 
-**Current use**: `initialize-world` uses it internally to compose. The bundled `world-init/schema-gen` does not declare it to the model directly.
+Whose dimension definitions are used:
 
-### set-world-dimensions
+- When the world's author has declared dimensions, the author's definitions are used. The `definitions` the model also gives are not used, and the call still succeeds. The reason it does not reject them: the prompt cannot tell the model whether the world has declarations, so rejecting would only add one extra model call at the start of every game.
+- Only a world that has setting text and no declarations uses the definitions the model generates.
+- The tool does not turn resource structures into character fields, and it does not turn them into constant lorebook entries.
 
-**Owner**: world-init (`plugins/world-init/tools/set-world-dimensions.js`)
+`worldSchema` is also the runtime output of `world-init/schema-gen`. It is passed to `char-creator/player-init` in the same setup execution. This way, the downstream runtime does not have to read storage that has not been committed yet.
 
-Adopt dimension declarations. The argument `{definitions}` uses an [open definition map](./world-data.md#declaration-format). It returns `{success, dimensionCount}` and one `dimension.initialize` proposal.
+This runtime declares `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` and `io.output.schema`. So the model needs to generate the tool arguments only once. After the tool succeeds, the framework checks the result directly against the output schema and ends.
 
-- Missing records are created.
-- Initializing again with the same definitions does not reset the current values.
-- If an adopted definition differs from this one, it counts as a conflict.
-- Changes to declarations are handled through world sync. Do not use this tool to overwrite game progress.
+**Used by**: `world-init/schema-gen`
 
 ### dimension-rule-get
 

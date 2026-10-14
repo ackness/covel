@@ -57,6 +57,26 @@ const runtime = {
 };
 describe("manifest authoring CLI", () => {
   it.each([
+    { schedule: { ...runtime.schedule, needs: ["extract"] } },
+    { schedule: { ...runtime.schedule, after: [{ runtime: "extract" }] } },
+    { io: { inputs: { facts: { from: { runtime: "extract" } } } } },
+  ])(
+    "suggests the complete local runtime ID for an unprefixed reference: %j",
+    async (reference) => {
+      const root = await fixture();
+      await write(path.join(root, "runtimes/extract"), "RUNTIME.md", runtime);
+      await write(path.join(root, "runtimes/read"), "RUNTIME.md", {
+        ...runtime,
+        ...reference,
+      });
+      const result = await validate(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("probe/extract");
+      expect(result.stderr).not.toContain("outside package");
+      expect(result.stderr).not.toContain("use a contract");
+    },
+  );
+  it.each([
     { runtime: { ...runtime, function: { handler: "./missing.js" } } },
     { runtime: { type: "function", function: { handler: "./handler.js" } } },
     {

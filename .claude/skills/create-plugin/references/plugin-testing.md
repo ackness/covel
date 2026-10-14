@@ -56,7 +56,7 @@ Fix: `tools.local` was removed — register the tool in the plugin's `entry`
 
 ```js
 import { describe, expect, it } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+import { getPendingProposals } from "@covel/plugin-handlers-utils";
 import createMyTool from "../tools/my-tool.js";
 
 describe("my-tool", () => {

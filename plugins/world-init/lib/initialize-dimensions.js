@@ -25,24 +25,14 @@ export function createDimensionDefinitionSchema(z) {
   });
 }
 
-export default function ({ tool, z }) {
-  return tool({
-    name: "set-world-dimensions",
-    description:
-      "Adopt world-authored dimension declarations into this session. Does not reset existing values and cannot change an adopted definition.",
-    parameters: z.strictObject({
-      definitions: z.record(z.string(), createDimensionDefinitionSchema(z)),
-    }),
-    execute: async ({ definitions }, ctx) => {
-      const parsed = worldDimensionsSchema.parse(definitions);
-      return withPendingProposals(
-        { success: true, dimensionCount: Object.keys(parsed).length },
-        [
-          makeProposal(ctx, new Date().toISOString(), "dimension.initialize", {
-            definitions: parsed,
-          }),
-        ],
-      );
-    },
-  });
+export function initializeDimensionDefinitions(definitions, context) {
+  const parsed = worldDimensionsSchema.parse(definitions);
+  return withPendingProposals(
+    { success: true, dimensionCount: Object.keys(parsed).length },
+    [
+      makeProposal(context, new Date().toISOString(), "dimension.initialize", {
+        definitions: parsed,
+      }),
+    ],
+  );
 }

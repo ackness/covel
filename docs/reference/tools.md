@@ -42,15 +42,12 @@
 | create-character-form                 | local   | char-creator        | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值                  |
 | update-affinity                       | local   | affinity            | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100]     |
 | advance-world-time                    | local   | world-time          | auto-allow | 结算本回合叙事经过的世界时间：提交时长而非日历算术，随机模式省略数量，随故事一并提交               |
-| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的内部 schema 写入原语                                                          |
-| set-world-dimensions                  | local   | world-init          | auto-allow | 采纳维度声明，不重置会话进度                                                                       |
 | dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                                  |
 | update-dimensions                     | local   | world-init          | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化                                                        |
 | submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1`                                       |
 | sync-codex-entries                    | local   | codex               | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目                                                         |
 | generate-guide                        | local   | guide               | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                                       |
 | upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                                 |
-| list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                                |
 | plan-story-events                     | local   | story-events        | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划）                                            |
 | submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                                      |
 | submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                                    |
@@ -1079,6 +1076,9 @@ Attributes:
 - 持久化写入返回 `withPendingProposals(...)`，让提交流程负责落库。
 - 用 plugin 工具封装插件自己的数据 schema 和批量写入逻辑。
 
+<a id="set-world-schema"></a>
+<a id="set-world-dimensions"></a>
+
 ### initialize-world
 
 **所属**: world-init (`plugins/world-init/tools/initialize-world.js`)
@@ -1090,30 +1090,6 @@ Attributes:
 | `types`       | string[]        |      | 默认 `["npc", "companion"]`                                             |
 | `attributes`  | AttributeDef[]  | ✓    | 至少 15 项，覆盖 `stats` / `bio` / `abilities` / `equipment` / `social` |
 | `definitions` | WorldDimensions |      | 没有作者声明时可提供生成的 definition map；世界有声明时不被采用         |
-
-**输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
-
-维度定义用谁的：
-
-- 世界的作者已经声明了维度时，用作者的定义。模型同时给出的 `definitions` 不被采用，调用照常成功。不拒绝的原因：提示词没法告诉模型这个世界有没有声明，拒绝只会让每局开头多一次模型调用。
-- 没有声明的、只有设定文本的世界，才使用模型生成的 definitions。
-- 工具不把资源结构变成角色字段，也不变成 constant lorebook。
-
-`worldSchema` 同时是 `world-init/schema-gen` 的 runtime 输出，交给同一次 setup 执行里的 `char-creator/player-init`。这样下游不用去读还没提交的存储。
-
-这个 runtime 声明了 `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`。所以模型只需要生成一次工具参数：工具成功后，框架直接用输出 schema 检查结果并结束。
-
-**使用者**: `world-init/schema-gen`
-
-### set-world-schema
-
-**所属**: world-init (`plugins/world-init/tools/set-world-schema.js`)
-
-定义世界的角色类型和属性。它返回一条 `character.schema.set` proposal，写入会话的 World Model。payload 是 `{types,attributes}`，版本由内核递增。它不写插件私有的 schema namespace。
-
-| 参数       | 类型           | 必需 | 描述                          |
-| ---------- | -------------- | ---- | ----------------------------- |
-| attributes | AttributeDef[] | ✓    | 角色属性定义数组（至少 1 个） |
 
 **AttributeDef**:
 
@@ -1131,20 +1107,19 @@ Attributes:
 | valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**输出**: `{ success, attributeCount, categories, worldSchema }`
+**输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
 
-**当前用途**: `initialize-world` 内部用它来组合。内置的 `world-init/schema-gen` 不直接向模型声明它。
+维度定义用谁的：
 
-### set-world-dimensions
+- 世界的作者已经声明了维度时，用作者的定义。模型同时给出的 `definitions` 不被采用，调用照常成功。不拒绝的原因：提示词没法告诉模型这个世界有没有声明，拒绝只会让每局开头多一次模型调用。
+- 没有声明的、只有设定文本的世界，才使用模型生成的 definitions。
+- 工具不把资源结构变成角色字段，也不变成 constant lorebook。
 
-**所属**: world-init (`plugins/world-init/tools/set-world-dimensions.js`)
+`worldSchema` 同时是 `world-init/schema-gen` 的 runtime 输出，交给同一次 setup 执行里的 `char-creator/player-init`。这样下游不用去读还没提交的存储。
 
-采用维度声明。参数 `{definitions}` 使用[开放 definition map](./world-data.md#声明格式)。返回 `{success, dimensionCount}` 和一条 `dimension.initialize` proposal。
+这个 runtime 声明了 `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`。所以模型只需要生成一次工具参数：工具成功后，框架直接用输出 schema 检查结果并结束。
 
-- 缺少的记录被创建。
-- 用同样的定义重复初始化，不会重置当前值。
-- 已采用的定义和这次不同，算冲突。
-- 声明的变更通过 world sync 处理。不要用这个工具覆盖游戏进度。
+**使用者**: `world-init/schema-gen`
 
 ### dimension-rule-get
 

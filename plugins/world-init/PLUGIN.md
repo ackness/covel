@@ -38,8 +38,6 @@ contributes:
       - ./runtimes/schema-gen/ui/world-overview.json
       - ./runtimes/schema-gen/ui/world-schema.json
   tools:
-    - set-world-schema
-    - set-world-dimensions
     - initialize-world
     - dimension-rule-get
     - update-dimensions

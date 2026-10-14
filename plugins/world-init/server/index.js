@@ -12,8 +12,6 @@ import {
 } from "@covel/plugin-handlers-utils/dimensions";
 import { schemaForTracker } from "../lib/schema-for-tracker.js";
 import makeDimensionRuleGet from "../tools/dimension-rule-get.js";
-import makeSetWorldSchema from "../tools/set-world-schema.js";
-import makeSetWorldDimensions from "../tools/set-world-dimensions.js";
 import makeInitializeWorld from "../tools/initialize-world.js";
 import makeUpdateDimensions from "../tools/update-dimensions.js";
 
@@ -218,8 +216,6 @@ export default function (covel) {
   });
   covel.on("PreLLMCall", trackerTools);
   covel.registerTool(makeDimensionRuleGet(covel.toolkit));
-  covel.registerTool(makeSetWorldSchema(covel.toolkit));
-  covel.registerTool(makeSetWorldDimensions(covel.toolkit));
   covel.registerTool(makeInitializeWorld(covel.toolkit));
   covel.registerTool(makeUpdateDimensions(covel.toolkit));
 }

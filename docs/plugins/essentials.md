@@ -138,7 +138,7 @@ agent:
 - 模型只能调用这里列出的工具。没列出的，它看不到。
 - 插件只有一个 runtime（写在 `runtime:` 里）并且没有写 `agent.tools.plugin` 时，这个 runtime 得到 `contributes.tools` 里的全部工具，不用再列一遍。
 - 写了 `plugin` 就以写的为准。`plugin: []` 表示一个自己的工具都不给。
-- 有多个 runtime 的插件里，每个 runtime 各自列出要用的工具。
+- 有多个 runtime 的插件里，每个 runtime 各自列出要用的工具。没有 runtime 使用的内部 helpers 不要注册成工具，也不要列进 `contributes.tools`。
 - 工具名只在自己的插件里唯一。一个插件调用不了另一个插件的工具，要用服务，见[插件扩展与通信](../reference/plugin-extensions.md)。
 
 内置工具的清单见[工具参考](../reference/tools.md)。
