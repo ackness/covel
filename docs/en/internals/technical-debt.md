@@ -24,7 +24,6 @@ The source currently has 12 markers, and each row in the three tables below matc
 | `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | Before resume data enters the tool loop, its MediaRefs are not checked. The content to be saved is normalized only at commit time            | A resumed runtime operates on a media reference before any proposal carries it                               |
 | `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | Acceptance scenarios 12 and 19-25 (the plan/confirm enablement flow, and persisted approval authorization) are `it.todo`                     | An enablement resolver or persisted approval authorization is scheduled into the implementation plan         |
 | `packages/events/src/event-bus.ts`                               | The state for receive order is evicted least recently used first. An evicted stream must restart from sequence 1, so its session resets once | Multi-pod deployments keep more live streams than the cap, enough to justify a per-state TTL or a larger cap |
-| `packages/store/src/media-store/filter.ts`                       | When filtering by metadata, the whole `listAssets()` is scanned                                                                              | The number of media items in one session becomes large enough to push the filter down into SQL               |
 
 ## Server
 

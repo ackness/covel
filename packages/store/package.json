@@ -51,10 +51,6 @@
     "./capabilities": {
       "types": "./src/storage-capabilities.ts",
       "import": "./src/storage-capabilities.ts"
-    },
-    "./indexeddb": {
-      "types": "./src/indexeddb-entry.ts",
-      "import": "./src/indexeddb-entry.ts"
     }
   },
   "scripts": {
@@ -67,13 +63,11 @@
   "dependencies": {
     "@covel/shared": "workspace:*",
     "drizzle-orm": "^0.45.3",
-    "idb": "^8.0.3",
     "postgres": "^3.4.9",
     "sqlite-vec": "^0.1.9",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "fake-indexeddb": "^6.2.5",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }
