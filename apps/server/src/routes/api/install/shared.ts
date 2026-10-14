@@ -24,6 +24,7 @@ export const LIMITS = {
   maxUploadBytes: 20 * 1024 * 1024, // 20 MB
   maxEntries: 2000,
   maxUncompressedBytes: 200 * 1024 * 1024, // 200 MB
+  maxCollectionUncompressedBytes: 200 * 1024 * 1024, // shared by every archive in one request
   maxFileNameLength: 512,
   // Uncompressed/compressed ratio ceiling — catches zip-bombs that stay under
   // `maxUploadBytes` but would explode on extract.
@@ -32,11 +33,16 @@ export const LIMITS = {
 
 // ── Error helpers ───────────────────────────────────────────────
 
-export type HttpError = Error & { httpStatus: number };
+export type HttpError = Error & { httpStatus: number; details?: unknown };
 
-export function httpError(status: number, message: string): HttpError {
+export function httpError(
+  status: number,
+  message: string,
+  details?: unknown,
+): HttpError {
   const e = new Error(message) as HttpError;
   e.httpStatus = status;
+  if (details !== undefined) e.details = details;
   return e;
 }
 
@@ -59,7 +65,10 @@ export function errorResponse(err: unknown): {
   if (err instanceof Error) {
     const httpStatus = (err as Error & { httpStatus?: number }).httpStatus;
     if (typeof httpStatus === "number")
-      return { status: httpStatus, body: errorBody(err.message) };
+      return {
+        status: httpStatus,
+        body: errorBody(err.message, { details: (err as HttpError).details }),
+      };
   }
   throw err;
 }
@@ -140,9 +149,29 @@ function sanitizeRelativePath(raw: string, targetRoot: string): string | null {
   return normalized;
 }
 
+/** A request owns one budget, shared by its distinct downloaded archives. */
+export interface ExtractionBudget {
+  consume(bytes: number): void;
+}
+
+export function createCollectionExtractionBudget(): ExtractionBudget {
+  let used = 0;
+  return {
+    consume(bytes) {
+      used += bytes;
+      if (used > LIMITS.maxCollectionUncompressedBytes)
+        throw httpError(
+          413,
+          `Collection uncompressed size exceeds ${LIMITS.maxCollectionUncompressedBytes} bytes`,
+        );
+    },
+  };
+}
+
 export async function readAllEntries(
   buffer: Buffer,
   sentinelRoot: string,
+  budget?: ExtractionBudget,
 ): Promise<ExtractedEntry[]> {
   return new Promise((resolveFn, rejectFn) => {
     yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
@@ -225,6 +254,15 @@ export async function readAllEntries(
         paths.add(key);
         if (!Number.isFinite(uncompressed) || uncompressed < 0) {
           fail(400, `invalid uncompressed size for ${safeRel}`);
+          return;
+        }
+        try {
+          budget?.consume(uncompressed);
+        } catch (error) {
+          finish(() => {
+            zf.close();
+            rejectFn(error);
+          });
           return;
         }
         totalUncompressed += uncompressed;

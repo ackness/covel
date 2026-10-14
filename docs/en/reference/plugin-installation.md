@@ -138,6 +138,7 @@ The outer directory layer that a GitHub source archive carries is removed, and t
 | Expansion ratio      | 100     |
 
 - These limits apply to the whole GitHub archive. For a large monorepo, use a trimmed release repository, or a local ZIP.
+- All archives in a collection preview or batch installation share a 200 MiB extraction budget, including the manifest archive. The same repository and commit count once. Exceeding the budget returns 413 and stops reading later members. Offline collection ZIPs use the same budget.
 - Symbolic links, paths that escape the directory, and duplicate file paths that differ only in letter case are all rejected.
 
 ## HTTP contract
@@ -160,7 +161,8 @@ The Zod schemas for requests and responses are in the `plugin-install` export of
 - `collection`: `{ id, name, version }` when the directory has a manifest, otherwise `null`.
 - `problems` is `{ level: "error" | "warning", message, packageId? }[]`.
 - A batch accepts 1–20 tokens. It first downloads and checks each one's digest and identity. Writing starts only when all of them pass and none of the targets already exists.
-- If any target already exists, it returns 409 and changes nothing. If a failure happens during the writing stage, the packages written in this call are rolled back.
+- If any target already exists, the request returns 409 without changes. A write failure rolls back packages installed by that request. World rollback uses the normal deletion lifecycle: the world lock, a deletion marker, and recoverable package files if record deletion fails.
+- If a world acquired sessions during installation, rollback retains the world and its sessions. Packages whose deletion fails are also retained for retry. The error response’s `details` contains `rolledBack` and `retained`, each a `{ kind, id }[]` list. The `error` message also names retained packages so partial rollback is visible.
 - `/collection` accepts a ZIP produced by `pnpm pack:collection` (the manifest is at the top level, and it contains all the members). It has no preview step, so integrity check errors are returned directly as 400.
 
 ### Host version range
