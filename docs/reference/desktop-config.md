@@ -24,6 +24,7 @@
 
 <data_root>/                 ← 默认 ~/.covel/data；可以改到任意路径
   covel.db                   ← SQLite 数据库
+  media/                     ← 已保存的图片、音频等媒体
   worlds/                    ← 用户创建和安装的世界
   logs/                      ← 应用日志（按大小轮转，NDJSON，一行一条）
     desktop.log              ← 桌面主进程的事件（窗口 / IPC / 后端监督 / 启动失败）
@@ -183,8 +184,8 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 **切换 `data_root`。** 桌面版里选好目录后，按新旧两个位置的情况处理：
 
 - 当前目录有数据、新目录没有：弹窗问“复制我的数据”还是“从空目录开始”。
-- 新目录里已经有 `covel.db` 或用户世界：直接使用，不复制，不覆盖。
-- 选“复制我的数据”时，此刻只在配置根目录写一份 `data-root-copy.json`，`data_root` 不变。下次启动时，主进程在启动后端之前复制 `covel.db`、`covel.db-wal`、`covel.db-shm` 和 `worlds/`（不复制 `logs/` 和 `server.port`），成功后才改写 `data_root`。
+- 新目录里已经有 `covel.db` 或用户世界、媒体：直接使用，不复制，不覆盖。
+- 选“复制我的数据”时，此刻只在配置根目录写一份 `data-root-copy.json`，`data_root` 不变。下次启动时，主进程在启动后端之前复制 `covel.db`、`covel.db-wal`、`covel.db-shm`、`worlds/` 和 `media/`（不复制 `logs/` 和 `server.port`），成功后才改写 `data_root`。
 - 复制只尝试一次。失败、被中断，或者还有别的 Covel 进程开着数据库时，删除这次复制写下的文件，`data_root` 保持不变，并弹窗说明原因。
 - 旧目录只读不改：不移动，不删除。
 
