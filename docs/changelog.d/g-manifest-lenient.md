@@ -1,0 +1,3 @@
+### Changed
+
+- **An unknown manifest field no longer stops a plugin.** When `PLUGIN.md`, a `RUNTIME.md` or the inline `runtime` has a field this version does not know, such as an old field that was removed or one written for a newer Covel, the plugin loads and installs without that field and the server log names the file and the field. `pnpm validate:plugin` still reports it as an error. An unknown key inside a known field (`permissions.fs`, `io.conceal`) and a misspelling of a field that limits or identifies the package (`permision`, `gaurd`, `covle`) still fail the load. See `docs/reference/plugins.md`.

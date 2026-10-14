@@ -131,12 +131,14 @@ describe("package declarations", () => {
     expect(root.manifest).not.toHaveProperty("runtimeType");
   });
   it.each(["settings", "data", "commands", "events", "ui"])(
-    "rejects package contribution %s on a child runtime",
+    "leaves out package contribution %s on a child runtime",
     (field) => {
       const root = declaration();
-      expect(() => child(root, { contributes: { [field]: [] } })).toThrow(
-        "invalid manifest",
-      );
+      const runtime = child(root, { contributes: { [field]: [] } });
+      expect(runtime.manifest).not.toHaveProperty(field);
+      expect(runtime.ignoredFields?.map((ignored) => ignored.field)).toEqual([
+        "contributes",
+      ]);
     },
   );
   it("keeps inline execution separate and validates command action ownership", () => {
