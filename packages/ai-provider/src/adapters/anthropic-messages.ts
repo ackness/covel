@@ -27,6 +27,7 @@ import {
   assertGenerationPayload,
   assertStreamCompleted,
   assertSuccessfulFinishReason,
+  withFailureUsage,
 } from "./generation-completion.js";
 import type {
   ModelRequestContext,
@@ -407,16 +408,20 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         headers,
       );
       const payload = await parseJson(response);
+      // A failed answer may still be billed; the error keeps its usage.
+      const reportedUsage = readAnthropicUsage(payload);
       const diagnostics = readResponseDiagnostics(
         payload,
         "anthropic",
         "anthropic",
+        reportedUsage,
       );
       assertSuccess(response, payload, "anthropic");
-      assertGenerationPayload(payload, "anthropic");
+      assertGenerationPayload(payload, "anthropic", reportedUsage);
       assertSuccessfulFinishReason(
         String(payload.stop_reason ?? "stop"),
         "anthropic",
+        reportedUsage,
       );
 
       const toolCalls = readAnthropicToolCalls(payload);
@@ -472,16 +477,20 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         headers,
       );
       const payload = await parseJson(response);
+      // A failed answer may still be billed; the error keeps its usage.
+      const reportedUsage = readAnthropicUsage(payload);
       const diagnostics = readResponseDiagnostics(
         payload,
         "anthropic",
         "anthropic",
+        reportedUsage,
       );
       assertSuccess(response, payload, "anthropic");
-      assertGenerationPayload(payload, "anthropic");
+      assertGenerationPayload(payload, "anthropic", reportedUsage);
       assertSuccessfulFinishReason(
         String(payload.stop_reason ?? "stop"),
         "anthropic",
+        reportedUsage,
       );
 
       let rawObject: unknown;
@@ -583,7 +592,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       try {
         for await (const payload of iterateSsePayloads(response)) {
           diagnostics.push(payload);
-          if (payload.error) diagnostics.assertNotRefused("anthropic");
+          if (payload.error) diagnostics.assertNotRefused("anthropic", usage);
           assertGenerationPayload(payload, "anthropic-messages");
           if (payload.type === "message_stop") completed = true;
           continuation.push(payload);
@@ -678,11 +687,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           }
         }
       } catch (error) {
-        diagnostics.assertNotRefused("anthropic");
-        throw error;
+        diagnostics.assertNotRefused("anthropic", usage);
+        throw withFailureUsage(error, usage);
       }
-      diagnostics.assertNotRefused("anthropic");
-      assertStreamCompleted(completed, "anthropic-messages");
+      diagnostics.assertNotRefused("anthropic", usage);
+      assertStreamCompleted(completed, "anthropic-messages", usage);
       for (const toolCall of completedToolCalls) {
         yield { type: "tool-call", ...toolCall };
       }

@@ -4,6 +4,7 @@ import {
   MAX_JSON_RESPONSE_BYTES,
 } from "./constants.js";
 import { AiProviderError } from "../../errors.js";
+import { accountFailureKind } from "../provider-error-kind.js";
 import type { UsageSummary } from "../../types.js";
 import { isRetriableStatus } from "./retry.js";
 
@@ -104,6 +105,54 @@ export async function readResponseJson(
 ): Promise<unknown> {
   if (!response.body) return response.json();
   return JSON.parse(await readResponseText(response, maxBytes));
+}
+
+/** An error answer is short; a longer body is not read for its reason. */
+const ACCOUNT_FAILURE_BODY_MAX_BYTES = 64 * 1024;
+
+/**
+ * Read a 429 answer for an empty account (OpenAI `insufficient_quota`) before
+ * the HTTP layer sends the request again. The answer comes back with the body
+ * it had, so the caller still reports the provider's own words; `account` is
+ * set when sending it again would fail the same way.
+ */
+export async function readAccountFailure(
+  response: Response,
+): Promise<{ readonly response: Response; readonly account: boolean }> {
+  let text: string;
+  try {
+    text = await readResponseText(response, ACCOUNT_FAILURE_BODY_MAX_BYTES);
+  } catch {
+    return { response, account: false };
+  }
+  let payload: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed !== null && typeof parsed === "object")
+      payload = parsed as Record<string, unknown>;
+  } catch {
+    // A body that is not JSON names no account failure.
+  }
+  const error =
+    payload.error !== null && typeof payload.error === "object"
+      ? (payload.error as Record<string, unknown>)
+      : payload;
+  const account = accountFailureKind(response.status, {
+    providerCode: error.code,
+    providerType: error.type,
+    message: error.message,
+  });
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  return {
+    response: new Response(text, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    }),
+    account: account !== undefined,
+  };
 }
 
 export async function parseJson(
@@ -213,8 +262,6 @@ export function assertSuccess(
       : typeof payload.message === "string"
         ? payload.message
         : undefined;
-  const isRateLimit =
-    response.status === 429 || errorType === "rate_limit_error";
   const details: Record<string, unknown> = {
     ...errorObj,
     ...(errorMessage ? { message: errorMessage } : {}),
@@ -231,11 +278,16 @@ export function assertSuccess(
       : {}),
   };
 
+  // An empty account or a refused key is not a rate limit, whatever the
+  // status: the same request fails again until the player fixes the account.
+  const account = accountFailureKind(response.status, details);
+  const isRateLimit =
+    !account && (response.status === 429 || errorType === "rate_limit_error");
   throw new AiProviderError({
     code: isRateLimit ? "RATE_LIMITED" : "PROVIDER_ERROR",
     message: providerErrorMessage(provider, response.status, details),
     provider,
-    retriable: isRateLimit || isRetriableStatus(response.status),
+    retriable: !account && (isRateLimit || isRetriableStatus(response.status)),
     statusCode: response.status,
     details,
   });

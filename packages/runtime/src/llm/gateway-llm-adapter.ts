@@ -156,6 +156,7 @@ export interface GatewayLike {
   ): Promise<{
     text: string;
     finishReason: string;
+    rawFinishReason?: string;
     usage: LLMUsageSummary;
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
     reasoningContent?: string;
@@ -206,6 +207,7 @@ export interface GatewayLike {
     textDelta?: string;
     reasoningDelta?: string;
     finishReason?: string;
+    rawFinishReason?: string;
     id?: string;
     name?: string;
     arguments?: string;
@@ -353,7 +355,10 @@ export function createGatewayAdapter(
           name: tc.name,
           arguments: tc.arguments,
         })),
-        finishReason: completedFinishReason(result.finishReason),
+        finishReason: unifyFinishReason(result.finishReason),
+        ...(result.rawFinishReason
+          ? { rawFinishReason: result.rawFinishReason }
+          : {}),
         usage: result.usage,
         ...(result.providerContinuation
           ? { providerContinuation: result.providerContinuation }
@@ -446,6 +451,9 @@ export function createGatewayAdapter(
             type: "done" as const,
             ...(event.diagnostics ? { diagnostics: event.diagnostics } : {}),
             finishReason: event.finishReason ?? "stop",
+            ...(event.rawFinishReason
+              ? { rawFinishReason: event.rawFinishReason }
+              : {}),
             ...(event.providerContinuation
               ? { providerContinuation: event.providerContinuation }
               : {}),
@@ -532,12 +540,4 @@ function toGatewayTool(tool: LLMToolDefinition) {
       parameters: tool.parameters,
     },
   };
-}
-
-/** A gateway of another origin may still answer in a provider's own word. */
-function completedFinishReason(
-  reason: string,
-): "stop" | "tool_calls" | "length" {
-  const unified = unifyFinishReason(reason);
-  return unified === "tool_calls" || unified === "length" ? unified : "stop";
 }

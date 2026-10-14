@@ -309,7 +309,9 @@ model    = "glm-5"
 
 备用模型的切换：
 
-- HTTP 429 限流允许切换到已配置的备用模型，其他 4xx 保留原来的失败路径。
+- HTTP 429 限流允许切换到已配置的备用模型。
+- 账户的失败（余额用完、密钥无效或无权使用这个模型，见下面的 `quota` / `auth`）也允许切换：它只属于这一家的账户，备用的目标可能还能用。没配备用模型，就直接失败，把原因告诉玩家。
+- 其他 4xx 保留原来的失败路径。
 - 流式内容一旦已经输出，就禁止切换，避免把两个模型的结果混在一起。
 
 ### 失败时记录的是哪个模型
@@ -824,7 +826,11 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 | `refused`      | 服务商拒绝回答                           | refusal / content filter                                                                         |
 | `config`       | 模型配置无法发起这次调用                 | 配置错误、地址被出站规则拒绝                                                                     |
 
-连接失败时，`error` 取底层原因（如 `connect ECONNREFUSED 127.0.0.1:11434`），不是笼统的 `fetch failed`。分类在 `@covel/ai-provider` 的 `classifyProviderFailure`。
+连接失败时，`error` 取底层原因（如 `connect ECONNREFUSED 127.0.0.1:11434`），不是笼统的 `fetch failed`。分类在 `@covel/ai-provider` 的 `classifyProviderFailure`，类别的类型 `ProviderFailureKind` 在 `@covel/shared`。
+
+429 只按错误码判断是不是额度用完，不读文字：OpenAI 普通限流的提示里也带着账单页面的链接。
+
+`quota` 和 `auth` 是账户的失败，`@covel/shared` 的 `isAccountFailure` 判断。同一个请求再发给同一家，只会同样失败，所以 HTTP 层和 runtime 都不再重发，只切换玩家配置的备用模型。
 
 连接测试按模型类型选择探测方式：
 
@@ -870,9 +876,15 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 | `tool_calls`     | 请求调用工具           |
 | `content_filter` | 服务商拦截或拒答       |
 | `error`          | 出错                   |
-| `other`          | 其他                   |
+| `other`          | 对照表里没有的原因     |
 
 服务商自己的用词（如 Anthropic 的 `end_turn` / `max_tokens` / `tool_use`）保留在 `rawFinishReason`。对照表只有一份，在 `@covel/shared` 的 `unifyFinishReason`。网关在出口处应用它，runtime 和世界生成读同一张表；做法和 AI SDK 的 `unified` / `raw` 相同。插件通过 `ctx.gateway` 拿到的也是统一之后的值。
+
+**只有 `stop` 和 `tool_calls` 算说完了**（`@covel/shared` 的 `isCompleteFinishReason`）。`other` 不算正常结束：服务商没说清为什么停（如 Anthropic 的 `pause_turn`、DeepSeek 的 `insufficient_system_resource`），回答可能停在任何地方。
+
+- 叙事：已经写出来的正文保留，`llm.responded` 带着 `finishReason: other` 和 `rawFinishReason`，界面提示这段没写完，玩家可以重试这一回合。被输出上限截断（`length`）的叙事同样保留，提示的是另一句话。
+- runtime 里其他的回答（带工具调用的、要求 JSON 的、不保留截断正文的 runtime）、世界生成、历史摘要：按失败处理，不保存半截结果，也不自动重试。
+- function 插件通过 `ctx.gateway` 拿到的是原样的 `other`，由插件决定。后台输出应当和上面一样按失败处理。
 
 **诊断。** 四种内置文本协议的 text / object 返回值和 stream 的 `done` 可以带 `diagnostics`，包含服务商和请求的 warning、URL / 文档来源和引用位置。runtime bridge 和 LLM trace 保留这些信息。
 
@@ -881,6 +893,8 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 - function 插件的 `PluginRuntimeGateway` 同样透传 `providerOptions` 和完整的返回诊断。这条路径的 `gateway.responded` / `gateway.failed` trace 保持原有的隐私约定：只记录 `diagnosticsSummary` 里的 warning 类型、来源和引用的数量、拒绝原因，不记录引用原文、来源 URL、标题或拒绝的全文。
 
 **拒绝。** 明确的 refusal 或 content filter 抛出不可重试的 `REFUSAL`，拒绝原因保留在 `error.details.diagnostics.refusal`，不切换备用模型。
+
+**失败也记下用掉的 token。** 拒答、`finishReason: error`、错误正文、流正常读到 EOF 却没有结束标志：服务商在失败之前报告过用量时，错误带着它（`error.details.usage`）。runtime 把它写进这次调用的 `llm.responded`，function 插件和扩展点提供方的调用写进 `gateway.failed`，调试页的用量和费用都算上它。服务商没报告用量，就不写 `usage`，不当成 0。绕过适配器收尾检查的底层网络异常仍可能丢失此前报告的用量。
 
 - 即使已经有普通文本或工具内容，也不能把夹着拒绝的回答记成成功。
 - 流式文本可能已经交付出去，但不会产生成功的 `done`。
@@ -920,6 +934,7 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 和 OpenAI、Anthropic 官方 SDK 以及 AI SDK 一致：
 
 - 重试 408、409、429 和 5xx。
+- 429 的错误码说额度用完（OpenAI 的 `insufficient_quota`）时不重试：先读出回答正文，再把带着原样正文的回答交给调用方。
 - 服务商在 `x-should-retry` 头里给出的 `true` / `false` 优先于状态码。
 - 等待时间先读更精确的 `retry-after-ms`（OpenAI、Azure），再读 `Retry-After`。
 - `Retry-After` 同时接受整数秒和 HTTP-date。过去的日期立即重试，无效的值退回到退避策略。
@@ -986,6 +1001,7 @@ assertLlmRequestBudget(config.requestBudget, {
 
 - runtime 对同一个目标重试时，优先读取结构化 provider 错误的 `code`、`statusCode` 和 `retriable`。
 - 配置和 schema 校验失败不重试。错误消息里的关键词不能推翻明确的“不可重试”判断。
+- 账户的失败（`quota` / `auth`）不重试，即使状态码是 429。
 - 网关整理错误时，保留已知临时网络故障的“可重试”属性。只有未知的第三方异常才根据消息判断。
 - 调用方取消，或者已有部分流式输出，仍然禁止重试。备用模型的切换保留自己独立的规则。
 

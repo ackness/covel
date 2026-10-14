@@ -321,6 +321,7 @@ export function createGateway(deps: GatewayDependencies) {
           assertSuccessfulFinishReason(
             result.finishReason,
             targetProvider(target),
+            result.usage,
           );
           return {
             ...withProviderWarnings(
@@ -389,6 +390,7 @@ export function createGateway(deps: GatewayDependencies) {
           assertSuccessfulFinishReason(
             result.finishReason,
             targetProvider(target),
+            result.usage,
           );
           return {
             ...withProviderWarnings(
@@ -551,7 +553,11 @@ export function createGateway(deps: GatewayDependencies) {
             emittedDelta = true;
           }
           if (event.type === "done") {
-            assertSuccessfulFinishReason(event.finishReason, provider);
+            assertSuccessfulFinishReason(
+              event.finishReason,
+              provider,
+              event.usage,
+            );
             completion = withProviderWarnings(
               withUnifiedFinishReason(event),
               request.warnings,

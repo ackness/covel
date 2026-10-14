@@ -24,7 +24,7 @@ describe("requestLlmResponse", () => {
       }),
     ).rejects.toMatchObject({ name: "LlmIncompleteOutputError" });
   });
-  it.each(["length", "max_tokens", "error"])(
+  it.each(["length", "max_tokens", "error", "pause_turn", "other"])(
     "rejects incomplete streamed output (%s)",
     async (reason) => {
       await expect(
