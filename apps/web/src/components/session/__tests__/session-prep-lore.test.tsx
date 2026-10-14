@@ -43,6 +43,7 @@ vi.mock("../session-prep/use-plugin-selection.js", () => ({
     pluginPlanError: null,
     missingPluginIds: [],
     unmetRequirements: [],
+    dependentsOff: [],
   }),
 }));
 vi.mock("../session-prep/use-world-data-preflight.js", () => ({
