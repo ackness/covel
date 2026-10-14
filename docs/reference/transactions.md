@@ -46,12 +46,17 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
 2. **回滚恢复可观察的状态。** 事务回滚之后，每个读方法返回的结果，和事务开始前那一刻相同。之前就有的记录保留原来的身份；事务里做的修改被丢弃。
 3. **没有共享的句柄。** 事务的范围只绑定这一次 `fn` 调用。外层的 store 不会停在“事务进行中”的状态，失败的事务不会把 store 卡住。
 4. **事务之外的写入立即生效。** 不在 `withTransaction` 里调用的写方法，写完就是持久的。
-5. **不允许嵌套。** 每个后端都拒绝在事务里再开事务（见[下文](#nesting-is-rejected-on-every-backend)）。需要一段可以单独回滚的范围时，用 `tx.savepoint`：
+5. **事务里只能用 `tx` 写。** 在 `fn` 里（包括它 `await` 的代码）通过外层的根 store 调用写方法，每个后端都拒绝，抛 `RootStoreWriteInTransactionError`，什么也不写。错误逃出 `fn` 时整个事务回滚。读方法不受限制。`fn` 结束之后才运行的代码（比如它留下的定时器）不算在事务里，照常写入。
+6. **不允许嵌套。** 每个后端都拒绝在事务里再开事务（见[下文](#nesting-is-rejected-on-every-backend)）。需要一段可以单独回滚的范围时，用 `tx.savepoint`：
    - SQLite 在唯一的连接上执行 `SAVEPOINT` / `ROLLBACK TO`。
    - PostgreSQL 打开 Drizzle 的嵌套事务，也就是保留连接上的一个 savepoint。
    - MemoryStore 为每一层打开的 savepoint 保留一份惰性快照。
 
 **消息 ID 不能重复。** 普通的 `addMessage` 插入会拒绝一个已被占用的全局消息 ID，即使占用它的是另一个会话。拒绝不会改动原来那一行。错误逃出事务回调时，之前的写入回滚；失败的 savepoint 只回滚它自己的写入。另一个接口 `commitPlayerInputMessage` 保留它明确的“幂等接管”约定。
+
+**追加型记录的 ID 不能重复。** 回合结果、工具调用、运行时输出、交互记录、状态变化、事件、trace、回合消息、玩家输入和会话摘要的 ID 都是全局主键。在每个后端上，用已有的 ID 再写一次都会报错，原来那一行不变。
+
+**设定条目的批量写入是原子的。** `upsertLorebookEntries` 的一批里只要有一条失败（比如 ID 含 U+0000），整批都不写。
 
 **快照刷新。** 同一个属主刷新快照时，采集时间和内容在同一次写入里更新，并跟随外层事务的提交或回滚。它不改变快照 ID，也不放松对跨会话归属的拒绝。
 
@@ -230,6 +235,7 @@ compareAndSetPluginDataBatch(
 
 - 事务外面的读写等事务结束。
 - 通过 `tx` 范围发出的操作就地执行。它属于这个事务，让它排队会造成死锁。
+- 事务回调里通过根 store 发出的读就地执行；`DataStore` 的写被拒绝（规则 5）。共用这个连接的镜像 MediaStore 不受规则 5 限制，它的写仍然就地执行。
 - “里面还是外面”由 `AsyncLocalStorage` 判断。所以一个真正并发的调用方，即使在事务停在某个 `await` 时开始，也不会被误认为是嵌套调用。
 
 **这道门按连接设，不按 store 设。** 所有通过同一个 `node:sqlite` 句柄做修改的代码共用一道门，由 `sqlite/shared-connection.ts` 里的 `getConnectionWriteGate(db)` 取得。共用它的有：

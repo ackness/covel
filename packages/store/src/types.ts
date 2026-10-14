@@ -696,7 +696,8 @@ export interface WorldDataImportLedgerStore {
 export interface LorebookStore {
   /**
    * Upsert a batch of session-scoped lorebook entries. Same `(sessionId, owner, id)`
-   * replaces the existing row. Used by the `lorebook.upsert` proposal commit
+   * replaces the existing row. The batch is atomic: when one entry fails, none
+   * of the batch is written. Used by the `lorebook.upsert` proposal commit
    * handler and by plugins that emit world data through the lorebook
    * pipeline.
    */
@@ -966,6 +967,11 @@ export interface TransactionalStore {
    *   serialize transactions and bundled root mutators through one write gate,
    *   so an unrelated root write waits instead of being folded into a rollback.
    *   SQLite gates every store sharing its connection.
+   *
+   * **Write only through `tx` inside `fn`.** A `DataStore` write made through
+   * the root store from inside `fn` rejects with
+   * `RootStoreWriteInTransactionError` on every backend and writes nothing;
+   * root reads are allowed.
    *
    * **Nesting is not supported on any backend.** Calling `withTransaction` from
    * inside another `withTransaction` callback rejects with a clear error rather

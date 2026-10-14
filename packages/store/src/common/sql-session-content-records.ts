@@ -143,7 +143,7 @@ export function createSqlSessionContentRecords(
       }
       const rows = await runner.select<EventRow>(events, {
         where: and(...conditions),
-        orderBy: [asc(events.createdAt)],
+        orderBy: [asc(events.createdAt), asc(byteOrder(events.id))],
         limit: options?.limit,
       });
       return rows.map((row) => toEventRecord(row, json));
