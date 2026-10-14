@@ -51,6 +51,7 @@ function ctx(): ToolExecutionContext {
     turnId: "turn-plugin-data",
     pluginId: "core-test",
     runtimeId: "core-test/runtime",
+    random: { int: (min: number) => min },
   };
 }
 

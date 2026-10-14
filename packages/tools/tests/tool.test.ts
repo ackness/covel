@@ -52,6 +52,7 @@ describe("tool()", () => {
       turnId: "t1",
       pluginId: "p1",
       runtimeId: "r1",
+      random: { int: (min: number) => min },
     };
     const result = await modelCall(mod, { city: "Tokyo" }, ctx);
     expect(result).toEqual({ temp: 22, city: "Tokyo" });
@@ -64,6 +65,7 @@ describe("tool()", () => {
       turnId: "t1",
       pluginId: "p1",
       runtimeId: "r1",
+      random: { int: (min: number) => min },
     };
     // Missing required field 'city'
     await expect(modelCall(mod, {}, ctx)).rejects.toMatchObject({
@@ -83,7 +85,13 @@ describe("tool()", () => {
       }),
       execute: async (params) => params,
     });
-    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    const ctx = {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "p",
+      runtimeId: "p",
+      random: { int: (min: number) => min },
+    };
 
     expect(
       await modelCall(
@@ -131,7 +139,13 @@ describe("tool()", () => {
       (mod.jsonSchema.properties as Record<string, object>).relation,
     ).not.toHaveProperty("pattern");
     // The value is still checked.
-    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    const ctx = {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "p",
+      runtimeId: "p",
+      random: { int: (min: number) => min },
+    };
     await expect(
       modelCall(mod, { relation: "1st", people: [] }, ctx),
     ).rejects.toMatchObject({ details: [{ path: "relation" }] });
@@ -152,7 +166,13 @@ describe("tool()", () => {
       }),
       execute: async (params) => params,
     });
-    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    const ctx = {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "p",
+      runtimeId: "p",
+      random: { int: (min: number) => min },
+    };
     // The model closed the arguments object inside the text of the array,
     // closed an element once too often, or ended the text before the last
     // brackets.
@@ -189,7 +209,13 @@ describe("tool()", () => {
       }),
       execute: async (params) => params,
     });
-    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    const ctx = {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "p",
+      runtimeId: "p",
+      random: { int: (min: number) => min },
+    };
     // The model escaped the quotes of the JSON text, but not the quote marks
     // around a word inside it.
     expect(
@@ -207,7 +233,13 @@ describe("tool()", () => {
       }),
       execute: async (params) => params,
     });
-    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    const ctx = {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "p",
+      runtimeId: "p",
+      random: { int: (min: number) => min },
+    };
     // A colon is missing. Told only "expected array, received string", a
     // model sends the same broken text again and again.
     const broken = await modelCall(
@@ -267,7 +299,13 @@ describe("tool()", () => {
       await modelCall(
         mod,
         { text: "abc" },
-        { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" },
+        {
+          sessionId: "s",
+          turnId: "t",
+          pluginId: "p",
+          runtimeId: "p",
+          random: { int: (min: number) => min },
+        },
       ),
     ).toEqual({ length: 3 });
   });

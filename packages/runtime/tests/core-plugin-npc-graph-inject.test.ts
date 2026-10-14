@@ -116,6 +116,7 @@ async function seedNpcGraph(
       turnId: "turn-seed",
       pluginId: "npc-graph",
       runtimeId: "npc-graph/extractor",
+      random: countingRandom(),
       store: createFunctionStoreView(store, {
         sessionId,
         turnId: "turn-seed",
@@ -126,6 +127,12 @@ async function seedNpcGraph(
   );
 
   await createCommitPipeline(store).commitAll(getPendingProposals(result));
+}
+
+/** A different draw each call, so new IDs never collide. */
+function countingRandom() {
+  let next = 0;
+  return { int: (min: number) => min + next++ };
 }
 
 describe("npc-graph core plugin write-read-inject path", () => {
@@ -143,6 +150,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
         turnId: "turn-buffered",
         logicalTurn: 0,
         pendingProposals: pending,
+        random: countingRandom(),
       };
       const scopedContext = {
         ...context,
@@ -230,6 +238,12 @@ describe("npc-graph core plugin write-read-inject path", () => {
         store: scopedContext.store,
         playerMessage: "Alice",
         locale: "en-US",
+        session: { lastPlayerInput: null },
+        recursiveCall: async () => {
+          throw new Error("rag-retriever must not recurse");
+        },
+        recursionDepth: 0,
+        random: { int: (min: number) => min },
         pluginData: {
           list: (namespace: string) =>
             store.listPluginData(sessionId, "npc-graph", namespace),

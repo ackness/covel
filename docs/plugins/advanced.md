@@ -292,6 +292,8 @@ function:
 
 函数里有几样东西是直接调用的，不经过工具清单和授权流程：`ctx.gateway`（调用模型）、`ctx.images` / `ctx.speech` / `ctx.music`（生成媒体）、`ctx.media`（保存媒体）、`ctx.utils`（网络请求）。
 
+它们都写在 `PluginFunctionContext` 类型里。宿主配好了模型和媒体存储才会给，用之前先判断有没有：`if (!ctx.images) return …`。
+
 生成图片时，在函数里直接调用 `ctx.images.generate(...)`。不要做一个让模型调用的“生成图片”工具，也不要自己写请求去调用图片服务商。细节见[图片生成](../reference/image-generation.md)和[媒体存储](../reference/media-store.md)。
 
 ## 权限

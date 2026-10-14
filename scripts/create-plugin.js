@@ -447,7 +447,6 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
       ? manualPayload.title.trim()
       : '${runtimeName} checkpoint';
   const now = new Date().toISOString();
-  if (!random) throw new Error('The host must provide ctx.random');
   let key;
   do {
     key = \`${runtimeName}-\${random.int(0, 0x100000000).toString(36)}\`;

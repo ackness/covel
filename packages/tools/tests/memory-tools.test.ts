@@ -21,7 +21,13 @@ describe("kernel memory search", () => {
     const [tool] = createMemoryTools({ search });
     const result = await tool!.execute(
       { query: "compass", limit: 2 },
-      { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p/r" },
+      {
+        sessionId: "s",
+        turnId: "t",
+        pluginId: "p",
+        runtimeId: "p/r",
+        random: { int: (min: number) => min },
+      },
     );
     expect(search).toHaveBeenCalledExactlyOnceWith("s", "compass", {
       scope: "all",
@@ -52,7 +58,13 @@ it("preserves memory excerpts and hides internal message identities", async () =
   });
   const result = await tool!.execute(
     { query: "compass" },
-    { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p/r" },
+    {
+      sessionId: "s",
+      turnId: "t",
+      pluginId: "p",
+      runtimeId: "p/r",
+      random: { int: (min: number) => min },
+    },
   );
   expect(result).toMatchObject({
     results: [{ content: `[assistant] ${excerpt}` }],

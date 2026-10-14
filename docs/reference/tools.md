@@ -1347,7 +1347,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 `codex`、`npc-graph` 的节点和玩家角色用的是 `wordId`。
 
-`shortId` 的第四个参数传上下文的 `random`，随机串就取自宿主的随机源（见 [`ctx.random`](./plugins.md#输入和输出)）。
+`shortId` 的第四个参数必须传上下文的 `random`，随机串取自宿主的随机源（见 [`ctx.random`](./plugins.md#随机数ctxrandom)）。
 
 ```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
@@ -1609,10 +1609,10 @@ export default function ({ tool, z, shortId }) {
 
 生产宿主和 `test-runtime` 在每次工具调用时注入 `context.store`。它的接口和 `FunctionStoreView` 相同：
 
-| 方法                                                             | 读到什么                                                                                          |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | 当前会话、当前插件的数据。按顺序合并了同一次执行里已有的 set、batch 和 delete 提案。              |
-| `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` | 只读当前会话。给了 limit 时读最近的消息。消息只含已提交的回合；正在执行的回合要到提交之后才出现。 |
+| 方法                                                             | 读到什么                                                                                                                                                               |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | 当前会话、当前插件的数据。按顺序合并了同一次执行里已有的 set、batch 和 delete 提案。                                                                                   |
+| `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` | 只读当前会话。`getSession()` 返回[会话视图](./plugins.md#会话视图storegetsession)。给了 limit 时读最近的消息。消息只含已提交的回合；正在执行的回合要到提交之后才出现。 |
 
 规则：
 

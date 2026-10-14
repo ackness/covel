@@ -45,7 +45,10 @@ export type RpcTrustLevel = "builtin" | "community";
  */
 export interface RpcHandlerStore {
   // ── Sessions ─────
-  getSession(): Promise<unknown>;
+  /** The current session's clock, language and setup progress. */
+  getSession(): Promise<
+    import("@covel/plugin-handlers-utils").PluginSessionView
+  >;
   // ── Turn messages ─────
   /** The most recent committed messages: `limit` of them, at most 200 (also the default). */
   listTurnMessages(limit?: number): Promise<

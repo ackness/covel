@@ -272,7 +272,12 @@ describe("createRpcExecutor", () => {
     function recordingStore(writeDelay?: Promise<void>) {
       const writes: string[] = [];
       const store = {
-        getSession: async () => ({}),
+        getSession: async () => ({
+          phase: "playing" as const,
+          completedPlayerTurns: 0,
+          locale: "en",
+          setupRuntimes: {},
+        }),
         listTurnMessages: async () => [],
         setPluginData: async (record: { key: string }) => {
           await writeDelay;
@@ -458,7 +463,26 @@ describe("createRpcExecutor", () => {
 describe("createRpcHandlerStoreView", () => {
   it("binds action-level RPC reads and writes to the current session and plugin", async () => {
     const store = {
-      getSession: vi.fn(async (id: string) => ({ id })),
+      getSession: vi.fn(async (id: string) => ({
+        id,
+        incarnation: "inc-1",
+        status: "active",
+        phase: "setup",
+        completedPlayerTurns: 0,
+        locale: "en-US",
+        activePlugins: ["plugin-real"],
+        setupRuntimes: {
+          "plugin-real/opening": {
+            state: "pending",
+            pluginVersion: "1.0.0",
+            generation: 1,
+            attempts: 1,
+            lastError: "model timed out",
+          },
+        },
+        createdAt: "2026-04-30T00:00:00.000Z",
+        updatedAt: "2026-04-30T00:00:00.000Z",
+      })),
       listRecentTurnMessages: vi.fn(
         async (sessionId: string, _limit: number) => [{ sessionId }],
       ),
@@ -484,7 +508,18 @@ describe("createRpcHandlerStoreView", () => {
       pluginId: "plugin-real",
     });
 
-    await scoped.getSession();
+    // Plugin code reads a projection of the session, never the record.
+    expect(await scoped.getSession()).toEqual({
+      phase: "setup",
+      completedPlayerTurns: 0,
+      locale: "en-US",
+      setupRuntimes: {
+        "plugin-real/opening": {
+          state: "pending",
+          lastError: "model timed out",
+        },
+      },
+    });
     await scoped.listTurnMessages();
     await scoped.listTurnMessages(5);
     await scoped.listTurnMessages(1_000_000);

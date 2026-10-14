@@ -323,7 +323,7 @@ When a plugin needs to call a model, or connect a new provider, choose the appro
 
 ### Use the model features that already exist
 
-- Text, images, speech, and music: use `ctx.gateway`, `ctx.images`, `ctx.speech`, and `ctx.music`.
+- Text, images, speech, and music: use `ctx.gateway`, `ctx.images`, `ctx.speech`, and `ctx.music`. Their types (`PluginServiceGateway`, `PluginImages`, `PluginSpeech`, `PluginMusic`, `PluginMedia`) are exported by `@covel/plugin-handlers-utils`, and the host implements exactly these types.
 - Evaluation: `ctx.gateway.evaluate({ presetId, state, questions, signal })`. It supports three kinds of questions: Boolean, Choice, and Score.
 
 ### Budget when you build a long prompt yourself

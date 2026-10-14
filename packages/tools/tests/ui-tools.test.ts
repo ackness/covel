@@ -11,6 +11,7 @@ const CTX = {
   turnId: "turn-1",
   pluginId: "plugin",
   runtimeId: "runtime",
+  random: { int: (min: number) => min },
 };
 
 describe("builtin ui tools", () => {
@@ -33,6 +34,7 @@ describe("builtin ui tools", () => {
         turnId: "turn-1",
         pluginId: "plugin",
         runtimeId: "runtime",
+        random: { int: (min: number) => min },
       },
     );
 

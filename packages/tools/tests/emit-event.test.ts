@@ -9,6 +9,7 @@ const ctx: ToolExecutionContext = {
   turnId: "t1",
   pluginId: "narrator",
   runtimeId: "narrator",
+  random: { int: (min: number) => min },
 };
 
 interface FakeTopicEntry {

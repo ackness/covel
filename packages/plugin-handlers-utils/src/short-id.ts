@@ -15,14 +15,12 @@ import type { PluginRandom } from "./function-runtime.js";
 
 const MAX_SLUG_LENGTH = 32;
 
-/** Eight random hex digits, from the host's `ctx.random` when given. */
-const randomPart = (random?: PluginRandom) =>
+/** Eight random hex digits from the host's `ctx.random`. */
+const randomPart = (random: PluginRandom) =>
   random
-    ? random
-        .int(0, 2 ** 32)
-        .toString(16)
-        .padStart(8, "0")
-    : crypto.randomUUID().replaceAll("-", "").slice(0, 8);
+    .int(0, 2 ** 32)
+    .toString(16)
+    .padStart(8, "0");
 
 /**
  * Eight hex digits of the label (FNV-1a over its UTF-16 units). The same
@@ -68,14 +66,14 @@ export function wordId(
  * 8-hex random part, so repeated labels and lossy slugs stay distinct.
  * The session argument is retained for source compatibility, not uniqueness.
  * Names are display text, not identity; deduplicate against stored entities.
- * Pass the context's `random`: the random part then repeats in a test server
- * started with a seed, as every other draw of the plugin does.
+ * The random part comes from the context's `random`, so it repeats in a test
+ * server started with a seed, as every other draw of the plugin does.
  */
 export function shortId(
   prefix: string,
   label: string,
   _sessionId: string,
-  random?: PluginRandom,
+  random: PluginRandom,
 ): string {
   return [prefix, wordSlug(label), randomPart(random)]
     .filter(Boolean)
@@ -87,7 +85,7 @@ export function shortIdBatch(
   prefix: string,
   labels: readonly string[],
   sessionId: string,
-  random?: PluginRandom,
+  random: PluginRandom,
 ): string[] {
   return labels.map((label) => shortId(prefix, label, sessionId, random));
 }

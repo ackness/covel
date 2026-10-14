@@ -515,7 +515,13 @@ export async function executeFunctionRuntime({
         ? { exports: exportSlots }
         : {}),
       ...(activation ? { activation } : {}),
-      execution: executionContext,
+      // The public identity only; counting and ledger keys stay in the kernel.
+      execution: {
+        origin: executionContext.origin,
+        ...(executionContext.sourceTurnId !== undefined
+          ? { sourceTurnId: executionContext.sourceTurnId }
+          : {}),
+      },
       ...(resumedFromSuspensionId !== undefined
         ? { resumeData, resumedFromSuspensionId }
         : {}),

@@ -6,10 +6,21 @@
  */
 
 import type {
+  ExecutionContext,
+  ExecutionOrigin,
   KernelExtensionPointIo,
+  MediaRef,
+  NestedTurnResult,
+  PlayerInputSubmission,
   PluginExtensionContext,
   PluginExtensionDefinition,
   Proposal,
+  RecursiveCallDelta,
+  RuntimeActivation,
+  RuntimeStatus,
+  Session,
+  SetupRuntimeState,
+  TurnDigest,
   WorldDimensions,
   WorldModelView,
 } from "@covel/shared";
@@ -36,13 +47,30 @@ import type {
   FunctionStoreView as PublicFunctionStoreView,
   PluginDataWriter as PublicPluginDataWriter,
   HandlerResult as PublicHandlerResult,
+  PluginExecutionInfo,
+  PluginExecutionOrigin,
+  PluginHttp,
+  PluginMediaRef,
+  PluginNestedRuntimeResult,
+  PluginNestedTurnResult,
+  PluginPlayerInputSubmission,
+  PluginRecursiveCallDelta,
+  PluginRuntimeActivation,
+  PluginRuntimeStatus,
+  PluginServiceGateway,
+  PluginSessionView,
+  PluginSetupRuntimeState,
+  PluginTurnDigest,
 } from "@covel/plugin-handlers-utils";
+import type { ImageGenerationHandlerContext } from "@covel/plugin-handlers-utils/image-generation";
 import type {
   FunctionHandlerContext,
   FunctionHandler,
   AgentGuard,
   FunctionStoreView,
   PluginDataWriter,
+  PluginRuntimeGateway,
+  PluginRuntimeUtils,
 } from "@covel/shared/plugin-runtime";
 import type { HandlerResult } from "@covel/shared";
 
@@ -214,6 +242,90 @@ type _SameHandlerResult = Assert<
 >;
 type _HostProvidesFunctionCore = Assert<
   FunctionHandlerContext extends PluginFunctionContext ? true : false
+>;
+// The host context and the public one name the same fields: a field the host
+// adds must be typed in the SDK first, and one the SDK drops fails here.
+// `packages/runtime/tests/sdk-context-keys.test.ts` checks the objects the
+// host really builds against the same list.
+type _SameFunctionContextKeys = Assert<
+  SameKeys<FunctionHandlerContext, PluginFunctionContext>
+>;
+type _SameRequiredFunctionContextKeys = Assert<
+  SameKeys<Required<FunctionHandlerContext>, Required<PluginFunctionContext>>
+>;
+// The public data shapes mirror the kernel's types exactly.
+type _SameMediaRef = Assert<MutuallyAssignable<MediaRef, PluginMediaRef>>;
+type _SameExecutionOrigin = Assert<
+  MutuallyAssignable<ExecutionOrigin, PluginExecutionOrigin>
+>;
+type _ExecutionInfoProjects = Assert<
+  ExecutionContext extends PluginExecutionInfo ? true : false
+>;
+type _SameActivation = Assert<
+  MutuallyAssignable<RuntimeActivation, PluginRuntimeActivation>
+>;
+// zod's JSON type has mutable arrays, so these two compare one way plus keys.
+type _PlayerInputFits = Assert<
+  PlayerInputSubmission extends PluginPlayerInputSubmission ? true : false
+>;
+type _SamePlayerInputKeys = Assert<
+  SameKeys<PlayerInputSubmission, PluginPlayerInputSubmission>
+>;
+type _TurnDigestFits = Assert<
+  TurnDigest extends PluginTurnDigest ? true : false
+>;
+type _SameTurnDigestKeys = Assert<SameKeys<TurnDigest, PluginTurnDigest>>;
+type _SameRecursiveDelta = Assert<
+  MutuallyAssignable<RecursiveCallDelta, PluginRecursiveCallDelta>
+>;
+type _SameRuntimeStatus = Assert<
+  MutuallyAssignable<RuntimeStatus, PluginRuntimeStatus>
+>;
+type _NestedResultProjects = Assert<
+  NestedTurnResult extends PluginNestedTurnResult ? true : false
+>;
+type _NestedRuntimeResultKeys = Assert<
+  Exclude<
+    keyof PluginNestedRuntimeResult,
+    keyof NestedTurnResult["runtimeResults"][number]
+  > extends never
+    ? true
+    : false
+>;
+type _SameGateway = Assert<
+  MutuallyAssignable<PluginRuntimeGateway, PluginServiceGateway>
+>;
+type _SameHttp = Assert<MutuallyAssignable<PluginRuntimeUtils, PluginHttp>>;
+// The session view is a projection of the session record: each field keeps
+// the record's type, and each setup state keeps its variant's fields.
+type _SessionViewKeys = Assert<
+  Exclude<keyof PluginSessionView, keyof Session> extends never ? true : false
+>;
+type _SessionViewFields = Assert<
+  MutuallyAssignable<
+    Omit<Pick<Session, keyof PluginSessionView>, "setupRuntimes">,
+    Omit<PluginSessionView, "setupRuntimes">
+  >
+>;
+type _SameSetupStates = Assert<
+  MutuallyAssignable<
+    SetupRuntimeState["state"],
+    PluginSetupRuntimeState["state"]
+  >
+>;
+type SetupStateProjects<S extends SetupRuntimeState["state"]> =
+  Extract<SetupRuntimeState, { state: S }> extends Extract<
+    PluginSetupRuntimeState,
+    { state: S }
+  >
+    ? true
+    : false;
+type _PendingProjects = Assert<SetupStateProjects<"pending">>;
+type _DoneProjects = Assert<SetupStateProjects<"done">>;
+type _BlockedProjects = Assert<SetupStateProjects<"blocked">>;
+// The shared image-generation trunk runs on the context the host passes.
+type _ImageTrunkRunsOnHost = Assert<
+  FunctionHandlerContext extends ImageGenerationHandlerContext ? true : false
 >;
 type _PublicHandlerRunsOnHost = Assert<
   PluginFunctionHandler extends FunctionHandler ? true : false
