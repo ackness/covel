@@ -2,12 +2,14 @@
 import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 import path from "node:path";
 import {
+  isRuntimeDisablingIssue,
   pluginManifestSchema,
   runtimeAuthoringManifestSchema,
   resolveI18nText,
 } from "@covel/shared";
 import type { PluginManifest } from "@covel/shared";
 import type {
+  DisabledRuntime,
   ParsedPluginMd,
   ParsedRuntimeMd,
   PackageManifest,
@@ -42,17 +44,79 @@ function frontmatter(
       : data,
   };
 }
+interface ManifestIssue {
+  readonly code?: string;
+  readonly path: readonly PropertyKey[];
+  readonly message: string;
+  readonly params?: unknown;
+}
+function issueLine(filePath: string, issue: ManifestIssue, advice: string) {
+  return `${filePath}: ${issue.path.map(String).join(".") || "frontmatter"}: ${issue.message}; ${advice}`;
+}
 function invalid(filePath: string, error: unknown): never {
+  if (error instanceof RuntimeDisabledError) throw error;
   const details =
     error instanceof Error && "issues" in error && Array.isArray(error.issues)
-      ? (error.issues as { path: PropertyKey[]; message: string }[])
-          .map(
-            (issue) =>
-              `${filePath}: ${issue.path.join(".") || "frontmatter"}: ${issue.message}; correct this field using the current plugin manifest reference`,
+      ? (error.issues as ManifestIssue[])
+          .map((issue) =>
+            issueLine(
+              filePath,
+              issue,
+              "correct this field using the current plugin manifest reference",
+            ),
           )
           .join("\n")
       : `${filePath}: ${error instanceof Error ? error.message : String(error)}`;
   throw new Error(`[plugin-loader] invalid manifest frontmatter\n${details}`);
+}
+
+/**
+ * A runtime whose manifest can never run, while the rest of its package can.
+ * The loader leaves the runtime out and reports why; authoring validation and
+ * installation treat it as the error it is.
+ */
+export class RuntimeDisabledError extends Error {
+  constructor(readonly disabled: DisabledRuntime) {
+    super(disabled.message);
+    this.name = "RuntimeDisabledError";
+  }
+}
+
+/** The issues, if every one of them disables only the runtime. */
+function runtimeOnlyIssues(
+  issues: readonly ManifestIssue[],
+  prefix: readonly string[] = [],
+): readonly ManifestIssue[] | undefined {
+  return issues.length > 0 &&
+    issues.every(
+      (issue) =>
+        isRuntimeDisablingIssue(issue) &&
+        prefix.every((segment, index) => issue.path[index] === segment),
+    )
+    ? issues
+    : undefined;
+}
+
+function disabledRuntime(
+  filePath: string,
+  issues: readonly ManifestIssue[],
+  runtime: unknown,
+): DisabledRuntime {
+  const io = (runtime as { io?: { output?: { contract?: unknown } } })?.io;
+  const contract = io?.output?.contract;
+  return {
+    sourcePath: filePath,
+    message: issues
+      .map((issue) =>
+        issueLine(
+          filePath,
+          issue,
+          "the runtime does not run until this is fixed",
+        ),
+      )
+      .join("\n"),
+    ...(typeof contract === "string" ? { outputContract: contract } : {}),
+  };
 }
 export function parsePluginMd(
   content: string,
@@ -68,13 +132,25 @@ export function parsePluginMd(
       canonicalFrontmatter,
       labels,
     );
-    const plugin = withContractDefaults(pluginManifestSchema.parse(data));
+    let parsed = pluginManifestSchema.safeParse(data);
+    let disabled: DisabledRuntime | undefined;
+    if (!parsed.success) {
+      // An inline runtime that can never run leaves the rest of the package.
+      const issues = runtimeOnlyIssues(parsed.error.issues, ["runtime"]);
+      if (!issues) throw parsed.error;
+      disabled = disabledRuntime(filePath, issues, data.runtime);
+      const { runtime: _runtime, ...rest } = data;
+      parsed = pluginManifestSchema.safeParse(rest);
+      if (!parsed.success) throw parsed.error;
+    }
+    const plugin = withContractDefaults(parsed.data);
     return {
       sourcePath: filePath,
       plugin,
       manifest: normalizePackageManifest(plugin),
       promptTemplate: body,
       rawFrontmatter: data,
+      ...(disabled ? { disabledRuntime: disabled } : {}),
     };
   } catch (error) {
     return invalid(filePath, error);
@@ -95,7 +171,14 @@ export function parseRuntimeMd(
       canonicalFrontmatter,
       labels,
     );
-    const runtime = runtimeAuthoringManifestSchema.parse(data);
+    const result = runtimeAuthoringManifestSchema.safeParse(data);
+    if (!result.success) {
+      const issues = runtimeOnlyIssues(result.error.issues);
+      if (issues)
+        throw new RuntimeDisabledError(disabledRuntime(filePath, issues, data));
+      throw result.error;
+    }
+    const runtime = result.data;
     const localId = path.basename(path.dirname(filePath));
     if (!/^[a-z][a-z0-9-]*$/.test(localId))
       throw new Error(`Invalid runtime directory name: ${localId}`);
@@ -199,11 +282,19 @@ export function compileInlineRuntime(
 ): ParsedRuntimeMd | undefined {
   const runtime = parsed.plugin.runtime;
   if (!runtime) return undefined;
-  return {
-    sourcePath: parsed.sourcePath,
-    runtime,
-    manifest: compileRuntimeManifest(parsed.plugin, runtime, parsed.plugin.id),
-    promptTemplate: parsed.promptTemplate,
-    rawFrontmatter: parsed.rawFrontmatter,
-  };
+  try {
+    return {
+      sourcePath: parsed.sourcePath,
+      runtime,
+      manifest: compileRuntimeManifest(
+        parsed.plugin,
+        runtime,
+        parsed.plugin.id,
+      ),
+      promptTemplate: parsed.promptTemplate,
+      rawFrontmatter: parsed.rawFrontmatter,
+    };
+  } catch (error) {
+    return invalid(parsed.sourcePath ?? "PLUGIN.md", error);
+  }
 }
