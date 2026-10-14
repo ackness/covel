@@ -292,11 +292,7 @@ The main job of a theme package is to override the semantic tokens. The full lis
 - `--surface-empty`
 - `--border-subtle`
 
-Aliases kept for older themes:
-
-- `--surface-app`
-- `--surface-panel`
-- `--surface-panel-strong`
+Use only the token names above. Replace `--surface-app`, `--surface-panel`, and `--surface-panel-strong` in custom themes with `--surface-page`, `--surface-rail`, and `--surface-elevated` respectively. Color scheme changes are applied by the SettingsStore subscriber through `applyColorScheme`; there is no second theme provider or `covel:scheme` storage key.
 
 ### 5.3 Rule and accent tokens
 

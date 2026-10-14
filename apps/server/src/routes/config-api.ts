@@ -37,7 +37,7 @@ import {
   readDesktopConfigFile,
 } from "@covel/shared/desktop-config/node";
 import {
-  normalizeProviderKeyMap,
+  parseProviderKeysEnv,
   providerApiKeysFromEnv,
   providerKeyToId,
   readRuntimeEnv,
@@ -50,7 +50,6 @@ import {
   type SettingsPersistenceBundle,
 } from "@covel/shared/settings-persistence";
 import { errorBody, listBody, readJsonBody } from "../api-error.js";
-import { parseEnvLines } from "../lib/env-file.js";
 import { LLM_TOML_STARTER } from "../ai-setup.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
 import { checkHostedOperator } from "./api/session/session-guard.js";
@@ -613,12 +612,8 @@ export function resolveCovelHome(): string | null {
 }
 
 function readKeysEnv(file: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!existsSync(file)) return result;
-  for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
-    result[key] = val;
-  }
-  return normalizeProviderKeyMap(result);
+  if (!existsSync(file)) return {};
+  return parseProviderKeysEnv(readFileSync(file, "utf-8")).keys;
 }
 
 function readSettingsBundle(file: string): SettingsPersistenceBundle {
@@ -646,6 +641,9 @@ function writePrivateFileAtomic(file: string, contents: string): void {
 
 function writeKeysEnv(file: string, entries: Record<string, string>): void {
   const envEntries = toApiKeyEnvMap(entries);
+  const unrecognized = existsSync(file)
+    ? parseProviderKeysEnv(readFileSync(file, "utf-8")).unrecognizedLines
+    : [];
   const header =
     `# Covel provider API keys. One KEY=VALUE per line.\n` +
     `# Managed by Settings → Desktop. Manual edits survive restarts.\n` +
@@ -653,5 +651,8 @@ function writeKeysEnv(file: string, entries: Record<string, string>): void {
   const body = Object.entries(envEntries)
     .map(([k, v]) => `${k}=${v.trim()}`)
     .join("\n");
-  writePrivateFileAtomic(file, header + body + "\n");
+  writePrivateFileAtomic(
+    file,
+    header + body + "\n" + unrecognized.map((line) => `${line}\n`).join(""),
+  );
 }

@@ -659,6 +659,8 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 - Persistence is a bounded, best-effort audit queue. `flush()` waits for the queue to drain, but it does not guarantee that the transport has delivered.
 - For a very large transport frame, after a successful save, only a reference is sent. The receiver reads the content from the same store.
 
+Transport frames between processes require a nonempty `stream` identifying the sender generation. Frames without it are rejected; upgrade and restart all publishers together. Trace event payloads are read as flat objects: a nested `data` field is ordinary data and is never merged into the envelope. Old nested traces must be regenerated for the current debug view.
+
 #### Event ID format: `${epoch}:${seq}` (H-05/H-06)
 
 The `id` of each subscription event is `${epoch}:${seq}`. It is both the `id:` line of SSE and the `lastEventId` cursor used on reconnect.

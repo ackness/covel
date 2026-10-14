@@ -224,6 +224,7 @@ export {
 export {
   apiKeyEnvNameToProviderId,
   normalizeProviderKeyMap,
+  parseProviderKeysEnv,
   providerIdToApiKeyEnvName,
   providerKeyToId,
   toApiKeyEnvMap,

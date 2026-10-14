@@ -177,6 +177,8 @@ homepage: https://example.com/tidefall
 - **翻译**：插件在 `locales/<locale>.yaml` 的 `PLUGIN.md` 一节翻译 `author.about` 和 `author.links` 的 `label`（链接按顺序对应）。世界在 `world.<locale>.yaml` 里翻译同样两处。作者名和许可证不翻译，`pnpm i18n` 不把它们算作待翻译文本。
 - **版本号**：列表显示清单里的 `version`。插件同时带 `package.json` 时两处的版本必须相同，`pnpm validate:plugin` 会检查：安装预览读的是 `package.json`，宿主读的是 `PLUGIN.md`。`version` 变化会让已有会话重跑该插件的 setup runtime，所以 setup 的 guard 或 handler 必须对已完成的工作返回跳过。
 
+内置插件也只读当前数据契约。骰子回执必须带 `checks` 数组，`pluginData.get()` 直接返回保存的值。经过 `select: /narrativeOutput` 投影的叙事输入是字符串。世界规则是带 `schemaVersion`、`id`、`content` 的扁平记录，不接受 `{ rule, ... }` 包装。NPC 关系的每个事实只能有一个开放版本；遇到重复开放版本会拒绝写入，不自动修复。立绘替换只匹配完整角色 ID 或当前的 `npc-<blueprintId>` 投影，不匹配任意会话前缀。
+
 ### 契约版本策略
 
 契约 ID 中的 `@N` 是版本标识（如 `narrative-engine@1`）。内核只承载当前版本（current-only）：不做版本协商，不同时支持多个版本，也不提供跨版本的兼容读取或双写迁移。

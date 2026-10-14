@@ -351,3 +351,5 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 - 写工具和函数：[带本地代码的插件](./local-code.md)
 - 测试：[插件测试](./testing.md)
 - 发给别人：[验证与分发](../ship/index.md)
+
+只使用当前声明的输入和数据形状：投影后的叙事输入是字符串，骰子回执带 `checks` 数组，`pluginData.get()` 直接返回存储值。版本变更见[插件契约](../reference/plugins.md#契约版本策略)，不要为了保留开发数据再加包装或回退分支。

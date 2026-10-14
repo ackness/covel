@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
+import { applyAppearance, applyColorScheme } from "@/lib/appearance.js";
 import { useThemeSnapshot } from "../use-theme-snapshot.js";
 
 const root = document.documentElement;
@@ -9,11 +10,12 @@ afterEach(() => {
   root.removeAttribute("data-theme");
   root.removeAttribute("data-scheme");
   root.removeAttribute("style");
+  root.classList.remove("dark");
 });
 
 it("reads the active theme and follows a change of scheme", async () => {
-  root.setAttribute("data-theme", "book");
-  root.setAttribute("data-scheme", "light");
+  applyAppearance("book");
+  applyColorScheme("light");
   root.style.setProperty("--accent-primary", "rgb(10 20 30)");
   root.style.setProperty("--font-sans", "Inter, sans-serif");
   const { result } = renderHook(() => useThemeSnapshot());
@@ -30,11 +32,14 @@ it("reads the active theme and follows a change of scheme", async () => {
 
   const before = result.current;
   await act(async () => {
-    root.setAttribute("data-scheme", "dark");
+    applyAppearance("paper");
+    applyColorScheme("dark");
     root.style.setProperty("--accent-primary", "rgb(200 210 220)");
     await Promise.resolve();
   });
   await waitFor(() => expect(result.current.scheme).toBe("dark"));
+  expect(result.current.id).toBe("paper");
+  expect(root.classList.contains("dark")).toBe(true);
   expect(result.current.tokens.accent).toBe("rgb(200 210 220)");
   expect(result.current).not.toBe(before);
 });

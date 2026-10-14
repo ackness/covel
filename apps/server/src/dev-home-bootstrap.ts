@@ -1,3 +1,4 @@
+import { parseProviderKeysEnv, toApiKeyEnvMap } from "@covel/shared";
 /**
  * Dev-only auto-bootstrap from `~/.covel/`.
  *
@@ -28,7 +29,6 @@ import os from "node:os";
 import path from "node:path";
 import { isEnvTruthy } from "@covel/shared";
 import { setupServerLogFile } from "./server-log-tee.js";
-import { parseEnvLines } from "./lib/env-file.js";
 
 interface BootstrapSummary {
   readonly applied: boolean;
@@ -76,7 +76,9 @@ function loadKeysEnvIntoProcessEnv(filePath: string): number {
     return 0;
   }
   let count = 0;
-  for (const [key, value] of parseEnvLines(content)) {
+  for (const [key, value] of Object.entries(
+    toApiKeyEnvMap(parseProviderKeysEnv(content).keys),
+  )) {
     if (process.env[key]) continue;
     process.env[key] = value;
     count++;

@@ -75,9 +75,6 @@ html[data-theme="aurora"] {
   --surface-dialog: color-mix(in oklab, oklch(20% 0.045 268) 90%, transparent);
   --surface-player: color-mix(in oklab, oklch(80% 0.14 185) 12%, transparent);
 
-  --surface-app: var(--surface-page);
-  --surface-panel: var(--surface-rail);
-  --surface-panel-strong: var(--surface-elevated);
   --surface-empty: color-mix(in oklab, oklch(22% 0.04 268) 45%, transparent);
   --border-subtle: color-mix(in oklab, var(--color-border) 55%, transparent);
 

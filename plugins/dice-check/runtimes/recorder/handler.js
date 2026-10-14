@@ -75,12 +75,10 @@ export default async function handler(ctx) {
     };
   }
   const data = ctx.triggerEvent?.data;
-  // Tolerate a bare single-check payload (schema forbids it, but a hand-made
-  // event should degrade to "one check" rather than a skip).
-  const rawChecks =
-    data && typeof data === "object" && Array.isArray(data.checks)
-      ? data.checks
-      : [data];
+  const rawChecks = Array.isArray(data?.checks) ? data.checks : [];
+  if (rawChecks.length === 0) {
+    return { outcome: "skipped", skipReason: "No checks array to record" };
+  }
   const previousChecks = await readTurnChecks(ctx);
   const dice = await readDicePool(ctx);
   const records = [];
@@ -181,10 +179,7 @@ function parseCheck(data, roll) {
 async function readTurnChecks(ctx) {
   if (!ctx.pluginData?.get) return [];
   const row = await ctx.pluginData.get(MESSAGE_NAMESPACE, ctx.turnId);
-  // Tolerate both host shapes: the stored value directly, or a { value } wrapper.
-  const value =
-    row && typeof row === "object" && "checks" in row ? row : row?.value;
-  return Array.isArray(value?.checks) ? value.checks : [];
+  return Array.isArray(row?.checks) ? row.checks : [];
 }
 
 /**
@@ -200,9 +195,7 @@ async function readDicePool(ctx) {
   if (Array.isArray(inputDice)) return validDice(inputDice);
   if (!ctx.pluginData?.get) return [];
   const row = await ctx.pluginData.get("rolls", ctx.turnId);
-  const value =
-    row && typeof row === "object" && "dice" in row ? row : row?.value;
-  return Array.isArray(value?.dice) ? validDice(value.dice) : [];
+  return Array.isArray(row?.dice) ? validDice(row.dice) : [];
 }
 
 /** @param {ReadonlyArray<unknown>} dice */

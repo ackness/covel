@@ -122,7 +122,7 @@ export function GameView({
   const [immersive, setImmersive] = useState(false);
   // Warm the media cache with known stage art (sprites + scene backdrops)
   // during pre-game, so the opening turn paints them without a download stall.
-  useStageMediaPreload(session.id, sessionPlugins);
+  useStageMediaPreload(session.id);
   // Enter the stage as soon as the player submits the opening (character
   // creation) form, instead of waiting for pre-game to fully complete —
   // the backdrop shows the world hero image until the narrator's first
@@ -439,7 +439,6 @@ export function GameView({
               />
             </ResizablePanel>
             <ResizableHandle
-              withHandle
               orientation={direction}
               className={isLeftCollapsed ? "hidden" : ""}
             />
@@ -645,7 +644,6 @@ export function GameView({
         {!isMobile && (
           <>
             <ResizableHandle
-              withHandle
               orientation={direction}
               className={isRightCollapsed ? "hidden" : ""}
             />

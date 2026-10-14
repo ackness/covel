@@ -186,8 +186,8 @@ interface SessionState {
  */
 interface TransportFrame {
   readonly origin: string;
-  /** Sender session-state generation; absent on legacy frames. */
-  readonly stream?: string;
+  /** Sender session-state generation. */
+  readonly stream: string;
   readonly seq: number;
   readonly event?: SubscriptionEvent;
   readonly ref?: {
@@ -247,10 +247,7 @@ function parseTransportFrame(payload: string): TransportFrame | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const frame = raw as Record<string, unknown>;
   if (typeof frame.origin !== "string") return undefined;
-  if (
-    frame.stream !== undefined &&
-    (typeof frame.stream !== "string" || frame.stream.length === 0)
-  ) {
+  if (typeof frame.stream !== "string" || frame.stream.length === 0) {
     return undefined;
   }
   if (typeof frame.seq !== "number" || !Number.isSafeInteger(frame.seq)) {
@@ -685,7 +682,7 @@ export function createEventBus(
     }
     if (frame.origin === originId) return; // self-echo
     const sessionId = frame.event?.sessionId ?? frame.ref!.sessionId;
-    const stream = frame.stream ?? "legacy";
+    const stream = frame.stream;
     const rs = getReceiveState(frame.origin, sessionId, stream);
     if (frame.seq < rs.expected) return; // duplicate/late
     if (frame.seq === rs.expected) {

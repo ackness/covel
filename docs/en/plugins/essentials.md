@@ -351,3 +351,5 @@ Do not give the model bookkeeping fields: session IDs, record UUIDs and timestam
 - Write tools and functions: [plugins with local code](./local-code.md)
 - Testing: [plugin testing](./testing.md)
 - Share with others: [verify and distribute](../ship/index.md)
+
+Use the current declared input and data shapes. A projected narrative input is a string, dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. See the [plugin contract](../reference/plugins.md#contract-version-policy) for version changes; do not add wrappers or fallbacks to retain development data.

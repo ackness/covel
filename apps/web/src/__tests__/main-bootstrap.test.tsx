@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 
@@ -13,9 +13,6 @@ vi.mock("@tanstack/react-router", () => ({
   RouterProvider: () => <div>App ready</div>,
 }));
 vi.mock("../routeTree.gen", () => ({ routeTree: {} }));
-vi.mock("@/components/theme-provider", () => ({
-  ThemeProvider: ({ children }: { children: ReactNode }) => children,
-}));
 vi.mock("@/components/reload-overlay", () => ({ ReloadOverlay: () => null }));
 vi.mock("@/stores/session-store", () => ({
   SessionProvider: ({ children }: { children: ReactNode }) => children,
@@ -29,10 +26,6 @@ vi.mock("@/services/api", () => ({
 }));
 vi.mock("@/lib/desktop-bridge", () => ({
   probeDesktopMode: mocks.probeDesktopMode,
-}));
-vi.mock("@/lib/appearance", () => ({
-  applyAppearance: vi.fn(),
-  applyColorScheme: vi.fn(),
 }));
 vi.mock("@/settings/store", () => ({
   getSettings: mocks.getSettings,
@@ -67,6 +60,8 @@ vi.mock("@/i18n", () => ({
 it("initializes browser settings when server management discovery is unavailable", async () => {
   document.body.innerHTML = '<div id="root"></div>';
   mocks.probeDesktopMode.mockResolvedValueOnce("unknown");
+  const subscriptions = new Map<string, (value: string) => void>();
+  localStorage.setItem("covel:scheme", "dark");
   mocks.getSettings.mockReturnValue({
     get: (key: string) =>
       key === "ui.locale"
@@ -74,12 +69,24 @@ it("initializes browser settings when server management discovery is unavailable
         : key === "ui.chatMessageWindow"
           ? 40
           : "light",
-    subscribe: vi.fn(),
+    subscribe: (key: string, listener: (value: string) => void) =>
+      subscriptions.set(key, listener),
   });
 
   await import("../main.js");
   expect(await screen.findByText("App ready")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(document.documentElement.dataset.scheme).toBe("light");
+  expect(document.documentElement.classList.contains("dark")).toBe(false);
+  act(() => subscriptions.get("ui.scheme")?.("dark"));
+  expect(document.documentElement.dataset.scheme).toBe("dark");
+  expect(document.documentElement.style.colorScheme).toBe("dark");
+  expect(document.documentElement.classList.contains("dark")).toBe(true);
+  // Changing the scheme neither consults nor rewrites the old next-themes key.
+  localStorage.setItem("covel:scheme", "unchanged");
+  act(() => subscriptions.get("ui.scheme")?.("light"));
+  expect(localStorage.getItem("covel:scheme")).toBe("unchanged");
+  expect(document.documentElement.classList.contains("dark")).toBe(false);
   expect(mocks.probeDesktopMode).toHaveBeenCalledOnce();
   expect(mocks.initSettings).toHaveBeenCalledOnce();
   expect(mocks.getSettings).toHaveBeenCalled();

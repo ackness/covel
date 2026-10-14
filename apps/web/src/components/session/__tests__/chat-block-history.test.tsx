@@ -59,3 +59,35 @@ it("mounts a historical plugin message only while its disclosure is open", () =>
   expect(screen.queryByText("Historical plugin panel")).toBeNull();
   expect(lifecycle.unmount).toHaveBeenCalledOnce();
 });
+
+it.each([undefined, "notes"])(
+  "labels only an actual pluginId: %s",
+  (pluginId) => {
+    const { container } = render(
+      <ChatBlockRenderer
+        msg={{
+          id: "m",
+          role: "assistant",
+          content: "",
+          timestamp: "now",
+          runtimeId: "notes/run",
+          block: { type: "plugin_message", data: { pluginId } },
+        }}
+        index={0}
+        lastUserMsgIndex={-1}
+        viewMode="detailed"
+        sessionId="session-1"
+        executing={false}
+        submittedBlockIds={new Set()}
+        submittedBlockValues={{}}
+        onSendMessage={() => {}}
+        onSubmitBlock={() => {}}
+        t={i18n.t}
+      />,
+    );
+    expect(container.textContent).not.toContain("plugin · notes/run");
+    expect(container.textContent?.includes("plugin · notes")).toBe(
+      pluginId !== undefined,
+    );
+  },
+);
