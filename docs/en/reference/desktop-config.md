@@ -211,6 +211,8 @@ In source development the priority of the root `llm.toml`, the user resource dir
 
 ## Startup and recovery
 
+On startup failure, the main process waits for the splash page to finish loading before sending the error, so the page can show retry and log controls.
+
 - The app takes a single-instance lock before starting. Another launch only focuses the existing window.
 - Once the backend is listening, it tells the main process through private IPC and the window loads immediately. When the desktop parent disconnects, the backend drains and exits.
 - `server.port` holds the last port that worked. It is reused when free; otherwise another free port is chosen.
@@ -236,13 +238,9 @@ An endpoint that requires the token checks the `Authorization: Bearer <token>` h
 - The Electron page gets `restToken` through the `covel:get-info` IPC and adds it to every write request.
 - In development, when the variable is absent, the token gate is off. Plain web deployments and the `pnpm dev:web` flow are unaffected.
 
-**How keys appear in the UI.** After reading the provider list from `GET /api/config/keys`, the UI marks those providers in memory as having a server-managed key. The mark is not the key text and never enters the `X-Provider-Keys` header. On save:
+**How keys appear in the UI.** The Electron UI reads plaintext keys from `keys.env` through `covel:keys:load` IPC. SettingsStore keeps them in memory to build the `X-Provider-Keys` header, without writing them to the desktop page's `localStorage`. Saving sends a patch through `covel:keys:save`: unchanged keys stay, new values are written, and `null` deletes a key. The main process first writes through the sidecar's `PUT /api/config/keys`; in development without a sidecar, or when the sidecar is unavailable, it writes the file directly.
 
-- A server-managed key you did not edit is left alone.
-- A newly typed key becomes an incremental change in one PUT.
-- A provider removed in the UI becomes an explicit delete.
-
-So the provider list is never mistaken for a key map, and editing one key does not overwrite the others.
+`GET /api/config/keys` returns provider names only, never key values. The current Electron UI does not call it: its `json-file` backend uses IPC, while a plain browser uses `localStorage`. An integration that explicitly selects the `json-file` REST transport represents this list as in-memory “server-managed key” markers, which never enter `X-Provider-Keys`. See [Settings store](./settings-store.md).
 
 **When `keys.env` cannot be read.** GET returns `500 keys_file_unreadable` and PUT returns `409 keys_file_unreadable`; the original file is kept. Writes use the same temporary file plus rename.
 
