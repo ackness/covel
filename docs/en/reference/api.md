@@ -534,9 +534,9 @@ This section lists every endpoint by topic. After each table come the rules that
 | DELETE | `/api/worlds/:id`                       | Delete a world and all of its sessions. The rules are below                                             |
 | GET    | `/api/worlds/:id/dimensions/export`     | Export the world's dimensions (YAML / JSON)                                                             |
 | POST   | `/api/worlds/:id/dimensions/import`     | Import the world's dimensions                                                                           |
-| POST   | `/api/worlds/:id/sync-dimensions`       | Sync the world's dimensions to active sessions                                                          |
+| POST   | `/api/worlds/:id/sync-dimensions`       | Authors and tools: sync world dimensions to one specified active session                                |
 | POST   | `/api/worlds/:id/world-data/preflight`  | Dry-run a worldData import, read-only                                                                   |
-| POST   | `/api/worlds/:id/sync-data`             | Sync the worldData rows that the importer manages. Supports dry-run and force                           |
+| POST   | `/api/worlds/:id/sync-data`             | Authors and tools: sync importer-managed worldData rows; dry-run by default                             |
 | POST   | `/api/worlds/:id/translate`             | Use the configured model to add one language version to a world package in the user worlds folder (SSE) |
 | GET    | `/api/worlds/:id/gallery`               | List the images that come with the world package (scenes, portraits)                                    |
 | GET    | `/api/media/library`                    | The player's media library (`self` / desktop app only)                                                  |
@@ -545,7 +545,7 @@ This section lists every endpoint by topic. After each table come the rules that
 
 A few more notes:
 
-- `POST /api/worlds/:id/sync-dimensions` writes the dimensions into the `plugin_data` and lorebook constant entries of active sessions, and removes old keys.
+- `POST /api/worlds/:id/sync-dimensions` handles only the specified session's protected `_dimensions` records and import ledger. It does not write the lorebook. See the endpoint details below.
 - `POST /api/worlds/:id/world-data/preflight` builds the import plan for worldData but does not write it. It returns the diagnostics, the number of planned writes, and a summary of the targets.
 - `POST /api/worlds/:id/sync-data` uses the provenance ledger to decide which rows the importer manages.
 - `GET /api/worlds/:id/gallery` lets the world list and world details show images even when no session exists yet.
@@ -1798,7 +1798,7 @@ Behavior:
 
 #### `POST /api/worlds/:id/sync-dimensions`
 
-Syncs the world's current dimension definitions to one given session. This endpoint tries to write directly. If you want to preview first, or need the general sync options, use `sync-data`.
+An API for authors and tools that syncs the world's current dimension definitions to the one active session specified by `sessionId`. The app has no control for players to call it. This endpoint tries to write directly and has no dry-run. To preview first, or use the general sync options, use [`sync-data`](#post-apiworldsidsync-data).
 
 It handles only dimensions. It uses the `world_data_import_ledger` ledger and the protected `_dimensions` records. It does not write `entries`, does not write the always-on lorebook, and does not clean up other imported data.
 
@@ -1884,7 +1884,9 @@ or:
 
 #### `POST /api/worlds/:id/sync-data`
 
-Sync the updated worldData from a world package into an existing session. **It only previews by default (dry-run).** Send `dryRun: false` to write.
+An API for authors and tools that syncs updated worldData from a world package into the one existing session specified by `sessionId`. The app currently has no sync control for players. **It only previews by default (dry-run).** Send `dryRun: false` to write. Actual writes require the session to be `active`.
+
+Updating a world package, hot-reloading files, enabling a plugin or approving its server code does not call this endpoint automatically. It uses the session's saved `activePlugins`. It does not enable plugins, rerun setup or rewrite past story messages. Players who want the new starting data should start a new session. Lore still follows the rules under "Automatic reload after a file change" in [World data](./world-data.md).
 
 **Request fields:**
 
@@ -1896,7 +1898,7 @@ Sync the updated worldData from a world package into an existing session. **It o
 
 **What gets synced:**
 
-- Only rows in the ledger `world_data_import_ledger` with `managed=true` are handled.
+- Overwriting and deleting existing records only handles rows in `world_data_import_ledger` with `managed=true` that belong to the current world. New records in this plan are also imported and added to the ledger.
 - It uses `valueHash` to check whether a player or a plugin has changed the target data.
 - Dimension definitions are in the same ledger. This includes inline definitions, `dimensionSources`, and the effective definitions of a storage-backed world.
 

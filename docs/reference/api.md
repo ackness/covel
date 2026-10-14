@@ -534,9 +534,9 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | DELETE | `/api/worlds/:id`                       | 删除世界及其全部会话，规则见下文                               |
 | GET    | `/api/worlds/:id/dimensions/export`     | 导出世界维度（YAML / JSON）                                    |
 | POST   | `/api/worlds/:id/dimensions/import`     | 导入世界维度                                                   |
-| POST   | `/api/worlds/:id/sync-dimensions`       | 把世界维度同步到活跃会话                                       |
+| POST   | `/api/worlds/:id/sync-dimensions`       | 作者和工具：把世界维度同步到指定的一个活跃会话                 |
 | POST   | `/api/worlds/:id/world-data/preflight`  | 只读地预演 worldData 导入                                      |
-| POST   | `/api/worlds/:id/sync-data`             | 同步由导入器管理的 worldData 行，支持 dry-run 与 force         |
+| POST   | `/api/worlds/:id/sync-data`             | 作者和工具：同步由导入器管理的 worldData 行，默认 dry-run      |
 | POST   | `/api/worlds/:id/translate`             | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）    |
 | GET    | `/api/worlds/:id/gallery`               | 列出世界包自带的图片（场景、立绘）                             |
 | GET    | `/api/media/library`                    | 玩家的媒体库（仅 `self` / 桌面端）                             |
@@ -545,7 +545,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 几条补充：
 
-- `POST /api/worlds/:id/sync-dimensions` 把维度写入活跃会话的 `plugin_data` 和 lorebook 常量词条，并清理旧 key。
+- `POST /api/worlds/:id/sync-dimensions` 只处理指定会话受保护的 `_dimensions` 记录和导入账本，不写 lorebook；见下文的端点说明。
 - `POST /api/worlds/:id/world-data/preflight` 构建 worldData 的导入计划但不写入，返回 diagnostics、计划写入的数量和目标摘要。
 - `POST /api/worlds/:id/sync-data` 依据来源账本（provenance ledger）判断哪些行归导入器管理。
 - `GET /api/worlds/:id/gallery` 让世界列表和世界详情在还没有会话时也能展示图片。
@@ -1798,7 +1798,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 #### `POST /api/worlds/:id/sync-dimensions`
 
-把世界当前的维度定义同步到指定的一个会话。这个端点直接尝试写入；想先预览，或者需要通用的同步选项，用 `sync-data`。
+作者和工具用的接口，把世界当前的维度定义同步到 `sessionId` 指定的一个活跃会话。应用没有供玩家操作的入口。这个端点直接尝试写入，不支持 dry-run；想先预览，或者需要通用的同步选项，用 [`sync-data`](#post-apiworldsidsync-data)。
 
 它只处理维度：使用 `world_data_import_ledger` 账本和受保护的 `_dimensions` 记录，不写 `entries`，也不写常驻 lorebook，也不清理其他导入的数据。
 
@@ -1884,7 +1884,9 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 #### `POST /api/worlds/:id/sync-data`
 
-把世界包里更新过的 worldData 同步到一个已有的会话。**默认只预览（dry-run）**，传 `dryRun: false` 才写入。
+作者和工具用的接口，把世界包里更新过的 worldData 同步到 `sessionId` 指定的一个已有会话。应用目前没有供玩家操作的同步入口。**默认只预览（dry-run）**，传 `dryRun: false` 才写入；实际写入要求会话为 `active`。
+
+更新世界包、文件热更新、启用插件和批准插件运行服务端代码都不会自动调用它。接口使用会话已保存的 `activePlugins`，不启用插件，不重新运行开局流程，也不重写历史故事。玩家要使用新的开局数据，请新开会话；正文仍按[世界数据](./world-data.md)中“改文件后自动重载”的规则更新。
 
 **请求字段:**
 
@@ -1896,7 +1898,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **同步哪些数据:**
 
-- 只处理账本 `world_data_import_ledger` 里 `managed=true` 的 row。
+- 已有记录的覆盖和删除，只处理账本 `world_data_import_ledger` 里 `managed=true`、属于当前世界的 row；本次计划里的新记录也会导入并记入账本。
 - 用 `valueHash` 判断玩家或插件有没有改过目标数据。
 - 维度定义也在同一本账里，包括 inline 定义、`dimensionSources`，以及存储型世界的有效定义。
 

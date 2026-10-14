@@ -482,13 +482,13 @@ For installing and updating from GitHub, see [world catalog and installation](./
 
 **What a reload affects:**
 
-| Target                    | Result                                                                                                                                                                            |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| New sessions              | Read the latest world package                                                                                                                                                     |
-| Lore of existing sessions | The next turn reads the new lore. A session that has its own `loreOverride` keeps using it.                                                                                       |
-| Data of existing sessions | Characters, lorebook entries, dimension values and states that have already happened are not rewritten. To use new data, start a new session, or use [sync](#preflight-and-sync). |
+| Target                    | Result                                                                                                                                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New sessions              | Read the latest world package                                                                                                                                                                                                          |
+| Lore of existing sessions | The next turn reads the new lore. A session that has its own `loreOverride` keeps using it.                                                                                                                                            |
+| Data of existing sessions | Characters, lorebook entries, dimension values and existing state are not rewritten automatically. Players who want the new starting data need to start a new session. Authors and tools can call the [sync API](#preflight-and-sync). |
 
-- When a dimension declaration changes, sessions that use this world receive `world.dimensions.changed`. This is only a notice. A value that has already changed in a session is not reset to the new initial value. You must sync it on purpose and deal with any conflicts.
+- When a dimension declaration changes, sessions that use this world receive `world.dimensions.changed`. This is only a notice. A value that has already changed in a session is not reset to the new initial value. Authors and tools must call the sync API to try to update the session's declarations. Dimensions with conflicts stay as they are.
 - This is not a hot update of the whole package. Putting a **new** world folder into the directory only makes it appear after a restart, or through the install entry point. A plugin install also still needs a server restart.
 - When the file system does not support watching, a warning is logged at startup. Dimensions can also be imported through `POST /api/worlds/:id/dimensions/import`.
 - The implementation is in `apps/server/src/world-file-watcher.ts`. For the install response, see [API reference](./api.md#installed-resource-storage-and-vector-configuration).
@@ -677,7 +677,7 @@ For a field-by-field explanation, see the generated [World data descriptor field
 
 - A missing `key` is an error.
 - Without `indexTo`, nothing records which images exist, so these files are not imported.
-- When the plugin that receives the image index is not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. If you enable the receiving plugin later, run [sync](#preflight-and-sync) to import them.
+- When the plugin that receives the image index is not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. Enabling the receiving plugin later in an existing session does not import them automatically. Authors and tools can call the [sync API](#preflight-and-sync). Players who want this starting data should enable the receiving plugin when starting a new session.
 
 ### Images visible before a session
 
@@ -832,7 +832,7 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. T
 
 - A media source uses `to: media` with `indexTo` in contract form. A structured source cannot set `to` to `media`. This kind of wrong combination is rejected during validation.
 - A path in `world:metadata.<path>` cannot contain dangerous segments such as `__proto__`. Paths other than `dimensions` are only recorded for now, and they have no effect.
-- World data is imported when a session is created. Existing sessions must be synced through [`sync-data`](#preflight-and-sync). Calling `preflight` first lets you see the diagnostics before anything is written.
+- World data is imported when a session is created. Authors and tools can update existing sessions through [`sync-data`](#preflight-and-sync). Calling `preflight` first lets you see the diagnostics before anything is written. The app has no sync control for players.
 
 ### Lorebook entries injected by player message
 
@@ -995,7 +995,7 @@ Execution limits:
 - `preflight` checks only the source, the declarations, the target and the schema. **It does not load or run any handler.** Which keys a projection actually produces is known only after an import or a sync.
 - Import and sync run only the matching declarations of the plugins enabled in this game. When one projection fails, it only produces a warning. It does not stop the original source from being written, and it does not affect other plugins' projections.
 - Each declared output either succeeds as a whole group or is not written at all. If any record has an invalid key or schema, the group keeps the last successful content and ledger, and old and new content are never mixed. Only when the handler successfully returns `[]` does it mean "there really are no records". Only then are the old records deleted.
-- A built-in plugin's handler can run directly. A community plugin's handler needs this game to explicitly allow it to run server code. Permission cannot be given before the session is created, so for a community projection, run it afterward like this: after the session is created, call the plugin enable (you can call it again even when the plugin is already enabled). This triggers the session-level permission for `covel:plugin-server-code`. Then call `sync-data`. Without permission, an import only emits a warning and does not run the code in secret.
+- A built-in plugin's handler can run directly. A community plugin's handler needs this game to explicitly allow it to run server code. Permission cannot be given before the session is created, so authors and tools must use the HTTP API to run a community projection afterward: after the session is created, call the plugin enable (you can call it again even when the plugin is already enabled). This triggers the session-level permission for `covel:plugin-server-code`. Then call `sync-data`. Enabling or approving the plugin does not run the projection by itself. Without permission, an import only emits a warning and does not run the code in secret.
 - Each call runs in its own Worker. Its input is a structured clone:
 
   | Limit                          | Value                      |
@@ -1481,17 +1481,21 @@ POST /api/worlds/<world-id>/world-data/preflight
 - When `sessionId` is passed, preflight uses the plugins enabled in that existing session.
 - The built-in interface calls it automatically before the game starts. It shows what will be written, a summary of the targets, and the diagnostics.
 
-**Sync (sync):** applies later changes in the world package to a game that already exists.
+**Sync (sync):** an HTTP API for authors and tools that applies later data changes in a world package to one specified existing session. The app currently has no sync control for players.
+
+Updating a world package, hot-reloading files, enabling a plugin or approving its server code does not call sync automatically. Players who want the new starting data should start a new session. Existing sessions keep their own data and progress. Lore still follows this page's rules under "Automatic reload after a file change."
 
 ```http
 POST /api/worlds/<world-id>/sync-data
 ```
 
-By default this is only a trial run (dry-run). It returns `upserted`, `deleted`, `unchanged` and `conflicts`. Pass `dryRun:false` to actually write.
+The request must include `sessionId`. By default this is only a trial run (dry-run). It returns the plan and `upserted`, `deleted`, `unchanged` and `conflicts`, without changing the session. Authors and tools should check the diagnostics and conflicts first, then pass `dryRun:false` to apply the eligible writes. See [API](./api.md#post-apiworldsidsync-data) for the request and response.
+
+Sync reads data accepted by the plugins enabled in that session. It can add import records, update records that have not been changed, and delete records removed from the world package. It does not enable plugins, rerun setup or rewrite past story messages.
 
 Sync rules:
 
-1. Only handles records in the import ledger where `managed=true`, and whose `sourceWorldId` is the current world.
+1. Overwriting and deleting existing records only handles import ledger records where `managed=true` and `sourceWorldId` is the current world. Newly imported records are added to the same ledger.
 2. A record is overwritten or deleted automatically only when its current content is the same as when it was imported (the hash matches the ledger's `valueHash`).
 3. When a record has been changed by the player or a plugin, the result is `conflicts.reason = "modified"`.
 4. When the world package still has the record, but the record is gone from the session, the result is `conflicts.reason = "missing"`.
@@ -1507,9 +1511,9 @@ Sync rules:
 - The protection for pending settlement does not depend on the import ledger. A dimension that was initialized during play, and so has no ledger record, is protected the same way. When the declaration has not changed, it is not a conflict.
 - Only an imported initial value that has not been changed can take the new declaration or be deleted. When the schema changes, old values are not converted automatically.
 - Sync checks the hash and version again inside the transaction. Passing preflight does not mean the data can be overwritten without conditions later.
-- When a dimension has a conflict, the plan and the conflicts are returned, and this sync is not applied.
+- When a dimension has a conflict, the plan and the conflicts are returned. The conflicting dimension is kept, and other records without conflicts are still applied.
 
-`POST /api/worlds/:id/sync-dimensions` syncs only dimensions. It uses the same ledger and the same conflict rules. It does not clean up other data, and it does not rebuild the lorebook. A notice that a file was hot-updated does not change the session's current values by itself.
+`POST /api/worlds/:id/sync-dimensions` is also only for authors and tools. It attempts to write directly to the one session specified by `sessionId`, with no dry-run. Use `sync-data` to preview first. It syncs only dimensions, using the same ledger and conflict rules. It does not clean up other data or rebuild the lorebook. A notice that a file was hot-updated does not change the session's current values by itself.
 
 **Protection of media files.** Image and music bytes are stored by content, and several games share them. So the handling of deletes and failures is conservative:
 
