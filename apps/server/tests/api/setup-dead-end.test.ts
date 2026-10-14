@@ -21,6 +21,13 @@ const nameField = {
   required: true,
 };
 
+const narration = {
+  content: "The story begins.",
+  toolCalls: [],
+  finishReason: "stop",
+  usage: { inputTokens: 1, outputTokens: 1 },
+} as const;
+
 /** A model that answers the character runtime with the opening form. */
 const openingForm =
   (fields: unknown[] = []): Generate =>
@@ -28,7 +35,8 @@ const openingForm =
     const formTool = request.tools?.find(
       (tool) => tool.name === "create-character-form",
     );
-    if (!formTool) throw new Error("Unexpected model call");
+    // The narrator tells the opening once setup is done.
+    if (!formTool) return narration;
     return {
       content: "Your story begins.",
       toolCalls: [
@@ -100,7 +108,12 @@ async function harness(options: {
     phase: "setup",
     setupRuntimes: {},
     completedPlayerTurns: 0,
-    activePlugins: options.plugins ?? ["pregame", "world-init", "char-creator"],
+    activePlugins: options.plugins ?? [
+      "pregame",
+      "world-init",
+      "char-creator",
+      "narrator",
+    ],
     locale: options.locale ?? "en-US",
     metadata: {
       approvalScopeNonce: crypto.randomUUID(),
@@ -524,7 +537,13 @@ it("tells the player in their language what to correct, and keeps the form open"
   const h = await harness({
     generate: openingForm(),
     attributes: [ability("might", "力量"), ability("wits", "机敏")],
-    plugins: ["pregame", "world-init", "char-creator", "tabletop-rules"],
+    plugins: [
+      "pregame",
+      "world-init",
+      "char-creator",
+      "narrator",
+      "tabletop-rules",
+    ],
     locale: "zh-CN",
   });
   try {

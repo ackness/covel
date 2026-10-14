@@ -160,11 +160,11 @@ When there are errors, the command ends with a failure, so you can put it direct
 
 - The player sees a preview first. The preview does not write any file and does not run any code.
 - The player ticks what to install and confirms once. The items are installed as a whole: plugins first, then worlds.
-- If one item fails, everything installed in this attempt is rolled back, so no half-installed state is left behind.
+- If an item fails, packages installed by this request are rolled back. A world that acquired sessions during installation is retained to protect those saves; packages whose deletion fails are retained too. The error names retained packages so you can resolve them before retrying.
 - Installing plugins requires restarting the backend once. Worlds are usable right away.
 - Being installed does not mean being authorized. The first time a plugin runs, the player is still asked to authorize it.
 
-When importing from a ZIP, there is no preview step, and a problem causes the install to be refused directly.
+When importing from a ZIP, there is no preview step, and a problem causes the install to be refused directly. All collection archives share the [installer’s extraction budget](../reference/plugin-installation.md#archive-limits); exceeding it rejects the request before writing.
 
 Plugins in GitHub and offline collections follow the [installer’s runtime dependency rule](../reference/plugin-installation.md#what-the-installer-does-and-does-not-do). Authors must bundle dependencies into release files; the installer does not install dependencies for players.
 

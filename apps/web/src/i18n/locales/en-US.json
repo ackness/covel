@@ -378,6 +378,7 @@
     "modelCredentialsMissing": "Add an API key in provider settings before starting.",
     "steerNotTaken": "This turn did not take your message. It is back in the input box for you to send next.",
     "outputTruncated": "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
+    "outputInterrupted": "The model stopped the story before it finished ({{reason}}), so it may end mid-sentence. Retry this turn to have it written again.",
     "canvasEyebrow": "§ SESSION CANVAS",
     "blockType": "Block: {{type}}",
     "dbLoadErrorDetail": "Failed to load database: {{error}}",
@@ -397,7 +398,8 @@
       "succeeded": "Succeeded"
     },
     "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
-    "activeTask": "{{label}}…"
+    "activeTask": "{{label}}…",
+    "panelUnavailable": "This panel is not available in this session."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1662,6 +1664,7 @@
       "allowSelected": "Authorize selected",
       "notNow": "Not now"
     },
+    "unavailable": "Some plugins of this session cannot run now: {{plugins}}. The game goes on without them; open the plugin list to see why.",
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
@@ -2036,7 +2039,7 @@
       "estCost": "Est. settlement (USD)",
       "unknownModel": "(unknown model)",
       "noPrice": "no price",
-      "note": "Token usage comes from llm.responded / gateway.responded. Estimated settlement applies each provider's price multiplier to model reference prices; usage without a model or price is excluded, so the result may be a lower bound.",
+      "note": "Token usage comes from llm.responded / gateway.responded, and from gateway.failed when a failed call reported it. Estimated settlement applies each provider's price multiplier to model reference prices; usage without a model or price is excluded, so the result may be a lower bound.",
       "cacheNote": "Cache read/write tokens are included in input totals but excluded from USD until provider-specific cache prices are available.",
       "noData": "No token usage recorded for this session.",
       "windowTitle": "Loaded window",

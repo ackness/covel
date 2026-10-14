@@ -15,6 +15,7 @@ import { resolveEffectsPolicy } from "@covel/runtime";
 import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
 import type { DataStore, PluginDataRecord } from "@covel/store";
 import { buildPluginDetail } from "../../lib/plugin-descriptor.js";
+import { runnablePluginIds } from "./session/plugins.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -209,7 +210,10 @@ export async function buildSessionDiscoverySnapshot(options: {
   readonly isEntryPublished?: (pluginId: string) => boolean;
 }): Promise<SessionDiscoverySnapshot> {
   const session = await options.store.getSession(options.sessionId);
-  const activePluginIds = session?.activePlugins ?? [];
+  const activePluginIds =
+    session && options.registry
+      ? runnablePluginIds(session.activePlugins, options.registry)
+      : (session?.activePlugins ?? []);
   const pluginEntries = options.registry
     ? activePluginIds
         .map((pluginId) => options.registry?.get(pluginId))

@@ -5,11 +5,12 @@ import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
+import { runnablePluginIds } from "../session/plugins.js";
 
 /** Keep an execution's graph while checking revocation against live authority. */
 export function createPluginServiceAdmission(args: {
   readonly store: Pick<DataStore, "getSession">;
-  readonly registry: Pick<PluginRegistry, "getActivePlugins">;
+  readonly registry: Pick<PluginRegistry, "getActivePlugins" | "getAll">;
   readonly ensurePluginEntry: (
     pluginId: string,
     sessionId: string,
@@ -21,7 +22,7 @@ export function createPluginServiceAdmission(args: {
   const activeIds = (session: SessionRecord): readonly string[] =>
     executions.getStore()
       ? args.registry.getActivePlugins(session.id)
-      : session.activePlugins;
+      : runnablePluginIds(session.activePlugins, args.registry);
 
   async function ensure(sessionId: string, pluginId: string): Promise<string> {
     const live = await args.store.getSession(sessionId);

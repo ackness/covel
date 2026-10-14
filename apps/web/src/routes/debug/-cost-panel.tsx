@@ -15,8 +15,8 @@ import { resolveLocalModelPrices, type ModelPrice } from "./-model-prices.js";
 
 /**
  * Token usage + estimated cost panel — aggregates `usage` from the persisted
- * `llm.responded` / `gateway.responded` trace events (per runtime, per turn,
- * per model, session total).
+ * `llm.responded` / `gateway.responded` trace events and the `gateway.failed`
+ * events that carry one (per runtime, per turn, per model, session total).
  *
  * Aggregates generically by event type + runtimeId, never hardcoding a plugin
  * ID. Model attribution: `llm.responded` payloads carry no model id, so each
@@ -49,7 +49,13 @@ function tokenCount(value: unknown): number {
 }
 
 function readUsage(event: api.TraceEvent): Usage | null {
-  if (event.type !== "llm.responded" && event.type !== "gateway.responded") {
+  // A failed gateway call carries the tokens the provider had already
+  // reported, when it reported any; they were spent too.
+  if (
+    event.type !== "llm.responded" &&
+    event.type !== "gateway.responded" &&
+    event.type !== "gateway.failed"
+  ) {
     return null;
   }
   const usage = (event.payload as Record<string, unknown>).usage as
@@ -549,7 +555,7 @@ export function CostPanel({
         <p className="ui-meta text-xs text-muted-foreground/70">
           {t(
             "debugger.cost.note",
-            "Token usage comes from llm.responded / gateway.responded. Estimated settlement applies each provider's price multiplier to model reference prices; usage without a model or price is excluded, so the result may be a lower bound.",
+            "Token usage comes from llm.responded / gateway.responded, and from gateway.failed when a failed call reported it. Estimated settlement applies each provider's price multiplier to model reference prices; usage without a model or price is excluded, so the result may be a lower bound.",
           )}
         </p>
         {(model.totalCachedInput > 0 || model.totalCacheWriteInput > 0) && (

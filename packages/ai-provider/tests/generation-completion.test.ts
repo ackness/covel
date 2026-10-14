@@ -196,3 +196,110 @@ it.each(["generateText", "generateObject"] as const)(
     expect(error).toHaveBeenCalledTimes(2);
   },
 );
+
+describe("a failed generation keeps the usage the provider reported", () => {
+  const usage = { inputTokens: 12, outputTokens: 5 };
+  it.each([
+    {
+      name: "chat refusal",
+      create: createOpenAiChatAdapter,
+      payload: {
+        usage: { prompt_tokens: 12, completion_tokens: 5 },
+        choices: [
+          { message: { content: "no" }, finish_reason: "content_filter" },
+        ],
+      },
+      code: "REFUSAL",
+    },
+    {
+      name: "chat error payload",
+      create: createOpenAiChatAdapter,
+      payload: {
+        error: { message: "Synthetic error" },
+        usage: { prompt_tokens: 12, completion_tokens: 5 },
+        choices: [{ message: { content: partial }, finish_reason: "stop" }],
+      },
+      code: "PROVIDER_ERROR",
+    },
+    {
+      name: "anthropic refusal",
+      create: createAnthropicMessagesAdapter,
+      payload: {
+        content: [{ type: "text", text: "no" }],
+        stop_reason: "refusal",
+        usage: { input_tokens: 12, output_tokens: 5 },
+      },
+      code: "REFUSAL",
+    },
+    {
+      name: "failed Responses status",
+      create: createOpenAiResponsesAdapter,
+      payload: {
+        status: "failed",
+        usage: { input_tokens: 12, output_tokens: 5 },
+        output: [],
+      },
+      code: "PROVIDER_ERROR",
+    },
+  ])("$name", async ({ create, payload, code }) => {
+    stub(payload);
+    await expect(create().generateText(config, params)).rejects.toMatchObject({
+      code,
+      details: { usage },
+    });
+  });
+
+  it("from a custom adapter's error finish reason, through the gateway", async () => {
+    const adapter: ModelProviderAdapter = {
+      async generateText() {
+        return { text: partial, finishReason: "error", usage };
+      },
+      async generateObject() {
+        throw new Error("unused");
+      },
+      async *streamText() {
+        throw new Error("unused");
+      },
+      async embed() {
+        throw new Error("unused");
+      },
+    };
+    const gateway = createGateway({
+      providerRegistry: createProviderRegistry({
+        providers: { primary: { adapter, defaults: config } },
+      }),
+      presetRegistry: createPresetRegistry({
+        profiles: [],
+        presets: [
+          {
+            id: "primary",
+            name: "Primary",
+            provider: "primary",
+            model: "synthetic",
+            tier: "medium",
+            enabled: true,
+            isDefault: true,
+            supportedModes: ["text"],
+          },
+        ],
+      }),
+    });
+    await expect(gateway.generateText(params)).rejects.toMatchObject({
+      code: "PROVIDER_ERROR",
+      details: { usage, rawFinishReason: "error" },
+    });
+  });
+
+  it("leaves usage out when the provider reported none", async () => {
+    stub({
+      choices: [
+        { message: { content: "no" }, finish_reason: "content_filter" },
+      ],
+    });
+    const error = await createOpenAiChatAdapter()
+      .generateText(config, params)
+      .catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "REFUSAL" });
+    expect((error as { details?: object }).details).not.toHaveProperty("usage");
+  });
+});

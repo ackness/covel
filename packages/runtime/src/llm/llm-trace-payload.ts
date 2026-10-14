@@ -127,6 +127,9 @@ export function buildLlmRespondedSuccessPayload(
     toolCalls: input.response.toolCalls,
     usage: input.response.usage,
     finishReason: input.response.finishReason,
+    ...(input.response.rawFinishReason
+      ? { rawFinishReason: input.response.rawFinishReason }
+      : {}),
     durationMs: input.durationMs,
     attempt: input.attempt,
     ...(input.streaming ? { streaming: true } : {}),

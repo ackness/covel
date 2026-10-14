@@ -1,3 +1,5 @@
+import { stripPromptCacheMarkers } from "@covel/shared";
+import type { TextGenerationParams } from "../types.js";
 import type { ModelProviderAdapter } from "../adapters/adapter.js";
 import {
   objectResponseFormat,
@@ -29,14 +31,33 @@ export function listTextWires(): TextWire[] {
   return listWires("text");
 }
 
+/** Internal cache sentinels never cross the plugin wire boundary. */
+function cleanMessages<T extends TextGenerationParams>(params: T): T {
+  return {
+    ...params,
+    messages: params.messages.map((message) => ({
+      ...message,
+      content:
+        typeof message.content === "string"
+          ? stripPromptCacheMarkers(message.content)
+          : (message.content?.map((part) =>
+              part.type === "text"
+                ? { ...part, text: stripPromptCacheMarkers(part.text) }
+                : part,
+            ) ?? null),
+    })),
+  };
+}
+
 /** The adapter a slot on this wire resolves to. */
 export function textWireAdapter(wire: TextWire): ModelProviderAdapter {
   return {
     generateText: (config, params, context) =>
-      wire.generateText(config, params, context),
+      wire.generateText(config, cleanMessages(params), context),
     streamText: (config, params, context) =>
-      wire.streamText(config, params, context),
+      wire.streamText(config, cleanMessages(params), context),
     async generateObject(config, params, context) {
+      params = cleanMessages(params);
       if (wire.generateObject)
         return wire.generateObject(config, params, context);
       const { schema, ...text } = params;
@@ -48,6 +69,7 @@ export function textWireAdapter(wire: TextWire): ModelProviderAdapter {
           messages: withResponseFormatInstruction(
             text.messages,
             responseFormat,
+            text.instructionLocale,
           ),
           responseFormat,
         },

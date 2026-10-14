@@ -82,6 +82,7 @@ import {
   parseSessionCommandInvocation,
   resolveSessionCommand,
 } from "./session/commands.js";
+import { sessionPluginIds } from "./session/plugins.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import {
   concealResultSummaries,
@@ -157,7 +158,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   if (body.kind === "command") {
     resolvedCommand = resolveSessionCommand(
       body.commandId,
-      session.activePlugins ?? [],
+      sessionPluginIds(session, c.get("pluginRegistry")),
       c.get("pluginRegistry"),
     );
     if (!resolvedCommand) {

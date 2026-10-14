@@ -83,12 +83,15 @@ function isToolResultContent(content: string | readonly unknown[]): boolean {
 }
 
 /** Opens a conversation whose first kept message is the model's. */
-const EARLIER_TURNS_OMITTED =
-  "(The conversation continues from earlier turns.)";
+const EARLIER_TURNS_OMITTED = {
+  en: "(The conversation continues from earlier turns.)",
+  zh: "（对话从此前的回合继续。）",
+};
 
 export function toAnthropicMessages(
   messages: TextMessage[],
   target?: { model: string; config: ProviderConfig },
+  instructionLocale: "en" | "zh" = "en",
 ): {
   system: string;
   messages: Array<{ role: string; content: string | readonly unknown[] }>;
@@ -191,7 +194,10 @@ export function toAnthropicMessages(
   // compacted can start with the model's turn; the text of this opener is
   // fixed, so it stays part of the cached prefix.
   if (out.length > 0 && out[0]!.role !== "user")
-    out.unshift({ role: "user", content: EARLIER_TURNS_OMITTED });
+    out.unshift({
+      role: "user",
+      content: EARLIER_TURNS_OMITTED[instructionLocale],
+    });
 
   if (target?.config.cacheStrategy === "anthropic-explicit") {
     // A breakpoint turns a message's string into a block array, and it moves:
