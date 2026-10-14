@@ -1,3 +1,4 @@
+import type { StageChoicesModel } from "@covel/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -77,6 +78,25 @@ function fixture(): StageViewProps {
 }
 
 describe("stage decision lifecycle", () => {
+  it.each([undefined, { choices: [] }, { recap: "", choices: [] }] satisfies (
+    StageChoicesModel | undefined
+  )[])(
+    "keeps optional recap absent while retaining free input: %j",
+    (suggestions) => {
+      stageSlots.items = suggestions
+        ? [{ slot: "stage.choices@1", value: suggestions }]
+        : [];
+      const props = fixture();
+      render(<StageView {...props} />);
+      expect(screen.queryByText("当前信息")).toBeNull();
+      expect(screen.queryByText(previousStory.content)).toBeNull();
+      const input = screen.getByTestId("stage-decision-input");
+      fireEvent.change(input, { target: { value: "Look around" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(props.onSendMessage).toHaveBeenCalledWith("Look around");
+    },
+  );
+
   it("passes explicit cast focus through to the sprite layer", () => {
     stageSlots.items = [
       {

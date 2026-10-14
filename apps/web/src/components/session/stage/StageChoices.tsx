@@ -31,8 +31,6 @@ export interface StageChoicesProps {
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
   readonly suggestions?: StageChoicesModel;
-  /** Current-story fallback for legacy guide rows without `recap`. */
-  readonly fallbackRecap?: string;
   readonly locale: string;
   readonly onSubmitInteraction?: (
     blockId: string,
@@ -57,7 +55,6 @@ export function StageChoices({
   executing,
   interactionChoices,
   suggestions,
-  fallbackRecap,
   locale,
   onSubmitInteraction,
   onSendMessage,
@@ -110,7 +107,7 @@ export function StageChoices({
   };
 
   const itemOrder = new Map(items.map((item, index) => [item.id, index]));
-  const recap = context.recap ?? fallbackRecap;
+  const recap = context.recap;
   const decision =
     context.decision ??
     (context.scene

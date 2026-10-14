@@ -47,7 +47,7 @@ export function initialStageReadStoryKey(
   return message?.id.startsWith("stream_") ? undefined : stageStoryKey(message);
 }
 
-// ── Backdrop (scene-stage `stage/current`) ──────────────────────
+// ── Backdrop (stage.backdrop@1) ──────────────────────
 
 export type StageBackdropKind = "scene" | "hero" | "gradient";
 
@@ -74,7 +74,7 @@ export function resolveBackdrop(
   return { kind: "hero", ref: worldVisual.image };
 }
 
-// ── Sprites (scene-stage `active-cast` × character-blueprint `presence`) ──
+// ── Sprites (stage.cast@1 × character.visual@1) ──
 export type { PresenceRecord } from "@/lib/character-visuals.js";
 
 export interface StageSpriteSlot {
@@ -227,14 +227,7 @@ export function computeSpriteLanes(
   return lanes;
 }
 
-/**
- * Reconcile scoped speaker ids against bare presence characterIds. The cast
- * keys speakers by `<sessionId>-<characterId>` (scopedCharacterId) while
- * character-blueprint keys its presence records by the bare `characterId`, so a direct
- * `presenceMap[speaker.id]` lookup always misses. Match on the presence
- * *value*'s characterId by exact id or the `-<characterId>` suffix — mirrors
- * `resolveCharacterAvatar` in lib/catalog.
- */
+/** Slot projections share the World Model character ID. */
 function findPresence(
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
   speakerId: string,
@@ -247,7 +240,7 @@ function findPresence(
  * kept as `ref: null` slots (the sprite layer renders a fallback card) rather
  * than dropped — dropping the primary speaker left the dialog nameplate
  * pointing at nobody on stage. `speakers[0]` (the highest-salience speaker
- * from the scene-stage cast) is the fallback focus when no actor specifies `active`.
+ * from the stage.cast@1 value) is the fallback focus when no actor specifies `active`.
  *
  * `stations` is the sticky assignment from {@link assignStations} — pass the
  * previous render's map through it so sprites keep their spots across speaker
@@ -289,7 +282,7 @@ export function computeSpriteSlots(
   });
 }
 
-// ── Choices (interaction.request choice blocks + guide prompts) ─────
+// ── Choices (interaction.request choice blocks + stage.choices@1) ─────
 
 /** One pending choice-type interaction block, ready to flatten into items. */
 export interface StageInteractionChoice {
@@ -395,45 +388,6 @@ export function hasSubmittedForm(
   );
 }
 
-const FALLBACK_RECAP_MAX_CHARS = 180;
-const FALLBACK_RECAP_MAX_SENTENCES = 3;
-
-/**
- * Derive a compact, deterministic context excerpt for legacy prompt data that
- * predates guide's `recap` field. This is deliberately a fallback, not
- * an LLM summary: prefer the latest complete sentences and keep the decision
- * panel bounded even when the story message is long.
- */
-export function deriveDecisionRecapFallback(
-  storyText: string,
-  maxChars = FALLBACK_RECAP_MAX_CHARS,
-): string | undefined {
-  const normalized = storyText.replace(/\s+/gu, " ").trim();
-  if (!normalized || maxChars <= 0) return undefined;
-  if (maxChars === 1) return "…";
-  if (normalized.length <= maxChars) return normalized;
-
-  const sentences =
-    normalized
-      .match(/[^。！？!?]+(?:[。！？!?]+[”’」』）》】]?|$)/gu) // i18n-allow -- locale-aware sentence punctuation
-      ?.map((value) => value.trim()) ?? [];
-  let recap = "";
-  let sentenceCount = 0;
-  for (let index = sentences.length - 1; index >= 0; index -= 1) {
-    const sentence = sentences[index];
-    if (!sentence) continue;
-    const candidate = `${sentence}${recap}`;
-    if (candidate.length > maxChars) {
-      if (!recap) return `…${sentence.slice(-(maxChars - 1))}`;
-      break;
-    }
-    recap = candidate;
-    sentenceCount += 1;
-    if (sentenceCount >= FALLBACK_RECAP_MAX_SENTENCES) break;
-  }
-  return recap || `…${normalized.slice(-(maxChars - 1))}`;
-}
-
 /** A single renderable entry in the stage choice overlay. */
 export type StageChoiceItem =
   | {
@@ -480,13 +434,9 @@ export interface MergedChoices {
 const TWO_COLUMN_THRESHOLD = 6;
 
 /**
- * Order: pending interaction choices, then guide short phrases
- * (unpacked from `prompt{N}Text/Label`, N sorted ascending, empty slots
- * skipped). Groups preserve the question each set answers; the flat `items`
- * array remains available for layout and backwards-compatible consumers.
- *
- * ponytail: `prompt{N}Icon/Color` are left unpacked — v1 has no consumer for
- * them (plan's explicit scope cut); add when a component wants icon/color.
+ * Pending interaction choices come first, followed by the stage.choices@1
+ * provider's choices in their declared order. Groups retain their question;
+ * the flat items list supplies shared numbering and keyboard navigation.
  */
 export function mergeChoices(
   interactionChoices: readonly StageInteractionChoice[],
@@ -564,13 +514,10 @@ export function mergeChoices(
 }
 
 /**
- * guide stamps its `message` namespace with the `__turnId` that
- * produced the phrases. Once the story advances, the old prompts linger until
- * guide regenerates — drop them so the stage never offers phrases from
- * a past turn. Returns the namespace untouched when the stamp is fresh, absent,
- * or uncomparable (no current turn yet) — the latter two keep back-compat with
- * pre-`__turnId` data. Interaction choices and the inline composer are
- * unaffected (they don't live in this namespace).
+ * A stage.choices@1 value without turnId is unscoped under the current
+ * optional-field contract. Turn-scoped choices require a matching story turn;
+ * committed retries may resolve to that story's turn through resolveTurnId.
+ * Interaction choices and the free-text composer are independent of this slot.
  */
 export function filterStalePrompts(
   suggestions: StageChoicesModel | undefined,
@@ -578,9 +525,9 @@ export function filterStalePrompts(
   resolveTurnId: (turnId: string) => string = (turnId) => turnId,
 ): StageChoicesModel | undefined {
   if (
-    suggestions?.turnId &&
-    currentTurnId &&
-    resolveTurnId(suggestions.turnId) !== currentTurnId
+    suggestions?.turnId !== undefined &&
+    (currentTurnId === undefined ||
+      resolveTurnId(suggestions.turnId) !== currentTurnId)
   )
     return undefined;
   return suggestions;
