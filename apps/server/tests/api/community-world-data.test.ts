@@ -203,6 +203,59 @@ describe("world data of a community receiver approved after creation", () => {
     ).toEqual({ id: "rain", content: "The rain stopped." });
   });
 
+  it("imports a confirmed dependent when its missing provider makes it runnable", async () => {
+    const dependent = await entry(worldsDir, NOTES, "builtin", ["facts"]);
+    const provider = await entry(worldsDir, "support", "builtin");
+    if (!dependent.packageManifest || !provider.packageManifest)
+      throw new Error("expected fixture manifests");
+    registry.register({
+      ...dependent,
+      packageManifest: {
+        ...dependent.packageManifest,
+        plugin: {
+          ...dependent.packageManifest.plugin,
+          requires: ["support@1"],
+        },
+      },
+    });
+    registry.register({
+      ...provider,
+      packageManifest: {
+        ...provider.packageManifest,
+        plugin: { ...provider.packageManifest.plugin, provides: ["support@1"] },
+      },
+    });
+    const created = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "s1", worldId: "notes-world", plugins: [] }),
+    });
+    expect(created.status, await created.clone().text()).toBe(201);
+    const session = (await store.getSession("s1"))!;
+    // A save can confirm a dependent while its missing provider keeps it off.
+    await store.updateSession("s1", {
+      activePlugins: [NOTES],
+      metadata: {
+        ...session.metadata,
+        pluginSelection: {
+          requested: [NOTES],
+          excluded: ["support"],
+          requiredContracts: [],
+        },
+      },
+    });
+    expect(await facts()).toEqual([]);
+    const response = await app.request("/api/sessions/s1/plugins/support", {
+      method: "PUT",
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect((await response.json()).worldData).toMatchObject({
+      receivers: [NOTES],
+      imported: 2,
+    });
+    expect(await facts()).toEqual(["gate", "rain"]);
+  });
+
   it("leaves other plugins' imported rows alone", async () => {
     registry.register(
       await entry(worldsDir, "other-notes", "builtin", ["facts"]),

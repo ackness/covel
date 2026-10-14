@@ -10,6 +10,7 @@ import {
   buildSessionPluginView,
   readSessionPluginSelection,
   resolveSessionPluginPlan,
+  runnablePluginIds,
   storedPluginSelection,
   authorizedSessionPluginIds,
 } from "./plugins.js";
@@ -201,6 +202,9 @@ export function registerSessionPluginRoutes(
       if (rejected)
         return c.json(errorBody(rejected.reason, { code: rejected.code }), 409);
       const active = plan.active;
+      const previouslyActive = new Set(
+        runnablePluginIds(session.activePlugins, pluginRegistry),
+      );
       const droppedProvider = droppedDimensionProvider(session, active);
       if (droppedProvider)
         return c.json(dimensionProviderRequired(droppedProvider), 409);
@@ -233,7 +237,7 @@ export function registerSessionPluginRoutes(
       // plugin without its data. The plugin stays enabled if this fails; the
       // player is told what is missing.
       const joined = active.filter(
-        (activeId) => !session.activePlugins.includes(activeId),
+        (activeId) => !previouslyActive.has(activeId),
       );
       let worldData;
       try {
