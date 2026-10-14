@@ -1,0 +1,105 @@
+##
+# Covel — personal self-hosted stack (SQLite persistence, the default)
+#
+# One container, no database service: the SQLite file lives on a named volume
+# together with the installed user worlds and plugins. For PostgreSQL use
+# docker/docker-compose.yml (`pnpm docker:pg:build`).
+#
+# Usage:
+#   pnpm docker:build     # Build + start (first time or after code changes)
+#   pnpm docker:up        # Start existing containers
+#   pnpm docker:down      # Stop (keep the volume)
+#   pnpm docker:down-all  # Stop + delete the volume (fresh start)
+#   pnpm docker:logs      # Tail logs
+#
+# Prerequisites:
+#   1. Docker Compose 2.24+ (`env_file.required` is used below).
+#   2. cp .env.example .env — set COVEL_MEDIA_TOKEN_SECRET (openssl rand -hex 32).
+#   3. cp llm.toml.example llm.toml  (configure LLM provider slots)
+#   4. cp .env.llm.example .env.llm  (add LLM API keys, optional)
+##
+
+# A project name of its own keeps this stack's volume and containers apart from
+# the PostgreSQL stack (docker/docker-compose.yml).
+name: covel-sqlite
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: covel-sqlite-app
+    restart: unless-stopped
+    ports:
+      # Keep the plain-HTTP service local by default. Set APP_BIND_IP only
+      # when an authenticated TLS reverse proxy protects external traffic.
+      - "${APP_BIND_IP:-127.0.0.1}:${APP_PORT:-3001}:3001"
+    environment:
+      # ── Database ────────────────────────────────────────────────
+      # Set explicitly so a `.env` copied for source runs (relative
+      # SQLITE_PATH, host DATABASE_URL, MEDIA_ROOT) cannot point the
+      # container off the volume. The media blobs sit beside the database.
+      STORE_BACKEND: sqlite
+      SQLITE_PATH: /home/node/.covel/data/covel.db
+      MEDIA_ROOT: /home/node/.covel/data/media
+
+      # ── Server ─────────────────────────────────────────────────
+      SERVER_PORT: "3001"
+      # The server defaults to loopback (audit S-02); inside the container it
+      # must listen on the container interface to be reachable via the mapped
+      # host port. This is an explicit deployment opt-in.
+      COVEL_BIND_HOST: 0.0.0.0
+      NODE_ENV: production
+      SERVE_STATIC: "true"
+      STATIC_DIR: ./web-dist
+      # Production signs media URLs with this secret; the server throws at the
+      # first media token without it. Fail at start instead.
+      COVEL_MEDIA_TOKEN_SECRET: ${COVEL_MEDIA_TOKEN_SECRET:?Set COVEL_MEDIA_TOKEN_SECRET in .env (openssl rand -hex 32)}
+
+      # ── Personal instance ──────────────────────────────────────
+      # The host port stays on loopback by default. This profile trusts the
+      # instance owner; it does not isolate multiple players sharing a server.
+      DEPLOYMENT_TIER: self
+      COVEL_DESKTOP_REST_TOKEN: ${COVEL_DESKTOP_REST_TOKEN:-}
+      # Same-origin browser access needs no CORS override. Configure an
+      # authenticated reverse proxy before exposing this personal instance.
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+
+      COVEL_LLM_TOML: /app/llm.toml
+      COVEL_PLUGINS_DIR: /app/plugins
+      COVEL_WORLDS_DIR: /app/worlds
+      COVEL_HOME: /home/node/.covel
+      COVEL_USER_WORLDS_DIR: /home/node/.covel/worlds
+      COVEL_USER_PLUGINS_DIR: /home/node/.covel/plugins
+    env_file:
+      - path: ../.env
+        required: false
+      # .env.llm is optional — only needed for server-side LLM key injection.
+      # In browser-key mode (default), API keys are passed per-request via
+      # X-Provider-Keys header from the frontend localStorage.
+      - path: ../.env.llm
+        required: false
+    volumes:
+      # The SQLite file (data/), its media blobs and the installed
+      # worlds/plugins survive app container recreation.
+      - appdata:/home/node/.covel
+      # Model slot configuration (required — copy llm.toml.example to llm.toml)
+      - type: bind
+        source: ../llm.toml
+        target: /app/llm.toml
+        read_only: true
+        bind:
+          # A missing file must fail instead of becoming a host directory.
+          create_host_path: false
+      # Optional: mount custom world packages from host
+      # - ../worlds:/app/worlds:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+volumes:
+  appdata:
