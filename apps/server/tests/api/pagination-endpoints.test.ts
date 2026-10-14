@@ -16,7 +16,9 @@ import { decodePageCursor } from "@covel/shared";
 import { messageRoutes } from "../../src/routes/api/messages.js";
 import { traceRoutes } from "../../src/routes/api/traces.js";
 
-type Env = { Variables: { store: DataStore; builtinToolNames: readonly string[] } };
+type Env = {
+  Variables: { store: DataStore; builtinToolNames: readonly string[] };
+};
 
 function buildApp(store: DataStore): Hono<Env> {
   const app = new Hono<Env>();

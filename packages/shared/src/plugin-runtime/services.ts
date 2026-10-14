@@ -1,4 +1,4 @@
-import type { LLMUsageSummary, MediaRef } from "../index.js";
+import type { LLMUsageSummary } from "../index.js";
 import type { LLMDiagnostics } from "../types/llm-diagnostics.js";
 import type {
   EvaluationParams,
@@ -281,174 +281,19 @@ export interface PluginRuntimeUtils {
   ): Promise<Response>;
 }
 
-export interface IngestUrlOptions {
-  /** Maximum response bytes accepted before the download is aborted. */
-  readonly maxBytes?: number;
-  /** End-to-end timeout for the ingest request, including redirects. */
-  readonly timeoutMs?: number;
-  /** MIME allow-list. Supports exact matches and family wildcards such as `image/*`. */
-  readonly allowedMimes?: readonly string[];
-  /** Abort signal forwarded from the handler or turn runtime. */
-  readonly signal?: AbortSignal;
-  /** Additional metadata persisted with the media object. */
-  readonly meta?: Readonly<Record<string, unknown>>;
-}
-
-export interface MediaContext {
-  put(
-    blob: Uint8Array | Blob,
-    mime: string,
-    meta?: Readonly<Record<string, unknown>>,
-  ): Promise<MediaRef>;
-  get(ref: MediaRef): Promise<Uint8Array | Blob>;
-  resolveUrl(ref: MediaRef): Promise<string>;
-  ingestUrl(url: string, opts?: IngestUrlOptions): Promise<MediaRef>;
-}
-
-export interface ImageGenerateInput {
-  /** Exact image role or preset name; defaults to the "image" role. */
-  readonly presetId?: string;
-  readonly prompt: string;
-  readonly negativePrompt?: string;
-  readonly size?: string;
-  readonly quality?: string;
-  readonly n?: number;
-  readonly background?: "transparent" | "opaque";
-  /**
-   * Business metadata persisted onto the MediaRef (kind / sceneId /
-   * characterId / variant …). `pluginId` and `promptHash` are injected by
-   * the framework and cannot be overridden. `metadata` does not participate
-   * in dedup; the persisted record keeps the first call's metadata, but a
-   * cache hit returns THIS call's metadata on the ref so each consumer
-   * indexes by its own values.
-   */
-  readonly metadata?: Readonly<Record<string, unknown>>;
-  /** Abort signal forwarded to the provider call. Not part of promptHash. */
-  readonly signal?: AbortSignal;
-}
-
-export interface ImageGenerateOutput {
-  readonly refs: readonly MediaRef[];
-  readonly warnings: readonly string[];
-  /** True when the resolved model, wire settings and prompt matched an existing asset. */
-  readonly cached: boolean;
-}
-
-/**
- * First-class image generation for function runtimes. Prefer this over
- * `gateway.resolveSlot()` + hand-rolled HTTP: the framework picks the wire,
- * stores bytes into the media library, stamps unified metadata, and
- * deduplicates identical prompts (promptHash).
- */
-export interface ImagesContext {
-  /** Check the exact image role without generating or making a provider request. */
-  isAvailable(presetId?: string): boolean;
-  generate(input: ImageGenerateInput): Promise<ImageGenerateOutput>;
-}
-
-export interface SpeechGenerateInput {
-  /** Slot name; defaults to speech-tag resolution. */
-  readonly presetId?: string;
-  readonly text: string;
-  readonly voice?: string;
-  readonly format?: string;
-  /**
-   * Business metadata persisted onto the MediaRef. Same contract as
-   * ctx.images: `pluginId` and `promptHash` are injected by the framework
-   * and cannot be overridden; metadata does not participate in dedup.
-   */
-  readonly metadata?: Readonly<Record<string, unknown>>;
-  /** Abort signal forwarded to the provider call. Not part of promptHash. */
-  readonly signal?: AbortSignal;
-}
-
-export interface SpeechGenerateOutput {
-  /** Always a single ref today; array keeps the shape symmetric with images. */
-  readonly refs: readonly MediaRef[];
-  readonly warnings: readonly string[];
-  /** True when promptHash matched an existing asset and no provider call was made. */
-  readonly cached: boolean;
-}
-
-export interface SpeechTranscribeInput {
-  /** Slot name; defaults to transcription-tag resolution. */
-  readonly presetId?: string;
-  /** A MediaRef of already-stored audio (common path) or raw bytes. */
-  readonly audio:
-    | MediaRef
-    | {
-        readonly data: Uint8Array;
-        readonly mimeType: string;
-        readonly fileName?: string;
-      };
-  readonly signal?: AbortSignal;
-}
-
-/**
- * First-class speech pipeline for function runtimes — TTS with the same
- * dedup + MediaStore persistence contract as ctx.images, plus STT.
- */
-export interface SpeechContext {
-  generate(input: SpeechGenerateInput): Promise<SpeechGenerateOutput>;
-  /** No dedup: output is plain text returned to the handler, nothing persisted. */
-  transcribe(input: SpeechTranscribeInput): Promise<{
-    readonly text: string;
-    readonly warnings: readonly string[];
-  }>;
-}
-
-export interface MusicGenerateInput {
-  /** Slot name; defaults to the `music` role, then any slot tagged `music`. */
-  readonly presetId?: string;
-  /** What the music should be: style, instruments, mood, tempo. */
-  readonly prompt: string;
-  /** Words to sing. Absent: the provider decides, or the piece has none. */
-  readonly lyrics?: string;
-  /** True asks for a piece without vocals. */
-  readonly instrumental?: boolean;
-  /** Wanted length in seconds. A provider may round it or ignore it. */
-  readonly durationSeconds?: number;
-  readonly format?: string;
-  /**
-   * Business metadata persisted onto the MediaRef. Same contract as
-   * ctx.speech: `pluginId` and `promptHash` are injected by the framework
-   * and cannot be overridden; metadata does not participate in dedup.
-   */
-  readonly metadata?: Readonly<Record<string, unknown>>;
-  /** Abort signal forwarded to the provider call. Not part of promptHash. */
-  readonly signal?: AbortSignal;
-}
-
-export interface MusicGenerateOutput {
-  /** Always a single ref today; array keeps the shape symmetric with images. */
-  readonly refs: readonly MediaRef[];
-  readonly warnings: readonly string[];
-  /** True when promptHash matched an existing asset and no provider call was made. */
-  readonly cached: boolean;
-}
-
-/**
- * First-class music pipeline for function runtimes, with the same dedup +
- * MediaStore persistence contract as ctx.speech. A piece takes long to
- * generate: call it from a detached or background runtime, never in a turn.
- */
-export interface MusicContext {
-  /** Check the music role without generating or making a provider request. */
-  isAvailable(presetId?: string): boolean;
-  generate(input: MusicGenerateInput): Promise<MusicGenerateOutput>;
-}
-
-export interface AssetProgressInput {
-  /** Stable asset/job id when the plugin has one before final MediaRef commit. */
-  readonly assetId?: string;
-  /** Producer-defined phase, e.g. queued, generating, uploading, finalizing. */
-  readonly phase: string;
-  /** Numeric progress percentage from 0 to 100. */
-  readonly percent?: number;
-  /** Optional human-readable status text for debug surfaces. */
-  readonly message?: string;
-  /** Modality tag that will also appear on the final asset.generate payload. */
-  readonly modality?: string;
-  /** Provider/job metadata. Keep this lightweight; final assets still use MediaRef. */
-  readonly meta?: Readonly<Record<string, unknown>>;
-}
+// The media capabilities are the public SDK's types; the host implements them.
+export type {
+  PluginIngestUrlOptions as IngestUrlOptions,
+  PluginMedia as MediaContext,
+  PluginImageGenerateInput as ImageGenerateInput,
+  PluginImageGenerateOutput as ImageGenerateOutput,
+  PluginImages as ImagesContext,
+  PluginSpeechGenerateInput as SpeechGenerateInput,
+  PluginSpeechGenerateOutput as SpeechGenerateOutput,
+  PluginSpeechTranscribeInput as SpeechTranscribeInput,
+  PluginSpeech as SpeechContext,
+  PluginMusicGenerateInput as MusicGenerateInput,
+  PluginMusicGenerateOutput as MusicGenerateOutput,
+  PluginMusic as MusicContext,
+  PluginAssetProgress as AssetProgressInput,
+} from "@covel/plugin-handlers-utils";

@@ -234,7 +234,9 @@ describe("session-kernel commitAll atomicity", () => {
       const results = await pipeline.commitAll(proposals);
       expect(results[0]!.committed).toBe(true);
       expect(results[1]!.committed).toBe(false);
-      expect(results[1]!.error).toMatch(/table must be a non-empty string/);
+      expect(results[1]!.error).toMatch(
+        /state\.patch: invalid payload \(table:/,
+      );
       expect(results[2]!.committed).toBe(true);
 
       // Siblings stay committed; the transaction commits (no rollback).
@@ -267,9 +269,9 @@ describe("session-kernel commitAll atomicity", () => {
     ]);
 
     expect(results[0]!.committed).toBe(false);
-    expect(results[0]!.error).toMatch(/table must be a non-empty string/);
+    expect(results[0]!.error).toMatch(/state\.patch: invalid payload \(table:/);
     expect(results[1]!.committed).toBe(false);
-    expect(results[1]!.error).toMatch(/topic must be a non-empty string/);
+    expect(results[1]!.error).toMatch(/event\.emit: invalid payload \(topic:/);
     expect(store.stateChanges).toHaveLength(0);
     expect(store.events).toHaveLength(0);
   });

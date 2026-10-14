@@ -2,6 +2,7 @@ import { vectorRowKey } from "../common/keys.js";
 import type {
   DeleteVectorsInput,
   EmbeddingModelIdentity,
+  ResetSessionVectorIndexInput,
   SearchVectorsInput,
   UpsertVectorInput,
   VectorSearchResult,
@@ -82,6 +83,13 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
       const session = state.sessions.get(input.sessionId);
       if (!session || session.createdAt !== input.expectedSessionCreatedAt) {
         throw new Error("Vector index progress: session incarnation changed");
+      }
+      if (
+        input.expectedModelRegistryId !== undefined &&
+        state.sessionVectorTargets.get(input.sessionId)?.modelRegistryId !==
+          input.expectedModelRegistryId
+      ) {
+        throw new Error("Vector index progress: embedding model changed");
       }
       const key = JSON.stringify([
         input.sessionId,
@@ -228,6 +236,31 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         );
       }
       state.sessionVectorTargets.set(sessionId, target);
+    },
+
+    async resetSessionVectorIndex(input: ResetSessionVectorIndexInput) {
+      const session = state.sessions.get(input.sessionId);
+      if (!session || session.createdAt !== input.expectedSessionCreatedAt) {
+        throw new Error("Vector index reset: session incarnation changed");
+      }
+      const current = state.sessionVectorTargets.get(input.sessionId) ?? null;
+      if ((current?.modelRegistryId ?? null) !== input.expectedModelRegistryId)
+        return false;
+      for (const [rowKey, row] of Array.from(state.vectorRows.entries())) {
+        if (row.sessionId === input.sessionId) state.vectorRows.delete(rowKey);
+      }
+      for (const [key, row] of Array.from(
+        state.vectorIndexProgress.entries(),
+      )) {
+        if (row.sessionId === input.sessionId)
+          state.vectorIndexProgress.delete(key);
+      }
+      if (input.target) {
+        state.sessionVectorTargets.set(input.sessionId, input.target);
+      } else {
+        state.sessionVectorTargets.delete(input.sessionId);
+      }
+      return true;
     },
 
     async resolveSessionVectorTarget(

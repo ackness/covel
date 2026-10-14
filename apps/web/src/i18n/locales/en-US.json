@@ -85,13 +85,13 @@
       "detail": "You can start without them, but what they add to this world will be missing. Install them under Settings → Install & manage, then restart the backend."
     },
     "worldRequirements": {
-      "blockedTitle": "This world cannot start yet",
       "degradedTitle": "This world will run without something it relies on",
       "missing-provider": "No installed plugin provides {{contract}}. Install one under Settings → Install & manage, then restart the backend.",
       "unavailable": "{{plugins}} provides {{contract}} but cannot be enabled with the current selection.",
       "ambiguous-provider": "Several plugins provide {{contract}}: {{plugins}}. Enable one of them in the plugin list below.",
       "excluded": "You turned off {{plugins}}, which provides {{contract}}. The game can start, but that part of the world will not work.",
-      "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts."
+      "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts.",
+      "dimensions": "No plugin you turned on keeps this world's dimensions ({{contract}}), so the game starts without them. Turn on a plugin that provides it to use them."
     },
     "history": "Previous Sessions",
     "worldLore": "World Document",
@@ -212,6 +212,8 @@
     "dimensionsImported": "Imported successfully",
     "reasonConnectionClosed": "Connection closed but backend did not report completion",
     "reasonSessionBusy": "Session is busy, please retry",
+    "reasonInputAlreadyCommitted": "This message was already sent and its turn is saved. Refresh to see it.",
+    "reasonRetryStale": "The task statuses have changed. Refresh them before retrying.",
     "reasonExecutionCommitFailed": "The turn could not be saved. Please try again.",
     "reasonExecutionFailed": "The turn failed. Please try again.",
     "reasonHistoryRestoreFailed": "The message history could not be restored. Reload the page if it stays out of date.",
@@ -271,6 +273,11 @@
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
+    "worldDataNotices": {
+      "title": "Some of this world's data is not in this game:",
+      "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
+      "hide": "Hide"
+    },
     "worldDataPreflight": {
       "title": "World Data",
       "loading": "Checking",
@@ -333,6 +340,9 @@
     "recoveryFailed": "This turn did not complete",
     "recoveryHydrating": "Restoring your session",
     "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
+    "recoveryUnavailableDetail": "The server cannot tell right now whether a turn is running. It will check again shortly. Nothing is retried or started until it knows.",
+    "recoveryUnconfirmed": "Could not confirm the turn",
+    "recoveryUnconfirmedDetail": "After several checks the server still cannot tell, so automatic checks have stopped. Choose Check status to ask again.",
     "recoveryRunningDetail": "The server is continuing the original task. Its result will appear here automatically; you can wait or stop it.",
     "recoveryInterruptedDetail": "The unfinished task is no longer running. Your saved progress is preserved. Retry starts a new attempt only when you choose it.",
     "unsavedNarrative": "Unsaved",
@@ -349,6 +359,15 @@
     "setupUnfinishedDetail": "The story is still being prepared. Continue to run the remaining steps with what you have already entered.",
     "setupContinue": "Continue setup",
     "setupRetryFailed": "Could not restart setup. Check the connection and try again.",
+    "memoryIndex": {
+      "staleTitle": "Memory search is matching keywords only",
+      "staleDetail": "This session's memory was indexed with {{locked}}, and the embedding model is now {{configured}}. Rebuild the index to search with the new model; this sends the session's history to the embedding model again.",
+      "noModelDetail": "This session's memory was indexed with {{locked}}, and no embedding model is configured now. Clearing the index frees its space; once an embedding model is configured, the session is indexed with it.",
+      "rebuild": "Rebuild index",
+      "clear": "Clear index",
+      "rebuilding": "Rebuilding…",
+      "failed": "The index was not rebuilt and is unchanged: {{reason}}"
+    },
     "reasonInterrupted": "This task stopped before completion and did not commit a result. This is its recorded execution history.",
     "retryTask": "Retry this task",
     "executionHistory": "History",
@@ -373,6 +392,8 @@
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
+    "minimalPluginSet": "Back to the minimal set",
+    "minimalPluginSetHint": "The narrative plugins, the plugin that holds the world's dimensions, and what they and the world need; everything else is turned off.",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
     "allWorlds": "All worlds ({{total}})",
@@ -586,10 +607,6 @@
     "aiPackageDesc": "Choose what the agent should author and keep consistent.",
     "aiPackageCount": "{{count}} selected",
     "aiExperienceLabel": "Player Experience",
-    "aiExperienceStory": "Story Adventure",
-    "aiExperienceStoryDesc": "Focus on action, exploration, and a continuous plot.",
-    "aiExperienceDialogue": "Character Dialogue",
-    "aiExperienceDialogueDesc": "Focus on character interaction and stage presentation.",
     "aiContentLabel": "Package Supplements",
     "aiContentCharacters": "Main Cast",
     "aiContentCharactersDesc": "Create 3–5 connected characters with motives and secrets.",
@@ -638,6 +655,11 @@
     "revising": "Revising…",
     "reviseAction": "Apply the change",
     "translateTitle": "Translate this world",
+    "packageEditedHint": "You edited this world in Covel. Your version is the one you play: changes to its package files, including updates, no longer replace it.",
+    "restorePackageAction": "Restore the package version",
+    "restorePackageTitle": "Restore the package version?",
+    "restorePackageConfirm": "Your edits to this world are replaced with the current package files. Saved session data is kept; sessions without their own lore read the restored world lore on the next turn.",
+    "restorePackageFailed": "The package version could not be restored.",
     "translateHint": "This world is written in {{worldLanguage}}, and a session plays in a language the world has. You can add a {{language}} edition.",
     "translateConfirm": "Your model translates every text of the world: names, lore, rules and characters. This uses model calls, and a machine translation of names and tone needs a look afterwards.",
     "translating": "Translating…",
@@ -1745,7 +1767,7 @@
       "allowSelected": "Authorize selected",
       "notNow": "Not now"
     },
-    "unavailable": "Some plugins of this session cannot run now: {{plugins}}. The game goes on without them; open the plugin list to see why.",
+    "unavailable": "Some plugins of this session are off. The game goes on without them:",
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
@@ -1773,7 +1795,22 @@
     "invalidPanelSpecDetail": "Invalid panel spec: {{label}} — {{reason}}",
     "rpc": {
       "failed": "The plugin task failed. Try again."
-    }
+    },
+    "off": {
+      "needsProvider": "{{plugin}} is off: it needs {{contract}}. Turn on {{providers}} to use it.",
+      "noProvider": "{{plugin}} is off: it needs {{contract}}, and no installed plugin provides it. Install one under Settings → Install & manage, then restart the backend.",
+      "notInstalled": "{{plugin}} is not installed, or it failed to load.",
+      "conflict": "{{plugin}} conflicts with another plugin of this session.",
+      "other": "{{plugin}} cannot run now. Open the plugin list to see why.",
+      "turnOn": "Turn on {{plugin}}"
+    },
+    "noStory": {
+      "title": "No narrative plugin is on",
+      "detail": "Turns will not tell a story: none of the enabled plugins writes narration.",
+      "enable": "Turn on {{plugins}} to get a story.",
+      "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
+    },
+    "dependentsOff": "These plugins will be off, because something they need is off:"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

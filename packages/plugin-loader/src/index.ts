@@ -1,10 +1,12 @@
-export { loadPluginUiSpec } from "./ui-spec.js";
+export { loadPluginUiSpec, loadPluginUiSpecs } from "./ui-spec.js";
+export type { PluginUiSpecDiagnostic, PluginUiSpecs } from "./ui-spec.js";
 // ── Parsers ──────────────────────────────────────────────────────
 export {
   parsePluginMd,
   parseRuntimeMd,
   compileInlineRuntime,
   normalizePackageManifest,
+  RuntimeDisabledError,
 } from "./parse-plugin-md.js";
 
 // ── Discovery & Loading ──────────────────────────────────────────
@@ -22,7 +24,6 @@ export {
   loadPluginEntryDefinition,
   loadRuntime,
   resolveRuntimePrompt,
-  loadPluginUi,
 } from "./load.js";
 export {
   reloadGenerationUrl,
@@ -68,6 +69,8 @@ export { getPluginTrustInfo, deriveBuiltinPluginIds } from "./trust.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
+  DisabledRuntime,
+  IgnoredField,
   ParsedPluginMd,
   ParsedRuntimeMd,
   PackageManifest,

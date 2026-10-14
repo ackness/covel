@@ -33,6 +33,7 @@ async function list(count: number) {
       turnId: "turn-1",
       pluginId: "p",
       runtimeId: "p/r",
+      random: { int: (min: number) => min },
       pendingProposals: [],
     },
   );

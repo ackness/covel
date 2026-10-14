@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { outboundFetch } from "@covel/ai-provider";
+import { outboundFetch, readResponseJson } from "@covel/ai-provider";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
@@ -58,7 +58,9 @@ export async function fetchLatestCovelRelease(
     throw new Error(`GitHub release check failed with HTTP ${response.status}`);
   }
 
-  const parsed = githubReleaseSchema.safeParse(await response.json());
+  const parsed = githubReleaseSchema.safeParse(
+    await readResponseJson(response),
+  );
   if (!parsed.success) {
     throw new Error(
       `GitHub release response is invalid: ${parsed.error.message}`,

@@ -58,7 +58,7 @@ export interface TurnMessageRecord {
   readonly id: string;
   readonly sessionId: string;
   readonly turnId: string;
-  readonly sourceType: string; // 'system' | 'runtime' | 'player' | 'tool' | 'player-input'
+  readonly sourceType: string; // 'system' | 'runtime' | 'player' | 'player-interjection' | 'tool' | 'player-input'
   readonly sourcePluginId?: string;
   readonly sourceRuntimeId?: string;
   readonly role: string; // 'system' | 'user' | 'assistant'

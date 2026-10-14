@@ -118,6 +118,18 @@ function render(surface: AuthoringSurface): string {
       );
   }
 
+  lines.push(
+    "## Plugin packs",
+    "",
+    "A world names one in `pluginPolicy.presetId`: it seeds the plugins a new session starts with.",
+    "",
+  );
+  for (const pack of surface.packs)
+    lines.push(
+      `- \`${pack.id}\` — ${pack.label}${pack.description ? `: ${pack.description}` : ""}${pack.defaultViewMode ? ` (view: ${pack.defaultViewMode})` : ""}`,
+    );
+  lines.push("");
+
   lines.push("## Plugins", "");
   for (const plugin of surface.plugins) {
     lines.push(

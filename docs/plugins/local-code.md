@@ -397,7 +397,11 @@ export default async function handler(ctx) {
 | `ctx.logger`                                                                  | 写插件日志                                                                               |
 | `ctx.signal`                                                                  | 运行被取消时得到通知                                                                     |
 | `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | 在这一回合里再运行一个手动 runtime。只认这两个字段，会话、语言、设置和模型都沿用本次运行 |
+| `ctx.recursionDepth`                                                          | 被 `recursiveCall` 嵌套运行时大于 0。只该在顶层做的事，先判断它                          |
+| `ctx.execution?.sourceTurnId`                                                 | 重试旧回合时是那个回合的 ID。掷骰、揭示用它做键，重试就不会重新抽                        |
+| `ctx.store.getSession()`                                                      | 这一局的阶段、回合数、语言和开局步骤的进度（只读）                                       |
 
+- 上面每个字段都写在 `PluginFunctionContext` 类型里，开头那行类型注释就能让编辑器提示和检查它们。
 - 函数能调用的工具写在 `function.tools` 里。函数的时限是 `function.timeoutMs`。这两项不要写进 `agent` 里：函数 runtime 不能有 `agent` 配置。
 - 想让下一回合或别的运行读到这次的结果，在这边声明 `io.output.recordAs`，在读的那边声明 `scope: committed` 和同一个 `recordAs`。
 - 函数没有组装好的对话。这一回合的内容从 `ctx.playerMessage`、你声明的输入，或者 Covel 提供的 `turn-digest@1` 输入（含 `playerMessage` 和 `narrativeText`）里读。

@@ -1,7 +1,7 @@
 {
-  "$id": "https://covel.local/schemas/runtime-manifest.authoring.schema.json",
-  "title": "Covel runtime manifest (strict authoring)",
-  "description": "Strict target for newly authored plugins. Enforces every cross-field constraint, including a required stage on auto / scheduled runtimes.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- runtimeType 'function' requires a non-empty handler path.\n- output.schema is required when output.recordAs is set.\n- requireExplicitCompletion is only valid for non-story agent runtimes without output.schema.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- turnCompletion.mode 'detached' is only valid on post-turn/audit staged runtimes.\n- turnCompletion.mode 'detached' cannot be used with outputKind 'story'.\n- event/manual runtimes use execution and cannot use detached turn completion.\n- turnCompletion queue/overlap/stale options require mode 'detached'.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.\n- auto / scheduled runtimes must declare a stage.",
+  "$id": "https://covel.local/schemas/runtime-manifest.compiled.schema.json",
+  "title": "Covel compiled runtime manifest (internal, not an authoring format)",
+  "description": "The internal RuntimeManifest the plugin loader compiles each RUNTIME.md or inline runtime into. Authors write runtime-manifest.schema.json instead; this file documents the compiled form for host and tool code.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- runtimeType 'function' requires a non-empty handler path.\n- output.schema is required when output.recordAs is set.\n- requireExplicitCompletion is only valid for non-story agent runtimes without output.schema.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- turnCompletion.mode 'detached' is only valid on post-turn/audit staged runtimes.\n- turnCompletion.mode 'detached' cannot be used with outputKind 'story'.\n- event/manual runtimes use execution and cannot use detached turn completion.\n- turnCompletion queue/overlap/stale options require mode 'detached'.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
@@ -29,23 +29,6 @@
       ],
       "description": "What the package does. Plain string; translations go in locale files."
     },
-    "displayName": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      ],
-      "description": "Player-facing name. Plain string; translations go in locale files."
-    },
     "version": {
       "type": "string"
     },
@@ -58,60 +41,6 @@
     },
     "guard": {
       "type": "string"
-    },
-    "entry": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^(?!\\/)(?!.*\\/\\.\\.\\/)(?!\\.\\.\\/)[a-zA-Z0-9_./-]+\\.[mMcC]?[jJ][sS]$",
-      "description": "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions."
-    },
-    "extensions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "point": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-            "description": "Extension point this entry provides.",
-            "examples": ["prompt.segment@1"]
-          },
-          "id": {
-            "type": "string",
-            "pattern": "^[a-zA-Z0-9][\\w.-]*$",
-            "description": "ID of this extension within the package."
-          },
-          "order": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "description": "Sort order among providers of the same point. Lower values come first. Defaults to 0."
-          },
-          "slot": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-            "description": "UI slot providers only: the kernel UI slot this entry fills."
-          },
-          "watch": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "description": "UI slot providers only: own data namespaces whose changes refresh the slot."
-          },
-          "preview": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "description": "UI slot providers only: event topics whose in-turn preview refreshes the slot."
-          }
-        },
-        "required": ["point", "id"],
-        "additionalProperties": false
-      }
     },
     "model": {
       "type": "string"
@@ -238,15 +167,6 @@
     },
     "defaultProvider": {
       "type": "boolean"
-    },
-    "tags": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 64,
-        "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-      }
     },
     "stage": {
       "type": "string",
@@ -623,29 +543,6 @@
                 "properties": {
                   "kind": {
                     "type": "string",
-                    "const": "runtime"
-                  },
-                  "from": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "field": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "as": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": ["kind", "from", "field", "as"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
                     "const": "plugin-data"
                   },
                   "namespace": {
@@ -781,6 +678,46 @@
       },
       "additionalProperties": false
     },
+    "trigger": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["auto", "manual", "scheduled", "event"],
+          "description": "`auto` runs every turn in its stage. `scheduled` runs every `interval` turns. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted."
+        },
+        "interval": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Interval in turns. For `scheduled` only."
+        },
+        "topic": {
+          "type": "string",
+          "description": "Event topic to subscribe to. Required for `event`."
+        },
+        "maxTriggerCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Maximum number of triggers in one session."
+        },
+        "cooldownTurns": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Minimum number of turns between two triggers."
+        },
+        "startTurn": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "description": "First logical turn at which the runtime may trigger. When unset, it triggers as soon as its stage opens."
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
     "dataSchemas": {
       "type": "object",
       "propertyNames": {
@@ -820,152 +757,6 @@
         "required": ["schemaVersion", "acceptsWorldData", "schema"],
         "additionalProperties": false
       }
-    },
-    "worldProjections": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 64,
-        "pattern": "^[a-z][a-z0-9_-]*$"
-      },
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "from": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S",
-            "description": "Schema URI of the world data source to project. Only sources with exactly this schema are projected."
-          },
-          "handler": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^(?!\\/)(?!.*\\/\\.\\.\\/)(?!\\.\\.\\/)[a-zA-Z0-9_./-]+\\.[mMcC]?[jJ][sS]$",
-            "description": "Package-relative path of the pure projection handler module."
-          },
-          "outputs": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_-]*$"
-            },
-            "additionalProperties": {
-              "type": "object",
-              "properties": {
-                "namespace": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64,
-                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
-                  "description": "Own data namespace that receives the projected records."
-                },
-                "key": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64,
-                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
-                  "description": "Field of each projected record used as its stable key."
-                }
-              },
-              "required": ["namespace", "key"],
-              "additionalProperties": false
-            },
-            "description": "Destinations keyed by output ID. At least one is required.",
-            "minProperties": 1
-          }
-        },
-        "required": ["from", "handler", "outputs"],
-        "additionalProperties": false
-      },
-      "minProperties": 1
-    },
-    "events": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "topic": {
-            "type": "string",
-            "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$",
-            "description": "Event topic in dot-separated kebab-case.",
-            "examples": ["scene.set"]
-          },
-          "schema": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$",
-            "description": "Package-relative path of the JSON Schema that validates the event payload."
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "string"
-                }
-              }
-            ],
-            "description": "What the event means. Given to runtimes that may emit it."
-          },
-          "advertise": {
-            "default": true,
-            "description": "`true` advertises the event to runtimes that emit events. Defaults to `true`.",
-            "type": "boolean"
-          }
-        },
-        "required": ["topic", "schema", "description"],
-        "additionalProperties": false
-      },
-      "description": "Domain events the package's runtimes may emit with the builtin `emit-event` tool."
-    },
-    "i18n": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "ui": {
-      "type": "object",
-      "properties": {
-        "right": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "Paths of UI specs for right-panel tabs."
-        },
-        "message": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "Paths of UI specs rendered inside the message stream."
-        },
-        "left": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": "Paths of UI specs for the left panel."
-        }
-      },
-      "additionalProperties": false,
-      "description": "Package-relative paths of declarative UI specs, by placement."
     },
     "userSettings": {
       "type": "array",
@@ -1077,168 +868,6 @@
         "additionalProperties": false
       },
       "description": "Player-configurable settings. A world can preset them with `pluginSettings`."
-    },
-    "commands": {
-      "maxItems": 32,
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 32,
-            "pattern": "^[a-z][a-z0-9-]*$",
-            "description": "Command name in lowercase kebab-case, without the leading slash."
-          },
-          "aliases": {
-            "maxItems": 16,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 32,
-              "pattern": "^[a-z][a-z0-9-]*$"
-            },
-            "description": "Other names that invoke the same command."
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "type": "string"
-                }
-              }
-            ],
-            "description": "What the command does. Shown to the player."
-          },
-          "arguments": {
-            "maxItems": 16,
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 32,
-                  "pattern": "^[a-z][a-z0-9-]*$",
-                  "description": "Argument name in lowercase kebab-case."
-                },
-                "type": {
-                  "type": "string",
-                  "enum": ["string", "integer", "number", "boolean"],
-                  "description": "Value type of the argument. Defaults to string."
-                },
-                "description": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "string"
-                      }
-                    }
-                  ],
-                  "description": "What the argument means. Shown to the player."
-                },
-                "required": {
-                  "type": "boolean",
-                  "description": "`true` when the player must supply the argument."
-                },
-                "variadic": {
-                  "type": "boolean",
-                  "description": "`true` collects all remaining words. Only the last argument can be variadic."
-                },
-                "choices": {
-                  "minItems": 1,
-                  "maxItems": 64,
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "description": "Allowed values of the argument."
-                }
-              },
-              "required": ["name"],
-              "additionalProperties": false
-            },
-            "description": "Positional arguments, in order. Names must be unique."
-          },
-          "action": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 32,
-            "pattern": "^[a-z][a-z0-9-]*$",
-            "description": "RPC action the command invokes. It must be listed in `contributes.actions`."
-          },
-          "context": {
-            "maxItems": 3,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": ["session", "active-runtimes", "models"]
-            },
-            "description": "Host context scopes passed to the action."
-          }
-        },
-        "required": ["name", "description", "action"],
-        "additionalProperties": false
-      },
-      "description": "Player slash commands. Each `action` must be listed in `actions`."
-    },
-    "trigger": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["auto", "manual", "scheduled", "event"],
-          "description": "`auto` runs every turn in its stage. `scheduled` runs every `interval` turns. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted."
-        },
-        "interval": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991,
-          "description": "Interval in turns. For `scheduled` only."
-        },
-        "topic": {
-          "type": "string",
-          "description": "Event topic to subscribe to. Required for `event`."
-        },
-        "maxTriggerCount": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991,
-          "description": "Maximum number of triggers in one session."
-        },
-        "cooldownTurns": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991,
-          "description": "Minimum number of turns between two triggers."
-        },
-        "startTurn": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991,
-          "description": "First logical turn at which the runtime may trigger. When unset, it triggers as soon as its stage opens."
-        }
-      },
-      "required": ["type"],
-      "additionalProperties": false
     }
   },
   "required": ["name", "description"],

@@ -141,9 +141,7 @@ function consumerDependsOn(
   ) {
     return true;
   }
-  return (consumer.input?.inject ?? []).some(
-    (inject) => inject.kind === "runtime" && inject.from === candidate.name,
-  );
+  return false;
 }
 
 function intrinsicIneligibility(manifest: RuntimeManifest): string | undefined {
@@ -166,7 +164,10 @@ function intrinsicIneligibility(manifest: RuntimeManifest): string | undefined {
   if (manifest.output?.recordAs) {
     return "recordAs exports cannot be published from a detached stage runtime";
   }
-  if ((manifest.events?.length ?? 0) > 0 || manifest.advertiseEvents === true) {
+  if (
+    manifest.tools?.builtin?.includes("emit-event") ||
+    manifest.advertiseEvents === true
+  ) {
     return "event emission is not supported by detached stage runtimes";
   }
   if (

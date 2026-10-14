@@ -64,6 +64,17 @@ The dispatcher's rules:
 
 No environment variable can turn this dispatcher off. Test runs replace the global `fetch` to pose as a provider. Only when the test run's own startup code (`vitest.base.ts`) sets a marker on `globalThis` (`OUTBOUND_TEST_FETCH_HOOK` in `outbound-network.ts`) does the transport hand the request to that stand-in. A server started with `NODE_ENV=test` does not have this marker, so it still uses the pinned-address transport.
 
+### Redirects
+
+Requests the framework makes itself follow no redirect: core provider requests, the model database download, the version check, and plugin installs from GitHub. They all go through `outboundFetch` (`packages/ai-provider/src/outbound-network.ts`), which always asks Undici for `redirect: "manual"`.
+
+- A caller that passes `redirect: "manual"` gets the 3xx response as it is and checks each hop itself.
+- Anything else (no value, `error`, `follow`) fails on a 3xx without sending a second request.
+
+The reason is that no check looks at a `Location`: the string check sees only the first URL, an IP literal skips the pinned DNS lookup, and in a proxy mode the proxy resolves the next hop. Following a `302 Location: http://169.254.169.254/` would reach a cloud metadata service.
+
+The plugin `fetchWithRetry` does not follow redirects either; `ctx.media.ingestUrl` follows them itself and runs the string check again on every hop.
+
 ### Response size ceiling
 
 An endpoint that answers a provider request may be one the player typed in, so the server does not buffer whatever amount the other side sends.

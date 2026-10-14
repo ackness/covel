@@ -35,6 +35,7 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
+export * from "./llm-slots.js";
 export {
   isCompleteFinishReason,
   unifyFinishReason,
@@ -76,6 +77,11 @@ export type {
 } from "./provider-protocols.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
+export {
+  checkProposalPayload,
+  proposalPayloadSchemas,
+  type ProposalPayloadCheck,
+} from "./proposals/payload-schemas.js";
 export {
   materializeWorldModel,
   validateWorldModel,
@@ -279,21 +285,25 @@ export {
   toolsConfigSchema,
   hookDeclarationSchema,
   runtimeManifestInputSchema,
-  runtimeManifestAuthoringSchema,
-  authoringTriggerConfigSchema,
   stageSchema,
   turnCompletionConfigSchema,
   MAX_SETTLE_WAIT_MS,
   effectsDeclSchema,
   permissionsDeclSchema,
-  validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
+export {
+  isRuntimeDisablingIssue,
+  type RuntimeRuleIssue,
+} from "./schemas/runtime-rules.js";
+export {
+  CURRENT_UI_SPEC_VERSION,
+  MAX_UI_WEBVIEW_BYTES,
+  pluginUiSpecIssues,
+  pluginUiSpecSchema,
+  type PluginUiSpecIssue,
+} from "./schemas/ui-spec.js";
 
-export type {
-  RuntimeManifestInput,
-  RuntimeManifestSemanticDiagnostic,
-  RuntimeManifestSemanticDiagnosticCode,
-} from "./schemas/plugin.js";
+export type { RuntimeManifestInput } from "./schemas/plugin.js";
 
 // ── World Schemas ───────────────────────────────────────────────
 export {
@@ -462,6 +472,8 @@ export {
   resolveSessionPlugins,
   resolveConfirmedSessionPlugins,
   isBlockingWorldRequirement,
+  isDependencyRejection,
+  disabledDependents,
   providedContracts,
 } from "./plugin-selection.js";
 export {

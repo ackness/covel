@@ -45,6 +45,7 @@ function makeContext() {
     },
     images: { isAvailable: available, generate },
     pluginData: { set },
+    random: { int: (min) => min },
   };
   return { ctx, available, generate, set };
 }
@@ -136,6 +137,19 @@ describe("runImageGeneration model availability", () => {
       "images",
       expect.any(String),
       expect.objectContaining({ status: "failed" }),
+    );
+  });
+
+  it("draws the image ID's random part from ctx.random", async () => {
+    const { ctx, available } = makeContext();
+    available.mockReturnValue(true);
+    const int = vi.fn(() => 35);
+    const result = expectSuccess(
+      await runImageGeneration({ ...ctx, random: { int } }, config),
+    );
+    expect(int).toHaveBeenCalledWith(0, 36 ** 6);
+    expect((result.value as { imageId: string }).imageId).toMatch(
+      /^img-[0-9a-z]+-00000z$/,
     );
   });
 });

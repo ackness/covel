@@ -70,6 +70,32 @@ interface ParsedMarkdown {
   readonly sourcePath?: string;
   readonly promptTemplate: string;
   readonly rawFrontmatter: Readonly<Record<string, unknown>>;
+  /** Unknown whole fields left out of this file; see {@link IgnoredField}. */
+  readonly ignoredFields?: readonly IgnoredField[];
+}
+
+/**
+ * A runtime left out at load: its manifest can never run, and nothing else in
+ * the package depends on that. Authoring validation and installation reject it.
+ */
+export interface DisabledRuntime {
+  readonly sourcePath: string;
+  /** One line per problem: file, field path, problem. */
+  readonly message: string;
+  /** The contract its output would have provided; the package no longer provides it. */
+  readonly outputContract?: string;
+}
+
+/**
+ * A whole manifest field this host does not know. Loading leaves it out and
+ * warns; `pnpm validate:plugin` reports it as an error.
+ */
+export interface IgnoredField {
+  readonly sourcePath: string;
+  /** Field path as written, such as `contributes.sandbox`. */
+  readonly field: string;
+  /** `<file>: <field>: unknown field`. */
+  readonly message: string;
 }
 
 export interface ParsedPluginMd extends ParsedMarkdown {
@@ -78,6 +104,8 @@ export interface ParsedPluginMd extends ParsedMarkdown {
   readonly contractSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  /** The inline runtime, when it was left out (`plugin.runtime` is then absent). */
+  readonly disabledRuntime?: DisabledRuntime;
 }
 
 export interface ParsedRuntimeMd extends ParsedMarkdown {

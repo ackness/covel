@@ -193,21 +193,18 @@ function characterFields(submitted, schema) {
  */
 async function schemaStepSkipped(ctx) {
   try {
-    const session =
-      /** @type {{ setupRuntimes?: Record<string, { state?: string, resolution?: string, lastError?: string }> } | null} */ (
-        await ctx.store.getSession()
-      );
-    const states = Object.entries(session?.setupRuntimes ?? {}).filter(
+    const session = await ctx.store.getSession();
+    const states = Object.entries(session.setupRuntimes).filter(
       ([runtimeId]) => runtimeId !== ctx.runtimeId,
     );
     return (
       states.some(
-        ([, state]) => state?.state === "done" && state.resolution === "waived",
+        ([, state]) => state.state === "done" && state.resolution === "waived",
       ) &&
       states.every(
         ([, state]) =>
-          state?.state === "done" ||
-          (state?.state === "pending" && !state.lastError),
+          state.state === "done" ||
+          (state.state === "pending" && !state.lastError),
       )
     );
   } catch {

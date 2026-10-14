@@ -24,7 +24,6 @@ describe("llm slots model", () => {
             model: "image",
             outputKind: "plugin",
             outputContract: undefined,
-            tags: [],
           },
           {
             id: "runtime-plugin",
@@ -35,7 +34,6 @@ describe("llm slots model", () => {
             model: "plugin",
             outputKind: "plugin",
             outputContract: undefined,
-            tags: [],
           },
           {
             id: "runtime-text",
@@ -46,7 +44,6 @@ describe("llm slots model", () => {
             model: "text",
             outputKind: "plugin",
             outputContract: undefined,
-            tags: [],
           },
           {
             id: "runtime-function",
@@ -57,7 +54,6 @@ describe("llm slots model", () => {
             model: "ignored-function-slot",
             outputKind: "plugin",
             outputContract: undefined,
-            tags: [],
           },
         ],
         userSettings: [

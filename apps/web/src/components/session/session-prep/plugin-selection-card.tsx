@@ -35,6 +35,7 @@ interface PluginSelectionCardProps {
   onPluginSearchChange: (value: string) => void;
   onTogglePluginTag: (tag: string) => void;
   onApplyPack: (packId: string) => void;
+  onResetToMinimal: () => void;
   pluginGroups: PluginGroup[];
   corePluginIds: ReadonlySet<string>;
   lockedPluginIds: ReadonlySet<string>;
@@ -121,6 +122,7 @@ export function PluginSelectionCard({
   onPluginSearchChange,
   onTogglePluginTag,
   onApplyPack,
+  onResetToMinimal,
   pluginGroups,
   corePluginIds,
   lockedPluginIds,
@@ -171,6 +173,17 @@ export function PluginSelectionCard({
               activePluginPack={activePluginPack}
               onApplyPack={onApplyPack}
             />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <button
+                type="button"
+                className="border border-border bg-muted/20 px-2 py-1 font-medium text-foreground hover:bg-muted/40"
+                data-testid="plugin-minimal-set"
+                onClick={onResetToMinimal}
+              >
+                {t("session.minimalPluginSet")}
+              </button>
+              <span>{t("session.minimalPluginSetHint")}</span>
+            </div>
             <details
               className="space-y-2"
               data-testid="advanced-plugin-settings"

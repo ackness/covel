@@ -8,6 +8,7 @@ import {
   createPluginTestStore,
   executeToolAndCommit as executeAndCommit,
   commitToolResults,
+  makeRandom,
 } from "@covel/plugin-test-utils";
 /**
  * inventory plugin tests.
@@ -31,7 +32,7 @@ import path from "node:path";
 import {
   discoverPlugins,
   loadPluginDefinition,
-  loadPluginUi,
+  loadPluginUiSpecs,
   loadRuntime,
 } from "@covel/plugin-loader";
 
@@ -50,6 +51,7 @@ describe("update-inventory", () => {
     turnId: "turn-1",
     pluginId: "inventory",
     runtimeId: "inventory/ledger",
+    random: makeRandom(),
   };
   let mockStore;
   let updateInventoryTool;
@@ -432,7 +434,11 @@ describe("inventory plugin manifest", () => {
     const definition = await loadPluginDefinition(discovery);
     const manifests = definition.manifests;
     packageManifest = definition.packageManifest.manifest;
-    loadedUi = await loadPluginUi(discovery, undefined, definition);
+    loadedUi = await loadPluginUiSpecs(
+      discovery.rootPath,
+      discovery.id,
+      definition.packageManifest.manifest.ui,
+    );
     manifest = manifests.find(
       (entry) => entry.manifest.name === "inventory/ledger",
     ).manifest;
@@ -505,11 +511,12 @@ describe("inventory plugin manifest", () => {
   });
 
   it("loads UI spec JSON with panel metadata", () => {
-    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
-    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("inventory");
-    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("backpack");
-    expect(loadedUi.uiSpecs?.message).toHaveLength(1);
-    expect(loadedUi.uiSpecs?.message?.[0].id).toBe("inventory-message");
+    expect(loadedUi.diagnostics).toEqual([]);
+    expect(loadedUi.slots.right).toHaveLength(1);
+    expect(loadedUi.slots.right?.[0].id).toBe("inventory");
+    expect(loadedUi.slots.right?.[0].icon).toBe("backpack");
+    expect(loadedUi.slots.message).toHaveLength(1);
+    expect(loadedUi.slots.message?.[0].id).toBe("inventory-message");
   });
 });
 
@@ -601,6 +608,7 @@ describe("inventory from WorldIR", () => {
       turnId: "turn-1",
       pluginId: "inventory",
       runtimeId: "inventory/ledger",
+      random: makeRandom(),
       store: {
         listPluginData: async () => [],
         getPluginData: async () => null,
@@ -650,6 +658,7 @@ describe("inventory from WorldIR", () => {
       turnId: "turn-1",
       pluginId: "inventory",
       runtimeId: "inventory/ledger",
+      random: makeRandom(),
       store: {
         listPluginData: async () => [],
         getPluginData: async () => null,

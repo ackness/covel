@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { EmbedFn } from "@covel/memory";
+import { EmbeddingModelChangedError, type EmbedFn } from "@covel/memory";
 import type { GatewayOptions, ResolvedSlotConfig } from "@covel/ai-provider";
 import type {
   DataStore,
@@ -53,6 +53,90 @@ function embeddingConfiguration(target: ResolvedSlotConfig) {
   };
 }
 
+/** One vector request: the dimension of the target's vector space. Throws when it fails. */
+async function probeDimension(
+  ai: Pick<AiStack, "gateway">,
+  options: GatewayOptions,
+  target: ResolvedSlotConfig,
+): Promise<number> {
+  const result = await ai.gateway.embed(
+    {
+      presetId: embeddingRole(options),
+      values: ["covel-embed-probe"],
+      expectedModelId: `${target.provider}/${target.model}`,
+      expectedConfiguration: embeddingConfiguration(target),
+    },
+    options,
+  );
+  const vector = result.embeddings[0];
+  if (!Array.isArray(vector) || vector.length === 0)
+    throw new Error("The embedding model returned an empty vector");
+  return vector.length;
+}
+
+/** The embedding model the configuration selects, as a player names it. */
+export interface ConfiguredEmbeddingModel {
+  /** The identity a session's index is locked to (`provider/model#hash`). */
+  readonly modelId: string;
+  readonly provider: string;
+  readonly modelName: string;
+}
+
+/** What the memory index routes need from the model configuration. */
+export interface MemoryIndexControl {
+  /** The model the current request's configuration selects; null when none is configured. */
+  configured(): ConfiguredEmbeddingModel | null;
+  /**
+   * The vector target of that model, its dimension measured with one request.
+   * Null when no embedding model is configured. Throws when the request fails,
+   * so a caller can stop before it discards an index.
+   */
+  configuredTarget(): Promise<VectorTarget | null>;
+}
+
+/** Read the embedding configuration with the request's model settings and keys. */
+export function createMemoryIndexControl(opts: {
+  store: DataStore;
+  ai: Pick<AiStack, "gateway">;
+  apiKeys?: Record<string, string>;
+}): MemoryIndexControl {
+  const { store, ai, apiKeys } = opts;
+  const resolveConfigured = (options: GatewayOptions) => {
+    try {
+      return resolveEmbedding(ai, options);
+    } catch {
+      return null;
+    }
+  };
+  return {
+    configured() {
+      const target = resolveConfigured(embeddingOptions(apiKeys));
+      return target
+        ? {
+            modelId: embeddingModelIdentity(target),
+            provider: target.provider,
+            modelName: target.model,
+          }
+        : null;
+    },
+    async configuredTarget() {
+      if (!supportsVector(store)) return null;
+      const options = embeddingOptions(apiKeys);
+      // Invalid explicit configuration is an error, not a request to clear
+      // the index. Only an actually absent model resolves to null.
+      const target = resolveEmbedding(ai, options);
+      if (!target) return null;
+      const dim = await probeDimension(ai, options, target);
+      return store.ensureVectorModel({
+        provider: target.provider,
+        modelName: target.model,
+        dim,
+        modelId: embeddingModelIdentity(target),
+      });
+    },
+  };
+}
+
 /** Share one lock per session while every probe uses its originating request configuration. */
 export function createEmbeddingLockHelper(opts: {
   store: DataStore;
@@ -82,18 +166,7 @@ export function createEmbeddingLockHelper(opts: {
     let dim = dimCache.get(modelId);
     if (dim === undefined) {
       try {
-        const result = await ai.gateway.embed(
-          {
-            presetId: embeddingRole(options),
-            values: ["covel-embed-probe"],
-            expectedModelId: `${target.provider}/${target.model}`,
-            expectedConfiguration: embeddingConfiguration(target),
-          },
-          options,
-        );
-        const vector = result.embeddings[0];
-        if (!Array.isArray(vector) || vector.length === 0) return null;
-        dim = vector.length;
+        dim = await probeDimension(ai, options, target);
         dimCache.set(modelId, dim);
       } catch (error) {
         console.warn(
@@ -144,8 +217,8 @@ export function createMemoryEmbed(opts: {
     const options = embeddingOptions(opts.apiKeys);
     const target = resolveEmbedding(opts.ai, options);
     if (!target || embeddingModelIdentity(target) !== context.modelId) {
-      throw new Error(
-        "Embedding configuration changed for this session; restore its locked model settings.",
+      throw new EmbeddingModelChangedError(
+        "Embedding configuration changed for this session; restore its locked model settings or rebuild its memory index.",
       );
     }
     const result = await opts.ai.gateway.embed(

@@ -23,6 +23,7 @@ import {
   primaryKey,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { isNotNull, isNull } from "drizzle-orm";
 import { DEFAULT_LOCALE } from "@covel/shared";
 
 // ── Worlds (not session-scoped) ─────────────────────────────────
@@ -435,6 +436,26 @@ export const turnMessages = sqliteTable(
     index("turn_messages_session_id_idx").on(table.sessionId),
     index("turn_messages_turn_id_idx").on(table.sessionId, table.turnId),
     index("turn_messages_write_seq_idx").on(table.sessionId, table.writeSeq),
+    // The history order (`turnMessageOrder`): the full list, its tail
+    // (`listRecentTurnMessages`) and the compacted tags walk the session's
+    // rows in index order instead of sorting all of them.
+    index("turn_messages_session_order_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.order,
+      table.id,
+    ),
+    // The same order over the rows not compacted yet: the prompt history every
+    // turn reads (`listUncompactedTurnMessages`). It stays the size of the
+    // uncompacted tail however long the session grows.
+    index("turn_messages_uncompacted_idx")
+      .on(table.sessionId, table.createdAt, table.order, table.id)
+      .where(isNull(table.compactedAtTurnId)),
+    // The player-message count of `getTurnMessageStats`, answered from the index.
+    index("turn_messages_source_type_idx").on(
+      table.sessionId,
+      table.sourceType,
+    ),
   ],
 );
 
@@ -549,7 +570,19 @@ export const stateSnapshots = sqliteTable(
     payload: text("payload").notNull(), // JSON — SnapshotPayload
     createdAt: text("created_at").notNull(),
   },
-  (table) => [index("state_snapshots_session_id_idx").on(table.sessionId)],
+  (table) => [
+    index("state_snapshots_session_id_idx").on(table.sessionId),
+    // The keyset page and the auto-snapshot prune: `(created_at, id)`.
+    index("state_snapshots_session_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.id,
+    ),
+    // The prune keeps any snapshot a fork names as its parent, in any session.
+    index("state_snapshots_parent_id_idx")
+      .on(table.parentId)
+      .where(isNotNull(table.parentId)),
+  ],
 );
 
 // ── Suspensions ────────────────────────────────────────

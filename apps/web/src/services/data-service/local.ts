@@ -102,7 +102,8 @@ function humanSessionId(): string {
     "wood",
     "glow",
   ];
-  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+  const pick = (arr: string[]) =>
+    arr[Number.parseInt(crypto.randomUUID().slice(0, 8), 16) % arr.length];
   const hex = crypto.randomUUID().slice(0, 8);
   return `${pick(words)}-${pick(nouns)}-${pick(words)}-${hex}`;
 }
@@ -935,14 +936,19 @@ export class LocalDataService implements DataService {
     const browserWorld = current.session.worldId
       ? await vault.getWorld(current.session.worldId)
       : current.world;
-    await vault.applySessionCommit({
-      ...commit,
-      checkpoint: {
-        ...commit.checkpoint,
-        world: browserWorld,
+    await vault.applySessionCommit(
+      {
+        ...commit,
+        checkpoint: {
+          ...commit.checkpoint,
+          world: browserWorld,
+        },
       },
-    });
-    await vault.clearPendingCommit(sessionId, actionId);
+      // The server answers a replayed actionId with the same commit, while the
+      // browser world may have been edited since: recognise the replay by the
+      // server's checkpoint, and clear the pending action in the same write.
+      { digestOf: commit.checkpoint, clearPendingActionId: actionId },
+    );
   }
 
   async saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {

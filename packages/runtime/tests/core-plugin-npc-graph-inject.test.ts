@@ -116,6 +116,7 @@ async function seedNpcGraph(
       turnId: "turn-seed",
       pluginId: "npc-graph",
       runtimeId: "npc-graph/extractor",
+      random: countingRandom(),
       store: createFunctionStoreView(store, {
         sessionId,
         turnId: "turn-seed",
@@ -126,6 +127,12 @@ async function seedNpcGraph(
   );
 
   await createCommitPipeline(store).commitAll(getPendingProposals(result));
+}
+
+/** A different draw each call, so new IDs never collide. */
+function countingRandom() {
+  let next = 0;
+  return { int: (min: number) => min + next++ };
 }
 
 describe("npc-graph core plugin write-read-inject path", () => {
@@ -143,6 +150,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
         turnId: "turn-buffered",
         logicalTurn: 0,
         pendingProposals: pending,
+        random: countingRandom(),
       };
       const scopedContext = {
         ...context,
@@ -230,6 +238,12 @@ describe("npc-graph core plugin write-read-inject path", () => {
         store: scopedContext.store,
         playerMessage: "Alice",
         locale: "en-US",
+        session: { lastPlayerInput: null },
+        recursiveCall: async () => {
+          throw new Error("rag-retriever must not recurse");
+        },
+        recursionDepth: 0,
+        random: { int: (min: number) => min },
         pluginData: {
           list: (namespace: string) =>
             store.listPluginData(sessionId, "npc-graph", namespace),
@@ -281,15 +295,11 @@ describe("npc-graph core plugin write-read-inject path", () => {
       stage: "narrative",
       runtimeType: "agent",
       outputKind: "story",
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "npc-graph/rag-retriever",
-            field: "npcContext",
-            as: "npc-relationships",
-          },
-        ],
+      inputs: {
+        npcRelationships: {
+          from: { runtime: "npc-graph/rag-retriever" },
+          select: "/npcContext",
+        },
       },
     });
     const llm = new CapturingLLM();
@@ -333,7 +343,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
     expect(retrieverOutput.npcContext).toContain("COMPETES_WITH");
 
     expect(llm.systemPrompts).toHaveLength(1);
-    expect(llm.systemPrompts[0]).toContain("<npc-relationships>");
+    expect(llm.systemPrompts[0]).toContain('"npcRelationships"');
     expect(llm.systemPrompts[0]).toContain("暗中阻挠青萍宗调查灵脉异常");
   });
 });

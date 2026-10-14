@@ -50,6 +50,23 @@ export async function runValidateManifest(
       if (discovery.layoutWarnings?.length)
         throw new Error(discovery.layoutWarnings.join("\n"));
       const definition = await loadPluginDefinition(discovery);
+      // Loading leaves such a runtime out so the game goes on; the author
+      // still has to fix it.
+      if (definition.disabledRuntimes.length)
+        throw new Error(
+          definition.disabledRuntimes.map(({ message }) => message).join("\n"),
+        );
+      // Loading leaves an unknown field out so the package keeps working;
+      // the author still has to remove or rename it.
+      if (definition.ignoredFields.length)
+        throw new Error(
+          definition.ignoredFields
+            .map(
+              ({ message }) =>
+                `${message}; remove it or correct its name using the current plugin manifest reference`,
+            )
+            .join("\n"),
+        );
       validatePluginFiles(
         definition.packageManifest,
         definition.manifests,

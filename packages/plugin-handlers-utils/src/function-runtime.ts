@@ -1,10 +1,22 @@
 /** Stable author capabilities; provider-specific services are host extensions. */
-import type { PluginInputSlot, PluginServiceClient } from "./plugin-api.js";
+import type {
+  PluginHttp,
+  PluginInputSlot,
+  PluginServiceClient,
+  PluginServiceGateway,
+} from "./plugin-api.js";
 import type { ExtensionWorldModel } from "./extension-points.js";
 import type { HandlerResult, JobStatusEffect } from "./handler-result.js";
 import type { PluginToolResult } from "./tool-result.js";
 import type { PluginMessages } from "./messages.js";
-import type { PluginDataReader } from "./types.js";
+import type { JsonValue, PluginDataReader } from "./types.js";
+import type {
+  PluginAssetProgress,
+  PluginImages,
+  PluginMedia,
+  PluginMusic,
+  PluginSpeech,
+} from "./media.js";
 
 export interface FunctionStoreView {
   /** Read a single plugin_data row scoped to the calling plugin. */
@@ -25,8 +37,8 @@ export interface FunctionStoreView {
       readonly values: unknown;
     }[]
   >;
-  /** Read the canonical session record. */
-  getSession(): Promise<unknown>;
+  /** Read the current session's clock, language and setup progress. */
+  getSession(): Promise<PluginSessionView>;
   /**
    * List recent turn messages for the session (read-only timeline access).
    * Committed messages only: the running turn is not among them. Read it from
@@ -66,6 +78,125 @@ export interface PluginTurnMessage {
   readonly createdAt: string;
   /** True when prompts show this message through a compaction summary. */
   readonly compacted: boolean;
+}
+
+/**
+ * The current session as plugin code reads it: a read-only projection of the
+ * kernel's session record, not the record itself.
+ */
+export interface PluginSessionView {
+  /** `setup` until every setup runtime is resolved, then `playing`. */
+  readonly phase: "setup" | "playing";
+  /** Committed main-loop player turns; setup and the opening do not count. */
+  readonly completedPlayerTurns: number;
+  /** The session's content locale, fixed when the session was created. */
+  readonly locale: string;
+  /** Setup progress of each setup runtime, keyed by runtime ID. */
+  readonly setupRuntimes: Readonly<Record<string, PluginSetupRuntimeState>>;
+}
+
+/** Where one setup runtime stands in the current session. */
+export type PluginSetupRuntimeState =
+  | {
+      readonly state: "pending";
+      /** Error of the latest failed attempt, when there was one. */
+      readonly lastError?: string;
+    }
+  | {
+      readonly state: "done";
+      /** `waived` when the player skipped the step after it failed. */
+      readonly resolution: "completed" | "waived";
+      readonly warning?: string;
+    }
+  | {
+      readonly state: "blocked";
+      readonly reason: string;
+      readonly lastError?: string;
+    };
+
+/** Why the current execution runs. */
+export type PluginExecutionOrigin =
+  "player" | "continuation" | "manual" | "background" | "recursive" | "resume";
+
+/** Read-only identity of the execution a handler runs in. */
+export interface PluginExecutionInfo {
+  readonly origin: PluginExecutionOrigin;
+  /**
+   * Set when this execution retries runtimes of an earlier committed turn:
+   * the ID of that turn. Key rolls and reveals by it so a retry reuses them
+   * instead of drawing again.
+   */
+  readonly sourceTurnId?: string;
+}
+
+/** How the scheduler activated this runtime this time. */
+export interface PluginRuntimeActivation {
+  readonly source: "stage" | "event" | "manual";
+  readonly detached: boolean;
+  /** `null` when the caller gave no payload. */
+  readonly payload: JsonValue;
+}
+
+/** The player's latest accepted form submission. */
+export interface PluginPlayerInputSubmission {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly formId: string;
+  readonly values: Readonly<Record<string, JsonValue>>;
+  readonly createdAt: string;
+}
+
+/**
+ * The `turn-digest@1` kernel input: frozen facts of the source turn, the same
+ * value for a foreground runtime and a detached job.
+ */
+export interface PluginTurnDigest {
+  readonly turnId: string;
+  readonly playerMessage: string;
+  readonly lastPlayerInput: PluginPlayerInputSubmission | null;
+  /** Story text of the turn's successful story runtimes, joined by blank lines. */
+  readonly narrativeText: string;
+  /** One short line per successful, visible tool call. */
+  readonly toolCallSummaries: readonly string[];
+  readonly runtimeResults: readonly {
+    readonly runtimeId: string;
+    readonly status: "success" | "failed" | "skipped" | "suspended";
+  }[];
+  readonly locale?: string;
+}
+
+/** What `ctx.recursiveCall` may change; everything else comes from the parent. */
+export interface PluginRecursiveCallDelta {
+  /** Player message the nested execution sees. Defaults to the parent's. */
+  readonly playerMessage?: string;
+  /** Run one manual runtime of this plugin, with an optional payload. */
+  readonly manualTrigger?: {
+    readonly runtimeId: string;
+    readonly payload?: Readonly<Record<string, unknown>>;
+  };
+}
+
+export type PluginRuntimeStatus =
+  "pending" | "running" | "success" | "failed" | "skipped" | "suspended";
+
+/** One runtime's result inside a nested execution. */
+export interface PluginNestedRuntimeResult {
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly status: PluginRuntimeStatus;
+  readonly output: Readonly<Record<string, unknown>> | null;
+  readonly error?: string;
+}
+
+/** What a nested execution returns; the parent's commit persists its effects. */
+export interface PluginNestedTurnResult {
+  readonly turnId: string;
+  readonly runtimeResults: readonly PluginNestedRuntimeResult[];
+  /** Results of executions nested deeper still, flattened. */
+  readonly nestedRuntimeResults?: readonly PluginNestedRuntimeResult[];
+  /** Why the nested execution stopped before any runtime ran, when it did. */
+  readonly abortReason?: string;
 }
 
 export interface PluginDataWriter extends PluginDataReader {
@@ -117,7 +248,11 @@ export interface ProgressReporter {
   report(effect: ProgressEffect): Promise<void>;
 }
 
-/** Scoped capabilities shared by function handlers and agent guards. */
+/**
+ * Everything a host passes to function handlers and agent guards. A field
+ * marked optional is present only when the host has it for this run (a
+ * gateway when a model is configured, `inputs` when the runtime binds any).
+ */
 export interface PluginFunctionContext {
   readonly sessionId: string;
   readonly turnId: string;
@@ -133,6 +268,10 @@ export interface PluginFunctionContext {
   readonly locale?: string;
   /** This plugin's translations, read by `translate` and `labelText`. */
   readonly messages?: PluginMessages;
+  /** The player's latest accepted form submission, or `null`. */
+  readonly session: {
+    readonly lastPlayerInput: PluginPlayerInputSubmission | null;
+  };
   readonly store: FunctionStoreView;
   readonly world?: ExtensionWorldModel;
   readonly services?: PluginServiceClient;
@@ -151,12 +290,35 @@ export interface PluginFunctionContext {
   };
   readonly inputs?: Readonly<Record<string, PluginInputSlot>>;
   readonly exports?: Readonly<Record<string, PluginInputSlot>>;
+  /** How the scheduler activated this runtime; absent for a guard. */
+  readonly activation?: PluginRuntimeActivation;
+  /** Identity of the running execution; absent for a guard. */
+  readonly execution?: PluginExecutionInfo;
+  /**
+   * Run one manual runtime of this plugin inside the current execution. Its
+   * effects commit with the parent's.
+   */
+  readonly recursiveCall: (
+    delta: PluginRecursiveCallDelta,
+    opts?: { readonly reason?: string },
+  ) => Promise<PluginNestedTurnResult>;
+  /** 0 for a top-level execution, one more for each `recursiveCall` level. */
+  readonly recursionDepth: number;
   readonly userSettings?: Readonly<Record<string, unknown>>;
   readonly pluginData?: PluginDataWriter;
   readonly logger?: PluginLogger;
   readonly progress?: ProgressReporter;
-  /** Dice and other game rolls; a session host always supplies it. */
-  readonly random?: PluginRandom;
+  /** Model calls through the session's slots; present when a model is configured. */
+  readonly gateway?: PluginServiceGateway;
+  /** The host's outbound HTTP checks and retrying fetch. */
+  readonly utils?: PluginHttp;
+  readonly media?: PluginMedia;
+  readonly images?: PluginImages;
+  readonly speech?: PluginSpeech;
+  readonly music?: PluginMusic;
+  readonly assetProgress?: (progress: PluginAssetProgress) => Promise<void>;
+  /** Dice and other game rolls. */
+  readonly random: PluginRandom;
   readonly signal?: AbortSignal;
 }
 

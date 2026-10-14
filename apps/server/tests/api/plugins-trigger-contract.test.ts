@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   apiListResponseSchema,
   pluginSummarySchema,
-  runtimeManifestAuthoringSchema,
+  runtimeAuthoringManifestSchema,
 } from "@covel/shared";
 import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 
@@ -11,12 +11,20 @@ describe("plugin trigger discovery contract", () => {
     "preserves an authored %s trigger with an empty optional topic",
     (type) => {
       const description = "Trigger contract fixture";
-      const authored = runtimeManifestAuthoringSchema.parse({
-        name: "trigger-fixture",
+      const name = "trigger-fixture";
+      const { schedule } = runtimeAuthoringManifestSchema.parse({
+        type: "agent",
         description,
-        trigger: { type, topic: "" },
-        ...(type === "auto" ? { stage: "pre-turn" } : {}),
+        schedule: {
+          trigger: { type, topic: "" },
+          ...(type === "auto" ? { stage: "pre-turn" } : {}),
+        },
       });
+      const authored = {
+        name,
+        trigger: schedule?.trigger,
+        stage: schedule?.stage,
+      };
       const summary = buildPluginSummary({
         id: authored.name,
         source: "builtin",

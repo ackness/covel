@@ -59,6 +59,8 @@ interface UseSessionSubscriptionOptions {
   activeTurnIdRef: MutableRef<string | null>;
   deltaBufferRef: DeltaBufferRef;
   deltaRafRef: DeltaRafRef;
+  /** `SessionState.initialEventCursor`: where the first stream starts. */
+  initialEventCursor?: string | null;
 }
 
 /**
@@ -464,6 +466,7 @@ export function useSessionSubscription({
   activeTurnIdRef,
   deltaBufferRef,
   deltaRafRef,
+  initialEventCursor,
 }: UseSessionSubscriptionOptions): void {
   const sessionGeneration = sessionGenerationRef.current;
   const subscriptionRef = useRef<SessionSubscription | null>(null);
@@ -690,6 +693,15 @@ export function useSessionSubscription({
     const sub = createSessionSubscription(sessionId, {
       topics: ["plugin", "system", "game", "runtime", "job", "state"],
       onStateChange: handleConnectionStateChange,
+      // Events published between the restore's view read and this stream's
+      // registration reached neither; read everything again, as on a reset.
+      onMissedEvents: () => {
+        if (!isCurrent()) return;
+        void recoverUiSlots(sessionId).catch(
+          ignoreError("refresh UI slots after a late first stream"),
+        );
+        startRecovery("full");
+      },
       recoverMissingSession:
         storageMode === "local"
           ? async () => {
@@ -726,4 +738,11 @@ export function useSessionSubscription({
     deltaBufferRef,
     deltaRafRef,
   ]);
+
+  // Declared after the effect that creates the stream, so a stream created in
+  // the same commit receives the cursor too.
+  useEffect(() => {
+    if (initialEventCursor)
+      subscriptionRef.current?.alignWithSnapshot(initialEventCursor);
+  }, [initialEventCursor, sessionId, sessionGeneration, storageMode]);
 }

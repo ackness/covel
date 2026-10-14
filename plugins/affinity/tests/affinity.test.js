@@ -33,7 +33,7 @@ import path from "node:path";
 import {
   discoverPlugins,
   loadPluginDefinition,
-  loadPluginUi,
+  loadPluginUiSpecs,
   loadRuntime,
   resolveRuntimePrompt,
 } from "@covel/plugin-loader";
@@ -46,7 +46,7 @@ import {
   getTier,
   tierLabel,
 } from "../tier-metadata.js";
-import { loadPluginMessages } from "@covel/plugin-test-utils";
+import { loadPluginMessages, makeRandom } from "@covel/plugin-test-utils";
 
 // What the host gives a tool as `context.messages` for a Chinese session.
 const messages = await loadPluginMessages(
@@ -114,6 +114,7 @@ describe("update-affinity", () => {
     turnId: "turn-1",
     pluginId: "affinity",
     runtimeId: "affinity",
+    random: makeRandom(),
     locale: "zh-CN",
     messages,
     logicalTurn: 3,
@@ -542,7 +543,11 @@ describe("affinity plugin manifest", () => {
     const definition = await loadPluginDefinition(discovery);
     const manifests = definition.manifests;
     packageManifest = definition.packageManifest.manifest;
-    loadedUi = await loadPluginUi(discovery, undefined, definition);
+    loadedUi = await loadPluginUiSpecs(
+      discovery.rootPath,
+      discovery.id,
+      definition.packageManifest.manifest.ui,
+    );
     manifest = manifests[0].manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
@@ -611,11 +616,12 @@ describe("affinity plugin manifest", () => {
   });
 
   it("loads UI spec JSON with panel metadata", () => {
-    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
-    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("affinity");
-    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("heart");
-    expect(loadedUi.uiSpecs?.message).toHaveLength(1);
-    expect(loadedUi.uiSpecs?.message?.[0].id).toBe("affinity-toast");
+    expect(loadedUi.diagnostics).toEqual([]);
+    expect(loadedUi.slots.right).toHaveLength(1);
+    expect(loadedUi.slots.right?.[0].id).toBe("affinity");
+    expect(loadedUi.slots.right?.[0].icon).toBe("heart");
+    expect(loadedUi.slots.message).toHaveLength(1);
+    expect(loadedUi.slots.message?.[0].id).toBe("affinity-toast");
   });
 
   it("loads PLUGIN.md body as the LLM prompt template", async () => {

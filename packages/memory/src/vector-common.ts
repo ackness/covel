@@ -22,6 +22,28 @@ export type EmbedFn = (
 ) => Promise<readonly Float32Array[]>;
 
 /**
+ * Thrown by an {@link EmbedFn} when the embedding model configured now is not
+ * the one the session's index was built with. Nothing can be indexed or
+ * searched by vector until the configuration is restored or the index is
+ * rebuilt; memory search falls back to keywords meanwhile.
+ */
+export class EmbeddingModelChangedError extends Error {
+  readonly code = "embedding_model_changed";
+  constructor(message = "The embedding model changed for this session") {
+    super(message);
+    this.name = "EmbeddingModelChangedError";
+  }
+}
+
+/** True for {@link EmbeddingModelChangedError}, also across module copies. */
+export function isEmbeddingModelChanged(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error as { code?: unknown }).code === "embedding_model_changed"
+  );
+}
+
+/**
  * Reserved, framework-internal "plugin id" used to partition memory's own
  * vectors inside the shared per-session vector table.
  *

@@ -23,7 +23,7 @@ import {
 } from "../hooks/wire-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
-import { agentInputSlots } from "./runtime-input-slots.js";
+import { freezeInputSlots } from "./runtime-input-slots.js";
 import { applyHistoryWindow, filterRuntimeHistory } from "./message-filter.js";
 import { createAgentSchemaGate } from "./runtime-output-validator.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
@@ -246,11 +246,7 @@ export async function executeAgentRuntime({
   // Turn-level, once per runtime: lets plugins rewrite the assembled system
   // prompt and/or projected history before the loop. Distinct from the
   // per-call PreLLMCall — this shapes the assembled context a single time.
-  const resolvedInputSlots = agentInputSlots(
-    manifest,
-    completedResults,
-    inputs,
-  );
+  const resolvedInputSlots = freezeInputSlots(inputs ?? {});
   const shapedContext = await runPostContextAssemblyHook(
     {
       pipeline: hookPipeline,

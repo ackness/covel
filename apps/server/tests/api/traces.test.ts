@@ -104,9 +104,6 @@ function makeEntry(
         builtin: ["plugin-data-get"],
         plugin: ["save-image"],
       },
-      ui: {
-        right: ["./ui/panel.json"],
-      },
     },
     promptTemplate: "",
     rawFrontmatter: {},

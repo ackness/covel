@@ -14,7 +14,6 @@ export type {
 // ── Context Builder ─────────────────────────────────────────────
 export {
   interpolateTemplate,
-  buildInjectBlocks,
   buildContext,
   resolveFrameworkCompletion,
 } from "./context-builder.js";

@@ -7,7 +7,7 @@ import {
 } from "../../lib/check-rules.js";
 
 /**
- * @typedef {import("@covel/plugin-handlers-utils").PluginFunctionContext & { execution?: { sourceTurnId?: string } }} RecorderContext
+ * @typedef {import("@covel/plugin-handlers-utils").PluginFunctionContext} RecorderContext
  */
 
 const CHECKS_NAMESPACE = "checks";

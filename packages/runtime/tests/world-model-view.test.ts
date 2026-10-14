@@ -416,15 +416,12 @@ describe("execution World Model", () => {
       trigger: { type: "auto" },
       ...(index > 0
         ? {
-            input: {
-              inject: [
-                {
-                  kind: "runtime" as const,
-                  from: `provider/${index === 1 ? "schema" : "character"}`,
-                  field: "ready",
-                  as: "upstream",
+            inputs: {
+              upstream: {
+                from: {
+                  runtime: `provider/${index === 1 ? "schema" : "character"}`,
                 },
-              ],
+              },
             },
           }
         : {}),

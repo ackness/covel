@@ -20,7 +20,7 @@ The settings search shows keyboard focus. Configuration sources use segmented bu
 
 ## AI Create World
 
-On the world selection page, click "AI Create World". Write a "Core Direction", choose "Story Adventure" or "Character Dialogue" as the player experience, and tick what to generate together: "Main Cast", "World Lorebook", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
+On the world selection page, click "AI Create World". Write a "Core Direction", under "Player Experience" choose the gameplay pack the world is made for (the choices are the app's gameplay packs, such as "Traditional Story", "Dialogue Mode" and "Low Cost"), and tick what to generate together: "Main Cast", "World Lorebook", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
 
 ![World package builder](/world-package-builder.webp)
 
@@ -34,7 +34,8 @@ When the world dimension editor has unsaved changes, clicking "Cancel" asks whet
 
 After you choose a world and click "Enter", you reach the session-prep screen ("Session Setup"). Here you decide which plugins are on for this game.
 
-- At the top, you can choose a gameplay pack, such as "Traditional Story", "Dialogue Mode" or "Low Cost". Choosing one turns on all the plugins it includes.
+- At the top, you can choose a gameplay pack, such as "Traditional Story", "Dialogue Mode", "Low Cost" or "Narrative Only". Choosing one turns on all the plugins it includes; some packs also turn plugins off.
+- "Back to the minimal set" keeps only the narrative plugins, the plugin that holds the world's dimensions, and the plugins the world requires, and turns everything else off.
 - Below is the plugin list. You can tick plugins one by one. The top shows "x/y plugins selected".
 - When a world has its own defaults or recommendations, the list marks them as "World default" or "Recommended by world".
 - "Customize plugins and advanced settings" has more detailed options.

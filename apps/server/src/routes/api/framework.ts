@@ -30,7 +30,13 @@ frameworkRoutes.get("/capabilities", (c) => {
 frameworkRoutes.get("/authoring", async (c) => {
   const registry = c.get("pluginRegistry");
   if (!registry)
-    return c.json({ files: [], destinations: [], contracts: [], plugins: [] });
+    return c.json({
+      files: [],
+      destinations: [],
+      contracts: [],
+      plugins: [],
+      packs: [],
+    });
   return c.json(
     await describeAuthoringSurface(registry, {
       locale: normalizeLocale(c.req.query("locale"), DEFAULT_LOCALE),

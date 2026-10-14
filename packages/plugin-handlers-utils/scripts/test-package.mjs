@@ -70,7 +70,7 @@ for (const copy of [{ ...result }, structuredClone(result), JSON.parse(JSON.stri
   await writeFile(
     path.join(temp, "consumer.mts"),
     `
-import { makeProposal, optionalNumber, withPendingProposals } from "@covel/plugin-handlers-utils";
+import { makeProposal, optionalNumber, shortId, withPendingProposals } from "@covel/plugin-handlers-utils";
 import type { ImageGenerationHandlerContext } from "@covel/plugin-handlers-utils/image-generation";
 import type { PluginAPI, PluginEntryFactory, PluginFunctionHandler, PluginAgentGuard } from "@covel/plugin-handlers-utils";
 const p = makeProposal({pluginId:"sample",turnId:"t",sessionId:"s"},"now","plugin.data",{namespace:"notes",key:"current",value:1});
@@ -85,8 +85,21 @@ const handler: PluginFunctionHandler = async (context) => {
   await context.pluginData?.set("notes", "current", previous?.value ?? "saved");
   return { outcome: "success", value: { saved: true } };
 };
-const guard: PluginAgentGuard = async (context) => ({ skip: !(await context.store.getSession()) });
-const ctx: ImageGenerationHandlerContext = {turnId:"t"};
+const guard: PluginAgentGuard = async (context) => {
+  const session = await context.store.getSession();
+  const waived = Object.values(session.setupRuntimes).some((state) => state.state === "done" && state.resolution === "waived");
+  return { skip: context.recursionDepth > 0 || session.phase !== "playing" || waived };
+};
+const retried: PluginFunctionHandler = async (context) => {
+  const sourceTurnId: string = context.execution?.sourceTurnId ?? context.turnId;
+  const die: number = context.random.int(1, 21);
+  const image = await context.images?.generate({ prompt: "a quiet garden" });
+  const ref: string | undefined = image?.refs[0]?.id;
+  return { outcome: "success", value: { sourceTurnId, die, ref: ref ?? null } };
+};
+const ctx: ImageGenerationHandlerContext = {turnId:"t", random: {int: (min) => min}};
+// @ts-expect-error IDs draw their random part from the host's ctx.random.
+shortId("npc", "Lin", "s");
 declare const api: PluginAPI;
 api.provideExtension("prompt.segment@1", "note", {handler: (input) => {
   const t: string = input.turnId;
@@ -141,7 +154,7 @@ const entry: PluginEntryFactory = (covel) => {
 api.provideExtension("unknown.point@1", "bad", { handler: () => null });
 // @ts-expect-error Wrong handler output for a known point is rejected.
 api.provideExtension("prompt.segment@1", "bad", { handler: () => 1 });
-void [kind,value,ctx,entry,handler,guard,withPendingProposals("saved", [p]),optionalNumber("1")];
+void [kind,value,ctx,entry,handler,guard,retried,withPendingProposals("saved", [p]),optionalNumber("1")];
 `,
   );
   await writeFile(

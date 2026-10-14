@@ -23,7 +23,7 @@ import path from "node:path";
 import {
   discoverPlugins,
   loadPluginDefinition,
-  loadPluginUi,
+  loadPluginUiSpecs,
   loadRuntime,
   resolveRuntimePrompt,
 } from "@covel/plugin-loader";
@@ -314,7 +314,11 @@ describe("codex plugin manifest", () => {
     const definition = await loadPluginDefinition(discovery);
     const manifests = definition.manifests;
     packageManifest = definition.packageManifest.manifest;
-    loadedUi = await loadPluginUi(discovery, undefined, definition);
+    loadedUi = await loadPluginUiSpecs(
+      discovery.rootPath,
+      discovery.id,
+      definition.packageManifest.manifest.ui,
+    );
     manifest = manifests[0].manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
@@ -406,9 +410,9 @@ describe("codex plugin manifest", () => {
   });
 
   it("should load UI spec JSON with panel metadata", () => {
-    expect(loadedUi.uiSpecs).toBeDefined();
-    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
-    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("codex");
-    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("book-open");
+    expect(loadedUi.diagnostics).toEqual([]);
+    expect(loadedUi.slots.right).toHaveLength(1);
+    expect(loadedUi.slots.right?.[0].id).toBe("codex");
+    expect(loadedUi.slots.right?.[0].icon).toBe("book-open");
   });
 });
