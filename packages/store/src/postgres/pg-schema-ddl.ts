@@ -7,7 +7,8 @@
  *
  * Only the things Drizzle cannot model stay hand-written below, because they are
  * operational, not a second copy of the schema: the `vector_models` table-name
- * backfill function + trigger.
+ * backfill function + trigger, and the write-order triggers
+ * (`common/write-order-ddl.ts`).
  *
  * Media tables are emitted into their own constant ({@link CREATE_MEDIA_TABLES_SQL})
  * because the MediaStore boots them standalone (`media-store/pg.ts`).
@@ -17,6 +18,7 @@
  */
 
 import { buildCreateTablesSql, tableNameOf } from "../common/ddl-codegen.js";
+import { pgWriteOrderTriggersSql } from "../common/write-order-ddl.js";
 import {
   DELETE_RETIRED_PLUGIN_DATA_SQL,
   RETIRED_TABLE_NAMES,
@@ -91,6 +93,7 @@ const VECTOR_MODELS_TRIGGER_SQL = `
 export const CREATE_TABLES_SQL = [
   CREATE_CORE_TABLES_SQL,
   VECTOR_MODELS_TRIGGER_SQL,
+  pgWriteOrderTriggersSql(),
   CREATE_MEDIA_TABLES_SQL,
   // Checked first so routine boots do not log a "does not exist" notice.
   ...RETIRED_TABLE_NAMES.map(

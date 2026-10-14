@@ -15,6 +15,7 @@
  *   6. deleteVectors removes matching rows, leaves others intact
  *   7. Embedding length mismatch throws
  *   8. session without a locked model returns empty results
+ *   9. getVectorPayloads reads stored payloads by key within one namespace
  *
  * Note: The old "multiple dimensions coexist" test is removed because
  * Phase 1 locks each session to a single embedding model, so mixing
@@ -199,6 +200,45 @@ export function runVectorStoreContractTests(
       expect(
         results.map((row) => `${row.namespace}/${row.key}`).sort(),
       ).toEqual(["archive/kept", "other/removed"]);
+    });
+
+    it("reads stored payloads by key within one session namespace", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      await setupSessionWithModel(store, "s2", 2);
+      const embedding = new Float32Array([1, 0]);
+      for (const [sessionId, namespace, key, payload] of [
+        ["s1", "archive", "a", "payload-a"],
+        ["s1", "archive", "b", undefined],
+        ["s1", "other", "c", "other-namespace"],
+        ["s2", "archive", "c", "other-session"],
+      ] as const) {
+        await store.upsertVector({
+          sessionId,
+          pluginId: "owner",
+          namespace,
+          key,
+          embedding,
+          payload,
+        });
+      }
+      const payloads = await store.getVectorPayloads({
+        sessionId: "s1",
+        pluginId: "owner",
+        namespace: "archive",
+        keys: ["a", "b", "c", "missing", "a"],
+      });
+      expect([...payloads.entries()].sort()).toEqual([
+        ["a", "payload-a"],
+        ["b", null],
+      ]);
+      expect(
+        await store.getVectorPayloads({
+          sessionId: "s1",
+          pluginId: "owner",
+          namespace: "archive",
+          keys: [],
+        }),
+      ).toEqual(new Map());
     });
 
     it("isolates index progress, compares revisions atomically and rejects stale incarnations", async () => {

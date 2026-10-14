@@ -35,5 +35,7 @@ export function createMemoryState(): MemoryState {
     setupAttempts: new Map(),
     jobStatus: new Map(),
     runtimeExports: new Map(),
+    recordChanges: new Map(),
+    sessionWriteCounters: new Map(),
   };
 }
