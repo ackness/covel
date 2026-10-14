@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
-  loadPluginUi,
+  loadPluginDefinition,
+  loadPluginUiSpecs,
   loadPluginManifest,
   parsePluginMd,
 } from "@covel/plugin-loader";
@@ -50,14 +51,19 @@ describe("living-world-rules manifest and UI loading", () => {
 
     expect(await loadPluginManifest(discovery)).toHaveLength(0);
 
-    const ui = await loadPluginUi(discovery);
-    expect(ui.uiSpecs?.right).toHaveLength(1);
+    const ui = await loadPluginUiSpecs(
+      discovery.rootPath,
+      discovery.id,
+      (await loadPluginDefinition(discovery)).packageManifest.manifest.ui,
+    );
+    expect(ui.diagnostics).toEqual([]);
+    expect(ui.slots.right).toHaveLength(1);
     // Read-only display panel (no editing): relies on emptyState rather than
     // alwaysRender, so a world without declared rules shows the empty hint.
-    expect(ui.uiSpecs?.right?.[0]).toMatchObject({
+    expect(ui.slots.right?.[0]).toMatchObject({
       id: "living-world-rules",
       dataSource: { namespace: "rules" },
     });
-    expect(ui.uiSpecs?.right?.[0]?.emptyState).toBeDefined();
+    expect(ui.slots.right?.[0]?.emptyState).toBeDefined();
   });
 });

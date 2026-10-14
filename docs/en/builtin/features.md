@@ -34,7 +34,8 @@ When the world dimension editor has unsaved changes, clicking "Cancel" asks whet
 
 After you choose a world and click "Enter", you reach the session-prep screen ("Session Setup"). Here you decide which plugins are on for this game.
 
-- At the top, you can choose a gameplay pack, such as "Traditional Story", "Dialogue Mode" or "Low Cost". Choosing one turns on all the plugins it includes.
+- At the top, you can choose a gameplay pack, such as "Traditional Story", "Dialogue Mode", "Low Cost" or "Narrative Only". Choosing one turns on all the plugins it includes; some packs also turn plugins off.
+- "Back to the minimal set" keeps only the narrative plugins, the plugin that holds the world's dimensions, and the plugins the world requires, and turns everything else off.
 - Below is the plugin list. You can tick plugins one by one. The top shows "x/y plugins selected".
 - When a world has its own defaults or recommendations, the list marks them as "World default" or "Recommended by world".
 - "Customize plugins and advanced settings" has more detailed options.

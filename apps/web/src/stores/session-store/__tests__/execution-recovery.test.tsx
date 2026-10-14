@@ -559,3 +559,36 @@ it("does not overlap a pending recovery read when visibility changes", async () 
   await act(async () => vi.advanceTimersByTimeAsync(3000));
   expect(api.getSessionExecution).toHaveBeenCalledTimes(2);
 });
+
+it.each(["failed", "interrupted"] as const)(
+  "keeps unmatched %s prose as an unsaved local copy and drains its stream",
+  async (state) => {
+    api.getSessionExecution.mockResolvedValue({ state, turnId: "t" });
+    api.getSessionView.mockResolvedValue({
+      ...snapshot("running"),
+      execution: { state, turnId: "t" },
+    });
+    const { result, delta, flush, recover, frames } = ownedRecovery();
+    act(() => {
+      delta("t", "Already read");
+      flush();
+      delta("t", " queued");
+      recover();
+    });
+    await waitFor(() => expect(result.current.state.executing).toBe(false));
+    expect(result.current.state.unsavedNarratives).toEqual([
+      expect.objectContaining({ turnId: "t", content: "Already read queued" }),
+    ]);
+    expect(result.current.state.messages).toEqual([]);
+    expect(getStreamingText("stream_t_story/main")).toBeUndefined();
+    expect(result.current.refs.deltaBufferRef.current.size).toBe(0);
+    expect(result.current.refs.deltaRafRef.current).toBeNull();
+    act(() => {
+      for (const cb of frames.values()) cb(1);
+    });
+    expect(result.current.state.messages).toEqual([]);
+    expect(workspace.run).not.toHaveBeenCalled();
+    act(() => result.current.dispatch({ type: "RESET_SESSION" }));
+    expect(result.current.state.unsavedNarratives).toEqual([]);
+  },
+);
