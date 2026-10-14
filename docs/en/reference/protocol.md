@@ -736,7 +736,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                      | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                    |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts` (`character.upsert` proposal commit) | Character snapshot event                                                                                                                                   |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                                                                                                        |
-| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit |
+| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit                                                 |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                                                                                             |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                                                                                           |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                                                                                                        |
@@ -1063,7 +1063,7 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState (deep merge) + statePatches
+state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps

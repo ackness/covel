@@ -306,7 +306,7 @@ it("coalesces committed state notices during a snapshot read without replaying t
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
-    ...current.gameState,
+    tables: current.gameState,
     characters: current.characters,
   });
   expect(options.stateRef.current.statePatches).toEqual([]);
@@ -342,8 +342,7 @@ it("refreshes once when a state commit follows snapshot publication but other re
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
-    stats: { hp: 9, mp: 3 },
-    weather: { sky: "clear" },
+    tables: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
     characters: [],
   });
   expect(options.stateRef.current.statePatches).toEqual([]);
@@ -407,7 +406,7 @@ it("does not duplicate action-stream patch history when the subscription observe
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
-    ...current.gameState,
+    tables: current.gameState,
     characters: [],
   });
   expect(options.stateRef.current.statePatches).toHaveLength(2);
@@ -485,7 +484,7 @@ it("reads only the snapshot for committed state and shows what a turn changed", 
   expectSnapshotReadsOnly(2);
   const state = options.stateRef.current;
   expect(state.gameState).toMatchObject({
-    stats: { hp: 9 },
+    tables: { stats: { hp: 9 } },
     characters: committed.characters,
     dimensions: committed.dimensions,
   });
@@ -629,7 +628,7 @@ it("backs off failed recovery reads, stops, and reads again on the next commit",
   expect(api.getSessionView).toHaveBeenCalledTimes(reads + 1);
   expect(options.stateRef.current.executionError).toBeNull();
   expect(options.stateRef.current.gameState).toMatchObject({
-    stats: { hp: 2 },
+    tables: { stats: { hp: 2 } },
   });
   unmount();
 });

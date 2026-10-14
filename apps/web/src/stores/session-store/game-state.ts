@@ -31,7 +31,7 @@ export function enrichGameStateFromSnapshot(
   snapshot: GameStateSnapshotSlice,
 ): Record<string, unknown> {
   const enrichedState: Record<string, unknown> = {
-    ...snapshot.gameState,
+    tables: snapshot.gameState ?? {},
     characters: snapshot.characters,
     dimensions: snapshot.dimensions ?? {},
     ...(snapshot.dimensionProviderPluginId
@@ -99,8 +99,11 @@ export function mergeCommittedDimensions(
     typeof payload.providerPluginId !== "string"
   )
     return current;
+  const parsedDimensions = dimensionSnapshotSchema.safeParse(
+    current.dimensions ?? {},
+  );
   const dimensions = {
-    ...dimensionSnapshotSchema.parse(current.dimensions ?? {}),
+    ...(parsedDimensions.success ? parsedDimensions.data : {}),
   };
   if (payload.dimensions) {
     const changes = dimensionSnapshotSchema.safeParse(payload.dimensions);
@@ -133,7 +136,7 @@ export function mergeCommittedDimensions(
     const previous =
       index < 0
         ? undefined
-        : dimensionSettlementSummarySchema.parse(summaries[index]);
+        : dimensionSettlementSummarySchema.safeParse(summaries[index]).data;
     if (!previous || summary.data.version > previous.version) {
       if (index < 0) summaries.push(summary.data);
       else summaries[index] = summary.data;
@@ -156,5 +159,5 @@ export function rebuildGameStateFromPatches(
       );
     }
   }
-  return rebuiltGameState;
+  return { tables: rebuiltGameState };
 }

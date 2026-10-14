@@ -531,7 +531,7 @@ it.each(["restore", "reconnect"])(
       characterSchema: null,
       dimensions: {},
       dimensionSettlements: [],
-      ...currentView.gameState,
+      tables: currentView.gameState,
       characters: [],
     });
     await act(async () => {
@@ -545,7 +545,7 @@ it.each(["restore", "reconnect"])(
       characterSchema: null,
       dimensions: {},
       dimensionSettlements: [],
-      ...currentView.gameState,
+      tables: currentView.gameState,
       characters: [],
     });
     expect(api.getSessionView).toHaveBeenCalledTimes(3);
@@ -571,6 +571,7 @@ it("accepts an empty authoritative initial view after committed state was delete
     await restoring;
   });
   expect(stateRef.current.gameState).toEqual({
+    tables: {},
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
@@ -623,12 +624,13 @@ it("projects committed state changes with the same table/field shape as session 
   const { stateRef, send } = setup();
   stateRef.current = {
     ...stateRef.current,
-    gameState: { stats: { hp: 1, mp: 3 }, weather: { sky: "clear" } },
+    gameState: {
+      tables: { stats: { hp: 1, mp: 3 }, weather: { sky: "clear" } },
+    },
   };
   send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
   expect(stateRef.current.gameState).toEqual({
-    stats: { hp: 9, mp: 3 },
-    weather: { sky: "clear" },
+    tables: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
   });
 });
 
@@ -660,7 +662,9 @@ it("keeps live state patches when the local fallback returns an older history", 
     ]);
     await restoring;
   });
-  expect(stateRef.current.gameState).toEqual({ stats: { hp: 9, mp: 3 } });
+  expect(stateRef.current.gameState).toEqual({
+    tables: { stats: { hp: 9, mp: 3 } },
+  });
   expect(stateRef.current.statePatches).toHaveLength(2);
   expect(stateRef.current.hasGameStateSnapshot).toBe(false);
 });
@@ -688,6 +692,7 @@ it("does not rebuild deleted fields from cached patches after an authoritative e
     await restoring;
   });
   expect(stateRef.current.gameState).toEqual({
+    tables: {},
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],

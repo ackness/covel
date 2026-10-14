@@ -433,7 +433,7 @@ export function reducer(
       const patchData = action.patch.data as
         Record<string, unknown> | undefined;
       const newGameState = patchData
-        ? deepMerge(state.gameState, patchData)
+        ? deepMerge(state.gameState, { tables: patchData })
         : state.gameState;
       return {
         ...state,
