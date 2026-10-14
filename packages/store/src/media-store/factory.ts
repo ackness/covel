@@ -32,16 +32,12 @@ export async function createMediaStore(
       });
     }
     case "pg": {
+      if (!config.databaseUrl)
+        throw new Error(
+          "The pg media store needs DATABASE_URL. Set it, or set MEDIA_BACKEND=none to run without media.",
+        );
       const { createPgMediaStore } = await import("./pg.js");
-      if (!config.databaseUrl) return undefined;
       return createPgMediaStore(config.databaseUrl);
-    }
-    case "idb": {
-      const { createIndexedDbMediaStore } =
-        await import("../indexeddb/idb-media-store.js");
-      return createIndexedDbMediaStore({
-        dbName: config.idbDbName,
-      });
     }
     default:
       throw new Error(`Unknown media store backend: ${String(backend)}`);

@@ -66,6 +66,7 @@ The host is an application that assembles these packages and runs them: the serv
 
 - The official website `apps/site` is a separate static site. It does not depend on any workspace package, and it is not part of the Web or desktop build.
 - The docs site `apps/docs` is also separate. It uses VitePress to build the pages of `docs/` into a static site, which is published under the `docs/` path of the official website.
+- Documentation diagrams use Mermaid 12 and require an ES2024 browser (Safari 17.4+). Mermaid belongs only to the documentation site and is not bundled into the Web or desktop app.
 - The application's own `/` goes straight to the world list.
 
 ### Desktop shell

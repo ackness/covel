@@ -654,7 +654,20 @@ export async function syncWorldDataForSession(
   const dryRun = options.dryRun === true;
   const prepared =
     options.prepared ?? (await prepareWorldDataSyncForSession(options));
-  const { diagnostics, plan } = prepared;
+  const { diagnostics } = prepared;
+  // A sync for some receivers touches only their rows and ledger entries;
+  // everything else in the session is left as it is.
+  const receivers = options.receivers;
+  const forReceivers = (pluginId: string | undefined) =>
+    !receivers || (pluginId !== undefined && receivers.includes(pluginId));
+  const plan = receivers
+    ? {
+        ...prepared.plan,
+        writes: prepared.plan.writes.filter((write) =>
+          forReceivers("pluginId" in write ? write.pluginId : undefined),
+        ),
+      }
+    : prepared.plan;
   if (
     !prepared.imported ||
     !options.worldId ||
@@ -689,6 +702,7 @@ export async function syncWorldDataForSession(
     (ledger) =>
       ledger.managed &&
       ledger.sourceWorldId === worldId &&
+      forReceivers(ledger.pluginId) &&
       (!dimensionOnly || ledger.namespace === DIMENSION_DATA_NAMESPACE),
   );
   const ledgerByKey = new Map(

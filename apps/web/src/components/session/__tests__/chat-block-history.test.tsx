@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
 import { ChatBlockRenderer } from "../chat-messages/chat-block-renderer.js";
 
@@ -16,6 +16,10 @@ vi.mock("../chat-messages/message-blocks.js", () => ({
   MessageBlockRenderer: () => null,
   UiRenderBlock: () => null,
 }));
+
+beforeEach(async () => {
+  await i18n.changeLanguage("en-US");
+});
 
 it("mounts a historical plugin message only while its disclosure is open", () => {
   render(
@@ -38,9 +42,13 @@ it("mounts a historical plugin message only while its disclosure is open", () =>
       submittedBlockValues={{}}
       onSendMessage={() => {}}
       onSubmitBlock={() => {}}
+      plugins={[
+        { id: "notes", displayName: { en: "Field Notes", zh: "旅途札记" } },
+      ]}
       t={i18n.t}
     />,
   );
+  expect(screen.getByText("Field Notes · expand to review")).toBeTruthy();
   const disclosure = screen.getByTestId(
     "history-interaction",
   ) as HTMLDetailsElement;
@@ -59,6 +67,43 @@ it("mounts a historical plugin message only while its disclosure is open", () =>
   expect(screen.queryByText("Historical plugin panel")).toBeNull();
   expect(lifecycle.unmount).toHaveBeenCalledOnce();
 });
+
+it.each([
+  [
+    "zh-CN",
+    [{ id: "notes", displayName: { en: "Field Notes", zh: "旅途札记" } }],
+    "旅途札记 · 展开查看",
+  ],
+  ["en-US", [], "Plugin content · expand to review"],
+] as const)(
+  "names history with the provider or a neutral fallback in %s",
+  async (locale, plugins, label) => {
+    await i18n.changeLanguage(locale);
+    render(
+      <ChatBlockRenderer
+        msg={{
+          id: "m",
+          role: "assistant",
+          content: "",
+          timestamp: "",
+          block: { type: "plugin_message", data: { pluginId: "notes" } },
+        }}
+        index={0}
+        lastUserMsgIndex={1}
+        viewMode="parsed"
+        sessionId="s"
+        executing={false}
+        submittedBlockIds={new Set()}
+        submittedBlockValues={{}}
+        onSendMessage={() => {}}
+        onSubmitBlock={() => {}}
+        plugins={plugins}
+        t={i18n.t}
+      />,
+    );
+    expect(screen.getByText(label)).toBeTruthy();
+  },
+);
 
 it.each([undefined, "notes"])(
   "labels only an actual pluginId: %s",

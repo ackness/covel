@@ -1,7 +1,10 @@
-import { FRAMEWORK_TOOL_NAMES } from "@covel/shared";
+import {
+  FRAMEWORK_TOOL_NAMES,
+  MAX_UI_WEBVIEW_BYTES,
+  pluginUiSpecIssues,
+} from "@covel/shared";
 import path from "node:path";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
-import { validateUiSpecStructure } from "./ui-spec.js";
 
 /** Every declared server module, relative to the manifest that owns it. */
 export function pluginImportReferences(
@@ -130,23 +133,27 @@ export function validateRuntimeDeclarations(
   }
 }
 
-/** Validate referenced files and runtime scheduling without executing modules. */
+/**
+ * Validate referenced files and runtime scheduling without executing modules.
+ * Authoring validation and installation call it; `readFile` throws for a
+ * missing file.
+ */
 export function validatePluginFiles(
   packageManifest: ParsedPluginMd,
   manifests: readonly ParsedRuntimeMd[],
   readFile: (absolutePath: string) => string,
 ): void {
+  if (packageManifest.disabledRuntime)
+    throw new Error(packageManifest.disabledRuntime.message);
   validateRuntimeDeclarations(packageManifest, manifests);
   if (!packageManifest.sourcePath)
     throw new Error("Static validation requires the PLUGIN.md source path");
   const root = path.resolve(path.dirname(packageManifest.sourcePath));
-  const file = (
+  const read = (
     source: string | undefined,
     field: string,
-    reference: string | undefined,
-    json = false,
-  ): unknown => {
-    if (!reference || reference.startsWith("contract:")) return undefined;
+    reference: string,
+  ): { resolved: string; content: string } => {
     if (!source)
       throw new Error(
         `Static validation requires the source path for ${field}`,
@@ -162,8 +169,24 @@ export function validatePluginFiles(
         `${source}: ${field}: ${reference} leaves the plugin root; use a package-local path`,
       );
     try {
-      const content = readFile(resolved);
-      return json ? (JSON.parse(content) as unknown) : undefined;
+      return { resolved, content: readFile(resolved) };
+    } catch (error) {
+      throw new Error(
+        `${source}: ${field}: cannot read ${reference}: ${error instanceof Error ? error.message : String(error)}; include a valid file at this path`,
+      );
+    }
+  };
+  const file = (
+    source: string | undefined,
+    field: string,
+    reference: string | undefined,
+    json = false,
+  ): unknown => {
+    if (!reference || reference.startsWith("contract:")) return undefined;
+    const { content } = read(source, field, reference);
+    if (!json) return undefined;
+    try {
+      return JSON.parse(content) as unknown;
     } catch (error) {
       throw new Error(
         `${source}: ${field}: cannot read ${reference}: ${error instanceof Error ? error.message : String(error)}; include a valid file at this path`,
@@ -192,27 +215,37 @@ export function validatePluginFiles(
       declaration.schema,
       true,
     );
+  // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
   for (const [slot, paths] of Object.entries(plugin.contributes?.ui ?? {}))
     for (const reference of paths ?? []) {
+      const source = packageManifest.sourcePath;
       const field = `contributes.ui.${slot}`;
-      const json = reference.endsWith(".json");
-      const spec = file(packageManifest.sourcePath, field, reference, json);
-      if (!json) continue;
-      try {
-        validateUiSpecStructure(spec);
-      } catch (error) {
+      if (!reference.endsWith(".json"))
         throw new Error(
-          `${packageManifest.sourcePath}: ${field}: ${reference}: ${error instanceof Error ? error.message : String(error)}`,
+          `${source}: ${field}: ${reference}: a UI spec is a JSON file; custom component files are not supported`,
         );
-      }
+      const spec = file(source, field, reference, true);
+      const problems = pluginUiSpecIssues(spec, plugin.id);
+      if (problems.length)
+        throw new Error(
+          problems
+            .map(
+              (problem) =>
+                `${source}: ${field}: ${reference}: ${problem.path}: ${problem.message}`,
+            )
+            .join("\n"),
+        );
+      const entry = (spec as { webview?: { entry?: string } }).webview?.entry;
+      if (!entry) continue;
+      const specFile = path.resolve(path.dirname(source!), reference);
+      const { content } = read(specFile, "webview.entry", entry);
+      if (Buffer.byteLength(content) > MAX_UI_WEBVIEW_BYTES)
+        throw new Error(
+          `${specFile}: webview.entry: ${entry} exceeds ${MAX_UI_WEBVIEW_BYTES / 1024} KiB`,
+        );
     }
   for (const parsed of manifests) {
     const runtime = parsed.manifest;
-    const type = runtime.trigger?.type ?? "auto";
-    if ((type === "auto" || type === "scheduled") && !runtime.stage)
-      throw new Error(
-        `${parsed.sourcePath}: schedule.stage is required for ${type}; choose setup, pre-turn, narrative, post-turn or audit`,
-      );
     file(parsed.sourcePath, "io.output.schema", runtime.output?.schema, true);
     file(parsed.sourcePath, "io.payloadSchema", runtime.input?.schema, true);
     // Committed bindings compile into input.inject, not runtime.inputs.

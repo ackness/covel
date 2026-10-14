@@ -31,7 +31,7 @@ import path from "node:path";
 import {
   discoverPlugins,
   loadPluginDefinition,
-  loadPluginUi,
+  loadPluginUiSpecs,
   loadRuntime,
 } from "@covel/plugin-loader";
 
@@ -704,7 +704,11 @@ describe("core-quest plugin manifest", () => {
     const definition = await loadPluginDefinition(discovery);
     const manifests = definition.manifests;
     packageManifest = definition.packageManifest.manifest;
-    loadedUi = await loadPluginUi(discovery, undefined, definition);
+    loadedUi = await loadPluginUiSpecs(
+      discovery.rootPath,
+      discovery.id,
+      definition.packageManifest.manifest.ui,
+    );
     manifest = manifests.find(
       (entry) => entry.manifest.name === "core-quest/log",
     ).manifest;
@@ -771,11 +775,12 @@ describe("core-quest plugin manifest", () => {
   });
 
   it("loads UI spec JSON with panel metadata", () => {
-    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
-    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("core-quest");
-    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("scroll-text");
-    expect(loadedUi.uiSpecs?.message).toHaveLength(1);
-    expect(loadedUi.uiSpecs?.message?.[0].id).toBe("core-quest-changes");
+    expect(loadedUi.diagnostics).toEqual([]);
+    expect(loadedUi.slots.right).toHaveLength(1);
+    expect(loadedUi.slots.right?.[0].id).toBe("core-quest");
+    expect(loadedUi.slots.right?.[0].icon).toBe("scroll-text");
+    expect(loadedUi.slots.message).toHaveLength(1);
+    expect(loadedUi.slots.message?.[0].id).toBe("core-quest-changes");
   });
 });
 
