@@ -3,7 +3,7 @@ import type { ArchivalStore } from "./store-contracts.js";
 
 export interface ArchivalItem {
   readonly vecKey: string;
-  readonly displayKey: string;
+  readonly displayKey?: string;
   readonly text: string;
   readonly source: "lorebook" | "character" | "plugin_data";
   readonly pluginId?: string;
@@ -26,6 +26,11 @@ export type SearchablePluginDataResolver = (
   sessionId: string,
 ) => Promise<readonly SearchablePluginData[]>;
 
+/** Apply the ID projection before relabelling a storage key for the model. */
+function displayKey(id: string): string | undefined {
+  return modelFacingJson({ id }).id || undefined;
+}
+
 export async function lorebookItems(
   store: ArchivalStore,
   sessionId: string,
@@ -37,7 +42,7 @@ export async function lorebookItems(
     if (!content) continue;
     items.push({
       vecKey: `lorebook:${JSON.stringify(entry.owner)}:${entry.id}`,
-      displayKey: entry.keys?.[0] ?? entry.id,
+      displayKey: displayKey(entry.keys?.[0] || entry.id),
       text: content,
       source: "lorebook",
       ...(entry.owner.kind === "plugin"
@@ -89,7 +94,7 @@ export async function pluginDataItems(
       if (!text) continue;
       items.push({
         vecKey: `plugin:${source.pluginId}:${source.namespace}:${row.key}`,
-        displayKey: row.key,
+        displayKey: displayKey(row.key),
         text,
         source: "plugin_data",
         pluginId: source.pluginId,

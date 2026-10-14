@@ -3,6 +3,7 @@ import {
   canonicalizeLocale,
   DEFAULT_FALLBACK_LOCALE,
   localeLanguage,
+  localizedWorldText,
   MAX_LOCALE_CODE_LENGTH,
   resolveI18nText,
   sessionContentLocale,
@@ -40,6 +41,22 @@ export function worldPlayLocale(
   // A world that states no language has none to show or to compare.
   if (!worldLocaleCode(interfaceLocale) || !world.locale) return world.locale;
   return sessionContentLocale(world, interfaceLocale!).locale;
+}
+
+/** World labels from the edition the player will read. */
+export function worldDisplayText(
+  world: Pick<WorldRecord, "name" | "description" | "locale" | "metadata">,
+  locale: string,
+) {
+  return localizedWorldText(
+    {
+      name: resolveI18nText(world.name, locale) ?? "",
+      description: resolveI18nText(world.description, locale) ?? "",
+      locale: world.locale,
+      metadata: world.metadata,
+    },
+    locale,
+  );
 }
 
 /** Normalize the primary language subtag used by Covel's locale switcher. */

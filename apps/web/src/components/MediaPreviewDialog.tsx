@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
 import { Media } from "@/components/Media.js";
-import { downloadImage } from "@/components/session/image-plugin-panels/actions.js";
+import { downloadMedia } from "@/components/session/image-plugin-panels/actions.js";
 
 interface MediaPreviewDialogProps {
   /** The media to show enlarged, or `null` to keep the dialog closed. */
@@ -60,7 +60,9 @@ export function MediaPreviewDialog({
                 src={mediaRef}
                 sessionId={sessionId ?? ""}
                 alt={title ?? ""}
-                aspectRatio={aspectRatio}
+                aspectRatio={
+                  mediaRef.mime.startsWith("image/") ? aspectRatio : "auto"
+                }
                 rounded="md"
                 fit="contain"
                 maxHeight="76vh"
@@ -81,16 +83,16 @@ export function MediaPreviewDialog({
                 size="sm"
                 className="shrink-0"
                 onClick={() =>
-                  downloadImage({
+                  downloadMedia({
                     t,
                     ref: mediaRef,
                     sessionId,
-                    filename: `${title || "image"}.png`,
+                    filenameStem: title || "media",
                   })
                 }
               >
                 <Download className="mr-1 h-3 w-3" />{" "}
-                {t("coreImage.panel.downloadImage", "Download image")}
+                {t("catalog.mediaGallery.download")}
               </Button>
               <DialogClose asChild>
                 <Button

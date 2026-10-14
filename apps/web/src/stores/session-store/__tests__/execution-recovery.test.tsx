@@ -489,3 +489,73 @@ it("terminal polling retries a failed bridge read without publishing a discontin
   expect(workspace.run).not.toHaveBeenCalled();
   unmount();
 });
+
+function setVisibilityForTest(initial: DocumentVisibilityState = "visible") {
+  let current = initial;
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(
+    () => current,
+  );
+  return (next: DocumentVisibilityState) => {
+    current = next;
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+}
+
+it("backs off failed polls to 30 seconds and resets after a successful observation", async () => {
+  vi.useFakeTimers();
+  setVisibilityForTest();
+  api.getSessionExecution.mockRejectedValue(new Error("offline"));
+  setup();
+  await act(async () => {});
+  expect(api.getSessionExecution).toHaveBeenCalledWith("s", { retry: false });
+  let calls = 1;
+  for (const delay of [3000, 6000, 12000, 24000, 30000, 30000]) {
+    await act(async () => vi.advanceTimersByTimeAsync(delay - 1));
+    expect(api.getSessionExecution).toHaveBeenCalledTimes(calls);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(api.getSessionExecution).toHaveBeenCalledTimes(++calls);
+  }
+  api.getSessionExecution.mockResolvedValue({ state: "running", turnId: "t" });
+  await act(async () => vi.advanceTimersByTimeAsync(30000));
+  expect(api.getSessionExecution).toHaveBeenCalledTimes(++calls);
+  await act(async () => vi.advanceTimersByTimeAsync(3000));
+  expect(api.getSessionExecution).toHaveBeenCalledTimes(++calls);
+});
+
+it("pauses recovery while hidden, resumes immediately and removes its listener on unmount", async () => {
+  vi.useFakeTimers();
+  const setVisibility = setVisibilityForTest("hidden");
+  const { unmount } = setup();
+  await act(async () => vi.advanceTimersByTimeAsync(60000));
+  expect(api.getSessionExecution).not.toHaveBeenCalled();
+  await act(async () => setVisibility("visible"));
+  expect(api.getSessionExecution).toHaveBeenCalledOnce();
+  await act(async () => setVisibility("hidden"));
+  await act(async () => vi.advanceTimersByTimeAsync(60000));
+  expect(api.getSessionExecution).toHaveBeenCalledOnce();
+  await act(async () => setVisibility("visible"));
+  expect(api.getSessionExecution).toHaveBeenCalledTimes(2);
+  unmount();
+  await act(async () => {
+    setVisibility("hidden");
+    setVisibility("visible");
+    await vi.advanceTimersByTimeAsync(60000);
+  });
+  expect(api.getSessionExecution).toHaveBeenCalledTimes(2);
+});
+
+it("does not overlap a pending recovery read when visibility changes", async () => {
+  vi.useFakeTimers();
+  const setVisibility = setVisibilityForTest();
+  const pending = deferred<{ state: "running"; turnId: string }>();
+  api.getSessionExecution.mockReturnValueOnce(pending.promise);
+  setup();
+  await act(async () => {
+    setVisibility("hidden");
+    setVisibility("visible");
+  });
+  expect(api.getSessionExecution).toHaveBeenCalledOnce();
+  await act(async () => pending.resolve({ state: "running", turnId: "t" }));
+  await act(async () => vi.advanceTimersByTimeAsync(3000));
+  expect(api.getSessionExecution).toHaveBeenCalledTimes(2);
+});

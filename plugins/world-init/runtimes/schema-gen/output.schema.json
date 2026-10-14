@@ -18,7 +18,7 @@
     },
     "attributeCount": {
       "type": "integer",
-      "minimum": 15
+      "minimum": 0
     },
     "worldSchema": {
       "type": "object",
@@ -33,7 +33,6 @@
         },
         "attributes": {
           "type": "array",
-          "minItems": 15,
           "items": {
             "type": "object"
           }

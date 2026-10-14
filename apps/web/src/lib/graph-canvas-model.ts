@@ -13,7 +13,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function read(value: unknown, path: string): unknown {
+function read(value: unknown, path: string | undefined): unknown {
+  if (path === undefined) return undefined;
   let current = value;
   for (const part of path.split(/[/.]/).filter(Boolean)) {
     if (!isRecord(current) && !Array.isArray(current)) return undefined;
@@ -63,7 +64,8 @@ export function buildLinks(
     const id = read(record, fields.idField);
     const source = read(record, fields.sourceField);
     const target = read(record, fields.targetField);
-    const strength = read(record, fields.strengthField);
+    const weight = read(record, fields.strengthField);
+    const strength = weight === undefined ? 0 : weight;
     if (
       typeof id !== "string" ||
       !id ||
@@ -78,11 +80,13 @@ export function buildLinks(
     const relation = read(record, fields.relationField);
     const fact = read(record, fields.factField);
     const color =
-      strength >= 0.33
-        ? fields.colors.positive
-        : strength <= -0.33
-          ? fields.colors.negative
-          : fields.colors.neutral;
+      fields.colors && weight !== undefined
+        ? strength >= 0.33
+          ? fields.colors.positive
+          : strength <= -0.33
+            ? fields.colors.negative
+            : fields.colors.neutral
+        : (fields.defaultColor ?? fields.colors?.neutral ?? "#94a3b8");
     return [
       {
         source,

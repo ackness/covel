@@ -152,7 +152,7 @@ interface MediaStore {
 
 **注册 wire**
 
-- 插件在 `entry` 模块里调用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })`。ID 自动加上前缀，成为 `<pluginId>/<wireId>`；是否加载受信任级别控制。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
+- 插件在 `entry` 模块里调用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })`。ID 自动加上前缀，成为 `<pluginId>/<wireId>`。会话里只有启用了该插件才能选用它；不属于任何会话的请求只能选用内置插件的 wire，`self` 形态下也能选用社区插件的。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
 - 随框架打包的代码也可以直接调用 `registerImageWire` / `registerSpeechWire` / `registerTranscriptionWire`。ID 是任意字符串，不是枚举。
 
 ## Metadata Conventions & Querying
@@ -199,6 +199,8 @@ interface MediaStore {
 - 只命中一部分（已有文件少于 `n`，例如上次有一张图没存成功）**不算**命中。这时重新生成整批，而不是悄悄少给几张。
 
 ## Ownership
+
+SQLite 的 `media_assets.path` 保存相对 `mediaRoot` 的路径（`ab/cd/<sha256>.bin`）。`mediaRoot` 默认是数据库旁的 `media/`。读取、流式读取、修复和删除都使用当前目录。复制或备份时要把数据库和这个目录一起带走，搬迁后不需要改写记录。自定义的 `mediaRoot` 需要另行复制和配置。含绝对媒体路径的开发数据库必须重建，不提供迁移或兼容读取。
 
 **SQLite / 本地文件的写入**
 

@@ -13,7 +13,13 @@
  * and `tests/schema-ddl-codegen.test.ts`.
  */
 
-import { buildCreateTablesSql } from "../common/ddl-codegen.js";
+import { buildCreateTablesSql, tableColumnsOf } from "../common/ddl-codegen.js";
+import {
+  assertColumnsPresent,
+  assertRecordedVersion,
+  type ExistingColumns,
+} from "../common/schema-version.js";
+import { DATA_SCHEMA_VERSION } from "../migrations.js";
 import {
   DELETE_RETIRED_PLUGIN_DATA_SQL,
   DROP_RETIRED_TABLES_SQL,
@@ -48,9 +54,44 @@ const VECTOR_MODELS_TRIGGER_SQL = `
   END;
 `;
 
-export function createTables(sqlite: { exec(sql: string): void }): void {
+const EXPECTED_COLUMNS = tableColumnsOf(Object.values(schema), "sqlite");
+
+interface SqliteDdlConnection {
+  exec(sql: string): void;
+  prepare(sql: string): { get(): unknown; all(): unknown[] };
+}
+
+function existingColumns(sqlite: SqliteDdlConnection): ExistingColumns {
+  const columns = new Map<string, ReadonlySet<string>>();
+  for (const table of EXPECTED_COLUMNS.keys()) {
+    const rows = sqlite.prepare(`PRAGMA table_info("${table}")`).all() as {
+      name: string;
+    }[];
+    if (rows.length > 0) columns.set(table, new Set(rows.map((r) => r.name)));
+  }
+  return columns;
+}
+
+/**
+ * Check the recorded schema version (`PRAGMA user_version`, 0 = none), create
+ * the current tables, then record the version. Throws
+ * `StoreSchemaVersionError` before any DDL when the file was written by a
+ * build with another data schema (see `common/schema-version.ts`).
+ */
+export function createTables(sqlite: SqliteDdlConnection): void {
+  const row = sqlite.prepare("PRAGMA user_version").get() as {
+    user_version: number;
+  };
+  const found = row.user_version === 0 ? null : row.user_version;
+  assertRecordedVersion("sqlite", found);
+  if (found === null) {
+    assertColumnsPresent("sqlite", EXPECTED_COLUMNS, existingColumns(sqlite));
+  }
   sqlite.exec(CREATE_TABLES_SQL);
   sqlite.exec(VECTOR_MODELS_TRIGGER_SQL);
   sqlite.exec(DROP_RETIRED_TABLES_SQL);
   sqlite.exec(DELETE_RETIRED_PLUGIN_DATA_SQL);
+  if (found === null) {
+    sqlite.exec(`PRAGMA user_version = ${DATA_SCHEMA_VERSION}`);
+  }
 }

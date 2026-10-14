@@ -72,25 +72,30 @@ const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
 const BACKOFF_MULTIPLIER = 2;
 
-let activeActionStreams = 0;
+const activeActionStreams = new Map<string, number>();
 const refreshPauseState = new Set<() => void>();
 
-/** Give action/control requests the connection occupied by auxiliary SSE. */
-export function pauseSessionSubscriptions(): () => void {
-  activeActionStreams += 1;
+/** Give an action the auxiliary SSE connection belonging to its session. */
+export function pauseSessionSubscriptions(sessionId: string): () => void {
+  activeActionStreams.set(
+    sessionId,
+    (activeActionStreams.get(sessionId) ?? 0) + 1,
+  );
   for (const refresh of refreshPauseState) refresh();
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    activeActionStreams -= 1;
+    const remaining = (activeActionStreams.get(sessionId) ?? 1) - 1;
+    if (remaining > 0) activeActionStreams.set(sessionId, remaining);
+    else activeActionStreams.delete(sessionId);
     for (const refresh of refreshPauseState) refresh();
   };
 }
 
-function shouldPause(): boolean {
+function shouldPause(sessionId: string): boolean {
   return (
-    activeActionStreams > 0 ||
+    (activeActionStreams.get(sessionId) ?? 0) > 0 ||
     (typeof document !== "undefined" && document.visibilityState === "hidden")
   );
 }
@@ -117,7 +122,7 @@ export function createSessionSubscription(
   let backoffMs = INITIAL_BACKOFF_MS;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
-  let paused = shouldPause();
+  let paused = shouldPause(sessionId);
   let resumeActionSilently = false;
   let clientErrorStreak = 0;
   let mirrorRecovery: Promise<boolean> | null = null;
@@ -340,7 +345,7 @@ export function createSessionSubscription(
   }
 
   function handlePauseChange(): void {
-    const next = shouldPause();
+    const next = shouldPause(sessionId);
     const tabIsHidden =
       typeof document !== "undefined" && document.visibilityState === "hidden";
     if (tabIsHidden) resumeActionSilently = false;
@@ -349,7 +354,7 @@ export function createSessionSubscription(
     if (paused) {
       resumeActionSilently =
         !tabIsHidden &&
-        activeActionStreams > 0 &&
+        (activeActionStreams.get(sessionId) ?? 0) > 0 &&
         connectionState === "connected";
       // One tab needs only its action stream while executing. Otherwise even
       // three visible tabs can exhaust HTTP/1.1 slots needed by stop/read APIs.
@@ -410,7 +415,7 @@ export function createSessionSubscription(
       closed = false;
       clientErrorStreak = 0;
       backoffMs = INITIAL_BACKOFF_MS;
-      paused = shouldPause();
+      paused = shouldPause(sessionId);
       resumeActionSilently = false;
       if (paused) setState("paused");
       else void connect();

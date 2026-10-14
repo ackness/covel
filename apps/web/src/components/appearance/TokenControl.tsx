@@ -1,3 +1,4 @@
+import { importCssImages } from "@/lib/import-image.js";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
@@ -89,7 +90,11 @@ function useLiveValue(
     // An earlier save/rollback may change committed while a newer preview is
     // still pending. Only that preview's own terminal callback may discard it.
     if (live.current.draft !== null) {
-      document.documentElement.style.setProperty(spec.name, live.current.draft);
+      if (!/https?:/i.test(live.current.draft))
+        document.documentElement.style.setProperty(
+          spec.name,
+          live.current.draft,
+        );
       return;
     }
     if (live.current.saving) return;
@@ -145,11 +150,22 @@ function useLiveValue(
     const edit = ++live.current.edit;
     live.current.draft = next;
     setDraft(next);
-    paint(next);
+    if (!/https?:/i.test(next)) paint(next);
     cancel();
     pending.current = {
       timer: setTimeout(flush, COMMIT_DELAY_MS),
-      commit: () => persist(() => onCommit(next), edit),
+      commit: () => {
+        const scope = live.current;
+        persist(
+          () =>
+            /https:/i.test(next)
+              ? importCssImages(next).then((imported) => {
+                  if (scope.edit === edit) return onCommit(imported);
+                })
+              : onCommit(next),
+          edit,
+        );
+      },
     };
   }
 

@@ -103,6 +103,30 @@ describe("system.reset control frame", () => {
     await seedSession(store, SESSION_ID);
   });
 
+  it("resets a stale Last-Event-ID header instead of silently losing replay", async () => {
+    emitSeq(eventBus, SESSION_ID, "state", 1);
+    const ac = new AbortController();
+    try {
+      const res = await app.request(
+        `/api/events/stream?sessionId=${SESSION_ID}&topics=state`,
+        { signal: ac.signal, headers: { "Last-Event-ID": "stale-epoch:3" } },
+      );
+      expect(res.status).toBe(200);
+      const reader = res.body!.getReader();
+      const frames = await drain(reader, { deadlineMs: 400 });
+      const reset = findReset(frames);
+      expect(reset).toBeDefined();
+      expect(reset!.id).toBeUndefined();
+      expect(JSON.parse(reset!.data!)).toMatchObject({
+        reason: "epoch-change",
+      });
+      expect(nonControlFrames(frames)).toHaveLength(0);
+      await reader.cancel();
+    } finally {
+      ac.abort();
+    }
+  });
+
   it("emits reason=epoch-change for a foreign-epoch cursor and skips replay", async () => {
     for (let n = 1; n <= 3; n++) emitSeq(eventBus, SESSION_ID, "state", n);
     const currentEpoch = eventBus.getEventsAfter(SESSION_ID, 3).epoch!;

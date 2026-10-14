@@ -1,5 +1,6 @@
 import postgres, { type JSONValue, type Sql } from "postgres";
 import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-store-mappers.js";
+import { SCHEMA_DDL_LOCK_SQL } from "../postgres/pg-schema-boot.js";
 import type { MediaRefRecord, MediaStore } from "@covel/shared";
 import {
   finalizeMediaCleanupResult,
@@ -24,7 +25,11 @@ export async function createPgMediaStore(
       await sql`DROP TABLE IF EXISTS media_refs CASCADE`;
       await sql`DROP TABLE IF EXISTS media_assets CASCADE`;
     }
-    await sql.unsafe(CREATE_MEDIA_TABLES_SQL);
+    // Same lock as the data store's boot DDL, so the two never race.
+    await sql.begin(async (tx) => {
+      await tx.unsafe(SCHEMA_DDL_LOCK_SQL);
+      await tx.unsafe(CREATE_MEDIA_TABLES_SQL);
+    });
 
     const store = createPgMediaStoreFromClient(sql);
     let closed = false;

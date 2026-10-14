@@ -187,7 +187,7 @@ async function summarizeSource(
         sourceId: source.id,
         message: `Invalid dimension declarations: ${definitions.error.message}`,
       });
-  } else if (parsedTarget?.kind === "world-metadata") {
+  } else if (parsedTarget?.kind === "world-metadata" && !isDimensions) {
     diagnostics.push({
       level: "warning",
       sourceId: source.id,

@@ -539,6 +539,8 @@ The original keys can still be read directly with `$state: "/someKey"`. Both way
 
 **Naming convention**: a group name shared across plugins works like a CSS class name. Authors add their own namespace prefix to avoid conflicts, for example `core.character` or `myorg.combat`. The framework does not add prefixes automatically.
 
+When several plugins share a group, provider switch buttons show each plugin's localized `displayName`, falling back to its ID when no name is available. Every group name follows this rule; a panel's `label` / `shortLabel` does not change the provider name.
+
 **Implementation**: `aggregateSpecsIntoGroups()` in `apps/web/src/lib/plugin-panel-tabs.ts`. It is a pure function and can be tested on its own (see the Playwright smoke test).
 
 ### Ordering
@@ -675,7 +677,8 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 - After the text has been read, and the turn execution has ended, the same spot is replaced by the unified decision panel. It shows, in order: the scene, a "Current context" summary, the "Decision" question, grouped options, and an inline free text input.
 - Right after submitting, the whole old decision panel is hidden, including areas added by plugins. While the new narrative is coming, "Generating" is shown. Narrative that was already read is not replayed.
 - When a session is restored, or when you switch into the stage from another view, the latest narrative that already existed before mounting counts as read, so it is not typed out again.
-- When an old action-suggestion row has no `recap/decision`, the panel takes up to three sentences, at most 180 characters, from the latest story as the situation recap, and uses `scene` to make a context-aware decision question. New data always uses the fields the agent generated first.
+- `stage.choices@1.recap` is optional. When omitted or empty, the panel omits “Current context” and does not extract a summary from the story. If `decision` is omitted, the scene or a generic question guides free input. Reading narration and submitting free input still work without a suggestions provider.
+- Omitting `turnId` declares unscoped choices. Choices with a `turnId` appear only when it matches the current story turn; they stay hidden when that turn is unknown. A committed retry can resolve to the source story through the turn resolver. Providers should set `turnId` on choices that expire with the turn, without relying on the framework to infer old data.
 
 **Previews and caching of slots.**
 
@@ -806,6 +809,7 @@ When the components in the catalog are not enough, a plugin can bring its own HT
 - **What the component can do.** Through the message bridge it receives the current style scheme (`theme` and the `--covel-*` CSS variables), and it can call actions such as `emitEvent` and `draftMessage`.
 - **Enlarging.** Every plugin panel in the right-side panel can be "enlarged" to show in a large dialog.
 - **Showing on the stage.** A `ui.right` spec can declare `surfaces: ["panel", "stage"]`. When it is not written, it shows only in the right-side panel.
+- **Player confirmation and loading failures.** A stage plugin panel’s `sendMessage` fills the input for the player to edit and send. The stage reuses the session’s loaded panel definitions. If loading fails, it shows a message and Retry while the player can still use the input.
 - **Isolation.** The HTML sits in a sandboxed iframe with two layers of opaque origin:
   - The outer layer is the static document `/plugin-frame.html` in the web build. It is loaded by URL, so it has its own CSP and does not inherit the main page's policy (the main page does not allow inline scripts). Its CSP stops the plugin document from navigating itself to a network address, and the port is handed over only once.
   - The inner layer is the plugin's HTML. It keeps inline scripts and the `window.covel` data / action bridge. The structure of the component code and of the business state belongs to the plugin.

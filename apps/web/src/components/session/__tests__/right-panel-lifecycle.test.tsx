@@ -120,8 +120,37 @@ beforeEach(async () => {
   };
   mocks.fetchSpecs.mockReset().mockImplementation(async () => mocks.specs);
 });
+it.each(["shared", "chat-mode"])(
+  "uses plugin names for providers in the %s group",
+  async (group) => {
+    mocks.plugins = [
+      { ...plugin("provider-a"), displayName: { en: "First provider" } },
+      { ...plugin("provider-b"), displayName: { en: "Second provider" } },
+    ];
+    mocks.specs.right = mocks.specs.right.map((entry) => ({
+      ...entry,
+      specs: entry.specs.map((panel) => ({
+        ...panel,
+        group,
+        shortLabel: "Panel",
+      })),
+    }));
+    render(
+      <RightPanel sessionId="provider-labels" world={null} statePatchRevision={0} />,
+    );
+    fireEvent.keyDown(
+      await screen.findByRole("tab", { name: "Shared panels" }),
+      { key: "Enter" },
+    );
+    expect(
+      await screen.findByRole("button", { name: "First provider" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Second provider" }));
+    expect(await screen.findByText("Mounted panel: provider-b")).toBeTruthy();
+  },
+);
 it("keeps shared panel selection stable across provider changes and resets across sessions", async () => {
-  const props = { sessionId: "session-a", world: null, statePatches: [] };
+  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
   const view = render(<RightPanel {...props} />);
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
@@ -132,9 +161,9 @@ it("keeps shared panel selection stable across provider changes and resets acros
   await act(async () => {
     mocks.plugins = [plugin("provider-b")];
     mocks.specs = { ...mocks.specs, right: [spec("provider-b", "details")] };
-    // The mocked store is not reactive and the panel is memoised, so a new
-    // patches array stands in for the store update that re-renders it.
-    view.rerender(<RightPanel {...props} statePatches={[]} />);
+    // The mocked store is not reactive and the panel is memoised, so a newer
+    // patch revision stands in for the store update that re-renders it.
+    view.rerender(<RightPanel {...props} statePatchRevision={1} />);
   });
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: "provider-a" })).toBeNull(),
@@ -144,7 +173,7 @@ it("keeps shared panel selection stable across provider changes and resets acros
   expect(await screen.findByText("World content")).toBeTruthy();
 });
 it("returns to World when the active plugin panel disappears", async () => {
-  const props = { sessionId: "session-a", world: null, statePatches: [] };
+  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
   const view = render(<RightPanel {...props} />);
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
@@ -152,7 +181,7 @@ it("returns to World when the active plugin panel disappears", async () => {
   await act(async () => {
     mocks.plugins = [];
     mocks.specs = { ...mocks.specs, right: [] };
-    view.rerender(<RightPanel {...props} statePatches={[]} />);
+    view.rerender(<RightPanel {...props} statePatchRevision={1} />);
   });
   expect(await screen.findByText("World content")).toBeTruthy();
   expect(screen.queryByRole("tab", { name: "Shared panels" })).toBeNull();
@@ -166,7 +195,7 @@ it("retains an image navigation request until lazy specs load and supports repea
         release = resolve;
       }),
   );
-  const props = { sessionId: "session-a", world: null, statePatches: [] };
+  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
   const view = render(
     <RightPanel {...props} panelRequest={{ event: "open-images" }} />,
   );
@@ -186,7 +215,9 @@ it("retains an image navigation request until lazy specs load and supports repea
 });
 
 it("lets a side panel queue a line for the composer without sending it", async () => {
-  render(<RightPanel sessionId="session-a" world={null} statePatches={[]} />);
+  render(
+    <RightPanel sessionId="session-a" world={null} statePatchRevision={0} />,
+  );
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
   });
@@ -203,7 +234,9 @@ it("lets a side panel queue a line for the composer without sending it", async (
 });
 
 it("moves a plugin panel into the large dialog and back", async () => {
-  render(<RightPanel sessionId="session-a" world={null} statePatches={[]} />);
+  render(
+    <RightPanel sessionId="session-a" world={null} statePatchRevision={0} />,
+  );
   fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
     key: "Enter",
   });
@@ -223,7 +256,7 @@ it("moves a plugin panel into the large dialog and back", async () => {
 
 it("shows the raw Database tab only when the developer view is on", async () => {
   await initSettings();
-  const props = { sessionId: "session-a", world: null, statePatches: [] };
+  const props = { sessionId: "session-a", world: null, statePatchRevision: 0 };
   const view = render(<RightPanel {...props} />);
   await screen.findByRole("tab", { name: "Shared panels" });
   expect(screen.queryByRole("tab", { name: "Database" })).toBeNull();
@@ -242,7 +275,7 @@ it("translates the memory storage badge", async () => {
   mocks.health = {
     storage: { data: { backend: "memory", frontendMode: "remote" } },
   };
-  render(<RightPanel sessionId="s" world={null} statePatches={[]} />);
+  render(<RightPanel sessionId="s" world={null} statePatchRevision={0} />);
   expect(await screen.findByText("内存")).toBeTruthy();
   expect(screen.queryByText("Memory")).toBeNull();
 });

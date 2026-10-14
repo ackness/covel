@@ -36,6 +36,8 @@ Without `-t` (or `--with-tools`) the scaffolder writes to the user plugin
 directory (`~/.covel/plugins`), not the repository. See
 [examples](references/example-plugins.md) for packages that show each pattern.
 
+Every mode starts `PLUGIN.md` and `package.json` at `0.1.0`; keep both versions equal when updating. Generated runtime case files include `$schema`; `name` and `runtimeId` are required, and unknown case/expectation/artifact fields fail before execution.
+
 The default analyst runs automatically in `post-turn` and consumes the current narrative binding. Function notes remain manual; generate keys through `ctx.random` and timestamps in code.
 
 ### 3. Declare the manifest
@@ -79,8 +81,9 @@ proposals or handler effects.
   `covel.provideExtension(point, id, {handler})` for extensions. Registration
   factories only register; defer I/O to invocation handlers.
 - Agent runtime bodies hold prompts. Function handlers return explicit
-  success / skipped / failed / blocked results
-  ([runtime context](references/runtime-context.md)). Preserve cancellation,
+  success / suspended / skipped / failed results
+  ([public HandlerResult](../../../packages/plugin-handlers-utils/src/handler-result.ts),
+  [runtime context](references/runtime-context.md)). Preserve cancellation,
   bounded work, and successful-commit-only domain writes.
 - Media goes through `ctx.images.generate` and `ctx.speech.generate` /
   `transcribe`. An image-flow entry declares `media.image-flow@1`, returning its
@@ -117,7 +120,8 @@ declarations, and generic UI props.
 ### 7. Sync docs
 
 A bundled plugin added or changed in the main checkout updates
-`docs/reference/plugins.md` in the same change (see the documentation sync list
+`docs/reference/plugins.md`, its theme page under `docs/builtin/`, and the tables
+in `docs/builtin/index.md` in the same change (see the documentation sync list
 in `AGENTS.md`). Update bilingual user documentation, settings instructions,
 network/data behavior, and tests together. Publishing or installing outside the
 authorized workspace requires the user's explicit authorization.

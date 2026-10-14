@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
-import { clearDomainEventPreviews } from "@/stores/domain-event-preview-store.js";
+import { clearUiSlots } from "@/stores/ui-slot-store.js";
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import {
   clearNarrativeDeltaBuffer,
@@ -64,6 +64,8 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
 
   useEffect(
     () => () => {
+      if (publishedSessionIdRef.current)
+        clearUiSlots(publishedSessionIdRef.current);
       sessionGenerationRef.current += 1;
       sessionIdRef.current = null;
       publishedSessionIdRef.current = null;
@@ -83,7 +85,7 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
     if (previousId === nextId) return;
     publishedSessionIdRef.current = nextId;
     if (previousId) {
-      clearDomainEventPreviews(previousId);
+      clearUiSlots(previousId);
     }
     setActivePluginDataSession(nextId);
     clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);

@@ -19,7 +19,6 @@ import {
  *  4. Edges resolve sourceName/targetName to node IDs
  *  5. Duplicate edges (same source/target/relation) are skipped
  *  6. Only node and edge rows are stored (no adjacency index)
- *  7. list-npc-graph returns compact summaries
  *  8. Orphan-endpoint edges are flagged, not crashed
  */
 
@@ -29,7 +28,8 @@ import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 
 import { tool, z } from "@covel/tools";
 import createUpsertNpcGraph from "../tools/upsert-npc-graph.js";
-import createListNpcGraph from "../tools/list-npc-graph.js";
+import register from "../server/index.js";
+import { readdirSync } from "node:fs";
 
 const ctx = {
   sessionId: "sess-npc",
@@ -54,6 +54,19 @@ describe("npc-graph manifests", () => {
     manifests = parsed.map((p) => p.manifest);
   });
 
+  it("registers only the extractor write tool and ships no function prompt variant", () => {
+    const registered = [];
+    register({
+      toolkit: { tool, z },
+      registerTool(instance) {
+        registered.push(instance.name);
+      },
+    });
+    expect(registered).toEqual(["upsert-npc-graph"]);
+    expect(
+      readdirSync(new URL("../runtimes/rag-retriever/", import.meta.url)),
+    ).not.toContain("RUNTIME.zh.md");
+  });
   it("discovers both extractor and rag-retriever runtimes", () => {
     const names = manifests.map((m) => m.name);
     expect(names).toContain("npc-graph/extractor");
@@ -84,7 +97,7 @@ describe("npc-graph manifests", () => {
 
   it("extractor drops the never-used generic plugin-data builtin tools", () => {
     // These were scaffold residue — the prompt never referenced them; the
-    // dedicated list-npc-graph tool + plugin-data injects cover the same need.
+    // graph injections already cover the same need.
     const builtin = manifests.find((m) => m.name === "npc-graph/extractor")
       .tools?.builtin;
     expect(builtin ?? []).not.toContain("plugin-data-list");
@@ -93,7 +106,7 @@ describe("npc-graph manifests", () => {
 
   it("extractor injects the existing graph as plugin-data (no list round-trip)", () => {
     // Nodes/edges are the extractor's own plugin_data; injecting them at
-    // prompt-build time removes the mandatory per-turn list-npc-graph round-trip
+    // prompt-build time removes a per-turn graph read round-trip
     // (same pattern codex/character-tracker use). Nodes keyed by id, edges keyed
     // by edge id — the tool works name-first so the LLM only needs to SEE them.
     const injects = manifests.find((m) => m.name === "npc-graph/extractor")
@@ -122,7 +135,6 @@ describe("npc-graph manifests", () => {
 describe("upsert-npc-graph", () => {
   let store;
   let upsertTool;
-  let listTool;
 
   beforeEach(async () => {
     store = await createPluginTestStore(ctx);
@@ -130,7 +142,6 @@ describe("upsert-npc-graph", () => {
       createUpsertNpcGraph({ tool, z, shortIdBatch }),
       store,
     );
-    listTool = bindToolStore(createListNpcGraph({ tool, z }), store);
   });
 
   // The list tool shows current edges only; superseded versions are read from storage.
@@ -253,10 +264,10 @@ describe("upsert-npc-graph", () => {
       skipped: 1,
       results: [{ target: "青铜门", skipped: "missing endpoint node" }],
     });
-    const list = await listTool.execute({}, ctx);
-    expect(getToolContent(list).nodes).toMatchObject([
-      { name: "科尔文・艾什", type: "individual" },
-    ]);
+    const nodes = (
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "nodes")
+    ).map((row) => row.value);
+    expect(nodes).toMatchObject([{ name: "科尔文・艾什", type: "individual" }]);
     // A type that is not a World IR entity type is still an error.
     await expect(
       upsertTool.execute(
@@ -276,9 +287,9 @@ describe("upsert-npc-graph", () => {
       ctx,
     );
     expect(getToolContent(places).nodes).toMatchObject({ created: 0 });
-    expect(getToolContent(await listTool.execute({}, ctx)).nodes).toHaveLength(
-      1,
-    );
+    expect(
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "nodes"),
+    ).toHaveLength(1);
   });
 
   it("creates new nodes with short IDs and persists them", async () => {
@@ -311,13 +322,13 @@ describe("upsert-npc-graph", () => {
       expect(r.id).toMatch(/^npc-/);
     }
 
-    const list = await listTool.execute({}, ctx);
-    expect(getToolContent(list).nodeCount).toBe(2);
-    expect(
-      getToolContent(list)
-        .nodes.map((n) => n.name)
-        .sort(),
-    ).toEqual(["萧衍笙", "碧波宗"].sort());
+    const nodes = (
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "nodes")
+    ).map((row) => row.value);
+    expect(nodes).toHaveLength(2);
+    expect(nodes.map((node) => node.name).sort()).toEqual(
+      ["萧衍笙", "碧波宗"].sort(),
+    );
   });
 
   it("merges when a node with the same name is upserted twice", async () => {
@@ -351,13 +362,12 @@ describe("upsert-npc-graph", () => {
     expect(getToolContent(second).nodes.created).toBe(0);
     expect(getToolContent(second).nodes.updated).toBe(1);
 
-    const list = await listTool.execute({}, ctx);
-    expect(getToolContent(list).nodeCount).toBe(1);
-    expect(getToolContent(list).nodes[0].labels).toEqual([
-      "sect-leader",
-      "researcher",
-    ]);
-    expect(getToolContent(list).nodes[0].summary).toMatch(/古老的阵法/);
+    const nodes = (
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "nodes")
+    ).map((row) => row.value);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].labels).toEqual(["sect-leader", "researcher"]);
+    expect(nodes[0].summary).toMatch(/古老的阵法/);
   });
 
   it("keeps one node for a session character named by its name and by an alias", async () => {
@@ -422,8 +432,9 @@ describe("upsert-npc-graph", () => {
       created: 1,
       skipped: 0,
     });
-    const list = await listTool.execute({}, ctx);
-    const nodes = getToolContent(list).nodes;
+    const nodes = (
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "nodes")
+    ).map((row) => row.value);
     expect(nodes.map((node) => node.name).sort()).toEqual([
       "Corvin Ashe",
       "Keeper Ysolde",
@@ -608,55 +619,6 @@ describe("upsert-npc-graph", () => {
     expect(current.invalidAt).toBeUndefined();
     expect(current.validAt).toBe(9);
     expect(current.strength).toBe(-0.4);
-  });
-
-  it("lists current edges only, most recently changed first, and says when it cuts the list", async () => {
-    const rows = [
-      { id: "e-old", validAt: 1, invalidAt: 5 },
-      { id: "e-a", validAt: 2 },
-      { id: "e-b", validAt: 8 },
-      { id: "e-c", validAt: 4 },
-    ].map((value) => ({
-      sessionId: ctx.sessionId,
-      pluginId: ctx.pluginId,
-      namespace: "edges",
-      key: value.id,
-      value: { ...value, source: "a", target: "b", relation: "R" },
-      updatedAt: "2026-01-01T00:00:00Z",
-    }));
-    await store.setPluginDataBatch(rows);
-
-    const all = getToolContent(await listTool.execute({}, ctx));
-    expect(all.edges.map((e) => e.id)).toEqual(["e-b", "e-c", "e-a"]);
-    expect(all.edgeCount).toBe(3);
-    expect(all.edgesTruncated).toBeUndefined();
-
-    const cut = getToolContent(await listTool.execute({ limit: 2 }, ctx));
-    expect(cut.edges.map((e) => e.id)).toEqual(["e-b", "e-c"]);
-    expect(cut.edgesTruncated).toMatch(/2 most recently changed of 3/);
-  });
-
-  it("lists the most recently seen nodes first and says when the cap cuts the list", async () => {
-    const rows = Array.from({ length: 125 }, (_, i) => ({
-      sessionId: ctx.sessionId,
-      pluginId: ctx.pluginId,
-      namespace: "nodes",
-      key: `n-${i}`,
-      value: { id: `n-${i}`, name: `Person ${i}`, lastSeenTurn: i },
-      updatedAt: "2026-01-01T00:00:00Z",
-    }));
-    await store.setPluginDataBatch(rows);
-
-    const result = getToolContent(await listTool.execute({}, ctx));
-    expect(result.nodeCount).toBe(125);
-    expect(result.nodes).toHaveLength(120);
-    expect(result.nodes[0].id).toBe("n-124");
-    expect(result.nodes.map((n) => n.id)).not.toContain("n-4");
-    expect(result.nodesTruncated).toMatch(/120 most recently seen of 125/);
-
-    const all = getToolContent(await listTool.execute({ limit: 200 }, ctx));
-    expect(all.nodes).toHaveLength(125);
-    expect(all.nodesTruncated).toBeUndefined();
   });
 
   it("keeps distinct versions when the same relation is revised across calls in one turn", async () => {

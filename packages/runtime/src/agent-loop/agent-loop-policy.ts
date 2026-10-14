@@ -16,7 +16,10 @@ import type {
   LLMResponseFormat,
   LLMToolDefinition,
 } from "../llm/llm-adapter.js";
-import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
+import {
+  buildToolDefinitions,
+  usesRuntimeDone,
+} from "../turn-executor/turn-executor-helpers.js";
 import { declaredToolNames, resolveDeferredToolNames } from "./tool-search.js";
 import { buildRetryPolicy, type RetryPolicy } from "../retry/llm-retry.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
@@ -51,11 +54,12 @@ export interface AgentLoopPolicy {
    */
   readonly runtimeModelOverride: string | undefined;
   /**
-   * Stream only for story-output runtimes. Plugin runtimes' raw LLM text is
-   * reasoning chatter that feeds into structured tool calls — it should never
-   * reach the user's narrative feed. Story runtimes that also declare tools
-   * still stream; the request layer falls back to generate() when the
-   * provider cannot parse tool calls out of stream chunks.
+   * Stream whenever the LLM client can stream (`deps.llm.stream`), for every
+   * runtime kind. Only story-output runtimes forward the streamed text to the
+   * player's narrative feed: a plugin runtime's raw text is reasoning chatter
+   * that feeds into structured tool calls, so it is consumed without being
+   * shown. The request layer falls back to generate() when the provider
+   * cannot parse tool calls out of stream chunks.
    */
   readonly useStreaming: boolean;
   /**
@@ -83,7 +87,8 @@ export interface AgentLoopPolicy {
    * The runtime's exact execution authorization set: its declared
    * tool names (deferred names included — deferring only withholds the
    * schema advertisement, never grants or removes authorization) plus the
-   * framework-contract `runtime-done` sentinel for non-schema runtimes.
+   * framework-contract `runtime-done` sentinel for runtimes that use it
+   * (and story runtimes that receive a story correction).
    * Passed to the ToolExecutor on every call so execution — not just
    * advertisement — is bounded by the manifest declaration.
    */
@@ -127,7 +132,10 @@ export function buildAgentLoopPolicy({
   // A story runtime is not offered `runtime-done` (see `usesRuntimeDone`),
   // but a model may call it from habit. The call stays authorized so that the
   // loop can answer it by asking for the story, not with a tool error.
-  if (!manifest.output?.schema) {
+  if (
+    usesRuntimeDone(manifest) ||
+    (manifest.outputKind === "story" && !manifest.output?.schema)
+  ) {
     authorizedToolNames.add("runtime-done");
   }
 

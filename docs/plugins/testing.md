@@ -256,8 +256,13 @@ pnpm test:runtime -- my-plugin/note --payload '{"title":"Gate"}' --pretty
 
 ### 用例文件
 
+文件可以是用例数组，或 `{ "$schema": "…", "cases": [...] }`。每个用例必须有非空的 `name` 和 `runtimeId`。`mode` 只接受 `mock`、`live`、`both`；省略时为 `both`。顶层、用例、`expect` 和 `artifacts` 中的未知字段都会报错，错误带文件名和字段路径；例如 `expects` 或 `expect.runtimeResult` 不会被忽略。插件定义的 payload、设置和模拟回复对象仍可使用自己的字段。
+
+脚手架生成的文件带 `$schema`，编辑器可按 [runtime-cases.schema.json](../../packages/shared/schemas/runtime-cases.schema.json) 提示字段。修改用例后重新运行，校验失败时不会开始执行 runtime。
+
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/AcKnEsS/covel/main/packages/shared/schemas/runtime-cases.schema.json",
   "cases": [
     {
       "name": "manual-note-writes-plugin-data",

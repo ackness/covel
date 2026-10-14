@@ -331,6 +331,7 @@ export default function register(covel) {
 
 - 界面传来的 `payload` 是外部输入，使用之前要检查。
 - 动作的写入是立刻生效的。它不属于某个回合，后面的步骤失败了也不会撤销。要“全部成功才保存”，用手动触发的函数 runtime。
+- 动作要很快做完。超过 30 秒这次动作就算失败：`ctx.signal` 中止，之后的 `ctx.store` 调用都会被拒绝。耗时的工作交给 `schedule.manual.execution: background` 的 runtime。
 - 离线运行不支持动作。运行时它会提示 `Unsupported rpc: notebook/inspect-note. Verify with the server.`，这不是错误。动作要在真实的服务端上验证。
 
 ## 写一个函数
@@ -382,19 +383,20 @@ export default async function handler(ctx) {
 
 函数里常用的东西：
 
-| 写法                          | 作用                               |
-| ----------------------------- | ---------------------------------- |
-| `ctx.inputs.<名字>.value`     | 你声明的输入                       |
-| `ctx.playerMessage`           | 玩家这一回合的输入                 |
-| `ctx.manualPayload`           | 手动触发时界面传来的数据           |
-| `ctx.pluginData.get/list/set` | 读写自己的数据                     |
-| `ctx.world`                   | 角色、角色的字段定义、资料库。只读 |
-| `ctx.userSettings`            | 玩家的设置项                       |
-| `ctx.random`                  | 随机数。掷骰只用它                 |
-| `ctx.locale`                  | 这一局游戏的语言                   |
-| `ctx.tools.call(name, args)`  | 调用 `function.tools` 里列出的工具 |
-| `ctx.logger`                  | 写插件日志                         |
-| `ctx.signal`                  | 运行被取消时得到通知               |
+| 写法                                                                          | 作用                                                                                     |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `ctx.inputs.<名字>.value`                                                     | 你声明的输入                                                                             |
+| `ctx.playerMessage`                                                           | 玩家这一回合的输入                                                                       |
+| `ctx.manualPayload`                                                           | 手动触发时界面传来的数据                                                                 |
+| `ctx.pluginData.get/list/set`                                                 | 读写自己的数据                                                                           |
+| `ctx.world`                                                                   | 角色、角色的字段定义、资料库。只读                                                       |
+| `ctx.userSettings`                                                            | 玩家的设置项                                                                             |
+| `ctx.random`                                                                  | 随机数。掷骰只用它                                                                       |
+| `ctx.locale`                                                                  | 这一局游戏的语言                                                                         |
+| `ctx.tools.call(name, args)`                                                  | 调用 `function.tools` 里列出的工具                                                       |
+| `ctx.logger`                                                                  | 写插件日志                                                                               |
+| `ctx.signal`                                                                  | 运行被取消时得到通知                                                                     |
+| `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | 在这一回合里再运行一个手动 runtime。只认这两个字段，会话、语言、设置和模型都沿用本次运行 |
 
 - 函数能调用的工具写在 `function.tools` 里。函数的时限是 `function.timeoutMs`。这两项不要写进 `agent` 里：函数 runtime 不能有 `agent` 配置。
 - 想让下一回合或别的运行读到这次的结果，在这边声明 `io.output.recordAs`，在读的那边声明 `scope: committed` 和同一个 `recordAs`。

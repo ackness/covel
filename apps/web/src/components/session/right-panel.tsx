@@ -34,7 +34,7 @@ import type { ServerStoreBackend } from "@/services/data-service.js";
 import {
   compactTabLabel,
   groupShortLabel,
-  panelProviderLabel,
+  pluginShortLabel,
   planPluginPanelProviders,
   pluginPanelKey,
   selectedPluginPanelIndex,
@@ -99,7 +99,7 @@ interface RightPanelProps {
    * tab. We pass the length as `refreshKey` so the panel re-fetches
    * whenever a new patch lands.
    */
-  statePatches: Array<{ id: string }>;
+  statePatchRevision: number;
 }
 
 /**
@@ -138,7 +138,7 @@ function OwnedRightPanel(props: RightPanelProps) {
 function SessionRightPanel({
   sessionId,
   world,
-  statePatches,
+  statePatchRevision,
   panelState,
 }: RightPanelProps & { panelState: RightPanelState }) {
   const { t, i18n } = useTranslation();
@@ -397,7 +397,7 @@ function SessionRightPanel({
               )}
               <DatabasePanel
                 sessionId={sessionId}
-                refreshKey={statePatches.length}
+                refreshKey={statePatchRevision}
               />
             </TabsContent>
           )}
@@ -460,10 +460,8 @@ function SessionRightPanel({
                             }`}
                             title={p.pluginId}
                           >
-                            {panelProviderLabel(
+                            {pluginShortLabel(
                               p.pluginId,
-                              group.id,
-                              p.subs.map((item) => item.sub),
                               sessionState.sessionPlugins,
                               i18n.language,
                             )}

@@ -22,8 +22,11 @@ vi.mock("@/services/api.js", () => ({
   fetchPluginFlows: vi.fn(async () => ({ steps: [] })),
 }));
 const getWorld = vi.fn();
+const listSessions = vi.fn(
+  async (_worldId: string): Promise<api.SessionRecord[]> => [],
+);
 vi.mock("@/services/data-service.js", () => ({
-  getDataService: () => ({ listSessions: async () => [], getWorld }),
+  getDataService: () => ({ listSessions, getWorld }),
 }));
 vi.mock("@/hooks/use-slot-config.js", () => ({
   useSlotConfig: () => ({ resolvedSlots: [], refresh: vi.fn() }),
@@ -49,12 +52,6 @@ vi.mock("../session-prep/use-prep-runtime-bindings.js", () => ({
   usePrepRuntimeBindings: () => ({ bindingState: {} }),
 }));
 vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
-vi.mock("../session-prep/world-info-card.js", () => ({
-  WorldInfoCard: () => null,
-}));
-vi.mock("../session-prep/session-history-card.js", () => ({
-  SessionHistoryCard: () => null,
-}));
 vi.mock("../session-prep/dimension-actions.js", () => ({
   DimensionActions: () => null,
 }));
@@ -106,6 +103,7 @@ function openLore() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  listSessions.mockResolvedValue([]);
   invalidateAllWorldRecords();
   primeWorldRecord(fullWorld);
   await i18n.changeLanguage("en-US");
@@ -347,5 +345,66 @@ describe("session prep lore ownership", () => {
       [],
     );
     await act(async () => write.resolve());
+  });
+});
+
+describe("session prep edition and saves", () => {
+  it("uses the playing edition for the header, breadcrumb and expanded world card", async () => {
+    const translated = {
+      ...world,
+      name: "默认世界",
+      description: "默认简介",
+      locale: "zh-CN",
+      metadata: {
+        supportedLocales: ["zh-CN", "en-US"],
+        localizedText: {
+          name: { "en-US": "English world" },
+          description: { "en-US": "English description" },
+        },
+      },
+    };
+    render(<SessionPrepScreen {...props({ world: translated })} />);
+    fireEvent.click(screen.getByRole("button", { name: /English world/ }));
+    await act(async () => {});
+    expect(screen.queryByText("默认世界")).toBeNull();
+    expect(screen.queryByText("默认简介")).toBeNull();
+    expect(screen.getAllByText("English world").length).toBeGreaterThanOrEqual(
+      3,
+    );
+    expect(
+      screen.getAllByText("English description").length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows a save-list failure and retries without blocking a new game", async () => {
+    listSessions.mockRejectedValueOnce(new Error("unavailable"));
+    const onStart = vi.fn();
+    render(<SessionPrepScreen {...props({ onStart })} />);
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Could not load previous sessions",
+      ),
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
+    expect(onStart).toHaveBeenCalled();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Retry" })),
+    );
+    expect(listSessions).toHaveBeenCalledTimes(2);
+    expect(listSessions).toHaveBeenLastCalledWith(world.id);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("ignores a previous world's late save-list failure", async () => {
+    const oldRead = deferred<api.SessionRecord[]>();
+    listSessions.mockReturnValueOnce(oldRead.promise);
+    primeWorldRecord({ ...fullWorld, id: "world-b" });
+    const view = render(<SessionPrepScreen {...props()} />);
+    view.rerender(
+      <SessionPrepScreen {...props({ world: { ...world, id: "world-b" } })} />,
+    );
+    await act(async () => oldRead.reject(new Error("old world unavailable")));
+    expect(listSessions).toHaveBeenLastCalledWith("world-b");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

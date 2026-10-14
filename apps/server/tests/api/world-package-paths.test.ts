@@ -8,6 +8,7 @@ import {
   realpath,
   readFile,
   readdir,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -25,6 +26,7 @@ import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import type { WorldEnv } from "../../src/routes/api/worlds/shared.js";
 import { importWorldDataForSession } from "../../src/world-data/session-import.js";
 import { resolveWorldRoot } from "../../src/world-data/session-import/utils.js";
+import { recoverWorldPackageDeletions } from "../../src/routes/api/worlds/file-package.js";
 
 let root: string;
 let bundled: string;
@@ -97,6 +99,72 @@ async function seedWorld(
 }
 const removeWorld = () =>
   app.request("/api/worlds/logical-world", { method: "DELETE" });
+
+async function interruptedDeletion() {
+  const owned = await makePackage(user, "renamed-world");
+  await seedWorld();
+  const world = (await store.getWorld("logical-world"))!;
+  await store.upsertWorld({
+    ...world,
+    metadata: {
+      ...world.metadata,
+      worldDeletion: {
+        nonce: "interrupted",
+        startedAt: new Date().toISOString(),
+      },
+    },
+  });
+  const staging = await mkdtemp(path.join(user, ".covel-world-delete-"));
+  await rename(owned, path.join(staging, "package"));
+  return staging;
+}
+
+it("restores an interrupted world deletion at startup and allows immediate retry", async () => {
+  await interruptedDeletion();
+  await recoverWorldPackageDeletions(store, user);
+  expect(
+    readWorldDeletion((await store.getWorld("logical-world"))!)?.retryable,
+  ).toBe(true);
+  expect(await readdir(user)).toEqual(["logical-world"]);
+  expect(
+    await readFile(path.join(user, "logical-world/data/lore.json"), "utf8"),
+  ).toContain("User clue");
+  expect((await removeWorld()).status).toBe(200);
+  expect(await store.getWorld("logical-world")).toBeNull();
+  expect(await readdir(user)).toEqual([]);
+});
+
+it("finishes cleanup after the world record was deleted without recreating it", async () => {
+  await interruptedDeletion();
+  await store.deleteWorld("logical-world");
+  await recoverWorldPackageDeletions(store, user);
+  expect(await readdir(user)).toEqual([]);
+  expect(await store.getWorld("logical-world")).toBeNull();
+});
+
+it.each(["occupied", "unmarked", "wrong-root", "database-unavailable"])(
+  "preserves staged world files when recovery is ambiguous: %s",
+  async (scenario) => {
+    const staged = await interruptedDeletion();
+    if (scenario === "occupied") await mkdir(path.join(user, "logical-world"));
+    if (scenario === "unmarked") await seedWorld();
+    if (scenario === "wrong-root") {
+      const world = (await store.getWorld("logical-world"))!;
+      await store.upsertWorld({
+        ...world,
+        metadata: { ...world.metadata, storage: { path: bundled } },
+      });
+    }
+    if (scenario === "database-unavailable")
+      vi.spyOn(store, "getWorld").mockRejectedValue(
+        new Error("DB unavailable"),
+      );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await recoverWorldPackageDeletions(store, user);
+    await access(path.join(staged, "package/data/lore.json"));
+    expect(warn).toHaveBeenCalled();
+  },
+);
 
 it("imports the higher-priority manifest id from a renamed directory", async () => {
   await makePackage(bundled);

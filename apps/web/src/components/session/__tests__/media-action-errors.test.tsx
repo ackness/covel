@@ -9,7 +9,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
-import { downloadImage } from "../image-plugin-panels/actions.js";
+import { downloadMedia } from "../image-plugin-panels/actions.js";
 import { JobListPanel } from "../image-plugin-panels/image-jobs-panel.js";
 
 vi.mock("@/lib/toast-channel.js", () => ({ emitToast: vi.fn() }));
@@ -26,10 +26,10 @@ it.each(["zh-CN", "en-US", "ru-RU"])(
     await i18n.changeLanguage(locale);
     const args = {
       ref: { id: "a".repeat(64), mime: "image/png", size: 1 },
-      filename: "picture.png",
+      filenameStem: "picture",
       t: i18n.t,
     };
-    downloadImage({ ...args, sessionId: undefined });
+    downloadMedia({ ...args, sessionId: undefined });
     await waitFor(() =>
       expect(emitToast).toHaveBeenLastCalledWith(
         "error",
@@ -41,7 +41,7 @@ it.each(["zh-CN", "en-US", "ru-RU"])(
       url: "",
       fromCache: false,
     });
-    downloadImage({ ...args, sessionId: "session" });
+    downloadMedia({ ...args, sessionId: "session" });
     await waitFor(() =>
       expect(emitToast).toHaveBeenLastCalledWith(
         "error",

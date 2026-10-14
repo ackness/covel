@@ -29,7 +29,6 @@
  */
 
 import { withRequestLlmOptions } from "../request-llm-context.js";
-import type { PluginLlmModelTarget } from "@covel/runtime";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import {
@@ -49,7 +48,6 @@ import { llmModelBindingSchema, readRuntimeEnv } from "@covel/shared";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
-  readonly modelTargets?: ReadonlyMap<string, PluginLlmModelTarget>;
   /** Base API keys from process.env (*_API_KEY). Client keys override. */
   readonly envApiKeys: Record<string, string>;
   /**
@@ -134,10 +132,10 @@ export function createPerRequestLlmMiddleware(
       return;
     }
 
-    const perRequestAdapter = createGatewayAdapter(opts.ai.gateway, {
-      ...requestOptions,
-      modelTargets: opts.modelTargets,
-    });
+    const perRequestAdapter = createGatewayAdapter(
+      opts.ai.gateway,
+      requestOptions,
+    );
 
     // Keep the function-runtime gateway in lock-step with the
     // agent-runtime LLM adapter. Both are rebuilt from the same merged
@@ -158,15 +156,10 @@ export function createPerRequestLlmMiddleware(
     c.set("llmAdapter", perRequestAdapter);
     c.set("pluginGateway", perRequestPluginGateway);
     c.set("requestLlmOverridden", true);
-    // Same gateway, options and plugin targets as the adapter above, so a
-    // queued job is judged by the model configuration it will execute with.
+    // Same gateway and options as the adapter above, so a queued job is
+    // judged by the model configuration it will execute with.
     c.set("requestRuntimeJobReady", (model) =>
-      hasRuntimeJobCredentials(
-        opts.ai.gateway,
-        model,
-        requestOptions,
-        opts.modelTargets,
-      ),
+      hasRuntimeJobCredentials(opts.ai.gateway, model, requestOptions),
     );
     if (slotOverrides?.slotBindings?.memory) {
       c.set("requestMemorySlot", "memory");

@@ -53,6 +53,8 @@ When `needs` points to a contract that has only one provider, a result that the 
 
 When several records must succeed or fail together, use `invokeRuntime`. This function handler does not need a model. A manual trigger does not run a narrative runtime by itself. Any event downstream that the runtime declares still runs under the scheduling rules.
 
+An RPC action handler receives `ctx.signal`, which aborts at its time limit. The RPC channel below defines when store calls close and already-started writes settle.
+
 See [RPC channel](./api.md#post-apisessionsidplugin-rpc) and [handler write contract](./plugins.md#inputs-and-outputs).
 
 ### Tools do not cross plugins
@@ -371,7 +373,7 @@ ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, 
 
 ### Permissions do not grow across plugins
 
-A gateway and HTTP tools used by a service inherit the request settings, permissions, tracing, cancellation, and revocation boundaries of the runtime that made the call. In particular, when a community plugin is the caller, the HTTP requests it sends are still limited by its own `permissions.http`. If the gateway already has a standard method for the job, use the gateway first.
+A gateway used by a service inherits the request settings, tracing, cancellation, and revocation boundaries of the runtime that made the call. HTTP requests are sent by the provider's code, so they are checked against the provider's declaration: in a community provider's handler, `context.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package, whoever the caller is. An extension handler works the same way. If the gateway already has a standard method for the job, use the gateway first.
 
 ### The scope of "no framework change needed"
 
@@ -445,10 +447,10 @@ Which requests can select this protocol:
 | The same as above, in the `self` deployment                                                             | There is only one player, and every loaded community plugin was authorized by that player. So a community plugin's protocol can also be selected. |
 | The same as above, in the hosted deployment                                                             | A community plugin's protocol must be used in a session that has enabled it.                                                                      |
 
-A request-level preset, the `llm.toml` slots, and a runtime's own slot preference are all checked against this table. The protocol dropdown on the settings page still lists the protocols of all loaded plugins.
+A request-level preset, the `llm.toml` slots, and a runtime's own slot preference are all checked against this table. The protocol dropdown on the settings page still lists the protocols of all loaded plugins. Image, speech, transcription and music wires that a plugin registers are chosen by the same table; when none can be chosen, generation fails with a configuration error that names the plugin to enable.
 
 > [!CAUTION]
-> The trust boundary is the same as for media wires. A community plugin's server code runs only after the player authorizes it, and the origins declared in `permissions.http` are enforced as usual. The difference is that a text wire handles **all the prompts and answers** of the role that selects it.
+> The trust boundary is the same as for media wires. A community plugin's server code runs only after the player authorizes it. `covel.http` in a wire reaches only the origins declared in the package's `permissions.http` and the endpoint of the slot it is serving. The difference is that a text wire handles **all the prompts and answers** of the role that selects it.
 
 ## Custom components and mounting
 
@@ -545,7 +547,7 @@ The bridge accepts only the actions that the host explicitly provides:
 | `invokeRuntime`, `invokePluginAction`, `invokeCommand` | Everywhere            | Execution actions. They are bound to the current plugin automatically.   |
 | `emitEvent({ topic, data })`                           | Everywhere            | Emits an event that this plugin declares.                                |
 | `draftMessage({ text, selectionGroup? })`              | Right-side panel      | Puts a line into the pending area, to be sent after the player confirms. |
-| `sendMessage({ text })`                                | Stage                 | Sends one message.                                                       |
+| `sendMessage({ text })`                                | Stage                 | Fills the stage input for the player to confirm and send.                |
 | `setUiState({ value })`                                | Everywhere            | Saves the temporary state of the panel. See below.                       |
 
 You cannot change the pluginId in a parameter to call another plugin. When you need to work with another plugin, use `ctx.services` or an event from your own runtime. Do not read the other plugin's private data in the browser.
