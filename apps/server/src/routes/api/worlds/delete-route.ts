@@ -22,6 +22,22 @@ import {
 import { checkWorldWriteAccess } from "./world-write-guard.js";
 
 export async function deleteWorldWithLifecycle(c: Context): Promise<Response> {
+  return deleteWorld(c, c.req.param("id")!, false);
+}
+
+/** Undo an installation without deleting saves created while the batch ran. */
+export async function rollbackWorldWithLifecycle(
+  c: Context,
+  id: string,
+): Promise<Response> {
+  return deleteWorld(c, id, true);
+}
+
+async function deleteWorld(
+  c: Context,
+  id: string,
+  onlyIfUnused: boolean,
+): Promise<Response> {
   const denied = checkWorldWriteAccess(c);
   if (denied) return denied;
   const settings = decodePluginUserSettingsHeader(
@@ -35,7 +51,6 @@ export async function deleteWorldWithLifecycle(c: Context): Promise<Response> {
   }
   const store = c.get("store");
   const lock = c.get("sessionLock");
-  const id = c.req.param("id")!;
   const key = worldOperationLockId(id);
   const nonce = randomUUID();
   const markRetryable = async (): Promise<void> => {
@@ -66,6 +81,16 @@ export async function deleteWorldWithLifecycle(c: Context): Promise<Response> {
         return c.json(
           errorBody("World not found", { code: "world_not_found" }),
           404,
+        );
+      if (
+        onlyIfUnused &&
+        (await store.listSessions()).some((session) => session.worldId === id)
+      )
+        return c.json(
+          errorBody("World has sessions; installation rollback retained it", {
+            code: "world_in_use",
+          }),
+          409,
         );
       if (world.metadata?.source === "file") {
         return c.json(errorBody("Built-in worlds cannot be deleted"), 403);

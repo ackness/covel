@@ -35,6 +35,7 @@ export function objectResponseFormat(
 export function responseFormatInstruction(
   messages: readonly TextMessage[],
   responseFormat: LLMResponseFormat | undefined,
+  instructionLocale: "en" | "zh" = "en",
 ): string | undefined {
   if (!responseFormat) return undefined;
   const marker = `<response-format>${JSON.stringify(responseFormat.schema)}</response-format>`;
@@ -49,8 +50,9 @@ export function responseFormatInstruction(
   });
   if (alreadyPresent) return undefined;
   return (
-    "Return only JSON that conforms exactly to the following JSON Schema. " +
-    "Do not add properties that the schema does not allow.\n" +
+    (instructionLocale === "zh"
+      ? "只返回完全符合下面这份 JSON Schema 的 JSON。不要添加 schema 不允许的属性。\n"
+      : "Return only JSON that conforms exactly to the following JSON Schema. Do not add properties that the schema does not allow.\n") +
     marker
   );
 }
@@ -58,8 +60,13 @@ export function responseFormatInstruction(
 export function withResponseFormatInstruction(
   messages: TextMessage[],
   responseFormat: LLMResponseFormat | undefined,
+  instructionLocale: "en" | "zh" = "en",
 ): TextMessage[] {
-  const instruction = responseFormatInstruction(messages, responseFormat);
+  const instruction = responseFormatInstruction(
+    messages,
+    responseFormat,
+    instructionLocale,
+  );
   if (!instruction) return messages;
   // A separate final system message leaves existing cacheable content intact.
   let lastSystem = -1;

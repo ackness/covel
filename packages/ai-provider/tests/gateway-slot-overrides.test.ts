@@ -287,7 +287,7 @@ describe("gateway + slotOverrides", () => {
       capabilityOverrides: {
         story: {
           input: ["text", "image"],
-          output: ["image"],
+          output: ["text", "image"],
           contextWindow: 240_000,
           maxOutputTokens: 24_000,
         },
@@ -311,18 +311,44 @@ describe("gateway + slotOverrides", () => {
     const resolved = gateway.resolveSlot("story", options);
 
     expect(calls.map((call) => call.capability)).toEqual([
-      expect.objectContaining({ contextWindow: 240_000, output: ["image"] }),
-      expect.objectContaining({ contextWindow: 240_000, output: ["image"] }),
+      expect.objectContaining({ contextWindow: 240_000, output: ["text", "image"] }),
+      expect.objectContaining({ contextWindow: 240_000, output: ["text", "image"] }),
     ]);
     expect(calls.map((call) => call.tag)).toEqual(["image", "image"]);
     expect(resolved).toMatchObject({
       tag: "image",
-      capability: { contextWindow: 240_000, output: ["image"] },
+      capability: { contextWindow: 240_000, output: ["text", "image"] },
     });
     expect(presetRegistry.resolvePreset("ds-chat")?.capability).toMatchObject({
       contextWindow: 100_000,
       output: ["text"],
     });
+  });
+
+  it("rejects a text role override that removes text output before provider dispatch", async () => {
+    const { gateway, calls } = setup();
+    const options = {
+      capabilityOverridePolicy: "full" as const,
+      slotOverrides: {
+        capabilityOverrides: {
+          story: { output: ["image"] },
+        },
+      } satisfies SlotOverridesInput,
+    };
+    const input = {
+      presetId: "story",
+      messages: [{ role: "user" as const, content: "hi" }],
+    };
+
+    await expect(gateway.generateText(input, options)).rejects.toMatchObject({
+      code: "CONFIG_ERROR",
+    });
+    await expect(async () => {
+      for await (const _event of gateway.streamText(input, options)) {
+        // A mismatched target must fail before a provider event is emitted.
+      }
+    }).rejects.toMatchObject({ code: "CONFIG_ERROR" });
+    expect(calls).toEqual([]);
   });
 
   it("restricts hosted expansion and isolates concurrent request targets", async () => {

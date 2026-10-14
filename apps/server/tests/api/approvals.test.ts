@@ -24,6 +24,11 @@ import {
   createRpcApprovalGate,
   type RpcApprovalGate,
 } from "@covel/approval";
+import {
+  createPluginRegistry,
+  parsePluginMd,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import {
   approvalRoutes,
@@ -44,8 +49,33 @@ type Env = {
     rpcExecutor: RpcExecutor;
     rpcRegistry: PluginRpcRegistry;
     rpcApprovalGate: RpcApprovalGate;
+    pluginRegistry: PluginRegistry;
   };
 };
+
+/** The installed community package whose action the tests dispatch. */
+function installedPlugins(): PluginRegistry {
+  const registry = createPluginRegistry();
+  registry.register({
+    id: "untrusted",
+    source: "community",
+    packageManifest: parsePluginMd(
+      "---\nid: untrusted\nkind: plugin\ndescription: Untrusted\n---\n",
+      "untrusted/PLUGIN.md",
+    ),
+    manifests: [],
+    summary: {
+      id: "untrusted",
+      name: "untrusted",
+      description: "Untrusted",
+      pluginType: "plugin",
+      runtimeCount: 0,
+    },
+    loadedRuntimes: new Map(),
+    status: "registered",
+  });
+  return registry;
+}
 
 function setup(
   store: DataStore = createMemoryStore(),
@@ -66,6 +96,7 @@ function setup(
     "community",
   );
   const executor = createRpcExecutor({ registry });
+  const plugins = installedPlugins();
   const sessionLock = createInProcessSessionLock();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
@@ -73,6 +104,7 @@ function setup(
     c.set("rpcExecutor", executor);
     c.set("rpcRegistry", registry);
     c.set("rpcApprovalGate", gate);
+    c.set("pluginRegistry", plugins);
     c.set("sessionLock", sessionLock);
     await next();
   });
@@ -400,6 +432,7 @@ describe("Plugin RPC approval flow", () => {
         "community",
       );
       const executor = createRpcExecutor({ registry });
+      const plugins = installedPlugins();
       const gate = createRpcApprovalGate();
       const sessionLock = options?.sessionLock ?? createInProcessSessionLock();
       const activatorCalls: string[] = [];
@@ -415,6 +448,7 @@ describe("Plugin RPC approval flow", () => {
         c.set("rpcExecutor", executor);
         c.set("rpcRegistry", registry);
         c.set("rpcApprovalGate", gate);
+        c.set("pluginRegistry", plugins);
         c.set("sessionLock", sessionLock);
         c.set("activatePluginServerCode", async (pluginId: string) => {
           activatorCalls.push(pluginId);
@@ -509,6 +543,7 @@ describe("Plugin RPC approval flow", () => {
         "community",
       );
       const executor = createRpcExecutor({ registry });
+      const plugins = installedPlugins();
       const gate = createRpcApprovalGate();
       const sessionLock = createInProcessSessionLock();
       const app = new Hono<
@@ -523,6 +558,7 @@ describe("Plugin RPC approval flow", () => {
         c.set("rpcExecutor", executor);
         c.set("rpcRegistry", registry);
         c.set("rpcApprovalGate", gate);
+        c.set("pluginRegistry", plugins);
         c.set("sessionLock", sessionLock);
         c.set("activatePluginServerCode", async () => {
           throw new Error("boom");

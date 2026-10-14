@@ -16,6 +16,7 @@ import {
   type RpcApprovalGate,
 } from "@covel/approval";
 import type { DataStore } from "@covel/store";
+import { runnablePluginIds } from "../session/plugins.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 
 export interface RuntimeLoaderParams {
@@ -269,7 +270,10 @@ export function createRuntimeLoader(
       const loaded = new Map<string, LoadedRuntime>();
       const prompts = new Map<string, ParsedRuntimeMd>();
       const failed = new Map<string, string>();
-      for (const pluginId of session.activePlugins) {
+      const runnable = params.pluginRegistry
+        ? runnablePluginIds(session.activePlugins, params.pluginRegistry)
+        : session.activePlugins;
+      for (const pluginId of runnable) {
         for (const parsed of manifestCache.get(pluginId) ?? []) {
           if (!(await authorized(pluginId, parsed.manifest.name, sessionId)))
             continue;

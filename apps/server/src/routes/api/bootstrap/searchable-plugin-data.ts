@@ -2,6 +2,7 @@ import { compareText } from "@covel/shared";
 import type { SearchablePluginDataResolver } from "@covel/memory";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
+import { runnablePluginIds } from "../session/plugins.js";
 
 /**
  * The plugin data namespaces a session's memory search reads: those declared
@@ -14,7 +15,9 @@ export function createSearchablePluginDataResolver(deps: {
   return async (sessionId) => {
     const session = await deps.store.getSession(sessionId);
     if (!session) return [];
-    const active = new Set(session.activePlugins);
+    const active = new Set(
+      runnablePluginIds(session.activePlugins, deps.registry),
+    );
     const sources = [];
     for (const [pluginId, entry] of deps.registry.getAll()) {
       if (!active.has(pluginId) || entry.status === "error") continue;

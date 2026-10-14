@@ -2,6 +2,7 @@ import {
   awaitLlmRequest,
   createLlmRequestBudget,
   DEFAULT_LLM_REQUEST_CEILING_MS,
+  isCompleteFinishReason,
   iterateLlmRequest,
   unifyFinishReason,
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
@@ -32,9 +33,8 @@ export class LlmIncompleteOutputError extends Error {
 }
 
 function requireComplete(reason: string | undefined): void {
-  const unified = unifyFinishReason(reason);
-  if (unified === "length" || unified === "error")
-    throw new LlmIncompleteOutputError(reason ?? unified);
+  if (!isCompleteFinishReason(unifyFinishReason(reason)))
+    throw new LlmIncompleteOutputError(String(reason));
 }
 
 interface LlmRequestOptions {
@@ -95,7 +95,7 @@ export async function requestLlmResponse(
       );
       signal.throwIfAborted();
       options.onUsage?.(response.usage);
-      requireComplete(response.finishReason);
+      requireComplete(response.rawFinishReason ?? response.finishReason);
       return response;
     }
 
@@ -124,7 +124,7 @@ export async function requestLlmResponse(
           usage = event.usage;
           options.onUsage?.(usage);
         }
-        requireComplete(event.finishReason);
+        requireComplete(event.rawFinishReason ?? event.finishReason);
         completed = true;
         finishReason =
           unifyFinishReason(event.finishReason) === "tool_calls"

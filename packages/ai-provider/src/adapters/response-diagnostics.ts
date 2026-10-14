@@ -6,6 +6,8 @@ import type {
   LLMSource,
 } from "@covel/shared";
 import { AiProviderError } from "../errors.js";
+import type { UsageSummary } from "../types.js";
+import { failureUsageDetails } from "./generation-completion.js";
 
 type Protocol = "chat" | "responses" | "anthropic";
 function record(value: unknown): Record<string, unknown> {
@@ -69,7 +71,7 @@ export class ResponseDiagnostics {
   }
 
   /** Mixed text/tool output does not turn a provider refusal into success. */
-  assertNotRefused(provider: string): void {
+  assertNotRefused(provider: string, usage?: UsageSummary): void {
     const diagnostics = this.diagnostics();
     if (!diagnostics?.refusal) return;
     throw new AiProviderError({
@@ -77,7 +79,7 @@ export class ResponseDiagnostics {
       message: `${provider} refused the generation`,
       provider,
       retriable: false,
-      details: { diagnostics },
+      details: { ...failureUsageDetails(usage), diagnostics },
     });
   }
 
@@ -299,9 +301,10 @@ export function readResponseDiagnostics(
   payload: Record<string, unknown>,
   protocol: Protocol,
   provider: string,
+  usage?: UsageSummary,
 ): LLMDiagnostics | undefined {
   const diagnostics = new ResponseDiagnostics(protocol);
   diagnostics.push(payload);
-  diagnostics.assertNotRefused(provider);
+  diagnostics.assertNotRefused(provider, usage);
   return diagnostics.diagnostics();
 }

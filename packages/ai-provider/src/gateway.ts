@@ -269,6 +269,7 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       messages: TextMessage[];
+      instructionLocale?: "en" | "zh";
       tools?: ToolDefinition[];
       defaults?: LLMRequestDefaults;
       responseFormat?: LLMResponseFormat;
@@ -308,6 +309,7 @@ export function createGateway(deps: GatewayDependencies) {
             {
               model: targetModel(target),
               messages: request.messages,
+              instructionLocale: input.instructionLocale,
               tools: input.tools,
               defaults: input.defaults,
               responseFormat: input.responseFormat,
@@ -319,6 +321,7 @@ export function createGateway(deps: GatewayDependencies) {
           assertSuccessfulFinishReason(
             result.finishReason,
             targetProvider(target),
+            result.usage,
           );
           return {
             ...withProviderWarnings(
@@ -340,6 +343,7 @@ export function createGateway(deps: GatewayDependencies) {
       presetId?: string;
       schema: ZodType<TObject>;
       messages: TextMessage[];
+      instructionLocale?: "en" | "zh";
       providerRequestMetadata?: Record<string, unknown>;
       providerOptions?: ProviderOptions;
     },
@@ -378,6 +382,7 @@ export function createGateway(deps: GatewayDependencies) {
               model: targetModel(target),
               schema: input.schema,
               messages: request.messages,
+              instructionLocale: input.instructionLocale,
               providerRequestMetadata: request.metadata,
             },
             textContext(target, resolved, "object"),
@@ -385,6 +390,7 @@ export function createGateway(deps: GatewayDependencies) {
           assertSuccessfulFinishReason(
             result.finishReason,
             targetProvider(target),
+            result.usage,
           );
           return {
             ...withProviderWarnings(
@@ -405,6 +411,7 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       messages: TextMessage[];
+      instructionLocale?: "en" | "zh";
       tools?: ToolDefinition[];
       defaults?: LLMRequestDefaults;
       responseFormat?: LLMResponseFormat;
@@ -446,6 +453,7 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       messages: TextMessage[];
+      instructionLocale?: "en" | "zh";
       tools?: ToolDefinition[];
       defaults?: LLMRequestDefaults;
       responseFormat?: LLMResponseFormat;
@@ -525,6 +533,7 @@ export function createGateway(deps: GatewayDependencies) {
             {
               model: targetModel(target),
               messages: request.messages,
+              instructionLocale: input.instructionLocale,
               tools: input.tools,
               defaults: input.defaults,
               responseFormat: input.responseFormat,
@@ -544,7 +553,11 @@ export function createGateway(deps: GatewayDependencies) {
             emittedDelta = true;
           }
           if (event.type === "done") {
-            assertSuccessfulFinishReason(event.finishReason, provider);
+            assertSuccessfulFinishReason(
+              event.finishReason,
+              provider,
+              event.usage,
+            );
             completion = withProviderWarnings(
               withUnifiedFinishReason(event),
               request.warnings,
@@ -1082,6 +1095,7 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       messages: TextMessage[];
+      instructionLocale?: "en" | "zh";
       tools?: ToolDefinition[];
       schema?: ZodType;
       defaults?: LLMRequestDefaults;

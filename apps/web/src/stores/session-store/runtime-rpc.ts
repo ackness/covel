@@ -30,6 +30,7 @@ export function refreshApprovedSessionPlugins(
           type: "LOAD_SESSION_PLUGINS",
           plugins: [...plugins.items],
           commands: [...plugins.commands],
+          unavailable: plugins.unavailable,
         });
     })
     .catch(ignoreError("refresh plugins after approval"));
