@@ -19,6 +19,14 @@ export const SERVER_ENV_VARS = [
       "HTTP server listen host. Defaults to loopback so local/desktop deployments are not reachable from the network. Set to 0.0.0.0 explicitly for containers or hosted deployments.",
   },
   {
+    name: "COVEL_ALLOWED_HOSTS",
+    group: "server",
+    type: "string",
+    status: "active",
+    description:
+      "Comma-separated host names, besides localhost, 127.0.0.1 and [::1], that a request on the self tier may name in its Host header. List the names a self-hosted web app is opened by from other machines; any other Host is refused, which stops DNS rebinding.",
+  },
+  {
     name: "NODE_ENV",
     group: "server",
     type: "enum",
@@ -73,7 +81,8 @@ export const SERVER_ENV_VARS = [
     type: "integer",
     status: "active",
     defaultValue: "60",
-    description: "Default per-IP requests per minute for rate-limited routes.",
+    description:
+      "Per-IP requests per minute for GET /api/events/stream only. Other rate-limited routes set their own quota in code.",
   },
   {
     name: "TRUSTED_PROXY_IPS",

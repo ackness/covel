@@ -360,6 +360,26 @@ describe("collection ZIP import", () => {
     });
   };
 
+  it.each([".covel-install.json", ".COVEL-INSTALL.JSON"])(
+    "rejects a world member carrying a reserved receipt %s without installing any member",
+    async (filename) => {
+      const response = await upload({
+        ...collection({
+          worlds: [{ path: "worlds/barrow" }],
+          plugins: [{ path: "plugins/barrow-dice" }],
+        }),
+        ...pluginFiles("barrow-dice"),
+        ...worldFiles(),
+        [`worlds/barrow/${filename}`]: "{}",
+      });
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("reserved installation receipt");
+      expect(await exists(path.join(pluginRoot, "barrow-dice"))).toBe(false);
+      expect(await exists(path.join(worldRoot, "barrow"))).toBe(false);
+      expect(await store.getWorld("barrow")).toBeNull();
+    },
+  );
+
   it("installs a packed collection as a unit", async () => {
     const response = await upload({
       ...collection({

@@ -1,3 +1,4 @@
+import { importImage } from "@/lib/import-image.js";
 import {
   afterEach,
   beforeAll,
@@ -10,6 +11,10 @@ import {
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ImageScopeContext } from "@/lib/external-images.js";
 import { Markdown } from "../markdown.js";
+
+vi.mock("@/lib/import-image.js", () => ({
+  importImage: vi.fn(async () => "data:image/png;base64,AAAA"),
+}));
 
 const settings = vi.hoisted(() => ({
   value: {} as Record<string, string[]>,
@@ -32,6 +37,7 @@ beforeAll(async () => {
 beforeEach(() => {
   settings.value = {};
   settings.set.mockReset();
+  vi.mocked(importImage).mockClear();
 });
 afterEach(cleanup);
 
@@ -42,12 +48,11 @@ describe("Markdown images", () => {
     render(<Markdown>{EXTERNAL}</Markdown>);
     await screen.findByText(/externalImageHeld/);
     expect(document.querySelector("img")).toBeNull();
+    expect(importImage).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByText("session.externalImageLoad"));
-    const img = document.querySelector("img");
-    expect(img?.getAttribute("src")).toBe(
-      "https://cdn.example/map.png?leak=secret",
-    );
+    const img = await screen.findByAltText("a map");
+    expect(img?.getAttribute("src")).toBe("data:image/png;base64,AAAA");
     expect(img?.getAttribute("referrerpolicy")).toBe("no-referrer");
   });
 

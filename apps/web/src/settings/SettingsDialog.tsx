@@ -272,9 +272,7 @@ export function SettingsDialog({
                 {t("settings.loadFailedReadOnly")}
               </p>
             )}
-            <fieldset disabled={!writable} className="min-w-0">
-              {renderPane(selectedNode, t)}
-            </fieldset>
+            {renderPane(selectedNode, t)}
           </section>
         </div>
       </DialogContent>

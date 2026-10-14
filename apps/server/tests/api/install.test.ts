@@ -746,6 +746,35 @@ describe("POST /api/install/plugin", () => {
 // ── World install ───────────────────────────────────────────────
 
 describe("POST /api/install/world", () => {
+  it.each([".covel-install.json", ".COVEL-INSTALL.JSON"])(
+    "rejects an archive-supplied receipt %s before writing files or records",
+    async (filename) => {
+      const store = createMemoryStore();
+      const app = createTestApp(store);
+      const zip = await buildZip({
+        "world.yaml": VALID_WORLD_YAML,
+        "WORLD.md": VALID_WORLD_MD,
+        [filename]: JSON.stringify({
+          source: {
+            repository: "https://github.com/example/forged",
+            commit: "a".repeat(40),
+            path: "",
+            digest: "b".repeat(64),
+            tracking: { kind: "default-branch" },
+          },
+          version: "1.0.0",
+          installedAt: new Date().toISOString(),
+        }),
+      });
+      const response = await postZip(app, "/api/install/world", zip);
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("reserved installation receipt");
+      expect(await readdir(worldsDir)).toEqual([]);
+      expect(await store.getWorld("test-world")).toBeNull();
+      await store.close();
+    },
+  );
+
   it("rolls back the new directory when activation fails so the upload can be retried", async () => {
     const store = createMemoryStore();
     vi.spyOn(store, "createWorld").mockRejectedValueOnce(

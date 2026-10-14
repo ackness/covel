@@ -549,19 +549,19 @@ Search the session's memory. It looks in two sources:
 | scope    | enum   |          | `recall` / `archival` / `all`, default `all`                      |
 | limit    | number |          | Maximum number of results, 1–20, default 5                        |
 
-Both keyword and vector search return an excerpt around a query term: up to 500 source characters, plus ellipses and the recall role prefix. A semantic hit without a literal query term returns a prefix excerpt. The tool preserves the excerpt without truncating its ending. The next section describes retrieval.
+Both keyword and vector search return an excerpt around a query term: up to 500 source characters, plus ellipses and the recall role prefix. A semantic hit without a literal query term returns a prefix excerpt. The tool preserves the excerpt without truncating its ending. An archival result's `key` is a readable source identifier. When a lorebook entry has no first keyword, it may use a readable entry ID, but never a UUID. UUID keywords and plugin data keys are also omitted: the result keeps its content without a `key`. The next section describes retrieval.
 
 ### Plugin memory and vector search
 
 This section explains how `memory-search` searches, and how plugin data gets into the search scope.
 
-**No embedding model is needed.** When no embedding slot is configured, recall and archival rank results with BM25 (`rankTexts` from `@covel/plugin-handlers-utils`): When vector recall has too few results, keyword hits fill the remaining places and are deduplicated by message ID. Distinct messages with identical text in the same turn remain separate hits. Message IDs are internal and are not returned to the model by the tool.
+**No embedding model is needed.** When no embedding slot is configured, recall and archival rank results with BM25 (`rankTexts` from `@covel/plugin-handlers-utils`):
 
 - Both the query and the texts are split into words. Chinese, Japanese, and Korean text is split into pairs of adjacent characters. English is split into words, and plurals and possessives are reduced to the base form.
 - A word that appears in only a few texts (a person's name, an item's name) gets a high weight. A word that appears in almost every text gets a weight close to zero. A long text is not penalized just for being long.
 - It matches only literal text, not paraphrases. So the tool description asks the caller to put the names involved in the query, and it can take several wordings at once.
 
-When an embedding slot is configured and the store supports vectors, the search uses vector retrieval instead. If that fails, it falls back to BM25.
+When an embedding slot is configured and the store supports vectors, the search uses vector retrieval instead. If that fails, it falls back to BM25. When vector recall has too few results, keyword hits fill the remaining places and are deduplicated by message ID. Distinct messages with identical text in the same turn remain separate hits. Message IDs are internal and are not returned to the model by the tool.
 
 **The recall scope** is the latest 500 messages, plus all the history summaries (the summary segments written by `history.compact@2`, whose result `role` is `summary`). So earlier turns can still be found through the summaries.
 
@@ -605,6 +605,8 @@ All plugins read the same public snapshot, `ctx.world.dimensions`, which is froz
 - Does not read a provider's private namespace.
 - Does not add in the caller's own writes that are not yet committed.
 - Does not fall back to the world's initial values.
+
+The model's `_text` queries and pages dimension values after applying `modelFacingJson`. A direct query of a bookkeeping field cannot expose it; code still receives the full values in `results`.
 
 | Argument  | Type                                       | Required | Description                       |
 | --------- | ------------------------------------------ | -------- | --------------------------------- |
@@ -749,7 +751,7 @@ When one of the model's replies has several tool calls, the `suspend` call first
 **Things to note:**
 
 - `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
-- A runtime can have only one unresolved suspension at a time. The resume endpoint looks it up by `runtimeId + sessionId`.
+- Only a runtime's newest suspension can resume. When the same runtime suspended again later, the player played another turn, or the plugin changed version, the old suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
@@ -775,7 +777,7 @@ When a runtime has many tools, putting every tool's schema into every model call
 - This call is handled directly by the agent loop. It **does not go through ToolExecutor**, and it is not in the tool registry. Its name is still a reserved framework name.
 - The search is strictly limited to the deferred tools that this runtime declared itself. Schemas are obtained through `getToolInfo(name, context)`, and they follow the same builtin / local access boundaries. A tool the runtime has no permission for cannot be found, so it does not leak.
 - Scoring uses BM25 with no dependencies (k1=1.2 / b=0.75). Chinese, Japanese, and Korean text is split into pairs of adjacent characters. The searched text is: the tool name, the description, and the field names and field descriptions in the parameter schema.
-- The description of `search-tools` tells the model how many tools are in the deferred pool and which plugins they come from. The model uses this to know that there are tools it has not loaded yet that it can search for.
+- The description of `search-tools` tells the model how many tools are in the deferred pool, and names the plugin that declared it. The pool can hold framework built-in tools too, so not all of them come from that plugin. The model uses this to know that there are tools it has not loaded yet that it can search for.
 - When to use it: when a runtime's allow-list has more than about 10 tools, preloading every schema on every call starts to take up the prompt budget.
 
 The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the execution logic is in `packages/runtime/src/agent-loop/tool-search.ts`. The approach follows openai/codex's `tool_search` (`ToolExposure::Deferred` + BM25).
@@ -1025,6 +1027,7 @@ Characters in session (3 total, sorted by frequency then recency):
 Read the session's character attribute schema. The argument is `{}`, and it returns `{ schema: CharacterSchemaRecord | null, _text }`.
 
 - The schema belongs to the session's World Model. It contains `version` / `types` / `attributes`. When it does not exist, it returns `null`.
+- The `_text` the model reads passes through `modelFacingJson`, removing the session ID and write timestamps. Code still receives the complete `schema` record.
 - The read includes the validated pending domain proposals. It does not infer the schema from the plugin's private `schema` data.
 - This tool does not write data, and it does not accept IDs of other sessions or plugins.
 
@@ -1449,9 +1452,9 @@ Every tool call goes through the approval check in `ApprovalPipeline`. The curre
 
 It is classified automatically at startup:
 
-- Tools in `builtinUITools` → `builtin`
-- Tools that a plugin's `entry` registered successfully with `registerTool()` → `local`
-- Anything else → `third-party` (currently no tool falls into this category)
+- Tools registered with `registerBuiltin` (including `builtinUITools`) → `builtin`
+- Every other tool, that is, a plugin tool that its `entry` registered successfully with `registerTool()` → `local`
+- No tool is given `third-party` today: the classification only produces `builtin` and `local`
 
 ### The approval boundary for third-party plugin server code and plugin tools
 

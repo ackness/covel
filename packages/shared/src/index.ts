@@ -550,3 +550,13 @@ export { isValidPluginSetting } from "./plugin-settings.js";
 
 export * from "./world-data-target.js";
 export * from "./plugin-frame.js";
+
+export {
+  runtimeCaseFileSchema,
+  runtimeCasesSchema,
+} from "./schemas/runtime-cases.js";
+export type {
+  RuntimeCase,
+  CaseExpectations,
+  CaseArtifactConfig,
+} from "./schemas/runtime-cases.js";

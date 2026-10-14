@@ -79,6 +79,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - function runtime 挂起时，continuation 保存还没提交的命令、输入和导出的绑定，以及 activation。
 - 恢复时使用这些冻结的快照。还没提交的命令仍然可以被这次运行读到，并在恢复成功时一起原子提交。
 - 恢复失败会丢弃这些域写入。
+- continuation 还记下挂起时历史里的玩家回合数和插件版本。恢复时任一项变了，挂起项就被作废，不再运行，见[过时的挂起项](./api.md#过时的挂起项)。
 
 > [!WARNING]
 > continuation 的格式更新之后，已有的开发期暂停记录需要重建。
@@ -144,7 +145,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 - 它在 `emit-event` 工具完成 schema 校验、产出 `emittedEvents` 之后马上发出，早于回合的事件链和最终的事务提交。
 - 它只能用来驱动可以撤销的显示效果。它不代表业务状态已经保存，也不满足 runtime 的 binding 和 gate。
-- 网页端在收到 `execution.completed`、出错或 proposal 提交失败时，清掉同一回合的预览。对应的持久状态到了之后，以 `plugin-data.changed` 为准。
+- 网页端不直接保存或读取这个事件。服务端将它投影为 `ui.slot.preview`；网页端通过 UI slot 事件显示和清除预览。
 
 这样舞台动画可以在叙事还在生成时就有反应，同时整个回合的事务仍然是原子的。
 
@@ -317,6 +318,7 @@ ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })
 - 还没结束的作业，按 runtime 的结果换成终态。
 - 插件已经上报了 `succeeded`，但这次的领域写入没有提交（整次执行回滚、这个 runtime 失败，或者它的写入在提交时被单独丢弃）：框架追加一条 `failed`，不保留成功状态。
 - 插件自己上报的 `failed` / `cancelled` 不会被改写。
+- 挂起的 runtime 的作业停在 `waiting-input`。它们记在挂起那次执行名下：恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试时继续等待。
 
 **后台作业的状态对应**
 
@@ -597,7 +599,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 1. 连接建立时，先发一条 `system.connected`。
 2. 之后每 30 秒发一条 `system.heartbeat`。
-3. 请求带了 `lastEventId` 时，先补发 EventBus 缓存里 `seq > lastEventId` 的事件，再切换到实时事件。
+3. 重连游标可通过 `lastEventId` 查询参数或标准 `Last-Event-ID` 请求头传入；两者都有时，查询参数优先。游标的 epoch 仍有效时，先补发 EventBus 缓存里序号大于游标 seq 的事件，再切换到实时事件；无法补齐时发送 `system.reset`。
 
 `system.connected` 的 data 里有 `cursor`：这一刻这个会话已经发出的最新事件 id（`${epoch}:${seq}`，还没发过事件时 seq 是 0）。
 
@@ -729,7 +731,7 @@ data: {
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                          |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 可撤销表现层即时预览；不代表领域提交                                  |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                  |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                       |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
@@ -811,6 +813,7 @@ data: {
 
 - 上表的六种动作都可以附加 `payload.recoverFromTurnId`，并且必须和服务端返回的原 action 描述一致。
 - 客户端从 `GET /api/sessions/:id/execution` 读取只读的状态。刷新页面不会重新提交动作。玩家明确点了恢复重试之后，才用新的 requestId 发送。
+- 恢复轮询在成功时每 3 秒检查一次；失败后等待 3、6、12、24 秒，之后最多每 30 秒一次，成功后复位。状态请求不叠加 HTTP 重试；页面隐藏时暂停，重新显示时立即检查，同一观察不会并发轮询。
 - 服务端在会话锁里校验来源回合。开场恢复保留 continuation 的来源，不增加玩家回合数。
 - 执行状态查询在发送回答之前，会复核通过鉴权的会话代次。查询期间会话被删除，或者用同一个 ID 重建了，返回 `409 session_incarnation_changed`，而不是新会话的 `retry` 输入。这个只读的检查不等待正在运行的长回合，也不自动重新提交动作。
 
@@ -1265,6 +1268,7 @@ runtime 的终态：
 
 **浏览器里的事件处理器**
 
+- 动作流只暂停同一会话的后台订阅，暂停按会话计数。切换会话不会中止旧动作流或它的检查点提交；新会话的订阅可以立即连接。页面隐藏时暂停订阅，重新显示时恢复。
 - 浏览器的订阅把每个事件处理器隔离开。
 - 一个处理器同步抛错时，上报会话 id、事件 id / 类型和错误类型。它不记录事件的负载或异常消息，其他订阅者继续运行。
 - 连接恢复和 `system.reset` 仍然从权威状态重建。只有一条处理器警告，不会改变补发的游标，也不会触发重试。
@@ -1287,7 +1291,7 @@ runtime 的终态：
 | `ui.slot.cleared { turnId }`                              | 移除这一回合的预览                             |
 
 - 这些事件同时转发到 action 流和后台订阅。
-- 回合完成、失败和取消时，客户端也会清掉预览。
+- 回合完成、失败和取消时，客户端也会清掉预览。离开会话或卸载会话宿主时，清掉该会话的整份 slot 缓存；回来时重读权威状态。同一会话内刷新不会清掉正在进行的预览。
 - 给一个已经结束的回合迟到的预览会被忽略。明确地开始一次新的执行，允许同一个回合 ID 重试。
 - 一个在更新的 SSE 事件之前发出的 GET，它的回答到达时不能覆盖那些更新。
 
@@ -1307,7 +1311,7 @@ runtime 的终态：
 `turn-digest@1` 包含 `turnId/playerMessage/locale/narrativeText/toolCallSummaries/lastPlayerInput/runtimeResults`：
 
 - `runtimeResults` 只列出记录那一刻、来源回合已经看到的 `runtimeId` 和状态（`success/failed/skipped/suspended`）。它不包含还没运行的使用者，也不包含其他回合的重试种子。
-- 只有成功的故事和已接受的工具调用进入文本摘要。
+- 只有成功的故事和已接受的工具调用进入文本摘要。声明 `io.concealed: true` 的 runtime，其工具调用不进入 `toolCallSummaries`；`runtimeResults` 仍保留它的 ID 和状态。
 
 快照怎样保存：
 

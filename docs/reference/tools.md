@@ -549,7 +549,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 | scope | enum   |      | `recall` / `archival` / `all`，默认 `all` |
 | limit | number |      | 最多返回几条，1–20，默认 5                |
 
-关键词和向量检索都返回查询词附近的摘录：正文最多 500 个字符，省略号和 recall 的角色前缀另计。语义命中没有出现查询词时，返回开头的摘录。工具保留检索器的摘录，不再截掉末尾。检索的规则见下一节。
+关键词和向量检索都返回查询词附近的摘录：正文最多 500 个字符，省略号和 recall 的角色前缀另计。语义命中没有出现查询词时，返回开头的摘录。工具保留检索器的摘录，不再截掉末尾。archival 结果的 `key` 是可读的来源标识；lorebook 的首个关键词为空时可用可读的条目 ID，但不会回退到 UUID。UUID 形式的关键词或插件数据 key 也不返回，结果省略 `key`，仍保留正文。检索的规则见下一节。
 
 ### 插件记忆与向量搜索
 
@@ -605,6 +605,8 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 - 不读提供者的私有 namespace。
 - 不叠加调用方自己还没提交的写入。
 - 不回退到世界的初值。
+
+模型读取的 `_text` 先用 `modelFacingJson` 投影维度值，再按路径查询和分页。因此直接查询簿记字段也不会读到它；代码读取的 `results` 仍保留完整值。
 
 | 参数      | 类型                                       | 必需 | 描述                  |
 | --------- | ------------------------------------------ | ---- | --------------------- |
@@ -749,7 +751,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 **注意事项**：
 
 - `resumeSchema` 必须能被 `JSON.stringify`，因为现场要写进存储。
-- 同一个 runtime 同一时刻只能有一个没解决的挂起。恢复接口按 `runtimeId + sessionId` 查找。
+- 一个 runtime 只有最新的那次挂起能恢复。同一个 runtime 之后又挂起过、玩家之后又玩了回合，或者插件换了版本，旧的挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
 - `@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具。agent 仍要在 `agent.tools.builtin` 里列出 `suspend` 才能调用。
 - 恢复是接着被挂起的那次执行继续：
   - `ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化。
@@ -775,7 +777,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - 这个调用由 agent 循环直接处理，**不进入 ToolExecutor**，也不在工具注册表里。它的名字仍然是框架保留名。
 - 搜索的范围严格限于这个 runtime 自己声明并且被延迟的工具。schema 通过 `getToolInfo(name, context)` 取得，沿用 builtin / local 的访问边界：没有权限的工具搜不到，也不会泄露。
 - 打分用不带任何依赖的 BM25（k1=1.2 / b=0.75）。中日韩文本按相邻两个字切分。被搜索的文本是：工具名、描述、参数 schema 里的字段名和字段描述。
-- `search-tools` 的描述会告诉模型延迟池里有多少工具、来自哪些插件。模型据此知道还有没加载的工具可以搜。
+- `search-tools` 的描述会告诉模型延迟池里有多少工具，并写上声明它的插件 ID。池子里的工具可能是框架内置工具，不一定都来自这个插件。模型据此知道还有没加载的工具可以搜。
 - 适用场景：一个 runtime 的白名单超过大约 10 个工具，每次调用都预载全部 schema 开始挤占提示词预算。
 
 契约声明在 `packages/tools/src/builtin/tool-search.ts`，执行逻辑在 `packages/runtime/src/agent-loop/tool-search.ts`。做法参照 openai/codex 的 `tool_search`（`ToolExposure::Deferred` + BM25）。
@@ -1025,6 +1027,7 @@ Characters in session (3 total, sorted by frequency then recency):
 读取会话的角色属性 schema。参数为 `{}`，返回 `{ schema: CharacterSchemaRecord | null, _text }`。
 
 - schema 属于会话的 World Model，包含 `version` / `types` / `attributes`。不存在时返回 `null`。
+- 模型读取的 `_text` 经过 `modelFacingJson`，不含会话 ID 和写入时间。代码读取的 `schema` 保留完整记录。
 - 读取包括已验证的待提交领域 proposal。它不根据插件私有的 `schema` 数据推断。
 - 这个工具不写数据，也不接受其他会话或插件的 ID。
 
@@ -1449,9 +1452,9 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 启动时自动分类：
 
-- `builtinUITools` 里的工具 → `builtin`
-- 插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
-- 其他 → `third-party`（当前没有工具属于这一类）
+- 框架用 `registerBuiltin` 注册的工具（包括 `builtinUITools`）→ `builtin`
+- 其他工具，即插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
+- `third-party` 目前不会被分给任何工具（分类只产生 `builtin` 和 `local`）
 
 ### 第三方插件 server-code / plugin tool 审批边界
 

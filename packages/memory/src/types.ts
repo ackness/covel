@@ -36,7 +36,8 @@ export interface RecallSearcher {
 // ── Archival Memory (cross-plugin knowledge search) ─────────────
 
 export interface ArchivalSearchResult {
-  readonly key: string;
+  /** Readable source key; absent when the source has only a storage UUID. */
+  readonly key?: string;
   /** Query-centered excerpt, shared by keyword and vector search. */
   readonly content: string;
   /** Relevance score (higher = more relevant); see {@link RecallSearchResult.score}. */

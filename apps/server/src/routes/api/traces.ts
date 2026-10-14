@@ -67,7 +67,7 @@ type Env = {
   Variables: {
     store: DataStore;
     pluginRegistry?: PluginRegistry;
-    builtinToolNames?: readonly string[];
+    builtinToolNames: readonly string[];
   };
 };
 

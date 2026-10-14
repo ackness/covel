@@ -17,17 +17,22 @@ pnpm build:electron   # production desktop installer → release/
 pnpm format           # Prettier
 pnpm clean            # remove build output of every package (turbo clean)
 pnpm db:up            # start the PostgreSQL container only (needed before dev:pg / test:pg)
-pnpm docker:up        # Compose stack (postgres + app)
+pnpm docker:up        # SQLite Compose stack (app only; docker/docker-compose.sqlite.yml)
 pnpm docker:build     # the same, rebuilding the image first
-pnpm docker:down      # stop the stack, keep the volumes
-pnpm docker:down-all  # stop the stack and DELETE the volumes
+pnpm docker:down      # stop the stack, keep the volume
+pnpm docker:down-all  # stop the stack and DELETE the volume
 pnpm docker:logs      # follow the stack's logs
+pnpm docker:pg:up     # PostgreSQL Compose stack (postgres + app; docker/docker-compose.yml)
+pnpm docker:pg:build  # the same, rebuilding the image first
+pnpm docker:pg:down   # stop the stack, keep the volumes
+pnpm docker:pg:down-all  # stop the stack and DELETE the volumes
+pnpm docker:pg:logs   # follow the stack's logs
 pnpm db:generate      # Drizzle migration generation for the server
 pnpm db:studio        # Drizzle Studio
 ```
 
 > [!CAUTION]
-> `pnpm docker:down-all` 会删除数据卷，里面的数据库和应用数据一起消失。只想停掉容器时用 `pnpm docker:down`。
+> `pnpm docker:down-all` 和 `pnpm docker:pg:down-all` 会删除数据卷，里面的数据库和应用数据一起消失。只想停掉容器时用 `pnpm docker:down` / `pnpm docker:pg:down`。
 
 ## Tests
 

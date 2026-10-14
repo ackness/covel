@@ -25,6 +25,7 @@ import type { HookPipeline } from "../hooks/pipeline.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
+import { suspensionBasis } from "./suspension-settlement.js";
 
 export interface HandleSuspensionOptions {
   readonly sentinel: SuspendSentinel;
@@ -89,6 +90,8 @@ export async function handleSuspension(
     ...(opts.inputSlots ? { inputSlots: opts.inputSlots } : {}),
     ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),
     executionContext,
+    // `executeTurn` sets the player turns once it knows the whole execution.
+    takenUnder: suspensionBasis(manifest, 0),
     ...(input.locale !== undefined ? { locale: input.locale } : {}),
     ...(opts.logicalTurn !== undefined
       ? { logicalTurn: opts.logicalTurn }

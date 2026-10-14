@@ -303,6 +303,8 @@ export async function loadPluginDefinition(
   locale?: string,
 ): Promise<PluginDefinition> {
   if (discovery.layoutError) throw new Error(discovery.layoutError);
+  for (const warning of discovery.layoutWarnings ?? [])
+    console.warn(`[plugin-loader] ${warning}`);
   const rootPath = path.join(discovery.rootPath, "PLUGIN.md");
   const parsedPackage = await parsePluginMdForLocale(
     discovery.rootPath,
@@ -363,7 +365,7 @@ export async function loadPluginDefinition(
     messages: await readMessageCatalogs(discovery.rootPath),
     languages: await pluginLanguages(discovery.rootPath),
   };
-  validatePluginDeclarations([packageManifest]);
+  validatePluginDeclarations(packageManifest);
   return definition;
 }
 

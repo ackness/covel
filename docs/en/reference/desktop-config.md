@@ -24,6 +24,7 @@ On first launch the desktop app creates `~/.covel/`. Small config files and user
 
 <data_root>/                 ← default ~/.covel/data; can point anywhere
   covel.db                   ← SQLite database
+  media/                     ← Stored images, audio and other media
   worlds/                    ← worlds the user created or installed
   logs/                      ← app logs (rotated by size, one NDJSON record per line)
     desktop.log              ← main-process events (window / IPC / backend supervision / startup failures)
@@ -116,6 +117,8 @@ A packaged desktop app queries the latest stable GitHub Release through `GET /ap
 
 ## `~/.covel/keys.env`
 
+External environment keys take precedence over saved copies, even when their values match. Deleting a local copy does not delete an external key. At startup, the sidecar records external keys before loading `keys.env`, so saves keep the two sources separate.
+
 ```env
 # One KEY=VALUE per line; # starts a comment.
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
@@ -184,8 +187,8 @@ Picker options and default summaries show the slot, the provider and the **effec
 **Switching `data_root`.** After you pick a folder in the desktop app, what happens depends on the two locations:
 
 - The current folder has data and the new one has none: a dialog asks "Copy my data" or "Start empty".
-- The new folder already holds a `covel.db` or user worlds: it is used as it is. Nothing is copied or overwritten.
-- With "Copy my data", only a `data-root-copy.json` is written to the config root at that moment, and `data_root` stays unchanged. At the next start the main process copies `covel.db`, `covel.db-wal`, `covel.db-shm` and `worlds/` before it starts the backend (not `logs/`, not `server.port`), and rewrites `data_root` only after the copy succeeded.
+- The new folder already holds a `covel.db` or user worlds or media: it is used as it is. Nothing is copied or overwritten.
+- With "Copy my data", only a `data-root-copy.json` is written to the config root at that moment, and `data_root` stays unchanged. At the next start the main process copies `covel.db`, `covel.db-wal`, `covel.db-shm`, `worlds/` and `media/` before it starts the backend (not `logs/`, not `server.port`), and rewrites `data_root` only after the copy succeeded.
 - The copy is tried once. When it fails, is cut short, or another Covel process still has the database open, the files this copy wrote are removed, `data_root` stays unchanged, and a dialog says why.
 - The old folder is only read: nothing is moved or deleted.
 
@@ -211,6 +214,8 @@ In source development the priority of the root `llm.toml`, the user resource dir
 
 ## Startup and recovery
 
+On startup failure, the main process waits for the splash page to finish loading before sending the error, so the page can show retry and log controls.
+
 - The app takes a single-instance lock before starting. Another launch only focuses the existing window.
 - Once the backend is listening, it tells the main process through private IPC and the window loads immediately. When the desktop parent disconnects, the backend drains and exits.
 - `server.port` holds the last port that worked. It is reused when free; otherwise another free port is chosen.
@@ -223,12 +228,12 @@ In source development the priority of the root `llm.toml`, the user resource dir
 
 The desktop shell generates a one-time bearer token at every launch and passes it to the backend as `COVEL_DESKTOP_REST_TOKEN`.
 
-| Endpoint                                                                                                                                                   | Token                                            |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `PUT /api/config/keys`, `PUT /api/config/settings`, `PUT /api/config/proxy`, `PUT /api/config/data-root`, `POST /api/config/open-folder` (write endpoints) | Required                                         |
-| `GET /api/config/settings`, `GET /api/config/proxy`, `GET /api/app-update/latest` (return local config, or send an outbound request for you)               | Required                                         |
-| `GET /api/config/info`                                                                                                                                     | Not required                                     |
-| `GET /api/config/keys`                                                                                                                                     | Not required. Returns provider names, never keys |
+| Endpoint                                                                                                                                                   | Token                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `PUT /api/config/keys`, `PUT /api/config/settings`, `PUT /api/config/proxy`, `PUT /api/config/data-root`, `POST /api/config/open-folder` (write endpoints) | Required                                     |
+| `GET /api/config/settings`, `GET /api/config/proxy`, `GET /api/app-update/latest` (return local config, or send an outbound request for you)               | Required                                     |
+| `GET /api/config/info`                                                                                                                                     | Not required                                 |
+| `GET /api/config/keys`                                                                                                                                     | Required. Returns provider names, never keys |
 
 An endpoint that requires the token checks the `Authorization: Bearer <token>` header and returns `401` when it is missing or wrong.
 
@@ -236,13 +241,9 @@ An endpoint that requires the token checks the `Authorization: Bearer <token>` h
 - The Electron page gets `restToken` through the `covel:get-info` IPC and adds it to every write request.
 - In development, when the variable is absent, the token gate is off. Plain web deployments and the `pnpm dev:web` flow are unaffected.
 
-**How keys appear in the UI.** After reading the provider list from `GET /api/config/keys`, the UI marks those providers in memory as having a server-managed key. The mark is not the key text and never enters the `X-Provider-Keys` header. On save:
+**How keys appear in the UI.** The Electron UI reads plaintext keys from `keys.env` through `covel:keys:load` IPC. SettingsStore keeps them in memory to build the `X-Provider-Keys` header, without writing them to the desktop page's `localStorage`. Saving sends a patch through `covel:keys:save`: unchanged keys stay, new values are written, and `null` deletes a key. The main process first writes through the sidecar's `PUT /api/config/keys`; in development without a sidecar, or when the sidecar is unavailable, it writes the file directly.
 
-- A server-managed key you did not edit is left alone.
-- A newly typed key becomes an incremental change in one PUT.
-- A provider removed in the UI becomes an explicit delete.
-
-So the provider list is never mistaken for a key map, and editing one key does not overwrite the others.
+`GET /api/config/keys` returns provider names only, never key values. The current Electron UI does not call it: its `json-file` backend uses IPC, while a plain browser uses `localStorage`. An integration that explicitly selects the `json-file` REST transport represents this list as in-memory “server-managed key” markers, which never enter `X-Provider-Keys`. See [Settings store](./settings-store.md).
 
 **When `keys.env` cannot be read.** GET returns `500 keys_file_unreadable` and PUT returns `409 keys_file_unreadable`; the original file is kept. Writes use the same temporary file plus rename.
 

@@ -200,6 +200,8 @@ Returns the files owned by `sessionId` whose `meta` contains every key-value pai
 
 ## Ownership
 
+SQLite stores `media_assets.path` as a relative path (`ab/cd/<sha256>.bin`) beneath `mediaRoot`, which defaults to `media/` beside the database. Reads, streams, repairs and deletion resolve it against the current root. Copy or back up the database and this directory together; moving them does not require rewriting rows. A custom `mediaRoot` must be copied and configured separately. Development databases containing absolute media paths must be recreated; there is no migration or fallback.
+
 **Writes to SQLite / local files**
 
 - `put()` first writes the complete bytes to an exclusive temporary file in the target directory. It then renames the file atomically to the content path, and finally records the metadata.

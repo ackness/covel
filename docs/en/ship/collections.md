@@ -166,6 +166,8 @@ When there are errors, the command ends with a failure, so you can put it direct
 
 When importing from a ZIP, there is no preview step, and a problem causes the install to be refused directly.
 
+Collection members cannot carry the installer's source receipt. Worlds and plugins share the [reserved-file rule](../reference/world-installation.md#api).
+
 ## Installing Several at Once Without a Manifest
 
 When the repository has no `covel-collection.yaml`, after the player pastes the link they see all the worlds and plugins in that directory, and they can install them all at once in the same way. The manifest does two things: it specifies exactly what to install, and it references packages in other repositories.

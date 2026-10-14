@@ -1,3 +1,5 @@
+import { loadWorldForPublication } from "../../../world-data/publication.js";
+import { worldAuthoringFlight } from "../../../authoring/flight.js";
 /**
  * World translation route.
  *
@@ -5,12 +7,13 @@
  *   language, written by the configured model. Streams Server-Sent Events.
  */
 
-import { realpath, stat } from "node:fs/promises";
+import { cp, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
 import {
   inspectGeneratedWorldPackage,
   recordGeneratedWorldFiles,
+  publishWorldPackage,
 } from "@covel/create";
 import {
   WORLD_EDITIONS_KEY,
@@ -29,7 +32,7 @@ import {
 import { streamOwnedSSE } from "../../../application-work.js";
 import { orderedSend } from "../../../lib/ordered-send.js";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
-import { rateLimiter, singleFlight } from "../../../middleware/rate-limit.js";
+import { rateLimiter } from "../../../middleware/rate-limit.js";
 import { parseIdleTimeoutMs } from "../../../world-data/authoring-timeout.js";
 import { writeWorldTranslations } from "../../../world-data/locale-tooling.js";
 import { resolveWorldRoot } from "../../../world-data/session-import/utils.js";
@@ -43,10 +46,7 @@ import {
   isWorldDeleting,
   worldOperationLockId,
 } from "../../../world-lifecycle.js";
-import {
-  loadSingleWorld,
-  preserveWorldProvenance,
-} from "../../../world-seed-loader.js";
+import { preserveWorldProvenance } from "../../../world-seed-loader.js";
 import { checkHostedOperator } from "../session/session-guard.js";
 import type { WorldEnv } from "./shared.js";
 import { checkWorldWriteAccess } from "./world-write-guard.js";
@@ -124,7 +124,7 @@ worldTranslateRoutes.post(
     await next();
   },
   rateLimiter({ max: 10 }),
-  singleFlight(),
+  worldAuthoringFlight,
   async (c) => {
     const store = c.get("store");
     const worldId = c.req.param("id");
@@ -256,24 +256,35 @@ worldTranslateRoutes.post(
             const pristine =
               (await inspectGeneratedWorldPackage(packagePath)).state ===
               "pristine";
-            const written = await writeWorldTranslations(
-              packagePath,
-              locale,
-              result.translations,
+            const staging = await mkdtemp(
+              path.join(userWorlds, ".covel-translate-"),
             );
-            if (pristine) await recordGeneratedWorldFiles(packagePath, written);
-            await declareWorldEdition(packagePath, locale);
-            if (pristine)
-              await recordGeneratedWorldFiles(packagePath, ["world.yaml"]);
-            const loaded = await loadSingleWorld(packagePath);
-            if (!loaded)
-              throw new Error(
-                `World "${worldId}" failed validation after translation`,
+            try {
+              // Preserve media, receipts, markers and authored files in the copy.
+              await cp(packagePath, staging, {
+                recursive: true,
+                verbatimSymlinks: true,
+              });
+              const written = await writeWorldTranslations(
+                staging,
+                locale,
+                result.translations,
               );
-            const next = withNewEdition(loaded, current, locale);
-            await store.upsertWorld(next);
-            // The record as the store gives it, in the shape of `GET /worlds/:id`.
-            return (await store.getWorld(worldId)) ?? next;
+              if (pristine) await recordGeneratedWorldFiles(staging, written);
+              await declareWorldEdition(staging, locale);
+              if (pristine)
+                await recordGeneratedWorldFiles(staging, ["world.yaml"]);
+              const loaded = await loadWorldForPublication(staging);
+              const next = withNewEdition(loaded, current, locale);
+              signal.throwIfAborted();
+              await publishWorldPackage(staging, packagePath, {
+                replace: true,
+                afterPublish: () => store.upsertWorld(next),
+              });
+              return next;
+            } finally {
+              await rm(staging, { recursive: true, force: true });
+            }
           });
         if (!record) {
           await send({

@@ -26,6 +26,7 @@ import {
 } from "@covel/ai-provider";
 import { readRuntimeEnv } from "@covel/shared";
 import { preparePluginReload } from "./plugin-reload.js";
+import { publicPluginError } from "./plugin-discovery.js";
 import type { RuntimeLoader } from "./runtime-loader.js";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -279,7 +280,11 @@ export async function createBootstrapPluginEntries(
         `[bootstrap] Failed to prepare the entry of plugin ${pluginId}:`,
         message,
       );
-      reportActivation(pluginId, message, error);
+      reportActivation(
+        pluginId,
+        publicPluginError(message, discovery.rootPath),
+        error,
+      );
     }
   }
 

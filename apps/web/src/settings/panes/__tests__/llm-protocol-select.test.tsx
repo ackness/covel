@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -226,6 +227,79 @@ describe("model list picker", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "codex/gpt-6-luna" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "codex/gpt-6-luna" }));
     expect(ids.value).toBe("typed-by-hand\nqwen3:8b");
+  });
+
+  it.each(["provider", "endpoint", "protocol"])(
+    "F-094 discards models and picked IDs when the %s changes",
+    async (field) => {
+      vi.mocked(listProviderModels).mockResolvedValue({
+        ok: true,
+        models: ["old-model"],
+      });
+      render(<Fixture />);
+      fireEvent.click(
+        screen.getByRole("button", { name: i18n.t("settings.fetchModels") }),
+      );
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: "old-model" }),
+      );
+      const control =
+        field === "provider"
+          ? screen.getByPlaceholderText(i18n.t("settings.providerIdExample"))
+          : field === "endpoint"
+            ? screen.getByPlaceholderText(i18n.t("settings.baseUrlPlaceholder"))
+            : screen.getByRole("combobox", { name: /^API protocol$/ });
+      fireEvent.change(control, {
+        target: {
+          value:
+            field === "provider"
+              ? "other"
+              : field === "endpoint"
+                ? "https://other.invalid"
+                : "openai-responses-v1",
+        },
+      });
+      expect(screen.queryByRole("checkbox", { name: "old-model" })).toBeNull();
+      expect(
+        (
+          screen.getByRole("textbox", {
+            name: /Model IDs/,
+          }) as HTMLTextAreaElement
+        ).value,
+      ).toBe("typed-by-hand");
+    },
+  );
+
+  it("F-094 ignores a late model list from the previous target", async () => {
+    let resolve!: (
+      value: Awaited<ReturnType<typeof listProviderModels>>,
+    ) => void;
+    vi.mocked(listProviderModels).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    render(<Fixture />);
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("settings.fetchModels") }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(i18n.t("settings.providerIdExample")),
+      { target: { value: "other" } },
+    );
+    vi.mocked(listProviderModels).mockResolvedValueOnce({
+      ok: true,
+      models: ["new-model"],
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("settings.fetchModels") }),
+    );
+    expect(
+      await screen.findByRole("checkbox", { name: "new-model" }),
+    ).toBeTruthy();
+    await act(async () => resolve({ ok: true, models: ["old-model"] }));
+    expect(screen.queryByRole("checkbox", { name: "old-model" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "new-model" })).toBeTruthy();
   });
 
   it("shows why the service gave no list", async () => {

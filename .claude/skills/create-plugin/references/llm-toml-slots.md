@@ -2,6 +2,8 @@
 
 第三方插件**不修改 llm.toml 本身**——只在 README 里告诉用户怎么配。本文只收集写 README 和 handler 错误信息时容易踩的坑。
 
+插件只在 `agent.model` / `function.model` 写用途（slot）名，**不能自带模型或端点**：插件目录里的 `llm.toml` 不会被读取，`pnpm validate:plugin` 会提醒删掉它（见 [`docs/reference/slots.md#实际选择优先级`](../../../../docs/reference/slots.md#实际选择优先级)）。
+
 **字段全集、枚举值和默认值以 [`docs/reference/slots.md`](../../../../docs/reference/slots.md) 为准**（schema 源码：`packages/ai-provider/src/config/llm-schema.ts`）。不要在这里或插件 README 里另抄一份字段表：schema 是 Zod **strict**，抄错一个枚举值，用户照着填会让**整份** `llm.toml` 拒载——所有 slot（包括与你无关的 `[covel.story]`）一起停摆，服务端回退到内置 DeepSeek `story`，用户看到的现象是"我配的别的 provider 都没生效"。
 
 ## 踩雷点（第三方插件作者必须在 README 里教用户）

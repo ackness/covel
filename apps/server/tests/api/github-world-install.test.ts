@@ -105,6 +105,21 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+it.each([".covel-install.json", ".COVEL-INSTALL.JSON"])(
+  "rejects a GitHub world carrying a reserved receipt %s",
+  async (filename) => {
+    archive = await zip({
+      ...files(),
+      [`worlds/test-world/${filename}`]: "{}",
+    });
+    const response = await request("world/github/preview", { url: repo });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("reserved installation receipt");
+    expect(await readdir(root)).toEqual([]);
+    expect(await store.getWorld("test-world")).toBeNull();
+  },
+);
+
 it("discovers multiple worlds and installs only the selected directory without running scripts", async () => {
   archive = await zip({
     ...files(),
