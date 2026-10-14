@@ -200,7 +200,11 @@ These are committed or rolled back together in the same `finalizeExecution` tran
 
 Details to remember:
 
-- **The only exception** is the attempt count of a setup runtime. It updates the count in `setupRuntimes` after the transaction. A rolled-back attempt still uses up a try, but it does not switch `phase`.
+- A few writes happen outside this transaction. None of them switches `phase`:
+  - The attempt count of a setup runtime. It updates the count in `setupRuntimes` after the transaction. A rolled-back attempt still uses up a try.
+  - Setup runtimes caught in a `needs(scope: session)` cycle. The executor marks them `blocked` before anything runs.
+  - The player retrying or waiving a setup runtime in the UI.
+  - The execution record. `turn_results` and each runtime's output are written before the commit; `turn_results` starts as `pending` and is settled to `committed` or `failed` after the commit.
 - `turn.suspended` is sent only after the commit.
 - The automatic snapshot is taken after all proposals are committed. This makes sure the conversation position, characters, state, and plugin data all belong to the same committed turn.
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.

@@ -120,25 +120,49 @@ export async function finalizeRuntimeResult(
     if (error)
       finalized = { ...finalized, status: "failed", output: null, error };
   }
+  // A hook that turns a failed or skipped result into success must pass the
+  // same `output.schema` gate as a normal success. Such a result has no
+  // canonical value, so its `output` is what downstream inputs read.
+  const recovered =
+    result.status !== "success" && finalized.status === "success";
   const schemaTarget =
     finalized.canonicalValue?.value !== undefined
       ? { schema: options.outputSchema, value: finalized.canonicalValue.value }
       : !finalized.canonicalValue &&
           manifest.outputKind !== "story" &&
-          !isDeepStrictEqual(finalized.output, preHookOutput)
-        ? { schema: options.agentOutputSchema, value: finalized.output }
+          (recovered || !isDeepStrictEqual(finalized.output, preHookOutput))
+        ? {
+            schema: options.agentOutputSchema ?? options.outputSchema,
+            value: finalized.output,
+          }
         : undefined;
-  if (finalized.status === "success" && schemaTarget?.schema) {
+  if (finalized.status === "success" && schemaTarget) {
     let error: string | undefined;
-    try {
-      const validation = validateOutput(
-        schemaTarget.value,
-        schemaTarget.schema,
-      );
-      if (!validation.valid)
-        error = (validation.errors ?? []).slice(0, 5).join("; ");
-    } catch {
-      error = "schema could not be compiled or output could not be validated";
+    let schema = schemaTarget.schema;
+    if (
+      !schema &&
+      recovered &&
+      !Object.hasOwn(options, "outputSchema") &&
+      !Object.hasOwn(options, "agentOutputSchema")
+    ) {
+      // A failure before dispatch (missing handler, thrown error) finalizes
+      // without the loaded schemas; a recovery from it loads them here.
+      try {
+        schema = (
+          await deps.loadRuntime?.(manifest, input.locale, input.sessionId)
+        )?.outputSchema;
+      } catch {
+        error = "schema could not be loaded";
+      }
+    }
+    if (schema && error === undefined) {
+      try {
+        const validation = validateOutput(schemaTarget.value, schema);
+        if (!validation.valid)
+          error = (validation.errors ?? []).slice(0, 5).join("; ");
+      } catch {
+        error = "schema could not be compiled or output could not be validated";
+      }
     }
     if (error !== undefined)
       finalized = {

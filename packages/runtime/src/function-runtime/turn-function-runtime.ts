@@ -757,8 +757,12 @@ export async function executeFunctionRuntime({
   );
 
   // Keep commands separate from business output; copying the result preserves them.
+  // The buffer belongs to the handler's own success: a failed handler that a
+  // PostRuntime hook turned into success commits none of its buffered writes.
   const completedResult: RuntimeResult =
-    result.status === "success" && writeBuffer.length > 0
+    rawResult.status === "success" &&
+    result.status === "success" &&
+    writeBuffer.length > 0
       ? {
           ...result,
           pendingProposals: [
