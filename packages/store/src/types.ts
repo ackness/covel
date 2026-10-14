@@ -299,6 +299,8 @@ export interface MessageStore {
    * no-ops. Call within the turn finalization transaction.
    */
   commitPlayerInputMessage(record: MessageRecord): Promise<void>;
+  /** One message of this session by ID, or null. */
+  getMessage(sessionId: string, id: string): Promise<MessageRecord | null>;
   listMessages(
     sessionId: string,
     pagination?: PaginationOpts,

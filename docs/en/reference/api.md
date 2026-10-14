@@ -880,9 +880,9 @@ Some runtimes do not need the turn to wait for them to finish. A safe leaf runti
 | Method | Path                      | Description                                                   |
 | ------ | ------------------------- | ------------------------------------------------------------- |
 | POST   | `/api/sessions/:id/steer` | Interject into a turn in progress. Body `{ message: string }` |
-| POST   | `/api/sessions/:id/abort` | Stop a turn in progress. Idempotent                           |
+| POST   | `/api/sessions/:id/abort` | Stop the player's action in progress. Idempotent              |
 
-Both endpoints return `409` when no turn is in progress.
+Both endpoints return `409` when no turn is in progress. `abort` stops the player's action request: once the request's last turn has ended, it also returns `409`.
 
 `steer` (interject):
 
@@ -897,11 +897,14 @@ Both endpoints return `409` when no turn is in progress.
 - The `execution.completed` payload of that action's SSE carries `abortReason: "aborted-by-player"`.
 - If the stop signal arrives before the commit, this run does not commit its messages, domain state, or turn count. A turn that was already committed is not rolled back.
 - Before a turn starts, and before it commits, if it is waiting for the previous turn's memory update, it also responds to the stop. It cancels the current wait and releases the session execution lock. The memory update for a previous committed turn finishes on its own.
+- A stop before the turn starts (still waiting for the session lock or the memory update, or retrying a dimension settlement the previous turn left pending) means this action does not start: nothing is saved, and the stream holds only one `execution.completed`, with `committed: false` and `abortReason: "aborted-by-player"`.
+- A stop after the setup turn was committed and before the opening continuation started means the opening does not start; see [Opening continuation](#opening-continuation).
 
 Limits that apply to both:
 
 - The control registry for a turn lives inside the process. In a multi-pod (PG) deployment, steer and abort can reach only the turn on the same pod. Checking execution status across processes does not change this.
-- Registration happens after the session lock is obtained. It covers preparation, model execution, commit, and cleanup, and is released only when the action completes. So a refresh does not wrongly report idle while the commit is still unfinished. A queued request also does not overwrite the control registration of the current turn.
+- An action request is registered as soon as it arrives, so it can be stopped while it waits. It becomes the session's current turn only after it obtains the session lock. From then on it covers preparation, model execution, commit, and cleanup, and is released only when the action completes. So a refresh does not wrongly report idle while the commit is still unfinished.
+- While a turn is running, a stop applies only to it, never to a request queued behind it for the lock. A queued request also does not overwrite the control registration of the current turn.
 - A stop signal cannot undo a transaction that has already finished.
 
 ### Setup runtime control (retry / skip)
@@ -4755,6 +4758,25 @@ After the player submits the opening form, the opening narrative appears on its 
   - The execution was aborted (`abortReason`);
   - The commit failed;
   - Setup still has unfinished items (an opening interaction comes next).
+- **The player stopped before the continuation started**: The setup turn is saved as usual, and the opening does not start. `execution.completed` carries the continuation turn's `turnId`, `committed: false`, and `abortReason: "aborted-by-player"`. The continuation turn that never started is recorded: the execution status (`GET /api/sessions/:id/execution`) shows `state: "failed"`, `origin: "continuation"`, and `retry` is `retry_turn`. Recovering with it (with `recoverFromTurnId`) runs the opening as a continuation turn, without adding a player turn.
+- **Wrapping up after the turn is saved**: When steps such as announcing background jobs or writing the `turn.completed` debug record fail, they are only logged. The stream still ends with `execution.completed`, and the opening continuation still runs.
+
+##### Rejections in the stream
+
+After the SSE stream opens, an action can still be refused before it starts. The stream then holds only one `error.occurred`, with `message` and `code`. Nothing is saved, and the message is the original text in production too. Refusals from the session guards (such as `session_not_active` and `approval_required`) keep the code they have in the JSON endpoints. The others:
+
+| `code`                       | Meaning                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `input_already_committed`    | This input (`inputMessageId`) was already saved with a turn; do not resend it |
+| `retry_source_not_found`     | The turn named by `retryFromTurnId` is not in this session                    |
+| `retry_source_not_committed` | The source turn was not committed; recover the original action first          |
+| `retry_source_not_original`  | It names a retry, not the original turn                                       |
+| `retry_source_stale`         | The story has moved on past the source turn                                   |
+| `retry_target_not_active`    | A retry target is no longer active in the session                             |
+| `retry_target_not_failed`    | A retry target is no longer failed                                            |
+| `recovery_unavailable`       | The turn named by `recoverFromTurnId` can no longer be recovered              |
+
+`retry_*` and `recovery_unavailable` all mean the task statuses the client sees are out of date: refresh first, then decide whether to retry.
 
 ##### Request headers (optional)
 

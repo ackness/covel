@@ -880,9 +880,9 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | 方法 | 路径                      | 描述                                           |
 | ---- | ------------------------- | ---------------------------------------------- |
 | POST | `/api/sessions/:id/steer` | 向进行中的回合插话。body `{ message: string }` |
-| POST | `/api/sessions/:id/abort` | 中止进行中的回合。幂等                         |
+| POST | `/api/sessions/:id/abort` | 停止玩家进行中的动作。幂等                     |
 
-两个端点在没有进行中的回合时都返回 `409`。
+两个端点在没有进行中的回合时都返回 `409`。`abort` 停止的是玩家的这次动作请求：请求的最后一个回合结束以后，它也返回 `409`。
 
 `steer`（插话）：
 
@@ -897,11 +897,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`。
 - 提交前收到停止信号时，本次执行不提交消息、领域状态和回合计数。已经提交的回合不回滚。
 - 回合开始前和提交前，如果正在等上一轮的记忆更新，也会响应停止：取消当前的等待并释放会话执行锁。上一轮已提交回合的记忆更新会独立完成。
+- 回合还没开始就停止（还在等会话锁、等记忆更新，或者在自动重试上一轮没结算的维度），这次动作不再开始：什么都不保存，流里只有一个 `execution.completed`，带 `committed: false` 和 `abortReason: "aborted-by-player"`。
+- setup 回合已经提交、开场接力还没开始时停止，开场不再开始，见[开场接力](#开场接力opening-continuation)。
 
 两者共同的限制：
 
 - 回合的控制注册表在进程内。多 pod（PG）部署下，steer / abort 只能到达同一个 pod 上的回合。跨进程的执行状态探测不改变这一点。
-- 注册发生在拿到会话锁之后，覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。所以刷新时不会在提交还没完成时误判为空闲；排队的请求也不会覆盖当前回合的控制注册。
+- 动作请求一进来就登记，所以等待中也能被停止。拿到会话锁之后，它才成为会话当前的回合：覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。所以刷新时不会在提交还没完成时误判为空闲。
+- 有回合正在执行时，停止只作用于它，不会落到排在后面等锁的请求上；排队的请求也不会覆盖当前回合的控制注册。
 - 停止信号不能撤回已经完成的事务。
 
 ### Setup runtime 控制（重试 / 跳过）
@@ -4753,6 +4756,25 @@ id: example-epoch:2
   - 执行被中止（`abortReason`）；
   - 提交失败；
   - setup 还有没完成的项（后面还有开局交互）。
+- **接力开始前玩家点了停止**：setup 回合照常保存，开场不再开始。`execution.completed` 带接力回合的 `turnId`、`committed: false` 和 `abortReason: "aborted-by-player"`。这个没开始的接力回合会记下来：执行状态（`GET /api/sessions/:id/execution`）显示 `state: "failed"`、`origin: "continuation"`，`retry` 是 `retry_turn`。用它恢复（带 `recoverFromTurnId`）时，开场照常以接力回合运行，不增加玩家回合数。
+- **回合保存之后的收尾**：宣布后台作业、写 `turn.completed` 调试记录这些步骤失败时只记日志。流仍然以 `execution.completed` 结束，开场接力照常进行。
+
+##### 流里的拒绝
+
+SSE 流已经打开之后，动作仍可能在开始前被拒绝。这时流里只有一个 `error.occurred`，带 `message` 和 `code`，什么都没有保存，生产环境也给出原文。会话守卫的拒绝（比如 `session_not_active`、`approval_required`）保留它们在 JSON 接口里的 code。另外几种：
+
+| `code`                       | 含义                                                       |
+| ---------------------------- | ---------------------------------------------------------- |
+| `input_already_committed`    | 这条输入（`inputMessageId`）已经随一个回合保存过，不要重发 |
+| `retry_source_not_found`     | `retryFromTurnId` 指的回合不在这个会话里                   |
+| `retry_source_not_committed` | 来源回合没有提交，先恢复原来的动作                         |
+| `retry_source_not_original`  | 指的是一次重试，不是原回合                                 |
+| `retry_source_stale`         | 来源回合之后故事已经往前走了                               |
+| `retry_target_not_active`    | 重试目标在会话里已经停用                                   |
+| `retry_target_not_failed`    | 重试目标已经不再是失败状态                                 |
+| `recovery_unavailable`       | `recoverFromTurnId` 指的回合已经不能恢复                   |
+
+`retry_*` 和 `recovery_unavailable` 都说明客户端看到的任务状态过时了：先刷新，再决定是否重试。
 
 ##### 请求头（可选）
 

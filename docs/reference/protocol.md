@@ -172,7 +172,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `resync`      | 只在 `committed: true`、并且这一回合提交之后有一部分事件没发出去时为 `true`。数据已经保存，客户端应该去读已保存的状态，不要等那些事件。订阅流同时会收到 `system.reset`，`reason: "publish-failed"` |
 
 > [!NOTE]
-> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。
+> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -193,6 +193,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 **abort：玩家停止这一回合**（`POST /api/sessions/:id/abort`）
 
+- 停止作用于玩家的这次动作请求，不只是当前的一个回合。请求还在等会话锁或等记忆更新时停止，回合不再开始，流里只有一个带 `abortReason` 的 `execution.completed`。
 - 它触发回合级的取消信号。重试层立刻切断正在进行的模型调用和流。玩家停止不会自动重试，也不会把半截叙事当成结果提交。
 - executor 停止调度后面的 runtime 组，并跳过事件链。
 - 被中止的 runtime 以失败上报（`runtime.failed`），它的提案不产出。最终提交时会检查玩家的取消信号：提交之前收到取消，整个回合都不提交。
@@ -216,7 +217,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ---------------- | ---- | -------- | ------------------------------ |
 | `error.occurred` | S→C  | 执行错误 | `{ message, code?, details? }` |
 
-- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。
+- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。动作开始前被拒绝的 code 见 [api.md § 流里的拒绝](./api.md#流里的拒绝)。
 - `details` 只随 `code: "form_rejected"` 出现，见[交互响应](#交互响应)。
 
 世界翻译接口使用另一种独立的 SSE 事件 `{ type: "error", message }`，没有 `code` 字段：
