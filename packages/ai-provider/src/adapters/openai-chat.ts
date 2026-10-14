@@ -8,6 +8,7 @@ import {
   assertGenerationPayload,
   assertStreamCompleted,
   assertSuccessfulFinishReason,
+  withFailureUsage,
 } from "./generation-completion.js";
 import type { UsageSummary } from "../types.js";
 import {
@@ -334,16 +335,20 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
       const response = await postJson(config, "/chat/completions", body);
       const payload = await parseJson(response);
+      // A failed answer may still be billed; the error keeps its usage.
+      const reportedUsage = readOpenAiChatUsage(payload);
       const diagnostics = readResponseDiagnostics(
         payload,
         "chat",
         "openai-chat",
+        reportedUsage,
       );
       assertSuccess(response, payload, "openai-chat");
-      assertGenerationPayload(payload, "openai-chat");
+      assertGenerationPayload(payload, "openai-chat", reportedUsage);
       assertSuccessfulFinishReason(
         readOpenAiChatFinishReason(payload),
         "openai-chat",
+        reportedUsage,
       );
 
       const toolCalls = readOpenAiChatToolCalls(
@@ -393,16 +398,20 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         ),
       });
       const payload = await parseJson(response);
+      // A failed answer may still be billed; the error keeps its usage.
+      const reportedUsage = readOpenAiChatUsage(payload);
       const diagnostics = readResponseDiagnostics(
         payload,
         "chat",
         "openai-chat",
+        reportedUsage,
       );
       assertSuccess(response, payload, "openai-chat");
-      assertGenerationPayload(payload, "openai-chat");
+      assertGenerationPayload(payload, "openai-chat", reportedUsage);
       assertSuccessfulFinishReason(
         readOpenAiChatFinishReason(payload),
         "openai-chat",
+        reportedUsage,
       );
 
       const reply = splitThinkTags(readOpenAiChatText(payload));
@@ -511,7 +520,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       try {
         for await (const payload of iterateSsePayloads(response)) {
           diagnostics.push(payload);
-          if (payload.error) diagnostics.assertNotRefused("openai-chat");
+          if (payload.error) diagnostics.assertNotRefused("openai-chat", usage);
           assertGenerationPayload(payload, "openai-chat");
           const reasoning = readOpenAiChatStreamReasoningDelta(payload);
           if (reasoning) {
@@ -552,11 +561,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           }
         }
       } catch (error) {
-        diagnostics.assertNotRefused("openai-chat");
-        throw error;
+        diagnostics.assertNotRefused("openai-chat", usage);
+        throw withFailureUsage(error, usage);
       }
-      diagnostics.assertNotRefused("openai-chat");
-      assertStreamCompleted(completed, "openai-chat");
+      diagnostics.assertNotRefused("openai-chat", usage);
+      assertStreamCompleted(completed, "openai-chat", usage);
       yield* replyParts(thinkSplitter.flush());
 
       // Emit accumulated tool calls before done.

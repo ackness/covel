@@ -5,7 +5,7 @@ import {
 } from "../src/adapters/http/response.js";
 import { providerErrorKind } from "../src/adapters/provider-error-kind.js";
 import { AiProviderError, OutboundFetchError } from "../src/errors.js";
-import { normalizeError } from "../src/gateway-lifecycle.js";
+import { normalizeError, shouldFallback } from "../src/gateway-lifecycle.js";
 import { outboundFetch } from "../src/outbound-network.js";
 
 describe("gateway transport error normalization", () => {
@@ -95,12 +95,33 @@ describe("errors typed where they start", () => {
       message: "You exceeded your current quota",
     });
     expect(quota).toBeInstanceOf(AiProviderError);
+    // An empty account is no rate limit: sending again fails the same way.
     expect(quota).toMatchObject({
-      code: "RATE_LIMITED",
+      code: "PROVIDER_ERROR",
+      retriable: false,
       statusCode: 429,
       message: "[openai-chat] HTTP 429 — You exceeded your current quota",
       details: { providerCode: "insufficient_quota" },
     });
+    // OpenAI's rate-limit text links the billing page; it is still a rate limit.
+    expect(
+      thrown(429, {
+        code: "rate_limit_exceeded",
+        type: "requests",
+        message:
+          "Rate limit reached. Add a payment method at https://platform.openai.com/account/billing.",
+      }),
+    ).toMatchObject({ code: "RATE_LIMITED", retriable: true });
+    expect(thrown(402, { message: "Insufficient Balance" })).toMatchObject({
+      code: "PROVIDER_ERROR",
+      retriable: false,
+    });
+    expect(
+      thrown(401, {
+        type: "authentication_error",
+        message: "invalid x-api-key",
+      }),
+    ).toMatchObject({ code: "PROVIDER_ERROR", retriable: false });
 
     const malformed = thrown(400, {
       type: "invalid_request_error",
@@ -115,6 +136,32 @@ describe("errors typed where they start", () => {
       message: "function.arguments must be in JSON format",
     }) as AiProviderError;
     expect(other.details?.requestFault).toBeUndefined();
+  });
+
+  it("lets a configured backup take over an account failure, but not a bad request", () => {
+    const failed = (statusCode: number, details?: Record<string, unknown>) =>
+      new AiProviderError({
+        code: "PROVIDER_ERROR",
+        message: "failed",
+        provider: "fixture",
+        retriable: false,
+        statusCode,
+        ...(details ? { details } : {}),
+      });
+    expect(shouldFallback(failed(402))).toBe(true);
+    expect(shouldFallback(failed(401))).toBe(true);
+    expect(shouldFallback(failed(403))).toBe(true);
+    expect(
+      shouldFallback(failed(429, { providerCode: "insufficient_quota" })),
+    ).toBe(true);
+    expect(
+      shouldFallback(
+        failed(400, { message: "Your credit balance is too low" }),
+      ),
+    ).toBe(true);
+    expect(shouldFallback(failed(400, { message: "bad tool schema" }))).toBe(
+      false,
+    );
   });
 
   it("classifies a provider's error code by table, then by fragment", () => {

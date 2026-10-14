@@ -5641,18 +5641,18 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 
 下面这些事件也是 `CovelEvent` 的正式成员。`COVEL_EVENT_META` 标明了每一种是否 `forwardToActionStream`。前端的穷尽检查要求每一种都被处理，或者被明确忽略。
 
-| 事件                                                                   | 来源                              | 转发到 `/api/actions` | 说明                                                                        |
-| ---------------------------------------------------------------------- | --------------------------------- | :-------------------: | --------------------------------------------------------------------------- |
-| `runtime.skipped`                                                      | `actions.ts`                      |          否           | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                    |
-| `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal 提交后发出                                      |
-| `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（调试时间线用）                                              |
-| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                              |
-| `block.emitted` / `state.patch.applied`                                | TurnEmitter                       |          是           | 块发出 / state patch 应用的 trace                                           |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                       |          是           | Hook 行为 trace                                                             |
-| `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter（`withGatewayTrace`） |          是           | function runtime 通过 `ctx.gateway` 调 provider 的 trace（与 `llm.*` 对等） |
-| `function.executing` / `function.completed`                            | TurnEmitter                       |          否           | function runtime handler 的起止 trace；只走订阅通道和 `trace_events`        |
-| `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                       |          否           | 递归 runtime 的 trace；只走订阅通道（topic `trace`）                        |
-| `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | `withUtilsTrace`                  |          否           | 插件自带 wire 调 provider HTTP 的 trace（`ctx.utils.fetchWithRetry`）       |
+| 事件                                                                   | 来源                              | 转发到 `/api/actions` | 说明                                                                                                                      |
+| ---------------------------------------------------------------------- | --------------------------------- | :-------------------: | ------------------------------------------------------------------------------------------------------------------------- |
+| `runtime.skipped`                                                      | `actions.ts`                      |          否           | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                                                                  |
+| `character.upserted`                                                   | `session-commit-emitter.ts`       |          是           | `character.upsert` proposal 提交后发出                                                                                    |
+| `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                       |          是           | 工具调用 trace（调试时间线用）                                                                                            |
+| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                       |          是           | LLM 调用 trace                                                                                                            |
+| `block.emitted` / `state.patch.applied`                                | TurnEmitter                       |          是           | 块发出 / state patch 应用的 trace                                                                                         |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                       |          是           | Hook 行为 trace                                                                                                           |
+| `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter（`withGatewayTrace`） |          是           | function runtime 和扩展点提供方通过 `ctx.gateway` 调 provider 的 trace（与 `llm.*` 对等）；失败时带服务商已报告的 `usage` |
+| `function.executing` / `function.completed`                            | TurnEmitter                       |          否           | function runtime handler 的起止 trace；只走订阅通道和 `trace_events`                                                      |
+| `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                       |          否           | 递归 runtime 的 trace；只走订阅通道（topic `trace`）                                                                      |
+| `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | `withUtilsTrace`                  |          否           | 插件自带 wire 调 provider HTTP 的 trace（`ctx.utils.fetchWithRetry`）                                                     |
 
 详见 [protocol.md § 转发的运行时内部事件](./protocol.md#转发的运行时内部事件apiactions-转发已纳入-covelevent)。
 

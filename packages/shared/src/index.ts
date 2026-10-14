@@ -35,8 +35,13 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
-export { unifyFinishReason } from "./llm-finish-reason.js";
+export {
+  isCompleteFinishReason,
+  unifyFinishReason,
+} from "./llm-finish-reason.js";
 export type { LLMFinishReason } from "./llm-finish-reason.js";
+export { isAccountFailure } from "./llm-failure-kind.js";
+export type { ProviderFailureKind } from "./llm-failure-kind.js";
 export type {
   EvaluationJson,
   EvaluationValue,

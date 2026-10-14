@@ -61,3 +61,42 @@ export function providerErrorKind(
   }
   return undefined;
 }
+
+/**
+ * A provider reports an empty account under several statuses: OpenAI as 429
+ * `insufficient_quota`, DeepSeek as 402, Anthropic as 400 with a message.
+ * The status and the provider's error code are read first. This text is the
+ * fallback for an endpoint that says it only in its message, as Anthropic's
+ * 400 `invalid_request_error` does. A 429 is not read by its text: OpenAI's
+ * rate-limit message links the billing page too.
+ */
+const QUOTA_MESSAGE_FALLBACK =
+  /insufficient[_ ]quota|insufficient[_ ]balance|credit balance|billing|payment required|exceeded your current quota/i;
+
+/**
+ * The failure of the provider account an HTTP error answer names: no
+ * balance (`quota`) or a key the provider does not accept (`auth`).
+ * `details` holds the `providerCode`, `providerType` and `message` read from
+ * the error body. Sending the same request to that provider again fails the
+ * same way, so neither the HTTP layer nor the runtime sends it again.
+ */
+export function accountFailureKind(
+  statusCode: number | undefined,
+  details: Readonly<Record<string, unknown>> | undefined,
+): "quota" | "auth" | undefined {
+  if (statusCode === undefined) return undefined;
+  if (statusCode === 402) return "quota";
+  if (
+    providerErrorKind(details?.providerCode, details?.providerType) === "quota"
+  )
+    return "quota";
+  if (
+    statusCode !== 429 &&
+    statusCode >= 400 &&
+    typeof details?.message === "string" &&
+    QUOTA_MESSAGE_FALLBACK.test(details.message)
+  )
+    return "quota";
+  if (statusCode === 401 || statusCode === 403) return "auth";
+  return undefined;
+}

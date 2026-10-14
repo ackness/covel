@@ -342,6 +342,48 @@ describe("createGatewayAdapter target resolution", () => {
     });
   });
 
+  it("does not read a reason it does not know as a normal end", async () => {
+    const gateway: GatewayLike = {
+      resolveSlot() {
+        return { provider: "deepseek", model: "deepseek-chat" };
+      },
+      async generateText() {
+        return {
+          text: "The gate",
+          finishReason: "other",
+          rawFinishReason: "insufficient_system_resource",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+    const result = await createGatewayAdapter(gateway).generate({
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(result).toMatchObject({
+      finishReason: "other",
+      rawFinishReason: "insufficient_system_resource",
+    });
+
+    // A gateway of another origin may answer in the provider's own word.
+    const raw: GatewayLike = {
+      ...gateway,
+      async generateText() {
+        return {
+          text: "The gate",
+          finishReason: "pause_turn",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+    expect(
+      (
+        await createGatewayAdapter(raw).generate({
+          messages: [{ role: "user", content: "hi" }],
+        })
+      ).finishReason,
+    ).toBe("other");
+  });
+
   it("preserves prompt cache usage from a streamed gateway done event", async () => {
     const gateway: GatewayLike = {
       resolveSlot() {

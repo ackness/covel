@@ -203,6 +203,35 @@ describe("isTransientError", () => {
     );
   });
 
+  it("does not retry an empty account or a refused key at the same provider", () => {
+    const failed = (
+      statusCode: number,
+      code: "RATE_LIMITED" | "PROVIDER_ERROR",
+      details?: Record<string, unknown>,
+    ) =>
+      new AiProviderError({
+        code,
+        message: "failed",
+        provider: "fixture",
+        // An adapter outside the built-in HTTP layer may still call it a rate limit.
+        retriable: true,
+        statusCode,
+        ...(details ? { details } : {}),
+      });
+    expect(
+      isTransientError(
+        failed(429, "RATE_LIMITED", { providerCode: "insufficient_quota" }),
+      ),
+    ).toBe(false);
+    expect(isTransientError(failed(402, "PROVIDER_ERROR"))).toBe(false);
+    expect(isTransientError(failed(401, "PROVIDER_ERROR"))).toBe(false);
+    expect(
+      isTransientError(
+        failed(429, "RATE_LIMITED", { providerCode: "rate_limit_exceeded" }),
+      ),
+    ).toBe(true);
+  });
+
   it("does not retry schema / client errors", () => {
     expect(isTransientError(new Error("HTTP 400 Bad Request"))).toBe(false);
     expect(isTransientError(new Error("invalid tool arguments"))).toBe(false);
@@ -1747,6 +1776,96 @@ describe("provider failure terminals", () => {
       content: "The gate",
       finishReason: "length",
     });
+  });
+
+  it("keeps a story the provider ended for an unknown reason, marked as not whole", async () => {
+    const generated = await callLLMWithRetry({
+      llm: createScriptedLLM([
+        {
+          kind: "ok",
+          response: {
+            ...okResponse("The gate"),
+            finishReason: "other",
+            rawFinishReason: "insufficient_system_resource",
+          },
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(generated).toMatchObject({
+      content: "The gate",
+      finishReason: "other",
+      rawFinishReason: "insufficient_system_resource",
+    });
+
+    const streamed = await streamLLMWithRetry({
+      llm: createScriptedStreamLLM([
+        {
+          events: [
+            { type: "text-delta", textDelta: "The gate" },
+            {
+              type: "done",
+              finishReason: "other",
+              rawFinishReason: "pause_turn",
+            },
+          ],
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(streamed.response).toMatchObject({
+      content: "The gate",
+      finishReason: "other",
+      rawFinishReason: "pause_turn",
+    });
+  });
+
+  it("rejects an answer ended for an unknown reason when it must be whole", async () => {
+    const llm = createScriptedLLM([
+      {
+        kind: "ok",
+        response: {
+          ...okResponse('{"summary":"half'),
+          finishReason: "other",
+          rawFinishReason: "insufficient_system_resource",
+        },
+      },
+    ]);
+    await expect(
+      callLLMWithRetry({
+        llm,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+      }),
+    ).rejects.toThrow(
+      /stopped before it finished.*insufficient_system_resource/,
+    );
+    // Not sent again: the same request may stop the same way.
+    expect(llm.calls).toHaveLength(1);
+
+    const stream = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "text-delta", textDelta: "The gate" },
+          { type: "done", finishReason: "pause_turn" },
+        ],
+      },
+    ]);
+    await expect(
+      streamLLMWithRetry({
+        llm: stream,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+      }),
+    ).rejects.toThrow(/stopped before it finished.*pause_turn/);
   });
 
   it.each([

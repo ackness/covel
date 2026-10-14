@@ -326,6 +326,8 @@ So when a provider accepts the request but never produces any text, there is sti
 - The call fails only if it is cut off again. The error message suggests raising the output limit. If the limit is really too small, the second attempt will not finish either.
 - The one exception: a runtime with `io.visibility: story` produced only story text and no tool calls. In that case the text is kept and committed, and the player sees a notice that it may have stopped mid-sentence.
 
+**The provider did not say why it stopped (`finishReason: other`).** The reply may stop anywhere. As with a cut-off reply, a runtime with `io.visibility: story` that produced only story text and no tool calls keeps and commits the text, and the player sees a notice that it is not finished and the turn can be retried. Anything else fails and is not retried. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
+
 **A streaming call is interrupted after it has already produced output** (the connection drops, or it goes silent for longer than `idleTimeoutMs`).
 
 - A runtime with `io.visibility: story` is not retried, because the player has already read that text.

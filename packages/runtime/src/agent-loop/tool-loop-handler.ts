@@ -416,6 +416,16 @@ async function malformedToolArgsFallback(args: {
     if (response.finishReason === "error") {
       throw new Error("PROVIDER_ERROR: model generation ended with an error");
     }
+    // An answer that ended for a reason the vocabulary does not know is not
+    // whole; its tool calls are not run.
+    if (
+      response.finishReason === "other" ||
+      response.finishReason === "content_filter"
+    ) {
+      throw new Error(
+        `PROVIDER_ERROR: the model stopped before it finished its answer (${response.rawFinishReason ?? response.finishReason})`,
+      );
+    }
     await ensureCalling();
   } catch (fallbackErr) {
     // Pair every `llm.calling` with an `llm.responded` on the error path so

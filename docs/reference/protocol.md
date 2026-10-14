@@ -724,16 +724,16 @@ data: {
 - 服务端的转发白名单 `FORWARDED_EVENT_TYPES` 完全从这份元数据**生成**，不是手写的集合。
 - 网页端的 actions 处理器对这些类型明确地什么都不做，它们通过订阅通道驱动 `/debug` 的时间线。因为它们在联合类型里，新增同类事件时，前端的穷尽检查会强制你决定“处理还是忽略”。
 
-| 事件                                                       | 来源                                                                                          | 用途                                                                  |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
-| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                          |
-| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 可撤销表现层即时预览；不代表领域提交                                  |
-| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                       |
-| `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
-| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等） |
+| 事件                                                       | 来源                                                                                          | 用途                                                                                                                   |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                                                               |
+| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                                                                           |
+| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                                                                     |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 可撤销表现层即时预览；不代表领域提交                                                                                   |
+| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                                                         |
+| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                                                        |
+| `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                                                                        |
+| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime 和扩展点提供方的 `ctx.gateway` provider 调用 trace（与 `llm.*` 对等）；失败时带服务商已报告的 `usage` |
 
 `runtime.skipped` 是 actions 路由自己写进流里的，它在元数据里的 `forwardToActionStream` 是 `false`。
 

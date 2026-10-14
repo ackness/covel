@@ -284,14 +284,29 @@ export function createSseEventHandler(
     switch (eventType) {
       case "llm.responded":
       case "gateway.responded": {
-        // Only a story is kept when it is cut at the model's output limit;
-        // the text stays on screen, so say that it is not whole.
+        // Only a story is kept when it is cut at the model's output limit or
+        // ended for a reason the provider did not explain; the text stays on
+        // screen, so say that it is not whole.
         if (eventType === "llm.responded" && payload.finishReason === "length")
           emitToast(
             "info",
             i18n.t("session.outputTruncated", {
               defaultValue:
                 "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
+            }),
+            undefined,
+            { durationMs: 12_000 },
+          );
+        if (eventType === "llm.responded" && payload.finishReason === "other")
+          emitToast(
+            "info",
+            i18n.t("session.outputInterrupted", {
+              reason:
+                typeof payload.rawFinishReason === "string"
+                  ? payload.rawFinishReason
+                  : "other",
+              defaultValue:
+                "The model stopped the story before it finished ({{reason}}), so it may end mid-sentence. Retry this turn to have it written again.",
             }),
             undefined,
             { durationMs: 12_000 },

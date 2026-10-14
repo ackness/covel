@@ -377,7 +377,8 @@
     "panelLoadFailed": "插件面板加载失败。",
     "modelCredentialsMissing": "开始前请先在服务商设置中填写 API 密钥。",
     "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。",
-    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。"
+    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。",
+    "outputInterrupted": "模型没写完就停下了这段正文（{{reason}}），可能停在半句。重试这一回合可以让它重新写。"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -1968,7 +1969,7 @@
       "estCost": "预估结算（USD）",
       "unknownModel": "（未知模型）",
       "noPrice": "无价格",
-      "note": "Token 用量来自 llm.responded / gateway.responded。预估结算按模型参考价乘以服务商价格倍率；无法识别模型或价格的用量不计入，因此结果可能是下限值。",
+      "note": "Token 用量来自 llm.responded / gateway.responded，失败的调用报告过用量时也计入 gateway.failed。预估结算按模型参考价乘以服务商价格倍率；无法识别模型或价格的用量不计入，因此结果可能是下限值。",
       "cacheNote": "缓存读写 token 已计入输入合计；在取得服务商缓存单价前，不计入 USD 预估。",
       "noData": "本会话暂无 token 用量记录。",
       "windowTitle": "已加载窗口",
