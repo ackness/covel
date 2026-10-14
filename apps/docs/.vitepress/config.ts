@@ -484,6 +484,8 @@ export default defineConfig({
   // The pages are outside this package, so Vite would look for Vue beside
   // them, where pnpm installs nothing. Point it at VitePress's own copy.
   vite: {
+    // Mermaid 12 targets Safari 17.4 / ES2024; Vite 5 otherwise lowers to Safari 14.
+    build: { target: "safari17.4" },
     resolve: { alias: [{ find: /^vue(?=$|\/)/, replacement: vueDir }] },
   },
   head: [["link", { rel: "icon", href: `${siteBase}docs/icon.png` }]],

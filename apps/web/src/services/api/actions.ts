@@ -9,7 +9,7 @@ import {
 import { ApiError, request, requestResponse } from "./request.js";
 import { z } from "zod";
 
-const actionApprovalSchema = z.object({
+export const actionApprovalSchema = z.object({
   status: z.literal("approval-required"),
   approvalId: z.string().min(1),
   pending: z.object({
