@@ -37,6 +37,8 @@ function makeCase(): { dir: string; from: string; to: string } {
     path.join(from, "worlds", "my-world", "media", "cover.png"),
     "png",
   );
+  fs.mkdirSync(path.join(from, "media", "ab", "cd"), { recursive: true });
+  fs.writeFileSync(path.join(from, "media", "ab", "cd", "asset.bin"), "media");
   return { dir, from, to: path.join(dir, "new") };
 }
 
@@ -58,7 +60,7 @@ function snapshot(root: string): Record<string, string> {
   return files;
 }
 
-test("copies the database files and worlds, and nothing else", async () => {
+test("copies the database files, worlds and media, and nothing else", async () => {
   const { from, to } = makeCase();
   const before = snapshot(from);
   assert.equal(planDataRootSwitch(from, to), "copy");
@@ -69,6 +71,10 @@ test("copies the database files and worlds, and nothing else", async () => {
     "covel.db": "database",
     "covel.db-shm": "shared memory",
     "covel.db-wal": "write-ahead log",
+    "media/": "",
+    "media/ab/": "",
+    "media/ab/cd/": "",
+    "media/ab/cd/asset.bin": "media",
     "worlds/": "",
     "worlds/my-world/": "",
     "worlds/my-world/media/": "",
@@ -81,6 +87,7 @@ test("copies the database files and worlds, and nothing else", async () => {
 test("fills an existing destination that holds no Covel data", async () => {
   const { from, to } = makeCase();
   fs.mkdirSync(path.join(to, "worlds"), { recursive: true });
+  fs.mkdirSync(path.join(to, "media"));
   fs.writeFileSync(path.join(to, "notes.txt"), "mine");
 
   const undo = await copyDataRoot(from, to);
@@ -89,11 +96,32 @@ test("fills an existing destination that holds no Covel data", async () => {
 
   // Undo removes the copy and leaves what was there before.
   await undo();
-  assert.deepEqual(snapshot(to), { "notes.txt": "mine", "worlds/": "" });
+  assert.deepEqual(snapshot(to), {
+    "notes.txt": "mine",
+    "worlds/": "",
+    "media/": "",
+  });
+});
+
+test("copies a source containing only media", async () => {
+  const { from, to } = makeCase();
+  for (const name of ["covel.db", "covel.db-wal", "covel.db-shm", "worlds"])
+    fs.rmSync(path.join(from, name), { recursive: true });
+  assert.equal(planDataRootSwitch(from, to), "copy");
+  await copyDataRoot(from, to);
+  assert.equal(
+    fs.readFileSync(path.join(to, "media", "ab", "cd", "asset.bin"), "utf-8"),
+    "media",
+  );
 });
 
 test("refuses a destination that already holds Covel data", async () => {
-  for (const existing of ["covel.db", "covel.db-wal", "worlds/theirs/x"]) {
+  for (const existing of [
+    "covel.db",
+    "covel.db-wal",
+    "worlds/theirs/x",
+    "media/ab/cd/theirs.bin",
+  ]) {
     const { from, to } = makeCase();
     const file = path.join(to, existing);
     fs.mkdirSync(path.dirname(file), { recursive: true });

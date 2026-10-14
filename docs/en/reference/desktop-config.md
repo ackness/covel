@@ -24,6 +24,7 @@ On first launch the desktop app creates `~/.covel/`. Small config files and user
 
 <data_root>/                 ← default ~/.covel/data; can point anywhere
   covel.db                   ← SQLite database
+  media/                     ← Stored images, audio and other media
   worlds/                    ← worlds the user created or installed
   logs/                      ← app logs (rotated by size, one NDJSON record per line)
     desktop.log              ← main-process events (window / IPC / backend supervision / startup failures)
@@ -184,8 +185,8 @@ Picker options and default summaries show the slot, the provider and the **effec
 **Switching `data_root`.** After you pick a folder in the desktop app, what happens depends on the two locations:
 
 - The current folder has data and the new one has none: a dialog asks "Copy my data" or "Start empty".
-- The new folder already holds a `covel.db` or user worlds: it is used as it is. Nothing is copied or overwritten.
-- With "Copy my data", only a `data-root-copy.json` is written to the config root at that moment, and `data_root` stays unchanged. At the next start the main process copies `covel.db`, `covel.db-wal`, `covel.db-shm` and `worlds/` before it starts the backend (not `logs/`, not `server.port`), and rewrites `data_root` only after the copy succeeded.
+- The new folder already holds a `covel.db` or user worlds or media: it is used as it is. Nothing is copied or overwritten.
+- With "Copy my data", only a `data-root-copy.json` is written to the config root at that moment, and `data_root` stays unchanged. At the next start the main process copies `covel.db`, `covel.db-wal`, `covel.db-shm`, `worlds/` and `media/` before it starts the backend (not `logs/`, not `server.port`), and rewrites `data_root` only after the copy succeeded.
 - The copy is tried once. When it fails, is cut short, or another Covel process still has the database open, the files this copy wrote are removed, `data_root` stays unchanged, and a dialog says why.
 - The old folder is only read: nothing is moved or deleted.
 
