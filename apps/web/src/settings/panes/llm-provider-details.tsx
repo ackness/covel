@@ -1,3 +1,5 @@
+import { requestConfirm } from "@/lib/confirm-channel.js";
+import { useSettingsWritable } from "../use-settings-save.js";
 import { useTranslation } from "react-i18next";
 import { Copy, FileCode, Plus, Trash2 } from "lucide-react";
 import {
@@ -28,6 +30,7 @@ type ServerConfigSource = LlmConfigResponse["source"];
 export function ProviderDetails({
   provider,
   serverConfig,
+  busy = false,
   onAddModel,
   onPatchLocalProfile,
   onDeleteLocalModel,
@@ -35,15 +38,21 @@ export function ProviderDetails({
   onDeleteLocalProvider,
 }: {
   provider: ProviderCatalogEntry;
+  busy?: boolean;
   /** Where the server models come from: an llm.toml file or the built-in default. */
   serverConfig?: ServerConfigSource;
   onAddModel: () => void;
-  onPatchLocalProfile: (patch: Partial<ProviderModelProfile>) => void;
+  onPatchLocalProfile: (
+    patch:
+      | Partial<ProviderModelProfile>
+      | ((profile: ProviderModelProfile) => Partial<ProviderModelProfile>),
+  ) => void;
   onDeleteLocalModel: (modelRef: string) => void;
   onDuplicateLocalModel: (model: ProviderModelEntry) => void;
   onDeleteLocalProvider: () => void;
 }) {
   const { t } = useTranslation();
+  const writable = useSettingsWritable();
   const isServerProvider = provider.serverModels.length > 0;
   const isBuiltinDefault = serverConfig?.kind === "builtin";
   const serverLabel = isBuiltinDefault
@@ -87,7 +96,20 @@ export function ProviderDetails({
           <Button
             variant="ghost"
             size="icon-xs"
-            onClick={onDeleteLocalProvider}
+            disabled={busy || !writable}
+            onClick={async () => {
+              if (
+                await requestConfirm({
+                  title: t("settings.deleteProviderTitle"),
+                  message: t("settings.deleteProviderConfirm"),
+                  subject: provider.id,
+                  confirmLabel: t("common.delete"),
+                  cancelLabel: t("common.cancel"),
+                  destructive: true,
+                })
+              )
+                onDeleteLocalProvider();
+            }}
             aria-label={t("common.delete", "Delete")}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -120,6 +142,7 @@ export function ProviderDetails({
             value={baseUrl.draft}
             aria-invalid={baseUrl.conflict}
             readOnly={!localProfile}
+            disabled={!writable}
             onChange={(event) => baseUrl.setDraft(event.target.value)}
             onBlur={commitBaseUrl}
             onKeyDown={(event) => {
@@ -132,7 +155,7 @@ export function ProviderDetails({
         <ProtocolSelect
           provider={provider.provider}
           value={localProfile?.protocol ?? provider.protocol}
-          disabled={!localProfile}
+          disabled={!localProfile || !writable}
           onChange={(protocol) => onPatchLocalProfile({ protocol })}
         />
       </div>
@@ -150,7 +173,12 @@ export function ProviderDetails({
               )}
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={onAddModel}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy || !writable}
+            onClick={onAddModel}
+          >
             <Plus className="h-3.5 w-3.5" />
             {t("settings.addModel", "Add model")}
           </Button>
@@ -180,12 +208,13 @@ export function ProviderDetails({
               }
               modelProtocol={model.protocol}
               providerProtocol={localProfile.protocol ?? provider.protocol}
+              busy={busy}
               onProtocolChange={(protocol) =>
-                onPatchLocalProfile({
-                  models: localProfile.models.map((entry) =>
+                onPatchLocalProfile((current) => ({
+                  models: current.models.map((entry) =>
                     entry.ref === model.ref ? { ...entry, protocol } : entry,
                   ),
-                })
+                }))
               }
               modelId={model.modelId}
               name={model.name}
@@ -195,21 +224,21 @@ export function ProviderDetails({
               sourceLabel={t("settings.localModel", "Local model")}
               reasoningEffort={model.reasoningEffort}
               onNameChange={(name) =>
-                onPatchLocalProfile({
-                  models: localProfile.models.map((entry) =>
+                onPatchLocalProfile((current) => ({
+                  models: current.models.map((entry) =>
                     entry.ref === model.ref ? { ...entry, name } : entry,
                   ),
-                })
+                }))
               }
               onDuplicate={() => onDuplicateLocalModel(model)}
               onReasoningChange={(reasoningEffort) =>
-                onPatchLocalProfile({
-                  models: localProfile.models.map((entry) =>
+                onPatchLocalProfile((current) => ({
+                  models: current.models.map((entry) =>
                     entry.ref === model.ref
                       ? { ...entry, reasoningEffort }
                       : entry,
                   ),
-                })
+                }))
               }
               onDelete={() => onDeleteLocalModel(model.ref)}
             />
@@ -278,6 +307,7 @@ function ProviderModelRow({
   onReasoningChange,
   onNameChange,
   onDuplicate,
+  busy = false,
 }: {
   provider: string;
   protocol: string;
@@ -296,8 +326,10 @@ function ProviderModelRow({
   onReasoningChange?: (value: ReasoningEffort | undefined) => void;
   onNameChange?: (value: string) => void;
   onDuplicate?: () => void;
+  busy?: boolean;
 }) {
   const { t } = useTranslation();
+  const writable = useSettingsWritable();
   const nameDraft = useSettingDraft(name ?? "", presetId);
   return (
     <div
@@ -336,6 +368,7 @@ function ProviderModelRow({
           <Button
             variant="ghost"
             size="icon-xs"
+            disabled={busy || !writable}
             onClick={onDuplicate}
             aria-label={t("settings.duplicateModelConfiguration")}
             title={t("settings.duplicateModelConfiguration")}
@@ -347,7 +380,20 @@ function ProviderModelRow({
           <Button
             variant="ghost"
             size="icon-xs"
-            onClick={onDelete}
+            disabled={busy || !writable}
+            onClick={async () => {
+              if (
+                await requestConfirm({
+                  title: t("settings.deleteModelTitle"),
+                  message: t("settings.deleteModelConfirm"),
+                  subject: name || modelId,
+                  confirmLabel: t("common.delete"),
+                  cancelLabel: t("common.cancel"),
+                  destructive: true,
+                })
+              )
+                onDelete();
+            }}
             aria-label={t("common.delete", "Delete")}
           >
             <Trash2 className="h-3 w-3" />
@@ -358,6 +404,7 @@ function ProviderModelRow({
         <ProtocolSelect
           provider={provider}
           inheritedProtocol={providerProtocol}
+          disabled={!writable}
           value={modelProtocol ?? ""}
           onChange={(value) => onProtocolChange(value || undefined)}
           inheritLabel={t("settings.inheritProviderProtocol")}
@@ -378,6 +425,7 @@ function ProviderModelRow({
               <label className="block space-y-1 text-xs">
                 <span>{t("settings.modelConfigurationName")}</span>
                 <input
+                  disabled={!writable}
                   value={nameDraft.draft}
                   placeholder={modelId}
                   maxLength={100}
@@ -400,13 +448,15 @@ function ProviderModelRow({
             {nameDraft.conflict && (
               <SettingsDraftConflict onReload={nameDraft.reset} />
             )}
-            <ModelReasoningSettings
-              model={modelId}
-              provider={provider}
-              protocol={protocol}
-              value={reasoningEffort}
-              onChange={onReasoningChange}
-            />
+            <fieldset disabled={!writable}>
+              <ModelReasoningSettings
+                model={modelId}
+                provider={provider}
+                protocol={protocol}
+                value={reasoningEffort}
+                onChange={onReasoningChange}
+              />
+            </fieldset>
           </div>
         </details>
       )}

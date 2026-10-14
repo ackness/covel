@@ -90,7 +90,19 @@ export type {
 export {
   createProgressReporter,
   finalizeJobStatuses,
+  finalizeSuspendedJobStatuses,
 } from "./job-status/job-status.js";
+export {
+  applySuspensionAbandonTx,
+  isPendingSuspension,
+  planSuspensionAbandon,
+  settleAbandonedSuspensionJobs,
+  suspensionOutdatedReason,
+} from "./resume/suspension-settlement.js";
+export type {
+  SuspensionAbandonPlan,
+  SuspensionOutdatedReason,
+} from "./resume/suspension-settlement.js";
 export type {
   ProgressReporterDeps,
   ExecutionJobOutcome,
@@ -119,10 +131,6 @@ export type {
   ToolCallResult,
   ToolExecutorConfig,
 } from "./agent-loop/tool-executor.js";
-
-// ── Model Resolver ──────────────────────────────────────────────
-export type { PluginLlmModelTarget } from "./llm/model-resolver.js";
-export { createModelResolver } from "./llm/model-resolver.js";
 
 // ── Per-Session Runtime Slot Resolver ───────────────────
 
@@ -162,10 +170,7 @@ export {
 export type { PreparedInteractionSubmission } from "./interaction/interaction-submission.js";
 
 // ── Gateway Bridge ──────────────────────────────────────────────
-export {
-  createGatewayAdapter,
-  resolveGatewayModelSelection,
-} from "./llm/gateway-llm-adapter.js";
+export { createGatewayAdapter } from "./llm/gateway-llm-adapter.js";
 export type {
   GatewayLike,
   GatewayAdapterConfig,

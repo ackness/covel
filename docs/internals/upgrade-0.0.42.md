@@ -21,10 +21,10 @@ v0.0.42 换掉了插件、世界数据和存储的格式。**它不会自动转�
    - SQLite 或本地文件系统：媒体目录可能由 `MEDIA_ROOT` 指定。
    - PostgreSQL：媒体可能就在数据库里。用数据库管理员认可的一致性备份方式，并备份应用数据卷和外部的媒体存储。
    - 浏览器本地模式：媒体在 IndexedDB 里。
-   - Docker Compose：`appdata` 和 `pgdata18` 两个卷都要考虑。
+   - Docker Compose：SQLite 那套的数据库和媒体都在 `appdata` 卷里；PostgreSQL 那套要同时考虑 `appdata` 和 `pgdata18` 两个卷。
 
 > [!CAUTION]
-> `pnpm docker:down-all` 会删除卷里的数据。
+> `pnpm docker:down-all` 和 `pnpm docker:pg:down-all` 会删除卷里的数据。
 
 备份之后，先确认文件能读、数据库备份能恢复，并保留原始备份。
 

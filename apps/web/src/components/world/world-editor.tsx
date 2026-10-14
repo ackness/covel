@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Braces,
@@ -38,6 +38,7 @@ import { DimensionsJsonEditor } from "./dimensions-json-editor.js";
 import type { WorldRecord, WorldSummary } from "@/services/api.js";
 import { useWorldRecord } from "@/services/world-records.js";
 import { getDataService } from "@/services/data-service.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import { GeographyTab } from "./tabs/geography-tab.js";
 import { FactionsTab } from "./tabs/factions-tab.js";
 import { PowerSystemTab } from "./tabs/power-system-tab.js";
@@ -146,7 +147,12 @@ export function WorldEditorLoader({
     );
   }
   return (
-    <WorldEditor world={record.world} onSave={onSave} onCancel={onCancel} />
+    <WorldEditor
+      key={record.world.id}
+      world={record.world}
+      onSave={onSave}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -161,6 +167,36 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
   const [drafts, setDrafts] = useState<DimensionsState>(() =>
     projectDimensionTemplates(dimensions),
   );
+  // Keep incomplete form values and unapplied JSON in the dirty check.
+  // Merged definitions alone can omit an unnamed or duplicate resource row.
+  const snapshot = JSON.stringify({ dimensions, drafts });
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const [jsonDrafts, setJsonDrafts] = useState<
+    Record<string, { value: string; original: string }>
+  >({});
+  const dirty =
+    snapshot !== savedSnapshot ||
+    Object.values(jsonDrafts).some(({ value, original }) => value !== original);
+  const [confirming, setConfirming] = useState(false);
+  const editorRef = useRef<object | null>(null);
+
+  useEffect(() => {
+    const editor = {};
+    editorRef.current = editor;
+    return () => {
+      editorRef.current = null;
+    };
+  }, [world.id]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dirty]);
   const [activeTab, setActiveTab] = useState("definitions");
   // Set by a save that found problems. From then on the problems follow the
   // edits, so a message goes when its field is put right.
@@ -196,6 +232,11 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
       ...projectDimensionTemplates(next),
       ...Object.fromEntries(untouched),
     });
+    setJsonDrafts((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([id]) => id !== activeTab),
+      ),
+    );
   }
   const templateComponents = {
     geography: GeographyTab,
@@ -225,6 +266,7 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
       const updated = await getDataService().updateWorld(world.id, {
         dimensions: merged,
       });
+      setSavedSnapshot(snapshot);
       onSave(updated);
     } catch (err: unknown) {
       const message =
@@ -232,6 +274,28 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
       setError(message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (saving || confirming) return;
+    if (!dirty) {
+      onCancel();
+      return;
+    }
+    const editor = editorRef.current;
+    setConfirming(true);
+    try {
+      const discard = await requestConfirm({
+        title: t("world.discardChangesTitle"),
+        message: t("world.discardChangesMessage"),
+        confirmLabel: t("world.discardChanges"),
+        cancelLabel: t("world.keepEditing"),
+        destructive: true,
+      });
+      if (editorRef.current === editor && discard) onCancel();
+    } finally {
+      if (editorRef.current === editor) setConfirming(false);
     }
   }
 
@@ -249,13 +313,17 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={onCancel}
-              disabled={saving}
+              onClick={handleCancel}
+              disabled={saving || confirming}
             >
               <X className="mr-1 h-4 w-4" />
               {t("common.cancel")}
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving || confirming}
+            >
               <Save className="mr-1 h-4 w-4" />
               {saving ? t("common.loading") : t("common.save")}
             </Button>
@@ -314,6 +382,21 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
                       <DimensionsJsonEditor
                         dimensions={merged}
                         onChange={applyDefinitions}
+                        draft={
+                          jsonDrafts[tab.id]?.value ??
+                          JSON.stringify(merged, null, 2)
+                        }
+                        onDraftChange={(value) =>
+                          setJsonDrafts((current) => ({
+                            ...current,
+                            [tab.id]: {
+                              value,
+                              original:
+                                current[tab.id]?.original ??
+                                JSON.stringify(merged, null, 2),
+                            },
+                          }))
+                        }
                       />
                     )}
                   </TabsContent>

@@ -79,6 +79,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - function runtime 挂起时，continuation 保存还没提交的命令、输入和导出的绑定，以及 activation。
 - 恢复时使用这些冻结的快照。还没提交的命令仍然可以被这次运行读到，并在恢复成功时一起原子提交。
 - 恢复失败会丢弃这些域写入。
+- continuation 还记下挂起时历史里的玩家回合数和插件版本。恢复时任一项变了，挂起项就被作废，不再运行，见[过时的挂起项](./api.md#过时的挂起项)。
 
 > [!WARNING]
 > continuation 的格式更新之后，已有的开发期暂停记录需要重建。
@@ -317,6 +318,7 @@ ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })
 - 还没结束的作业，按 runtime 的结果换成终态。
 - 插件已经上报了 `succeeded`，但这次的领域写入没有提交（整次执行回滚、这个 runtime 失败，或者它的写入在提交时被单独丢弃）：框架追加一条 `failed`，不保留成功状态。
 - 插件自己上报的 `failed` / `cancelled` 不会被改写。
+- 挂起的 runtime 的作业停在 `waiting-input`。它们记在挂起那次执行名下：恢复成功提交后换成 `succeeded`；挂起项被放弃、过期或作废时换成 `cancelled`；恢复失败、还能重试时继续等待。
 
 **后台作业的状态对应**
 
@@ -1309,7 +1311,7 @@ runtime 的终态：
 `turn-digest@1` 包含 `turnId/playerMessage/locale/narrativeText/toolCallSummaries/lastPlayerInput/runtimeResults`：
 
 - `runtimeResults` 只列出记录那一刻、来源回合已经看到的 `runtimeId` 和状态（`success/failed/skipped/suspended`）。它不包含还没运行的使用者，也不包含其他回合的重试种子。
-- 只有成功的故事和已接受的工具调用进入文本摘要。
+- 只有成功的故事和已接受的工具调用进入文本摘要。声明 `io.concealed: true` 的 runtime，其工具调用不进入 `toolCallSummaries`；`runtimeResults` 仍保留它的 ID 和状态。
 
 快照怎样保存：
 

@@ -11,6 +11,7 @@ import {
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { worldTranslateRoutes } from "../../src/routes/api/worlds/translate.js";
 import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
@@ -124,10 +125,12 @@ function createTestApp(
     if (registry) c.set("pluginRegistry", registry);
     c.set("sessionLock", sessionLock);
     c.set("storeBackend", "memory");
+    c.set("worldsDirs", [process.env.COVEL_USER_WORLDS_DIR!]);
     await next();
   });
   app.route("/api/ai", aiRoutes);
   app.route("/api/worlds", worldCrudRoutes);
+  app.route("/api/worlds", worldTranslateRoutes);
   return app;
 }
 
@@ -199,6 +202,151 @@ describe("ai world generation route", () => {
     }
     await rm(worldsDir, { recursive: true, force: true });
   });
+
+  const minimalWorld = {
+    id: "writeback-world",
+    locale: "en-US",
+    manifest: {
+      schemaVersion: "1.0",
+      id: "writeback-world",
+      name: "Harbor",
+      summary: "A harbor",
+      defaultLocale: "en-US",
+    },
+    lore: "Original lore",
+    packageContent: { characters: [], lorebook: [], rules: [] },
+    warnings: [],
+  };
+
+  it.each(["generate-world", "revise-world"])(
+    "%s rejects invalid package data before publication",
+    async (route) => {
+      const dir = path.join(worldsDir, minimalWorld.id);
+      if (route === "revise-world") {
+        await worldCreation.writeWorldPackage(worldsDir, minimalWorld);
+        await store.createWorld(
+          (await loadSingleWorld(dir, { source: "generated-file" }))!,
+        );
+      }
+      const before = await store.getWorld(minimalWorld.id);
+      const filesBefore =
+        route === "revise-world"
+          ? await Promise.all(
+              (await readdir(dir)).map(async (name) => [
+                name,
+                await readFile(path.join(dir, name), "hex"),
+              ]),
+            )
+          : [];
+      vi.spyOn(worldCreation, "createWorld").mockResolvedValue({
+        ...minimalWorld,
+        success: true,
+        lore: "Revised lore",
+        manifest: { ...minimalWorld.manifest, worldData: "data/missing.yaml" },
+      });
+      const events = await readSseJson(
+        await app.request(`/api/ai/${route}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            concept: "Harbor",
+            worldId: minimalWorld.id,
+            instruction: "Revise",
+            saveTarget: "server-file",
+          }),
+        }),
+      );
+      expect(events.some((event) => event.type === "error")).toBe(true);
+      expect(events.some((event) => event.type === "done")).toBe(false);
+      expect(await store.getWorld(minimalWorld.id)).toEqual(before);
+      expect(await readdir(worldsDir)).toEqual(
+        route === "revise-world" ? [minimalWorld.id] : [],
+      );
+      if (route === "revise-world")
+        expect(
+          await Promise.all(
+            (await readdir(dir)).map(async (name) => [
+              name,
+              await readFile(path.join(dir, name), "hex"),
+            ]),
+          ),
+        ).toEqual(filesBefore);
+    },
+  );
+
+  it.each(["generate", "revise", "translate"])(
+    "holds shared authoring admission throughout the %s SSE stream",
+    async (active) => {
+      await worldCreation.writeWorldPackage(worldsDir, minimalWorld);
+      await store.createWorld(
+        (await loadSingleWorld(path.join(worldsDir, minimalWorld.id), {
+          source: "generated-file",
+        }))!,
+      );
+      let entered!: () => void;
+      let release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const llm = new FixedLlm();
+      const original = llm.generate.bind(llm);
+      vi.spyOn(llm, "generate").mockImplementation(async () => {
+        entered();
+        await gate;
+        return original();
+      });
+      app = createTestApp(store, llm);
+      const requests = {
+        generate: [
+          "/api/ai/generate-world",
+          { concept: "Harbor", saveTarget: "return-only" },
+        ],
+        revise: [
+          "/api/ai/revise-world",
+          { worldId: minimalWorld.id, instruction: "Revise" },
+        ],
+        translate: [
+          `/api/worlds/${minimalWorld.id}/translate`,
+          { locale: "ja-JP" },
+        ],
+      } as const;
+      const post = async (kind: keyof typeof requests) => {
+        const [url, body] = requests[kind];
+        return app.request(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      };
+      const pending = post(active as keyof typeof requests).then(readSseJson);
+      await started;
+      const responses: Response[] = [];
+      try {
+        for (const kind of ["generate", "revise", "translate"] as const) {
+          const blocked = await post(kind);
+          responses.push(blocked);
+          expect(blocked.status).toBe(429);
+          expect(await blocked.json()).toMatchObject({
+            code: "operation_in_progress",
+          });
+        }
+      } finally {
+        release();
+        await pending;
+        await Promise.all(
+          responses
+            .filter((response) => !response.bodyUsed)
+            .map((response) => response.text()),
+        );
+      }
+      const retry = await post("generate");
+      expect(retry.status).toBe(200);
+      await readSseJson(retry);
+    },
+  );
 
   it.each(["generate-world", "revise-world"] as const)(
     "%s keeps unexpected exceptions out of production SSE and logs the original error",

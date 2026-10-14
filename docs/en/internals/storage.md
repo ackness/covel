@@ -38,8 +38,9 @@ There is no `STORE_BACKEND=idb`, and no `createStore({ backend: "idb" })`. If yo
 
 - `createStoreFromEnv()` takes an exclusive lock by creating `<SQLITE_PATH>.lock`, which records the holder's pid and start time. The lock is deleted when the store closes or the process exits.
 - A second process that starts on the same file (for example, the desktop app and the dev server pointing at the same Covel home directory) fails to start. The error names the file and the holder's pid.
-- If the pid in the lock is no longer running, the lock is stale and gets taken over.
-- Opening the same file twice in one process is not a conflict.
+- If the pid in the lock is no longer running, the lock is stale. Takeover renames it before exclusively creating a new lock, then reads back the pid and start time to verify ownership.
+- A temporary `.lock.claim` directory serializes inspection, takeover, and creation. It is published atomically with a unique owner marker inside. Recovery after a crash moves only that generation's marker, so a delayed contender cannot delete a new owner's marker. Another process starting at the same time receives a retry message.
+- Opening the same file twice in one process is not a conflict. Relative and absolute paths share a reference count; only the final close releases the lock.
 - Code that opens the database file directly with `createStore()` (tests, tools, read-only scripts) takes no lock. The memory and `pg` backends take no lock either.
 
 **Code layout of the SQL backends.** Each of the two backends has its own directory, `packages/store/src/sqlite/` and `packages/store/src/postgres/`, and they are split in the same way.
@@ -57,7 +58,7 @@ When you add a table or a query, put it in the module for its feature area, add 
 
 **World settings are not cached per process.** The schemas of world settings and memory blocks are read every time from the DataStore being used. A committed change, or a replacement with the same ID, is visible on the next read. Separate store instances do not accidentally share world records. Runtime settings are taken once at the start of each operation, and later changes do not affect an operation already in progress.
 
-**Deleting archived vectors.** Before archived vectors are deleted, both sources, the characters and the lorebook (the setting collection), must be read successfully.
+**Deleting archived vectors.** Before archived vectors are deleted, three kinds of source must be read successfully: the characters, the lorebook (the setting collection), and the plugin data of the active plugins that declare their namespace searchable (`contributes.data.<ns>.search`).
 
 - If reading either source fails, this round of archive cleanup is aborted. The existing vectors and content hashes are kept, and a warning with the session information is emitted.
 - If reading a source succeeds but its content is empty, the empty result is trusted, and outdated entries are still deleted.
@@ -67,12 +68,12 @@ When you add a table or a query, put it in the module for its feature area, add 
 
 `MemorySystem` manages its own background jobs. Before the host closes its store, it stops whatever produces the jobs, calls this instance's `drain()`, and then checks `pendingTaskCount()`. Separate instances do not share a process-level drain barrier.
 
-**Checking sources at query time.** Before a query on archived vectors returns content, it checks the candidates against the current character and lorebook records. If a candidate has been deleted or changed, the query falls back to keyword search until the asynchronous write job refreshes the index. Writing the lorebook through the API also schedules a write job. Deleting one archive source removes only its own vectors. The other unchanged vectors are kept, and embedding is not called again.
+**Checking sources at query time.** Before a query on archived vectors returns content, it checks the candidates against the current character, lorebook and searchable plugin data records. If a candidate has been deleted or changed, the query falls back to keyword search until the asynchronous write job refreshes the index. Writing the lorebook through the API also schedules a write job. Deleting one archive source removes only its own vectors. The other unchanged vectors are kept, and embedding is not called again.
 
 **Where progress is stored.** The recall cursor and the archive hashes are stored in the `vector_index_progress` table. They sit next to the physical index, not in `plugin_data`.
 
 - When progress is written, the previously serialized value is compared. The session's "incarnation" is also checked inside the backend's write boundary. (If the same ID is deleted and then recreated, it counts as a different incarnation.)
-- Deleting or replacing a session clears both the progress and the vectors. A transaction rollback restores the progress.
+- Deleting or replacing a session clears both the progress and the vectors. A transaction rollback restores the progress. See [session deletion](#server-world-and-session-deletion) for the exception when SQLite's vector extension is unavailable.
 - Business snapshots, forks and browser checkpoints do not copy it, so each of them rebuilds its own index.
 
 > [!IMPORTANT]
@@ -89,6 +90,8 @@ Deleting a world is orchestrated by the world's DELETE endpoint, in these steps:
 3. Only after no sessions remain, delete the world record and the generated world package.
 
 The underlying `DataStore.deleteWorld` deletes only the world record itself.
+
+**When SQLite's vector extension is unavailable.** Sessions can still be deleted even if the database already contains `vec0` virtual tables. Business records and index progress are deleted in one transaction; only the inaccessible vector tables are skipped. When the extension next loads successfully, a transaction removes vector rows without a corresponding session from every model table and preserves vectors belonging to existing sessions. Until then, the orphan rows still occupy space.
 
 **Lock order.**
 
@@ -356,6 +359,18 @@ Electron uses the web interface in remote mode, and business records are persist
 
 The Dexie BrowserVault schema belongs to `apps/web`, and it is not reported externally as a migration of the server `DataStore`. `VECTOR_BACKEND=embedded` uses the capabilities of the current server store. BrowserVault deliberately does not implement vector retrieval.
 
+**The data schema version is checked at startup.** The two SQL backends share one data schema version: `DATA_SCHEMA_VERSION` in `packages/store/src/migrations.ts`. Covel does not migrate old data, so opening a database compares the version before any table-creation statement runs:
+
+- SQLite records the version in `PRAGMA user_version`; PostgreSQL records it in the single-row table `covel_schema_meta`.
+- The recorded version equals the current one: the database opens.
+- Another version is recorded, older or newer: the database is refused with `StoreSchemaVersionError` (`code: "store_schema_incompatible"`). The message tells the user to back up first, then switch to a new data directory, `SQLITE_PATH` or empty PostgreSQL database. The refusal comes before any table-creation statement, so the old database is not changed.
+- No version is recorded (a new database, or one written before this check existed): only the Covel tables that already exist are checked for every column of the current schema. A missing column is refused the same way; a missing table is fine, because startup creates it. When the check passes, the current version is recorded.
+- The desktop app shows this error on its startup screen, with the paths of the data directory and of `config.toml`.
+
+When a column of an existing table changes in a way an old database cannot follow (added, removed, renamed or retyped), raise `DATA_SCHEMA_VERSION` by one. `packages/store/tests/schema-version.test.ts` records the table-shape digests for each version; the test fails when the table shapes change and the digests are not updated.
+
+**PostgreSQL runs its startup table creation one server at a time.** The version check, the table-creation statements and the version record run in one transaction that first takes a transaction-scoped advisory lock with a fixed key. When several servers start together against one database (a rolling deploy, several instances), they create the tables in turn instead of colliding on the system catalog. The standalone PostgreSQL media store takes the same lock for its own tables. The `vector_models` trigger is created only when it is missing, so a routine start no longer locks that table.
+
 ## Prep Drafts and Session Lore
 
 **Drafts.** The app KV overlay stored per world is an editing draft kept for later visits.
@@ -410,7 +425,7 @@ Memory, SQLite and PostgreSQL agree on this, and the shared contract tests check
 - PostgreSQL uses a separate sequence for each table to assign positions for messages, traces and turn artifacts, and this still works when several connections write at the same time.
 - SQLite assigns them inside the write boundary it serializes.
 - A gap in sequence numbers after a rollback is normal. When importing in order, new positions are assigned in the order of the import list. Cursor pagination and full lists use the same positions.
-- The data schema metadata version is 4 for both SQL backends. Existing development databases must be rebuilt.
+- The data schema version is 4 for both SQL backends. It is checked at startup; see [The data schema version is checked at startup](#capabilities-and-migrations).
 
 **Vector retrieval.** The results are first filtered by session, plugin and namespace, and then the top-K is picked exactly. Memory, SQLite and PostgreSQL all return Euclidean L2 distance. PostgreSQL materializes the filtered candidates instead of using a global approximate index, because the latter can miss matches after filtering.
 

@@ -98,10 +98,17 @@ export async function readEffectiveDimensions(args: {
     dimensions?: unknown;
     dimensionSources?: unknown;
     defaultLocale?: string;
+    supportedLocales?: readonly string[];
   };
   sources?: readonly OrderedWorldDataSource[];
   locale?: string;
 }): Promise<import("@covel/shared").WorldDimensions> {
+  const declared = [
+    ...new Set([
+      ...(args.manifest.defaultLocale ? [args.manifest.defaultLocale] : []),
+      ...(args.manifest.supportedLocales ?? []),
+    ]),
+  ];
   let definitions = parseDimensions(args.manifest.dimensions);
   const paths = z
     .record(dimensionIdSchema, z.string().min(1))
@@ -116,6 +123,7 @@ export async function readEffectiveDimensions(args: {
     paths,
     args.manifest.id ?? "world",
     args.manifest.defaultLocale,
+    declared,
     (message) => {
       externalDiagnostic = message;
     },
@@ -135,7 +143,11 @@ export async function readEffectiveDimensions(args: {
     // Every overlay is compiled in: labels keep all languages. The values
     // are resolved for the session's locale at the end of this function.
     const read = await readWorldDataSource(source, undefined, {
-      overlays: { mode: "compile", baseLocale: args.manifest.defaultLocale },
+      overlays: {
+        mode: "compile",
+        baseLocale: args.manifest.defaultLocale,
+        declared,
+      },
     });
     if (read.diagnostics.some((diagnostic) => diagnostic.level === "error"))
       throw new Error(

@@ -126,6 +126,8 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 内置供应商（`@covel/shared` 里的 `BUILTIN_PROVIDER_CONNECTIONS`）属于已注册的供应商默认值：以其中某个供应商命名的环境密钥，只会附到该供应商的官方源上，不会附到别处。模型列表请求（`POST /api/ai/models`）把目标当作请求级目标来解析，所以同一条规则在那里也成立。
 
+插件不能自己指定模型的地址。它只写想用的用途名（`agent.model` / `function.model`），用哪个服务商、模型、地址和协议，由玩家或运营者的配置决定。插件目录里的 `llm.toml` 不会被读取。所以不论内置还是社区插件、有没有服务端代码，插件的清单和配置文件都没办法让玩家的密钥发到它自己选的地址。
+
 回环地址（`localhost`、`127.0.0.1`、`::1`）上的模型不需要密钥就算就绪：Ollama 这类本机服务不用密钥。这只改变就绪检查；配了密钥仍然会发送，托管档位上出站防护仍然会拒绝这个请求。
 
 插件可以注册自己的文本 wire（`covel.registerWires({ text })`）。wire 是一段替某种协议收发模型请求的插件代码。
@@ -147,12 +149,23 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - Web 端存在 `localStorage`（`covel:keys`）。
 - 两处都不加密。渲染进程需要明文才能拼出 `X-Provider-Keys`，所以即使落盘加密，`covel:keys:load` 这条 IPC 通道（只接受受信任的发送方）也还是原样；而在未签名的构建上，Electron `safeStorage` 只会多出一个 macOS 钥匙串弹窗。
 
-文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见下一节）。
+文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见 [Community plugin code](#community-plugin-code)）。
+
+## 桌面窗口
+
+桌面窗口启用 `contextIsolation` 和 `sandbox`，关闭 `nodeIntegration`，不启用子 frame 的 Node 集成。`preload.ts` 通过 `contextBridge` 暴露 `window.covelIpc`：应用元信息、只允许白名单通道的 `invoke` 和 `on`；订阅回调拿不到 Electron 事件对象。
+
+敏感 IPC（包括明文密钥、REST token 和设置读写）要求发送方是其 `webContents.mainFrame`，且 URL 与主窗口已提交的回环 HTTP 源相同。同源子 frame 也被拒绝。恢复通道（重试启动、打开日志、配置或数据目录）同样要求主 frame，但也接受主进程生成的当前启动页。启动页不能读取密钥或 REST token。
+
+`windows.ts` 阻止主 frame 导航或重定向到其他源；主进程主动加载启动页或应用地址不受此事件守卫限制。`window.open` 不创建新窗口：HTTPS 和回环 HTTP 链接交给系统浏览器，其他 HTTP 链接先确认，其他协议拒绝。这些限制不能防住受信任主页面内的恶意脚本，也不能隔离已批准的插件服务端代码。
+
+发送方校验和启动错误投递的回归测试在 `apps/desktop/scripts/restart-server.test.mjs`；源和启动页 URL 匹配测试在 `apps/desktop/src/trusted-origin.selfcheck.ts`。
 
 ## Community plugin code
 
 插件的服务端 JavaScript（`entry`、handler、guard、hook、wire）运行在服务端进程里，拥有服务端的全部权限。没有进程沙箱、VM 沙箱或模块沙箱。挡在社区包和这些权限之间的，只有玩家的同意：
 
+- 清单读取共用纯 YAML 解析入口，加载、安装、校验和本地化工具都在解析前拒绝 `---js` 等引擎指令。
 - 批准之前，`community` 包只是数据。安装、预览、列表和校验只解析它的文件，一个都不 import。两阶段批准（先 `covel:plugin-server-code`，再授予具体操作，见 [Hosted auth](#hosted-auth)）把守着第一次 import。
 - 批准之后，这些代码能做服务端进程能做的一切：读写服务端系统用户的文件（`keys.env`、`llm.toml`、SQLite 文件），读 `process.env`，打开套接字，启动进程。
 - `permissions.http` 是插件 API 上的白名单，作用于 `ctx.utils.fetchWithRetry`、`ctx.media.ingestUrl` 以及建立在它们之上的媒体绑定（`packages/runtime/src/function-runtime/http-permissions.ts`）。它能阻止一个包通过这套 API 访问它没有声明的源。它阻止不了直接调用全局 `fetch` 或 `node:https` 的代码。
@@ -188,6 +201,8 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 托管档位缺少 operator token、媒体密钥或 CORS 源时，`validateSecurityPosture`（`apps/server/src/security-posture.ts`）会让启动失败。`self` 档位、桌面端和开发环境严格地什么都不做：令牌被忽略，单用户本地游玩不受影响。
 
 社区服务端代码（`entry`、handler、hook、wire、运行时 JavaScript）的 import 由两阶段批准把守：先授予 `covel:plugin-server-code`，再授予具体操作。
+
+设置了启动令牌时，桌面敏感配置接口的读取和写入都受其保护，包括只返回供应商名称的 `GET /api/config/keys`。托管档位的公开模型目录（`/api/presets`、`/api/llm-config`）省略 `baseUrl`，避免泄露私有网关地址和 URL 内的凭据；运维令牌持有者仍可读取地址。
 
 ### Server settings
 
@@ -315,15 +330,16 @@ script-src 'self'; style-src 'self' 'unsafe-inline' https:; font-src 'self' data
 | Guard              | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Code                                          |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | Bind address       | 默认监听 `127.0.0.1`；设置 `COVEL_BIND_HOST` 才改为 `0.0.0.0`                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `apps/server/src/app.ts`                      |
+| Host name          | 在 `self` 档位（默认、桌面端、`pnpm dev`），请求头 `Host` 里的主机名必须是 `localhost`、`127.0.0.1`、`[::1]`，或列在 `COVEL_ALLOWED_HOSTS` 里，否则所有方法都在进入任何路由和静态文件之前以 `403 host_not_allowed` 拒绝。回环监听只限制谁能连上，不限制浏览器用什么名字连上：DNS 重绑定让攻击者自己的域名指向 `127.0.0.1`，浏览器就把本机服务当成那个网页的同源，CORS 和写入来源检查都会放行，但请求的 `Host` 仍是攻击者的域名。端口不比较。不带 `Host` 的请求不是浏览器发的，放行。`demo` / `commercial` 使用各自的鉴权规则，不做这个检查。自部署的网页版要从别的机器打开时，把它的域名或地址写进 `COVEL_ALLOWED_HOSTS` | `apps/server/src/middleware/host-guard.ts`    |
 | Signed media URLs  | `MediaRef` 的 URL 用 `COVEL_MEDIA_TOKEN_SECRET` 签名。桌面壳必须提供这个密钥，否则图片加载不出来；Web 端使用每次启动生成的密钥                                                                                                                                                                                                                                                                                                                                                                                 | `apps/server/src/middleware/media-token.ts`   |
 | Media library      | `GET /api/media/library` 和 `POST /api/media/library/delete` 不需要指明会话，就能列出和删除所有已存资源；列表还会签发作用域为 `media-library:` 的签名 URL，可以读取任何资源。它们只存在于一个玩家拥有整个存储的地方（`self`、桌面端）。在 `demo`、`commercial` 和 browser-private 配置上，它们回答 `503`，这个作用域也被拒绝，带不带 operator token 都一样，因为存储没有按所有者划分的媒体索引                                                                                                                 | `apps/server/src/routes/api/media-library.ts` |
 | Session IDs        | `{worldId}-{uuid8}`，来自 `crypto.randomUUID()`，难以枚举                                                                                                                                                                                                                                                                                                                                                                                                                                                      | session routes                                |
 | World IDs          | 白名单 `/^[a-z0-9_-]{1,64}$/i`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | world routes                                  |
 | World reads        | `GET /api/worlds` 和 `GET /api/worlds/:id` 在所有档位上都不需要身份：能访问到服务端的人就能读每一条世界记录，包括已存储（生成的）世界里内嵌的角色、设定集、契约数据，以及作者标记为隐藏的内容。写入有把守，读取没有。托管部署如果不能把这些内容给每个访客看，就必须把服务端放在自己的访问控制后面                                                                                                                                                                                                              | `apps/server/src/routes/api/worlds/crud.ts`   |
 | World gallery      | `GET /api/worlds/:id/gallery*` 不需要会话就提供世界包里的图片，能列出世界的人都能访问。请求给出文件地址的两个部分；只有当图库列表本身包含这个文件时才会应答：一张位图（PNG、JPEG、WebP，绝不是 SVG），由包的 `media/gallery.json` 列出且不晚于开场；没有那个文件时，则是直接位于某个公开的 `kind: media` 来源里的文件。路径在包内解析，拒绝符号链接；`enabled: false` 或 `visibility: hidden` 的来源不提供。它提供的唯一一个音频文件是 `world.yaml` 里 `themeMusic` 指定的 `.mp3` / `.wav`，遵守同样的路径规则 | `apps/server/src/world-data/gallery.ts`       |
-| Write origin       | CORS 只能阻止页面读取响应；“简单”的跨站请求（表单提交、`text/plain` 的 `fetch`）仍然会执行处理函数。带 `Origin` 的 `POST` / `PUT` / `PATCH` / `DELETE`，除非这个源在 CORS 白名单上，或者它的主机就是请求发往的主机（`Host`，在代理后面是 `X-Forwarded-Host`），否则在进入任何路由之前就以 `403 origin_not_allowed` 拒绝。不带 `Origin` 的请求是非浏览器客户端，放行。这不是身份验证，也不防 DNS 重绑定                                                                                                         | `apps/server/src/middleware/origin-guard.ts`  |
-| Rate limiting      | `rateLimiter()` 和 `singleFlight()`；`RATE_LIMIT_RPM` 设置额度。每个客户端地址对每条具体路径有一份额度，对每个路由模板（`/api/sessions/:id/state`）还有第二份，是前者的八倍。这样每个会话有自己的额度，而轮换路径参数会停在较大的那一份上。计数表最多保存 10,000 条，先淘汰时间窗最早的                                                                                                                                                                                                                        | `apps/server/src/middleware/rate-limit.ts`    |
-| Raw config files   | `GET` / `PUT /api/config/raw*` 以文本形式读写 `llm.toml`（桌面模式下还有 `config.toml`）。它们共用安装守卫：托管档位要 operator token，桌面壳下要桌面令牌，生产环境要 `COVEL_INSTALL_API_ENABLED=1`。文件名是一份固定名单，从不取自请求里的路径；`keys.env` 不在名单上。文本只有被服务端自己的解析器接受之后才会写入                                                                                                                                                                                           | `apps/server/src/routes/raw-config-api.ts`    |
+| Write origin       | CORS 只能阻止页面读取响应；“简单”的跨站请求（表单提交、`text/plain` 的 `fetch`）仍然会执行处理函数。带 `Origin` 的 `POST` / `PUT` / `PATCH` / `DELETE`，除非这个源在 CORS 白名单上，或者它的主机就是请求发往的主机（`Host`，在代理后面是 `X-Forwarded-Host`），否则在进入任何路由之前就以 `403 origin_not_allowed` 拒绝。不带 `Origin` 的请求是非浏览器客户端，放行。这不是身份验证；DNS 重绑定由上面的 Host name 检查挡住                                                                                                                                                                                             | `apps/server/src/middleware/origin-guard.ts`  |
+| Rate limiting      | `rateLimiter()` 和 `singleFlight()`；`RATE_LIMIT_RPM` 只设置 `GET /api/events/stream` 的额度（每个 IP 每分钟，默认 60）；其余路由的额度写死在各路由里，例如媒体上传 10、`POST /api/actions` 30、读取会话状态 120（每分钟）。每个客户端地址对每条具体路径有一份额度，对每个路由模板（`/api/sessions/:id/state`）还有第二份，是前者的八倍。这样每个会话有自己的额度，而轮换路径参数会停在较大的那一份上。计数表最多保存 10,000 条，先淘汰时间窗最早的                                                            | `apps/server/src/middleware/rate-limit.ts`    |
+| Raw config files   | `GET` / `PUT /api/config/raw*` 以文本形式读写 `llm.toml`（桌面模式下还有 `config.toml`）。它们共用安装守卫：托管档位要 operator token，桌面壳下要桌面令牌，生产环境要 `COVEL_INSTALL_API_ENABLED=1`。文件名是一份固定名单，从不取自请求里的路径；`keys.env` 不在名单上。文本只有被服务端自己的解析器接受之后才会写入。`llm.toml` 的解析和校验错误只给行号、列号和键名，不含 `${VAR}` 替换后的值，所以拒绝信息、日志和设置页都不会带出密钥                                                                                                                                                                                           | `apps/server/src/routes/raw-config-api.ts`    |
 | Error sanitization | 生产环境下 `app.onError` 返回 `"Internal server error"`；堆栈和路径只进 `console.error`。开发环境返回 `err.message`                                                                                                                                                                                                                                                                                                                                                                                            | `routes/api/bootstrap.ts`, `app.ts`           |
 
 **失败响应里的错误信息。** 恢复挂起失败，以及快照和分支的意外失败，在完成必要的清理之后，都经过标准的错误分类器（`apps/server/src/api-error.ts`、`routes/api/resume.ts`、`routes/api/snapshots.ts`）。

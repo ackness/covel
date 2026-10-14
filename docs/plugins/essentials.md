@@ -75,6 +75,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 三条最容易出错的规则：
 
 - `id` 必须和文件夹的名字一样。
+- `runtimes/` 下每个目录都要有 `RUNTIME.md`，共享代码放在根目录的 `lib/`。缺清单的路径会报给作者，其他 runtime 仍可加载；详见[插件规范](../reference/plugins.md)。
 - 只有一个 runtime 时，把它写在 `PLUGIN.md` 的 `runtime:` 里。有多个时，每个放在 `runtimes/<名字>/RUNTIME.md`。两种写法不能同时用，否则校验报 `inline runtime and runtimes/ cannot coexist`。
 - `PLUGIN.md` 写了 `version` 时，它必须和 `package.json` 里的 `version` 相同。 `package.json` 还必须写 `"type": "module"`：插件包只支持 ESM，缺了这一行校验和安装都会拒绝。
 

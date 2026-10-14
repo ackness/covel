@@ -221,23 +221,6 @@ export function resolvePluginPanelTarget(
     : undefined;
 }
 
-export function panelProviderLabel(
-  pluginId: string,
-  groupId: string,
-  subPanels: readonly PluginPanelSubPanel[],
-  sessionPlugins: readonly {
-    readonly id: string;
-    readonly displayName: unknown;
-  }[],
-  locale: string,
-): string {
-  if (groupId === "chat-mode" && subPanels.length > 0) {
-    const first = subPanels[0]!;
-    return first.shortLabel ?? first.label;
-  }
-  return pluginShortLabel(pluginId, sessionPlugins, locale);
-}
-
 interface WritablePluginPanelTabGroup {
   readonly id: string;
   readonly label: string;
