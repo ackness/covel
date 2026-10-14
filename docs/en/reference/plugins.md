@@ -422,6 +422,7 @@ The static validation in the CLI and the installer checks inputs with `scope: tu
 When you publish a runtime's output contract, declare the public schema of the complete output in `contracts.<contractId>.schema` at the root.
 
 - All providers of the same contract ID must publish the same schema.
+- The public schema covers both model output and guard skip output. For example, `world-init` publishes `world-data-provider@1` with support for authored schemas of fewer than 15 attributes; the requirement to generate at least 15 stays in the `initialize-world` tool parameters.
 - The `provides` of a replacement plugin must match the `io.output.contract` of its own runtime. Output from other installed plugins cannot satisfy the declaration in its place.
 - A consumed contract that has no schema, or a provider that declares a contract but never produces it, causes a loading diagnostic.
 

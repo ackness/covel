@@ -422,6 +422,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 发布 runtime 的输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。
 
 - 同一个契约 ID 的所有提供者必须发布一致的 schema。
+- 公共 schema 同时覆盖模型输出和 guard 跳过输出。例如 `world-init` 的 `world-data-provider@1` 允许作者提供少于 15 项的属性结构；生成至少 15 项的要求留在 `initialize-world` 的工具参数中。
 - 替代插件的 `provides` 必须和它自己 runtime 的 `io.output.contract` 对齐。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
 

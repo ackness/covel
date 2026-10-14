@@ -91,7 +91,7 @@ Notes:
 | `prompt`      | The timing instructions that the author gives the model. It can be translated. For example, how long a conversation, sleep, or trip takes, and whether a memory affects the current time |
 | `randomRange` | `{min, max}`. Required in `random` mode. A closed range with signs, in base units. The absolute value cannot exceed `maxStep`                                                            |
 
-In `random` mode, the code decides how far to jump. The model does not generate random numbers. If the same turn is recalculated, the result is the same.
+In `random` mode, the plugin draws the step through `ctx.random`. The model does not generate random numbers. With a fixed `COVEL_RANDOM_SEED`, the same script repeats its draw sequence regardless of session or turn IDs. Repeated tool calls in one turn reuse the buffered or saved result without drawing again.
 
 An example of a coarse backward time:
 
