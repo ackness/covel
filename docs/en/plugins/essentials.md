@@ -79,6 +79,8 @@ Three rules that are easiest to get wrong:
 - With only one runtime, put it in the `runtime:` section of `PLUGIN.md`. With several, put each one in `runtimes/<name>/RUNTIME.md`. You cannot use both styles at once. If you do, validation reports `inline runtime and runtimes/ cannot coexist`.
 - When `PLUGIN.md` has a `version`, it must be the same as the `version` in `package.json`. `package.json` must also say `"type": "module"`: a plugin package is ESM only, and validation and installation both refuse a package without that line.
 
+Every `pnpm create-plugin` mode starts both `PLUGIN.md` and `package.json` at version `0.1.0`. Update both when publishing a new version, then check with `pnpm validate:plugin <plugin-dir>`.
+
 After validation passes, select the plugin on the session-prep screen of the game and authorize it. Only then does it run. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
 
 ## Where to declare what my code registers
@@ -139,10 +141,12 @@ Rules:
 - The model can call only the tools listed here. A tool that is not listed is not visible to it.
 - When the plugin has one runtime (written in `runtime:`) and does not write `agent.tools.plugin`, that runtime gets all the tools in `contributes.tools`. You do not need to list them again.
 - When you write `plugin`, what you write is what counts. `plugin: []` means no tools of its own are given.
-- In a plugin with several runtimes, each runtime lists the tools it uses.
+- In a plugin with several runtimes, each runtime lists the tools it uses. Keep internal helpers that no runtime calls out of the tool registry and `contributes.tools`.
 - A tool name is unique only within its own plugin. One plugin cannot call another plugin's tool. Use a service instead. See [plugin extensions and communication](../reference/plugin-extensions.md).
 
 For the list of built-in tools, see the [tools reference](../reference/tools.md).
+
+For agent completion rules, see the [plugin reference](../reference/plugins.md). With `completion.require: tool-use` and `afterTools`, a read tool cannot substitute for a declared completing tool.
 
 ## How to use another plugin's results
 
@@ -176,6 +180,8 @@ There are two more fields that control order only: `schedule.needs` requires the
 One capability can have several providers. Use `cardinality: one` to mean "only one is needed", and `cardinality: all` to mean "all of them are needed". To make your plugin mutually exclusive with other plugins that provide a capability, write `conflicts` in `PLUGIN.md`.
 
 Runtimes triggered by an event can also be ordered. Among the runtimes triggered by the same event, `needs` and `after` still apply, and runtimes without a dependency still run at the same time. A dependency does not trigger a runtime that no event matched. Runtimes that run in the background cannot be ordered this way. To pass work along, send a follow-up event, or read the output the other side has already saved.
+
+When publishing output, declare its public schema in the root `contracts` and make guard skip output match it too. Existing data may be smaller than generated data, so keep generation size requirements in the tool rather than the public output; see [publishing an output contract](../reference/plugins.md#publishing-an-output-contract).
 
 For the ways of communicating (results for the same turn, saved results, events, services and extension points), see [plugin extensions and communication](../reference/plugin-extensions.md).
 

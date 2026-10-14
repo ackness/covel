@@ -52,7 +52,10 @@ describe("text wires of a plugin entry", () => {
       events.push(event.type);
     expect(events).toEqual(["text-delta", "done"]);
     expect(await registered.listModels!({})).toEqual(["acme-1"]);
-    expect(invoked).toHaveLength(3);
+    // generateText, the stream's start and each of its three steps (two
+    // events and the end), listModels: the stream body runs in the step
+    // that pulls it, so each step goes through the scope.
+    expect(invoked).toHaveLength(6);
   });
 
   it.each([

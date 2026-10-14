@@ -138,7 +138,7 @@ See [form tools](./tools.md#create-form) and [plugin testing](../plugins/testing
 
 | Component         | Use                                                                                                                                                                                                                                                                                                                                                                    | Main properties                             |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `GraphCanvas`     | A force-directed relationship graph, using `react-force-graph-2d` (loaded on demand, about 60 KB after gzip). It draws the nodes and edges the panel gives it.                                                                                                                                                                                                         | `nodes`, `edges`, `node`, `edge`, `height?` |
+| `GraphCanvas`     | A force-directed relationship graph, using `react-force-graph-2d` (loaded on demand, about 60 KB after gzip). It draws the nodes and edges the panel gives it.                                                                                                                                                                                                         | `nodes`, `edges`, `node`, `edge`, `height?`, `emptyText?` |
 | `WorldDimensions` | Shows the values and versions of session dimensions according to their schema. When runtime metadata that the host has validated is available, it also offers editing and recovery of pending settlements. It reads the public session snapshot. It does not read the author's initial values, and it does not read plugin namespaces. No bindings need to be written. | —                                           |
 
 **`WorldDimensions`**
@@ -150,10 +150,13 @@ See [form tools](./tools.md#create-form) and [plugin testing](../plugins/testing
 **`GraphCanvas` data mapping**
 
 - `nodes` and `edges` can be arrays, or objects that map "key → record".
-- The `node` mapping declares: `idField`, `labelField`, `typeField`, `summaryField`, `labelsField`, `colors` (by type), and `defaultColor`.
-- The `edge` mapping declares: `idField`, `sourceField`, `targetField`, `relationField`, `strengthField`, `factField`, `inactiveField`, and `colors` (`positive`, `negative`, `neutral`).
-- Field paths are relative to each record.
-- An edge is hidden as soon as its configured inactive field has a value. The value `0` also counts.
+- Required `node` mappings: `idField`, `labelField`, `colors` (by type), and `defaultColor`. `typeField`, `summaryField`, and `labelsField` are optional.
+- Required `edge` mappings: `idField`, `sourceField`, and `targetField`. `relationField`, `strengthField`, `factField`, `inactiveField`, `defaultColor`, and `colors` (`positive`, `negative`, `neutral`) are optional.
+- Field paths are relative to each record. Edges with missing endpoints are hidden.
+- When no strength field is mapped or a record omits its strength, the edge uses `defaultColor`, then `colors.neutral`, then gray `#94a3b8`. Its model width is 1, the canvas minimum width is 2.5, and its layout distance is 110.
+- Finite strengths retain their existing behavior: model width is `1 + abs(strength) * 2` and layout distance is `110 + abs(strength) * 30`. With `colors`, strengths ≥ 0.33 use positive, ≤ -0.33 use negative, and others use neutral; without it they use the default color. Non-numeric, NaN, and infinite strengths discard the edge.
+- An edge is hidden when its configured inactive field is not `undefined`, including `0`, `false`, and `null`.
+- `emptyText` (I18nText) can override the default “No graph data yet.”.
 - The panel binds its own namespace to these properties. The component does not pick a plugin or a namespace itself.
 
 **How `GraphCanvas` updates**
@@ -219,6 +222,8 @@ This section explains how list components (`EntryList`, `MediaGallery`, `JobList
 - An upload is prepared only after the workspace is restored, and it is reused when authorization is retried.
 - The plugin that owns this runtime validates the payload and implements the business rules. For example, it replaces the default portrait while keeping the other variants.
 - This is the only contract for now. Plugin-specific component names and cross-plugin avatar bindings no longer exist. Specs under development need to be updated to match what is written here.
+
+`MediaGallery` and `JobList` accept `emptyText` (I18nText) to override “No media yet.” and “No jobs yet.”. The gallery uses MIME to show images, audio, video, or download links; playback controls are outside preview buttons. Gallery and preview downloads choose a MIME-based extension, using `.bin` for unknown formats without converting the contents.
 
 **`JobList.relatedMedia`.** Optional. It links the media records you provide to the job rows:
 

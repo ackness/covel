@@ -35,7 +35,7 @@ example/
 
 Layout rules:
 
-- The root `PLUGIN.md` is required. Its `id` must match the package directory name.
+- The root `PLUGIN.md` is required. Its `id` must match the package directory name. `framework` is kept for the framework itself and cannot be used as an `id`.
 - If there is only one runtime, write it in the `runtime` section of the root file. The body of the root file is then its prompt.
 - If there are several runtimes, put each one in `runtimes/<id>/RUNTIME.md`. Its logical ID is `<pluginId>/<id>`. The body of each file is the prompt for that runtime.
 - You cannot mix the two layouts. A child runtime cannot declare package-level contributions.
@@ -198,6 +198,15 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | `effects`     | Read and write resources, and `parallelSafe`                               |
 | `permissions` | Declaration of the permissions the execution needs                         |
 
+The root `PLUGIN.md` can also have `permissions.http`. It covers the code of the `entry` module: in a community package, `covel.http` (used in tools, hooks, RPC, services, extensions and wires) reaches only the origins and methods listed in the `permissions.http` of the root file and of each runtime. A wire can also reach the endpoint of the slot it is serving. An undeclared request fails before it is sent: `http permission denied: …`.
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [POST]
+```
+
 ### Two kinds of runtime
 
 - A **function runtime** must declare `function.handler`. That module must default-export a function. It cannot also set `agent`.
@@ -234,7 +243,7 @@ Use `io.concealed: true` for runtimes that handle hidden content, such as an age
 
 ### Scope of dependencies and references
 
-The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. A dependency given as a string without a prefix is held to the same rule.
+The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. An unprefixed string dependency is rejected with a suggestion to write `<pluginId>/<runtimeId>`. Only a complete runtime ID from another package receives the advice to use a contract.
 
 **Limits on references to runtimes in other packages:**
 
@@ -350,7 +359,7 @@ The budget decides how many retries can actually be used:
 **Completion conditions.**
 
 - `completion.afterTools`: the run finishes once the named tools succeed.
-- `completion.require: tool-use`: requires a valid tool call, meaning at least one successful business tool call. A failed call does not count.
+- `completion.require: tool-use`: with a nonempty `afterTools` list, at least one listed completing tool must succeed. Without that list, any successful business tool counts. Failed calls and `runtime-done` do not count.
 - If the model returns only plain text, or calls `runtime-done` while no such call has been made yet, the framework first injects a correction prompt. Only if the run is still not complete is it marked as failed. So even when "nothing changed", submit an empty result through a business tool.
 - The request right after a correction requires the model to call a tool (`toolChoice: "required"`, with any tool named in the manifest kept as it is). After the model calls a tool, the choice goes back to automatic. When the model is in thinking mode, the provider does not accept a forced choice, so the model keeps choosing on its own.
 - This check runs in one place, where the loop returns. It applies to every way a normal run or a resume can end: a text answer, `runtime-done`, automatic completion through `afterTools`, a `PostToolUse` hook that stops the run, and running out of steps.
@@ -422,6 +431,7 @@ The static validation in the CLI and the installer checks inputs with `scope: tu
 When you publish a runtime's output contract, declare the public schema of the complete output in `contracts.<contractId>.schema` at the root.
 
 - All providers of the same contract ID must publish the same schema.
+- The public schema covers both model output and guard skip output. For example, `world-init` publishes `world-data-provider@1` with support for authored schemas of fewer than 15 attributes; the requirement to generate at least 15 stays in the `initialize-world` tool parameters.
 - The `provides` of a replacement plugin must match the `io.output.contract` of its own runtime. Output from other installed plugins cannot satisfy the declaration in its place.
 - A consumed contract that has no schema, or a provider that declares a contract but never produces it, causes a loading diagnostic.
 
@@ -563,7 +573,7 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 **The plugin's own data.**
 
-- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace?)`.
+- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace)`.
 - A plugin cannot specify an arbitrary sessionId or pluginId to read another plugin's private data.
 - To share data publicly across plugins, use a contract, a service, or an extension. Do not scan the other plugin's namespace.
 

@@ -138,13 +138,6 @@ export function summarizeTime(definition, tick, delta, locale = "en") {
   };
 }
 
-function seededFraction(seed) {
-  let hash = 2166136261;
-  for (const character of seed)
-    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
-  return (hash >>> 0) / 4294967296;
-}
-
 /**
  * The units a duration can use on this clock. The first one is the base unit.
  */
@@ -163,7 +156,7 @@ function unitError(definition, unit) {
     : `Unit ${unit} is not available: this world counts time in phases, not in minutes or hours. Use unit ${usable}. Use amount 0 when the events stay in the current phase.`;
 }
 
-export function advanceTime(definition, tick, request, turnId) {
+export function advanceTime(definition, tick, request, random) {
   const rule = definition.evolution;
   let delta;
   if (rule.mode === "random") {
@@ -176,9 +169,7 @@ export function advanceTime(definition, tick, request, turnId) {
         "Random time is sampled by the clock; omit amount, unit and direction",
       );
     const range = rule.randomRange;
-    delta =
-      range.min +
-      Math.floor(seededFraction(turnId) * (range.max - range.min + 1));
+    delta = random.int(range.min, range.max + 1);
   } else {
     if (request.amount === undefined && request.unit !== undefined) {
       throw new Error(

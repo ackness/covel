@@ -1,3 +1,7 @@
+import {
+  compactStatePatches,
+  rememberStatePatchIds,
+} from "@/services/state-patch-cache.js";
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import { deepMerge, encodePageCursor, summarizeWorld } from "@covel/shared";
@@ -99,15 +103,36 @@ function capLiveMessages(
     return { messages };
   }
   const kept = messages.slice(dropCount);
-  const edge = kept[0];
+  const edge = kept.find(
+    (message) =>
+      !message.requestId &&
+      !message.id.startsWith(STREAM_ID_PREFIX) &&
+      message.kind !== "plugin-message",
+  );
+  // Retain an authoritative anchor until a durable message can bound paging.
+  if (!edge) return { messages };
+  const keptTurns = new Set(kept.map((message) => message.turnId));
+  const removedTurns = new Set(
+    dropped
+      .map((message) => message.turnId)
+      .filter((turnId) => turnId && !keptTurns.has(turnId)),
+  );
+  const assetsByTurn = new Map(state.assetsByTurn);
+  const assetProgressByTurn = new Map(state.assetProgressByTurn);
+  for (const turnId of removedTurns) {
+    if (!turnId) continue;
+    assetsByTurn.delete(turnId);
+    assetProgressByTurn.delete(turnId);
+  }
   return {
     messages: kept,
-    // Boundary rows this deep in the window are server-authoritative
-    // (timestamp = server createdAt); stream placeholders with client wall
-    // clocks never reach the front of a full window.
-    olderMessagesCursor: edge
-      ? encodePageCursor({ createdAt: edge.timestamp, id: edge.id })
-      : state.olderMessagesCursor,
+    assetsByTurn,
+    assetProgressByTurn,
+    // Only server timestamps can bound server history.
+    olderMessagesCursor: encodePageCursor({
+      createdAt: edge.timestamp,
+      id: edge.id,
+    }),
   };
 }
 
@@ -130,6 +155,8 @@ export const initialState: SessionState = {
   executionRecovery: null,
   actionGeneration: 0,
   statePatches: [],
+  statePatchRevision: 0,
+  recentStatePatchIds: [],
   gameState: {},
   hasGameStateSnapshot: false,
   pluginMessageData: {},
@@ -155,6 +182,8 @@ const SESSION_RESET: Partial<SessionState> = {
   messages: [],
   olderMessagesCursor: null,
   statePatches: [],
+  statePatchRevision: 0,
+  recentStatePatchIds: [],
   gameState: {},
   hasGameStateSnapshot: false,
   pluginMessageData: {},
@@ -396,8 +425,7 @@ export function reducer(
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
     case "ADD_STATE_PATCH": {
-      if (state.statePatches.some((patch) => patch.id === action.patch.id))
-        return state;
+      if (state.recentStatePatchIds.includes(action.patch.id)) return state;
       const patchData = action.patch.data as
         Record<string, unknown> | undefined;
       const newGameState = patchData
@@ -405,7 +433,15 @@ export function reducer(
         : state.gameState;
       return {
         ...state,
-        statePatches: [...state.statePatches, action.patch],
+        statePatches: compactStatePatches([
+          ...state.statePatches,
+          action.patch,
+        ]),
+        statePatchRevision: state.statePatchRevision + 1,
+        recentStatePatchIds: rememberStatePatchIds([
+          ...state.recentStatePatchIds,
+          action.patch.id,
+        ]),
         gameState: newGameState,
       };
     }
@@ -443,19 +479,20 @@ export function reducer(
     case "SET_OLDER_MESSAGES_CURSOR":
       return { ...state, olderMessagesCursor: action.cursor };
     case "MERGE_INITIAL_STATE_PATCHES": {
-      const currentIds = new Set(state.statePatches.map((patch) => patch.id));
-      const historical = new Map(
-        action.patches.map((patch) => [patch.id, patch]),
-      );
-      const patches = [
-        ...[...historical.values()].filter(
-          (patch) => !currentIds.has(patch.id),
-        ),
+      const currentIds = new Set(state.recentStatePatchIds);
+      const historical = action.patches;
+      const patches = compactStatePatches([
+        ...historical.filter((patch) => !currentIds.has(patch.id)),
         ...state.statePatches,
-      ];
+      ]);
       return {
         ...state,
         statePatches: patches,
+        statePatchRevision: state.statePatchRevision + 1,
+        recentStatePatchIds: rememberStatePatchIds([
+          ...historical.map((patch) => patch.id),
+          ...state.recentStatePatchIds,
+        ]),
         // Live increments win over cached history. Once a full snapshot was
         // published, even its empty state is authoritative for deleted fields.
         gameState: state.hasGameStateSnapshot
@@ -625,23 +662,17 @@ export function reducer(
       };
     }
     case "BACKFILL_TURN_ID": {
-      // Assign turnId to the last user message that has no turnId.
-      // This links the player's input to the server-generated turnId so the
-      // execution timeline can be inserted inline after the player message.
-      const msgs = state.messages;
-      let targetIdx = -1;
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        const message = msgs[i]!;
-        if (message.role === "user" && !message.turnId) {
-          targetIdx = i;
-          break;
-        }
-      }
-      if (targetIdx < 0) return state;
+      const target = state.messages.find(
+        (message) =>
+          message.role === "user" &&
+          !message.turnId &&
+          message.requestId === action.requestId,
+      );
+      if (!target) return state;
       return {
         ...state,
-        messages: msgs.map((m, i) =>
-          i === targetIdx ? { ...m, turnId: action.turnId } : m,
+        messages: state.messages.map((message) =>
+          message === target ? { ...message, turnId: action.turnId } : message,
         ),
       };
     }
@@ -828,7 +859,22 @@ export function reducer(
     case "ASSET_PROGRESS": {
       const existing = state.assetProgressByTurn.get(action.turnId) ?? [];
       const nextMap = new Map(state.assetProgressByTurn);
-      nextMap.set(action.turnId, [...existing, action.progress]);
+      const key = (progress: AssetProgressEvent) =>
+        JSON.stringify([
+          progress.assetId,
+          progress.assetId ? undefined : progress.runtimeId,
+          progress.assetId ? undefined : progress.pluginId,
+          progress.phase,
+        ]);
+      const next = existing.filter(
+        (progress) => key(progress) !== key(action.progress),
+      );
+      nextMap.set(action.turnId, [...next, action.progress].slice(-256));
+      while (nextMap.size > 256) {
+        const oldest = nextMap.keys().next().value;
+        if (oldest === undefined) break;
+        nextMap.delete(oldest);
+      }
       return { ...state, assetProgressByTurn: nextMap };
     }
     default:

@@ -240,9 +240,11 @@ runtime:
       isMultiRuntime: false,
     };
     const definition = await loadPluginDefinition(discovery);
-    const entry = await loadPluginEntryDefinition(discovery, [
-      definition.packageManifest,
-    ]);
+    const entry = await loadPluginEntryDefinition(
+      discovery,
+      [definition.packageManifest],
+      definition.manifests,
+    );
     expect(entry.staticPromptSegments[0]!.content).toBe("English");
     expect(entry.staticPromptVariants?.["zh"]?.[0]!.content).toBe("中文");
     await fs.writeFile(path.join(dir, "PLUGIN.zh.md"), "broken after capture");

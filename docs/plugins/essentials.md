@@ -79,6 +79,8 @@ Write one observation grounded in runtime-inputs.narrative.value.
 - 只有一个 runtime 时，把它写在 `PLUGIN.md` 的 `runtime:` 里。有多个时，每个放在 `runtimes/<名字>/RUNTIME.md`。两种写法不能同时用，否则校验报 `inline runtime and runtimes/ cannot coexist`。
 - `PLUGIN.md` 写了 `version` 时，它必须和 `package.json` 里的 `version` 相同。 `package.json` 还必须写 `"type": "module"`：插件包只支持 ESM，缺了这一行校验和安装都会拒绝。
 
+`pnpm create-plugin` 的每种模式都会把 `PLUGIN.md` 和 `package.json` 的版本设为 `0.1.0`。发布新版本时同时更新两处，再用 `pnpm validate:plugin <插件目录>` 检查。
+
 校验通过后，在游戏的准备页选中插件并授权，它才会运行，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
 
 ## 我注册的东西要在哪里声明
@@ -139,10 +141,12 @@ agent:
 - 模型只能调用这里列出的工具。没列出的，它看不到。
 - 插件只有一个 runtime（写在 `runtime:` 里）并且没有写 `agent.tools.plugin` 时，这个 runtime 得到 `contributes.tools` 里的全部工具，不用再列一遍。
 - 写了 `plugin` 就以写的为准。`plugin: []` 表示一个自己的工具都不给。
-- 有多个 runtime 的插件里，每个 runtime 各自列出要用的工具。
+- 有多个 runtime 的插件里，每个 runtime 各自列出要用的工具。没有 runtime 使用的内部 helpers 不要注册成工具，也不要列进 `contributes.tools`。
 - 工具名只在自己的插件里唯一。一个插件调用不了另一个插件的工具，要用服务，见[插件扩展与通信](../reference/plugin-extensions.md)。
 
 内置工具的清单见[工具参考](../reference/tools.md)。
+
+Agent 的完成条件见[插件参考](../reference/plugins.md)：`completion.require: tool-use` 配合 `afterTools` 时，查询工具不能代替声明的完成工具。
 
 ## 怎样用别的插件的结果
 
@@ -176,6 +180,8 @@ runtime:
 同一项能力可以有几个提供者。用 `cardinality: one` 表示“只要一个”，`cardinality: all` 表示“全都要”。想和提供某项能力的其他插件互斥，在 `PLUGIN.md` 写 `conflicts`。
 
 由事件触发的 runtime 也可以排先后：同一个事件触发的几个 runtime 之间，`needs` 和 `after` 照常生效，没有依赖的仍然同时运行。依赖不会替你触发一个没有被事件匹配到的 runtime。后台运行的 runtime 之间不能这样排序，要接力就发一个后续事件，或者读对方已经保存的输出。
+
+发布输出时，在根 `contracts` 声明公共 schema，并让 guard 跳过时的输出也符合它。已有资料可能比模型生成的资料少，不要把生成工具的数量要求放进公共输出；见[发布输出契约](../reference/plugins.md#发布输出契约)。
 
 各种通信方式（同一回合的结果、已保存的结果、事件、服务、扩展点）见[插件扩展与通信](../reference/plugin-extensions.md)。
 

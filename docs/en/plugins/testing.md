@@ -256,8 +256,13 @@ The command looks for plugins in this order: `--plugins-dir`, the environment va
 
 ### Case file
 
+A file can be an array of cases or `{ "$schema": "…", "cases": [...] }`. Each case requires non-empty `name` and `runtimeId` fields. `mode` accepts only `mock`, `live`, or `both`, and defaults to `both` when omitted. Unknown fields at the root, in a case, in `expect`, or in `artifacts` are errors with a file name and field path. Misspellings such as `expects` or `expect.runtimeResult` are never ignored. Plugin-defined payloads, settings, and mock reply objects can still use their own fields.
+
+Scaffolded files include `$schema` for editor hints from [runtime-cases.schema.json](../../../packages/shared/schemas/runtime-cases.schema.json). Run the cases again after editing them; validation errors stop the run before any runtime executes.
+
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/AcKnEsS/covel/main/packages/shared/schemas/runtime-cases.schema.json",
   "cases": [
     {
       "name": "manual-note-writes-plugin-data",

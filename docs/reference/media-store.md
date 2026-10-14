@@ -152,7 +152,7 @@ interface MediaStore {
 
 **注册 wire**
 
-- 插件在 `entry` 模块里调用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })`。ID 自动加上前缀，成为 `<pluginId>/<wireId>`；是否加载受信任级别控制。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
+- 插件在 `entry` 模块里调用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })`。ID 自动加上前缀，成为 `<pluginId>/<wireId>`。会话里只有启用了该插件才能选用它；不属于任何会话的请求只能选用内置插件的 wire，`self` 形态下也能选用社区插件的。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
 - 随框架打包的代码也可以直接调用 `registerImageWire` / `registerSpeechWire` / `registerTranscriptionWire`。ID 是任意字符串，不是枚举。
 
 ## Metadata Conventions & Querying

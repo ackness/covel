@@ -16,7 +16,10 @@ import type {
   LLMResponseFormat,
   LLMToolDefinition,
 } from "../llm/llm-adapter.js";
-import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js";
+import {
+  buildToolDefinitions,
+  usesRuntimeDone,
+} from "../turn-executor/turn-executor-helpers.js";
 import { declaredToolNames, resolveDeferredToolNames } from "./tool-search.js";
 import { buildRetryPolicy, type RetryPolicy } from "../retry/llm-retry.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
@@ -84,7 +87,8 @@ export interface AgentLoopPolicy {
    * The runtime's exact execution authorization set: its declared
    * tool names (deferred names included — deferring only withholds the
    * schema advertisement, never grants or removes authorization) plus the
-   * framework-contract `runtime-done` sentinel for non-schema runtimes.
+   * framework-contract `runtime-done` sentinel for runtimes that use it
+   * (and story runtimes that receive a story correction).
    * Passed to the ToolExecutor on every call so execution — not just
    * advertisement — is bounded by the manifest declaration.
    */
@@ -128,7 +132,10 @@ export function buildAgentLoopPolicy({
   // A story runtime is not offered `runtime-done` (see `usesRuntimeDone`),
   // but a model may call it from habit. The call stays authorized so that the
   // loop can answer it by asking for the story, not with a tool error.
-  if (!manifest.output?.schema) {
+  if (
+    usesRuntimeDone(manifest) ||
+    (manifest.outputKind === "story" && !manifest.output?.schema)
+  ) {
     authorizedToolNames.add("runtime-done");
   }
 

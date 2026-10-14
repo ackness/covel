@@ -41,6 +41,8 @@ function stateFor(
     executionSteps: [],
     suspensions: [],
     statePatches: [],
+    statePatchRevision: 0,
+    recentStatePatchIds: [],
     gameState: {},
     hasGameStateSnapshot: false,
     pluginMessageData: {},

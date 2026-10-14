@@ -9,10 +9,10 @@
 export default function ({ tool, z, shortId, shortIdBatch }) {
   return tool({
     name: 'my-tool',
-    description: '工具描述（会注入 LLM 上下文，LLM 据此决定何时调用）',
+    description: 'Save one selected story note.',
     parameters: z.object({
-      param1: z.string().describe('参数描述（LLM 看到的说明）'),
-      param2: z.number().optional().describe('可选参数'),
+      param1: z.string().describe('The note text to save.'),
+      param2: z.number().optional().describe('Optional note priority.'),
     }),
     execute: async (params, context) => {
       // context: { sessionId, turnId, pluginId, runtimeId, locale, messages,
@@ -43,14 +43,24 @@ execute: async (params) => ({
   interaction: {
     type: 'form',            // form | choice | confirmation
     interactionId: params.formId,
-    title: '角色创建',
+    title: 'Character creation',
     fields: [
-      { type: 'text', name: 'characterName', label: '角色名', required: true },
+      { type: 'text', name: 'characterName', label: 'Character name', required: true },
     ],
-    submitLabel: '确认创建',
-    narrativeTemplate: '你的名字叫 {{characterName}}。',
+    submitLabel: 'Create character',
+    narrativeTemplate: 'Your name is {{characterName}}.',
   },
 }),
+```
+
+界面文本通过 `labelText(context, "English text")` 返回各语言标签；内容文本通过 `translate(context, "English text")` 解析为会话语言。译文放在 `locales/zh.yaml`，例如：
+
+```yaml
+messages:
+  Character creation: 角色创建
+  Character name: 角色名
+  Create character: 确认创建
+  Your name is {{characterName}}.: 你的名字叫 {{characterName}}。
 ```
 
 ## 带持久化数据的工具

@@ -23,6 +23,7 @@ import {
 import { createSettledSessionLock } from "./plugin-rpc/settled-session-lock.js";
 import {
   listSettlingRuntimeJobs,
+  markRunnableSettlingJobs,
   type RuntimeJobRecord,
 } from "./plugin-rpc/jobs.js";
 /** Wire the API dependency graph for production and tests. */
@@ -102,6 +103,7 @@ import {
   createRuntimeJobWorker,
   parseActivatedRuntimeJobPayload,
   parseStagedRuntimeJobPayload,
+  type RuntimeJobExecutor,
   type RuntimeJobWorker,
 } from "./plugin-rpc/runtime-job-worker.js";
 import { createRuntimeJobExecutor } from "./plugin-rpc/runtime-job-executor.js";
@@ -683,6 +685,78 @@ async function assembleApi(
     credentials: runtimeJobCredentials,
     createRunner: createJobRunner,
   });
+  // Shared by the worker's claim and the settle barrier's runnable check.
+  const prepareRuntimeJobExecution = (
+    job: RuntimeJobRecord,
+  ): RuntimeJobExecutor | undefined => {
+    const payload =
+      parseStagedRuntimeJobPayload(job.payload) ??
+      parseActivatedRuntimeJobPayload(job.payload);
+    if (!payload) return executeRuntimeJob({ llm: config.llmAdapter });
+    const key = {
+      jobId: job.jobId,
+      sessionId: job.sessionId,
+      expectedSessionIncarnation: payload.expectedSessionIncarnation,
+    };
+    const entry = registry.get(job.pluginId);
+    const parsed =
+      entry &&
+      pluginRuntimeManifests(entry).find(
+        ({ manifest }) => manifest.name === job.runtimeId,
+      );
+    const manifest =
+      entry && parsed
+        ? resolvePluginRuntimeManifest(entry, parsed.manifest)
+        : undefined;
+    const modelOverride =
+      "modelOverride" in payload ? payload.modelOverride : undefined;
+    const override =
+      manifest?.outputKind === "story" && modelOverride
+        ? modelOverride
+        : payload.runtimeModelOverrides?.[job.runtimeId];
+    // The worker may drain inside an unrelated request's scope. Resolve the
+    // job's model under the configuration of the services that will run it.
+    const modelFor = (services: RuntimeJobServices | undefined) =>
+      withRequestLlmOptions(services?.llmOptions, () =>
+        manifest ? resolveModel(manifest, override) : override,
+      );
+    let selectedServices = runtimeJobCredentials.peek(key);
+    let handoff = selectedServices !== undefined;
+    if (selectedServices?.canRun) {
+      let ready = false;
+      try {
+        ready = selectedServices.canRun(modelFor(selectedServices));
+      } catch {
+        /* Fail closed. */
+      }
+      if (!ready) {
+        // An unusable handoff must not block the next authenticated request.
+        runtimeJobCredentials.discard(key);
+        selectedServices = undefined;
+        handoff = false;
+      }
+    }
+    if (!selectedServices) {
+      if (
+        !config.canRunRuntimeJobWithServerServices?.({
+          job,
+          model: modelFor(undefined),
+        })
+      )
+        return undefined;
+      selectedServices = {
+        llm: config.llmAdapter,
+        gateway: config.pluginGateway,
+        compactor: compactorRunner,
+      };
+    }
+    // The executor restores the selected services' LLM scope around the job.
+    const execute = executeRuntimeJob(selectedServices, handoff);
+    return async (claimed, control) => {
+      runtimeJobCredentials.discard(key);
+      await execute(claimed, control);
+    };
+  };
   const runtimeJobWorker = createRuntimeJobWorker({
     store,
     eventBus,
@@ -692,75 +766,7 @@ async function assembleApi(
       gateway: config.pluginGateway,
       compactor: compactorRunner,
     }),
-    prepareExecution: (job) => {
-      const payload =
-        parseStagedRuntimeJobPayload(job.payload) ??
-        parseActivatedRuntimeJobPayload(job.payload);
-      if (!payload) return executeRuntimeJob({ llm: config.llmAdapter });
-      const key = {
-        jobId: job.jobId,
-        sessionId: job.sessionId,
-        expectedSessionIncarnation: payload.expectedSessionIncarnation,
-      };
-      const entry = registry.get(job.pluginId);
-      const parsed =
-        entry &&
-        pluginRuntimeManifests(entry).find(
-          ({ manifest }) => manifest.name === job.runtimeId,
-        );
-      const manifest =
-        entry && parsed
-          ? resolvePluginRuntimeManifest(entry, parsed.manifest)
-          : undefined;
-      const modelOverride =
-        "modelOverride" in payload ? payload.modelOverride : undefined;
-      const override =
-        manifest?.outputKind === "story" && modelOverride
-          ? modelOverride
-          : payload.runtimeModelOverrides?.[job.runtimeId];
-      // The worker may drain inside an unrelated request's scope. Resolve the
-      // job's model under the configuration of the services that will run it.
-      const modelFor = (services: RuntimeJobServices | undefined) =>
-        withRequestLlmOptions(services?.llmOptions, () =>
-          manifest ? resolveModel(manifest, override) : override,
-        );
-      let selectedServices = runtimeJobCredentials.peek(key);
-      let handoff = selectedServices !== undefined;
-      if (selectedServices?.canRun) {
-        let ready = false;
-        try {
-          ready = selectedServices.canRun(modelFor(selectedServices));
-        } catch {
-          /* Fail closed. */
-        }
-        if (!ready) {
-          // An unusable handoff must not block the next authenticated request.
-          runtimeJobCredentials.discard(key);
-          selectedServices = undefined;
-          handoff = false;
-        }
-      }
-      if (!selectedServices) {
-        if (
-          !config.canRunRuntimeJobWithServerServices?.({
-            job,
-            model: modelFor(undefined),
-          })
-        )
-          return undefined;
-        selectedServices = {
-          llm: config.llmAdapter,
-          gateway: config.pluginGateway,
-          compactor: compactorRunner,
-        };
-      }
-      // The executor restores the selected services' LLM scope around the job.
-      const execute = executeRuntimeJob(selectedServices, handoff);
-      return async (claimed, control) => {
-        runtimeJobCredentials.discard(key);
-        await execute(claimed, control);
-      };
-    },
+    prepareExecution: prepareRuntimeJobExecution,
   });
   const uiSlots = createUiSlotHost({
     store,
@@ -770,7 +776,13 @@ async function assembleApi(
   });
   const settledSessionLock = createSettledSessionLock({
     sessionLock,
-    listPendingJobs: (sessionId) => listSettlingRuntimeJobs(store, sessionId),
+    // Runs after the request handed its credentials over, so a job its
+    // credentials can serve counts as runnable.
+    listPendingJobs: async (sessionId) =>
+      markRunnableSettlingJobs(
+        await listSettlingRuntimeJobs(store, sessionId),
+        (job) => prepareRuntimeJobExecution(job) !== undefined,
+      ),
     wake: (sessionId) => runtimeJobWorker.wake(sessionId),
   });
 

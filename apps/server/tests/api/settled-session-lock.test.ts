@@ -86,6 +86,52 @@ describe("settled session lock", () => {
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 
+  it("does not wait for a job the worker cannot start, and reports it", async () => {
+    const { lock, setPending } = setup();
+    setPending([
+      { jobId: "no-credentials", maxSettleWaitMs: 60_000, runnable: false },
+    ]);
+    const onTimeout = vi.fn();
+    const onSkipped = vi.fn();
+    const provideCredentials = vi.fn();
+    const startedAt = performance.now();
+    await expect(
+      lock.withLock(
+        "session",
+        { onTimeout, onSkipped, provideCredentials },
+        async () => "admitted",
+      ),
+    ).resolves.toBe("admitted");
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(provideCredentials).not.toHaveBeenCalled();
+    expect(onSkipped).toHaveBeenCalledOnce();
+    expect(onSkipped).toHaveBeenCalledWith({
+      skippedJobIds: ["no-credentials"],
+    });
+  });
+
+  it("still waits for a runnable job next to one it skips", async () => {
+    const { raw, lock, setPending } = setup();
+    setPending([
+      { jobId: "no-credentials", runnable: false },
+      { jobId: "running", runnable: true },
+    ]);
+    const provided = vi.fn();
+    const next = vi.fn(async () => "next");
+    const result = lock.withLock(
+      "session",
+      { provideCredentials: provided },
+      next,
+    );
+    await vi.waitFor(() => expect(provided).toHaveBeenCalled());
+    expect(next).not.toHaveBeenCalled();
+    await raw.withLock("session", async () =>
+      setPending([{ jobId: "no-credentials", runnable: false }]),
+    );
+    await expect(result).resolves.toBe("next");
+  });
+
   it("clamps persisted settle waits to the kernel ceiling", async () => {
     const { lock, setPending } = setup();
     setPending([{ jobId: "stalling", maxSettleWaitMs: 10 * 60_000 }]);
