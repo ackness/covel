@@ -224,26 +224,34 @@ it("keeps chat-only media readable after deleting the parent", async () => {
   ).toEqual({ image: ref });
 });
 
-it.each(["missing", "reference-write"])(
-  "rolls back chat history when media is %s",
-  async (failure) => {
-    const ref =
-      failure === "missing"
-        ? { id: "d".repeat(64), mime: "image/png", size: 3 }
-        : await mediaStore.put(new Uint8Array([1, 2, 3]), "image/png");
-    await add("image", at, { block: { ref } });
-    if (failure === "reference-write") {
-      await mediaStore.recordOwnership(ref.id, "parent");
-      vi.spyOn(mediaStore, "addRef").mockRejectedValue(
-        new Error("Synthetic ref failure"),
-      );
-    }
-    const response = await fork(await capture());
-    expect(response.status).toBe(failure === "missing" ? 409 : 500);
-    expect(await store.listSessions()).toHaveLength(1);
-    expect(await mediaStore.listRefs()).toEqual([]);
-  },
-);
+it("rolls back chat history when a media reference cannot be written", async () => {
+  const ref = await mediaStore.put(new Uint8Array([1, 2, 3]), "image/png");
+  await add("image", at, { block: { ref } });
+  await mediaStore.recordOwnership(ref.id, "parent");
+  vi.spyOn(mediaStore, "addRef").mockRejectedValue(
+    new Error("Synthetic ref failure"),
+  );
+  const response = await fork(await capture());
+  expect(response.status).toBe(500);
+  expect(await store.listSessions()).toHaveLength(1);
+  expect(await mediaStore.listRefs()).toEqual([]);
+});
+
+it("keeps chat history that shows a missing picture and counts it (F-162)", async () => {
+  const ref = { id: "d".repeat(64), mime: "image/png", size: 3 };
+  await add("image", at, { block: { ref } });
+  const response = await fork(await capture());
+  expect(response.status).toBe(201);
+  const body = (await response.json()) as {
+    sessionId: string;
+    missingMediaCount: number;
+  };
+  expect(body.missingMediaCount).toBe(1);
+  expect(
+    (await requireSnapshot(store, body.sessionId)).messages[0]?.block,
+  ).toEqual({ ref });
+  expect(await mediaStore.listRefs()).toEqual([]);
+});
 
 it.each(["chat", "state", "export"])(
   "does not grant access to foreign media referenced by %s",

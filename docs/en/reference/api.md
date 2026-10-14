@@ -535,9 +535,9 @@ This section lists every endpoint by topic. After each table come the rules that
 | GET    | `/api/worlds/:id/dimensions/export`     | Export the world's dimensions (YAML / JSON)                                                             |
 | POST   | `/api/worlds/:id/dimensions/import`     | Import the world's dimensions                                                                           |
 | POST   | `/api/worlds/:id/restore-package`       | Put an edited package world back to the version in its world package                                    |
-| POST   | `/api/worlds/:id/sync-dimensions`       | Sync the world's dimensions to active sessions                                                          |
+| POST   | `/api/worlds/:id/sync-dimensions`       | Authors and tools: sync world dimensions to one specified active session                                |
 | POST   | `/api/worlds/:id/world-data/preflight`  | Dry-run a worldData import, read-only                                                                   |
-| POST   | `/api/worlds/:id/sync-data`             | Sync the worldData rows that the importer manages. Supports dry-run and force                           |
+| POST   | `/api/worlds/:id/sync-data`             | Authors and tools: sync importer-managed worldData rows; dry-run by default                             |
 | POST   | `/api/worlds/:id/translate`             | Use the configured model to add one language version to a world package in the user worlds folder (SSE) |
 | GET    | `/api/worlds/:id/gallery`               | List the images that come with the world package (scenes, portraits)                                    |
 | GET    | `/api/media/library`                    | The player's media library (`self` / desktop app only)                                                  |
@@ -546,7 +546,7 @@ This section lists every endpoint by topic. After each table come the rules that
 
 A few more notes:
 
-- `POST /api/worlds/:id/sync-dimensions` writes the dimensions into the `plugin_data` and lorebook constant entries of active sessions, and removes old keys.
+- `POST /api/worlds/:id/sync-dimensions` handles only the specified session's protected `_dimensions` records and import ledger. It does not write the lorebook. See the endpoint details below.
 - `POST /api/worlds/:id/world-data/preflight` builds the import plan for worldData but does not write it. It returns the diagnostics, the number of planned writes, and a summary of the targets.
 - `POST /api/worlds/:id/sync-data` uses the provenance ledger to decide which rows the importer manages.
 - `GET /api/worlds/:id/gallery` lets the world list and world details show images even when no session exists yet.
@@ -1809,7 +1809,7 @@ Puts a package world that was edited in the app back to the version in its world
 
 - The server reads the world package again, replaces the world record with what it read, and removes `packageModified`. From then on startup loading and file reloads make the record follow the files again.
 - The world's origin (`metadata.source`, `metadata.storage`) and its creation time keep their values.
-- When dimension definitions changed, the sessions of this world receive a `world.dimensions.changed` notice. The values a session already has are not reset; sync when needed.
+- When dimension definitions changed, the sessions of this world receive a `world.dimensions.changed` notice. The values a session already has are not reset.
 - The request body may be an empty object.
 
 **Response:** the restored WorldRecord.
@@ -1826,7 +1826,7 @@ Puts a package world that was edited in the app back to the version in its world
 
 #### `POST /api/worlds/:id/sync-dimensions`
 
-Syncs the current dimension definitions of the world record to one given session. This endpoint tries to write directly. If you want to preview first, or need the general sync options, use `sync-data`.
+An API for authors and tools that syncs the current dimension definitions of the world record to the one active session specified by `sessionId`. The app has no control for players to call it. This endpoint tries to write directly and has no dry-run. To preview first, or use the general sync options, use [`sync-data`](#post-apiworldsidsync-data).
 
 It handles only dimensions. It uses the `world_data_import_ledger` ledger and the protected `_dimensions` records. It does not write `entries`, does not write the always-on lorebook, and does not clean up other imported data.
 
@@ -1914,7 +1914,9 @@ or:
 
 #### `POST /api/worlds/:id/sync-data`
 
-Sync the updated worldData from a world package into an existing session. **It only previews by default (dry-run).** Send `dryRun: false` to write.
+An API for authors and tools that syncs updated worldData from a world package into the one existing session specified by `sessionId`. The app currently has no sync control for players. **It only previews by default (dry-run).** Send `dryRun: false` to write. Actual writes require the session to be `active`.
+
+Updating a world package, hot-reloading files, enabling a plugin or approving its server code does not call this endpoint automatically. It uses the session's saved `activePlugins`. It does not enable plugins, rerun setup or rewrite past story messages. Players who want the new starting data should start a new session. Lore still follows the rules under "Automatic reload after a file change" in [World data](./world-data.md).
 
 **Request fields:**
 
@@ -1926,7 +1928,7 @@ Sync the updated worldData from a world package into an existing session. **It o
 
 **What gets synced:**
 
-- Only rows in the ledger `world_data_import_ledger` with `managed=true` are handled.
+- Overwriting and deleting existing records only handles rows in `world_data_import_ledger` with `managed=true` that belong to the current world. New records in this plan are also imported and added to the ledger.
 - It uses `valueHash` to check whether a player or a plugin has changed the target data.
 - Dimension definitions are in the same ledger. Dimensions come from the world record, so dimensions edited in the app are synced too; other worldData comes from `data/` of the world package.
 
@@ -4032,7 +4034,8 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400`.
+- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime needs approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
 **Response**
@@ -4043,14 +4046,18 @@ Resume a suspended runtime with the data the player submitted.
 
 **Errors**
 
-| Status | `code`                | When                                                                                                                                     |
-| ------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | —                     | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
-| 404    | —                     | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
-| 409    | —                     | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
-| 409    | `suspension_outdated` | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
-| 500    | —                     | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
-| 503    | `session_busy`        | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
+| Status | `code`                    | When                                                                                                                                     |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | —                         | The request body is not valid JSON or has the wrong structure                                                                            |
+| 400    | `resume_data_invalid`     | `data` fails `resumeSchema` validation                                                                                                   |
+| 400    | `resume_schema_invalid`   | `resumeSchema` is not an object or cannot compile; the suspension remains pending                                                        |
+| 401    | `operator_token_required` | A hosted deployment requires the operator credential to run a community plugin                                                           |
+| 429    | `approval_queue_full`     | The pending approval queue is full; resolve existing approvals first                                                                     |
+| 404    | —                         | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
+| 409    | —                         | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
+| 409    | `suspension_outdated`     | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
+| 500    | —                         | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
+| 503    | `session_busy`            | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
 
 Rules for failed responses:
 
@@ -4317,9 +4324,12 @@ Returns `201 Created`.
   "sessionId": "mistport-<new-uuid8>",
   "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
-  "forkSnapshotId": "<child-fork-snapshot-id>"
+  "forkSnapshotId": "<child-fork-snapshot-id>",
+  "missingMediaCount": 0
 }
 ```
+
+`missingMediaCount` is the number of files the fork uses that are no longer in the media store, each file counted once. The interface shows a "media unavailable" placeholder in their place.
 
 **What the server does**
 
@@ -4365,7 +4375,8 @@ The chat history shown in the interface is copied separately, using `payload.dis
 Media handling:
 
 - Creates the child session's own references to the media in the copied messages.
-- All media used in messages, state, and runtime exports must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- All media used in messages, state, and runtime exports that still exists must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- Media that no longer exists (for example, deleted in the media library) does not stop the fork. The child session is created as usual and keeps the original messages and data, but gets no reference to that file. It shows a placeholder in the child as it does in the parent, and is counted in `missingMediaCount`.
 
 Runtime export handling:
 

@@ -1,6 +1,13 @@
-import type { SessionExecutionStatus, SessionSnapshot } from "@covel/shared";
+import {
+  PLAYER_ABORT_REASON,
+  type SessionExecutionStatus,
+  type SessionSnapshot,
+} from "@covel/shared";
 import * as api from "@/services/api.js";
-import { clearStreamingText } from "@/stores/streaming-text-store.js";
+import {
+  clearStreamingText,
+  getStreamingText,
+} from "@/stores/streaming-text-store.js";
 import {
   publishSubmittedInteractions,
   toStreamMessages,
@@ -84,6 +91,37 @@ export function publishRecoveredMessages(
       ? execution.turnId
       : undefined;
   const messages = toStreamMessages(snapshot.messages);
+  const unsavedNarratives: StreamMessage[] = [];
+  if (
+    terminalTurnId &&
+    (execution?.state === "failed" || execution?.state === "interrupted") &&
+    execution.abortReason !== PLAYER_ABORT_REASON
+  ) {
+    for (const row of state.messages) {
+      if (
+        row.turnId !== terminalTurnId ||
+        !row.id.startsWith("stream_") ||
+        messages.some(
+          (saved) =>
+            saved.turnId === row.turnId &&
+            saved.runtimeId === row.runtimeId &&
+            saved.kind === "story",
+        )
+      )
+        continue;
+      const bufferKey = `${terminalTurnId}_${row.runtimeId}`;
+      const content =
+        (getStreamingText(row.id) ?? row.content) +
+        (deltaBufferRef.current.get(bufferKey)?.text ?? "");
+      unsavedNarratives.push({ ...row, content });
+      deltaBufferRef.current.delete(bufferKey);
+      clearStreamingText(row.id);
+    }
+    // No queued chunk from this closed attempt may create a new placeholder.
+    for (const [key, pending] of deltaBufferRef.current) {
+      if (pending.turnId === terminalTurnId) deltaBufferRef.current.delete(key);
+    }
+  }
   if (terminalTurnId) {
     for (const message of messages) {
       if (
@@ -104,6 +142,7 @@ export function publishRecoveredMessages(
     type: "MERGE_RECOVERED_MESSAGES",
     messages,
     terminalTurnId,
+    unsavedNarratives,
     actionGeneration: state.actionGeneration ?? 0,
   });
 }

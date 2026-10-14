@@ -1,7 +1,11 @@
 import postgres, { type JSONValue, type Sql } from "postgres";
 import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-store-mappers.js";
 import { SCHEMA_DDL_LOCK_SQL } from "../postgres/pg-schema-boot.js";
-import type { MediaRefRecord, MediaStore } from "@covel/shared";
+import type {
+  MediaAssetRecord,
+  MediaRefRecord,
+  MediaStore,
+} from "@covel/shared";
 import {
   finalizeMediaCleanupResult,
   planMediaCleanup,
@@ -265,30 +269,12 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     },
 
     async listAssets() {
-      const rows = await sql<
-        {
-          id: string;
-          mime: string;
-          size: number;
-          meta: Record<string, unknown> | null;
-          owner_session_id: string | null;
-          owner_plugin_id: string | null;
-          created_at: string;
-        }[]
-      >`
+      const rows = await sql<AssetRow[]>`
         SELECT id, mime, size, meta, owner_session_id, owner_plugin_id, created_at
         FROM media_assets
         ORDER BY created_at ASC, id ASC
       `;
-      return rows.map((row) => ({
-        id: row.id,
-        mime: row.mime,
-        size: row.size,
-        ownerSessionId: row.owner_session_id,
-        ownerPluginId: row.owner_plugin_id,
-        createdAt: row.created_at,
-        ...(row.meta == null ? {} : { meta: row.meta }),
-      }));
+      return rows.map(toAssetRecord);
     },
 
     async listRefs() {
@@ -313,7 +299,13 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     },
 
     async listByMetadata(sessionId, filter) {
-      return filterAssetsByMetadata(await this.listAssets(), sessionId, filter);
+      const rows = await sql<AssetRow[]>`
+        SELECT id, mime, size, meta, owner_session_id, owner_plugin_id, created_at
+        FROM media_assets
+        WHERE owner_session_id = ${sessionId}
+        ORDER BY created_at ASC, id ASC
+      `;
+      return filterAssetsByMetadata(rows.map(toAssetRecord), sessionId, filter);
     },
 
     async cleanup(protectedIds, policy) {
@@ -375,5 +367,27 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     // falls back to the eager `get()` path. Operators with media > 1 MiB on
     // PostgreSQL should switch to SQLite-backed media (createSqliteMediaStore)
     // or S3 with a metadata adapter — see docs/reference/media-store.md.
+  };
+}
+
+interface AssetRow {
+  readonly id: string;
+  readonly mime: string;
+  readonly size: number;
+  readonly meta: Record<string, unknown> | null;
+  readonly owner_session_id: string | null;
+  readonly owner_plugin_id: string | null;
+  readonly created_at: string;
+}
+
+function toAssetRecord(row: AssetRow): MediaAssetRecord {
+  return {
+    id: row.id,
+    mime: row.mime,
+    size: row.size,
+    ownerSessionId: row.owner_session_id,
+    ownerPluginId: row.owner_plugin_id,
+    createdAt: row.created_at,
+    ...(row.meta == null ? {} : { meta: row.meta }),
   };
 }
