@@ -1349,7 +1349,7 @@ There are two ways to generate them, both from `@covel/plugin-handlers-utils`:
 
 The nodes of `codex` and `npc-graph`, and player characters, use `wordId`.
 
-The fourth argument of `shortId` takes the context's `random`, so the random string comes from the host's random source (see [`ctx.random`](./plugins.md#inputs-and-outputs)).
+The fourth argument of `shortId` must be the context's `random`; the random string comes from the host's random source (see [`ctx.random`](./plugins.md#random-numbers-ctxrandom)).
 
 ```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
@@ -1611,10 +1611,10 @@ export default function ({ tool, z, shortId }) {
 
 Production hosts and `test-runtime` inject `context.store` on every tool call. Its interface is the same as `FunctionStoreView`:
 
-| Method                                                           | What it reads                                                                                                                                                                                   |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | The data of the current session and the current plugin. The existing set, batch, and delete proposals from the same execution are merged in, in order.                                          |
-| `getSession()`, `listPlayerInputs()`, `listTurnMessages(limit?)` | Read-only access to the current session. When a limit is given, it reads the latest messages. Messages include only committed turns; a turn that is running appears only after it is committed. |
+| Method                                                           | What it reads                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | The data of the current session and the current plugin. The existing set, batch, and delete proposals from the same execution are merged in, in order.                                                                                                                                    |
+| `getSession()`, `listPlayerInputs()`, `listTurnMessages(limit?)` | Read-only access to the current session. `getSession()` returns the [session view](./plugins.md#the-session-view-storegetsession). When a limit is given, it reads the latest messages. Messages include only committed turns; a turn that is running appears only after it is committed. |
 
 Rules:
 

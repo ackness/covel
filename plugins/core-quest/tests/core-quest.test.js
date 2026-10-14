@@ -8,6 +8,7 @@ import {
   createPluginTestStore,
   executeToolAndCommit as executeAndCommit,
   loadPluginMessages,
+  makeRandom,
 } from "@covel/plugin-test-utils";
 /**
  * core-quest plugin tests.
@@ -54,6 +55,7 @@ describe("upsert-quests", () => {
     turnId: "turn-1",
     pluginId: "core-quest",
     runtimeId: "core-quest/log",
+    random: makeRandom(),
     logicalTurn: 3,
     // What the host gives a tool as `context.messages`.
     messages,
@@ -854,6 +856,7 @@ describe("quests from WorldIR", () => {
       turnId: "turn-1",
       pluginId: "core-quest",
       runtimeId: "core-quest/log",
+      random: makeRandom(),
       logicalTurn: 2,
       store: {
         listPluginData: async () => [],
@@ -894,6 +897,7 @@ describe("quests from WorldIR", () => {
       turnId: "turn-1",
       pluginId: "core-quest",
       runtimeId: "core-quest/log",
+      random: makeRandom(),
       logicalTurn: 2,
       store: {
         listPluginData: async () => [],

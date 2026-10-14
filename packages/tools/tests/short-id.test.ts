@@ -1,4 +1,8 @@
+import { randomInt } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+
+// Uniqueness needs real draws; production IDs take them from `ctx.random`.
+const random = { int: randomInt };
 
 describe("entity ID allocation", () => {
   it("does not reuse IDs after reloading the allocator", async () => {
@@ -10,31 +14,38 @@ describe("entity ID allocation", () => {
       "a".repeat(31),
     ];
     const first = await import("../src/short-id.js");
-    const before = first.shortIdBatch("item", labels, "session");
+    const before = first.shortIdBatch("item", labels, "session", random);
     vi.resetModules();
     const restarted = await import("../src/short-id.js");
-    const after = restarted.shortIdBatch("item", labels, "session");
+    const after = restarted.shortIdBatch("item", labels, "session", random);
     expect(new Set([...before, ...after]).size).toBe(labels.length * 2);
     expect(before.every((id) => /^item-[a-z0-9-]+$/.test(id))).toBe(true);
   });
 
   it("keeps the label's ASCII words and a short random part", async () => {
     const { shortId } = await import("../src/short-id.js");
-    expect(shortId("npc", "林若风", "s")).toMatch(/^npc-[0-9a-f]{8}$/);
-    expect(shortId("item", "Dragon Sword!", "s")).toMatch(
+    expect(shortId("npc", "林若风", "s", random)).toMatch(/^npc-[0-9a-f]{8}$/);
+    expect(shortId("item", "Dragon Sword!", "s", random)).toMatch(
       /^item-dragon-sword-[0-9a-f]{8}$/,
     );
-    expect(shortId("item", "🔥", "s")).toMatch(/^item-[0-9a-f]{8}$/);
+    expect(shortId("item", "🔥", "s", random)).toMatch(/^item-[0-9a-f]{8}$/);
   });
 
   it("keeps repeated labels and lossy slugs distinct across batches", async () => {
     const { shortIdBatch } = await import("../src/short-id.js");
     const labels = ["Fire!", "Fire?", "Fire", "Fire", "火", "水"];
     const ids = [
-      ...shortIdBatch("entry", labels, "session"),
-      ...shortIdBatch("entry", labels, "session"),
+      ...shortIdBatch("entry", labels, "session", random),
+      ...shortIdBatch("entry", labels, "session", random),
     ];
     expect(new Set(ids).size).toBe(labels.length * 2);
+  });
+
+  it("takes the random part from the given source", async () => {
+    const { shortId } = await import("../src/short-id.js");
+    expect(shortId("npc", "Lin", "s", { int: () => 0xabc })).toBe(
+      "npc-lin-00000abc",
+    );
   });
 
   it("allocates word-only IDs that skip taken ones", async () => {

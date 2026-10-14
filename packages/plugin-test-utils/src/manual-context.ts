@@ -58,6 +58,7 @@ export function makeManualFunctionContext({
       throw new Error("recursiveCall is not configured for this test context");
     },
     recursionDepth: 0,
+    session: { lastPlayerInput: null },
     manualPayload,
     random,
     ...capabilities,

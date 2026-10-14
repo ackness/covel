@@ -504,17 +504,33 @@ An agent's side effects come only from its tools. What the model can write is de
 | `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `interval` also count by it. |
 | `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                              |
 | `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                   |
+| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`. An agent guard has no `ctx.execution`                                                                                                                                     |
+| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                |
+| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                  |
 
 `ctx.session.lastPlayerInput` may come from an earlier turn. Having this record does not mean that a form was submitted in this turn.
 
+#### The session view (`store.getSession()`)
+
+`ctx.store.getSession()` (`context.store.getSession()` in a tool or an action) returns `PluginSessionView`, a read-only view of the current session, not the session record itself:
+
+| Field                  | Meaning                                                                                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `phase`                | `setup` or `playing`                                                                                                                                                                                           |
+| `completedPlayerTurns` | Committed main-loop player turns; setup and the opening do not count                                                                                                                                           |
+| `locale`               | The content language of this game                                                                                                                                                                              |
+| `setupRuntimes`        | The progress of each setup runtime, keyed by runtime ID: `{ state: "pending", lastError? }`, `{ state: "done", resolution: "completed" \| "waived", warning? }`, or `{ state: "blocked", reason, lastError? }` |
+
+When the session no longer exists, `getSession()` throws and the current execution cannot continue. Normal degradation for missing plugins or optional capabilities does not change this boundary.
+
 #### Random numbers (`ctx.random`)
 
-`ctx.random` is a random source provided by the host. It is in the context of function handlers, agent guards, plugin tools, and RPC actions.
+`ctx.random` is a random source provided by the host. The context of every function handler, agent guard, plugin tool, and RPC action has it, and its type marks it as always present.
 
 - Use `ctx.random.int(min, max)` for dice and any other random draws in the game. It returns an integer with `min <= n < max`. It is the same as `randomInt` from `node:crypto`.
 - Do not use `node:crypto` or `Math.random` directly.
 - Normally it is just `randomInt`. When the test server is started with `COVEL_RANDOM_SEED`, the nth number drawn by the same runtime (or the same RPC action) is the same on every run. A scripted session can therefore be repeated (see [Environment variables](./env-registry.md#runtime-contract) and [Recording and replay](../ship/real-model.md#recording-and-replay)).
-- `shortId` and `shortIdBatch` accept it as their fourth argument. The random part of an ID can then also be repeated.
+- `shortId` and `shortIdBatch` must get it as their fourth argument. The random part of an ID can then also be repeated. The SDK has no other random source to fall back on.
 
 #### Bookkeeping fields the model cannot see
 
@@ -545,7 +561,17 @@ The records that code reads do not change: the return values of `ctx.inputs`, `c
 
 #### The kernel input `turn-digest@1`
 
-The kernel input `turn-digest@1` freezes the same `lastPlayerInput` snapshot, along with `runtimeResults`.
+The kernel input `turn-digest@1` freezes the facts of the source turn. A foreground runtime and a background job read the same value. Its type in the SDK is `PluginTurnDigest`:
+
+| Field               | Meaning                                                                       |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `turnId`            | The ID of the source turn                                                     |
+| `playerMessage`     | The player's input for that turn                                              |
+| `lastPlayerInput`   | The same snapshot as `ctx.session.lastPlayerInput`, or `null`                 |
+| `narrativeText`     | The story text of the turn's successful story runtimes, joined by blank lines |
+| `toolCallSummaries` | One short line per successful, visible tool call                              |
+| `runtimeResults`    | The runtimes that finished: `{ runtimeId, status }`                           |
+| `locale`            | The content language of this game (only sometimes present)                    |
 
 - `runtimeResults` holds the final states already observed, as `{runtimeId, status}`. `status` is `success`, `failed`, `skipped`, or `suspended`. A runtime that has not finished is not predicted to succeed.
 - A background (detached) worker reads the snapshot of the source execution. It does not query the latest form or turn state again.

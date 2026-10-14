@@ -199,9 +199,8 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/create/src/validation-helpers.ts": 7,
   "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
   "packages/tools/src/builtin/tool-search.ts": 2,
-  // Example input for tests and the CLI.
+  // Example input for tests.
   "packages/plugin-test-utils/src/factories.ts": 1,
-  "packages/test-runtime/src/run-cli.ts": 1,
 };
 
 function frameworkRoots() {

@@ -73,6 +73,7 @@ describe.each(["function", "agent"] as const)(
                               sessionId: "s",
                               pluginId: "external",
                               runtimeId: manifest.name,
+                              random: { int: (min: number) => min },
                               turnId: "t",
                             })) as { interaction: PluginFormInteraction }
                           ).interaction,
