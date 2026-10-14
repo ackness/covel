@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { ThemeImportError } from "../import-error.js";
+import { BUILTIN_THEME_IDS } from "../builtins.js";
 import { parseImportedThemeFile } from "../validate.js";
 
 describe("parseImportedThemeFile", () => {
@@ -77,7 +79,7 @@ describe("parseImportedThemeFile", () => {
   it("rejects css without a theme selector", () => {
     expect(() =>
       parseImportedThemeFile(".panel { color: red; }", "broken.css"),
-    ).toThrow(/data-theme/);
+    ).toThrow(/missing-scope/);
   });
 
   it("rejects css files that mix multiple theme ids", () => {
@@ -89,7 +91,7 @@ describe("parseImportedThemeFile", () => {
         `,
         "mixed.css",
       ),
-    ).toThrow(/exactly one data-theme id/);
+    ).toThrow(/multiple-ids/);
   });
 
   it("reports light-only when no dark-scoped selector is present", () => {
@@ -117,7 +119,7 @@ describe("parseImportedThemeFile", () => {
         `,
         "linen.css",
       ),
-    ).toThrow(/must be scoped/);
+    ).toThrow(/escapes-scope/);
   });
 
   it("rejects @import (remote fetch / beacon vector)", () => {
@@ -129,7 +131,7 @@ describe("parseImportedThemeFile", () => {
         `,
         "linen.css",
       ),
-    ).toThrow(/@import/);
+    ).toThrow(/import-rule/);
   });
 
   // The scope scan reads whatever sits in front of a `{` as the selector, so a
@@ -189,7 +191,7 @@ describe("parseImportedThemeFile", () => {
          * { display: none !important; }`,
         "linen.css",
       ),
-    ).toThrow(/must be scoped/);
+    ).toThrow(/escapes-scope/);
   });
 
   it("is not fooled by a rule buried in nested at-rules", () => {
@@ -199,7 +201,7 @@ describe("parseImportedThemeFile", () => {
          @media all { @media all { * { display: none !important; } } }`,
         "linen.css",
       ),
-    ).toThrow(/must be scoped/);
+    ).toThrow(/escapes-scope/);
   });
 
   it("is not fooled by the scope token appearing inside :not()", () => {
@@ -209,7 +211,7 @@ describe("parseImportedThemeFile", () => {
          *:not([data-theme="linen"]) { display: none !important; }`,
         "linen.css",
       ),
-    ).toThrow(/must be scoped/);
+    ).toThrow(/escapes-scope/);
   });
 
   it("allows scoped rules nested inside at-rules and nested blocks", () => {
@@ -242,6 +244,56 @@ describe("parseImportedThemeFile", () => {
         }),
         "sunfall.theme.json",
       ),
-    ).toThrow(/matches "sunfall"/);
+    ).toThrow(/id-mismatch/);
   });
+});
+
+it.each([":is(h1, h2)", ":where(h1, :is(h2, h3))", "[title='hello, world']"])(
+  "F-081 accepts scoped nested selector lists: %s",
+  (selector) => {
+    expect(() =>
+      parseImportedThemeFile(
+        `html[data-theme="nested"] ${selector} { color: red; }`,
+        "nested.css",
+      ),
+    ).not.toThrow();
+  },
+);
+it("F-081 still rejects an unscoped selector after a top-level comma", () => {
+  expect(() =>
+    parseImportedThemeFile(
+      'html[data-theme="nested"] a, :is(h1, h2) { color: red; }',
+      "nested.css",
+    ),
+  ).toThrowError(
+    new ThemeImportError("escapes-scope", {
+      id: "nested",
+      selector: ":is(h1, h2)",
+    }),
+  );
+});
+it.each([...BUILTIN_THEME_IDS])(
+  "F-082 rejects built-in ID %s in CSS and JSON",
+  (id) => {
+    const cssText = `html[data-theme="${id}"] { color: red; }`;
+    for (const [text, file] of [
+      [cssText, "theme.css"],
+      [JSON.stringify({ id, label: id, cssText }), "theme.json"],
+    ]) {
+      try {
+        parseImportedThemeFile(text!, file!);
+        throw new Error("accepted builtin");
+      } catch (error) {
+        expect(error).toMatchObject({ code: "builtin-id", params: { id } });
+      }
+    }
+  },
+);
+it.each([
+  ["{", "invalid-json"],
+  ['{"id":"x"}', "invalid-manifest"],
+])("F-083 gives malformed JSON a stable code", (text, code) => {
+  expect(() => parseImportedThemeFile(text!, "broken.json")).toThrowError(
+    new ThemeImportError(code as "invalid-json" | "invalid-manifest"),
+  );
 });

@@ -204,8 +204,8 @@ it("rejects a stale whole-settings edit instead of deleting another window's val
     await mocks.store.set("concurrent", "Keep this");
   });
   save();
-  expect((await screen.findByRole("alert")).textContent).toMatch(
-    /changed|conflict/i,
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    i18n.t("settings.rawConfigChanged"),
   );
   expect(mocks.store.get("concurrent")).toBe("Keep this");
   expect(mocks.store.get("ui.scheme")).toBe("dark");

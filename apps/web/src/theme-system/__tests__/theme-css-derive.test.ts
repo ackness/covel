@@ -116,7 +116,7 @@ html[data-theme="source"] {
         "source",
         "saved",
       ),
-    ).toThrow(/must be scoped/);
+    ).toThrow(/escapes-scope/);
   });
 
   it("handles CSS escapes and priorities without requiring whitespace", () => {
