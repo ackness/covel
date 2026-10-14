@@ -4283,9 +4283,12 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
   "sessionId": "mistport-<new-uuid8>",
   "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
-  "forkSnapshotId": "<child-fork-snapshot-id>"
+  "forkSnapshotId": "<child-fork-snapshot-id>",
+  "missingMediaCount": 0
 }
 ```
+
+`missingMediaCount` 是分叉用到、但已经不在媒体存储里的文件数，同一个文件只算一次。界面在这些位置显示“媒体不可用”的占位。
 
 **服务端做了什么**
 
@@ -4331,7 +4334,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 媒体的处理：
 
 - 为拷贝过来的消息里的媒体建立子会话自己的引用。
-- 消息、状态和 runtime 导出里用到的所有媒体，都必须已经授权给父会话，否则整个分叉以 `403 media_reference_forbidden` 失败。只知道媒体 ID 不能获得访问权。
+- 消息、状态和 runtime 导出里用到的、还存在的媒体，都必须已经授权给父会话，否则整个分叉以 `403 media_reference_forbidden` 失败。只知道媒体 ID 不能获得访问权。
+- 已经不存在的媒体（例如在媒体库里删掉了）不阻止分叉。子会话照常创建，保留原来的消息和数据，但不得到这个文件的引用。它在子会话里和在父会话里一样显示占位，并计入 `missingMediaCount`。
 
 runtime 导出的处理：
 
