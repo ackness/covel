@@ -136,6 +136,11 @@ export interface PluginEntryDefinition {
   readonly pluginRoot: string;
   /** Plugin-root-relative entry module paths, deduplicated in declaration order. */
   readonly entryPaths: readonly string[];
+  /**
+   * Origins the package's entry code may reach through `covel.http` when the
+   * package is community: the root `permissions.http` and every runtime's.
+   */
+  readonly httpPermissions: readonly import("@covel/shared").HttpPermissionDecl[];
 }
 
 // ── Progressive loading results ──────────────────────────────────

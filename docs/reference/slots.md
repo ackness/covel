@@ -650,6 +650,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 - 路由键在进入 wire 之前被去掉，不会出现在发给厂商的请求体里。
 - wire ID 没有注册时，生成时抛 `CONFIG_ERROR`（报错信息里有修复办法），不会悄悄换成别的 wire。
+- 插件注册的 wire 只服务启用了该插件的会话，规则和文本协议相同。别的会话用到它时抛 `CONFIG_ERROR`，报错里写明要启用哪个插件。
 - 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })` 注册自定义 wire。frontmatter 的 `wires` 字段仍然接受，但已弃用。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
 - wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music)。
 

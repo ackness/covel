@@ -155,7 +155,15 @@ A plugin's server-side JavaScript (`entry`, handler, guard, hook, wire) runs in 
 
 - Before approval, a `community` package is just data. Installing, previewing, listing, and validating only parse its files. Nothing is imported. The two-step approval (first `covel:plugin-server-code`, then the specific operations; see [Hosted auth](#hosted-auth)) guards the first import.
 - After approval, this code can do anything the server process can do: read and write files that the server's system user can access (`keys.env`, `llm.toml`, the SQLite file), read `process.env`, open sockets, and start processes.
-- `permissions.http` is an allowlist on the plugin API, applied to `ctx.utils.fetchWithRetry`, `ctx.media.ingestUrl`, and the media bindings built on them (`packages/runtime/src/function-runtime/http-permissions.ts`). It stops a package from reaching an origin it did not declare through this API. It cannot stop code that calls the global `fetch` or `node:https` directly.
+- `permissions.http` is an allowlist on the plugin API. Every framework request channel of a community package is checked against it (`packages/runtime/src/function-runtime/http-permissions.ts`):
+  - A runtime's `ctx.utils.fetchWithRetry`, `ctx.media.ingestUrl`, and the media bindings built on them are checked against that runtime's declaration.
+  - `covel.http` of the `entry` module (used by tools, hooks, RPC, form validators, services, extensions and wires) is checked against the declaration of the whole package: the `permissions.http` of the root `PLUGIN.md` plus those of every runtime (`apps/server/src/routes/api/bootstrap/entry-http.ts`).
+  - The `context.utils` that a service or extension handler receives is replaced by the check of the provider's own package. It does not borrow the caller's.
+  - While a wire serves a slot, it may also reach the endpoint configured for that slot. The player sets that address; the plugin does not declare it.
+  - Builtin packages are not checked, as for runtimes. The SSRF check runs for every package.
+- This allowlist stops a package from reaching an origin it did not declare through this API. It cannot stop code that calls the global `fetch` or `node:https` directly.
+- A media wire a plugin registers carries that plugin, like a text wire: in a session it can be chosen only when the plugin is enabled there; a request that belongs to no session can choose only a builtin plugin's wire, and on the `self` tier a community plugin's as well.
+- `framework` is a reserved ID that no package can take. A request with `pluginId: "framework"` runs only a framework default action, so the route's trust decision and the handler that runs are the same one.
 - The bound session store view, the lookup of tools by plugin, and the proposal pipeline are also permission boundaries of the plugin API, and they have the same limit.
 
 `ctx.gateway.resolveSlot()` is the same kind of boundary.

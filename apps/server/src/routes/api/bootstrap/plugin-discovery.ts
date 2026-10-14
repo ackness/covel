@@ -70,6 +70,7 @@ export async function discoverAndRegisterPlugins(
       await loadPluginEntryDefinition(
         discovery,
         pluginDeclarations(definition),
+        definition.manifests,
       );
       const { packageManifest, manifests } = definition;
       const summary = {

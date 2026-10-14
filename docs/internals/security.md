@@ -155,7 +155,15 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 - 批准之前，`community` 包只是数据。安装、预览、列表和校验只解析它的文件，一个都不 import。两阶段批准（先 `covel:plugin-server-code`，再授予具体操作，见 [Hosted auth](#hosted-auth)）把守着第一次 import。
 - 批准之后，这些代码能做服务端进程能做的一切：读写服务端系统用户的文件（`keys.env`、`llm.toml`、SQLite 文件），读 `process.env`，打开套接字，启动进程。
-- `permissions.http` 是插件 API 上的白名单，作用于 `ctx.utils.fetchWithRetry`、`ctx.media.ingestUrl` 以及建立在它们之上的媒体绑定（`packages/runtime/src/function-runtime/http-permissions.ts`）。它能阻止一个包通过这套 API 访问它没有声明的源。它阻止不了直接调用全局 `fetch` 或 `node:https` 的代码。
+- `permissions.http` 是插件 API 上的白名单，社区包的每条框架请求通道都按它检查（`packages/runtime/src/function-runtime/http-permissions.ts`）：
+  - runtime 的 `ctx.utils.fetchWithRetry`、`ctx.media.ingestUrl` 以及建立在它们之上的媒体绑定，按该 runtime 的声明检查。
+  - `entry` 模块的 `covel.http`（工具、钩子、RPC、表单校验器、服务、扩展、wire 都用它），按整个包的声明检查：根 `PLUGIN.md` 的 `permissions.http` 加上每个 runtime 的（`apps/server/src/routes/api/bootstrap/entry-http.ts`）。
+  - 服务和扩展的处理函数收到的 `context.utils` 换成提供方自己包的检查，不借用调用方的。
+  - wire 正在服务某个用途时，还可以访问该用途配置的端点。这个地址由玩家设置，不由插件声明。
+  - 内置包和 runtime 一样不做这项检查，SSRF 检查对所有包都照常进行。
+- 这份白名单能阻止一个包通过这套 API 访问它没有声明的源。它阻止不了直接调用全局 `fetch` 或 `node:https` 的代码。
+- 插件注册的媒体 wire 和文本 wire 一样带着提供它的插件：会话里只有启用了该插件才能选用；不属于任何会话的请求，只能选用内置插件的 wire，`self` 形态下也能选用社区插件的。
+- `framework` 是保留的 ID，没有包能用它。请求里写 `pluginId: "framework"` 只会执行框架默认动作，路由的信任判断和实际执行的处理函数是同一个。
 - 绑定会话的存储视图、按插件查找工具、proposal 管线，都是插件 API 的权限边界，也有同样的局限。
 
 `ctx.gateway.resolveSlot()` 是同一类边界。

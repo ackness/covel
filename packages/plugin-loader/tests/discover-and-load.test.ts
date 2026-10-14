@@ -52,7 +52,11 @@ describe("current package discovery and loading", () => {
     ).toBe(0);
     await fs.rm(path.join(temp, "probe/PLUGIN.md"));
     expect(
-      await loadPluginEntryDefinition(d!, pluginDeclarations(definition)),
+      await loadPluginEntryDefinition(
+        d!,
+        pluginDeclarations(definition),
+        definition.manifests,
+      ),
     ).toMatchObject({
       entryPaths: ["./throws.js"],
       contributions: { tools: ["probe"] },

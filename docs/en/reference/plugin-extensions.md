@@ -371,7 +371,7 @@ ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, 
 
 ### Permissions do not grow across plugins
 
-A gateway and HTTP tools used by a service inherit the request settings, permissions, tracing, cancellation, and revocation boundaries of the runtime that made the call. In particular, when a community plugin is the caller, the HTTP requests it sends are still limited by its own `permissions.http`. If the gateway already has a standard method for the job, use the gateway first.
+A gateway used by a service inherits the request settings, tracing, cancellation, and revocation boundaries of the runtime that made the call. HTTP requests are sent by the provider's code, so they are checked against the provider's declaration: in a community provider's handler, `context.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package, whoever the caller is. An extension handler works the same way. If the gateway already has a standard method for the job, use the gateway first.
 
 ### The scope of "no framework change needed"
 
@@ -445,10 +445,10 @@ Which requests can select this protocol:
 | The same as above, in the `self` deployment                                                             | There is only one player, and every loaded community plugin was authorized by that player. So a community plugin's protocol can also be selected. |
 | The same as above, in the hosted deployment                                                             | A community plugin's protocol must be used in a session that has enabled it.                                                                      |
 
-A request-level preset, the `llm.toml` slots, and a runtime's own slot preference are all checked against this table. The protocol dropdown on the settings page still lists the protocols of all loaded plugins.
+A request-level preset, the `llm.toml` slots, and a runtime's own slot preference are all checked against this table. The protocol dropdown on the settings page still lists the protocols of all loaded plugins. Image, speech, transcription and music wires that a plugin registers are chosen by the same table; when none can be chosen, generation fails with a configuration error that names the plugin to enable.
 
 > [!CAUTION]
-> The trust boundary is the same as for media wires. A community plugin's server code runs only after the player authorizes it, and the origins declared in `permissions.http` are enforced as usual. The difference is that a text wire handles **all the prompts and answers** of the role that selects it.
+> The trust boundary is the same as for media wires. A community plugin's server code runs only after the player authorizes it. `covel.http` in a wire reaches only the origins declared in the package's `permissions.http` and the endpoint of the slot it is serving. The difference is that a text wire handles **all the prompts and answers** of the role that selects it.
 
 ## Custom components and mounting
 
