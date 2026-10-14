@@ -18,7 +18,7 @@ rg -n "ponytail:" apps packages plugins
 | 位置                                                             | 接受的限制                                                                           | 什么时候重新考虑                                                      |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
 | `packages/runtime/src/schedule/effects.ts`                       | 对 `self` 字面量做字符串相等比较，可能把不同插件的 effects 误判为相同                | 误报的冲突多到值得把 `self` 解析成插件 ID                             |
-| `packages/runtime/src/function-runtime/turn-function-runtime.ts` | 撤销只在新调用进入时检查；已经发出的外部效果可能在期限之后才结束                     | 原语需要协作式取消，或者需要用 worker 隔离迟到的外部效果              |
+| `packages/runtime/src/function-runtime/plugin-runtime-context.ts` | 撤销只在新调用进入时检查；已经发出的外部效果可能在期限之后才结束                     | 原语需要协作式取消，或者需要用 worker 隔离迟到的外部效果              |
 | `packages/runtime/src/turn-executor/turn-runtime-execution.ts`   | 带 `accepts` 的消费者每次都重新加载生产者声明的输出 schema                           | 性能分析显示重复的工作多到值得做每回合的 schema 缓存                  |
 | `packages/shared/src/llm-slots.ts`                               | 所有 LLM provider 共用一个进程级的并发上限                                           | 互相独立的 provider 需要各自的容量                                    |
 | `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 恢复（resume）数据进入工具循环前不检查其中的 MediaRef；提交时才把要保存的内容规范化  | 一个恢复的 runtime 在任何 proposal 带上某个媒体引用之前就对它做了操作 |

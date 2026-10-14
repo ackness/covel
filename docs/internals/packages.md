@@ -28,6 +28,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 - `plugin-handlers-utils` 不依赖任何私有的工作区包。
 - `shared` 保存框架各层共用的 DTO 和 schema。
 - `tools` 实现 SDK 所描述的工具协议。
+- `plugin-loader` 依赖 SDK 和 `zod`。导入插件的 entry、handler 或 guard 之前，它先登记插件目录（`provideHostModules`）；这个目录里的模块 `import` 这两个包时，解析到宿主的那份。内置插件和安装的插件走同一条路，插件不用自带这两个包。
 
 详见[插件契约](../reference/plugins.md)和[工具](../reference/tools.md)。
 

@@ -51,7 +51,7 @@ zip -r ~/tavern-rumors.zip . -x "node_modules/*" ".*"
 打开 ZIP，第一层就应该能看到 `PLUGIN.md` 和 `package.json`。
 
 > [!IMPORTANT]
-> 安装时 Covel 不会替你安装依赖，也不会运行任何构建命令。包里的代码必须拿来就能运行。
+> 安装时 Covel 不会替你安装依赖，也不会运行任何构建命令。包里的代码必须拿来就能运行。插件 SDK `@covel/plugin-handlers-utils` 和 `zod` 由 Covel 提供，直接 `import`，不用打包。
 
 ## 3. 先把开发用的那份挪走
 

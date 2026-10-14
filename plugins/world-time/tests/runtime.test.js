@@ -19,7 +19,6 @@ import {
   commitExecution,
   createToolExecutor,
   createFunctionStoreView,
-  createTrustedHandlerStore,
 } from "@covel/runtime";
 
 import { tool } from "@covel/tools";
@@ -27,6 +26,13 @@ import createAdvance from "../tools/advance-world-time.js";
 import { DEFAULT_TIME, initialTick, loadTime } from "../clock.js";
 
 const now = "2026-09-18T00:00:00Z";
+const clockReader = (store) =>
+  createFunctionStoreView(store, {
+    sessionId: "s",
+    pluginId: "world-time",
+    runtimeId: "world-time/context",
+    turnId: "test",
+  });
 async function fixture({ withReader = false } = {}) {
   const store = createMemoryStore();
   await store.createSession({
@@ -191,58 +197,12 @@ describe("world-time pipeline", () => {
     });
     const restored = createMemoryStore();
     await replaceSessionFromCheckpoint(restored, checkpoint);
-    expect(
-      (
-        await loadTime(
-          createTrustedHandlerStore(
-            restored,
-            {
-              sessionId: "s",
-              pluginId: "world-time",
-              runtimeId: "world-time/context",
-              turnId: "test",
-            },
-            [],
-          ),
-          "en",
-        )
-      ).tick,
-    ).toBe(value.tick);
+    expect((await loadTime(clockReader(restored), "en")).tick).toBe(value.tick);
     await commit(await run("next-turn"));
-    expect(
-      (
-        await loadTime(
-          createTrustedHandlerStore(
-            restored,
-            {
-              sessionId: "s",
-              pluginId: "world-time",
-              runtimeId: "world-time/context",
-              turnId: "test",
-            },
-            [],
-          ),
-          "en",
-        )
-      ).tick,
-    ).toBe(value.tick);
-    expect(
-      (
-        await loadTime(
-          createTrustedHandlerStore(
-            store,
-            {
-              sessionId: "s",
-              pluginId: "world-time",
-              runtimeId: "world-time/context",
-              turnId: "test",
-            },
-            [],
-          ),
-          "en",
-        )
-      ).tick,
-    ).toBe(value.tick + 60);
+    expect((await loadTime(clockReader(restored), "en")).tick).toBe(value.tick);
+    expect((await loadTime(clockReader(store), "en")).tick).toBe(
+      value.tick + 60,
+    );
   });
   it("gives a same-stage reader this turn's settled time, not the time the turn started at", async () => {
     const { run, commit, readerHandler } = await fixture({ withReader: true });
@@ -326,19 +286,7 @@ describe("world-time pipeline", () => {
     ctx.inputSlots = {
       currentTime: {
         cardinality: "one",
-        value: await loadTime(
-          createTrustedHandlerStore(
-            store,
-            {
-              sessionId: "s",
-              pluginId: "world-time",
-              runtimeId: "world-time/context",
-              turnId: "test",
-            },
-            [],
-          ),
-          "en",
-        ),
+        value: await loadTime(clockReader(store), "en"),
       },
       narrative: { cardinality: "one", value: "A short conversation." },
     };

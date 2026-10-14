@@ -352,9 +352,9 @@ describe("callLLMWithRetry", () => {
     // Arrange — cap 1 with the slot held, so the call must queue.
     const { setLLMSlotCapForTests, acquireLLMSlot } =
       await import("@covel/shared");
+    vi.useFakeTimers();
     setLLMSlotCapForTests(1);
     const holder = await acquireLLMSlot();
-    setTimeout(() => holder.release(), 40);
     const llm = createScriptedLLM([
       { kind: "ok", response: okResponse("hello") },
     ]);
@@ -364,7 +364,7 @@ describe("callLLMWithRetry", () => {
 
     // Act
     try {
-      const res = await callLLMWithRetry({
+      const pending = callLLMWithRetry({
         llm: throughGateway(llm),
         messages: baseMessages,
         policy,
@@ -372,17 +372,25 @@ describe("callLLMWithRetry", () => {
         onQueueWait: (ms) => waits.push(ms),
         emitter,
       });
+      // Flush admission before advancing the clock, so gateway setup time
+      // cannot consume part of a real timer's intended queue wait.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(llm.calls).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(40);
+      holder.release();
+      const res = await pending;
 
       // Assert — the queued call succeeded and reported its wait upward.
       expect(res.content).toBe("hello");
-      expect(waits).toHaveLength(1);
-      expect(waits[0]).toBeGreaterThanOrEqual(30);
+      expect(waits).toEqual([40]);
       expect(
         emitter.events.find((event) => event.type === "llm.calling")?.payload
           .queueWaitMs,
       ).toBe(waits[0]);
     } finally {
+      holder.release();
       setLLMSlotCapForTests(undefined);
+      vi.useRealTimers();
     }
   });
 

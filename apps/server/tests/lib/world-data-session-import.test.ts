@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { Hono } from "hono";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import {
   createPluginRegistry,
@@ -23,6 +24,9 @@ import {
 } from "../../src/world-data/session-import.js";
 import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
 import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
+import { sessionRoutes } from "../../src/routes/api/session.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { conventionsOfPlugins } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
@@ -204,7 +208,7 @@ async function builtinPluginRegistry() {
         runtimeCount: manifests.length,
       },
       rootPath: discovery.rootPath,
-
+      source: "builtin",
       manifests,
       packageManifest,
       loadedRuntimes: new Map(),
@@ -290,7 +294,7 @@ describe("world data session importer", () => {
   });
 
   it.each(["emberback", "haruka-academy", "lantern-barrow", "mistport"])(
-    "starts %s with the narrative-only pack",
+    "starts %s with the narrative-only pack and only the narrator active",
     async (worldId) => {
       const registry = await builtinPluginRegistry();
       const pack = BUILTIN_PLUGIN_PACKS.find(
@@ -300,17 +304,69 @@ describe("world data session importer", () => {
         excluded: pack.excluded,
         authorized: [...registry.getAll().keys()],
       }).active;
-      expect(activePlugins).toContain("narrator");
+      expect(pack.requested).toEqual(["narrator"]);
+      expect(pack.excluded).toContain("world-init");
+      expect(activePlugins).toEqual(["narrator"]);
+      const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
+      const world = await loadSingleWorld(path.join(worldsDir, worldId));
+      if (!world) throw new Error(`Bundled world ${worldId} is missing`);
       const result = await preflightWorldDataForSession({
+        world,
         sessionId: "preview",
         worldId,
-        worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+        worldsDirs: [worldsDir],
         now: NOW,
         preflight: { registry, activePlugins },
       });
       expect(
         result.diagnostics.filter((item) => item.level === "error"),
       ).toEqual([]);
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          level: "warning",
+          code: "dimension-provider-missing",
+        }),
+      );
+
+      // Exercise session creation too. Explicitly turn off world dependencies
+      // as well, so even a world that requires dice starts with narration only.
+      const store = createMemoryStore();
+      await store.createWorld(world);
+      const sessionLock = createInProcessSessionLock();
+      const mediaStore = createMemoryMediaStore();
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        c.set("store", store);
+        c.set("pluginRegistry", registry);
+        c.set("sessionLock", sessionLock);
+        c.set("worldsDirs", [worldsDir]);
+        c.set("mediaStore", mediaStore);
+        await next();
+      });
+      app.route("/api/sessions", sessionRoutes);
+      const response = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "narrative-only",
+          worldId,
+          plugins: pack.requested,
+          excludedPlugins: [...registry.getAll().keys()].filter(
+            (id) => !pack.requested.includes(id),
+          ),
+        }),
+      });
+      expect(response.status, await response.clone().text()).toBe(201);
+      expect(await response.json()).toMatchObject({
+        activePlugins: ["narrator"],
+        phase: "playing",
+        setupRuntimes: {},
+        ignoredDimensions: expect.arrayContaining([expect.any(String)]),
+      });
+      expect((await store.getSession("narrative-only"))?.activePlugins).toEqual(
+        ["narrator"],
+      );
+      await store.close();
     },
   );
 

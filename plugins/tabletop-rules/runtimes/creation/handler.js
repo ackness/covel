@@ -1,8 +1,5 @@
-import {
-  creationRules,
-  validateAllocation,
-  translate,
-} from "../../lib/rules.js";
+import { translate } from "@covel/plugin-handlers-utils";
+import { creationRules, validateAllocation } from "../../lib/rules.js";
 
 export default async function (ctx) {
   const session = await ctx.store.getSession();

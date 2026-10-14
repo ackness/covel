@@ -35,6 +35,7 @@ import {
   loadPluginEntryDefinition,
   pluginDeclarations,
   loadPluginDefinition,
+  provideHostModules,
   trackReloadGeneration,
   type PluginEntryDefinition,
   type ParsedRuntimeMd,
@@ -322,6 +323,7 @@ export async function createBootstrapPluginEntries(
           if (!fsSync.existsSync(fullPath)) {
             throw new Error(`entry file not found: ${entryPath}`);
           }
+          provideHostModules(definition.pluginRoot);
           const url = pathToFileURL(fullPath);
           if (generation) url.searchParams.set("generation", generation);
           const mod = await import(url.href);

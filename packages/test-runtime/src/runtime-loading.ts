@@ -29,6 +29,7 @@ import {
   type LoadedRuntime,
   type PluginDiscoveryResult,
   type PluginRegistry,
+  provideHostModules,
 } from "@covel/plugin-loader";
 import {
   ToolRegistry,
@@ -516,6 +517,7 @@ export async function loadEntryTools(
         throw new Error(`entry path escapes plugin root: ${entryPath}`);
       }
 
+      provideHostModules(discovery.rootPath);
       const mod = await import(pathToFileURL(realPath).href);
       const factory = mod.default;
       if (typeof factory !== "function") {

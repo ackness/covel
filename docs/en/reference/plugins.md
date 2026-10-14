@@ -233,6 +233,12 @@ An agent's guard runs before the model is called.
 
 When the runtime needs to give up its work for this turn, return the smallest output the contract allows. For example, when `story-events/plot` is off, return an empty plan, `{ skip: true, events: [] }`.
 
+A guard gets the same `ctx` as a function handler, and a bundled plugin gets the same as a community one:
+
+- It has `ctx.inputs` (this execution's input bindings), `ctx.world`, `ctx.store`, `ctx.pluginData`, `ctx.recursiveCall`, and the other helpers.
+- Write through `ctx.pluginData`, or attach proposals to the skip result with `withPendingProposals`. These writes commit only when the guard skips; otherwise they are dropped, and the model's run decides what to write.
+- Once the guard returns or times out, `ctx.signal` is aborted and all of these stop working.
+
 ### Runtimes that hide content (`io.concealed`)
 
 Use `io.concealed: true` for runtimes that handle hidden content, such as an agent that plans hidden events in the story.
@@ -506,7 +512,7 @@ An agent's side effects come only from its tools. What the model can write is de
 | `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `interval` also count by it. |
 | `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                              |
 | `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                   |
-| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`. An agent guard has no `ctx.execution`                                                                                                                                     |
+| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                         |
 | `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                |
 | `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                  |
 
@@ -780,7 +786,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
 - The resolver still checks the world's `requires` on its own. Do not treat `requested` as a required item that cannot be canceled.
 - A gameplay pack can have `excluded`: choosing the pack turns those plugins off, `kind: core` ones included, and the player can turn them back on. Switching to the next pack lifts only the exclusions the previous pack added; the player's own exclusions stay. The exclusions of the pack the world selects at the start apply from the beginning. A plugin that is not installed does not appear in `excluded`.
-- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected), the plugin that provides `world.dimensions@1`, and the plugins that these and the world's `requires` pull in. Every other core plugin and every plugin the world `requested` is excluded, and the pack highlight is cleared.
+- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected) and the plugins that these and the world's `requires` pull in. It adds no extra requirement for a `world.dimensions@1` provider. Every other core plugin and every plugin the world `requested` is excluded, and the pack highlight is cleared.
 
 **A save keeps the set the player confirmed.**
 

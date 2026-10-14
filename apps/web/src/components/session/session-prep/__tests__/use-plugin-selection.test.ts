@@ -673,13 +673,18 @@ describe("usePluginSelection", () => {
   });
 
   it.each(["core", "plugin"] as const)(
-    "goes back to the narrative plugins and what they and the world need with a %s dimension provider",
+    "keeps only narrative and declared dependencies, dropping an unneeded %s dimension provider",
     async (kind) => {
       const story = [
         { outputKind: "story" },
       ] as unknown as PluginSummary["runtimes"];
       const plugins = [
-        plugin("teller", { kind: "core", runtimes: story }),
+        plugin("teller", {
+          kind: "core",
+          runtimes: story,
+          requires: ["story-support@1"],
+        }),
+        plugin("supporter", { provides: ["story-support@1"] }),
         plugin("helper", { kind: "core" }),
         plugin("keeper", { kind: "core", provides: ["need@1"] }),
         plugin("dims", { kind, provides: ["world.dimensions@1"] }),
@@ -711,18 +716,63 @@ describe("usePluginSelection", () => {
       );
       await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
       expect(result.current.selectedPluginIdSet).toEqual(
-        new Set(["teller", "helper", "keeper", "dims", "world-pick", "extra"]),
+        new Set([
+          "teller",
+          "supporter",
+          "helper",
+          "keeper",
+          "dims",
+          "world-pick",
+          "extra",
+        ]),
       );
 
       act(() => result.current.resetToMinimal());
 
       expect(result.current.selectedPluginIdSet).toEqual(
-        new Set(["teller", "keeper", "dims"]),
+        new Set(["teller", "supporter", "keeper"]),
       );
       expect(new Set(result.current.excludedPluginIds)).toEqual(
-        new Set(["helper", "world-pick"]),
+        new Set(["helper", "world-pick", ...(kind === "core" ? ["dims"] : [])]),
       );
       expect(result.current.activePluginPack).toBeNull();
+      expect(result.current.unmetRequirements).toEqual([]);
+    },
+  );
+
+  it.each(["story", "world"])(
+    "retains a dimension provider explicitly required by the %s in the minimal set",
+    async (requirer) => {
+      const contract = "world.dimensions@1";
+      const plugins = [
+        plugin("teller", {
+          kind: "core",
+          runtimes: [
+            { outputKind: "story" },
+          ] as unknown as PluginSummary["runtimes"],
+          requires: requirer === "story" ? [contract] : [],
+        }),
+        plugin("dims", { kind: "core", provides: [contract] }),
+        plugin("extra", { kind: "core" }),
+      ];
+      vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+        ...selectionPlan([]),
+        policy: {
+          ...selectionPlan([]).policy,
+          requires: requirer === "world" ? [contract] : [],
+        },
+      });
+      const { result } = renderHook(() =>
+        usePluginSelection(PLAN.worldId, plugins, prepareWorldForServer),
+      );
+      await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+
+      act(() => result.current.resetToMinimal());
+
+      expect(result.current.selectedPluginIdSet).toEqual(
+        new Set(["teller", "dims"]),
+      );
+      expect(result.current.excludedPluginIds).toEqual(["extra"]);
       expect(result.current.unmetRequirements).toEqual([]);
     },
   );
