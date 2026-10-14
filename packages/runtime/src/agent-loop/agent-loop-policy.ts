@@ -51,11 +51,12 @@ export interface AgentLoopPolicy {
    */
   readonly runtimeModelOverride: string | undefined;
   /**
-   * Stream only for story-output runtimes. Plugin runtimes' raw LLM text is
-   * reasoning chatter that feeds into structured tool calls — it should never
-   * reach the user's narrative feed. Story runtimes that also declare tools
-   * still stream; the request layer falls back to generate() when the
-   * provider cannot parse tool calls out of stream chunks.
+   * Stream whenever the LLM client can stream (`deps.llm.stream`), for every
+   * runtime kind. Only story-output runtimes forward the streamed text to the
+   * player's narrative feed: a plugin runtime's raw text is reasoning chatter
+   * that feeds into structured tool calls, so it is consumed without being
+   * shown. The request layer falls back to generate() when the provider
+   * cannot parse tool calls out of stream chunks.
    */
   readonly useStreaming: boolean;
   /**

@@ -20,6 +20,7 @@ export type SqliteSessions = Pick<
 export function createSqliteSessions(
   sqlite: SqliteConnection,
   db: SqliteDb,
+  vectorAvailable: boolean,
 ): SqliteSessions {
   return {
     ...createSqlSessionRecords({
@@ -30,7 +31,7 @@ export function createSqliteSessions(
     }),
 
     async deleteSession(id: string): Promise<void> {
-      deleteSqliteSessionCascade(sqlite, id);
+      deleteSqliteSessionCascade(sqlite, id, vectorAvailable);
     },
   };
 }

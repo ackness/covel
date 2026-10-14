@@ -1,13 +1,16 @@
 /**
  * Approval pipeline — checks tool calls against permission rules.
  *
- * Current rules (set in bootstrap.ts):
+ * The host's rules are built by `createDefaultToolApprovalPipeline` below and
+ * used by the server's tool bootstrap (apps/server/src/routes/api/bootstrap/tools.ts):
  *   - builtin:*     → allow (framework-owned tools)
- *   - local:*       → allow (plugin-declared tools from trusted sources)
- *   - third-party:* → deny  (community plugins, not yet implemented)
+ *   - local:*       → allow (tools of installed plugins that the loader found)
+ *   - third-party:* → deny  (no tool is classified this way today: the registry
+ *                            only yields builtin or local)
  *
- * Community-plugin approval persistence is not implemented yet; denied calls
- * remain denied until that flow is added.
+ * A community plugin's server code is not loaded until the player approves it,
+ * through the plugin-RPC approval gate (rpc-approval.ts) and the approvals
+ * route. Its tools are then classified as local:* like any plugin tool.
  */
 
 import type { ApprovalRequest } from "@covel/shared";

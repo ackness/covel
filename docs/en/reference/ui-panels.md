@@ -539,6 +539,8 @@ The original keys can still be read directly with `$state: "/someKey"`. Both way
 
 **Naming convention**: a group name shared across plugins works like a CSS class name. Authors add their own namespace prefix to avoid conflicts, for example `core.character` or `myorg.combat`. The framework does not add prefixes automatically.
 
+When several plugins share a group, provider switch buttons show each plugin's localized `displayName`, falling back to its ID when no name is available. Every group name follows this rule; a panel's `label` / `shortLabel` does not change the provider name.
+
 **Implementation**: `aggregateSpecsIntoGroups()` in `apps/web/src/lib/plugin-panel-tabs.ts`. It is a pure function and can be tested on its own (see the Playwright smoke test).
 
 ### Ordering
@@ -804,6 +806,7 @@ When the components in the catalog are not enough, a plugin can bring its own HT
 - **What the component can do.** Through the message bridge it receives the current style scheme (`theme` and the `--covel-*` CSS variables), and it can call actions such as `emitEvent` and `draftMessage`.
 - **Enlarging.** Every plugin panel in the right-side panel can be "enlarged" to show in a large dialog.
 - **Showing on the stage.** A `ui.right` spec can declare `surfaces: ["panel", "stage"]`. When it is not written, it shows only in the right-side panel.
+- **Player confirmation and loading failures.** A stage plugin panel’s `sendMessage` fills the input for the player to edit and send. The stage reuses the session’s loaded panel definitions. If loading fails, it shows a message and Retry while the player can still use the input.
 - **Isolation.** The HTML sits in a sandboxed iframe with two layers of opaque origin:
   - The outer layer is the static document `/plugin-frame.html` in the web build. It is loaded by URL, so it has its own CSP and does not inherit the main page's policy (the main page does not allow inline scripts). Its CSP stops the plugin document from navigating itself to a network address, and the port is handed over only once.
   - The inner layer is the plugin's HTML. It keeps inline scripts and the `window.covel` data / action bridge. The structure of the component code and of the business state belongs to the plugin.

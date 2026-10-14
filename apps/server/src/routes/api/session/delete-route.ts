@@ -68,6 +68,7 @@ export async function deleteSessionWithLifecycle(
     c.get("uiSlots")?.clearSession(id);
     c.get("rpcApprovalGate")?.revoke(id);
     c.get("clearSessionToolOverrides")?.(id);
+    c.get("clearCompactionFailures")?.(id);
     c.get("clearBrowserWorkspace")?.(id);
   };
 

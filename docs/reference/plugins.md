@@ -41,6 +41,8 @@ example/
 - 两种布局不能混用。子 runtime 不能声明包级贡献。
 - 只有 entry、UI 或扩展的包可以一个 runtime 都没有。
 
+`runtimes/` 的每个实际子目录都必须有大小写准确的 `RUNTIME.md`；共享代码放在插件根目录的 `lib/`。缺少清单时，加载器报告路径并继续加载包内其他 runtime；静态校验和安装拒绝该布局。runtime 子目录的符号链接不参与发现或本地化扫描。
+
 所有 `PLUGIN.md`、`RUNTIME.md` 和它们的语言变体，开头必须是用单独一行 `---` 包起来的普通 YAML。`---javascript`、`---js` 这类会执行代码的写法在解析前就被拒绝，所以安装、手动放入目录和重载都不能借元数据运行代码。
 
 字段的完整清单由 Zod schema 生成，不手工维护：
@@ -201,6 +203,7 @@ homepage: https://example.com/tidefall
 - **Function runtime** 必须声明 `function.handler`，这个模块必须默认导出一个函数，不能同时配置 `agent`。
 - **Agent runtime** 不能配置 `function`。
 - `function.model` 说明 handler 里的 `ctx.gateway` 调用使用哪个模型 slot（如 `memory`）。后台（detached）任务在领取前用它判断凭证是否就绪。不声明时按系统默认 preset 判断，可能漏掉请求级的 slot 绑定，任务就会一直排队，直到 `maxQueueMs` 超时。
+- `agent.model` 和 `function.model` 只写用途（slot）的名字。插件不能指定服务商、模型、地址或协议：这些由玩家的模型设置决定（见[实际选择优先级](./slots.md#实际选择优先级)）。插件目录里的 `llm.toml` 不会被读取。
 
 ### Agent 能用哪些工具
 
@@ -505,7 +508,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 内核把记录写进提示词时会去掉它们：
 
 - `io.selfData` 的每一行是 `- <key> | <值的 JSON>`（`summary` 格式截断到 200 字符）。不带行的 `updatedAt`，值里和 key 相同的 `id` 也不重复。
-- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及没有 `_text` 的工具结果。
+- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`<runtime-activation>` 的载荷、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及没有 `_text` 的工具结果。
 
 属性名和取值都符合才会被去掉：
 
@@ -520,7 +523,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 > [!WARNING]
 > 这个判断只看名字和取值的形状，分不出剧情里的时间。故事内的时刻如果存成 `diedAt: "1943-06-01T08:00:00Z"`（名字以 `At` 结尾或叫 `timestamp`，取值是 ISO 时间），模型同样看不到它，运行时也没有任何报错。要给模型看的剧情时间请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间（`"1943 年 6 月 1 日清晨"`）。世界包里的数据和插件自己存的数据都适用。世界包里的这类字段，`pnpm validate:world` 会给出 `model-hidden-field` 提醒；插件运行时自己存的数据不在检查范围内。
 
-代码读到的记录不变：`ctx.inputs`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。
+代码读到的记录不变：`ctx.inputs`、`ctx.activation`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。
 
 - 插件自己拼提示词（例如直接调用 `ctx.gateway`）时，用 `@covel/plugin-handlers-utils` 导出的 `modelFacingJson(value)` 做同样的事。
 - 工具要把一个不透明的句柄交给模型时，写在 `_text` 里。
@@ -731,6 +734,8 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 自动和定时的 runtime 必须有 stage。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+
+目录级检查还会在插件根目录有 `llm.toml` 时给出提醒：这个文件不会被读取，不影响通过。
 
 这些检查不执行插件代码，不能代替启动时的注册一致性检查。
 

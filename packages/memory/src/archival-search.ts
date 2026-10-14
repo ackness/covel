@@ -63,7 +63,7 @@ export function archivalResult(
   score: number,
 ): ArchivalSearchResult {
   return {
-    key: item.displayKey,
+    ...(item.displayKey ? { key: item.displayKey } : {}),
     content: query === undefined ? item.text : searchExcerpt(item.text, query),
     score,
     source: item.source,

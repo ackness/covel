@@ -149,11 +149,18 @@ If reading `settings.json` / `covel:settings` fails:
 
 ### Docker Compose
 
+There are two Compose files for self-hosting. Both are personal instances bound to loopback:
+
+| Backend          | File                               | Commands                                                                                             |
+| ---------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| SQLite (default) | `docker/docker-compose.sqlite.yml` | `pnpm docker:build` / `docker:up` / `docker:down` / `docker:down-all` / `docker:logs`                |
+| PostgreSQL       | `docker/docker-compose.yml`        | `pnpm docker:pg:build` / `docker:pg:up` / `docker:pg:down` / `docker:pg:down-all` / `docker:pg:logs` |
+
 Preparation:
 
 1. Copy `.env.example` to `.env`, and copy `llm.toml.example` to `llm.toml`.
-2. If you only run `pnpm db:up`, you need only the PostgreSQL settings (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`).
-3. If you run the whole application, you also need to fill in `POSTGRES_PASSWORD` and `COVEL_MEDIA_TOKEN_SECRET`.
+2. Set `COVEL_MEDIA_TOKEN_SECRET` in `.env` (generate it with `openssl rand -hex 32`). Without it, a production app fails when it issues its first media URL, the SQLite stack refuses to start without it. The PostgreSQL stack does not check it, so that `pnpm db:up` can start only the database; set it yourself.
+3. For PostgreSQL, uncomment the PostgreSQL block of `.env.example` and set `POSTGRES_PASSWORD`. If you only run `pnpm db:up`, you need only the PostgreSQL settings (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`).
 4. The server's provider keys can go in the optional `.env.llm`.
 
 Then:
@@ -163,17 +170,34 @@ pnpm docker:build
 pnpm docker:logs
 ```
 
-Fixed behavior of Compose:
+For PostgreSQL:
+
+```bash
+pnpm docker:pg:build
+pnpm docker:pg:logs
+```
+
+Behavior that both Compose files share:
 
 - It uses `DEPLOYMENT_TIER=self`. The host binds only to the loopback address by default, and the same-origin interface does not need an operator token or CORS configuration.
-- Inside the app container, `SERVER_PORT` is fixed at `3001`. The host entry point is set by `APP_BIND_IP` (default `127.0.0.1`) and `APP_PORT` (default `3001`).
+- Inside the app container, `SERVER_PORT` is fixed at `3001`. The host entry point is set by `APP_BIND_IP` (default `127.0.0.1`) and `APP_PORT` (default `3001`). Both stacks use the same default port, so do not start them together.
 - The built-in health check reaches `http://127.0.0.1:3001/api/health` inside the container.
-- The database address inside the container is fixed at `postgres:5432`. It does not depend on the host's `POSTGRES_PORT`.
 - The root `llm.toml` is mounted read-only at `/app/llm.toml`. If the file is missing, Compose reports an error.
-- The `appdata` volume is mounted at `/home/node/.covel`, and it stores the user's worlds and plugins. The `pgdata18` volume stores the database.
+- The `appdata` volume is mounted at `/home/node/.covel`, and it stores the user's worlds and plugins.
+
+The SQLite stack:
+
+- It has one app container and no database service. `STORE_BACKEND=sqlite`, `SQLITE_PATH=/home/node/.covel/data/covel.db`, and `MEDIA_ROOT=/home/node/.covel/data/media` are set in the Compose file, and they override variables of the same name that `.env` holds for runs from source. The database and the media are therefore both in the `appdata` volume.
+- A folder of the image that has no volume (for example `/app/apps/server/data`) is lost when the container is recreated, so the database must not be placed there.
+- The project name is `covel-sqlite` and the container name is `covel-sqlite-app`.
+
+The PostgreSQL stack:
+
+- The database address inside the container is fixed at `postgres:5432`. It does not depend on the host's `POSTGRES_PORT`.
+- The `pgdata18` volume stores the database.
 
 > [!CAUTION]
-> `pnpm docker:down` keeps both volumes. **`pnpm docker:down-all` deletes both volumes and the data in them.**
+> `docker:down` / `docker:pg:down` keep the volumes. **`docker:down-all` deletes the SQLite stack's `appdata` volume, which means the database and all the data in it; `docker:pg:down-all` deletes both volumes of the PostgreSQL stack and the data in them.**
 
 Before an upgrade, if the old container already has worlds or plugins installed, export `/home/node/.covel` first, and then import it into the new volume. New volumes do not automatically move files that were written in the old container's writable layer.
 
@@ -258,7 +282,7 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `SERVE_STATIC` / `STATIC_DIR`   | `false` / `./web-dist`   | Lets the server host the web front end in the given folder                                                                                                                                                                                               |
 | `CORS_ORIGIN`                   | —                        | List of allowed HTTP origins, separated by commas                                                                                                                                                                                                        |
 | `ENABLE_DEBUG_PAGE`             | `false`                  | Turns on debug and internal routes in production                                                                                                                                                                                                         |
-| `RATE_LIMIT_RPM`                | `60`                     | Default request quota per IP address per minute                                                                                                                                                                                                          |
+| `RATE_LIMIT_RPM`                | `60`                     | Request quota per IP address per minute, used only by `GET /api/events/stream`; other routes set their quota in their own code                                                                                                                           |
 | `TRUSTED_PROXY_IPS`             | —                        | List of trusted proxy addresses. Only requests from these addresses are trusted to carry forwarded IP headers                                                                                                                                            |
 | `COVEL_MEDIA_TOKEN_SECRET`      | Required in production   | Key used to sign short-lived access links for media. If it is not set in development, a random one is generated at each start                                                                                                                            |
 | `COVEL_MEDIA_CLEANUP_ENABLED`   | `false`                  | Turns on `POST /api/media/cleanup`                                                                                                                                                                                                                       |
@@ -347,7 +371,7 @@ Only the Electron packaging tools and the desktop packaging scripts read these v
 
 - `*_API_KEY` names are listed by code dynamically. The registry lists only common examples.
 - `*_BASE_URL` has an effect only when the active `llm.toml` refers to it with `${VAR}`.
-- `APP_BIND_IP` is read only by `docker/docker-compose.yml`.
+- `APP_BIND_IP` is read only by `docker/docker-compose.yml` and `docker/docker-compose.sqlite.yml`.
 - `COVEL_MEMORY_V1`, `COVEL_STORY_BASE_URL`, `COVEL_PLUGIN_BASE_URL`, `VITE_API_URL`, and `LIVE_IMAGE_ENABLED` are not read by any code. You can delete them from your local config.
 
 ## Migration rules
@@ -393,7 +417,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 **`COVEL_BIND_HOST`**
 
 - The default `127.0.0.1` means local and desktop deployments listen only on the loopback interface, and cannot be reached over the network.
-- A container or multi-pod deployment must set `COVEL_BIND_HOST=0.0.0.0` explicitly (`docker/docker-compose.yml` already does). Before listening publicly, check `DEPLOYMENT_TIER` and the authentication settings.
+- A container or multi-pod deployment must set `COVEL_BIND_HOST=0.0.0.0` explicitly (both Docker Compose files already do). Before listening publicly, check `DEPLOYMENT_TIER` and the authentication settings.
 
 **`TRUSTED_PROXY_IPS`**
 

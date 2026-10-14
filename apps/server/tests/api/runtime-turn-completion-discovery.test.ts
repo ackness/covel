@@ -114,7 +114,7 @@ describe("runtime turnCompletion discovery", () => {
   });
 
   it("advertises the supported policy values", () => {
-    const capabilities = buildFrameworkCapabilities().framework as {
+    const capabilities = buildFrameworkCapabilities([]).framework as {
       pluginManifest: { turnCompletionModes: string[] };
     };
     expect(capabilities.pluginManifest.turnCompletionModes).toEqual([

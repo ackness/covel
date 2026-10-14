@@ -6,6 +6,10 @@ import { SettingWidget } from "../widgets/index.js";
 
 const state = vi.hoisted(() => ({ saved: "sk-saved-secret", set: vi.fn() }));
 vi.mock("../use-settings.js", () => ({
+  useSettingsStore: () => ({
+    isHydrated: () => true,
+    subscribePersistenceErrors: () => () => {},
+  }),
   useSetting: () => [state.saved, state.set],
   useSettingOverride: () => [false, vi.fn()],
   useServerSettingState: () => undefined,

@@ -401,7 +401,7 @@ The built-in `narrator` and `chat-mode-narrator` do this.
 **Bookkeeping fields do not enter the prompt.** Records that the kernel writes into the prompt do not carry bookkeeping fields:
 
 - Rows of `io.selfData` are `- <key> | <JSON of the value>`. A row has no `updatedAt`. An `id` in the value that is the same as the key is not repeated.
-- In these rows, in the values of `<runtime-inputs>` / `<runtime-exports>`, and in `{{ world.schema }}`, UUID-type IDs, ISO times, and `sessionId` are removed.
+- In these rows, in the values of `<runtime-inputs>` / `<runtime-exports>`, in the payload of `<runtime-activation>`, and in `{{ world.schema }}`, UUID-type IDs, ISO times, and `sessionId` are removed.
 - The player table and NPC fields of `characterSheetSegments()`, and the fields of `{{ characters.npcs }}`, also use the same projection recursively before serialization.
 - Readable semantic IDs and story fields such as `date` are kept.
 

@@ -29,7 +29,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import YAML from "yaml";
+import { readPlainYamlFrontmatter } from "../../packages/plugin-loader/src/plain-yaml-frontmatter.ts";
+import { runtimeDirectoryDiagnostics } from "../../packages/plugin-loader/src/runtime-directory.ts";
 import { promptStyleFindings, structureDifferences } from "./prompt-style.mjs";
 
 /** `zh`, `zh-CN`, `zh-Hans`; not `zh-Hant` or `zh-TW`, which read English. */
@@ -51,11 +52,7 @@ function isChinese(text) {
 
 function parsePromptFile(file) {
   const text = readFileSync(file, "utf8");
-  // The block may be empty; try that reading first so a `---` rule further
-  // down the body is never taken for the closing fence.
-  const match = /^---\n(?:([\s\S]*?)\n)??---(?:\n|$)([\s\S]*)$/.exec(text);
-  if (!match) return { data: {}, body: text };
-  return { data: YAML.parse(match[1] ?? "") ?? {}, body: match[2] };
+  return readPlainYamlFrontmatter(text);
 }
 
 function digest(text) {
@@ -75,13 +72,22 @@ function staticPrompts(data) {
 }
 
 /** Every prompt file pair of one plugin: the root file and each runtime. */
-function promptDirs(pluginRoot) {
+function promptDirs(pluginRoot, problems) {
   const dirs = [{ dir: pluginRoot, stem: "PLUGIN" }];
   const runtimes = path.join(pluginRoot, "runtimes");
   if (existsSync(runtimes))
-    for (const name of readdirSync(runtimes).sort()) {
-      const dir = path.join(runtimes, name);
-      if (statSync(dir).isDirectory()) dirs.push({ dir, stem: "RUNTIME" });
+    for (const entry of readdirSync(runtimes, { withFileTypes: true }).sort(
+      (a, b) => a.name.localeCompare(b.name),
+    )) {
+      if (!entry.isDirectory()) continue;
+      const dir = path.join(runtimes, entry.name);
+      const files = readdirSync(dir, { withFileTypes: true })
+        .filter((file) => file.isFile() || file.isSymbolicLink())
+        .map((file) => file.name);
+      const diagnostic = runtimeDirectoryDiagnostics(dir, files);
+      if (diagnostic.error || diagnostic.warning)
+        problems.push(diagnostic.error ?? diagnostic.warning);
+      if (files.includes("RUNTIME.md")) dirs.push({ dir, stem: "RUNTIME" });
     }
   return dirs.filter(({ dir, stem }) =>
     existsSync(path.join(dir, `${stem}.md`)),
@@ -156,23 +162,27 @@ export function checkPromptVariants({
     .filter((dir) => statSync(dir).isDirectory())
     .sort();
 
+  const problems = [];
+  const directories = new Map(
+    plugins.map((plugin) => [plugin, promptDirs(plugin, problems)]),
+  );
+
   // Tool names any bundled prompt may mention, plus the builtin completion tool.
   const knownTools = new Set(["runtime-done"]);
   for (const plugin of plugins)
-    for (const { dir, stem } of promptDirs(plugin))
+    for (const { dir, stem } of directories.get(plugin))
       for (const name of toolNames(
         parsePromptFile(path.join(dir, `${stem}.md`)).data,
       ))
         knownTools.add(name);
 
-  const problems = [];
   // Style of the English contract zone, and structure the two languages do
   // not share. They do not fail the check: see docs/plugins/prompt-style.md.
   const warnings = [];
   const pairs = {};
 
   for (const plugin of plugins) {
-    for (const { dir, stem } of promptDirs(plugin)) {
+    for (const { dir, stem } of directories.get(plugin)) {
       const canonicalPath = path.join(dir, `${stem}.md`);
       const label = path.relative(labelRoot, canonicalPath);
       const canonical = parsePromptFile(canonicalPath);

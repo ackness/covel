@@ -1387,7 +1387,7 @@ fork 和社区插件的授权：
 
 各端点的补充说明：
 
-- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。
+- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
 - `GET /api/worlds/:id/plugin-plan`：服务端解析世界的插件策略、组合包和默认选择。
   - 各个 `requested` 和 `defaultPluginIds` 只含已安装的插件。
   - 世界请求了、但宿主没装的插件列在 `missing: [{ pluginId, packId? }]`。
@@ -2475,7 +2475,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 **“能不能跑”是怎么判断的:**
 
 - 判断与执行使用同一套模型解析和环境密钥来源校验。
-- 使用来源请求的服务时，两者都按那个请求的模型配置（槽位绑定、自定义预设、插件 `llm.toml` 的模型目标）和凭据解析。
+- 使用来源请求的服务时，两者都按那个请求的模型配置（槽位绑定、自定义预设）和凭据解析。
 - 使用服务端 adapter 时，只按服务端配置解析，不受碰巧唤醒 worker 的其他请求影响。
 - 它无法静态证明一个 function handler 会不会调用模型，也不会自动放行没有密钥的本地端点。
 - 嵌入式宿主或测试可以通过 `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` 显式确认自己的 adapter 可用。这个确认不改变运行时授权、会话身份校验或提交校验。

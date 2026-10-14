@@ -1387,7 +1387,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 
 Notes on each endpoint:
 
-- `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`.
+- `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
 - `GET /api/worlds/:id/plugin-plan`: the server resolves the world's plugin policy, the packs, and the default selection.
   - Each `requested` and `defaultPluginIds` list contains only installed plugins.
   - A plugin the world requests but the host does not have is listed in `missing: [{ pluginId, packId? }]`.
@@ -2475,7 +2475,7 @@ This group of endpoints manages the background jobs (`_runtime_jobs`) that the s
 **How "can it run" is decided:**
 
 - The decision and the execution use the same model resolution and the same check of environment key sources.
-- When the source request's service is used, both are resolved with that request's model configuration (slot bindings, custom presets, and the model target in the plugin's `llm.toml`) and its credentials.
+- When the source request's service is used, both are resolved with that request's model configuration (slot bindings and custom presets) and its credentials.
 - When the server adapter is used, it is resolved only with the server configuration. It is not affected by other requests that happen to wake the worker.
 - It cannot prove statically whether a function handler will call a model. It also does not automatically allow a local endpoint that has no key.
 - An embedded host or a test can use `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` to confirm explicitly that its own adapter is available. This confirmation does not change runtime authorization, session identity checks, or commit checks.

@@ -30,7 +30,7 @@ New files are limited to 3 MiB by default. World gallery originals at `worlds/*/
 
 ### PostgreSQL 18 development environment
 
-Create the root `.env` as above and keep `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, and `DATABASE_URL` consistent. Starting only the database does not require the Docker app's operator token:
+SQLite is the default backend, and running from source needs no database service. To use PostgreSQL, create the root `.env` as above, uncomment the "PostgreSQL (optional)" block of `.env.example`, and keep `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, and `DATABASE_URL` consistent. Starting only the database does not require the Docker app's operator token:
 
 ```bash
 pnpm db:up
@@ -41,9 +41,22 @@ On first initialization, wait for the database to become ready before running `d
 
 Compose uses PostgreSQL 18 with pgvector 0.8.6 and stores the database in `pgdata18`. The previous PG17 `pgdata` volume is not mounted, automatically migrated, or deleted.
 
-`pnpm docker:build` builds and starts **both the database and the app**. The app uses the `commercial` configuration and also requires `COVEL_DESKTOP_REST_TOKEN`, `COVEL_MEDIA_TOKEN_SECRET`, and `CORS_ORIGIN` in `.env`, plus the root `llm.toml`. The `appdata` volume persists installed/generated user worlds and plugins; model configuration remains a read-only host mount. See [Docker configuration](./reference/env-registry.md#docker-compose).
+### Docker self-hosting
 
-`pnpm docker:down` stops containers and preserves data. **`pnpm docker:down-all` deletes the current Compose project's `pgdata18` and `appdata`, including the database, user worlds, and plugins**; use it only after backing up and choosing to reset the entire environment. `db:generate` / `db:studio` are PostgreSQL maintenance tools, not automatic database upgrades; see [database maintenance](./reference/env-registry.md#数据库维护命令).
+There are two Compose stacks for self-hosting. Both are personal instances bound to loopback (`DEPLOYMENT_TIER=self`). SQLite is the default and runs a single app container; use the `pg` commands for PostgreSQL. Each stack has its own Compose project and volumes, so they do not touch each other.
+
+| Backend          | Build and start        | Start existing containers | Stop, keep data       | Stop and **delete volumes** | Logs                  |
+| ---------------- | ---------------------- | ------------------------- | --------------------- | --------------------------- | --------------------- |
+| SQLite (default) | `pnpm docker:build`    | `pnpm docker:up`          | `pnpm docker:down`    | `pnpm docker:down-all`      | `pnpm docker:logs`    |
+| PostgreSQL       | `pnpm docker:pg:build` | `pnpm docker:pg:up`       | `pnpm docker:pg:down` | `pnpm docker:pg:down-all`   | `pnpm docker:pg:logs` |
+
+Both need the root `.env` and the root `llm.toml` (the model configuration is a read-only host mount), and `COVEL_MEDIA_TOKEN_SECRET` in `.env` (generate it with `openssl rand -hex 32`; without it a production app cannot issue media URLs; the SQLite stack refuses to start without it, and the PostgreSQL stack does not check it, so set it yourself). The PostgreSQL stack also needs the PostgreSQL block of `.env.example` uncommented and `POSTGRES_PASSWORD` set.
+
+In the SQLite stack the `appdata` volume is mounted at `/home/node/.covel`: the database file `data/covel.db`, the media files, and the installed or generated user worlds and plugins all live in it. In the PostgreSQL stack the database is in the `pgdata18` volume, and `appdata` holds only user worlds and plugins. See [Docker configuration](./reference/env-registry.md#docker-compose).
+
+`docker:down` and `docker:pg:down` stop containers and preserve data. **`docker:down-all` deletes the SQLite stack's `appdata` volume, including the database, user worlds, and plugins; `docker:pg:down-all` deletes the PostgreSQL stack's `pgdata18` and `appdata`**; use them only after backing up and choosing to reset the entire environment.
+
+`db:generate` / `db:studio` are PostgreSQL maintenance tools, not automatic database upgrades; see [database maintenance](./reference/env-registry.md#数据库维护命令).
 
 ### Showcase site demo media
 
