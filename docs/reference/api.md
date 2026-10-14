@@ -1029,6 +1029,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/collection`：响应和 batch 相同。
 
 批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
+
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：
@@ -2233,16 +2234,17 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **响应字段**:
 
-| 字段                   | 类型                                   | 说明                                                                                                                               |
-| ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                 |
-| `locale`               | string                                 | 会话实际的内容语言                                                                                                                 |
-| `requestedLocale`      | string（可选）                         | 只在实际语言与请求不同时出现                                                                                                       |
-| `pluginsWithoutLocale` | string[]（可选）                       | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                            |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | 会话生命周期状态                                                                                                                   |
-| `phase`                | `'setup' \| 'playing'`                 | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing` |
-| `completedPlayerTurns` | number                                 | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                             |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | 每个 setup runtime 的状态。见下表                                                                                                  |
+| 字段                   | 类型                                      | 说明                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ownerToken`           | string                                    | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                                                       |
+| `locale`               | string                                    | 会话实际的内容语言                                                                                                                                                       |
+| `requestedLocale`      | string（可选）                            | 只在实际语言与请求不同时出现                                                                                                                                             |
+| `pluginsWithoutLocale` | string[]（可选）                          | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                                                                  |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]`（可选） | 世界数据里没有导入的部分（warning 和 error），例如只有还在等批准的社区插件接收的数据。游戏界面显示给玩家；见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件) |
+| `status`               | `'active' \| 'paused' \| 'ended'`         | 会话生命周期状态                                                                                                                                                         |
+| `phase`                | `'setup' \| 'playing'`                    | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                       |
+| `completedPlayerTurns` | number                                    | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                   |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`    | 每个 setup runtime 的状态。见下表                                                                                                                                        |
 
 `ownerToken` 什么时候必须携带：
 
@@ -3569,7 +3571,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `eventTopics`：会话解析插件集合时用它保证一个 topic 只有一个声明者。
 - `languages.text`：插件有文字的语言，包括标签、界面文字、代码里的文字，以及翻译目录里的译文。`languages.instructions`：有指令（prompt 正文）的语言。两者都至少包含 `en`。
 - `author.about` 和链接的 `label` 可能是按语言分的 map。
-- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。
+- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。 `tags` 属于包摘要，runtime 摘要不重复提供。
 
 `hostState` 说的是服务端有没有加载这个插件，不是某个会话有没有启用它。这是两种状态，列表不会把前者写成某个会话的 active。
 
@@ -3597,6 +3599,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 注意：
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` 是编译后的执行描述，用来解释执行顺序、输入条件和 detached 行为。作者写的是另一种格式：在 `PLUGIN.md` 里声明包级 `contributes`，在 `RUNTIME.md` 的 `schedule` / `io` / `agent` / `function` 分组里声明执行配置。不要把这里的内部结构当作清单提交。
+- UI 声明在包级 `ui` 字段中，`runtimes[]` 不提供 UI。`GET /api/plugin-flows` 的 runtime 项也不提供 `uiSlots`；UI 声明从插件详情或 `/api/ui-specs` 读取。
 - 动态 key 不在清单里列举。用当前会话的 plugin-data 查询或 `_index` 端点读取。
 - 服务、工具、action、slash command 和 extension 是不同的注册种类，必须分别声明。
 
@@ -3671,6 +3674,15 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 ```
 
 响应里还有 `resolution`：本次求解的完整结果。
+
+会话有世界、并且这次有插件新加入启用集合时，服务端为它们补导入一次世界数据（规则见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件)），响应多一个 `worldData`：
+
+| 字段        | 类型                              | 说明                                           |
+| ----------- | --------------------------------- | ---------------------------------------------- |
+| `receivers` | string[]                          | 第一次收到数据的插件                           |
+| `imported`  | number                            | 写入的条数                                     |
+| `conflicts` | number                            | 因为游戏改过而保持原样的条数                   |
+| `notices`   | `{ level, sourceId?, message }[]` | 按现在启用的插件，世界数据里仍然没有导入的部分 |
 
 规则（启用和禁用相同）：
 
@@ -5361,7 +5373,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 
 它先扫描 `messages`、`plugin_data`、`runtime_outputs`、`trace_events`、`snapshots`、`turn_results`，收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删掉其余的。
 
-每次清理还会释放世界数据导入留下的、创建已满 24 小时的临时引用（`world-data-import:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
+每次清理还会释放世界数据导入、上传或 runtime 写入留下的、创建已满 24 小时的临时引用（`media-pin:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
 
 > [!WARNING]
 > 这个端点默认禁用，必须设置 `COVEL_MEDIA_CLEANUP_ENABLED` 才能用。真正删除还要带确认头。
@@ -5394,7 +5406,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5412,7 +5424,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }

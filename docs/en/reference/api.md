@@ -1029,6 +1029,7 @@ What each endpoint accepts and returns:
 - `POST /api/install/collection`: the response is the same as for batch.
 
 Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
+
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
 `/api/install/world` checks the worldData diagnostics before it writes the world record:
@@ -2233,16 +2234,17 @@ The response is the session record, plus a one-time `ownerToken`.
 
 **Response fields**:
 
-| Field                  | Type                                   | Description                                                                                                                                                                                       |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                  |
-| `locale`               | string                                 | The session's actual content language                                                                                                                                                             |
-| `requestedLocale`      | string (optional)                      | Appears only when the actual language differs from the requested one                                                                                                                              |
-| `pluginsWithoutLocale` | string[] (optional)                    | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                    |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | The session lifecycle status                                                                                                                                                                      |
-| `phase`                | `'setup' \| 'playing'`                 | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done |
-| `completedPlayerTurns` | number                                 | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | The state of each setup runtime. See the table below                                                                                                                                              |
+| Field                  | Type                                         | Description                                                                                                                                                                                                                                                                               |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownerToken`           | string                                       | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                                                                                                          |
+| `locale`               | string                                       | The session's actual content language                                                                                                                                                                                                                                                     |
+| `requestedLocale`      | string (optional)                            | Appears only when the actual language differs from the requested one                                                                                                                                                                                                                      |
+| `pluginsWithoutLocale` | string[] (optional)                          | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                                                                                                            |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]` (optional) | World data that was not imported (warnings and errors), such as data that only a community plugin still waiting for approval receives. The game screen shows it to the player; see [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts) |
+| `status`               | `'active' \| 'paused' \| 'ended'`            | The session lifecycle status                                                                                                                                                                                                                                                              |
+| `phase`                | `'setup' \| 'playing'`                       | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done                                                                                         |
+| `completedPlayerTurns` | number                                       | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                                                                                                        |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`       | The state of each setup runtime. See the table below                                                                                                                                                                                                                                      |
 
 When `ownerToken` must be sent:
 
@@ -3569,7 +3571,7 @@ Field notes:
 - `eventTopics`: when a session resolves its plugin set, it uses this to make sure a topic has only one declaring plugin.
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.
-- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`.
+- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`. `tags` belongs to the package summary; runtime summaries do not repeat it.
 
 `hostState` says whether the server has loaded this plugin. It does not say whether a session has enabled it. These are two different states, and the list does not show the first as a session's active state.
 
@@ -3597,6 +3599,7 @@ Returns the full description of one plugin, `PluginDetail`. If the plugin does n
 Notes:
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` are compiled execution descriptions. They explain execution order, input conditions, and detached behavior. Authors write something different: they declare package-level `contributes` in `PLUGIN.md`, and they declare execution settings in the `schedule` / `io` / `agent` / `function` groups of `RUNTIME.md`. Do not submit this internal structure as a manifest.
+- UI declarations belong to the package-level `ui` field, not to `runtimes[]`. Runtime entries in `GET /api/plugin-flows` also omit `uiSlots`; read plugin details or `/api/ui-specs` for UI declarations.
 - Dynamic keys are not listed in the manifest. Read them with a plugin-data query for the current session or with the `_index` endpoint.
 - Services, tools, actions, slash commands, and extensions are different kinds of registration, and each must be declared separately.
 
@@ -3671,6 +3674,15 @@ Turns on a plugin in this session. The server recalculates the session's active 
 ```
 
 The response also has `resolution`, which is the full result of this solve.
+
+When the session has a world and plugins newly join its active set, the server imports the world's data once for them (rules: [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts)), and the response has a `worldData`:
+
+| Field       | Type                              | Meaning                                                        |
+| ----------- | --------------------------------- | -------------------------------------------------------------- |
+| `receivers` | string[]                          | The plugins that received data for the first time              |
+| `imported`  | number                            | The rows written                                               |
+| `conflicts` | number                            | The rows left as they were because the game changed them       |
+| `notices`   | `{ level, sourceId?, message }[]` | World data still not imported with the plugins that are on now |
 
 Rules (enabling and disabling are the same):
 
@@ -5363,7 +5375,7 @@ Deletes media that is no longer referenced. This is a destructive maintenance en
 
 It first scans `messages`, `plugin_data`, `runtime_outputs`, `trace_events`, `snapshots`, and `turn_results`. It collects the mediaIds that are still referenced. Then it calls `MediaStore.cleanup()` to delete the rest.
 
-Every cleanup also releases the temporary references (`world-data-import:<uuid>`) that a world-data import left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
+Every cleanup also releases the temporary references (`media-pin:<uuid>`) that a world-data import, upload or runtime write left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
 
 > [!WARNING]
 > This endpoint is disabled by default. You must set `COVEL_MEDIA_CLEANUP_ENABLED` to use it. Actual deletion also requires a confirmation header.
@@ -5396,7 +5408,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5414,7 +5426,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }

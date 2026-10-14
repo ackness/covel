@@ -104,16 +104,11 @@ describe("scene cast manifests", () => {
       {
         name: "guide",
         pluginId: "guide",
-        priority: 600,
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "chat-mode-narrator",
-              field: "narrativeOutput",
-              as: "<narrator-output>",
-            },
-          ],
+        stage: "post-turn",
+        inputs: {
+          narrative: {
+            from: { runtime: "chat-mode-narrator" },
+          },
         },
       },
     ]);
