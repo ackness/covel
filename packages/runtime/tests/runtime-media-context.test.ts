@@ -93,6 +93,12 @@ function createStore(): MediaStoreLike & {
         ...(pluginId === undefined ? {} : { pluginId }),
       });
     },
+    async claimAssets(claims) {
+      for (const { id, sessionId, pluginId } of claims) {
+        await this.recordOwnership(id, sessionId, pluginId);
+        await this.addRef(id, sessionId, pluginId);
+      }
+    },
     async removeRef(id, sessionId) {
       const index = refs.findIndex(
         (r) => r.id === id && r.sessionId === sessionId,

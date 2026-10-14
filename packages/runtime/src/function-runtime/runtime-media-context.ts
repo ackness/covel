@@ -36,6 +36,7 @@ export type MediaStoreLike = Pick<
   | "lookup"
   | "isReferencedBy"
   | "addRef"
+  | "claimAssets"
   | "removeRef"
   | "listByMetadata"
 >;
@@ -76,7 +77,8 @@ export interface PinnedMediaBatch {
   ingestUrl(url: string, opts?: IngestUrlOptions): Promise<MediaRef>;
   /**
    * Record ownership and the session's own ref for every asset stored so
-   * far. Rejects without claiming anything once the invocation was aborted.
+   * far, in one `claimAssets` transaction: all of them or none. Rejects
+   * without claiming anything once the invocation was aborted.
    */
   claim(): Promise<void>;
   /**
@@ -144,10 +146,14 @@ export function createRuntimeMediaWriter(
           // (b) the second writer of a deduped asset still gains the
           // explicit reference required by `isReferencedBy()` — without
           // having to wait for an asset.generate proposal to be committed.
-          for (const id of stored) {
-            await mediaStore.recordOwnership(id, sessionId, pluginId);
-            await mediaStore.addRef(id, sessionId, pluginId);
-          }
+          // One transaction: a failure part-way claims none of the batch.
+          await mediaStore.claimAssets(
+            [...stored].map((id) => ({
+              id,
+              sessionId,
+              ...(pluginId === undefined ? {} : { pluginId }),
+            })),
+          );
         },
         async release() {
           for (const id of stored) {

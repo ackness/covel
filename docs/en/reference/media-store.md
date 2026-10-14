@@ -32,6 +32,9 @@ interface MediaStore {
     ownerPluginId?: string,
   ): Promise<void>;
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  claimAssets(
+    claims: readonly { id: string; sessionId: string; pluginId?: string }[],
+  ): Promise<void>;
   removeRef(id: string, sessionId: string): Promise<void>;
   releaseSession(sessionId: string): Promise<void>;
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
@@ -220,14 +223,17 @@ SQLite stores `media_assets.path` as a relative path (`ab/cd/<sha256>.bin`) bene
 
 **Ownership and references**
 
-| Method              | What it does                                                                                                               |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `recordOwnership()` | Sets the first owner of a file. First come, first served: a second call with a different `sessionId` does not overwrite it |
-| `addRef()`          | Gives another session read access. Used for forks and snapshots                                                            |
-| `removeRef()`       | Removes one session's reference. It can be called repeatedly. It does not delete the bytes or change the owner             |
-| `isReferencedBy()`  | Returns true for the owner session, or for a session that has a reference record                                           |
+| Method              | What it does                                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `recordOwnership()` | Sets the first owner of a file. First come, first served: a second call with a different `sessionId` does not overwrite it    |
+| `addRef()`          | Gives another session read access. Used for forks and snapshots                                                               |
+| `claimAssets()`     | Does `recordOwnership()` and then `addRef()` for each file of a batch, in one transaction: every claim is recorded or none is |
+| `removeRef()`       | Removes one session's reference. It can be called repeatedly. It does not delete the bytes or change the owner                |
+| `isReferencedBy()`  | Returns true for the owner session, or for a session that has a reference record                                              |
 
 `ctx.media.put()` and `ctx.media.ingestUrl()` store the bytes together with a temporary reference `media-pin:<uuid>` (see [Creating a reference at the time of storing](#creating-a-reference-at-the-time-of-storing)), and release it once the owner and this session's reference are recorded. So from the moment the bytes are stored until they are recorded, a concurrent cleanup cannot delete them.
+
+The claims are recorded with `claimAssets()`. The images stored by one `ctx.images.generate()` call, the files of one world-data import and one upload are each recorded in one transaction. When it fails part-way, none of the batch is recorded: ownership and references other sessions already hold stay as they are, and the session is not left with half a batch. All three backends behave the same, and a batch with U+0000 in an identifier is refused before anything is written.
 
 If the runtime or guard that called them is aborted or times out during this time, the call is rejected, neither is recorded, and the temporary reference is still released. Bytes with no owner are left for media cleanup to reclaim.
 

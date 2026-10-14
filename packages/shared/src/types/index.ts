@@ -4,6 +4,7 @@ export type {
   MediaAssetLookup,
   MediaAssetRecord,
   MediaRefRecord,
+  MediaClaim,
   MediaLifecyclePolicy,
   MediaCleanupResult,
   MediaStore,

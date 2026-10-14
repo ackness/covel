@@ -109,6 +109,13 @@ export interface MediaCleanupResult {
   readonly expiredRefs: readonly MediaRefRecord[];
 }
 
+/** One asset a session takes: ownership if it has none, plus its own ref. */
+export interface MediaClaim {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly pluginId?: string;
+}
+
 export interface MediaStore {
   /** Publish bytes and an optional initial reference atomically with cleanup. */
   put(
@@ -154,6 +161,15 @@ export interface MediaStore {
    * pluginId is a silent no-op, preserving the first writer's pluginId).
    */
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  /**
+   * For every claim, what {@link recordOwnership} and then {@link addRef} do,
+   * all in one transaction: either every claim is recorded or none is. A
+   * write that publishes several assets claims them through this, so a
+   * failure part-way leaves no asset owned or referenced by the session.
+   * Ownership another session already holds, and refs that already exist,
+   * stay as they are; an unknown id is skipped.
+   */
+  claimAssets(claims: readonly MediaClaim[]): Promise<void>;
   /**
    * Idempotently remove one session's explicit ref for an asset. This does
    * not delete bytes or ownership metadata; callers that want to reclaim the

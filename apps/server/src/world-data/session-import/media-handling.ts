@@ -115,14 +115,14 @@ export async function finalizeWorldDataMediaRefs(options: {
   refs: readonly WorldDataImportedMediaRef[];
 }): Promise<void> {
   if (!options.mediaStore) return;
-  for (const ref of options.refs) {
-    await options.mediaStore.recordOwnership(
-      ref.id,
-      ref.sessionId,
-      ref.pluginId,
-    );
-    await options.mediaStore.addRef(ref.id, ref.sessionId, ref.pluginId);
-  }
+  // One transaction: a failure part-way leaves none of the files claimed.
+  await options.mediaStore.claimAssets(
+    options.refs.map((ref) => ({
+      id: ref.id,
+      sessionId: ref.sessionId,
+      ...(ref.pluginId === undefined ? {} : { pluginId: ref.pluginId }),
+    })),
+  );
   await releaseWorldDataMediaRefs(options);
 }
 

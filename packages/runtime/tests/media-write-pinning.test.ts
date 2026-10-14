@@ -4,11 +4,17 @@
  * claims its images together or not at all (F-169). Both run against the
  * real in-memory MediaStore so cleanup applies its true deletion gate.
  */
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import type { MediaStore } from "@covel/shared";
 import type { PluginRuntimeUtils } from "@covel/plugin-loader";
 import type { ResolvedSlotForPlugin } from "@covel/shared/plugin-runtime";
 import { createMemoryMediaStore } from "@covel/store/memory";
+import { createSqliteMediaStore } from "@covel/store/sqlite";
 import {
   createRuntimeMediaContext,
   createRuntimeMediaWriter,
@@ -113,8 +119,10 @@ describe("pinned media writes (F-164)", () => {
 });
 
 describe("ctx.images.generate stores a batch all or nothing (F-169)", () => {
-  function setup(bodies: Record<string, Uint8Array<ArrayBuffer>>) {
-    const mediaStore = createMemoryMediaStore();
+  function setup(
+    bodies: Record<string, Uint8Array<ArrayBuffer>>,
+    mediaStore: MediaStore = createMemoryMediaStore(),
+  ) {
     const target: ResolvedSlotForPlugin = {
       presetId: "image",
       provider: "test",
@@ -164,6 +172,70 @@ describe("ctx.images.generate stores a batch all or nothing (F-169)", () => {
       await mediaStore.listByMetadata("sess-1", { pluginId: "img-plugin" }),
     ).toEqual([]);
   });
+
+  it.each([
+    ["no image had an owner", false],
+    ["another session already owns the first image", true],
+  ])(
+    "claims no image of the batch when recording the second claim fails (%s)",
+    async (_, shared) => {
+      // A real SQL transaction, failed part-way by a trigger on the second
+      // image's ref; the in-memory store cannot fail between two claims.
+      const dir = mkdtempSync(path.join(tmpdir(), "covel-claim-batch-"));
+      const dbPath = path.join(dir, "media.db");
+      const mediaStore = createSqliteMediaStore(dbPath, {
+        mediaRoot: path.join(dir, "media"),
+      });
+      const db = new DatabaseSync(dbPath);
+      try {
+        const firstId = createHash("sha256").update(png(10)).digest("hex");
+        if (shared) {
+          await mediaStore.put(png(10), "image/png");
+          await mediaStore.claimAssets([
+            { id: firstId, sessionId: "sess-other", pluginId: "other-plugin" },
+          ]);
+        }
+        const secondId = createHash("sha256").update(png(11)).digest("hex");
+        db.exec(`
+        CREATE TRIGGER fail_second_claim
+        BEFORE INSERT ON media_refs
+        WHEN NEW.media_id = '${secondId}' AND NEW.session_id = 'sess-1'
+        BEGIN
+          SELECT RAISE(ABORT, 'synthetic claim failure');
+        END
+      `);
+        const { images } = setup(
+          { "https://images.test/b.png": png(11) },
+          mediaStore,
+        );
+
+        await expect(
+          images.generate({ prompt: "two cats", n: 2 }),
+        ).rejects.toThrow("synthetic claim failure");
+
+        const owners = Object.fromEntries(
+          (await mediaStore.listAssets()).map((asset) => [
+            asset.id,
+            asset.ownerSessionId,
+          ]),
+        );
+        expect(owners).toEqual({
+          [firstId]: shared ? "sess-other" : null,
+          [secondId]: null,
+        });
+        expect(
+          (await mediaStore.listRefs()).map((row) => [
+            row.mediaId,
+            row.sessionId,
+          ]),
+        ).toEqual(shared ? [[firstId, "sess-other"]] : []);
+      } finally {
+        db.close();
+        await mediaStore.close?.();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("claims both images of a successful batch and serves that batch from the cache", async () => {
     const { mediaStore, gateway, images } = setup({

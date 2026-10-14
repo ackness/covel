@@ -342,7 +342,7 @@ it.each(["memory", "sqlite"] as const)(
         createdAt: now,
         updatedAt: now,
       });
-      vi.spyOn(mediaStore, "recordOwnership").mockRejectedValue(
+      vi.spyOn(mediaStore, "claimAssets").mockRejectedValue(
         new Error("synthetic claim failure"),
       );
       await expect(
@@ -445,7 +445,7 @@ it.each([
         };
       });
     if (failure === "finalize-failed" || failure === "rollback-failed") {
-      vi.spyOn(mediaStore, "recordOwnership").mockRejectedValue(
+      vi.spyOn(mediaStore, "claimAssets").mockRejectedValue(
         new Error("synthetic claim failure"),
       );
     }

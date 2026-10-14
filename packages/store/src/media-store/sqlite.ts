@@ -38,6 +38,7 @@ import {
   planMediaCleanup,
 } from "./cleanup-result.js";
 import {
+  assertMediaClaims,
   filterAssetsByMetadata,
   mediaPath,
   sha256,
@@ -395,6 +396,23 @@ function initializeSqliteMediaStore(
         mediaId: id,
         pluginId: pluginId ?? null,
         createdAt: new Date().toISOString(),
+      });
+    },
+
+    async claimAssets(claims) {
+      assertMediaClaims(claims);
+      if (claims.length === 0) return;
+      const createdAt = new Date().toISOString();
+      runSqliteTransaction(sqlite, () => {
+        for (const { id, sessionId, pluginId } of claims) {
+          updateOwnership.run({ id, sessionId, pluginId: pluginId ?? null });
+          insertRef.run({
+            sessionId,
+            mediaId: id,
+            pluginId: pluginId ?? null,
+            createdAt,
+          });
+        }
       });
     },
 

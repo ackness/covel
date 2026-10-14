@@ -221,8 +221,7 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
       expectedSession: initialSession,
       allowedStatuses: ["active"],
       mutate: async () => {
-        await mediaStore.recordOwnership(ref.id, sessionId);
-        await mediaStore.addRef(ref.id, sessionId);
+        await mediaStore.claimAssets([{ id: ref.id, sessionId }]);
         return c.json({ id: ref.id, mime: ref.mime, size: ref.size }, 201);
       },
     });

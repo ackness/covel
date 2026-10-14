@@ -32,6 +32,9 @@ interface MediaStore {
     ownerPluginId?: string,
   ): Promise<void>;
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  claimAssets(
+    claims: readonly { id: string; sessionId: string; pluginId?: string }[],
+  ): Promise<void>;
   removeRef(id: string, sessionId: string): Promise<void>;
   releaseSession(sessionId: string): Promise<void>;
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
@@ -220,14 +223,17 @@ SQLite 的 `media_assets.path` 保存相对 `mediaRoot` 的路径（`ab/cd/<sha2
 
 **归属和引用**
 
-| 方法                | 作用                                                                      |
-| ------------------- | ------------------------------------------------------------------------- |
-| `recordOwnership()` | 给文件设置第一个归属者。先到先得：第二次用不同的 `sessionId` 调用不会覆盖 |
-| `addRef()`          | 给另一个会话读取权限，用于 fork 和快照                                    |
-| `removeRef()`       | 移除一个会话的引用。可以重复调用；不删除字节，也不动归属                  |
-| `isReferencedBy()`  | 归属者会话，或者有一条引用记录的会话，返回 true                           |
+| 方法                | 作用                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| `recordOwnership()` | 给文件设置第一个归属者。先到先得：第二次用不同的 `sessionId` 调用不会覆盖                          |
+| `addRef()`          | 给另一个会话读取权限，用于 fork 和快照                                                             |
+| `claimAssets()`     | 对一批文件各做一次 `recordOwnership()` 加 `addRef()`，在一个事务里：要么全部登记，要么一条都不登记 |
+| `removeRef()`       | 移除一个会话的引用。可以重复调用；不删除字节，也不动归属                                           |
+| `isReferencedBy()`  | 归属者会话，或者有一条引用记录的会话，返回 true                                                    |
 
 `ctx.media.put()` 和 `ctx.media.ingestUrl()` 存入字节时带一条临时引用 `media-pin:<uuid>`（见[存入时同时建立引用](#存入时同时建立引用)），登记完归属和本会话的引用之后再释放它。所以从字节存入到登记完成，并发的清理删不掉它们。
+
+登记用 `claimAssets()`。一次 `ctx.images.generate()` 存入的几张图、一次世界数据导入的文件和一次上传，都在一个事务里登记。中途失败时这一批一条都不登记：别的会话已有的归属和引用不变，本会话也不会留下半批图。三个后端行为一致，标识符里有 U+0000 的一批在写入之前就被拒绝。
 
 如果调用它们的 runtime 或 guard 在这期间被中止或超时，这次调用被拒绝，两样都不登记，临时引用照样释放。没有归属的字节留给媒体清理去回收。
 
