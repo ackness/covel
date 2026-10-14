@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import matter from "gray-matter";
+import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 import { Document, parseDocument } from "yaml";
 import { canonicalizeLocale, isKnownLocale } from "@covel/shared";
 import {
@@ -219,7 +219,7 @@ export async function pluginLabelUnits(
     } catch {
       continue;
     }
-    units.push(...labelUnits(file, matter(content, { language: "yaml" }).data));
+    units.push(...labelUnits(file, readPlainYamlFrontmatter(content).data));
   }
   return units;
 }

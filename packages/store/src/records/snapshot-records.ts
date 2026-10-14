@@ -185,16 +185,29 @@ export interface SnapshotMetadata {
 export function settledSuspensionContinuation(
   continuation: SuspensionRecord["pendingContinuation"],
 ): SuspensionRecord["pendingContinuation"] {
-  const { executionContext, locale, logicalTurn, turnNumber } = continuation;
+  const { executionContext, takenUnder, locale, logicalTurn, turnNumber } =
+    continuation;
   return {
     messages: [],
     toolCallsSoFar: [],
     pendingProposals: [],
     executionContext,
+    takenUnder,
     ...(locale !== undefined ? { locale } : {}),
     ...(logicalTurn !== undefined ? { logicalTurn } : {}),
     ...(turnNumber !== undefined ? { turnNumber } : {}),
   };
+}
+
+/** The session and plugin state a suspension was taken under. */
+export interface SuspensionBasis {
+  /**
+   * Player turns in the session's history (its player messages) once the
+   * suspended execution committed. A later player turn raises it.
+   */
+  readonly playerTurns: number;
+  /** Version of the plugin that owns the suspended runtime (`0.0.0` when it declares none). */
+  readonly pluginVersion: string;
 }
 
 export interface SuspensionRecord {
@@ -244,6 +257,12 @@ export interface SuspensionRecord {
      * execution id, so suspension itself never completes a player turn.
      */
     readonly executionContext: ExecutionContext;
+    /**
+     * What the suspension was taken under. A resume that finds the session or
+     * the plugin changed since then is voided instead of running on stale
+     * state (`suspensionOutdatedReason` in `@covel/runtime`).
+     */
+    readonly takenUnder: SuspensionBasis;
     /**
      * Content locale and numeric clock of the suspended execution. Resume
      * hands them back unchanged: a continuation belongs to its source turn,

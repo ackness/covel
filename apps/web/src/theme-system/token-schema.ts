@@ -520,9 +520,9 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
         options: AMBIENCE_PRESETS,
         hint: {
           "zh-CN":
-            "可选预设，或填入任意 CSS 背景值，例如 url(https://…/bg.jpg)。",
+            "可选预设，或填入 url(https://…/bg.jpg) 下载背景。图片需支持跨域读取，最大 5 MiB。",
           "en-US":
-            "Pick a preset, or write any CSS background value such as url(https://…/bg.jpg).",
+            "Pick a preset, or import url(https://…/bg.jpg). Images must allow CORS and be at most 5 MiB.",
         },
       },
       {

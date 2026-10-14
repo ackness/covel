@@ -58,6 +58,8 @@ To see the story from another angle, switch between the parsed view and the stag
 
 Close Covel and open it again, then go back to the same world. The world lists your saved games. Click "Continue your last adventure" to pick up from the last turn.
 
+If previous sessions fail to load, the preparation page shows an error and a Retry button. Click Retry to load your saves again; you can still start a new game.
+
 At this point, you have completed one full game loop: choose a world, check the play style, finish the opening, act, save, and continue.
 
 ## When a turn does not finish as expected

@@ -1,3 +1,4 @@
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import {
   cleanup,
   fireEvent,
@@ -38,9 +39,12 @@ const brokenPlugin: PluginSummary = {
   languages: { text: ["en"], instructions: ["en"] },
 };
 
+vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: vi.fn() }));
+
 describe("PackagesPane installed plugin management", () => {
   beforeEach(async () => {
     boot.mockReset();
+    vi.mocked(requestConfirm).mockReset().mockResolvedValue(true);
     await i18n.changeLanguage("en-US");
   });
 
@@ -49,7 +53,7 @@ describe("PackagesPane installed plugin management", () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps failed community plugins visible and allows uninstalling them", async () => {
+  it("F-191 confirms uninstalling failed community plugins", async () => {
     const fetchMock = vi
       .fn()
       .mockImplementation(async (url: string, init?: RequestInit) => {
@@ -94,6 +98,12 @@ describe("PackagesPane installed plugin management", () => {
     expect(screen.queryByText("Builtin plugin")).toBeNull();
     const row = name.closest("li");
     expect(row).not.toBeNull();
+    vi.mocked(requestConfirm).mockResolvedValueOnce(false);
+    fireEvent.click(within(row!).getByRole("button", { name: "Uninstall" }));
+    await waitFor(() => expect(requestConfirm).toHaveBeenCalledTimes(1));
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE"),
+    ).toBe(false);
     fireEvent.click(within(row!).getByRole("button", { name: "Uninstall" }));
 
     await waitFor(() =>

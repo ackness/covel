@@ -35,6 +35,17 @@ export function refreshApprovedSessionPlugins(
     .catch(ignoreError("refresh plugins after approval"));
 }
 
+/** The label explaining why the server withdrew an out-of-date suspension. */
+function suspensionOutdatedDetailKey(details: unknown): string {
+  const reason =
+    details && typeof details === "object" && "reason" in details
+      ? details.reason
+      : undefined;
+  if (reason === "plugin-updated") return "session.suspensionOutdatedPlugin";
+  if (reason === "superseded") return "session.suspensionOutdatedSuperseded";
+  return "session.suspensionOutdatedMovedOn";
+}
+
 export async function resumeSessionSuspension(
   suspensionId: string,
   data: unknown,
@@ -55,16 +66,43 @@ export async function resumeSessionSuspension(
   const sid = sessionIdRef.current;
   if (!sid) return;
   const generation = sessionGenerationRef.current;
-  const { result, events } = await workspace.run(
+  // An out-of-date suspension is withdrawn by the server; that is a settled
+  // outcome the workspace keeps, not a failure to roll back.
+  const outcome = await workspace.run(
     sid,
     `resume:${crypto.randomUUID()}`,
-    () => api.resumeSuspension(sid, suspensionId, data),
+    async () => {
+      try {
+        return {
+          kind: "resumed" as const,
+          ...(await api.resumeSuspension(sid, suspensionId, data)),
+        };
+      } catch (err) {
+        if (err instanceof ApiError && err.code === "suspension_outdated")
+          return { kind: "outdated" as const, error: err };
+        throw err;
+      }
+    },
   );
   if (
     sessionIdRef.current !== sid ||
     sessionGenerationRef.current !== generation
   )
     return;
+  if (outcome.kind === "outdated") {
+    dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
+    emitToast(
+      "info",
+      i18n.t("session.suspensionOutdated", {
+        defaultValue: "This request is out of date and has been withdrawn",
+      }) as string,
+      i18n.t(suspensionOutdatedDetailKey(outcome.error.details), {
+        defaultValue: "The story has moved on since it was asked.",
+      }) as string,
+    );
+    return;
+  }
+  const { result, events } = outcome;
   applyResumeEvents(events);
   dispatch({
     type: "UPSERT_EXECUTION_STEP",

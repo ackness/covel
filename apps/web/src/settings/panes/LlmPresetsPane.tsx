@@ -46,6 +46,8 @@ export function LlmPresetsPane() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const pendingSave = useRef(false);
+  const saveQueue = useRef(Promise.resolve());
+  const saveCount = useRef(0);
   const mounted = useRef(false);
   const importGeneration = useRef(0);
   useEffect(() => {
@@ -110,15 +112,26 @@ export function LlmPresetsPane() {
   const writable = useSettingsWritable();
 
   const commit = async (
-    next: ProviderModelProfile[],
-    slots = getSlotConfig(),
+    next:
+      | ProviderModelProfile[]
+      | ((current: ProviderModelProfile[]) => ProviderModelProfile[]),
+    slots?: ReturnType<typeof getSlotConfig>,
   ): Promise<boolean> => {
-    if (!writable || pendingSave.current || !mounted.current) return false;
+    if (!writable || !mounted.current) return false;
+    const previous = saveQueue.current;
+    let release!: () => void;
+    saveQueue.current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    saveCount.current += 1;
     pendingSave.current = true;
     setSaving(true);
     setSaveError(null);
+    await previous;
     try {
-      const normalized = normalizeProviderProfiles(next);
+      const normalized = normalizeProviderProfiles(
+        typeof next === "function" ? next(getProviderProfiles()) : next,
+      );
       const result = await setProviderProfiles(normalized, slots);
       if (mounted.current) {
         setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
@@ -139,8 +152,10 @@ export function LlmPresetsPane() {
         emitToast("error", message);
       return false;
     } finally {
-      pendingSave.current = false;
-      if (mounted.current) setSaving(false);
+      saveCount.current -= 1;
+      pendingSave.current = saveCount.current > 0;
+      release();
+      if (mounted.current) setSaving(pendingSave.current);
     }
   };
 
@@ -228,13 +243,21 @@ export function LlmPresetsPane() {
     setModelDialogOpen(false);
   };
 
-  const patchLocalProfile = (patch: Partial<ProviderModelProfile>) => {
+  const patchLocalProfile = (
+    patch:
+      | Partial<ProviderModelProfile>
+      | ((profile: ProviderModelProfile) => Partial<ProviderModelProfile>),
+  ) => {
     if (!selectedProvider?.localProfile) return;
     const selectedId = normalizeProviderId(selectedProvider.id);
-    void commit(
-      profiles.map((profile) =>
+    void commit((current) =>
+      current.map((profile) =>
         normalizeProviderId(profile.id) === selectedId
-          ? { ...profile, ...patch, id: selectedId }
+          ? {
+              ...profile,
+              ...(typeof patch === "function" ? patch(profile) : patch),
+              id: selectedId,
+            }
           : profile,
       ),
     );
@@ -325,7 +348,7 @@ export function LlmPresetsPane() {
   };
 
   return (
-    <fieldset disabled={saving || !writable} className="min-w-0 space-y-3">
+    <div aria-busy={saving} className="min-w-0 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">
@@ -341,6 +364,7 @@ export function LlmPresetsPane() {
         <Button
           variant="outline"
           size="sm"
+          disabled={saving || !writable}
           onClick={() => setProviderDialogOpen(true)}
           className="shrink-0"
         >
@@ -351,6 +375,7 @@ export function LlmPresetsPane() {
 
       <div className="grid min-h-112 grid-cols-1 lg:grid-cols-[10.5rem_minmax(0,1fr)] border border-border">
         <ProviderList
+          busy={saving || !writable}
           providers={filteredCatalog}
           selectedProviderId={selectedProvider?.id}
           query={query}
@@ -379,22 +404,21 @@ export function LlmPresetsPane() {
             <ProviderDetails
               provider={selectedProvider}
               serverConfig={state.llmConfig?.source}
+              busy={saving || !writable}
               onAddModel={() => setModelDialogOpen(true)}
               onPatchLocalProfile={patchLocalProfile}
               onDuplicateLocalModel={duplicateModel}
               onDeleteLocalModel={(modelRef) => {
-                const profile = selectedProvider.localProfile;
-                if (!profile) return;
-                patchLocalProfile({
+                patchLocalProfile((profile) => ({
                   models: profile.models.filter(
                     (model) => model.ref !== modelRef,
                   ),
-                });
+                }));
               }}
               onDeleteLocalProvider={() => {
                 setMobileDetailsOpen(false);
-                void commit(
-                  profiles.filter(
+                void commit((current) =>
+                  current.filter(
                     (profile) =>
                       normalizeProviderId(profile.id) !==
                       normalizeProviderId(selectedProvider.id),
@@ -431,6 +455,7 @@ export function LlmPresetsPane() {
         <Button
           variant="outline"
           size="sm"
+          disabled={saving || !writable}
           onClick={() => fileRef.current?.click()}
           className="flex-1 text-xs"
         >
@@ -440,6 +465,7 @@ export function LlmPresetsPane() {
         <input
           ref={fileRef}
           type="file"
+          disabled={saving || !writable}
           accept=".json"
           aria-label={t("settings.import")}
           className="hidden"
@@ -449,7 +475,7 @@ export function LlmPresetsPane() {
 
       <ProviderDialog
         open={providerDialogOpen}
-        busy={saving}
+        busy={saving || !writable}
         error={saveError}
         draft={providerDraft}
         onOpenChange={(open) => {
@@ -461,7 +487,7 @@ export function LlmPresetsPane() {
       {selectedProvider && (
         <ModelDialog
           open={modelDialogOpen}
-          busy={saving}
+          busy={saving || !writable}
           error={saveError}
           providerId={selectedProvider.id}
           provider={selectedProvider.provider}
@@ -479,6 +505,6 @@ export function LlmPresetsPane() {
           onSubmit={handleAddModels}
         />
       )}
-    </fieldset>
+    </div>
   );
 }

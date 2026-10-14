@@ -24,6 +24,7 @@
 
 <data_root>/                 ← 默认 ~/.covel/data；可以改到任意路径
   covel.db                   ← SQLite 数据库
+  media/                     ← 已保存的图片、音频等媒体
   worlds/                    ← 用户创建和安装的世界
   logs/                      ← 应用日志（按大小轮转，NDJSON，一行一条）
     desktop.log              ← 桌面主进程的事件（窗口 / IPC / 后端监督 / 启动失败）
@@ -115,6 +116,8 @@ max_files   = 10
 
 ## `~/.covel/keys.env`
 
+外部环境的密钥优先于本地保存的副本，即使两个值相同。删除本地副本不会删除外部密钥。后端启动时先记录外部密钥，再加载 `keys.env`，因此保存操作不会混淆两种来源。
+
 ```env
 # 一行一个 KEY=VALUE，# 开头是注释
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
@@ -183,8 +186,8 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 **切换 `data_root`。** 桌面版里选好目录后，按新旧两个位置的情况处理：
 
 - 当前目录有数据、新目录没有：弹窗问“复制我的数据”还是“从空目录开始”。
-- 新目录里已经有 `covel.db` 或用户世界：直接使用，不复制，不覆盖。
-- 选“复制我的数据”时，此刻只在配置根目录写一份 `data-root-copy.json`，`data_root` 不变。下次启动时，主进程在启动后端之前复制 `covel.db`、`covel.db-wal`、`covel.db-shm` 和 `worlds/`（不复制 `logs/` 和 `server.port`），成功后才改写 `data_root`。
+- 新目录里已经有 `covel.db` 或用户世界、媒体：直接使用，不复制，不覆盖。
+- 选“复制我的数据”时，此刻只在配置根目录写一份 `data-root-copy.json`，`data_root` 不变。下次启动时，主进程在启动后端之前复制 `covel.db`、`covel.db-wal`、`covel.db-shm`、`worlds/` 和 `media/`（不复制 `logs/` 和 `server.port`），成功后才改写 `data_root`。
 - 复制只尝试一次。失败、被中断，或者还有别的 Covel 进程开着数据库时，删除这次复制写下的文件，`data_root` 保持不变，并弹窗说明原因。
 - 旧目录只读不改：不移动，不删除。
 
@@ -210,6 +213,8 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 ## 启动与恢复
 
+启动失败时，主进程等启动页加载完成后才发送错误，页面显示重试和日志入口。
+
 - 应用启动时先取得单实例锁。重复打开只会聚焦已有的窗口。
 - 后端开始监听后，通过私有 IPC 通知主进程，窗口立即加载。桌面主进程断开时，后端会收尾并退出。
 - `server.port` 保存上次成功使用的端口，下次在它空闲时复用；被占用时换另一个空闲端口。
@@ -222,12 +227,12 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 桌面程序每次启动时生成一个一次性的 bearer token，通过 `COVEL_DESKTOP_REST_TOKEN` 传给后端。
 
-| 接口                                                                                                                                               | 要不要 token                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/proxy`、`PUT /api/config/data-root`、`POST /api/config/open-folder`（写接口） | 要                                 |
-| `GET /api/config/settings`、`GET /api/config/proxy`、`GET /api/app-update/latest`（返回本地配置，或者代你向外发请求）                              | 要                                 |
-| `GET /api/config/info`                                                                                                                             | 不要                               |
-| `GET /api/config/keys`                                                                                                                             | 不要。只返回服务商列表，不含密钥值 |
+| 接口                                                                                                                                               | 要不要 token                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/proxy`、`PUT /api/config/data-root`、`POST /api/config/open-folder`（写接口） | 要                               |
+| `GET /api/config/settings`、`GET /api/config/proxy`、`GET /api/app-update/latest`（返回本地配置，或者代你向外发请求）                              | 要                               |
+| `GET /api/config/info`                                                                                                                             | 不要                             |
+| `GET /api/config/keys`                                                                                                                             | 要。只返回服务商列表，不含密钥值 |
 
 需要 token 的接口检查请求头 `Authorization: Bearer <token>`，缺失或不匹配返回 `401`。
 
@@ -235,13 +240,9 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 - Electron 的页面通过 `covel:get-info` IPC 拿到 `restToken`，自动加到所有写请求上。
 - 开发模式下没设置这个变量时，token 门不启用。纯网页部署和 `pnpm dev:web` 的流程不受影响。
 
-**密钥在界面里怎样表示。** 界面从 `GET /api/config/keys` 拿到服务商列表后，只在内存里把这些服务商标记为“服务端已有密钥”。这个标记不是密钥明文，也不会进入 `X-Provider-Keys` 请求头。保存时：
+**密钥在界面里怎样表示。** Electron 界面通过 `covel:keys:load` IPC 读取 `keys.env` 的明文密钥，保存在 SettingsStore 内存中，用于构造 `X-Provider-Keys` 请求头，不写入桌面页面的 `localStorage`。保存通过 `covel:keys:save` 传递补丁：未修改的密钥保留，新值写入，`null` 删除。主进程优先通过 sidecar 的 `PUT /api/config/keys` 写入；开发模式没有 sidecar 或 sidecar 不可用时，直接写文件。
 
-- 没编辑过的服务端密钥保持不变。
-- 新输入的密钥变成一次 PUT 里的增量修改。
-- 从界面里移除的服务商变成显式删除。
-
-所以服务商列表不会被误当成密钥表，编辑一个密钥也不会覆盖其他密钥。
+`GET /api/config/keys` 只返回服务商名，不返回密钥。当前 Electron 界面不调用它：`json-file` 后端使用 IPC；普通浏览器使用 `localStorage`。显式选择 `json-file` 的 REST 传输的集成方才会把这个列表表示为“服务端已有密钥”的内存标记，标记不会进入 `X-Provider-Keys`。详见 [设置存储](./settings-store.md)。
 
 **`keys.env` 读不了时。** GET 返回 `500 keys_file_unreadable`，PUT 返回 `409 keys_file_unreadable`，原文件保留。写入同样是同目录临时文件加改名替换。
 

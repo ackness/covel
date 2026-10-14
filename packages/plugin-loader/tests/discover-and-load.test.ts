@@ -1,5 +1,5 @@
 import { resolveSessionPlugins } from "@covel/shared";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -110,6 +110,39 @@ describe("current package discovery and loading", () => {
     const [d] = await discoverPlugins(temp);
     await expect(loadPluginDefinition(d!)).rejects.toThrow("cannot coexist");
   });
+  it.each([undefined, "runtime.md", "RUNTIME.zh.md", "helper.js"])(
+    "diagnoses a child containing %s without hiding valid runtimes or packages",
+    async (filename) => {
+      await root();
+      const missing = path.join(temp, "probe/runtimes/missing");
+      await fs.mkdir(missing, { recursive: true });
+      if (filename) await write(path.join(missing, filename), md(agent));
+      await write(path.join(temp, "probe/runtimes/run/RUNTIME.md"), md(agent));
+      await write(
+        path.join(temp, "sibling/PLUGIN.md"),
+        md({ id: "sibling", kind: "plugin", description: "Sibling" }),
+      );
+      const discoveries = await discoverPlugins(temp);
+      const probe = discoveries.find((item) => item.id === "probe")!;
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const loaded = await loadPluginDefinition(probe);
+        expect(loaded.manifests.map((item) => item.manifest.name)).toEqual([
+          "probe/run",
+        ]);
+        expect(warning).toHaveBeenCalledWith(
+          expect.stringContaining(`${missing}/RUNTIME.md`),
+        );
+        await expect(
+          loadPluginDefinition(
+            discoveries.find((item) => item.id === "sibling")!,
+          ),
+        ).resolves.toBeDefined();
+      } finally {
+        warning.mockRestore();
+      }
+    },
+  );
   it("requires a root and matching package identity", async () => {
     await write(path.join(temp, "probe/runtimes/run/RUNTIME.md"), md(agent));
     const [missingRoot] = await discoverPlugins(temp);
@@ -191,7 +224,7 @@ describe("current package discovery and loading", () => {
     await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
   });
   it.each([
-    { schedule: { needs: ["foreign"] } },
+    { schedule: { needs: ["foreign/step"] } },
     {
       schedule: {
         stage: "setup",
@@ -199,7 +232,7 @@ describe("current package discovery and loading", () => {
       },
     },
     { schedule: { after: ["probe-other/step"] } },
-    { schedule: { after: [{ runtime: "foreign" }] } },
+    { schedule: { after: [{ runtime: "foreign/step" }] } },
     { io: { inputs: { facts: { from: { runtime: "foreign/step" } } } } },
   ])(
     "rejects cross-package runtime references in $schedule $io",

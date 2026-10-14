@@ -375,6 +375,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                       resumeSchema: {},
                       createdAt: new Date().toISOString(),
                       pendingContinuation: {
+                        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
                         executionContext: {
                           executionId: "previous-run",
                           origin: "manual",

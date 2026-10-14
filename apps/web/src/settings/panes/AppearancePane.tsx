@@ -1,3 +1,4 @@
+import { useSettingsWritable } from "../use-settings-save.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, Download, RotateCcw, Save, Upload } from "lucide-react";
@@ -39,6 +40,7 @@ import type { ThemeScheme } from "@/theme-system/types.js";
 export function AppearancePane() {
   const { t, i18n } = useTranslation();
   const store = useSettingsStore();
+  const writable = useSettingsWritable();
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +78,7 @@ export function AppearancePane() {
    */
   async function handleSaveAsTheme(): Promise<void> {
     const label = themeName.trim();
-    if (!label || saving) return;
+    if (!label || saving || !writable) return;
     setSaving(true);
     setError(null);
     try {
@@ -175,7 +177,9 @@ export function AppearancePane() {
 
   return (
     <div className="space-y-5">
-      <StylePicker />
+      <fieldset disabled={!writable} className="min-w-0">
+        <StylePicker />
+      </fieldset>
 
       <details className="ui-frame group/library [&_summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 hover:bg-(--surface-inset)">
@@ -203,6 +207,7 @@ export function AppearancePane() {
             <Button
               size="sm"
               variant="ghost"
+              disabled={!writable}
               onClick={() => fileRef.current?.click()}
             >
               <Upload className="mr-1.5 h-3.5 w-3.5" />
@@ -220,7 +225,7 @@ export function AppearancePane() {
             <Button
               size="sm"
               variant="outline"
-              disabled={customCount === 0}
+              disabled={customCount === 0 || !writable}
               onClick={() => void resetOverrides()}
             >
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
@@ -261,7 +266,7 @@ export function AppearancePane() {
           <Button
             size="sm"
             variant="outline"
-            disabled={saving || themeName.trim().length === 0}
+            disabled={saving || !writable || themeName.trim().length === 0}
             onClick={() => void handleSaveAsTheme()}
           >
             <Save className="mr-1.5 h-3.5 w-3.5" />
@@ -272,6 +277,7 @@ export function AppearancePane() {
         <input
           ref={fileRef}
           type="file"
+          disabled={!writable}
           accept=".json"
           aria-label={t("appearance.importTheme")}
           className="hidden"
@@ -284,7 +290,7 @@ export function AppearancePane() {
         )}
       </div>
 
-      <div className="space-y-2">
+      <fieldset disabled={!writable} className="min-w-0 space-y-2">
         {localizedTokenGroups.map((group, index) => (
           <TokenGroupSection
             key={`${appearance}:${group.id}`}
@@ -307,7 +313,7 @@ export function AppearancePane() {
             }
           />
         ))}
-      </div>
+      </fieldset>
     </div>
   );
 }

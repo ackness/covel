@@ -543,6 +543,7 @@ export function GameView({
           />
           {stageActive ? (
             <StageView
+              panelState={rightPanelState}
               key={session.id}
               session={session}
               world={world}

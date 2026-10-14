@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createMemoryStore } from "@covel/store/memory";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,6 +39,7 @@ beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "covel-startup-ownership-"));
   vi.stubEnv("COVEL_HOME", home);
   vi.stubEnv("COVEL_USER_WORLDS_DIR", join(home, "user-worlds"));
+  vi.stubEnv("COVEL_USER_PLUGINS_DIR", join(home, "user-plugins"));
   vi.stubEnv("DATABASE_URL", "postgres://fixture.invalid/test");
   vi.stubEnv("DEPLOYMENT_TIER", "self");
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -53,6 +55,54 @@ afterEach(async () => {
 }, 60_000);
 
 describe("production composition root startup failure", () => {
+  it("cleans staging and restores pending world deletion before plugin bootstrap and update application", async () => {
+    const worlds = join(home, "user-worlds");
+    const abandoned = [
+      join(worlds, ".covel-install-crash"),
+      join(worlds, ".covel-updates/.covel-install-crash"),
+      join(home, "user-plugins/.covel-install-crash"),
+      join(home, "user-plugins/.covel-uninstall-crash"),
+    ];
+    for (const directory of abandoned)
+      await mkdir(directory, { recursive: true });
+    const stagedWorld = join(worlds, ".covel-world-delete-crash/package");
+    await mkdir(stagedWorld, { recursive: true });
+    await writeFile(join(stagedWorld, "world.yaml"), "id: interrupted\n");
+    const store = createMemoryStore();
+    await store.upsertWorld({
+      id: "interrupted",
+      name: "Interrupted world",
+      description: "",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        source: "generated-file",
+        storage: { path: worlds },
+        worldDeletion: {
+          nonce: "old-process",
+          startedAt: new Date().toISOString(),
+        },
+      },
+    });
+    fakes.store.mockResolvedValue(store);
+    fakes.media.mockResolvedValue({ close: async () => {} });
+    fakes.pool.mockImplementation(() => ({ end: async () => {} }));
+    const stop = new Error("Stop after checking startup recovery");
+    fakes.bootstrap.mockImplementation(async () => {
+      for (const directory of abandoned)
+        await expect(access(directory)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      await access(join(worlds, "interrupted/world.yaml"));
+      expect(await store.getWorld("interrupted")).toMatchObject({
+        metadata: { worldDeletion: { retryable: true } },
+      });
+      throw stop;
+    });
+    startupImport = import("../../src/app.js");
+    await expect(startupImport).rejects.toBe(stop);
+    expect(fakes.bootstrap).toHaveBeenCalledOnce();
+  }, 60_000);
+
   it.each([
     "store",
     "media",

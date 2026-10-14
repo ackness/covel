@@ -11,7 +11,7 @@ import { buildFrameworkCapabilities } from "./discovery.js";
 
 type Env = {
   Variables: {
-    builtinToolNames?: readonly string[];
+    builtinToolNames: readonly string[];
     pluginRegistry?: PluginRegistry;
   };
 };

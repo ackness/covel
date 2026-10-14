@@ -7,6 +7,7 @@ export {
   readGeneratedWorldMarker,
   recordGeneratedWorldFiles,
   writeWorldPackage,
+  publishWorldPackage,
 } from "./world-writer.js";
 export type {
   GeneratedWorldMarker,
