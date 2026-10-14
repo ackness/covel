@@ -18,7 +18,10 @@ import {
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import { SettingsRevisionConflictError } from "@covel/settings";
+import {
+  sameSettingValue,
+  SettingsRevisionConflictError,
+} from "@covel/settings";
 import { useSettingsSave } from "../use-settings-save.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
@@ -61,7 +64,8 @@ export function LlmSlotsPane() {
   const [reloading, setReloading] = useState(false);
   const [savingSlot, setSavingSlot] = useState(false);
   const [slotSaveError, setSlotSaveError] = useState<string | null>(null);
-  const pendingSlotSave = useRef(false);
+  const pendingSlotSave = useRef(Promise.resolve());
+  const slotSaveCount = useRef(0);
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -99,14 +103,35 @@ export function LlmSlotsPane() {
     writable,
   } = useSettingsSave(() => setCapOverridesLocal(getCapabilityOverrides()));
 
-  const commitSlot = async (next: Record<string, SlotConfigEntry>) => {
-    if (!writable || pendingSlotSave.current || !mounted.current) return;
-    pendingSlotSave.current = true;
+  const commitSlot = async (
+    next: Record<string, SlotConfigEntry>,
+    touchedSlot?: string,
+  ) => {
+    if (!writable || !mounted.current) return;
+    const changed = touchedSlot
+      ? [touchedSlot]
+      : [...new Set([...Object.keys(slotConfig), ...Object.keys(next)])].filter(
+          (key) => !sameSettingValue(slotConfig[key], next[key]),
+        );
+    const requested = next;
+    const previous = pendingSlotSave.current;
+    let release!: () => void;
+    pendingSlotSave.current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    slotSaveCount.current += 1;
     setSavingSlot(true);
     setSlotSaveError(null);
+    await previous;
+    const currentSlots = getSlotConfig();
+    next = { ...currentSlots };
+    for (const key of changed) {
+      if (requested[key]) next[key] = requested[key];
+      else delete next[key];
+    }
     const currentParamOverrides = getParamOverrides();
     const nextParamOverrides = clearChangedSlotReasoningEfforts(
-      slotConfig,
+      currentSlots,
       next,
       currentParamOverrides,
     );
@@ -127,8 +152,9 @@ export function LlmSlotsPane() {
       if (!(error instanceof SettingsRevisionConflictError))
         emitToast("error", message);
     } finally {
-      pendingSlotSave.current = false;
-      if (mounted.current) setSavingSlot(false);
+      slotSaveCount.current -= 1;
+      release();
+      if (mounted.current) setSavingSlot(slotSaveCount.current > 0);
     }
   };
 
@@ -149,17 +175,27 @@ export function LlmSlotsPane() {
     slotId: string,
     patch: Partial<ModelCapabilityInfo>,
   ) => {
-    const next = {
-      ...capOverrides,
-      [slotId]: { ...capOverrides[slotId], ...patch },
-    };
-    return saveCapabilities(() => setCapabilityOverrides(next));
+    return saveCapabilities(() => {
+      const current = getCapabilityOverrides();
+      return setCapabilityOverrides({
+        ...current,
+        [slotId]: {
+          ...current[slotId],
+          ...patch,
+          ...(patch.pricing
+            ? { pricing: { ...current[slotId]?.pricing, ...patch.pricing } }
+            : {}),
+        },
+      });
+    });
   };
 
   const resetCapOverride = (slotId: string) => {
-    const next = { ...capOverrides };
-    delete next[slotId];
-    void saveCapabilities(() => setCapabilityOverrides(next));
+    void saveCapabilities(() => {
+      const next = { ...getCapabilityOverrides() };
+      delete next[slotId];
+      return setCapabilityOverrides(next);
+    });
   };
 
   const handleReloadConfig = async () => {
@@ -352,11 +388,7 @@ export function LlmSlotsPane() {
           {t("settings.slotFilterEmpty")}
         </p>
       )}
-      <fieldset
-        disabled={savingSlot || savingCapabilities || !writable}
-        aria-busy={savingSlot}
-        className="min-w-0 space-y-3"
-      >
+      <div aria-busy={savingSlot} className="min-w-0 space-y-3">
         {visibleSlots.map((slotId) => (
           <LlmSlotCard
             key={slotId}
@@ -370,7 +402,8 @@ export function LlmSlotsPane() {
             isFirst={isConfigured && slotId === configuredSlots[0]}
             isDiscovered={discoveredSlotIds.includes(slotId)}
             isEditing={editingSlot === slotId}
-            commitSlot={commitSlot}
+            savingCapabilities={savingCapabilities}
+            commitSlot={(next) => void commitSlot(next, slotId)}
             onToggleEditing={() =>
               setEditingSlot(editingSlot === slotId ? null : slotId)
             }
@@ -378,7 +411,7 @@ export function LlmSlotsPane() {
             onUpdateCapability={(patch) => updateCapOverride(slotId, patch)}
           />
         ))}
-      </fieldset>
+      </div>
 
       <div className="border border-dashed border-border p-3 space-y-2 mt-2">
         <div className="flex items-center justify-between">

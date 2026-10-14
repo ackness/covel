@@ -7,10 +7,15 @@ import { SettingWidget } from "../widgets/index.js";
 
 const settings = vi.hoisted(() => ({
   value: 120 as unknown,
+  writable: true,
   overridden: false,
   set: vi.fn(),
   restoreDefault: vi.fn(),
 }));
+vi.mock("../use-settings-save.js", () => ({
+  useSettingsWritable: () => settings.writable,
+}));
+
 vi.mock("../use-settings.js", () => ({
   useSetting: () => [settings.value, settings.set],
   useSettingOverride: () => [settings.overridden, settings.restoreDefault],
@@ -32,6 +37,7 @@ describe("SettingWidget editing", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("en-US");
     settings.value = 120;
+    settings.writable = true;
     settings.overridden = false;
     settings.set.mockReset();
     settings.restoreDefault.mockReset();
@@ -108,4 +114,32 @@ describe("SettingWidget editing", () => {
     );
     expect(screen.getByText(/instead of folded into one line/)).toBeTruthy();
   });
+});
+
+it("F-199 disables setting writes while allowing secret visibility", async () => {
+  await i18n.changeLanguage("en-US");
+  settings.value = 120;
+  settings.writable = false;
+  settings.overridden = true;
+  render(
+    <>
+      <SettingWidget entry={wait} />
+      <SettingWidget
+        entry={{
+          ...wait,
+          key: "demo.secret",
+          label: "Secret",
+          widget: "secret",
+          default: "",
+          schema: z.string(),
+        }}
+      />
+    </>,
+  );
+  expect(screen.getByLabelText("Wait").matches(":disabled")).toBe(true);
+  expect(screen.queryByRole("button", { name: "Use default" })).toBeNull();
+  expect(screen.getByLabelText("Secret").matches(":disabled")).toBe(true);
+  expect(
+    screen.getByRole("button", { name: "Show" }).matches(":disabled"),
+  ).toBe(false);
 });
