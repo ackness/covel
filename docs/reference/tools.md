@@ -1727,7 +1727,15 @@ agent:
 - `dimension.initialize`、`dimension.update`
 - `lorebook.upsert`
 
-类型只在一处定义：`ProposalPayloadMap`。`ProposalType`、提交处理器的注册表（`satisfies CommitHandlerMap`）和对外公布的列表（`PROPOSAL_TYPES`）都在编译期和它对齐。新增一种 proposal 只改 `ProposalPayloadMap` 一处；漏注册处理器时编译失败。
+类型只在一处定义：`ProposalPayloadMap`。`ProposalType`、提交处理器的注册表（`satisfies CommitHandlerMap`）、每种类型的 payload schema（`proposalPayloadSchemas`，在 `@covel/shared`）和对外公布的列表（`PROPOSAL_TYPES`）都在编译期和它对齐。新增一种 proposal 时改 `ProposalPayloadMap`，再补上它的处理器和 schema；漏了哪一个都编译失败。
+
+**提交前的检查。** 每条 proposal 在它的处理器运行之前都要通过同一道检查，不论它来自工具、handler 还是 runtime 的输出：
+
+- payload 必须符合它那种类型的 schema，并且能写成 JSON。之后提交的是它的 JSON 副本：值为 `undefined` 的字段被去掉，`Date` 变成 ISO 字符串，每个存储后端存下的都一样。BigInt、循环引用这类 JSON 存不下的值在这里被拒绝。
+- payload 里的每个 `MediaRef` 都对照本会话检查（见[媒体存储](./media-store.md#提交时检查引用)）。
+- 处理器之后还按自己的规则检查（保留命名空间、大小上限、角色名字、维度的提供者等）。
+
+没通过的 proposal 不提交，错误码是 `proposal-invalid` 或媒体检查的拒绝原因。它走的是提交失败的路径：跟在一段已提交故事旁边的可选 runtime，只丢掉它自己的写入；没有故事的执行（手动、后台、setup）整次不提交。不会只落下一部分 proposal。
 
 **`state.patch` 和 `plugin.data` 的区别。** `state.patch` 写入的状态表是全会话共享的：
 
