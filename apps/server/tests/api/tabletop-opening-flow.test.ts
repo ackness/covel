@@ -33,8 +33,21 @@ for (const community of [false, true]) {
         const formTool = request.tools?.find(
           (tool) => tool.name === "create-character-form",
         );
-        if (!formTool)
-          throw new Error("Unexpected model call outside the opening form");
+        // Once setup is done the narrator tells the opening and the
+        // character tracker finishes without changes.
+        if (!formTool) {
+          const done = request.tools?.some(
+            (tool) => tool.name === "runtime-done",
+          );
+          return {
+            content: done ? null : "The story begins.",
+            toolCalls: done
+              ? [{ id: "tracker-done", name: "runtime-done", arguments: "{}" }]
+              : [],
+            finishReason: done ? "tool_calls" : "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        }
         return {
           content: "Your story begins.",
           toolCalls: [
@@ -124,7 +137,13 @@ for (const community of [false, true]) {
           phase: "setup",
           setupRuntimes: {},
           completedPlayerTurns: 0,
-          activePlugins: ["pregame", "world-init", "char-creator", pluginId],
+          activePlugins: [
+            "pregame",
+            "world-init",
+            "char-creator",
+            "narrator",
+            pluginId,
+          ],
           locale: "en-US",
           metadata: {
             approvalScopeNonce: crypto.randomUUID(),
@@ -250,7 +269,13 @@ for (const community of [false, true]) {
           ).toBeNull();
         }
         expect((await store.getSession(sessionId))?.phase).toBe("playing");
-        expect(generate).toHaveBeenCalledTimes(1);
+        expect(
+          generate.mock.calls.filter(([request]) =>
+            request.tools?.some(
+              (tool) => tool.name === "create-character-form",
+            ),
+          ),
+        ).toHaveLength(1);
       } finally {
         await closeTestApi(boot);
         await store.close();
@@ -294,7 +319,7 @@ it("does not publish a character form or create a player after schema initializa
       phase: "setup",
       setupRuntimes: {},
       completedPlayerTurns: 0,
-      activePlugins: ["pregame", "world-init", "char-creator"],
+      activePlugins: ["pregame", "world-init", "char-creator", "narrator"],
       locale: "en-US",
       metadata: {
         approvalScopeNonce: crypto.randomUUID(),

@@ -17,6 +17,7 @@
     "primary": "Primary"
   },
   "session": {
+    "cached": "Cached",
     "historyLoadFailed": "Could not load previous sessions. Retry to see your saves.",
     "reasoningContent": "Thinking",
     "reasoningContentHint": "Reasoning text or summaries returned by the model, in call order.",
@@ -198,14 +199,7 @@
     "pluginsSelected": "plugins selected",
     "searchPlugins": "Search plugins, tags, capabilities",
     "pluginGroups": {
-      "core": "Core",
-      "setup": "Setup",
-      "traditional": "Traditional story",
-      "dialogue": "Dialogue mode",
-      "characters": "Characters",
-      "memory": "Memory & retrieval",
-      "guidance": "Guidance",
-      "utility": "Utility"
+      "untagged": "Untagged"
     },
     "recommendationReasons": {
       "requiredByWorld": "Required by world",
@@ -307,7 +301,8 @@
       "serverBackend": "Server {{backend}}",
       "builtIn": "Built-in",
       "serverStore": "Server store",
-      "server": "Server"
+      "server": "Server",
+      "memory": "Memory"
     },
     "jumpToLatest": "Jump to latest",
     "loadOlderFailed": "Could not load earlier messages.",
@@ -334,6 +329,8 @@
     "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
     "recoveryRunningDetail": "The server is continuing the original task. Its result will appear here automatically; you can wait or stop it.",
     "recoveryInterruptedDetail": "The unfinished task is no longer running. Your saved progress is preserved. Retry starts a new attempt only when you choose it.",
+    "unsavedNarrative": "Unsaved",
+    "unsavedNarrativeDetail": "This text was not saved. It stays here until you leave the session.",
     "recoveryHydratingDetail": "Recovering the latest saved result before you continue.",
     "recoveryRetry": "Retry unfinished turn",
     "recoveryRefresh": "Check status",
@@ -369,7 +366,6 @@
     },
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
-    "previousSuggestions": "Earlier suggestions · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
@@ -382,7 +378,31 @@
     "panelLoadFailed": "Plugin panels could not be loaded.",
     "modelCredentialsMissing": "Add an API key in provider settings before starting.",
     "steerNotTaken": "This turn did not take your message. It is back in the input box for you to send next.",
-    "outputTruncated": "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this."
+    "outputTruncated": "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
+    "outputInterrupted": "The model stopped the story before it finished ({{reason}}), so it may end mid-sentence. Retry this turn to have it written again.",
+    "canvasEyebrow": "§ SESSION CANVAS",
+    "blockType": "Block: {{type}}",
+    "dbLoadErrorDetail": "Failed to load database: {{error}}",
+    "retryTaskNamed": "Retry this task: {{label}}",
+    "activeTaskDetail": "{{label}} — {{detail}}…",
+    "jobStatus": {
+      "pending": "Pending",
+      "queued": "Queued",
+      "running": "Running",
+      "done": "Done",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "suspended": "Suspended",
+      "progress": "In progress",
+      "waiting-input": "Waiting for input",
+      "succeeded": "Succeeded"
+    },
+    "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
+    "activeTask": "{{label}}…",
+    "panelUnavailable": "This panel is not available in this session.",
+    "previousPluginContent": "{{title}} · expand to review",
+    "pluginContent": "Plugin content"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -612,6 +632,12 @@
     "numberTooSmall": "Enter {{minimum}} or more.",
     "wholeNumberNeeded": "Enter a whole number.",
     "fixMarkedFields": "Fix the marked fields before saving.",
+    "unnamedCurrency": "Currency #{{number}}",
+    "numberedResource": "Resource {{number}}",
+    "unnamedFaction": "Faction #{{number}}",
+    "unnamedHistory": "Historical event #{{number}}",
+    "pendingDimensionsTurn": "Dimension settlement pending · Turn {{turn}}",
+    "currentDimensionValue": "Current value · {{id}}",
     "discardChangesTitle": "Discard unsaved changes?",
     "discardChangesMessage": "Your world edits have not been saved. Discard them and leave the editor?",
     "discardChanges": "Discard changes",
@@ -1220,7 +1246,7 @@
     },
     "worldGithub": {
       "risk": "Worlds contain third-party prompts, settings and media. Review their content and plugin requirements before playing. World installation does not install or authorize plugins, or run repository scripts.",
-      "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Existing saves are not automatically synchronized; use world-data sync separately.",
+      "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Updating does not change data already imported into an existing game. To use new starting data, start a new game.",
       "installed": "Installed world packages"
     },
     "deleteProviderTitle": "Delete provider?",
@@ -1540,8 +1566,9 @@
     "triggerInterval": "Interval",
     "triggerManual": "Manual",
     "triggerEvent": "Event",
-    "locked": "Core plugin — cannot be disabled",
-    "core": "core",
+    "locked": "This plugin is locked",
+    "defaultEnabled": "Enabled by default",
+    "defaultEnabledHint": "Enabled by default; you can disable it",
     "enable": "Enable plugin",
     "disable": "Disable plugin",
     "emptyPlaceholder": "{{label}} has no data yet. Waiting for the story to progress…",
@@ -1611,8 +1638,8 @@
     },
     "source": {
       "builtin": {
-        "label": "Core",
-        "tooltip": "Builtin core plugin shipped with Covel"
+        "label": "Builtin",
+        "tooltip": "Plugin shipped with Covel"
       },
       "official": {
         "label": "Official",
@@ -1640,6 +1667,7 @@
       "allowSelected": "Authorize selected",
       "notNow": "Not now"
     },
+    "unavailable": "Some plugins of this session are off. The game goes on without them:",
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
@@ -1661,7 +1689,26 @@
     },
     "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles.",
     "untranslated": "Not translated",
-    "untranslatedHint": "This plugin has no text in your language. Its panels show English."
+    "untranslatedHint": "This plugin has no text in your language. Its panels show English.",
+    "invalidPanelSpecDetail": "Invalid panel spec: {{label}} — {{reason}}",
+    "rpc": {
+      "failed": "The plugin task failed. Try again."
+    },
+    "off": {
+      "needsProvider": "{{plugin}} is off: it needs {{contract}}. Turn on {{providers}} to use it.",
+      "noProvider": "{{plugin}} is off: it needs {{contract}}, and no installed plugin provides it. Install one under Settings → Install & manage, then restart the backend.",
+      "notInstalled": "{{plugin}} is not installed, or it failed to load.",
+      "conflict": "{{plugin}} conflicts with another plugin of this session.",
+      "other": "{{plugin}} cannot run now. Open the plugin list to see why.",
+      "turnOn": "Turn on {{plugin}}"
+    },
+    "noStory": {
+      "title": "No narrative plugin is on",
+      "detail": "Turns will not tell a story: none of the enabled plugins writes narration.",
+      "enable": "Turn on {{plugins}} to get a story.",
+      "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
+    },
+    "dependentsOff": "These plugins will be off, because something they need is off:"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",
@@ -1710,7 +1757,10 @@
       "zh": "Chinese (recommended for DashScope)",
       "en": "English (recommended for GPT/Gemini)"
     },
-    "generationFailed": "Image generation failed"
+    "generationFailed": "Image generation failed",
+    "approvalAction": "Generate image",
+    "sessionUnavailable": "This session is unavailable. Reopen it and try again.",
+    "mediaUnavailable": "This image is unavailable. Reload and try again."
   },
   "onboarding": {
     "language": "Language",
@@ -1786,6 +1836,14 @@
       "empty": "No jobs yet.",
       "copy": "Copy",
       "rerun": "Re-run"
+    },
+    "candidateList": {
+      "draft": "Draft",
+      "send": "Send",
+      "accept": "Accept",
+      "regenerate": "Regenerate",
+      "title": "Candidates",
+      "regenerateHint": "Generate another set of candidates."
     }
   },
   "graph": {
@@ -1808,7 +1866,8 @@
     "submittedHint": "Selected",
     "selectPrefix": "Select {{label}}",
     "selectPlaceholder": "Select...",
-    "requiredMissing": "Please fill in required fields"
+    "requiredMissing": "Please fill in required fields",
+    "missingInteraction": "This form cannot be submitted. Reopen the session and try again."
   },
   "interaction": {
     "playerSelected": "You chose:",
@@ -1840,7 +1899,20 @@
       "showDetail": "Show details",
       "hideDetail": "Hide details",
       "copyDetail": "Copy details",
-      "copied": "Copied"
+      "copied": "Copied",
+      "badge": {
+        "auth": "auth",
+        "forbidden": "forbidden",
+        "not-found": "not found",
+        "rate-limited": "rate limited",
+        "server": "server",
+        "timeout": "timeout",
+        "network": "network",
+        "invalid-output": "output",
+        "incomplete": "incomplete",
+        "error": "error",
+        "unknown": "unknown"
+      }
     },
     "plugin": {
       "loadFailed": "Plugin load failed"
@@ -1864,7 +1936,7 @@
     }
   },
   "characterPresence": {
-    "hint": "Click a portrait to enlarge, or hover and pick an image to replace it.",
+    "hint": "Click a portrait to enlarge it, or choose Replace to upload an image.",
     "empty": "This world ships no character portraits yet.",
     "replace": "Replace",
     "uploading": "Uploading…",
@@ -1993,7 +2065,7 @@
       "estCost": "Est. settlement (USD)",
       "unknownModel": "(unknown model)",
       "noPrice": "no price",
-      "note": "Token usage comes from llm.responded / gateway.responded. Estimated settlement applies each provider's price multiplier to model reference prices; usage without a model or price is excluded, so the result may be a lower bound.",
+      "note": "Token usage comes from llm.responded / gateway.responded, and from gateway.failed when a failed call reported it. Estimated settlement applies each provider's price multiplier to model reference prices; usage without a model or price is excluded, so the result may be a lower bound.",
       "cacheNote": "Cache read/write tokens are included in input totals but excluded from USD until provider-specific cache prices are available.",
       "noData": "No token usage recorded for this session.",
       "windowTitle": "Loaded window",
@@ -2192,17 +2264,6 @@
     "confirmDelete": "Delete",
     "deleted": "Deleted items: {{count}} · {{size}} freed",
     "skipped": "Kept because a session uses them now: {{count}}"
-  },
-  "branchReply": {
-    "replyCandidates": "Reply candidates",
-    "draft": "Draft",
-    "send": "Send",
-    "accept": "Accept",
-    "regenerate": "Regenerate",
-    "regenerateHint": "Tap Regenerate for alternative phrasings of this reply.",
-    "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
-    "approvalRequired": "Branch reply action requires approval.",
-    "actionFailed": "Branch reply action failed"
   },
   "characterBlueprint": {
     "empty": "No character blueprints yet",

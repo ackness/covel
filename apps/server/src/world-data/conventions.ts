@@ -1,4 +1,4 @@
-import { compareText } from "@covel/shared";
+import { KERNEL_WORLD_DATA_PATHS, compareText } from "@covel/shared";
 import { stat } from "node:fs/promises";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type {
@@ -6,6 +6,7 @@ import type {
   WorldDataSourceDescriptor,
 } from "@covel/shared";
 import { resolveContainedPath } from "./safe-path.js";
+import type { WorldDataDiagnostic } from "./types.js";
 
 /**
  * Well-known paths of a world package.
@@ -30,7 +31,7 @@ export const KERNEL_SOURCES: readonly ConventionalSource[] = [
     id: "dimensions",
     entry: {
       kind: "yaml",
-      path: "data/dimensions.yaml",
+      path: KERNEL_WORLD_DATA_PATHS.dimensions,
       schema: "covel://world/dimensions",
       to: "world:metadata.dimensions",
     },
@@ -39,7 +40,7 @@ export const KERNEL_SOURCES: readonly ConventionalSource[] = [
     id: "lorebook",
     entry: {
       kind: "yaml",
-      path: "data/lorebook.yaml",
+      path: KERNEL_WORLD_DATA_PATHS.lorebook,
       to: "lorebook",
       key: "id",
     },
@@ -48,7 +49,7 @@ export const KERNEL_SOURCES: readonly ConventionalSource[] = [
     id: "characters",
     entry: {
       kind: "json",
-      path: "characters/characters.json",
+      path: KERNEL_WORLD_DATA_PATHS.characters,
       to: "characters",
       key: "id",
     },
@@ -91,17 +92,32 @@ export function pluginSourceEntry(
   };
 }
 
+/** A conventional source and the plugin declaration that names it. */
+interface Claim {
+  readonly source: ConventionalSource;
+  /** The declaring plugin and `pluginId/namespace (contract)`; absent for the kernel's. */
+  readonly claimant?: { readonly pluginId: string; readonly label: string };
+}
+
 /**
- * The conventional sources of a set of plugins: the kernel's, then one for
- * each data contract whose plugin names a path
- * (`contributes.data.<ns>.authoring.source`). A path two contracts claim is
- * not a convention for either: the world must say which one it means.
+ * The kernel's sources, then one for each data contract whose plugin names a
+ * path (`contributes.data.<ns>.authoring.source`). Only plugins that loaded
+ * count, and of those only `activePlugins` when it is given: a plugin the
+ * session does not run has no say in how its world is read. A plugin cannot
+ * name a kernel path; the manifest schema rejects it.
  */
-export function conventionsOfPlugins(
+function claimsOf(
   catalogue: Pick<PluginRegistry, "getAll">,
-): readonly ConventionalSource[] {
-  const sources: ConventionalSource[] = [...KERNEL_SOURCES];
-  const entries = [...catalogue.getAll()].sort(([a], [b]) => compareText(a, b));
+  activePlugins: readonly string[] | undefined,
+): Claim[] {
+  const claims: Claim[] = KERNEL_SOURCES.map((source) => ({ source }));
+  const entries = [...catalogue.getAll()]
+    .filter(
+      ([pluginId, entry]) =>
+        entry.status !== "error" &&
+        (!activePlugins || activePlugins.includes(pluginId)),
+    )
+    .sort(([a], [b]) => compareText(a, b));
   for (const [pluginId, entry] of entries)
     for (const [namespace, declaration] of Object.entries(
       entry.packageManifest?.plugin?.contributes?.data ?? {},
@@ -109,19 +125,102 @@ export function conventionsOfPlugins(
       const source = declaration.authoring?.source;
       if (!source) continue;
       for (const contract of declaration.accepts ?? [])
-        sources.push({
-          // A source ID is the namespace; the plugin ID is added when two
-          // plugins use the same namespace.
-          id: sources.some((item) => item.id === namespace)
-            ? `${pluginId}-${namespace}`
-            : namespace,
-          entry: pluginSourceEntry(contract, source),
+        claims.push({
+          source: {
+            // A source ID is the namespace; the plugin ID is added when two
+            // plugins use the same namespace.
+            id: claims.some((item) => item.source.id === namespace)
+              ? `${pluginId}-${namespace}`
+              : namespace,
+            entry: pluginSourceEntry(contract, source),
+          },
+          claimant: {
+            pluginId,
+            label: `${pluginId}/${namespace} (${contract})`,
+          },
         });
     }
-  const claims = new Map<string, number>();
-  for (const { entry } of sources)
-    claims.set(entry.path, (claims.get(entry.path) ?? 0) + 1);
-  return sources.filter(({ entry }) => claims.get(entry.path) === 1);
+  return claims;
+}
+
+function claimCounts(claims: readonly Claim[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { source } of claims)
+    counts.set(source.entry.path, (counts.get(source.entry.path) ?? 0) + 1);
+  return counts;
+}
+
+/**
+ * The conventional sources of a set of plugins: the kernel's, then one for
+ * each data contract whose plugin names a path. `activePlugins` limits the
+ * plugins to those of one session; without it every plugin that loaded
+ * counts. A path two contracts claim is not a convention for either: the
+ * world must say which one it means (see `conventionCollisions`).
+ */
+export function conventionsOfPlugins(
+  catalogue: Pick<PluginRegistry, "getAll">,
+  activePlugins?: readonly string[],
+): readonly ConventionalSource[] {
+  const claims = claimsOf(catalogue, activePlugins);
+  const counts = claimCounts(claims);
+  return claims
+    .filter(({ source }) => counts.get(source.entry.path) === 1)
+    .map(({ source }) => source);
+}
+
+/** A path that more than one data contract of the same plugin set names. */
+export interface ConventionCollision {
+  readonly path: string;
+  /** Each declaration that names it, labelled `pluginId/namespace (contract)`. */
+  readonly claimants: readonly {
+    readonly pluginId: string;
+    readonly label: string;
+  }[];
+}
+
+/** The paths that `conventionsOfPlugins` leaves out because two contracts name them. */
+export function conventionCollisions(
+  catalogue: Pick<PluginRegistry, "getAll">,
+  activePlugins?: readonly string[],
+): readonly ConventionCollision[] {
+  const claims = claimsOf(catalogue, activePlugins);
+  const counts = claimCounts(claims);
+  const byPath = new Map<string, NonNullable<Claim["claimant"]>[]>();
+  for (const { source, claimant } of claims)
+    if (claimant && (counts.get(source.entry.path) ?? 0) > 1)
+      byPath.set(source.entry.path, [
+        ...(byPath.get(source.entry.path) ?? []),
+        claimant,
+      ]);
+  return [...byPath]
+    .sort(([a], [b]) => compareText(a, b))
+    .map(([path, claimants]) => ({ path, claimants }));
+}
+
+/**
+ * A warning for each collision whose file or directory the package has: the
+ * file is imported for none of the contracts that name it. Never an error: a
+ * session still starts, without that file.
+ */
+export async function conventionCollisionDiagnostics(
+  worldRoot: string,
+  collisions: readonly ConventionCollision[],
+): Promise<WorldDataDiagnostic[]> {
+  const diagnostics: WorldDataDiagnostic[] = [];
+  for (const collision of collisions) {
+    const full = await resolveContainedPath(worldRoot, collision.path, {
+      rejectSymlinks: true,
+    });
+    if (!full || !(await stat(full).catch(() => undefined))) continue;
+    diagnostics.push({
+      level: "warning",
+      code: "convention-collision",
+      path: collision.path,
+      message: `${collision.path} is not imported: more than one plugin names it as the file of its data (${collision.claimants.map((item) => item.label).join(", ")})`,
+      hint: "Write a worldData descriptor that lists this file with the contract it is for.",
+    });
+  }
+  return diagnostics;
 }
 
 let conventions: readonly ConventionalSource[] = KERNEL_SOURCES;

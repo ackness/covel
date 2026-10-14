@@ -66,7 +66,7 @@ import {
   PortraitGallery,
   Source,
 } from "./catalog/media-renderers.js";
-import { CandidateList } from "./catalog/branch-reply-renderer.js";
+import { CandidateList } from "./catalog/candidate-list-renderer.js";
 import { Choice, ChoiceList } from "./catalog/choice-renderers.js";
 import {
   AssetRenderCatalog,

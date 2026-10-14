@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段                                          | 含义                                                                                                        |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；`role:*` 标签不驱动任何业务                                                                         |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                        |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
 | `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
@@ -121,6 +121,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 - 不同的包可以提供同一个契约。消费者用 `cardinality: one` 或 `all` 说明要一个还是全部。
 - 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
+
+准备页按插件声明的第一个标签分组，组名直接显示标签原文；没有标签的插件放入“无标签”。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
 
 ### contributes 字段
 
@@ -334,6 +336,8 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 - 这次调用以一次新的尝试重试一遍，附一句“只写任务需要的内容”的提示。打转或重复输出的模型重来一次通常就能写完。
 - 再次被截断才判为失败，错误信息提示调大输出上限。额度真的太小时，第二次也写不完。
 - 唯一的例外：`io.visibility: story` 的 runtime 只输出了正文、没有工具调用。这时正文保留并提交，玩家看到一条“可能停在半句”的提示。
+
+**服务商没说清为什么停（`finishReason: other`）。** 回复可能停在任何地方。和截断一样，`io.visibility: story` 的 runtime 只输出了正文、没有工具调用时，正文保留并提交，玩家会看到提示：这段没写完，可以重试这一回合。其他情况判为失败，不重试。详见 [slots.md](./slots.md#结束原因诊断与拒绝)。
 
 **流式调用在已有输出之后中断**（连接断开，或静默超过 `idleTimeoutMs`）。
 
@@ -715,7 +719,10 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 有明确的提供者被激活时，默认提供者退出。
 - 必需的契约会自动补入提供者。缺失、歧义、冲突和授权不足都会返回原因。
 - 一个事件 topic 在一个会话里只有一个声明者。两个活动插件的 `contributes.events` 含同一个 topic 时，后被接受的那个以 `event-topic-conflict` 被拒绝，原因里写出 topic 和两个插件的 ID（显式请求先于自动依赖，其余按请求顺序）。topic 是会话内全局的名字，发出者和订阅者往往属于别的插件，所以它只能对应一份 payload schema。两个插件可以同时安装，只是不能进同一个会话。给自己的 topic 加上和插件相关的前缀可以避免撞名。
-- 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。
+- 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。这类拒绝的 `code` 是 `missing-provider` 或 `ambiguous-provider`，`contract` 写出等的是哪个契约。
+- 被依赖的插件缺了，依赖它的插件自动停用，不挡开局。创建会话和启用、停用插件时，玩家要的（`requested`）和 `kind: core` 的插件里因此停用的那些，仍写进 `activePlugins`：它们暂时不运行，列在 `unavailable` 里，依赖回来后自动恢复。只有玩家要的插件因冲突等别的原因被拒，创建才返回 `400 plugin_rejected`，正文写出插件 ID 和原因。
+- 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
+- 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
 - 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。前两种阻止创建会话；后两种是玩家的选择，不阻止。
 
@@ -734,7 +741,16 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
 - 世界的 `requires` 仍由解析器独立校验。不能把 `requested` 当作不可取消的必需项。
 
-**发现和授权。** 插件发现接口返回的数据区分 `kind`、宿主的 `hostState` 和会话的 `sessionState`，运行时提供 `outputContract`。没有授权的社区插件可以留在请求列表里，但不能进入执行集合。许可绑定会话身份和审批范围。
+**存档固定玩家确认的那一组。**
+
+- 创建会话、启用或停用插件时，解析结果写进会话的 `activePlugins`。这就是玩家确认的集合。
+- 插件列表、斜杠命令和执行器都用同一个函数 `resolveConfirmedSessionPlugins` 读它：从 `activePlugins` 出发，用当前安装的版本检查，不补入任何插件。后来新装的插件，`kind: core` 的也一样，不会自己加进旧存档。
+- 没有安装、加载失败、当前版本缺少必需的提供者，或者和前面的成员冲突的插件，暂时不运行。原因列在 `GET /api/sessions/:id/plugins` 的 `unavailable` 里，游戏界面给出提示。其他插件照常运行。`activePlugins` 不被改写，插件恢复后它也跟着恢复。
+- 不运行就是处处等于停用：不加载它的 runtime，不触发它的钩子，不接受它的服务调用、动作和表单校验，不显示它的面板，记忆检索也不读它的数据。直接调用它的动作返回 `404 plugin_not_active`，错误信息写明原因。
+- 授权不影响这个集合。社区插件的代码在获准前不运行，由信任门禁按会话单独检查。
+- 想按当前安装的插件重新计算，启用或停用一个插件即可。这两个操作按 `requested` 和 `excluded` 重新解析，再写回 `activePlugins`。
+
+**发现和授权。** 插件发现接口返回的数据区分 `kind`、宿主的 `hostState` 和会话的 `sessionState`，运行时提供 `outputContract`。没有授权的社区插件可以留在请求列表里，但获准前它的代码不运行。许可绑定会话身份和审批范围。
 
 ## 本地化与验证
 

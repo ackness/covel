@@ -2,7 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
-import { resolveI18nText, worldManifestSchema } from "@covel/shared";
+import { z } from "zod";
+import {
+  i18nTextSchema,
+  WORLD_LOCALIZED_TEXT_KEY,
+  worldManifestSchema,
+} from "@covel/shared";
 import { loadWorldDataSummary } from "../../../world-data/world-load.js";
 import { loadSingleWorld } from "../../../world-seed-loader.js";
 import { validateWorldBundle } from "./worlds.js";
@@ -78,14 +83,17 @@ export async function inspectWorldBundle(entries: readonly ExtractedEntry[]) {
         400,
         "World package contains invalid dimensions or referenced files",
       );
+    const localized = z
+      .object({ description: i18nTextSchema.optional() })
+      .safeParse(record.metadata?.[WORLD_LOCALIZED_TEXT_KEY]);
+    return {
+      id: worldId,
+      version: manifest.version ?? null,
+      description: localized.data?.description ?? record.description ?? "",
+      author: manifest.author?.name ?? null,
+      hasServerCode: false,
+    };
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
-  return {
-    id: worldId,
-    version: manifest.version ?? null,
-    description: resolveI18nText(manifest.summary, "en-US") ?? "",
-    author: manifest.author?.name ?? null,
-    hasServerCode: false,
-  };
 }

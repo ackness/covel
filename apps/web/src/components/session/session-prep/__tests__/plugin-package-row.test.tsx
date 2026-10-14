@@ -5,6 +5,7 @@ import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { registerPluginUserSettings } from "@/settings/registry/plugin.js";
 import { PluginPackageRow } from "../plugin-package-row.js";
+import { PluginItem } from "../../plugin-list-panel/plugin-item.js";
 
 const mocks = vi.hoisted(() => ({ store: null as unknown as SettingsStore }));
 vi.mock("@/settings/store.js", () => ({ getSettings: () => mocks.store }));
@@ -150,3 +151,46 @@ it("marks a plugin that has no text in the interface language", async () => {
   );
   expect(screen.queryByText("未翻译")).toBeNull();
 });
+
+it.each([
+  [
+    "en-US",
+    "Enabled by default",
+    "Builtin",
+    "Enabled by default; you can disable it",
+  ],
+  ["zh-CN", "默认启用", "内置", "默认启用，可以关闭"],
+])(
+  "distinguishes default selection from builtin source in %s",
+  async (locale, defaultLabel, sourceLabel, hint) => {
+    await i18n.changeLanguage(locale);
+    const props = rowProps();
+    const view = render(
+      <PluginPackageRow
+        {...props}
+        pkg={{ ...plugin, kind: "core", source: "community" }}
+      />,
+    );
+    expect(screen.getByText(defaultLabel)).toBeTruthy();
+    expect(screen.getByTitle(hint).querySelector("svg.lucide-lock")).toBeNull();
+    const toggle = screen.getByRole("switch") as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    fireEvent.click(toggle);
+    expect(props.onTogglePlugin).toHaveBeenCalledWith(plugin.id);
+    view.unmount();
+    render(
+      <PluginItem
+        pkg={plugin}
+        sessionPlugin={{
+          ...plugin,
+          serverCodeApproved: true,
+          sessionState: "active",
+          active: true,
+          locked: false,
+        }}
+        resolvedSlots={[]}
+      />,
+    );
+    expect(screen.getByText(sourceLabel)).toBeTruthy();
+  },
+);

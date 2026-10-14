@@ -1,17 +1,27 @@
-import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
+import {
+  getPluginTrustInfo,
+  type PluginRegistry,
+  type PluginRegistryEntry,
+} from "@covel/plugin-loader";
 import {
   COMMUNITY_SERVER_CODE_ACTION,
   type RpcApprovalGate,
 } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
 import {
+  disabledDependents,
+  resolveConfirmedSessionPlugins,
   resolveSessionPlugins,
+  type PluginResolutionRejection,
   type SessionPlugin,
   type SnapshotPluginStatus,
   type SessionPluginResolution,
   type UnmetWorldRequirement,
 } from "@covel/shared";
-import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
+import {
+  buildPluginSummary,
+  pluginContractFacts,
+} from "../../../lib/plugin-descriptor.js";
 import { sessionApprovalScope } from "./session-guard.js";
 
 /**
@@ -53,7 +63,7 @@ export function readSessionPluginSelection(
   };
 }
 export function authorizedSessionPluginIds(
-  registry: PluginRegistry,
+  registry: Pick<PluginRegistry, "getAll">,
   gate?: RpcApprovalGate,
   session?: SessionRecord,
 ): string[] {
@@ -75,7 +85,7 @@ export function authorizedSessionPluginIds(
 }
 export function resolveSessionPluginPlan(
   requested: readonly string[],
-  registry: PluginRegistry,
+  registry: Pick<PluginRegistry, "getAll">,
   options: {
     excluded?: readonly string[];
     authorized?: readonly string[];
@@ -89,24 +99,83 @@ export function resolveSessionPluginPlan(
     requested,
     excluded: options.excluded,
     requiredContracts: options.requiredContracts,
-    plugins: [...registry.getAll().values()]
-      .filter((entry) => entry.status !== "error")
-      .map((entry) => {
-        const summary = buildPluginSummary(entry);
-        return {
-          id: entry.id,
-          kind: summary.kind,
-          source: summary.source,
-          authorized: authorized.has(entry.id),
-          provides: summary.provides,
-          requires: summary.requires,
-          optional: summary.optional,
-          conflicts: summary.conflicts,
-          extensions: summary.extensions,
-          eventTopics: summary.eventTopics,
-        };
-      }),
+    plugins: resolvablePlugins(registry.getAll().values()).map((facts) => ({
+      ...facts,
+      authorized: authorized.has(facts.id),
+    })),
   });
+}
+
+/**
+ * The set a session confirms from a plan: the plugins that run, plus the
+ * requested and `core` ones turned off for a missing dependency
+ * (`disabledDependents`). The session's set resolution keeps those off and
+ * lists them in `unavailable` until the dependency is back.
+ */
+export function confirmedPluginIds(
+  plan: SessionPluginResolution,
+  requested: readonly string[],
+  registry: Pick<PluginRegistry, "getAll">,
+): string[] {
+  const dependents = disabledDependents(plan, {
+    requested,
+    plugins: resolvablePlugins(registry.getAll().values()),
+  }).map((item) => item.pluginId);
+  return [...new Set([...plan.active, ...dependents])];
+}
+
+/** Installed entries that can join a session; a package that failed to load cannot. */
+function resolvablePlugins(entries: Iterable<PluginRegistryEntry>) {
+  return [...entries]
+    .filter((entry) => entry.status !== "error")
+    .map(pluginContractFacts);
+}
+
+/**
+ * The one authority for a session's plugin set: the plugins the player
+ * confirmed (`session.activePlugins`), checked against the installed
+ * versions. The plugin list, slash commands and the executor (through the
+ * registry's `resolveSessionSet`) all read it; nothing joins on its own.
+ */
+export function resolveSessionPluginSet(
+  confirmed: readonly string[],
+  entries: ReadonlyMap<string, PluginRegistryEntry>,
+  requiredContracts?: readonly string[],
+): SessionPluginResolution {
+  const set = resolveConfirmedSessionPlugins({
+    confirmed,
+    plugins: resolvablePlugins(entries.values()),
+    ...(requiredContracts ? { requiredContracts } : {}),
+  });
+  return {
+    ...set,
+    rejected: set.rejected.map((item) =>
+      item.code === "unknown-plugin" && entries.has(item.pluginId)
+        ? { ...item, reason: `Plugin ${item.pluginId} failed to load` }
+        : item,
+    ),
+  };
+}
+
+/**
+ * The confirmed plugins that can run now (`resolveSessionPluginSet`). Every
+ * execution gate reads this, never the stored IDs: a member whose
+ * requirement is gone, that conflicts or that failed to load is disabled
+ * everywhere, and the plugin list's `unavailable` tells the player why.
+ */
+export function runnablePluginIds(
+  confirmed: readonly string[],
+  registry: Pick<PluginRegistry, "getAll">,
+): string[] {
+  return resolveSessionPluginSet(confirmed, registry.getAll()).active;
+}
+
+/** IDs of the session's plugin set; see `runnablePluginIds`. */
+export function sessionPluginIds(
+  session: Pick<SessionRecord, "activePlugins">,
+  registry: Pick<PluginRegistry, "getAll">,
+): string[] {
+  return runnablePluginIds(session.activePlugins ?? [], registry);
 }
 /** A world record's `pluginPolicy.requires`: contracts it needs a provider for. */
 export function worldRequiredContracts(
@@ -180,7 +249,12 @@ export function buildAvailablePluginList(
   });
 }
 
-/** Shared read-only projection for session lists and diagnostics. */
+/**
+ * Shared read-only projection for session lists and diagnostics. It shows the
+ * session's plugin set (`resolveSessionPluginSet`); members and requested
+ * plugins whose server code awaits approval are marked so the player can
+ * approve them, and `unavailable` lists the members that cannot run now.
+ */
 export function buildSessionPluginView(
   session: SessionRecord,
   registry: PluginRegistry,
@@ -188,13 +262,42 @@ export function buildSessionPluginView(
     authorized: readonly string[];
     isEntryPublished?: (pluginId: string) => boolean;
   },
-): { items: SessionPlugin[]; resolution: SessionPluginResolution } {
+): {
+  items: SessionPlugin[];
+  resolution: SessionPluginResolution;
+  unavailable: PluginResolutionRejection[];
+} {
   const selection = readSessionPluginSelection(session);
-  const resolution = resolveSessionPluginPlan(selection.requested, registry, {
-    excluded: selection.excluded,
-    authorized: options.authorized,
-    requiredContracts: selection.requiredContracts,
+  const set = resolveSessionPluginSet(
+    session.activePlugins ?? [],
+    registry.getAll(),
+    selection.requiredContracts,
+  );
+  const authorized = new Set(options.authorized);
+  const awaitingApproval = [
+    ...new Set([...set.active, ...selection.requested]),
+  ].filter((id) => {
+    const entry = registry.get(id);
+    return (
+      entry !== undefined &&
+      entry.status !== "error" &&
+      !selection.excluded.includes(id) &&
+      getPluginTrustInfo(id, entry.source).source === "community" &&
+      !authorized.has(id)
+    );
   });
+  const resolution: SessionPluginResolution = {
+    ...set,
+    active: set.active.filter((id) => !awaitingApproval.includes(id)),
+    rejected: [
+      ...set.rejected,
+      ...awaitingApproval.map((pluginId): PluginResolutionRejection => ({
+        pluginId,
+        code: "approval-required",
+        reason: `Plugin ${pluginId} requires approval`,
+      })),
+    ],
+  };
   return {
     items: buildAvailablePluginList(
       resolution.active,
@@ -203,8 +306,10 @@ export function buildSessionPluginView(
       options,
     ),
     resolution,
+    unavailable: set.rejected,
   };
 }
+
 export function buildSnapshotPluginList(
   registry: PluginRegistry,
   activeIds: ReadonlySet<string>,

@@ -14,7 +14,7 @@
  *
  * The category's name is not stored. Entries are injected into this plugin's
  * prompt, and a name stored in two languages put both in front of the model.
- * The panel takes the names from its filter tabs.
+ * The panel declares localized names in its category options and filter tabs.
  *
  * Categories MUST stay in sync with the enum in `tools/sync-codex-entries.js`.
  */

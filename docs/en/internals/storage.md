@@ -52,25 +52,31 @@ There is no `STORE_BACKEND=idb`, and no `createStore({ backend: "idb" })`. If yo
 
 When you add a table or a query, put it in the module for its feature area, add it to both backends, and do not put it in the factory.
 
-**The media backend is chosen separately.** `MEDIA_BACKEND` does not depend on the data backend. `mirror` means it follows the current server data backend. An explicitly chosen browser IDB is only an implementation for media and caches. It is not a business `DataStore`.
+**The media backend is chosen separately.** `MEDIA_BACKEND` does not depend on the data backend. `mirror` means it follows the current server data backend. When the media backend is `pg` (chosen or followed) and `DATABASE_URL` is missing, the server refuses to start instead of quietly turning media off; to run without media, set `MEDIA_BACKEND=none`. The web app's media display cache lives in the browser and is not a `MediaStore` backend.
 
 **PostgreSQL does not mean automatic failover.** PostgreSQL lets multiple processes coordinate database writes, session locks and EventBus event dispatch. But the "steer" and "cancel" of a turn still depend on the in-process execution handle, so a request must reach the instance that is running that turn. The guarantees after a restart also differ for legacy background jobs and for persisted staged jobs. These limits are recorded in [API multi-instance boundaries](../reference/api.md#limits-of-running-several-instances).
 
 **World settings are not cached per process.** The schemas of world settings and memory blocks are read every time from the DataStore being used. A committed change, or a replacement with the same ID, is visible on the next read. Separate store instances do not accidentally share world records. Runtime settings are taken once at the start of each operation, and later changes do not affect an operation already in progress.
 
-**Deleting archived vectors.** Before archived vectors are deleted, three kinds of source must be read successfully: the characters, the lorebook (the setting collection), and the plugin data of the active plugins that declare their namespace searchable (`contributes.data.<ns>.search`).
+**Write order.** Each session has a write counter (`session_write_counters`). Every saved turn message, and every insert, update or delete of a lorebook entry, character or plugin data row, takes the next number from it. The number is taken inside the statement that writes, and the counter row stays locked until the transaction ends, so the numbers of one session follow the order writes were saved in: when number N is visible, every lower number already is. Database triggers do this (`packages/store/src/common/write-order-ddl.ts`), so every write path counts; the memory backend follows the same rule.
 
-- If reading either source fails, this round of archive cleanup is aborted. The existing vectors and content hashes are kept, and a warning with the session information is emitted.
-- If reading a source succeeds but its content is empty, the empty result is trusted, and outdated entries are still deleted.
-- The next normal cleanup can reuse unchanged hashes and does not need to call embedding again.
+- A turn message keeps its number in `write_seq`. Incremental reads (`listTurnMessagesAfter`, a plugin's `readTurnMessages`) move along it, not along `createdAt`: a background execution takes its time while it runs and can be saved after a later turn, and a cursor on time would skip it for good. The timeline itself is still sorted by time.
+- The latest change of each lorebook entry, character and plugin data row is kept in `record_changes`, one row per record; a delete keeps its row too (a tombstone). `listRecordChanges` reads them by number. The table grows with the records a session ever had, not with the number of writes.
+- Deleting a session fires those triggers again for the rows it deletes, so the registry deletes `record_changes` and `session_write_counters` last.
+- The column and the two tables arrived with data schema version 5. A SQLite or PostgreSQL database at version 4 is refused at startup (`StoreSchemaVersionError`) and is left unchanged; back it up and start with a new database, as described in [the startup check of the data schema version](#capabilities-and-migrations).
+
+**Writing archived vectors.** The archive index no longer reads every character, lorebook entry and plugin data row each turn. Each write job reads the changes since its last position and reads the one record each change names: a record that still exists is embedded; one that is gone, disabled or has no text has its vector deleted. When the vector already holds the same text, embedding is not called.
+
+- If a read fails or embedding returns nothing, the round does not move past that change. The existing vectors and progress are kept, a warning with the session information is emitted, and the next round retries.
+- When a plugin namespace becomes searchable (`contributes.data.<ns>.search`), its changes before the current position are read separately. When it stops being searchable, the vector of every record it ever had is deleted, and no new vector is written until that is done.
 
 ## Memory Index Ownership
 
 `MemorySystem` manages its own background jobs. Before the host closes its store, it stops whatever produces the jobs, calls this instance's `drain()`, and then checks `pendingTaskCount()`. Separate instances do not share a process-level drain barrier.
 
-**Checking sources at query time.** Before a query on archived vectors returns content, it checks the candidates against the current character, lorebook and searchable plugin data records. If a candidate has been deleted or changed, the query falls back to keyword search until the asynchronous write job refreshes the index. Writing the lorebook through the API also schedules a write job. Deleting one archive source removes only its own vectors. The other unchanged vectors are kept, and embedding is not called again.
+**Checking sources at query time.** Before a query on archived vectors returns content, it reads only the records its hits name, not the whole corpus. If a hit's record has been deleted or changed, the query falls back to keyword search until the asynchronous write job refreshes the index. Writing the lorebook through the API also schedules a write job. Deleting one archive source removes only its own vectors. The other unchanged vectors are kept, and embedding is not called again.
 
-**Where progress is stored.** The recall cursor and the archive hashes are stored in the `vector_index_progress` table. They sit next to the physical index, not in `plugin_data`.
+**Where progress is stored.** The recall cursor (the last `write_seq` handled) and the archive progress (the last change number handled, the searchable namespaces indexed, and any unfinished catch-up or removal) are stored in the `vector_index_progress` table. They sit next to the physical index, not in `plugin_data`.
 
 - When progress is written, the previously serialized value is compared. The session's "incarnation" is also checked inside the backend's write boundary. (If the same ID is deleted and then recreated, it counts as a different incarnation.)
 - Deleting or replacing a session clears both the progress and the vectors. A transaction rollback restores the progress. See [session deletion](#server-world-and-session-deletion) for the exception when SQLite's vector extension is unavailable.
@@ -300,7 +306,6 @@ The display history of state changes is a read-through cache on IndexedDB. It is
 - When a version change notice arrives, the handle is closed and released so that a delete or an upgrade can proceed. It does not delete data, and it does not replay failed operations automatically.
 - A blocked open fails immediately and does not wait forever. While the native request is still blocked, later calls reuse this failure instead of queuing a new open. An upgrade that is later abandoned is aborted, or its handle is closed.
 - On error, the app KV reports the error. The render cache falls back to an authorized network response.
-- IndexedDbMediaStore's explicit backend connection has its own lifecycle.
 - A failure to persist a patch is returned to the caller. The SSE consumer reports it as a "best-effort display cache failure", and it does not change the committed game result.
 
 ### Render Blob Cache

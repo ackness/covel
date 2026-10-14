@@ -35,8 +35,13 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
-export { unifyFinishReason } from "./llm-finish-reason.js";
+export {
+  isCompleteFinishReason,
+  unifyFinishReason,
+} from "./llm-finish-reason.js";
 export type { LLMFinishReason } from "./llm-finish-reason.js";
+export { isAccountFailure } from "./llm-failure-kind.js";
+export type { ProviderFailureKind } from "./llm-failure-kind.js";
 export type {
   EvaluationJson,
   EvaluationValue,
@@ -455,7 +460,10 @@ export type {
 } from "./proposals/asset-generate.js";
 export {
   resolveSessionPlugins,
+  resolveConfirmedSessionPlugins,
   isBlockingWorldRequirement,
+  isDependencyRejection,
+  disabledDependents,
   providedContracts,
 } from "./plugin-selection.js";
 export {
@@ -550,6 +558,7 @@ export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 export { isValidPluginSetting } from "./plugin-settings.js";
 
 export * from "./world-data-target.js";
+export * from "./world-package-paths.js";
 export * from "./plugin-frame.js";
 
 export {

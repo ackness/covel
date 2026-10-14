@@ -4,11 +4,11 @@ import { mediaImageFlowSchema } from "@covel/shared";
 import { request } from "@/services/api/request.js";
 import type { PluginRpcRequest } from "@covel/shared";
 import type { SessionPlugin } from "@/services/api.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import {
   emitPluginRpcRuntimeResponse,
   postPluginRpcWithApproval,
-  type ConfirmPluginRpcApproval,
 } from "../plugin-rpc-ui.js";
 
 interface ImageGenEntry {
@@ -19,7 +19,6 @@ interface ImageGenEntry {
 interface UseImageGenerationArgs {
   readonly sessionPlugins: SessionPlugin[];
   readonly sessionId: string | undefined;
-  readonly confirm: ConfirmPluginRpcApproval;
   readonly t: TFunction;
 }
 
@@ -39,7 +38,6 @@ interface UseImageGenerationResult {
 export function useImageGeneration({
   sessionPlugins,
   sessionId,
-  confirm,
   t,
 }: UseImageGenerationArgs): UseImageGenerationResult {
   const [generatingImage, setGeneratingImage] = useState(false);
@@ -94,8 +92,8 @@ export function useImageGeneration({
         sessionId,
         request: req,
         pluginId: imageGenEntry.pluginId,
-        actionLabel: `runtime ${imageGenEntry.runtimeId}`,
-        confirm,
+        actionLabel: t("coreImage.approvalAction"),
+        confirm: requestConfirm,
         t,
       });
       if (res) {
@@ -111,11 +109,14 @@ export function useImageGeneration({
         });
       }
     } catch (err) {
-      emitToast("error", err instanceof Error ? err.message : String(err));
+      emitToast(
+        "error",
+        err instanceof Error ? err.message : t("common.error"),
+      );
     } finally {
       setGeneratingImage(false);
     }
-  }, [sessionId, imageGenEntry, generatingImage, confirm, t]);
+  }, [sessionId, imageGenEntry, generatingImage, t]);
 
   return {
     isImageGenActive: imageGenEntry !== null,

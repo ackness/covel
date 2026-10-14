@@ -84,7 +84,7 @@ markers in source — update it when adding or removing one.
 
 ## Commands
 
-Toolchain versions come from `mise.toml` (Node 26, pnpm 12.6.0, actionlint).
+Toolchain versions come from `mise.toml` (Node 26.10.0, pnpm 12.10.1, actionlint).
 
 ```bash
 pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)
@@ -230,7 +230,9 @@ relative imports**. Workspace packages export TS source directly
 as the standalone author SDK: `pnpm install` and Turbo's `^build` edge rebuild it,
 and so does the dev server at every start of its process when the build is older
 than the source (`scripts/ensure-plugin-sdk.mjs`, preloaded by the server's `dev`
-scripts; a change to the SDK source restarts the server). After editing its
+scripts; a change to the SDK source restarts the server). The SDK's own Turbo
+lint/test tasks also wait for its build: their test imports reach its `dist`
+through `shared`. After editing its
 source a direct `pnpm --filter <pkg> test` still needs
 `pnpm --filter @covel/plugin-handlers-utils build` first. It is not on npm, so
 nothing outside this workspace can depend on it by version — a standalone plugin

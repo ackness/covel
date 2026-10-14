@@ -11,7 +11,11 @@ import {
 import { resolvePath, useI18nResolver } from "@/lib/catalog/helpers.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { compactJobId, formatJobDuration } from "@/lib/job-ui.js";
+import {
+  compactJobId,
+  formatJobDuration,
+  jobStatusLabel,
+} from "@/lib/job-ui.js";
 
 export function JobListPanel({
   props: input,
@@ -68,7 +72,7 @@ export function JobListPanel({
             >
               <div className="flex items-center gap-1.5 text-[10px]">
                 {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                <span>{status}</span>
+                <span>{jobStatusLabel(status, t)}</span>
                 <span className="font-mono">{compactJobId(id)}</span>
               </div>
               {typeof duration === "number" ? (
@@ -122,7 +126,11 @@ export function JobListPanel({
                 ) : null}
                 {error ? (
                   <p className="text-[11px] text-destructive whitespace-pre-wrap">
-                    {String(error)}
+                    {error instanceof Error
+                      ? error.message
+                      : typeof error === "string"
+                        ? error
+                        : t("common.error")}
                   </p>
                 ) : null}
                 {props.rerunAction ? (
@@ -139,7 +147,14 @@ export function JobListPanel({
                         scope: { item, props: input },
                         t,
                       })
-                        .catch((err) => emitToast("error", String(err)))
+                        .catch((err) =>
+                          emitToast(
+                            "error",
+                            err instanceof Error
+                              ? err.message
+                              : t("common.error"),
+                          ),
+                        )
                         .finally(() => setBusy(false));
                     }}
                   >

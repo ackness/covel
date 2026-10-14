@@ -93,9 +93,7 @@ export function SessionPluginItem({
             {displayName}
           </span>
           {isLocked && (
-            <span
-              title={t("plugin.locked", "Core plugin — cannot be disabled")}
-            >
+            <span title={t("plugin.locked")}>
               <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
             </span>
           )}

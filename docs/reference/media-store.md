@@ -24,7 +24,7 @@ interface MediaStore {
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
   resolveUrl(ref: MediaRef): Promise<string>;
-  delete(id: string, opts?: { force?: boolean }): Promise<void>;
+  delete(id: string): Promise<void>;
   lookup(id: string): Promise<MediaAssetLookup | null>;
   recordOwnership(
     id: string,
@@ -98,12 +98,11 @@ interface MediaStore {
 
 ## Backends
 
-| 后端                | 工厂函数                                        | 字节存在哪里                                          | `openReadStream()`                      |
-| ------------------- | ----------------------------------------------- | ----------------------------------------------------- | --------------------------------------- |
-| Memory              | `createMemoryMediaStore()`                      | 进程内存                                              | 有（一次给出整块）                      |
-| SQLite/local-fs     | `createSqliteMediaStore(dbPath, { mediaRoot })` | 本地文件，路径是 `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | 有（真正的流式读取）                    |
-| PostgreSQL          | `createPgMediaStore(databaseUrl)`               | `media_assets.body` 列，类型 `bytea`                  | **没有**，见下面的“PG streaming caveat” |
-| IndexedDB（网页端） | `createIndexedDbMediaStore({ dbName })`         | 浏览器 IndexedDB 的 Blob 存储                         | 有（`Blob.stream()`）                   |
+| 后端            | 工厂函数                                        | 字节存在哪里                                          | `openReadStream()`                      |
+| --------------- | ----------------------------------------------- | ----------------------------------------------------- | --------------------------------------- |
+| Memory          | `createMemoryMediaStore()`                      | 进程内存                                              | 有（一次给出整块）                      |
+| SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | 本地文件，路径是 `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | 有（真正的流式读取）                    |
+| PostgreSQL      | `createPgMediaStore(databaseUrl)`               | `media_assets.body` 列，类型 `bytea`                  | **没有**，见下面的“PG streaming caveat” |
 
 ### 浏览器里的显示缓存
 
@@ -171,11 +170,10 @@ interface MediaStore {
 
 返回 `sessionId` 拥有的、并且 `meta` 包含 `filter` 里每一对键值的文件。
 
-- 匹配方式是精确、浅层的子集匹配。四种后端共用一个实现：`packages/store/src/media-store/filter.ts` 的 `filterAssetsByMetadata`。
+- 后端先只取出这个会话拥有的文件：SQLite 和 PostgreSQL 在 SQL 里按 `owner_session_id` 查询，走归属索引。所以查询的开销随这个会话的媒体数量增长，和其他会话有多少媒体无关。
+- 匹配方式是精确、浅层的子集匹配。三种后端共用一个实现：`packages/store/src/media-store/filter.ts` 的 `filterAssetsByMetadata`。
 - `filter` 里某个值是 `undefined` 时，既匹配“没有这个键”，也匹配“这个键明确存成了 `undefined`”（比较用的是 `meta[k] === v`，两边都读到 `undefined`）。
 - 只有基本类型的值（string / number / boolean / `null`）比较才有意义。对象和数组永远不匹配，因为 `===` 比较的是引用。
-- 结果集预期很小：每个会话的媒体只有几十条，所以这里做的是全表扫描。`filter.ts` 里有 `ponytail:` 注释：数据量超出这个规模时，要下推到 SQL。
-- `filter.ts` 不使用 Node 内置模块（和 `utils.ts` 不同），因为浏览器端的 MediaStore 也会导入它。
 
 ### `promptHash` idempotency
 
@@ -235,7 +233,7 @@ SQLite 的 `media_assets.path` 保存相对 `mediaRoot` 的路径（`ab/cd/<sha2
 
 **`addRef()` 按 `(sessionId, mediaId)` 幂等**
 
-`media_refs` 的 UNIQUE 约束不包含 `plugin_id`，它只作为“最先来源”的说明被记录下来。这样做是安全的：SQL 的 `UNIQUE` 把每个 `NULL` 都当成不同的值，如果约束里包含可以为空的 `plugin_id`，调用方传 `undefined` 时就会悄悄产生无数条重复记录。这个键的形状和 Memory、IndexedDB 一致，它们也用 `(sessionId, mediaId)` 作为 map 的键。
+`media_refs` 的 UNIQUE 约束不包含 `plugin_id`，它只作为“最先来源”的说明被记录下来。这样做是安全的：SQL 的 `UNIQUE` 把每个 `NULL` 都当成不同的值，如果约束里包含可以为空的 `plugin_id`，调用方传 `undefined` 时就会悄悄产生无数条重复记录。这个键的形状和 Memory 一致，它也用 `(sessionId, mediaId)` 作为 map 的键。
 
 > [!WARNING]
 > 只支持当前的 `(session_id, media_id)` 约束。使用旧的媒体引用结构的开发数据库需要重建，框架不迁移也不自动删除旧记录。
@@ -273,7 +271,7 @@ SQLite 的 `media_assets.path` 保存相对 `mediaRoot` 的路径（`ab/cd/<sha2
 - 收尾时，先给真实会话建立归属和引用，再释放临时引用。
 - 准备、语义写入、会话重复和世界准入失败时，只释放本次尝试的临时引用。它们不会强制删除共享的内容，也不会释放已有会话的声明。之后没人声明的字节可以被生命周期清理回收。
 - 新建的会话在媒体收尾时失败的话，创建流程会在会话生命周期锁里删除这个会话并释放它的声明。
-- 同步（sync）在提交之后移除明确的引用，归属和字节的回收留给生命周期清理。
+- 同步（sync）在提交之后，移除本会话对不再需要的文件的明确引用。会话的其他索引行、消息、快照、runtime 输出、trace 或回合结果里还出现的文件，引用保留：这个会话和它的分叉一直能读历史里出现过的图。扫描超过行数上限（200,000）时全部保留。归属和字节的回收留给生命周期清理。
 
 出问题时：
 
@@ -323,7 +321,7 @@ SQLite 媒体工厂在构造成功之前，自己持有共享连接的引用。�
 **`protectedIds` 只是计划，不是最后的裁决**
 
 - 清理的计划里还包括当前所有的归属和引用声明，包括导入时还没过期的临时引用。所以演练（dry run）会把被钉住的文件报告为受保护。
-- 每个后端在删除的同一个临界区或事务里，再检查一次文件当前的归属和引用：PG 用 advisory 事务锁加 `NOT EXISTS`，SQLite 用 `BEGIN IMMEDIATE`，IndexedDB 用跨两个 store 的 `readwrite` 事务，Memory 同步检查 map。
+- 每个后端在删除的同一个临界区或事务里，再检查一次文件当前的归属和引用：PG 用 advisory 事务锁加 `NOT EXISTS`，SQLite 用 `BEGIN IMMEDIATE`，Memory 同步检查 map。
 - 所以在路由扫描之后才建立的引用或归属，仍然能保住文件。返回的清理计数和 ID 以实际删除的为准，不是照抄过时的计划。
 
 **SQLite 的额外规则**
@@ -388,9 +386,10 @@ SQLite 媒体工厂在构造成功之前，自己持有共享连接的引用。�
 - 未使用的媒体通过带 `onlyIds` 的 `MediaStore.cleanup()` 删除。所以每个后端都会在删除它的临界区里，再检查一遍它的归属和引用。扫描之后才被某个会话声明的文件会保留，并报告为“已跳过”。
 - 在用、被占用或未知的文件，只能用带 `force`、并且只点名一个 ID 的请求删除。这时 `delete()` 把它和指向它的所有引用一起移除。
 - 用过它的会话保留自己的记录。原来放图片或声音的地方，界面显示“媒体不可用”的占位。插件再次请求同样的生成时，会得到一个新的文件。
+- 从这些会话分叉照常成功，缺的文件在子会话里同样显示占位（见 [api.md 的分叉](./api.md#post-apisessionsidfork)）。
 
 **访问。** 媒体库只在“服务器保存的一切都属于同一个玩家”的地方存在：`DEPLOYMENT_TIER=self` 和桌面版。在 `demo` 和 `commercial` 部署下，以及在浏览器私有模式下（生产服务器使用 MemoryStore），MediaStore 里有多个归属者的媒体，又没有按归属者的索引。所以这两个路由都返回 `503 unavailable`，带不带运维令牌都一样。
 
 ## Tests
 
-共用的契约测试在 `packages/store/src/contract/media-store-contract.ts`。目前的覆盖范围：Memory、SQLite/local-fs、IndexedDB（通过 `fake-indexeddb`），以及 `DATABASE_URL` 指向一个可以连上的数据库时的 PostgreSQL（`packages/store/tests/media-store.test.ts`）。
+共用的契约测试在 `packages/store/src/contract/media-store-contract.ts`。目前的覆盖范围：Memory、SQLite/local-fs，以及 `DATABASE_URL` 指向一个可以连上的数据库时的 PostgreSQL（`packages/store/tests/media-store.test.ts`）。

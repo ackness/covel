@@ -534,9 +534,9 @@ This section lists every endpoint by topic. After each table come the rules that
 | DELETE | `/api/worlds/:id`                       | Delete a world and all of its sessions. The rules are below                                             |
 | GET    | `/api/worlds/:id/dimensions/export`     | Export the world's dimensions (YAML / JSON)                                                             |
 | POST   | `/api/worlds/:id/dimensions/import`     | Import the world's dimensions                                                                           |
-| POST   | `/api/worlds/:id/sync-dimensions`       | Sync the world's dimensions to active sessions                                                          |
+| POST   | `/api/worlds/:id/sync-dimensions`       | Authors and tools: sync world dimensions to one specified active session                                |
 | POST   | `/api/worlds/:id/world-data/preflight`  | Dry-run a worldData import, read-only                                                                   |
-| POST   | `/api/worlds/:id/sync-data`             | Sync the worldData rows that the importer manages. Supports dry-run and force                           |
+| POST   | `/api/worlds/:id/sync-data`             | Authors and tools: sync importer-managed worldData rows; dry-run by default                             |
 | POST   | `/api/worlds/:id/translate`             | Use the configured model to add one language version to a world package in the user worlds folder (SSE) |
 | GET    | `/api/worlds/:id/gallery`               | List the images that come with the world package (scenes, portraits)                                    |
 | GET    | `/api/media/library`                    | The player's media library (`self` / desktop app only)                                                  |
@@ -545,7 +545,7 @@ This section lists every endpoint by topic. After each table come the rules that
 
 A few more notes:
 
-- `POST /api/worlds/:id/sync-dimensions` writes the dimensions into the `plugin_data` and lorebook constant entries of active sessions, and removes old keys.
+- `POST /api/worlds/:id/sync-dimensions` handles only the specified session's protected `_dimensions` records and import ledger. It does not write the lorebook. See the endpoint details below.
 - `POST /api/worlds/:id/world-data/preflight` builds the import plan for worldData but does not write it. It returns the diagnostics, the number of planned writes, and a summary of the targets.
 - `POST /api/worlds/:id/sync-data` uses the provenance ledger to decide which rows the importer manages.
 - `GET /api/worlds/:id/gallery` lets the world list and world details show images even when no session exists yet.
@@ -1019,7 +1019,7 @@ Authentication:
 
 What each endpoint accepts and returns:
 
-- `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` and `package.json` at the root, or a `.zip` with a multi-runtime layout. Returns `201 { ok, kind: "plugin", id, restartRequired: true }`.
+- `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` and `package.json` at the root, or a `.zip` with a multi-runtime layout. Returns `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`.
 - `POST /api/install/world`: accepts a `.zip` with `world.yaml` and `WORLD.md` at the root. Returns `201 { ok, kind: "world", id, restartRequired: false }`.
 - `POST /api/install/plugin/github/preview`: returns the fixed commit, the summary, and the signed preview.
 - `.../github/update/preview`: returns `{ status: "current" }`, `{ status: "pinned" }`, or `{ status: "available", ... }` plus a preview. The full contract of the update endpoints is in [Plugin install](./plugin-installation.md#http-contract) and [World install](./world-installation.md).
@@ -1027,6 +1027,8 @@ What each endpoint accepts and returns:
 - `POST /api/install/github/preview`: returns `{ collection, items, problems }`. See [Plugin install](./plugin-installation.md#http-contract).
 - `POST /api/install/github/batch`: returns `201 { ok, installed, restartRequired }`.
 - `POST /api/install/collection`: the response is the same as for batch.
+
+Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
 `/api/install/world` checks the worldData diagnostics before it writes the world record:
@@ -1263,7 +1265,7 @@ Fork and community plugin grants:
 - When the dimension provider bound in a snapshot is a community plugin, the child cannot enable it when it is created:
   - If the snapshot has dimension data or settlement receipts for that provider: fork returns `409 { "code": "dimension_provider_required" }`, and no child session is created.
   - If the snapshot has no dimension data: the child session is created normally, but without this binding.
-- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a community plugin that lacks its current grant as inactive. It keeps the plugin selection saved in the session, so it can be authorized again later.
+- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a community plugin that lacks its current grant as inactive (`approvalRequired: true`). It keeps the plugin selection saved in the session, so it can be authorized again later.
 
 ### Character data
 
@@ -1798,7 +1800,7 @@ Behavior:
 
 #### `POST /api/worlds/:id/sync-dimensions`
 
-Syncs the world's current dimension definitions to one given session. This endpoint tries to write directly. If you want to preview first, or need the general sync options, use `sync-data`.
+An API for authors and tools that syncs the world's current dimension definitions to the one active session specified by `sessionId`. The app has no control for players to call it. This endpoint tries to write directly and has no dry-run. To preview first, or use the general sync options, use [`sync-data`](#post-apiworldsidsync-data).
 
 It handles only dimensions. It uses the `world_data_import_ledger` ledger and the protected `_dimensions` records. It does not write `entries`, does not write the always-on lorebook, and does not clean up other imported data.
 
@@ -1884,7 +1886,9 @@ or:
 
 #### `POST /api/worlds/:id/sync-data`
 
-Sync the updated worldData from a world package into an existing session. **It only previews by default (dry-run).** Send `dryRun: false` to write.
+An API for authors and tools that syncs updated worldData from a world package into the one existing session specified by `sessionId`. The app currently has no sync control for players. **It only previews by default (dry-run).** Send `dryRun: false` to write. Actual writes require the session to be `active`.
+
+Updating a world package, hot-reloading files, enabling a plugin or approving its server code does not call this endpoint automatically. It uses the session's saved `activePlugins`. It does not enable plugins, rerun setup or rewrite past story messages. Players who want the new starting data should start a new session. Lore still follows the rules under "Automatic reload after a file change" in [World data](./world-data.md).
 
 **Request fields:**
 
@@ -1896,7 +1900,7 @@ Sync the updated worldData from a world package into an existing session. **It o
 
 **What gets synced:**
 
-- Only rows in the ledger `world_data_import_ledger` with `managed=true` are handled.
+- Overwriting and deleting existing records only handles rows in `world_data_import_ledger` with `managed=true` that belong to the current world. New records in this plan are also imported and added to the ledger.
 - It uses `valueHash` to check whether a player or a plugin has changed the target data.
 - Dimension definitions are in the same ledger. This includes inline definitions, `dimensionSources`, and the effective definitions of a storage-backed world.
 
@@ -2201,6 +2205,7 @@ Notes:
   - These requirements are saved with the session in `metadata.pluginSelection.requiredContracts`. Later starts, stops, and reloads use this list and do not read the world again.
   - If no provider is installed, or there are several providers and the request does not pick one, the response is `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`.
   - If the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval, the session is still created.
+- A plugin with a missing dependency: when no provider gives a contract it depends on (say the player turned the provider off), the session is still created and the plugin is turned off automatically. Such plugins that the player asked for, or that are `kind: core`, are still written into `activePlugins`; `GET /api/sessions/:id/plugins` lists them in `unavailable`, and they come back on their own once the dependency is back. Rules: [Session plugin selection](./plugins.md#session-plugin-selection).
 - `metadata.characterSchema`: when a local session is created in Web private mode, the same schema is written. If the preset is not valid, the session is not created.
 - `metadata.embeddedCharacters`: these are not a plugin's character cards. They do not make a copy of plugin data.
 - `metadata.embeddedLorebook`: AI-generated worlds with `server-store` / `return-only` use it to carry their material and rules.
@@ -2259,13 +2264,14 @@ When `ownerToken` must be sent:
 
 **Errors:**
 
-| Status | `code`                    | When                                                                                               |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| 400    | `world_requirement_unmet` | A contract the world requires has no provider, or has several providers and none is picked         |
-| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token |
-| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                |
-| 409    | `world_deleting`          | The world is being deleted                                                                         |
-| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                       |
+| Status | `code`                    | When                                                                                                                                   |
+| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `plugin_rejected`         | A plugin the player asked for is rejected for a reason other than a missing dependency, such as a conflict; `details` is the rejection |
+| 400    | `world_requirement_unmet` | A contract the world requires has no provider, or has several providers and none is picked                                             |
+| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token                                     |
+| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                                                    |
+| 409    | `world_deleting`          | The world is being deleted                                                                                                             |
+| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                                                           |
 
 - When `id` already exists, the response body is `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`. Creating does not overwrite the existing session, and it does not treat the old session's child records as data for the new session.
 - The server checks the world once before preparing resources and once more when the session is committed. Preparing does not attach media to the session. If it fails, any leftover bytes that nothing refers to are cleaned up by media GC. It does not force-delete content that another session might be using.
@@ -2799,7 +2805,7 @@ Sends a structured command to a plugin in a session. It does not go through chat
 
 Calls the handler that the plugin registers in `entry` with `covel.registerRpc`, or a default framework handler (such as `slash-debug`).
 
-- The plugin must be one of the session's currently enabled plugins. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A late request from an old panel is also subject to this check.
+- The plugin must be one of the session's currently enabled plugins that can run now. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A plugin the player confirmed that cannot run now (see `unavailable[]`) gets the same error, and the message gives the reason. A late request from an old panel is also subject to this check.
 - `pluginId: "framework"` means a default framework action. It is not part of the plugin set that is enabled, and it runs under its own entry conditions. `framework` is a reserved ID that no plugin can take, so such a request runs only a framework default action; a request that names a plugin ID runs only an action that plugin registered itself.
 - The handler runs inside the session lock and has 30 seconds. Past that the handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Store calls already in progress finish before the request returns `504 handler_timeout` and releases the lock. Data it wrote before the limit is kept, not rolled back.
 
@@ -3603,6 +3609,8 @@ Lists the plugins this session can see, and the commands the session can run rig
 - `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can also include `approvalRequired`, `autoAdded`, and `rejection`.
 - `items[].runtimes` has exactly the same shape as in `GET /api/plugins`.
 - `commands[]`: the only executable command catalog. It is filtered by the plugins that are currently enabled, plus the framework commands. Each command is listed once at the top level, and it is not repeated per plugin.
+- `unavailable[]`: the plugins the player confirmed that cannot run now. Each item is a `rejection` (`pluginId`, `code`, `reason`). The cause can be that the plugin is not installed (`unknown-plugin`), failed to load, or that its installed version lacks a provider or conflicts with another member. The game goes on.
+- The list, the commands and the executor read the same set: the session's saved `activePlugins`, checked against the installed versions, with no new plugin added. The rules are in [Session plugin selection](./plugins.md#session-plugin-selection). This endpoint only reads; it does not rewrite the session.
 
 **Response:**
 
@@ -4000,7 +4008,8 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400`.
+- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime needs approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
 **Response**
@@ -4011,14 +4020,18 @@ Resume a suspended runtime with the data the player submitted.
 
 **Errors**
 
-| Status | `code`                | When                                                                                                                                     |
-| ------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | —                     | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
-| 404    | —                     | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
-| 409    | —                     | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
-| 409    | `suspension_outdated` | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
-| 500    | —                     | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
-| 503    | `session_busy`        | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
+| Status | `code`                    | When                                                                                                                                     |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | —                         | The request body is not valid JSON or has the wrong structure                                                                            |
+| 400    | `resume_data_invalid`     | `data` fails `resumeSchema` validation                                                                                                   |
+| 400    | `resume_schema_invalid`   | `resumeSchema` is not an object or cannot compile; the suspension remains pending                                                        |
+| 401    | `operator_token_required` | A hosted deployment requires the operator credential to run a community plugin                                                           |
+| 429    | `approval_queue_full`     | The pending approval queue is full; resolve existing approvals first                                                                     |
+| 404    | —                         | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
+| 409    | —                         | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
+| 409    | `suspension_outdated`     | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
+| 500    | —                         | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
+| 503    | `session_busy`            | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
 
 Rules for failed responses:
 
@@ -4285,9 +4298,12 @@ Returns `201 Created`.
   "sessionId": "mistport-<new-uuid8>",
   "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
-  "forkSnapshotId": "<child-fork-snapshot-id>"
+  "forkSnapshotId": "<child-fork-snapshot-id>",
+  "missingMediaCount": 0
 }
 ```
+
+`missingMediaCount` is the number of files the fork uses that are no longer in the media store, each file counted once. The interface shows a "media unavailable" placeholder in their place.
 
 **What the server does**
 
@@ -4333,7 +4349,8 @@ The chat history shown in the interface is copied separately, using `payload.dis
 Media handling:
 
 - Creates the child session's own references to the media in the copied messages.
-- All media used in messages, state, and runtime exports must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- All media used in messages, state, and runtime exports that still exists must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- Media that no longer exists (for example, deleted in the media library) does not stop the fork. The child session is created as usual and keeps the original messages and data, but gets no reference to that file. It shows a placeholder in the child as it does in the parent, and is counted in `missingMediaCount`.
 
 Runtime export handling:
 
@@ -5677,18 +5694,18 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 
 These events are also full members of `CovelEvent`. `COVEL_EVENT_META` says for each one whether it is `forwardToActionStream`. The exhaustiveness check in the front end requires that each one is either handled or explicitly ignored.
 
-| Event                                                                  | Source                           | Forwarded to `/api/actions` | Description                                                                                                       |
-| ---------------------------------------------------------------------- | -------------------------------- | :-------------------------: | ----------------------------------------------------------------------------------------------------------------- |
-| `runtime.skipped`                                                      | `actions.ts`                     |             No              | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                           |
-| `character.upserted`                                                   | `session-commit-emitter.ts`      |             Yes             | Sent after a `character.upsert` proposal is committed                                                             |
-| `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                         |
-| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                   |
-| `block.emitted` / `state.patch.applied`                                | TurnEmitter                      |             Yes             | Traces for a block being emitted / a state patch being applied                                                    |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                              |
-| `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter (`withGatewayTrace`) |             Yes             | Traces for a function runtime calling a provider through `ctx.gateway` (same as `llm.*`)                          |
-| `function.executing` / `function.completed`                            | TurnEmitter                      |             No              | Start and end traces of a function runtime handler; only goes through the subscription channel and `trace_events` |
-| `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                      |             No              | Traces of a recursive runtime; only goes through the subscription channel (topic `trace`)                         |
-| `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | `withUtilsTrace`                 |             No              | Traces of a plugin's own wire calling a provider over HTTP (`ctx.utils.fetchWithRetry`)                           |
+| Event                                                                  | Source                           | Forwarded to `/api/actions` | Description                                                                                                                                                            |
+| ---------------------------------------------------------------------- | -------------------------------- | :-------------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runtime.skipped`                                                      | `actions.ts`                     |             No              | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                                |
+| `character.upserted`                                                   | `session-commit-emitter.ts`      |             Yes             | Sent after a `character.upsert` proposal is committed                                                                                                                  |
+| `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                                                                              |
+| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                                                                        |
+| `block.emitted` / `state.patch.applied`                                | TurnEmitter                      |             Yes             | Traces for a block being emitted / a state patch being applied                                                                                                         |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
+| `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter (`withGatewayTrace`) |             Yes             | Traces for a function runtime or an extension provider calling a provider through `ctx.gateway` (same as `llm.*`); a failure carries the `usage` the provider reported |
+| `function.executing` / `function.completed`                            | TurnEmitter                      |             No              | Start and end traces of a function runtime handler; only goes through the subscription channel and `trace_events`                                                      |
+| `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                      |             No              | Traces of a recursive runtime; only goes through the subscription channel (topic `trace`)                                                                              |
+| `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | `withUtilsTrace`                 |             No              | Traces of a plugin's own wire calling a provider over HTTP (`ctx.utils.fetchWithRetry`)                                                                                |
 
 See [protocol.md § Forwarded internal runtime events](./protocol.md#forwarded-runtime-internal-events-apiactions-forwards-them-included-in-covelevent) for details.
 

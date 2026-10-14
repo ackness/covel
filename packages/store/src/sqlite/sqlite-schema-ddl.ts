@@ -6,8 +6,9 @@
  * a hand-maintained copy of the column/index definitions here; editing a column
  * means editing the Drizzle table, and this DDL follows automatically.
  *
- * The only thing Drizzle cannot model stays hand-written below: the
- * `vector_models` table-name backfill trigger.
+ * The only things Drizzle cannot model stay hand-written: the `vector_models`
+ * table-name backfill trigger below and the write-order triggers
+ * (`common/write-order-ddl.ts`).
  *
  * The schema↔DDL parity guard lives in `tests/schema-index-consistency.test.ts`
  * and `tests/schema-ddl-codegen.test.ts`.
@@ -19,6 +20,7 @@ import {
   assertRecordedVersion,
   type ExistingColumns,
 } from "../common/schema-version.js";
+import { sqliteWriteOrderTriggersSql } from "../common/write-order-ddl.js";
 import { DATA_SCHEMA_VERSION } from "../migrations.js";
 import {
   DELETE_RETIRED_PLUGIN_DATA_SQL,
@@ -89,6 +91,7 @@ export function createTables(sqlite: SqliteDdlConnection): void {
   }
   sqlite.exec(CREATE_TABLES_SQL);
   sqlite.exec(VECTOR_MODELS_TRIGGER_SQL);
+  sqlite.exec(sqliteWriteOrderTriggersSql());
   sqlite.exec(DROP_RETIRED_TABLES_SQL);
   sqlite.exec(DELETE_RETIRED_PLUGIN_DATA_SQL);
   if (found === null) {

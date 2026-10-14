@@ -23,6 +23,7 @@ export function createSqliteDataCrud(db: SqliteDb): SqliteDataCrud {
       pluginData: schema.pluginData,
       worldDataImportLedger: schema.worldDataImportLedger,
       lorebookEntries: schema.lorebookEntries,
+      recordChanges: schema.recordChanges,
     },
     json: sqliteJsonReader,
     values: makeInsertValues(sqliteJsonWriter),

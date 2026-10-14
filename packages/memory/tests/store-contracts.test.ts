@@ -56,6 +56,7 @@ describe("memory tier storage adapters", () => {
         upsertVector: async () => {},
         deleteVectors: async () => {},
         getVectorIndexProgress: async () => null,
+        getVectorPayloads: async () => new Map(),
         commitVectorIndexBatch: async () => true,
         lockSessionEmbeddingModel: async () => {},
         ensureVectorModel: async () => {},

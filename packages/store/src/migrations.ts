@@ -14,7 +14,7 @@ export { BROWSER_IDB_DATABASE_NAME };
  * it whenever a column changes in a way an existing database cannot follow;
  * `tests/schema-version.test.ts` fails when the table shapes change without it.
  */
-export const DATA_SCHEMA_VERSION = 4;
+export const DATA_SCHEMA_VERSION = 5;
 
 export type StorageMigrationDomain = "data" | "media" | "vector" | "browser";
 export type StorageMigrationStatus =
@@ -23,7 +23,7 @@ export type StorageMigrationStatus =
 export interface StorageMigrationSummary {
   readonly id: string;
   readonly domain: StorageMigrationDomain;
-  readonly backend: StoreBackend | MediaStoreBackend | "embedded";
+  readonly backend: StoreBackend | MediaStoreBackend | "idb" | "embedded";
   readonly version: number;
   readonly status: StorageMigrationStatus;
   readonly description: string;
@@ -56,15 +56,6 @@ const REGISTRY: readonly StorageMigrationSummary[] = [
     status: "managed-by-backend",
     description:
       "PostgreSQL creates the current data schema directly and records its version in covel_schema_meta; a database written with another version is refused, not upgraded.",
-  },
-  {
-    id: "media:idb:store",
-    domain: "media",
-    backend: "idb",
-    version: BROWSER_IDB_SCHEMA_VERSION,
-    status: "managed-by-backend",
-    description:
-      "IndexedDB MediaStore upgrades through the idb openDB upgrade callback.",
   },
   {
     id: "vector:embedded:model-registry",

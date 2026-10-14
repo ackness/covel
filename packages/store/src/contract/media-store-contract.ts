@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mediaRefSchema } from "@covel/shared";
 import type { MediaStore } from "../media-store.js";
 
@@ -179,14 +179,17 @@ export function runMediaStoreContractTests(
       expect([...(await toUint8Array(await store.get(ref)))]).toEqual([...PNG]);
     });
 
-    it("deletes stored media by id", async () => {
+    it("deletes stored media by id, claims included", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
+      await store.recordOwnership(ref.id, "sess-owner", "plugin-owner");
       await store.addRef(ref.id, "sess-delete", "plugin-delete");
 
       await store.delete(ref.id);
 
       expect(await store.exists(ref.id)).toBe(false);
+      expect(await store.lookup(ref.id)).toBeNull();
+      expect(await store.isReferencedBy(ref.id, "sess-owner")).toBe(false);
       await expect(store.get(ref)).rejects.toThrow(ref.id);
       expect(
         (await store.listRefs()).filter((row) => row.mediaId === ref.id),
@@ -391,7 +394,7 @@ export function runMediaStoreContractTests(
         lookup?.ownerSessionId === "sess-OWNER" &&
         remainingRefs.length === 0
       ) {
-        await store.delete(ref.id, { force: true });
+        await store.delete(ref.id);
       }
 
       expect(await store.exists(ref.id)).toBe(false);
@@ -637,6 +640,26 @@ export function runMediaStoreContractTests(
       // Empty filter = ownership-only filter, returns every sess-1 asset.
       const all = await store.listByMetadata("sess-1", {});
       expect(all.map((h) => h.id).sort()).toEqual([a.id, b.id].sort());
+    });
+
+    it("listByMetadata reads only the session's own assets, not the whole inventory", async () => {
+      const store = await createStore();
+      const mine = await store.put(PNG, "image/png", { promptHash: "h" });
+      await store.recordOwnership(mine.id, "sess-mine", "p1");
+      for (const [index, bytes] of [OTHER, new Uint8Array([7, 7])].entries()) {
+        const other = await store.put(bytes, "image/png", { promptHash: "h" });
+        await store.recordOwnership(other.id, `sess-other-${index}`, "p1");
+      }
+      const inventory = vi.spyOn(store, "listAssets");
+
+      const hits = await store.listByMetadata("sess-mine", { promptHash: "h" });
+
+      expect(inventory).not.toHaveBeenCalled();
+      inventory.mockRestore();
+      // Same record shape the inventory reports for that asset.
+      expect(hits).toEqual(
+        (await store.listAssets()).filter((asset) => asset.id === mine.id),
+      );
     });
   });
 }

@@ -10,6 +10,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 > 所以构建产物比源码旧的时候（例如拉取了新提交却没有重新 `pnpm install`），导入新名字的插件会加载失败。
 >
 > - 开发服务端每次启动进程时会检查并重新构建（`scripts/ensure-plugin-sdk.mjs`）。
+> - Turbo 会先完成 SDK 构建，再运行它自己的 lint 和测试。SDK 测试经 `shared` 读取自己的 `dist` 声明，所以只有依赖包的 `^build` 顺序还不够。
 > - 单独运行某个包的测试之前，仍然要手动执行 `pnpm --filter @covel/plugin-handlers-utils build`。
 
 其余的库主要由应用和框架在工作区内组合使用。
@@ -55,7 +56,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 - 不要因为一个包体量小或只在开发时用，就把它并进 `runtime`。
 - 也不要为了“看起来通用”而增加只做转发的包。
 
-**依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。
+**依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。 SQLite 向量扩展 `sqlite-vec` 由 `store` 直接声明，根包不重复提供。
 
 ## 宿主组合的关键边界
 
@@ -65,6 +66,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 - 官网 `apps/site` 是独立的静态站点。它不依赖任何工作区包，也不进入 Web 或桌面的构建。
 - 文档站 `apps/docs` 同样独立。它用 VitePress 把 `docs/` 的页面构建成静态站点，发布在官网的 `docs/` 路径下。
+- 文档图表使用 Mermaid 12，需要支持 ES2024 的浏览器（Safari 17.4+）。Mermaid 只属于文档站，不进入 Web 或桌面应用。
 - 应用自己的 `/` 直接跳到世界列表。
 
 ### 桌面壳

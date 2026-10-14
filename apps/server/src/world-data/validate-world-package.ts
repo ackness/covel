@@ -29,7 +29,12 @@ import {
 } from "@covel/shared";
 import { discoverAndRegisterPlugins } from "../routes/api/bootstrap/plugin-discovery.js";
 import { resolveLocaleFilePath } from "../world-seed-loader.js";
+import { buildPluginSummary } from "../lib/plugin-descriptor.js";
+import { resolveSessionPluginPlan } from "../routes/api/session/plugins.js";
+import { worldPluginPlan } from "../routes/api/worlds/plugin-plan.js";
 import {
+  conventionCollisionDiagnostics,
+  conventionCollisions,
   conventionsOfPlugins,
   setWorldDataConventions,
   worldHasData,
@@ -70,6 +75,8 @@ export interface WorldPackageDiagnostic {
     | "unknown-preset"
     | "unprovided-contract"
     | "unresolved-contract"
+    | "unrequested-receiver"
+    | "convention-collision"
     | "world-data"
     | "locale-overlay"
     | "locale-script"
@@ -764,11 +771,80 @@ async function unclaimedDataFiles(
   return diagnostics;
 }
 
+/**
+ * The plugins a new session of the world starts with when the player changes
+ * nothing: what the session preparation screen selects (`defaultPluginIds`),
+ * resolved as session creation resolves it. A scanned plugin counts as
+ * approved, since the world asks for it.
+ */
+function defaultSessionPlugins(
+  manifest: WorldManifestView,
+  catalogue: PluginCatalogue,
+): readonly string[] {
+  const entries = [...catalogue.getAll().values()];
+  const plan = worldPluginPlan(
+    manifest.id,
+    { pluginPolicy: manifest.pluginPolicy },
+    entries.map((entry) => buildPluginSummary(entry)),
+  );
+  return resolveSessionPluginPlan(plan.defaultPluginIds, catalogue, {
+    authorized: entries.map((entry) => entry.id),
+    requiredContracts: manifest.pluginPolicy?.requires ?? [],
+  }).active;
+}
+
+/**
+ * Files at a path that more than one scanned plugin names. An error when two
+ * of the names come from plugins a new session starts with: that session
+ * imports the file for neither. Otherwise a warning, for a player who turns
+ * the others on.
+ */
+async function collisionDiagnostics(
+  worldDir: string,
+  catalogue: PluginCatalogue,
+  defaultPlugins: readonly string[],
+): Promise<WorldPackageDiagnostic[]> {
+  const collisions = conventionCollisions(catalogue);
+  return (await conventionCollisionDiagnostics(worldDir, collisions)).map(
+    (diagnostic) => {
+      const collision = collisions.find(
+        (item) => item.path === diagnostic.path,
+      );
+      const started =
+        collision?.claimants.filter((item) =>
+          defaultPlugins.includes(item.pluginId),
+        ).length ?? 0;
+      return {
+        level: started > 1 ? "error" : "warning",
+        code: "convention-collision",
+        file: diagnostic.path,
+        message: diagnostic.message,
+        hint: diagnostic.hint,
+      };
+    },
+  );
+}
+
+/** Plugins that accept a contract's records and loaded. */
+function receiversOf(catalogue: PluginCatalogue, contract: string): string[] {
+  return [...catalogue.getAll()]
+    .filter(
+      ([, entry]) =>
+        entry.status !== "error" &&
+        Object.values(
+          entry.packageManifest?.plugin?.contributes?.data ?? {},
+        ).some((declaration) => declaration.accepts?.includes(contract)),
+    )
+    .map(([id]) => id)
+    .sort(compareText);
+}
+
 async function checkWorldData(
   worldDir: string,
   manifest: WorldManifestView,
   catalogue: PluginCatalogue,
   strict: boolean,
+  defaultPlugins: readonly string[],
 ): Promise<WorldPackageDiagnostic[]> {
   const diagnostics: WorldPackageDiagnostic[] = [];
   const descriptor = await loadWorldDataDescriptor({
@@ -806,9 +882,18 @@ async function checkWorldData(
       hint: "Check each dimensionSources path and dimension definition.",
     });
   }
+  const collisions = manifest.worldData
+    ? []
+    : await collisionDiagnostics(worldDir, catalogue, defaultPlugins);
+  diagnostics.push(...collisions);
   if (!descriptor.diagnostics.some((item) => item.level === "error"))
     diagnostics.push(
-      ...(await unclaimedDataFiles(worldDir, manifest, descriptor.sources)),
+      ...(
+        await unclaimedDataFiles(worldDir, manifest, descriptor.sources)
+      ).filter(
+        // A collision already says why the file is not read.
+        (item) => !collisions.some((collision) => collision.file === item.file),
+      ),
     );
   if (!manifest.worldData) {
     if (!(await worldHasData(worldDir, undefined))) return diagnostics;
@@ -868,6 +953,30 @@ async function checkWorldData(
     }
   }
 
+  // Records are checked for every scanned receiver, so a plugin the player
+  // may turn on is covered too. A source none of whose receivers a new
+  // session starts with is skipped in that session: say so.
+  for (const source of descriptor.sources) {
+    for (const uri of [source.descriptor.to, source.descriptor.indexTo]) {
+      const target = uri ? parseWorldDataTarget(uri) : null;
+      if (target?.kind !== "contract-data") continue;
+      const receivers = receiversOf(catalogue, target.contract);
+      if (
+        receivers.length === 0 ||
+        receivers.some((id) => defaultPlugins.includes(id))
+      )
+        continue;
+      diagnostics.push({
+        level: "warning",
+        code: "unrequested-receiver",
+        file: fileOf.get(source.id) ?? descriptorFile,
+        sourceId: source.id,
+        message: `a new session of this world starts without a plugin that accepts data contract "${target.contract}" (${listSome(receivers)}); the source is imported only after the player turns one on`,
+        hint: "Add the plugin to `pluginPolicy.requested`, or to the `requested` list of the pack that `pluginPolicy.presetId` names.",
+      });
+    }
+  }
+
   // Each declared locale selects its own source variants, so validate each.
   const locales = declaredLocales(manifest);
   const seen = new Map<
@@ -893,6 +1002,9 @@ async function checkWorldData(
     }));
     for (const diagnostic of preflight.diagnostics) {
       if (diagnostic.level === "info") continue;
+      // Reported above, with the level the default plugin set gives it.
+      if ("code" in diagnostic && diagnostic.code === "convention-collision")
+        continue;
       // Every locale file is checked once below, whatever locale reads it.
       if ("localeOverlay" in diagnostic && diagnostic.localeOverlay) continue;
       if (diagnostic.sourceId && unresolvedSources.has(diagnostic.sourceId))
@@ -982,7 +1094,10 @@ export async function validateWorldPackage(
   const catalogue = await loadPluginCatalogue(options.pluginsDirs);
   // A package without a descriptor is read by the conventions of the
   // scanned plugins, as the server reads it by those of the installed ones.
+  // Every scanned plugin's paths are read, so each file is checked for the
+  // plugin that reads it; a session reads by its active plugins alone.
   setWorldDataConventions(conventionsOfPlugins(catalogue));
+  const defaultPlugins = defaultSessionPlugins(manifest, catalogue);
   const strict = options.strict === true;
   return {
     worldId: manifest.id,
@@ -999,7 +1114,13 @@ export async function validateWorldPackage(
       ...(await checkLocaleFileNames(worldDir, manifest)),
       ...(await checkEditions(worldDir, manifest)),
       ...checkPluginReferences(manifest, catalogue, strict),
-      ...(await checkWorldData(worldDir, manifest, catalogue, strict)),
+      ...(await checkWorldData(
+        worldDir,
+        manifest,
+        catalogue,
+        strict,
+        defaultPlugins,
+      )),
     ],
   };
 }

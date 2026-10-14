@@ -64,7 +64,6 @@ export type {
   PgMediaStoreOptions,
   SqliteMediaStoreOptions,
 } from "./media-store.js";
-export type { IndexedDbMediaStoreOptions } from "./indexeddb/idb-media-store.js";
 export type {
   StorageMigrationDomain,
   StorageMigrationStatus,
@@ -112,8 +111,11 @@ export type {
   RuntimeOutputFilters,
   InteractionRecordFilters,
   TurnMessageRecord,
+  WriteOrderedTurnMessage,
   TurnMessageStats,
   CompactedTurnMessageTag,
+  RecordChange,
+  RecordChangeQuery,
   PlayerInputRecord,
   WorldDataImportLedgerRecord,
   LorebookEntryRecord,

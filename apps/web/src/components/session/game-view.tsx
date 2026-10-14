@@ -12,8 +12,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
+import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
+import { SessionPluginNotices } from "./session-plugin-notices.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -99,6 +101,7 @@ export function GameView({
     sessionPlugins,
     sessionCommands,
     sessionCommandsLoaded,
+    unavailableSessionPlugins,
     presets,
     llmConfig,
     statePatchRevision,
@@ -520,8 +523,23 @@ export function GameView({
             </div>
           )}
 
+          <SessionPluginNotices
+            plugins={sessionPlugins}
+            unavailable={unavailableSessionPlugins}
+            offTitle={t("plugin.unavailable")}
+            variant="bar"
+            busy={executing}
+            onTurnOn={(pluginId) => void onTogglePlugin(pluginId, true)}
+          />
+
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}
+          <UnsavedNarratives
+            messages={state.unsavedNarratives ?? []}
+            recovery={state.executionRecovery}
+            executing={state.executing}
+            onRetry={retryInterruptedTurn}
+          />
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             onRetry={retryInterruptedTurn}

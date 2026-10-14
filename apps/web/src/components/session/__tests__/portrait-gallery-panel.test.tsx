@@ -93,6 +93,28 @@ function upload() {
   });
   return { view, input };
 }
+it("provides a keyboard-focusable replacement button that opens the file picker", () => {
+  const view = render(
+    <PortraitGalleryPanel
+      replaceAction={{
+        pluginId: "portraits",
+        runtimeId: "portraits/save",
+        payload: {},
+      }}
+    />,
+  );
+  const replace = screen.getAllByRole("button", { name: "替换" })[0];
+  if (!replace) throw new Error("Missing replacement button");
+  const input =
+    view.container.querySelector<HTMLInputElement>("input[type=file]")!;
+  const pick = vi.spyOn(input, "click");
+  replace.focus();
+  expect(document.activeElement).toBe(replace);
+  fireEvent.click(replace);
+  expect(pick).toHaveBeenCalledOnce();
+  expect(replace.className).toContain("focus-visible:opacity-100");
+  expect(replace.className).toContain("[@media(hover:none)]:opacity-100");
+});
 it("hydrates before upload and resolves approval without uploading twice", async () => {
   mocks.rpc.mockImplementationOnce(async () => {
     mocks.order.push("rpc");
@@ -137,7 +159,7 @@ it("reports failed runtime results instead of silently completing the replacemen
   });
   upload();
   await waitFor(() =>
-    expect(mocks.toast).toHaveBeenCalledWith("error", "Runtime save failed"),
+    expect(mocks.toast).toHaveBeenCalledWith("error", "插件任务失败，请重试。"),
   );
 });
 it("stops after a denied approval", async () => {

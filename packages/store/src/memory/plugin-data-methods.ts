@@ -3,6 +3,7 @@ import { SessionNotFoundError } from "../errors.js";
 import { applyPagination, compareByteOrder } from "../common/pagination.js";
 import type { PluginDataRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+import { listRecordChanges, recordChange } from "./write-order.js";
 import {
   pluginDataVersion,
   validatePluginDataCasEntries,
@@ -44,7 +45,15 @@ export function createPluginDataMethods(
         ? { ...record, id: existing.id, createdAt: existing.createdAt }
         : record,
     );
+    changed(record);
   };
+  const changed = (record: PluginDataRecord): void =>
+    recordChange(state, record.sessionId, {
+      kind: "plugin_data",
+      pluginId: record.pluginId,
+      namespace: record.namespace,
+      key: record.key,
+    });
   return {
     async compareAndSetPluginDataBatch(sessionId, pluginId, entries) {
       validatePluginDataCasEntries(entries);
@@ -83,7 +92,10 @@ export function createPluginDataMethods(
           updatedAt: entry.timestamp,
         },
       }));
-      for (const { key, record } of next) state.pluginData.set(key, record);
+      for (const { key, record } of next) {
+        state.pluginData.set(key, record);
+        changed(record);
+      }
       return true;
     },
 
@@ -201,9 +213,21 @@ export function createPluginDataMethods(
     },
 
     async deletePluginData(sessionId, pluginId, namespace, key) {
-      state.pluginData.delete(
-        pluginDataKey(sessionId, pluginId, namespace, key),
-      );
+      if (
+        state.pluginData.delete(
+          pluginDataKey(sessionId, pluginId, namespace, key),
+        )
+      )
+        recordChange(state, sessionId, {
+          kind: "plugin_data",
+          pluginId,
+          namespace,
+          key,
+        });
+    },
+
+    async listRecordChanges(sessionId, query) {
+      return listRecordChanges(state, sessionId, query);
     },
   };
 }

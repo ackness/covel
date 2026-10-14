@@ -172,16 +172,19 @@ describe("WorldEditor unsaved changes", () => {
       fireEvent.click(
         screen.getByRole("button", { name: i18n.t("common.save") }),
       );
-      await waitFor(() =>
+      await waitFor(() => {
+        if (success) expect(onSave).toHaveBeenCalledWith(world);
+        else expect(screen.getByText("Save failed")).toBeTruthy();
         expect(
           (
             screen.getByRole("button", {
               name: i18n.t("common.save"),
             }) as HTMLButtonElement
           ).disabled,
-        ).toBe(false),
-      );
-      expect(unload()).toBe(!success);
+        ).toBe(false);
+        // The saved snapshot and its reload-guard effect must both settle.
+        expect(unload()).toBe(!success);
+      });
       cancel();
       if (success) {
         expect(onSave).toHaveBeenCalledWith(world);

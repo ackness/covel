@@ -17,6 +17,7 @@
     "primary": "主导航"
   },
   "session": {
+    "cached": "已缓存",
     "historyLoadFailed": "无法读取历史存档，请重试。",
     "reasoningContent": "思考内容",
     "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
@@ -198,14 +199,7 @@
     "pluginsSelected": "个插件已选择",
     "searchPlugins": "搜索插件、标签、能力",
     "pluginGroups": {
-      "core": "核心",
-      "setup": "开局准备",
-      "traditional": "传统故事",
-      "dialogue": "对话模式",
-      "characters": "角色",
-      "memory": "记忆与检索",
-      "guidance": "引导",
-      "utility": "工具"
+      "untagged": "无标签"
     },
     "recommendationReasons": {
       "requiredByWorld": "世界必需",
@@ -307,7 +301,8 @@
       "serverBackend": "服务端 {{backend}}",
       "builtIn": "内置",
       "serverStore": "服务端存储",
-      "server": "服务端"
+      "server": "服务端",
+      "memory": "内存"
     },
     "jumpToLatest": "跳到最新",
     "loadOlderFailed": "无法加载更早的消息。",
@@ -334,6 +329,8 @@
     "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
     "recoveryRunningDetail": "服务端仍在继续原任务，完成后会自动恢复结果。你可以等待，也可以停止任务。",
     "recoveryInterruptedDetail": "未完成的任务已停止运行，已保存的进度会保留。只有点击重试，才会发起新的尝试。",
+    "unsavedNarrative": "未保存",
+    "unsavedNarrativeDetail": "这段文字没有保存，离开会话后会消失。",
     "recoveryHydratingDetail": "正在取回最新保存的结果，随后即可继续游玩。",
     "recoveryRetry": "重试未完成回合",
     "recoveryRefresh": "检查状态",
@@ -369,7 +366,6 @@
     },
     "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
     "submittedInteraction": "已完成的交互 · 展开查看",
-    "previousSuggestions": "历史建议 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
     "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
@@ -382,7 +378,31 @@
     "panelLoadFailed": "插件面板加载失败。",
     "modelCredentialsMissing": "开始前请先在服务商设置中填写 API 密钥。",
     "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。",
-    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。"
+    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。",
+    "outputInterrupted": "模型没写完就停下了这段正文（{{reason}}），可能停在半句。重试这一回合可以让它重新写。",
+    "canvasEyebrow": "§ 故事开场",
+    "blockType": "内容块：{{type}}",
+    "dbLoadErrorDetail": "加载数据库失败：{{error}}",
+    "retryTaskNamed": "重试此任务：{{label}}",
+    "activeTaskDetail": "{{label}}：{{detail}}…",
+    "jobStatus": {
+      "pending": "等待中",
+      "queued": "排队中",
+      "running": "进行中",
+      "done": "已完成",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "suspended": "已暂停",
+      "progress": "进行中",
+      "waiting-input": "等待输入",
+      "succeeded": "已完成"
+    },
+    "retryScopeLimited": "只重试选中的失败任务，正文和其他已完成结果会保留。每批最多 {{count}} 个任务，完成后可继续重试其余任务。",
+    "activeTask": "{{label}}…",
+    "panelUnavailable": "当前会话没有这个面板。",
+    "previousPluginContent": "{{title}} · 展开查看",
+    "pluginContent": "插件内容"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -612,6 +632,12 @@
     "numberTooSmall": "请输入不小于 {{minimum}} 的数值。",
     "wholeNumberNeeded": "请输入整数。",
     "fixMarkedFields": "请修正标记的字段后再保存。",
+    "unnamedCurrency": "货币 {{number}}",
+    "numberedResource": "资源 {{number}}",
+    "unnamedFaction": "势力 {{number}}",
+    "unnamedHistory": "历史事件 {{number}}",
+    "pendingDimensionsTurn": "维度待结算 · 第 {{turn}} 回合",
+    "currentDimensionValue": "当前值：{{id}}",
     "discardChangesTitle": "放弃未保存的修改？",
     "discardChangesMessage": "世界的修改尚未保存。要放弃这些修改并退出编辑器吗？",
     "discardChanges": "放弃修改",
@@ -1220,7 +1246,7 @@
     },
     "worldGithub": {
       "risk": "世界包包含第三方提示词、设置与媒体。开始游戏前请检查内容及所需插件。安装世界不会自动安装或授权插件，也不会执行仓库脚本。",
-      "updateRisk": "更新将在后端重启时应用，本地编辑过的世界不会被覆盖。已有存档不会自动同步，请另行使用世界数据同步功能。",
+      "updateRisk": "更新将在后端重启时应用，本地编辑过的世界不会被覆盖。更新不会改写已有游戏导入的数据；想使用新的开局数据，请新开一局。",
       "installed": "已安装的世界包"
     },
     "deleteProviderTitle": "删除服务商？",
@@ -1540,8 +1566,9 @@
     "triggerInterval": "间隔",
     "triggerManual": "手动",
     "triggerEvent": "事件触发",
-    "locked": "核心插件 — 不可关闭",
-    "core": "核心",
+    "locked": "此插件已锁定",
+    "defaultEnabled": "默认启用",
+    "defaultEnabledHint": "默认启用，可以关闭",
     "enable": "开启插件",
     "disable": "关闭插件",
     "emptyPlaceholder": "{{label}} 暂无数据，等待游戏推进……",
@@ -1611,8 +1638,8 @@
     },
     "source": {
       "builtin": {
-        "label": "核心",
-        "tooltip": "Covel 框架内置的核心插件"
+        "label": "内置",
+        "tooltip": "随 Covel 提供的插件"
       },
       "official": {
         "label": "官方",
@@ -1640,6 +1667,7 @@
       "allowSelected": "授权所选",
       "notNow": "暂不授权"
     },
+    "unavailable": "本存档有插件没有运行，游戏照常进行：",
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
@@ -1661,7 +1689,26 @@
     },
     "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。",
     "untranslated": "未翻译",
-    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。"
+    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。",
+    "invalidPanelSpecDetail": "面板定义无效：{{label}}（{{reason}}）",
+    "rpc": {
+      "failed": "插件任务失败，请重试。"
+    },
+    "off": {
+      "needsProvider": "{{plugin}} 已停用：它需要 {{contract}}。打开 {{providers}} 就能用。",
+      "noProvider": "{{plugin}} 已停用：它需要 {{contract}}，但没有已安装的插件提供它。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
+      "notInstalled": "{{plugin}} 没有安装，或者加载失败。",
+      "conflict": "{{plugin}} 和本存档的另一个插件冲突。",
+      "other": "{{plugin}} 现在无法运行，打开插件列表可以看到原因。",
+      "turnOn": "打开 {{plugin}}"
+    },
+    "noStory": {
+      "title": "没有开启叙事插件",
+      "detail": "回合不会产生故事：开启的插件里没有负责叙事的。",
+      "enable": "打开 {{plugins}} 就能得到故事。",
+      "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
+    },
+    "dependentsOff": "下面这些插件需要的东西被关掉了，开局后它们会停用："
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
@@ -1710,7 +1757,10 @@
       "zh": "中文（推荐 DashScope）",
       "en": "英文（推荐 GPT/Gemini）"
     },
-    "generationFailed": "图像生成失败"
+    "generationFailed": "图像生成失败",
+    "approvalAction": "生成图像",
+    "sessionUnavailable": "当前会话不可用，请重新打开会话后重试。",
+    "mediaUnavailable": "图片不可用，请重新加载后重试。"
   },
   "onboarding": {
     "language": "语言",
@@ -1786,6 +1836,14 @@
       "empty": "暂无任务。",
       "copy": "复制",
       "rerun": "重新运行"
+    },
+    "candidateList": {
+      "draft": "草稿",
+      "send": "发送",
+      "accept": "采纳",
+      "regenerate": "重新生成",
+      "title": "候选",
+      "regenerateHint": "重新生成一组候选。"
     }
   },
   "graph": {
@@ -1808,7 +1866,8 @@
     "submittedHint": "已选择",
     "selectPrefix": "选择{{label}}",
     "selectPlaceholder": "请选择...",
-    "requiredMissing": "请填写必填字段"
+    "requiredMissing": "请填写必填字段",
+    "missingInteraction": "无法提交此表单，请重新打开会话后重试。"
   },
   "interaction": {
     "playerSelected": "你的选择：",
@@ -1840,7 +1899,20 @@
       "showDetail": "查看详情",
       "hideDetail": "收起详情",
       "copyDetail": "复制详情",
-      "copied": "已复制"
+      "copied": "已复制",
+      "badge": {
+        "auth": "认证",
+        "forbidden": "权限",
+        "not-found": "未找到",
+        "rate-limited": "请求受限",
+        "server": "服务异常",
+        "timeout": "超时",
+        "network": "网络",
+        "invalid-output": "输出格式",
+        "incomplete": "未完成",
+        "error": "错误",
+        "unknown": "未知错误"
+      }
     },
     "plugin": {
       "loadFailed": "插件加载失败"
@@ -1864,7 +1936,7 @@
     }
   },
   "characterPresence": {
-    "hint": "点击立绘可放大，鼠标悬停可替换成你自己的图片。",
+    "hint": "点击立绘可放大，选择“替换”可上传新图片。",
     "empty": "本世界暂未提供角色立绘。",
     "replace": "替换",
     "uploading": "上传中…",
@@ -1993,7 +2065,7 @@
       "estCost": "预估结算（USD）",
       "unknownModel": "（未知模型）",
       "noPrice": "无价格",
-      "note": "Token 用量来自 llm.responded / gateway.responded。预估结算按模型参考价乘以服务商价格倍率；无法识别模型或价格的用量不计入，因此结果可能是下限值。",
+      "note": "Token 用量来自 llm.responded / gateway.responded，失败的调用报告过用量时也计入 gateway.failed。预估结算按模型参考价乘以服务商价格倍率；无法识别模型或价格的用量不计入，因此结果可能是下限值。",
       "cacheNote": "缓存读写 token 已计入输入合计；在取得服务商缓存单价前，不计入 USD 预估。",
       "noData": "本会话暂无 token 用量记录。",
       "windowTitle": "已加载窗口",
@@ -2192,17 +2264,6 @@
     "confirmDelete": "删除",
     "deleted": "已删除 {{count}} 项 · 释放 {{size}}",
     "skipped": "有 {{count}} 项现在正被会话使用，已保留"
-  },
-  "branchReply": {
-    "replyCandidates": "回复候选",
-    "draft": "草稿",
-    "send": "发送",
-    "accept": "采纳",
-    "regenerate": "重新生成",
-    "regenerateHint": "点「重新生成」获取这条回复的其他说法。",
-    "jobSubmitted": "已提交 branch-reply 任务: {{jobId}}",
-    "approvalRequired": "Branch reply 操作需要授权。",
-    "actionFailed": "Branch reply 操作失败"
   },
   "characterBlueprint": {
     "empty": "暂无角色蓝图",

@@ -16,8 +16,13 @@ const mocks = vi.hoisted(() => ({
   plugins: [] as SessionPlugin[],
   specs: { right: [], message: [], left: [] } as UISpecsResponse,
   fetchSpecs: vi.fn(),
+  health: {} as {
+    storage?: { data: { backend: "memory"; frontendMode: "remote" } };
+  },
   upsertInteractionDraft: vi.fn(),
+  toast: vi.fn(),
 }));
+vi.mock("@/lib/toast-channel.js", () => ({ emitToast: mocks.toast }));
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: { sessionPlugins: mocks.plugins, gameState: {} },
@@ -28,7 +33,7 @@ vi.mock("@/stores/session-store.js", () => ({
 }));
 vi.mock("@/services/api.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/api.js")>()),
-  fetchServerHealth: async () => ({}),
+  fetchServerHealth: async () => mocks.health,
   fetchUiSpecs: mocks.fetchSpecs,
   listPluginData: async () => [],
 }));
@@ -77,6 +82,7 @@ const spec = (pluginId: string, panelId: string) => ({
       groupLabel: "Shared panels",
       label: panelId,
       icon: "book-open",
+      navTarget: undefined as "images" | undefined,
       view: { component: "Text" },
     },
   ],
@@ -106,7 +112,9 @@ const plugin = (id: string): SessionPlugin => ({
   tags: [],
 });
 beforeEach(async () => {
+  mocks.health = {};
   mocks.upsertInteractionDraft.mockReset();
+  mocks.toast.mockReset();
   await i18n.changeLanguage("en-US");
   mocks.plugins = [plugin("provider-a"), plugin("provider-b")];
   mocks.specs = {
@@ -132,7 +140,11 @@ it.each(["shared", "chat-mode"])(
       })),
     }));
     render(
-      <RightPanel sessionId="provider-labels" world={null} statePatchRevision={0} />,
+      <RightPanel
+        sessionId="provider-labels"
+        world={null}
+        statePatchRevision={0}
+      />,
     );
     fireEvent.keyDown(
       await screen.findByRole("tab", { name: "Shared panels" }),
@@ -197,7 +209,7 @@ it("retains an image navigation request until lazy specs load and supports repea
   );
   expect(screen.getByText("World content")).toBeTruthy();
   const gallery = spec("provider-a", "portraits");
-  gallery.specs[0]!.icon = "image";
+  gallery.specs[0]!.navTarget = "images";
   await act(async () => release({ ...mocks.specs, right: [gallery] }));
   expect(await screen.findByText("Mounted panel: provider-a")).toBeTruthy();
   fireEvent.keyDown(screen.getByRole("tab", { name: "World" }), {
@@ -264,4 +276,87 @@ it("shows the raw Database tab only when the developer view is on", async () => 
     await getSettings().set("ui.developerView", false);
   });
   view.unmount();
+});
+
+it("opens the declared image destination instead of an earlier image icon", async () => {
+  const portraits = spec("provider-a", "portraits");
+  portraits.specs[0]!.icon = "image";
+  const gallery = spec("provider-b", "gallery");
+  gallery.specs[0]!.navTarget = "images";
+  mocks.specs.right = [portraits, gallery];
+  render(
+    <RightPanel
+      sessionId="semantic-nav"
+      world={null}
+      statePatchRevision={0}
+      panelRequest={{ event: "open-images" }}
+    />,
+  );
+  expect(await screen.findByText("Mounted panel: provider-b")).toBeTruthy();
+  expect(mocks.toast).not.toHaveBeenCalled();
+});
+
+it.each(["images", "plugin"])(
+  "clears an unavailable %s request after loading and does not replay it",
+  async (kind) => {
+    const panelRequest = {
+      event:
+        kind === "images"
+          ? ("open-images" as const)
+          : {
+              type: "open-plugin-panel" as const,
+              pluginId: "provider-a",
+              panelId: "missing",
+            },
+    };
+    const props = {
+      sessionId: "missing-nav",
+      world: null,
+      statePatchRevision: 0,
+      panelRequest,
+    };
+    const view = render(<RightPanel {...props} />);
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledOnce());
+    expect(mocks.toast).toHaveBeenCalledWith(
+      "info",
+      "This panel is not available in this session.",
+    );
+    const available = spec("provider-a", "missing");
+    available.specs[0]!.navTarget = "images";
+    mocks.specs.right = [available];
+    mocks.plugins = [...mocks.plugins, plugin("new-provider")];
+    view.rerender(<RightPanel {...props} statePatchRevision={1} />);
+    await waitFor(() => expect(mocks.fetchSpecs).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("World content")).toBeTruthy();
+    expect(screen.queryByText("Mounted panel: provider-a")).toBeNull();
+    expect(mocks.toast).toHaveBeenCalledOnce();
+  },
+);
+
+it("keeps navigation intent through a failed spec load and an explicit retry", async () => {
+  mocks.fetchSpecs.mockRejectedValueOnce(new Error("offline"));
+  const gallery = spec("provider-b", "gallery");
+  gallery.specs[0]!.navTarget = "images";
+  mocks.specs.right = [gallery];
+  render(
+    <RightPanel
+      sessionId="retry-nav"
+      world={null}
+      statePatchRevision={0}
+      panelRequest={{ event: "open-images" }}
+    />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: /retry/i }));
+  expect(await screen.findByText("Mounted panel: provider-b")).toBeTruthy();
+  expect(mocks.toast).not.toHaveBeenCalled();
+});
+
+it("translates the memory storage badge", async () => {
+  await i18n.changeLanguage("zh-CN");
+  mocks.health = {
+    storage: { data: { backend: "memory", frontendMode: "remote" } },
+  };
+  render(<RightPanel sessionId="s" world={null} statePatchRevision={0} />);
+  expect(await screen.findByText("内存")).toBeTruthy();
+  expect(screen.queryByText("Memory")).toBeNull();
 });

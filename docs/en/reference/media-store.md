@@ -24,7 +24,7 @@ interface MediaStore {
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
   resolveUrl(ref: MediaRef): Promise<string>;
-  delete(id: string, opts?: { force?: boolean }): Promise<void>;
+  delete(id: string): Promise<void>;
   lookup(id: string): Promise<MediaAssetLookup | null>;
   recordOwnership(
     id: string,
@@ -103,7 +103,6 @@ For a saved SVG file, the response includes `Content-Disposition: attachment` an
 | Memory          | `createMemoryMediaStore()`                      | Process memory                                                | Yes (gives the whole block at once)     |
 | SQLite/local-fs | `createSqliteMediaStore(dbPath, { mediaRoot })` | Local files, at the path `{mediaRoot}/{ab}/{cd}/{sha256}.bin` | Yes (true streaming read)               |
 | PostgreSQL      | `createPgMediaStore(databaseUrl)`               | The `body` column of `media_assets`, type `bytea`             | **No**, see "PG streaming caveat" below |
-| IndexedDB (web) | `createIndexedDbMediaStore({ dbName })`         | The Blob storage in the browser's IndexedDB                   | Yes (`Blob.stream()`)                   |
 
 ### Display cache in the browser
 
@@ -171,11 +170,10 @@ See [slots.md](./slots.md).
 
 Returns the files owned by `sessionId` whose `meta` contains every key-value pair in `filter`.
 
-- Matching is an exact, shallow subset match. All four backends share one implementation: `filterAssetsByMetadata` in `packages/store/src/media-store/filter.ts`.
+- The backend first reads only the files this session owns: SQLite and PostgreSQL query by `owner_session_id` in SQL, using the owner index. So the cost grows with this session's media, not with how much media other sessions have.
+- Matching is an exact, shallow subset match. All three backends share one implementation: `filterAssetsByMetadata` in `packages/store/src/media-store/filter.ts`.
 - If a value in `filter` is `undefined`, it matches both "the key is absent" and "the key was explicitly stored as `undefined`". (The comparison is `meta[k] === v`, and both sides read as `undefined`.)
 - Only primitive values (string / number / boolean / `null`) make a meaningful comparison. Objects and arrays never match, because `===` compares references.
-- The result set is expected to be small: each session has only a few dozen media files, so this does a full table scan. `filter.ts` has a `ponytail:` comment: once the data grows beyond this size, push the filter down into SQL.
-- `filter.ts` does not use Node built-in modules (unlike `utils.ts`), because the browser-side MediaStore also imports it.
 
 ### `promptHash` idempotency
 
@@ -235,7 +233,7 @@ If the runtime or guard that called them is aborted or times out during this tim
 
 **`addRef()` is idempotent per `(sessionId, mediaId)`**
 
-The UNIQUE constraint on `media_refs` does not include `plugin_id`. The plugin ID is recorded only as a note about the first source. This is safe. In SQL, `UNIQUE` treats every `NULL` as a different value. If the constraint included the nullable `plugin_id`, a caller passing `undefined` would quietly create countless duplicate records. The shape of this key matches Memory and IndexedDB, which also use `(sessionId, mediaId)` as the map key.
+The UNIQUE constraint on `media_refs` does not include `plugin_id`. The plugin ID is recorded only as a note about the first source. This is safe. In SQL, `UNIQUE` treats every `NULL` as a different value. If the constraint included the nullable `plugin_id`, a caller passing `undefined` would quietly create countless duplicate records. The shape of this key matches Memory, which also uses `(sessionId, mediaId)` as the map key.
 
 > [!WARNING]
 > Only the current `(session_id, media_id)` constraint is supported. Development databases that use the old media reference structure must be rebuilt. The framework does not migrate them, and it does not delete the old records automatically.
@@ -273,7 +271,7 @@ When preparing world data, the operation above is used to "pin" the bytes. The r
 - At the end, ownership and a reference are first recorded for the real session, and then the temporary reference is released.
 - When preparation, the semantic write, a duplicate session, or world admission fails, only this attempt's temporary reference is released. These failures do not force-delete shared content, and they do not release the claims of existing sessions. Bytes that no one claims later can be reclaimed by lifecycle cleanup.
 - If a newly created session fails at media finalization, the create flow deletes that session inside the session lifecycle lock and releases its claims.
-- Sync removes explicit references after the commit. Ownership and reclaiming the bytes are left to lifecycle cleanup.
+- After the commit, sync removes this session's explicit references to files it no longer needs. A file that still appears in the session's other index rows, messages, snapshots, runtime outputs, traces or turn results keeps its reference: the session and its forks can always read the pictures its history has shown. When the scan goes over its row limit (200,000), every reference is kept. Ownership and reclaiming the bytes are left to lifecycle cleanup.
 
 When something goes wrong:
 
@@ -323,7 +321,7 @@ A `self` deployment keeps the single-user, local behavior, and it does not need 
 **`protectedIds` is a plan, not the final decision**
 
 - The cleanup plan also includes every current ownership and reference claim, including temporary references from imports that have not expired. So a dry run reports pinned files as protected.
-- Each backend checks the file's current ownership and references again inside the same critical section or transaction in which it deletes. PG uses an advisory transaction lock plus `NOT EXISTS`. SQLite uses `BEGIN IMMEDIATE`. IndexedDB uses a `readwrite` transaction across two stores. Memory checks the map synchronously.
+- Each backend checks the file's current ownership and references again inside the same critical section or transaction in which it deletes. PG uses an advisory transaction lock plus `NOT EXISTS`. SQLite uses `BEGIN IMMEDIATE`. Memory checks the map synchronously.
 - So a reference or ownership that is created after the route's scan still protects the file. The returned cleanup counts and IDs reflect what was actually deleted, not a copy of the outdated plan.
 
 **Extra rules for SQLite**
@@ -388,9 +386,10 @@ When a scan is incomplete: a session has more rows than the limit (for the media
 - Unused media is deleted with `MediaStore.cleanup()` using `onlyIds`. So each backend checks the file's ownership and references again inside the critical section where it deletes. A file that a session claims after the scan is kept, and it is reported as "skipped".
 - A file that is in use, held, or unknown can only be deleted with a request that has `force` and names exactly one ID. In that case, `delete()` removes it together with every reference that points to it.
 - Sessions that used the file keep their own records. Where an image or sound used to be, the interface shows a "media unavailable" placeholder. When a plugin requests the same generation again, it gets a new file.
+- Forking from these sessions still succeeds, and the missing files show the same placeholder in the child (see [the fork in api.md](./api.md#post-apisessionsidfork)).
 
 **Access.** The media library exists only where everything the server saves belongs to the same player: `DEPLOYMENT_TIER=self` and the desktop app. In `demo` and `commercial` deployments, and in browser-private mode (where the production server uses MemoryStore), MediaStore holds media with several owners, and there is no index by owner. So both routes return `503 unavailable`, with or without an operator token.
 
 ## Tests
 
-The shared contract tests are in `packages/store/src/contract/media-store-contract.ts`. Current coverage: Memory, SQLite/local-fs, and IndexedDB (through `fake-indexeddb`), and PostgreSQL when `DATABASE_URL` points to a database that can be reached (`packages/store/tests/media-store.test.ts`).
+The shared contract tests are in `packages/store/src/contract/media-store-contract.ts`. Current coverage: Memory, SQLite/local-fs, and PostgreSQL when `DATABASE_URL` points to a database that can be reached (`packages/store/tests/media-store.test.ts`).

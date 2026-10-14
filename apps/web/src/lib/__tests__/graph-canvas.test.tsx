@@ -28,6 +28,7 @@ vi.mock("react-force-graph-2d", () => ({
 
 afterEach(() => {
   cleanup();
+  canvas.graphData = undefined;
   vi.unstubAllGlobals();
 });
 const graphProps: GraphCanvasProps = {
@@ -270,6 +271,12 @@ describe("relationship graph", () => {
     );
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "Mira" }))[0]!,
+    );
+    // The relationship list renders before the lazy canvas mounts.
+    await waitFor(() =>
+      expect(canvas.graphData).toMatchObject({
+        links: [{ edgeId: "ab", source: "a", target: "b" }],
+      }),
     );
     const simulationData = canvas.graphData;
     await act(async () => {

@@ -1,10 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import "fake-indexeddb/auto";
 import { afterAll, describe, expect, it } from "vitest";
 import { runMediaStoreContractTests } from "../src/contract/media-store-contract.js";
-import { createIndexedDbMediaStore } from "../src/indexeddb/idb-media-store.js";
 import {
   createMemoryMediaStore,
   createPgMediaStore,
@@ -112,63 +110,3 @@ if (pgAvailable) {
     it.skip("skipped — PostgreSQL not available", () => {});
   });
 }
-
-let idbCounter = 0;
-runMediaStoreContractTests("IndexedDbMediaStore", async () => {
-  idbCounter += 1;
-  return createIndexedDbMediaStore({
-    dbName: `covel-media-store-test-${idbCounter}`,
-  });
-});
-
-describe("IndexedDbMediaStore concurrent first-writer semantics", () => {
-  it("preserves the first owner and ref source under concurrent calls", async () => {
-    const store = await createIndexedDbMediaStore({
-      dbName: `covel-media-idb-concurrency-${crypto.randomUUID()}`,
-    });
-    try {
-      const ref = await store.put(
-        new Uint8Array([91, 92, 93]),
-        "application/octet-stream",
-      );
-
-      await Promise.all([
-        store.recordOwnership(ref.id, "session-first", "plugin-first"),
-        store.recordOwnership(ref.id, "session-second", "plugin-second"),
-      ]);
-      expect(await store.lookup(ref.id)).toMatchObject({
-        ownerSessionId: "session-first",
-        ownerPluginId: "plugin-first",
-      });
-
-      await Promise.all([
-        store.addRef(ref.id, "session-shared", "plugin-first"),
-        store.addRef(ref.id, "session-shared", "plugin-second"),
-      ]);
-      const refs = (await store.listRefs()).filter(
-        (row) => row.mediaId === ref.id && row.sessionId === "session-shared",
-      );
-      expect(refs).toHaveLength(1);
-      expect(refs[0]?.pluginId).toBe("plugin-first");
-    } finally {
-      await store.close?.();
-    }
-  });
-
-  it("returns the same first record from concurrent content-identical puts", async () => {
-    const store = await createIndexedDbMediaStore({
-      dbName: `covel-media-idb-put-${crypto.randomUUID()}`,
-    });
-    try {
-      const bytes = new Uint8Array([101, 102, 103]);
-      const [first, second] = await Promise.all([
-        store.put(bytes, "application/first", { source: "first" }),
-        store.put(bytes, "application/second", { source: "second" }),
-      ]);
-      expect(second).toEqual(first);
-      expect(await store.lookup(first.id)).toMatchObject({ mime: first.mime });
-    } finally {
-      await store.close?.();
-    }
-  });
-});

@@ -1,6 +1,9 @@
 import path from "node:path";
+import { z } from "zod";
 import {
   packageModuleTypeProblem,
+  pluginImportReferences,
+  type ParsedPluginMd,
   readPlainYamlFrontmatter,
   runtimeDirectoryDiagnostics,
   parsePluginMd,
@@ -34,6 +37,30 @@ export function readPluginFrontmatter(
 
 interface PluginManifestSummary {
   readonly pluginId: string;
+  readonly manifest: ParsedPluginMd;
+  readonly version: string | null;
+  readonly hasServerCode: boolean;
+}
+
+const installPackageSchema = z.object({
+  version: z.string().max(100).optional(),
+  type: z.unknown().optional(),
+  dependencies: z.record(z.string(), z.unknown()).optional(),
+  optionalDependencies: z.record(z.string(), z.unknown()).optional(),
+  peerDependencies: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** All install paths require a self-contained release; development tools are allowed. */
+function validateRuntimeDependencies(
+  pkg: z.infer<typeof installPackageSchema>,
+): void {
+  const declared = (
+    ["dependencies", "optionalDependencies", "peerDependencies"] as const
+  ).filter((field) => Object.keys(pkg[field] ?? {}).length > 0);
+  if (declared.length)
+    throw new Error(
+      `package.json declares runtime dependencies in ${declared.join(", ")}. Bundle the runtime dependencies into self-contained release files and remove these declarations (or leave empty maps); devDependencies are allowed. The installer never runs package managers or build scripts.`,
+    );
 }
 
 function readPackageId(entries: readonly ExtractedEntry[]): string | null {
@@ -177,11 +204,14 @@ export function validatePluginBundle(
       if (!entry) throw new Error("File not found");
       return entry.content.toString("utf8");
     });
-    const packaged = JSON.parse(
-      entries
-        .find((entry) => entry.relativePath === "package.json")!
-        .content.toString("utf8"),
-    ) as { version?: string; type?: unknown };
+    const packaged = installPackageSchema.parse(
+      JSON.parse(
+        entries
+          .find((entry) => entry.relativePath === "package.json")!
+          .content.toString("utf8"),
+      ),
+    );
+    validateRuntimeDependencies(packaged);
     if (
       root.plugin.version &&
       packaged.version &&
@@ -223,12 +253,20 @@ export function validatePluginBundle(
         );
       }
     }
+    return {
+      pluginId: canonicalId,
+      manifest: root,
+      version: packaged.version ?? null,
+      hasServerCode:
+        pluginImportReferences(root, declarations).length > 0 ||
+        entries.some((entry) =>
+          /\.(?:[cm]?[jt]s|tsx|node|wasm)$/i.test(entry.relativePath),
+        ),
+    };
   } catch (error) {
     throw httpError(
       400,
       error instanceof Error ? error.message : String(error),
     );
   }
-
-  return { pluginId: canonicalId };
 }

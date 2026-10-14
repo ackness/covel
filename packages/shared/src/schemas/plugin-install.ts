@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { i18nTextSchema } from "./world.js";
 
 export const githubPluginPreviewRequestSchema = z
   .object({
@@ -57,7 +58,7 @@ export const githubPluginPreviewSchema = z
   .object({
     id: z.string(),
     version: z.string().nullable(),
-    description: z.string(),
+    description: i18nTextSchema,
     /** Author name from the package manifest; null when it declares none. */
     author: z.string().nullable(),
     hasServerCode: z.boolean(),

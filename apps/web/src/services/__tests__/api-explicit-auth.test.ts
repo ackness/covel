@@ -58,6 +58,43 @@ afterEach(() => {
 });
 
 describe("explicit session auth on indirect routes", () => {
+  it("parses resume approvals and sends session and operator credentials", async () => {
+    await api.storeSessionToken("sess-1", "owner-secret");
+    api.storeOperatorToken("operator-secret");
+    const approval = {
+      status: "approval-required",
+      approvalId: "approval-1",
+      pending: {
+        sessionId: "sess-1",
+        pluginId: "external",
+        action: "runtime:external/run",
+      },
+    };
+    const success = {
+      result: { runtimeId: "external/run", status: "success" },
+      events: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ...okJson(approval), status: 202 })
+      .mockResolvedValueOnce(okJson(success))
+      .mockResolvedValueOnce({ ...okJson({ result: {} }), status: 202 });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      api.resumeSuspension("sess-1", "susp-1", { name: "Ada" }),
+    ).resolves.toEqual(approval);
+    expect(headersAt(fetchMock).get("X-Session-Token")).toBe("owner-secret");
+    expect(headersAt(fetchMock).get("Authorization")).toBe(
+      "Bearer operator-secret",
+    );
+    await expect(api.resumeSuspension("sess-1", "susp-1", {})).resolves.toEqual(
+      success,
+    );
+    await expect(
+      api.resumeSuspension("sess-1", "susp-1", {}),
+    ).rejects.toThrow();
+  });
+
   it("retries an action only after each exact approval and preserves its request id", async () => {
     const pending = (action: string) => ({
       ...okJson({
@@ -283,6 +320,7 @@ describe("operator auth on hosted administration routes", () => {
           kind: "plugin",
           id: "fixture-plugin",
           restartRequired: true,
+          hasServerCode: true,
         }),
       )
       .mockResolvedValueOnce(okJson({ ok: true }));
@@ -292,10 +330,12 @@ describe("operator auth on hosted administration routes", () => {
     await api.createSession("world-1");
     await api.refreshModelDb();
     await api.pingPreset({ presetId: "preset-1" });
-    await api.installPackage(
-      "plugin",
-      new File(["zip"], "fixture.zip", { type: "application/zip" }),
-    );
+    await expect(
+      api.installPackage(
+        "plugin",
+        new File(["zip"], "fixture.zip", { type: "application/zip" }),
+      ),
+    ).resolves.toMatchObject({ hasServerCode: true });
     await api.uninstallPlugin("fixture-plugin");
 
     for (const index of [0, 1, 3, 4, 5, 6]) {

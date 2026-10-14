@@ -10,6 +10,7 @@ Covel is a modular monolith: one repository, released together, with its code sp
 > So when the build output is older than the source (for example, you pulled new commits but did not run `pnpm install` again), a plugin that imports a new name will fail to load.
 >
 > - The development server checks and rebuilds it every time its process starts (`scripts/ensure-plugin-sdk.mjs`).
+> - Turbo finishes the SDK build before running its own lint and tests. SDK tests read their own `dist` declarations through `shared`, so dependency-only `^build` ordering is not enough.
 > - Before you run the tests of a single package on their own, you still have to run `pnpm --filter @covel/plugin-handlers-utils build` by hand.
 
 The other libraries are mainly combined inside the workspace by the applications and the framework.
@@ -55,7 +56,7 @@ The small packages `approval`, `context`, `events`, `create`, and `settings` eac
 - Do not merge a package into `runtime` just because it is small or only used during development.
 - Also do not add a package that only forwards calls just to look generic.
 
-**Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction.
+**Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction. The `store` package declares the SQLite vector extension `sqlite-vec` directly; the root package does not duplicate it.
 
 ## Key boundaries when the host combines packages
 
@@ -65,6 +66,7 @@ The host is an application that assembles these packages and runs them: the serv
 
 - The official website `apps/site` is a separate static site. It does not depend on any workspace package, and it is not part of the Web or desktop build.
 - The docs site `apps/docs` is also separate. It uses VitePress to build the pages of `docs/` into a static site, which is published under the `docs/` path of the official website.
+- Documentation diagrams use Mermaid 12 and require an ES2024 browser (Safari 17.4+). Mermaid belongs only to the documentation site and is not bundled into the Web or desktop app.
 - The application's own `/` goes straight to the world list.
 
 ### Desktop shell

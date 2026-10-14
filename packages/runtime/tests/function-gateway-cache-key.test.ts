@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime, PluginRuntimeGateway } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
@@ -29,8 +30,9 @@ const input: TurnInput = {
 async function runWith(
   loaded: LoadedRuntime,
   gateway: PluginRuntimeGateway,
+  locale?: string,
 ): Promise<void> {
-  await executeTurn(input, [loaded.manifest], {
+  await executeTurn({ ...input, locale }, [loaded.manifest], {
     loadRuntime: async () => loaded,
     llm: { generate: vi.fn() },
     store: createMemoryStore(),
@@ -89,3 +91,59 @@ describe("prompt cache key on a function runtime's model calls", () => {
     expect(generateText.mock.calls[1]![0]).not.toHaveProperty("promptCacheKey");
   });
 });
+
+afterEach(() => vi.unstubAllEnvs());
+it.each([
+  ["zh-CN", "", "zh"],
+  ["en-US", "", "en"],
+  ["ja-JP", "", "en"],
+  ["zh-CN", "en", "en"],
+  ["en-US", "zh", "zh"],
+])(
+  "binds function text and object calls to session %s with override %s",
+  async (locale, override, expected) => {
+    vi.stubEnv("COVEL_INSTRUCTION_LOCALE", override);
+    const generateText = vi
+      .fn()
+      .mockResolvedValue({
+        text: "{}",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      });
+    const generateObject = vi
+      .fn()
+      .mockResolvedValue({
+        object: {},
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      });
+    const gateway = createPluginRuntimeGateway(
+      { generateText, generateObject, resolveSlot: () => null },
+      { toZodSchema: () => z.object({}) },
+    );
+    await runWith(
+      {
+        manifest,
+        promptTemplate: "",
+        handler: async (ctx) => {
+          await ctx.gateway!.generateText({
+            prompt: "one",
+            instructionLocale: "en",
+          } as never);
+          await ctx.gateway!.generateObject({ prompt: "two", schema: {} });
+          return { outcome: "success", value: {} };
+        },
+      },
+      gateway,
+      locale,
+    );
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({ instructionLocale: expected }),
+      expect.anything(),
+    );
+    expect(generateObject).toHaveBeenCalledWith(
+      expect.objectContaining({ instructionLocale: expected }),
+      expect.anything(),
+    );
+  },
+);

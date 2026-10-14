@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import {
   isBlockingWorldRequirement,
+  isDependencyRejection,
   isSetupRuntime,
   pluginHasTextIn,
   readRuntimeEnv,
@@ -68,6 +69,7 @@ import {
 } from "./session/session-guard.js";
 import {
   resolveSessionPluginPlan,
+  confirmedPluginIds,
   storedPluginSelection,
   unknownPluginIds,
   unmetRequirementMessage,
@@ -249,13 +251,29 @@ sessionRoutes.post("/", async (c) => {
     pluginRegistry,
     { excluded: parsedCreate.excludedPlugins, requiredContracts },
   );
+  // A plugin whose dependency is missing is turned off, not a reason to
+  // refuse the session: it is confirmed with the rest, stays off, and the
+  // player is told why (`unavailable` of the plugin list). A dependency the
+  // resolver could not add (say it lost a conflict) only does that to its
+  // dependents; only a plugin the player asked for can refuse the session.
   const failure = selection.rejected.find(
     (item) =>
       !["approval-required", "excluded", "default-replaced"].includes(
         item.code,
-      ),
+      ) &&
+      !isDependencyRejection(item) &&
+      (parsedCreate.requestedPlugins.includes(item.pluginId) ||
+        pluginRegistry.get(item.pluginId)?.packageManifest?.plugin?.kind ===
+          "core"),
   );
-  if (failure) return c.json(errorBody(failure.reason), 400);
+  if (failure)
+    return c.json(
+      errorBody(`Plugin ${failure.pluginId}: ${failure.reason}`, {
+        code: "plugin_rejected",
+        details: failure,
+      }),
+      400,
+    );
   // A requirement the player turned off, or one awaiting consent, is a choice
   // and proceeds. A missing or ambiguous provider is a setup problem.
   const unmet = selection.unmet.find(isBlockingWorldRequirement);
@@ -267,7 +285,11 @@ sessionRoutes.post("/", async (c) => {
       }),
       400,
     );
-  const plugins = selection.active;
+  const plugins = confirmedPluginIds(
+    selection,
+    parsedCreate.requestedPlugins,
+    pluginRegistry,
+  );
 
   if (rawWorldId) {
     const worldAccess = await withWritableWorld(
@@ -286,7 +308,7 @@ sessionRoutes.post("/", async (c) => {
   // A session whose active set declares a setup runtime starts in `setup`;
   // otherwise it goes straight to `playing`.
   const phase: "setup" | "playing" = sessionHasSetupRuntime(
-    plugins.filter((p): p is string => typeof p === "string"),
+    selection.active,
     pluginRegistry,
   )
     ? "setup"
@@ -349,11 +371,17 @@ sessionRoutes.post("/", async (c) => {
     mediaStore: c.get("mediaStore"),
     now,
     locale: session.locale,
+    // Only plugins that run take part: a projection is plugin code.
     preflight: {
-      activePlugins: plugins,
+      activePlugins: selection.active,
       registry: pluginRegistry,
     },
   });
+  // A file that several active plugins name is left out, and the session
+  // starts without it. The log tells the world's author why.
+  for (const diagnostic of preparedWorldData.diagnostics)
+    if (diagnostic.code === "convention-collision")
+      console.warn(`[sessions] world ${rawWorldId}: ${diagnostic.message}`);
 
   const sessionLock = c.get("sessionLock");
   // Keep the persistent commit, media finalisation and process-local registry
@@ -566,7 +594,7 @@ sessionRoutes.post("/", async (c) => {
   });
   if (responseSession instanceof Response) return responseSession;
 
-  const untranslatedPlugins = plugins.filter(
+  const untranslatedPlugins = selection.active.filter(
     (pluginId) =>
       !pluginHasTextIn(
         pluginRegistry.get(pluginId)?.languages,

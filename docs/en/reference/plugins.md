@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | Root field                                      | Meaning                                                                                                                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | Package identity. `kind` is `core` or `plugin`.                                                                                                                  |
-| `version`, `displayName`, `description`, `tags` | Metadata. `role:*` tags do not drive any business logic.                                                                                                         |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                               |
 | `covel`                                         | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package.                         |
 | `author`, `license`, `homepage`                 | Author information, shown only for display. See [Author information](#author-information).                                                                       |
 | `provides`                                      | Versioned contract strings, or `{contract, default: true}`.                                                                                                      |
@@ -121,6 +121,8 @@ A contract is a versioned name, such as `narrative-engine@1`. Plugins find each 
 - Different packages can provide the same contract. A consumer says whether it wants one provider or all of them, using `cardinality: one` or `all`.
 - Only an extension point that allows one provider, and an explicit `conflicts` entry, get a separate mutual-exclusion check.
 - `conflicts` can name only plugin contracts. If you write a kernel extension point or a UI slot, you get `invalid-conflict`, and the error points to the position of the `conflicts` field. How kernel extension points combine is decided by their mode.
+
+Session prep groups each plugin by its first declared tag, using the tag text as the heading. Plugins with no tags appear under “Untagged”. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
 
 ### contributes fields
 
@@ -334,6 +336,8 @@ So when a provider accepts the request but never produces any text, there is sti
 - The call is retried as a new attempt, with one added line that says "write only what the task needs". A model that loops or repeats itself usually finishes on a second try.
 - The call fails only if it is cut off again. The error message suggests raising the output limit. If the limit is really too small, the second attempt will not finish either.
 - The one exception: a runtime with `io.visibility: story` produced only story text and no tool calls. In that case the text is kept and committed, and the player sees a notice that it may have stopped mid-sentence.
+
+**The provider did not say why it stopped (`finishReason: other`).** The reply may stop anywhere. As with a cut-off reply, a runtime with `io.visibility: story` that produced only story text and no tool calls keeps and commits the text, and the player sees a notice that it is not finished and the turn can be retried. Anything else fails and is not retried. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
 
 **A streaming call is interrupted after it has already produced output** (the connection drops, or it goes silent for longer than `idleTimeoutMs`).
 
@@ -715,7 +719,10 @@ After a namespace declares `search`, its records enter the framework's memory re
 - When a provider is activated explicitly, the default provider steps aside.
 - A required contract automatically brings in a provider. When a contract is missing, ambiguous, in conflict, or not authorized enough, the result gives the reason.
 - An event topic has only one declarer in a session. When two active plugins both declare the same topic in `contributes.events`, the one accepted second is rejected with `event-topic-conflict`. The reason names the topic and the two plugin IDs. Explicit requests come before automatic dependencies, and the rest follow request order. A topic is a name that is global to the session. The sender and the subscribers often belong to other plugins, so a topic can match only one payload schema. Two plugins can be installed at the same time, but they cannot both be in the same session. To avoid name clashes, add a prefix tied to your plugin to your own topics.
-- A plugin that loses its required provider, and an automatic dependency that nothing needs anymore, are removed.
+- A plugin that loses its required provider, and an automatic dependency that nothing needs anymore, are removed. Such a rejection has the `code` `missing-provider` or `ambiguous-provider`, and `contract` names the contract it waits for.
+- When a plugin that others depend on is missing, the plugins that depend on it are turned off automatically, and the game still starts. When a session is created, or a plugin is turned on or off, the requested plugins (`requested`) and the `kind: core` plugins turned off this way are still written into `activePlugins`. They do not run for now, they are listed in `unavailable`, and they come back on their own once the dependency is back. Creation returns `400 plugin_rejected` only when a plugin the player asked for is rejected for another reason, such as a conflict; the message names the plugin and the reason.
+- Before the game starts, the session prep screen lists the plugins this will turn off, the contract each one lacks, and the installed plugins that provide it, with a button to turn one on. The game screen does the same for `unavailable`.
+- When none of the enabled plugins has a narrative runtime (`io.visibility: story`), turns do not tell a story. The session prep screen and the game screen both say so and list the narrative plugins that can be turned on. When none is installed, they point to Settings → Install & manage.
 - `requested` and the computed `active` set are stored separately. An automatic dependency does not become the player's explicit choice.
 - The world's `pluginPolicy.requires` is passed in as `requiredContracts`. A world is a dependent, just like a plugin. A single provider is added automatically, and it is not removed as an unneeded dependency. A need that cannot be met is returned in `unmet`, with the reason `missing-provider`, `ambiguous-provider`, `approval-required`, or `excluded`. The first two block session creation. The last two are the player's choice, and they do not block it.
 
@@ -734,7 +741,16 @@ After a namespace declares `search`, its records enter the framework's memory re
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
 - The resolver still checks the world's `requires` on its own. Do not treat `requested` as a required item that cannot be canceled.
 
-**Discovery and authorization.** The data returned by the plugin discovery API separates `kind`, the host's `hostState`, and the session's `sessionState`. The runtime provides `outputContract`. A community plugin that is not authorized can stay in the request list, but it cannot enter the execution set. An approval is bound to the session identity and to its approval scope.
+**A save keeps the set the player confirmed.**
+
+- When a session is created, or a plugin is enabled or disabled, the result of the resolution is written to the session's `activePlugins`. This is the set the player confirmed.
+- The plugin list, the slash commands and the executor all read it through one function, `resolveConfirmedSessionPlugins`. It starts from `activePlugins`, checks it against the installed versions, and adds no plugin. A plugin installed later, a `kind: core` one included, does not join an old save on its own.
+- A plugin that is not installed, failed to load, lacks a required provider in its installed version, or conflicts with an earlier member sits out for now. The reasons are listed in `unavailable` of `GET /api/sessions/:id/plugins`, and the game screen shows a notice. The other plugins run as usual. `activePlugins` is not rewritten, so the plugin comes back when it is available again.
+- Sitting out means it is off everywhere: its runtimes do not load, its hooks do not fire, its services, actions and form validators refuse calls, its panels do not show, and memory search does not read its data. A direct call to one of its actions returns `404 plugin_not_active`, and the error message gives the reason.
+- Approval does not change this set. A community plugin's code does not run until it is approved; the trust gate checks that per session.
+- To recompute the set from the installed plugins, enable or disable a plugin. Both operations resolve `requested` and `excluded` again and write the result back to `activePlugins`.
+
+**Discovery and authorization.** The data returned by the plugin discovery API separates `kind`, the host's `hostState`, and the session's `sessionState`. The runtime provides `outputContract`. A community plugin that is not authorized can stay in the request list, but its code does not run until it is approved. An approval is bound to the session identity and to its approval scope.
 
 ## Localization and validation
 

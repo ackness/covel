@@ -27,19 +27,22 @@ describe("plugin-rpc-ui", () => {
 
   it("extracts runtime failures from ok responses", () => {
     expect(
-      getPluginRpcFailureMessage({
-        status: "ok",
-        runtimeResults: [
-          {
-            runtimeId: "rt",
-            pluginId: "plugin",
-            status: "failed",
-            durationMs: 5,
-            error: "boom",
-            output: {},
-          },
-        ],
-      }),
+      getPluginRpcFailureMessage(
+        {
+          status: "ok",
+          runtimeResults: [
+            {
+              runtimeId: "rt",
+              pluginId: "plugin",
+              status: "failed",
+              durationMs: 5,
+              error: "boom",
+              output: {},
+            },
+          ],
+        },
+        t,
+      ),
     ).toBe("boom");
   });
 
@@ -290,4 +293,30 @@ describe("plugin-rpc-ui", () => {
     expect(submitApproval).not.toHaveBeenCalled();
     expect(retry).not.toHaveBeenCalled();
   });
+});
+
+it("localizes failures without server details instead of showing a runtime identifier", () => {
+  const translate = vi.fn(() => "Translated failure");
+  const response: PluginRpcResponse = {
+    status: "ok",
+    runtimeResults: [
+      {
+        runtimeId: "internal-task",
+        pluginId: "provider",
+        status: "failed",
+        durationMs: 0,
+        output: {},
+      },
+    ],
+  };
+  expect(getPluginRpcFailureMessage(response, translate)).toBe(
+    "Translated failure",
+  );
+  expect(translate).toHaveBeenCalledWith("plugin.rpc.failed");
+  emitPluginRpcRuntimeResponse({
+    response,
+    t: translate,
+    runtimeId: "internal-task",
+  });
+  expect(emitToast).toHaveBeenLastCalledWith("error", "Translated failure");
 });
