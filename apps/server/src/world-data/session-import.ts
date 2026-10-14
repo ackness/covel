@@ -683,7 +683,12 @@ export async function syncWorldDataForSession(
       ledger.managed &&
       ledger.sourceWorldId === worldId &&
       forReceivers(ledger.pluginId) &&
-      (!dimensionOnly || ledger.namespace === DIMENSION_DATA_NAMESPACE),
+      (!dimensionOnly || ledger.namespace === DIMENSION_DATA_NAMESPACE) &&
+      // Without a provider the world's dimensions are left out, not removed:
+      // the session keeps the records it has.
+      !(
+        plan.skippedDimensions && ledger.namespace === DIMENSION_DATA_NAMESPACE
+      ),
   );
   const ledgerByKey = new Map(
     ledgers.map((ledger) => [ledgerKey(ledger), ledger]),

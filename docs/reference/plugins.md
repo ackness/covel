@@ -734,7 +734,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
 - 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
-- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。前两种阻止创建会话；后两种是玩家的选择，不阻止。
+- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
 **世界和玩法包怎样给出初始请求。**
 

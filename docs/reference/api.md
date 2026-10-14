@@ -1883,6 +1883,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带一条 warning，说明这部分推迟到真正导入或同步时执行。
 
+世界声明了维度，而这组插件里没有提供 `world.dimensions@1` 的，响应带一条 `code: "dimension-provider-missing"` 的 warning：这些维度不会导入。准备页据此提示玩家。
+
 **请求体:**
 
 ```json
@@ -1942,6 +1944,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 维度的源没变时，不重置进度。
 - 作者修改或移除了维度，而会话里的值已演化、被手改，或还有待结算的回执时，报告冲突。
 - `force: true` 不解除这些维度保护，不触发结构迁移，也不强制重置。
+- 会话现在没有启用提供 `world.dimensions@1` 的插件时，维度不参与同步：已有的维度记录原样保留，响应带一条 `dimension-provider-missing` warning。
 
 **并发:**
 
@@ -2234,8 +2237,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - `pluginPolicy.requires`：
   - 创建时，世界作为一个依赖方参与解析。某个契约只有一个提供者时，它会被自动加入。
   - 这些需求随会话保存在 `metadata.pluginSelection.requiredContracts`。之后的启停与重载沿用它，不再读取世界。
-  - 没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。
-  - 玩家显式停用了提供者，或提供者是还在等授权的社区插件时，会话照常创建。
+  - 有需求没满足时会话照常创建：没有已安装的提供者，有多个提供者而请求里没有指定，玩家显式停用了提供者，或提供者是还在等授权的社区插件。响应在 `unmetRequirements` 里列出每一项 `{ contract, code, candidates? }`，`code` 是 `missing-provider`、`ambiguous-provider`、`excluded` 或 `approval-required`。前两种还会在服务端日志里记一条 warning。
+- 世界声明了维度，而本次启用的插件里没有提供 `world.dimensions@1` 的，维度不导入，会话照常创建。响应的 `ignoredDimensions` 列出这些维度 ID；会话在没有维度的情况下运行。
 - 依赖缺失的插件：它依赖的契约没有提供者（例如玩家关掉了提供者）时，会话照常创建，这个插件自动停用。玩家要的和 `kind: core` 的这类插件仍写进 `activePlugins`，`GET /api/sessions/:id/plugins` 把它们列在 `unavailable`，依赖回来后自动恢复。规则见[会话插件选择](./plugins.md#会话插件选择)。
 - `metadata.characterSchema`：Web 私有模式创建本地会话时写入同样的 schema。预设不合法时，会话不创建。
 - `metadata.embeddedCharacters`：它不是插件的角色卡，不会产生插件数据的副本。
@@ -2264,17 +2267,19 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **响应字段**:
 
-| 字段                   | 类型                                      | 说明                                                                                                                                                                     |
-| ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ownerToken`           | string                                    | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                                                       |
-| `locale`               | string                                    | 会话实际的内容语言                                                                                                                                                       |
-| `requestedLocale`      | string（可选）                            | 只在实际语言与请求不同时出现                                                                                                                                             |
-| `pluginsWithoutLocale` | string[]（可选）                          | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                                                                  |
-| `worldDataNotices`     | `{ level, sourceId?, message }[]`（可选） | 世界数据里没有导入的部分（warning 和 error），例如只有还在等批准的社区插件接收的数据。游戏界面显示给玩家；见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件) |
-| `status`               | `'active' \| 'paused' \| 'ended'`         | 会话生命周期状态                                                                                                                                                         |
-| `phase`                | `'setup' \| 'playing'`                    | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                       |
-| `completedPlayerTurns` | number                                    | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                   |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`    | 每个 setup runtime 的状态。见下表                                                                                                                                        |
+| 字段                   | 类型                                        | 说明                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ownerToken`           | string                                      | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                                                       |
+| `locale`               | string                                      | 会话实际的内容语言                                                                                                                                                       |
+| `requestedLocale`      | string（可选）                              | 只在实际语言与请求不同时出现                                                                                                                                             |
+| `pluginsWithoutLocale` | string[]（可选）                            | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                                                                  |
+| `unmetRequirements`    | `{ contract, code, candidates? }[]`（可选） | 世界必需、但本会话没有启用提供者的契约。会话少了这部分照常运行。只是提示，不影响创建                                                                                     |
+| `ignoredDimensions`    | string[]（可选）                            | 世界声明了、但没有启用的插件能保存的维度 ID。它们没有导入。只是提示，不影响创建                                                                                          |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]`（可选）   | 世界数据里没有导入的部分（warning 和 error），例如只有还在等批准的社区插件接收的数据。游戏界面显示给玩家；见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件) |
+| `status`               | `'active' \| 'paused' \| 'ended'`           | 会话生命周期状态                                                                                                                                                         |
+| `phase`                | `'setup' \| 'playing'`                      | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                       |
+| `completedPlayerTurns` | number                                      | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                   |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`      | 每个 setup runtime 的状态。见下表                                                                                                                                        |
 
 `ownerToken` 什么时候必须携带：
 
@@ -2299,7 +2304,6 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 | 状态码 | `code`                    | 什么时候                                                             |
 | ------ | ------------------------- | -------------------------------------------------------------------- |
 | 400    | `plugin_rejected`         | 玩家要的插件因冲突等原因被拒（不包括依赖缺失）；`details` 是这条拒绝 |
-| 400    | `world_requirement_unmet` | 世界必需的契约没有提供者，或有多个提供者而没有指定                   |
 | 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token          |
 | 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                                       |
 | 409    | `world_deleting`          | 世界正在删除                                                         |

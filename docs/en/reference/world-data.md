@@ -413,7 +413,7 @@ pluginPolicy:
 ```
 
 - When only one installed plugin provides it, that plugin is turned on automatically.
-- When there is no provider, or there are several and neither the world nor the player has chosen one, the session-prep screen explains why and disables the start button.
+- When there is no provider, or there are several and neither the world nor the player has chosen one, the session-prep screen says what is missing. The session starts as usual, only without this part of the gameplay. The response that creates the session lists them in `unmetRequirements`.
 - The player can still turn off a provider. That is the player's choice. The session starts as usual, and the session-prep screen shows a notice.
 - `requires` accepts only contract IDs in the form `name@version`. A plugin ID written here causes an error when the world loads.
 
